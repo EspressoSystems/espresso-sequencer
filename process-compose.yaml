@@ -18,11 +18,9 @@ processes:
     readiness_probe:
       exec:
         command: "[ $(docker inspect -f '{{.State.Health.Status}}' espresso-sequencer-demo-l1-network-1) = 'healthy' ]"
-      initial_delay_seconds: 5
-      period_seconds: 6
+      period_seconds: 1
       timeout_seconds: 5
-      success_threshold: 1
-      failure_threshold: 20
+      failure_threshold: 30
 
   deploy-sequencer-contracts:
     # The contract addresses are implicitly inherited from .env. We need to unset these or else the
@@ -56,6 +54,8 @@ processes:
     namespace: setup
     environment:
       - L1_PROVIDER=http://localhost:$ESPRESSO_SEQUENCER_L1_PORT
+      - L1_POLLING_INTERVAL=$ESPRESSO_SEQUENCER_L1_POLLING_INTERVAL
+      - REQUIRE_L1_FINALITY=false
       - ESPRESSO_PROVIDER=http://localhost:$ESPRESSO_SEQUENCER1_API_PORT
       - CONTRACT_ADDRESS=0xa15bb66138824a1c7167f5e85b957d04dd34e468
       - MNEMONIC=$ESPRESSO_BUILDER_ETH_MNEMONIC
@@ -89,6 +89,8 @@ processes:
   state-relay-server:
     command: state-relay-server
     readiness_probe:
+      failure_threshold: 10
+      period_seconds: 1
       http_get:
         scheme: http
         host: localhost
@@ -163,6 +165,7 @@ processes:
         host: localhost
         port: $ESPRESSO_SEQUENCER_API_PORT
         path: /healthcheck
+      period_seconds: 1
       failure_threshold: 100
 
   sequencer1:
@@ -215,6 +218,7 @@ processes:
         host: localhost
         port: $ESPRESSO_SEQUENCER1_API_PORT
         path: /healthcheck
+      period_seconds: 1
       failure_threshold: 100
     availability:
       restart: exit_on_failure
@@ -262,6 +266,7 @@ processes:
         port: $ESPRESSO_SEQUENCER2_API_PORT
         path: /healthcheck
       failure_threshold: 100
+      period_seconds: 1
     availability:
       exit_on_skipped: true
       restart: exit_on_failure
@@ -310,6 +315,7 @@ processes:
         port: $ESPRESSO_SEQUENCER3_API_PORT
         path: /healthcheck
       failure_threshold: 100
+      period_seconds: 1
     availability:
       exit_on_skipped: true
       restart: exit_on_failure
@@ -356,6 +362,7 @@ processes:
         port: $ESPRESSO_SEQUENCER4_API_PORT
         path: /healthcheck
       failure_threshold: 100
+      period_seconds: 1
     availability:
       exit_on_skipped: true
       restart: exit_on_failure
@@ -387,8 +394,8 @@ processes:
         host: localhost
         port: $ESPRESSO_SEQUENCER1_API_PORT
         path: /healthcheck
+      period_seconds: 1
       failure_threshold: 100
-
 
   # We use KeyDB (a Redis variant) to maintain consistency between
   # different parts of the CDN
@@ -416,6 +423,7 @@ processes:
         host: 127.0.0.1
         port: 9093
         path: /metrics
+      period_seconds: 1
       failure_threshold: 100
 
   # A broker is the main message-routing unit of the CDN
@@ -430,6 +438,7 @@ processes:
         host: 127.0.0.1
         port: 9091
         path: /metrics
+      period_seconds: 1
       failure_threshold: 100
 
   # A broker is the main message-routing unit of the CDN
@@ -448,6 +457,7 @@ processes:
         host: 127.0.0.1
         port: 9092
         path: /metrics
+      period_seconds: 1
       failure_threshold: 100
 
   cdn-whitelist:
@@ -477,6 +487,7 @@ processes:
         port: $ESPRESSO_SUBMIT_TRANSACTIONS_PUBLIC_PORT
         path: /healthcheck
       failure_threshold: 100
+      period_seconds: 1
     availability:
       exit_on_skipped: true
 
@@ -497,6 +508,7 @@ processes:
         port: $ESPRESSO_SUBMIT_TRANSACTIONS_PRIVATE_PORT
         path: /healthcheck
       failure_threshold: 100
+      period_seconds: 1
     availability:
       exit_on_skipped: true
 
@@ -520,6 +532,7 @@ processes:
         port: $ESPRESSO_BUILDER_SERVER_PORT
         path: /healthcheck
       failure_threshold: 100
+      period_seconds: 1
     availability:
       restart: "exit_on_failure"
 
@@ -560,6 +573,7 @@ processes:
         host: localhost
         port: $ESPRESSO_MARKETPLACE_SOLVER_API_PORT
         path: /healthcheck
+      period_seconds: 1
       failure_threshold: 100
 
   sequencer-db-0:
@@ -623,4 +637,3 @@ processes:
     depends_on:
       sequencer1:
         condition: process_healthy
-

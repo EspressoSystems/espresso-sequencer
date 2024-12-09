@@ -2,7 +2,7 @@ use anyhow::{bail, ensure, Context};
 use clap::{Parser, Subcommand};
 use client::SequencerClient;
 use contract_bindings::fee_contract::FeeContract;
-use espresso_types::{eth_signature_key::EthKeyPair, Header};
+use espresso_types::{eth_signature_key::EthKeyPair, parse_duration, Header};
 use ethers::{
     middleware::{Middleware, SignerMiddleware},
     providers::Provider,
@@ -10,7 +10,7 @@ use ethers::{
 };
 use futures::stream::StreamExt;
 use sequencer_utils::logging;
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 use surf_disco::Url;
 
 /// Command-line utility for working with the Espresso bridge.
@@ -36,6 +36,21 @@ struct Deposit {
     /// L1 JSON-RPC provider.
     #[clap(short, long, env = "L1_PROVIDER")]
     rpc_url: Url,
+
+    /// Request rate when polling L1.
+    #[clap(
+        short,
+        long,
+        env = "L1_POLLING_INTERVAL",
+        default_value = "7s",
+        value_parser = parse_duration
+    )]
+    l1_interval: Duration,
+
+    /// Whether to require L1 finality to consider deposit
+    /// finalized on Espresso.
+    #[clap(short = 'f', long, env = "REQUIRE_L1_FINALITY", default_value = "true")]
+    require_l1_finality: bool,
 
     /// Espresso query service provider.
     ///
@@ -106,6 +121,16 @@ struct L1Balance {
     #[clap(short, long, env = "L1_PROVIDER")]
     rpc_url: Url,
 
+    /// Request rate when polling L1.
+    #[clap(
+        short,
+        long,
+        env = "L1_POLLING_INTERVAL",
+        default_value = "7s",
+        value_parser = parse_duration
+    )]
+    l1_interval: Duration,
+
     /// Account to check.
     #[clap(short, long, env = "ADDRESS", required_unless_present = "mnemonic")]
     address: Option<Address>,
@@ -134,7 +159,7 @@ async fn deposit(opt: Deposit) -> anyhow::Result<()> {
     let key_pair = EthKeyPair::from_mnemonic(opt.mnemonic, opt.account_index)?;
 
     // Connect to L1.
-    let rpc = Provider::try_from(opt.rpc_url.to_string())?;
+    let rpc = Provider::try_from(opt.rpc_url.to_string())?.interval(opt.l1_interval);
     let signer = key_pair.signer();
     let l1 = Arc::new(SignerMiddleware::new_with_provider_chain(rpc, signer).await?);
     let contract = FeeContract::new(opt.contract_address, l1.clone());
@@ -195,10 +220,16 @@ async fn deposit(opt: Deposit) -> anyhow::Result<()> {
                 continue;
             }
         };
-        let Some(l1_finalized) = header.l1_finalized() else {
-            continue;
+        let l1_finalized = if opt.require_l1_finality {
+            if let Some(l1_finalized) = header.l1_finalized() {
+                l1_finalized.number
+            } else {
+                continue;
+            }
+        } else {
+            header.l1_head()
         };
-        if l1_finalized.number >= l1_block {
+        if l1_finalized >= l1_block {
             tracing::info!(block = header.height(), "deposit finalized on Espresso");
             break header.height();
         } else {
@@ -258,7 +289,7 @@ async fn l1_balance(opt: L1Balance) -> anyhow::Result<()> {
         bail!("address or mnemonic must be provided");
     };
 
-    let l1 = Provider::try_from(opt.rpc_url.to_string())?;
+    let l1 = Provider::try_from(opt.rpc_url.to_string())?.interval(opt.l1_interval);
 
     let block = opt.block.map(BlockId::from);
     tracing::debug!(%address, ?block, "fetching L1 balance");
