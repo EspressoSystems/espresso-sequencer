@@ -27,7 +27,3 @@ strip = true
 opt-level = 1
 [profile.test.package.hotshot-state-prover]
 opt-level = 3
-[profile.test.package.gen-vk-contract]
-opt-level = 3
-[profile.test.package.diff-test-hotshot]
-opt-level = 3
