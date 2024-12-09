@@ -2,6 +2,7 @@ pub mod api;
 pub mod catchup;
 pub mod context;
 pub mod genesis;
+mod proposal_fetcher;
 
 mod external_event_handler;
 pub mod options;
@@ -12,7 +13,7 @@ mod message_compat_tests;
 use anyhow::Context;
 use async_lock::RwLock;
 use catchup::StatePeers;
-use context::{ProposalFetcherConfig, SequencerContext};
+use context::SequencerContext;
 use espresso_types::{
     traits::EventConsumer, BackoffParams, L1Client, L1ClientOptions, NodeState, PubKey, SeqTypes,
     SolverAuctionResultsProvider, ValidatedState,
@@ -22,6 +23,7 @@ use futures::FutureExt;
 use genesis::L1Finalized;
 use hotshot::traits::election::static_committee::StaticCommittee;
 use hotshot_types::traits::election::Membership;
+use proposal_fetcher::ProposalFetcherConfig;
 use std::sync::Arc;
 // Should move `STAKE_TABLE_CAPACITY` in the sequencer repo when we have variate stake table support
 use libp2p::Multiaddr;

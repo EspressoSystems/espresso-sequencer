@@ -7,9 +7,14 @@ doc *args:
 demo *args:
     docker compose up {{args}}
 
-demo-native:
-    cargo build --profile test
-    scripts/demo-native
+demo-native *args: build
+    scripts/demo-native {{args}}
+
+lint:
+    cargo clippy --workspace --features testing --all-targets -- -D warnings
+
+build profile="test":
+    cargo build --profile {{profile}}
 
 demo-native-mp:
     cargo build --release
