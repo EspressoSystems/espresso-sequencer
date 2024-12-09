@@ -27,7 +27,7 @@ struct TypePathBracketedArray {
 /// description of a crosstest
 #[derive(derive_builder::Builder, Debug, Clone)]
 struct CrossTestData {
-    /// imlementations
+    /// implementations
     impls: ExprArray,
 
     /// builder impl

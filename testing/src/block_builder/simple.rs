@@ -238,7 +238,7 @@ where
             .await;
 
         if transactions.is_empty() {
-            // We don't want to return an empty block if we have no trasnactions, as we would end up
+            // We don't want to return an empty block if we have no transactions, as we would end up
             // driving consensus to produce empty blocks extremely quickly when mempool is empty.
             // Instead, we return no blocks, so that view leader will keep asking for blocks until
             // either we have something non-trivial to propose, or leader runs out of time to propose,

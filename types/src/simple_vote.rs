@@ -526,7 +526,7 @@ impl<TYPES: NodeType> Committable for ViewSyncCommitData2<TYPES> {
     }
 }
 
-// impl votable for all the data types in this file sealed marker should ensure nothing is accidently
+// impl votable for all the data types in this file sealed marker should ensure nothing is accidentally
 // implemented for structs that aren't "voteable"
 impl<V: sealed::Sealed + Committable + Clone + Serialize + Debug + PartialEq + Hash + Eq> Voteable
     for V

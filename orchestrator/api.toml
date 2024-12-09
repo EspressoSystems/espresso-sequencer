@@ -44,7 +44,7 @@ Supply whether or not we are DA.
 [route.peer_pubconfig_ready]
 PATH = ["peer_pub_ready"]
 DOC = """
-Get whether the node can collect the final config which includs all peer's public config/info like public keys, returns a boolean.
+Get whether the node can collect the final config which includes all peer's public config/info like public keys, returns a boolean.
 """
 
 # POST the updated config with all peers' public keys / configs
