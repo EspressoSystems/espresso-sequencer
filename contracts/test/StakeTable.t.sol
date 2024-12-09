@@ -279,13 +279,12 @@ contract StakeTable_register_Test is Test {
         ) = genClientWallet(exampleTokenCreator, seed);
 
         // Prepare for the token transfer by granting allowance to the contract
-        vm.prank(exampleTokenCreator);
+        vm.startPrank(exampleTokenCreator);
         token.approve(address(stakeTable), depositAmount);
 
         // Balances before registration
         assertEq(token.balanceOf(exampleTokenCreator), INITIAL_BALANCE);
 
-        vm.startPrank(exampleTokenCreator);
         stakeTable.register(blsVK, schnorrVK, depositAmount, sig, validUntilEpoch);
 
         // Step 2: generate a new blsVK and schnorrVK
@@ -326,6 +325,8 @@ contract StakeTable_register_Test is Test {
         assertEq(abi.encode(node.schnorrVK), abi.encode(EdOnBN254.EdOnBN254Point(0, 0)));
         assertEq(node.balance, 0);
         assertEq(node.account, address(0));
+
+        vm.stopPrank();
     }
 
     function test_RevertWhen_UpdateConsensusKeysWithSameKeys() public {
@@ -341,18 +342,19 @@ contract StakeTable_register_Test is Test {
         ) = genClientWallet(exampleTokenCreator, seed);
 
         // Prepare for the token transfer by granting allowance to the contract
-        vm.prank(exampleTokenCreator);
+        vm.startPrank(exampleTokenCreator);
         token.approve(address(stakeTable), depositAmount);
 
         // Balances before registration
         assertEq(token.balanceOf(exampleTokenCreator), INITIAL_BALANCE);
 
-        vm.startPrank(exampleTokenCreator);
         stakeTable.register(blsVK, schnorrVK, depositAmount, sig, validUntilEpoch);
 
         // Step 2: attempt to update the consensus keys with the same keys
         vm.expectRevert(S.NoKeyChange.selector);
         stakeTable.updateConsensusKeys(blsVK, blsVK, schnorrVK, sig);
+
+        vm.stopPrank();
     }
 
     function test_RevertWhen_UpdateConsensusKeysWithEmptyKeys() public {
@@ -368,13 +370,12 @@ contract StakeTable_register_Test is Test {
         ) = genClientWallet(exampleTokenCreator, seed);
 
         // Prepare for the token transfer by granting allowance to the contract
-        vm.prank(exampleTokenCreator);
+        vm.startPrank(exampleTokenCreator);
         token.approve(address(stakeTable), depositAmount);
 
         // Balances before registration
         assertEq(token.balanceOf(exampleTokenCreator), INITIAL_BALANCE);
 
-        vm.startPrank(exampleTokenCreator);
         stakeTable.register(blsVK, schnorrVK, depositAmount, sig, validUntilEpoch);
 
         // empty keys
@@ -389,5 +390,136 @@ contract StakeTable_register_Test is Test {
         // Step 2: attempt to update the consensus keys with the same keys
         vm.expectRevert(S.NoKeyChange.selector);
         stakeTable.updateConsensusKeys(blsVK, emptyBlsVK, emptySchnorrVK, sig);
+
+        vm.stopPrank();
     }
+
+    // function test_RevertWhen_UpdateConsensusKeysWithInvalidSignature() public {
+    //     uint64 depositAmount = 10 ether;
+    //     uint64 validUntilEpoch = 5;
+    //     string memory seed = "123";
+
+    //     //Step 1: generate a new blsVK and schnorrVK and register this node
+    //     (
+    //         BN254.G2Point memory blsVK,
+    //         EdOnBN254.EdOnBN254Point memory schnorrVK,
+    //         BN254.G1Point memory sig
+    //     ) = genClientWallet(exampleTokenCreator, seed);
+
+    //     // Prepare for the token transfer by granting allowance to the contract
+    //     vm.startPrank(exampleTokenCreator);
+    //     token.approve(address(stakeTable), depositAmount);
+
+    //     // Balances before registration
+    //     assertEq(token.balanceOf(exampleTokenCreator), INITIAL_BALANCE);
+
+    //     BN254.G1Point memory badSig = BN254.G1Point(BN254.BaseField.wrap(0),
+    // BN254.BaseField.wrap(0));
+
+    //     stakeTable.register(blsVK, schnorrVK, depositAmount, sig, validUntilEpoch);
+
+    //     // Step 2: generate a new blsVK and schnorrVK
+    //     seed = "234";
+    //     (
+    //         BN254.G2Point memory newBlsVK,
+    //         EdOnBN254.EdOnBN254Point memory newSchnorrVK,
+    //     ) = genClientWallet(exampleTokenCreator, seed);
+
+    //     // Step 3: attempt to update the consensus keys with the new keys but invalid signature
+    //     vm.expectRevert(BLSSig.BLSSigVerificationFailed.selector);
+    //     stakeTable.updateConsensusKeys(blsVK, newBlsVK, newSchnorrVK, badSig);
+
+    //     vm.stopPrank();
+    // }
+
+    // function test_UpdateConsensusKeysWithInvalidBlsKeyInfoButOnlySchnorrVKChanged_Succeeds()
+    // public {
+    //     uint64 depositAmount = 10 ether;
+    //     uint64 validUntilEpoch = 5;
+    //     string memory seed = "123";
+
+    //     //Step 1: generate a new blsVK and schnorrVK and register this node
+    //     (
+    //         BN254.G2Point memory blsVK,
+    //         EdOnBN254.EdOnBN254Point memory schnorrVK,
+    //         BN254.G1Point memory sig
+    //     ) = genClientWallet(exampleTokenCreator, seed);
+
+    //     // Prepare for the token transfer by granting allowance to the contract
+    //     vm.startPrank(exampleTokenCreator);
+    //     token.approve(address(stakeTable), depositAmount);
+
+    //     // Balances before registration
+    //     assertEq(token.balanceOf(exampleTokenCreator), INITIAL_BALANCE);
+
+    //     BN254.G1Point memory badSig = BN254.G1Point(BN254.BaseField.wrap(0),
+    // BN254.BaseField.wrap(0));
+
+    //     stakeTable.register(blsVK, schnorrVK, depositAmount, sig, validUntilEpoch);
+    //     vm.expectEmit(false, false, false, true, address(stakeTable));
+    //     emit Registered(stakeTable._hashBlsKey(blsVK), 1, depositAmount);
+
+    //     // Step 2: generate an empty and new schnorrVK
+    //     // seed = "234";
+    //     // (, EdOnBN254.EdOnBN254Point memory newSchnorrVK,) =
+    // genClientWallet(exampleTokenCreator, seed);
+
+    //     // BN254.G2Point memory emptyBlsVK = BN254.G2Point(
+    //     //     BN254.BaseField.wrap(0),
+    //     //     BN254.BaseField.wrap(0),
+    //     //     BN254.BaseField.wrap(0),
+    //     //     BN254.BaseField.wrap(0)
+    //     // );
+
+    //     // console.logBytes(abi.encode(stakeTable.lookupNode(blsVK).blsVK));
+
+    //     // // Step 3: update the consensus keys with the new schnorr Key but empty bls key
+    //     // stakeTable.updateConsensusKeys(blsVK, emptyBlsVK, newSchnorrVK, badSig);
+    //     // console.logBytes(abi.encode(stakeTable.lookupNode(blsVK).blsVK));
+
+    //     // Step 4: update the consensus keys with the new schnorr key and same bls key (using the
+    // old schnorr key info for this update)
+    //     // stakeTable.updateConsensusKeys(blsVK, blsVK, schnorrVK, sig);
+    //     // vm.stopPrank();
+    // }
+
+    // function test_UpdateConsensusKeysWithInvalidSchnorrVKButNewBlsVK_Succeeds() public {
+    //     uint64 depositAmount = 10 ether;
+    //     uint64 validUntilEpoch = 5;
+    //     string memory seed = "123";
+
+    //     //Step 1: generate a new blsVK and schnorrVK and register this node
+    //     (
+    //         BN254.G2Point memory blsVK,
+    //         EdOnBN254.EdOnBN254Point memory schnorrVK,
+    //         BN254.G1Point memory sig
+    //     ) = genClientWallet(exampleTokenCreator, seed);
+
+    //     // Prepare for the token transfer by granting allowance to the contract
+    //     vm.startPrank(exampleTokenCreator);
+    //     token.approve(address(stakeTable), depositAmount);
+
+    //     // Balances before registration
+    //     assertEq(token.balanceOf(exampleTokenCreator), INITIAL_BALANCE);
+
+    //     stakeTable.register(blsVK, schnorrVK, depositAmount, sig, validUntilEpoch);
+
+    //     // Step 2: generate a new blsVK
+    //     seed = "234";
+    //     (BN254.G2Point memory newBlsVK, ,BN254.G1Point memory newSig) = genClientWallet(
+    //         exampleTokenCreator,
+    //         seed
+    //     );
+
+    //     // Step 3: update the consensus keys with the same schnorrVK but new bls keys
+    //     stakeTable.updateConsensusKeys(blsVK, newBlsVK, schnorrVK, newSig);
+
+    //     // Step 4: update the consensus keys with the same bls keys but empty schnorrVK (using
+    // the old bls key info for this update)
+    //     BN254.G2Point memory currentBlsVK = newBlsVK;
+    //     EdOnBN254.EdOnBN254Point memory emptySchnorrVK = EdOnBN254.EdOnBN254Point(0, 0);
+    //     stakeTable.updateConsensusKeys(currentBlsVK, blsVK, emptySchnorrVK, sig);
+
+    //     vm.stopPrank();
+    // }
 }

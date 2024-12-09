@@ -106,6 +106,10 @@ contract StakeTable is AbstractStakeTable {
         return keccak256(abi.encode(blsVK.x0, blsVK.x1, blsVK.y0, blsVK.y1));
     }
 
+    /// @dev Compares two BLS keys for equality
+    /// @param a First BLS key
+    /// @param b Second BLS key
+    /// @return True if the keys are equal, false otherwise
     function _isEqualBlsKey(BN254.G2Point memory a, BN254.G2Point memory b)
         public
         pure
