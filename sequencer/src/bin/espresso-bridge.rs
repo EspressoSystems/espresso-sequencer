@@ -47,11 +47,6 @@ struct Deposit {
     )]
     l1_interval: Duration,
 
-    /// Whether to require L1 finality to consider deposit
-    /// finalized on Espresso.
-    #[clap(short = 'f', long, env = "REQUIRE_L1_FINALITY", default_value = "true")]
-    require_l1_finality: bool,
-
     /// Espresso query service provider.
     ///
     /// This must point to an Espresso node running the /availability, /node and Merklized state
@@ -220,16 +215,10 @@ async fn deposit(opt: Deposit) -> anyhow::Result<()> {
                 continue;
             }
         };
-        let l1_finalized = if opt.require_l1_finality {
-            if let Some(l1_finalized) = header.l1_finalized() {
-                l1_finalized.number
-            } else {
-                continue;
-            }
-        } else {
-            header.l1_head()
+        let Some(l1_finalized) = header.l1_finalized() else {
+            continue;
         };
-        if l1_finalized >= l1_block {
+        if l1_finalized.number() >= l1_block {
             tracing::info!(block = header.height(), "deposit finalized on Espresso");
             break header.height();
         } else {
