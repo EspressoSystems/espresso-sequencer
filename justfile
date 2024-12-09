@@ -18,13 +18,13 @@ lint:
     cargo clippy --workspace --features testing --all-targets -- -D warnings
     cargo clippy --workspace --all-targets --manifest-path sequencer-sqlite/Cargo.toml -- -D warnings
 
-build:
+build profile="test":
     #!/usr/bin/env bash
     set -euxo pipefail
     # Use the same target dir for both `build` invocations
     export CARGO_TARGET_DIR=${CARGO_TARGET_DIR:-target}
-    cargo build --profile test
-    cargo build --profile test --manifest-path ./sequencer-sqlite/Cargo.toml
+    cargo build --profile {{profile}}
+    cargo build --profile {{profile}} --manifest-path ./sequencer-sqlite/Cargo.toml
 
 demo-native-mp *args: build
     scripts/demo-native -f process-compose.yaml -f process-compose-mp.yml {{args}}
