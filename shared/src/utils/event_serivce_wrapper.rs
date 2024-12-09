@@ -34,6 +34,9 @@ pub struct EventServiceStream<Types: NodeType, V: StaticVersionType> {
 }
 
 impl<Types: NodeType, ApiVer: StaticVersionType + 'static> EventServiceStream<Types, ApiVer> {
+    /// Maximum period between events, once it elapsed we assume
+    /// udnerlying connection silently went down and attempt to reconnect
+    const MAX_WAIT_PERIOD: Duration = Duration::from_secs(10);
     const RETRY_PERIOD: Duration = Duration::from_secs(1);
     const CONNECTION_TIMEOUT: Duration = Duration::from_secs(60);
 
@@ -84,7 +87,7 @@ impl<Types: NodeType, ApiVer: StaticVersionType + 'static> EventServiceStream<Ty
             loop {
                 match &mut this.connection {
                     Left(connection) => {
-                        match tokio::time::timeout(Self::RETRY_PERIOD, connection.next()).await {
+                        match tokio::time::timeout(Self::MAX_WAIT_PERIOD, connection.next()).await {
                             Ok(Some(Ok(event))) => {
                                 return Some((event, this));
                             }
