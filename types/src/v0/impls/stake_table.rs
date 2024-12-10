@@ -168,23 +168,13 @@ impl Membership<SeqTypes> for StaticCommittee {
         // Index the stake table by public key
         let indexed_stake_table: BTreeMap<PubKey, SeqStakeTableEntry> = members
             .iter()
-            .map(|entry| {
-                (
-                    SignatureKey::public_key(entry),
-                    entry.clone(),
-                )
-            })
+            .map(|entry| (SignatureKey::public_key(entry), entry.clone()))
             .collect();
 
         // Index the stake table by public key
         let indexed_da_stake_table: BTreeMap<PubKey, SeqStakeTableEntry> = da_members
             .iter()
-            .map(|entry| {
-                (
-                    SignatureKey::public_key(entry),
-                    entry.clone(),
-                )
-            })
+            .map(|entry| (SignatureKey::public_key(entry), entry.clone()))
             .collect();
 
         Self {
@@ -244,21 +234,13 @@ impl Membership<SeqTypes> for StaticCommittee {
     }
 
     /// Get the stake table entry for a public key
-    fn stake(
-        &self,
-        pub_key: &SignatureKey,
-        _epoch: Epoch,
-    ) -> Option<SeqStakeTableEntry> {
+    fn stake(&self, pub_key: &SignatureKey, _epoch: Epoch) -> Option<SeqStakeTableEntry> {
         // Only return the stake if it is above zero
         self.indexed_stake_table.get(pub_key).cloned()
     }
 
     /// Get the DA stake table entry for a public key
-    fn da_stake(
-        &self,
-        pub_key: &SignatureKey,
-        _epoch: Epoch,
-    ) -> Option<SeqStakeTableEntry> {
+    fn da_stake(&self, pub_key: &SignatureKey, _epoch: Epoch) -> Option<SeqStakeTableEntry> {
         // Only return the stake if it is above zero
         self.indexed_da_stake_table.get(pub_key).cloned()
     }
@@ -324,6 +306,5 @@ impl Membership<SeqTypes> for StaticCommittee {
 }
 
 type Epoch = <SeqTypes as NodeType>::Epoch;
-type SeqStakeTableEntry =
-    <SignatureKey as hotshot::types::SignatureKey>::StakeTableEntry;
+type SeqStakeTableEntry = <SignatureKey as hotshot::types::SignatureKey>::StakeTableEntry;
 type SignatureKey = <SeqTypes as NodeType>::SignatureKey;
