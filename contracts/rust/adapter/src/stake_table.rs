@@ -192,10 +192,9 @@ impl From<PeerConfigKeys<BLSPubKey>> for NodeInfoJf {
 
 #[cfg(test)]
 mod test {
-    use hotshot_types::{light_client::StateKeyPair, traits::signature_key::BuilderSignatureKey};
-    use rand::{Rng, RngCore};
-
     use super::*;
+    use ark_std::rand::{Rng, RngCore};
+    use hotshot_types::{light_client::StateKeyPair, traits::signature_key::BuilderSignatureKey};
 
     impl NodeInfoJf {
         fn random(rng: &mut impl RngCore) -> Self {
@@ -214,7 +213,7 @@ mod test {
 
     #[test]
     fn test_node_info_round_trip() {
-        let mut rng = rand::thread_rng();
+        let mut rng = ark_std::rand::thread_rng();
         for _ in 0..20 {
             let jf = NodeInfoJf::random(&mut rng);
             let sol: NodeInfo = jf.clone().into();
