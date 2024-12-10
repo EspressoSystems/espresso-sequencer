@@ -18,3 +18,7 @@ pub(crate) use super::v0_1::{
 };
 
 pub const VERSION: Version = Version { major: 0, minor: 3 };
+
+mod stake_table;
+
+pub use stake_table::CombinedStakeTable;
