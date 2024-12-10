@@ -155,25 +155,16 @@ impl StaticCommittee {
     /// `Self.stake_table` only needs to be updated once in a given
     /// life-cycle but may be read from many times.
     async fn update_stake_table(&mut self, l1_block_height: u64) {
-        // TODO also deal w/ removed entries
-        let updates: Vec<StakersUpdatedFilter> = self
+        let updates: StakeTables = self
             .provider
             .get_stake_table(l1_block_height, self.contract_address.unwrap())
             .await;
 
-        let added: Vec<_> = updates
-            .into_iter()
-            .flat_map(|e: StakersUpdatedFilter| e.added.into_iter().map(NodeInfoJf::from))
-            .collect();
-        for node in added {
-            if !node.da {
-                let entry: StakeTableEntry<PubKey> = StakeTableEntry {
-                    stake_key: node.stake_table_key,
-                    stake_amount: U256::from(1),
-                };
-                self.stake_table.insert(entry);
-            }
-        }
+        // This works because `get_stake_table` is fetching *all*
+        // update events and building the table for us. We will need
+        // more subtlety when start fetching only the events since last update.
+        self.stake_table = HashSet::from_iter(updates.consensus_stake_table.0);
+        self.da_stake_table = HashSet::from_iter(updates.da_stake_table.0);
     }
 
     // We need a constructor to match our concrete type.

@@ -39,7 +39,10 @@ use tracing::Instrument;
 use url::Url;
 
 use super::{L1BlockInfo, L1ClientMetrics, L1State, L1UpdateTask, PubKey, RpcClient, SeqTypes};
-use crate::{FeeInfo, L1Client, L1ClientOptions, L1Event, L1ReconnectTask, L1Snapshot};
+use crate::{
+    v0::impls::stake_table::StakeTables, FeeInfo, L1Client, L1ClientOptions, L1Event,
+    L1ReconnectTask, L1Snapshot,
+};
 
 impl PartialOrd for L1BlockInfo {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
@@ -789,23 +792,20 @@ impl L1Client {
     }
 
     /// Get `StakeTable` at block height.
-    pub async fn get_stake_table(
-        &self,
-        _block: u64,
-        address: Address,
-    ) -> Vec<StakersUpdatedFilter> {
+    pub async fn get_stake_table(&self, block: u64, address: Address) -> StakeTables {
         // TODO epoch size may need to be passed in as well
         // TODO here or in memberships check if we have fetched table this epoch
-        dbg!(&address);
         let stake_table_contract = PermissionedStakeTable::new(address, self.provider.clone());
 
         let events = stake_table_contract
             .stakers_updated_filter()
+            .from_block(0)
+            .to_block(block)
             .query()
             .await
             .unwrap();
-        dbg!(&events);
-        events
+
+        StakeTables::from_l1_events(events.clone())
     }
 }
 
@@ -878,7 +878,7 @@ mod test {
     use std::time::Duration;
     use time::OffsetDateTime;
 
-    use crate::SeqTypes;
+    use crate::{v0::impls::stake_table::StakeTables, SeqTypes};
 
     use super::*;
 
@@ -1302,21 +1302,23 @@ mod test {
             .unwrap()
             .send()
             .await?;
-        dbg!(&stake_table_contract);
-
-        let owner = stake_table_contract.owner().await;
-        dbg!(owner);
 
         let address = stake_table_contract.address();
-        dbg!(&address);
 
-        let node = NodeInfo::default();
-        let new_nodes = vec![node];
-        let x = stake_table_contract.update(v, new_nodes);
-        x.send().await?;
-        let nodes = l1_client.get_stake_table(0, address).await;
-        dbg!(nodes);
+        let mut rng = rand::thread_rng();
+        let node = NodeInfoJf::random(&mut rng);
 
+        let new_nodes: Vec<NodeInfo> = vec![node.into()];
+        let updater = stake_table_contract.update(v, new_nodes);
+        updater.send().await?;
+
+        let block = client.get_block(BlockNumber::Latest).await?.unwrap();
+        let nodes = l1_client
+            .get_stake_table(block.number.unwrap().as_u64(), address)
+            .await;
+
+        let result = nodes.consensus_stake_table.0[0].clone();
+        assert_eq!(result.stake_amount.as_u64(), 1);
         Ok(())
     }
 }
