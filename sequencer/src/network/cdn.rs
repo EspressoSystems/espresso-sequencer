@@ -142,16 +142,6 @@ impl<TYPES: NodeType> ConnectionDef for BrokerDef<TYPES> {
     type MessageHook = NoMessageHook;
 }
 
-/// The client definition for the Push CDN. Uses the Quic
-/// protocol and no middleware. Differs from the user
-/// definition in that is on the client-side.
-#[derive(Clone)]
-pub struct ClientDef<TYPES: NodeType>(PhantomData<TYPES>);
-impl<TYPES: NodeType> ConnectionDef for ClientDef<TYPES> {
-    type Scheme = WrappedSignatureKey<TYPES::SignatureKey>;
-    type Protocol = Quic;
-    type MessageHook = NoMessageHook;
-}
 
 /// The testing run definition for the Push CDN.
 /// Uses the real protocols, but with an embedded discovery client.
