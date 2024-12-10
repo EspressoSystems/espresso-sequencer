@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":["build_sqlite_path","collect_garbage"],"struct":["Options","Persistence","PostgresOptions","PruningOptions","SqliteOptions"]};

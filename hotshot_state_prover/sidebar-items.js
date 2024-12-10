@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"mod":["circuit","mock_ledger","service","snark"]};
