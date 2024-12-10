@@ -421,9 +421,11 @@ mod tests {
 
         let st = StakeTables::from_l1_events(updates.clone());
 
+        // The DA stake table contains the DA node only
         assert_eq!(st.da_stake_table.0.len(), 1);
         assert_eq!(st.da_stake_table.0[0].stake_key, da_node.stake_table_key);
 
+        // The consensus stake table contains both nodes
         assert_eq!(st.consensus_stake_table.0.len(), 2);
         assert_eq!(
             st.consensus_stake_table.0[0].stake_key,
@@ -434,15 +436,48 @@ mod tests {
             consensus_node.stake_table_key
         );
 
-        // Simulate removing the second node
+        // Simulate making the consensus node a DA node. This is accomplished by
+        // sending a transaction removes and re-adds the same node with updated
+        // DA status.
+        let mut new_da_node = consensus_node.clone();
+        new_da_node.da = true;
         updates.push(StakersUpdatedFilter {
             removed: vec![consensus_node.clone().into()],
+            added: vec![new_da_node.clone().into()],
+        });
+        let st = StakeTables::from_l1_events(updates.clone());
+
+        // The DA stake stable now contains both nodes
+        assert_eq!(st.da_stake_table.0.len(), 2);
+        assert_eq!(st.da_stake_table.0[0].stake_key, da_node.stake_table_key);
+        assert_eq!(
+            st.da_stake_table.0[1].stake_key,
+            new_da_node.stake_table_key
+        );
+
+        // The consensus stake stable (still) contains both nodes
+        assert_eq!(st.consensus_stake_table.0.len(), 2);
+        assert_eq!(
+            st.consensus_stake_table.0[0].stake_key,
+            da_node.stake_table_key
+        );
+        assert_eq!(
+            st.consensus_stake_table.0[1].stake_key,
+            new_da_node.stake_table_key
+        );
+
+        // Simulate removing the second node
+        updates.push(StakersUpdatedFilter {
+            removed: vec![new_da_node.clone().into()],
             added: vec![],
         });
         let st = StakeTables::from_l1_events(updates);
+
+        // The DA stake table contains only the original DA node
         assert_eq!(st.da_stake_table.0.len(), 1);
         assert_eq!(st.da_stake_table.0[0].stake_key, da_node.stake_table_key);
 
+        // The consensus stake table also contains only the original DA node
         assert_eq!(st.consensus_stake_table.0.len(), 1);
         assert_eq!(
             st.consensus_stake_table.0[0].stake_key,
