@@ -17,7 +17,7 @@ services:
 
   deploy-sequencer-contracts:
     image: ghcr.io/espressosystems/espresso-sequencer/deploy:main
-    command: deploy --only sequencer,permissioned-stake-table
+    command: deploy --only fee-contract,permissioned-stake-table
     environment:
       - ESPRESSO_SEQUENCER_ETH_MULTISIG_ADDRESS
       - ESPRESSO_SEQUENCER_L1_PROVIDER
