@@ -43,7 +43,7 @@ vergen = { workspace = true }
 anyhow = { workspace = true }
 ark-ff = { workspace = true }
 ark-serialize = { workspace = true, features = ["derive"] }
-async-broadcast = { workspace = true }
+async-channel = { workspace = true }
 async-lock = { workspace = true }
 async-once-cell = { workspace = true }
 async-trait = { workspace = true }
@@ -95,6 +95,7 @@ marketplace-solver = { path = "../marketplace-solver" }
 num_enum = "0.7"
 parking_lot = "0.12"
 portpicker = { workspace = true }
+priority-queue = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
 rand_distr = { workspace = true }

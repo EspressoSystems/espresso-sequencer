@@ -213,6 +213,7 @@ pub mod mock {
     impl StateCatchup for MockStateCatchup {
         async fn try_fetch_accounts(
             &self,
+            _retry: usize,
             _instance: &NodeState,
             _height: u64,
             view: ViewNumber,
@@ -228,6 +229,7 @@ pub mod mock {
 
         async fn try_remember_blocks_merkle_tree(
             &self,
+            _retry: usize,
             _instance: &NodeState,
             _height: u64,
             view: ViewNumber,
@@ -252,6 +254,7 @@ pub mod mock {
 
         async fn try_fetch_chain_config(
             &self,
+            _retry: usize,
             _commitment: Commitment<ChainConfig>,
         ) -> anyhow::Result<ChainConfig> {
             Ok(ChainConfig::default())

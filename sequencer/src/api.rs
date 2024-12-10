@@ -1527,6 +1527,7 @@ mod test {
                 StatePeers::<StaticVersion<0, 1>>::from_urls(
                     vec![format!("http://localhost:{port}").parse().unwrap()],
                     Default::default(),
+                    &NoMetrics,
                 )
             }))
             .build();
@@ -1571,6 +1572,7 @@ mod test {
                 StatePeers::<StaticVersion<0, 1>>::from_urls(
                     vec![format!("http://localhost:{port}").parse().unwrap()],
                     Default::default(),
+                    &NoMetrics,
                 ),
                 &NoMetrics,
                 test_helpers::STAKE_TABLE_CAPACITY_FOR_TEST,
@@ -1636,6 +1638,7 @@ mod test {
                 StatePeers::<StaticVersion<0, 1>>::from_urls(
                     vec![format!("http://localhost:{port}").parse().unwrap()],
                     Default::default(),
+                    &NoMetrics,
                 )
             }))
             .network_config(TestConfigBuilder::default().l1_url(l1).build())
@@ -1713,6 +1716,7 @@ mod test {
                 StatePeers::<StaticVersion<0, 1>>::from_urls(
                     vec![format!("http://localhost:{port}").parse().unwrap()],
                     Default::default(),
+                    &NoMetrics,
                 )
             }))
             .network_config(TestConfigBuilder::default().l1_url(l1).build())
@@ -1773,6 +1777,7 @@ mod test {
             StatePeers::<SequencerApiVersion>::from_urls(
                 vec![format!("http://localhost:{port}").parse().unwrap()],
                 BackoffParams::default(),
+                &NoMetrics,
             )
         });
 
@@ -1780,6 +1785,7 @@ mod test {
         peers[2] = StatePeers::<SequencerApiVersion>::from_urls(
             vec![url.clone()],
             BackoffParams::default(),
+            &NoMetrics,
         );
 
         let config = TestNetworkConfigBuilder::<NUM_NODES, _, _>::with_num_nodes()
@@ -1801,13 +1807,16 @@ mod test {
         // The catchup should successfully retrieve the correct chain config.
         let node = &network.peers[0];
         let peers = node.node_state().peers;
-        peers.try_fetch_chain_config(cf.commit()).await.unwrap();
+        peers.try_fetch_chain_config(0, cf.commit()).await.unwrap();
 
         // Test a catchup request for node #1, which is connected to a dishonest peer.
         // This request will result in an error due to the malicious chain config provided by the peer.
         let node = &network.peers[1];
         let peers = node.node_state().peers;
-        peers.try_fetch_chain_config(cf.commit()).await.unwrap_err();
+        peers
+            .try_fetch_chain_config(0, cf.commit())
+            .await
+            .unwrap_err();
 
         network.server.shut_down().await;
         handle.abort();
@@ -1963,6 +1972,7 @@ mod test {
                 StatePeers::<SequencerApiVersion>::from_urls(
                     vec![format!("http://localhost:{port}").parse().unwrap()],
                     Default::default(),
+                    &NoMetrics,
                 )
             }))
             .network_config(
@@ -2136,6 +2146,7 @@ mod test {
                 StatePeers::<StaticVersion<0, 1>>::from_urls(
                     vec![format!("http://localhost:{port}").parse().unwrap()],
                     Default::default(),
+                    &NoMetrics,
                 )
             }))
             .network_config(TestConfigBuilder::default().l1_url(l1).build())
@@ -2200,6 +2211,7 @@ mod test {
         let peers = StatePeers::<StaticVersion<0, 1>>::from_urls(
             vec!["https://notarealnode.network".parse().unwrap(), url],
             Default::default(),
+            &NoMetrics,
         );
 
         // Fetch the config from node 1, a different node than the one running the service.

@@ -1,6 +1,7 @@
-use std::{fs::File, io::stdout, path::PathBuf};
+use std::{fs::File, io::stdout, path::PathBuf, time::Duration};
 
 use clap::Parser;
+use espresso_types::parse_duration;
 use ethers::types::Address;
 use futures::FutureExt;
 use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
@@ -38,6 +39,15 @@ struct Options {
         default_value = "http://localhost:8545"
     )]
     rpc_url: Url,
+
+    /// Request rate when polling L1.
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_L1_POLLING_INTERVAL",
+        default_value = "7s",
+        value_parser = parse_duration,
+    )]
+    pub l1_polling_interval: Duration,
 
     /// URL of a sequencer node that is currently providing the HotShot config.
     /// This is used to initialize the stake table.
@@ -149,6 +159,7 @@ async fn main() -> anyhow::Result<()> {
 
     let contracts = deploy(
         opt.rpc_url,
+        opt.l1_polling_interval,
         opt.mnemonic,
         opt.account_index,
         opt.multisig_address,

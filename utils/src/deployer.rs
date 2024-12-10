@@ -19,8 +19,7 @@ use futures::future::{BoxFuture, FutureExt};
 use hotshot_contract_adapter::light_client::{
     LightClientConstructorArgs, ParsedLightClientState, ParsedStakeTableState,
 };
-use std::sync::Arc;
-use std::{collections::HashMap, io::Write, ops::Deref};
+use std::{collections::HashMap, io::Write, ops::Deref, sync::Arc, time::Duration};
 use url::Url;
 
 /// Set of predeployed contracts.
@@ -310,6 +309,7 @@ pub async fn deploy_mock_light_client_contract<M: Middleware + 'static>(
 #[allow(clippy::too_many_arguments)]
 pub async fn deploy(
     l1url: Url,
+    l1_interval: Duration,
     mnemonic: String,
     account_index: u32,
     multisig_address: Option<H160>,
@@ -320,7 +320,7 @@ pub async fn deploy(
     mut contracts: Contracts,
     initial_stake_table: Option<Vec<NodeInfo>>,
 ) -> anyhow::Result<Contracts> {
-    let provider = Provider::<Http>::try_from(l1url.to_string())?;
+    let provider = Provider::<Http>::try_from(l1url.to_string())?.interval(l1_interval);
     let chain_id = provider.get_chainid().await?.as_u64();
     let wallet = MnemonicBuilder::<English>::default()
         .phrase(mnemonic.as_str())
