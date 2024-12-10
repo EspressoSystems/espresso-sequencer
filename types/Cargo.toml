@@ -22,7 +22,6 @@ committable = { workspace = true }
 contract-bindings = { path = "../contract-bindings" }
 derive_more = { workspace = true }
 diff-test-bn254 = { git = "https://github.com/EspressoSystems/solidity-bn254.git" }
-dyn-clone = { workspace = true }
 ethers = { workspace = true }
 fluent-asserter = "0.1.9"
 futures = { workspace = true }
