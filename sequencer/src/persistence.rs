@@ -23,16 +23,20 @@ pub trait ChainConfigPersistence: Sized + Send + Sync {
 #[cfg(any(test, feature = "testing"))]
 mod testing {
 
-    use espresso_types::v0::traits::SequencerPersistence;
+    use espresso_types::v0::traits::{PersistenceOptions, SequencerPersistence};
 
     use super::*;
     #[allow(dead_code)]
     #[async_trait]
     pub trait TestablePersistence: SequencerPersistence {
-        type Storage;
+        type Storage: Sync;
 
         async fn tmp_storage() -> Self::Storage;
-        async fn connect(storage: &Self::Storage) -> Self;
+        fn options(storage: &Self::Storage) -> impl PersistenceOptions<Persistence = Self>;
+
+        async fn connect(storage: &Self::Storage) -> Self {
+            Self::options(storage).create().await.unwrap()
+        }
     }
 }
 
@@ -45,7 +49,8 @@ mod persistence_tests {
     use async_lock::RwLock;
     use committable::Committable;
     use espresso_types::{
-        traits::EventConsumer, Event, Leaf, Leaf2, NodeState, PubKey, SeqTypes, ValidatedState,
+        traits::{EventConsumer, NullEventConsumer, PersistenceOptions},
+        Event, Leaf, Leaf2, NodeState, PubKey, SeqTypes, ValidatedState,
     };
     use hotshot::types::{BLSPubKey, SignatureKey};
     use hotshot_example_types::node_types::TestVersions;
@@ -746,5 +751,133 @@ mod persistence_tests {
             assert_eq!(decided_vid_share.view_number, leaf.view_number());
             assert!(info.leaf.block_payload().is_some());
         }
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    pub async fn test_pruning<P: TestablePersistence>() {
+        setup_test();
+
+        let tmp = P::tmp_storage().await;
+
+        let mut options = P::options(&tmp);
+        options.set_view_retention(1);
+        let storage = options.create().await.unwrap();
+
+        // Add some "old" data, from view 0.
+        let leaf = Leaf::genesis(&ValidatedState::default(), &NodeState::mock()).await;
+        let leaf_payload = leaf.block_payload().unwrap();
+        let leaf_payload_bytes_arc = leaf_payload.encode();
+        let disperse = vid_scheme(2)
+            .disperse(leaf_payload_bytes_arc.clone())
+            .unwrap();
+        let payload_commitment = disperse.commit;
+        let (pubkey, privkey) = BLSPubKey::generated_from_seed_indexed([0; 32], 1);
+        let vid_share = VidDisperseShare::<SeqTypes> {
+            view_number: ViewNumber::new(0),
+            payload_commitment,
+            share: disperse.shares[0].clone(),
+            common: disperse.common,
+            recipient_key: pubkey,
+        }
+        .to_proposal(&privkey)
+        .unwrap()
+        .clone();
+
+        let quorum_proposal = QuorumProposal2::<SeqTypes> {
+            block_header: leaf.block_header().clone(),
+            view_number: ViewNumber::genesis(),
+            justify_qc: QuorumCertificate::genesis::<TestVersions>(
+                &ValidatedState::default(),
+                &NodeState::mock(),
+            )
+            .await
+            .to_qc2(),
+            upgrade_certificate: None,
+            view_change_evidence: None,
+            drb_seed: INITIAL_DRB_SEED_INPUT,
+            drb_result: INITIAL_DRB_RESULT,
+        };
+        let quorum_proposal_signature =
+            BLSPubKey::sign(&privkey, &bincode::serialize(&quorum_proposal).unwrap())
+                .expect("Failed to sign quorum proposal");
+        let quorum_proposal = Proposal {
+            data: quorum_proposal,
+            signature: quorum_proposal_signature,
+            _pd: Default::default(),
+        };
+
+        let block_payload_signature = BLSPubKey::sign(&privkey, &leaf_payload_bytes_arc)
+            .expect("Failed to sign block payload");
+        let da_proposal = Proposal {
+            data: DaProposal::<SeqTypes> {
+                encoded_transactions: leaf_payload_bytes_arc,
+                metadata: leaf_payload.ns_table().clone(),
+                view_number: ViewNumber::new(0),
+            },
+            signature: block_payload_signature,
+            _pd: Default::default(),
+        };
+
+        storage
+            .append_da(&da_proposal, payload_commitment)
+            .await
+            .unwrap();
+        storage.append_vid(&vid_share).await.unwrap();
+        storage
+            .append_quorum_proposal(&quorum_proposal)
+            .await
+            .unwrap();
+
+        // Decide a newer view, view 1.
+        storage
+            .append_decided_leaves(ViewNumber::new(1), [], &NullEventConsumer)
+            .await
+            .unwrap();
+
+        // The old data is not more than the retention period (1 view) old, so it should not be
+        // GCed.
+        assert_eq!(
+            storage
+                .load_da_proposal(ViewNumber::new(0))
+                .await
+                .unwrap()
+                .unwrap(),
+            da_proposal
+        );
+        assert_eq!(
+            storage
+                .load_vid_share(ViewNumber::new(0))
+                .await
+                .unwrap()
+                .unwrap(),
+            vid_share
+        );
+        assert_eq!(
+            storage
+                .load_quorum_proposal(ViewNumber::new(0))
+                .await
+                .unwrap(),
+            quorum_proposal
+        );
+
+        // Decide an even newer view, triggering GC of the old data.
+        storage
+            .append_decided_leaves(ViewNumber::new(2), [], &NullEventConsumer)
+            .await
+            .unwrap();
+        assert!(storage
+            .load_da_proposal(ViewNumber::new(0))
+            .await
+            .unwrap()
+            .is_none());
+        assert!(storage
+            .load_vid_share(ViewNumber::new(0))
+            .await
+            .unwrap()
+            .is_none());
+        assert!(storage
+            .load_quorum_proposal(ViewNumber::new(0))
+            .await
+            .is_err());
     }
 }

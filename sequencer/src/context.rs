@@ -32,6 +32,7 @@ use hotshot_types::{
     },
     PeerConfig, ValidatorConfig,
 };
+use std::fmt::Debug;
 use tracing::{Instrument, Level};
 use url::Url;
 
@@ -311,7 +312,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> Sequence
     ///
     /// When this context is dropped or [`shut_down`](Self::shut_down), background tasks will be
     /// cancelled in the reverse order that they were spawned.
-    pub fn spawn(&mut self, name: impl Display, task: impl Future + Send + 'static) {
+    pub fn spawn(&mut self, name: impl Display, task: impl Future<Output: Debug> + Send + 'static) {
         self.tasks.spawn(name, task);
     }
 
@@ -322,7 +323,11 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> Sequence
     ///
     /// The only difference between a short-lived background task and a [long-lived](Self::spawn)
     /// one is how urgently logging related to the task is treated.
-    pub fn spawn_short_lived(&mut self, name: impl Display, task: impl Future + Send + 'static) {
+    pub fn spawn_short_lived(
+        &mut self,
+        name: impl Display,
+        task: impl Future<Output: Debug> + Send + 'static,
+    ) {
         self.tasks.spawn_short_lived(name, task);
     }
 
@@ -442,8 +447,8 @@ macro_rules! spawn_with_log_level {
             spawn(
                 async move {
                     tracing::event!($lvl, "spawning background task");
-                    $task.await;
-                    tracing::event!($lvl, "background task exited");
+                    let res = $task.await;
+                    tracing::event!($lvl, ?res, "background task exited");
                 }
                 .instrument(span),
             )
@@ -457,7 +462,7 @@ impl TaskList {
     ///
     /// When this [`TaskList`] is dropped or [`shut_down`](Self::shut_down), background tasks will
     /// be cancelled in the reverse order that they were spawned.
-    pub fn spawn(&mut self, name: impl Display, task: impl Future + Send + 'static) {
+    pub fn spawn(&mut self, name: impl Display, task: impl Future<Output: Debug> + Send + 'static) {
         spawn_with_log_level!(self, Level::INFO, name, task);
     }
 
@@ -468,7 +473,11 @@ impl TaskList {
     ///
     /// The only difference between a short-lived background task and a [long-lived](Self::spawn)
     /// one is how urgently logging related to the task is treated.
-    pub fn spawn_short_lived(&mut self, name: impl Display, task: impl Future + Send + 'static) {
+    pub fn spawn_short_lived(
+        &mut self,
+        name: impl Display,
+        task: impl Future<Output: Debug> + Send + 'static,
+    ) {
         spawn_with_log_level!(self, Level::DEBUG, name, task);
     }
 
