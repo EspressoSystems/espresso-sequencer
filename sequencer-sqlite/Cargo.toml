@@ -1,0 +1,33 @@
+# As a workaround for feature unification by cargo this separate crate that is
+# not part of the workspace that allows us to compile a sequencer binary without
+# the embedded-db feature turned on.
+[package]
+name = "sequencer-sqlite"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+sequencer = { path = "../sequencer" , features = ["embedded-db"] }
+tokio = { version = "1", default-features = false, features = [
+	"rt-multi-thread",
+	"macros",
+	"parking_lot",
+	"sync",
+] }
+anyhow = "^1.0"
+
+[profile.dev]
+# No optimizations
+opt-level = 0
+# Skip compiling the debug information.
+debug = false
+# Skip linking symbols.
+strip = true
+[profile.test]
+opt-level = 1
+[profile.test.package.hotshot-state-prover]
+opt-level = 3
+[profile.test.package.gen-vk-contract]
+opt-level = 3
+[profile.test.package.diff-test-hotshot]
+opt-level = 3

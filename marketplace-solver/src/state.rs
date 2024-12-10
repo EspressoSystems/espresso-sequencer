@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use async_trait::async_trait;
 use committable::Committable;
 use espresso_types::{
-    v0_3::{
+    v0_99::{
         BidTx, RollupRegistration, RollupRegistrationBody, RollupUpdate, RollupUpdatebody,
         SolverAuctionResults,
     },
@@ -203,7 +203,7 @@ impl UpdateSolverState for GlobalState {
             registration.body.active = active;
         }
 
-        // The given signature key should also be from the database `signature_keys`.`
+        // The given signature key should also be from the database `signature_keys`.
         if !registration.body.signature_keys.contains(&signature_key) {
             return Err(SolverError::SignatureKeysMismatch(
                 signature_key.to_string(),
@@ -308,7 +308,7 @@ struct RollupRegistrationResult {
     data: Vec<u8>,
 }
 
-#[cfg(any(test, feature = "testing"))]
+#[cfg(all(any(test, feature = "testing"), not(feature = "embedded-db")))]
 impl GlobalState {
     pub async fn mock() -> Self {
         let db = hotshot_query_service::data_source::sql::testing::TmpDb::init().await;
@@ -340,7 +340,7 @@ impl GlobalState {
     }
 }
 
-#[cfg(any(test, feature = "testing"))]
+#[cfg(all(any(test, feature = "testing"), not(feature = "embedded-db")))]
 impl SolverState {
     pub fn mock() -> Self {
         Self {

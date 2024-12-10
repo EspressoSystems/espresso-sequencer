@@ -1,11 +1,13 @@
 use crate::v0::{
-    retain_accounts, traits::StateCatchup, v0_3::ChainConfig, FeeMerkleTree, GenesisHeader,
-    L1BlockInfo, L1Client, PubKey, Timestamp, Upgrade, UpgradeMode,
+    traits::StateCatchup, v0_99::ChainConfig, GenesisHeader, L1BlockInfo, L1Client, PubKey,
+    Timestamp, Upgrade, UpgradeMode,
 };
 use hotshot_types::traits::states::InstanceState;
 use hotshot_types::HotShotConfig;
 use std::{collections::BTreeMap, sync::Arc};
-use vbs::version::{StaticVersion, StaticVersionType, Version};
+use vbs::version::Version;
+#[cfg(any(test, feature = "testing"))]
+use vbs::version::{StaticVersion, StaticVersionType};
 
 use super::state::ValidatedState;
 
@@ -15,7 +17,7 @@ use super::state::ValidatedState;
 #[derive(derive_more::Debug, Clone)]
 pub struct NodeState {
     pub node_id: u64,
-    pub chain_config: crate::v0_3::ChainConfig,
+    pub chain_config: crate::v0_99::ChainConfig,
     pub l1_client: L1Client,
     #[debug("{}", peers.name())]
     pub peers: Arc<dyn StateCatchup>,
@@ -92,7 +94,7 @@ impl NodeState {
     }
 
     #[cfg(any(test, feature = "testing"))]
-    pub fn mock_v3() -> Self {
+    pub fn mock_v99() -> Self {
         use vbs::version::StaticVersion;
 
         Self::new(
@@ -100,7 +102,7 @@ impl NodeState {
             ChainConfig::default(),
             L1Client::http("http://localhost:3331".parse().unwrap()),
             mock::MockStateCatchup::default(),
-            StaticVersion::<0, 3>::version(),
+            StaticVersion::<0, 99>::version(),
         )
     }
 
@@ -187,7 +189,10 @@ pub mod mock {
     use jf_merkle_tree::{ForgetableMerkleTreeScheme, MerkleTreeScheme};
 
     use super::*;
-    use crate::{BackoffParams, BlockMerkleTree, FeeAccount, FeeMerkleCommitment};
+    use crate::{
+        retain_accounts, BackoffParams, BlockMerkleTree, FeeAccount, FeeMerkleCommitment,
+        FeeMerkleTree,
+    };
 
     #[derive(Debug, Clone, Default)]
     pub struct MockStateCatchup {
@@ -208,6 +213,7 @@ pub mod mock {
     impl StateCatchup for MockStateCatchup {
         async fn try_fetch_accounts(
             &self,
+            _retry: usize,
             _instance: &NodeState,
             _height: u64,
             view: ViewNumber,
@@ -223,6 +229,7 @@ pub mod mock {
 
         async fn try_remember_blocks_merkle_tree(
             &self,
+            _retry: usize,
             _instance: &NodeState,
             _height: u64,
             view: ViewNumber,
@@ -247,6 +254,7 @@ pub mod mock {
 
         async fn try_fetch_chain_config(
             &self,
+            _retry: usize,
             _commitment: Commitment<ChainConfig>,
         ) -> anyhow::Result<ChainConfig> {
             Ok(ChainConfig::default())

@@ -2,7 +2,7 @@ use committable::{Commitment, Committable};
 use hotshot::types::SignatureKey;
 
 use super::{
-    v0_3::{RollupRegistrationBody, RollupUpdatebody},
+    v0_99::{RollupRegistrationBody, RollupUpdatebody},
     Update,
 };
 use crate::Update::Set;

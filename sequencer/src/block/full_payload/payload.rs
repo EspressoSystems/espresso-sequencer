@@ -88,7 +88,6 @@ impl Payload {
     fn from_transactions_sync(
         transactions: impl IntoIterator<Item = <Self as BlockPayload<SeqTypes>>::Transaction> + Send,
         chain_config: ChainConfig,
-        _instance_state: &<Self as BlockPayload<SeqTypes>>::Instance,
     ) -> Result<
         (Self, <Self as BlockPayload<SeqTypes>>::Metadata),
         <Self as BlockPayload<SeqTypes>>::Error,
@@ -102,7 +101,7 @@ impl Payload {
         // add each tx to its namespace
         let mut ns_builders = BTreeMap::<NamespaceId, NsPayloadBuilder>::new();
         for tx in transactions.into_iter() {
-            // accounting for block byte length limit            
+            // accounting for block byte length limit
             block_byte_len += tx.size_in_block(!ns_builders.contains_key(&tx.namespace()));
             if block_byte_len > max_block_byte_len {
                 tracing::warn!("transactions truncated to fit in maximum block byte length {max_block_byte_len}");

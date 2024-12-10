@@ -7,6 +7,7 @@ environment:
   - ESPRESSO_SEQUENCER_L1_PROVIDER=http://localhost:$ESPRESSO_SEQUENCER_L1_PORT
   - ESPRESSO_SEQUENCER_GENESIS_FILE=data/genesis/demo.toml
   - ESPRESSO_BUILDER_GENESIS_FILE=data/genesis/demo.toml
+  - ESPRESSO_SEQUENCER_INITIAL_PERMISSIONED_STAKE_TABLE_PATH=data/initial_stake_table.toml
   - ESPRESSO_STATE_RELAY_SERVER_URL=http://localhost:$ESPRESSO_STATE_RELAY_SERVER_PORT
   - QUERY_SERVICE_URI=http://localhost:$ESPRESSO_SEQUENCER1_API_PORT/v0/
   - NODE_VALIDATOR_URI=ws://localhost:$ESPRESSO_NODE_VALIDATOR_PORT/v0/
@@ -18,18 +19,16 @@ processes:
     readiness_probe:
       exec:
         command: "[ $(docker inspect -f '{{.State.Health.Status}}' espresso-sequencer-demo-l1-network-1) = 'healthy' ]"
-      initial_delay_seconds: 5
-      period_seconds: 6
+      period_seconds: 1
       timeout_seconds: 5
-      success_threshold: 1
-      failure_threshold: 20
+      failure_threshold: 30
 
   deploy-sequencer-contracts:
     # The contract addresses are implicitly inherited from .env. We need to unset these or else the
     # script will think they're already deployed.
     command:
       unset ESPRESSO_SEQUENCER_HOTSHOT_ADDRESS ESPRESSO_SEQUENCER_LIGHT_CLIENT_PROXY_ADDRESS && deploy --only
-      fee-contract
+      fee-contract,permissioned-stake-table
     namespace: setup
     depends_on:
       demo-l1-network:
@@ -56,6 +55,7 @@ processes:
     namespace: setup
     environment:
       - L1_PROVIDER=http://localhost:$ESPRESSO_SEQUENCER_L1_PORT
+      - L1_POLLING_INTERVAL=$ESPRESSO_SEQUENCER_L1_POLLING_INTERVAL
       - ESPRESSO_PROVIDER=http://localhost:$ESPRESSO_SEQUENCER1_API_PORT
       - CONTRACT_ADDRESS=0xa15bb66138824a1c7167f5e85b957d04dd34e468
       - MNEMONIC=$ESPRESSO_BUILDER_ETH_MNEMONIC
@@ -89,6 +89,8 @@ processes:
   state-relay-server:
     command: state-relay-server
     readiness_probe:
+      failure_threshold: 10
+      period_seconds: 1
       http_get:
         scheme: http
         host: localhost
@@ -163,6 +165,7 @@ processes:
         host: localhost
         port: $ESPRESSO_SEQUENCER_API_PORT
         path: /healthcheck
+      period_seconds: 1
       failure_threshold: 100
 
   sequencer1:
@@ -171,7 +174,7 @@ processes:
       - ESPRESSO_SEQUENCER_API_PORT=$ESPRESSO_SEQUENCER1_API_PORT
       - ESPRESSO_SEQUENCER_LIBP2P_BIND_ADDRESS=0.0.0.0:$ESPRESSO_DEMO_SEQUENCER_LIBP2P_PORT_1
       - ESPRESSO_SEQUENCER_LIBP2P_ADVERTISE_ADDRESS=localhost:$ESPRESSO_DEMO_SEQUENCER_LIBP2P_PORT_1
-      - ESPRESSO_SEQUENCER_API_PEERS=http://localhost:$ESPRESSO_SEQUENCER_API_PORT
+      - ESPRESSO_SEQUENCER_API_PEERS=http://localhost:$ESPRESSO_SEQUENCER4_API_PORT
       - ESPRESSO_SEQUENCER_STATE_PEERS=http://localhost:$ESPRESSO_SEQUENCER2_API_PORT
       - ESPRESSO_SEQUENCER_POSTGRES_HOST=localhost
       - ESPRESSO_SEQUENCER_POSTGRES_PORT=$ESPRESSO_SEQUENCER1_DB_PORT
@@ -215,6 +218,7 @@ processes:
         host: localhost
         port: $ESPRESSO_SEQUENCER1_API_PORT
         path: /healthcheck
+      period_seconds: 1
       failure_threshold: 100
     availability:
       restart: exit_on_failure
@@ -262,6 +266,7 @@ processes:
         port: $ESPRESSO_SEQUENCER2_API_PORT
         path: /healthcheck
       failure_threshold: 100
+      period_seconds: 1
     availability:
       exit_on_skipped: true
       restart: exit_on_failure
@@ -310,15 +315,17 @@ processes:
         port: $ESPRESSO_SEQUENCER3_API_PORT
         path: /healthcheck
       failure_threshold: 100
+      period_seconds: 1
     availability:
       exit_on_skipped: true
       restart: exit_on_failure
 
   sequencer4:
-    command: sequencer -- http -- catchup -- status
+    command: sequencer-sqlite -- storage-sql -- http -- query -- catchup -- status
     environment:
       - ESPRESSO_SEQUENCER_API_PORT=$ESPRESSO_SEQUENCER4_API_PORT
       - ESPRESSO_SEQUENCER_STATE_PEERS=http://localhost:$ESPRESSO_SEQUENCER_API_PORT
+      - ESPRESSO_SEQUENCER_API_PEERS=http://localhost:$ESPRESSO_SEQUENCER_API_PORT
       - ESPRESSO_SEQUENCER_STORAGE_PATH=$ESPRESSO_BASE_STORAGE_PATH/seq4
       - ESPRESSO_SEQUENCER_PRIVATE_STAKING_KEY=$ESPRESSO_DEMO_SEQUENCER_STAKING_PRIVATE_KEY_4
       - ESPRESSO_SEQUENCER_PRIVATE_STATE_KEY=$ESPRESSO_DEMO_SEQUENCER_STATE_PRIVATE_KEY_4
@@ -332,6 +339,7 @@ processes:
       - ESPRESSO_SEQUENCER_IDENTITY_LATITUDE=-25.2744
       - ESPRESSO_SEQUENCER_IDENTITY_LONGITUDE=133.7751
       - ESPRESSO_SEQUENCER_PUBLIC_API_URL=http://localhost:$ESPRESSO_SEQUENCER4_API_PORT/
+      - ESPRESSO_SEQUENCER_IS_DA=true
     depends_on:
       orchestrator:
         condition: process_healthy
@@ -354,6 +362,7 @@ processes:
         port: $ESPRESSO_SEQUENCER4_API_PORT
         path: /healthcheck
       failure_threshold: 100
+      period_seconds: 1
     availability:
       exit_on_skipped: true
       restart: exit_on_failure
@@ -385,8 +394,8 @@ processes:
         host: localhost
         port: $ESPRESSO_SEQUENCER1_API_PORT
         path: /healthcheck
+      period_seconds: 1
       failure_threshold: 100
-
 
   # We use KeyDB (a Redis variant) to maintain consistency between
   # different parts of the CDN
@@ -414,6 +423,7 @@ processes:
         host: 127.0.0.1
         port: 9093
         path: /metrics
+      period_seconds: 1
       failure_threshold: 100
 
   # A broker is the main message-routing unit of the CDN
@@ -428,6 +438,7 @@ processes:
         host: 127.0.0.1
         port: 9091
         path: /metrics
+      period_seconds: 1
       failure_threshold: 100
 
   # A broker is the main message-routing unit of the CDN
@@ -446,6 +457,7 @@ processes:
         host: 127.0.0.1
         port: 9092
         path: /metrics
+      period_seconds: 1
       failure_threshold: 100
 
   cdn-whitelist:
@@ -475,6 +487,7 @@ processes:
         port: $ESPRESSO_SUBMIT_TRANSACTIONS_PUBLIC_PORT
         path: /healthcheck
       failure_threshold: 100
+      period_seconds: 1
     availability:
       exit_on_skipped: true
 
@@ -495,6 +508,7 @@ processes:
         port: $ESPRESSO_SUBMIT_TRANSACTIONS_PRIVATE_PORT
         path: /healthcheck
       failure_threshold: 100
+      period_seconds: 1
     availability:
       exit_on_skipped: true
 
@@ -518,6 +532,7 @@ processes:
         port: $ESPRESSO_BUILDER_SERVER_PORT
         path: /healthcheck
       failure_threshold: 100
+      period_seconds: 1
     availability:
       restart: "exit_on_failure"
 
@@ -558,6 +573,7 @@ processes:
         host: localhost
         port: $ESPRESSO_MARKETPLACE_SOLVER_API_PORT
         path: /healthcheck
+      period_seconds: 1
       failure_threshold: 100
 
   sequencer-db-0:
@@ -621,4 +637,3 @@ processes:
     depends_on:
       sequencer1:
         condition: process_healthy
-

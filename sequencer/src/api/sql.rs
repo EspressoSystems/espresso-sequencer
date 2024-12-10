@@ -3,8 +3,8 @@ use async_trait::async_trait;
 use committable::{Commitment, Committable};
 use espresso_types::{
     get_l1_deposits,
-    v0_3::{ChainConfig, IterableFeeInfo},
-    BlockMerkleTree, FeeAccount, FeeMerkleTree, Leaf, NodeState, ValidatedState,
+    v0_99::{ChainConfig, IterableFeeInfo},
+    BlockMerkleTree, FeeAccount, FeeMerkleTree, Leaf, Leaf2, NodeState, ValidatedState,
 };
 use hotshot::traits::ValidatedState as _;
 use hotshot_query_service::{
@@ -53,7 +53,7 @@ impl SequencerDataSource for DataSource {
         let fetch_limit = opt.fetch_rate_limit;
         let active_fetch_delay = opt.active_fetch_delay;
         let chunk_fetch_delay = opt.chunk_fetch_delay;
-        let mut cfg = Config::try_from(opt)?;
+        let mut cfg = Config::try_from(&opt)?;
 
         if reset {
             cfg = cfg.reset_schema();
@@ -64,6 +64,7 @@ impl SequencerDataSource for DataSource {
         if let Some(limit) = fetch_limit {
             builder = builder.with_rate_limit(limit);
         }
+
         if let Some(delay) = active_fetch_delay {
             builder = builder.with_active_fetch_delay(delay);
         }
@@ -82,7 +83,7 @@ impl CatchupStorage for SqlStorage {
         height: u64,
         view: ViewNumber,
         accounts: &[FeeAccount],
-    ) -> anyhow::Result<(FeeMerkleTree, Leaf)> {
+    ) -> anyhow::Result<(FeeMerkleTree, Leaf2)> {
         let mut tx = self.read().await.context(format!(
             "opening transaction to fetch account {accounts:?}; height {height}"
         ))?;
@@ -162,7 +163,7 @@ impl CatchupStorage for DataSource {
         height: u64,
         view: ViewNumber,
         accounts: &[FeeAccount],
-    ) -> anyhow::Result<(FeeMerkleTree, Leaf)> {
+    ) -> anyhow::Result<(FeeMerkleTree, Leaf2)> {
         self.as_ref()
             .get_accounts(instance, height, view, accounts)
             .await
@@ -217,7 +218,7 @@ async fn load_accounts<Mode: TransactionMode>(
     tx: &mut Transaction<Mode>,
     height: u64,
     accounts: &[FeeAccount],
-) -> anyhow::Result<(FeeMerkleTree, Leaf)> {
+) -> anyhow::Result<(FeeMerkleTree, Leaf2)> {
     let leaf = tx
         .get_leaf(LeafId::<SeqTypes>::from(height as usize))
         .await
@@ -254,7 +255,7 @@ async fn load_accounts<Mode: TransactionMode>(
         }
     }
 
-    Ok((snapshot, leaf.leaf().clone()))
+    Ok((snapshot, leaf.leaf().clone().into()))
 }
 
 async fn load_chain_config<Mode: TransactionMode>(
@@ -277,13 +278,13 @@ async fn reconstruct_state<Mode: TransactionMode>(
     from_height: u64,
     to_view: ViewNumber,
     accounts: &[FeeAccount],
-) -> anyhow::Result<(ValidatedState, Leaf)> {
+) -> anyhow::Result<(ValidatedState, Leaf2)> {
     tracing::info!("attempting to reconstruct fee state");
     let from_leaf = tx
         .get_leaf((from_height as usize).into())
         .await
         .context(format!("leaf {from_height} not available"))?;
-    let from_leaf = from_leaf.leaf();
+    let from_leaf: Leaf2 = from_leaf.leaf().clone().into();
     ensure!(
         from_leaf.view_number() < to_view,
         "state reconstruction: starting state {:?} must be before ending state {to_view:?}",
@@ -300,7 +301,7 @@ async fn reconstruct_state<Mode: TransactionMode>(
     let mut parent = to_leaf.parent_commitment();
     tracing::debug!(?to_leaf, ?parent, view = ?to_view, "have required leaf");
     leaves.push_front(to_leaf.clone());
-    while parent != Committable::commit(from_leaf) {
+    while parent != Committable::commit(&from_leaf) {
         let leaf = get_leaf_from_proposal(tx, "leaf_hash = $1", &parent.to_string())
             .await
             .context(format!(
@@ -320,7 +321,7 @@ async fn reconstruct_state<Mode: TransactionMode>(
     let mut accounts = accounts.iter().copied().collect::<HashSet<_>>();
     // Add in all the accounts we will need to replay any of the headers, to ensure that we don't
     // need to do catchup recursively.
-    let (catchup, dependencies) = header_dependencies(tx, instance, parent, &leaves).await?;
+    let (catchup, dependencies) = header_dependencies(tx, instance, &parent, &leaves).await?;
     accounts.extend(dependencies);
     let accounts = accounts.into_iter().collect::<Vec<_>>();
     state.fee_merkle_tree = load_accounts(tx, from_height, &accounts)
@@ -349,8 +350,8 @@ async fn reconstruct_state<Mode: TransactionMode>(
     }
 
     // Apply subsequent headers to compute the later state.
-    for proposal in &leaves {
-        state = compute_state_update(&state, instance, &catchup, parent, proposal)
+    for proposal in leaves {
+        state = compute_state_update(&state, instance, &catchup, &parent, &proposal)
             .await
             .context(format!(
                 "unable to reconstruct state because state update {} failed",
@@ -373,8 +374,8 @@ async fn reconstruct_state<Mode: TransactionMode>(
 async fn header_dependencies<Mode: TransactionMode>(
     tx: &mut Transaction<Mode>,
     instance: &NodeState,
-    mut parent: &Leaf,
-    leaves: impl IntoIterator<Item = &Leaf>,
+    mut parent: &Leaf2,
+    leaves: impl IntoIterator<Item = &Leaf2>,
 ) -> anyhow::Result<(NullStateCatchup, HashSet<FeeAccount>)> {
     let mut catchup = NullStateCatchup::default();
     let mut accounts = HashSet::default();
@@ -432,7 +433,7 @@ async fn get_leaf_from_proposal<Mode, P>(
     tx: &mut Transaction<Mode>,
     where_clause: &str,
     param: P,
-) -> anyhow::Result<Leaf>
+) -> anyhow::Result<Leaf2>
 where
     P: Type<Db> + for<'q> Encode<'q, Db>,
 {
@@ -443,7 +444,7 @@ where
     .fetch_one(tx.as_mut())
     .await?;
     let proposal: Proposal<SeqTypes, QuorumProposal<SeqTypes>> = bincode::deserialize(&data)?;
-    Ok(Leaf::from_quorum_proposal(&proposal.data))
+    Ok(Leaf::from_quorum_proposal(&proposal.data).into())
 }
 
 #[cfg(any(test, feature = "testing"))]
@@ -455,12 +456,25 @@ mod impl_testable_data_source {
     use crate::api::{self, data_source::testing::TestableSequencerDataSource};
 
     fn tmp_options(db: &TmpDb) -> Options {
-        Options {
-            port: Some(db.port()),
-            host: Some(db.host()),
-            user: Some("postgres".into()),
-            password: Some("password".into()),
-            ..Default::default()
+        #[cfg(not(feature = "embedded-db"))]
+        {
+            let opt = crate::persistence::sql::PostgresOptions {
+                port: Some(db.port()),
+                host: Some(db.host()),
+                user: Some("postgres".into()),
+                password: Some("password".into()),
+                ..Default::default()
+            };
+
+            opt.into()
+        }
+
+        #[cfg(feature = "embedded-db")]
+        {
+            let opt = crate::persistence::sql::SqliteOptions {
+                path: Some(db.path()),
+            };
+            opt.into()
         }
     }
 

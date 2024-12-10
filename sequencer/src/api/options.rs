@@ -3,7 +3,7 @@
 use anyhow::{bail, Context};
 use clap::Parser;
 use espresso_types::{
-    v0::traits::{EventConsumer, NullEventConsumer, SequencerPersistence},
+    v0::traits::{EventConsumer, NullEventConsumer, PersistenceOptions, SequencerPersistence},
     BlockMerkleTree, PubKey,
 };
 use futures::{
@@ -13,6 +13,7 @@ use futures::{
 use hotshot_events_service::events::Error as EventStreamingError;
 use hotshot_query_service::{
     data_source::{ExtensibleDataSource, MetricsDataSource},
+    fetching::provider::QueryServiceProvider,
     status::{self, UpdateStatusData},
     ApiState as AppState, Error,
 };
@@ -27,7 +28,7 @@ use vbs::version::StaticVersionType;
 
 use super::{
     data_source::{
-        provider, CatchupDataSource, HotShotConfigDataSource, NodeStateDataSource,
+        provider, CatchupDataSource, HotShotConfigDataSource, NodeStateDataSource, Provider,
         SequencerDataSource, StateSignatureDataSource, SubmitDataSource,
     },
     endpoints, fs, sql,
@@ -333,12 +334,18 @@ impl Options {
         N: ConnectedNetwork<PubKey>,
         P: SequencerPersistence,
     {
-        let ds = sql::DataSource::create(
-            mod_opt.clone(),
-            provider::<V>(query_opt.peers.clone(), bind_version),
-            false,
-        )
-        .await?;
+        let mut provider = Provider::default();
+
+        // Use the database itself as a fetching provider: sometimes we can fetch data that is
+        // missing from the query service from ephemeral consensus storage.
+        provider = provider.with_provider(mod_opt.clone().create().await?);
+        // If that fails, fetch missing data from peers.
+        for peer in query_opt.peers {
+            tracing::info!("will fetch missing data from {peer}");
+            provider = provider.with_provider(QueryServiceProvider::new(peer, bind_version));
+        }
+
+        let ds = sql::DataSource::create(mod_opt.clone(), provider, false).await?;
         let (metrics, ds, mut app) = self
             .init_app_modules(ds, state.clone(), bind_version)
             .await?;

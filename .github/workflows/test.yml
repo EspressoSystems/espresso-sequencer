@@ -20,10 +20,12 @@ concurrency:
 env:
   RUST_LOG: info,libp2p=off,node=error
   CARGO_TERM_COLOR: always
+  # Save the process compose logs
+  PC_LOGS: /tmp/pc.log
 
 jobs:
-  build-test-artifacts:
-    name: Build test artifacts
+  build-test-artifacts-postgres:
+    name: Build test artifacts (postgres)
     runs-on: buildjet-8vcpu-ubuntu-2204
     steps:
       - uses: rui314/setup-mold@v1
@@ -40,13 +42,40 @@ jobs:
           cache-provider: buildjet
 
       - name: Build and archive tests
-        run: cargo nextest archive --locked --workspace --all-features --archive-file nextest-archive.tar.zst
+        run: cargo nextest archive --locked --workspace --archive-file nextest-archive-postgres.tar.zst
 
       - name: Upload archive to workflow
         uses: actions/upload-artifact@v4
         with:
-          name: nextest-archive
-          path: nextest-archive.tar.zst
+          name: nextest-archive-postgres
+          path: nextest-archive-postgres.tar.zst
+
+  build-test-artifacts-sqlite:
+    name: Build test artifacts (sqlite)
+    runs-on: buildjet-8vcpu-ubuntu-2204
+    steps:
+      - uses: rui314/setup-mold@v1
+
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Install nextest
+        uses: taiki-e/install-action@nextest
+
+      - name: Enable Rust Caching
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-all-crates: true
+          cache-provider: buildjet
+
+      - name: Build and archive tests
+        run: cargo nextest archive --locked --features "embedded-db testing" --workspace --archive-file nextest-archive-sqlite.tar.zst
+
+      - name: Upload archive to workflow
+        uses: actions/upload-artifact@v4
+        with:
+          name: nextest-archive-sqlite
+          path: nextest-archive-sqlite.tar.zst
 
   build-test-bins:
     name: Build test binaries
@@ -63,7 +92,9 @@ jobs:
           cache-provider: buildjet
 
       - name: Build Bins
-        run: cargo build --locked --profile test --bins
+        run: |
+          cargo build --locked --profile test --bins
+          cargo build --manifest-path ./sequencer-sqlite/Cargo.toml --target-dir ./target
         timeout-minutes: 30
 
       - name: Upload archive to workflow
@@ -93,9 +124,10 @@ jobs:
             target/debug/marketplace-builder
             target/debug/node-metrics
             target/debug/dev-rollup
+            target/debug/sequencer-sqlite
 
-  test:
-    needs: build-test-artifacts
+  test-postgres:
+    needs: build-test-artifacts-postgres
     runs-on: ubuntu-latest
     steps:
       - name: Install Foundry
@@ -108,24 +140,54 @@ jobs:
       - name: Download archive
         uses: actions/download-artifact@v4
         with:
-          name: nextest-archive
+          name: nextest-archive-postgres
 
       - name: Test
         run: |
-          cargo nextest run --archive-file nextest-archive.tar.zst  --verbose --no-fail-fast \
+          cargo nextest run --archive-file nextest-archive-postgres.tar.zst  --verbose --no-fail-fast \
+          --workspace-remap $PWD
+        timeout-minutes: 20
+
+  test-sqlite:
+    needs: build-test-artifacts-sqlite
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fix submodule permissions check
+        run: |
+          git config --global --add safe.directory '*'
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: nightly
+
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install nextest
+        uses: taiki-e/install-action@nextest
+      - name: Download archive
+        uses: actions/download-artifact@v4
+        with:
+          name: nextest-archive-sqlite
+
+      - name: Test
+        run: |
+          cargo nextest run --archive-file nextest-archive-sqlite.tar.zst  --verbose --no-fail-fast \
           --workspace-remap $PWD
         timeout-minutes: 20
 
   test-integration:
-    needs: [build-test-artifacts, build-test-bins]
+    needs: [build-test-bins, build-test-artifacts-postgres]
     strategy:
       matrix:
-        version: [02,03]
+        version: [02,99]
         include:
           - version: 02
             compose: "-f process-compose.yaml -D"
             
-          - version: 03
+          - version: 99
             compose: "-f process-compose.yaml -f process-compose-mp.yml -D"
     runs-on: ubuntu-latest
     steps:
@@ -144,7 +206,7 @@ jobs:
 
       - name: Move files
         run: |
-          mv nextest-archive/* .
+          mv nextest-archive-postgres/* .
           mkdir -p target/debug
           mv test-binaries/* target/debug
           chmod -c +x target/debug/*
@@ -152,23 +214,25 @@ jobs:
       - name: Install process-compose
         run: nix profile install nixpkgs#process-compose
 
-      - name: Pull Docker Images
-        run: docker compose pull || docker-compose pull
-
       - name: Run Demo-Native ${{matrix.version}}
-        run: bash -x scripts/demo-native ${{matrix.compose}}
+        run: bash -x scripts/demo-native ${{matrix.compose}} --tui=false > ${{ env.PC_LOGS }} 2>&1 &
 
       - name: Test Integration
         env:
+          RUST_LOG: debug
           NEXTEST_PROFILE: integration
           INTEGRATION_TEST_SEQUENCER_VERSION: ${{ matrix.version }}
         run: |
-          cargo nextest run --archive-file nextest-archive.tar.zst --verbose --no-fail-fast \
+          cargo nextest run --archive-file nextest-archive-postgres.tar.zst --verbose --no-fail-fast --nocapture \
           --workspace-remap $PWD $(if [ "${{ matrix.version }}" == "2" ]; then echo " smoke"; fi)
-        timeout-minutes: 40
+        timeout-minutes: 10
 
-      - name: Process Compose Down
-        run: process-compose down
+      - name: Upload process compose logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: process-compose-logs-integration-v${{ matrix.version  }}
+          path: ${{ env.PC_LOGS }}
 
   demo-native:
     needs: build-test-bins
@@ -197,6 +261,3 @@ jobs:
           set -o pipefail
           scripts/demo-native --tui=false &
           timeout -v 600 scripts/smoke-test-demo | sed -e 's/^/smoke-test: /;'
-
-      - name: Process Compose Down
-        run: process-compose down

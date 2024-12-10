@@ -1,7 +1,7 @@
 use super::{state::ValidatedState, MarketplaceVersion};
 use crate::{
     eth_signature_key::{EthKeyPair, SigningError},
-    v0_3::{BidTx, BidTxBody, FullNetworkTx, SolverAuctionResults},
+    v0_99::{BidTx, BidTxBody, FullNetworkTx, SolverAuctionResults},
     FeeAccount, FeeAmount, FeeError, FeeInfo, NamespaceId,
 };
 use anyhow::Context;
@@ -93,7 +93,7 @@ impl BidTxBody {
     /// Sign Body and return a `BidTx`. This is the expected way to obtain a `BidTx`.
     /// ```
     /// # use espresso_types::FeeAccount;
-    /// # use espresso_types::v0_3::BidTxBody;
+    /// # use espresso_types::v0_99::BidTxBody;
     ///
     /// BidTxBody::default().signed(&FeeAccount::test_key_pair()).unwrap();
     /// ```
@@ -210,7 +210,7 @@ impl BidTx {
             .charge_fee(FeeInfo::new(self.account(), self.amount()), recipient)
             .map_err(ExecutionError::from)?;
 
-        // Charge the the gas amount
+        // Charge the gas amount
         state
             .charge_fee(FeeInfo::new(self.account(), self.gas_price()), recipient)
             .map_err(ExecutionError::from)?;

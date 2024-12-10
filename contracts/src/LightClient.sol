@@ -306,13 +306,16 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     }
 
     /// @notice Updates the `stateHistoryCommitments` array when a new finalized state is added
-    /// and ensures that the array does not retain states older than the
+    /// and prunes the most outdated element starting from the first element if they fall outside
+    /// the
     /// `stateHistoryRetentionPeriod`.
     /// @dev the block timestamp is used to determine if the stateHistoryCommitments array
     /// should be pruned, based on the stateHistoryRetentionPeriod (seconds).
-    /// @dev a FIFO approach is used to delete elements from the start of the array,
-    /// ensuring that only the most recent states that only recent states are kept within
-    /// the retention window.
+    /// @dev A FIFO approach is used to remove the most outdated element from the start of the
+    /// array.
+    /// However, only one outdated element is removed per invocation of this function, even if
+    /// multiple elements exceed the retention period. As a result, some outdated elements may
+    /// remain in the array temporarily until subsequent invocations of this function.
     /// @dev the `delete` method does not reduce the array length but resets the value at the
     /// specified index to zero. the stateHistoryFirstIndex variable acts as an offset to indicate
     /// the starting point for reading the array, since the length of the array is not reduced
@@ -426,8 +429,8 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
             revert InvalidHotShotBlockForCommitmentCheck();
         }
         for (uint256 i = stateHistoryFirstIndex; i < commitmentsHeight; i++) {
-            // The first commitment greater than the provided height is the root of the tree
-            // that leaf at that HotShot height
+            // Finds and returns the first HotShot commitment whose height is greater than
+            // or equal to the specified HotShot height.
             if (stateHistoryCommitments[i].hotShotBlockHeight >= hotShotBlockHeight) {
                 return (
                     stateHistoryCommitments[i].hotShotBlockCommRoot,

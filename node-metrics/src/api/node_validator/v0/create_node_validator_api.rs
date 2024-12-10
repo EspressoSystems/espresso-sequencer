@@ -13,7 +13,7 @@ use crate::service::{
     server_message::ServerMessage,
 };
 use async_lock::RwLock;
-use espresso_types::{PubKey, SeqTypes};
+use espresso_types::{downgrade_leaf, PubKey, SeqTypes};
 use futures::{
     channel::mpsc::{self, Receiver, SendError, Sender},
     Sink, SinkExt, Stream, StreamExt,
@@ -127,7 +127,8 @@ impl HotShotEventProcessingTask {
             match event {
                 EventType::Decide { leaf_chain, .. } => {
                     for leaf_info in leaf_chain.iter().rev() {
-                        let leaf = leaf_info.leaf.clone();
+                        let leaf2 = leaf_info.leaf.clone();
+                        let leaf = downgrade_leaf(leaf2);
 
                         let send_result = leaf_sender.send(leaf).await;
                         if let Err(err) = send_result {
@@ -157,7 +158,7 @@ impl HotShotEventProcessingTask {
 
                     let public_api_url = roll_call_info.public_api_url;
 
-                    // Send the the discovered public url to the sink
+                    // Send the discovered public url to the sink
                     let send_result = url_sender.send(public_api_url).await;
                     if let Err(err) = send_result {
                         tracing::error!("url sender closed: {}", err);

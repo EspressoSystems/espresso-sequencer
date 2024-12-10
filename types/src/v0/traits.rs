@@ -4,16 +4,17 @@ use std::{cmp::max, collections::BTreeMap, fmt::Debug, ops::Range, sync::Arc};
 
 use anyhow::{bail, ensure, Context};
 use async_trait::async_trait;
-use committable::Commitment;
-use dyn_clone::DynClone;
+use committable::{Commitment, Committable};
 use futures::{FutureExt, TryFutureExt};
 use hotshot::{types::EventType, HotShotInitializer};
 use hotshot_types::{
     consensus::CommitmentMap,
-    data::{DaProposal, QuorumProposal, VidDisperseShare, ViewNumber},
+    data::{
+        DaProposal, EpochNumber, QuorumProposal, QuorumProposal2, VidDisperseShare, ViewNumber,
+    },
     event::{HotShotAction, LeafInfo},
-    message::Proposal,
-    simple_certificate::{QuorumCertificate, UpgradeCertificate},
+    message::{convert_proposal, Proposal},
+    simple_certificate::{QuorumCertificate, QuorumCertificate2, UpgradeCertificate},
     traits::{
         node_implementation::{ConsensusTime, Versions},
         storage::Storage,
@@ -27,17 +28,19 @@ use jf_vid::VidScheme;
 use serde::{de::DeserializeOwned, Serialize};
 
 use crate::{
-    v0::impls::ValidatedState, v0_3::ChainConfig, BackoffParams, BlockMerkleTree, Event,
-    FeeAccount, FeeAccountProof, FeeMerkleCommitment, FeeMerkleTree, Leaf, NetworkConfig, SeqTypes,
+    v0::impls::ValidatedState, v0_99::ChainConfig, BackoffParams, BlockMerkleTree, Event,
+    FeeAccount, FeeAccountProof, FeeMerkleCommitment, FeeMerkleTree, Leaf2, NetworkConfig,
+    SeqTypes,
 };
 
-use super::impls::NodeState;
+use super::{impls::NodeState, Leaf};
 
 #[async_trait]
 pub trait StateCatchup: Send + Sync {
     /// Try to fetch the given accounts state, failing without retrying if unable.
     async fn try_fetch_accounts(
         &self,
+        retry: usize,
         instance: &NodeState,
         height: u64,
         view: ViewNumber,
@@ -55,10 +58,18 @@ pub trait StateCatchup: Send + Sync {
         accounts: Vec<FeeAccount>,
     ) -> anyhow::Result<Vec<FeeAccountProof>> {
         self.backoff()
-            .retry(self, |provider| {
-                async {
+            .retry(self, |provider, retry| {
+                let accounts = &accounts;
+                async move {
                     let tree = provider
-                        .try_fetch_accounts(instance, height, view, fee_merkle_tree_root, &accounts)
+                        .try_fetch_accounts(
+                            retry,
+                            instance,
+                            height,
+                            view,
+                            fee_merkle_tree_root,
+                            accounts,
+                        )
                         .await
                         .map_err(|err| {
                             err.context(format!(
@@ -82,6 +93,7 @@ pub trait StateCatchup: Send + Sync {
     /// Try to fetch and remember the blocks frontier, failing without retrying if unable.
     async fn try_remember_blocks_merkle_tree(
         &self,
+        retry: usize,
         instance: &NodeState,
         height: u64,
         view: ViewNumber,
@@ -97,8 +109,8 @@ pub trait StateCatchup: Send + Sync {
         mt: &mut BlockMerkleTree,
     ) -> anyhow::Result<()> {
         self.backoff()
-            .retry(mt, |mt| {
-                self.try_remember_blocks_merkle_tree(instance, height, view, mt)
+            .retry(mt, |mt, retry| {
+                self.try_remember_blocks_merkle_tree(retry, instance, height, view, mt)
                     .map_err(|err| err.context("fetching frontier"))
                     .boxed()
             })
@@ -107,6 +119,7 @@ pub trait StateCatchup: Send + Sync {
 
     async fn try_fetch_chain_config(
         &self,
+        retry: usize,
         commitment: Commitment<ChainConfig>,
     ) -> anyhow::Result<ChainConfig>;
 
@@ -115,9 +128,9 @@ pub trait StateCatchup: Send + Sync {
         commitment: Commitment<ChainConfig>,
     ) -> anyhow::Result<ChainConfig> {
         self.backoff()
-            .retry(self, |provider| {
+            .retry(self, |provider, retry| {
                 provider
-                    .try_fetch_chain_config(commitment)
+                    .try_fetch_chain_config(retry, commitment)
                     .map_err(|err| err.context("fetching chain config"))
                     .boxed()
             })
@@ -132,6 +145,7 @@ pub trait StateCatchup: Send + Sync {
 impl<T: StateCatchup + ?Sized> StateCatchup for Box<T> {
     async fn try_fetch_accounts(
         &self,
+        retry: usize,
         instance: &NodeState,
         height: u64,
         view: ViewNumber,
@@ -139,7 +153,14 @@ impl<T: StateCatchup + ?Sized> StateCatchup for Box<T> {
         accounts: &[FeeAccount],
     ) -> anyhow::Result<FeeMerkleTree> {
         (**self)
-            .try_fetch_accounts(instance, height, view, fee_merkle_tree_root, accounts)
+            .try_fetch_accounts(
+                retry,
+                instance,
+                height,
+                view,
+                fee_merkle_tree_root,
+                accounts,
+            )
             .await
     }
 
@@ -158,13 +179,14 @@ impl<T: StateCatchup + ?Sized> StateCatchup for Box<T> {
 
     async fn try_remember_blocks_merkle_tree(
         &self,
+        retry: usize,
         instance: &NodeState,
         height: u64,
         view: ViewNumber,
         mt: &mut BlockMerkleTree,
     ) -> anyhow::Result<()> {
         (**self)
-            .try_remember_blocks_merkle_tree(instance, height, view, mt)
+            .try_remember_blocks_merkle_tree(retry, instance, height, view, mt)
             .await
     }
 
@@ -182,9 +204,10 @@ impl<T: StateCatchup + ?Sized> StateCatchup for Box<T> {
 
     async fn try_fetch_chain_config(
         &self,
+        retry: usize,
         commitment: Commitment<ChainConfig>,
     ) -> anyhow::Result<ChainConfig> {
-        (**self).try_fetch_chain_config(commitment).await
+        (**self).try_fetch_chain_config(retry, commitment).await
     }
 
     async fn fetch_chain_config(
@@ -207,6 +230,7 @@ impl<T: StateCatchup + ?Sized> StateCatchup for Box<T> {
 impl<T: StateCatchup + ?Sized> StateCatchup for Arc<T> {
     async fn try_fetch_accounts(
         &self,
+        retry: usize,
         instance: &NodeState,
         height: u64,
         view: ViewNumber,
@@ -214,7 +238,14 @@ impl<T: StateCatchup + ?Sized> StateCatchup for Arc<T> {
         accounts: &[FeeAccount],
     ) -> anyhow::Result<FeeMerkleTree> {
         (**self)
-            .try_fetch_accounts(instance, height, view, fee_merkle_tree_root, accounts)
+            .try_fetch_accounts(
+                retry,
+                instance,
+                height,
+                view,
+                fee_merkle_tree_root,
+                accounts,
+            )
             .await
     }
 
@@ -233,13 +264,14 @@ impl<T: StateCatchup + ?Sized> StateCatchup for Arc<T> {
 
     async fn try_remember_blocks_merkle_tree(
         &self,
+        retry: usize,
         instance: &NodeState,
         height: u64,
         view: ViewNumber,
         mt: &mut BlockMerkleTree,
     ) -> anyhow::Result<()> {
         (**self)
-            .try_remember_blocks_merkle_tree(instance, height, view, mt)
+            .try_remember_blocks_merkle_tree(retry, instance, height, view, mt)
             .await
     }
 
@@ -257,9 +289,10 @@ impl<T: StateCatchup + ?Sized> StateCatchup for Arc<T> {
 
     async fn try_fetch_chain_config(
         &self,
+        retry: usize,
         commitment: Commitment<ChainConfig>,
     ) -> anyhow::Result<ChainConfig> {
-        (**self).try_fetch_chain_config(commitment).await
+        (**self).try_fetch_chain_config(retry, commitment).await
     }
 
     async fn fetch_chain_config(
@@ -284,6 +317,7 @@ impl<T: StateCatchup> StateCatchup for Vec<T> {
     #[tracing::instrument(skip(self, instance))]
     async fn try_fetch_accounts(
         &self,
+        retry: usize,
         instance: &NodeState,
         height: u64,
         view: ViewNumber,
@@ -292,7 +326,14 @@ impl<T: StateCatchup> StateCatchup for Vec<T> {
     ) -> anyhow::Result<FeeMerkleTree> {
         for provider in self {
             match provider
-                .try_fetch_accounts(instance, height, view, fee_merkle_tree_root, accounts)
+                .try_fetch_accounts(
+                    retry,
+                    instance,
+                    height,
+                    view,
+                    fee_merkle_tree_root,
+                    accounts,
+                )
                 .await
             {
                 Ok(tree) => return Ok(tree),
@@ -312,6 +353,7 @@ impl<T: StateCatchup> StateCatchup for Vec<T> {
     #[tracing::instrument(skip(self, instance, mt))]
     async fn try_remember_blocks_merkle_tree(
         &self,
+        retry: usize,
         instance: &NodeState,
         height: u64,
         view: ViewNumber,
@@ -319,7 +361,7 @@ impl<T: StateCatchup> StateCatchup for Vec<T> {
     ) -> anyhow::Result<()> {
         for provider in self {
             match provider
-                .try_remember_blocks_merkle_tree(instance, height, view, mt)
+                .try_remember_blocks_merkle_tree(retry, instance, height, view, mt)
                 .await
             {
                 Ok(()) => return Ok(()),
@@ -337,10 +379,11 @@ impl<T: StateCatchup> StateCatchup for Vec<T> {
 
     async fn try_fetch_chain_config(
         &self,
+        retry: usize,
         commitment: Commitment<ChainConfig>,
     ) -> anyhow::Result<ChainConfig> {
         for provider in self {
-            match provider.try_fetch_chain_config(commitment).await {
+            match provider.try_fetch_chain_config(retry, commitment).await {
                 Ok(cf) => return Ok(cf),
                 Err(err) => {
                     tracing::info!(
@@ -371,19 +414,13 @@ impl<T: StateCatchup> StateCatchup for Vec<T> {
 pub trait PersistenceOptions: Clone + Send + Sync + 'static {
     type Persistence: SequencerPersistence;
 
-    async fn create(self) -> anyhow::Result<Self::Persistence>;
+    fn set_view_retention(&mut self, view_retention: u64);
+    async fn create(&mut self) -> anyhow::Result<Self::Persistence>;
     async fn reset(self) -> anyhow::Result<()>;
-
-    async fn create_catchup_provider(
-        self,
-        backoff: BackoffParams,
-    ) -> anyhow::Result<Arc<dyn StateCatchup>> {
-        self.create().await?.into_catchup_provider(backoff)
-    }
 }
 
 #[async_trait]
-pub trait SequencerPersistence: Sized + Send + Sync + 'static {
+pub trait SequencerPersistence: Sized + Send + Sync + Clone + 'static {
     /// Use this storage as a state catchup backend, if supported.
     fn into_catchup_provider(
         self,
@@ -407,17 +444,17 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
     /// Load undecided state saved by consensus before we shut down.
     async fn load_undecided_state(
         &self,
-    ) -> anyhow::Result<Option<(CommitmentMap<Leaf>, BTreeMap<ViewNumber, View<SeqTypes>>)>>;
+    ) -> anyhow::Result<Option<(CommitmentMap<Leaf2>, BTreeMap<ViewNumber, View<SeqTypes>>)>>;
 
     /// Load the proposals saved by consensus
     async fn load_quorum_proposals(
         &self,
-    ) -> anyhow::Result<BTreeMap<ViewNumber, Proposal<SeqTypes, QuorumProposal<SeqTypes>>>>;
+    ) -> anyhow::Result<BTreeMap<ViewNumber, Proposal<SeqTypes, QuorumProposal2<SeqTypes>>>>;
 
     async fn load_quorum_proposal(
         &self,
         view: ViewNumber,
-    ) -> anyhow::Result<Proposal<SeqTypes, QuorumProposal<SeqTypes>>>;
+    ) -> anyhow::Result<Proposal<SeqTypes, QuorumProposal2<SeqTypes>>>;
 
     async fn load_vid_share(
         &self,
@@ -478,8 +515,12 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
             None => {
                 tracing::info!("no saved leaf, starting from genesis leaf");
                 (
-                    Leaf::genesis(&genesis_validated_state, &state).await,
-                    QuorumCertificate::genesis::<V>(&genesis_validated_state, &state).await,
+                    hotshot_types::data::Leaf::genesis(&genesis_validated_state, &state)
+                        .await
+                        .into(),
+                    QuorumCertificate::genesis::<V>(&genesis_validated_state, &state)
+                        .await
+                        .to_qc2(),
                     None,
                 )
             }
@@ -498,6 +539,8 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
         // starting in a view in which we had already voted before the restart, and prevents
         // unnecessary catchup from starting in a view earlier than the anchor leaf.
         let view = max(highest_voted_view, leaf.view_number());
+        // TODO:
+        let epoch = EpochNumber::genesis();
 
         let (undecided_leaves, undecided_state) = self
             .load_undecided_state()
@@ -518,6 +561,7 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
         tracing::info!(
             ?leaf,
             ?view,
+            ?epoch,
             ?high_qc,
             ?validated_state,
             ?undecided_leaves,
@@ -533,6 +577,7 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
                 state,
                 validated_state,
                 view,
+                epoch,
                 highest_voted_view,
                 saved_proposals,
                 high_qc,
@@ -601,12 +646,13 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
     async fn append_decided_leaves(
         &self,
         decided_view: ViewNumber,
-        leaf_chain: impl IntoIterator<Item = (&LeafInfo<SeqTypes>, QuorumCertificate<SeqTypes>)> + Send,
+        leaf_chain: impl IntoIterator<Item = (&LeafInfo<SeqTypes>, QuorumCertificate2<SeqTypes>)> + Send,
         consumer: &(impl EventConsumer + 'static),
     ) -> anyhow::Result<()>;
 
-    async fn load_anchor_leaf(&self)
-        -> anyhow::Result<Option<(Leaf, QuorumCertificate<SeqTypes>)>>;
+    async fn load_anchor_leaf(
+        &self,
+    ) -> anyhow::Result<Option<(Leaf2, QuorumCertificate2<SeqTypes>)>>;
     async fn append_vid(
         &self,
         proposal: &Proposal<SeqTypes, VidDisperseShare<SeqTypes>>,
@@ -619,16 +665,23 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
     async fn record_action(&self, view: ViewNumber, action: HotShotAction) -> anyhow::Result<()>;
     async fn update_undecided_state(
         &self,
-        leaves: CommitmentMap<Leaf>,
+        leaves: CommitmentMap<Leaf2>,
         state: BTreeMap<ViewNumber, View<SeqTypes>>,
     ) -> anyhow::Result<()>;
     async fn append_quorum_proposal(
         &self,
-        proposal: &Proposal<SeqTypes, QuorumProposal<SeqTypes>>,
+        proposal: &Proposal<SeqTypes, QuorumProposal2<SeqTypes>>,
     ) -> anyhow::Result<()>;
     async fn store_upgrade_certificate(
         &self,
         decided_upgrade_certificate: Option<UpgradeCertificate<SeqTypes>>,
+    ) -> anyhow::Result<()>;
+    async fn migrate_consensus(
+        &self,
+        migrate_leaf: fn(Leaf) -> Leaf2,
+        migrate_proposal: fn(
+            Proposal<SeqTypes, QuorumProposal<SeqTypes>>,
+        ) -> Proposal<SeqTypes, QuorumProposal2<SeqTypes>>,
     ) -> anyhow::Result<()>;
 
     async fn load_anchor_view(&self) -> anyhow::Result<ViewNumber> {
@@ -640,16 +693,13 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
 }
 
 #[async_trait]
-pub trait EventConsumer: Debug + DynClone + Send + Sync {
+pub trait EventConsumer: Debug + Send + Sync {
     async fn handle_event(&self, event: &Event) -> anyhow::Result<()>;
 }
-
-dyn_clone::clone_trait_object!(EventConsumer);
 
 #[async_trait]
 impl<T> EventConsumer for Box<T>
 where
-    Self: Clone,
     T: EventConsumer + ?Sized,
 {
     async fn handle_event(&self, event: &Event) -> anyhow::Result<()> {
@@ -683,9 +733,11 @@ impl<P: SequencerPersistence> Storage<SeqTypes> for Arc<P> {
     ) -> anyhow::Result<()> {
         (**self).append_da(proposal, vid_commit).await
     }
+
     async fn record_action(&self, view: ViewNumber, action: HotShotAction) -> anyhow::Result<()> {
         (**self).record_action(view, action).await
     }
+
     async fn update_high_qc(&self, _high_qc: QuorumCertificate<SeqTypes>) -> anyhow::Result<()> {
         Ok(())
     }
@@ -695,14 +747,27 @@ impl<P: SequencerPersistence> Storage<SeqTypes> for Arc<P> {
         leaves: CommitmentMap<Leaf>,
         state: BTreeMap<ViewNumber, View<SeqTypes>>,
     ) -> anyhow::Result<()> {
-        (**self).update_undecided_state(leaves, state).await
+        (**self)
+            .update_undecided_state(
+                leaves
+                    .into_values()
+                    .map(|leaf| {
+                        let leaf2: Leaf2 = leaf.into();
+                        (leaf2.commit(), leaf2)
+                    })
+                    .collect(),
+                state,
+            )
+            .await
     }
 
     async fn append_proposal(
         &self,
         proposal: &Proposal<SeqTypes, QuorumProposal<SeqTypes>>,
     ) -> anyhow::Result<()> {
-        (**self).append_quorum_proposal(proposal).await
+        (**self)
+            .append_quorum_proposal(&convert_proposal(proposal.clone()))
+            .await
     }
 
     async fn update_decided_upgrade_certificate(
@@ -711,6 +776,37 @@ impl<P: SequencerPersistence> Storage<SeqTypes> for Arc<P> {
     ) -> anyhow::Result<()> {
         (**self)
             .store_upgrade_certificate(decided_upgrade_certificate)
+            .await
+    }
+
+    async fn append_proposal2(
+        &self,
+        proposal: &Proposal<SeqTypes, QuorumProposal2<SeqTypes>>,
+    ) -> anyhow::Result<()> {
+        (**self).append_quorum_proposal(proposal).await
+    }
+
+    async fn update_high_qc2(&self, _high_qc: QuorumCertificate2<SeqTypes>) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    async fn update_undecided_state2(
+        &self,
+        leaves: CommitmentMap<Leaf2>,
+        state: BTreeMap<ViewNumber, View<SeqTypes>>,
+    ) -> anyhow::Result<()> {
+        (**self).update_undecided_state(leaves, state).await
+    }
+
+    async fn migrate_consensus(
+        &self,
+        migrate_leaf: fn(Leaf) -> Leaf2,
+        migrate_proposal: fn(
+            Proposal<SeqTypes, QuorumProposal<SeqTypes>>,
+        ) -> Proposal<SeqTypes, QuorumProposal2<SeqTypes>>,
+    ) -> anyhow::Result<()> {
+        (**self)
+            .migrate_consensus(migrate_leaf, migrate_proposal)
             .await
     }
 }
