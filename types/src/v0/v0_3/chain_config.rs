@@ -74,13 +74,13 @@ impl Committable for ChainConfig {
 }
 
 impl ResolvableChainConfig {
-    pub fn commit(&self) -> Commitment<ChainConfig> {
+    pub fn _commit(&self) -> Commitment<ChainConfig> {
         match self.chain_config {
             Either::Left(config) => config.commit(),
             Either::Right(commitment) => commitment,
         }
     }
-    pub fn resolve(self) -> Option<ChainConfig> {
+    pub fn _resolve(self) -> Option<ChainConfig> {
         match self.chain_config {
             Either::Left(config) => Some(config),
             Either::Right(_) => None,

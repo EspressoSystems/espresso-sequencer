@@ -112,13 +112,13 @@ pub struct StaticCommittee {
     indexed_da_stake_table: BTreeMap<PubKey, StakeTableEntry<PubKey>>,
 
     /// Number of blocks in an epoch
-    epoch_size: u64,
+    _epoch_size: u64,
 
     /// Address of StakeTable contract (proxy address)
-    contract_address: Option<Address>,
+    _contract_address: Option<Address>,
 
     /// L1 provider
-    provider: L1Client,
+    _provider: L1Client,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -156,8 +156,8 @@ impl StaticCommittee {
     /// life-cycle but may be read from many times.
     async fn _update_stake_table(&mut self, l1_block_height: u64) {
         let updates: StakeTables = self
-            .provider
-            .get_stake_table(l1_block_height, self.contract_address.unwrap())
+            ._provider
+            .get_stake_table(l1_block_height, self._contract_address.unwrap())
             .await;
 
         // This works because `get_stake_table` is fetching *all*
@@ -215,9 +215,9 @@ impl StaticCommittee {
             da_stake_table: HashSet::from_iter(da_members),
             indexed_stake_table,
             indexed_da_stake_table,
-            epoch_size,
-            provider: instance_state.l1_client.clone(),
-            contract_address: instance_state.chain_config.stake_table_contract,
+            _epoch_size: epoch_size,
+            _provider: instance_state.l1_client.clone(),
+            _contract_address: instance_state.chain_config.stake_table_contract,
         }
     }
 }
@@ -275,9 +275,9 @@ impl Membership<SeqTypes> for StaticCommittee {
             da_stake_table: HashSet::from_iter(da_members),
             indexed_stake_table,
             indexed_da_stake_table,
-            epoch_size: 12, // TODO get the real number from config (I think)
-            provider: L1Client::http(Url::from_str("http:://ab.b").unwrap()),
-            contract_address: None,
+            _epoch_size: 12, // TODO get the real number from config (I think)
+            _provider: L1Client::http(Url::from_str("http:://ab.b").unwrap()),
+            _contract_address: None,
         }
     }
     /// Get the stake table for the current view
