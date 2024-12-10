@@ -1,6 +1,7 @@
-use std::{fs::File, io::stdout, path::PathBuf};
+use std::{fs::File, io::stdout, path::PathBuf, time::Duration};
 
 use clap::Parser;
+use espresso_types::parse_duration;
 use ethers::types::Address;
 use futures::FutureExt;
 use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
@@ -8,6 +9,7 @@ use hotshot_state_prover::service::light_client_genesis;
 use sequencer_utils::{
     deployer::{deploy, ContractGroup, Contracts, DeployedContracts},
     logging,
+    stake_table::PermissionedStakeTableConfig,
 };
 use url::Url;
 
@@ -37,6 +39,15 @@ struct Options {
         default_value = "http://localhost:8545"
     )]
     rpc_url: Url,
+
+    /// Request rate when polling L1.
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_L1_POLLING_INTERVAL",
+        default_value = "7s",
+        value_parser = parse_duration,
+    )]
+    pub l1_polling_interval: Duration,
 
     /// URL of a sequencer node that is currently providing the HotShot config.
     /// This is used to initialize the stake table.
@@ -111,6 +122,20 @@ struct Options {
     #[clap(long, env = "ESPRESSO_SEQUENCER_PERMISSIONED_PROVER")]
     permissioned_prover: Option<Address>,
 
+    /// A toml file with the initial stake table.
+    ///
+    /// Schema:
+    ///
+    /// public_keys = [
+    ///   {
+    ///     stake_table_key = "BLS_VER_KEY~...",
+    ///     state_ver_key = "SCHNORR_VER_KEY~...",
+    ///     da = true,
+    ///   },
+    /// ]
+    #[clap(long, env = "ESPRESSO_SEQUENCER_INITIAL_PERMISSIONED_STAKE_TABLE_PATH")]
+    initial_stake_table_path: Option<PathBuf>,
+
     #[clap(flatten)]
     logging: logging::Config,
 }
@@ -126,8 +151,15 @@ async fn main() -> anyhow::Result<()> {
 
     let genesis = light_client_genesis(&sequencer_url, opt.stake_table_capacity).boxed();
 
+    let initial_stake_table = if let Some(path) = opt.initial_stake_table_path {
+        Some(PermissionedStakeTableConfig::from_toml_file(&path)?.into())
+    } else {
+        None
+    };
+
     let contracts = deploy(
         opt.rpc_url,
+        opt.l1_polling_interval,
         opt.mnemonic,
         opt.account_index,
         opt.multisig_address,
@@ -136,6 +168,7 @@ async fn main() -> anyhow::Result<()> {
         genesis,
         opt.permissioned_prover,
         contracts,
+        initial_stake_table,
     )
     .await?;
 

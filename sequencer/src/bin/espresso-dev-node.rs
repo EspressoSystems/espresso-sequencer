@@ -42,6 +42,17 @@ struct Args {
     /// If this is not provided, an Avil node will be  launched automatically.
     #[clap(short, long, env = "ESPRESSO_SEQUENCER_L1_PROVIDER")]
     rpc_url: Option<Url>,
+
+    /// Request rate when polling L1.
+    #[clap(
+        short,
+        long,
+        env = "ESPRESSO_SEQUENCER_L1_POLLING_INTERVAL",
+        default_value = "7s",
+        value_parser = parse_duration
+    )]
+    l1_interval: Duration,
+
     /// Mnemonic for an L1 wallet.
     ///
     /// This wallet is used to deploy the contracts,
@@ -165,6 +176,7 @@ async fn main() -> anyhow::Result<()> {
         retry_interval,
         alt_prover_retry_intervals,
         alt_prover_update_intervals,
+        l1_interval,
     } = cli_params;
 
     logging.init();
@@ -262,6 +274,7 @@ async fn main() -> anyhow::Result<()> {
 
         let contracts = deploy(
             url.clone(),
+            l1_interval,
             mnemonic.clone(),
             account_index,
             multisig_address,
@@ -270,10 +283,13 @@ async fn main() -> anyhow::Result<()> {
             async { Ok(lc_genesis.clone()) }.boxed(),
             None,
             contracts.clone(),
+            None, // initial stake table
         )
         .await?;
 
-        let provider = Provider::<Http>::try_from(url.as_str()).unwrap();
+        let provider = Provider::<Http>::try_from(url.as_str())
+            .unwrap()
+            .interval(l1_interval);
         let chain_id = provider.get_chainid().await.unwrap().as_u64();
 
         let wallet = MnemonicBuilder::<English>::default()

@@ -2834,15 +2834,17 @@ dependencies = [
  "committable",
  "contract-bindings",
  "derive_more 1.0.0",
- "dyn-clone",
+ "diff-test-bn254",
  "ethers",
  "fluent-asserter",
  "futures",
  "hotshot",
+ "hotshot-contract-adapter",
  "hotshot-query-service",
  "hotshot-types",
  "itertools 0.12.1",
  "jf-merkle-tree",
+ "jf-signature 0.2.0",
  "jf-utils",
  "jf-vid",
  "lru 0.12.5",
@@ -4082,11 +4084,14 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "ark-bn254",
+ "ark-ec",
+ "ark-ed-on-bn254",
  "ark-ff",
  "ark-poly",
  "ark-serialize",
  "ark-std",
  "contract-bindings",
+ "derive_more 1.0.0",
  "diff-test-bn254",
  "ethers",
  "hotshot-types",
@@ -4096,6 +4101,7 @@ dependencies = [
  "libp2p",
  "num-bigint",
  "num-traits",
+ "serde",
 ]
 
 [[package]]
@@ -7414,6 +7420,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "priority-queue"
+version = "2.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "714c75db297bc88a63783ffc6ab9f830698a6705aa0201416931759ef4c8183d"
+dependencies = [
+ "autocfg",
+ "equivalent",
+ "indexmap 2.6.0",
+]
+
+[[package]]
 name = "proc-macro-crate"
 version = "3.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8595,7 +8612,7 @@ dependencies = [
  "anyhow",
  "ark-ff",
  "ark-serialize",
- "async-broadcast",
+ "async-channel 2.3.1",
  "async-lock 3.4.0",
  "async-once-cell",
  "async-trait",
@@ -8610,7 +8627,6 @@ dependencies = [
  "derivative",
  "derive_more 1.0.0",
  "dotenvy",
- "dyn-clone",
  "escargot",
  "espresso-macros",
  "espresso-types",
@@ -8642,6 +8658,7 @@ dependencies = [
  "parking_lot",
  "portpicker",
  "pretty_assertions",
+ "priority-queue",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "rand_distr",
@@ -8686,6 +8703,7 @@ dependencies = [
  "futures",
  "hotshot",
  "hotshot-contract-adapter",
+ "hotshot-types",
  "log-panics",
  "portpicker",
  "reqwest 0.11.27",
@@ -8694,6 +8712,7 @@ dependencies = [
  "surf",
  "tempfile",
  "tokio",
+ "toml 0.8.19",
  "tracing",
  "url",
 ]

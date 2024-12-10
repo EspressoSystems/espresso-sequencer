@@ -7,6 +7,7 @@ use contract_bindings::{
     light_client_mock::LIGHTCLIENTMOCK_ABI,
     light_client_state_update_vk::LightClientStateUpdateVK,
     light_client_state_update_vk_mock::LightClientStateUpdateVKMock,
+    permissioned_stake_table::{NodeInfo, PermissionedStakeTable},
     plonk_verifier::PlonkVerifier,
 };
 use derive_more::Display;
@@ -18,8 +19,7 @@ use futures::future::{BoxFuture, FutureExt};
 use hotshot_contract_adapter::light_client::{
     LightClientConstructorArgs, ParsedLightClientState, ParsedStakeTableState,
 };
-use std::sync::Arc;
-use std::{collections::HashMap, io::Write, ops::Deref};
+use std::{collections::HashMap, io::Write, ops::Deref, sync::Arc, time::Duration};
 use url::Url;
 
 /// Set of predeployed contracts.
@@ -48,6 +48,10 @@ pub struct DeployedContracts {
     /// Use an already-deployed FeeContract.sol proxy instead of deploying a new one.
     #[clap(long, env = Contract::FeeContractProxy)]
     fee_contract_proxy: Option<Address>,
+
+    /// Use an already-deployed PermissonedStakeTable.sol proxy instead of deploying a new one.
+    #[clap(long, env = Contract::PermissonedStakeTable)]
+    permissioned_stake_table: Option<Address>,
 }
 
 /// An identifier for a particular contract.
@@ -65,6 +69,8 @@ pub enum Contract {
     FeeContract,
     #[display("ESPRESSO_SEQUENCER_FEE_CONTRACT_PROXY_ADDRESS")]
     FeeContractProxy,
+    #[display("ESPRESSO_SEQUENCER_PERMISSIONED_STAKE_TABLE_ADDRESS")]
+    PermissonedStakeTable,
 }
 
 impl From<Contract> for OsStr {
@@ -97,6 +103,9 @@ impl From<DeployedContracts> for Contracts {
         }
         if let Some(addr) = deployed.fee_contract_proxy {
             m.insert(Contract::FeeContractProxy, addr);
+        }
+        if let Some(addr) = deployed.permissioned_stake_table {
+            m.insert(Contract::PermissonedStakeTable, addr);
         }
         Self(m)
     }
@@ -300,6 +309,7 @@ pub async fn deploy_mock_light_client_contract<M: Middleware + 'static>(
 #[allow(clippy::too_many_arguments)]
 pub async fn deploy(
     l1url: Url,
+    l1_interval: Duration,
     mnemonic: String,
     account_index: u32,
     multisig_address: Option<H160>,
@@ -308,8 +318,9 @@ pub async fn deploy(
     genesis: BoxFuture<'_, anyhow::Result<(ParsedLightClientState, ParsedStakeTableState)>>,
     permissioned_prover: Option<Address>,
     mut contracts: Contracts,
+    initial_stake_table: Option<Vec<NodeInfo>>,
 ) -> anyhow::Result<Contracts> {
-    let provider = Provider::<Http>::try_from(l1url.to_string())?;
+    let provider = Provider::<Http>::try_from(l1url.to_string())?.interval(l1_interval);
     let chain_id = provider.get_chainid().await?.as_u64();
     let wallet = MnemonicBuilder::<English>::default()
         .phrase(mnemonic.as_str())
@@ -426,6 +437,28 @@ pub async fn deploy(
         }
     }
 
+    // `PermissionedStakeTable.sol`
+    if should_deploy(ContractGroup::PermissionedStakeTable, &only) {
+        let initial_stake_table: Vec<_> = initial_stake_table.unwrap_or_default();
+        let stake_table_address = contracts
+            .deploy_tx(
+                Contract::PermissonedStakeTable,
+                PermissionedStakeTable::deploy(l1.clone(), initial_stake_table)?,
+            )
+            .await?;
+        let stake_table = PermissionedStakeTable::new(stake_table_address, l1.clone());
+
+        // Transfer ownership to the multisig wallet if provided.
+        if let Some(owner) = multisig_address {
+            tracing::info!(
+                %stake_table_address,
+                %owner,
+                "transferring PermissionedStakeTable ownership to multisig",
+            );
+            stake_table.transfer_ownership(owner).send().await?.await?;
+        }
+    }
+
     Ok(contracts)
 }
 
@@ -459,6 +492,7 @@ pub async fn is_proxy_contract(
 pub enum ContractGroup {
     FeeContract,
     LightClient,
+    PermissionedStakeTable,
 }
 
 #[cfg(any(test, feature = "testing"))]

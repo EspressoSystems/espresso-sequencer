@@ -1,7 +1,9 @@
 [files]
 extend-exclude = [
+  "data/initial_stake_table.toml",
   ".env",
   "*.json",
+  "**/*.pdf",
   "doc/*.svg",
   "doc/*.puml",
   "contracts/lib",
