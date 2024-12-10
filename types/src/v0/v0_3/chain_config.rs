@@ -1,4 +1,4 @@
-use crate::{v0_1, v0_3, BlockSize, ChainId, FeeAccount, FeeAmount};
+use crate::{v0_1, BlockSize, ChainId, FeeAccount, FeeAmount};
 use committable::{Commitment, Committable};
 use ethers::types::{Address, U256};
 use itertools::Either;
@@ -36,13 +36,9 @@ pub struct ChainConfig {
     /// contract when they are off. In a future release, after PoS is switched on and thoroughly
     /// tested, this may be made mandatory.
     pub stake_table_contract: Option<Address>,
-
-    /// Account that receives sequencing bids.
-    pub bid_recipient: Option<FeeAccount>,
 }
 
 #[derive(Clone, Debug, Copy, PartialEq, Deserialize, Serialize, Eq, Hash)]
-/// A commitment to a ChainConfig or a full ChainConfig.
 pub struct ResolvableChainConfig {
     pub(crate) chain_config: Either<ChainConfig, Commitment<ChainConfig>>,
 }
@@ -63,19 +59,12 @@ impl Committable for ChainConfig {
         } else {
             comm.u64_field("fee_contract", 0)
         };
-
+        // With `ChainConfig` upgrades we want commitments w/out
+        // fields added >= v0_3 to have the same commitment as <= v0_3
+        // commitment. Therefore `None` values are simply ignored.
         let comm = if let Some(addr) = self.stake_table_contract {
             comm.u64_field("stake_table_contract", 1)
                 .fixed_size_bytes(&addr.0)
-        } else {
-            comm
-        };
-
-        // With `ChainConfig` upgrades we want commitments w/out
-        // fields added >= v0_99 to have the same commitment as <= v0_99
-        // commitment. Therefore `None` values are simply ignored.
-        let comm = if let Some(bid_recipient) = self.bid_recipient {
-            comm.fixed_size_field("bid_recipient", &bid_recipient.to_fixed_bytes())
         } else {
             comm
         };
@@ -148,31 +137,6 @@ impl From<v0_1::ChainConfig> for ChainConfig {
             fee_contract,
             fee_recipient,
             stake_table_contract: None,
-            bid_recipient: None,
-        }
-    }
-}
-
-impl From<v0_3::ChainConfig> for ChainConfig {
-    fn from(chain_config: v0_3::ChainConfig) -> ChainConfig {
-        let v0_3::ChainConfig {
-            chain_id,
-            max_block_size,
-            base_fee,
-            fee_contract,
-            fee_recipient,
-            stake_table_contract,
-            ..
-        } = chain_config;
-
-        ChainConfig {
-            chain_id,
-            max_block_size,
-            base_fee,
-            fee_contract,
-            fee_recipient,
-            stake_table_contract,
-            bid_recipient: None,
         }
     }
 }
@@ -207,32 +171,6 @@ impl Default for ChainConfig {
             fee_contract: None,
             fee_recipient: Default::default(),
             stake_table_contract: None,
-            bid_recipient: None,
         }
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use super::*;
-
-    #[test]
-    fn test_upgrade_chain_config_v3_resolvable_chain_config_from_v1() {
-        let expectation: ResolvableChainConfig = ChainConfig::default().into();
-        let v1_resolvable: v0_1::ResolvableChainConfig = v0_1::ChainConfig::default().into();
-        let v3_resolvable: ResolvableChainConfig = ResolvableChainConfig::from(&v1_resolvable);
-        assert_eq!(expectation, v3_resolvable);
-        let expectation: ResolvableChainConfig = ChainConfig::default().commit().into();
-        let v1_resolvable: v0_1::ResolvableChainConfig =
-            v0_1::ChainConfig::default().commit().into();
-        let v3_resolvable: ResolvableChainConfig = ResolvableChainConfig::from(&v1_resolvable);
-        assert_eq!(expectation, v3_resolvable);
-    }
-    #[test]
-    fn test_upgrade_chain_config_v1_chain_config_from_v3() {
-        let expectation = v0_1::ChainConfig::default();
-        let v3_chain_config = ChainConfig::default();
-        let v1_chain_config = v0_1::ChainConfig::from(v3_chain_config);
-        assert_eq!(expectation, v1_chain_config);
     }
 }

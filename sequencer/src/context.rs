@@ -1,25 +1,21 @@
-use std::{fmt::Display, sync::Arc};
-
 use anyhow::Context;
 use async_lock::RwLock;
 use derivative::Derivative;
 use espresso_types::{
     v0::traits::{EventConsumer as PersistenceEventConsumer, SequencerPersistence},
-    NodeState, PubKey, Transaction, ValidatedState,
+    NodeState, PubKey, StaticCommittee, Transaction, ValidatedState,
 };
 use futures::{
     future::{join_all, Future},
     stream::{Stream, StreamExt},
 };
 use hotshot::{
-    traits::election::static_committee::StaticCommittee,
     types::{Event, EventType, SystemContextHandle},
     MarketplaceConfig, SystemContext,
 };
 use hotshot_events_service::events_source::{EventConsumer, EventsStreamer};
 use parking_lot::Mutex;
 use tokio::{spawn, task::JoinHandle};
-
 use hotshot_orchestrator::client::OrchestratorClient;
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
@@ -32,6 +28,7 @@ use hotshot_types::{
     },
     PeerConfig, ValidatorConfig,
 };
+use std::{fmt::Display, sync::Arc};
 use tracing::{Instrument, Level};
 use url::Url;
 
@@ -82,7 +79,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> Sequence
     pub async fn init(
         network_config: NetworkConfig<PubKey>,
         validator_config: ValidatorConfig<<SeqTypes as NodeType>::SignatureKey>,
-        membership: StaticCommittee<SeqTypes>,
+        membership: StaticCommittee,
         instance_state: NodeState,
         persistence: P,
         network: Arc<N>,
