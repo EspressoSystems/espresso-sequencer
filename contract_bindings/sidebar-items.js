@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"mod":["erc1967_proxy","fee_contract","i_plonk_verifier","light_client","light_client_mock","light_client_state_update_vk","light_client_state_update_vk_mock","permissioned_stake_table","plonk_verifier","plonk_verifier_2","shared_types"]};
