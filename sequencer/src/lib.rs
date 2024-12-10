@@ -438,7 +438,6 @@ pub async fn init_node<P: SequencerPersistence, V: Versions>(
     let network = {
         let p2p_network = Libp2pNetwork::from_config(
             network_config.clone(),
-            
             membership.clone(),
             gossip_config,
             request_response_config,
