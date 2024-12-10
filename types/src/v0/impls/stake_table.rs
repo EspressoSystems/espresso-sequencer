@@ -19,6 +19,10 @@ use std::{
 use thiserror::Error;
 use url::Url;
 
+type Epoch = <SeqTypes as NodeType>::Epoch;
+type SeqStakeTableEntry = <SignatureKey as hotshot::types::SignatureKey>::StakeTableEntry;
+type SignatureKey = <SeqTypes as NodeType>::SignatureKey;
+
 #[derive(Clone, Debug)]
 pub struct StaticCommittee {
     /// The nodes eligible for leadership.
@@ -61,7 +65,7 @@ impl StaticCommittee {
             .get_stake_table(l1_block_height, self.contract_address.unwrap())
             .await;
 
-        let added: Vec<NodeInfoJf> = updates
+        let added: Vec<_> = updates
             .into_iter()
             .flat_map(|e: StakersUpdatedFilter| e.added.into_iter().map(NodeInfoJf::from))
             .collect();
@@ -85,34 +89,34 @@ impl StaticCommittee {
         epoch_size: u64,
     ) -> Self {
         // For each eligible leader, get the stake table entry
-        let eligible_leaders: Vec<SeqStakeTableEntry> = committee_members
+        let eligible_leaders: Vec<_> = committee_members
             .iter()
             .map(|member| member.stake_table_entry.clone())
             .filter(|entry| entry.stake() > U256::zero())
             .collect();
 
         // For each member, get the stake table entry
-        let members: Vec<SeqStakeTableEntry> = committee_members
+        let members: Vec<_> = committee_members
             .iter()
             .map(|member| member.stake_table_entry.clone())
             .filter(|entry| entry.stake() > U256::zero())
             .collect();
 
         // For each member, get the stake table entry
-        let da_members: Vec<SeqStakeTableEntry> = da_members
+        let da_members: Vec<_> = da_members
             .iter()
             .map(|member| member.stake_table_entry.clone())
             .filter(|entry| entry.stake() > U256::zero())
             .collect();
 
         // Index the stake table by public key
-        let indexed_stake_table: BTreeMap<PubKey, SeqStakeTableEntry> = members
+        let indexed_stake_table: BTreeMap<PubKey, _> = members
             .iter()
             .map(|entry| (SignatureKey::public_key(entry), entry.clone()))
             .collect();
 
         // Index the stake table by public key
-        let indexed_da_stake_table: BTreeMap<PubKey, SeqStakeTableEntry> = da_members
+        let indexed_da_stake_table: BTreeMap<PubKey, _> = da_members
             .iter()
             .map(|entry| (SignatureKey::public_key(entry), entry.clone()))
             .collect();
@@ -145,34 +149,34 @@ impl Membership<SeqTypes> for StaticCommittee {
         da_members: Vec<PeerConfig<SignatureKey>>,
     ) -> Self {
         // For each eligible leader, get the stake table entry
-        let eligible_leaders: Vec<SeqStakeTableEntry> = committee_members
+        let eligible_leaders: Vec<_> = committee_members
             .iter()
             .map(|member| member.stake_table_entry.clone())
             .filter(|entry| entry.stake() > U256::zero())
             .collect();
 
         // For each member, get the stake table entry
-        let members: Vec<SeqStakeTableEntry> = committee_members
+        let members: Vec<_> = committee_members
             .iter()
             .map(|member| member.stake_table_entry.clone())
             .filter(|entry| entry.stake() > U256::zero())
             .collect();
 
         // For each member, get the stake table entry
-        let da_members: Vec<SeqStakeTableEntry> = da_members
+        let da_members: Vec<_> = da_members
             .iter()
             .map(|member| member.stake_table_entry.clone())
             .filter(|entry| entry.stake() > U256::zero())
             .collect();
 
         // Index the stake table by public key
-        let indexed_stake_table: BTreeMap<PubKey, SeqStakeTableEntry> = members
+        let indexed_stake_table: BTreeMap<PubKey, _> = members
             .iter()
             .map(|entry| (SignatureKey::public_key(entry), entry.clone()))
             .collect();
 
         // Index the stake table by public key
-        let indexed_da_stake_table: BTreeMap<PubKey, SeqStakeTableEntry> = da_members
+        let indexed_da_stake_table: BTreeMap<PubKey, _> = da_members
             .iter()
             .map(|entry| (SignatureKey::public_key(entry), entry.clone()))
             .collect();
@@ -304,7 +308,3 @@ impl Membership<SeqTypes> for StaticCommittee {
         .unwrap()
     }
 }
-
-type Epoch = <SeqTypes as NodeType>::Epoch;
-type SeqStakeTableEntry = <SignatureKey as hotshot::types::SignatureKey>::StakeTableEntry;
-type SignatureKey = <SeqTypes as NodeType>::SignatureKey;
