@@ -142,7 +142,6 @@ impl<TYPES: NodeType> ConnectionDef for BrokerDef<TYPES> {
     type MessageHook = NoMessageHook;
 }
 
-
 /// The testing run definition for the Push CDN.
 /// Uses the real protocols, but with an embedded discovery client.
 pub struct TestingDef<TYPES: NodeType>(PhantomData<TYPES>);
