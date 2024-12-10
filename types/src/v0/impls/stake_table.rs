@@ -1,5 +1,6 @@
 use super::{L1Client, NodeState, PubKey, SeqTypes};
-use contract_bindings::permissioned_stake_table::StakersUpdatedFilter;
+use contract_bindings::permissioned_stake_table::{NodeInfo, StakersUpdatedFilter};
+use derive_more::derive::{From, Into};
 use ethers::{abi::Address, types::U256};
 use hotshot::types::SignatureKey as _;
 use hotshot_contract_adapter::stake_table::NodeInfoJf;
@@ -10,6 +11,7 @@ use hotshot_types::{
     },
     PeerConfig,
 };
+use itertools::Itertools;
 use std::{
     cmp::max,
     collections::{BTreeMap, BTreeSet, HashSet},
@@ -20,27 +22,94 @@ use thiserror::Error;
 use url::Url;
 
 type Epoch = <SeqTypes as NodeType>::Epoch;
-type SeqStakeTableEntry = <SignatureKey as hotshot::types::SignatureKey>::StakeTableEntry;
-type SignatureKey = <SeqTypes as NodeType>::SignatureKey;
+
+// NewTypes for two types of stake tables to avoid confusion
+#[derive(Clone, Debug, From, Into)]
+pub struct DAStakeTable(pub Vec<StakeTableEntry<PubKey>>);
+
+#[derive(Clone, Debug, From, Into)]
+pub struct ConsensusStakeTable(pub Vec<StakeTableEntry<PubKey>>);
+
+#[derive(Clone, Debug)]
+pub struct StakeTables {
+    pub consensus_stake_table: ConsensusStakeTable,
+    pub da_stake_table: DAStakeTable,
+}
+
+impl StakeTables {
+    pub fn new(consensus_stake_table: ConsensusStakeTable, da_stake_table: DAStakeTable) -> Self {
+        Self {
+            consensus_stake_table,
+            da_stake_table,
+        }
+    }
+
+    /// Create the consensus and DA stake tables from L1 events
+    ///
+    /// This is a pure function, to make it easily testable.
+    ///
+    /// We expect have at most a few hundred EVM events in the
+    /// PermissionedStakeTable contract over the liftetime of the contract so it
+    /// should not significantly affect performance to fetch all events and
+    /// perform the computation in this functions once per epoch.
+    pub fn from_l1_events(updates: Vec<StakersUpdatedFilter>) -> Self {
+        let changes_per_node = updates
+            .into_iter()
+            .flat_map(|event| {
+                event
+                    .removed
+                    .into_iter()
+                    .map(|node_info| StakeTableDelta::remove(node_info.into()))
+                    .chain(
+                        event
+                            .added
+                            .into_iter()
+                            .map(|node_info| StakeTableDelta::add(node_info.into())),
+                    )
+            })
+            .group_by(|delta| delta.node_info.stake_table_key);
+
+        // If the last event for a stakers is `Added` the staker is currently
+        // staking, if the last event is removed or (or the staker is not present)
+        // they are not staking.
+        let currently_staking = changes_per_node
+            .into_iter()
+            .map(|(_pub_key, deltas)| deltas.last().expect("deltas non-empty").clone())
+            .filter_map(|delta| match delta.change {
+                StakeTableChange::Add => Some(delta.node_info),
+                StakeTableChange::Remove => None,
+            });
+
+        let mut consensus_stake_table: Vec<StakeTableEntry<PubKey>> = vec![];
+        let mut da_stake_table: Vec<StakeTableEntry<PubKey>> = vec![];
+        for node in currently_staking {
+            consensus_stake_table.push(node.clone().into());
+            if node.da {
+                da_stake_table.push(node.into());
+            }
+        }
+        Self::new(consensus_stake_table.into(), da_stake_table.into())
+    }
+}
 
 #[derive(Clone, Debug)]
 pub struct StaticCommittee {
     /// The nodes eligible for leadership.
     /// NOTE: This is currently a hack because the DA leader needs to be the quorum
     /// leader but without voting rights.
-    eligible_leaders: Vec<SeqStakeTableEntry>,
+    eligible_leaders: Vec<StakeTableEntry<PubKey>>,
 
     /// The nodes on the committee and their stake
-    stake_table: HashSet<SeqStakeTableEntry>,
+    stake_table: HashSet<StakeTableEntry<PubKey>>,
 
     /// The nodes on the committee and their stake
-    da_stake_table: HashSet<SeqStakeTableEntry>,
+    da_stake_table: HashSet<StakeTableEntry<PubKey>>,
 
     /// The nodes on the committee and their stake, indexed by public key
-    indexed_stake_table: BTreeMap<PubKey, SeqStakeTableEntry>,
+    indexed_stake_table: BTreeMap<PubKey, StakeTableEntry<PubKey>>,
 
     /// The nodes on the committee and their stake, indexed by public key
-    indexed_da_stake_table: BTreeMap<PubKey, SeqStakeTableEntry>,
+    indexed_da_stake_table: BTreeMap<PubKey, StakeTableEntry<PubKey>>,
 
     /// Number of blocks in an epoch
     epoch_size: u64,
@@ -50,6 +119,33 @@ pub struct StaticCommittee {
 
     /// L1 provider
     provider: L1Client,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+enum StakeTableChange {
+    Add,
+    Remove,
+}
+
+#[derive(Debug, Clone)]
+struct StakeTableDelta {
+    change: StakeTableChange,
+    node_info: NodeInfoJf,
+}
+
+impl StakeTableDelta {
+    fn add(node_info: NodeInfoJf) -> Self {
+        Self {
+            change: StakeTableChange::Add,
+            node_info,
+        }
+    }
+    fn remove(node_info: NodeInfoJf) -> Self {
+        Self {
+            change: StakeTableChange::Remove,
+            node_info,
+        }
+    }
 }
 
 impl StaticCommittee {
@@ -79,12 +175,13 @@ impl StaticCommittee {
             }
         }
     }
+
     // We need a constructor to match our concrete type.
     pub fn new_stake(
         // TODO remove `new` from trait and rename this to `new`.
         // https://github.com/EspressoSystems/HotShot/commit/fcb7d54a4443e29d643b3bbc53761856aef4de8b
-        committee_members: Vec<PeerConfig<SignatureKey>>,
-        da_members: Vec<PeerConfig<SignatureKey>>,
+        committee_members: Vec<PeerConfig<PubKey>>,
+        da_members: Vec<PeerConfig<PubKey>>,
         instance_state: &NodeState,
         epoch_size: u64,
     ) -> Self {
@@ -112,13 +209,13 @@ impl StaticCommittee {
         // Index the stake table by public key
         let indexed_stake_table: BTreeMap<PubKey, _> = members
             .iter()
-            .map(|entry| (SignatureKey::public_key(entry), entry.clone()))
+            .map(|entry| (PubKey::public_key(entry), entry.clone()))
             .collect();
 
         // Index the stake table by public key
         let indexed_da_stake_table: BTreeMap<PubKey, _> = da_members
             .iter()
-            .map(|entry| (SignatureKey::public_key(entry), entry.clone()))
+            .map(|entry| (PubKey::public_key(entry), entry.clone()))
             .collect();
 
         Self {
@@ -145,8 +242,8 @@ impl Membership<SeqTypes> for StaticCommittee {
     fn new(
         // TODO remove `new` from trait and remove this fn as well.
         // https://github.com/EspressoSystems/HotShot/commit/fcb7d54a4443e29d643b3bbc53761856aef4de8b
-        committee_members: Vec<PeerConfig<SignatureKey>>,
-        da_members: Vec<PeerConfig<SignatureKey>>,
+        committee_members: Vec<PeerConfig<PubKey>>,
+        da_members: Vec<PeerConfig<PubKey>>,
     ) -> Self {
         // For each eligible leader, get the stake table entry
         let eligible_leaders: Vec<_> = committee_members
@@ -172,13 +269,13 @@ impl Membership<SeqTypes> for StaticCommittee {
         // Index the stake table by public key
         let indexed_stake_table: BTreeMap<PubKey, _> = members
             .iter()
-            .map(|entry| (SignatureKey::public_key(entry), entry.clone()))
+            .map(|entry| (PubKey::public_key(entry), entry.clone()))
             .collect();
 
         // Index the stake table by public key
         let indexed_da_stake_table: BTreeMap<PubKey, _> = da_members
             .iter()
-            .map(|entry| (SignatureKey::public_key(entry), entry.clone()))
+            .map(|entry| (PubKey::public_key(entry), entry.clone()))
             .collect();
 
         Self {
@@ -193,11 +290,11 @@ impl Membership<SeqTypes> for StaticCommittee {
         }
     }
     /// Get the stake table for the current view
-    fn stake_table(&self, _epoch: Epoch) -> Vec<SeqStakeTableEntry> {
+    fn stake_table(&self, _epoch: Epoch) -> Vec<StakeTableEntry<PubKey>> {
         self.stake_table.clone().into_iter().collect()
     }
     /// Get the stake table for the current view
-    fn da_stake_table(&self, _epoch: Epoch) -> Vec<SeqStakeTableEntry> {
+    fn da_stake_table(&self, _epoch: Epoch) -> Vec<StakeTableEntry<PubKey>> {
         self.da_stake_table.clone().into_iter().collect()
     }
 
@@ -206,11 +303,8 @@ impl Membership<SeqTypes> for StaticCommittee {
         &self,
         _view_number: <SeqTypes as NodeType>::View,
         _epoch: Epoch,
-    ) -> BTreeSet<SignatureKey> {
-        self.stake_table
-            .iter()
-            .map(SignatureKey::public_key)
-            .collect()
+    ) -> BTreeSet<PubKey> {
+        self.stake_table.iter().map(PubKey::public_key).collect()
     }
 
     /// Get all members of the committee for the current view
@@ -218,11 +312,8 @@ impl Membership<SeqTypes> for StaticCommittee {
         &self,
         _view_number: <SeqTypes as NodeType>::View,
         _epoch: Epoch,
-    ) -> BTreeSet<SignatureKey> {
-        self.da_stake_table
-            .iter()
-            .map(SignatureKey::public_key)
-            .collect()
+    ) -> BTreeSet<PubKey> {
+        self.da_stake_table.iter().map(PubKey::public_key).collect()
     }
 
     /// Get all eligible leaders of the committee for the current view
@@ -230,34 +321,34 @@ impl Membership<SeqTypes> for StaticCommittee {
         &self,
         _view_number: <SeqTypes as NodeType>::View,
         _epoch: Epoch,
-    ) -> BTreeSet<SignatureKey> {
+    ) -> BTreeSet<PubKey> {
         self.eligible_leaders
             .iter()
-            .map(SignatureKey::public_key)
+            .map(PubKey::public_key)
             .collect()
     }
 
     /// Get the stake table entry for a public key
-    fn stake(&self, pub_key: &SignatureKey, _epoch: Epoch) -> Option<SeqStakeTableEntry> {
+    fn stake(&self, pub_key: &PubKey, _epoch: Epoch) -> Option<StakeTableEntry<PubKey>> {
         // Only return the stake if it is above zero
         self.indexed_stake_table.get(pub_key).cloned()
     }
 
     /// Get the DA stake table entry for a public key
-    fn da_stake(&self, pub_key: &SignatureKey, _epoch: Epoch) -> Option<SeqStakeTableEntry> {
+    fn da_stake(&self, pub_key: &PubKey, _epoch: Epoch) -> Option<StakeTableEntry<PubKey>> {
         // Only return the stake if it is above zero
         self.indexed_da_stake_table.get(pub_key).cloned()
     }
 
     /// Check if a node has stake in the committee
-    fn has_stake(&self, pub_key: &SignatureKey, _epoch: Epoch) -> bool {
+    fn has_stake(&self, pub_key: &PubKey, _epoch: Epoch) -> bool {
         self.indexed_stake_table
             .get(pub_key)
             .is_some_and(|x| x.stake() > U256::zero())
     }
 
     /// Check if a node has stake in the committee
-    fn has_da_stake(&self, pub_key: &SignatureKey, _epoch: Epoch) -> bool {
+    fn has_da_stake(&self, pub_key: &PubKey, _epoch: Epoch) -> bool {
         self.indexed_da_stake_table
             .get(pub_key)
             .is_some_and(|x| x.stake() > U256::zero())
@@ -268,10 +359,10 @@ impl Membership<SeqTypes> for StaticCommittee {
         &self,
         view_number: <SeqTypes as NodeType>::View,
         _epoch: Epoch,
-    ) -> Result<SignatureKey, Self::Error> {
+    ) -> Result<PubKey, Self::Error> {
         let index = *view_number as usize % self.eligible_leaders.len();
         let res = self.eligible_leaders[index].clone();
-        Ok(SignatureKey::public_key(&res))
+        Ok(PubKey::public_key(&res))
     }
 
     /// Get the total number of nodes in the committee
@@ -307,4 +398,60 @@ impl Membership<SeqTypes> for StaticCommittee {
         ))
         .unwrap()
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_stake_table_from_l1_events() {
+        let mut rng = rand::thread_rng();
+
+        // Build a stake table with one DA node and one consensus node.
+        let mut da_node = NodeInfoJf::random(&mut rng);
+        da_node.da = true;
+        let mut consensus_node = NodeInfoJf::random(&mut rng);
+        consensus_node.da = false;
+        let added: Vec<NodeInfo> = vec![da_node.clone().into(), consensus_node.clone().into()];
+        let mut updates = vec![StakersUpdatedFilter {
+            removed: vec![],
+            added,
+        }];
+
+        let st = StakeTables::from_l1_events(updates.clone());
+
+        assert_eq!(st.da_stake_table.0.len(), 1);
+        assert_eq!(st.da_stake_table.0[0].stake_key, da_node.stake_table_key);
+
+        assert_eq!(st.consensus_stake_table.0.len(), 2);
+        assert_eq!(
+            st.consensus_stake_table.0[0].stake_key,
+            da_node.stake_table_key
+        );
+        assert_eq!(
+            st.consensus_stake_table.0[1].stake_key,
+            consensus_node.stake_table_key
+        );
+
+        // Simulate removing the second node
+        updates.push(StakersUpdatedFilter {
+            removed: vec![consensus_node.clone().into()],
+            added: vec![],
+        });
+        let st = StakeTables::from_l1_events(updates);
+        assert_eq!(st.da_stake_table.0.len(), 1);
+        assert_eq!(st.da_stake_table.0[0].stake_key, da_node.stake_table_key);
+
+        assert_eq!(st.consensus_stake_table.0.len(), 1);
+        assert_eq!(
+            st.consensus_stake_table.0[0].stake_key,
+            da_node.stake_table_key
+        );
+    }
+
+    // TODO: test that repeatedly removes and adds more nodes
+
+    // TODO: the contract prevents removing nodes that aren't stakers and adding
+    //       stakers multiple times, but should the rust code handle it too?
 }
