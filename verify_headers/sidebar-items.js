@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":["get_header","get_l1_block","main","verify_header"],"struct":["Options"],"type":["SequencerClient"]};
