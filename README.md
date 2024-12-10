@@ -62,7 +62,7 @@ To generate the documentation locally and view it in the browser, run
 
 ## Building and running
 
-Docker images and the [docker-compose-demo.yaml](docker-compose-demo.yaml) file are provided for convenience. The
+Docker images and the [docker-compose.yaml](docker-compose.yaml) file are provided for convenience. The
 Docker-based demo fetches the images from the `ghcr` repository, where they are updated with every push to `main` on
 GitHub. For testing uncommitted changes, you can also run the binaries by manually building and running the services.
 
@@ -160,13 +160,6 @@ Running the script will save a file with details about the deployment in `contra
 
 The gas consumption for verifying a plonk proof as well as updating the state of the light client contract can be seen
 by running:
-
-```
-> just gas-benchmarks
-> cat gas-benchmarks.txt
-[PASS] test_verify_succeeds() (gas: 507774)
-[PASS] testCorrectUpdateBench() (gas: 594533)
-```
 
 In order to profile the gas consumption of the light client contract do the following:
 
