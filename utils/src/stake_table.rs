@@ -20,7 +20,7 @@ pub struct PermissionedStakeTableConfig {
     /// permissioned stake table contract.
     #[serde(default)]
     // Custom deserialization to handle toml file where the "stake" field is not provided.
-    // Defaults the "stake" field to 0 if not specified.
+    // Defaults the "stake" field to 1 if not specified.
     #[serde(deserialize_with = "deserialize_peer_config_keys")]
     pub public_keys: Vec<PeerConfigKeys<BLSPubKey>>,
 }
@@ -65,7 +65,7 @@ where
                 keys.push(PeerConfigKeys {
                     stake_table_key,
                     state_ver_key,
-                    stake: stake.unwrap_or_default(),
+                    stake: stake.unwrap_or(1),
                     da,
                 });
             }
@@ -125,7 +125,7 @@ mod test {
             keys.push(PeerConfigKeys {
                 stake_table_key: pubkey,
                 state_ver_key: ver_key,
-                stake: 0,
+                stake: 1,
                 da: i == 0,
             });
         }
@@ -146,13 +146,13 @@ mod test {
             [[public_keys]]
             stake_table_key =  st_key_1
             state_ver_key  =  verkey_1
-            stake = 0
+            stake = 1
             da = da_1
 
             [[public_keys]]
             stake_table_key =  st_key_2
             state_ver_key  =  verkey_2
-            stake = 2
+            stake = 1
             da = da_2
 
             [[public_keys]]
@@ -174,7 +174,7 @@ mod test {
             keys[0].stake_table_key
         );
         assert_eq!(toml_st.public_keys[0].da, da_1);
-        assert_eq!(toml_st.public_keys[0].stake, 0);
+        assert_eq!(toml_st.public_keys[0].stake, 1);
 
         assert_eq!(toml_st.public_keys[1].state_ver_key, keys[1].state_ver_key);
         assert_eq!(
@@ -182,7 +182,7 @@ mod test {
             keys[1].stake_table_key
         );
         assert_eq!(toml_st.public_keys[1].da, da_2);
-        assert_eq!(toml_st.public_keys[1].stake, 2);
+        assert_eq!(toml_st.public_keys[1].stake, 1);
 
         assert_eq!(toml_st.public_keys[2].state_ver_key, keys[2].state_ver_key);
         assert_eq!(
@@ -190,6 +190,6 @@ mod test {
             keys[2].stake_table_key
         );
         assert_eq!(toml_st.public_keys[2].da, da_3);
-        assert_eq!(toml_st.public_keys[2].stake, 0);
+        assert_eq!(toml_st.public_keys[2].stake, 1);
     }
 }
