@@ -5,11 +5,8 @@
 use contract_bindings::permissioned_stake_table::NodeInfo;
 use hotshot::types::BLSPubKey;
 use hotshot_contract_adapter::stake_table::NodeInfoJf;
-use hotshot_types::{light_client::StateVerKey, network::PeerConfigKeys};
-use serde::{
-    de::{SeqAccess, Visitor},
-    Deserializer,
-};
+use hotshot_types::network::PeerConfigKeys;
+
 use std::{fs, path::Path};
 
 /// A stake table config stored in a file
@@ -19,62 +16,7 @@ pub struct PermissionedStakeTableConfig {
     /// The list of public keys that are initially inserted into the
     /// permissioned stake table contract.
     #[serde(default)]
-    // Custom deserialization to handle toml file where the "stake" field is not provided.
-    // Defaults the "stake" field to 1 if not specified.
-    #[serde(deserialize_with = "deserialize_peer_config_keys")]
     pub public_keys: Vec<PeerConfigKeys<BLSPubKey>>,
-}
-
-fn deserialize_peer_config_keys<'de, D>(
-    deserializer: D,
-) -> Result<Vec<PeerConfigKeys<BLSPubKey>>, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    struct PeerConfigKeysVisitor;
-
-    // We deserialize the toml file entries into this struct which contains optional stake field.
-    // which is then converted into `PeerConfigKeys`
-    #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-    pub struct PeerConfigKeysOptionalStakeField {
-        pub stake_table_key: BLSPubKey,
-        pub state_ver_key: StateVerKey,
-        pub stake: Option<u64>,
-        pub da: bool,
-    }
-
-    impl<'de> Visitor<'de> for PeerConfigKeysVisitor {
-        type Value = Vec<PeerConfigKeys<BLSPubKey>>;
-
-        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-            formatter.write_str("peer config keys")
-        }
-
-        fn visit_seq<A>(self, mut seq: A) -> Result<Vec<PeerConfigKeys<BLSPubKey>>, A::Error>
-        where
-            A: SeqAccess<'de>,
-        {
-            let mut keys = vec![];
-            while let Some(PeerConfigKeysOptionalStakeField {
-                stake_table_key,
-                state_ver_key,
-                stake,
-                da,
-            }) = seq.next_element::<PeerConfigKeysOptionalStakeField>()?
-            {
-                keys.push(PeerConfigKeys {
-                    stake_table_key,
-                    state_ver_key,
-                    stake: stake.unwrap_or(1),
-                    da,
-                });
-            }
-
-            Ok(keys)
-        }
-    }
-
-    deserializer.deserialize_seq(PeerConfigKeysVisitor)
 }
 
 impl PermissionedStakeTableConfig {
@@ -158,6 +100,7 @@ mod test {
             [[public_keys]]
             stake_table_key = st_key_3
             state_ver_key  =  verkey_3
+            stake = 2
             da = da_3
 
         }
@@ -190,6 +133,6 @@ mod test {
             keys[2].stake_table_key
         );
         assert_eq!(toml_st.public_keys[2].da, da_3);
-        assert_eq!(toml_st.public_keys[2].stake, 1);
+        assert_eq!(toml_st.public_keys[2].stake, 2);
     }
 }
