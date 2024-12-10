@@ -247,7 +247,7 @@ where
     // Where's the stake table?
     let signatures = signatures.as_ref();
 
-    // Let's determine the the participants of the voter participants
+    // Let's determine the participants of the voter participants
     // in the Quorum Certificate.
 
     // We shouldn't ever have a BitVec that is empty, with the possible
