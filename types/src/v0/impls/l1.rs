@@ -1,18 +1,9 @@
-use std::{
-    cmp::{min, Ordering},
-    fmt::Debug,
-    num::NonZeroUsize,
-    sync::Arc,
-    time::Duration,
-};
-
 use anyhow::{bail, Context};
 use async_trait::async_trait;
 use clap::Parser;
 use committable::{Commitment, Committable, RawCommitmentBuilder};
 use contract_bindings::{
-    fee_contract::FeeContract,
-    permissioned_stake_table::{NodeInfo, PermissionedStakeTable, StakersUpdatedFilter},
+    fee_contract::FeeContract, permissioned_stake_table::PermissionedStakeTable,
 };
 use ethers::{
     prelude::{Address, BlockNumber, Middleware, Provider, H256, U256},
@@ -22,14 +13,16 @@ use futures::{
     future::Future,
     stream::{self, StreamExt},
 };
-use hotshot::types::SignatureKey;
-use hotshot_contract_adapter::stake_table::NodeInfoJf;
-use hotshot_types::{
-    stake_table::StakeTableEntry,
-    traits::{metrics::Metrics, node_implementation::NodeType},
-};
+use hotshot_types::traits::metrics::Metrics;
 use lru::LruCache;
 use serde::{de::DeserializeOwned, Serialize};
+use std::{
+    cmp::{min, Ordering},
+    fmt::Debug,
+    num::NonZeroUsize,
+    sync::Arc,
+    time::Duration,
+};
 use tokio::{
     spawn,
     sync::{Mutex, MutexGuard, RwLock},
@@ -38,7 +31,7 @@ use tokio::{
 use tracing::Instrument;
 use url::Url;
 
-use super::{L1BlockInfo, L1ClientMetrics, L1State, L1UpdateTask, PubKey, RpcClient, SeqTypes};
+use super::{L1BlockInfo, L1ClientMetrics, L1State, L1UpdateTask, RpcClient};
 use crate::{
     v0::impls::stake_table::StakeTables, FeeInfo, L1Client, L1ClientOptions, L1Event,
     L1ReconnectTask, L1Snapshot,
@@ -866,19 +859,18 @@ mod test {
 
     use contract_bindings::{
         fee_contract::FeeContract,
-        permissioned_stake_table::{G2Point, NodeInfo, PermissionedStakeTable},
+        permissioned_stake_table::{NodeInfo, PermissionedStakeTable},
     };
     use ethers::{
         prelude::{LocalWallet, Signer, SignerMiddleware, H160, U64},
         utils::{hex, parse_ether, Anvil, AnvilInstance},
     };
+    use hotshot_contract_adapter::stake_table::NodeInfoJf;
     use hotshot_types::traits::metrics::NoMetrics;
     use portpicker::pick_unused_port;
     use sequencer_utils::test_utils::setup_test;
     use std::time::Duration;
     use time::OffsetDateTime;
-
-    use crate::{v0::impls::stake_table::StakeTables, SeqTypes};
 
     use super::*;
 
@@ -1285,7 +1277,6 @@ mod test {
         setup_test();
 
         let anvil = Anvil::new().spawn();
-        let wallet_address = anvil.addresses().first().cloned().unwrap();
         let l1_client = L1Client::http(anvil.endpoint().parse().unwrap());
         let wallet: LocalWallet = anvil.keys()[0].clone().into();
 

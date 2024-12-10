@@ -14,8 +14,6 @@ use hotshot::{
     MarketplaceConfig, SystemContext,
 };
 use hotshot_events_service::events_source::{EventConsumer, EventsStreamer};
-use parking_lot::Mutex;
-use tokio::{spawn, task::JoinHandle};
 use hotshot_orchestrator::client::OrchestratorClient;
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
@@ -28,7 +26,9 @@ use hotshot_types::{
     },
     PeerConfig, ValidatorConfig,
 };
+use parking_lot::Mutex;
 use std::{fmt::Display, sync::Arc};
+use tokio::{spawn, task::JoinHandle};
 use tracing::{Instrument, Level};
 use url::Url;
 

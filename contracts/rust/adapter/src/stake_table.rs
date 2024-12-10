@@ -21,7 +21,6 @@ use hotshot_types::{
     signature_key::BLSPubKey,
     stake_table::StakeTableEntry,
     traits::signature_key::SignatureKey as _,
-    PeerConfig,
 };
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;

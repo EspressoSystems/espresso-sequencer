@@ -1,5 +1,5 @@
 use super::{L1Client, NodeState, PubKey, SeqTypes};
-use contract_bindings::permissioned_stake_table::{NodeInfo, StakersUpdatedFilter};
+use contract_bindings::permissioned_stake_table::StakersUpdatedFilter;
 use derive_more::derive::{From, Into};
 use ethers::{abi::Address, types::U256};
 use hotshot::types::SignatureKey as _;
@@ -154,7 +154,7 @@ impl StaticCommittee {
     /// to be called before calling `self.stake()` so that
     /// `Self.stake_table` only needs to be updated once in a given
     /// life-cycle but may be read from many times.
-    async fn update_stake_table(&mut self, l1_block_height: u64) {
+    async fn _update_stake_table(&mut self, l1_block_height: u64) {
         let updates: StakeTables = self
             .provider
             .get_stake_table(l1_block_height, self.contract_address.unwrap())
@@ -393,6 +393,8 @@ impl Membership<SeqTypes> for StaticCommittee {
 
 #[cfg(test)]
 mod tests {
+    use contract_bindings::permissioned_stake_table::NodeInfo;
+
     use super::*;
 
     #[test]
