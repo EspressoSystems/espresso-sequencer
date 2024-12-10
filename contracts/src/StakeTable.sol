@@ -450,7 +450,7 @@ contract StakeTable is AbstractStakeTable {
     /// @param newBlsVK The new BLS verification key
     /// @param newSchnorrVK The new Schnorr verification key
     /// @param newBlsSig The BLS signature that the account owns the new BLS key
-    /// TODO: This function should be tested
+    /// TODO: consider emitting the changed keys
     function updateConsensusKeys(
         BN254.G2Point memory newBlsVK,
         EdOnBN254.EdOnBN254Point memory newSchnorrVK,
