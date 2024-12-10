@@ -109,7 +109,7 @@ const REFERENCE_V1_CHAIN_CONFIG_COMMITMENT: &str =
     "CHAIN_CONFIG~L6HmMktJbvnEGgpmRrsiYvQmIBstSj9UtDM7eNFFqYFO";
 
 const REFERENCE_V99_CHAIN_CONFIG_COMMITMENT: &str =
-    "CHAIN_CONFIG~1mJTBiaJ0Nyuu4Ir5IZTamyI8CjexbktPkRr6R1rtnGh";
+    "CHAIN_CONFIG~ucfYQZSMbWCUHdtwYMc6vsw-4jDmlu3hi2lGDBxCRpI-";
 
 fn reference_fee_info() -> FeeInfo {
     FeeInfo::new(
@@ -156,7 +156,7 @@ async fn reference_header(version: Version) -> Header {
 
 const REFERENCE_V1_HEADER_COMMITMENT: &str = "BLOCK~dh1KpdvvxSvnnPpOi2yI3DOg8h6ltr2Kv13iRzbQvtN2";
 const REFERENCE_V2_HEADER_COMMITMENT: &str = "BLOCK~V0GJjL19nCrlm9n1zZ6gaOKEekSMCT6uR5P-h7Gi6UJR";
-const REFERENCE_V99_HEADER_COMMITMENT: &str = "BLOCK~BGlAadiwOlxmhQxdp2HS7mHpG-ifDOx9ocBkTEJXx05_";
+const REFERENCE_V99_HEADER_COMMITMENT: &str = "BLOCK~nzcKNbVZPDIO-6AepK2pRQKxMXeIi3U98p-CpVv8HNUt";
 
 fn reference_transaction<R>(ns_id: NamespaceId, rng: &mut R) -> Transaction
 where
