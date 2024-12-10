@@ -2,6 +2,7 @@ pub mod api;
 pub mod catchup;
 pub mod context;
 pub mod genesis;
+mod proposal_fetcher;
 
 mod external_event_handler;
 pub mod options;
@@ -13,7 +14,7 @@ mod message_compat_tests;
 
 use anyhow::Context;
 use catchup::StatePeers;
-use context::{ProposalFetcherConfig, SequencerContext};
+use context::SequencerContext;
 use espresso_types::{
     traits::EventConsumer, BackoffParams, L1ClientOptions, NodeState, PubKey, SeqTypes,
     SolverAuctionResultsProvider, ValidatedState,
@@ -21,6 +22,7 @@ use espresso_types::{
 use genesis::L1Finalized;
 use hotshot::traits::election::static_committee::StaticCommittee;
 use hotshot_types::traits::election::Membership;
+use proposal_fetcher::ProposalFetcherConfig;
 use std::sync::Arc;
 use tokio::select;
 // Should move `STAKE_TABLE_CAPACITY` in the sequencer repo when we have variate stake table support
@@ -53,7 +55,7 @@ use hotshot_types::{
     light_client::{StateKeyPair, StateSignKey},
     signature_key::{BLSPrivKey, BLSPubKey},
     traits::{
-        metrics::Metrics,
+        metrics::{Metrics, NoMetrics},
         network::ConnectedNetwork,
         node_implementation::{NodeImplementation, NodeType, Versions},
     },
@@ -312,8 +314,11 @@ pub async fn init_node<P: SequencerPersistence, V: Versions>(
         // If we were told to fetch the config from an already-started peer, do so.
         (None, Some(peers)) => {
             tracing::info!(?peers, "loading network config from peers");
-            let peers =
-                StatePeers::<SequencerApiVersion>::from_urls(peers, network_params.catchup_backoff);
+            let peers = StatePeers::<SequencerApiVersion>::from_urls(
+                peers,
+                network_params.catchup_backoff,
+                &NoMetrics,
+            );
             let config = peers.fetch_config(validator_config.clone()).await?;
 
             tracing::info!(
@@ -509,6 +514,7 @@ pub async fn init_node<P: SequencerPersistence, V: Versions>(
             StatePeers::<SequencerApiVersion>::from_urls(
                 network_params.state_peers,
                 network_params.catchup_backoff,
+                metrics,
             ),
         )
         .await,

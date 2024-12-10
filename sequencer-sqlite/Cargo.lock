@@ -7139,6 +7139,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "priority-queue"
+version = "2.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "714c75db297bc88a63783ffc6ab9f830698a6705aa0201416931759ef4c8183d"
+dependencies = [
+ "autocfg",
+ "equivalent",
+ "indexmap 2.7.0",
+]
+
+[[package]]
 name = "proc-macro-crate"
 version = "3.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8318,7 +8329,7 @@ dependencies = [
  "anyhow",
  "ark-ff",
  "ark-serialize",
- "async-broadcast",
+ "async-channel 2.3.1",
  "async-lock 3.4.0",
  "async-once-cell",
  "async-trait",
@@ -8357,6 +8368,7 @@ dependencies = [
  "num_enum",
  "parking_lot",
  "portpicker",
+ "priority-queue",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "rand_distr",
