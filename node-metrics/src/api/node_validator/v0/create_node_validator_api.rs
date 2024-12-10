@@ -158,7 +158,7 @@ impl HotShotEventProcessingTask {
 
                     let public_api_url = roll_call_info.public_api_url;
 
-                    // Send the the discovered public url to the sink
+                    // Send the discovered public url to the sink
                     let send_result = url_sender.send(public_api_url).await;
                     if let Err(err) = send_result {
                         tracing::error!("url sender closed: {}", err);

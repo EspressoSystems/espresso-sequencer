@@ -594,7 +594,7 @@ mod test {
 
         let genesis: Genesis = toml::from_str(&toml).unwrap_or_else(|err| panic!("{err:#}"));
 
-        // validate the the fee_contract address
+        // validate the fee_contract address
         let result = genesis.validate_fee_contract(anvil.endpoint()).await;
 
         // check if the result from the validation is an error

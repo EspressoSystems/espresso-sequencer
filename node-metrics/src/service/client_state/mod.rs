@@ -1003,7 +1003,7 @@ impl ProcessDistributeBlockDetailHandlingTask {
     }
 
     /// [process_distribute_block_detail_handling_stream] is a function that
-    /// processes the the [Stream] of incoming [BlockDetail] and distributes them
+    /// processes the [Stream] of incoming [BlockDetail] and distributes them
     /// to all subscribed clients.
     async fn process_distribute_block_detail_handling_stream<S, K>(
         client_thread_state: Arc<RwLock<ClientThreadState<K>>>,
@@ -1073,7 +1073,7 @@ impl ProcessDistributeNodeIdentityHandlingTask {
     }
 
     /// [process_distribute_node_identity_handling_stream] is a function that
-    /// processes the the [Stream] of incoming [NodeIdentity] and distributes them
+    /// processes the [Stream] of incoming [NodeIdentity] and distributes them
     /// to all subscribed clients.
     async fn process_distribute_node_identity_handling_stream<S, K>(
         client_thread_state: Arc<RwLock<ClientThreadState<K>>>,
@@ -1143,7 +1143,7 @@ impl ProcessDistributeVotersHandlingTask {
     }
 
     /// [process_distribute_voters_handling_stream] is a function that processes
-    /// the the [Stream] of incoming [BitVec] and distributes them to all
+    /// the [Stream] of incoming [BitVec] and distributes them to all
     /// subscribed clients.
     async fn process_distribute_voters_handling_stream<S, K>(
         client_thread_state: Arc<RwLock<ClientThreadState<K>>>,
