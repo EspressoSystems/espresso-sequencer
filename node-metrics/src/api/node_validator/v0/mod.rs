@@ -452,7 +452,7 @@ impl HotshotQueryServiceLeafStreamRetriever {
     /// will use the given base [Url] to be able to retrieve the stream of
     /// [Leaf]s from the Hotshot Query Service.
     ///
-    /// The [Url] is expected to point to the the API version root of the
+    /// The [Url] is expected to point to the API version root of the
     /// Hotshot Query Service.  Example:
     ///   https://example.com/v0
     pub fn new(base_url: Url) -> Self {
