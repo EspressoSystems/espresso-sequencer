@@ -106,7 +106,7 @@ where
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct NodeInfoJf {
     pub stake_table_key: BLSPubKey,
     pub state_ver_key: StateVerKey,
@@ -186,6 +186,40 @@ impl From<PeerConfigKeys<BLSPubKey>> for NodeInfoJf {
             stake_table_key,
             state_ver_key,
             da,
+        }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use hotshot_types::{light_client::StateKeyPair, traits::signature_key::BuilderSignatureKey};
+    use rand::{Rng, RngCore};
+
+    use super::*;
+
+    impl NodeInfoJf {
+        fn random(rng: &mut impl RngCore) -> Self {
+            let mut seed = [0u8; 32];
+            rng.fill_bytes(&mut seed);
+
+            let (stake_table_key, _) = BLSPubKey::generated_from_seed_indexed(seed, 0);
+            let state_key_pair = StateKeyPair::generate_from_seed_indexed(seed, 0);
+            Self {
+                stake_table_key,
+                state_ver_key: state_key_pair.ver_key(),
+                da: rng.gen(),
+            }
+        }
+    }
+
+    #[test]
+    fn test_node_info_round_trip() {
+        let mut rng = rand::thread_rng();
+        for _ in 0..20 {
+            let jf = NodeInfoJf::random(&mut rng);
+            let sol: NodeInfo = jf.clone().into();
+            let jf2: NodeInfoJf = sol.into();
+            assert_eq!(jf2, jf);
         }
     }
 }
