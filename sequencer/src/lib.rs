@@ -484,7 +484,7 @@ pub async fn init_node<P: SequencerPersistence, V: Versions>(
         network_config.config.known_nodes_with_stake.clone(),
         network_config.config.known_nodes_with_stake.clone(),
         &instance_state,
-        Default::default(),
+        network_config.config.epoch_height,
     )));
 
     // Initialize the Libp2p network

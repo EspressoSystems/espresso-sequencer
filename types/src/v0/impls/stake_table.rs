@@ -12,7 +12,9 @@ use hotshot_contract_adapter::stake_table::NodeInfoJf;
 use hotshot_types::{
     stake_table::StakeTableEntry,
     traits::{
-        election::Membership, node_implementation::NodeType, signature_key::StakeTableEntryType,
+        election::Membership,
+        node_implementation::{ConsensusTime, NodeType},
+        signature_key::StakeTableEntryType,
     },
     PeerConfig,
 };
@@ -195,24 +197,31 @@ impl StaticCommittee {
             .filter(|entry| entry.stake() > U256::zero())
             .collect();
 
-        // // Index the stake table by public key
-        // let indexed_stake_table: BTreeMap<PubKey, _> = members
-        //     .iter()
-        //     .map(|entry| (PubKey::public_key(entry), entry.clone()))
-        //     .collect();
+        // Index the stake table by public key
+        let indexed_stake_table: HashMap<PubKey, _> = members
+            .iter()
+            .map(|entry| (PubKey::public_key(entry), entry.clone()))
+            .collect();
 
-        // // Index the stake table by public key
-        // let indexed_da_stake_table: BTreeMap<PubKey, _> = da_members
-        //     .iter()
-        //     .map(|entry| (PubKey::public_key(entry), entry.clone()))
-        //     .collect();
+        // Wrap that in a map indexed by epoch
+        let indexed_stake_table: BTreeMap<Epoch, _> =
+            BTreeMap::from([(Epoch::genesis(), indexed_stake_table)]);
+
+        // Index the stake table by public key
+        let indexed_da_stake_table: HashMap<PubKey, _> = da_members
+            .iter()
+            .map(|entry| (PubKey::public_key(entry), entry.clone()))
+            .collect();
+        // Wrap that in a map indexed by epoch
+        let indexed_da_stake_table: BTreeMap<Epoch, _> =
+            BTreeMap::from([(Epoch::genesis(), indexed_da_stake_table)]);
 
         Self {
             eligible_leaders,
             stake_table: HashSet::from_iter(members),
             da_stake_table: HashSet::from_iter(da_members),
-            indexed_stake_table: BTreeMap::new(),
-            indexed_da_stake_table: BTreeMap::new(),
+            indexed_stake_table,
+            indexed_da_stake_table,
             _epoch_size: epoch_size,
             l1_client: instance_state.l1_client.clone(),
             _contract_address: instance_state.chain_config.stake_table_contract,
@@ -294,18 +303,6 @@ impl Membership<SeqTypes> for Arc<RwLock<StaticCommittee>> {
             .map(|member| member.stake_table_entry.clone())
             .filter(|entry| entry.stake() > U256::zero())
             .collect();
-
-        // // Index the stake table by public key
-        // let indexed_stake_table: BTreeMap<PubKey, _> = members
-        //     .iter()
-        //     .map(|entry| (PubKey::public_key(entry), entry.clone()))
-        //     .collect();
-
-        // // Index the stake table by public key
-        // let indexed_da_stake_table: BTreeMap<PubKey, _> = da_members
-        //     .iter()
-        //     .map(|entry| (PubKey::public_key(entry), entry.clone()))
-        //     .collect();
 
         let committee = StaticCommittee {
             eligible_leaders,
