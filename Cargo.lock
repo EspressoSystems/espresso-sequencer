@@ -4101,6 +4101,7 @@ dependencies = [
  "libp2p",
  "num-bigint",
  "num-traits",
+ "rand 0.8.5",
  "serde",
 ]
 
