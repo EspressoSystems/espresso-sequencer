@@ -1,14 +1,14 @@
-use crate::parse_duration;
+use crate::{parse_duration, v0_3::StakeTables};
 use async_broadcast::{InactiveReceiver, Sender};
 use clap::Parser;
 use ethers::{
     prelude::{H256, U256},
     providers::{Http, Provider, Ws},
 };
-use hotshot_types::traits::metrics::{Counter, Gauge, Metrics, NoMetrics};
+use hotshot_types::{data::EpochNumber, traits::metrics::{Counter, Gauge, Metrics, NoMetrics}};
 use lru::LruCache;
 use serde::{Deserialize, Serialize};
-use std::{num::NonZeroUsize, sync::Arc, time::Duration};
+use std::{collections::BTreeMap, num::NonZeroUsize, sync::Arc, time::Duration};
 use tokio::{
     sync::{Mutex, RwLock},
     task::JoinHandle,
@@ -132,17 +132,21 @@ pub(crate) enum RpcClient {
     },
 }
 
+ 
+
 /// In-memory view of the L1 state, updated asynchronously.
 #[derive(Debug)]
 pub(crate) struct L1State {
     pub(crate) snapshot: L1Snapshot,
     pub(crate) finalized: LruCache<u64, L1BlockInfo>,
+    pub(crate) stake_tables: BTreeMap<EpochNumber, StakeTables>
 }
 
 #[derive(Clone, Debug)]
 pub(crate) enum L1Event {
     NewHead { head: u64 },
     NewFinalized { finalized: L1BlockInfo },
+    NewEpoch {epoch : EpochNumber , l1_block_number: u64 },
 }
 
 #[derive(Debug, Default)]

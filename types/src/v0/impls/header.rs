@@ -1182,7 +1182,11 @@ mod test_headers {
     use std::sync::Arc;
 
     use ethers::{types::Address, utils::Anvil};
-    use hotshot_types::{traits::signature_key::BuilderSignatureKey, vid::vid_scheme};
+    use hotshot_types::{
+        data::EpochNumber,
+        traits::{node_implementation::ConsensusTime, signature_key::BuilderSignatureKey},
+        vid::vid_scheme,
+    };
 
     use sequencer_utils::test_utils::setup_test;
     use v0_1::{BlockMerkleTree, FeeMerkleTree, L1Client};
@@ -1243,6 +1247,7 @@ mod test_headers {
                 block_merkle_tree: block_merkle_tree.clone(),
                 fee_merkle_tree,
                 chain_config: genesis.instance_state.chain_config.into(),
+                prev_block_epoch: EpochNumber::new(0),
             };
 
             let (fee_account, fee_key) = FeeAccount::generated_from_seed_indexed([0; 32], 0);

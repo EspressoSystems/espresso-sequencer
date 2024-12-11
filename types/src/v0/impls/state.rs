@@ -3,11 +3,12 @@ use committable::{Commitment, Committable};
 use ethers::types::Address;
 use hotshot_query_service::merklized_state::MerklizedState;
 use hotshot_types::{
-    data::{BlockError, ViewNumber},
+    data::{BlockError, EpochNumber, ViewNumber},
     traits::{
         block_contents::BlockHeader, node_implementation::ConsensusTime,
         signature_key::BuilderSignatureKey, states::StateDelta, ValidatedState as HotShotState,
     },
+    utils::epoch_from_block_number,
     vid::{VidCommon, VidSchemeType},
 };
 use itertools::Itertools;
@@ -23,11 +24,11 @@ use serde::{Deserialize, Serialize};
 use std::ops::Add;
 use thiserror::Error;
 use time::OffsetDateTime;
-use vbs::version::Version;
+use vbs::version::{StaticVersionType, Version};
 
 use super::{
     auction::ExecutionError, fee_info::FeeError, instance_state::NodeState, BlockMerkleCommitment,
-    BlockSize, FeeMerkleCommitment, L1Client,
+    BlockSize, EpochVersion, FeeMerkleCommitment, L1Client, StaticCommittee, EPOCH_HEIGHT,
 };
 use crate::{
     traits::StateCatchup,
@@ -134,6 +135,8 @@ pub struct ValidatedState {
     pub fee_merkle_tree: FeeMerkleTree,
     /// Configuration [`Header`] proposals will be validated against.
     pub chain_config: ResolvableChainConfig,
+    // TODO: >>>> better name?
+    pub prev_block_epoch: EpochNumber,
 }
 
 impl Default for ValidatedState {
@@ -159,6 +162,7 @@ impl Default for ValidatedState {
             block_merkle_tree,
             fee_merkle_tree,
             chain_config,
+            prev_block_epoch: EpochNumber::new(0),
         }
     }
 }
@@ -619,6 +623,7 @@ impl ValidatedState {
                 self.block_merkle_tree.commitment(),
             ),
             chain_config: ResolvableChainConfig::from(self.chain_config.commit()),
+            prev_block_epoch: EpochNumber::new(0),
         }
     }
 }
@@ -694,6 +699,37 @@ fn validate_builder_fee(
     Ok(())
 }
 
+async fn emit_update_stake_table_event(
+    instance: &NodeState,
+    header: &Header,
+    prev_block_epoch: EpochNumber,
+) -> anyhow::Result<()> {
+    // TODO: epoch height???
+    let epoch = epoch_from_block_number(header.block_number(), EPOCH_HEIGHT);
+
+    if epoch <= prev_block_epoch.u64() {
+        return Ok(());
+    }
+
+    let l1 = &instance.l1_client;
+    let Some(l1_finalized) = header.l1_finalized() else {
+        tracing::info!("L1 block not finalized. skipping stake table update in L1State ");
+        return Ok(());
+    };
+
+    tracing::info!("new epoch found! updating L1 State stake tables");
+
+    let l1_block_number = l1_finalized.number();
+    l1.sender
+        .broadcast_direct(crate::L1Event::NewEpoch {
+            epoch: EpochNumber::new(epoch),
+            l1_block_number,
+        })
+        .await?;
+
+    Ok(())
+}
+
 impl ValidatedState {
     /// Updates state with [`Header`] proposal.
     ///   * Clones and updates [`ValidatedState`] (avoiding mutation).
@@ -730,6 +766,15 @@ impl ValidatedState {
             chain_config.fee_contract,
         )
         .await;
+
+        if version >= EpochVersion::VERSION {
+            emit_update_stake_table_event(
+                instance,
+                proposed_header,
+                validated_state.prev_block_epoch,
+            )
+            .await?;
+        }
 
         // Find missing fee state entries. We will need to use the builder account which is paying a
         // fee and the recipient account which is receiving it, plus any counts receiving deposits
@@ -961,10 +1006,13 @@ impl HotShotState<SeqTypes> for ValidatedState {
         } else {
             BlockMerkleTree::from_commitment(block_header.block_merkle_tree_root())
         };
+
+        let epoch = epoch_from_block_number(block_header.block_number(), EPOCH_HEIGHT);
         Self {
             fee_merkle_tree,
             block_merkle_tree,
             chain_config: block_header.chain_config(),
+            prev_block_epoch: EpochNumber::new(epoch),
         }
     }
     /// Construct a genesis validated state.
