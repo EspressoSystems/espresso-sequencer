@@ -233,7 +233,7 @@ impl<T: NodeType> NetworkNode<T> {
             let identify = IdentifyBehaviour::new(identify_cfg);
 
             // - Build DHT needed for peer discovery
-            let mut kconfig = Config::default();
+            let mut kconfig = Config::new(StreamProtocol::new("/ipfs/kad/1.0.0"));
             // 8 hours by default
             let record_republication_interval = config
                 .republication_interval
@@ -603,6 +603,7 @@ impl<T: NodeType> NetworkNode<T> {
                                     agent_version: _,
                                     observed_addr: _,
                                 },
+                            connection_id: _,
                         } = *e
                         {
                             let behaviour = self.swarm.behaviour_mut();

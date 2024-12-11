@@ -14,7 +14,11 @@ use hotshot_types::traits::{
     signature_key::SignatureKey,
 };
 use libp2p::{
-    core::{muxing::StreamMuxerExt, transport::TransportEvent, StreamMuxer},
+    core::{
+        muxing::StreamMuxerExt,
+        transport::{DialOpts, TransportEvent},
+        StreamMuxer,
+    },
     identity::PeerId,
     Transport,
 };
@@ -314,9 +318,10 @@ where
     fn dial(
         &mut self,
         addr: libp2p::Multiaddr,
+        opts: DialOpts,
     ) -> Result<Self::Dial, libp2p::TransportError<Self::Error>> {
         // Perform the inner dial
-        let res = self.inner.dial(addr);
+        let res = self.inner.dial(addr, opts);
 
         // Clone the necessary fields
         let auth_message = Arc::clone(&self.auth_message);
@@ -325,27 +330,6 @@ where
         // If the dial was successful, perform the authentication handshake on top
         match res {
             Ok(dial) => Ok(Self::gen_handshake(dial, true, stake_table, auth_message)),
-            Err(err) => Err(err),
-        }
-    }
-
-    /// Dial a remote peer as a listener. This function is changed to perform an authentication
-    /// handshake on top. The flow should be the reverse of the `dial` function and the
-    /// same as the `poll` function.
-    fn dial_as_listener(
-        &mut self,
-        addr: libp2p::Multiaddr,
-    ) -> Result<Self::Dial, libp2p::TransportError<Self::Error>> {
-        // Perform the inner dial
-        let res = self.inner.dial(addr);
-
-        // Clone the necessary fields
-        let auth_message = Arc::clone(&self.auth_message);
-        let stake_table = Arc::clone(&self.stake_table);
-
-        // If the dial was successful, perform the authentication handshake on top
-        match res {
-            Ok(dial) => Ok(Self::gen_handshake(dial, false, stake_table, auth_message)),
             Err(err) => Err(err),
         }
     }
@@ -419,13 +403,6 @@ where
     /// to define them
     fn remove_listener(&mut self, id: libp2p::core::transport::ListenerId) -> bool {
         self.inner.remove_listener(id)
-    }
-    fn address_translation(
-        &self,
-        listen: &libp2p::Multiaddr,
-        observed: &libp2p::Multiaddr,
-    ) -> Option<libp2p::Multiaddr> {
-        self.inner.address_translation(listen, observed)
     }
     fn listen_on(
         &mut self,
