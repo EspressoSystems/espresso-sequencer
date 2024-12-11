@@ -25,15 +25,13 @@ import { ExampleToken } from "../src/ExampleToken.sol";
 import { StakeTable as S } from "../src/StakeTable.sol";
 
 contract StakeTable_register_Test is Test {
-    event Registered(bytes32, uint64, uint256);
-
     S public stakeTable;
     ExampleToken public token;
     LightClientMock public lcMock;
     uint256 public constant INITIAL_BALANCE = 10 ether;
     address public exampleTokenCreator;
 
-    function genClientWallet(address sender)
+    function genClientWallet(address sender, string memory seed)
         private
         returns (BN254.G2Point memory, EdOnBN254.EdOnBN254Point memory, BN254.G1Point memory)
     {
@@ -42,7 +40,7 @@ contract StakeTable_register_Test is Test {
         cmds[0] = "diff-test";
         cmds[1] = "gen-client-wallet";
         cmds[2] = vm.toString(sender);
-        cmds[3] = "123";
+        cmds[3] = seed;
 
         bytes memory result = vm.ffi(cmds);
         (
@@ -85,9 +83,10 @@ contract StakeTable_register_Test is Test {
     function testFuzz_RevertWhen_InvalidBLSSig(uint256 scalar) external {
         uint64 depositAmount = 10 ether;
         uint64 validUntilEpoch = 5;
+        string memory seed = "123";
 
         (BN254.G2Point memory blsVK, EdOnBN254.EdOnBN254Point memory schnorrVK,) =
-            genClientWallet(exampleTokenCreator);
+            genClientWallet(exampleTokenCreator, seed);
 
         // Prepare for the token transfer
         vm.startPrank(exampleTokenCreator);
@@ -152,12 +151,13 @@ contract StakeTable_register_Test is Test {
     function test_RevertWhen_NodeAlreadyRegistered() external {
         uint64 depositAmount = 10 ether;
         uint64 validUntilEpoch = 5;
+        string memory seed = "123";
 
         (
             BN254.G2Point memory blsVK,
             EdOnBN254.EdOnBN254Point memory schnorrVK,
             BN254.G1Point memory sig
-        ) = genClientWallet(exampleTokenCreator);
+        ) = genClientWallet(exampleTokenCreator, seed);
 
         // Prepare for the token transfer
         vm.prank(exampleTokenCreator);
@@ -176,12 +176,13 @@ contract StakeTable_register_Test is Test {
     function test_RevertWhen_NoTokenAllowanceOrBalance() external {
         uint64 depositAmount = 10 ether;
         uint64 validUntilEpoch = 10;
+        string memory seed = "123";
 
         (
             BN254.G2Point memory blsVK,
             EdOnBN254.EdOnBN254Point memory schnorrVK,
             BN254.G1Point memory sig
-        ) = genClientWallet(exampleTokenCreator);
+        ) = genClientWallet(exampleTokenCreator, seed);
 
         assertEq(ERC20(token).balanceOf(exampleTokenCreator), INITIAL_BALANCE);
         vm.prank(exampleTokenCreator);
@@ -192,7 +193,7 @@ contract StakeTable_register_Test is Test {
 
         // A user with 0 balance cannot register either
         address newUser = makeAddr("New user with zero balance");
-        (blsVK, schnorrVK, sig) = genClientWallet(newUser);
+        (blsVK, schnorrVK, sig) = genClientWallet(newUser, seed);
 
         vm.startPrank(newUser);
         // Prepare for the token transfer by giving the StakeTable contract the required allowance
@@ -205,12 +206,13 @@ contract StakeTable_register_Test is Test {
     function test_RevertWhen_WrongStakeAmount() external {
         uint64 depositAmount = 5 ether;
         uint64 validUntilEpoch = 10;
+        string memory seed = "123";
 
         (
             BN254.G2Point memory blsVK,
             EdOnBN254.EdOnBN254Point memory schnorrVK,
             BN254.G1Point memory sig
-        ) = genClientWallet(exampleTokenCreator);
+        ) = genClientWallet(exampleTokenCreator, seed);
 
         assertEq(ERC20(token).balanceOf(exampleTokenCreator), INITIAL_BALANCE);
         vm.prank(exampleTokenCreator);
@@ -222,14 +224,15 @@ contract StakeTable_register_Test is Test {
 
     /// @dev Tests a correct registration
     function test_Registration_succeeds() external {
+        uint64 depositAmount = 10 ether;
+        uint64 validUntilEpoch = 5;
+        string memory seed = "123";
+
         (
             BN254.G2Point memory blsVK,
             EdOnBN254.EdOnBN254Point memory schnorrVK,
             BN254.G1Point memory sig
-        ) = genClientWallet(exampleTokenCreator);
-
-        uint64 depositAmount = 10 ether;
-        uint64 validUntilEpoch = 5;
+        ) = genClientWallet(exampleTokenCreator, seed);
 
         // Prepare for the token transfer
         vm.prank(exampleTokenCreator);
@@ -242,15 +245,9 @@ contract StakeTable_register_Test is Test {
         totalStakeAmount = stakeTable.totalStake();
         assertEq(totalStakeAmount, 0);
 
-        AbstractStakeTable.Node memory node;
-        node.account = exampleTokenCreator;
-        node.balance = depositAmount;
-        node.schnorrVK = schnorrVK;
-        node.registerEpoch = 1;
-
         // Check event is emitted after calling successfully `register`
         vm.expectEmit(false, false, false, true, address(stakeTable));
-        emit Registered(stakeTable._hashBlsKey(blsVK), node.registerEpoch, node.balance);
+        emit AbstractStakeTable.Registered(exampleTokenCreator, 1, depositAmount);
         vm.prank(exampleTokenCreator);
         stakeTable.register(blsVK, schnorrVK, depositAmount, sig, validUntilEpoch);
 
@@ -258,5 +255,342 @@ contract StakeTable_register_Test is Test {
         assertEq(token.balanceOf(exampleTokenCreator), INITIAL_BALANCE - depositAmount);
         totalStakeAmount = stakeTable.totalStake();
         assertEq(totalStakeAmount, depositAmount);
+
+        // lookup the node and verify the data
+        AbstractStakeTable.Node memory node = stakeTable.lookupNode(exampleTokenCreator);
+        assertEq(node.account, exampleTokenCreator);
+        assertEq(node.balance, depositAmount);
+        assertEq(node.registerEpoch, 1);
+        assertTrue(stakeTable._isEqualBlsKey(node.blsVK, blsVK));
+        assertTrue(EdOnBN254.isEqual(node.schnorrVK, schnorrVK));
+
+        // lookup the stake and verify the data
+        uint256 stakeAmount = stakeTable.lookupStake(exampleTokenCreator);
+        assertEq(stakeAmount, depositAmount);
+    }
+
+    function test_UpdateConsensusKeys_succeeds() public {
+        uint64 depositAmount = 10 ether;
+        uint64 validUntilEpoch = 5;
+        string memory seed = "123";
+
+        //Step 1: generate a new blsVK and schnorrVK and register this node
+        (
+            BN254.G2Point memory blsVK,
+            EdOnBN254.EdOnBN254Point memory schnorrVK,
+            BN254.G1Point memory sig
+        ) = genClientWallet(exampleTokenCreator, seed);
+
+        // Prepare for the token transfer by granting allowance to the contract
+        vm.startPrank(exampleTokenCreator);
+        token.approve(address(stakeTable), depositAmount);
+
+        // Balances before registration
+        assertEq(token.balanceOf(exampleTokenCreator), INITIAL_BALANCE);
+
+        // Check event is emitted after calling successfully `register`
+        vm.expectEmit(false, false, false, true, address(stakeTable));
+        emit AbstractStakeTable.Registered(exampleTokenCreator, 1, depositAmount);
+        stakeTable.register(blsVK, schnorrVK, depositAmount, sig, validUntilEpoch);
+
+        // Step 2: generate a new blsVK and schnorrVK
+        seed = "234";
+        (
+            BN254.G2Point memory newBlsVK,
+            EdOnBN254.EdOnBN254Point memory newSchnorrVK,
+            BN254.G1Point memory newBlsSig
+        ) = genClientWallet(exampleTokenCreator, seed);
+
+        // assert that the new blsVK and schnorrVK are not the same as the old ones
+        assertFalse(stakeTable._isEqualBlsKey(newBlsVK, blsVK));
+        assertFalse(EdOnBN254.isEqual(newSchnorrVK, schnorrVK));
+
+        // Step 3: update the consensus keys
+        stakeTable.updateConsensusKeys(newBlsVK, newSchnorrVK, newBlsSig);
+
+        // Step 4: verify the update
+        AbstractStakeTable.Node memory node = stakeTable.lookupNode(exampleTokenCreator);
+        assertTrue(stakeTable._isEqualBlsKey(node.blsVK, newBlsVK));
+        assertTrue(EdOnBN254.isEqual(node.schnorrVK, newSchnorrVK));
+        assertEq(node.balance, depositAmount);
+        assertEq(node.account, exampleTokenCreator);
+
+        vm.stopPrank();
+    }
+
+    function test_RevertWhen_UpdateConsensusKeysWithSameKeys() public {
+        uint64 depositAmount = 10 ether;
+        uint64 validUntilEpoch = 5;
+        string memory seed = "123";
+
+        //Step 1: generate a new blsVK and schnorrVK and register this node
+        (
+            BN254.G2Point memory blsVK,
+            EdOnBN254.EdOnBN254Point memory schnorrVK,
+            BN254.G1Point memory sig
+        ) = genClientWallet(exampleTokenCreator, seed);
+
+        // Prepare for the token transfer by granting allowance to the contract
+        vm.startPrank(exampleTokenCreator);
+        token.approve(address(stakeTable), depositAmount);
+
+        // Balances before registration
+        assertEq(token.balanceOf(exampleTokenCreator), INITIAL_BALANCE);
+
+        stakeTable.register(blsVK, schnorrVK, depositAmount, sig, validUntilEpoch);
+
+        // Step 2: attempt to update the consensus keys with the same keys
+        vm.expectRevert(S.NoKeyChange.selector);
+        stakeTable.updateConsensusKeys(blsVK, schnorrVK, sig);
+
+        vm.stopPrank();
+    }
+
+    function test_RevertWhen_UpdateConsensusKeysWithEmptyKeys() public {
+        uint64 depositAmount = 10 ether;
+        uint64 validUntilEpoch = 5;
+        string memory seed = "123";
+
+        //Step 1: generate a new blsVK and schnorrVK and register this node
+        (
+            BN254.G2Point memory blsVK,
+            EdOnBN254.EdOnBN254Point memory schnorrVK,
+            BN254.G1Point memory sig
+        ) = genClientWallet(exampleTokenCreator, seed);
+
+        // Prepare for the token transfer by granting allowance to the contract
+        vm.startPrank(exampleTokenCreator);
+        token.approve(address(stakeTable), depositAmount);
+
+        // Balances before registration
+        assertEq(token.balanceOf(exampleTokenCreator), INITIAL_BALANCE);
+
+        stakeTable.register(blsVK, schnorrVK, depositAmount, sig, validUntilEpoch);
+
+        // empty keys
+        BN254.G2Point memory emptyBlsVK = BN254.G2Point(
+            BN254.BaseField.wrap(0),
+            BN254.BaseField.wrap(0),
+            BN254.BaseField.wrap(0),
+            BN254.BaseField.wrap(0)
+        );
+        EdOnBN254.EdOnBN254Point memory emptySchnorrVK = EdOnBN254.EdOnBN254Point(0, 0);
+
+        // Step 2: attempt to update the consensus keys with the same keys
+        vm.expectRevert(S.NoKeyChange.selector);
+        stakeTable.updateConsensusKeys(emptyBlsVK, emptySchnorrVK, sig);
+
+        vm.stopPrank();
+    }
+
+    function test_RevertWhen_UpdateConsensusKeysWithInvalidSignature() public {
+        uint64 depositAmount = 10 ether;
+        uint64 validUntilEpoch = 5;
+        string memory seed = "123";
+
+        //Step 1: generate a new blsVK and schnorrVK and register this node
+        (
+            BN254.G2Point memory blsVK,
+            EdOnBN254.EdOnBN254Point memory schnorrVK,
+            BN254.G1Point memory sig
+        ) = genClientWallet(exampleTokenCreator, seed);
+
+        // Prepare for the token transfer by granting allowance to the contract
+        vm.startPrank(exampleTokenCreator);
+        token.approve(address(stakeTable), depositAmount);
+
+        // Balances before registration
+        assertEq(token.balanceOf(exampleTokenCreator), INITIAL_BALANCE);
+
+        BN254.G1Point memory badSig =
+            BN254.G1Point(BN254.BaseField.wrap(0), BN254.BaseField.wrap(0));
+
+        stakeTable.register(blsVK, schnorrVK, depositAmount, sig, validUntilEpoch);
+
+        // Step 2: generate a new blsVK and schnorrVK
+        seed = "234";
+        (BN254.G2Point memory newBlsVK, EdOnBN254.EdOnBN254Point memory newSchnorrVK,) =
+            genClientWallet(exampleTokenCreator, seed);
+
+        // Step 3: attempt to update the consensus keys with the new keys but invalid signature
+        vm.expectRevert(BLSSig.BLSSigVerificationFailed.selector);
+        stakeTable.updateConsensusKeys(newBlsVK, newSchnorrVK, badSig);
+
+        vm.stopPrank();
+    }
+
+    function test_UpdateConsensusKeysWithInvalidBlsKeyInfoButOnlySchnorrVKChanged_Succeeds()
+        public
+    {
+        uint64 depositAmount = 10 ether;
+        uint64 validUntilEpoch = 5;
+        string memory seed = "123";
+
+        //Step 1: generate a new blsVK and schnorrVK and register this node
+        (
+            BN254.G2Point memory blsVK,
+            EdOnBN254.EdOnBN254Point memory schnorrVK,
+            BN254.G1Point memory sig
+        ) = genClientWallet(exampleTokenCreator, seed);
+
+        // Prepare for the token transfer by granting allowance to the contract
+        vm.startPrank(exampleTokenCreator);
+        token.approve(address(stakeTable), depositAmount);
+
+        // Balances before registration
+        assertEq(token.balanceOf(exampleTokenCreator), INITIAL_BALANCE);
+
+        vm.expectEmit(false, false, false, true, address(stakeTable));
+        emit AbstractStakeTable.Registered(exampleTokenCreator, 1, depositAmount);
+        stakeTable.register(blsVK, schnorrVK, depositAmount, sig, validUntilEpoch);
+
+        // Step 2: generate an empty and new schnorrVK
+        seed = "234";
+        (, EdOnBN254.EdOnBN254Point memory newSchnorrVK,) =
+            genClientWallet(exampleTokenCreator, seed);
+
+        BN254.G2Point memory emptyBlsVK = BN254.G2Point(
+            BN254.BaseField.wrap(0),
+            BN254.BaseField.wrap(0),
+            BN254.BaseField.wrap(0),
+            BN254.BaseField.wrap(0)
+        );
+
+        // Step 3: update the consensus keys with the new schnorr Key but empty bls key
+        vm.expectEmit(false, false, false, true, address(stakeTable));
+        emit AbstractStakeTable.UpdatedConsensusKeys(exampleTokenCreator);
+        stakeTable.updateConsensusKeys(emptyBlsVK, newSchnorrVK, sig);
+
+        // Step 4: verify the update
+        AbstractStakeTable.Node memory node = stakeTable.lookupNode(exampleTokenCreator);
+        assertTrue(stakeTable._isEqualBlsKey(node.blsVK, blsVK)); // same as current bls vk
+        assertTrue(EdOnBN254.isEqual(node.schnorrVK, newSchnorrVK)); // new schnorr vk
+        assertEq(node.balance, depositAmount); //same balance
+        assertEq(node.account, exampleTokenCreator); //same account
+
+        // Step 5: update the consensus keys with the same bls keys but new schnorrVK
+        seed = "235";
+        (, EdOnBN254.EdOnBN254Point memory newSchnorrVK2,) =
+            genClientWallet(exampleTokenCreator, seed);
+
+        vm.expectEmit(false, false, false, true, address(stakeTable));
+        emit AbstractStakeTable.UpdatedConsensusKeys(exampleTokenCreator);
+        stakeTable.updateConsensusKeys(blsVK, newSchnorrVK2, sig);
+
+        // Step 6: verify the update
+        node = stakeTable.lookupNode(exampleTokenCreator);
+        assertTrue(stakeTable._isEqualBlsKey(node.blsVK, blsVK)); // same as current bls vk
+        assertTrue(EdOnBN254.isEqual(node.schnorrVK, newSchnorrVK2)); // new schnorr vk
+        assertEq(node.balance, depositAmount); //same balance
+        assertEq(node.account, exampleTokenCreator); //same account
+
+        vm.stopPrank();
+    }
+
+    function test_UpdateConsensusKeysWithInvalidSchnorrVKButNewBlsVK_Succeeds() public {
+        uint64 depositAmount = 10 ether;
+        uint64 validUntilEpoch = 5;
+        string memory seed = "123";
+
+        //Step 1: generate a new blsVK and schnorrVK and register this node
+        (
+            BN254.G2Point memory blsVK,
+            EdOnBN254.EdOnBN254Point memory schnorrVK,
+            BN254.G1Point memory sig
+        ) = genClientWallet(exampleTokenCreator, seed);
+
+        // Prepare for the token transfer by granting allowance to the contract
+        vm.startPrank(exampleTokenCreator);
+        token.approve(address(stakeTable), depositAmount);
+
+        // Balances before registration
+        assertEq(token.balanceOf(exampleTokenCreator), INITIAL_BALANCE);
+
+        stakeTable.register(blsVK, schnorrVK, depositAmount, sig, validUntilEpoch);
+
+        // Step 2: generate a new blsVK
+        seed = "234";
+        (BN254.G2Point memory newBlsVK,, BN254.G1Point memory newSig) =
+            genClientWallet(exampleTokenCreator, seed);
+
+        // Step 3: update the consensus keys with the same schnorrVK but new bls keys
+        vm.expectEmit(false, false, false, true, address(stakeTable));
+        emit AbstractStakeTable.UpdatedConsensusKeys(exampleTokenCreator);
+        stakeTable.updateConsensusKeys(newBlsVK, schnorrVK, newSig);
+
+        // Step 4: verify the update
+        AbstractStakeTable.Node memory node = stakeTable.lookupNode(exampleTokenCreator);
+        assertTrue(stakeTable._isEqualBlsKey(node.blsVK, newBlsVK)); // same as current bls vk
+        assertTrue(EdOnBN254.isEqual(node.schnorrVK, schnorrVK)); // same as current schnorr vk
+        assertEq(node.balance, depositAmount); //same balance
+        assertEq(node.account, exampleTokenCreator); //same account
+
+        // Step 5: update the consensus keys with the same bls keys but empty schnorrVK
+        EdOnBN254.EdOnBN254Point memory emptySchnorrVK = EdOnBN254.EdOnBN254Point(0, 0);
+
+        // Step 6: generate a new blsVK
+        seed = "235";
+        (BN254.G2Point memory newBlsVK2,, BN254.G1Point memory newSig2) =
+            genClientWallet(exampleTokenCreator, seed);
+        vm.expectEmit(false, false, false, true, address(stakeTable));
+        emit AbstractStakeTable.UpdatedConsensusKeys(exampleTokenCreator);
+        stakeTable.updateConsensusKeys(newBlsVK2, emptySchnorrVK, newSig2);
+
+        // Step 7: verify the update
+        node = stakeTable.lookupNode(exampleTokenCreator);
+        assertTrue(stakeTable._isEqualBlsKey(node.blsVK, newBlsVK2)); // same as current bls vk
+        assertTrue(EdOnBN254.isEqual(node.schnorrVK, schnorrVK)); // same as current schnorr vk
+        assertEq(node.balance, depositAmount); //same balance
+        assertEq(node.account, exampleTokenCreator); //same account
+
+        vm.stopPrank();
+    }
+
+    function test_lookupNodeAndLookupStake_fails() public {
+        address randomUser = makeAddr("randomUser");
+
+        // lookup the stake for an address that is not registered and verify the data is empty
+        uint256 stakeAmount = stakeTable.lookupStake(randomUser);
+        assertEq(stakeAmount, 0);
+
+        // lookup the node for an address that is not registered and verify the data is empty
+        AbstractStakeTable.Node memory node = stakeTable.lookupNode(randomUser);
+        assertEq(node.account, address(0));
+        assertEq(node.balance, 0);
+        assertEq(node.registerEpoch, 0);
+        assertTrue(
+            stakeTable._isEqualBlsKey(
+                node.blsVK,
+                BN254.G2Point(
+                    BN254.BaseField.wrap(0),
+                    BN254.BaseField.wrap(0),
+                    BN254.BaseField.wrap(0),
+                    BN254.BaseField.wrap(0)
+                )
+            )
+        );
+        assertTrue(EdOnBN254.isEqual(node.schnorrVK, EdOnBN254.EdOnBN254Point(0, 0)));
+
+        // look up the stake for the zero address and verify the data is empty
+        stakeAmount = stakeTable.lookupStake(address(0));
+        assertEq(stakeAmount, 0);
+
+        // look up the node for the zero address and verify the data is empty
+        node = stakeTable.lookupNode(address(0));
+        assertEq(node.account, address(0));
+        assertEq(node.balance, 0);
+        assertEq(node.registerEpoch, 0);
+        assertTrue(
+            stakeTable._isEqualBlsKey(
+                node.blsVK,
+                BN254.G2Point(
+                    BN254.BaseField.wrap(0),
+                    BN254.BaseField.wrap(0),
+                    BN254.BaseField.wrap(0),
+                    BN254.BaseField.wrap(0)
+                )
+            )
+        );
+        assertTrue(EdOnBN254.isEqual(node.schnorrVK, EdOnBN254.EdOnBN254Point(0, 0)));
     }
 }
