@@ -152,6 +152,7 @@ async fn main() -> anyhow::Result<()> {
     let genesis = light_client_genesis(&sequencer_url, opt.stake_table_capacity).boxed();
 
     let initial_stake_table = if let Some(path) = opt.initial_stake_table_path {
+        tracing::info!("Loading initial stake table from {:?}", path);
         Some(PermissionedStakeTableConfig::from_toml_file(&path)?.into())
     } else {
         None
