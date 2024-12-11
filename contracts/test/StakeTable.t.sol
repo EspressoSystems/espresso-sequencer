@@ -469,7 +469,7 @@ contract StakeTable_register_Test is Test {
         assertEq(node.account, exampleTokenCreator); //same account
 
         // Step 5: update the consensus keys with the same bls keys but new schnorrVK
-        seed = "234";
+        seed = "235";
         (, EdOnBN254.EdOnBN254Point memory newSchnorrVK2,) =
             genClientWallet(exampleTokenCreator, seed);
 
