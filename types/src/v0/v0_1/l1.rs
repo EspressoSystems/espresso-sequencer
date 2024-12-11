@@ -1,14 +1,14 @@
-use crate::parse_duration;
+use crate::{parse_duration, };
 use async_broadcast::{InactiveReceiver, Sender};
 use clap::Parser;
 use ethers::{
     prelude::{H256, U256},
     providers::{Http, Provider, Ws},
 };
-use hotshot_types::traits::metrics::{Counter, Gauge, Metrics, NoMetrics};
+use hotshot_types::{data::EpochNumber, traits::metrics::{Counter, Gauge, Metrics, NoMetrics}};
 use lru::LruCache;
 use serde::{Deserialize, Serialize};
-use std::{num::NonZeroUsize, sync::Arc, time::Duration};
+use std::{ num::NonZeroUsize, sync::Arc, time::Duration};
 use tokio::{
     sync::{Mutex, RwLock},
     task::JoinHandle,
@@ -132,6 +132,8 @@ pub(crate) enum RpcClient {
     },
 }
 
+ 
+
 /// In-memory view of the L1 state, updated asynchronously.
 #[derive(Debug)]
 pub(crate) struct L1State {
@@ -143,6 +145,7 @@ pub(crate) struct L1State {
 pub(crate) enum L1Event {
     NewHead { head: u64 },
     NewFinalized { finalized: L1BlockInfo },
+    NewEpoch {epoch : EpochNumber , l1_block_number: u64 },
 }
 
 #[derive(Debug, Default)]
