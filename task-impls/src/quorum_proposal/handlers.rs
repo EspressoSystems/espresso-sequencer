@@ -25,9 +25,7 @@ use hotshot_types::{
     message::Proposal,
     simple_certificate::{QuorumCertificate2, UpgradeCertificate},
     traits::{
-        block_contents::BlockHeader,
-        election::Membership,
-        node_implementation::{ConsensusTime, NodeType},
+        block_contents::BlockHeader, election::Membership, node_implementation::NodeType,
         signature_key::SignatureKey,
     },
     vote::{Certificate, HasViewNumber},
@@ -128,9 +126,8 @@ impl<TYPES: NodeType, V: Versions> ProposalDependencyHandle<TYPES, V> {
                     .is_valid_cert(
                         // TODO take epoch from `qc`
                         // https://github.com/EspressoSystems/HotShot/issues/3917
-                        self.quorum_membership.stake_table(TYPES::Epoch::new(0)),
-                        self.quorum_membership
-                            .success_threshold(TYPES::Epoch::new(0)),
+                        self.quorum_membership.stake_table(qc.data.epoch),
+                        self.quorum_membership.success_threshold(qc.data.epoch),
                         &self.upgrade_lock,
                     )
                     .await
