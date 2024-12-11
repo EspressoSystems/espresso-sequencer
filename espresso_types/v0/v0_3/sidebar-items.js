@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"constant":["VERSION"],"mod":["stake_table"],"struct":["CombinedStakeTable"]};
