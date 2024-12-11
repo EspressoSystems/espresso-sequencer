@@ -1,4 +1,4 @@
-use crate::{parse_duration, v0_3::StakeTables};
+use crate::{parse_duration, };
 use async_broadcast::{InactiveReceiver, Sender};
 use clap::Parser;
 use ethers::{
@@ -8,7 +8,7 @@ use ethers::{
 use hotshot_types::{data::EpochNumber, traits::metrics::{Counter, Gauge, Metrics, NoMetrics}};
 use lru::LruCache;
 use serde::{Deserialize, Serialize};
-use std::{collections::BTreeMap, num::NonZeroUsize, sync::Arc, time::Duration};
+use std::{ num::NonZeroUsize, sync::Arc, time::Duration};
 use tokio::{
     sync::{Mutex, RwLock},
     task::JoinHandle,
@@ -139,7 +139,6 @@ pub(crate) enum RpcClient {
 pub(crate) struct L1State {
     pub(crate) snapshot: L1Snapshot,
     pub(crate) finalized: LruCache<u64, L1BlockInfo>,
-    pub(crate) stake_tables: BTreeMap<EpochNumber, StakeTables>
 }
 
 #[derive(Clone, Debug)]

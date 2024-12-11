@@ -1,3 +1,4 @@
+use async_lock::RwLock;
 use hotshot_types::{
     data::{EpochNumber, ViewNumber},
     signature_key::BLSPubKey,
@@ -7,7 +8,6 @@ use hotshot_types::{
     },
 };
 use serde::{Deserialize, Serialize};
-use tokio::sync::RwLock;
 use std::{marker::PhantomData, sync::Arc};
 
 mod header;
@@ -181,7 +181,7 @@ pub type FeeVersion = StaticVersion<0, 2>;
 pub type MarketplaceVersion = StaticVersion<0, 99>;
 pub type EpochVersion = StaticVersion<0, 100>;
 
-// >>>>>???
+// TODO: >>>>>???
 pub const EPOCH_HEIGHT: u64 = 10000;
 
 pub type Leaf = hotshot_types::data::Leaf<SeqTypes>;

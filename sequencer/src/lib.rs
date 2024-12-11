@@ -13,6 +13,7 @@ mod restart_tests;
 mod message_compat_tests;
 
 use anyhow::Context;
+use async_lock::RwLock;
 use catchup::StatePeers;
 use context::SequencerContext;
 use espresso_types::StaticCommittee;
@@ -479,12 +480,12 @@ pub async fn init_node<P: SequencerPersistence, V: Versions>(
     };
 
     // Create the HotShot membership
-    let membership = StaticCommittee::new_stake(
+    let membership = Arc::new(RwLock::new(StaticCommittee::new_stake(
         network_config.config.known_nodes_with_stake.clone(),
         network_config.config.known_nodes_with_stake.clone(),
         &instance_state,
         Default::default(),
-    );
+    )));
 
     // Initialize the Libp2p network
     let network = {

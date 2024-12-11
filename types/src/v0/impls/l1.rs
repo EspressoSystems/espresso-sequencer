@@ -18,7 +18,6 @@ use lru::LruCache;
 use serde::{de::DeserializeOwned, Serialize};
 use std::{
     cmp::{min, Ordering},
-    collections::BTreeMap,
     fmt::Debug,
     num::NonZeroUsize,
     sync::Arc,
@@ -810,7 +809,6 @@ impl L1State {
         Self {
             snapshot: Default::default(),
             finalized: LruCache::new(cache_size),
-            stake_tables: BTreeMap::new(),
         }
     }
 

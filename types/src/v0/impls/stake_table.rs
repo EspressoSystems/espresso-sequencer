@@ -3,6 +3,7 @@ use super::{
     L1Client, L1Event, NodeState, PubKey, SeqTypes,
 };
 
+use async_lock::RwLock;
 use contract_bindings::permissioned_stake_table::StakersUpdatedFilter;
 use ethers::{abi::Address, types::U256};
 use futures::StreamExt;
@@ -18,13 +19,14 @@ use hotshot_types::{
 use itertools::Itertools;
 use std::{
     cmp::max,
-    collections::{BTreeMap, BTreeSet, HashSet},
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
+    future::Future,
     num::NonZeroU64,
     str::FromStr,
     sync::Arc,
 };
 use thiserror::Error;
-use tokio::{sync::RwLock, task, time::sleep};
+use tokio::{task, time::sleep};
 use tracing::Instrument;
 use url::Url;
 
@@ -99,11 +101,11 @@ pub struct StaticCommittee {
     /// The nodes on the committee and their stake
     da_stake_table: HashSet<StakeTableEntry<PubKey>>,
 
-    /// The nodes on the committee and their stake, indexed by public key
-    indexed_stake_table: BTreeMap<PubKey, StakeTableEntry<PubKey>>,
+    /// TODO:
+    indexed_stake_table: BTreeMap<Epoch, HashMap<PubKey, StakeTableEntry<PubKey>>>,
 
-    /// The nodes on the committee and their stake, indexed by public key
-    indexed_da_stake_table: BTreeMap<PubKey, StakeTableEntry<PubKey>>,
+    /// TODO:
+    indexed_da_stake_table: BTreeMap<Epoch, HashMap<PubKey, StakeTableEntry<PubKey>>>,
 
     /// Number of blocks in an epoch
     _epoch_size: u64,
@@ -193,31 +195,31 @@ impl StaticCommittee {
             .filter(|entry| entry.stake() > U256::zero())
             .collect();
 
-        // Index the stake table by public key
-        let indexed_stake_table: BTreeMap<PubKey, _> = members
-            .iter()
-            .map(|entry| (PubKey::public_key(entry), entry.clone()))
-            .collect();
+        // // Index the stake table by public key
+        // let indexed_stake_table: BTreeMap<PubKey, _> = members
+        //     .iter()
+        //     .map(|entry| (PubKey::public_key(entry), entry.clone()))
+        //     .collect();
 
-        // Index the stake table by public key
-        let indexed_da_stake_table: BTreeMap<PubKey, _> = da_members
-            .iter()
-            .map(|entry| (PubKey::public_key(entry), entry.clone()))
-            .collect();
+        // // Index the stake table by public key
+        // let indexed_da_stake_table: BTreeMap<PubKey, _> = da_members
+        //     .iter()
+        //     .map(|entry| (PubKey::public_key(entry), entry.clone()))
+        //     .collect();
 
         Self {
             eligible_leaders,
             stake_table: HashSet::from_iter(members),
             da_stake_table: HashSet::from_iter(da_members),
-            indexed_stake_table,
-            indexed_da_stake_table,
+            indexed_stake_table: BTreeMap::new(),
+            indexed_da_stake_table: BTreeMap::new(),
             _epoch_size: epoch_size,
             l1_client: instance_state.l1_client.clone(),
             _contract_address: instance_state.chain_config.stake_table_contract,
         }
     }
 
-    async fn update_loop(committee: Arc<RwLock<StaticCommittee>>) {
+    async fn update_loop(committee: Arc<RwLock<StaticCommittee>>) -> impl Future<Output = ()> {
         let l1_client = { committee.read().await.l1_client.clone() };
 
         let retry_delay = l1_client.retry_delay;
@@ -254,7 +256,7 @@ impl StaticCommittee {
                 }
             }
         }
-        .instrument(span);
+        .instrument(span)
     }
 }
 
@@ -293,24 +295,25 @@ impl Membership<SeqTypes> for Arc<RwLock<StaticCommittee>> {
             .filter(|entry| entry.stake() > U256::zero())
             .collect();
 
-        // Index the stake table by public key
-        let indexed_stake_table: BTreeMap<PubKey, _> = members
-            .iter()
-            .map(|entry| (PubKey::public_key(entry), entry.clone()))
-            .collect();
+        // // Index the stake table by public key
+        // let indexed_stake_table: BTreeMap<PubKey, _> = members
+        //     .iter()
+        //     .map(|entry| (PubKey::public_key(entry), entry.clone()))
+        //     .collect();
 
-        // Index the stake table by public key
-        let indexed_da_stake_table: BTreeMap<PubKey, _> = da_members
-            .iter()
-            .map(|entry| (PubKey::public_key(entry), entry.clone()))
-            .collect();
+        // // Index the stake table by public key
+        // let indexed_da_stake_table: BTreeMap<PubKey, _> = da_members
+        //     .iter()
+        //     .map(|entry| (PubKey::public_key(entry), entry.clone()))
+        //     .collect();
 
-        let mut committee = StaticCommittee {
+        let committee = StaticCommittee {
             eligible_leaders,
             stake_table: HashSet::from_iter(members),
             da_stake_table: HashSet::from_iter(da_members),
-            indexed_stake_table,
-            indexed_da_stake_table,
+            // TODO: ??
+            indexed_stake_table: BTreeMap::new(),
+            indexed_da_stake_table: BTreeMap::new(),
             _epoch_size: 12, // TODO get the real number from config (I think)
             l1_client: L1Client::http(Url::from_str("http:://ab.b").unwrap()),
             _contract_address: None,
@@ -378,45 +381,52 @@ impl Membership<SeqTypes> for Arc<RwLock<StaticCommittee>> {
     }
 
     /// Get the stake table entry for a public key
-    fn stake(&self, pub_key: &PubKey, _epoch: Epoch) -> Option<StakeTableEntry<PubKey>> {
+    fn stake(&self, pub_key: &PubKey, epoch: Epoch) -> Option<StakeTableEntry<PubKey>> {
         let sc = tokio::runtime::Runtime::new()
             .unwrap()
             .block_on(async { self.read().await });
 
         // Only return the stake if it is above zero
-        sc.indexed_stake_table.get(pub_key).cloned()
+
+        sc.indexed_stake_table
+            .get(&epoch)
+            .and_then(|h| h.get(pub_key).cloned())
     }
 
     /// Get the DA stake table entry for a public key
-    fn da_stake(&self, pub_key: &PubKey, _epoch: Epoch) -> Option<StakeTableEntry<PubKey>> {
+    fn da_stake(&self, pub_key: &PubKey, epoch: Epoch) -> Option<StakeTableEntry<PubKey>> {
         let sc = tokio::runtime::Runtime::new()
             .unwrap()
             .block_on(async { self.read().await });
 
         // Only return the stake if it is above zero
-        sc.indexed_da_stake_table.get(pub_key).cloned()
+        sc.indexed_da_stake_table
+            .get(&epoch)
+            .and_then(|h| h.get(pub_key).cloned())
     }
 
     /// Check if a node has stake in the committee
-    fn has_stake(&self, pub_key: &PubKey, _epoch: Epoch) -> bool {
+    fn has_stake(&self, pub_key: &PubKey, epoch: Epoch) -> bool {
         let sc = tokio::runtime::Runtime::new()
             .unwrap()
             .block_on(async { self.read().await });
 
         sc.indexed_stake_table
-            .get(pub_key)
-            .is_some_and(|x| x.stake() > U256::zero())
+            .get(&epoch)
+            .and_then(|h| h.get(pub_key))
+            .map_or(false, |x| x.stake() > U256::zero())
     }
 
     /// Check if a node has stake in the committee
-    fn has_da_stake(&self, pub_key: &PubKey, _epoch: Epoch) -> bool {
+    fn has_da_stake(&self, pub_key: &PubKey, epoch: Epoch) -> bool {
         let sc = tokio::runtime::Runtime::new()
             .unwrap()
             .block_on(async { self.read().await });
 
         sc.indexed_da_stake_table
-            .get(pub_key)
-            .is_some_and(|x| x.stake() > U256::zero())
+            .get(&epoch)
+            .and_then(|h| h.get(pub_key))
+            .map_or(false, |x| x.stake() > U256::zero())
     }
 
     /// Index the vector of public keys with the current view number

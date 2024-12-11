@@ -28,7 +28,7 @@ use vbs::version::{StaticVersionType, Version};
 
 use super::{
     auction::ExecutionError, fee_info::FeeError, instance_state::NodeState, BlockMerkleCommitment,
-    BlockSize, EpochVersion, FeeMerkleCommitment, L1Client, StaticCommittee, EPOCH_HEIGHT,
+    BlockSize, EpochVersion, FeeMerkleCommitment, L1Client, EPOCH_HEIGHT,
 };
 use crate::{
     traits::StateCatchup,
@@ -704,7 +704,6 @@ async fn emit_update_stake_table_event(
     header: &Header,
     prev_block_epoch: EpochNumber,
 ) -> anyhow::Result<()> {
-    // TODO: epoch height???
     let epoch = epoch_from_block_number(header.block_number(), EPOCH_HEIGHT);
 
     if epoch <= prev_block_epoch.u64() {
