@@ -80,7 +80,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> Sequence
     pub async fn init(
         network_config: NetworkConfig<PubKey>,
         validator_config: ValidatorConfig<<SeqTypes as NodeType>::SignatureKey>,
-        membership: Arc<RwLock<StaticCommittee>>,
+        membership: StaticCommittee,
         instance_state: NodeState,
         persistence: P,
         network: Arc<N>,
