@@ -135,8 +135,6 @@ pub struct ValidatedState {
     pub fee_merkle_tree: FeeMerkleTree,
     /// Configuration [`Header`] proposals will be validated against.
     pub chain_config: ResolvableChainConfig,
-    // TODO: >>>> better name?
-    pub prev_block_epoch: EpochNumber,
 }
 
 impl Default for ValidatedState {
@@ -162,7 +160,6 @@ impl Default for ValidatedState {
             block_merkle_tree,
             fee_merkle_tree,
             chain_config,
-            prev_block_epoch: EpochNumber::new(0),
         }
     }
 }
@@ -623,7 +620,6 @@ impl ValidatedState {
                 self.block_merkle_tree.commitment(),
             ),
             chain_config: ResolvableChainConfig::from(self.chain_config.commit()),
-            prev_block_epoch: EpochNumber::new(0),
         }
     }
 }
@@ -702,11 +698,11 @@ fn validate_builder_fee(
 async fn emit_update_stake_table_event(
     instance: &NodeState,
     header: &Header,
-    prev_block_epoch: EpochNumber,
 ) -> anyhow::Result<()> {
+    let prev_epoch = epoch_from_block_number(header.block_number().saturating_sub(1), EPOCH_HEIGHT);
     let epoch = epoch_from_block_number(header.block_number(), EPOCH_HEIGHT);
 
-    if epoch <= prev_block_epoch.u64() {
+    if epoch <= prev_epoch {
         return Ok(());
     }
 
@@ -767,12 +763,7 @@ impl ValidatedState {
         .await;
 
         if version >= EpochVersion::VERSION {
-            emit_update_stake_table_event(
-                instance,
-                proposed_header,
-                validated_state.prev_block_epoch,
-            )
-            .await?;
+            emit_update_stake_table_event(instance, proposed_header).await?;
         }
 
         // Find missing fee state entries. We will need to use the builder account which is paying a
@@ -1011,7 +1002,6 @@ impl HotShotState<SeqTypes> for ValidatedState {
             fee_merkle_tree,
             block_merkle_tree,
             chain_config: block_header.chain_config(),
-            prev_block_epoch: EpochNumber::new(epoch),
         }
     }
     /// Construct a genesis validated state.

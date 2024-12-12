@@ -1247,7 +1247,6 @@ mod test_headers {
                 block_merkle_tree: block_merkle_tree.clone(),
                 fee_merkle_tree,
                 chain_config: genesis.instance_state.chain_config.into(),
-                prev_block_epoch: EpochNumber::new(0),
             };
 
             let (fee_account, fee_key) = FeeAccount::generated_from_seed_indexed([0; 32], 0);
