@@ -139,6 +139,7 @@ pub(crate) enum RpcClient {
 pub(crate) struct L1State {
     pub(crate) snapshot: L1Snapshot,
     pub(crate) finalized: LruCache<u64, L1BlockInfo>,
+    pub(crate) stake_tables: BTreeMap<EpochNumber, StakeTables>
 }
 
 #[derive(Clone, Debug)]
