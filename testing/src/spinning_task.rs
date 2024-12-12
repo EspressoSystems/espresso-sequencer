@@ -28,7 +28,7 @@ use hotshot_types::{
     constants::EVENT_CHANNEL_SIZE,
     data::Leaf2,
     event::Event,
-    simple_certificate::{QuorumCertificate, QuorumCertificate2},
+    simple_certificate::QuorumCertificate2,
     traits::{
         network::{AsyncGenerator, ConnectedNetwork},
         node_implementation::{ConsensusTime, NodeImplementation, NodeType, Versions},
@@ -243,12 +243,11 @@ where
                                     read_storage.last_actioned_view().await,
                                     read_storage.proposals_cloned().await,
                                     read_storage.high_qc_cloned().await.unwrap_or(
-                                        QuorumCertificate::genesis::<V>(
+                                        QuorumCertificate2::genesis::<V>(
                                             &TestValidatedState::default(),
                                             &TestInstanceState::default(),
                                         )
-                                        .await
-                                        .to_qc2(),
+                                        .await,
                                     ),
                                     read_storage.decided_upgrade_certificate().await,
                                     Vec::new(),

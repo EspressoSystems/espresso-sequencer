@@ -21,7 +21,7 @@ use vec1::Vec1;
 
 pub use crate::utils::{View, ViewInner};
 use crate::{
-    data::{Leaf2, QuorumProposal2, VidDisperse, VidDisperseShare},
+    data::{Leaf2, QuorumProposal2, VidDisperse, VidDisperseShare2},
     error::HotShotError,
     event::{HotShotAction, LeafInfo},
     message::Proposal,
@@ -46,7 +46,7 @@ pub type CommitmentMap<T> = HashMap<Commitment<T>, T>;
 /// A type alias for `BTreeMap<T::Time, HashMap<T::SignatureKey, Proposal<T, VidDisperseShare<T>>>>`
 pub type VidShares<TYPES> = BTreeMap<
     <TYPES as NodeType>::View,
-    HashMap<<TYPES as NodeType>::SignatureKey, Proposal<TYPES, VidDisperseShare<TYPES>>>,
+    HashMap<<TYPES as NodeType>::SignatureKey, Proposal<TYPES, VidDisperseShare2<TYPES>>>,
 >;
 
 /// Type alias for consensus state wrapped in a lock.
@@ -632,10 +632,14 @@ impl<TYPES: NodeType> Consensus<TYPES> {
     pub fn update_da_view(
         &mut self,
         view_number: TYPES::View,
+        epoch: TYPES::Epoch,
         payload_commitment: VidCommitment,
     ) -> Result<()> {
         let view = View {
-            view_inner: ViewInner::Da { payload_commitment },
+            view_inner: ViewInner::Da {
+                payload_commitment,
+                epoch,
+            },
         };
         self.update_validated_state_map(view_number, view)
     }
@@ -652,11 +656,13 @@ impl<TYPES: NodeType> Consensus<TYPES> {
         delta: Option<Arc<<TYPES::ValidatedState as ValidatedState<TYPES>>::Delta>>,
     ) -> Result<()> {
         let view_number = leaf.view_number();
+        let epoch = TYPES::Epoch::new(epoch_from_block_number(leaf.height(), self.epoch_height));
         let view = View {
             view_inner: ViewInner::Leaf {
                 leaf: leaf.commit(),
                 state,
                 delta,
+                epoch,
             },
         };
         self.update_validated_state_map(view_number, view)?;
@@ -738,7 +744,7 @@ impl<TYPES: NodeType> Consensus<TYPES> {
     pub fn update_vid_shares(
         &mut self,
         view_number: TYPES::View,
-        disperse: Proposal<TYPES, VidDisperseShare<TYPES>>,
+        disperse: Proposal<TYPES, VidDisperseShare2<TYPES>>,
     ) {
         self.vid_shares
             .entry(view_number)
@@ -901,11 +907,17 @@ impl<TYPES: NodeType> Consensus<TYPES> {
         view: <TYPES as NodeType>::View,
         membership: Arc<TYPES::Membership>,
         private_key: &<TYPES::SignatureKey as SignatureKey>::PrivateKey,
-        epoch: TYPES::Epoch,
     ) -> Option<()> {
         let txns = Arc::clone(consensus.read().await.saved_payloads().get(&view)?);
+        let epoch = consensus
+            .read()
+            .await
+            .validated_state_map()
+            .get(&view)?
+            .view_inner
+            .epoch()?;
         let vid = VidDisperse::calculate_vid_disperse(txns, &membership, view, epoch, None).await;
-        let shares = VidDisperseShare::from_vid_disperse(vid);
+        let shares = VidDisperseShare2::from_vid_disperse(vid);
         let mut consensus_writer = consensus.write().await;
         for share in shares {
             if let Some(prop) = share.to_proposal(private_key) {
@@ -995,6 +1007,20 @@ impl<TYPES: NodeType> Consensus<TYPES> {
     pub fn is_leaf_for_last_block(&self, leaf_commit: LeafCommitment<TYPES>) -> bool {
         let Some(leaf) = self.saved_leaves.get(&leaf_commit) else {
             tracing::trace!("We don't have a leaf corresponding to the leaf commit");
+            return false;
+        };
+        let block_height = leaf.height();
+        if block_height == 0 || self.epoch_height == 0 {
+            false
+        } else {
+            block_height % self.epoch_height == 0
+        }
+    }
+
+    /// Returns true if our high QC is for the last block in the epoch
+    pub fn is_high_qc_for_last_block(&self) -> bool {
+        let Some(leaf) = self.saved_leaves.get(&self.high_qc().data.leaf_commit) else {
+            tracing::trace!("We don't have a leaf corresponding to the high QC");
             return false;
         };
         let block_height = leaf.height();

@@ -25,6 +25,7 @@ use hotshot_types::{
         signature_key::SignatureKey,
         storage::Storage,
     },
+    utils::EpochTransitionIndicator,
     vote::{Certificate, HasViewNumber},
 };
 use tokio::task::JoinHandle;
@@ -40,6 +41,9 @@ mod handlers;
 pub struct QuorumProposalTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> {
     /// Latest view number that has been proposed for.
     pub latest_proposed_view: TYPES::View,
+
+    /// Current epoch
+    pub cur_epoch: TYPES::Epoch,
 
     /// Table for the in-progress proposal dependency tasks.
     pub proposal_dependencies: BTreeMap<TYPES::View, JoinHandle<()>>,
@@ -97,6 +101,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
         view_number: TYPES::View,
         event_receiver: Receiver<Arc<HotShotEvent<TYPES>>>,
     ) -> EventDependency<Arc<HotShotEvent<TYPES>>> {
+        let id = self.id;
         EventDependency::new(
             event_receiver,
             Box::new(move |event| {
@@ -158,7 +163,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                 let valid = event_view == view_number;
                 if valid {
                     tracing::debug!(
-                        "Dependency {dependency_type:?} is complete for view {event_view:?}!",
+                        "Dependency {dependency_type:?} is complete for view {event_view:?}, my id is {id:?}!",
                     );
                 }
                 valid
@@ -273,10 +278,22 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
         event_receiver: Receiver<Arc<HotShotEvent<TYPES>>>,
         event_sender: Sender<Arc<HotShotEvent<TYPES>>>,
         event: Arc<HotShotEvent<TYPES>>,
+        epoch_transition_indicator: EpochTransitionIndicator,
     ) -> Result<()> {
+        let leader_in_current_epoch =
+            self.quorum_membership.leader(view_number, epoch_number)? == self.public_key;
+        // If we are in the epoch transition and we are the leader in the next epoch,
+        // we might want to start collecting dependencies for our next epoch proposal.
+        let leader_in_next_epoch = matches!(
+            epoch_transition_indicator,
+            EpochTransitionIndicator::InTransition
+        ) && self
+            .quorum_membership
+            .leader(view_number, epoch_number + 1)?
+            == self.public_key;
         // Don't even bother making the task if we are not entitled to propose anyway.
         ensure!(
-            self.quorum_membership.leader(view_number, epoch_number)? == self.public_key,
+            leader_in_current_epoch || leader_in_next_epoch,
             debug!("We are not the leader of the next view")
         );
 
@@ -316,6 +333,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                 id: self.id,
                 view_start_time: Instant::now(),
                 highest_qc: self.highest_qc.clone(),
+                epoch_height: self.epoch_height,
             },
         );
         self.proposal_dependencies
@@ -350,13 +368,20 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
     }
 
     /// Handles a consensus event received on the event stream
-    #[instrument(skip_all, fields(id = self.id, latest_proposed_view = *self.latest_proposed_view), name = "handle method", level = "error", target = "QuorumProposalTaskState")]
+    #[instrument(skip_all, fields(id = self.id, latest_proposed_view = *self.latest_proposed_view, epoch = *self.cur_epoch), name = "handle method", level = "error", target = "QuorumProposalTaskState")]
     pub async fn handle(
         &mut self,
         event: Arc<HotShotEvent<TYPES>>,
         event_receiver: Receiver<Arc<HotShotEvent<TYPES>>>,
         event_sender: Sender<Arc<HotShotEvent<TYPES>>>,
     ) -> Result<()> {
+        let epoch_number = self.cur_epoch;
+        let epoch_transition_indicator = if self.consensus.read().await.is_high_qc_for_last_block()
+        {
+            EpochTransitionIndicator::InTransition
+        } else {
+            EpochTransitionIndicator::NotInTransition
+        };
         match event.as_ref() {
             HotShotEvent::UpgradeCertificateFormed(cert) => {
                 tracing::debug!(
@@ -373,13 +398,13 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
             HotShotEvent::Qc2Formed(cert) => match cert.clone() {
                 either::Right(timeout_cert) => {
                     let view_number = timeout_cert.view_number + 1;
-                    let epoch_number = self.consensus.read().await.cur_epoch();
                     self.create_dependency_task_if_new(
                         view_number,
                         epoch_number,
                         event_receiver,
                         event_sender,
                         Arc::clone(&event),
+                        epoch_transition_indicator,
                     )?;
                 }
                 either::Left(qc) => {
@@ -407,13 +432,13 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                         .wrap()
                         .context(error!("Failed to update high QC in storage!"))?;
                     let view_number = qc.view_number() + 1;
-                    let epoch_number = self.consensus.read().await.cur_epoch();
                     self.create_dependency_task_if_new(
                         view_number,
                         epoch_number,
                         event_receiver,
                         event_sender,
                         Arc::clone(&event),
+                        epoch_transition_indicator,
                     )?;
                 }
             },
@@ -426,7 +451,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                 _auction_result,
             ) => {
                 let view_number = *view_number;
-                let epoch_number = self.consensus.read().await.cur_epoch();
 
                 self.create_dependency_task_if_new(
                     view_number,
@@ -434,9 +458,15 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                     event_receiver,
                     event_sender,
                     Arc::clone(&event),
+                    EpochTransitionIndicator::NotInTransition,
                 )?;
             }
             HotShotEvent::ViewSyncFinalizeCertificateRecv(certificate) => {
+                // MERGE TODO
+                //
+                // HotShotEvent::ViewSyncFinalizeCertificate2Recv(certificate) => {
+                //    let cert_epoch_number = certificate.data.epoch;
+                //
                 let epoch_number = self.consensus.read().await.cur_epoch();
 
                 ensure!(
@@ -461,6 +491,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                     event_receiver,
                     event_sender,
                     event,
+                    EpochTransitionIndicator::NotInTransition,
                 )?;
             }
             HotShotEvent::QuorumProposalPreliminarilyValidated(proposal) => {
@@ -469,7 +500,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                 if !self.update_latest_proposed_view(view_number).await {
                     tracing::trace!("Failed to update latest proposed view");
                 }
-                let epoch_number = self.consensus.read().await.cur_epoch();
 
                 self.create_dependency_task_if_new(
                     view_number + 1,
@@ -477,6 +507,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                     event_receiver,
                     event_sender,
                     Arc::clone(&event),
+                    epoch_transition_indicator,
                 )?;
             }
             HotShotEvent::QuorumProposalSend(proposal, _) => {
@@ -489,25 +520,31 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
             }
             HotShotEvent::VidDisperseSend(vid_share, _) => {
                 let view_number = vid_share.data.view_number();
-                let epoch_number = self.consensus.read().await.cur_epoch();
                 self.create_dependency_task_if_new(
                     view_number,
                     epoch_number,
                     event_receiver,
                     event_sender,
                     Arc::clone(&event),
+                    EpochTransitionIndicator::NotInTransition,
                 )?;
             }
-            HotShotEvent::ViewChange(view, _) | HotShotEvent::Timeout(view) => {
+            HotShotEvent::ViewChange(view, epoch) => {
+                if epoch > &self.cur_epoch {
+                    self.cur_epoch = *epoch;
+                }
+                self.cancel_tasks(*view);
+            }
+            HotShotEvent::Timeout(view, ..) => {
                 self.cancel_tasks(*view);
             }
             HotShotEvent::HighQcSend(qc, ..) => {
                 ensure!(qc.view_number() > self.highest_qc.view_number());
-                let epoch_number = self.consensus.read().await.cur_epoch();
+                let cert_epoch_number = qc.data.epoch;
                 ensure!(
                     qc.is_valid_cert(
-                        self.quorum_membership.stake_table(epoch_number),
-                        self.quorum_membership.success_threshold(epoch_number),
+                        self.quorum_membership.stake_table(cert_epoch_number),
+                        self.quorum_membership.success_threshold(cert_epoch_number),
                         &self.upgrade_lock
                     )
                     .await,

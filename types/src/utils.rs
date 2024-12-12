@@ -45,6 +45,8 @@ pub enum ViewInner<TYPES: NodeType> {
     Da {
         /// Payload commitment to the available block.
         payload_commitment: VidCommitment,
+        /// An epoch to which the data belongs to. Relevant for validating against the correct stake table
+        epoch: TYPES::Epoch,
     },
     /// Undecided view
     Leaf {
@@ -54,6 +56,8 @@ pub enum ViewInner<TYPES: NodeType> {
         state: Arc<TYPES::ValidatedState>,
         /// Optional state delta.
         delta: Option<Arc<<TYPES::ValidatedState as ValidatedState<TYPES>>::Delta>>,
+        /// An epoch to which the data belongs to. Relevant for validating against the correct stake table
+        epoch: TYPES::Epoch,
     },
     /// Leaf has failed
     Failed,
@@ -61,13 +65,23 @@ pub enum ViewInner<TYPES: NodeType> {
 impl<TYPES: NodeType> Clone for ViewInner<TYPES> {
     fn clone(&self) -> Self {
         match self {
-            Self::Da { payload_commitment } => Self::Da {
+            Self::Da {
+                payload_commitment,
+                epoch,
+            } => Self::Da {
                 payload_commitment: *payload_commitment,
+                epoch: *epoch,
             },
-            Self::Leaf { leaf, state, delta } => Self::Leaf {
+            Self::Leaf {
+                leaf,
+                state,
+                delta,
+                epoch,
+            } => Self::Leaf {
                 leaf: *leaf,
                 state: Arc::clone(state),
                 delta: delta.clone(),
+                epoch: *epoch,
             },
             Self::Failed => Self::Failed,
         }
@@ -126,10 +140,21 @@ impl<TYPES: NodeType> ViewInner<TYPES> {
     /// return the underlying block paylod commitment if it exists
     #[must_use]
     pub fn payload_commitment(&self) -> Option<VidCommitment> {
-        if let Self::Da { payload_commitment } = self {
+        if let Self::Da {
+            payload_commitment, ..
+        } = self
+        {
             Some(*payload_commitment)
         } else {
             None
+        }
+    }
+
+    /// Returns `Epoch` if possible
+    pub fn epoch(&self) -> Option<TYPES::Epoch> {
+        match self {
+            Self::Da { epoch, .. } | Self::Leaf { epoch, .. } => Some(*epoch),
+            Self::Failed => None,
         }
     }
 }
@@ -233,4 +258,13 @@ pub fn mnemonic<H: Hash>(bytes: H) -> String {
     let mut state = std::collections::hash_map::DefaultHasher::new();
     bytes.hash(&mut state);
     mnemonic::to_string(state.finish().to_le_bytes())
+}
+
+/// A helper enum to indicate whether a node is in the epoch transition
+/// A node is in epoch transition when its high QC is for the last block in an epoch
+pub enum EpochTransitionIndicator {
+    /// A node is currently in the epoch transition
+    InTransition,
+    /// A node is not in the epoch transition
+    NotInTransition,
 }

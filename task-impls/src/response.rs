@@ -10,7 +10,7 @@ use async_broadcast::{Receiver, Sender};
 use committable::Committable;
 use hotshot_types::{
     consensus::{Consensus, LockedConsensusState, OuterConsensus},
-    data::VidDisperseShare,
+    data::VidDisperseShare2,
     message::Proposal,
     traits::{
         election::Membership, network::DataRequest, node_implementation::NodeType,
@@ -138,7 +138,7 @@ impl<TYPES: NodeType> NetworkResponseState<TYPES> {
         &self,
         view: TYPES::View,
         key: &TYPES::SignatureKey,
-    ) -> Option<Proposal<TYPES, VidDisperseShare<TYPES>>> {
+    ) -> Option<Proposal<TYPES, VidDisperseShare2<TYPES>>> {
         let consensus_reader = self.consensus.read().await;
         if let Some(view) = consensus_reader.vid_shares().get(&view) {
             if let Some(share) = view.get(key) {
@@ -146,7 +146,6 @@ impl<TYPES: NodeType> NetworkResponseState<TYPES> {
             }
         }
 
-        let cur_epoch = consensus_reader.cur_epoch();
         drop(consensus_reader);
 
         if Consensus::calculate_and_update_vid(
@@ -154,7 +153,6 @@ impl<TYPES: NodeType> NetworkResponseState<TYPES> {
             view,
             Arc::clone(&self.quorum),
             &self.private_key,
-            cur_epoch,
         )
         .await
         .is_none()
@@ -166,7 +164,6 @@ impl<TYPES: NodeType> NetworkResponseState<TYPES> {
                 view,
                 Arc::clone(&self.quorum),
                 &self.private_key,
-                cur_epoch,
             )
             .await?;
         }

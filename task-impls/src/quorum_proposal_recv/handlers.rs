@@ -105,6 +105,7 @@ fn spawn_fetch_proposal<TYPES: NodeType, V: Versions>(
     sender_public_key: TYPES::SignatureKey,
     sender_private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
     upgrade_lock: UpgradeLock<TYPES, V>,
+    epoch_height: u64,
 ) {
     spawn(async move {
         let lock = upgrade_lock;
@@ -118,6 +119,7 @@ fn spawn_fetch_proposal<TYPES: NodeType, V: Versions>(
             sender_public_key,
             sender_private_key,
             &lock,
+            epoch_height,
         )
         .await;
     });
@@ -151,6 +153,11 @@ pub(crate) async fn handle_quorum_proposal_recv<
 
     let view_number = proposal.data.view_number();
     let justify_qc = proposal.data.justify_qc.clone();
+    let proposal_block_number = proposal.data.block_header.block_number();
+    let proposal_epoch = TYPES::Epoch::new(epoch_from_block_number(
+        proposal_block_number,
+        validation_info.epoch_height,
+    ));
 
     if !justify_qc
         .is_valid_cert(
@@ -199,6 +206,7 @@ pub(crate) async fn handle_quorum_proposal_recv<
             validation_info.public_key.clone(),
             validation_info.private_key.clone(),
             validation_info.upgrade_lock.clone(),
+            validation_info.epoch_height,
         );
     }
     let consensus_reader = validation_info.consensus.read().await;
@@ -239,18 +247,13 @@ pub(crate) async fn handle_quorum_proposal_recv<
             justify_qc.data.leaf_commit
         );
         validate_proposal_liveness(proposal, &validation_info).await?;
-        let block_number = proposal.data.block_header.block_number();
-        let epoch = TYPES::Epoch::new(epoch_from_block_number(
-            block_number,
-            validation_info.epoch_height,
-        ));
         tracing::trace!(
             "Sending ViewChange for view {} and epoch {}",
             view_number,
-            *epoch
+            *proposal_epoch
         );
         broadcast_event(
-            Arc::new(HotShotEvent::ViewChange(view_number, epoch)),
+            Arc::new(HotShotEvent::ViewChange(view_number, proposal_epoch)),
             event_sender,
         )
         .await;
@@ -267,18 +270,13 @@ pub(crate) async fn handle_quorum_proposal_recv<
     )
     .await?;
 
-    let epoch_number = TYPES::Epoch::new(epoch_from_block_number(
-        proposal.data.block_header.block_number(),
-        validation_info.epoch_height,
-    ));
-
     tracing::trace!(
         "Sending ViewChange for view {} and epoch {}",
         view_number,
-        *epoch_number
+        *proposal_epoch
     );
     broadcast_event(
-        Arc::new(HotShotEvent::ViewChange(view_number, epoch_number)),
+        Arc::new(HotShotEvent::ViewChange(view_number, proposal_epoch)),
         event_sender,
     )
     .await;

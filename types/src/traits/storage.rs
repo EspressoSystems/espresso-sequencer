@@ -20,6 +20,7 @@ use crate::{
     consensus::{CommitmentMap, View},
     data::{
         DaProposal, DaProposal2, Leaf, Leaf2, QuorumProposal, QuorumProposal2, VidDisperseShare,
+        VidDisperseShare2,
     },
     event::HotShotAction,
     message::Proposal,
@@ -32,6 +33,9 @@ use crate::{
 pub trait Storage<TYPES: NodeType>: Send + Sync + Clone {
     /// Add a proposal to the stored VID proposals.
     async fn append_vid(&self, proposal: &Proposal<TYPES, VidDisperseShare<TYPES>>) -> Result<()>;
+    /// Add a proposal to the stored VID proposals.
+    async fn append_vid2(&self, proposal: &Proposal<TYPES, VidDisperseShare2<TYPES>>)
+        -> Result<()>;
     /// Add a proposal to the stored DA proposals.
     async fn append_da(
         &self,

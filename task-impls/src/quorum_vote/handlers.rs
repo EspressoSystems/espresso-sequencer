@@ -12,7 +12,7 @@ use chrono::Utc;
 use committable::Committable;
 use hotshot_types::{
     consensus::OuterConsensus,
-    data::{Leaf2, QuorumProposal2, VidDisperseShare},
+    data::{Leaf2, QuorumProposal2, VidDisperseShare2},
     event::{Event, EventType, LeafInfo},
     message::{Proposal, UpgradeLock},
     simple_vote::{QuorumData2, QuorumVote2},
@@ -278,8 +278,9 @@ pub(crate) async fn update_shared_state<
     instance_state: Arc<TYPES::InstanceState>,
     storage: Arc<RwLock<I::Storage>>,
     proposed_leaf: &Leaf2<TYPES>,
-    vid_share: &Proposal<TYPES, VidDisperseShare<TYPES>>,
+    vid_share: &Proposal<TYPES, VidDisperseShare2<TYPES>>,
     parent_view_number: Option<TYPES::View>,
+    epoch_height: u64,
 ) -> Result<()> {
     let justify_qc = &proposed_leaf.justify_qc();
 
@@ -313,6 +314,7 @@ pub(crate) async fn update_shared_state<
                 public_key.clone(),
                 private_key.clone(),
                 &upgrade_lock,
+                epoch_height,
             )
             .await
             .ok()
@@ -402,7 +404,7 @@ pub(crate) async fn submit_vote<TYPES: NodeType, I: NodeImplementation<TYPES>, V
     epoch_height: u64,
     storage: Arc<RwLock<I::Storage>>,
     leaf: Leaf2<TYPES>,
-    vid_share: Proposal<TYPES, VidDisperseShare<TYPES>>,
+    vid_share: Proposal<TYPES, VidDisperseShare2<TYPES>>,
     extended_vote: bool,
 ) -> Result<()> {
     let epoch_number = TYPES::Epoch::new(epoch_from_block_number(
@@ -432,26 +434,27 @@ pub(crate) async fn submit_vote<TYPES: NodeType, I: NodeImplementation<TYPES>, V
     .await
     .wrap()
     .context(error!("Failed to sign vote. This should never happen."))?;
-    tracing::debug!(
-        "sending vote to next quorum leader {:?}",
-        vote.view_number() + 1
-    );
     // Add to the storage.
     storage
         .write()
         .await
-        .append_vid(&vid_share)
+        .append_vid2(&vid_share)
         .await
         .wrap()
         .context(error!("Failed to store VID share"))?;
 
     if extended_vote {
+        tracing::debug!("sending extended vote to everybody",);
         broadcast_event(
             Arc::new(HotShotEvent::ExtendedQuorumVoteSend(vote)),
             &sender,
         )
         .await;
     } else {
+        tracing::debug!(
+            "sending vote to next quorum leader {:?}",
+            vote.view_number() + 1
+        );
         broadcast_event(Arc::new(HotShotEvent::QuorumVoteSend(vote)), &sender).await;
     }
 

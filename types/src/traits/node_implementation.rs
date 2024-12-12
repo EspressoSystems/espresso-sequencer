@@ -212,6 +212,8 @@ pub trait NodeType:
     type View: ConsensusTime + Display;
     /// Same as above but for epoch.
     type Epoch: ConsensusTime + Display;
+    /// constant for epoch height
+    const EPOCH_HEIGHT: u64;
     /// The AuctionSolverResult is a type that holds the data associated with a particular solver
     /// run, for a particular view.
     type AuctionResult: Debug

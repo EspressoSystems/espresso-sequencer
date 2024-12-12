@@ -144,7 +144,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> DaTaskState<TYP
             HotShotEvent::DaProposalValidated(proposal, sender) => {
                 let cur_view = self.consensus.read().await.cur_view();
                 let view_number = proposal.data.view_number();
-                let epoch_number = proposal.data.epoch_number;
+                let epoch_number = proposal.data.epoch;
 
                 ensure!(
                   cur_view <= view_number + 1,
@@ -209,7 +209,9 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> DaTaskState<TYP
 
                 // Ensure this view is in the view map for garbage collection.
 
-                if let Err(e) = consensus_writer.update_da_view(view_number, payload_commitment) {
+                if let Err(e) =
+                    consensus_writer.update_da_view(view_number, epoch_number, payload_commitment)
+                {
                     tracing::trace!("{e:?}");
                 }
 
@@ -234,7 +236,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> DaTaskState<TYP
                             view_number,
                             membership,
                             &pk,
-                            epoch_number,
                         )
                         .await;
                         if let Some(Some(vid_share)) = consensus
@@ -260,13 +261,14 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> DaTaskState<TYP
                 tracing::debug!("DA vote recv, Main Task {:?}", vote.view_number());
                 // Check if we are the leader and the vote is from the sender.
                 let view = vote.view_number();
+                let epoch = vote.data.epoch;
 
                 ensure!(
-                    self.membership.leader(view, self.cur_epoch)? == self.public_key,
+                    self.membership.leader(view, epoch)? == self.public_key,
                     debug!(
                       "We are not the DA committee leader for view {} are we leader for next view? {}",
                       *view,
-                      self.membership.leader(view + 1, self.cur_epoch)? == self.public_key
+                      self.membership.leader(view + 1, epoch)? == self.public_key
                     )
                 );
 
@@ -275,7 +277,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> DaTaskState<TYP
                     vote,
                     self.public_key.clone(),
                     &self.membership,
-                    self.cur_epoch,
+                    epoch,
                     self.id,
                     &event,
                     &event_stream,
@@ -318,12 +320,18 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> DaTaskState<TYP
                     TYPES::SignatureKey::sign(&self.private_key, &encoded_transactions_hash)
                         .wrap()?;
 
+                if self.membership.leader(view_number, *epoch_number)? != self.public_key {
+                    tracing::debug!(
+                        "We are not the leader in the current epoch. Do not send the DA proposal"
+                    );
+                    return Ok(());
+                }
                 let data: DaProposal2<TYPES> = DaProposal2 {
                     encoded_transactions: Arc::clone(encoded_transactions),
                     metadata: metadata.clone(),
                     // Upon entering a new view we want to send a DA Proposal for the next view -> Is it always the case that this is cur_view + 1?
                     view_number,
-                    epoch_number: *epoch_number,
+                    epoch: *epoch_number,
                 };
 
                 let message = Proposal {

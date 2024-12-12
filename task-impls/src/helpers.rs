@@ -20,10 +20,11 @@ use hotshot_types::{
     message::{Proposal, UpgradeLock},
     request_response::ProposalRequestPayload,
     simple_certificate::{QuorumCertificate2, UpgradeCertificate},
+    simple_vote::HasEpoch,
     traits::{
         block_contents::BlockHeader,
         election::Membership,
-        node_implementation::{NodeImplementation, NodeType, Versions},
+        node_implementation::{ConsensusTime, NodeImplementation, NodeType, Versions},
         signature_key::SignatureKey,
         BlockPayload, ValidatedState,
     },
@@ -48,6 +49,7 @@ pub(crate) async fn fetch_proposal<TYPES: NodeType, V: Versions>(
     sender_public_key: TYPES::SignatureKey,
     sender_private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
     upgrade_lock: &UpgradeLock<TYPES, V>,
+    epoch_height: u64,
 ) -> Result<(Leaf2<TYPES>, View<TYPES>)> {
     // We need to be able to sign this request before submitting it to the network. Compute the
     // payload first.
@@ -72,7 +74,6 @@ pub(crate) async fn fetch_proposal<TYPES: NodeType, V: Versions>(
     .await;
 
     let mem = Arc::clone(&quorum_membership);
-    let cur_epoch = consensus.read().await.cur_epoch();
     // Make a background task to await the arrival of the event data.
     let Ok(Some(proposal)) =
         // We want to explicitly timeout here so we aren't waiting around for the data.
@@ -104,7 +105,7 @@ pub(crate) async fn fetch_proposal<TYPES: NodeType, V: Versions>(
                         hs_event.as_ref()
                     {
                         // Make sure that the quorum_proposal is valid
-                        if quorum_proposal.validate_signature(&mem, cur_epoch).is_ok() {
+                        if quorum_proposal.validate_signature(&mem, epoch_height).is_ok() {
                             proposal = Some(quorum_proposal.clone());
                         }
 
@@ -124,10 +125,11 @@ pub(crate) async fn fetch_proposal<TYPES: NodeType, V: Versions>(
     let view_number = proposal.data.view_number();
     let justify_qc = proposal.data.justify_qc.clone();
 
+    let justify_qc_epoch = justify_qc.data.epoch();
     if !justify_qc
         .is_valid_cert(
-            quorum_membership.stake_table(cur_epoch),
-            quorum_membership.success_threshold(cur_epoch),
+            quorum_membership.stake_table(justify_qc_epoch),
+            quorum_membership.success_threshold(justify_qc_epoch),
             upgrade_lock,
         )
         .await
@@ -148,6 +150,7 @@ pub(crate) async fn fetch_proposal<TYPES: NodeType, V: Versions>(
             leaf: leaf.commit(),
             state,
             delta: None,
+            epoch: leaf.epoch(),
         },
     };
     Ok((leaf, view))
@@ -425,7 +428,6 @@ pub async fn decide_from_proposal<TYPES: NodeType>(
 #[instrument(skip_all)]
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn parent_leaf_and_state<TYPES: NodeType, V: Versions>(
-    next_proposal_view_number: TYPES::View,
     event_sender: &Sender<Arc<HotShotEvent<TYPES>>>,
     event_receiver: &Receiver<Arc<HotShotEvent<TYPES>>>,
     quorum_membership: Arc<TYPES::Membership>,
@@ -434,16 +436,9 @@ pub(crate) async fn parent_leaf_and_state<TYPES: NodeType, V: Versions>(
     consensus: OuterConsensus<TYPES>,
     upgrade_lock: &UpgradeLock<TYPES, V>,
     parent_view_number: TYPES::View,
+    epoch_height: u64,
 ) -> Result<(Leaf2<TYPES>, Arc<<TYPES as NodeType>::ValidatedState>)> {
     let consensus_reader = consensus.read().await;
-    let cur_epoch = consensus_reader.cur_epoch();
-    ensure!(
-        quorum_membership.leader(next_proposal_view_number, cur_epoch)? == public_key,
-        info!(
-            "Somehow we formed a QC but are not the leader for the next view {:?}",
-            next_proposal_view_number
-        )
-    );
     let vsm_contains_parent_view = consensus_reader
         .validated_state_map()
         .contains_key(&parent_view_number);
@@ -459,6 +454,7 @@ pub(crate) async fn parent_leaf_and_state<TYPES: NodeType, V: Versions>(
             public_key.clone(),
             private_key.clone(),
             upgrade_lock,
+            epoch_height,
         )
         .await
         .context(info!("Failed to fetch proposal"))?;
@@ -517,6 +513,8 @@ pub async fn validate_proposal_safety_and_liveness<
         proposed_leaf.parent_commitment() == parent_leaf.commit(),
         "Proposed leaf does not extend the parent leaf."
     );
+    let proposal_epoch =
+        epoch_from_block_number(proposed_leaf.height(), validation_info.epoch_height);
 
     let state = Arc::new(
         <TYPES::ValidatedState as ValidatedState<TYPES>>::from_header(&proposal.data.block_header),
@@ -535,11 +533,10 @@ pub async fn validate_proposal_safety_and_liveness<
         };
     }
 
-    let cur_epoch = validation_info.cur_epoch;
     UpgradeCertificate::validate(
         &proposal.data.upgrade_certificate,
         &validation_info.quorum_membership,
-        cur_epoch,
+        TYPES::Epoch::new(proposal_epoch),
         &validation_info.upgrade_lock,
     )
     .await?;
@@ -562,8 +559,6 @@ pub async fn validate_proposal_safety_and_liveness<
         // The proposal is safe if
         // 1. the proposed block and the justify QC block belong to the same epoch or
         // 2. the justify QC is the eQC for the previous block
-        let proposal_epoch =
-            epoch_from_block_number(proposed_leaf.height(), validation_info.epoch_height);
         let justify_qc_epoch =
             epoch_from_block_number(parent_leaf.height(), validation_info.epoch_height);
         ensure!(
@@ -661,7 +656,7 @@ pub(crate) async fn validate_proposal_view_and_certs<
     // Validate the proposal's signature. This should also catch if the leaf_commitment does not equal our calculated parent commitment
     proposal.validate_signature(
         &validation_info.quorum_membership,
-        validation_info.cur_epoch,
+        validation_info.epoch_height,
     )?;
 
     // Verify a timeout certificate OR a view sync certificate exists and is valid.
@@ -679,16 +674,16 @@ pub(crate) async fn validate_proposal_view_and_certs<
                     "Timeout certificate for view {} was not for the immediately preceding view",
                     *view_number
                 );
-
+                let timeout_cert_epoch = timeout_cert.data().epoch();
                 ensure!(
                     timeout_cert
                         .is_valid_cert(
                             validation_info
                                 .quorum_membership
-                                .stake_table(validation_info.cur_epoch),
+                                .stake_table(timeout_cert_epoch),
                             validation_info
                                 .quorum_membership
-                                .success_threshold(validation_info.cur_epoch),
+                                .success_threshold(timeout_cert_epoch),
                             &validation_info.upgrade_lock
                         )
                         .await,
@@ -704,16 +699,17 @@ pub(crate) async fn validate_proposal_view_and_certs<
                     view_number
                 );
 
+                let view_sync_cert_epoch = view_sync_cert.data().epoch();
                 // View sync certs must also be valid.
                 ensure!(
                     view_sync_cert
                         .is_valid_cert(
                             validation_info
                                 .quorum_membership
-                                .stake_table(validation_info.cur_epoch),
+                                .stake_table(view_sync_cert_epoch),
                             validation_info
                                 .quorum_membership
-                                .success_threshold(validation_info.cur_epoch),
+                                .success_threshold(view_sync_cert_epoch),
                             &validation_info.upgrade_lock
                         )
                         .await,
@@ -725,13 +721,19 @@ pub(crate) async fn validate_proposal_view_and_certs<
 
     // Validate the upgrade certificate -- this is just a signature validation.
     // Note that we don't do anything with the certificate directly if this passes; it eventually gets stored as part of the leaf if nothing goes wrong.
-    UpgradeCertificate::validate(
-        &proposal.data.upgrade_certificate,
-        &validation_info.quorum_membership,
-        validation_info.cur_epoch,
-        &validation_info.upgrade_lock,
-    )
-    .await?;
+    {
+        let epoch = TYPES::Epoch::new(epoch_from_block_number(
+            proposal.data.block_header.block_number(),
+            TYPES::EPOCH_HEIGHT,
+        ));
+        UpgradeCertificate::validate(
+            &proposal.data.upgrade_certificate,
+            &validation_info.quorum_membership,
+            epoch,
+            &validation_info.upgrade_lock,
+        )
+        .await?;
+    }
 
     Ok(())
 }

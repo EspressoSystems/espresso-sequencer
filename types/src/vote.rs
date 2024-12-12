@@ -33,7 +33,7 @@ use crate::{
 /// A simple vote that has a signer and commitment to the data voted on.
 pub trait Vote<TYPES: NodeType>: HasViewNumber<TYPES> {
     /// Type of data commitment this vote uses.
-    type Commitment: Voteable;
+    type Commitment: Voteable<TYPES>;
 
     /// Get the signature of the vote sender
     fn signature(&self) -> <TYPES::SignatureKey as SignatureKey>::PureAssembledSignatureType;
@@ -59,7 +59,7 @@ The votes all must be over the `Commitment` associated type.
 */
 pub trait Certificate<TYPES: NodeType, T>: HasViewNumber<TYPES> {
     /// The data commitment this certificate certifies.
-    type Voteable: Voteable;
+    type Voteable: Voteable<TYPES>;
 
     /// Threshold Functions
     type Threshold: Threshold<TYPES>;

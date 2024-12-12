@@ -30,8 +30,8 @@ use hotshot_task_impls::events::HotShotEvent;
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
     constants::EVENT_CHANNEL_SIZE,
-    data::Leaf,
-    simple_certificate::QuorumCertificate,
+    data::Leaf2,
+    simple_certificate::QuorumCertificate2,
     traits::{
         election::Membership,
         network::ConnectedNetwork,
@@ -179,18 +179,16 @@ where
             late_start,
             latest_view: None,
             changes,
-            last_decided_leaf: Leaf::genesis(
+            last_decided_leaf: Leaf2::genesis(
                 &TestValidatedState::default(),
                 &TestInstanceState::default(),
             )
-            .await
-            .into(),
-            high_qc: QuorumCertificate::genesis::<V>(
+            .await,
+            high_qc: QuorumCertificate2::genesis::<V>(
                 &TestValidatedState::default(),
                 &TestInstanceState::default(),
             )
-            .await
-            .to_qc2(),
+            .await,
             async_delay_config: launcher.metadata.async_delay_config,
             restart_contexts: HashMap::new(),
             channel_generator: launcher.resource_generator.channel_generator,

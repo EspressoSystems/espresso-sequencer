@@ -87,7 +87,11 @@ impl<TYPES: NodeType> Threshold<TYPES> for UpgradeThreshold {
 
 /// A certificate which can be created by aggregating many simple votes on the commitment.
 #[derive(Serialize, Deserialize, Eq, Hash, PartialEq, Debug, Clone)]
-pub struct SimpleCertificate<TYPES: NodeType, VOTEABLE: Voteable, THRESHOLD: Threshold<TYPES>> {
+pub struct SimpleCertificate<
+    TYPES: NodeType,
+    VOTEABLE: Voteable<TYPES>,
+    THRESHOLD: Threshold<TYPES>,
+> {
     /// The data this certificate is for.  I.e the thing that was voted on to create this Certificate
     pub data: VOTEABLE,
     /// commitment of all the votes this cert should be signed over
@@ -100,7 +104,7 @@ pub struct SimpleCertificate<TYPES: NodeType, VOTEABLE: Voteable, THRESHOLD: Thr
     pub _pd: PhantomData<(TYPES, THRESHOLD)>,
 }
 
-impl<TYPES: NodeType, VOTEABLE: Voteable, THRESHOLD: Threshold<TYPES>>
+impl<TYPES: NodeType, VOTEABLE: Voteable<TYPES>, THRESHOLD: Threshold<TYPES>>
     SimpleCertificate<TYPES, VOTEABLE, THRESHOLD>
 {
     /// Creates a new instance of `SimpleCertificate`
@@ -121,8 +125,8 @@ impl<TYPES: NodeType, VOTEABLE: Voteable, THRESHOLD: Threshold<TYPES>>
     }
 }
 
-impl<TYPES: NodeType, VOTEABLE: Voteable + Committable, THRESHOLD: Threshold<TYPES>> Committable
-    for SimpleCertificate<TYPES, VOTEABLE, THRESHOLD>
+impl<TYPES: NodeType, VOTEABLE: Voteable<TYPES> + Committable, THRESHOLD: Threshold<TYPES>>
+    Committable for SimpleCertificate<TYPES, VOTEABLE, THRESHOLD>
 {
     fn commit(&self) -> Commitment<Self> {
         let signature_bytes = match self.signatures.as_ref() {
@@ -314,8 +318,11 @@ impl<TYPES: NodeType, THRESHOLD: Threshold<TYPES>> Certificate<TYPES, DaData2<TY
     }
 }
 
-impl<TYPES: NodeType, VOTEABLE: Voteable + 'static + QuorumMarker, THRESHOLD: Threshold<TYPES>>
-    Certificate<TYPES, VOTEABLE> for SimpleCertificate<TYPES, VOTEABLE, THRESHOLD>
+impl<
+        TYPES: NodeType,
+        VOTEABLE: Voteable<TYPES> + 'static + QuorumMarker,
+        THRESHOLD: Threshold<TYPES>,
+    > Certificate<TYPES, VOTEABLE> for SimpleCertificate<TYPES, VOTEABLE, THRESHOLD>
 {
     type Voteable = VOTEABLE;
     type Threshold = THRESHOLD;
@@ -403,7 +410,7 @@ impl<TYPES: NodeType, VOTEABLE: Voteable + 'static + QuorumMarker, THRESHOLD: Th
     }
 }
 
-impl<TYPES: NodeType, VOTEABLE: Voteable + 'static, THRESHOLD: Threshold<TYPES>>
+impl<TYPES: NodeType, VOTEABLE: Voteable<TYPES> + 'static, THRESHOLD: Threshold<TYPES>>
     HasViewNumber<TYPES> for SimpleCertificate<TYPES, VOTEABLE, THRESHOLD>
 {
     fn view_number(&self) -> TYPES::View {
@@ -477,7 +484,7 @@ impl<TYPES: NodeType> QuorumCertificate<TYPES> {
         let bytes: [u8; 32] = self.data.leaf_commit.into();
         let data = QuorumData2 {
             leaf_commit: Commitment::from_raw(bytes),
-            epoch: TYPES::Epoch::new(0),
+            epoch: TYPES::Epoch::genesis(),
         };
 
         let bytes: [u8; 32] = self.vote_commitment.into();

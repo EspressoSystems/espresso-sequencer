@@ -479,18 +479,20 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
                 .await;
             }
             HotShotEvent::ViewChange(view, epoch) => {
-                if *epoch > self.cur_epoch {
-                    self.cur_epoch = *epoch;
-                }
                 let view = TYPES::View::new(std::cmp::max(1, **view));
+
                 ensure!(
-                    *view > *self.cur_view,
+                    *view > *self.cur_view || *epoch > self.cur_epoch,
                     debug!(
-                      "Received a view change to an older view: tried to change view to {:?} though we are at view {:?}", view, self.cur_view
+                      "Received a view change to an older view and epoch: tried to change view to {:?}\
+                      and epoch {:?} though we are at view {:?} and epoch {:?}",
+                        view, epoch, self.cur_view, self.cur_epoch
                     )
                 );
                 self.cur_view = view;
-                if self.membership.leader(view, self.cur_epoch)? == self.public_key {
+                self.cur_epoch = *epoch;
+
+                if self.membership.leader(view, *epoch)? == self.public_key {
                     self.handle_view_change(&event_stream, view, *epoch).await;
                     return Ok(());
                 }
@@ -540,9 +542,9 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
                 ))?;
 
             match &view_data.view_inner {
-                ViewInner::Da { payload_commitment } => {
-                    return Ok((target_view, *payload_commitment))
-                }
+                ViewInner::Da {
+                    payload_commitment, ..
+                } => return Ok((target_view, *payload_commitment)),
                 ViewInner::Leaf {
                     leaf: leaf_commitment,
                     ..

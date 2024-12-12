@@ -26,7 +26,7 @@ use hotshot_testing::{
 };
 use hotshot_types::{
     data::{null_block, EpochNumber, Leaf2, ViewChangeEvidence, ViewNumber},
-    simple_vote::{TimeoutData, ViewSyncFinalizeData},
+    simple_vote::{TimeoutData2, ViewSyncFinalizeData2},
     traits::{
         election::Membership,
         node_implementation::{ConsensusTime, Versions},
@@ -331,8 +331,9 @@ async fn test_quorum_proposal_task_qc_timeout() {
         vid_dispersals.push(view.vid_disperse.clone());
         leaves.push(view.leaf.clone());
     }
-    let timeout_data = TimeoutData {
+    let timeout_data = TimeoutData2 {
         view: ViewNumber::new(1),
+        epoch: EpochNumber::new(0),
     };
     generator.add_timeout(timeout_data);
     for view in (&mut generator).take(2).collect::<Vec<_>>().await {
@@ -420,9 +421,10 @@ async fn test_quorum_proposal_task_view_sync() {
         leaves.push(view.leaf.clone());
     }
 
-    let view_sync_finalize_data = ViewSyncFinalizeData {
+    let view_sync_finalize_data = ViewSyncFinalizeData2 {
         relay: 2,
         round: ViewNumber::new(node_id),
+        epoch: EpochNumber::new(0),
     };
     generator.add_view_sync_finalize(view_sync_finalize_data);
     for view in (&mut generator).take(2).collect::<Vec<_>>().await {

@@ -158,8 +158,16 @@ pub struct UpgradeData2<TYPES: NodeType> {
 /// Marker trait for data or commitments that can be voted on.
 /// Only structs in this file can implement voteable.  This is enforced with the `Sealed` trait
 /// Sealing this trait prevents creating new vote types outside this file.
-pub trait Voteable:
+pub trait Voteable<TYPES: NodeType>:
     sealed::Sealed + Committable + Clone + Serialize + Debug + PartialEq + Hash + Eq
+{
+}
+
+/// Marker trait for data or commitments that can be voted on.
+/// Only structs in this file can implement voteable.  This is enforced with the `Sealed` trait
+/// Sealing this trait prevents creating new vote types outside this file.
+pub trait Voteable2<TYPES: NodeType>:
+    sealed::Sealed + HasEpoch<TYPES> + Committable + Clone + Serialize + Debug + PartialEq + Hash + Eq
 {
 }
 
@@ -190,7 +198,7 @@ impl<T: NodeType + DeserializeOwned> QuorumMarker for UpgradeProposalData<T> {}
 
 /// A simple yes vote over some votable type.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Hash, Eq)]
-pub struct SimpleVote<TYPES: NodeType, DATA: Voteable> {
+pub struct SimpleVote<TYPES: NodeType, DATA: Voteable<TYPES>> {
     /// The signature share associated with this vote
     pub signature: (
         TYPES::SignatureKey,
@@ -202,13 +210,15 @@ pub struct SimpleVote<TYPES: NodeType, DATA: Voteable> {
     pub view_number: TYPES::View,
 }
 
-impl<TYPES: NodeType, DATA: Voteable + 'static> HasViewNumber<TYPES> for SimpleVote<TYPES, DATA> {
+impl<TYPES: NodeType, DATA: Voteable<TYPES> + 'static> HasViewNumber<TYPES>
+    for SimpleVote<TYPES, DATA>
+{
     fn view_number(&self) -> <TYPES as NodeType>::View {
         self.view_number
     }
 }
 
-impl<TYPES: NodeType, DATA: Voteable + 'static> Vote<TYPES> for SimpleVote<TYPES, DATA> {
+impl<TYPES: NodeType, DATA: Voteable<TYPES> + 'static> Vote<TYPES> for SimpleVote<TYPES, DATA> {
     type Commitment = DATA;
 
     fn signing_key(&self) -> <TYPES as NodeType>::SignatureKey {
@@ -228,7 +238,7 @@ impl<TYPES: NodeType, DATA: Voteable + 'static> Vote<TYPES> for SimpleVote<TYPES
     }
 }
 
-impl<TYPES: NodeType, DATA: Voteable + 'static> SimpleVote<TYPES, DATA> {
+impl<TYPES: NodeType, DATA: Voteable<TYPES> + 'static> SimpleVote<TYPES, DATA> {
     /// Creates and signs a simple vote
     /// # Errors
     /// If we are unable to sign the data
@@ -260,7 +270,7 @@ impl<TYPES: NodeType, DATA: Voteable + 'static> SimpleVote<TYPES, DATA> {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Hash, Eq)]
 /// A wrapper for vote data that carries a view number and an `upgrade_lock`, allowing switching the commitment calculation dynamically depending on the version
-pub struct VersionedVoteData<TYPES: NodeType, DATA: Voteable, V: Versions> {
+pub struct VersionedVoteData<TYPES: NodeType, DATA: Voteable<TYPES>, V: Versions> {
     /// underlying vote data
     data: DATA,
 
@@ -274,7 +284,7 @@ pub struct VersionedVoteData<TYPES: NodeType, DATA: Voteable, V: Versions> {
     _pd: PhantomData<V>,
 }
 
-impl<TYPES: NodeType, DATA: Voteable, V: Versions> VersionedVoteData<TYPES, DATA, V> {
+impl<TYPES: NodeType, DATA: Voteable<TYPES>, V: Versions> VersionedVoteData<TYPES, DATA, V> {
     /// Create a new `VersionedVoteData` struct
     ///
     /// # Errors
@@ -314,7 +324,7 @@ impl<TYPES: NodeType, DATA: Voteable, V: Versions> VersionedVoteData<TYPES, DATA
     }
 }
 
-impl<TYPES: NodeType, DATA: Voteable, V: Versions> Committable
+impl<TYPES: NodeType, DATA: Voteable<TYPES>, V: Versions> Committable
     for VersionedVoteData<TYPES, DATA, V>
 {
     fn commit(&self) -> Commitment<Self> {
@@ -335,18 +345,14 @@ impl<TYPES: NodeType> Committable for QuorumData<TYPES> {
 
 impl<TYPES: NodeType> Committable for QuorumData2<TYPES> {
     fn commit(&self) -> Commitment<Self> {
-        let QuorumData2 { leaf_commit, epoch } = self;
+        let QuorumData2 {
+            leaf_commit,
+            epoch: _,
+        } = self;
 
-        if **epoch == 0 {
-            committable::RawCommitmentBuilder::new("Quorum data")
-                .var_size_bytes(leaf_commit.as_ref())
-                .finalize()
-        } else {
-            committable::RawCommitmentBuilder::new("Quorum data")
-                .var_size_bytes(leaf_commit.as_ref())
-                .u64(**epoch)
-                .finalize()
-        }
+        committable::RawCommitmentBuilder::new("Quorum data")
+            .var_size_bytes(leaf_commit.as_ref())
+            .finalize()
     }
 }
 
@@ -360,18 +366,11 @@ impl<TYPES: NodeType> Committable for TimeoutData<TYPES> {
 
 impl<TYPES: NodeType> Committable for TimeoutData2<TYPES> {
     fn commit(&self) -> Commitment<Self> {
-        let TimeoutData2 { view, epoch } = self;
+        let TimeoutData2 { view, epoch: _ } = self;
 
-        if **epoch == 0 {
-            committable::RawCommitmentBuilder::new("Timeout data")
-                .u64(**view)
-                .finalize()
-        } else {
-            committable::RawCommitmentBuilder::new("Timeout data")
-                .u64(**view)
-                .u64(**epoch)
-                .finalize()
-        }
+        committable::RawCommitmentBuilder::new("Timeout data")
+            .u64(**view)
+            .finalize()
     }
 }
 
@@ -387,18 +386,12 @@ impl<TYPES: NodeType> Committable for DaData2<TYPES> {
     fn commit(&self) -> Commitment<Self> {
         let DaData2 {
             payload_commit,
-            epoch,
+            epoch: _,
         } = self;
-        if **epoch == 0 {
-            committable::RawCommitmentBuilder::new("DA data")
-                .var_size_bytes(payload_commit.as_ref())
-                .finalize()
-        } else {
-            committable::RawCommitmentBuilder::new("DA data")
-                .var_size_bytes(payload_commit.as_ref())
-                .u64(**epoch)
-                .finalize()
-        }
+
+        committable::RawCommitmentBuilder::new("DA data")
+            .var_size_bytes(payload_commit.as_ref())
+            .finalize()
     }
 }
 
@@ -459,18 +452,10 @@ impl<TYPES: NodeType> Committable for ViewSyncPreCommitData2<TYPES> {
         let ViewSyncPreCommitData2 {
             relay,
             round,
-            epoch,
+            epoch: _,
         } = self;
 
-        if **epoch == 0 {
-            view_and_relay_commit::<TYPES, Self>(*round, *relay, "View Sync Precommit")
-        } else {
-            committable::RawCommitmentBuilder::new("View Sync Precommit")
-                .u64(*relay)
-                .u64(**round)
-                .u64(**epoch)
-                .finalize()
-        }
+        view_and_relay_commit::<TYPES, Self>(*round, *relay, "View Sync Precommit")
     }
 }
 
@@ -485,18 +470,10 @@ impl<TYPES: NodeType> Committable for ViewSyncFinalizeData2<TYPES> {
         let ViewSyncFinalizeData2 {
             relay,
             round,
-            epoch,
+            epoch: _,
         } = self;
 
-        if **epoch == 0 {
-            view_and_relay_commit::<TYPES, Self>(*round, *relay, "View Sync Finalize")
-        } else {
-            committable::RawCommitmentBuilder::new("View Sync Finalize")
-                .u64(*relay)
-                .u64(**round)
-                .u64(**epoch)
-                .finalize()
-        }
+        view_and_relay_commit::<TYPES, Self>(*round, *relay, "View Sync Finalize")
     }
 }
 
@@ -511,25 +488,65 @@ impl<TYPES: NodeType> Committable for ViewSyncCommitData2<TYPES> {
         let ViewSyncCommitData2 {
             relay,
             round,
-            epoch,
+            epoch: _,
         } = self;
 
-        if **epoch == 0 {
-            view_and_relay_commit::<TYPES, Self>(*round, *relay, "View Sync Commit")
-        } else {
-            committable::RawCommitmentBuilder::new("View Sync Commit")
-                .u64(*relay)
-                .u64(**round)
-                .u64(**epoch)
-                .finalize()
-        }
+        view_and_relay_commit::<TYPES, Self>(*round, *relay, "View Sync Commit")
     }
 }
 
+/// A trait for types belonging for specific epoch
+pub trait HasEpoch<TYPES: NodeType> {
+    /// Returns `Epoch`
+    fn epoch(&self) -> TYPES::Epoch;
+}
+
+/// Helper macro for trivial implementation of the `HasEpoch` trait
+#[macro_export]
+macro_rules! impl_has_epoch {
+    ($($t:ty),*) => {
+        $(
+            impl<TYPES: NodeType> HasEpoch<TYPES> for $t {
+                fn epoch(&self) -> TYPES::Epoch {
+                    self.epoch
+                }
+            }
+        )*
+    };
+}
+
+impl_has_epoch!(
+    QuorumData2<TYPES>,
+    DaData2<TYPES>,
+    TimeoutData2<TYPES>,
+    ViewSyncPreCommitData2<TYPES>,
+    ViewSyncCommitData2<TYPES>,
+    ViewSyncFinalizeData2<TYPES>
+);
+
 // impl votable for all the data types in this file sealed marker should ensure nothing is accidentally
 // implemented for structs that aren't "voteable"
-impl<V: sealed::Sealed + Committable + Clone + Serialize + Debug + PartialEq + Hash + Eq> Voteable
-    for V
+impl<
+        TYPES: NodeType,
+        V: sealed::Sealed + Committable + Clone + Serialize + Debug + PartialEq + Hash + Eq,
+    > Voteable<TYPES> for V
+{
+}
+
+// impl votable for all the data types in this file sealed marker should ensure nothing is accidently
+// implemented for structs that aren't "voteable"
+impl<
+        TYPES: NodeType,
+        V: sealed::Sealed
+            + HasEpoch<TYPES>
+            + Committable
+            + Clone
+            + Serialize
+            + Debug
+            + PartialEq
+            + Hash
+            + Eq,
+    > Voteable2<TYPES> for V
 {
 }
 
@@ -541,7 +558,7 @@ impl<TYPES: NodeType> QuorumVote<TYPES> {
         let signature = self.signature;
         let data = QuorumData2 {
             leaf_commit: Commitment::from_raw(bytes),
-            epoch: TYPES::Epoch::new(0),
+            epoch: TYPES::Epoch::genesis(),
         };
         let view_number = self.view_number;
 
@@ -596,6 +613,152 @@ impl<TYPES: NodeType> DaVote2<TYPES> {
         let signature = self.signature;
         let data = DaData {
             payload_commit: self.data.payload_commit,
+        };
+        let view_number = self.view_number;
+
+        SimpleVote {
+            signature,
+            data,
+            view_number,
+        }
+    }
+}
+
+impl<TYPES: NodeType> TimeoutVote<TYPES> {
+    /// Convert a `TimeoutVote` to a `TimeoutVote2`
+    pub fn to_vote2(self) -> TimeoutVote2<TYPES> {
+        let signature = self.signature;
+        let data = TimeoutData2 {
+            view: self.data.view,
+            epoch: TYPES::Epoch::new(0),
+        };
+        let view_number = self.view_number;
+
+        SimpleVote {
+            signature,
+            data,
+            view_number,
+        }
+    }
+}
+
+impl<TYPES: NodeType> TimeoutVote2<TYPES> {
+    /// Convert a `QuorumVote2` to a `QuorumVote`
+    pub fn to_vote(self) -> TimeoutVote<TYPES> {
+        let signature = self.signature;
+        let data = TimeoutData {
+            view: self.data.view,
+        };
+        let view_number = self.view_number;
+
+        SimpleVote {
+            signature,
+            data,
+            view_number,
+        }
+    }
+}
+
+impl<TYPES: NodeType> ViewSyncPreCommitVote<TYPES> {
+    /// Convert a `ViewSyncPreCommitVote` to a `ViewSyncPreCommitVote2`
+    pub fn to_vote2(self) -> ViewSyncPreCommitVote2<TYPES> {
+        let signature = self.signature;
+        let data = ViewSyncPreCommitData2 {
+            relay: self.data.relay,
+            round: self.data.round,
+            epoch: TYPES::Epoch::new(0),
+        };
+        let view_number = self.view_number;
+
+        SimpleVote {
+            signature,
+            data,
+            view_number,
+        }
+    }
+}
+
+impl<TYPES: NodeType> ViewSyncPreCommitVote2<TYPES> {
+    /// Convert a `ViewSyncPreCommitVote2` to a `ViewSyncPreCommitVote`
+    pub fn to_vote(self) -> ViewSyncPreCommitVote<TYPES> {
+        let signature = self.signature;
+        let data = ViewSyncPreCommitData {
+            relay: self.data.relay,
+            round: self.data.round,
+        };
+        let view_number = self.view_number;
+
+        SimpleVote {
+            signature,
+            data,
+            view_number,
+        }
+    }
+}
+
+impl<TYPES: NodeType> ViewSyncCommitVote<TYPES> {
+    /// Convert a `ViewSyncCommitVote` to a `ViewSyncCommitVote2`
+    pub fn to_vote2(self) -> ViewSyncCommitVote2<TYPES> {
+        let signature = self.signature;
+        let data = ViewSyncCommitData2 {
+            relay: self.data.relay,
+            round: self.data.round,
+            epoch: TYPES::Epoch::new(0),
+        };
+        let view_number = self.view_number;
+
+        SimpleVote {
+            signature,
+            data,
+            view_number,
+        }
+    }
+}
+
+impl<TYPES: NodeType> ViewSyncCommitVote2<TYPES> {
+    /// Convert a `ViewSyncCommitVote2` to a `ViewSyncCommitVote`
+    pub fn to_vote(self) -> ViewSyncCommitVote<TYPES> {
+        let signature = self.signature;
+        let data = ViewSyncCommitData {
+            relay: self.data.relay,
+            round: self.data.round,
+        };
+        let view_number = self.view_number;
+
+        SimpleVote {
+            signature,
+            data,
+            view_number,
+        }
+    }
+}
+
+impl<TYPES: NodeType> ViewSyncFinalizeVote<TYPES> {
+    /// Convert a `ViewSyncFinalizeVote` to a `ViewSyncFinalizeVote2`
+    pub fn to_vote2(self) -> ViewSyncFinalizeVote2<TYPES> {
+        let signature = self.signature;
+        let data = ViewSyncFinalizeData2 {
+            relay: self.data.relay,
+            round: self.data.round,
+            epoch: TYPES::Epoch::new(0),
+        };
+        let view_number = self.view_number;
+
+        SimpleVote {
+            signature,
+            data,
+            view_number,
+        }
+    }
+}
+
+impl<TYPES: NodeType> ViewSyncFinalizeVote2<TYPES> {
+    /// Convert a `ViewSyncFinalizeVote2` to a `ViewSyncFinalizeVote`
+    pub fn to_vote(self) -> ViewSyncFinalizeVote<TYPES> {
+        let signature = self.signature;
+        let data = ViewSyncFinalizeData {
+            relay: self.data.relay,
+            round: self.data.round,
         };
         let view_number = self.view_number;
 

@@ -12,18 +12,18 @@ use hotshot_task::task::TaskEvent;
 use hotshot_types::{
     data::{
         DaProposal2, Leaf2, PackedBundle, QuorumProposal2, UpgradeProposal, VidDisperse,
-        VidDisperseShare,
+        VidDisperseShare2,
     },
     message::Proposal,
     request_response::ProposalRequestPayload,
     simple_certificate::{
         DaCertificate2, QuorumCertificate, QuorumCertificate2, TimeoutCertificate,
-        UpgradeCertificate, ViewSyncCommitCertificate, ViewSyncFinalizeCertificate,
-        ViewSyncPreCommitCertificate,
+        TimeoutCertificate2, UpgradeCertificate, ViewSyncCommitCertificate2,
+        ViewSyncFinalizeCertificate2, ViewSyncPreCommitCertificate2,
     },
     simple_vote::{
-        DaVote2, QuorumVote2, TimeoutVote, UpgradeVote, ViewSyncCommitVote, ViewSyncFinalizeVote,
-        ViewSyncPreCommitVote,
+        DaVote2, QuorumVote2, TimeoutVote2, UpgradeVote, ViewSyncCommitVote2,
+        ViewSyncFinalizeVote2, ViewSyncPreCommitVote2,
     },
     traits::{
         block_contents::BuilderFee, network::DataRequest, node_implementation::NodeType,
@@ -76,9 +76,9 @@ pub enum HotShotEvent<TYPES: NodeType> {
     /// A quorum vote has been received from the network; handled by the consensus task
     QuorumVoteRecv(QuorumVote2<TYPES>),
     /// A timeout vote received from the network; handled by consensus task
-    TimeoutVoteRecv(TimeoutVote<TYPES>),
+    TimeoutVoteRecv(TimeoutVote2<TYPES>),
     /// Send a timeout vote to the network; emitted by consensus task replicas
-    TimeoutVoteSend(TimeoutVote<TYPES>),
+    TimeoutVoteSend(TimeoutVote2<TYPES>),
     /// A DA proposal has been received from the network; handled by the DA task
     DaProposalRecv(Proposal<TYPES, DaProposal2<TYPES>>, TYPES::SignatureKey),
     /// A DA proposal has been validated; handled by the DA task and VID task
@@ -123,7 +123,7 @@ pub enum HotShotEvent<TYPES: NodeType> {
     /// The next leader has collected enough votes to form a QC; emitted by the next leader in the consensus task; an internal event only
     QcFormed(Either<QuorumCertificate<TYPES>, TimeoutCertificate<TYPES>>),
     /// The next leader has collected enough votes to form a QC; emitted by the next leader in the consensus task; an internal event only
-    Qc2Formed(Either<QuorumCertificate2<TYPES>, TimeoutCertificate<TYPES>>),
+    Qc2Formed(Either<QuorumCertificate2<TYPES>, TimeoutCertificate2<TYPES>>),
     /// The DA leader has collected enough votes to form a DAC; emitted by the DA leader in the DA task; sent to the entire network via the networking task
     DacSend(DaCertificate2<TYPES>, TYPES::SignatureKey),
     /// The current view has changed; emitted by the replica in the consensus task or replica in the view sync task; received by almost all other tasks
@@ -132,37 +132,37 @@ pub enum HotShotEvent<TYPES: NodeType> {
     ViewSyncTimeout(TYPES::View, u64, ViewSyncPhase),
 
     /// Receive a `ViewSyncPreCommitVote` from the network; received by a relay in the view sync task
-    ViewSyncPreCommitVoteRecv(ViewSyncPreCommitVote<TYPES>),
+    ViewSyncPreCommitVoteRecv(ViewSyncPreCommitVote2<TYPES>),
     /// Receive a `ViewSyncCommitVote` from the network; received by a relay in the view sync task
-    ViewSyncCommitVoteRecv(ViewSyncCommitVote<TYPES>),
+    ViewSyncCommitVoteRecv(ViewSyncCommitVote2<TYPES>),
     /// Receive a `ViewSyncFinalizeVote` from the network; received by a relay in the view sync task
-    ViewSyncFinalizeVoteRecv(ViewSyncFinalizeVote<TYPES>),
+    ViewSyncFinalizeVoteRecv(ViewSyncFinalizeVote2<TYPES>),
 
     /// Send a `ViewSyncPreCommitVote` from the network; emitted by a replica in the view sync task
-    ViewSyncPreCommitVoteSend(ViewSyncPreCommitVote<TYPES>),
+    ViewSyncPreCommitVoteSend(ViewSyncPreCommitVote2<TYPES>),
     /// Send a `ViewSyncCommitVote` from the network; emitted by a replica in the view sync task
-    ViewSyncCommitVoteSend(ViewSyncCommitVote<TYPES>),
+    ViewSyncCommitVoteSend(ViewSyncCommitVote2<TYPES>),
     /// Send a `ViewSyncFinalizeVote` from the network; emitted by a replica in the view sync task
-    ViewSyncFinalizeVoteSend(ViewSyncFinalizeVote<TYPES>),
+    ViewSyncFinalizeVoteSend(ViewSyncFinalizeVote2<TYPES>),
 
     /// Receive a `ViewSyncPreCommitCertificate` from the network; received by a replica in the view sync task
-    ViewSyncPreCommitCertificateRecv(ViewSyncPreCommitCertificate<TYPES>),
+    ViewSyncPreCommitCertificateRecv(ViewSyncPreCommitCertificate2<TYPES>),
     /// Receive a `ViewSyncCommitCertificate` from the network; received by a replica in the view sync task
-    ViewSyncCommitCertificateRecv(ViewSyncCommitCertificate<TYPES>),
+    ViewSyncCommitCertificateRecv(ViewSyncCommitCertificate2<TYPES>),
     /// Receive a `ViewSyncFinalizeCertificate` from the network; received by a replica in the view sync task
-    ViewSyncFinalizeCertificateRecv(ViewSyncFinalizeCertificate<TYPES>),
+    ViewSyncFinalizeCertificateRecv(ViewSyncFinalizeCertificate2<TYPES>),
 
     /// Send a `ViewSyncPreCommitCertificate` from the network; emitted by a relay in the view sync task
-    ViewSyncPreCommitCertificateSend(ViewSyncPreCommitCertificate<TYPES>, TYPES::SignatureKey),
+    ViewSyncPreCommitCertificateSend(ViewSyncPreCommitCertificate2<TYPES>, TYPES::SignatureKey),
     /// Send a `ViewSyncCommitCertificate` from the network; emitted by a relay in the view sync task
-    ViewSyncCommitCertificateSend(ViewSyncCommitCertificate<TYPES>, TYPES::SignatureKey),
+    ViewSyncCommitCertificateSend(ViewSyncCommitCertificate2<TYPES>, TYPES::SignatureKey),
     /// Send a `ViewSyncFinalizeCertificate` from the network; emitted by a relay in the view sync task
-    ViewSyncFinalizeCertificateSend(ViewSyncFinalizeCertificate<TYPES>, TYPES::SignatureKey),
+    ViewSyncFinalizeCertificateSend(ViewSyncFinalizeCertificate2<TYPES>, TYPES::SignatureKey),
 
     /// Trigger the start of the view sync protocol; emitted by view sync task; internal trigger only
     ViewSyncTrigger(TYPES::View),
     /// A consensus view has timed out; emitted by a replica in the consensus task; received by the view sync task; internal event only
-    Timeout(TYPES::View),
+    Timeout(TYPES::View, TYPES::Epoch),
     /// Receive transactions from the network
     TransactionsRecv(Vec<TYPES::Transaction>),
     /// Send transactions to the network
@@ -187,10 +187,10 @@ pub enum HotShotEvent<TYPES: NodeType> {
     /// Like [`HotShotEvent::DaProposalRecv`].
     VidShareRecv(
         TYPES::SignatureKey,
-        Proposal<TYPES, VidDisperseShare<TYPES>>,
+        Proposal<TYPES, VidDisperseShare2<TYPES>>,
     ),
     /// VID share data is validated.
-    VidShareValidated(Proposal<TYPES, VidDisperseShare<TYPES>>),
+    VidShareValidated(Proposal<TYPES, VidDisperseShare2<TYPES>>),
     /// Upgrade proposal has been received from the network
     UpgradeProposalRecv(Proposal<TYPES, UpgradeProposal<TYPES>>, TYPES::SignatureKey),
     /// Upgrade proposal has been sent to the network
@@ -229,13 +229,13 @@ pub enum HotShotEvent<TYPES: NodeType> {
         TYPES::SignatureKey,
         /// Recipient key
         TYPES::SignatureKey,
-        Proposal<TYPES, VidDisperseShare<TYPES>>,
+        Proposal<TYPES, VidDisperseShare2<TYPES>>,
     ),
 
     /// Receive a VID response from the network; received by the node that triggered the VID request.
     VidResponseRecv(
         TYPES::SignatureKey,
-        Proposal<TYPES, VidDisperseShare<TYPES>>,
+        Proposal<TYPES, VidDisperseShare2<TYPES>>,
     ),
 
     /// A replica send us a High QC
@@ -316,7 +316,7 @@ impl<TYPES: NodeType> HotShotEvent<TYPES> {
             HotShotEvent::ViewChange(view_number, _)
             | HotShotEvent::ViewSyncTimeout(view_number, _, _)
             | HotShotEvent::ViewSyncTrigger(view_number)
-            | HotShotEvent::Timeout(view_number) => Some(*view_number),
+            | HotShotEvent::Timeout(view_number, ..) => Some(*view_number),
             HotShotEvent::DaCertificateRecv(cert) | HotShotEvent::DacSend(cert, _) => {
                 Some(cert.view_number())
             }
@@ -496,7 +496,9 @@ impl<TYPES: NodeType> Display for HotShotEvent<TYPES> {
             HotShotEvent::ViewSyncTrigger(view_number) => {
                 write!(f, "ViewSyncTrigger(view_number={view_number:?})")
             }
-            HotShotEvent::Timeout(view_number) => write!(f, "Timeout(view_number={view_number:?})"),
+            HotShotEvent::Timeout(view_number, epoch) => {
+                write!(f, "Timeout(view_number={view_number:?}, epoch={epoch:?})")
+            }
             HotShotEvent::TransactionsRecv(_) => write!(f, "TransactionsRecv"),
             HotShotEvent::TransactionSend(_, _) => write!(f, "TransactionSend"),
             HotShotEvent::SendPayloadCommitmentAndMetadata(_, _, _, view_number, _, _) => {

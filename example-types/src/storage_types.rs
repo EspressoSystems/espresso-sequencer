@@ -16,6 +16,7 @@ use hotshot_types::{
     consensus::CommitmentMap,
     data::{
         DaProposal, DaProposal2, Leaf, Leaf2, QuorumProposal, QuorumProposal2, VidDisperseShare,
+        VidDisperseShare2,
     },
     event::HotShotAction,
     message::Proposal,
@@ -36,9 +37,15 @@ type VidShares<TYPES> = HashMap<
     <TYPES as NodeType>::View,
     HashMap<<TYPES as NodeType>::SignatureKey, Proposal<TYPES, VidDisperseShare<TYPES>>>,
 >;
+type VidShares2<TYPES> = HashMap<
+    <TYPES as NodeType>::View,
+    HashMap<<TYPES as NodeType>::SignatureKey, Proposal<TYPES, VidDisperseShare2<TYPES>>>,
+>;
+
 #[derive(Clone, Debug)]
 pub struct TestStorageState<TYPES: NodeType> {
     vids: VidShares<TYPES>,
+    vid2: VidShares2<TYPES>,
     das: HashMap<TYPES::View, Proposal<TYPES, DaProposal<TYPES>>>,
     da2s: HashMap<TYPES::View, Proposal<TYPES, DaProposal2<TYPES>>>,
     proposals: BTreeMap<TYPES::View, Proposal<TYPES, QuorumProposal<TYPES>>>,
@@ -53,6 +60,7 @@ impl<TYPES: NodeType> Default for TestStorageState<TYPES> {
     fn default() -> Self {
         Self {
             vids: HashMap::new(),
+            vid2: HashMap::new(),
             das: HashMap::new(),
             da2s: HashMap::new(),
             proposals: BTreeMap::new(),
@@ -125,6 +133,23 @@ impl<TYPES: NodeType> Storage<TYPES> for TestStorage<TYPES> {
         let mut inner = self.inner.write().await;
         inner
             .vids
+            .entry(proposal.data.view_number)
+            .or_default()
+            .insert(proposal.data.recipient_key.clone(), proposal.clone());
+        Ok(())
+    }
+
+    async fn append_vid2(
+        &self,
+        proposal: &Proposal<TYPES, VidDisperseShare2<TYPES>>,
+    ) -> Result<()> {
+        if self.should_return_err {
+            bail!("Failed to append VID proposal to storage");
+        }
+        Self::run_delay_settings_from_config(&self.delay_config).await;
+        let mut inner = self.inner.write().await;
+        inner
+            .vid2
             .entry(proposal.data.view_number)
             .or_default()
             .insert(proposal.data.recipient_key.clone(), proposal.clone());

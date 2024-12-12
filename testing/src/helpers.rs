@@ -25,17 +25,17 @@ use hotshot_example_types::{
 use hotshot_task_impls::events::HotShotEvent;
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
-    data::{Leaf, Leaf2, QuorumProposal, VidDisperse, VidDisperseShare},
+    data::{Leaf2, QuorumProposal2, VidDisperse, VidDisperseShare2},
     message::{GeneralConsensusMessage, Proposal, UpgradeLock},
     simple_certificate::DaCertificate2,
-    simple_vote::{DaData2, DaVote2, QuorumData, QuorumVote, SimpleVote, VersionedVoteData},
+    simple_vote::{DaData2, DaVote2, QuorumData2, QuorumVote2, SimpleVote, VersionedVoteData},
     traits::{
         block_contents::vid_commitment,
         consensus_api::ConsensusApi,
         election::Membership,
-        node_implementation::{NodeType, Versions},
+        node_implementation::{ConsensusTime, NodeType, Versions},
     },
-    utils::{View, ViewInner},
+    utils::{epoch_from_block_number, View, ViewInner},
     vid::{vid_scheme, VidCommitment, VidProposal, VidSchemeType},
     vote::{Certificate, HasViewNumber, Vote},
     ValidatorConfig,
@@ -45,6 +45,7 @@ use primitive_types::U256;
 use serde::Serialize;
 
 use crate::{test_builder::TestDescription, test_launcher::TestLauncher};
+
 /// create the [`SystemContextHandle`] from a node id
 /// # Panics
 /// if cannot create a [`HotShotInitializer`]
@@ -182,9 +183,9 @@ pub async fn build_cert<
 }
 
 pub fn vid_share<TYPES: NodeType>(
-    shares: &[Proposal<TYPES, VidDisperseShare<TYPES>>],
+    shares: &[Proposal<TYPES, VidDisperseShare2<TYPES>>],
     pub_key: TYPES::SignatureKey,
-) -> Proposal<TYPES, VidDisperseShare<TYPES>> {
+) -> Proposal<TYPES, VidDisperseShare2<TYPES>> {
     shares
         .iter()
         .filter(|s| s.data.recipient_key == pub_key)
@@ -344,7 +345,7 @@ pub fn build_vid_proposal<TYPES: NodeType>(
 
     (
         vid_disperse_proposal,
-        VidDisperseShare::from_vid_disperse(vid_disperse)
+        VidDisperseShare2::from_vid_disperse(vid_disperse)
             .into_iter()
             .map(|vid_disperse| {
                 vid_disperse
@@ -389,14 +390,15 @@ pub async fn build_da_certificate<TYPES: NodeType, V: Versions>(
 
 pub async fn build_vote<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>(
     handle: &SystemContextHandle<TYPES, I, V>,
-    proposal: QuorumProposal<TYPES>,
+    proposal: QuorumProposal2<TYPES>,
 ) -> GeneralConsensusMessage<TYPES> {
     let view = proposal.view_number;
 
-    let leaf: Leaf<_> = Leaf::from_quorum_proposal(&proposal);
-    let vote = QuorumVote::<TYPES>::create_signed_vote(
-        QuorumData {
-            leaf_commit: leaf.commit(&handle.hotshot.upgrade_lock).await,
+    let leaf: Leaf2<_> = Leaf2::from_quorum_proposal(&proposal);
+    let vote = QuorumVote2::<TYPES>::create_signed_vote(
+        QuorumData2 {
+            leaf_commit: leaf.commit(),
+            epoch: leaf.epoch(),
         },
         view,
         &handle.public_key(),
@@ -405,7 +407,7 @@ pub async fn build_vote<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versio
     )
     .await
     .expect("Failed to create quorum vote");
-    GeneralConsensusMessage::<TYPES>::Vote(vote)
+    GeneralConsensusMessage::<TYPES>::Vote(vote.to_vote())
 }
 
 /// This function permutes the provided input vector `inputs`, given some order provided within the
@@ -429,8 +431,15 @@ where
 pub async fn build_fake_view_with_leaf<V: Versions>(
     leaf: Leaf2<TestTypes>,
     upgrade_lock: &UpgradeLock<TestTypes, V>,
+    epoch_height: u64,
 ) -> View<TestTypes> {
-    build_fake_view_with_leaf_and_state(leaf, TestValidatedState::default(), upgrade_lock).await
+    build_fake_view_with_leaf_and_state(
+        leaf,
+        TestValidatedState::default(),
+        upgrade_lock,
+        epoch_height,
+    )
+    .await
 }
 
 /// This function will create a fake [`View`] from a provided [`Leaf`] and `state`.
@@ -438,12 +447,16 @@ pub async fn build_fake_view_with_leaf_and_state<V: Versions>(
     leaf: Leaf2<TestTypes>,
     state: TestValidatedState,
     _upgrade_lock: &UpgradeLock<TestTypes, V>,
+    epoch_height: u64,
 ) -> View<TestTypes> {
+    let epoch =
+        <TestTypes as NodeType>::Epoch::new(epoch_from_block_number(leaf.height(), epoch_height));
     View {
         view_inner: ViewInner::Leaf {
             leaf: leaf.commit(),
             state: state.into(),
             delta: None,
+            epoch,
         },
     }
 }

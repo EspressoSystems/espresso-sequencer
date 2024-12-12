@@ -13,7 +13,7 @@ use hotshot_types::{
     message::{GeneralConsensusMessage, Message, MessageKind, SequencingMessage},
     signature_key::BLSPubKey,
     simple_certificate::SimpleCertificate,
-    simple_vote::ViewSyncCommitData,
+    simple_vote::ViewSyncCommitData2,
     traits::{node_implementation::ConsensusTime, signature_key::SignatureKey},
 };
 use vbs::{
@@ -27,6 +27,7 @@ use vbs::{
 fn version_number_at_start_of_serialization() {
     let sender = BLSPubKey::generated_from_seed_indexed([0u8; 32], 0).0;
     let view_number = ConsensusTime::new(17);
+    let epoch = ConsensusTime::new(0);
     // The version we set for the message
     const MAJOR: u16 = 37;
     const MINOR: u16 = 17;
@@ -37,16 +38,17 @@ fn version_number_at_start_of_serialization() {
     type TestVersion = StaticVersion<MAJOR, MINOR>;
     // The specific data we attach to our message shouldn't affect the serialization,
     // we're using ViewSyncCommitData for simplicity.
-    let data: ViewSyncCommitData<TestTypes> = ViewSyncCommitData {
+    let data: ViewSyncCommitData2<TestTypes> = ViewSyncCommitData2 {
         relay: 37,
         round: view_number,
+        epoch,
     };
     let simple_certificate =
         SimpleCertificate::new(data.clone(), data.commit(), view_number, None, PhantomData);
     let message = Message {
         sender,
         kind: MessageKind::Consensus(SequencingMessage::General(
-            GeneralConsensusMessage::ViewSyncCommitCertificate(simple_certificate),
+            GeneralConsensusMessage::ViewSyncCommitCertificate2(simple_certificate),
         )),
     };
     let serialized_message: Vec<u8> = Serializer::<TestVersion>::serialize(&message).unwrap();
