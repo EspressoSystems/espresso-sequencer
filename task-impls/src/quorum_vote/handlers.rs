@@ -285,7 +285,7 @@ pub(crate) async fn update_shared_state<
     let justify_qc = &proposed_leaf.justify_qc();
 
     let consensus_reader = consensus.read().await;
-    // Try to find the validated vview within the validasted state map. This will be present
+    // Try to find the validated view within the validated state map. This will be present
     // if we have the saved leaf, but if not we'll get it when we fetch_proposal.
     let mut maybe_validated_view = parent_view_number.and_then(|view_number| {
         consensus_reader

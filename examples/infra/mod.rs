@@ -736,7 +736,7 @@ where
             .to_string()
         };
 
-        // Create the qurorum membership from the list of known nodes
+        // Create the quorum membership from the list of known nodes
         let all_nodes = config.config.known_nodes_with_stake.clone();
         let da_nodes = config.config.known_da_nodes.clone();
         let quorum_membership = TYPES::Membership::new(all_nodes, da_nodes);
