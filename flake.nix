@@ -233,7 +233,7 @@
             export CARGO_HOME=$HOME/.cargo-nix
 
             # Add rust binaries to PATH for native demo
-            export PATH="$PWD/$CARGO_TARGET_DIR/debug:$PATH"
+            export PATH="$PWD/$CARGO_TARGET_DIR/debug:$PWD/$CARGO_TARGET_DIR/release:$PATH"
           '' + self.checks.${system}.pre-commit-check.shellHook;
           RUST_SRC_PATH = "${stableToolchain}/lib/rustlib/src/rust/library";
           FOUNDRY_SOLC = "${solc}/bin/solc";
