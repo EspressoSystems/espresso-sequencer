@@ -408,6 +408,8 @@ contract StakeTable is AbstractStakeTable {
     /// withdraw past their `exitEpoch`.
     ///
     /// @return The total amount withdrawn, equal to `Node.balance` associated with `blsVK`
+    /// TODO: add epoch logic so that we can ensure the node has first requested to exit and waiting
+    /// for the exit escrow period to be over
     function withdrawFunds() external override returns (uint256) {
         Node memory node = nodes[msg.sender];
 
@@ -416,21 +418,17 @@ contract StakeTable is AbstractStakeTable {
             revert NodeNotRegistered();
         }
 
-        // The exit request must come from the node's withdrawal account.
-        if (node.account != msg.sender) {
-            revert Unauthenticated();
-        }
-
         // Verify that the balance is greater than zero
         uint256 balance = node.balance;
         if (balance == 0) {
             revert InsufficientStakeBalance(0);
         }
 
-        // Verify that the exit escrow period is over.
-        if (currentEpoch() < node.exitEpoch + exitEscrowPeriod(node)) {
-            revert PrematureWithdrawal();
-        }
+        // // Verify that the exit escrow period is over.
+        // if (currentEpoch() < node.exitEpoch + exitEscrowPeriod(node)) {
+        //     revert PrematureWithdrawal();
+        // }
+        totalStake -= balance;
 
         // Delete the node from the stake table.
         delete nodes[msg.sender];
