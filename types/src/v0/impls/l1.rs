@@ -13,7 +13,7 @@ use futures::{
     future::Future,
     stream::{self, StreamExt},
 };
-use hotshot_types::traits::metrics::Metrics;
+use hotshot_types::{data::EpochNumber, traits::metrics::Metrics};
 use lru::LruCache;
 use serde::{de::DeserializeOwned, Serialize};
 use std::{
@@ -375,6 +375,49 @@ impl L1Client {
             *update_task = Some(spawn(self.update_loop()));
         }
     }
+    // TODO I think we need to shoehorn this guy into `spawn_tasks`.
+    pub async fn memberships_update_loop(&self) {
+        let retry_delay = self.retry_delay;
+        let state = self.state.clone();
+
+        let span = tracing::warn_span!("L1 client memberships update");
+
+        async move {
+            loop {
+                let mut events = self.receiver.activate_cloned();
+                while let Some(event) = events.next().await {
+                    let L1Event::NewEpoch {
+                        epoch,
+                        l1_block_number,
+                    } = event
+                    else {
+                        continue;
+                    };
+
+                    loop {
+                        {
+                            match self.get_stake_table(l1_block_number).await {
+                                Err(err) => {
+                                    tracing::warn!(
+                                        ?epoch,
+                                        ?l1_block_number,
+                                        "error fetching stake table from l1. err {err}"
+                                    );
+                                }
+                                Ok(stake_tables) => {
+                                    let mut state = state.lock().await;
+                                    let _ = state.stake_tables.insert(epoch, stake_tables);
+                                }
+                            }
+                        }
+
+                        sleep(retry_delay).await;
+                    }
+                }
+            }
+        }
+        .instrument(span);
+    }
 
     /// Shut down background tasks associated with this L1 client.
     ///
@@ -527,6 +570,19 @@ impl L1Client {
     /// Get a snapshot from the l1.
     pub async fn snapshot(&self) -> L1Snapshot {
         self.state.lock().await.snapshot
+    }
+
+    pub fn stake_table(&self, epoch: &EpochNumber) -> StakeTables {
+        if let Some(stake_tables) = self.state.blocking_lock().stake_tables.get(epoch) {
+            stake_tables.clone()
+        } else {
+            // It would be nice if we could update l1_cache of stake
+            // tables here. But how to we know l1_block of the epoch?
+            // This might even allow us to avoid the update loop. On
+            // the other hand if we timing is right we may never hit
+            // this case.
+            todo!();
+        }
     }
 
     /// Wait until the highest L1 block number reaches at least `number`.
@@ -784,14 +840,11 @@ impl L1Client {
     }
 
     /// Get `StakeTable` at block height.
-    pub async fn get_stake_table(
-        &self,
-        block: u64,
-        address: Address,
-    ) -> anyhow::Result<StakeTables> {
-        // TODO epoch size may need to be passed in as well
-        // TODO here or in memberships check if we have fetched table this epoch
-        let stake_table_contract = PermissionedStakeTable::new(address, self.provider.clone());
+    pub async fn get_stake_table(&self, block: u64) -> anyhow::Result<StakeTables> {
+        // TODO stake_table_address needs to be passed in to L1Client
+        // before update loop starts.
+        let stake_table_contract =
+            PermissionedStakeTable::new(self.stake_table_address, self.provider.clone());
 
         let events = stake_table_contract
             .stakers_updated_filter()
@@ -809,6 +862,7 @@ impl L1State {
         Self {
             snapshot: Default::default(),
             finalized: LruCache::new(cache_size),
+            stake_tables: Default::default(),
         }
     }
 

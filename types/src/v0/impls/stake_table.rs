@@ -91,26 +91,9 @@ impl StakeTables {
 }
 
 #[derive(Clone, Debug)]
-pub struct CommitteeState {
-    /// The nodes eligible for leadership.
-    /// NOTE: This is currently a hack because the DA leader needs to be the quorum
-    /// leader but without voting rights.
-    eligible_leaders: Vec<StakeTableEntry<PubKey>>,
-
-    /// The nodes on the committee and their stake
-    stake_table: HashSet<StakeTableEntry<PubKey>>,
-
-    /// The nodes on the committee and their stake
-    da_stake_table: HashSet<StakeTableEntry<PubKey>>,
-
-    /// TODO:
-    indexed_stake_table: BTreeMap<Epoch, HashMap<PubKey, StakeTableEntry<PubKey>>>,
-
-    /// TODO:
-    indexed_da_stake_table: BTreeMap<Epoch, HashMap<PubKey, StakeTableEntry<PubKey>>>,
-}
-#[derive(Clone, Debug)]
+/// Type to describe DA and Stake memberships
 pub struct StaticCommittee {
+    /// Holds Stake table and da stake
     state: Arc<RwLock<CommitteeState>>,
 
     /// Number of blocks in an epoch
@@ -149,6 +132,26 @@ impl StakeTableDelta {
         }
     }
 }
+/// Holds Stake table and da stake
+#[derive(Clone, Debug)]
+struct CommitteeState {
+    /// The nodes eligible for leadership.
+    /// NOTE: This is currently a hack because the DA leader needs to be the quorum
+    /// leader but without voting rights.
+    eligible_leaders: Vec<StakeTableEntry<PubKey>>,
+
+    /// The nodes on the committee and their stake
+    stake_table: HashSet<StakeTableEntry<PubKey>>,
+
+    /// The nodes on the committee and their stake
+    da_members: HashSet<StakeTableEntry<PubKey>>,
+
+    /// TODO:
+    indexed_stake_table: BTreeMap<Epoch, HashMap<PubKey, StakeTableEntry<PubKey>>>,
+
+    /// TODO:
+    indexed_da_members: BTreeMap<Epoch, HashMap<PubKey, StakeTableEntry<PubKey>>>,
+}
 
 impl StaticCommittee {
     /// Updates `Self.stake_table` with stake_table for
@@ -156,17 +159,41 @@ impl StaticCommittee {
     /// to be called before calling `self.stake()` so that
     /// `Self.stake_table` only needs to be updated once in a given
     /// life-cycle but may be read from many times.
-    async fn update_stake_table(&mut self, l1_block_height: u64) -> anyhow::Result<()> {
+    async fn update_stake_table(mut self, l1_block_height: u64) -> anyhow::Result<()> {
         let updates: StakeTables = self
             .l1_client
-            .get_stake_table(l1_block_height, self._contract_address.unwrap())
+            // .get_stake_table(l1_block_height, self._contract_address.unwrap())
+            .get_stake_table(l1_block_height)
             .await?;
 
-        // // This works because `get_stake_table` is fetching *all*
-        // // update events and building the table for us. We will need
-        // // more subtlety when start fetching only the events since last update.
-        // self.stake_table = HashSet::from_iter(updates.consensus_stake_table.0);
-        // self.da_stake_table = HashSet::from_iter(updates.da_stake_table.0);
+        let mut state = self.state.write().await;
+        // This works because `get_stake_table` is fetching *all*
+        // update events and building the table for us. We will need
+        // more subtlety when start fetching only the events since last update.
+        let stake_table = HashSet::from_iter(updates.consensus_stake_table.0);
+        let da_members = HashSet::from_iter(updates.da_stake_table.0);
+        state.stake_table = stake_table.clone();
+        state.da_members = da_members.clone();
+        let indexed_stake_table: HashMap<PubKey, _> = stake_table
+            .iter()
+            .map(|entry| (PubKey::public_key(entry), entry.clone()))
+            .collect();
+
+        // Wrap that in a map indexed by epoch
+        let indexed_stake_table: BTreeMap<Epoch, _> =
+            BTreeMap::from([(Epoch::genesis(), indexed_stake_table)]);
+
+        let indexed_da_members: HashMap<PubKey, _> = da_members
+            .iter()
+            .map(|entry| (PubKey::public_key(entry), entry.clone()))
+            .collect();
+
+        // Wrap that in a map indexed by epoch
+        let indexed_da_members: BTreeMap<Epoch, _> =
+            BTreeMap::from([(Epoch::genesis(), indexed_da_members)]);
+
+        state.indexed_stake_table = indexed_stake_table;
+        state.indexed_da_members = indexed_da_members;
 
         Ok(())
     }
@@ -217,15 +244,15 @@ impl StaticCommittee {
             .map(|entry| (PubKey::public_key(entry), entry.clone()))
             .collect();
         // Wrap that in a map indexed by epoch
-        let indexed_da_stake_table: BTreeMap<Epoch, _> =
+        let indexed_da_members: BTreeMap<Epoch, _> =
             BTreeMap::from([(Epoch::genesis(), indexed_da_stake_table)]);
 
         let state = CommitteeState {
             eligible_leaders,
             stake_table: HashSet::from_iter(members),
-            da_stake_table: HashSet::from_iter(da_members),
+            da_members: HashSet::from_iter(da_members),
             indexed_stake_table,
-            indexed_da_stake_table,
+            indexed_da_members,
         };
 
         Self {
@@ -234,46 +261,6 @@ impl StaticCommittee {
             l1_client: instance_state.l1_client.clone(),
             _contract_address: instance_state.chain_config.stake_table_contract,
         }
-    }
-
-    async fn update_loop(committee: StaticCommittee) -> impl Future<Output = ()> {
-        let l1_client = committee.l1_client.clone();
-
-        let retry_delay = l1_client.retry_delay;
-
-        let span = tracing::warn_span!("updating committee stake tables");
-        async move {
-            loop {
-                let mut events = l1_client.receiver.activate_cloned();
-                while let Some(event) = events.next().await {
-                    let L1Event::NewEpoch {
-                        epoch,
-                        l1_block_number,
-                    } = event
-                    else {
-                        continue;
-                    };
-
-                    loop {
-                        {
-                            // let mut committee_lock = committee.write().await;
-                            // if let Err(err) =
-                            //     committee_lock.update_stake_table(l1_block_number).await
-                            // {
-                            //     tracing::warn!(
-                            //         ?epoch,
-                            //         ?l1_block_number,
-                            //         "error updating stake table. err {err}"
-                            //     );
-                            // }
-                        }
-
-                        sleep(retry_delay).await;
-                    }
-                }
-            }
-        }
-        .instrument(span)
     }
 }
 
@@ -315,11 +302,11 @@ impl Membership<SeqTypes> for StaticCommittee {
         let state = CommitteeState {
             eligible_leaders,
             stake_table: HashSet::from_iter(members),
-            da_stake_table: HashSet::from_iter(da_members),
-            // TODO: ??
+            da_members: HashSet::from_iter(da_members),
             indexed_stake_table: BTreeMap::new(),
-            indexed_da_stake_table: BTreeMap::new(),
+            indexed_da_members: BTreeMap::new(),
         };
+
         let committee = StaticCommittee {
             state: Arc::new(RwLock::new(state)),
             _epoch_size: 12, // TODO get the real number from config (I think)
@@ -327,25 +314,51 @@ impl Membership<SeqTypes> for StaticCommittee {
             _contract_address: None,
         };
 
-        let _handle = task::spawn(StaticCommittee::update_loop(committee.clone()));
         committee
     }
 
-    // TODO: change all these to async? :((
     /// Get the stake table for the current view
-    fn stake_table(&self, _epoch: Epoch) -> Vec<StakeTableEntry<PubKey>> {
-        let sc = tokio::runtime::Runtime::new()
-            .unwrap()
-            .block_on(async { self.state.read().await });
+    fn stake_table(&self, epoch: Epoch) -> Vec<StakeTableEntry<PubKey>> {
+        let state = self.state.read_blocking();
+        if state.indexed_stake_table.contains_key(&epoch) {
+            state.stake_table.clone().into_iter().collect()
+        } else {
+            // TODO can we make state updates reusable? Otherwise we
+            // have to repeat this for the other methods.
+            let mut state = self.state.write_blocking();
+            let stake_tables = self.l1_client.stake_table(&epoch);
 
-        sc.stake_table.clone().into_iter().collect()
+            let stake_table: HashSet<StakeTableEntry<PubKey>> =
+                HashSet::from_iter(stake_tables.consensus_stake_table.0);
+            let da_members: HashSet<StakeTableEntry<PubKey>> =
+                HashSet::from_iter(stake_tables.da_stake_table.0);
+
+            let indexed_stake_table: HashMap<PubKey, _> = stake_table
+                .iter()
+                .map(|entry| (PubKey::public_key(entry), entry.clone()))
+                .collect();
+
+            state.indexed_stake_table.insert(epoch, indexed_stake_table);
+
+            let indexed_da_members: HashMap<PubKey, _> = da_members
+                .iter()
+                .map(|entry| (PubKey::public_key(entry), entry.clone()))
+                .collect();
+
+            state.indexed_da_members.insert(epoch, indexed_da_members);
+
+            state.stake_table = stake_table;
+            state.da_members = da_members;
+
+            state.stake_table.clone().into_iter().collect()
+        }
     }
     /// Get the stake table for the current view
     fn da_stake_table(&self, _epoch: Epoch) -> Vec<StakeTableEntry<PubKey>> {
         let sc = tokio::runtime::Runtime::new()
             .unwrap()
             .block_on(async { self.state.read().await });
-        sc.da_stake_table.clone().into_iter().collect()
+        sc.da_members.clone().into_iter().collect()
     }
 
     /// Get all members of the committee for the current view
@@ -370,7 +383,7 @@ impl Membership<SeqTypes> for StaticCommittee {
             .unwrap()
             .block_on(async { self.state.read().await });
 
-        sc.da_stake_table.iter().map(PubKey::public_key).collect()
+        sc.da_members.iter().map(PubKey::public_key).collect()
     }
 
     /// Get all eligible leaders of the committee for the current view
@@ -406,7 +419,7 @@ impl Membership<SeqTypes> for StaticCommittee {
             .block_on(async { self.state.read().await });
 
         // Only return the stake if it is above zero
-        sc.indexed_da_stake_table
+        sc.indexed_da_members
             .get(&epoch)
             .and_then(|h| h.get(pub_key).cloned())
     }
@@ -429,7 +442,7 @@ impl Membership<SeqTypes> for StaticCommittee {
             .unwrap()
             .block_on(async { self.state.read().await });
 
-        sc.indexed_da_stake_table
+        sc.indexed_da_members
             .get(&epoch)
             .and_then(|h| h.get(pub_key))
             .map_or(false, |x| x.stake() > U256::zero())
@@ -465,7 +478,7 @@ impl Membership<SeqTypes> for StaticCommittee {
             .unwrap()
             .block_on(async { self.state.read().await });
 
-        sc.da_stake_table.len()
+        sc.da_members.len()
     }
 
     /// Get the voting success threshold for the committee
@@ -483,7 +496,7 @@ impl Membership<SeqTypes> for StaticCommittee {
             .unwrap()
             .block_on(async { self.state.read().await });
 
-        NonZeroU64::new(((sc.da_stake_table.len() as u64 * 2) / 3) + 1).unwrap()
+        NonZeroU64::new(((sc.da_members.len() as u64 * 2) / 3) + 1).unwrap()
     }
 
     /// Get the voting failure threshold for the committee

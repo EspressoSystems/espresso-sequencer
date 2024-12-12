@@ -762,6 +762,13 @@ impl ValidatedState {
         )
         .await;
 
+        // Since this is being called on validators I believe event
+        // will not be emitted until after leader has created a new header.
+        // Is this correct?
+        //
+        // Also, We could just update l1_state here directly instead of emitting an event
+        // since we have access to L1Client and we are in an async context. We wouldn't need
+        // the update_loop in this case.
         if version >= EpochVersion::VERSION {
             emit_update_stake_table_event(instance, proposed_header).await?;
         }
