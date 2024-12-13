@@ -418,7 +418,7 @@ mod test {
                 fee_recipient: FeeAccount::default(),
                 fee_contract: Some(Address::default()),
                 bid_recipient: None,
-                stake_table_contract: Some(Address::default())
+                stake_table_contract: None
             }
         );
         assert_eq!(
