@@ -1359,7 +1359,7 @@ mod test {
             .await
             .unwrap();
 
-        let result = nodes.quorum.0[0].clone();
+        let result = nodes.stake_table.0[0].clone();
         assert_eq!(result.stake_amount.as_u64(), 1);
         Ok(())
     }

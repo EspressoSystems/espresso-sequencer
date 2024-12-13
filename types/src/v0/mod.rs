@@ -15,7 +15,7 @@ pub mod traits;
 mod utils;
 pub use header::Header;
 pub use impls::{
-    get_l1_deposits, retain_accounts, BuilderValidationError, FeeError, MembershipCommittee,
+    get_l1_deposits, retain_accounts, BuilderValidationError, FeeError, MembershipCommittees,
     ProposalValidationError, StateValidationError,
 };
 pub use utils::*;
@@ -140,7 +140,7 @@ impl NodeType for SeqTypes {
     type Transaction = Transaction;
     type InstanceState = NodeState;
     type ValidatedState = ValidatedState;
-    type Membership = MembershipCommittee;
+    type Membership = MembershipCommittees;
     type BuilderSignatureKey = FeeAccount;
     type AuctionResult = SolverAuctionResults;
 }

@@ -15,7 +15,7 @@ mod message_compat_tests;
 use anyhow::Context;
 use catchup::StatePeers;
 use context::SequencerContext;
-use espresso_types::MembershipCommittee;
+use espresso_types::MembershipCommittees;
 use espresso_types::{
     traits::EventConsumer, BackoffParams, L1ClientOptions, NodeState, PubKey, SeqTypes,
     SolverAuctionResultsProvider, ValidatedState,
@@ -478,7 +478,7 @@ pub async fn init_node<P: SequencerPersistence, V: Versions>(
     };
 
     // Create the HotShot membership
-    let membership = MembershipCommittee::new_stake(
+    let membership = MembershipCommittees::new_stake(
         network_config.config.known_nodes_with_stake.clone(),
         network_config.config.known_nodes_with_stake.clone(),
         &instance_state,
@@ -962,7 +962,7 @@ pub mod testing {
             .with_upgrades(upgrades);
 
             // Create the HotShot membership
-            let membership = MembershipCommittee::new(
+            let membership = MembershipCommittees::new(
                 config.known_nodes_with_stake.clone(),
                 config.known_nodes_with_stake.clone(),
             );

@@ -1,5 +1,5 @@
 use super::{
-    v0_3::{DAStakeTable, QuorumStakeTable, StakeTables},
+    v0_3::{DAStakeTable, StakeTable, StakeTables},
     L1Client, NodeState, PubKey, SeqTypes,
 };
 
@@ -33,8 +33,11 @@ use url::Url;
 type Epoch = <SeqTypes as NodeType>::Epoch;
 
 impl StakeTables {
-    pub fn new(quorum: QuorumStakeTable, da: DAStakeTable) -> Self {
-        Self { quorum, da }
+    pub fn new(stake_table: StakeTable, da_stake_table: DAStakeTable) -> Self {
+        Self {
+            stake_table,
+            da_stake_table,
+        }
     }
 
     /// Create the consensus and DA stake tables from L1 events
@@ -87,7 +90,7 @@ impl StakeTables {
 
 #[derive(Clone, Debug)]
 /// Type to describe DA and Stake memberships
-pub struct MembershipCommittee {
+pub struct MembershipCommittees {
     /// Holds Stake table and da stake
     state: Arc<RwLock<HashMap<Epoch, StaticCommittee>>>,
 
@@ -133,13 +136,13 @@ struct StaticCommittee {
     eligible_leaders: Vec<StakeTableEntry<PubKey>>,
 
     /// TODO: add comment
-    quorum: HashMap<PubKey, StakeTableEntry<PubKey>>,
+    indexed_stake_table: HashMap<PubKey, StakeTableEntry<PubKey>>,
 
     /// TODO: comment
-    da: HashMap<PubKey, StakeTableEntry<PubKey>>,
+    indexed_da_stake_table: HashMap<PubKey, StakeTableEntry<PubKey>>,
 }
 
-impl MembershipCommittee {
+impl MembershipCommittees {
     /// Updates `Self.stake_table` with stake_table for
     /// `Self.contract_address` at `l1_block_height`. This is intended
     /// to be called before calling `self.stake()` so that
@@ -151,21 +154,21 @@ impl MembershipCommittee {
         // more subtlety when start fetching only the events since last update.
 
         let indexed_stake_table: HashMap<PubKey, _> = st
-            .quorum
+            .stake_table
             .0
             .iter()
             .map(|entry| (PubKey::public_key(entry), entry.clone()))
             .collect();
 
-        let indexed_da_members: HashMap<PubKey, _> = st
-            .da
+        let indexed_da_stake_table: HashMap<PubKey, _> = st
+            .da_stake_table
             .0
             .iter()
             .map(|entry| (PubKey::public_key(entry), entry.clone()))
             .collect();
 
         let eligible_leaders: Vec<_> = st
-            .quorum
+            .stake_table
             .0
             .into_iter()
             .filter(|entry| entry.stake() > U256::zero())
@@ -177,8 +180,8 @@ impl MembershipCommittee {
             EpochNumber::genesis(),
             StaticCommittee {
                 eligible_leaders,
-                quorum: indexed_stake_table,
-                da: indexed_da_members,
+                indexed_stake_table,
+                indexed_da_stake_table,
             },
         );
     }
@@ -227,8 +230,8 @@ impl MembershipCommittee {
 
         let members = StaticCommittee {
             eligible_leaders,
-            quorum: indexed_stake_table,
-            da: indexed_da_stake_table,
+            indexed_stake_table,
+            indexed_da_stake_table,
         };
 
         let mut map = HashMap::new();
@@ -246,7 +249,7 @@ impl MembershipCommittee {
 #[error("Could not lookup leader")] // TODO error variants? message?
 pub struct LeaderLookupError;
 
-impl Membership<SeqTypes> for MembershipCommittee {
+impl Membership<SeqTypes> for MembershipCommittees {
     type Error = LeaderLookupError;
 
     // DO NOT USE. Dummy constructor to comply w/ trait.
@@ -291,8 +294,8 @@ impl Membership<SeqTypes> for MembershipCommittee {
 
         let members = StaticCommittee {
             eligible_leaders,
-            quorum: indexed_stake_table,
-            da: indexed_da_stake_table,
+            indexed_stake_table,
+            indexed_da_stake_table,
         };
 
         let mut map = HashMap::new();
@@ -310,13 +313,13 @@ impl Membership<SeqTypes> for MembershipCommittee {
         let state = self.state.read_blocking();
 
         match state.get(&epoch) {
-            Some(st) => st.quorum.clone().into_values().collect(),
+            Some(st) => st.indexed_stake_table.clone().into_values().collect(),
             None => {
                 // TODO can we make state updates reusable? Otherwise we
                 // have to repeat this for the other methods.
                 let stake_tables = self.l1_client.stake_table(&epoch);
                 self.update_stake_table(stake_tables.clone());
-                stake_tables.quorum.0
+                stake_tables.stake_table.0
             }
         }
     }
@@ -324,11 +327,11 @@ impl Membership<SeqTypes> for MembershipCommittee {
     fn da_stake_table(&self, epoch: Epoch) -> Vec<StakeTableEntry<PubKey>> {
         let state = self.state.read_blocking();
         match state.get(&epoch) {
-            Some(sc) => sc.da.clone().into_values().collect(),
+            Some(sc) => sc.indexed_da_stake_table.clone().into_values().collect(),
             None => {
                 let stake_tables = self.l1_client.stake_table(&epoch);
                 self.update_stake_table(stake_tables.clone());
-                stake_tables.da.0
+                stake_tables.da_stake_table.0
             }
         }
     }
@@ -342,12 +345,12 @@ impl Membership<SeqTypes> for MembershipCommittee {
         let state = self.state.read_blocking();
 
         match state.get(&epoch) {
-            Some(sc) => sc.quorum.clone().into_keys().collect(),
+            Some(sc) => sc.indexed_stake_table.clone().into_keys().collect(),
             None => {
                 let stake_tables = self.l1_client.stake_table(&epoch);
                 self.update_stake_table(stake_tables.clone());
                 stake_tables
-                    .quorum
+                    .stake_table
                     .0
                     .iter()
                     .map(PubKey::public_key)
@@ -365,11 +368,16 @@ impl Membership<SeqTypes> for MembershipCommittee {
         let sc = self.state.read_blocking();
 
         match sc.get(&epoch) {
-            Some(sc) => sc.da.clone().into_keys().collect(),
+            Some(sc) => sc.indexed_da_stake_table.clone().into_keys().collect(),
             None => {
                 let stake_tables = self.l1_client.stake_table(&epoch);
                 self.update_stake_table(stake_tables.clone());
-                stake_tables.da.0.iter().map(PubKey::public_key).collect()
+                stake_tables
+                    .da_stake_table
+                    .0
+                    .iter()
+                    .map(PubKey::public_key)
+                    .collect()
             }
         }
     }
@@ -398,7 +406,7 @@ impl Membership<SeqTypes> for MembershipCommittee {
         // Only return the stake if it is above zero
         state
             .get(&epoch)
-            .and_then(|h| h.quorum.get(pub_key).cloned())
+            .and_then(|h| h.indexed_stake_table.get(pub_key).cloned())
     }
 
     /// Get the DA stake table entry for a public key
@@ -406,7 +414,9 @@ impl Membership<SeqTypes> for MembershipCommittee {
         let state = self.state.read_blocking();
 
         // Only return the stake if it is above zero
-        state.get(&epoch).and_then(|h| h.da.get(pub_key).cloned())
+        state
+            .get(&epoch)
+            .and_then(|h| h.indexed_da_stake_table.get(pub_key).cloned())
     }
 
     /// Check if a node has stake in the committee
@@ -415,7 +425,7 @@ impl Membership<SeqTypes> for MembershipCommittee {
 
         state
             .get(&epoch)
-            .and_then(|h| h.quorum.get(pub_key))
+            .and_then(|h| h.indexed_stake_table.get(pub_key))
             .map_or(false, |x| x.stake() > U256::zero())
     }
 
@@ -425,7 +435,7 @@ impl Membership<SeqTypes> for MembershipCommittee {
 
         state
             .get(&epoch)
-            .and_then(|h| h.da.get(pub_key))
+            .and_then(|h| h.indexed_da_stake_table.get(pub_key))
             .map_or(false, |x| x.stake() > U256::zero())
     }
 
@@ -452,7 +462,7 @@ impl Membership<SeqTypes> for MembershipCommittee {
         let state = self.state.read_blocking();
         state
             .get(&epoch)
-            .map(|sc| sc.quorum.len())
+            .map(|sc| sc.indexed_stake_table.len())
             .unwrap_or_default()
     }
 
@@ -461,28 +471,28 @@ impl Membership<SeqTypes> for MembershipCommittee {
         let state = self.state.read_blocking();
         state
             .get(&epoch)
-            .map(|sc: &StaticCommittee| sc.da.len())
+            .map(|sc: &StaticCommittee| sc.indexed_da_stake_table.len())
             .unwrap_or_default()
     }
 
     /// Get the voting success threshold for the committee
     fn success_threshold(&self, epoch: Epoch) -> NonZeroU64 {
         let state = self.state.read_blocking();
-        let quorum = state.get(&epoch).unwrap().quorum.clone();
+        let quorum = state.get(&epoch).unwrap().indexed_stake_table.clone();
         NonZeroU64::new(((quorum.len() as u64 * 2) / 3) + 1).unwrap()
     }
 
     /// Get the voting success threshold for the committee
     fn da_success_threshold(&self, epoch: Epoch) -> NonZeroU64 {
         let state = self.state.read_blocking();
-        let da = state.get(&epoch).unwrap().da.clone();
+        let da = state.get(&epoch).unwrap().indexed_da_stake_table.clone();
         NonZeroU64::new(((da.len() as u64 * 2) / 3) + 1).unwrap()
     }
 
     /// Get the voting failure threshold for the committee
     fn failure_threshold(&self, epoch: Epoch) -> NonZeroU64 {
         let state = self.state.read_blocking();
-        let quorum = state.get(&epoch).unwrap().quorum.clone();
+        let quorum = state.get(&epoch).unwrap().indexed_stake_table.clone();
 
         NonZeroU64::new(((quorum.len() as u64) / 3) + 1).unwrap()
     }
@@ -490,7 +500,7 @@ impl Membership<SeqTypes> for MembershipCommittee {
     /// Get the voting upgrade threshold for the committee
     fn upgrade_threshold(&self, epoch: Epoch) -> NonZeroU64 {
         let state = self.state.read_blocking();
-        let quorum = state.get(&epoch).unwrap().quorum.clone();
+        let quorum = state.get(&epoch).unwrap().indexed_stake_table.clone();
 
         NonZeroU64::new(max(
             (quorum.len() as u64 * 9) / 10,
@@ -524,13 +534,16 @@ mod tests {
         let st = StakeTables::from_l1_events(updates.clone());
 
         // The DA stake table contains the DA node only
-        assert_eq!(st.da.0.len(), 1);
-        assert_eq!(st.da.0[0].stake_key, da_node.stake_table_key);
+        assert_eq!(st.da_stake_table.0.len(), 1);
+        assert_eq!(st.da_stake_table.0[0].stake_key, da_node.stake_table_key);
 
         // The consensus stake table contains both nodes
-        assert_eq!(st.quorum.0.len(), 2);
-        assert_eq!(st.quorum.0[0].stake_key, da_node.stake_table_key);
-        assert_eq!(st.da.0[1].stake_key, consensus_node.stake_table_key);
+        assert_eq!(st.stake_table.0.len(), 2);
+        assert_eq!(st.stake_table.0[0].stake_key, da_node.stake_table_key);
+        assert_eq!(
+            st.da_stake_table.0[1].stake_key,
+            consensus_node.stake_table_key
+        );
 
         // Simulate making the consensus node a DA node. This is accomplished by
         // sending a transaction removes and re-adds the same node with updated
@@ -544,14 +557,17 @@ mod tests {
         let st = StakeTables::from_l1_events(updates.clone());
 
         // The DA stake stable now contains both nodes
-        assert_eq!(st.da.0.len(), 2);
-        assert_eq!(st.da.0[0].stake_key, da_node.stake_table_key);
-        assert_eq!(st.da.0[1].stake_key, new_da_node.stake_table_key);
+        assert_eq!(st.da_stake_table.0.len(), 2);
+        assert_eq!(st.da_stake_table.0[0].stake_key, da_node.stake_table_key);
+        assert_eq!(
+            st.da_stake_table.0[1].stake_key,
+            new_da_node.stake_table_key
+        );
 
         // The consensus stake stable (still) contains both nodes
-        assert_eq!(st.quorum.0.len(), 2);
-        assert_eq!(st.quorum.0[0].stake_key, da_node.stake_table_key);
-        assert_eq!(st.quorum.0[1].stake_key, new_da_node.stake_table_key);
+        assert_eq!(st.stake_table.0.len(), 2);
+        assert_eq!(st.stake_table.0[0].stake_key, da_node.stake_table_key);
+        assert_eq!(st.stake_table.0[1].stake_key, new_da_node.stake_table_key);
 
         // Simulate removing the second node
         updates.push(StakersUpdatedFilter {
@@ -561,12 +577,12 @@ mod tests {
         let st = StakeTables::from_l1_events(updates);
 
         // The DA stake table contains only the original DA node
-        assert_eq!(st.da.0.len(), 1);
-        assert_eq!(st.da.0[0].stake_key, da_node.stake_table_key);
+        assert_eq!(st.da_stake_table.0.len(), 1);
+        assert_eq!(st.da_stake_table.0[0].stake_key, da_node.stake_table_key);
 
         // The consensus stake table also contains only the original DA node
-        assert_eq!(st.quorum.0.len(), 1);
-        assert_eq!(st.quorum.0[0].stake_key, da_node.stake_table_key);
+        assert_eq!(st.stake_table.0.len(), 1);
+        assert_eq!(st.stake_table.0[0].stake_key, da_node.stake_table_key);
     }
 
     // TODO: test that repeatedly removes and adds more nodes

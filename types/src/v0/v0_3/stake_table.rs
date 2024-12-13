@@ -16,10 +16,10 @@ pub struct CombinedStakeTable(Vec<PeerConfigKeys<PubKey>>);
 pub struct DAStakeTable(pub Vec<StakeTableEntry<PubKey>>);
 
 #[derive(Clone, Debug, From, Into)]
-pub struct QuorumStakeTable(pub Vec<StakeTableEntry<PubKey>>);
+pub struct StakeTable(pub Vec<StakeTableEntry<PubKey>>);
 
 #[derive(Clone, Debug)]
 pub struct StakeTables {
-    pub quorum: QuorumStakeTable,
-    pub da: DAStakeTable,
+    pub stake_table: StakeTable,
+    pub da_stake_table: DAStakeTable,
 }
