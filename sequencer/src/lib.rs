@@ -583,8 +583,8 @@ pub mod testing {
     use hotshot_testing::block_builder::{
         BuilderTask, SimpleBuilderImplementation, TestBuilderImplementation,
     };
+    use hotshot_types::traits::network::Topic;
     use hotshot_types::traits::signature_key::StakeTableEntryType;
-    use hotshot_types::traits::{election::Membership, network::Topic};
     use hotshot_types::{
         event::LeafInfo,
         light_client::{CircuitField, StateKeyPair, StateVerKey},
@@ -962,9 +962,11 @@ pub mod testing {
             .with_upgrades(upgrades);
 
             // Create the HotShot membership
-            let membership = EpochCommittees::new(
+            let membership = EpochCommittees::new_stake(
                 config.known_nodes_with_stake.clone(),
                 config.known_nodes_with_stake.clone(),
+                &node_state,
+                100,
             );
 
             tracing::info!(

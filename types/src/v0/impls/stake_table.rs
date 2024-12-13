@@ -33,10 +33,10 @@ use url::Url;
 type Epoch = <SeqTypes as NodeType>::Epoch;
 
 impl StakeTables {
-    pub fn new(stake_table: StakeTable, da_stake_table: DAStakeTable) -> Self {
+    pub fn new(stake_table: StakeTable, da_members: DAStakeTable) -> Self {
         Self {
             stake_table,
-            da_stake_table,
+            da_members,
         }
     }
 
@@ -77,14 +77,14 @@ impl StakeTables {
             });
 
         let mut consensus_stake_table: Vec<StakeTableEntry<PubKey>> = vec![];
-        let mut da_stake_table: Vec<StakeTableEntry<PubKey>> = vec![];
+        let mut da_members: Vec<StakeTableEntry<PubKey>> = vec![];
         for node in currently_staking {
             consensus_stake_table.push(node.clone().into());
             if node.da {
-                da_stake_table.push(node.into());
+                da_members.push(node.into());
             }
         }
-        Self::new(consensus_stake_table.into(), da_stake_table.into())
+        Self::new(consensus_stake_table.into(), da_members.into())
     }
 }
 
@@ -139,7 +139,7 @@ struct Committee {
     indexed_stake_table: HashMap<PubKey, StakeTableEntry<PubKey>>,
 
     /// TODO: comment
-    indexed_da_stake_table: HashMap<PubKey, StakeTableEntry<PubKey>>,
+    indexed_da_members: HashMap<PubKey, StakeTableEntry<PubKey>>,
 }
 
 impl EpochCommittees {
@@ -160,8 +160,8 @@ impl EpochCommittees {
             .map(|entry| (PubKey::public_key(entry), entry.clone()))
             .collect();
 
-        let indexed_da_stake_table: HashMap<PubKey, _> = st
-            .da_stake_table
+        let indexed_da_members: HashMap<PubKey, _> = st
+            .da_members
             .0
             .iter()
             .map(|entry| (PubKey::public_key(entry), entry.clone()))
@@ -181,7 +181,7 @@ impl EpochCommittees {
             Committee {
                 eligible_leaders,
                 indexed_stake_table,
-                indexed_da_stake_table,
+                indexed_da_members,
             },
         );
     }
@@ -223,7 +223,7 @@ impl EpochCommittees {
             .collect();
 
         // Index the stake table by public key
-        let indexed_da_stake_table: HashMap<PubKey, _> = da_members
+        let indexed_da_members: HashMap<PubKey, _> = da_members
             .iter()
             .map(|entry| (PubKey::public_key(entry), entry.clone()))
             .collect();
@@ -231,7 +231,7 @@ impl EpochCommittees {
         let members = Committee {
             eligible_leaders,
             indexed_stake_table,
-            indexed_da_stake_table,
+            indexed_da_members,
         };
 
         let mut map = HashMap::new();
@@ -287,7 +287,7 @@ impl Membership<SeqTypes> for EpochCommittees {
             .collect();
 
         // Index the stake table by public key
-        let indexed_da_stake_table: HashMap<PubKey, _> = da_members
+        let indexed_da_members: HashMap<PubKey, _> = da_members
             .iter()
             .map(|entry| (PubKey::public_key(entry), entry.clone()))
             .collect();
@@ -295,7 +295,7 @@ impl Membership<SeqTypes> for EpochCommittees {
         let members = Committee {
             eligible_leaders,
             indexed_stake_table,
-            indexed_da_stake_table,
+            indexed_da_members,
         };
 
         let mut map = HashMap::new();
@@ -325,11 +325,11 @@ impl Membership<SeqTypes> for EpochCommittees {
     fn da_stake_table(&self, epoch: Epoch) -> Vec<StakeTableEntry<PubKey>> {
         let state = self.state.read_blocking();
         match state.get(&epoch) {
-            Some(sc) => sc.indexed_da_stake_table.clone().into_values().collect(),
+            Some(sc) => sc.indexed_da_members.clone().into_values().collect(),
             None => {
                 let stake_tables = self.l1_client.stake_table(&epoch);
                 self.update_stake_table(stake_tables.clone());
-                stake_tables.da_stake_table.0
+                stake_tables.da_members.0
             }
         }
     }
@@ -366,12 +366,12 @@ impl Membership<SeqTypes> for EpochCommittees {
         let sc = self.state.read_blocking();
 
         match sc.get(&epoch) {
-            Some(sc) => sc.indexed_da_stake_table.clone().into_keys().collect(),
+            Some(sc) => sc.indexed_da_members.clone().into_keys().collect(),
             None => {
                 let stake_tables = self.l1_client.stake_table(&epoch);
                 self.update_stake_table(stake_tables.clone());
                 stake_tables
-                    .da_stake_table
+                    .da_members
                     .0
                     .iter()
                     .map(PubKey::public_key)
@@ -414,7 +414,7 @@ impl Membership<SeqTypes> for EpochCommittees {
         // Only return the stake if it is above zero
         state
             .get(&epoch)
-            .and_then(|h| h.indexed_da_stake_table.get(pub_key).cloned())
+            .and_then(|h| h.indexed_da_members.get(pub_key).cloned())
     }
 
     /// Check if a node has stake in the committee
@@ -433,7 +433,7 @@ impl Membership<SeqTypes> for EpochCommittees {
 
         state
             .get(&epoch)
-            .and_then(|h| h.indexed_da_stake_table.get(pub_key))
+            .and_then(|h| h.indexed_da_members.get(pub_key))
             .map_or(false, |x| x.stake() > U256::zero())
     }
 
@@ -469,7 +469,7 @@ impl Membership<SeqTypes> for EpochCommittees {
         let state = self.state.read_blocking();
         state
             .get(&epoch)
-            .map(|sc: &Committee| sc.indexed_da_stake_table.len())
+            .map(|sc: &Committee| sc.indexed_da_members.len())
             .unwrap_or_default()
     }
 
@@ -483,7 +483,7 @@ impl Membership<SeqTypes> for EpochCommittees {
     /// Get the voting success threshold for the committee
     fn da_success_threshold(&self, epoch: Epoch) -> NonZeroU64 {
         let state = self.state.read_blocking();
-        let da = state.get(&epoch).unwrap().indexed_da_stake_table.clone();
+        let da = state.get(&epoch).unwrap().indexed_da_members.clone();
         NonZeroU64::new(((da.len() as u64 * 2) / 3) + 1).unwrap()
     }
 
@@ -532,14 +532,14 @@ mod tests {
         let st = StakeTables::from_l1_events(updates.clone());
 
         // The DA stake table contains the DA node only
-        assert_eq!(st.da_stake_table.0.len(), 1);
-        assert_eq!(st.da_stake_table.0[0].stake_key, da_node.stake_table_key);
+        assert_eq!(st.da_members.0.len(), 1);
+        assert_eq!(st.da_members.0[0].stake_key, da_node.stake_table_key);
 
         // The consensus stake table contains both nodes
         assert_eq!(st.stake_table.0.len(), 2);
         assert_eq!(st.stake_table.0[0].stake_key, da_node.stake_table_key);
         assert_eq!(
-            st.da_stake_table.0[1].stake_key,
+            st.stake_table.0[1].stake_key,
             consensus_node.stake_table_key
         );
 
@@ -555,12 +555,9 @@ mod tests {
         let st = StakeTables::from_l1_events(updates.clone());
 
         // The DA stake stable now contains both nodes
-        assert_eq!(st.da_stake_table.0.len(), 2);
-        assert_eq!(st.da_stake_table.0[0].stake_key, da_node.stake_table_key);
-        assert_eq!(
-            st.da_stake_table.0[1].stake_key,
-            new_da_node.stake_table_key
-        );
+        assert_eq!(st.da_members.0.len(), 2);
+        assert_eq!(st.da_members.0[0].stake_key, da_node.stake_table_key);
+        assert_eq!(st.da_members.0[1].stake_key, new_da_node.stake_table_key);
 
         // The consensus stake stable (still) contains both nodes
         assert_eq!(st.stake_table.0.len(), 2);
@@ -575,8 +572,8 @@ mod tests {
         let st = StakeTables::from_l1_events(updates);
 
         // The DA stake table contains only the original DA node
-        assert_eq!(st.da_stake_table.0.len(), 1);
-        assert_eq!(st.da_stake_table.0[0].stake_key, da_node.stake_table_key);
+        assert_eq!(st.da_members.0.len(), 1);
+        assert_eq!(st.da_members.0[0].stake_key, da_node.stake_table_key);
 
         // The consensus stake table also contains only the original DA node
         assert_eq!(st.stake_table.0.len(), 1);

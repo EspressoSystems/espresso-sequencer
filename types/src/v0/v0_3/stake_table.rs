@@ -21,5 +21,5 @@ pub struct StakeTable(pub Vec<StakeTableEntry<PubKey>>);
 #[derive(Clone, Debug)]
 pub struct StakeTables {
     pub stake_table: StakeTable,
-    pub da_stake_table: DAStakeTable,
+    pub da_members: DAStakeTable,
 }
