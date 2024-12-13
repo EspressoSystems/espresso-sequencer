@@ -3,7 +3,7 @@ use async_broadcast::{InactiveReceiver, Sender};
 use clap::Parser;
 use ethers::{
     prelude::{H256, U256},
-    providers::{Http, Provider, Ws}, types::Address,
+    providers::{Http, Provider, Ws},
 };
 use hotshot_types::{
     data::EpochNumber,
@@ -145,12 +145,8 @@ pub(crate) struct L1State {
 
 #[derive(Clone, Debug)]
 pub(crate) enum L1Event {
-    NewHead {
-        head: u64,
-    },
-    NewFinalized {
-        finalized: L1BlockInfo,
-    },
+    NewHead { head: u64 },
+    NewFinalized { finalized: L1BlockInfo },
 }
 
 #[derive(Debug, Default)]

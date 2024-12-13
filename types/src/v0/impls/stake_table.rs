@@ -3,10 +3,9 @@ use super::{
     L1Client, NodeState, PubKey, SeqTypes,
 };
 
-use anyhow::Context;
 use async_lock::RwLock;
 use contract_bindings::permissioned_stake_table::StakersUpdatedFilter;
-use ethers::{abi::Address, types::U256};
+use ethers::types::U256;
 use hotshot::types::SignatureKey as _;
 use hotshot_contract_adapter::stake_table::NodeInfoJf;
 use hotshot_types::{
@@ -22,7 +21,7 @@ use hotshot_types::{
 use itertools::Itertools;
 use std::{
     cmp::max,
-    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
+    collections::{BTreeSet, HashMap},
     num::NonZeroU64,
     str::FromStr,
     sync::Arc,
@@ -438,7 +437,7 @@ impl Membership<SeqTypes> for MembershipCommittee {
         let state = self.state.read_blocking();
         let leaders = state
             .get(&epoch)
-            .ok_or_else(|| LeaderLookupError)?
+            .ok_or(LeaderLookupError)?
             .eligible_leaders
             .clone();
 

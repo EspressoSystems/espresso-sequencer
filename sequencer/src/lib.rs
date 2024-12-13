@@ -13,7 +13,6 @@ mod restart_tests;
 mod message_compat_tests;
 
 use anyhow::Context;
-use async_lock::RwLock;
 use catchup::StatePeers;
 use context::SequencerContext;
 use espresso_types::MembershipCommittee;
@@ -22,7 +21,6 @@ use espresso_types::{
     SolverAuctionResultsProvider, ValidatedState,
 };
 use genesis::L1Finalized;
-use hotshot_types::traits::election::Membership;
 use proposal_fetcher::ProposalFetcherConfig;
 use std::sync::Arc;
 use tokio::select;
@@ -585,8 +583,8 @@ pub mod testing {
     use hotshot_testing::block_builder::{
         BuilderTask, SimpleBuilderImplementation, TestBuilderImplementation,
     };
-    use hotshot_types::traits::network::Topic;
     use hotshot_types::traits::signature_key::StakeTableEntryType;
+    use hotshot_types::traits::{election::Membership, network::Topic};
     use hotshot_types::{
         event::LeafInfo,
         light_client::{CircuitField, StateKeyPair, StateVerKey},
