@@ -2,7 +2,10 @@ use committable::Commitment;
 use serde::{Deserialize, Serialize};
 use vbs::version::Version;
 
-use crate::{v0_1, v0_2, v0_3, ChainConfig};
+use crate::{
+    v0_1::{self, ChainConfig},
+    v0_2, v0_3, v0_99,
+};
 
 /// Each variant represents a specific minor version header.
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
@@ -10,6 +13,7 @@ pub enum Header {
     V1(v0_1::Header),
     V2(v0_2::Header),
     V3(v0_3::Header),
+    V99(v0_99::Header),
 }
 
 /// Enum to represent the first field of different versions of a header

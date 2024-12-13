@@ -3,6 +3,7 @@ use std::{collections::BTreeMap, sync::Arc};
 use async_trait::async_trait;
 use committable::Committable;
 use hotshot_query_service::availability::QueryablePayload;
+use hotshot_types::data::ViewNumber;
 use hotshot_types::{
     traits::{BlockPayload, EncodeBytes},
     utils::BuilderCommitment,
@@ -10,12 +11,31 @@ use hotshot_types::{
 };
 use jf_vid::VidScheme;
 use sha2::Digest;
+use thiserror::Error;
 
+use crate::Transaction;
 use crate::{
-    ChainConfig, Index, Iter, NamespaceId, NodeState, NsIndex, NsPayload, NsPayloadBuilder,
-    NsPayloadRange, NsTable, NsTableBuilder, Payload, PayloadByteLen, SeqTypes, Transaction,
-    TxProof, ValidatedState,
+    v0::impls::{NodeState, ValidatedState},
+    v0_1::ChainConfig,
+    Index, Iter, NamespaceId, NsIndex, NsPayload, NsPayloadBuilder, NsPayloadRange, NsTable,
+    NsTableBuilder, Payload, PayloadByteLen, SeqTypes, TxProof,
 };
+
+#[derive(serde::Deserialize, serde::Serialize, Error, Debug, Eq, PartialEq)]
+pub enum BlockBuildingError {
+    #[error("Parent state commitment {0} of block doesn't match current state commitment")]
+    IncorrectParent(String),
+    #[error("New view number ({new:?}) isn't strictly after current view ({curr:?})")]
+    IncorrectView { new: ViewNumber, curr: ViewNumber },
+    #[error("Genesis block either has zero or more than one transaction")]
+    GenesisWrongSize,
+    #[error("Genesis transaction not present in genesis block")]
+    MissingGenesis,
+    #[error("Genesis transaction in non-genesis block")]
+    UnexpectedGenesis,
+    #[error("ChainConfig is not available")]
+    MissingChainConfig(String),
+}
 
 impl Payload {
     pub fn ns_table(&self) -> &NsTable {
@@ -54,27 +74,29 @@ impl Payload {
     fn from_transactions_sync(
         transactions: impl IntoIterator<Item = <Self as BlockPayload<SeqTypes>>::Transaction> + Send,
         chain_config: ChainConfig,
-        _instance_state: &<Self as BlockPayload<SeqTypes>>::Instance,
     ) -> Result<
         (Self, <Self as BlockPayload<SeqTypes>>::Metadata),
         <Self as BlockPayload<SeqTypes>>::Error,
     > {
         // accounting for block byte length limit
-        let max_block_byte_len: usize = u64::from(chain_config.max_block_size)
-            .try_into()
-            .map_err(|_| <Self as BlockPayload<SeqTypes>>::Error::BlockBuilding)?;
-        let mut block_byte_len = NsTableBuilder::header_byte_len();
+        let max_block_byte_len = u64::from(chain_config.max_block_size);
+        let mut block_byte_len = NsTableBuilder::header_byte_len() as u64;
 
         // add each tx to its namespace
         let mut ns_builders = BTreeMap::<NamespaceId, NsPayloadBuilder>::new();
         for tx in transactions.into_iter() {
-            // accounting for block byte length limit
-            block_byte_len += tx.payload().len() + NsPayloadBuilder::tx_table_entry_byte_len();
-            if !ns_builders.contains_key(&tx.namespace()) {
-                // each new namespace adds overhead
-                block_byte_len +=
-                    NsTableBuilder::entry_byte_len() + NsPayloadBuilder::tx_table_header_byte_len();
+            let tx_size = tx.size_in_block(!ns_builders.contains_key(&tx.namespace()));
+
+            if tx_size > max_block_byte_len {
+                // skip this transaction since it exceeds the block size limit
+                tracing::warn!(
+                    "skip the transaction to fit in maximum block byte length {max_block_byte_len}, transaction size {tx_size}"
+                );
+                continue;
             }
+
+            // accounting for block byte length limit
+            block_byte_len += tx_size;
             if block_byte_len > max_block_byte_len {
                 tracing::warn!("transactions truncated to fit in maximum block byte length {max_block_byte_len}");
                 break;
@@ -107,7 +129,7 @@ impl Payload {
 impl BlockPayload<SeqTypes> for Payload {
     // TODO BlockPayload trait eliminate unneeded args, return vals of type
     // `Self::Metadata` https://github.com/EspressoSystems/HotShot/issues/3300
-    type Error = crate::Error;
+    type Error = BlockBuildingError;
     type Transaction = Transaction;
     type Instance = NodeState;
     type Metadata = NsTable;
@@ -126,17 +148,16 @@ impl BlockPayload<SeqTypes> for Payload {
         } else {
             match validated_state_cf.resolve() {
                 Some(cf) => cf,
-                None => {
-                    instance_state
-                        .peers
-                        .as_ref()
-                        .fetch_chain_config(validated_state_cf.commit())
-                        .await
-                }
+                None => instance_state
+                    .peers
+                    .as_ref()
+                    .fetch_chain_config(validated_state_cf.commit())
+                    .await
+                    .map_err(|err| BlockBuildingError::MissingChainConfig(format!("{err:#}")))?,
             }
         };
 
-        Self::from_transactions_sync(transactions, chain_config, instance_state)
+        Self::from_transactions_sync(transactions, ChainConfig::from(chain_config))
     }
 
     // TODO avoid cloning the entire payload here?
@@ -148,7 +169,7 @@ impl BlockPayload<SeqTypes> for Payload {
     }
 
     fn empty() -> (Self, Self::Metadata) {
-        let payload = Self::from_transactions_sync(vec![], Default::default(), &Default::default())
+        let payload = Self::from_transactions_sync(vec![], Default::default())
             .unwrap()
             .0;
 

@@ -1,9 +1,7 @@
-use std::{str::FromStr as _, time::Duration};
+use std::time::Duration;
 
-use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use clap::Parser;
-use cld::ClDuration;
-use es_version::SEQUENCER_VERSION;
+use espresso_types::parse_duration;
 use ethers::{
     providers::{Http, Middleware, Provider},
     signers::{coins_bip39::English, MnemonicBuilder, Signer},
@@ -11,8 +9,9 @@ use ethers::{
 };
 use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
 use hotshot_state_prover::service::{run_prover_once, run_prover_service, StateProverConfig};
-use snafu::Snafu;
+use sequencer_utils::logging;
 use url::Url;
+use vbs::version::StaticVersion;
 
 #[derive(Parser)]
 struct Args {
@@ -78,27 +77,15 @@ struct Args {
     /// Stake table capacity for the prover circuit
     #[clap(short, long, env = "ESPRESSO_SEQUENCER_STAKE_TABLE_CAPACITY", default_value_t = STAKE_TABLE_CAPACITY)]
     pub stake_table_capacity: usize,
+
+    #[clap(flatten)]
+    logging: logging::Config,
 }
 
-#[derive(Clone, Debug, Snafu)]
-pub struct ParseDurationError {
-    reason: String,
-}
-
-fn parse_duration(s: &str) -> Result<Duration, ParseDurationError> {
-    ClDuration::from_str(s)
-        .map(Duration::from)
-        .map_err(|err| ParseDurationError {
-            reason: err.to_string(),
-        })
-}
-
-#[async_std::main]
+#[tokio::main]
 async fn main() {
-    setup_logging();
-    setup_backtrace();
-
     let args = Args::parse();
+    args.logging.init();
 
     // prepare config for state prover from user options
     let provider = Provider::<Http>::try_from(args.l1_provider.to_string()).unwrap();
@@ -107,9 +94,9 @@ async fn main() {
         relay_server: args.relay_server,
         update_interval: args.update_interval,
         retry_interval: args.retry_interval,
-        l1_provider: args.l1_provider,
+        provider: args.l1_provider,
         light_client_address: args.light_client_address,
-        eth_signing_key: MnemonicBuilder::<English>::default()
+        signing_key: MnemonicBuilder::<English>::default()
             .phrase(args.eth_mnemonic.as_str())
             .index(args.eth_account_index)
             .expect("error building wallet")
@@ -118,19 +105,23 @@ async fn main() {
             .with_chain_id(chain_id)
             .signer()
             .clone(),
+
         sequencer_url: args.sequencer_url,
         port: args.port,
         stake_table_capacity: args.stake_table_capacity,
     };
 
+    // validate that the light client contract is a proxy, panics otherwise
+    config.validate_light_client_contract().await.unwrap();
+
     if args.daemon {
         // Launching the prover service daemon
-        if let Err(err) = run_prover_service(config, SEQUENCER_VERSION).await {
+        if let Err(err) = run_prover_service(config, StaticVersion::<0, 1> {}).await {
             tracing::error!("Error running prover service: {:?}", err);
         };
     } else {
         // Run light client state update once
-        if let Err(err) = run_prover_once(config, SEQUENCER_VERSION).await {
+        if let Err(err) = run_prover_once(config, StaticVersion::<0, 1> {}).await {
             tracing::error!("Error running prover once: {:?}", err);
         };
     }

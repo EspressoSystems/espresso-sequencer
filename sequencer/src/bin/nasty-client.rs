@@ -12,6 +12,35 @@
 //! provides a healthcheck endpoint as well as a prometheus endpoint which provides metrics like the
 //! count of various types of actions performed and the number of open streams.
 
+use anyhow::{bail, ensure, Context};
+use async_lock::RwLock;
+use clap::Parser;
+use committable::Committable;
+use derivative::Derivative;
+use espresso_types::{
+    parse_duration, v0_99::IterableFeeInfo, BlockMerkleTree, FeeMerkleTree, Header, SeqTypes,
+};
+use futures::{
+    future::{FutureExt, TryFuture, TryFutureExt},
+    stream::{Peekable, StreamExt},
+};
+use hotshot_query_service::{
+    availability::{self, BlockQueryData, LeafQueryData, PayloadQueryData, VidCommonQueryData},
+    metrics::PrometheusMetrics,
+    node::TimeWindowQueryData,
+    types::HeightIndexed,
+};
+use hotshot_types::traits::{
+    block_contents::BlockHeader,
+    metrics::{Counter, Gauge, Histogram, Metrics as _},
+};
+use jf_merkle_tree::{
+    ForgetableMerkleTreeScheme, MerkleCommitment, MerkleTreeScheme, UniversalMerkleTreeScheme,
+};
+use rand::{seq::SliceRandom, RngCore};
+use sequencer::{api::endpoints::NamespaceProofQueryData, SequencerApiVersion};
+use sequencer_utils::logging;
+use serde::de::DeserializeOwned;
 use std::{
     borrow::Cow,
     collections::{BTreeMap, HashMap},
@@ -20,40 +49,14 @@ use std::{
     sync::Arc,
     time::{Duration, Instant},
 };
-
-use anyhow::{bail, ensure, Context};
-use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
-use async_std::{
-    sync::RwLock,
-    task::{sleep, spawn},
-};
-use clap::Parser;
-use committable::Committable;
-use derivative::Derivative;
-use es_version::{SequencerVersion, SEQUENCER_VERSION};
-use espresso_types::{BlockMerkleTree, FeeMerkleTree, Header, SeqTypes};
-use futures::{
-    future::{FutureExt, TryFuture, TryFutureExt},
-    stream::{Peekable, StreamExt},
-};
-use hotshot_query_service::{
-    availability::{BlockQueryData, LeafQueryData, PayloadQueryData, VidCommonQueryData},
-    metrics::PrometheusMetrics,
-    node::TimeWindowQueryData,
-};
-use hotshot_types::traits::metrics::{Counter, Gauge, Histogram, Metrics as _};
-use jf_merkle_tree::{
-    ForgetableMerkleTreeScheme, MerkleCommitment, MerkleTreeScheme, UniversalMerkleTreeScheme,
-};
-use rand::{seq::SliceRandom, RngCore};
-use sequencer::{api::endpoints::NamespaceProofQueryData, options::parse_duration};
-use serde::de::DeserializeOwned;
 use strum::{EnumDiscriminants, VariantArray};
 use surf_disco::{error::ClientError, socket, Error, StatusCode, Url};
 use tide_disco::{error::ServerError, App};
 use time::OffsetDateTime;
+use tokio::{task::spawn, time::sleep};
 use toml::toml;
 use tracing::info_span;
+use vbs::version::StaticVersionType;
 
 /// An adversarial stress test for sequencer APIs.
 #[derive(Clone, Debug, Parser)]
@@ -76,6 +79,9 @@ struct Options {
 
     #[clap(flatten)]
     distribution: ActionDistribution,
+
+    #[clap(flatten)]
+    logging: logging::Config,
 }
 
 #[derive(Clone, Copy, Debug, Parser)]
@@ -161,6 +167,14 @@ struct ActionDistribution {
     #[clap(long, env = "ESPRESSO_NASTY_CLIENT_WEIGHT_QUERY", default_value = "20")]
     weight_query: u8,
 
+    /// The weight of query range actions in the random distribution.
+    #[clap(
+        long,
+        env = "ESPRESSO_NASTY_CLIENT_WEIGHT_QUERY_RANGE",
+        default_value = "10"
+    )]
+    weight_query_range: u8,
+
     /// The weight of "open stream" actions in the random distribution.
     #[clap(
         long,
@@ -222,6 +236,7 @@ impl ActionDistribution {
     fn weight(&self, action: ActionDiscriminants) -> u8 {
         match action {
             ActionDiscriminants::Query => self.weight_query,
+            ActionDiscriminants::QueryRange => self.weight_query_range,
             ActionDiscriminants::OpenStream => self.weight_open_stream,
             ActionDiscriminants::CloseStream => self.weight_close_stream,
             ActionDiscriminants::PollStream => self.weight_poll_stream,
@@ -237,6 +252,7 @@ impl ActionDistribution {
 struct Metrics {
     open_streams: HashMap<Resource, Box<dyn Gauge>>,
     query_actions: HashMap<Resource, Box<dyn Counter>>,
+    query_range_actions: HashMap<Resource, Box<dyn Counter>>,
     open_stream_actions: HashMap<Resource, Box<dyn Counter>>,
     close_stream_actions: HashMap<Resource, Box<dyn Counter>>,
     poll_stream_actions: HashMap<Resource, Box<dyn Counter>>,
@@ -269,6 +285,18 @@ impl Metrics {
                         *resource,
                         registry
                             .create_counter(format!("{}_query_actions", resource.singular()), None),
+                    )
+                })
+                .collect(),
+            query_range_actions: Resource::VARIANTS
+                .iter()
+                .map(|resource| {
+                    (
+                        *resource,
+                        registry.create_counter(
+                            format!("{}_query_range_actions", resource.singular()),
+                            None,
+                        ),
                     )
                 })
                 .collect(),
@@ -337,6 +365,10 @@ trait Queryable: DeserializeOwned + Debug + Eq {
     /// This may be none if the resource does not support fetching by payload hash.
     const PAYLOAD_HASH_URL_SEGMENT: Option<&'static str>;
 
+    /// Does this object use the large object limit for range queries?
+    const IS_LARGE_OBJECT: bool;
+
+    fn height(&self) -> usize;
     fn hash(&self) -> String;
     fn payload_hash(&self) -> String;
 }
@@ -345,6 +377,11 @@ impl Queryable for BlockQueryData<SeqTypes> {
     const RESOURCE: Resource = Resource::Blocks;
     const HASH_URL_SEGMENT: &'static str = "hash";
     const PAYLOAD_HASH_URL_SEGMENT: Option<&'static str> = Some("payload-hash");
+    const IS_LARGE_OBJECT: bool = true;
+
+    fn height(&self) -> usize {
+        HeightIndexed::height(self) as usize
+    }
 
     fn hash(&self) -> String {
         self.hash().to_string()
@@ -359,6 +396,11 @@ impl Queryable for LeafQueryData<SeqTypes> {
     const RESOURCE: Resource = Resource::Leaves;
     const HASH_URL_SEGMENT: &'static str = "hash";
     const PAYLOAD_HASH_URL_SEGMENT: Option<&'static str> = None;
+    const IS_LARGE_OBJECT: bool = false;
+
+    fn height(&self) -> usize {
+        HeightIndexed::height(self) as usize
+    }
 
     fn hash(&self) -> String {
         self.hash().to_string()
@@ -373,6 +415,11 @@ impl Queryable for Header {
     const RESOURCE: Resource = Resource::Headers;
     const HASH_URL_SEGMENT: &'static str = "hash";
     const PAYLOAD_HASH_URL_SEGMENT: Option<&'static str> = Some("payload-hash");
+    const IS_LARGE_OBJECT: bool = true;
+
+    fn height(&self) -> usize {
+        self.block_number() as usize
+    }
 
     fn hash(&self) -> String {
         self.commit().to_string()
@@ -387,6 +434,11 @@ impl Queryable for PayloadQueryData<SeqTypes> {
     const RESOURCE: Resource = Resource::Payloads;
     const HASH_URL_SEGMENT: &'static str = "block-hash";
     const PAYLOAD_HASH_URL_SEGMENT: Option<&'static str> = Some("hash");
+    const IS_LARGE_OBJECT: bool = true;
+
+    fn height(&self) -> usize {
+        HeightIndexed::height(self) as usize
+    }
 
     fn hash(&self) -> String {
         self.block_hash().to_string()
@@ -397,7 +449,7 @@ impl Queryable for PayloadQueryData<SeqTypes> {
     }
 }
 
-type Connection<T> = socket::Connection<T, socket::Unsupported, ClientError, SequencerVersion>;
+type Connection<T> = socket::Connection<T, socket::Unsupported, ClientError, SequencerApiVersion>;
 
 #[derive(Derivative)]
 #[derivative(Debug)]
@@ -410,7 +462,7 @@ struct Subscription<T: Queryable> {
 
 #[derive(Debug)]
 struct ResourceManager<T: Queryable> {
-    client: surf_disco::Client<ClientError, SequencerVersion>,
+    client: surf_disco::Client<ClientError, SequencerApiVersion>,
     open_streams: BTreeMap<u64, Subscription<T>>,
     next_stream_id: u64,
     metrics: Arc<Metrics>,
@@ -586,6 +638,55 @@ impl<T: Queryable> ResourceManager<T> {
         }
 
         self.metrics.query_actions[&T::RESOURCE].add(1);
+        Ok(())
+    }
+
+    async fn query_range(&mut self, from: u64, len: u16) -> anyhow::Result<()> {
+        let from = self.adjust_index(from).await? as usize;
+        let limits = self
+            .get::<availability::Limits>("availability/limits")
+            .await?;
+        let limit = if T::IS_LARGE_OBJECT {
+            limits.large_object_range_limit
+        } else {
+            limits.small_object_range_limit
+        };
+
+        // Adjust `len`, 10% of the time query above the limit for this type (so the query fails);
+        // the rest of the time query a valid range.
+        let max_len = limit * 11 / 10;
+        let to = self
+            .adjust_index(from as u64 + (len as u64) % (max_len as u64))
+            .await? as usize;
+        match self
+            .get::<Vec<T>>(format!("availability/{}/{from}/{to}", Self::singular()))
+            .await
+        {
+            Ok(range) => {
+                ensure!(to - from <= limit, "range endpoint succeeded and returned {} results for request over limit; limit: {limit} from: {from} to: {to}", range.len());
+                ensure!(range.len() == to - from, "range endpoint returned wrong number of results; from: {from} to: {to} results: {}", range.len());
+                for (i, obj) in range.iter().enumerate() {
+                    ensure!(
+                        obj.height() == from + i,
+                        "object in range has wrong height; from: {from} to: {to} i: {i} height: {}",
+                        obj.height()
+                    );
+                }
+            }
+            Err(_) if to - from > limit => {
+                tracing::info!(
+                    limit,
+                    from,
+                    to,
+                    "range query exceeding limit failed as expected"
+                );
+            }
+            Err(err) => {
+                return Err(err).context("error in range query");
+            }
+        }
+
+        self.metrics.query_range_actions[&T::RESOURCE].add(1);
         Ok(())
     }
 
@@ -929,7 +1030,10 @@ impl ResourceManager<Header> {
                     .await
             })
             .await?;
-        let builder_address = builder_header.fee_info().account();
+
+        // Since we have multiple fee accounts, we need to select one.
+        let accounts = builder_header.fee_info().accounts();
+        let builder_address = accounts.first().unwrap();
 
         // Get the header of the state snapshot we're going to query so we can later verify our
         // results.
@@ -1099,6 +1203,11 @@ enum Action {
         resource: Resource,
         at: u64,
     },
+    QueryRange {
+        resource: Resource,
+        from: u64,
+        len: u16,
+    },
     OpenStream {
         resource: Resource,
         from: u64,
@@ -1141,6 +1250,11 @@ impl Action {
             ActionDiscriminants::Query => Self::Query {
                 resource: Resource::random(rng),
                 at: rng.next_u64(),
+            },
+            ActionDiscriminants::QueryRange => Self::QueryRange {
+                resource: Resource::random(rng),
+                from: rng.next_u64(),
+                len: (rng.next_u32() % u16::MAX as u32) as u16,
             },
             ActionDiscriminants::OpenStream => Self::OpenStream {
                 resource: Resource::random(rng),
@@ -1204,6 +1318,16 @@ impl Client {
                 Resource::Headers => self.headers.query(at).await,
                 Resource::Payloads => self.payloads.query(at).await,
             },
+            Action::QueryRange {
+                resource,
+                from,
+                len,
+            } => match resource {
+                Resource::Blocks => self.blocks.query_range(from, len).await,
+                Resource::Leaves => self.leaves.query_range(from, len).await,
+                Resource::Headers => self.headers.query_range(from, len).await,
+                Resource::Payloads => self.payloads.query_range(from, len).await,
+            },
             Action::OpenStream { resource, from } => match resource {
                 Resource::Blocks => self.blocks.open_stream(from).await,
                 Resource::Leaves => self.leaves.open_stream(from).await,
@@ -1252,26 +1376,25 @@ async fn serve(port: u16, metrics: PrometheusMetrics) {
         METHOD = "METRICS"
     };
     let mut app = App::<_, ServerError>::with_state(RwLock::new(metrics));
-    app.module::<ServerError, SequencerVersion>("status", api)
+    app.module::<ServerError, SequencerApiVersion>("status", api)
         .unwrap()
         .metrics("metrics", |_req, state| {
             async move { Ok(Cow::Borrowed(state)) }.boxed()
         })
         .unwrap();
     if let Err(err) = app
-        .serve(format!("0.0.0.0:{port}"), SEQUENCER_VERSION)
+        .serve(format!("0.0.0.0:{port}"), SequencerApiVersion::instance())
         .await
     {
         tracing::error!("web server exited unexpectedly: {err:#}");
     }
 }
 
-#[async_std::main]
+#[tokio::main]
 async fn main() {
-    setup_logging();
-    setup_backtrace();
-
     let opt = Options::parse();
+    opt.logging.init();
+
     let metrics = PrometheusMetrics::default();
     let total_actions = metrics.create_counter("total_actions".into(), None);
     let failed_actions = metrics.create_counter("failed_actions".into(), None);

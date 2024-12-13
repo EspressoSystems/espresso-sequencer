@@ -13,18 +13,17 @@ contract LightClientMock is LC {
     bool internal hotShotDown;
     uint256 internal frozenL1Height;
 
-    constructor(LC.LightClientState memory genesis, uint32 numBlockPerEpoch) LC() {
-        _initializeState(genesis, numBlockPerEpoch);
+    constructor(
+        LC.LightClientState memory genesis,
+        LC.StakeTableState memory genesisStakeTableState,
+        uint32 maxHistorySeconds
+    ) LC() {
+        _initializeState(genesis, genesisStakeTableState, maxHistorySeconds);
     }
 
-    /// @dev Directly mutate `currentEpoch` variable for test
-    function setCurrentEpoch(uint64 newEpoch) public {
-        currentEpoch = newEpoch;
-    }
-
-    /// @dev Directly mutate `finalizedState` variable for test
+    /// @dev Directly mutate finalizedState variable for test
     function setFinalizedState(LC.LightClientState memory state) public {
-        states[finalizedState] = state;
+        finalizedState = state;
     }
 
     /// @dev override the production-implementation with test VK.
@@ -36,36 +35,27 @@ contract LightClientMock is LC {
         IPlonkVerifier.VerifyingKey memory vk = VkLib.getVk();
 
         // Prepare the public input
-        uint256[] memory publicInput = new uint256[](8);
-        publicInput[0] = votingThreshold;
-        publicInput[1] = uint256(state.viewNum);
-        publicInput[2] = uint256(state.blockHeight);
-        publicInput[3] = BN254.ScalarField.unwrap(state.blockCommRoot);
-        publicInput[4] = BN254.ScalarField.unwrap(state.feeLedgerComm);
-        publicInput[5] = BN254.ScalarField.unwrap(states[finalizedState].stakeTableBlsKeyComm);
-        publicInput[6] = BN254.ScalarField.unwrap(states[finalizedState].stakeTableSchnorrKeyComm);
-        publicInput[7] = BN254.ScalarField.unwrap(states[finalizedState].stakeTableAmountComm);
+        uint256[7] memory publicInput;
+        publicInput[0] = uint256(state.viewNum);
+        publicInput[1] = uint256(state.blockHeight);
+        publicInput[2] = BN254.ScalarField.unwrap(state.blockCommRoot);
+        publicInput[3] = BN254.ScalarField.unwrap(genesisStakeTableState.blsKeyComm);
+        publicInput[4] = BN254.ScalarField.unwrap(genesisStakeTableState.schnorrKeyComm);
+        publicInput[5] = BN254.ScalarField.unwrap(genesisStakeTableState.amountComm);
+        publicInput[6] = genesisStakeTableState.threshold;
 
         if (!PlonkVerifier.verify(vk, publicInput, proof)) {
             revert InvalidProof();
         }
     }
 
-    function setStateUpdateBlockNumbers(uint256[] memory values) public {
-        // Empty the array
-        delete stateUpdateBlockNumbers;
+    function setStateHistory(StateHistoryCommitment[] memory _stateHistoryCommitments) public {
+        // delete the previous stateHistoryCommitments
+        delete stateHistoryCommitments;
 
-        // Set the stateUpdateBlockNumbers to the new values
-        stateUpdateBlockNumbers = values;
-    }
-
-    function setHotShotCommitments(HotShotCommitment[] memory values) public {
-        // Empty the array
-        delete hotShotCommitments;
-
-        // Set the hotShotCommitments to the new values
-        for (uint256 i = 0; i < values.length; i++) {
-            hotShotCommitments.push(values[i]);
+        // Set the stateHistoryCommitments to the new values
+        for (uint256 i = 0; i < _stateHistoryCommitments.length; i++) {
+            stateHistoryCommitments.push(_stateHistoryCommitments[i]);
         }
     }
 
@@ -85,9 +75,8 @@ contract LightClientMock is LC {
         override
         returns (bool)
     {
-        if (hotShotDown) {
-            return blockNumber - frozenL1Height > threshold;
-        }
-        return super.lagOverEscapeHatchThreshold(blockNumber, threshold);
+        return hotShotDown
+            ? blockNumber - frozenL1Height > threshold
+            : super.lagOverEscapeHatchThreshold(blockNumber, threshold);
     }
 }

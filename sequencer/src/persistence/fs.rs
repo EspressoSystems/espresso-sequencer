@@ -1,29 +1,38 @@
+use anyhow::{anyhow, Context};
+use async_lock::RwLock;
+use async_trait::async_trait;
+use clap::Parser;
+use espresso_types::{
+    v0::traits::{EventConsumer, PersistenceOptions, SequencerPersistence},
+    Leaf, Leaf2, NetworkConfig, Payload, SeqTypes,
+};
+use hotshot_types::{
+    consensus::CommitmentMap,
+    data::{DaProposal, QuorumProposal, QuorumProposal2, VidDisperseShare},
+    event::{Event, EventType, HotShotAction, LeafInfo},
+    message::{convert_proposal, Proposal},
+    simple_certificate::{QuorumCertificate, QuorumCertificate2, UpgradeCertificate},
+    traits::{
+        block_contents::{BlockHeader, BlockPayload},
+        node_implementation::ConsensusTime,
+    },
+    utils::View,
+    vid::VidSchemeType,
+    vote::HasViewNumber,
+};
+use jf_vid::VidScheme;
+use std::sync::Arc;
 use std::{
     collections::BTreeMap,
     fs::{self, File, OpenOptions},
     io::{Read, Seek, SeekFrom, Write},
+    ops::RangeInclusive,
     path::{Path, PathBuf},
 };
 
-use anyhow::{anyhow, Context};
-use async_trait::async_trait;
-use clap::Parser;
-use espresso_types::{
-    v0::traits::{PersistenceOptions, SequencerPersistence},
-    Leaf, NetworkConfig, SeqTypes,
-};
-use hotshot_types::{
-    consensus::CommitmentMap,
-    data::{DaProposal, QuorumProposal, VidDisperseShare},
-    event::HotShotAction,
-    message::Proposal,
-    simple_certificate::QuorumCertificate,
-    traits::node_implementation::ConsensusTime,
-    utils::View,
-    vote::HasViewNumber,
-};
-
 use crate::ViewNumber;
+
+use espresso_types::{downgrade_commitment_map, downgrade_leaf, upgrade_commitment_map};
 
 /// Options for file system backed persistence.
 #[derive(Parser, Clone, Debug)]
@@ -34,6 +43,24 @@ pub struct Options {
 
     #[clap(long, env = "ESPRESSO_SEQUENCER_STORE_UNDECIDED_STATE", hide = true)]
     store_undecided_state: bool,
+
+    /// Number of views to retain in consensus storage before data that hasn't been archived is
+    /// garbage collected.
+    ///
+    /// The longer this is, the more certain that all data will eventually be archived, even if
+    /// there are temporary problems with archive storage or partially missing data. This can be set
+    /// very large, as most data is garbage collected as soon as it is finalized by consensus. This
+    /// setting only applies to views which never get decided (ie forks in consensus) and views for
+    /// which this node is partially offline. These should be exceptionally rare.
+    ///
+    /// The default of 130000 views equates to approximately 3 days (259200 seconds) at an average
+    /// view time of 2s.
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_CONSENSUS_VIEW_RETENTION",
+        default_value = "130000"
+    )]
+    pub(crate) consensus_view_retention: u64,
 }
 
 impl Default for Options {
@@ -47,6 +74,7 @@ impl Options {
         Self {
             path,
             store_undecided_state: false,
+            consensus_view_retention: 130000,
         }
     }
 
@@ -59,10 +87,21 @@ impl Options {
 impl PersistenceOptions for Options {
     type Persistence = Persistence;
 
-    async fn create(self) -> anyhow::Result<Persistence> {
+    fn set_view_retention(&mut self, view_retention: u64) {
+        self.consensus_view_retention = view_retention;
+    }
+
+    async fn create(&mut self) -> anyhow::Result<Self::Persistence> {
+        let path = self.path.clone();
+        let store_undecided_state = self.store_undecided_state;
+        let view_retention = self.consensus_view_retention;
+
         Ok(Persistence {
-            path: self.path,
-            store_undecided_state: self.store_undecided_state,
+            store_undecided_state,
+            inner: Arc::new(RwLock::new(Inner {
+                path,
+                view_retention,
+            })),
         })
     }
 
@@ -74,11 +113,21 @@ impl PersistenceOptions for Options {
 /// File system backed persistence.
 #[derive(Clone, Debug)]
 pub struct Persistence {
-    path: PathBuf,
     store_undecided_state: bool,
+
+    // We enforce mutual exclusion on access to the data source, as the current file system
+    // implementation does not support transaction isolation for concurrent reads and writes. We can
+    // improve this in the future by switching to a SQLite-based file system implementation.
+    inner: Arc<RwLock<Inner>>,
 }
 
-impl Persistence {
+#[derive(Debug)]
+struct Inner {
+    path: PathBuf,
+    view_retention: u64,
+}
+
+impl Inner {
     fn config_path(&self) -> PathBuf {
         self.path.join("hotshot.cfg")
     }
@@ -87,7 +136,13 @@ impl Persistence {
         self.path.join("highest_voted_view")
     }
 
-    fn anchor_leaf_path(&self) -> PathBuf {
+    /// Path to a directory containing decided leaves.
+    fn decided_leaf_path(&self) -> PathBuf {
+        self.path.join("decided_leaves")
+    }
+
+    /// The path from previous versions where there was only a single file for anchor leaves.
+    fn legacy_anchor_leaf_path(&self) -> PathBuf {
         self.path.join("anchor_leaf")
     }
 
@@ -105,6 +160,10 @@ impl Persistence {
 
     fn quorum_proposals_dir_path(&self) -> PathBuf {
         self.path.join("quorum_proposals")
+    }
+
+    fn upgrade_certificate_dir_path(&self) -> PathBuf {
+        self.path.join("upgrade_certificate")
     }
 
     /// Overwrite a file if a condition is met.
@@ -150,146 +209,170 @@ impl Persistence {
 
         Ok(())
     }
-}
 
-#[async_trait]
-impl SequencerPersistence for Persistence {
-    async fn load_config(&self) -> anyhow::Result<Option<NetworkConfig>> {
-        let path = self.config_path();
-        if !path.is_file() {
-            tracing::info!("config not found at {}", path.display());
-            return Ok(None);
-        }
-        tracing::info!("loading config from {}", path.display());
-
-        let bytes =
-            fs::read(&path).context(format!("unable to read config from {}", path.display()))?;
-        let json = serde_json::from_slice(&bytes).context("config file is not valid JSON")?;
-        let json = migrate_network_config(json).context("migration of network config failed")?;
-        let config = serde_json::from_value(json).context("malformed config file")?;
-        Ok(Some(config))
-    }
-
-    async fn save_config(&mut self, cfg: &NetworkConfig) -> anyhow::Result<()> {
-        let path = self.config_path();
-        tracing::info!("saving config to {}", path.display());
-        Ok(cfg.to_file(path.display().to_string())?)
-    }
-
-    async fn collect_garbage(&mut self, view: ViewNumber) -> anyhow::Result<()> {
+    fn collect_garbage(
+        &mut self,
+        view: ViewNumber,
+        intervals: &[RangeInclusive<u64>],
+    ) -> anyhow::Result<()> {
         let view_number = view.u64();
+        let prune_view = view.saturating_sub(self.view_retention);
 
-        let delete_files = |dir_path: PathBuf| -> anyhow::Result<()> {
-            if !dir_path.is_dir() {
-                return Ok(());
-            }
+        let delete_files =
+            |intervals: &[RangeInclusive<u64>], keep, dir_path: PathBuf| -> anyhow::Result<()> {
+                if !dir_path.is_dir() {
+                    return Ok(());
+                }
 
-            for entry in fs::read_dir(dir_path)? {
-                let entry = entry?;
-                let path = entry.path();
+                for entry in fs::read_dir(dir_path)? {
+                    let entry = entry?;
+                    let path = entry.path();
 
-                if let Some(file) = path.file_stem().and_then(|n| n.to_str()) {
-                    if let Ok(v) = file.parse::<u64>() {
-                        if v <= view_number {
-                            fs::remove_file(&path)?;
+                    if let Some(file) = path.file_stem().and_then(|n| n.to_str()) {
+                        if let Ok(v) = file.parse::<u64>() {
+                            // If the view is the anchor view, keep it no matter what.
+                            if let Some(keep) = keep {
+                                if keep == v {
+                                    continue;
+                                }
+                            }
+                            // Otherwise, delete it if it is time to prune this view _or_ if the
+                            // given intervals, which we've already successfully processed, contain
+                            // the view; in this case we simply don't need it anymore.
+                            if v < prune_view || intervals.iter().any(|i| i.contains(&v)) {
+                                fs::remove_file(&path)?;
+                            }
                         }
                     }
                 }
+
+                Ok(())
+            };
+
+        delete_files(intervals, None, self.da_dir_path())?;
+        delete_files(intervals, None, self.vid_dir_path())?;
+        delete_files(intervals, None, self.quorum_proposals_dir_path())?;
+
+        // Save the most recent leaf as it will be our anchor point if the node restarts.
+        delete_files(intervals, Some(view_number), self.decided_leaf_path())?;
+
+        Ok(())
+    }
+
+    /// Generate events based on persisted decided leaves.
+    ///
+    /// Returns a list of closed intervals of views which can be safely deleted, as all leaves
+    /// within these view ranges have been processed by the event consumer.
+    async fn generate_decide_events(
+        &self,
+        view: ViewNumber,
+        consumer: &impl EventConsumer,
+    ) -> anyhow::Result<Vec<RangeInclusive<u64>>> {
+        // Generate a decide event for each leaf, to be processed by the event consumer. We make a
+        // separate event for each leaf because it is possible we have non-consecutive leaves in our
+        // storage, which would not be valid as a single decide with a single leaf chain.
+        let mut leaves = BTreeMap::new();
+        for entry in fs::read_dir(self.decided_leaf_path())? {
+            let entry = entry?;
+            let path = entry.path();
+
+            let Some(file) = path.file_stem().and_then(|n| n.to_str()) else {
+                continue;
+            };
+            let Ok(v) = file.parse::<u64>() else {
+                continue;
+            };
+            if v > view.u64() {
+                continue;
             }
 
-            Ok(())
-        };
+            let bytes =
+                fs::read(&path).context(format!("reading decided leaf {}", path.display()))?;
+            let (mut leaf, qc) =
+                bincode::deserialize::<(Leaf, QuorumCertificate<SeqTypes>)>(&bytes)
+                    .context(format!("parsing decided leaf {}", path.display()))?;
 
-        delete_files(self.da_dir_path())?;
-        delete_files(self.vid_dir_path())?;
-        delete_files(self.quorum_proposals_dir_path())
-    }
+            // Include the VID share if available.
+            let vid_share = self
+                .load_vid_share(ViewNumber::new(v))?
+                .map(|proposal| proposal.data);
+            if vid_share.is_none() {
+                tracing::debug!(view = v, "VID share not available at decide");
+            }
 
-    async fn load_latest_acted_view(&self) -> anyhow::Result<Option<ViewNumber>> {
-        let path = self.voted_view_path();
-        if !path.is_file() {
-            return Ok(None);
+            // Fill in the full block payload using the DA proposals we had persisted.
+            if let Some(proposal) = self.load_da_proposal(ViewNumber::new(v))? {
+                let payload = Payload::from_bytes(
+                    &proposal.data.encoded_transactions,
+                    &proposal.data.metadata,
+                );
+                leaf.fill_block_payload_unchecked(payload);
+            } else {
+                tracing::debug!(view = v, "DA proposal not available at decide");
+            }
+
+            let info = LeafInfo {
+                leaf: leaf.into(),
+                vid_share,
+
+                // Note: the following fields are not used in Decide event processing, and should be
+                // removed. For now, we just default them.
+                state: Default::default(),
+                delta: Default::default(),
+            };
+
+            leaves.insert(v, (info, qc));
         }
-        let bytes = fs::read(self.voted_view_path())?
-            .try_into()
-            .map_err(|bytes| anyhow!("malformed voted view file: {bytes:?}"))?;
-        Ok(Some(ViewNumber::new(u64::from_le_bytes(bytes))))
-    }
 
-    async fn save_anchor_leaf(
-        &mut self,
-        leaf: &Leaf,
-        qc: &QuorumCertificate<SeqTypes>,
-    ) -> anyhow::Result<()> {
-        self.replace(
-            &self.anchor_leaf_path(),
-            |mut file| {
-                // Check if we already have a later leaf before writing the new one. The height of
-                // the latest saved leaf is in the first 8 bytes of the file.
-                if file.metadata()?.len() < 8 {
-                    // This shouldn't happen, but if there is an existing file smaller than 8 bytes,
-                    // it is not encoding a valid height, and we want to proceed with the swap.
-                    tracing::warn!("anchor leaf file smaller than 8 bytes will be replaced");
-                    return Ok(true);
+        // The invariant is that the oldest existing leaf in the `anchor_leaf` table -- if there is
+        // one -- was always included in the _previous_ decide event...but not removed from the
+        // database, because we always persist the most recent anchor leaf.
+        if let Some((oldest_view, _)) = leaves.first_key_value() {
+            // The only exception is when the oldest leaf is the genesis leaf; then there was no
+            // previous decide event.
+            if *oldest_view > 0 {
+                leaves.pop_first();
+            }
+        }
+
+        let mut intervals = vec![];
+        let mut current_interval = None;
+        for (view, (leaf, qc)) in leaves {
+            let height = leaf.leaf.block_header().block_number();
+            consumer
+                .handle_event(&Event {
+                    view_number: ViewNumber::new(view),
+                    event: EventType::Decide {
+                        qc: Arc::new(qc.to_qc2()),
+                        leaf_chain: Arc::new(vec![leaf]),
+                        block_size: None,
+                    },
+                })
+                .await?;
+            if let Some((start, end, current_height)) = current_interval.as_mut() {
+                if height == *current_height + 1 {
+                    // If we have a chain of consecutive leaves, extend the current interval of
+                    // views which are safe to delete.
+                    *current_height += 1;
+                    *end = view;
+                } else {
+                    // Otherwise, end the current interval and start a new one.
+                    intervals.push(*start..=*end);
+                    current_interval = Some((view, view, height));
                 }
-                let mut height_bytes = [0; 8];
-                file.read_exact(&mut height_bytes).context("read height")?;
-                let height = u64::from_le_bytes(height_bytes);
-                if height >= leaf.height() {
-                    tracing::warn!(
-                        saved_height = height,
-                        new_height = leaf.height(),
-                        "not writing anchor leaf because saved leaf has newer height",
-                    );
-                    return Ok(false);
-                }
-
-                // The existing leaf is older than the new leaf (this is the common case). Proceed
-                // with the swap.
-                Ok(true)
-            },
-            |mut file| {
-                // Save the new leaf. First we write the height.
-                file.write_all(&leaf.height().to_le_bytes())
-                    .context("write height")?;
-                // Now serialize and write out the actual leaf and its corresponding QC.
-                let bytes = bincode::serialize(&(leaf, qc)).context("serialize leaf")?;
-                file.write_all(&bytes).context("write leaf")?;
-                Ok(())
-            },
-        )
-    }
-
-    async fn load_anchor_leaf(
-        &self,
-    ) -> anyhow::Result<Option<(Leaf, QuorumCertificate<SeqTypes>)>> {
-        let path = self.anchor_leaf_path();
-        if !path.is_file() {
-            return Ok(None);
+            } else {
+                // Start a new interval.
+                current_interval = Some((view, view, height));
+            }
         }
-        let mut file = File::open(path)?;
-
-        // The first 8 bytes just contain the height of the leaf. We can skip this.
-        file.seek(SeekFrom::Start(8)).context("seek")?;
-        let bytes = file
-            .bytes()
-            .collect::<Result<Vec<_>, _>>()
-            .context("read")?;
-        Ok(Some(bincode::deserialize(&bytes).context("deserialize")?))
-    }
-
-    async fn load_undecided_state(
-        &self,
-    ) -> anyhow::Result<Option<(CommitmentMap<Leaf>, BTreeMap<ViewNumber, View<SeqTypes>>)>> {
-        let path = self.undecided_state_path();
-        if !path.is_file() {
-            return Ok(None);
+        if let Some((start, end, _)) = current_interval {
+            intervals.push(start..=end);
         }
-        let bytes = fs::read(&path).context("read")?;
-        Ok(Some(bincode::deserialize(&bytes).context("deserialize")?))
+
+        Ok(intervals)
     }
 
-    async fn load_da_proposal(
+    fn load_da_proposal(
         &self,
         view: ViewNumber,
     ) -> anyhow::Result<Option<Proposal<SeqTypes, DaProposal<SeqTypes>>>> {
@@ -308,7 +391,7 @@ impl SequencerPersistence for Persistence {
         Ok(Some(da_proposal))
     }
 
-    async fn load_vid_share(
+    fn load_vid_share(
         &self,
         view: ViewNumber,
     ) -> anyhow::Result<Option<Proposal<SeqTypes, VidDisperseShare<SeqTypes>>>> {
@@ -326,17 +409,210 @@ impl SequencerPersistence for Persistence {
         Ok(Some(vid_share))
     }
 
+    fn load_anchor_leaf(&self) -> anyhow::Result<Option<(Leaf2, QuorumCertificate2<SeqTypes>)>> {
+        if self.decided_leaf_path().is_dir() {
+            let mut anchor: Option<(Leaf2, QuorumCertificate2<SeqTypes>)> = None;
+
+            // Return the latest decided leaf.
+            for entry in
+                fs::read_dir(self.decided_leaf_path()).context("opening decided leaf directory")?
+            {
+                let file = entry.context("reading decided leaf directory")?.path();
+                let bytes =
+                    fs::read(&file).context(format!("reading decided leaf {}", file.display()))?;
+                let (leaf, qc) =
+                    bincode::deserialize::<(Leaf, QuorumCertificate<SeqTypes>)>(&bytes)
+                        .context(format!("parsing decided leaf {}", file.display()))?;
+                if let Some((anchor_leaf, _)) = &anchor {
+                    if leaf.view_number() > anchor_leaf.view_number() {
+                        let leaf2 = leaf.into();
+                        let qc2 = qc.to_qc2();
+                        anchor = Some((leaf2, qc2));
+                    }
+                } else {
+                    let leaf2 = leaf.into();
+                    let qc2 = qc.to_qc2();
+                    anchor = Some((leaf2, qc2));
+                }
+            }
+
+            return Ok(anchor);
+        }
+
+        if self.legacy_anchor_leaf_path().is_file() {
+            // We may have an old version of storage, where there is just a single file for the
+            // anchor leaf. Read it and return the contents.
+            let mut file = File::open(self.legacy_anchor_leaf_path())?;
+
+            // The first 8 bytes just contain the height of the leaf. We can skip this.
+            file.seek(SeekFrom::Start(8)).context("seek")?;
+            let bytes = file
+                .bytes()
+                .collect::<Result<Vec<_>, _>>()
+                .context("read")?;
+            return Ok(Some(bincode::deserialize(&bytes).context("deserialize")?));
+        }
+
+        Ok(None)
+    }
+}
+
+#[async_trait]
+impl SequencerPersistence for Persistence {
+    async fn load_config(&self) -> anyhow::Result<Option<NetworkConfig>> {
+        let inner = self.inner.read().await;
+        let path = inner.config_path();
+        if !path.is_file() {
+            tracing::info!("config not found at {}", path.display());
+            return Ok(None);
+        }
+        tracing::info!("loading config from {}", path.display());
+
+        let bytes =
+            fs::read(&path).context(format!("unable to read config from {}", path.display()))?;
+        let json = serde_json::from_slice(&bytes).context("config file is not valid JSON")?;
+        let json = migrate_network_config(json).context("migration of network config failed")?;
+        let config = serde_json::from_value(json).context("malformed config file")?;
+        Ok(Some(config))
+    }
+
+    async fn save_config(&self, cfg: &NetworkConfig) -> anyhow::Result<()> {
+        let inner = self.inner.write().await;
+        let path = inner.config_path();
+        tracing::info!("saving config to {}", path.display());
+        Ok(cfg.to_file(path.display().to_string())?)
+    }
+
+    async fn load_latest_acted_view(&self) -> anyhow::Result<Option<ViewNumber>> {
+        let inner = self.inner.read().await;
+        let path = inner.voted_view_path();
+        if !path.is_file() {
+            return Ok(None);
+        }
+        let bytes = fs::read(inner.voted_view_path())?
+            .try_into()
+            .map_err(|bytes| anyhow!("malformed voted view file: {bytes:?}"))?;
+        Ok(Some(ViewNumber::new(u64::from_le_bytes(bytes))))
+    }
+
+    async fn append_decided_leaves(
+        &self,
+        view: ViewNumber,
+        leaf_chain: impl IntoIterator<Item = (&LeafInfo<SeqTypes>, QuorumCertificate2<SeqTypes>)> + Send,
+        consumer: &impl EventConsumer,
+    ) -> anyhow::Result<()> {
+        let mut inner = self.inner.write().await;
+        let path = inner.decided_leaf_path();
+
+        // Ensure the anchor leaf directory exists.
+        fs::create_dir_all(&path).context("creating anchor leaf directory")?;
+
+        // Earlier versions stored only a single decided leaf in a regular file. If our storage is
+        // still on this version, migrate to a directory structure storing (possibly) many leaves.
+        let legacy_path = inner.legacy_anchor_leaf_path();
+        if !path.is_dir() && legacy_path.is_file() {
+            tracing::info!("migrating to multi-leaf storage");
+
+            // Move the existing data into the new directory.
+            let (leaf, qc) = inner
+                .load_anchor_leaf()?
+                .context("anchor leaf file exists but unable to load contents")?;
+            let view = leaf.view_number().u64();
+            let bytes = bincode::serialize(&(leaf, qc))?;
+            let new_file = path.join(view.to_string()).with_extension("txt");
+            fs::write(new_file, bytes).context(format!("writing anchor leaf file {view}"))?;
+
+            // Now we can remove the old file.
+            fs::remove_file(&legacy_path).context("removing legacy anchor leaf file")?;
+        }
+
+        for (info, qc2) in leaf_chain {
+            let view = info.leaf.view_number().u64();
+            let file_path = path.join(view.to_string()).with_extension("txt");
+            inner.replace(
+                &file_path,
+                |_| {
+                    // Don't overwrite an existing leaf, but warn about it as this is likely not
+                    // intended behavior from HotShot.
+                    tracing::warn!(view, "duplicate decided leaf");
+                    Ok(false)
+                },
+                |mut file| {
+                    let leaf = downgrade_leaf(info.leaf.clone());
+                    let qc = qc2.to_qc();
+                    let bytes = bincode::serialize(&(&leaf, qc))?;
+                    file.write_all(&bytes)?;
+                    Ok(())
+                },
+            )?;
+        }
+
+        match inner.generate_decide_events(view, consumer).await {
+            Err(err) => {
+                // Event processing failure is not an error, since by this point we have at least
+                // managed to persist the decided leaves successfully, and the event processing will
+                // just run again at the next decide.
+                tracing::warn!(?view, "event processing failed: {err:#}");
+            }
+            Ok(intervals) => {
+                if let Err(err) = inner.collect_garbage(view, &intervals) {
+                    // Similarly, garbage collection is not an error. We have done everything we
+                    // strictly needed to do, and GC will run again at the next decide. Log the
+                    // error but do not return it.
+                    tracing::warn!(?view, "GC failed: {err:#}");
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn load_anchor_leaf(
+        &self,
+    ) -> anyhow::Result<Option<(Leaf2, QuorumCertificate2<SeqTypes>)>> {
+        self.inner.read().await.load_anchor_leaf()
+    }
+
+    async fn load_undecided_state(
+        &self,
+    ) -> anyhow::Result<Option<(CommitmentMap<Leaf2>, BTreeMap<ViewNumber, View<SeqTypes>>)>> {
+        let inner = self.inner.read().await;
+        let path = inner.undecided_state_path();
+        if !path.is_file() {
+            return Ok(None);
+        }
+        let bytes = fs::read(&path).context("read")?;
+        let value: (CommitmentMap<Leaf>, _) =
+            bincode::deserialize(&bytes).context("deserialize")?;
+        Ok(Some((upgrade_commitment_map(value.0), value.1)))
+    }
+
+    async fn load_da_proposal(
+        &self,
+        view: ViewNumber,
+    ) -> anyhow::Result<Option<Proposal<SeqTypes, DaProposal<SeqTypes>>>> {
+        self.inner.read().await.load_da_proposal(view)
+    }
+
+    async fn load_vid_share(
+        &self,
+        view: ViewNumber,
+    ) -> anyhow::Result<Option<Proposal<SeqTypes, VidDisperseShare<SeqTypes>>>> {
+        self.inner.read().await.load_vid_share(view)
+    }
+
     async fn append_vid(
-        &mut self,
+        &self,
         proposal: &Proposal<SeqTypes, VidDisperseShare<SeqTypes>>,
     ) -> anyhow::Result<()> {
+        let mut inner = self.inner.write().await;
         let view_number = proposal.data.view_number().u64();
-        let dir_path = self.vid_dir_path();
+        let dir_path = inner.vid_dir_path();
 
         fs::create_dir_all(dir_path.clone()).context("failed to create vid dir")?;
 
         let file_path = dir_path.join(view_number.to_string()).with_extension("txt");
-        self.replace(
+        inner.replace(
             &file_path,
             |_| {
                 // Don't overwrite an existing share, but warn about it as this is likely not intended
@@ -352,16 +628,18 @@ impl SequencerPersistence for Persistence {
         )
     }
     async fn append_da(
-        &mut self,
+        &self,
         proposal: &Proposal<SeqTypes, DaProposal<SeqTypes>>,
+        _vid_commit: <VidSchemeType as VidScheme>::Commit,
     ) -> anyhow::Result<()> {
+        let mut inner = self.inner.write().await;
         let view_number = proposal.data.view_number().u64();
-        let dir_path = self.da_dir_path();
+        let dir_path = inner.da_dir_path();
 
         fs::create_dir_all(dir_path.clone()).context("failed to create da dir")?;
 
         let file_path = dir_path.join(view_number.to_string()).with_extension("txt");
-        self.replace(
+        inner.replace(
             &file_path,
             |_| {
                 // Don't overwrite an existing proposal, but warn about it as this is likely not
@@ -376,13 +654,15 @@ impl SequencerPersistence for Persistence {
             },
         )
     }
-    async fn record_action(
-        &mut self,
-        view: ViewNumber,
-        _action: HotShotAction,
-    ) -> anyhow::Result<()> {
-        self.replace(
-            &self.voted_view_path(),
+    async fn record_action(&self, view: ViewNumber, action: HotShotAction) -> anyhow::Result<()> {
+        // Todo Remove this after https://github.com/EspressoSystems/espresso-sequencer/issues/1931
+        if !matches!(action, HotShotAction::Propose | HotShotAction::Vote) {
+            return Ok(());
+        }
+        let mut inner = self.inner.write().await;
+        let path = &inner.voted_view_path();
+        inner.replace(
+            path,
             |mut file| {
                 let mut bytes = vec![];
                 file.read_to_end(&mut bytes)?;
@@ -401,16 +681,20 @@ impl SequencerPersistence for Persistence {
         )
     }
     async fn update_undecided_state(
-        &mut self,
-        leaves: CommitmentMap<Leaf>,
+        &self,
+        leaves: CommitmentMap<Leaf2>,
         state: BTreeMap<ViewNumber, View<SeqTypes>>,
     ) -> anyhow::Result<()> {
+        let leaves = downgrade_commitment_map(leaves);
+
         if !self.store_undecided_state {
             return Ok(());
         }
 
-        self.replace(
-            &self.undecided_state_path(),
+        let mut inner = self.inner.write().await;
+        let path = &inner.undecided_state_path();
+        inner.replace(
+            path,
             |_| {
                 // Always overwrite the previous file.
                 Ok(true)
@@ -424,16 +708,19 @@ impl SequencerPersistence for Persistence {
         )
     }
     async fn append_quorum_proposal(
-        &mut self,
-        proposal: &Proposal<SeqTypes, QuorumProposal<SeqTypes>>,
+        &self,
+        proposal: &Proposal<SeqTypes, QuorumProposal2<SeqTypes>>,
     ) -> anyhow::Result<()> {
+        let proposal: Proposal<SeqTypes, QuorumProposal<SeqTypes>> =
+            convert_proposal(proposal.clone());
+        let mut inner = self.inner.write().await;
         let view_number = proposal.data.view_number().u64();
-        let dir_path = self.quorum_proposals_dir_path();
+        let dir_path = inner.quorum_proposals_dir_path();
 
         fs::create_dir_all(dir_path.clone()).context("failed to create proposals dir")?;
 
         let file_path = dir_path.join(view_number.to_string()).with_extension("txt");
-        self.replace(
+        inner.replace(
             &file_path,
             |_| {
                 // Always overwrite the previous file
@@ -449,10 +736,14 @@ impl SequencerPersistence for Persistence {
     }
     async fn load_quorum_proposals(
         &self,
-    ) -> anyhow::Result<Option<BTreeMap<ViewNumber, Proposal<SeqTypes, QuorumProposal<SeqTypes>>>>>
-    {
+    ) -> anyhow::Result<BTreeMap<ViewNumber, Proposal<SeqTypes, QuorumProposal2<SeqTypes>>>> {
+        let inner = self.inner.read().await;
+
         // First, get the proposal directory.
-        let dir_path = self.quorum_proposals_dir_path();
+        let dir_path = inner.quorum_proposals_dir_path();
+        if !dir_path.is_dir() {
+            return Ok(Default::default());
+        }
 
         // Then, we want to get the entries in this directory since they'll be the
         // key/value pairs for our map.
@@ -463,12 +754,6 @@ impl SequencerPersistence for Persistence {
                     .filter(|e| e.file_type().map(|ft| ft.is_file()).unwrap_or(false))
             })
             .collect();
-
-        // Do we have any entries?
-        if files.is_empty() {
-            // Don't bother continuing if we don't have any data.
-            return Ok(None);
-        }
 
         // Read all of the files
         let proposal_files = files
@@ -494,13 +779,77 @@ impl SequencerPersistence for Persistence {
                 // Then, deserialize.
                 let proposal: Proposal<SeqTypes, QuorumProposal<SeqTypes>> =
                     bincode::deserialize(&proposal_bytes)?;
+                let proposal2 = convert_proposal(proposal);
 
                 // Push to the map and we're done.
-                map.insert(view_number, proposal);
+                map.insert(view_number, proposal2);
             }
         }
 
-        Ok(Some(map))
+        Ok(map)
+    }
+
+    async fn load_quorum_proposal(
+        &self,
+        view: ViewNumber,
+    ) -> anyhow::Result<Proposal<SeqTypes, QuorumProposal2<SeqTypes>>> {
+        let inner = self.inner.read().await;
+        let dir_path = inner.quorum_proposals_dir_path();
+        let file_path = dir_path.join(view.to_string()).with_extension("txt");
+        let bytes = fs::read(file_path)?;
+        let proposal: Proposal<SeqTypes, QuorumProposal<SeqTypes>> = bincode::deserialize(&bytes)?;
+        let proposal2 = convert_proposal(proposal);
+        Ok(proposal2)
+    }
+
+    async fn load_upgrade_certificate(
+        &self,
+    ) -> anyhow::Result<Option<UpgradeCertificate<SeqTypes>>> {
+        let inner = self.inner.read().await;
+        let path = inner.upgrade_certificate_dir_path();
+        if !path.is_file() {
+            return Ok(None);
+        }
+        let bytes = fs::read(&path).context("read")?;
+        Ok(Some(
+            bincode::deserialize(&bytes).context("deserialize upgrade certificate")?,
+        ))
+    }
+
+    async fn store_upgrade_certificate(
+        &self,
+        decided_upgrade_certificate: Option<UpgradeCertificate<SeqTypes>>,
+    ) -> anyhow::Result<()> {
+        let mut inner = self.inner.write().await;
+        let path = &inner.upgrade_certificate_dir_path();
+        let certificate = match decided_upgrade_certificate {
+            Some(cert) => cert,
+            None => return Ok(()),
+        };
+        inner.replace(
+            path,
+            |_| {
+                // Always overwrite the previous file.
+                Ok(true)
+            },
+            |mut file| {
+                let bytes =
+                    bincode::serialize(&certificate).context("serializing upgrade certificate")?;
+                file.write_all(&bytes)?;
+                Ok(())
+            },
+        )
+    }
+
+    async fn migrate_consensus(
+        &self,
+        _migrate_leaf: fn(Leaf) -> Leaf2,
+        _migrate_proposal: fn(
+            Proposal<SeqTypes, QuorumProposal<SeqTypes>>,
+        ) -> Proposal<SeqTypes, QuorumProposal2<SeqTypes>>,
+    ) -> anyhow::Result<()> {
+        // TODO: https://github.com/EspressoSystems/espresso-sequencer/issues/2357
+        Ok(())
     }
 }
 
@@ -555,6 +904,12 @@ fn migrate_network_config(
         config.insert("stop_voting_time".into(), 0.into());
     }
 
+    // HotShotConfig was upgraded to include an `epoch_height` parameter. Initialize with a default
+    // if missing.
+    if !config.contains_key("epoch_height") {
+        config.insert("epoch_height".into(), 0.into());
+    }
+
     Ok(network_config)
 }
 
@@ -572,8 +927,8 @@ mod testing {
             TempDir::new().unwrap()
         }
 
-        async fn connect(storage: &Self::Storage) -> Self {
-            Options::new(storage.path().into()).create().await.unwrap()
+        fn options(storage: &Self::Storage) -> impl PersistenceOptions<Persistence = Self> {
+            Options::new(storage.path().into())
         }
     }
 }
@@ -619,7 +974,8 @@ mod test {
                 "start_proposing_time": 1,
                 "stop_proposing_time": 2,
                 "start_voting_time": 1,
-                "stop_voting_time": 2
+                "stop_voting_time": 2,
+                "epoch_height": 0
             }
         });
 
@@ -638,7 +994,8 @@ mod test {
                 "start_proposing_time": 1,
                 "stop_proposing_time": 2,
                 "start_voting_time": 1,
-                "stop_voting_time": 2
+                "stop_voting_time": 2,
+                "epoch_height": 0
             }
         });
 
@@ -662,7 +1019,8 @@ mod test {
                 "start_proposing_time": 9007199254740991u64,
                 "stop_proposing_time": 0,
                 "start_voting_time": 9007199254740991u64,
-                "stop_voting_time": 0
+                "stop_voting_time": 0,
+                "epoch_height": 0
             }
         });
 
@@ -681,7 +1039,8 @@ mod test {
                 "start_proposing_time": 1,
                 "stop_proposing_time": 2,
                 "start_voting_time": 1,
-                "stop_voting_time": 2
+                "stop_voting_time": 2,
+                "epoch_height": 0
             }
         });
 

@@ -16,7 +16,7 @@ struct Args {
     pub orchestrator_url: Url,
 }
 
-#[async_std::main]
+#[tokio::main]
 async fn main() {
     let args = Args::parse();
     let pi = light_client_genesis(&args.orchestrator_url, STAKE_TABLE_CAPACITY)

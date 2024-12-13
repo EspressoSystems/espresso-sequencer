@@ -1,21 +1,24 @@
 //! Mock implementation of persistence, for testing.
 #![cfg(any(test, feature = "testing"))]
 
-use std::collections::BTreeMap;
-
+use anyhow::bail;
 use async_trait::async_trait;
 use espresso_types::{
-    v0::traits::{PersistenceOptions, SequencerPersistence},
-    Leaf, NetworkConfig,
+    v0::traits::{EventConsumer, PersistenceOptions, SequencerPersistence},
+    Leaf, Leaf2, NetworkConfig,
 };
 use hotshot_types::{
     consensus::CommitmentMap,
-    data::{DaProposal, QuorumProposal, VidDisperseShare},
-    event::HotShotAction,
+    data::{DaProposal, QuorumProposal, QuorumProposal2, VidDisperseShare},
+    event::{Event, EventType, HotShotAction, LeafInfo},
     message::Proposal,
-    simple_certificate::QuorumCertificate,
+    simple_certificate::{QuorumCertificate2, UpgradeCertificate},
     utils::View,
+    vid::VidSchemeType,
 };
+use jf_vid::VidScheme;
+use std::collections::BTreeMap;
+use std::sync::Arc;
 
 use crate::{SeqTypes, ViewNumber};
 
@@ -26,7 +29,9 @@ pub struct Options;
 impl PersistenceOptions for Options {
     type Persistence = NoStorage;
 
-    async fn create(self) -> anyhow::Result<Self::Persistence> {
+    fn set_view_retention(&mut self, _: u64) {}
+
+    async fn create(&mut self) -> anyhow::Result<Self::Persistence> {
         Ok(NoStorage)
     }
 
@@ -44,19 +49,32 @@ impl SequencerPersistence for NoStorage {
         Ok(None)
     }
 
-    async fn save_config(&mut self, _: &NetworkConfig) -> anyhow::Result<()> {
+    async fn save_config(&self, _: &NetworkConfig) -> anyhow::Result<()> {
         Ok(())
     }
 
-    async fn collect_garbage(&mut self, _view: ViewNumber) -> anyhow::Result<()> {
-        Ok(())
-    }
-
-    async fn save_anchor_leaf(
-        &mut self,
-        _: &Leaf,
-        _: &QuorumCertificate<SeqTypes>,
+    async fn append_decided_leaves(
+        &self,
+        view_number: ViewNumber,
+        leaves: impl IntoIterator<Item = (&LeafInfo<SeqTypes>, QuorumCertificate2<SeqTypes>)> + Send,
+        consumer: &impl EventConsumer,
     ) -> anyhow::Result<()> {
+        let leaves = leaves
+            .into_iter()
+            .map(|(info_ref, qc)| (info_ref.clone(), qc))
+            .collect::<Vec<_>>();
+        for (leaf_info, qc) in leaves {
+            consumer
+                .handle_event(&Event {
+                    view_number,
+                    event: EventType::Decide {
+                        leaf_chain: Arc::new(vec![leaf_info.clone()]),
+                        qc: Arc::new(qc),
+                        block_size: None,
+                    },
+                })
+                .await?;
+        }
         Ok(())
     }
 
@@ -66,13 +84,13 @@ impl SequencerPersistence for NoStorage {
 
     async fn load_anchor_leaf(
         &self,
-    ) -> anyhow::Result<Option<(Leaf, QuorumCertificate<SeqTypes>)>> {
+    ) -> anyhow::Result<Option<(Leaf2, QuorumCertificate2<SeqTypes>)>> {
         Ok(None)
     }
 
     async fn load_undecided_state(
         &self,
-    ) -> anyhow::Result<Option<(CommitmentMap<Leaf>, BTreeMap<ViewNumber, View<SeqTypes>>)>> {
+    ) -> anyhow::Result<Option<(CommitmentMap<Leaf2>, BTreeMap<ViewNumber, View<SeqTypes>>)>> {
         Ok(None)
     }
 
@@ -92,40 +110,63 @@ impl SequencerPersistence for NoStorage {
 
     async fn load_quorum_proposals(
         &self,
-    ) -> anyhow::Result<Option<BTreeMap<ViewNumber, Proposal<SeqTypes, QuorumProposal<SeqTypes>>>>>
-    {
+    ) -> anyhow::Result<BTreeMap<ViewNumber, Proposal<SeqTypes, QuorumProposal2<SeqTypes>>>> {
+        Ok(Default::default())
+    }
+    async fn load_quorum_proposal(
+        &self,
+        view: ViewNumber,
+    ) -> anyhow::Result<Proposal<SeqTypes, QuorumProposal2<SeqTypes>>> {
+        bail!("proposal {view:?} not available");
+    }
+    async fn load_upgrade_certificate(
+        &self,
+    ) -> anyhow::Result<Option<UpgradeCertificate<SeqTypes>>> {
         Ok(None)
     }
 
     async fn append_vid(
-        &mut self,
+        &self,
         _proposal: &Proposal<SeqTypes, VidDisperseShare<SeqTypes>>,
     ) -> anyhow::Result<()> {
         Ok(())
     }
     async fn append_da(
-        &mut self,
+        &self,
         _proposal: &Proposal<SeqTypes, DaProposal<SeqTypes>>,
+        _vid_commit: <VidSchemeType as VidScheme>::Commit,
     ) -> anyhow::Result<()> {
         Ok(())
     }
-    async fn record_action(
-        &mut self,
-        _view: ViewNumber,
-        _action: HotShotAction,
-    ) -> anyhow::Result<()> {
+    async fn record_action(&self, _view: ViewNumber, _action: HotShotAction) -> anyhow::Result<()> {
         Ok(())
     }
     async fn update_undecided_state(
-        &mut self,
-        _leaves: CommitmentMap<Leaf>,
+        &self,
+        _leaves: CommitmentMap<Leaf2>,
         _state: BTreeMap<ViewNumber, View<SeqTypes>>,
     ) -> anyhow::Result<()> {
         Ok(())
     }
     async fn append_quorum_proposal(
-        &mut self,
-        _proposal: &Proposal<SeqTypes, QuorumProposal<SeqTypes>>,
+        &self,
+        _proposal: &Proposal<SeqTypes, QuorumProposal2<SeqTypes>>,
+    ) -> anyhow::Result<()> {
+        Ok(())
+    }
+    async fn store_upgrade_certificate(
+        &self,
+        _decided_upgrade_certificate: Option<UpgradeCertificate<SeqTypes>>,
+    ) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    async fn migrate_consensus(
+        &self,
+        _: fn(Leaf) -> Leaf2,
+        _: fn(
+            Proposal<SeqTypes, QuorumProposal<SeqTypes>>,
+        ) -> Proposal<SeqTypes, QuorumProposal2<SeqTypes>>,
     ) -> anyhow::Result<()> {
         Ok(())
     }

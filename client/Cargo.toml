@@ -1,0 +1,17 @@
+[package]
+name = "client"
+version = { workspace = true }
+authors = { workspace = true }
+edition = { workspace = true }
+publish = false
+
+[dependencies]
+anyhow = { workspace = true }
+espresso-types = { path = "../types" }
+ethers = { workspace = true }
+futures = { workspace = true }
+jf-merkle-tree = { workspace = true }
+surf-disco = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+vbs = { workspace = true }

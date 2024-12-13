@@ -17,12 +17,11 @@
 use std::path::Path;
 
 use committable::Committable;
-use es_version::SequencerVersion;
-use espresso_types::{Leaf, NodeState, PubKey, ValidatedState};
-use hotshot::traits::election::static_committee::GeneralStaticCommittee;
+use espresso_types::{NodeState, PubKey, ValidatedState};
+use hotshot::traits::election::static_committee::StaticCommittee;
 use hotshot_types::{
     data::{
-        DaProposal, QuorumProposal, UpgradeProposal, VidDisperse, VidDisperseShare,
+        DaProposal, EpochNumber, QuorumProposal, UpgradeProposal, VidDisperse, VidDisperseShare,
         ViewChangeEvidence, ViewNumber,
     },
     message::{
@@ -39,25 +38,29 @@ use hotshot_types::{
         ViewSyncFinalizeVote, ViewSyncPreCommitData, ViewSyncPreCommitVote,
     },
     traits::{
-        node_implementation::ConsensusTime, signature_key::SignatureKey, BlockPayload, EncodeBytes,
+        election::Membership, node_implementation::ConsensusTime, signature_key::SignatureKey,
+        BlockPayload, EncodeBytes,
     },
     vid::vid_scheme,
 };
 use jf_vid::VidScheme;
 use pretty_assertions::assert_eq;
 use serde_json::Value;
-use vbs::{version::Version, BinarySerializer};
+use vbs::{
+    version::{StaticVersion, StaticVersionType, Version},
+    BinarySerializer,
+};
 
-type Serializer = vbs::Serializer<SequencerVersion>;
-
-#[async_std::test]
 #[cfg(feature = "testing")]
-async fn test_message_compat() {
-    use espresso_types::{Payload, SeqTypes, Transaction};
+async fn test_message_compat<Ver: StaticVersionType>(_ver: Ver) {
+    use espresso_types::{Leaf, Payload, SeqTypes, Transaction};
+    use hotshot_example_types::node_types::TestVersions;
+    use hotshot_types::PeerConfig;
 
     let (sender, priv_key) = PubKey::generated_from_seed_indexed(Default::default(), 0);
     let signature = PubKey::sign(&priv_key, &[]).unwrap();
-    let membership = GeneralStaticCommittee::new(&[], vec![sender.stake_table_entry(1)], vec![], 0);
+    let committee = vec![PeerConfig::default()]; /* one committee member, necessary to generate a VID share */
+    let membership = StaticCommittee::new(committee.clone(), committee);
     let upgrade_data = UpgradeProposalData {
         old_version: Version { major: 0, minor: 1 },
         new_version: Version { major: 1, minor: 0 },
@@ -66,7 +69,11 @@ async fn test_message_compat() {
         old_version_last_view: ViewNumber::genesis(),
         new_version_first_view: ViewNumber::genesis(),
     };
-    let leaf = Leaf::genesis(&ValidatedState::default(), &NodeState::mock()).await;
+    let leaf = Leaf::genesis(
+        &ValidatedState::default(),
+        &NodeState::mock().with_current_version(Ver::VERSION),
+    )
+    .await;
     let block_header = leaf.block_header().clone();
     let transaction = Transaction::new(1_u32.into(), vec![1, 2, 3]);
     let (payload, metadata) = Payload::from_transactions(
@@ -100,25 +107,25 @@ async fn test_message_compat() {
             data: QuorumProposal {
                 block_header,
                 view_number: ViewNumber::genesis(),
-                justify_qc: QuorumCertificate::genesis(
+                justify_qc: QuorumCertificate::genesis::<TestVersions>(
                     &ValidatedState::default(),
                     &NodeState::mock(),
                 )
                 .await,
-                upgrade_certificate: Some(UpgradeCertificate {
-                    data: upgrade_data.clone(),
-                    vote_commitment: upgrade_data.commit(),
-                    view_number: ViewNumber::genesis(),
-                    signatures: Default::default(),
-                    _pd: Default::default(),
-                }),
-                proposal_certificate: Some(ViewChangeEvidence::Timeout(TimeoutCertificate {
-                    data: timeout_data.clone(),
-                    vote_commitment: timeout_data.commit(),
-                    view_number: ViewNumber::genesis(),
-                    signatures: Default::default(),
-                    _pd: Default::default(),
-                })),
+                upgrade_certificate: Some(UpgradeCertificate::new(
+                    upgrade_data.clone(),
+                    upgrade_data.commit(),
+                    ViewNumber::genesis(),
+                    Default::default(),
+                    Default::default(),
+                )),
+                proposal_certificate: Some(ViewChangeEvidence::Timeout(TimeoutCertificate::new(
+                    timeout_data.clone(),
+                    timeout_data.commit(),
+                    ViewNumber::genesis(),
+                    Default::default(),
+                    Default::default(),
+                ))),
             },
             signature: signature.clone(),
             _pd: Default::default(),
@@ -126,7 +133,7 @@ async fn test_message_compat() {
         GeneralConsensusMessage::Vote(QuorumVote {
             signature: (sender, signature.clone()),
             data: QuorumData {
-                leaf_commit: leaf.commit(),
+                leaf_commit: <Leaf as Committable>::commit(&leaf),
             },
             view_number: ViewNumber::genesis(),
         }),
@@ -145,27 +152,27 @@ async fn test_message_compat() {
             data: view_sync_finalize_data.clone(),
             view_number: ViewNumber::genesis(),
         }),
-        GeneralConsensusMessage::ViewSyncPreCommitCertificate(ViewSyncPreCommitCertificate2 {
-            data: view_sync_pre_commit_data.clone(),
-            vote_commitment: view_sync_pre_commit_data.commit(),
-            view_number: ViewNumber::genesis(),
-            signatures: Default::default(),
-            _pd: Default::default(),
-        }),
-        GeneralConsensusMessage::ViewSyncCommitCertificate(ViewSyncCommitCertificate2 {
-            data: view_sync_commit_data.clone(),
-            vote_commitment: view_sync_commit_data.commit(),
-            view_number: ViewNumber::genesis(),
-            signatures: Default::default(),
-            _pd: Default::default(),
-        }),
-        GeneralConsensusMessage::ViewSyncFinalizeCertificate(ViewSyncFinalizeCertificate2 {
-            data: view_sync_finalize_data.clone(),
-            vote_commitment: view_sync_finalize_data.commit(),
-            view_number: ViewNumber::genesis(),
-            signatures: Default::default(),
-            _pd: Default::default(),
-        }),
+        GeneralConsensusMessage::ViewSyncPreCommitCertificate(ViewSyncPreCommitCertificate2::new(
+            view_sync_pre_commit_data.clone(),
+            view_sync_pre_commit_data.commit(),
+            ViewNumber::genesis(),
+            Default::default(),
+            Default::default(),
+        )),
+        GeneralConsensusMessage::ViewSyncCommitCertificate(ViewSyncCommitCertificate2::new(
+            view_sync_commit_data.clone(),
+            view_sync_commit_data.commit(),
+            ViewNumber::genesis(),
+            Default::default(),
+            Default::default(),
+        )),
+        GeneralConsensusMessage::ViewSyncFinalizeCertificate(ViewSyncFinalizeCertificate2::new(
+            view_sync_finalize_data.clone(),
+            view_sync_finalize_data.commit(),
+            ViewNumber::genesis(),
+            Default::default(),
+            Default::default(),
+        )),
         GeneralConsensusMessage::TimeoutVote(TimeoutVote {
             signature: (sender, signature.clone()),
             data: timeout_data,
@@ -200,18 +207,19 @@ async fn test_message_compat() {
             data: da_data.clone(),
             view_number: ViewNumber::genesis(),
         }),
-        DaConsensusMessage::DaCertificate(DaCertificate {
-            data: da_data.clone(),
-            vote_commitment: da_data.commit(),
-            view_number: ViewNumber::genesis(),
-            signatures: Default::default(),
-            _pd: Default::default(),
-        }),
+        DaConsensusMessage::DaCertificate(DaCertificate::new(
+            da_data.clone(),
+            da_data.commit(),
+            ViewNumber::genesis(),
+            Default::default(),
+            Default::default(),
+        )),
         DaConsensusMessage::VidDisperseMsg(Proposal {
             data: VidDisperseShare::from_vid_disperse(VidDisperse::from_membership(
                 ViewNumber::genesis(),
                 vid_scheme(1).disperse(payload.encode()).unwrap(),
                 &membership,
+                EpochNumber::genesis(),
             ))
             .remove(0),
             signature: signature.clone(),
@@ -233,8 +241,11 @@ async fn test_message_compat() {
         .map(|kind| Message { kind, sender })
         .collect::<Vec<Message<SeqTypes>>>();
 
+    let version_sub_dir = format!("v{}", Ver::VERSION.minor);
     // Load the expected serialization from the repo.
-    let data_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../data");
+    let data_dir = Path::new(&std::env::var("CARGO_MANIFEST_DIR").unwrap())
+        .join("../data")
+        .join(version_sub_dir);
     let expected_bytes = std::fs::read(data_dir.join("messages.json")).unwrap();
     let expected: Value = serde_json::from_slice(&expected_bytes).unwrap();
 
@@ -272,7 +283,7 @@ async fn test_message_compat() {
     // Ensure the current serialization implementation generates the same binary output as the
     // committed reference.
     let expected = std::fs::read(data_dir.join("messages.bin")).unwrap();
-    let actual = Serializer::serialize(&messages).unwrap();
+    let actual = vbs::Serializer::<Ver>::serialize(&messages).unwrap();
     if actual != expected {
         // Write the actual output to a file to make it easier to compare with/replace the expected
         // file if the serialization change was actually intended.
@@ -294,6 +305,20 @@ async fn test_message_compat() {
     }
 
     // Ensure the current `Message` type can be parsed from the committed reference binary.
-    let parsed: Vec<Message<SeqTypes>> = Serializer::deserialize(&expected).unwrap();
+    let parsed: Vec<Message<SeqTypes>> = vbs::Serializer::<Ver>::deserialize(&expected).unwrap();
     assert_eq!(parsed, messages);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_v1_message_compat() {
+    test_message_compat(StaticVersion::<0, 1> {}).await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_v2_message_compat() {
+    test_message_compat(StaticVersion::<0, 2> {}).await;
+}
+#[tokio::test(flavor = "multi_thread")]
+async fn test_v3_message_compat() {
+    test_message_compat(StaticVersion::<0, 3> {}).await;
 }

@@ -1,15 +1,47 @@
+use crate::v0::{
+    traits::StateCatchup, v0_99::ChainConfig, GenesisHeader, L1BlockInfo, L1Client, PubKey,
+    Timestamp, Upgrade, UpgradeMode,
+};
+use hotshot_types::traits::states::InstanceState;
+use hotshot_types::HotShotConfig;
 use std::{collections::BTreeMap, sync::Arc};
+use vbs::version::Version;
+#[cfg(any(test, feature = "testing"))]
+use vbs::version::{StaticVersion, StaticVersionType};
 
-use hotshot_types::{
-    traits::{node_implementation::NodeType, states::InstanceState},
-    HotShotConfig,
-};
-use vbs::version::{StaticVersionType, Version};
+use super::state::ValidatedState;
 
-use crate::{
-    v0::traits::StateCatchup, ChainConfig, L1Client, NodeState, PubKey, SeqTypes, Timestamp,
-    Upgrade, UpgradeMode, ValidatedState,
-};
+/// Represents the immutable state of a node.
+///
+/// For mutable state, use `ValidatedState`.
+#[derive(derive_more::Debug, Clone)]
+pub struct NodeState {
+    pub node_id: u64,
+    pub chain_config: crate::v0_99::ChainConfig,
+    pub l1_client: L1Client,
+    #[debug("{}", peers.name())]
+    pub peers: Arc<dyn StateCatchup>,
+    pub genesis_header: GenesisHeader,
+    pub genesis_state: ValidatedState,
+    pub l1_genesis: Option<L1BlockInfo>,
+
+    /// Map containing all planned and executed upgrades.
+    ///
+    /// Currently, only one upgrade can be executed at a time.
+    /// For multiple upgrades, the node needs to be restarted after each upgrade.
+    ///
+    /// This field serves as a record for planned and past upgrades,
+    /// listed in the genesis TOML file. It will be very useful if multiple upgrades
+    /// are supported in the future.
+    pub upgrades: BTreeMap<Version, Upgrade>,
+    /// Current version of the sequencer.
+    ///
+    /// This version is checked to determine if an upgrade is planned,
+    /// and which version variant for versioned types  
+    /// to use in functions such as genesis.
+    /// (example: genesis returns V2 Header if version is 0.2)
+    pub current_version: Version,
+}
 
 impl NodeState {
     pub fn new(
@@ -17,6 +49,7 @@ impl NodeState {
         chain_config: ChainConfig,
         l1_client: L1Client,
         catchup: impl StateCatchup + 'static,
+        current_version: Version,
     ) -> Self {
         Self {
             node_id,
@@ -30,17 +63,46 @@ impl NodeState {
             },
             l1_genesis: None,
             upgrades: Default::default(),
-            current_version: <SeqTypes as NodeType>::Base::version(),
+            current_version,
         }
     }
 
     #[cfg(any(test, feature = "testing"))]
     pub fn mock() -> Self {
+        use vbs::version::StaticVersion;
+
         Self::new(
             0,
             ChainConfig::default(),
-            L1Client::new("http://localhost:3331".parse().unwrap(), 10000),
+            L1Client::http("http://localhost:3331".parse().unwrap()),
             mock::MockStateCatchup::default(),
+            StaticVersion::<0, 1>::version(),
+        )
+    }
+
+    #[cfg(any(test, feature = "testing"))]
+    pub fn mock_v2() -> Self {
+        use vbs::version::StaticVersion;
+
+        Self::new(
+            0,
+            ChainConfig::default(),
+            L1Client::http("http://localhost:3331".parse().unwrap()),
+            mock::MockStateCatchup::default(),
+            StaticVersion::<0, 2>::version(),
+        )
+    }
+
+    #[cfg(any(test, feature = "testing"))]
+    pub fn mock_v99() -> Self {
+        use vbs::version::StaticVersion;
+
+        Self::new(
+            0,
+            ChainConfig::default(),
+            L1Client::http("http://localhost:3331".parse().unwrap()),
+            mock::MockStateCatchup::default(),
+            StaticVersion::<0, 99>::version(),
         )
     }
 
@@ -63,6 +125,11 @@ impl NodeState {
         self.upgrades = upgrades;
         self
     }
+
+    pub fn with_current_version(mut self, ver: Version) -> Self {
+        self.current_version = ver;
+        self
+    }
 }
 
 // This allows us to turn on `Default` on InstanceState trait
@@ -73,8 +140,9 @@ impl Default for NodeState {
         Self::new(
             1u64,
             ChainConfig::default(),
-            L1Client::new("http://localhost:3331".parse().unwrap(), 10000),
+            L1Client::http("http://localhost:3331".parse().unwrap()),
             mock::MockStateCatchup::default(),
+            StaticVersion::<0, 1>::version(),
         )
     }
 }
@@ -98,11 +166,9 @@ impl Upgrade {
                 config.start_proposing_time = t.start_proposing_time.unix_timestamp();
                 config.stop_proposing_time = t.stop_proposing_time.unix_timestamp();
                 config.start_voting_time = t.start_voting_time.unwrap_or_default().unix_timestamp();
-                // this should not panic because Timestamp::max() constructs the maximum possible Unix timestamp
-                // using i64::MAX
                 config.stop_voting_time = t
                     .stop_voting_time
-                    .unwrap_or(Timestamp::max().expect("overflow"))
+                    .unwrap_or(Timestamp::max())
                     .unix_timestamp();
                 config.start_proposing_view = 0;
                 config.stop_proposing_view = u64::MAX;
@@ -124,8 +190,8 @@ pub mod mock {
 
     use super::*;
     use crate::{
-        v0_1::{AccountQueryData, FeeAccountProof},
-        BackoffParams, BlockMerkleTree, FeeAccount, FeeMerkleCommitment,
+        retain_accounts, BackoffParams, BlockMerkleTree, FeeAccount, FeeMerkleCommitment,
+        FeeMerkleTree,
     };
 
     #[derive(Debug, Clone, Default)]
@@ -145,24 +211,26 @@ pub mod mock {
 
     #[async_trait]
     impl StateCatchup for MockStateCatchup {
-        async fn try_fetch_account(
+        async fn try_fetch_accounts(
             &self,
+            _retry: usize,
+            _instance: &NodeState,
             _height: u64,
             view: ViewNumber,
             fee_merkle_tree_root: FeeMerkleCommitment,
-            account: FeeAccount,
-        ) -> anyhow::Result<AccountQueryData> {
+            accounts: &[FeeAccount],
+        ) -> anyhow::Result<FeeMerkleTree> {
             let src = &self.state[&view].fee_merkle_tree;
             assert_eq!(src.commitment(), fee_merkle_tree_root);
 
-            tracing::info!("catchup: fetching account {account:?} for view {view:?}");
-            Ok(FeeAccountProof::prove(src, account.into())
-                .unwrap_or_else(|| panic!("Account {account:?} not in memory"))
-                .into())
+            tracing::info!("catchup: fetching accounts {accounts:?} for view {view:?}");
+            retain_accounts(src, accounts.iter().copied())
         }
 
         async fn try_remember_blocks_merkle_tree(
             &self,
+            _retry: usize,
+            _instance: &NodeState,
             _height: u64,
             view: ViewNumber,
             mt: &mut BlockMerkleTree,
@@ -186,6 +254,7 @@ pub mod mock {
 
         async fn try_fetch_chain_config(
             &self,
+            _retry: usize,
             _commitment: Commitment<ChainConfig>,
         ) -> anyhow::Result<ChainConfig> {
             Ok(ChainConfig::default())
@@ -193,6 +262,10 @@ pub mod mock {
 
         fn backoff(&self) -> &BackoffParams {
             &self.backoff
+        }
+
+        fn name(&self) -> String {
+            "MockStateCatchup".into()
         }
     }
 }
