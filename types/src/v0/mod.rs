@@ -15,8 +15,8 @@ pub mod traits;
 mod utils;
 pub use header::Header;
 pub use impls::{
-    get_l1_deposits, retain_accounts, BuilderValidationError, FeeError, ProposalValidationError,
-    StateValidationError, StaticCommittee,
+    get_l1_deposits, retain_accounts, BuilderValidationError, FeeError, MembershipCommittee,
+    ProposalValidationError, StateValidationError,
 };
 pub use utils::*;
 use vbs::version::{StaticVersion, StaticVersionType};
@@ -140,7 +140,7 @@ impl NodeType for SeqTypes {
     type Transaction = Transaction;
     type InstanceState = NodeState;
     type ValidatedState = ValidatedState;
-    type Membership = StaticCommittee;
+    type Membership = MembershipCommittee;
     type BuilderSignatureKey = FeeAccount;
     type AuctionResult = SolverAuctionResults;
 }
