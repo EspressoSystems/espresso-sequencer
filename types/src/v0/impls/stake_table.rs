@@ -1,12 +1,11 @@
 use super::{
-    v0_3::{ConsensusStakeTable, DAStakeTable, StakeTables},
-    L1Client, L1Event, NodeState, PubKey, SeqTypes,
+    v0_3::{DAStakeTable, QuorumStakeTable, StakeTables},
+    L1Client, NodeState, PubKey, SeqTypes,
 };
 
 use async_lock::RwLock;
 use contract_bindings::permissioned_stake_table::StakersUpdatedFilter;
 use ethers::{abi::Address, types::U256};
-use futures::StreamExt;
 use hotshot::types::SignatureKey as _;
 use hotshot_contract_adapter::stake_table::NodeInfoJf;
 use hotshot_types::{
@@ -22,24 +21,19 @@ use itertools::Itertools;
 use std::{
     cmp::max,
     collections::{BTreeMap, BTreeSet, HashMap, HashSet},
-    future::Future,
     num::NonZeroU64,
     str::FromStr,
     sync::Arc,
 };
 use thiserror::Error;
-use tokio::{task, time::sleep};
-use tracing::Instrument;
+
 use url::Url;
 
 type Epoch = <SeqTypes as NodeType>::Epoch;
 
 impl StakeTables {
-    pub fn new(consensus_stake_table: ConsensusStakeTable, da_stake_table: DAStakeTable) -> Self {
-        Self {
-            consensus_stake_table,
-            da_stake_table,
-        }
+    pub fn new(quorum: QuorumStakeTable, da: DAStakeTable) -> Self {
+        Self { quorum, da }
     }
 
     /// Create the consensus and DA stake tables from L1 events
@@ -159,13 +153,13 @@ impl StaticCommittee {
     /// to be called before calling `self.stake()` so that
     /// `Self.stake_table` only needs to be updated once in a given
     /// life-cycle but may be read from many times.
-    fn update_stake_table(&self, st: StakeTables) -> anyhow::Result<()> {
+    fn update_stake_table(&self, st: StakeTables) {
         let mut state = self.state.write_blocking();
         // This works because `get_stake_table` is fetching *all*
         // update events and building the table for us. We will need
         // more subtlety when start fetching only the events since last update.
-        let stake_table = HashSet::from_iter(st.consensus_stake_table.0);
-        let da_members = HashSet::from_iter(st.da_stake_table.0);
+        let stake_table = HashSet::from_iter(st.quorum.0);
+        let da_members = HashSet::from_iter(st.da.0);
         state.stake_table = stake_table.clone();
         state.da_members = da_members.clone();
         let indexed_stake_table: HashMap<PubKey, _> = stake_table
@@ -188,8 +182,6 @@ impl StaticCommittee {
 
         state.indexed_stake_table = indexed_stake_table;
         state.indexed_da_members = indexed_da_members;
-
-        Ok(())
     }
 
     // We need a constructor to match our concrete type.
@@ -301,14 +293,12 @@ impl Membership<SeqTypes> for StaticCommittee {
             indexed_da_members: BTreeMap::new(),
         };
 
-        let committee = StaticCommittee {
+        Self {
             state: Arc::new(RwLock::new(state)),
             _epoch_size: 12, // TODO get the real number from config (I think)
             l1_client: L1Client::http(Url::from_str("http:://ab.b").unwrap()),
             _contract_address: None,
-        };
-
-        committee
+        }
     }
 
     /// Get the stake table for the current view
@@ -322,7 +312,7 @@ impl Membership<SeqTypes> for StaticCommittee {
                 // have to repeat this for the other methods.
                 let stake_tables = self.l1_client.stake_table(&epoch);
                 self.update_stake_table(stake_tables.clone());
-                stake_tables.consensus_stake_table.0
+                stake_tables.quorum.0
             }
         }
     }
@@ -332,11 +322,9 @@ impl Membership<SeqTypes> for StaticCommittee {
         match state.indexed_da_members.get(&epoch) {
             Some(map) => map.clone().into_values().collect(),
             None => {
-                // TODO can we make state updates reusable? Otherwise we
-                // have to repeat this for the other methods.
                 let stake_tables = self.l1_client.stake_table(&epoch);
                 self.update_stake_table(stake_tables.clone());
-                stake_tables.da_stake_table.0
+                stake_tables.da.0
             }
         }
     }
@@ -345,10 +333,23 @@ impl Membership<SeqTypes> for StaticCommittee {
     fn committee_members(
         &self,
         _view_number: <SeqTypes as NodeType>::View,
-        _epoch: Epoch,
+        epoch: Epoch,
     ) -> BTreeSet<PubKey> {
         let state = self.state.read_blocking();
-        state.stake_table.iter().map(PubKey::public_key).collect()
+
+        match state.indexed_stake_table.get(&epoch) {
+            Some(st) => st.clone().into_keys().collect(),
+            None => {
+                let stake_tables = self.l1_client.stake_table(&epoch);
+                self.update_stake_table(stake_tables.clone());
+                stake_tables
+                    .quorum
+                    .0
+                    .iter()
+                    .map(PubKey::public_key)
+                    .collect()
+            }
+        }
     }
 
     /// Get all members of the committee for the current view
@@ -496,19 +497,13 @@ mod tests {
         let st = StakeTables::from_l1_events(updates.clone());
 
         // The DA stake table contains the DA node only
-        assert_eq!(st.da_stake_table.0.len(), 1);
-        assert_eq!(st.da_stake_table.0[0].stake_key, da_node.stake_table_key);
+        assert_eq!(st.da.0.len(), 1);
+        assert_eq!(st.da.0[0].stake_key, da_node.stake_table_key);
 
         // The consensus stake table contains both nodes
-        assert_eq!(st.consensus_stake_table.0.len(), 2);
-        assert_eq!(
-            st.consensus_stake_table.0[0].stake_key,
-            da_node.stake_table_key
-        );
-        assert_eq!(
-            st.consensus_stake_table.0[1].stake_key,
-            consensus_node.stake_table_key
-        );
+        assert_eq!(st.quorum.0.len(), 2);
+        assert_eq!(st.quorum.0[0].stake_key, da_node.stake_table_key);
+        assert_eq!(st.da.0[1].stake_key, consensus_node.stake_table_key);
 
         // Simulate making the consensus node a DA node. This is accomplished by
         // sending a transaction removes and re-adds the same node with updated
@@ -522,23 +517,14 @@ mod tests {
         let st = StakeTables::from_l1_events(updates.clone());
 
         // The DA stake stable now contains both nodes
-        assert_eq!(st.da_stake_table.0.len(), 2);
-        assert_eq!(st.da_stake_table.0[0].stake_key, da_node.stake_table_key);
-        assert_eq!(
-            st.da_stake_table.0[1].stake_key,
-            new_da_node.stake_table_key
-        );
+        assert_eq!(st.da.0.len(), 2);
+        assert_eq!(st.da.0[0].stake_key, da_node.stake_table_key);
+        assert_eq!(st.da.0[1].stake_key, new_da_node.stake_table_key);
 
         // The consensus stake stable (still) contains both nodes
-        assert_eq!(st.consensus_stake_table.0.len(), 2);
-        assert_eq!(
-            st.consensus_stake_table.0[0].stake_key,
-            da_node.stake_table_key
-        );
-        assert_eq!(
-            st.consensus_stake_table.0[1].stake_key,
-            new_da_node.stake_table_key
-        );
+        assert_eq!(st.quorum.0.len(), 2);
+        assert_eq!(st.quorum.0[0].stake_key, da_node.stake_table_key);
+        assert_eq!(st.quorum.0[1].stake_key, new_da_node.stake_table_key);
 
         // Simulate removing the second node
         updates.push(StakersUpdatedFilter {
@@ -548,15 +534,12 @@ mod tests {
         let st = StakeTables::from_l1_events(updates);
 
         // The DA stake table contains only the original DA node
-        assert_eq!(st.da_stake_table.0.len(), 1);
-        assert_eq!(st.da_stake_table.0[0].stake_key, da_node.stake_table_key);
+        assert_eq!(st.da.0.len(), 1);
+        assert_eq!(st.da.0[0].stake_key, da_node.stake_table_key);
 
         // The consensus stake table also contains only the original DA node
-        assert_eq!(st.consensus_stake_table.0.len(), 1);
-        assert_eq!(
-            st.consensus_stake_table.0[0].stake_key,
-            da_node.stake_table_key
-        );
+        assert_eq!(st.quorum.0.len(), 1);
+        assert_eq!(st.quorum.0[0].stake_key, da_node.stake_table_key);
     }
 
     // TODO: test that repeatedly removes and adds more nodes

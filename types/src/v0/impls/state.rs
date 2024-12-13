@@ -994,7 +994,6 @@ impl HotShotState<SeqTypes> for ValidatedState {
             BlockMerkleTree::from_commitment(block_header.block_merkle_tree_root())
         };
 
-        let epoch = epoch_from_block_number(block_header.block_number(), EPOCH_HEIGHT);
         Self {
             fee_merkle_tree,
             block_merkle_tree,

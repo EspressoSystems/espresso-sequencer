@@ -346,6 +346,7 @@ impl L1Client {
             sender,
             receiver: receiver.deactivate(),
             update_task: Default::default(),
+            permissioned_stake_table_contract: opt.permissioned_stake_table_contract,
         }
     }
 
@@ -384,27 +385,25 @@ impl L1Client {
 
         async move {
             loop {
-                {
-                    match self.get_stake_table(l1_block_number).await {
-                        Err(err) => {
-                            tracing::warn!(
-                                ?epoch,
-                                ?l1_block_number,
-                                "error fetching stake table from l1. err {err}"
-                            );
-                            sleep(retry_delay).await
-                        }
-                        Ok(stake_tables) => {
-                            let mut state = state.lock().await;
-                            let _ = state.stake_tables.insert(epoch, stake_tables);
-                        }
+                match self.get_stake_table(l1_block_number).await {
+                    Err(err) => {
+                        tracing::warn!(
+                            ?epoch,
+                            ?l1_block_number,
+                            "error fetching stake table from l1. err {err}"
+                        );
+                    }
+                    Ok(stake_tables) => {
+                        let mut state = state.lock().await;
+                        let _ = state.stake_tables.insert(epoch, stake_tables);
                     }
                 }
 
                 sleep(retry_delay).await;
             }
         }
-        .instrument(span);
+        .instrument(span)
+        .await
     }
 
     /// Shut down background tasks associated with this L1 client.
@@ -831,8 +830,10 @@ impl L1Client {
     pub async fn get_stake_table(&self, block: u64) -> anyhow::Result<StakeTables> {
         // TODO stake_table_address needs to be passed in to L1Client
         // before update loop starts.
-        let stake_table_contract =
-            PermissionedStakeTable::new(self.stake_table_address, self.provider.clone());
+        let stake_table_contract = PermissionedStakeTable::new(
+            self.permissioned_stake_table_contract,
+            self.provider.clone(),
+        );
 
         let events = stake_table_contract
             .stakers_updated_filter()
@@ -1353,7 +1354,7 @@ mod test {
             .await
             .unwrap();
 
-        let result = nodes.consensus_stake_table.0[0].clone();
+        let result = nodes.quorum.0[0].clone();
         assert_eq!(result.stake_amount.as_u64(), 1);
         Ok(())
     }
