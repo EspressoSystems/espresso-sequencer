@@ -346,7 +346,6 @@ impl L1Client {
             sender,
             receiver: receiver.deactivate(),
             update_task: Default::default(),
-            permissioned_stake_table_contract: opt.permissioned_stake_table_contract,
         }
     }
 
@@ -377,7 +376,7 @@ impl L1Client {
         }
     }
     // TODO I think we need to shoehorn this guy into `spawn_tasks`.
-    pub async fn update_membership(&self, l1_block_number: u64, epoch: EpochNumber) {
+    pub async fn update_membership(&self, contract: Address, l1_block_number: u64, epoch: EpochNumber) {
         let retry_delay = self.retry_delay;
         let state = self.state.clone();
 
@@ -385,7 +384,7 @@ impl L1Client {
 
         async move {
             loop {
-                match self.get_stake_table(l1_block_number).await {
+                match self.get_stake_table(contract, l1_block_number).await {
                     Err(err) => {
                         tracing::warn!(
                             ?epoch,
@@ -827,11 +826,11 @@ impl L1Client {
     }
 
     /// Get `StakeTable` at block height.
-    pub async fn get_stake_table(&self, block: u64) -> anyhow::Result<StakeTables> {
+    pub async fn get_stake_table(&self, contract: Address, block: u64) -> anyhow::Result<StakeTables> {
         // TODO stake_table_address needs to be passed in to L1Client
         // before update loop starts.
         let stake_table_contract = PermissionedStakeTable::new(
-            self.permissioned_stake_table_contract,
+            contract,
             self.provider.clone(),
         );
 
@@ -1350,7 +1349,7 @@ mod test {
 
         let block = client.get_block(BlockNumber::Latest).await?.unwrap();
         let nodes = l1_client
-            .get_stake_table(block.number.unwrap().as_u64())
+            .get_stake_table(address, block.number.unwrap().as_u64())
             .await
             .unwrap();
 

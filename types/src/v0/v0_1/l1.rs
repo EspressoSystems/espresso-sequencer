@@ -91,12 +91,6 @@ pub struct L1ClientOptions {
     )]
     pub l1_events_max_block_range: u64,
 
-    #[clap(
-        long,
-        env = "ESPRESSO_SEQUENCER_PERMISSIONED_STAKE_TABLE_ADDRESS",
-    )]
-    pub permissioned_stake_table_contract: Address,
-
     #[clap(skip = Arc::<Box<dyn Metrics>>::new(Box::new(NoMetrics)))]
     pub metrics: Arc<Box<dyn Metrics>>,
 }
@@ -123,7 +117,6 @@ pub struct L1Client {
     pub(crate) receiver: InactiveReceiver<L1Event>,
     /// Async task which updates the shared state.
     pub(crate) update_task: Arc<L1UpdateTask>,
-    pub(crate) permissioned_stake_table_contract: Address
 }
 
 /// An Ethereum RPC client over HTTP or WebSockets.

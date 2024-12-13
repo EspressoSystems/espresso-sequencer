@@ -695,7 +695,12 @@ fn validate_builder_fee(
     Ok(())
 }
 
-async fn update_l1_state_stake_tables(instance: &NodeState, header: &Header) -> anyhow::Result<()> {
+async fn update_l1_state_stake_tables(instance: &NodeState, header: &Header, chain_config : ChainConfig) -> anyhow::Result<()> {
+    
+    let Some(contract_addr) = chain_config.stake_table_contract else {
+        bail!("stake table contract not found");
+    };
+
     let prev_epoch = epoch_from_block_number(header.block_number().saturating_sub(1), EPOCH_HEIGHT);
     let epoch = epoch_from_block_number(header.block_number(), EPOCH_HEIGHT);
 
@@ -709,7 +714,7 @@ async fn update_l1_state_stake_tables(instance: &NodeState, header: &Header) -> 
         return Ok(());
     };
 
-    l1.update_membership(l1_finalized.number(), EpochNumber::new(epoch))
+    l1.update_membership(contract_addr, l1_finalized.number(), EpochNumber::new(epoch))
         .await;
 
     Ok(())
@@ -760,7 +765,7 @@ impl ValidatedState {
         // since we have access to L1Client and we are in an async context. We wouldn't need
         // the update_loop in this case.
         if version >= EpochVersion::VERSION {
-            update_l1_state_stake_tables(instance, proposed_header).await?;
+            update_l1_state_stake_tables(instance, proposed_header, chain_config).await?;
         }
 
         // Find missing fee state entries. We will need to use the builder account which is paying a

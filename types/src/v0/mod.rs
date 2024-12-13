@@ -1,4 +1,3 @@
-use async_lock::RwLock;
 use hotshot_types::{
     data::{EpochNumber, ViewNumber},
     signature_key::BLSPubKey,
@@ -8,7 +7,7 @@ use hotshot_types::{
     },
 };
 use serde::{Deserialize, Serialize};
-use std::{marker::PhantomData, sync::Arc};
+use std::marker::PhantomData;
 
 mod header;
 mod impls;
