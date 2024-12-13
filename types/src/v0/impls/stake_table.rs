@@ -1,5 +1,5 @@
 use super::{
-    v0_3::{DAStakeTable, StakeTable, StakeTables},
+    v0_3::{DaMembers, StakeTable, StakeTables},
     L1Client, NodeState, PubKey, SeqTypes,
 };
 
@@ -33,7 +33,7 @@ use url::Url;
 type Epoch = <SeqTypes as NodeType>::Epoch;
 
 impl StakeTables {
-    pub fn new(stake_table: StakeTable, da_members: DAStakeTable) -> Self {
+    pub fn new(stake_table: StakeTable, da_members: DaMembers) -> Self {
         Self {
             stake_table,
             da_members,
