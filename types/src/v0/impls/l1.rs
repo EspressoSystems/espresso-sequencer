@@ -568,9 +568,6 @@ impl L1Client {
         } else {
             // It would be nice if we could update l1_cache of stake
             // tables here. But how to we know l1_block of the epoch?
-            // This might even allow us to avoid the update loop. On
-            // the other hand if we timing is right we may never hit
-            // this case.
             todo!();
         }
     }
