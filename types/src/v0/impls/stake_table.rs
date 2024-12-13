@@ -315,8 +315,6 @@ impl Membership<SeqTypes> for EpochCommittees {
         match state.get(&epoch) {
             Some(st) => st.indexed_stake_table.clone().into_values().collect(),
             None => {
-                // TODO can we make state updates reusable? Otherwise we
-                // have to repeat this for the other methods.
                 let stake_tables = self.l1_client.stake_table(&epoch);
                 self.update_stake_table(stake_tables.clone());
                 stake_tables.stake_table.0

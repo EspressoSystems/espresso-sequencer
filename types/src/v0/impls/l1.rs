@@ -375,7 +375,6 @@ impl L1Client {
             *update_task = Some(spawn(self.update_loop()));
         }
     }
-    // TODO I think we need to shoehorn this guy into `spawn_tasks`.
     pub async fn update_membership(
         &self,
         contract: Address,
