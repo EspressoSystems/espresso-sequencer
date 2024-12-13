@@ -148,7 +148,7 @@ impl EpochCommittees {
     /// to be called before calling `self.stake()` so that
     /// `Self.stake_table` only needs to be updated once in a given
     /// life-cycle but may be read from many times.
-    fn update_stake_table(&self, st: StakeTables) {
+    fn update_stake_table(&self, epoch: EpochNumber, st: StakeTables) {
         // This works because `get_stake_table` is fetching *all*
         // update events and building the table for us. We will need
         // more subtlety when start fetching only the events since last update.
@@ -177,7 +177,7 @@ impl EpochCommittees {
         let mut state = self.state.write_blocking();
 
         state.insert(
-            EpochNumber::genesis(),
+            epoch,
             Committee {
                 eligible_leaders,
                 indexed_stake_table,
@@ -316,7 +316,7 @@ impl Membership<SeqTypes> for EpochCommittees {
             Some(st) => st.indexed_stake_table.clone().into_values().collect(),
             None => {
                 let stake_tables = self.l1_client.stake_table(&epoch);
-                self.update_stake_table(stake_tables.clone());
+                self.update_stake_table(epoch, stake_tables.clone());
                 stake_tables.stake_table.0
             }
         }
@@ -328,7 +328,7 @@ impl Membership<SeqTypes> for EpochCommittees {
             Some(sc) => sc.indexed_da_members.clone().into_values().collect(),
             None => {
                 let stake_tables = self.l1_client.stake_table(&epoch);
-                self.update_stake_table(stake_tables.clone());
+                self.update_stake_table(epoch, stake_tables.clone());
                 stake_tables.da_members.0
             }
         }
@@ -346,7 +346,7 @@ impl Membership<SeqTypes> for EpochCommittees {
             Some(sc) => sc.indexed_stake_table.clone().into_keys().collect(),
             None => {
                 let stake_tables = self.l1_client.stake_table(&epoch);
-                self.update_stake_table(stake_tables.clone());
+                self.update_stake_table(epoch, stake_tables.clone());
                 stake_tables
                     .stake_table
                     .0
@@ -369,7 +369,7 @@ impl Membership<SeqTypes> for EpochCommittees {
             Some(sc) => sc.indexed_da_members.clone().into_keys().collect(),
             None => {
                 let stake_tables = self.l1_client.stake_table(&epoch);
-                self.update_stake_table(stake_tables.clone());
+                self.update_stake_table(epoch, stake_tables.clone());
                 stake_tables
                     .da_members
                     .0
