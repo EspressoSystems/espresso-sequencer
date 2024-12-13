@@ -310,9 +310,7 @@ impl Membership<SeqTypes> for EpochCommittees {
 
     /// Get the stake table for the current view
     fn stake_table(&self, epoch: Epoch) -> Vec<StakeTableEntry<PubKey>> {
-        let state = self.state.read_blocking();
-
-        match state.get(&epoch) {
+        match self.state.read_blocking().get(&epoch) {
             Some(st) => st.indexed_stake_table.clone().into_values().collect(),
             None => {
                 let stake_tables = self.l1_client.stake_table(&epoch);
@@ -323,8 +321,7 @@ impl Membership<SeqTypes> for EpochCommittees {
     }
     /// Get the stake table for the current view
     fn da_stake_table(&self, epoch: Epoch) -> Vec<StakeTableEntry<PubKey>> {
-        let state = self.state.read_blocking();
-        match state.get(&epoch) {
+        match self.state.read_blocking().get(&epoch) {
             Some(sc) => sc.indexed_da_members.clone().into_values().collect(),
             None => {
                 let stake_tables = self.l1_client.stake_table(&epoch);
@@ -340,9 +337,7 @@ impl Membership<SeqTypes> for EpochCommittees {
         _view_number: <SeqTypes as NodeType>::View,
         epoch: Epoch,
     ) -> BTreeSet<PubKey> {
-        let state = self.state.read_blocking();
-
-        match state.get(&epoch) {
+        match self.state.read_blocking().get(&epoch) {
             Some(sc) => sc.indexed_stake_table.clone().into_keys().collect(),
             None => {
                 let stake_tables = self.l1_client.stake_table(&epoch);
@@ -363,9 +358,7 @@ impl Membership<SeqTypes> for EpochCommittees {
         _view_number: <SeqTypes as NodeType>::View,
         epoch: Epoch,
     ) -> BTreeSet<PubKey> {
-        let sc = self.state.read_blocking();
-
-        match sc.get(&epoch) {
+        match self.state.read_blocking().get(&epoch) {
             Some(sc) => sc.indexed_da_members.clone().into_keys().collect(),
             None => {
                 let stake_tables = self.l1_client.stake_table(&epoch);
@@ -386,9 +379,8 @@ impl Membership<SeqTypes> for EpochCommittees {
         _view_number: <SeqTypes as NodeType>::View,
         epoch: Epoch,
     ) -> BTreeSet<PubKey> {
-        let state = self.state.read_blocking();
-
-        state
+        self.state
+            .read_blocking()
             .get(&epoch)
             .unwrap()
             .eligible_leaders
@@ -399,29 +391,26 @@ impl Membership<SeqTypes> for EpochCommittees {
 
     /// Get the stake table entry for a public key
     fn stake(&self, pub_key: &PubKey, epoch: Epoch) -> Option<StakeTableEntry<PubKey>> {
-        let state = self.state.read_blocking();
-
         // Only return the stake if it is above zero
-        state
+        self.state
+            .read_blocking()
             .get(&epoch)
             .and_then(|h| h.indexed_stake_table.get(pub_key).cloned())
     }
 
     /// Get the DA stake table entry for a public key
     fn da_stake(&self, pub_key: &PubKey, epoch: Epoch) -> Option<StakeTableEntry<PubKey>> {
-        let state = self.state.read_blocking();
-
         // Only return the stake if it is above zero
-        state
+        self.state
+            .read_blocking()
             .get(&epoch)
             .and_then(|h| h.indexed_da_members.get(pub_key).cloned())
     }
 
     /// Check if a node has stake in the committee
     fn has_stake(&self, pub_key: &PubKey, epoch: Epoch) -> bool {
-        let state = self.state.read_blocking();
-
-        state
+        self.state
+            .read_blocking()
             .get(&epoch)
             .and_then(|h| h.indexed_stake_table.get(pub_key))
             .map_or(false, |x| x.stake() > U256::zero())
@@ -429,9 +418,8 @@ impl Membership<SeqTypes> for EpochCommittees {
 
     /// Check if a node has stake in the committee
     fn has_da_stake(&self, pub_key: &PubKey, epoch: Epoch) -> bool {
-        let state = self.state.read_blocking();
-
-        state
+        self.state
+            .read_blocking()
             .get(&epoch)
             .and_then(|h| h.indexed_da_members.get(pub_key))
             .map_or(false, |x| x.stake() > U256::zero())
@@ -443,8 +431,9 @@ impl Membership<SeqTypes> for EpochCommittees {
         view_number: <SeqTypes as NodeType>::View,
         epoch: Epoch,
     ) -> Result<PubKey, Self::Error> {
-        let state = self.state.read_blocking();
-        let leaders = state
+        let leaders = self
+            .state
+            .read_blocking()
             .get(&epoch)
             .ok_or(LeaderLookupError)?
             .eligible_leaders
@@ -457,8 +446,8 @@ impl Membership<SeqTypes> for EpochCommittees {
 
     /// Get the total number of nodes in the committee
     fn total_nodes(&self, epoch: Epoch) -> usize {
-        let state = self.state.read_blocking();
-        state
+        self.state
+            .read_blocking()
             .get(&epoch)
             .map(|sc| sc.indexed_stake_table.len())
             .unwrap_or_default()
@@ -466,8 +455,8 @@ impl Membership<SeqTypes> for EpochCommittees {
 
     /// Get the total number of DA nodes in the committee
     fn da_total_nodes(&self, epoch: Epoch) -> usize {
-        let state = self.state.read_blocking();
-        state
+        self.state
+            .read_blocking()
             .get(&epoch)
             .map(|sc: &Committee| sc.indexed_da_members.len())
             .unwrap_or_default()
@@ -475,30 +464,50 @@ impl Membership<SeqTypes> for EpochCommittees {
 
     /// Get the voting success threshold for the committee
     fn success_threshold(&self, epoch: Epoch) -> NonZeroU64 {
-        let state = self.state.read_blocking();
-        let quorum = state.get(&epoch).unwrap().indexed_stake_table.clone();
+        let quorum = self
+            .state
+            .read_blocking()
+            .get(&epoch)
+            .unwrap()
+            .indexed_stake_table
+            .clone();
         NonZeroU64::new(((quorum.len() as u64 * 2) / 3) + 1).unwrap()
     }
 
     /// Get the voting success threshold for the committee
     fn da_success_threshold(&self, epoch: Epoch) -> NonZeroU64 {
-        let state = self.state.read_blocking();
-        let da = state.get(&epoch).unwrap().indexed_da_members.clone();
+        let da = self
+            .state
+            .read_blocking()
+            .get(&epoch)
+            .unwrap()
+            .indexed_da_members
+            .clone();
         NonZeroU64::new(((da.len() as u64 * 2) / 3) + 1).unwrap()
     }
 
     /// Get the voting failure threshold for the committee
     fn failure_threshold(&self, epoch: Epoch) -> NonZeroU64 {
-        let state = self.state.read_blocking();
-        let quorum = state.get(&epoch).unwrap().indexed_stake_table.clone();
+        let quorum = self
+            .state
+            .read_blocking()
+            .get(&epoch)
+            .unwrap()
+            .indexed_stake_table
+            .clone();
 
         NonZeroU64::new(((quorum.len() as u64) / 3) + 1).unwrap()
     }
 
     /// Get the voting upgrade threshold for the committee
     fn upgrade_threshold(&self, epoch: Epoch) -> NonZeroU64 {
-        let state = self.state.read_blocking();
-        let quorum = state.get(&epoch).unwrap().indexed_stake_table.clone();
+        let quorum = self
+            .state
+            .read_blocking()
+            .get(&epoch)
+            .unwrap()
+            .indexed_stake_table
+            .clone();
 
         NonZeroU64::new(max(
             (quorum.len() as u64 * 9) / 10,
