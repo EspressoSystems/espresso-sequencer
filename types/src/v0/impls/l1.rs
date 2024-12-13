@@ -376,7 +376,7 @@ impl L1Client {
         }
     }
     // TODO I think we need to shoehorn this guy into `spawn_tasks`.
-    pub async fn memberships_update_loop(&self) {
+    pub async fn update_membership(&self, l1_block_number: u64, epoch: EpochNumber) {
         let retry_delay = self.retry_delay;
         let state = self.state.clone();
 
@@ -384,36 +384,24 @@ impl L1Client {
 
         async move {
             loop {
-                let mut events = self.receiver.activate_cloned();
-                while let Some(event) = events.next().await {
-                    let L1Event::NewEpoch {
-                        epoch,
-                        l1_block_number,
-                    } = event
-                    else {
-                        continue;
-                    };
-
-                    loop {
-                        {
-                            match self.get_stake_table(l1_block_number).await {
-                                Err(err) => {
-                                    tracing::warn!(
-                                        ?epoch,
-                                        ?l1_block_number,
-                                        "error fetching stake table from l1. err {err}"
-                                    );
-                                }
-                                Ok(stake_tables) => {
-                                    let mut state = state.lock().await;
-                                    let _ = state.stake_tables.insert(epoch, stake_tables);
-                                }
-                            }
+                {
+                    match self.get_stake_table(l1_block_number).await {
+                        Err(err) => {
+                            tracing::warn!(
+                                ?epoch,
+                                ?l1_block_number,
+                                "error fetching stake table from l1. err {err}"
+                            );
+                            sleep(retry_delay).await
                         }
-
-                        sleep(retry_delay).await;
+                        Ok(stake_tables) => {
+                            let mut state = state.lock().await;
+                            let _ = state.stake_tables.insert(epoch, stake_tables);
+                        }
                     }
                 }
+
+                sleep(retry_delay).await;
             }
         }
         .instrument(span);
@@ -1361,7 +1349,7 @@ mod test {
 
         let block = client.get_block(BlockNumber::Latest).await?.unwrap();
         let nodes = l1_client
-            .get_stake_table(block.number.unwrap().as_u64(), address)
+            .get_stake_table(block.number.unwrap().as_u64())
             .await
             .unwrap();
 

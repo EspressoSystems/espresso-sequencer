@@ -159,19 +159,13 @@ impl StaticCommittee {
     /// to be called before calling `self.stake()` so that
     /// `Self.stake_table` only needs to be updated once in a given
     /// life-cycle but may be read from many times.
-    async fn update_stake_table(mut self, l1_block_height: u64) -> anyhow::Result<()> {
-        let updates: StakeTables = self
-            .l1_client
-            // .get_stake_table(l1_block_height, self._contract_address.unwrap())
-            .get_stake_table(l1_block_height)
-            .await?;
-
-        let mut state = self.state.write().await;
+    fn update_stake_table(&self, st: StakeTables) -> anyhow::Result<()> {
+        let mut state = self.state.write_blocking();
         // This works because `get_stake_table` is fetching *all*
         // update events and building the table for us. We will need
         // more subtlety when start fetching only the events since last update.
-        let stake_table = HashSet::from_iter(updates.consensus_stake_table.0);
-        let da_members = HashSet::from_iter(updates.da_stake_table.0);
+        let stake_table = HashSet::from_iter(st.consensus_stake_table.0);
+        let da_members = HashSet::from_iter(st.da_stake_table.0);
         state.stake_table = stake_table.clone();
         state.da_members = da_members.clone();
         let indexed_stake_table: HashMap<PubKey, _> = stake_table
@@ -320,45 +314,31 @@ impl Membership<SeqTypes> for StaticCommittee {
     /// Get the stake table for the current view
     fn stake_table(&self, epoch: Epoch) -> Vec<StakeTableEntry<PubKey>> {
         let state = self.state.read_blocking();
-        if state.indexed_stake_table.contains_key(&epoch) {
-            state.stake_table.clone().into_iter().collect()
-        } else {
-            // TODO can we make state updates reusable? Otherwise we
-            // have to repeat this for the other methods.
-            let mut state = self.state.write_blocking();
-            let stake_tables = self.l1_client.stake_table(&epoch);
 
-            let stake_table: HashSet<StakeTableEntry<PubKey>> =
-                HashSet::from_iter(stake_tables.consensus_stake_table.0);
-            let da_members: HashSet<StakeTableEntry<PubKey>> =
-                HashSet::from_iter(stake_tables.da_stake_table.0);
-
-            let indexed_stake_table: HashMap<PubKey, _> = stake_table
-                .iter()
-                .map(|entry| (PubKey::public_key(entry), entry.clone()))
-                .collect();
-
-            state.indexed_stake_table.insert(epoch, indexed_stake_table);
-
-            let indexed_da_members: HashMap<PubKey, _> = da_members
-                .iter()
-                .map(|entry| (PubKey::public_key(entry), entry.clone()))
-                .collect();
-
-            state.indexed_da_members.insert(epoch, indexed_da_members);
-
-            state.stake_table = stake_table;
-            state.da_members = da_members;
-
-            state.stake_table.clone().into_iter().collect()
+        match state.indexed_stake_table.get(&epoch) {
+            Some(st) => st.clone().into_values().collect(),
+            None => {
+                // TODO can we make state updates reusable? Otherwise we
+                // have to repeat this for the other methods.
+                let stake_tables = self.l1_client.stake_table(&epoch);
+                self.update_stake_table(stake_tables.clone());
+                stake_tables.consensus_stake_table.0
+            }
         }
     }
     /// Get the stake table for the current view
-    fn da_stake_table(&self, _epoch: Epoch) -> Vec<StakeTableEntry<PubKey>> {
-        let sc = tokio::runtime::Runtime::new()
-            .unwrap()
-            .block_on(async { self.state.read().await });
-        sc.da_members.clone().into_iter().collect()
+    fn da_stake_table(&self, epoch: Epoch) -> Vec<StakeTableEntry<PubKey>> {
+        let state = self.state.read_blocking();
+        match state.indexed_da_members.get(&epoch) {
+            Some(map) => map.clone().into_values().collect(),
+            None => {
+                // TODO can we make state updates reusable? Otherwise we
+                // have to repeat this for the other methods.
+                let stake_tables = self.l1_client.stake_table(&epoch);
+                self.update_stake_table(stake_tables.clone());
+                stake_tables.da_stake_table.0
+            }
+        }
     }
 
     /// Get all members of the committee for the current view
@@ -367,10 +347,8 @@ impl Membership<SeqTypes> for StaticCommittee {
         _view_number: <SeqTypes as NodeType>::View,
         _epoch: Epoch,
     ) -> BTreeSet<PubKey> {
-        let sc = tokio::runtime::Runtime::new()
-            .unwrap()
-            .block_on(async { self.state.read().await });
-        sc.stake_table.iter().map(PubKey::public_key).collect()
+        let state = self.state.read_blocking();
+        state.stake_table.iter().map(PubKey::public_key).collect()
     }
 
     /// Get all members of the committee for the current view
@@ -379,9 +357,7 @@ impl Membership<SeqTypes> for StaticCommittee {
         _view_number: <SeqTypes as NodeType>::View,
         _epoch: Epoch,
     ) -> BTreeSet<PubKey> {
-        let sc = tokio::runtime::Runtime::new()
-            .unwrap()
-            .block_on(async { self.state.read().await });
+        let sc = self.state.read_blocking();
 
         sc.da_members.iter().map(PubKey::public_key).collect()
     }
@@ -392,18 +368,14 @@ impl Membership<SeqTypes> for StaticCommittee {
         _view_number: <SeqTypes as NodeType>::View,
         _epoch: Epoch,
     ) -> BTreeSet<PubKey> {
-        let sc = tokio::runtime::Runtime::new()
-            .unwrap()
-            .block_on(async { self.state.read().await });
+        let sc = self.state.read_blocking();
 
         sc.eligible_leaders.iter().map(PubKey::public_key).collect()
     }
 
     /// Get the stake table entry for a public key
     fn stake(&self, pub_key: &PubKey, epoch: Epoch) -> Option<StakeTableEntry<PubKey>> {
-        let sc = tokio::runtime::Runtime::new()
-            .unwrap()
-            .block_on(async { self.state.read().await });
+        let sc = self.state.read_blocking();
 
         // Only return the stake if it is above zero
 
@@ -414,9 +386,7 @@ impl Membership<SeqTypes> for StaticCommittee {
 
     /// Get the DA stake table entry for a public key
     fn da_stake(&self, pub_key: &PubKey, epoch: Epoch) -> Option<StakeTableEntry<PubKey>> {
-        let sc = tokio::runtime::Runtime::new()
-            .unwrap()
-            .block_on(async { self.state.read().await });
+        let sc = self.state.read_blocking();
 
         // Only return the stake if it is above zero
         sc.indexed_da_members
@@ -426,10 +396,7 @@ impl Membership<SeqTypes> for StaticCommittee {
 
     /// Check if a node has stake in the committee
     fn has_stake(&self, pub_key: &PubKey, epoch: Epoch) -> bool {
-        let sc = tokio::runtime::Runtime::new()
-            .unwrap()
-            .block_on(async { self.state.read().await });
-
+        let sc = self.state.read_blocking();
         sc.indexed_stake_table
             .get(&epoch)
             .and_then(|h| h.get(pub_key))
@@ -438,9 +405,7 @@ impl Membership<SeqTypes> for StaticCommittee {
 
     /// Check if a node has stake in the committee
     fn has_da_stake(&self, pub_key: &PubKey, epoch: Epoch) -> bool {
-        let sc = tokio::runtime::Runtime::new()
-            .unwrap()
-            .block_on(async { self.state.read().await });
+        let sc = self.state.read_blocking();
 
         sc.indexed_da_members
             .get(&epoch)
@@ -454,9 +419,7 @@ impl Membership<SeqTypes> for StaticCommittee {
         view_number: <SeqTypes as NodeType>::View,
         _epoch: Epoch,
     ) -> Result<PubKey, Self::Error> {
-        let sc = tokio::runtime::Runtime::new()
-            .unwrap()
-            .block_on(async { self.state.read().await });
+        let sc = self.state.read_blocking();
 
         let index = *view_number as usize % sc.eligible_leaders.len();
         let res = sc.eligible_leaders[index].clone();
@@ -465,54 +428,41 @@ impl Membership<SeqTypes> for StaticCommittee {
 
     /// Get the total number of nodes in the committee
     fn total_nodes(&self, _epoch: Epoch) -> usize {
-        let sc = tokio::runtime::Runtime::new()
-            .unwrap()
-            .block_on(async { self.state.read().await });
+        let sc = self.state.read_blocking();
 
         sc.stake_table.len()
     }
 
     /// Get the total number of DA nodes in the committee
     fn da_total_nodes(&self, _epoch: Epoch) -> usize {
-        let sc = tokio::runtime::Runtime::new()
-            .unwrap()
-            .block_on(async { self.state.read().await });
+        let sc = self.state.read_blocking();
 
         sc.da_members.len()
     }
 
     /// Get the voting success threshold for the committee
     fn success_threshold(&self, _epoch: Epoch) -> NonZeroU64 {
-        let sc = tokio::runtime::Runtime::new()
-            .unwrap()
-            .block_on(async { self.state.read().await });
+        let sc = self.state.read_blocking();
 
         NonZeroU64::new(((sc.stake_table.len() as u64 * 2) / 3) + 1).unwrap()
     }
 
     /// Get the voting success threshold for the committee
     fn da_success_threshold(&self, _epoch: Epoch) -> NonZeroU64 {
-        let sc = tokio::runtime::Runtime::new()
-            .unwrap()
-            .block_on(async { self.state.read().await });
-
+        let sc = self.state.read_blocking();
         NonZeroU64::new(((sc.da_members.len() as u64 * 2) / 3) + 1).unwrap()
     }
 
     /// Get the voting failure threshold for the committee
     fn failure_threshold(&self, _epoch: Epoch) -> NonZeroU64 {
-        let sc = tokio::runtime::Runtime::new()
-            .unwrap()
-            .block_on(async { self.state.read().await });
+        let sc = self.state.read_blocking();
 
         NonZeroU64::new(((sc.stake_table.len() as u64) / 3) + 1).unwrap()
     }
 
     /// Get the voting upgrade threshold for the committee
     fn upgrade_threshold(&self, _epoch: Epoch) -> NonZeroU64 {
-        let sc = tokio::runtime::Runtime::new()
-            .unwrap()
-            .block_on(async { self.state.read().await });
+        let sc = self.state.read_blocking();
 
         NonZeroU64::new(max(
             (sc.stake_table.len() as u64 * 9) / 10,

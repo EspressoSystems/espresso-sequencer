@@ -151,10 +151,6 @@ pub(crate) enum L1Event {
     NewFinalized {
         finalized: L1BlockInfo,
     },
-    NewEpoch {
-        epoch: EpochNumber,
-        l1_block_number: u64,
-    },
 }
 
 #[derive(Debug, Default)]
