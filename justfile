@@ -124,7 +124,7 @@ sol-lint:
 # Build diff-test binary and forge test
 # Note: we use an invalid etherscan api key in order to avoid annoying warnings. See https://github.com/EspressoSystems/espresso-sequencer/issues/979
 sol-test:
-    cargo build --bin diff-test --release
+    cargo build --profile test --bin diff-test
     forge test
 
 # Deploys the light client contract on Sepolia and call it for profiling purposes.
@@ -141,7 +141,7 @@ lc-contract-profiling-sepolia:
     forge script contracts/script/LightClientCallNewFinalizedState.s.sol --sig "run(uint32 numInitValidators, address lcContractAddress)" {{NUM_INIT_VALIDATORS}} $LC_CONTRACT_ADDRESS --fork-url ${SEPOLIA_RPC_URL}  --broadcast  --chain-id sepolia
 
 gas-benchmarks:
-    cargo build --bin diff-test --release
+    cargo build --profile test --bin diff-test
     forge snapshot --mt "test_verify_succeeds|testCorrectUpdateBench"
     @[ -n "$(git diff --name-only .gas-snapshot)" ] && echo "⚠️ Uncommitted gas benchmarks, please stage them before committing." && exit 1 || exit 0
 
