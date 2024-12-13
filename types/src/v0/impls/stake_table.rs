@@ -21,7 +21,7 @@ use hotshot_types::{
 use itertools::Itertools;
 use std::{
     cmp::max,
-    collections::{BTreeSet, HashMap},
+    collections::{BTreeMap, BTreeSet, HashMap},
     num::NonZeroU64,
     str::FromStr,
     sync::Arc,
@@ -136,10 +136,10 @@ struct Committee {
     eligible_leaders: Vec<StakeTableEntry<PubKey>>,
 
     /// TODO: add comment
-    indexed_stake_table: HashMap<PubKey, StakeTableEntry<PubKey>>,
+    indexed_stake_table: BTreeMap<PubKey, StakeTableEntry<PubKey>>,
 
     /// TODO: comment
-    indexed_da_members: HashMap<PubKey, StakeTableEntry<PubKey>>,
+    indexed_da_members: BTreeMap<PubKey, StakeTableEntry<PubKey>>,
 }
 
 impl EpochCommittees {
@@ -153,14 +153,14 @@ impl EpochCommittees {
         // update events and building the table for us. We will need
         // more subtlety when start fetching only the events since last update.
 
-        let indexed_stake_table: HashMap<PubKey, _> = st
+        let indexed_stake_table: BTreeMap<PubKey, _> = st
             .stake_table
             .0
             .iter()
             .map(|entry| (PubKey::public_key(entry), entry.clone()))
             .collect();
 
-        let indexed_da_members: HashMap<PubKey, _> = st
+        let indexed_da_members: BTreeMap<PubKey, _> = st
             .da_members
             .0
             .iter()
@@ -217,13 +217,13 @@ impl EpochCommittees {
             .collect();
 
         // Index the stake table by public key
-        let indexed_stake_table: HashMap<PubKey, _> = members
+        let indexed_stake_table: BTreeMap<PubKey, _> = members
             .iter()
             .map(|entry| (PubKey::public_key(entry), entry.clone()))
             .collect();
 
         // Index the stake table by public key
-        let indexed_da_members: HashMap<PubKey, _> = da_members
+        let indexed_da_members: BTreeMap<PubKey, _> = da_members
             .iter()
             .map(|entry| (PubKey::public_key(entry), entry.clone()))
             .collect();
@@ -281,13 +281,13 @@ impl Membership<SeqTypes> for EpochCommittees {
             .collect();
 
         // Index the stake table by public key
-        let indexed_stake_table: HashMap<PubKey, _> = members
+        let indexed_stake_table: BTreeMap<PubKey, _> = members
             .iter()
             .map(|entry| (PubKey::public_key(entry), entry.clone()))
             .collect();
 
         // Index the stake table by public key
-        let indexed_da_members: HashMap<PubKey, _> = da_members
+        let indexed_da_members: BTreeMap<PubKey, _> = da_members
             .iter()
             .map(|entry| (PubKey::public_key(entry), entry.clone()))
             .collect();
