@@ -148,7 +148,7 @@ impl EpochCommittees {
     /// to be called before calling `self.stake()` so that
     /// `Self.stake_table` only needs to be updated once in a given
     /// life-cycle but may be read from many times.
-    fn update_stake_table(&self, epoch: EpochNumber, st: StakeTables) {
+    fn update_stake_table(&self, epoch: EpochNumber, st: StakeTables) -> Committee {
         // This works because `get_stake_table` is fetching *all*
         // update events and building the table for us. We will need
         // more subtlety when start fetching only the events since last update.
@@ -176,16 +176,16 @@ impl EpochCommittees {
 
         let mut state = self.state.write_blocking();
 
-        state.insert(
-            epoch,
-            Committee {
-                eligible_leaders,
-                indexed_stake_table,
-                indexed_da_members,
-            },
-        );
-    }
+        let committee = Committee {
+            eligible_leaders,
+            indexed_stake_table,
+            indexed_da_members,
+        };
 
+        state.insert(epoch, committee.clone());
+        committee
+    }
+    fn stake_table(committee: Committee) {}
     // We need a constructor to match our concrete type.
     pub fn new_stake(
         // TODO remove `new` from trait and rename this to `new`.
@@ -310,24 +310,24 @@ impl Membership<SeqTypes> for EpochCommittees {
 
     /// Get the stake table for the current view
     fn stake_table(&self, epoch: Epoch) -> Vec<StakeTableEntry<PubKey>> {
-        match self.state.read_blocking().get(&epoch) {
-            Some(st) => st.indexed_stake_table.clone().into_values().collect(),
-            None => {
-                let stake_tables = self.l1_client.stake_table(&epoch);
-                self.update_stake_table(epoch, stake_tables.clone());
-                stake_tables.stake_table.0
-            }
+        if let Some(st) = self.state.read_blocking().get(&epoch) {
+            st.indexed_stake_table.clone().into_values().collect()
+        } else {
+            self.update_stake_table(epoch, self.l1_client.stake_table(&epoch))
+                .indexed_stake_table
+                .into_values()
+                .collect()
         }
     }
     /// Get the stake table for the current view
     fn da_stake_table(&self, epoch: Epoch) -> Vec<StakeTableEntry<PubKey>> {
-        match self.state.read_blocking().get(&epoch) {
-            Some(sc) => sc.indexed_da_members.clone().into_values().collect(),
-            None => {
-                let stake_tables = self.l1_client.stake_table(&epoch);
-                self.update_stake_table(epoch, stake_tables.clone());
-                stake_tables.da_members.0
-            }
+        if let Some(sc) = self.state.read_blocking().get(&epoch) {
+            sc.indexed_da_members.clone().into_values().collect()
+        } else {
+            self.update_stake_table(epoch, self.l1_client.stake_table(&epoch))
+                .indexed_da_members
+                .into_values()
+                .collect()
         }
     }
 
@@ -337,18 +337,13 @@ impl Membership<SeqTypes> for EpochCommittees {
         _view_number: <SeqTypes as NodeType>::View,
         epoch: Epoch,
     ) -> BTreeSet<PubKey> {
-        match self.state.read_blocking().get(&epoch) {
-            Some(sc) => sc.indexed_stake_table.clone().into_keys().collect(),
-            None => {
-                let stake_tables = self.l1_client.stake_table(&epoch);
-                self.update_stake_table(epoch, stake_tables.clone());
-                stake_tables
-                    .stake_table
-                    .0
-                    .iter()
-                    .map(PubKey::public_key)
-                    .collect()
-            }
+        if let Some(sc) = self.state.read_blocking().get(&epoch) {
+            sc.indexed_stake_table.clone().into_keys().collect()
+        } else {
+            self.update_stake_table(epoch, self.l1_client.stake_table(&epoch))
+                .indexed_stake_table
+                .into_keys()
+                .collect()
         }
     }
 
@@ -358,18 +353,13 @@ impl Membership<SeqTypes> for EpochCommittees {
         _view_number: <SeqTypes as NodeType>::View,
         epoch: Epoch,
     ) -> BTreeSet<PubKey> {
-        match self.state.read_blocking().get(&epoch) {
-            Some(sc) => sc.indexed_da_members.clone().into_keys().collect(),
-            None => {
-                let stake_tables = self.l1_client.stake_table(&epoch);
-                self.update_stake_table(epoch, stake_tables.clone());
-                stake_tables
-                    .da_members
-                    .0
-                    .iter()
-                    .map(PubKey::public_key)
-                    .collect()
-            }
+        if let Some(sc) = self.state.read_blocking().get(&epoch) {
+            sc.indexed_da_members.clone().into_keys().collect()
+        } else {
+            self.update_stake_table(epoch, self.l1_client.stake_table(&epoch))
+                .indexed_da_members
+                .into_keys()
+                .collect()
         }
     }
 
