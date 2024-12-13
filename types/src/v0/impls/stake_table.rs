@@ -146,7 +146,6 @@ impl MembershipCommittee {
     /// `Self.stake_table` only needs to be updated once in a given
     /// life-cycle but may be read from many times.
     fn update_stake_table(&self, st: StakeTables) {
-        let mut state = self.state.write_blocking();
         // This works because `get_stake_table` is fetching *all*
         // update events and building the table for us. We will need
         // more subtlety when start fetching only the events since last update.
@@ -171,6 +170,8 @@ impl MembershipCommittee {
             .into_iter()
             .filter(|entry| entry.stake() > U256::zero())
             .collect();
+
+        let mut state = self.state.write_blocking();
 
         state.insert(
             EpochNumber::genesis(),
