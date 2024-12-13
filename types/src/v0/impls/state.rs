@@ -695,8 +695,11 @@ fn validate_builder_fee(
     Ok(())
 }
 
-async fn update_l1_state_stake_tables(instance: &NodeState, header: &Header, chain_config : ChainConfig) -> anyhow::Result<()> {
-    
+async fn update_l1_state_stake_tables(
+    instance: &NodeState,
+    header: &Header,
+    chain_config: ChainConfig,
+) -> anyhow::Result<()> {
     let Some(contract_addr) = chain_config.stake_table_contract else {
         bail!("stake table contract not found");
     };
@@ -714,8 +717,12 @@ async fn update_l1_state_stake_tables(instance: &NodeState, header: &Header, cha
         return Ok(());
     };
 
-    l1.update_membership(contract_addr, l1_finalized.number(), EpochNumber::new(epoch))
-        .await;
+    l1.update_membership(
+        contract_addr,
+        l1_finalized.number(),
+        EpochNumber::new(epoch),
+    )
+    .await;
 
     Ok(())
 }

@@ -376,7 +376,12 @@ impl L1Client {
         }
     }
     // TODO I think we need to shoehorn this guy into `spawn_tasks`.
-    pub async fn update_membership(&self, contract: Address, l1_block_number: u64, epoch: EpochNumber) {
+    pub async fn update_membership(
+        &self,
+        contract: Address,
+        l1_block_number: u64,
+        epoch: EpochNumber,
+    ) {
         let retry_delay = self.retry_delay;
         let state = self.state.clone();
 
@@ -826,13 +831,14 @@ impl L1Client {
     }
 
     /// Get `StakeTable` at block height.
-    pub async fn get_stake_table(&self, contract: Address, block: u64) -> anyhow::Result<StakeTables> {
+    pub async fn get_stake_table(
+        &self,
+        contract: Address,
+        block: u64,
+    ) -> anyhow::Result<StakeTables> {
         // TODO stake_table_address needs to be passed in to L1Client
         // before update loop starts.
-        let stake_table_contract = PermissionedStakeTable::new(
-            contract,
-            self.provider.clone(),
-        );
+        let stake_table_contract = PermissionedStakeTable::new(contract, self.provider.clone());
 
         let events = stake_table_contract
             .stakers_updated_filter()
