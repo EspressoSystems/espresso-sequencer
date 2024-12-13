@@ -3,7 +3,7 @@ use async_lock::RwLock;
 use derivative::Derivative;
 use espresso_types::{
     v0::traits::{EventConsumer as PersistenceEventConsumer, SequencerPersistence},
-    MembershipCommittees, NodeState, PubKey, Transaction, ValidatedState,
+    EpochCommittees, NodeState, PubKey, Transaction, ValidatedState,
 };
 use futures::{
     future::{join_all, Future},
@@ -80,7 +80,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> Sequence
     pub async fn init(
         network_config: NetworkConfig<PubKey>,
         validator_config: ValidatorConfig<<SeqTypes as NodeType>::SignatureKey>,
-        membership: MembershipCommittees,
+        membership: EpochCommittees,
         instance_state: NodeState,
         persistence: P,
         network: Arc<N>,

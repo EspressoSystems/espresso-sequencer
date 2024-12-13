@@ -90,9 +90,9 @@ impl StakeTables {
 
 #[derive(Clone, Debug)]
 /// Type to describe DA and Stake memberships
-pub struct MembershipCommittees {
+pub struct EpochCommittees {
     /// Holds Stake table and da stake
-    state: Arc<RwLock<HashMap<Epoch, StaticCommittee>>>,
+    state: Arc<RwLock<HashMap<Epoch, Committee>>>,
 
     /// Number of blocks in an epoch
     _epoch_size: u64,
@@ -129,7 +129,7 @@ impl StakeTableDelta {
 }
 /// Holds Stake table and da stake
 #[derive(Clone, Debug)]
-struct StaticCommittee {
+struct Committee {
     /// The nodes eligible for leadership.
     /// NOTE: This is currently a hack because the DA leader needs to be the quorum
     /// leader but without voting rights.
@@ -142,7 +142,7 @@ struct StaticCommittee {
     indexed_da_stake_table: HashMap<PubKey, StakeTableEntry<PubKey>>,
 }
 
-impl MembershipCommittees {
+impl EpochCommittees {
     /// Updates `Self.stake_table` with stake_table for
     /// `Self.contract_address` at `l1_block_height`. This is intended
     /// to be called before calling `self.stake()` so that
@@ -178,7 +178,7 @@ impl MembershipCommittees {
 
         state.insert(
             EpochNumber::genesis(),
-            StaticCommittee {
+            Committee {
                 eligible_leaders,
                 indexed_stake_table,
                 indexed_da_stake_table,
@@ -228,7 +228,7 @@ impl MembershipCommittees {
             .map(|entry| (PubKey::public_key(entry), entry.clone()))
             .collect();
 
-        let members = StaticCommittee {
+        let members = Committee {
             eligible_leaders,
             indexed_stake_table,
             indexed_da_stake_table,
@@ -249,7 +249,7 @@ impl MembershipCommittees {
 #[error("Could not lookup leader")] // TODO error variants? message?
 pub struct LeaderLookupError;
 
-impl Membership<SeqTypes> for MembershipCommittees {
+impl Membership<SeqTypes> for EpochCommittees {
     type Error = LeaderLookupError;
 
     // DO NOT USE. Dummy constructor to comply w/ trait.
@@ -292,7 +292,7 @@ impl Membership<SeqTypes> for MembershipCommittees {
             .map(|entry| (PubKey::public_key(entry), entry.clone()))
             .collect();
 
-        let members = StaticCommittee {
+        let members = Committee {
             eligible_leaders,
             indexed_stake_table,
             indexed_da_stake_table,
@@ -471,7 +471,7 @@ impl Membership<SeqTypes> for MembershipCommittees {
         let state = self.state.read_blocking();
         state
             .get(&epoch)
-            .map(|sc: &StaticCommittee| sc.indexed_da_stake_table.len())
+            .map(|sc: &Committee| sc.indexed_da_stake_table.len())
             .unwrap_or_default()
     }
 
