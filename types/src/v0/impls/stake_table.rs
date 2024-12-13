@@ -185,7 +185,6 @@ impl EpochCommittees {
         state.insert(epoch, committee.clone());
         committee
     }
-    fn stake_table(committee: Committee) {}
     // We need a constructor to match our concrete type.
     pub fn new_stake(
         // TODO remove `new` from trait and rename this to `new`.
