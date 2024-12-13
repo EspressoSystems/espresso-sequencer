@@ -1350,7 +1350,7 @@ mod test {
 
         let new_nodes: Vec<NodeInfo> = vec![node.into()];
         let updater = stake_table_contract.update(v, new_nodes);
-        updater.send().await?;
+        updater.send().await?.await?;
 
         let block = client.get_block(BlockNumber::Latest).await?.unwrap();
         let nodes = l1_client
