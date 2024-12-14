@@ -358,7 +358,7 @@ forge script contracts/script/PlonkVerifier.s.sol:DeployPlonkVerifierScript \
 
 ```bash
 Error:
-error parsing abi for contract '_70c760a3e059d83dbf77da7f6778fbc0': couldn't parse ABI string as either human readable (1) or JSON (2):
+error parsing abi for contract '_70c760a3e059d83dbf77da7f6778fbc0': couldn't parse ABI string as either human-readable (1) or JSON (2):
 1. Illegal abi `{`, expected function
 2. data did not match any variant of untagged enum JsonContract
 error: Recipe `gen-bindings` failed on line 65 with exit code 1
