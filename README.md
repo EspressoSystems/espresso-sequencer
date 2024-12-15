@@ -145,7 +145,7 @@ To deploy to sepolia set `SEPOLIA_RPC_URL` and `MNEMONIC` env vars and run
 
     forge script DeployHotShot --broadcast --rpc-url sepolia
 
-To additionally verify the contact on etherscan set the `ETHERSCAN_API_KEY` env var and run
+To additionally verify the contract on etherscan set the `ETHERSCAN_API_KEY` env var and run
 
     forge script DeployHotShot --broadcast --rpc-url sepolia --verify
 
