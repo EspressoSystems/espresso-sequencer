@@ -11,7 +11,12 @@ use hotshot_types::{
 };
 use lru::LruCache;
 use serde::{Deserialize, Serialize};
-use std::{collections::BTreeMap, num::NonZeroUsize, sync::Arc, time::Duration};
+use std::{
+    collections::BTreeMap,
+    num::NonZeroUsize,
+    sync::{self, Arc},
+    time::Duration,
+};
 use tokio::{
     sync::{Mutex, RwLock},
     task::JoinHandle,
@@ -111,6 +116,9 @@ pub struct L1Client {
     pub(crate) events_max_block_range: u64,
     /// Shared state updated by an asynchronous task which polls the L1.
     pub(crate) state: Arc<Mutex<L1State>>,
+    /// TODO: We need to be able to take out sync locks on this part of the
+    /// state. until the trait definition of Membership is updated in HotShot.
+    pub(crate) stake_table_state: sync::Arc<sync::RwLock<BTreeMap<EpochNumber, StakeTables>>>,
     /// Channel used by the async update task to send events to clients.
     pub(crate) sender: Sender<L1Event>,
     /// Receiver for events from the async update task.
@@ -140,7 +148,6 @@ pub(crate) enum RpcClient {
 pub(crate) struct L1State {
     pub(crate) snapshot: L1Snapshot,
     pub(crate) finalized: LruCache<u64, L1BlockInfo>,
-    pub(crate) stake_tables: BTreeMap<EpochNumber, StakeTables>,
 }
 
 #[derive(Clone, Debug)]

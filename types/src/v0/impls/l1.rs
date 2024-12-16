@@ -18,9 +18,10 @@ use lru::LruCache;
 use serde::{de::DeserializeOwned, Serialize};
 use std::{
     cmp::{min, Ordering},
+    collections::BTreeMap,
     fmt::Debug,
     num::NonZeroUsize,
-    sync::Arc,
+    sync::{self, Arc},
     time::Duration,
 };
 use tokio::{
@@ -343,6 +344,7 @@ impl L1Client {
             provider: Arc::new(provider),
             events_max_block_range: opt.l1_events_max_block_range,
             state: Arc::new(Mutex::new(L1State::new(opt.l1_blocks_cache_size))),
+            stake_table_state: sync::Arc::new(sync::RwLock::new(BTreeMap::new())),
             sender,
             receiver: receiver.deactivate(),
             update_task: Default::default(),
@@ -382,7 +384,7 @@ impl L1Client {
         epoch: EpochNumber,
     ) {
         let retry_delay = self.retry_delay;
-        let state = self.state.clone();
+        let state = self.stake_table_state.clone();
 
         let span = tracing::warn_span!("L1 client memberships update");
 
@@ -397,8 +399,8 @@ impl L1Client {
                         );
                     }
                     Ok(stake_tables) => {
-                        let mut state = state.lock().await;
-                        let _ = state.stake_tables.insert(epoch, stake_tables);
+                        let mut state = state.write().unwrap();
+                        let _ = state.insert(epoch, stake_tables);
                     }
                 }
 
@@ -563,7 +565,7 @@ impl L1Client {
     }
 
     pub fn stake_table(&self, epoch: &EpochNumber) -> StakeTables {
-        if let Some(stake_tables) = self.state.blocking_lock().stake_tables.get(epoch) {
+        if let Some(stake_tables) = self.stake_table_state.read().unwrap().get(epoch) {
             stake_tables.clone()
         } else {
             // It would be nice if we could update l1_cache of stake
@@ -852,7 +854,6 @@ impl L1State {
         Self {
             snapshot: Default::default(),
             finalized: LruCache::new(cache_size),
-            stake_tables: Default::default(),
         }
     }
 
