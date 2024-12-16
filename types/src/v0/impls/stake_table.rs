@@ -18,7 +18,6 @@ use hotshot_types::{
     PeerConfig,
 };
 use itertools::Itertools;
-
 use std::sync::RwLock;
 use std::{
     cmp::max,
@@ -336,7 +335,6 @@ impl Membership<SeqTypes> for EpochCommittees {
     }
 
     /// Get all members of the committee for the current view
-
     fn committee_members(
         &self,
         _view_number: <SeqTypes as NodeType>::View,
@@ -446,7 +444,6 @@ impl Membership<SeqTypes> for EpochCommittees {
     }
 
     /// Get the total number of nodes in the committee
-
     fn total_nodes(&self, epoch: Epoch) -> usize {
         self.state
             .read()
@@ -457,7 +454,6 @@ impl Membership<SeqTypes> for EpochCommittees {
     }
 
     /// Get the total number of DA nodes in the committee
-
     fn da_total_nodes(&self, epoch: Epoch) -> usize {
         self.state
             .read()
@@ -468,7 +464,6 @@ impl Membership<SeqTypes> for EpochCommittees {
     }
 
     /// Get the voting success threshold for the committee
-
     fn success_threshold(&self, epoch: Epoch) -> NonZeroU64 {
         let quorum = self
             .state
