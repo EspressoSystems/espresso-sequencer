@@ -13,7 +13,7 @@ pub struct CombinedStakeTable(Vec<PeerConfigKeys<PubKey>>);
 
 #[derive(Clone, Debug, From, Into)]
 /// NewType to disambiguate DA Membership
-pub struct DaMembers(pub Vec<StakeTableEntry<PubKey>>);
+pub struct DAMembers(pub Vec<StakeTableEntry<PubKey>>);
 
 #[derive(Clone, Debug, From, Into)]
 /// NewType to disambiguate StakeTable
@@ -22,5 +22,5 @@ pub struct StakeTable(pub Vec<StakeTableEntry<PubKey>>);
 #[derive(Clone, Debug)]
 pub struct StakeTables {
     pub stake_table: StakeTable,
-    pub da_members: DaMembers,
+    pub da_members: DAMembers,
 }
