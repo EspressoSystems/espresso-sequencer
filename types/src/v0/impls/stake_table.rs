@@ -234,7 +234,9 @@ impl EpochCommittees {
         };
 
         let mut map = HashMap::new();
-        map.insert(Epoch::genesis(), members);
+        map.insert(Epoch::genesis(), members.clone());
+        // TODO: remove this, workaround for hotshot asking for stake tables from epoch 1
+        map.insert(Epoch::genesis() + 1u64, members);
 
         Self {
             state: Arc::new(RwLock::new(map)),
@@ -298,7 +300,9 @@ impl Membership<SeqTypes> for EpochCommittees {
         };
 
         let mut map = HashMap::new();
-        map.insert(Epoch::genesis(), members);
+        map.insert(Epoch::genesis(), members.clone());
+        // TODO: remove this, workaround for hotshot asking for stake tables from epoch 1
+        map.insert(Epoch::genesis() + 1u64, members);
 
         Self {
             state: Arc::new(RwLock::new(map)),
