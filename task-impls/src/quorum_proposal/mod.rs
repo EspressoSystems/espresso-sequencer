@@ -533,10 +533,12 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                 if epoch > &self.cur_epoch {
                     self.cur_epoch = *epoch;
                 }
-                self.cancel_tasks(*view);
+                let keep_view = TYPES::View::new(view.saturating_sub(1));
+                self.cancel_tasks(keep_view);
             }
             HotShotEvent::Timeout(view, ..) => {
-                self.cancel_tasks(*view);
+                let keep_view = TYPES::View::new(view.saturating_sub(1));
+                self.cancel_tasks(keep_view);
             }
             HotShotEvent::HighQcSend(qc, ..) => {
                 ensure!(qc.view_number() > self.highest_qc.view_number());
