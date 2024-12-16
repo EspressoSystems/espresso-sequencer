@@ -708,6 +708,7 @@ async fn update_l1_state_stake_tables(
     let epoch = epoch_from_block_number(header.block_number(), EPOCH_HEIGHT);
 
     if epoch <= prev_epoch {
+        tracing::info!("Epochs are not progressing with HotShot blocks");
         return Ok(());
     }
 
