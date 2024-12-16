@@ -475,6 +475,7 @@ pub async fn init_node<P: SequencerPersistence, V: Versions>(
         node_id: node_index,
         upgrades: genesis.upgrades,
         current_version: V::Base::VERSION,
+        epoch_height: None,
     };
 
     // Create the HotShot membership
@@ -959,6 +960,7 @@ pub mod testing {
             )
             .with_current_version(V::Base::version())
             .with_genesis(state)
+            .with_epoch_height(config.epoch_height)
             .with_upgrades(upgrades);
 
             // Create the HotShot membership

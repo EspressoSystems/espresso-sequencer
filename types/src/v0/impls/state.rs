@@ -28,7 +28,7 @@ use vbs::version::{StaticVersionType, Version};
 
 use super::{
     auction::ExecutionError, fee_info::FeeError, instance_state::NodeState, BlockMerkleCommitment,
-    BlockSize, EpochVersion, FeeMerkleCommitment, L1Client, EPOCH_HEIGHT,
+    BlockSize, EpochVersion, FeeMerkleCommitment, L1Client,
 };
 use crate::{
     traits::StateCatchup,
@@ -703,9 +703,11 @@ async fn update_l1_state_stake_tables(
     let Some(contract_addr) = chain_config.stake_table_contract else {
         bail!("stake table contract not found");
     };
-
-    let prev_epoch = epoch_from_block_number(header.block_number().saturating_sub(1), EPOCH_HEIGHT);
-    let epoch = epoch_from_block_number(header.block_number(), EPOCH_HEIGHT);
+    let epoch_height = instance
+        .epoch_height
+        .expect("`epoch_height should be set on `NodeState`");
+    let prev_epoch = epoch_from_block_number(header.block_number().saturating_sub(1), epoch_height);
+    let epoch = epoch_from_block_number(header.block_number(), epoch_height);
 
     if epoch <= prev_epoch {
         tracing::info!("Epochs are not progressing with HotShot blocks");

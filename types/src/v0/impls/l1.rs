@@ -564,6 +564,8 @@ impl L1Client {
         self.state.lock().await.snapshot
     }
 
+    // TODO remove after `Memberships` trait update on hotshot
+    // https://github.com/EspressoSystems/HotShot/issues/3966
     pub fn stake_table(&self, epoch: &EpochNumber) -> StakeTables {
         if let Some(stake_tables) = self.stake_table_state.read().unwrap().get(epoch) {
             stake_tables.clone()
