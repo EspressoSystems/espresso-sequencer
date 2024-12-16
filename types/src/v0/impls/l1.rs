@@ -344,7 +344,7 @@ impl L1Client {
             provider: Arc::new(provider),
             events_max_block_range: opt.l1_events_max_block_range,
             state: Arc::new(Mutex::new(L1State::new(opt.l1_blocks_cache_size))),
-            stake_table_state: sync::Arc::new(sync::RwLock::new(BTreeMap::new())),
+            stake_table_state: Arc::new(sync::RwLock::new(BTreeMap::new())),
             sender,
             receiver: receiver.deactivate(),
             update_task: Default::default(),
