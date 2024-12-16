@@ -568,9 +568,7 @@ impl L1Client {
         if let Some(stake_tables) = self.stake_table_state.read().unwrap().get(epoch) {
             stake_tables.clone()
         } else {
-            // It would be nice if we could update l1_cache of stake
-            // tables here. But how to we know l1_block of the epoch?
-            todo!();
+            StakeTables::new(vec![].into(), vec![].into())
         }
     }
 
