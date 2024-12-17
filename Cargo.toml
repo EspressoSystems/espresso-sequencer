@@ -168,3 +168,19 @@ opt-level = 3
 opt-level = 3
 [profile.test.package.diff-test-hotshot]
 opt-level = 3
+
+[patch.'https://github.com/EspressoSystems/hotshot.git']
+hotshot = { git = 'https://github.com/EspressoSystems/HotShot//', branch = 'lr/double-quorum' }
+hotshot-builder-api = { git = 'https://github.com/EspressoSystems/hotshot//', branch = 'lr/double-quorum' }
+hotshot-orchestrator ={ git = 'https://github.com/EspressoSystems/hotshot//', branch = 'lr/double-quorum' }
+hotshot-stake-table = { git = 'https://github.com/EspressoSystems/hotshot//', branch = 'lr/double-quorum' }
+hotshot-task = { git = 'https://github.com/EspressoSystems/hotshot//', branch = 'lr/double-quorum' }
+hotshot-task-impls = { git = 'https://github.com/EspressoSystems/hotshot//', branch = 'lr/double-quorum' }
+hotshot-testing = { git = 'https://github.com/EspressoSystems/hotshot//', branch = 'lr/double-quorum' }
+hotshot-types ={ git = 'https://github.com/EspressoSystems/hotshot//', branch = 'lr/double-quorum' }
+libp2p-networking = { git = "https://github.com/EspressoSystems/hotshot//", branch = 'lr/double-quorum'  }
+hotshot-example-types = { git = "https://github.com/EspressoSystems/hotshot//", branch = 'lr/double-quorum' }
+utils = { git = "https://github.com/EspressoSystems/hotshot//", branch = 'lr/double-quorum' }
+
+# patch
+# https://github.com/rust-lang/cargo/issues/5478
