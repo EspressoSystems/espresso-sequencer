@@ -25,6 +25,7 @@ use hotshot_types::{
         node_implementation::{ConsensusTime, NodeType, Versions},
         signature_key::SignatureKey,
     },
+    utils::EpochTransitionIndicator,
     vote::HasViewNumber,
 };
 use tracing::instrument;
@@ -243,7 +244,7 @@ impl<TYPES: NodeType, V: Versions> UpgradeTaskState<TYPES, V> {
                     &event,
                     &tx,
                     &self.upgrade_lock,
-                    true,
+                    EpochTransitionIndicator::NotInTransition,
                 )
                 .await?;
             }
@@ -287,6 +288,7 @@ impl<TYPES: NodeType, V: Versions> UpgradeTaskState<TYPES, V> {
                     let upgrade_proposal = UpgradeProposal {
                         upgrade_proposal: upgrade_proposal_data.clone(),
                         view_number: TYPES::View::new(view + UPGRADE_PROPOSE_OFFSET),
+                        epoch: self.cur_epoch,
                     };
 
                     let signature = TYPES::SignatureKey::sign(

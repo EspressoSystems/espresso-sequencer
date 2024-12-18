@@ -10,12 +10,13 @@ use async_broadcast::Sender;
 use chrono::Utc;
 use hotshot_types::{
     event::{Event, EventType},
-    simple_vote::{QuorumVote2, TimeoutData2, TimeoutVote2},
+    simple_vote::{HasEpoch, QuorumVote2, TimeoutData2, TimeoutVote2},
     traits::{
         election::Membership,
         node_implementation::{ConsensusTime, NodeImplementation, NodeType},
     },
-    vote::HasViewNumber,
+    utils::EpochTransitionIndicator,
+    vote::{HasViewNumber, Vote},
 };
 use tokio::{spawn, time::sleep};
 use tracing::instrument;
@@ -46,7 +47,7 @@ pub(crate) async fn handle_quorum_vote_recv<
         .is_high_qc_for_last_block();
     let we_are_leader = task_state
         .membership
-        .leader(vote.view_number() + 1, task_state.cur_epoch)?
+        .leader(vote.view_number() + 1, vote.data.epoch)?
         == task_state.public_key;
     ensure!(
         in_transition || we_are_leader,
@@ -56,19 +57,44 @@ pub(crate) async fn handle_quorum_vote_recv<
         )
     );
 
+    let transition_indicator = if in_transition {
+        EpochTransitionIndicator::InTransition
+    } else {
+        EpochTransitionIndicator::NotInTransition
+    };
     handle_vote(
         &mut task_state.vote_collectors,
         vote,
         task_state.public_key.clone(),
         &task_state.membership,
-        task_state.cur_epoch,
+        vote.data.epoch,
         task_state.id,
         &event,
         sender,
         &task_state.upgrade_lock,
-        !in_transition,
+        transition_indicator.clone(),
     )
     .await?;
+
+    // If the vote sender belongs to the next epoch, collect it separately to form the second QC
+    if task_state
+        .membership
+        .has_stake(&vote.signing_key(), vote.epoch() + 1)
+    {
+        handle_vote(
+            &mut task_state.next_epoch_vote_collectors,
+            &vote.clone().into(),
+            task_state.public_key.clone(),
+            &task_state.membership,
+            vote.data.epoch,
+            task_state.id,
+            &event,
+            sender,
+            &task_state.upgrade_lock,
+            transition_indicator,
+        )
+        .await?;
+    }
 
     Ok(())
 }
@@ -101,12 +127,12 @@ pub(crate) async fn handle_timeout_vote_recv<
         vote,
         task_state.public_key.clone(),
         &task_state.membership,
-        task_state.cur_epoch,
+        vote.data.epoch,
         task_state.id,
         &event,
         sender,
         &task_state.upgrade_lock,
-        true,
+        EpochTransitionIndicator::NotInTransition,
     )
     .await?;
 

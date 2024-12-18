@@ -28,7 +28,7 @@ use hotshot_types::{
         signature_key::SignatureKey,
         BlockPayload, ValidatedState,
     },
-    utils::{epoch_from_block_number, Terminator, View, ViewInner},
+    utils::{epoch_from_block_number, is_last_block_in_epoch, Terminator, View, ViewInner},
     vote::{Certificate, HasViewNumber},
 };
 use tokio::time::timeout;
@@ -572,6 +572,12 @@ pub async fn validate_proposal_safety_and_liveness<
                 )
             }
         );
+
+        // Make sure that the epoch transition proposal includes the next epoch QC
+        if is_last_block_in_epoch(parent_leaf.height(), validation_info.epoch_height) {
+            ensure!(proposal.data.next_epoch_justify_qc.is_some(),
+            "Epoch transition proposal does not include the next epoch justify QC. Do not vote!");
+        }
 
         // Liveness check.
         let liveness_check = justify_qc.view_number() > consensus_reader.locked_view();

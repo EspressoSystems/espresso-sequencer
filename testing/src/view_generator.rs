@@ -138,6 +138,7 @@ impl TestView {
                 &TestInstanceState::default(),
             )
             .await,
+            next_epoch_justify_qc: None,
             upgrade_certificate: None,
             view_change_evidence: None,
             drb_result: INITIAL_DRB_RESULT,
@@ -368,6 +369,7 @@ impl TestView {
             block_header: block_header.clone(),
             view_number: next_view,
             justify_qc: quorum_certificate.clone(),
+            next_epoch_justify_qc: None,
             upgrade_certificate: upgrade_certificate.clone(),
             view_change_evidence,
             drb_result: INITIAL_DRB_RESULT,

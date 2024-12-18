@@ -83,7 +83,7 @@ pub trait Certificate<TYPES: NodeType, T>: HasViewNumber<TYPES> {
     // TODO: Make this a static ratio of the total stake of `Membership`
     fn threshold<MEMBERSHIP: Membership<TYPES>>(
         membership: &MEMBERSHIP,
-        epoch: <TYPES as NodeType>::Epoch,
+        epoch: TYPES::Epoch,
     ) -> u64;
 
     /// Get  Stake Table from Membership implementation.

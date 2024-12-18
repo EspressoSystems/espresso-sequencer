@@ -332,7 +332,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> NetworkRequestState<TYPES, I
         .await
     }
 
-    /// Returns true if we got the data we wanted, a shutdown even was received, or the view has moved on.
+    /// Returns true if we got the data we wanted, a shutdown event was received, or the view has moved on.
     async fn cancel_vid_request_task(
         consensus: &OuterConsensus<TYPES>,
         sender: &Sender<Arc<HotShotEvent<TYPES>>>,

@@ -28,7 +28,7 @@ use hotshot_types::{
     constants::EVENT_CHANNEL_SIZE,
     data::Leaf2,
     event::Event,
-    simple_certificate::QuorumCertificate2,
+    simple_certificate::{NextEpochQuorumCertificate2, QuorumCertificate2},
     traits::{
         network::{AsyncGenerator, ConnectedNetwork},
         node_implementation::{ConsensusTime, NodeImplementation, NodeType, Versions},
@@ -65,6 +65,8 @@ pub struct SpinningTask<
     pub(crate) last_decided_leaf: Leaf2<TYPES>,
     /// Highest qc seen in the test for restarting nodes
     pub(crate) high_qc: QuorumCertificate2<TYPES>,
+    /// Next epoch highest qc seen in the test for restarting nodes
+    pub(crate) next_epoch_high_qc: Option<NextEpochQuorumCertificate2<TYPES>>,
     /// Add specified delay to async calls
     pub(crate) async_delay_config: DelayConfig,
     /// Context stored for nodes to be restarted with
@@ -160,6 +162,7 @@ where
                                             TYPES::View::genesis(),
                                             BTreeMap::new(),
                                             self.high_qc.clone(),
+                                            self.next_epoch_high_qc.clone(),
                                             None,
                                             Vec::new(),
                                             BTreeMap::new(),
@@ -249,6 +252,7 @@ where
                                         )
                                         .await,
                                     ),
+                                    read_storage.next_epoch_high_qc_cloned().await,
                                     read_storage.decided_upgrade_certificate().await,
                                     Vec::new(),
                                     BTreeMap::new(),

@@ -238,7 +238,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static, V: Versions> Handl
             self.private_key.clone(),
             self.upgrade_lock.clone(),
             self.view_number,
-            self.epoch_height,
             Arc::clone(&self.storage),
             leaf,
             vid_share,
@@ -504,6 +503,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> QuorumVoteTaskS
                 );
 
                 let cert_epoch = cert.data.epoch;
+
                 // Validate the DAC.
                 ensure!(
                     cert.is_valid_cert(
@@ -721,7 +721,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> QuorumVoteTaskS
             self.private_key.clone(),
             self.upgrade_lock.clone(),
             proposal.data.view_number(),
-            self.epoch_height,
             Arc::clone(&self.storage),
             proposed_leaf,
             updated_vid,

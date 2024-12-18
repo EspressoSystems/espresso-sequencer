@@ -24,7 +24,7 @@ use hotshot_types::{
         storage::Storage,
         ValidatedState,
     },
-    utils::epoch_from_block_number,
+    utils::{epoch_from_block_number, is_last_block_in_epoch},
     vote::HasViewNumber,
 };
 use tracing::instrument;
@@ -53,7 +53,7 @@ async fn handle_quorum_proposal_validated_drb_calculation_start<
 ) {
     let current_epoch_number = TYPES::Epoch::new(epoch_from_block_number(
         proposal.block_header.block_number(),
-        task_state.epoch_height,
+        TYPES::EPOCH_HEIGHT,
     ));
 
     // Start the new task if we're in the committee for this epoch
@@ -401,7 +401,6 @@ pub(crate) async fn submit_vote<TYPES: NodeType, I: NodeImplementation<TYPES>, V
     private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
     upgrade_lock: UpgradeLock<TYPES, V>,
     view_number: TYPES::View,
-    epoch_height: u64,
     storage: Arc<RwLock<I::Storage>>,
     leaf: Leaf2<TYPES>,
     vid_share: Proposal<TYPES, VidDisperseShare2<TYPES>>,
@@ -409,11 +408,17 @@ pub(crate) async fn submit_vote<TYPES: NodeType, I: NodeImplementation<TYPES>, V
 ) -> Result<()> {
     let epoch_number = TYPES::Epoch::new(epoch_from_block_number(
         leaf.block_header().block_number(),
-        epoch_height,
+        TYPES::EPOCH_HEIGHT,
     ));
 
+    let committee_member_in_current_epoch = quorum_membership.has_stake(&public_key, epoch_number);
+    // If the proposed leaf is for the last block in the epoch and the node is part of the quorum committee
+    // in the next epoch, the node should vote to achieve the double quorum.
+    let committee_member_in_next_epoch = is_last_block_in_epoch(leaf.height(), TYPES::EPOCH_HEIGHT)
+        && quorum_membership.has_stake(&public_key, epoch_number + 1);
+
     ensure!(
-        quorum_membership.has_stake(&public_key, epoch_number),
+        committee_member_in_current_epoch || committee_member_in_next_epoch,
         info!(
             "We were not chosen for quorum committee on {:?}",
             view_number

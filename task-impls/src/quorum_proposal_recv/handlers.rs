@@ -152,7 +152,10 @@ pub(crate) async fn handle_quorum_proposal_recv<
         .context(warn!("Failed to validate proposal view or attached certs"))?;
 
     let view_number = proposal.data.view_number();
+
     let justify_qc = proposal.data.justify_qc.clone();
+    let maybe_next_epoch_justify_qc = proposal.data.next_epoch_justify_qc.clone();
+
     let proposal_block_number = proposal.data.block_header.block_number();
     let proposal_epoch = TYPES::Epoch::new(epoch_from_block_number(
         proposal_block_number,
@@ -174,6 +177,34 @@ pub(crate) async fn handle_quorum_proposal_recv<
         let consensus_reader = validation_info.consensus.read().await;
         consensus_reader.metrics.invalid_qc.update(1);
         bail!("Invalid justify_qc in proposal for view {}", *view_number);
+    }
+
+    if let Some(ref next_epoch_justify_qc) = maybe_next_epoch_justify_qc {
+        // If the next epoch justify qc exists, make sure it's equal to the justify qc
+        if justify_qc.view_number() != next_epoch_justify_qc.view_number()
+            || justify_qc.data.epoch != next_epoch_justify_qc.data.epoch
+            || justify_qc.data.leaf_commit != next_epoch_justify_qc.data.leaf_commit
+        {
+            bail!("Next epoch justify qc exists but it's not equal with justify qc.");
+        }
+        // Validate the next epoch justify qc as well
+        if !next_epoch_justify_qc
+            .is_valid_cert(
+                validation_info
+                    .quorum_membership
+                    .stake_table(justify_qc.data.epoch + 1),
+                validation_info
+                    .quorum_membership
+                    .success_threshold(justify_qc.data.epoch + 1),
+                &validation_info.upgrade_lock,
+            )
+            .await
+        {
+            bail!(
+                "Invalid next_epoch_justify_qc in proposal for view {}",
+                *view_number
+            );
+        }
     }
 
     broadcast_event(
@@ -232,12 +263,31 @@ pub(crate) async fn handle_quorum_proposal_recv<
         {
             bail!("Failed to store High QC, not voting; error = {:?}", e);
         }
+        if let Some(ref next_epoch_justify_qc) = maybe_next_epoch_justify_qc {
+            if let Err(e) = validation_info
+                .storage
+                .write()
+                .await
+                .update_next_epoch_high_qc2(next_epoch_justify_qc.clone())
+                .await
+            {
+                bail!(
+                    "Failed to store next epoch High QC, not voting; error = {:?}",
+                    e
+                );
+            }
+        }
     }
     drop(consensus_reader);
 
     let mut consensus_writer = validation_info.consensus.write().await;
     if let Err(e) = consensus_writer.update_high_qc(justify_qc.clone()) {
         tracing::trace!("{e:?}");
+    }
+    if let Some(ref next_epoch_justify_qc) = maybe_next_epoch_justify_qc {
+        if let Err(e) = consensus_writer.update_next_epoch_high_qc(next_epoch_justify_qc.clone()) {
+            tracing::trace!("{e:?}");
+        }
     }
     drop(consensus_writer);
 

@@ -34,8 +34,8 @@ use crate::{
     impl_has_epoch,
     message::{Proposal, UpgradeLock},
     simple_certificate::{
-        QuorumCertificate, QuorumCertificate2, TimeoutCertificate2, UpgradeCertificate,
-        ViewSyncFinalizeCertificate2,
+        NextEpochQuorumCertificate2, QuorumCertificate, QuorumCertificate2, TimeoutCertificate2,
+        UpgradeCertificate, ViewSyncFinalizeCertificate2,
     },
     simple_vote::{HasEpoch, QuorumData, QuorumData2, UpgradeProposalData, VersionedVoteData},
     traits::{
@@ -146,6 +146,8 @@ pub struct DaProposal<TYPES: NodeType> {
     pub metadata: <TYPES::BlockPayload as BlockPayload<TYPES>>::Metadata,
     /// View this proposal applies to
     pub view_number: TYPES::View,
+    /// Epoch this proposal applies to
+    pub epoch: TYPES::Epoch,
 }
 
 /// A proposal to start providing data availability for a block.
@@ -179,6 +181,7 @@ impl<TYPES: NodeType> From<DaProposal2<TYPES>> for DaProposal<TYPES> {
             encoded_transactions: da_proposal2.encoded_transactions,
             metadata: da_proposal2.metadata,
             view_number: da_proposal2.view_number,
+            epoch: TYPES::Epoch::new(0),
         }
     }
 }
@@ -194,6 +197,8 @@ where
     pub upgrade_proposal: UpgradeProposalData<TYPES>,
     /// View this proposal applies to
     pub view_number: TYPES::View,
+    /// Epoch this proposal applies to
+    pub epoch: TYPES::Epoch,
 }
 
 /// VID dispersal data
@@ -205,7 +210,7 @@ where
 pub struct VidDisperse<TYPES: NodeType> {
     /// The view number for which this VID data is intended
     pub view_number: TYPES::View,
-    /// The epoch number for which this VID data is intended
+    /// Epoch this proposal applies to
     pub epoch: TYPES::Epoch,
     /// Block payload commitment
     pub payload_commitment: VidCommitment,
@@ -216,32 +221,34 @@ pub struct VidDisperse<TYPES: NodeType> {
 }
 
 impl<TYPES: NodeType> VidDisperse<TYPES> {
-    /// Create VID dispersal from a specified membership for a given epoch.
+    /// Create VID dispersal from a specified membership for the target epoch.
     /// Uses the specified function to calculate share dispersal
     /// Allows for more complex stake table functionality
     pub fn from_membership(
         view_number: TYPES::View,
         mut vid_disperse: JfVidDisperse<VidSchemeType>,
         membership: &TYPES::Membership,
-        epoch: TYPES::Epoch,
+        target_epoch: TYPES::Epoch,
+        sender_epoch: Option<TYPES::Epoch>,
     ) -> Self {
         let shares = membership
-            .committee_members(view_number, epoch)
+            .committee_members(view_number, target_epoch)
             .iter()
             .map(|node| (node.clone(), vid_disperse.shares.remove(0)))
             .collect();
 
         Self {
             view_number,
-            epoch,
             shares,
             common: vid_disperse.common,
             payload_commitment: vid_disperse.commit,
+            epoch: sender_epoch.unwrap_or(target_epoch),
         }
     }
 
     /// Calculate the vid disperse information from the payload given a view, epoch and membership,
-    /// optionally using precompute data from builder
+    /// optionally using precompute data from builder.
+    /// If the sender epoch is missing, it means it's the same as the target epoch.
     ///
     /// # Panics
     /// Panics if the VID calculation fails, this should not happen.
@@ -250,10 +257,11 @@ impl<TYPES: NodeType> VidDisperse<TYPES> {
         txns: Arc<[u8]>,
         membership: &Arc<TYPES::Membership>,
         view: TYPES::View,
-        epoch: TYPES::Epoch,
+        target_epoch: TYPES::Epoch,
+        sender_epoch: Option<TYPES::Epoch>,
         precompute_data: Option<VidPrecomputeData>,
     ) -> Self {
-        let num_nodes = membership.total_nodes(epoch);
+        let num_nodes = membership.total_nodes(target_epoch);
 
         let vid_disperse = spawn_blocking(move || {
             precompute_data
@@ -266,7 +274,13 @@ impl<TYPES: NodeType> VidDisperse<TYPES> {
         // Unwrap here will just propagate any panic from the spawned task, it's not a new place we can panic.
         let vid_disperse = vid_disperse.unwrap();
 
-        Self::from_membership(view, vid_disperse, membership.as_ref(), epoch)
+        Self::from_membership(
+            view,
+            vid_disperse,
+            membership.as_ref(),
+            target_epoch,
+            sender_epoch,
+        )
     }
 }
 
@@ -574,6 +588,9 @@ pub struct QuorumProposal2<TYPES: NodeType> {
     /// certificate that the proposal is chaining from
     pub justify_qc: QuorumCertificate2<TYPES>,
 
+    /// certificate that the proposal is chaining from formed by the next epoch nodes
+    pub next_epoch_justify_qc: Option<NextEpochQuorumCertificate2<TYPES>>,
+
     /// Possible upgrade certificate, which the leader may optionally attach.
     pub upgrade_certificate: Option<UpgradeCertificate<TYPES>>,
 
@@ -599,6 +616,7 @@ impl<TYPES: NodeType> From<QuorumProposal<TYPES>> for QuorumProposal2<TYPES> {
             block_header: quorum_proposal.block_header,
             view_number: quorum_proposal.view_number,
             justify_qc: quorum_proposal.justify_qc.to_qc2(),
+            next_epoch_justify_qc: None,
             upgrade_certificate: quorum_proposal.upgrade_certificate,
             view_change_evidence: quorum_proposal.proposal_certificate,
             drb_seed: INITIAL_DRB_SEED_INPUT,
@@ -627,6 +645,7 @@ impl<TYPES: NodeType> From<Leaf<TYPES>> for Leaf2<TYPES> {
             view_number: leaf.view_number,
             epoch: TYPES::Epoch::genesis(),
             justify_qc: leaf.justify_qc.to_qc2(),
+            next_epoch_justify_qc: None,
             parent_commitment: Commitment::from_raw(bytes),
             block_header: leaf.block_header,
             upgrade_certificate: leaf.upgrade_certificate,
@@ -759,6 +778,9 @@ pub struct Leaf2<TYPES: NodeType> {
     /// Per spec, justification
     justify_qc: QuorumCertificate2<TYPES>,
 
+    /// certificate that the proposal is chaining from formed by the next epoch nodes
+    next_epoch_justify_qc: Option<NextEpochQuorumCertificate2<TYPES>>,
+
     /// The hash of the parent `Leaf`
     /// So we can ask if it extends
     parent_commitment: Commitment<Self>,
@@ -834,6 +856,7 @@ impl<TYPES: NodeType> Leaf2<TYPES> {
         Self {
             view_number: TYPES::View::genesis(),
             justify_qc,
+            next_epoch_justify_qc: None,
             parent_commitment: null_quorum_data.leaf_commit,
             upgrade_certificate: None,
             block_header: block_header.clone(),
@@ -1001,6 +1024,7 @@ impl<TYPES: NodeType> PartialEq for Leaf2<TYPES> {
             view_number,
             epoch,
             justify_qc,
+            next_epoch_justify_qc,
             parent_commitment,
             block_header,
             upgrade_certificate,
@@ -1013,6 +1037,7 @@ impl<TYPES: NodeType> PartialEq for Leaf2<TYPES> {
         *view_number == other.view_number
             && *epoch == other.epoch
             && *justify_qc == other.justify_qc
+            && *next_epoch_justify_qc == other.next_epoch_justify_qc
             && *parent_commitment == other.parent_commitment
             && *block_header == other.block_header
             && *upgrade_certificate == other.upgrade_certificate
@@ -1378,6 +1403,7 @@ impl<TYPES: NodeType> Leaf2<TYPES> {
         let QuorumProposal2 {
             view_number,
             justify_qc,
+            next_epoch_justify_qc,
             block_header,
             upgrade_certificate,
             view_change_evidence,
@@ -1392,6 +1418,7 @@ impl<TYPES: NodeType> Leaf2<TYPES> {
                 TYPES::EPOCH_HEIGHT,
             )),
             justify_qc: justify_qc.clone(),
+            next_epoch_justify_qc: next_epoch_justify_qc.clone(),
             parent_commitment: justify_qc.data().leaf_commit,
             block_header: block_header.clone(),
             upgrade_certificate: upgrade_certificate.clone(),

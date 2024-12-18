@@ -24,10 +24,10 @@ use crate::{
     data::serialize_signature2,
     message::UpgradeLock,
     simple_vote::{
-        DaData, DaData2, QuorumData, QuorumData2, QuorumMarker, TimeoutData, TimeoutData2,
-        UpgradeProposalData, VersionedVoteData, ViewSyncCommitData, ViewSyncCommitData2,
-        ViewSyncFinalizeData, ViewSyncFinalizeData2, ViewSyncPreCommitData, ViewSyncPreCommitData2,
-        Voteable,
+        DaData, DaData2, NextEpochQuorumData2, QuorumData, QuorumData2, QuorumMarker, TimeoutData,
+        TimeoutData2, UpgradeProposalData, VersionedVoteData, ViewSyncCommitData,
+        ViewSyncCommitData2, ViewSyncFinalizeData, ViewSyncFinalizeData2, ViewSyncPreCommitData,
+        ViewSyncPreCommitData2, Voteable,
     },
     traits::{
         election::Membership,
@@ -42,7 +42,7 @@ pub trait Threshold<TYPES: NodeType> {
     /// Calculate a threshold based on the membership
     fn threshold<MEMBERSHIP: Membership<TYPES>>(
         membership: &MEMBERSHIP,
-        epoch: <TYPES as NodeType>::Epoch,
+        epoch: TYPES::Epoch,
     ) -> u64;
 }
 
@@ -53,7 +53,7 @@ pub struct SuccessThreshold {}
 impl<TYPES: NodeType> Threshold<TYPES> for SuccessThreshold {
     fn threshold<MEMBERSHIP: Membership<TYPES>>(
         membership: &MEMBERSHIP,
-        epoch: <TYPES as NodeType>::Epoch,
+        epoch: TYPES::Epoch,
     ) -> u64 {
         membership.success_threshold(epoch).into()
     }
@@ -66,7 +66,7 @@ pub struct OneHonestThreshold {}
 impl<TYPES: NodeType> Threshold<TYPES> for OneHonestThreshold {
     fn threshold<MEMBERSHIP: Membership<TYPES>>(
         membership: &MEMBERSHIP,
-        epoch: <TYPES as NodeType>::Epoch,
+        epoch: TYPES::Epoch,
     ) -> u64 {
         membership.failure_threshold(epoch).into()
     }
@@ -79,7 +79,7 @@ pub struct UpgradeThreshold {}
 impl<TYPES: NodeType> Threshold<TYPES> for UpgradeThreshold {
     fn threshold<MEMBERSHIP: Membership<TYPES>>(
         membership: &MEMBERSHIP,
-        epoch: <TYPES as NodeType>::Epoch,
+        epoch: TYPES::Epoch,
     ) -> u64 {
         membership.upgrade_threshold(epoch).into()
     }
@@ -211,7 +211,7 @@ impl<TYPES: NodeType, THRESHOLD: Threshold<TYPES>> Certificate<TYPES, DaData>
     }
     fn threshold<MEMBERSHIP: Membership<TYPES>>(
         membership: &MEMBERSHIP,
-        epoch: <TYPES as NodeType>::Epoch,
+        epoch: TYPES::Epoch,
     ) -> u64 {
         membership.da_success_threshold(epoch).into()
     }
@@ -367,7 +367,7 @@ impl<
     }
     fn threshold<MEMBERSHIP: Membership<TYPES>>(
         membership: &MEMBERSHIP,
-        epoch: <TYPES as NodeType>::Epoch,
+        epoch: TYPES::Epoch,
     ) -> u64 {
         THRESHOLD::threshold(membership, epoch)
     }
@@ -736,6 +736,9 @@ impl<TYPES: NodeType> TimeoutCertificate2<TYPES> {
 pub type QuorumCertificate<TYPES> = SimpleCertificate<TYPES, QuorumData<TYPES>, SuccessThreshold>;
 /// Type alias for a `QuorumCertificate2`, which is a `SimpleCertificate` over `QuorumData2`
 pub type QuorumCertificate2<TYPES> = SimpleCertificate<TYPES, QuorumData2<TYPES>, SuccessThreshold>;
+/// Type alias for a `QuorumCertificate2`, which is a `SimpleCertificate` over `QuorumData2`
+pub type NextEpochQuorumCertificate2<TYPES> =
+    SimpleCertificate<TYPES, NextEpochQuorumData2<TYPES>, SuccessThreshold>;
 /// Type alias for a `DaCertificate`, which is a `SimpleCertificate` over `DaData`
 pub type DaCertificate<TYPES> = SimpleCertificate<TYPES, DaData, SuccessThreshold>;
 /// Type alias for a `DaCertificate2`, which is a `SimpleCertificate` over `DaData2`

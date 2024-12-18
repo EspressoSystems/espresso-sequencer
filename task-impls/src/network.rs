@@ -10,18 +10,24 @@ use std::{
     sync::Arc,
 };
 
+use crate::{
+    events::{HotShotEvent, HotShotTaskCompleted},
+    helpers::broadcast_event,
+};
 use async_broadcast::{Receiver, Sender};
 use async_lock::RwLock;
 use async_trait::async_trait;
 use hotshot_task::task::TaskState;
+use hotshot_types::data::{VidDisperseShare, VidDisperseShare2};
 use hotshot_types::{
     consensus::OuterConsensus,
-    data::{VidDisperse, VidDisperseShare},
+    data::VidDisperse,
     event::{Event, EventType, HotShotAction},
     message::{
         convert_proposal, DaConsensusMessage, DataMessage, GeneralConsensusMessage, Message,
         MessageKind, Proposal, SequencingMessage, UpgradeLock,
     },
+    simple_vote::HasEpoch,
     traits::{
         election::Membership,
         network::{
@@ -37,11 +43,6 @@ use tokio::{spawn, task::JoinHandle};
 use tracing::instrument;
 use utils::anytrace::*;
 use vbs::version::StaticVersionType;
-
-use crate::{
-    events::{HotShotEvent, HotShotTaskCompleted},
-    helpers::broadcast_event,
-};
 
 /// the network message task state
 #[derive(Clone)]
@@ -321,16 +322,35 @@ impl<
         sender: &<TYPES as NodeType>::SignatureKey,
     ) -> Option<HotShotTaskCompleted> {
         let view = vid_proposal.data.view_number;
-        let vid_share_proposals = VidDisperseShare::to_vid_share_proposals(vid_proposal);
+        let vid_share_proposals = VidDisperseShare2::to_vid_share_proposals(vid_proposal);
         let mut messages = HashMap::new();
 
         for proposal in vid_share_proposals {
             let recipient = proposal.data.recipient_key.clone();
-            let message = Message {
-                sender: sender.clone(),
-                kind: MessageKind::<TYPES>::from_consensus_message(SequencingMessage::Da(
-                    DaConsensusMessage::VidDisperseMsg(proposal),
-                )),
+            let message = if self
+                .upgrade_lock
+                .version_infallible(proposal.data.view_number())
+                .await
+                >= V::Epochs::VERSION
+            {
+                Message {
+                    sender: sender.clone(),
+                    kind: MessageKind::<TYPES>::from_consensus_message(SequencingMessage::Da(
+                        DaConsensusMessage::VidDisperseMsg2(proposal),
+                    )),
+                }
+            } else {
+                let vid_share_proposal = Proposal {
+                    data: VidDisperseShare::from(proposal.data),
+                    signature: proposal.signature,
+                    _pd: proposal._pd,
+                };
+                Message {
+                    sender: sender.clone(),
+                    kind: MessageKind::<TYPES>::from_consensus_message(SequencingMessage::Da(
+                        DaConsensusMessage::VidDisperseMsg(vid_share_proposal),
+                    )),
+                }
             };
             let serialized_message = match self.upgrade_lock.serialize(&message).await {
                 Ok(serialized) => serialized,
@@ -449,7 +469,7 @@ impl<
             HotShotEvent::QuorumVoteSend(vote) => {
                 *maybe_action = Some(HotShotAction::Vote);
                 let view_number = vote.view_number() + 1;
-                let leader = match self.membership.leader(view_number, self.epoch) {
+                let leader = match self.membership.leader(view_number, vote.epoch()) {
                     Ok(l) => l,
                     Err(e) => {
                         tracing::warn!(

@@ -17,13 +17,17 @@ use anyhow::{ensure, Context, Result};
 use async_broadcast::{Receiver, Sender};
 use async_lock::RwLock;
 use committable::Committable;
-use hotshot_task::dependency_task::HandleDepOutput;
+use either::Either;
+use hotshot_task::{
+    dependency::{Dependency, EventDependency},
+    dependency_task::HandleDepOutput,
+};
 use hotshot_types::{
     consensus::{CommitmentAndMetadata, OuterConsensus},
     data::{Leaf2, QuorumProposal2, VidDisperse, ViewChangeEvidence},
     drb::{INITIAL_DRB_RESULT, INITIAL_DRB_SEED_INPUT},
     message::Proposal,
-    simple_certificate::{QuorumCertificate2, UpgradeCertificate},
+    simple_certificate::{NextEpochQuorumCertificate2, QuorumCertificate2, UpgradeCertificate},
     traits::{
         block_contents::BlockHeader,
         election::Membership,
@@ -130,8 +134,6 @@ impl<TYPES: NodeType, V: Versions> ProposalDependencyHandle<TYPES, V> {
             if let HotShotEvent::HighQcRecv(qc, _sender) = event.as_ref() {
                 if qc
                     .is_valid_cert(
-                        // TODO take epoch from `qc`
-                        // https://github.com/EspressoSystems/HotShot/issues/3917
                         self.quorum_membership.stake_table(qc.data.epoch),
                         self.quorum_membership.success_threshold(qc.data.epoch),
                         &self.upgrade_lock,
@@ -144,7 +146,7 @@ impl<TYPES: NodeType, V: Versions> ProposalDependencyHandle<TYPES, V> {
         }
         None
     }
-    /// Waits for the ocnfigured timeout for nodes to send HighQc messages to us.  We'll
+    /// Waits for the configured timeout for nodes to send HighQc messages to us.  We'll
     /// then propose with the highest QC from among these proposals.
     async fn wait_for_highest_qc(&mut self) {
         tracing::error!("waiting for QC");
@@ -186,6 +188,68 @@ impl<TYPES: NodeType, V: Versions> ProposalDependencyHandle<TYPES, V> {
                 self.highest_qc = qc;
             }
         }
+    }
+    /// Gets the next epoch QC corresponding to this epoch QC, times out if it takes too long.
+    /// We need the QC for the epoch transition proposals.
+    async fn get_next_epoch_qc(
+        &self,
+        high_qc: &QuorumCertificate2<TYPES>,
+    ) -> Option<NextEpochQuorumCertificate2<TYPES>> {
+        tracing::debug!("getting the next epoch QC");
+        // If we haven't upgraded to Epochs just return None right away
+        if self.upgrade_lock.version_infallible(self.view_number).await < V::Epochs::VERSION {
+            return None;
+        }
+        if let Some(next_epoch_qc) = self.consensus.read().await.next_epoch_high_qc() {
+            if next_epoch_qc.data.leaf_commit == high_qc.data.leaf_commit {
+                // We have it already, no reason to wait
+                return Some(next_epoch_qc.clone());
+            }
+        };
+
+        let wait_duration = Duration::from_millis(self.timeout / 2);
+
+        // TODO configure timeout
+        let Some(time_spent) = Instant::now().checked_duration_since(self.view_start_time) else {
+            // Shouldn't be possible, now must be after the start
+            return None;
+        };
+        let Some(time_left) = wait_duration.checked_sub(time_spent) else {
+            // No time left
+            return None;
+        };
+        let receiver = self.receiver.clone();
+        let Ok(Some(event)) = tokio::time::timeout(time_left, async move {
+            let this_epoch_high_qc = high_qc.clone();
+            EventDependency::new(
+                receiver,
+                Box::new(move |event| {
+                    let event = event.as_ref();
+                    if let HotShotEvent::NextEpochQc2Formed(Either::Left(qc)) = event {
+                        qc.data.leaf_commit == this_epoch_high_qc.data.leaf_commit
+                    } else {
+                        false
+                    }
+                }),
+            )
+            .completed()
+            .await
+        })
+        .await
+        else {
+            // Check again, there is a chance we missed it
+            if let Some(next_epoch_qc) = self.consensus.read().await.next_epoch_high_qc() {
+                if next_epoch_qc.data.leaf_commit == high_qc.data.leaf_commit {
+                    return Some(next_epoch_qc.clone());
+                }
+            };
+            return None;
+        };
+        let HotShotEvent::NextEpochQc2Formed(Either::Left(qc)) = event.as_ref() else {
+            // this shouldn't happen
+            return None;
+        };
+        Some(qc.clone())
     }
     /// Publishes a proposal given the [`CommitmentAndMetadata`], [`VidDisperse`]
     /// and high qc [`hotshot_types::simple_certificate::QuorumCertificate`],
@@ -312,10 +376,21 @@ impl<TYPES: NodeType, V: Versions> ProposalDependencyHandle<TYPES, V> {
             );
             return Ok(());
         }
+        let next_epoch_qc = if self
+            .consensus
+            .read()
+            .await
+            .is_leaf_for_last_block(parent_qc.data.leaf_commit)
+        {
+            self.get_next_epoch_qc(&parent_qc).await
+        } else {
+            None
+        };
         let proposal = QuorumProposal2 {
             block_header,
             view_number: self.view_number,
             justify_qc: parent_qc,
+            next_epoch_justify_qc: next_epoch_qc,
             upgrade_certificate,
             view_change_evidence: proposal_certificate,
             drb_seed: INITIAL_DRB_SEED_INPUT,

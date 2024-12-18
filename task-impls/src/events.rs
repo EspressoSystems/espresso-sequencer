@@ -17,8 +17,8 @@ use hotshot_types::{
     message::Proposal,
     request_response::ProposalRequestPayload,
     simple_certificate::{
-        DaCertificate2, QuorumCertificate, QuorumCertificate2, TimeoutCertificate,
-        TimeoutCertificate2, UpgradeCertificate, ViewSyncCommitCertificate2,
+        DaCertificate2, NextEpochQuorumCertificate2, QuorumCertificate, QuorumCertificate2,
+        TimeoutCertificate, TimeoutCertificate2, UpgradeCertificate, ViewSyncCommitCertificate2,
         ViewSyncFinalizeCertificate2, ViewSyncPreCommitCertificate2,
     },
     simple_vote::{
@@ -124,6 +124,8 @@ pub enum HotShotEvent<TYPES: NodeType> {
     QcFormed(Either<QuorumCertificate<TYPES>, TimeoutCertificate<TYPES>>),
     /// The next leader has collected enough votes to form a QC; emitted by the next leader in the consensus task; an internal event only
     Qc2Formed(Either<QuorumCertificate2<TYPES>, TimeoutCertificate2<TYPES>>),
+    /// The next leader has collected enough votes from the next epoch nodes to form a QC; emitted by the next leader in the consensus task; an internal event only
+    NextEpochQc2Formed(Either<NextEpochQuorumCertificate2<TYPES>, TimeoutCertificate<TYPES>>),
     /// The DA leader has collected enough votes to form a DAC; emitted by the DA leader in the DA task; sent to the entire network via the networking task
     DacSend(DaCertificate2<TYPES>, TYPES::SignatureKey),
     /// The current view has changed; emitted by the replica in the consensus task or replica in the view sync task; received by almost all other tasks
@@ -283,6 +285,10 @@ impl<TYPES: NodeType> HotShotEvent<TYPES> {
                 either::Left(qc) => Some(qc.view_number()),
                 either::Right(tc) => Some(tc.view_number()),
             },
+            HotShotEvent::NextEpochQc2Formed(cert) => match cert {
+                either::Left(qc) => Some(qc.view_number()),
+                either::Right(tc) => Some(tc.view_number()),
+            },
             HotShotEvent::ViewSyncCommitVoteSend(vote)
             | HotShotEvent::ViewSyncCommitVoteRecv(vote) => Some(vote.view_number()),
             HotShotEvent::ViewSyncPreCommitVoteRecv(vote)
@@ -406,8 +412,16 @@ impl<TYPES: NodeType> Display for HotShotEvent<TYPES> {
                 either::Right(tc) => write!(f, "QcFormed(view_number={:?})", tc.view_number()),
             },
             HotShotEvent::Qc2Formed(cert) => match cert {
-                either::Left(qc) => write!(f, "QcFormed(view_number={:?})", qc.view_number()),
-                either::Right(tc) => write!(f, "QcFormed(view_number={:?})", tc.view_number()),
+                either::Left(qc) => write!(f, "QcFormed2(view_number={:?})", qc.view_number()),
+                either::Right(tc) => write!(f, "QcFormed2(view_number={:?})", tc.view_number()),
+            },
+            HotShotEvent::NextEpochQc2Formed(cert) => match cert {
+                either::Left(qc) => {
+                    write!(f, "NextEpochQc2Formed(view_number={:?})", qc.view_number())
+                }
+                either::Right(tc) => {
+                    write!(f, "NextEpochQc2Formed(view_number={:?})", tc.view_number())
+                }
             },
             HotShotEvent::DacSend(cert, _) => {
                 write!(f, "DacSend(view_number={:?})", cert.view_number())

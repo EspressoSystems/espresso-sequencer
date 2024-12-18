@@ -29,6 +29,7 @@ use hotshot_types::{
         node_implementation::{ConsensusTime, NodeType, Versions},
         signature_key::SignatureKey,
     },
+    utils::EpochTransitionIndicator,
     vote::{Certificate, HasViewNumber, Vote},
 };
 use tokio::{spawn, task::JoinHandle, time::sleep};
@@ -318,15 +319,15 @@ impl<TYPES: NodeType, V: Versions> ViewSyncTaskState<TYPES, V> {
                     public_key: self.public_key.clone(),
                     membership: Arc::clone(&self.membership),
                     view: vote_view,
-                    epoch: self.cur_epoch,
                     id: self.id,
+                    epoch: vote.data.epoch,
                 };
                 let vote_collector = create_vote_accumulator(
                     &info,
                     event,
                     &event_stream,
                     self.upgrade_lock.clone(),
-                    true,
+                    EpochTransitionIndicator::NotInTransition,
                 )
                 .await?;
 
@@ -363,8 +364,8 @@ impl<TYPES: NodeType, V: Versions> ViewSyncTaskState<TYPES, V> {
                     public_key: self.public_key.clone(),
                     membership: Arc::clone(&self.membership),
                     view: vote_view,
-                    epoch: self.cur_epoch,
                     id: self.id,
+                    epoch: vote.data.epoch,
                 };
 
                 let vote_collector = create_vote_accumulator(
@@ -372,7 +373,7 @@ impl<TYPES: NodeType, V: Versions> ViewSyncTaskState<TYPES, V> {
                     event,
                     &event_stream,
                     self.upgrade_lock.clone(),
-                    true,
+                    EpochTransitionIndicator::NotInTransition,
                 )
                 .await?;
                 relay_map.insert(relay, vote_collector);
@@ -408,15 +409,15 @@ impl<TYPES: NodeType, V: Versions> ViewSyncTaskState<TYPES, V> {
                     public_key: self.public_key.clone(),
                     membership: Arc::clone(&self.membership),
                     view: vote_view,
-                    epoch: self.cur_epoch,
                     id: self.id,
+                    epoch: vote.data.epoch,
                 };
                 let vote_collector = create_vote_accumulator(
                     &info,
                     event,
                     &event_stream,
                     self.upgrade_lock.clone(),
-                    true,
+                    EpochTransitionIndicator::NotInTransition,
                 )
                 .await;
                 if let Ok(vote_task) = vote_collector {
