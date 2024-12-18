@@ -2127,7 +2127,8 @@ mod test {
             .get(&<MockSeqVersions as Versions>::Upgrade::VERSION)
             .unwrap()
             .upgrade_type
-            .data();
+            .chain_config()
+            .unwrap();
 
         const NUM_NODES: usize = 5;
         let config = TestNetworkConfigBuilder::<NUM_NODES, _, _>::with_num_nodes()
