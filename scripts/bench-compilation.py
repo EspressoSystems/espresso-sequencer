@@ -67,7 +67,9 @@ The script generates new cargo profile for all combinations of the "strip" and
     )
     parser.add_argument("--timed", help="Timed command to run", default="cargo build")
     parser.add_argument("--setup", help="Setup command to run", default="cargo clean")
-    parser.add_argument("--strip", help="Strip values", default="none,debuginfo")
+    parser.add_argument(
+        "--strip", help="Strip values", default="none,debuginfo,symbols"
+    )
     parser.add_argument(
         "--debug", help="Debug values", default="none,line-tables-only,limited,full"
     )
