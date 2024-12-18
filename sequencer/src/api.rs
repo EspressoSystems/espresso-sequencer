@@ -7,8 +7,8 @@ use data_source::{CatchupDataSource, StakeTableDataSource, SubmitDataSource};
 use derivative::Derivative;
 use espresso_types::{
     retain_accounts, v0::traits::SequencerPersistence, v0_99::ChainConfig, AccountQueryData,
-    BlockMerkleTree, FeeAccount, FeeAccountProof, FeeMerkleTree, NodeState, PubKey,
-    StaticCommittee, Transaction, ValidatedState,
+    BlockMerkleTree, FeeAccount, FeeAccountProof, FeeMerkleTree, NodeState, PubKey, Transaction,
+    ValidatedState,
 };
 use futures::{
     future::{BoxFuture, Future, FutureExt},
@@ -187,7 +187,7 @@ impl<N: ConnectedNetwork<PubKey>, V: Versions, P: SequencerPersistence>
             self.consensus().await.read().await.cur_epoch().await
         };
 
-        <StaticCommittee as Membership<SeqTypes>>::stake_table(
+        <SeqTypes as NodeType>::Membership::stake_table(
             &self.consensus().await.read().await.memberships,
             epoch,
         )
@@ -2127,7 +2127,8 @@ mod test {
             .get(&<MockSeqVersions as Versions>::Upgrade::VERSION)
             .unwrap()
             .upgrade_type
-            .data();
+            .chain_config()
+            .unwrap();
 
         const NUM_NODES: usize = 5;
         let config = TestNetworkConfigBuilder::<NUM_NODES, _, _>::with_num_nodes()

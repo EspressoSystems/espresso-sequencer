@@ -23,4 +23,4 @@ mod chain_config;
 mod stake_table;
 
 pub use chain_config::*;
-pub use stake_table::CombinedStakeTable;
+pub use stake_table::*;

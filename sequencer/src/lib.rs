@@ -15,13 +15,12 @@ mod message_compat_tests;
 use anyhow::Context;
 use catchup::StatePeers;
 use context::SequencerContext;
-use espresso_types::StaticCommittee;
+use espresso_types::EpochCommittees;
 use espresso_types::{
     traits::EventConsumer, BackoffParams, L1ClientOptions, NodeState, PubKey, SeqTypes,
     SolverAuctionResultsProvider, ValidatedState,
 };
 use genesis::L1Finalized;
-use hotshot_types::traits::election::Membership;
 use proposal_fetcher::ProposalFetcherConfig;
 use std::sync::Arc;
 use tokio::select;
@@ -476,14 +475,15 @@ pub async fn init_node<P: SequencerPersistence, V: Versions>(
         node_id: node_index,
         upgrades: genesis.upgrades,
         current_version: V::Base::VERSION,
+        epoch_height: None,
     };
 
     // Create the HotShot membership
-    let membership = StaticCommittee::new_stake(
+    let membership = EpochCommittees::new_stake(
         network_config.config.known_nodes_with_stake.clone(),
         network_config.config.known_nodes_with_stake.clone(),
         &instance_state,
-        Default::default(),
+        network_config.config.epoch_height,
     );
 
     // Initialize the Libp2p network
@@ -960,12 +960,15 @@ pub mod testing {
             )
             .with_current_version(V::Base::version())
             .with_genesis(state)
+            .with_epoch_height(config.epoch_height)
             .with_upgrades(upgrades);
 
             // Create the HotShot membership
-            let membership = StaticCommittee::new(
+            let membership = EpochCommittees::new_stake(
                 config.known_nodes_with_stake.clone(),
                 config.known_nodes_with_stake.clone(),
+                &node_state,
+                100,
             );
 
             tracing::info!(

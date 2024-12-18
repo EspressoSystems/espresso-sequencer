@@ -13,14 +13,15 @@ use futures::{
     future::Future,
     stream::{self, StreamExt},
 };
-use hotshot_types::traits::metrics::Metrics;
+use hotshot_types::{data::EpochNumber, traits::metrics::Metrics};
 use lru::LruCache;
 use serde::{de::DeserializeOwned, Serialize};
 use std::{
     cmp::{min, Ordering},
+    collections::BTreeMap,
     fmt::Debug,
     num::NonZeroUsize,
-    sync::Arc,
+    sync::{self, Arc},
     time::Duration,
 };
 use tokio::{
@@ -33,8 +34,7 @@ use url::Url;
 
 use super::{L1BlockInfo, L1ClientMetrics, L1State, L1UpdateTask, RpcClient};
 use crate::{
-    v0::impls::stake_table::StakeTables, FeeInfo, L1Client, L1ClientOptions, L1Event,
-    L1ReconnectTask, L1Snapshot,
+    v0_3::StakeTables, FeeInfo, L1Client, L1ClientOptions, L1Event, L1ReconnectTask, L1Snapshot,
 };
 
 impl PartialOrd for L1BlockInfo {
@@ -344,6 +344,7 @@ impl L1Client {
             provider: Arc::new(provider),
             events_max_block_range: opt.l1_events_max_block_range,
             state: Arc::new(Mutex::new(L1State::new(opt.l1_blocks_cache_size))),
+            stake_table_state: Arc::new(sync::RwLock::new(BTreeMap::new())),
             sender,
             receiver: receiver.deactivate(),
             update_task: Default::default(),
@@ -375,6 +376,39 @@ impl L1Client {
         if update_task.is_none() {
             *update_task = Some(spawn(self.update_loop()));
         }
+    }
+    pub async fn update_membership(
+        &self,
+        contract: Address,
+        l1_block_number: u64,
+        epoch: EpochNumber,
+    ) {
+        let retry_delay = self.retry_delay;
+        let state = self.stake_table_state.clone();
+
+        let span = tracing::warn_span!("L1 client memberships update");
+
+        async move {
+            loop {
+                match self.get_stake_table(contract, l1_block_number).await {
+                    Err(err) => {
+                        tracing::warn!(
+                            ?epoch,
+                            ?l1_block_number,
+                            "error fetching stake table from l1. err {err}"
+                        );
+                    }
+                    Ok(stake_tables) => {
+                        let mut state = state.write().unwrap();
+                        let _ = state.insert(epoch, stake_tables);
+                    }
+                }
+
+                sleep(retry_delay).await;
+            }
+        }
+        .instrument(span)
+        .await
     }
 
     /// Shut down background tasks associated with this L1 client.
@@ -528,6 +562,16 @@ impl L1Client {
     /// Get a snapshot from the l1.
     pub async fn snapshot(&self) -> L1Snapshot {
         self.state.lock().await.snapshot
+    }
+
+    // TODO remove after `Memberships` trait update on hotshot
+    // https://github.com/EspressoSystems/HotShot/issues/3966
+    pub fn stake_table(&self, epoch: &EpochNumber) -> StakeTables {
+        if let Some(stake_tables) = self.stake_table_state.read().unwrap().get(epoch) {
+            stake_tables.clone()
+        } else {
+            StakeTables::new(vec![].into(), vec![].into())
+        }
     }
 
     /// Wait until the highest L1 block number reaches at least `number`.
@@ -785,20 +829,23 @@ impl L1Client {
     }
 
     /// Get `StakeTable` at block height.
-    pub async fn get_stake_table(&self, block: u64, address: Address) -> StakeTables {
-        // TODO epoch size may need to be passed in as well
-        // TODO here or in memberships check if we have fetched table this epoch
-        let stake_table_contract = PermissionedStakeTable::new(address, self.provider.clone());
+    pub async fn get_stake_table(
+        &self,
+        contract: Address,
+        block: u64,
+    ) -> anyhow::Result<StakeTables> {
+        // TODO stake_table_address needs to be passed in to L1Client
+        // before update loop starts.
+        let stake_table_contract = PermissionedStakeTable::new(contract, self.provider.clone());
 
         let events = stake_table_contract
             .stakers_updated_filter()
             .from_block(0)
             .to_block(block)
             .query()
-            .await
-            .unwrap();
+            .await?;
 
-        StakeTables::from_l1_events(events.clone())
+        Ok(StakeTables::from_l1_events(events.clone()))
     }
 }
 
@@ -1301,14 +1348,15 @@ mod test {
 
         let new_nodes: Vec<NodeInfo> = vec![node.into()];
         let updater = stake_table_contract.update(v, new_nodes);
-        updater.send().await?;
+        updater.send().await?.await?;
 
         let block = client.get_block(BlockNumber::Latest).await?.unwrap();
         let nodes = l1_client
-            .get_stake_table(block.number.unwrap().as_u64(), address)
-            .await;
+            .get_stake_table(address, block.number.unwrap().as_u64())
+            .await
+            .unwrap();
 
-        let result = nodes.consensus_stake_table.0[0].clone();
+        let result = nodes.stake_table.0[0].clone();
         assert_eq!(result.stake_amount.as_u64(), 1);
         Ok(())
     }
