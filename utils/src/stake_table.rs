@@ -119,6 +119,9 @@ pub async fn update_stake_table(
     let l1 = Arc::new(SignerMiddleware::new(provider.clone(), wallet));
 
     let contract = PermissionedStakeTable::new(contract_address, l1);
+
+    tracing::info!("sending stake table update transaction");
+
     let tx_receipt = contract
         .update(update.stakers_to_remove(), update.new_stakers())
         .send()

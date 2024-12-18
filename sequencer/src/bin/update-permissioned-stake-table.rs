@@ -2,7 +2,7 @@ use anyhow::Result;
 use clap::Parser;
 use espresso_types::parse_duration;
 use ethers::types::Address;
-use sequencer_utils::stake_table::{update_stake_table, PermissionedStakeTableUpdate};
+use sequencer_utils::{logging, stake_table::{update_stake_table, PermissionedStakeTableUpdate}};
 use std::{path::PathBuf, time::Duration};
 use url::Url;
 
@@ -79,14 +79,17 @@ struct Options {
         verbatim_doc_comment
     )]
     update_toml_path: PathBuf,
+    #[clap(flatten)]
+    logging: logging::Config,
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
     let opts = Options::parse();
-
+    opts.logging.init();
     let update = PermissionedStakeTableUpdate::from_toml_file(&opts.update_toml_path)?;
 
+    
     update_stake_table(
         opts.rpc_url,
         opts.l1_polling_interval,
