@@ -130,7 +130,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> Sequence
             validator_config.private_key.clone(),
             instance_state.node_id,
             config.clone(),
-            membership,
+            Arc::new(async_lock::RwLock::new(membership)),
             network.clone(),
             initializer,
             ConsensusMetricsValue::new(metrics),

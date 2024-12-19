@@ -55,7 +55,7 @@ mod persistence_tests {
     use hotshot::types::{BLSPubKey, SignatureKey};
     use hotshot_example_types::node_types::TestVersions;
     use hotshot_types::{
-        data::{DaProposal, QuorumProposal2, VidDisperseShare, ViewNumber},
+        data::{DaProposal, EpochNumber, QuorumProposal2, VidDisperseShare, ViewNumber},
         drb::{INITIAL_DRB_RESULT, INITIAL_DRB_SEED_INPUT},
         event::{EventType, HotShotAction, LeafInfo},
         message::Proposal,
@@ -197,6 +197,7 @@ mod persistence_tests {
                 view_change_evidence: None,
                 drb_seed: INITIAL_DRB_SEED_INPUT,
                 drb_result: INITIAL_DRB_RESULT,
+                next_epoch_justify_qc: None,
             },
             signature,
             _pd: Default::default(),
@@ -248,6 +249,7 @@ mod persistence_tests {
             encoded_transactions: leaf_payload_bytes_arc.clone(),
             metadata: leaf_payload.ns_table().clone(),
             view_number: ViewNumber::new(0),
+            epoch: EpochNumber::new(1),
         };
 
         let da_proposal = Proposal {
@@ -610,6 +612,7 @@ mod persistence_tests {
             view_change_evidence: None,
             drb_seed: INITIAL_DRB_SEED_INPUT,
             drb_result: INITIAL_DRB_RESULT,
+            next_epoch_justify_qc: None,
         };
         let mut qc = QuorumCertificate::genesis::<TestVersions>(
             &ValidatedState::default(),
@@ -625,6 +628,7 @@ mod persistence_tests {
                 encoded_transactions: leaf_payload_bytes_arc.clone(),
                 metadata: leaf_payload.ns_table().clone(),
                 view_number: ViewNumber::new(0),
+                epoch: EpochNumber::new(1),
             },
             signature: block_payload_signature,
             _pd: Default::default(),
@@ -796,6 +800,7 @@ mod persistence_tests {
             view_change_evidence: None,
             drb_seed: INITIAL_DRB_SEED_INPUT,
             drb_result: INITIAL_DRB_RESULT,
+            next_epoch_justify_qc: None,
         };
         let quorum_proposal_signature =
             BLSPubKey::sign(&privkey, &bincode::serialize(&quorum_proposal).unwrap())
@@ -813,6 +818,7 @@ mod persistence_tests {
                 encoded_transactions: leaf_payload_bytes_arc,
                 metadata: leaf_payload.ns_table().clone(),
                 view_number: ViewNumber::new(0),
+                epoch: EpochNumber::new(1),
             },
             signature: block_payload_signature,
             _pd: Default::default(),
