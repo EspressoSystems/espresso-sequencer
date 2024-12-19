@@ -719,7 +719,7 @@ impl TestNetwork {
             && self.da_nodes.len() - da_nodes.len() >= da_threshold
         {
             // If we are shutting down less than f nodes, the remaining nodes should be able to make
-            // progress, and we will check that that is the case.
+            // progress, and we will check that is the case.
             //
             // Note that not every node will be able to commit leaves, because a node requires the
             // cooperation of the node after it to commit its proposal. But, as long as we have shut
