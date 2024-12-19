@@ -637,18 +637,19 @@ pub mod testing {
             .parse()
             .expect("Failed to parse builder URL");
 
-        let hooks = NoHooks(PhantomData);
+        // let hooks = NoHooks(PhantomData);
 
         // create the global state
-        let global_state: Arc<GlobalState<SeqTypes, NoHooks<SeqTypes>>> = GlobalState::new(
-            (builder_key_pair.fee_account(), builder_key_pair),
-            Duration::from_secs(60),
-            Duration::from_millis(100),
-            Duration::from_secs(60),
-            BUILDER_CHANNEL_CAPACITY_FOR_TEST,
-            10,
-            hooks,
-        );
+        // let global_state: Arc<GlobalState<SeqTypes, NoHooks<SeqTypes>>> = GlobalState::new(
+        //     (builder_key_pair.fee_account(), builder_key_pair),
+        //     Duration::from_secs(60),
+        //     Duration::from_millis(100),
+        //     Duration::from_secs(60),
+        //     BUILDER_CHANNEL_CAPACITY_FOR_TEST,
+        //     10,
+        //     hooks,
+        // );
+        let global_state: Arc<GlobalState<SeqTypes, NoHooks<SeqTypes>>> = todo!();
 
         // create the proxy global state it will server the builder apis
         let app = Arc::clone(&global_state)
