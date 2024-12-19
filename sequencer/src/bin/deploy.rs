@@ -131,6 +131,7 @@ struct Options {
     ///     stake_table_key = "BLS_VER_KEY~...",
     ///     state_ver_key = "SCHNORR_VER_KEY~...",
     ///     da = true,
+    ///     stake = 1, # this value is ignored, but needs to be set
     ///   },
     /// ]
     #[clap(long, env = "ESPRESSO_SEQUENCER_INITIAL_PERMISSIONED_STAKE_TABLE_PATH")]
