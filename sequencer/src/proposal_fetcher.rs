@@ -10,7 +10,7 @@ use espresso_types::{parse_duration, v0::traits::SequencerPersistence, PubKey, V
 use futures::stream::StreamExt;
 use hotshot::types::EventType;
 use hotshot_types::{
-    data::{EpochNumber, Leaf2, ViewNumber},
+    data::{Leaf2, ViewNumber},
     traits::{
         metrics::{Counter, Gauge, Metrics},
         network::ConnectedNetwork,
@@ -190,11 +190,7 @@ where
                 }
             }
 
-            let future =
-                self.consensus
-                    .read()
-                    .await
-                    .request_proposal(view, EpochNumber::genesis(), leaf)?;
+            let future = self.consensus.read().await.request_proposal(view, leaf)?;
             let proposal = timeout(self.cfg.fetch_timeout, future)
                 .await
                 .context("timed out fetching proposal")?

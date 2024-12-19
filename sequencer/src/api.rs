@@ -1061,6 +1061,7 @@ mod api_tests {
     use hotshot_query_service::availability::{
         AvailabilityDataSource, BlockQueryData, VidCommonQueryData,
     };
+    use hotshot_types::data::EpochNumber;
     use hotshot_types::drb::{INITIAL_DRB_RESULT, INITIAL_DRB_SEED_INPUT};
     use hotshot_types::{
         data::{DaProposal, QuorumProposal2, VidDisperseShare},
@@ -1261,6 +1262,7 @@ mod api_tests {
             view_change_evidence: None,
             drb_seed: INITIAL_DRB_SEED_INPUT,
             drb_result: INITIAL_DRB_RESULT,
+            next_epoch_justify_qc: None,
         };
         let mut qc = QuorumCertificate::genesis::<MockSequencerVersions>(
             &ValidatedState::default(),
@@ -1313,6 +1315,7 @@ mod api_tests {
                 encoded_transactions: payload_bytes_arc.clone(),
                 metadata: payload.ns_table().clone(),
                 view_number: leaf.view_number(),
+                epoch: EpochNumber::new(1),
             };
             let da_proposal = Proposal {
                 data: da_proposal_inner,
@@ -1468,6 +1471,7 @@ mod api_tests {
             view_change_evidence: None,
             drb_seed: INITIAL_DRB_SEED_INPUT,
             drb_result: INITIAL_DRB_RESULT,
+            next_epoch_justify_qc: None,
         };
 
         let leaf = Leaf2::from_quorum_proposal(&qp);
