@@ -15,12 +15,12 @@ mod message_compat_tests;
 use anyhow::Context;
 use catchup::StatePeers;
 use context::SequencerContext;
+use espresso_types::StaticCommittee;
 use espresso_types::{
     traits::EventConsumer, BackoffParams, L1ClientOptions, NodeState, PubKey, SeqTypes,
     SolverAuctionResultsProvider, ValidatedState,
 };
 use genesis::L1Finalized;
-use hotshot::traits::election::static_committee::StaticCommittee;
 use hotshot_types::traits::election::Membership;
 use proposal_fetcher::ProposalFetcherConfig;
 use std::sync::Arc;
@@ -391,12 +391,6 @@ pub async fn init_node<P: SequencerPersistence, V: Versions>(
         topics
     };
 
-    // Create the HotShot membership
-    let membership = StaticCommittee::new(
-        network_config.config.known_nodes_with_stake.clone(),
-        network_config.config.known_nodes_with_stake.clone(),
-    );
-
     // Initialize the push CDN network (and perform the initial connection)
     let cdn_network = PushCdnNetwork::new(
         network_params.cdn_endpoint,
@@ -439,6 +433,59 @@ pub async fn init_node<P: SequencerPersistence, V: Versions>(
         response_size_maximum: network_params.libp2p_max_direct_transmit_size,
     };
 
+    let l1_client = l1_params
+        .options
+        .with_metrics(metrics)
+        .connect(l1_params.url)
+        .await?;
+    l1_client.spawn_tasks().await;
+    let l1_genesis = match genesis.l1_finalized {
+        L1Finalized::Block(b) => b,
+        L1Finalized::Number { number } => l1_client.wait_for_finalized_block(number).await,
+        L1Finalized::Timestamp { timestamp } => {
+            l1_client
+                .wait_for_finalized_block_with_timestamp(timestamp.unix_timestamp().into())
+                .await
+        }
+    };
+
+    let mut genesis_state = ValidatedState {
+        chain_config: genesis.chain_config.into(),
+        ..Default::default()
+    };
+    for (address, amount) in genesis.accounts {
+        tracing::info!(%address, %amount, "Prefunding account for demo");
+        genesis_state.prefund_account(address, amount);
+    }
+
+    let instance_state = NodeState {
+        chain_config: genesis.chain_config,
+        l1_client,
+        genesis_header: genesis.header,
+        genesis_state,
+        l1_genesis: Some(l1_genesis),
+        peers: catchup::local_and_remote(
+            persistence.clone(),
+            StatePeers::<SequencerApiVersion>::from_urls(
+                network_params.state_peers,
+                network_params.catchup_backoff,
+                metrics,
+            ),
+        )
+        .await,
+        node_id: node_index,
+        upgrades: genesis.upgrades,
+        current_version: V::Base::VERSION,
+    };
+
+    // Create the HotShot membership
+    let membership = StaticCommittee::new_stake(
+        network_config.config.known_nodes_with_stake.clone(),
+        network_config.config.known_nodes_with_stake.clone(),
+        &instance_state,
+        Default::default(),
+    );
+
     // Initialize the Libp2p network
     let network = {
         let p2p_network = Libp2pNetwork::from_config(
@@ -477,50 +524,6 @@ pub async fn init_node<P: SequencerPersistence, V: Versions>(
             p2p_network,
             Some(Duration::from_secs(1)),
         ))
-    };
-
-    let mut genesis_state = ValidatedState {
-        chain_config: genesis.chain_config.into(),
-        ..Default::default()
-    };
-    for (address, amount) in genesis.accounts {
-        tracing::info!(%address, %amount, "Prefunding account for demo");
-        genesis_state.prefund_account(address, amount);
-    }
-
-    let l1_client = l1_params
-        .options
-        .with_metrics(metrics)
-        .connect(l1_params.url)
-        .await?;
-    l1_client.spawn_tasks().await;
-    let l1_genesis = match genesis.l1_finalized {
-        L1Finalized::Block(b) => b,
-        L1Finalized::Number { number } => l1_client.wait_for_finalized_block(number).await,
-        L1Finalized::Timestamp { timestamp } => {
-            l1_client
-                .wait_for_finalized_block_with_timestamp(timestamp.unix_timestamp().into())
-                .await
-        }
-    };
-    let instance_state = NodeState {
-        chain_config: genesis.chain_config,
-        l1_client,
-        genesis_header: genesis.header,
-        genesis_state,
-        l1_genesis: Some(l1_genesis),
-        peers: catchup::local_and_remote(
-            persistence.clone(),
-            StatePeers::<SequencerApiVersion>::from_urls(
-                network_params.state_peers,
-                network_params.catchup_backoff,
-                metrics,
-            ),
-        )
-        .await,
-        node_id: node_index,
-        upgrades: genesis.upgrades,
-        current_version: V::Base::VERSION,
     };
 
     let mut ctx = SequencerContext::init(
