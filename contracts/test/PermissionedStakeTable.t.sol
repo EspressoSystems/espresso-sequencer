@@ -13,12 +13,12 @@ contract PermissionedStakeTableTest is Test {
 
     function setUp() public {
         vm.prank(owner);
-        PermissionedStakeTable.NodeInfo[] memory initialStakers = nodes(0, 1);
+        PermissionedStakeTable.NodeInfo[] memory initialStakers = createNodes(0, 1);
         stakeTable = new PermissionedStakeTable(initialStakers);
     }
 
     // Create `numNodes` node IDs from `start` for testing.
-    function nodes(uint64 start, uint64 numNodes)
+    function createNodes(uint64 start, uint64 numNodes)
         private
         returns (PermissionedStakeTable.NodeInfo[] memory)
     {
@@ -41,6 +41,7 @@ contract PermissionedStakeTableTest is Test {
     // Convert NodeInfo array to BLS keys array
     function toBls(PermissionedStakeTable.NodeInfo[] memory nodes)
         private
+        pure
         returns (BN254.G2Point[] memory)
     {
         BN254.G2Point[] memory bls = new BN254.G2Point[](nodes.length);
@@ -51,15 +52,15 @@ contract PermissionedStakeTableTest is Test {
     }
 
     // Empty array of NodeInfo
-    function emptyNodes() private returns (PermissionedStakeTable.NodeInfo[] memory nodes) {}
+    function emptyNodes() private pure returns (PermissionedStakeTable.NodeInfo[] memory nodes) {}
 
     // Empty array of BLS keys
-    function emptyKeys() private returns (BN254.G2Point[] memory nodes) {}
+    function emptyKeys() private pure returns (BN254.G2Point[] memory keys) {}
 
 
     function testInsert() public {
         vm.prank(owner);
-        PermissionedStakeTable.NodeInfo[] memory stakers = nodes(1, 1);
+        PermissionedStakeTable.NodeInfo[] memory stakers = createNodes(1, 1);
 
         vm.expectEmit();
         emit PermissionedStakeTable.StakersUpdated(emptyKeys(), stakers);
@@ -71,7 +72,7 @@ contract PermissionedStakeTableTest is Test {
 
     function testInsertMany() public {
         vm.prank(owner);
-        PermissionedStakeTable.NodeInfo[] memory stakers = nodes(1, 10);
+        PermissionedStakeTable.NodeInfo[] memory stakers = createNodes(1, 10);
 
         vm.expectEmit();
         emit PermissionedStakeTable.StakersUpdated(emptyKeys(), stakers);
@@ -83,7 +84,7 @@ contract PermissionedStakeTableTest is Test {
 
     function testInsertRevertsIfStakerExists() public {
         vm.prank(owner);
-        PermissionedStakeTable.NodeInfo[] memory stakers = nodes(1, 1);
+        PermissionedStakeTable.NodeInfo[] memory stakers = createNodes(1, 1);
         stakeTable.update(emptyKeys(), stakers);
 
         // Try adding the same staker again
@@ -97,7 +98,7 @@ contract PermissionedStakeTableTest is Test {
     }
 
     function testRemove() public {
-        PermissionedStakeTable.NodeInfo[] memory stakersToInsert = nodes(1, 1);
+        PermissionedStakeTable.NodeInfo[] memory stakersToInsert = createNodes(1, 1);
         BN254.G2Point[] memory keysToRemove = toBls(stakersToInsert);
         vm.prank(owner);
 
@@ -116,7 +117,7 @@ contract PermissionedStakeTableTest is Test {
 
     function testRemoveRevertsIfStakerNotFound() public {
         vm.prank(owner);
-        BN254.G2Point[] memory keysToRemove = toBls(nodes(1, 1));
+        BN254.G2Point[] memory keysToRemove = toBls(createNodes(1, 1));
         vm.expectRevert(
             abi.encodeWithSelector(PermissionedStakeTable.StakerNotFound.selector, keysToRemove[0])
         );
@@ -129,7 +130,7 @@ contract PermissionedStakeTableTest is Test {
         vm.expectRevert(
             abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, address(2))
         );
-        PermissionedStakeTable.NodeInfo[] memory stakers = nodes(1, 1);
+        PermissionedStakeTable.NodeInfo[] memory stakers = createNodes(1, 1);
         stakeTable.update(emptyKeys(), stakers);
     }
 
@@ -138,7 +139,7 @@ contract PermissionedStakeTableTest is Test {
         vm.expectRevert(
             abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, address(2))
         );
-        BN254.G2Point[] memory keys = toBls(nodes(1, 1));
+        BN254.G2Point[] memory keys = toBls(createNodes(1, 1));
         stakeTable.update(keys, emptyNodes());
     }
 }
