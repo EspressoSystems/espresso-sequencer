@@ -143,6 +143,8 @@ impl NodeType for SeqTypes {
     type Membership = EpochCommittees;
     type BuilderSignatureKey = FeeAccount;
     type AuctionResult = SolverAuctionResults;
+    // TODO this associated constant will be removed to make it configurable
+    const EPOCH_HEIGHT: u64 = 42;
 }
 
 #[derive(Clone, Default, Debug, Copy)]

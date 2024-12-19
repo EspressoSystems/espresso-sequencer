@@ -313,7 +313,7 @@ impl Inner {
 
             let info = LeafInfo {
                 leaf: leaf.into(),
-                vid_share,
+                vid_share: vid_share.map(Into::into),
 
                 // Note: the following fields are not used in Decide event processing, and should be
                 // removed. For now, we just default them.

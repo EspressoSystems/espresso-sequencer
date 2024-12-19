@@ -1,4 +1,4 @@
-use std::{collections::HashSet, num::NonZeroUsize, time::Duration};
+use std::{arch::global_asm, collections::HashSet, num::NonZeroUsize, time::Duration};
 
 use anyhow::Context;
 use async_broadcast::{
@@ -169,15 +169,16 @@ impl BuilderConfig {
         };
 
         // create the global state
-        let global_state: Arc<GlobalState<SeqTypes, DynamicHooks>> = GlobalState::new(
-            (builder_key_pair.fee_account(), builder_key_pair),
-            api_timeout,
-            maximize_txns_count_timeout_duration,
-            Duration::from_secs(60),
-            tx_channel_capacity.get(),
-            base_fee.as_u64().expect("Base fee too high"),
-            hooks,
-        );
+        // let global_state: Arc<GlobalState<SeqTypes, DynamicHooks>> = GlobalState::new(
+        //     (builder_key_pair.fee_account(), builder_key_pair),
+        //     api_timeout,
+        //     maximize_txns_count_timeout_duration,
+        //     Duration::from_secs(60),
+        //     tx_channel_capacity.get(),
+        //     base_fee.as_u64().expect("Base fee too high"),
+        //     hooks,
+        // );
+        let global_state = todo!();
 
         Self::start_service(
             Arc::clone(&global_state),

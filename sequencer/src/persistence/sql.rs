@@ -746,7 +746,7 @@ impl Persistence {
 
                     LeafInfo {
                         leaf: leaf.into(),
-                        vid_share,
+                        vid_share: vid_share.map(Into::into),
                         // Note: the following fields are not used in Decide event processing, and
                         // should be removed. For now, we just default them.
                         state: Default::default(),
@@ -1508,6 +1508,7 @@ mod test {
     use futures::stream::TryStreamExt;
     use hotshot_example_types::node_types::TestVersions;
     use hotshot_types::{
+        data::EpochNumber,
         drb::{INITIAL_DRB_RESULT, INITIAL_DRB_SEED_INPUT},
         simple_certificate::QuorumCertificate,
         traits::{block_contents::vid_commitment, signature_key::SignatureKey, EncodeBytes},
@@ -1540,6 +1541,7 @@ mod test {
                 view_change_evidence: None,
                 drb_seed: INITIAL_DRB_SEED_INPUT,
                 drb_result: INITIAL_DRB_RESULT,
+                next_epoch_justify_qc: None,
             },
             signature,
             _pd: Default::default(),
@@ -1629,6 +1631,7 @@ mod test {
             view_change_evidence: None,
             drb_seed: INITIAL_DRB_SEED_INPUT,
             drb_result: INITIAL_DRB_RESULT,
+            next_epoch_justify_qc: None,
         };
         let quorum_proposal_signature =
             BLSPubKey::sign(&privkey, &bincode::serialize(&quorum_proposal).unwrap())
@@ -1646,6 +1649,7 @@ mod test {
                 encoded_transactions: leaf_payload_bytes_arc,
                 metadata: leaf_payload.ns_table().clone(),
                 view_number: ViewNumber::new(0),
+                epoch: EpochNumber::new(1),
             },
             signature: block_payload_signature,
             _pd: Default::default(),
@@ -1753,6 +1757,7 @@ mod test {
             view_change_evidence: None,
             drb_seed: INITIAL_DRB_SEED_INPUT,
             drb_result: INITIAL_DRB_RESULT,
+            next_epoch_justify_qc: None,
         };
         let quorum_proposal_signature =
             BLSPubKey::sign(&privkey, &bincode::serialize(&quorum_proposal).unwrap())
@@ -1770,6 +1775,7 @@ mod test {
                 encoded_transactions: leaf_payload_bytes_arc.clone(),
                 metadata: leaf_payload.ns_table().clone(),
                 view_number: data_view,
+                epoch: EpochNumber::new(1),
             },
             signature: block_payload_signature,
             _pd: Default::default(),

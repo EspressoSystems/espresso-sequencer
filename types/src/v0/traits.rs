@@ -10,11 +10,14 @@ use hotshot::{types::EventType, HotShotInitializer};
 use hotshot_types::{
     consensus::CommitmentMap,
     data::{
-        DaProposal, EpochNumber, QuorumProposal, QuorumProposal2, VidDisperseShare, ViewNumber,
+        DaProposal, DaProposal2, EpochNumber, QuorumProposal, QuorumProposal2, VidDisperseShare,
+        VidDisperseShare2, ViewNumber,
     },
     event::{HotShotAction, LeafInfo},
     message::{convert_proposal, Proposal},
-    simple_certificate::{QuorumCertificate, QuorumCertificate2, UpgradeCertificate},
+    simple_certificate::{
+        NextEpochQuorumCertificate2, QuorumCertificate, QuorumCertificate2, UpgradeCertificate,
+    },
     traits::{
         node_implementation::{ConsensusTime, Versions},
         storage::Storage,
@@ -493,6 +496,9 @@ pub trait SequencerPersistence: Sized + Send + Sync + Clone + 'static {
                 ViewNumber::genesis()
             }
         };
+
+        // TODO load from storage
+        let next_epoch_high_qc = None;
         let (leaf, high_qc, anchor_view) = match self
             .load_anchor_leaf()
             .await
@@ -581,6 +587,7 @@ pub trait SequencerPersistence: Sized + Send + Sync + Clone + 'static {
                 highest_voted_view,
                 saved_proposals,
                 high_qc,
+                next_epoch_high_qc,
                 upgrade_certificate,
                 undecided_leaves.into_values().collect(),
                 undecided_state,
@@ -726,12 +733,29 @@ impl<P: SequencerPersistence> Storage<SeqTypes> for Arc<P> {
         (**self).append_vid(proposal).await
     }
 
+    async fn append_vid2(
+        &self,
+        proposal: &Proposal<SeqTypes, VidDisperseShare2<SeqTypes>>,
+    ) -> anyhow::Result<()> {
+        let proposal_1 = convert_proposal(proposal.clone());
+        (**self).append_vid(&proposal_1).await
+    }
+
     async fn append_da(
         &self,
         proposal: &Proposal<SeqTypes, DaProposal<SeqTypes>>,
         vid_commit: <VidSchemeType as VidScheme>::Commit,
     ) -> anyhow::Result<()> {
         (**self).append_da(proposal, vid_commit).await
+    }
+
+    async fn append_da2(
+        &self,
+        proposal: &Proposal<SeqTypes, DaProposal2<SeqTypes>>,
+        vid_commit: <VidSchemeType as VidScheme>::Commit,
+    ) -> anyhow::Result<()> {
+        let proposal_1 = convert_proposal(proposal.clone());
+        (**self).append_da(&proposal_1, vid_commit).await
     }
 
     async fn record_action(&self, view: ViewNumber, action: HotShotAction) -> anyhow::Result<()> {
@@ -808,6 +832,14 @@ impl<P: SequencerPersistence> Storage<SeqTypes> for Arc<P> {
         (**self)
             .migrate_consensus(migrate_leaf, migrate_proposal)
             .await
+    }
+
+    async fn update_next_epoch_high_qc2(
+        &self,
+        _high_qc: NextEpochQuorumCertificate2<SeqTypes>,
+    ) -> anyhow::Result<()> {
+        // TODO
+        Ok(())
     }
 }
 

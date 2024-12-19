@@ -145,6 +145,8 @@ impl BuilderConfig {
                 vid_commitment,
                 leaf_commit: fake_commitment(),
                 builder_commitment,
+                tx_count: todo!(),
+                last_nonempty_view: todo!(),
             },
             decide_receiver,
             da_receiver,

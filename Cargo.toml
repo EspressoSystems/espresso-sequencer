@@ -168,3 +168,27 @@ opt-level = 3
 opt-level = 3
 [profile.test.package.diff-test-hotshot]
 opt-level = 3
+
+[patch.'https://github.com/EspressoSystems/hotshot.git']
+hotshot = { git = 'https://github.com/EspressoSystems/HotShot//', branch = 'bump/0.5.83' }
+hotshot-builder-api = { git = 'https://github.com/EspressoSystems/hotshot//', branch = 'bump/0.5.83' }
+hotshot-orchestrator ={ git = 'https://github.com/EspressoSystems/hotshot//', branch = 'bump/0.5.83' }
+hotshot-stake-table = { git = 'https://github.com/EspressoSystems/hotshot//', branch = 'bump/0.5.83' }
+hotshot-task = { git = 'https://github.com/EspressoSystems/hotshot//', branch = 'bump/0.5.83' }
+hotshot-task-impls = { git = 'https://github.com/EspressoSystems/hotshot//', branch = 'bump/0.5.83' }
+hotshot-testing = { git = 'https://github.com/EspressoSystems/hotshot//', branch = 'bump/0.5.83' }
+hotshot-types ={ git = 'https://github.com/EspressoSystems/hotshot//', branch = 'bump/0.5.83' }
+libp2p-networking = { git = "https://github.com/EspressoSystems/hotshot//", branch = 'bump/0.5.83'  }
+hotshot-example-types = { git = "https://github.com/EspressoSystems/hotshot//", branch = 'bump/0.5.83' }
+utils = { git = "https://github.com/EspressoSystems/hotshot//", branch = 'bump/0.5.83' }
+
+[patch.'https://github.com/EspressoSystems/marketplace-builder-core.git']
+marketplace-builder-core = { git = "https://github.com/EspressoSystems/marketplace-builder-core//", branch = "ma/hotshot-0.5.83" }
+marketplace-builder-shared = { git = "https://github.com/EspressoSystems/marketplace-builder-core//", branch = "ma/hotshot-0.5.83" }
+hotshot-builder-core = { git = "https://github.com/EspressoSystems/marketplace-builder-core//", branch = "ma/hotshot-0.5.83" }
+
+[patch.'https://github.com/EspressoSystems/hotshot-events-service.git']
+hotshot-events-service = { git = "https://github.com/EspressoSystems/hotshot-events-service//", branch = "ma/hotshot-0.5.83" }
+
+# patch
+# https://github.com/rust-lang/cargo/issues/5478
