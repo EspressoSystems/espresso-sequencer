@@ -178,7 +178,7 @@ hotshot-task = { git = 'https://github.com/EspressoSystems/hotshot//', branch = 
 hotshot-task-impls = { git = 'https://github.com/EspressoSystems/hotshot//', branch = 'bump/0.5.83' }
 hotshot-testing = { git = 'https://github.com/EspressoSystems/hotshot//', branch = 'bump/0.5.83' }
 hotshot-types ={ git = 'https://github.com/EspressoSystems/hotshot//', branch = 'bump/0.5.83' }
-libp2p-networking = { git = "https://github.com/EspressoSystems/hotshot//", branch = 'bump/0.5.83'  }
+libp2p-networking = { git = "https://github.com/EspressoSystems/hotshot//", branch = 'bump/0.5.83' }
 hotshot-example-types = { git = "https://github.com/EspressoSystems/hotshot//", branch = 'bump/0.5.83' }
 utils = { git = "https://github.com/EspressoSystems/hotshot//", branch = 'bump/0.5.83' }
 
