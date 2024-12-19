@@ -82,7 +82,7 @@ pub fn add_response_task<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versi
 ) {
     let state = NetworkResponseState::<TYPES>::new(
         handle.hotshot.consensus(),
-        Arc::clone(&handle.hotshot.memberships),
+        Arc::clone(&handle.memberships),
         handle.public_key().clone(),
         handle.private_key().clone(),
         handle.hotshot.id,
@@ -156,7 +156,9 @@ pub fn add_network_message_task<
                 message = network.recv_message().fuse() => {
                     // Make sure the message did not fail
                     let message = match message {
-                        Ok(message) => message,
+                        Ok(message) => {
+                            message
+                        }
                         Err(e) => {
                             tracing::error!("Failed to receive message: {:?}", e);
                             continue;

@@ -210,10 +210,14 @@ where
 pub struct VidDisperse<TYPES: NodeType> {
     /// The view number for which this VID data is intended
     pub view_number: TYPES::View,
-    /// Epoch this proposal applies to
+    /// Epoch the data of this proposal belongs to
     pub epoch: TYPES::Epoch,
-    /// Block payload commitment
+    /// Epoch to which the recipients of this VID belong to
+    pub target_epoch: TYPES::Epoch,
+    /// VidCommitment calculated based on the number of nodes in `target_epoch`.
     pub payload_commitment: VidCommitment,
+    /// VidCommitment calculated based on the number of nodes in `epoch`. Needed during epoch transition.
+    pub data_epoch_payload_commitment: Option<VidCommitment>,
     /// A storage node's key and its corresponding VID share
     pub shares: BTreeMap<TYPES::SignatureKey, VidShare>,
     /// VID common data sent to all storage nodes
@@ -229,7 +233,8 @@ impl<TYPES: NodeType> VidDisperse<TYPES> {
         mut vid_disperse: JfVidDisperse<VidSchemeType>,
         membership: &Arc<RwLock<TYPES::Membership>>,
         target_epoch: TYPES::Epoch,
-        sender_epoch: Option<TYPES::Epoch>,
+        data_epoch: TYPES::Epoch,
+        data_epoch_payload_commitment: Option<VidCommitment>,
     ) -> Self {
         let shares = membership
             .read()
@@ -244,7 +249,9 @@ impl<TYPES: NodeType> VidDisperse<TYPES> {
             shares,
             common: vid_disperse.common,
             payload_commitment: vid_disperse.commit,
-            epoch: sender_epoch.unwrap_or(target_epoch),
+            data_epoch_payload_commitment,
+            epoch: data_epoch,
+            target_epoch,
         }
     }
 
@@ -260,23 +267,43 @@ impl<TYPES: NodeType> VidDisperse<TYPES> {
         membership: &Arc<RwLock<TYPES::Membership>>,
         view: TYPES::View,
         target_epoch: TYPES::Epoch,
-        sender_epoch: Option<TYPES::Epoch>,
+        data_epoch: TYPES::Epoch,
         precompute_data: Option<VidPrecomputeData>,
     ) -> Self {
         let num_nodes = membership.read().await.total_nodes(target_epoch);
 
+        let txns_clone = Arc::clone(&txns);
         let vid_disperse = spawn_blocking(move || {
             precompute_data
                 .map_or_else(
-                    || vid_scheme(num_nodes).disperse(Arc::clone(&txns)),
-                    |data| vid_scheme(num_nodes).disperse_precompute(Arc::clone(&txns), &data)
+                    || vid_scheme(num_nodes).disperse(&txns_clone),
+                    |data| vid_scheme(num_nodes).disperse_precompute(&txns_clone, &data)
                 )
-                .unwrap_or_else(|err| panic!("VID disperse failure:(num_storage nodes,payload_byte_len)=({num_nodes},{}) error: {err}", txns.len()))
+                .unwrap_or_else(|err| panic!("VID disperse failure:(num_storage nodes,payload_byte_len)=({num_nodes},{}) error: {err}", txns_clone.len()))
         }).await;
+        let data_epoch_payload_commitment = if target_epoch == data_epoch {
+            None
+        } else {
+            let data_epoch_num_nodes = membership.read().await.total_nodes(data_epoch);
+            Some(spawn_blocking(move || {
+                vid_scheme(data_epoch_num_nodes).commit_only(&txns)
+                    .unwrap_or_else(|err| panic!("VID commit_only failure:(num_storage nodes,payload_byte_len)=({num_nodes},{}) error: {err}", txns.len()))
+            }).await)
+        };
         // Unwrap here will just propagate any panic from the spawned task, it's not a new place we can panic.
         let vid_disperse = vid_disperse.unwrap();
+        let data_epoch_payload_commitment =
+            data_epoch_payload_commitment.map(|result| result.unwrap());
 
-        Self::from_membership(view, vid_disperse, membership, target_epoch, sender_epoch).await
+        Self::from_membership(
+            view,
+            vid_disperse,
+            membership,
+            target_epoch,
+            data_epoch,
+            data_epoch_payload_commitment,
+        )
+        .await
     }
 }
 
@@ -364,7 +391,9 @@ impl<TYPES: NodeType> VidDisperseShare<TYPES> {
         let mut vid_disperse = VidDisperse {
             view_number: first_vid_disperse_share.view_number,
             epoch: TYPES::Epoch::new(0),
+            target_epoch: TYPES::Epoch::new(0),
             payload_commitment: first_vid_disperse_share.payload_commitment,
+            data_epoch_payload_commitment: None,
             common: first_vid_disperse_share.common,
             shares: share_map,
         };
@@ -405,10 +434,14 @@ impl<TYPES: NodeType> VidDisperseShare<TYPES> {
 pub struct VidDisperseShare2<TYPES: NodeType> {
     /// The view number for which this VID data is intended
     pub view_number: TYPES::View,
-    /// The epoch number for which this VID data is intended
+    /// The epoch number for which this VID data belongs to
     pub epoch: TYPES::Epoch,
+    /// The epoch number to which the recipient of this VID belongs to
+    pub target_epoch: TYPES::Epoch,
     /// Block payload commitment
     pub payload_commitment: VidCommitment,
+    /// VidCommitment calculated based on the number of nodes in `epoch`. Needed during epoch transition.
+    pub data_epoch_payload_commitment: Option<VidCommitment>,
     /// A storage node's key and its corresponding VID share
     pub share: VidShare,
     /// VID common data sent to all storage nodes
@@ -422,7 +455,9 @@ impl<TYPES: NodeType> From<VidDisperseShare2<TYPES>> for VidDisperseShare<TYPES>
         let VidDisperseShare2 {
             view_number,
             epoch: _,
+            target_epoch: _,
             payload_commitment,
+            data_epoch_payload_commitment: _,
             share,
             common,
             recipient_key,
@@ -451,7 +486,9 @@ impl<TYPES: NodeType> From<VidDisperseShare<TYPES>> for VidDisperseShare2<TYPES>
         Self {
             view_number,
             epoch: TYPES::Epoch::new(0),
+            target_epoch: TYPES::Epoch::new(0),
             payload_commitment,
+            data_epoch_payload_commitment: None,
             share,
             common,
             recipient_key,
@@ -462,7 +499,6 @@ impl<TYPES: NodeType> From<VidDisperseShare<TYPES>> for VidDisperseShare2<TYPES>
 impl<TYPES: NodeType> VidDisperseShare2<TYPES> {
     /// Create a vector of `VidDisperseShare` from `VidDisperse`
     pub fn from_vid_disperse(vid_disperse: VidDisperse<TYPES>) -> Vec<Self> {
-        let epoch = vid_disperse.epoch;
         vid_disperse
             .shares
             .into_iter()
@@ -472,7 +508,9 @@ impl<TYPES: NodeType> VidDisperseShare2<TYPES> {
                 view_number: vid_disperse.view_number,
                 common: vid_disperse.common.clone(),
                 payload_commitment: vid_disperse.payload_commitment,
-                epoch,
+                data_epoch_payload_commitment: vid_disperse.data_epoch_payload_commitment,
+                epoch: vid_disperse.epoch,
+                target_epoch: vid_disperse.target_epoch,
             })
             .collect()
     }
@@ -501,7 +539,6 @@ impl<TYPES: NodeType> VidDisperseShare2<TYPES> {
         I: Iterator<Item = &'a Self>,
     {
         let first_vid_disperse_share = it.next()?.clone();
-        let epoch = first_vid_disperse_share.epoch;
         let mut share_map = BTreeMap::new();
         share_map.insert(
             first_vid_disperse_share.recipient_key,
@@ -509,8 +546,10 @@ impl<TYPES: NodeType> VidDisperseShare2<TYPES> {
         );
         let mut vid_disperse = VidDisperse {
             view_number: first_vid_disperse_share.view_number,
-            epoch,
+            epoch: first_vid_disperse_share.epoch,
+            target_epoch: first_vid_disperse_share.target_epoch,
             payload_commitment: first_vid_disperse_share.payload_commitment,
+            data_epoch_payload_commitment: first_vid_disperse_share.data_epoch_payload_commitment,
             common: first_vid_disperse_share.common,
             shares: share_map,
         };
@@ -527,7 +566,6 @@ impl<TYPES: NodeType> VidDisperseShare2<TYPES> {
     pub fn to_vid_share_proposals(
         vid_disperse_proposal: Proposal<TYPES, VidDisperse<TYPES>>,
     ) -> Vec<Proposal<TYPES, Self>> {
-        let epoch = vid_disperse_proposal.data.epoch;
         vid_disperse_proposal
             .data
             .shares
@@ -539,7 +577,11 @@ impl<TYPES: NodeType> VidDisperseShare2<TYPES> {
                     view_number: vid_disperse_proposal.data.view_number,
                     common: vid_disperse_proposal.data.common.clone(),
                     payload_commitment: vid_disperse_proposal.data.payload_commitment,
-                    epoch,
+                    data_epoch_payload_commitment: vid_disperse_proposal
+                        .data
+                        .data_epoch_payload_commitment,
+                    epoch: vid_disperse_proposal.data.epoch,
+                    target_epoch: vid_disperse_proposal.data.target_epoch,
                 },
                 signature: vid_disperse_proposal.signature.clone(),
                 _pd: vid_disperse_proposal._pd,

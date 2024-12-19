@@ -336,6 +336,7 @@ pub async fn build_vid_proposal<TYPES: NodeType>(
         vid.disperse(&encoded_transactions).unwrap(),
         membership,
         epoch_number,
+        epoch_number,
         None,
     )
     .await;

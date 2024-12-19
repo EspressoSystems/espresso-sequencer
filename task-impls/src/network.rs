@@ -404,7 +404,6 @@ impl<
     ) -> std::result::Result<(), ()> {
         if let Some(mut action) = maybe_action {
             if !consensus.write().await.update_action(action, view) {
-                tracing::warn!("Already actioned {:?} in view {:?}", action, view);
                 return Err(());
             }
             // If the action was view sync record it as a vote, but we don't

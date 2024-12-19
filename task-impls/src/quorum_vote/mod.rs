@@ -173,7 +173,13 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static, V: Versions> Handl
                     }
                 }
                 HotShotEvent::VidShareValidated(share) => {
-                    let vid_payload_commitment = &share.data.payload_commitment;
+                    let vid_payload_commitment = if let Some(ref data_epoch_payload_commitment) =
+                        share.data.data_epoch_payload_commitment
+                    {
+                        data_epoch_payload_commitment
+                    } else {
+                        &share.data.payload_commitment
+                    };
                     vid_share = Some(share.clone());
                     if let Some(ref comm) = payload_commitment {
                         if vid_payload_commitment != comm {
@@ -372,8 +378,12 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> QuorumVoteTaskS
         view_number: TYPES::View,
         event_receiver: Receiver<Arc<HotShotEvent<TYPES>>>,
         event_sender: &Sender<Arc<HotShotEvent<TYPES>>>,
-        event: Option<Arc<HotShotEvent<TYPES>>>,
+        event: Arc<HotShotEvent<TYPES>>,
     ) {
+        tracing::debug!(
+            "Attempting to make dependency task for view {view_number:?} and event {event:?}"
+        );
+
         if self.vote_dependencies.contains_key(&view_number) {
             return;
         }
@@ -388,10 +398,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> QuorumVoteTaskS
         let vid_dependency =
             self.create_event_dependency(VoteDependency::Vid, view_number, event_receiver.clone());
         // If we have an event provided to us
-        if let Some(event) = event {
-            if let HotShotEvent::QuorumProposalValidated(..) = event.as_ref() {
-                quorum_proposal_dependency.mark_as_completed(event);
-            }
+        if let HotShotEvent::QuorumProposalValidated(..) = event.as_ref() {
+            quorum_proposal_dependency.mark_as_completed(event);
         }
 
         let deps = vec![quorum_proposal_dependency, dac_dependency, vid_dependency];
@@ -500,7 +508,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> QuorumVoteTaskS
                         proposal.data.view_number,
                         event_receiver,
                         &event_sender,
-                        Some(Arc::clone(&event)),
+                        Arc::clone(&event),
                     );
                 }
             }
@@ -544,7 +552,12 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> QuorumVoteTaskS
                     &event_sender.clone(),
                 )
                 .await;
-                self.create_dependency_task_if_new(view, event_receiver, &event_sender, None);
+                self.create_dependency_task_if_new(
+                    view,
+                    event_receiver,
+                    &event_sender,
+                    Arc::clone(&event),
+                );
             }
             HotShotEvent::VidShareRecv(sender, disperse) => {
                 let view = disperse.data.view_number();
@@ -557,25 +570,25 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> QuorumVoteTaskS
 
                 // Validate the VID share.
                 let payload_commitment = &disperse.data.payload_commitment;
-                let disperse_epoch = disperse.data.epoch;
-
                 // Check that the signature is valid
                 ensure!(
                     sender.validate(&disperse.signature, payload_commitment.as_ref()),
                     "VID share signature is invalid"
                 );
 
+                let vid_epoch = disperse.data.epoch;
+                let target_epoch = disperse.data.target_epoch;
                 let membership_reader = self.membership.read().await;
                 // ensure that the VID share was sent by a DA member OR the view leader
                 ensure!(
                     membership_reader
-                        .da_committee_members(view, disperse_epoch)
+                        .da_committee_members(view, vid_epoch)
                         .contains(sender)
-                        || *sender == membership_reader.leader(view, disperse_epoch)?,
+                        || *sender == membership_reader.leader(view, vid_epoch)?,
                     "VID share was not sent by a DA member or the view leader."
                 );
 
-                let membership_total_nodes = membership_reader.total_nodes(disperse_epoch);
+                let membership_total_nodes = membership_reader.total_nodes(target_epoch);
                 drop(membership_reader);
 
                 // NOTE: `verify_share` returns a nested `Result`, so we must check both the inner
@@ -606,7 +619,12 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> QuorumVoteTaskS
                     &event_sender.clone(),
                 )
                 .await;
-                self.create_dependency_task_if_new(view, event_receiver, &event_sender, None);
+                self.create_dependency_task_if_new(
+                    view,
+                    event_receiver,
+                    &event_sender,
+                    Arc::clone(&event),
+                );
             }
             HotShotEvent::Timeout(view, ..) => {
                 let view = TYPES::View::new(view.saturating_sub(1));
@@ -717,25 +735,30 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> QuorumVoteTaskS
             current_block_number,
             self.epoch_height,
         ));
-        tracing::trace!(
-            "Sending ViewChange for view {} and epoch {}",
-            proposal.data.view_number() + 1,
-            *current_epoch
-        );
-        broadcast_event(
-            Arc::new(HotShotEvent::ViewChange(
-                proposal.data.view_number() + 1,
-                current_epoch,
-            )),
-            &event_sender,
-        )
-        .await;
 
         let is_vote_leaf_extended = self
             .consensus
             .read()
             .await
             .is_leaf_extended(proposed_leaf.commit());
+        if !is_vote_leaf_extended {
+            // We're voting for the proposal that will probably form the eQC. We don't want to change
+            // the view here because we will probably change it when we form the eQC.
+            // The main reason is to handle view change event only once in the transaction task.
+            tracing::trace!(
+                "Sending ViewChange for view {} and epoch {}",
+                proposal.data.view_number() + 1,
+                *current_epoch
+            );
+            broadcast_event(
+                Arc::new(HotShotEvent::ViewChange(
+                    proposal.data.view_number() + 1,
+                    current_epoch,
+                )),
+                &event_sender,
+            )
+            .await;
+        }
         if let Err(e) = submit_vote::<TYPES, I, V>(
             event_sender.clone(),
             Arc::clone(&self.membership),

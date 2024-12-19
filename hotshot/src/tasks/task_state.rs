@@ -219,6 +219,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> CreateTaskState
                 .marketplace_config
                 .fallback_builder_url
                 .clone(),
+            epoch_height: handle.epoch_height,
         }
     }
 }

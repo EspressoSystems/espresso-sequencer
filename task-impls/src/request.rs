@@ -220,6 +220,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> NetworkRequestState<TYPES, I
             view,
             signature,
         };
+        let my_id = self.id;
         let handle: JoinHandle<()> = spawn(async move {
             // Do the delay only if primary is up and then start sending
             if !network.is_primary_down() {
@@ -261,8 +262,9 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> NetworkRequestState<TYPES, I
                 } else {
                     // This shouldnt be possible `recipients_it.next()` should clone original and start over if `None`
                     tracing::warn!(
-                        "Sent VID request to all available DA members and got no response for view: {:?}",
-                        view
+                        "Sent VID request to all available DA members and got no response for view: {:?}, my id: {:?}",
+                        view,
+                        my_id,
                     );
                     return;
                 }

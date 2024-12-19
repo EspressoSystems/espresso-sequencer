@@ -120,6 +120,9 @@ pub struct TransactionTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>, V
 
     /// fallback builder url
     pub fallback_builder_url: Url,
+
+    /// Number of blocks in an epoch, zero means there are no epochs
+    pub epoch_height: u64,
 }
 
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTaskState<TYPES, I, V> {
@@ -477,9 +480,13 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
             }
             HotShotEvent::ViewChange(view, epoch) => {
                 let view = TYPES::View::new(std::cmp::max(1, **view));
-
+                let epoch = if self.epoch_height != 0 {
+                    TYPES::Epoch::new(std::cmp::max(1, **epoch))
+                } else {
+                    *epoch
+                };
                 ensure!(
-                    *view > *self.cur_view || *epoch > self.cur_epoch,
+                    *view > *self.cur_view && *epoch >= *self.cur_epoch,
                     debug!(
                       "Received a view change to an older view and epoch: tried to change view to {:?}\
                       and epoch {:?} though we are at view {:?} and epoch {:?}",
@@ -487,11 +494,11 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
                     )
                 );
                 self.cur_view = view;
-                self.cur_epoch = *epoch;
+                self.cur_epoch = epoch;
 
-                let leader = self.membership.read().await.leader(view, *epoch)?;
+                let leader = self.membership.read().await.leader(view, epoch)?;
                 if leader == self.public_key {
-                    self.handle_view_change(&event_stream, view, *epoch).await;
+                    self.handle_view_change(&event_stream, view, epoch).await;
                     return Ok(());
                 }
             }

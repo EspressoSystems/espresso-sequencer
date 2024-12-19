@@ -6,7 +6,7 @@
 
 #[cfg(feature = "hotshot-testing")]
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::{marker::PhantomData, sync::Arc};
+use std::{collections::VecDeque, marker::PhantomData, sync::Arc};
 #[cfg(feature = "hotshot-testing")]
 use std::{path::Path, time::Duration};
 
@@ -46,6 +46,7 @@ use hotshot_types::{
     BoxSyncFuture,
 };
 use num_enum::{IntoPrimitive, TryFromPrimitive};
+use parking_lot::Mutex;
 #[cfg(feature = "hotshot-testing")]
 use rand::{rngs::StdRng, RngCore, SeedableRng};
 use tokio::{spawn, sync::mpsc::error::TrySendError, time::sleep};
@@ -191,6 +192,10 @@ pub struct PushCdnNetwork<K: SignatureKey + 'static> {
     client: Client<ClientDef<K>>,
     /// The CDN-specific metrics
     metrics: Arc<CdnMetricsValue>,
+    /// The internal queue for messages to ourselves
+    internal_queue: Arc<Mutex<VecDeque<Vec<u8>>>>,
+    /// The public key of this node
+    public_key: K,
     /// Whether or not the underlying network is supposed to be paused
     #[cfg(feature = "hotshot-testing")]
     is_paused: Arc<AtomicBool>,
@@ -229,7 +234,7 @@ impl<K: SignatureKey + 'static> PushCdnNetwork<K> {
         let config = ClientConfig {
             endpoint: marshal_endpoint,
             subscribed_topics: topics.into_iter().map(|t| t as u8).collect(),
-            keypair,
+            keypair: keypair.clone(),
             use_local_authority: true,
         };
 
@@ -239,6 +244,8 @@ impl<K: SignatureKey + 'static> PushCdnNetwork<K> {
         Ok(Self {
             client,
             metrics: Arc::from(metrics),
+            internal_queue: Arc::new(Mutex::new(VecDeque::new())),
+            public_key: keypair.public_key.0,
             // Start unpaused
             #[cfg(feature = "hotshot-testing")]
             is_paused: Arc::from(AtomicBool::new(false)),
@@ -422,7 +429,7 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES>
                     let client_config: ClientConfig<ClientDef<TYPES::SignatureKey>> =
                         ClientConfig {
                             keypair: KeyPair {
-                                public_key: WrappedSignatureKey(public_key),
+                                public_key: WrappedSignatureKey(public_key.clone()),
                                 private_key,
                             },
                             subscribed_topics: topics,
@@ -434,6 +441,8 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES>
                     Arc::new(PushCdnNetwork {
                         client: Client::new(client_config),
                         metrics: Arc::new(CdnMetricsValue::default()),
+                        internal_queue: Arc::new(Mutex::new(VecDeque::new())),
+                        public_key,
                         #[cfg(feature = "hotshot-testing")]
                         is_paused: Arc::from(AtomicBool::new(false)),
                     })
@@ -533,6 +542,12 @@ impl<K: SignatureKey + 'static> ConnectedNetwork<K> for PushCdnNetwork<K> {
             return Ok(());
         }
 
+        // If the message is to ourselves, just add it to the internal queue
+        if recipient == self.public_key {
+            self.internal_queue.lock().push_back(message);
+            return Ok(());
+        }
+
         // Send the message
         if let Err(e) = self
             .client
@@ -554,7 +569,12 @@ impl<K: SignatureKey + 'static> ConnectedNetwork<K> for PushCdnNetwork<K> {
     /// # Errors
     /// - If we fail to receive messages. Will trigger a retry automatically.
     async fn recv_message(&self) -> Result<Vec<u8>, NetworkError> {
-        // Receive a message
+        // If we have a message in the internal queue, return it
+        if let Some(message) = self.internal_queue.lock().pop_front() {
+            return Ok(message);
+        }
+
+        // Receive a message from the network
         let message = self.client.receive_message().await;
 
         // If we're paused, receive but don't process messages

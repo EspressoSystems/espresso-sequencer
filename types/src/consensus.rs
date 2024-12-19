@@ -950,7 +950,7 @@ impl<TYPES: NodeType> Consensus<TYPES> {
             .view_inner
             .epoch()?;
         let vid =
-            VidDisperse::calculate_vid_disperse(txns, &membership, view, epoch, None, None).await;
+            VidDisperse::calculate_vid_disperse(txns, &membership, view, epoch, epoch, None).await;
         let shares = VidDisperseShare2::from_vid_disperse(vid);
         let mut consensus_writer = consensus.write().await;
         for share in shares {
