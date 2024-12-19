@@ -1264,7 +1264,7 @@ dependencies = [
  "hotshot",
  "hotshot-builder-api",
  "hotshot-builder-core",
- "hotshot-events-service 0.1.56",
+ "hotshot-events-service",
  "hotshot-state-prover",
  "hotshot-types",
  "jf-signature 0.2.0",
@@ -4020,7 +4020,7 @@ dependencies = [
 [[package]]
 name = "hotshot"
 version = "0.5.83"
-source = "git+https://github.com/EspressoSystems/HotShot//?branch=bump%2F0.5.83#f9bf48ebf53a5fa934614a13f4cbb3069c1e0fda"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=bump%2F0.5.83#f9bf48ebf53a5fa934614a13f4cbb3069c1e0fda"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4063,7 +4063,7 @@ dependencies = [
 [[package]]
 name = "hotshot-builder-api"
 version = "0.1.7"
-source = "git+https://github.com/EspressoSystems/HotShot//?branch=bump%2F0.5.83#f9bf48ebf53a5fa934614a13f4cbb3069c1e0fda"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=bump%2F0.5.83#f9bf48ebf53a5fa934614a13f4cbb3069c1e0fda"
 dependencies = [
  "async-trait",
  "clap",
@@ -4082,7 +4082,7 @@ dependencies = [
 [[package]]
 name = "hotshot-builder-core"
 version = "0.1.58"
-source = "git+https://github.com/EspressoSystems/marketplace-builder-core//?branch=ma%2Fhotshot-0.5.83#8b6361e251840bb601f7af893b9bd868797c6362"
+source = "git+https://github.com/EspressoSystems/marketplace-builder-core?branch=ma%2Fhotshot-0.5.83#8b6361e251840bb601f7af893b9bd868797c6362"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4140,35 +4140,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-events-service"
-version = "0.1.56"
-source = "git+https://github.com/EspressoSystems/hotshot-events-service.git?tag=0.1.56#c8046e6debb533c6abf431866ccf1d3787338982"
-dependencies = [
- "async-broadcast",
- "async-lock 2.8.0",
- "async-trait",
- "clap",
- "derivative",
- "derive_more 0.99.18",
- "either",
- "futures",
- "hotshot-types",
- "libp2p-identity",
- "rand 0.8.5",
- "serde",
- "snafu 0.8.5",
- "tagged-base64",
- "tide-disco",
- "tokio",
- "toml 0.8.19",
- "tracing",
- "tracing-test",
- "vbs",
-]
-
-[[package]]
-name = "hotshot-events-service"
 version = "0.1.57"
-source = "git+https://github.com/EspressoSystems/hotshot-events-service//?branch=ma%2Fhotshot-0.5.83#89b06b6007e88fd20bfc855d3f400b8fa045f379"
+source = "git+https://github.com/EspressoSystems/hotshot-events-service.git?branch=ma%2Fhotshot-0.5.83#89b06b6007e88fd20bfc855d3f400b8fa045f379"
 dependencies = [
  "async-broadcast",
  "async-lock 2.8.0",
@@ -4195,7 +4168,7 @@ dependencies = [
 [[package]]
 name = "hotshot-example-types"
 version = "0.5.83"
-source = "git+https://github.com/EspressoSystems/HotShot//?branch=bump%2F0.5.83#f9bf48ebf53a5fa934614a13f4cbb3069c1e0fda"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=bump%2F0.5.83#f9bf48ebf53a5fa934614a13f4cbb3069c1e0fda"
 dependencies = [
  "anyhow",
  "async-lock 3.4.0",
@@ -4220,7 +4193,7 @@ dependencies = [
 [[package]]
 name = "hotshot-fakeapi"
 version = "0.5.83"
-source = "git+https://github.com/EspressoSystems/HotShot//?branch=bump%2F0.5.83#f9bf48ebf53a5fa934614a13f4cbb3069c1e0fda"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=bump%2F0.5.83#f9bf48ebf53a5fa934614a13f4cbb3069c1e0fda"
 dependencies = [
  "anyhow",
  "async-lock 3.4.0",
@@ -4238,7 +4211,7 @@ dependencies = [
 [[package]]
 name = "hotshot-macros"
 version = "0.5.83"
-source = "git+https://github.com/EspressoSystems/HotShot//?branch=bump%2F0.5.83#f9bf48ebf53a5fa934614a13f4cbb3069c1e0fda"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=bump%2F0.5.83#f9bf48ebf53a5fa934614a13f4cbb3069c1e0fda"
 dependencies = [
  "derive_builder",
  "proc-macro2",
@@ -4249,7 +4222,7 @@ dependencies = [
 [[package]]
 name = "hotshot-orchestrator"
 version = "0.5.83"
-source = "git+https://github.com/EspressoSystems/HotShot//?branch=bump%2F0.5.83#f9bf48ebf53a5fa934614a13f4cbb3069c1e0fda"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=bump%2F0.5.83#f9bf48ebf53a5fa934614a13f4cbb3069c1e0fda"
 dependencies = [
  "anyhow",
  "async-lock 3.4.0",
@@ -4272,7 +4245,7 @@ dependencies = [
 [[package]]
 name = "hotshot-query-service"
 version = "0.1.76"
-source = "git+https://github.com/EspressoSystems/hotshot-query-service//?branch=ma%2Fhotshot-0.5.83#77ad27d40201a8483ca6ad3af9040adf859d5607"
+source = "git+https://github.com/EspressoSystems/hotshot-query-service?branch=ma%2Fhotshot-0.5.83#77ad27d40201a8483ca6ad3af9040adf859d5607"
 dependencies = [
  "anyhow",
  "ark-serialize",
@@ -4327,7 +4300,7 @@ dependencies = [
 [[package]]
 name = "hotshot-stake-table"
 version = "0.5.83"
-source = "git+https://github.com/EspressoSystems/HotShot//?branch=bump%2F0.5.83#f9bf48ebf53a5fa934614a13f4cbb3069c1e0fda"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=bump%2F0.5.83#f9bf48ebf53a5fa934614a13f4cbb3069c1e0fda"
 dependencies = [
  "ark-bn254",
  "ark-ed-on-bn254",
@@ -4389,7 +4362,7 @@ dependencies = [
 [[package]]
 name = "hotshot-task"
 version = "0.5.83"
-source = "git+https://github.com/EspressoSystems/HotShot//?branch=bump%2F0.5.83#f9bf48ebf53a5fa934614a13f4cbb3069c1e0fda"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=bump%2F0.5.83#f9bf48ebf53a5fa934614a13f4cbb3069c1e0fda"
 dependencies = [
  "async-broadcast",
  "async-trait",
@@ -4402,7 +4375,7 @@ dependencies = [
 [[package]]
 name = "hotshot-task-impls"
 version = "0.5.83"
-source = "git+https://github.com/EspressoSystems/HotShot//?branch=bump%2F0.5.83#f9bf48ebf53a5fa934614a13f4cbb3069c1e0fda"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=bump%2F0.5.83#f9bf48ebf53a5fa934614a13f4cbb3069c1e0fda"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4436,7 +4409,7 @@ dependencies = [
 [[package]]
 name = "hotshot-testing"
 version = "0.5.83"
-source = "git+https://github.com/EspressoSystems/HotShot//?branch=bump%2F0.5.83#f9bf48ebf53a5fa934614a13f4cbb3069c1e0fda"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=bump%2F0.5.83#f9bf48ebf53a5fa934614a13f4cbb3069c1e0fda"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4477,7 +4450,7 @@ dependencies = [
 [[package]]
 name = "hotshot-types"
 version = "0.1.11"
-source = "git+https://github.com/EspressoSystems/HotShot//?branch=bump%2F0.5.83#f9bf48ebf53a5fa934614a13f4cbb3069c1e0fda"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=bump%2F0.5.83#f9bf48ebf53a5fa934614a13f4cbb3069c1e0fda"
 dependencies = [
  "anyhow",
  "ark-bn254",
@@ -6032,7 +6005,7 @@ dependencies = [
 [[package]]
 name = "libp2p-networking"
 version = "0.5.83"
-source = "git+https://github.com/EspressoSystems/HotShot//?branch=bump%2F0.5.83#f9bf48ebf53a5fa934614a13f4cbb3069c1e0fda"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=bump%2F0.5.83#f9bf48ebf53a5fa934614a13f4cbb3069c1e0fda"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -6411,7 +6384,7 @@ dependencies = [
  "futures",
  "hotshot",
  "hotshot-builder-api",
- "hotshot-events-service 0.1.56",
+ "hotshot-events-service",
  "hotshot-orchestrator",
  "hotshot-query-service",
  "hotshot-stake-table",
@@ -6437,7 +6410,7 @@ dependencies = [
 [[package]]
 name = "marketplace-builder-core"
 version = "0.1.58"
-source = "git+https://github.com/EspressoSystems/marketplace-builder-core//?branch=ma%2Fhotshot-0.5.83#8b6361e251840bb601f7af893b9bd868797c6362"
+source = "git+https://github.com/EspressoSystems/marketplace-builder-core?branch=ma%2Fhotshot-0.5.83#8b6361e251840bb601f7af893b9bd868797c6362"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -6462,7 +6435,7 @@ dependencies = [
 [[package]]
 name = "marketplace-builder-shared"
 version = "0.1.58"
-source = "git+https://github.com/EspressoSystems/marketplace-builder-core//?branch=ma%2Fhotshot-0.5.83#8b6361e251840bb601f7af893b9bd868797c6362"
+source = "git+https://github.com/EspressoSystems/marketplace-builder-core?branch=ma%2Fhotshot-0.5.83#8b6361e251840bb601f7af893b9bd868797c6362"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -6477,7 +6450,7 @@ dependencies = [
  "hex",
  "hotshot",
  "hotshot-builder-api",
- "hotshot-events-service 0.1.57",
+ "hotshot-events-service",
  "hotshot-example-types",
  "hotshot-task-impls",
  "hotshot-testing",
@@ -6512,7 +6485,7 @@ dependencies = [
  "espresso-types",
  "futures",
  "hotshot",
- "hotshot-events-service 0.1.56",
+ "hotshot-events-service",
  "hotshot-query-service",
  "hotshot-types",
  "marketplace-solver",
@@ -8864,7 +8837,7 @@ dependencies = [
  "futures",
  "hotshot",
  "hotshot-contract-adapter",
- "hotshot-events-service 0.1.56",
+ "hotshot-events-service",
  "hotshot-example-types",
  "hotshot-orchestrator",
  "hotshot-query-service",
@@ -10946,7 +10919,7 @@ checksum = "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821"
 [[package]]
 name = "utils"
 version = "0.5.83"
-source = "git+https://github.com/EspressoSystems/HotShot//?branch=bump%2F0.5.83#f9bf48ebf53a5fa934614a13f4cbb3069c1e0fda"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=bump%2F0.5.83#f9bf48ebf53a5fa934614a13f4cbb3069c1e0fda"
 dependencies = [
  "tracing",
 ]
