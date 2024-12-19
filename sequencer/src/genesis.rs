@@ -60,7 +60,7 @@ pub struct Genesis {
     pub header: GenesisHeader,
     #[serde(rename = "upgrade", with = "upgrade_ser")]
     #[serde(default)]
-    pub upgrades: BTreeMap<Version, Upgrade>,                                                                                                                             
+    pub upgrades: BTreeMap<Version, Upgrade>,
 }
 
 impl Genesis {
