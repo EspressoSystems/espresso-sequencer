@@ -593,7 +593,10 @@ pub mod testing {
         traits::{block_contents::BlockHeader, metrics::NoMetrics, stake_table::StakeTableScheme},
         HotShotConfig, PeerConfig,
     };
-    use marketplace_builder_core::{hooks::NoHooks, service::GlobalState};
+    use marketplace_builder_core::{
+        hooks::NoHooks,
+        service::{BuilderConfig, GlobalState},
+    };
 
     use portpicker::pick_unused_port;
     use tokio::spawn;
@@ -637,21 +640,21 @@ pub mod testing {
             .parse()
             .expect("Failed to parse builder URL");
 
-        // let hooks = NoHooks(PhantomData);
-
         // create the global state
-        // let global_state: Arc<GlobalState<SeqTypes, NoHooks<SeqTypes>>> = GlobalState::new(
-        //     (builder_key_pair.fee_account(), builder_key_pair),
-        //     Duration::from_secs(60),
-        //     Duration::from_millis(100),
-        //     Duration::from_secs(60),
-        //     BUILDER_CHANNEL_CAPACITY_FOR_TEST,
-        //     10,
-        //     hooks,
-        // );
-        let global_state: Arc<GlobalState<SeqTypes, NoHooks<SeqTypes>>> = todo!();
+        let global_state = GlobalState::new(
+            BuilderConfig {
+                builder_keys: (builder_key_pair.fee_account(), builder_key_pair),
+                api_timeout: Duration::from_secs(60),
+                tx_capture_timeout: Duration::from_millis(100),
+                txn_garbage_collect_duration: Duration::from_secs(60),
+                txn_channel_capacity: BUILDER_CHANNEL_CAPACITY_FOR_TEST,
+                tx_status_cache_capacity: 81920,
+                base_fee: 10,
+            },
+            NoHooks(PhantomData),
+        );
 
-        // create the proxy global state it will server the builder apis
+        // Create and spawn the tide-disco app to serve the builder APIs
         let app = Arc::clone(&global_state)
             .into_app()
             .expect("Failed to create builder tide-disco app");
@@ -665,6 +668,7 @@ pub mod testing {
             ),
         );
 
+        // Pass on the builder task to be injected in the testing harness
         (
             Box::new(MarketplaceBuilderImplementation { global_state }),
             url,
