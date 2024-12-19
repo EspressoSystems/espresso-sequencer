@@ -208,7 +208,9 @@ async fn load_frontier<Mode: TransactionMode>(
 ) -> anyhow::Result<BlocksFrontier> {
     tx.get_path(
         Snapshot::<SeqTypes, BlockMerkleTree, { BlockMerkleTree::ARITY }>::Index(height),
-        height - 1,
+        height
+            .checked_sub(1)
+            .ok_or(anyhow::anyhow!("Subtract with overflow ({height})!"))?,
     )
     .await
     .context(format!("fetching frontier at height {height}"))
