@@ -2,7 +2,7 @@
 ///
 /// The initial stake table is passed to the permissioned stake table contract
 /// on deployment.
-use contract_bindings::permissioned_stake_table::{NodeInfo, PermissionedStakeTable};
+use contract_bindings::permissioned_stake_table::{G2Point, NodeInfo, PermissionedStakeTable};
 use ethers::{
     middleware::SignerMiddleware,
     providers::{Http, Middleware as _, Provider},
@@ -10,7 +10,7 @@ use ethers::{
     types::Address,
 };
 use hotshot::types::BLSPubKey;
-use hotshot_contract_adapter::stake_table::NodeInfoJf;
+use hotshot_contract_adapter::stake_table::{bls_jf_to_sol, NodeInfoJf};
 use hotshot_types::network::PeerConfigKeys;
 use url::Url;
 
@@ -60,7 +60,7 @@ impl From<PermissionedStakeTableConfig> for Vec<NodeInfo> {
 #[serde(bound(deserialize = ""))]
 pub struct PermissionedStakeTableUpdate {
     #[serde(default)]
-    stakers_to_remove: Vec<PeerConfigKeys<BLSPubKey>>,
+    stakers_to_remove: Vec<BLSPubKey>,
     #[serde(default)]
     new_stakers: Vec<PeerConfigKeys<BLSPubKey>>,
 }
@@ -80,13 +80,10 @@ impl PermissionedStakeTableUpdate {
         )
     }
 
-    fn stakers_to_remove(&self) -> Vec<NodeInfo> {
+    fn stakers_to_remove(&self) -> Vec<G2Point> {
         self.stakers_to_remove
             .iter()
-            .map(|peer_config| {
-                let node_info: NodeInfoJf = peer_config.clone().into();
-                node_info.into()
-            })
+            .map(|v| bls_jf_to_sol(*v))
             .collect()
     }
 
