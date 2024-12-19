@@ -13,7 +13,7 @@ use super::node_implementation::NodeType;
 use crate::{traits::signature_key::SignatureKey, PeerConfig};
 
 /// A protocol for determining membership in and participating in a committee.
-pub trait Membership<TYPES: NodeType>: Clone + Debug + Send + Sync {
+pub trait Membership<TYPES: NodeType>: Debug + Send + Sync {
     /// The error type returned by methods like `lookup_leader`.
     type Error: std::fmt::Display;
 

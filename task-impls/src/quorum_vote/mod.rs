@@ -65,28 +65,40 @@ enum VoteDependency {
 pub struct VoteDependencyHandle<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> {
     /// Public key.
     pub public_key: TYPES::SignatureKey,
+
     /// Private Key.
     pub private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
+
     /// Reference to consensus. The replica will require a write lock on this.
     pub consensus: OuterConsensus<TYPES>,
+
     /// Immutable instance state
     pub instance_state: Arc<TYPES::InstanceState>,
+
     /// Membership for Quorum certs/votes.
-    pub quorum_membership: Arc<TYPES::Membership>,
+    pub membership: Arc<RwLock<TYPES::Membership>>,
+
     /// Reference to the storage.
     pub storage: Arc<RwLock<I::Storage>>,
+
     /// View number to vote on.
     pub view_number: TYPES::View,
+
     /// Event sender.
     pub sender: Sender<Arc<HotShotEvent<TYPES>>>,
+
     /// Event receiver.
     pub receiver: InactiveReceiver<Arc<HotShotEvent<TYPES>>>,
+
     /// Lock for a decided upgrade
     pub upgrade_lock: UpgradeLock<TYPES, V>,
+
     /// The consensus metrics
     pub consensus_metrics: Arc<ConsensusMetricsValue>,
+
     /// The node's id
     pub id: u64,
+
     /// Number of blocks in an epoch, zero means there are no epochs
     pub epoch_height: u64,
 }
@@ -197,7 +209,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static, V: Versions> Handl
             OuterConsensus::new(Arc::clone(&self.consensus.inner_consensus)),
             self.sender.clone(),
             self.receiver.clone(),
-            Arc::clone(&self.quorum_membership),
+            Arc::clone(&self.membership),
             self.public_key.clone(),
             self.private_key.clone(),
             self.upgrade_lock.clone(),
@@ -233,7 +245,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static, V: Versions> Handl
 
         if let Err(e) = submit_vote::<TYPES, I, V>(
             self.sender.clone(),
-            Arc::clone(&self.quorum_membership),
+            Arc::clone(&self.membership),
             self.public_key.clone(),
             self.private_key.clone(),
             self.upgrade_lock.clone(),
@@ -276,7 +288,7 @@ pub struct QuorumVoteTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>, V:
     pub network: Arc<I::Network>,
 
     /// Membership for Quorum certs/votes and DA committee certs/votes.
-    pub membership: Arc<TYPES::Membership>,
+    pub membership: Arc<RwLock<TYPES::Membership>>,
 
     /// Table for the in-progress DRB computation tasks.
     //pub drb_computations: BTreeMap<TYPES::Epoch, JoinHandle<DrbResult>>,
@@ -393,7 +405,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> QuorumVoteTaskS
                 private_key: self.private_key.clone(),
                 consensus: OuterConsensus::new(Arc::clone(&self.consensus.inner_consensus)),
                 instance_state: Arc::clone(&self.instance_state),
-                quorum_membership: Arc::clone(&self.membership),
+                membership: Arc::clone(&self.membership),
                 storage: Arc::clone(&self.storage),
                 view_number,
                 sender: event_sender.clone(),
@@ -504,11 +516,17 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> QuorumVoteTaskS
 
                 let cert_epoch = cert.data.epoch;
 
+                let membership_reader = self.membership.read().await;
+                let membership_da_stake_table = membership_reader.da_stake_table(cert_epoch);
+                let membership_da_success_threshold =
+                    membership_reader.da_success_threshold(cert_epoch);
+                drop(membership_reader);
+
                 // Validate the DAC.
                 ensure!(
                     cert.is_valid_cert(
-                        self.membership.da_stake_table(cert_epoch),
-                        self.membership.da_success_threshold(cert_epoch),
+                        membership_da_stake_table,
+                        membership_da_success_threshold,
                         &self.upgrade_lock
                     )
                     .await,
@@ -547,18 +565,22 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> QuorumVoteTaskS
                     "VID share signature is invalid"
                 );
 
+                let membership_reader = self.membership.read().await;
                 // ensure that the VID share was sent by a DA member OR the view leader
                 ensure!(
-                    self.membership
+                    membership_reader
                         .da_committee_members(view, disperse_epoch)
                         .contains(sender)
-                        || *sender == self.membership.leader(view, disperse_epoch)?,
+                        || *sender == membership_reader.leader(view, disperse_epoch)?,
                     "VID share was not sent by a DA member or the view leader."
                 );
 
+                let membership_total_nodes = membership_reader.total_nodes(disperse_epoch);
+                drop(membership_reader);
+
                 // NOTE: `verify_share` returns a nested `Result`, so we must check both the inner
                 // and outer results
-                match vid_scheme(self.membership.total_nodes(disperse_epoch)).verify_share(
+                match vid_scheme(membership_total_nodes).verify_share(
                     &disperse.data.share,
                     &disperse.data.common,
                     payload_commitment,

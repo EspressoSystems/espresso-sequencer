@@ -58,13 +58,16 @@ async fn test_network_task() {
 
     let all_nodes = config.known_nodes_with_stake.clone();
 
-    let membership = <TestTypes as NodeType>::Membership::new(all_nodes.clone(), all_nodes);
+    let membership = Arc::new(RwLock::new(<TestTypes as NodeType>::Membership::new(
+        all_nodes.clone(),
+        all_nodes,
+    )));
     let network_state: NetworkEventTaskState<TestTypes, TestVersions, MemoryNetwork<_>, _> =
         NetworkEventTaskState {
             network: network.clone(),
             view: ViewNumber::new(0),
             epoch: EpochNumber::new(0),
-            membership: membership.clone(),
+            membership: Arc::clone(&membership),
             upgrade_lock: upgrade_lock.clone(),
             storage,
             consensus,
@@ -227,13 +230,16 @@ async fn test_network_storage_fail() {
     let all_nodes = config.known_nodes_with_stake.clone();
     let upgrade_lock = UpgradeLock::<TestTypes, TestVersions>::new();
 
-    let membership = <TestTypes as NodeType>::Membership::new(all_nodes.clone(), all_nodes);
+    let membership = Arc::new(RwLock::new(<TestTypes as NodeType>::Membership::new(
+        all_nodes.clone(),
+        all_nodes,
+    )));
     let network_state: NetworkEventTaskState<TestTypes, TestVersions, MemoryNetwork<_>, _> =
         NetworkEventTaskState {
             network: network.clone(),
             view: ViewNumber::new(0),
             epoch: EpochNumber::new(0),
-            membership: membership.clone(),
+            membership: Arc::clone(&membership),
             upgrade_lock: upgrade_lock.clone(),
             storage,
             consensus,

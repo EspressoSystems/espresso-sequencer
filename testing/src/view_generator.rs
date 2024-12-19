@@ -12,6 +12,7 @@ use std::{
     task::{Context, Poll},
 };
 
+use async_lock::RwLock;
 use committable::Committable;
 use futures::{FutureExt, Stream};
 use hotshot::types::{BLSPubKey, SignatureKey, SystemContextHandle};
@@ -55,7 +56,7 @@ pub struct TestView {
     pub leaf: Leaf2<TestTypes>,
     pub view_number: ViewNumber,
     pub epoch_number: EpochNumber,
-    pub membership: <TestTypes as NodeType>::Membership,
+    pub membership: Arc<RwLock<<TestTypes as NodeType>::Membership>>,
     pub vid_disperse: Proposal<TestTypes, VidDisperse<TestTypes>>,
     pub vid_proposal: (
         Vec<Proposal<TestTypes, VidDisperseShare2<TestTypes>>>,
@@ -72,7 +73,7 @@ pub struct TestView {
 }
 
 impl TestView {
-    pub async fn genesis(membership: &<TestTypes as NodeType>::Membership) -> Self {
+    pub async fn genesis(membership: &Arc<RwLock<<TestTypes as NodeType>::Membership>>) -> Self {
         let genesis_view = ViewNumber::new(1);
         let genesis_epoch = EpochNumber::new(0);
         let upgrade_lock = UpgradeLock::new();
@@ -98,7 +99,8 @@ impl TestView {
         let leader_public_key = public_key;
 
         let payload_commitment =
-            da_payload_commitment::<TestTypes>(membership, transactions.clone(), genesis_epoch);
+            da_payload_commitment::<TestTypes>(membership, transactions.clone(), genesis_epoch)
+                .await;
 
         let (vid_disperse, vid_proposal) = build_vid_proposal(
             membership,
@@ -106,7 +108,8 @@ impl TestView {
             genesis_epoch,
             transactions.clone(),
             &private_key,
-        );
+        )
+        .await;
 
         let da_certificate = build_da_certificate(
             membership,
@@ -241,7 +244,8 @@ impl TestView {
         );
 
         let payload_commitment =
-            da_payload_commitment::<TestTypes>(membership, transactions.clone(), self.epoch_number);
+            da_payload_commitment::<TestTypes>(membership, transactions.clone(), self.epoch_number)
+                .await;
 
         let (vid_disperse, vid_proposal) = build_vid_proposal(
             membership,
@@ -249,7 +253,8 @@ impl TestView {
             self.epoch_number,
             transactions.clone(),
             &private_key,
-        );
+        )
+        .await;
 
         let da_certificate = build_da_certificate::<TestTypes, TestVersions>(
             membership,
@@ -492,11 +497,11 @@ impl TestView {
 
 pub struct TestViewGenerator {
     pub current_view: Option<TestView>,
-    pub membership: <TestTypes as NodeType>::Membership,
+    pub membership: Arc<RwLock<<TestTypes as NodeType>::Membership>>,
 }
 
 impl TestViewGenerator {
-    pub fn generate(membership: <TestTypes as NodeType>::Membership) -> Self {
+    pub fn generate(membership: Arc<RwLock<<TestTypes as NodeType>::Membership>>) -> Self {
         TestViewGenerator {
             current_view: None,
             membership,
@@ -576,13 +581,13 @@ impl Stream for TestViewGenerator {
     type Item = TestView;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        let mem = &self.membership.clone();
+        let mem = Arc::clone(&self.membership);
         let curr_view = &self.current_view.clone();
 
         let mut fut = if let Some(ref view) = curr_view {
             async move { TestView::next_view(view).await }.boxed()
         } else {
-            async move { TestView::genesis(mem).await }.boxed()
+            async move { TestView::genesis(&mem).await }.boxed()
         };
 
         match fut.as_mut().poll(cx) {

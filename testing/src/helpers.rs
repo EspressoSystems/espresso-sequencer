@@ -8,6 +8,7 @@
 use std::{fmt::Debug, hash::Hash, marker::PhantomData, sync::Arc};
 
 use async_broadcast::{Receiver, Sender};
+use async_lock::RwLock;
 use bitvec::bitvec;
 use committable::Committable;
 use hotshot::{
@@ -109,10 +110,10 @@ pub async fn build_system_handle_from_launcher<
     let private_key = validator_config.private_key.clone();
     let public_key = validator_config.public_key.clone();
 
-    let memberships = TYPES::Membership::new(
+    let memberships = Arc::new(RwLock::new(TYPES::Membership::new(
         config.known_nodes_with_stake.clone(),
         config.known_da_nodes.clone(),
-    );
+    )));
 
     SystemContext::init(
         public_key,
@@ -141,7 +142,7 @@ pub async fn build_cert<
     CERT: Certificate<TYPES, VOTE::Commitment, Voteable = VOTE::Commitment>,
 >(
     data: DATAType,
-    da_membership: &TYPES::Membership,
+    membership: &Arc<RwLock<TYPES::Membership>>,
     view: TYPES::View,
     epoch: TYPES::Epoch,
     public_key: &TYPES::SignatureKey,
@@ -150,7 +151,7 @@ pub async fn build_cert<
 ) -> CERT {
     let real_qc_sig = build_assembled_sig::<TYPES, V, VOTE, CERT, DATAType>(
         &data,
-        da_membership,
+        membership,
         view,
         epoch,
         upgrade_lock,
@@ -207,17 +208,20 @@ pub async fn build_assembled_sig<
     DATAType: Committable + Clone + Eq + Hash + Serialize + Debug + 'static,
 >(
     data: &DATAType,
-    membership: &TYPES::Membership,
+    membership: &Arc<RwLock<TYPES::Membership>>,
     view: TYPES::View,
     epoch: TYPES::Epoch,
     upgrade_lock: &UpgradeLock<TYPES, V>,
 ) -> <TYPES::SignatureKey as SignatureKey>::QcType {
-    let stake_table = CERT::stake_table(membership, epoch);
+    let membership_reader = membership.read().await;
+    let stake_table = CERT::stake_table(&*membership_reader, epoch);
     let real_qc_pp: <TYPES::SignatureKey as SignatureKey>::QcParams =
         <TYPES::SignatureKey as SignatureKey>::public_parameter(
             stake_table.clone(),
-            U256::from(CERT::threshold(membership, epoch)),
+            U256::from(CERT::threshold(&*membership_reader, epoch)),
         );
+    drop(membership_reader);
+
     let total_nodes = stake_table.len();
     let signers = bitvec![1; total_nodes];
     let mut sig_lists = Vec::new();
@@ -265,33 +269,34 @@ pub fn key_pair_for_id<TYPES: NodeType>(
 /// # Panics
 /// if unable to create a [`VidSchemeType`]
 #[must_use]
-pub fn vid_scheme_from_view_number<TYPES: NodeType>(
-    membership: &TYPES::Membership,
+pub async fn vid_scheme_from_view_number<TYPES: NodeType>(
+    membership: &Arc<RwLock<TYPES::Membership>>,
     view_number: TYPES::View,
     epoch_number: TYPES::Epoch,
 ) -> VidSchemeType {
     let num_storage_nodes = membership
+        .read()
+        .await
         .committee_members(view_number, epoch_number)
         .len();
     vid_scheme(num_storage_nodes)
 }
 
-pub fn vid_payload_commitment<TYPES: NodeType>(
-    quorum_membership: &<TYPES as NodeType>::Membership,
+pub async fn vid_payload_commitment<TYPES: NodeType>(
+    membership: &Arc<RwLock<<TYPES as NodeType>::Membership>>,
     view_number: TYPES::View,
     epoch_number: TYPES::Epoch,
     transactions: Vec<TestTransaction>,
 ) -> VidCommitment {
-    let mut vid =
-        vid_scheme_from_view_number::<TYPES>(quorum_membership, view_number, epoch_number);
+    let mut vid = vid_scheme_from_view_number::<TYPES>(membership, view_number, epoch_number).await;
     let encoded_transactions = TestTransaction::encode(&transactions);
     let vid_disperse = vid.disperse(&encoded_transactions).unwrap();
 
     vid_disperse.commit
 }
 
-pub fn da_payload_commitment<TYPES: NodeType>(
-    quorum_membership: &<TYPES as NodeType>::Membership,
+pub async fn da_payload_commitment<TYPES: NodeType>(
+    membership: &Arc<RwLock<<TYPES as NodeType>::Membership>>,
     transactions: Vec<TestTransaction>,
     epoch_number: TYPES::Epoch,
 ) -> VidCommitment {
@@ -299,41 +304,41 @@ pub fn da_payload_commitment<TYPES: NodeType>(
 
     vid_commitment(
         &encoded_transactions,
-        quorum_membership.total_nodes(epoch_number),
+        membership.read().await.total_nodes(epoch_number),
     )
 }
 
-pub fn build_payload_commitment<TYPES: NodeType>(
-    membership: &<TYPES as NodeType>::Membership,
+pub async fn build_payload_commitment<TYPES: NodeType>(
+    membership: &Arc<RwLock<<TYPES as NodeType>::Membership>>,
     view: TYPES::View,
     epoch: TYPES::Epoch,
 ) -> <VidSchemeType as VidScheme>::Commit {
     // Make some empty encoded transactions, we just care about having a commitment handy for the
     // later calls. We need the VID commitment to be able to propose later.
-    let mut vid = vid_scheme_from_view_number::<TYPES>(membership, view, epoch);
+    let mut vid = vid_scheme_from_view_number::<TYPES>(membership, view, epoch).await;
     let encoded_transactions = Vec::new();
     vid.commit_only(&encoded_transactions).unwrap()
 }
 
 /// TODO: <https://github.com/EspressoSystems/HotShot/issues/2821>
-pub fn build_vid_proposal<TYPES: NodeType>(
-    quorum_membership: &<TYPES as NodeType>::Membership,
+pub async fn build_vid_proposal<TYPES: NodeType>(
+    membership: &Arc<RwLock<<TYPES as NodeType>::Membership>>,
     view_number: TYPES::View,
     epoch_number: TYPES::Epoch,
     transactions: Vec<TestTransaction>,
     private_key: &<TYPES::SignatureKey as SignatureKey>::PrivateKey,
 ) -> VidProposal<TYPES> {
-    let mut vid =
-        vid_scheme_from_view_number::<TYPES>(quorum_membership, view_number, epoch_number);
+    let mut vid = vid_scheme_from_view_number::<TYPES>(membership, view_number, epoch_number).await;
     let encoded_transactions = TestTransaction::encode(&transactions);
 
     let vid_disperse = VidDisperse::from_membership(
         view_number,
         vid.disperse(&encoded_transactions).unwrap(),
-        quorum_membership,
+        membership,
         epoch_number,
         None,
-    );
+    )
+    .await;
 
     let signature =
         TYPES::SignatureKey::sign(private_key, vid_disperse.payload_commitment.as_ref())
@@ -359,7 +364,7 @@ pub fn build_vid_proposal<TYPES: NodeType>(
 
 #[allow(clippy::too_many_arguments)]
 pub async fn build_da_certificate<TYPES: NodeType, V: Versions>(
-    membership: &<TYPES as NodeType>::Membership,
+    membership: &Arc<RwLock<<TYPES as NodeType>::Membership>>,
     view_number: TYPES::View,
     epoch_number: TYPES::Epoch,
     transactions: Vec<TestTransaction>,
@@ -369,8 +374,10 @@ pub async fn build_da_certificate<TYPES: NodeType, V: Versions>(
 ) -> DaCertificate2<TYPES> {
     let encoded_transactions = TestTransaction::encode(&transactions);
 
-    let da_payload_commitment =
-        vid_commitment(&encoded_transactions, membership.total_nodes(epoch_number));
+    let da_payload_commitment = vid_commitment(
+        &encoded_transactions,
+        membership.read().await.total_nodes(epoch_number),
+    );
 
     let da_data = DaData2 {
         payload_commit: da_payload_commitment,

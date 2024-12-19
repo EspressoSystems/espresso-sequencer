@@ -10,8 +10,10 @@ use std::{
     collections::{BTreeMap, HashMap},
     marker::PhantomData,
     num::NonZeroU64,
+    sync::Arc,
 };
 
+use async_lock::RwLock;
 use bitvec::{bitvec, vec::BitVec};
 use committable::{Commitment, Committable};
 use either::Either;
@@ -162,7 +164,7 @@ impl<
     pub async fn accumulate(
         &mut self,
         vote: &VOTE,
-        membership: &TYPES::Membership,
+        membership: &Arc<RwLock<TYPES::Membership>>,
         epoch: TYPES::Epoch,
     ) -> Either<(), CERT> {
         let key = vote.signing_key();
@@ -186,10 +188,16 @@ impl<
             return Either::Left(());
         }
 
-        let Some(stake_table_entry) = CERT::stake_table_entry(membership, &key, epoch) else {
+        let membership_reader = membership.read().await;
+        let Some(stake_table_entry) = CERT::stake_table_entry(&*membership_reader, &key, epoch)
+        else {
             return Either::Left(());
         };
-        let stake_table = CERT::stake_table(membership, epoch);
+        let stake_table = CERT::stake_table(&*membership_reader, epoch);
+        let total_nodes = CERT::total_nodes(&*membership_reader, epoch);
+        let threshold = CERT::threshold(&*membership_reader, epoch);
+        drop(membership_reader);
+
         let Some(vote_node_id) = stake_table
             .iter()
             .position(|x| *x == stake_table_entry.clone())
@@ -212,7 +220,7 @@ impl<
         let (signers, sig_list) = self
             .signers
             .entry(vote_commitment)
-            .or_insert((bitvec![0; CERT::total_nodes(membership, epoch)], Vec::new()));
+            .or_insert((bitvec![0; total_nodes], Vec::new()));
         if signers.get(vote_node_id).as_deref() == Some(&true) {
             error!("Node id is already in signers list");
             return Either::Left(());
@@ -223,12 +231,12 @@ impl<
         *total_stake_casted += stake_table_entry.stake();
         total_vote_map.insert(key, (vote.signature(), vote_commitment));
 
-        if *total_stake_casted >= CERT::threshold(membership, epoch).into() {
+        if *total_stake_casted >= threshold.into() {
             // Assemble QC
             let real_qc_pp: <<TYPES as NodeType>::SignatureKey as SignatureKey>::QcParams =
                 <TYPES::SignatureKey as SignatureKey>::public_parameter(
                     stake_table,
-                    U256::from(CERT::threshold(membership, epoch)),
+                    U256::from(threshold),
                 );
 
             let real_qc_sig = <TYPES::SignatureKey as SignatureKey>::assemble(

@@ -58,7 +58,7 @@ pub struct QuorumProposalRecvTaskState<TYPES: NodeType, I: NodeImplementation<TY
     pub cur_epoch: TYPES::Epoch,
 
     /// Membership for Quorum Certs/votes
-    pub quorum_membership: Arc<TYPES::Membership>,
+    pub membership: Arc<RwLock<TYPES::Membership>>,
 
     /// View timeout from config.
     pub timeout: u64,
@@ -88,20 +88,28 @@ pub struct QuorumProposalRecvTaskState<TYPES: NodeType, I: NodeImplementation<TY
 pub(crate) struct ValidationInfo<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> {
     /// The node's id
     pub id: u64,
+
     /// Our public key
     pub(crate) public_key: TYPES::SignatureKey,
+
     /// Our Private Key
     pub(crate) private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
+
     /// Reference to consensus. The replica will require a write lock on this.
     pub(crate) consensus: OuterConsensus<TYPES>,
+
     /// Membership for Quorum Certs/votes
-    pub quorum_membership: Arc<TYPES::Membership>,
+    pub membership: Arc<RwLock<TYPES::Membership>>,
+
     /// Output events to application
     pub output_event_stream: async_broadcast::Sender<Event<TYPES>>,
+
     /// This node's storage ref
     pub(crate) storage: Arc<RwLock<I::Storage>>,
+
     /// Lock for a decided upgrade
     pub(crate) upgrade_lock: UpgradeLock<TYPES, V>,
+
     /// Number of blocks in an epoch, zero means there are no epochs
     pub epoch_height: u64,
 }
@@ -142,7 +150,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                     public_key: self.public_key.clone(),
                     private_key: self.private_key.clone(),
                     consensus: self.consensus.clone(),
-                    quorum_membership: Arc::clone(&self.quorum_membership),
+                    membership: Arc::clone(&self.membership),
                     output_event_stream: self.output_event_stream.clone(),
                     storage: Arc::clone(&self.storage),
                     upgrade_lock: self.upgrade_lock.clone(),

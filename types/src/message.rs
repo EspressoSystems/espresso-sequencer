@@ -432,7 +432,7 @@ where
     /// Returns an error when the proposal signature is invalid.
     pub async fn validate_signature<V: Versions>(
         &self,
-        quorum_membership: &TYPES::Membership,
+        membership: &TYPES::Membership,
         epoch_height: u64,
         upgrade_lock: &UpgradeLock<TYPES, V>,
     ) -> Result<()> {
@@ -441,7 +441,7 @@ where
             self.data.block_header.block_number(),
             epoch_height,
         ));
-        let view_leader_key = quorum_membership.leader(view_number, proposal_epoch)?;
+        let view_leader_key = membership.leader(view_number, proposal_epoch)?;
         let proposed_leaf = Leaf::from_quorum_proposal(&self.data);
 
         ensure!(
@@ -465,7 +465,7 @@ where
     /// Returns an error when the proposal signature is invalid.
     pub fn validate_signature(
         &self,
-        quorum_membership: &TYPES::Membership,
+        membership: &TYPES::Membership,
         epoch_height: u64,
     ) -> Result<()> {
         let view_number = self.data.view_number();
@@ -473,7 +473,7 @@ where
             self.data.block_header.block_number(),
             epoch_height,
         ));
-        let view_leader_key = quorum_membership.leader(view_number, proposal_epoch)?;
+        let view_leader_key = membership.leader(view_number, proposal_epoch)?;
         let proposed_leaf = Leaf2::from_quorum_proposal(&self.data);
 
         ensure!(

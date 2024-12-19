@@ -59,6 +59,8 @@ async fn handle_quorum_proposal_validated_drb_calculation_start<
     // Start the new task if we're in the committee for this epoch
     if task_state
         .membership
+        .read()
+        .await
         .has_stake(&task_state.public_key, current_epoch_number)
     {
         task_state
@@ -80,7 +82,7 @@ async fn handle_quorum_proposal_validated_drb_calculation_start<
 ///
 /// We don't need to handle the special cases explicitly here, because the first proposal
 /// with which we'll start the DRB computation is for epoch 3.
-fn handle_quorum_proposal_validated_drb_calculation_seed<
+async fn handle_quorum_proposal_validated_drb_calculation_seed<
     TYPES: NodeType,
     I: NodeImplementation<TYPES>,
     V: Versions,
@@ -112,6 +114,8 @@ fn handle_quorum_proposal_validated_drb_calculation_seed<
         // Skip if we are not in the committee of the next epoch.
         if task_state
             .membership
+            .read()
+            .await
             .has_stake(&task_state.public_key, current_epoch_number + 1)
         {
             let new_epoch_number = current_epoch_number + 2;
@@ -252,7 +256,8 @@ pub(crate) async fn handle_quorum_proposal_validated<
                 proposal,
                 task_state,
                 &leaf_views,
-            )?;
+            )
+            .await?;
         }
     }
 
@@ -270,7 +275,7 @@ pub(crate) async fn update_shared_state<
     consensus: OuterConsensus<TYPES>,
     sender: Sender<Arc<HotShotEvent<TYPES>>>,
     receiver: InactiveReceiver<Arc<HotShotEvent<TYPES>>>,
-    quorum_membership: Arc<TYPES::Membership>,
+    membership: Arc<RwLock<TYPES::Membership>>,
     public_key: TYPES::SignatureKey,
     private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
     upgrade_lock: UpgradeLock<TYPES, V>,
@@ -309,7 +314,7 @@ pub(crate) async fn update_shared_state<
                 justify_qc.view_number(),
                 sender.clone(),
                 receiver.activate_cloned(),
-                Arc::clone(&quorum_membership),
+                Arc::clone(&membership),
                 OuterConsensus::new(Arc::clone(&consensus.inner_consensus)),
                 public_key.clone(),
                 private_key.clone(),
@@ -396,7 +401,7 @@ pub(crate) async fn update_shared_state<
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn submit_vote<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>(
     sender: Sender<Arc<HotShotEvent<TYPES>>>,
-    quorum_membership: Arc<TYPES::Membership>,
+    membership: Arc<RwLock<TYPES::Membership>>,
     public_key: TYPES::SignatureKey,
     private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
     upgrade_lock: UpgradeLock<TYPES, V>,
@@ -411,11 +416,13 @@ pub(crate) async fn submit_vote<TYPES: NodeType, I: NodeImplementation<TYPES>, V
         TYPES::EPOCH_HEIGHT,
     ));
 
-    let committee_member_in_current_epoch = quorum_membership.has_stake(&public_key, epoch_number);
+    let membership_reader = membership.read().await;
+    let committee_member_in_current_epoch = membership_reader.has_stake(&public_key, epoch_number);
     // If the proposed leaf is for the last block in the epoch and the node is part of the quorum committee
     // in the next epoch, the node should vote to achieve the double quorum.
     let committee_member_in_next_epoch = is_last_block_in_epoch(leaf.height(), TYPES::EPOCH_HEIGHT)
-        && quorum_membership.has_stake(&public_key, epoch_number + 1);
+        && membership_reader.has_stake(&public_key, epoch_number + 1);
+    drop(membership_reader);
 
     ensure!(
         committee_member_in_current_epoch || committee_member_in_next_epoch,

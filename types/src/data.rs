@@ -224,14 +224,16 @@ impl<TYPES: NodeType> VidDisperse<TYPES> {
     /// Create VID dispersal from a specified membership for the target epoch.
     /// Uses the specified function to calculate share dispersal
     /// Allows for more complex stake table functionality
-    pub fn from_membership(
+    pub async fn from_membership(
         view_number: TYPES::View,
         mut vid_disperse: JfVidDisperse<VidSchemeType>,
-        membership: &TYPES::Membership,
+        membership: &Arc<RwLock<TYPES::Membership>>,
         target_epoch: TYPES::Epoch,
         sender_epoch: Option<TYPES::Epoch>,
     ) -> Self {
         let shares = membership
+            .read()
+            .await
             .committee_members(view_number, target_epoch)
             .iter()
             .map(|node| (node.clone(), vid_disperse.shares.remove(0)))
@@ -255,13 +257,13 @@ impl<TYPES: NodeType> VidDisperse<TYPES> {
     #[allow(clippy::panic)]
     pub async fn calculate_vid_disperse(
         txns: Arc<[u8]>,
-        membership: &Arc<TYPES::Membership>,
+        membership: &Arc<RwLock<TYPES::Membership>>,
         view: TYPES::View,
         target_epoch: TYPES::Epoch,
         sender_epoch: Option<TYPES::Epoch>,
         precompute_data: Option<VidPrecomputeData>,
     ) -> Self {
-        let num_nodes = membership.total_nodes(target_epoch);
+        let num_nodes = membership.read().await.total_nodes(target_epoch);
 
         let vid_disperse = spawn_blocking(move || {
             precompute_data
@@ -274,13 +276,7 @@ impl<TYPES: NodeType> VidDisperse<TYPES> {
         // Unwrap here will just propagate any panic from the spawned task, it's not a new place we can panic.
         let vid_disperse = vid_disperse.unwrap();
 
-        Self::from_membership(
-            view,
-            vid_disperse,
-            membership.as_ref(),
-            target_epoch,
-            sender_epoch,
-        )
+        Self::from_membership(view, vid_disperse, membership, target_epoch, sender_epoch).await
     }
 }
 

@@ -78,6 +78,7 @@ name = "whitelist-push-cdn"
 path = "push-cdn/whitelist-adapter.rs"
 
 [dependencies]
+async-lock = { workspace = true }
 async-trait = { workspace = true }
 
 cdn-broker = { workspace = true, features = ["global-permits"] }

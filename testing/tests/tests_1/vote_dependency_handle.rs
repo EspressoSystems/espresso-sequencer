@@ -36,9 +36,9 @@ async fn test_vote_dependency_handle() {
     let handle = build_system_handle::<TestTypes, MemoryImpl, TestVersions>(node_id)
         .await
         .0;
-    let membership = (*handle.hotshot.memberships).clone();
+    let membership = Arc::clone(&handle.hotshot.memberships);
 
-    let mut generator = TestViewGenerator::generate(membership.clone());
+    let mut generator = TestViewGenerator::generate(membership);
 
     // Generate our state for the test
     let mut proposals = Vec::new();
@@ -90,7 +90,7 @@ async fn test_vote_dependency_handle() {
                 consensus: OuterConsensus::new(consensus.clone()),
                 consensus_metrics: Arc::clone(&consensus.read().await.metrics),
                 instance_state: handle.hotshot.instance_state(),
-                quorum_membership: (*handle.hotshot.memberships).clone().into(),
+                membership: Arc::clone(&handle.hotshot.memberships),
                 storage: Arc::clone(&handle.storage()),
                 view_number,
                 sender: event_sender.clone(),

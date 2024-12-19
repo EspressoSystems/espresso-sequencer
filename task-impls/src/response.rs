@@ -7,6 +7,7 @@
 use std::{sync::Arc, time::Duration};
 
 use async_broadcast::{Receiver, Sender};
+use async_lock::RwLock;
 use committable::Committable;
 use hotshot_types::{
     consensus::{Consensus, LockedConsensusState, OuterConsensus},
@@ -31,12 +32,16 @@ const TXNS_TIMEOUT: Duration = Duration::from_millis(100);
 pub struct NetworkResponseState<TYPES: NodeType> {
     /// Locked consensus state
     consensus: LockedConsensusState<TYPES>,
+
     /// Quorum membership for checking if requesters have state
-    quorum: Arc<TYPES::Membership>,
+    membership: Arc<RwLock<TYPES::Membership>>,
+
     /// This replicas public key
     pub_key: TYPES::SignatureKey,
+
     /// This replicas private key
     private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
+
     /// The node's id
     id: u64,
 }
@@ -45,14 +50,14 @@ impl<TYPES: NodeType> NetworkResponseState<TYPES> {
     /// Create the network request state with the info it needs
     pub fn new(
         consensus: LockedConsensusState<TYPES>,
-        quorum: Arc<TYPES::Membership>,
+        membership: Arc<RwLock<TYPES::Membership>>,
         pub_key: TYPES::SignatureKey,
         private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
         id: u64,
     ) -> Self {
         Self {
             consensus,
-            quorum,
+            membership,
             pub_key,
             private_key,
             id,
@@ -71,8 +76,9 @@ impl<TYPES: NodeType> NetworkResponseState<TYPES> {
                     // break loop when false, this means shutdown received
                     match event.as_ref() {
                         HotShotEvent::VidRequestRecv(request, sender) => {
+                            let cur_epoch = self.consensus.read().await.cur_epoch();
                             // Verify request is valid
-                            if !self.valid_sender(sender, self.consensus.read().await.cur_epoch())
+                            if !self.valid_sender(sender, cur_epoch).await
                                 || !valid_signature::<TYPES>(request, sender)
                             {
                                 continue;
@@ -99,17 +105,18 @@ impl<TYPES: NodeType> NetworkResponseState<TYPES> {
                                 return;
                             }
 
-                            if let Some(quorum_proposal) = self
+                            let quorum_proposal_result = self
                                 .consensus
                                 .read()
                                 .await
                                 .last_proposals()
                                 .get(&req.view_number)
-                            {
+                                .cloned();
+                            if let Some(quorum_proposal) = quorum_proposal_result {
                                 broadcast_event(
                                     HotShotEvent::QuorumProposalResponseSend(
                                         req.key.clone(),
-                                        quorum_proposal.clone(),
+                                        quorum_proposal,
                                     )
                                     .into(),
                                     &event_sender,
@@ -151,7 +158,7 @@ impl<TYPES: NodeType> NetworkResponseState<TYPES> {
         if Consensus::calculate_and_update_vid(
             OuterConsensus::new(Arc::clone(&self.consensus)),
             view,
-            Arc::clone(&self.quorum),
+            Arc::clone(&self.membership),
             &self.private_key,
         )
         .await
@@ -162,7 +169,7 @@ impl<TYPES: NodeType> NetworkResponseState<TYPES> {
             Consensus::calculate_and_update_vid(
                 OuterConsensus::new(Arc::clone(&self.consensus)),
                 view,
-                Arc::clone(&self.quorum),
+                Arc::clone(&self.membership),
                 &self.private_key,
             )
             .await?;
@@ -178,8 +185,8 @@ impl<TYPES: NodeType> NetworkResponseState<TYPES> {
     }
 
     /// Makes sure the sender is allowed to send a request in the given epoch.
-    fn valid_sender(&self, sender: &TYPES::SignatureKey, epoch: TYPES::Epoch) -> bool {
-        self.quorum.has_stake(sender, epoch)
+    async fn valid_sender(&self, sender: &TYPES::SignatureKey, epoch: TYPES::Epoch) -> bool {
+        self.membership.read().await.has_stake(sender, epoch)
     }
 }
 

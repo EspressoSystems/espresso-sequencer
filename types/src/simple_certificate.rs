@@ -451,15 +451,20 @@ impl<TYPES: NodeType> UpgradeCertificate<TYPES> {
     /// Returns an error when the upgrade certificate is invalid.
     pub async fn validate<V: Versions>(
         upgrade_certificate: &Option<Self>,
-        quorum_membership: &TYPES::Membership,
+        membership: &RwLock<TYPES::Membership>,
         epoch: TYPES::Epoch,
         upgrade_lock: &UpgradeLock<TYPES, V>,
     ) -> Result<()> {
         if let Some(ref cert) = upgrade_certificate {
+            let membership_reader = membership.read().await;
+            let membership_stake_table = membership_reader.stake_table(epoch);
+            let membership_upgrade_threshold = membership_reader.upgrade_threshold(epoch);
+            drop(membership_reader);
+
             ensure!(
                 cert.is_valid_cert(
-                    quorum_membership.stake_table(epoch),
-                    quorum_membership.upgrade_threshold(epoch),
+                    membership_stake_table,
+                    membership_upgrade_threshold,
                     upgrade_lock
                 )
                 .await,

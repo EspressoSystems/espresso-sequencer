@@ -17,6 +17,7 @@ use std::{
     time::Duration,
 };
 
+use async_lock::RwLock;
 use async_trait::async_trait;
 use dyn_clone::DynClone;
 use futures::{future::join_all, Future};
@@ -262,7 +263,7 @@ pub trait ConnectedNetwork<K: SignatureKey + 'static>: Clone + Send + Sync + 'st
         &'a self,
         _view: u64,
         _epoch: u64,
-        _membership: &TYPES::Membership,
+        _membership: Arc<RwLock<TYPES::Membership>>,
     ) where
         TYPES: NodeType<SignatureKey = K> + 'a,
     {

@@ -54,11 +54,11 @@ async fn test_quorum_proposal_recv_task() {
     let handle = build_system_handle::<TestTypes, MemoryImpl, TestVersions>(2)
         .await
         .0;
-    let membership = (*handle.hotshot.memberships).clone();
+    let membership = Arc::clone(&handle.hotshot.memberships);
     let consensus = handle.hotshot.consensus();
     let mut consensus_writer = consensus.write().await;
 
-    let mut generator = TestViewGenerator::generate(membership.clone());
+    let mut generator = TestViewGenerator::generate(membership);
     let mut proposals = Vec::new();
     let mut leaders = Vec::new();
     let mut votes = Vec::new();
@@ -129,7 +129,7 @@ async fn test_quorum_proposal_recv_task_liveness_check() {
     let handle = build_system_handle::<TestTypes, MemoryImpl, TestVersions>(4)
         .await
         .0;
-    let membership = (*handle.hotshot.memberships).clone();
+    let membership = Arc::clone(&handle.hotshot.memberships);
     let consensus = handle.hotshot.consensus();
     let mut consensus_writer = consensus.write().await;
 

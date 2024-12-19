@@ -45,9 +45,9 @@ async fn test_quorum_vote_task_success() {
         .await
         .0;
 
-    let membership = (*handle.hotshot.memberships).clone();
+    let membership = Arc::clone(&handle.hotshot.memberships);
 
-    let mut generator = TestViewGenerator::generate(membership.clone());
+    let mut generator = TestViewGenerator::generate(membership);
 
     let mut proposals = Vec::new();
     let mut leaves = Vec::new();
@@ -112,9 +112,9 @@ async fn test_quorum_vote_task_miss_dependency() {
         .await
         .0;
 
-    let membership = (*handle.hotshot.memberships).clone();
+    let membership = Arc::clone(&handle.hotshot.memberships);
 
-    let mut generator = TestViewGenerator::generate(membership.clone());
+    let mut generator = TestViewGenerator::generate(membership);
 
     let mut proposals = Vec::new();
     let mut leaders = Vec::new();
@@ -196,7 +196,7 @@ async fn test_quorum_vote_task_incorrect_dependency() {
         .await
         .0;
 
-    let membership = (*handle.hotshot.memberships).clone();
+    let membership = Arc::clone(&handle.hotshot.memberships);
 
     let mut generator = TestViewGenerator::generate(membership);
 

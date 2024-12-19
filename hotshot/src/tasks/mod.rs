@@ -82,7 +82,7 @@ pub fn add_response_task<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versi
 ) {
     let state = NetworkResponseState::<TYPES>::new(
         handle.hotshot.consensus(),
-        (*handle.hotshot.memberships).clone().into(),
+        Arc::clone(&handle.hotshot.memberships),
         handle.public_key().clone(),
         handle.private_key().clone(),
         handle.hotshot.id,
@@ -190,7 +190,7 @@ pub fn add_network_event_task<
 >(
     handle: &mut SystemContextHandle<TYPES, I, V>,
     network: Arc<NET>,
-    membership: TYPES::Membership,
+    membership: Arc<RwLock<TYPES::Membership>>,
 ) {
     let network_state: NetworkEventTaskState<_, V, _, _> = NetworkEventTaskState {
         network,
@@ -321,7 +321,7 @@ where
         private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
         nonce: u64,
         config: HotShotConfig<TYPES::SignatureKey>,
-        memberships: TYPES::Membership,
+        memberships: Arc<RwLock<TYPES::Membership>>,
         network: Arc<I::Network>,
         initializer: HotShotInitializer<TYPES>,
         metrics: ConsensusMetricsValue,
@@ -516,8 +516,9 @@ where
     /// Adds the `NetworkEventTaskState` tasks possibly modifying them as well.
     fn add_network_event_tasks(&self, handle: &mut SystemContextHandle<TYPES, I, V>) {
         let network = Arc::clone(&handle.network);
+        let memberships = Arc::clone(&handle.memberships);
 
-        self.add_network_event_task(handle, Arc::clone(&network), (*handle.memberships).clone());
+        self.add_network_event_task(handle, network, memberships);
     }
 
     /// Adds a `NetworkEventTaskState` task. Can be reimplemented to modify its behaviour.
@@ -525,7 +526,7 @@ where
         &self,
         handle: &mut SystemContextHandle<TYPES, I, V>,
         channel: Arc<<I as NodeImplementation<TYPES>>::Network>,
-        membership: TYPES::Membership,
+        membership: Arc<RwLock<TYPES::Membership>>,
     ) {
         add_network_event_task(handle, channel, membership);
     }
@@ -563,6 +564,6 @@ pub fn add_network_event_tasks<TYPES: NodeType, I: NodeImplementation<TYPES>, V:
     add_network_event_task(
         handle,
         Arc::clone(&handle.network),
-        (*handle.memberships).clone(),
+        Arc::clone(&handle.memberships),
     );
 }

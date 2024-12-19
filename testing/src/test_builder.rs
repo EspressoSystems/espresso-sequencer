@@ -7,6 +7,7 @@
 use std::{collections::HashMap, num::NonZeroUsize, rc::Rc, sync::Arc, time::Duration};
 
 use anyhow::{ensure, Result};
+use async_lock::RwLock;
 use hotshot::{
     tasks::EventTransformerState,
     traits::{NetworkReliability, NodeImplementation, TestableNodeImplementation},
@@ -175,7 +176,7 @@ pub async fn create_test_handle<
     metadata: TestDescription<TYPES, I, V>,
     node_id: u64,
     network: Network<TYPES, I>,
-    memberships: TYPES::Membership,
+    memberships: Arc<RwLock<TYPES::Membership>>,
     config: HotShotConfig<TYPES::SignatureKey>,
     storage: I::Storage,
     marketplace_config: MarketplaceConfig<TYPES, I>,

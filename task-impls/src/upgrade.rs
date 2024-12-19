@@ -7,6 +7,7 @@
 use std::{marker::PhantomData, sync::Arc, time::SystemTime};
 
 use async_broadcast::{Receiver, Sender};
+use async_lock::RwLock;
 use async_trait::async_trait;
 use committable::Committable;
 use hotshot_task::task::TaskState;
@@ -50,7 +51,7 @@ pub struct UpgradeTaskState<TYPES: NodeType, V: Versions> {
     pub cur_epoch: TYPES::Epoch,
 
     /// Membership for Quorum Certs/votes
-    pub quorum_membership: Arc<TYPES::Membership>,
+    pub membership: Arc<RwLock<TYPES::Membership>>,
 
     /// A map of `UpgradeVote` collector tasks
     pub vote_collectors: VoteCollectorsMap<TYPES, UpgradeVote<TYPES>, UpgradeCertificate<TYPES>, V>,
@@ -180,7 +181,7 @@ impl<TYPES: NodeType, V: Versions> UpgradeTaskState<TYPES, V> {
                 );
 
                 // We then validate that the proposal was issued by the leader for the view.
-                let view_leader_key = self.quorum_membership.leader(view, self.cur_epoch)?;
+                let view_leader_key = self.membership.read().await.leader(view, self.cur_epoch)?;
                 ensure!(
                     view_leader_key == *sender,
                     info!(
@@ -223,13 +224,13 @@ impl<TYPES: NodeType, V: Versions> UpgradeTaskState<TYPES, V> {
                 // Check if we are the leader.
                 {
                     let view = vote.view_number();
+                    let membership_reader = self.membership.read().await;
                     ensure!(
-                        self.quorum_membership.leader(view, self.cur_epoch)? == self.public_key,
+                        membership_reader.leader(view, self.cur_epoch)? == self.public_key,
                         debug!(
                             "We are not the leader for view {} are we leader for next view? {}",
                             *view,
-                            self.quorum_membership.leader(view + 1, self.cur_epoch)?
-                                == self.public_key
+                            membership_reader.leader(view + 1, self.cur_epoch)? == self.public_key
                         )
                     );
                 }
@@ -238,7 +239,7 @@ impl<TYPES: NodeType, V: Versions> UpgradeTaskState<TYPES, V> {
                     &mut self.vote_collectors,
                     vote,
                     self.public_key.clone(),
-                    &self.quorum_membership,
+                    &self.membership,
                     self.cur_epoch,
                     self.id,
                     &event,
@@ -265,16 +266,18 @@ impl<TYPES: NodeType, V: Versions> UpgradeTaskState<TYPES, V> {
                     ))?
                     .as_secs();
 
+                let leader = self.membership.read().await.leader(
+                    TYPES::View::new(view + UPGRADE_PROPOSE_OFFSET),
+                    self.cur_epoch,
+                )?;
+
                 // We try to form a certificate 5 views before we're leader.
                 if view >= self.start_proposing_view
                     && view < self.stop_proposing_view
                     && time >= self.start_proposing_time
                     && time < self.stop_proposing_time
                     && !self.upgraded().await
-                    && self.quorum_membership.leader(
-                        TYPES::View::new(view + UPGRADE_PROPOSE_OFFSET),
-                        self.cur_epoch,
-                    )? == self.public_key
+                    && leader == self.public_key
                 {
                     let upgrade_proposal_data = UpgradeProposalData {
                         old_version: V::Base::VERSION,

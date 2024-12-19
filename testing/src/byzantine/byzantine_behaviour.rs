@@ -339,7 +339,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + std::fmt::Debug, V: Version
         &self,
         handle: &mut SystemContextHandle<TYPES, I, V>,
         network: Arc<<I as NodeImplementation<TYPES>>::Network>,
-        membership: TYPES::Membership,
+        membership: Arc<RwLock<TYPES::Membership>>,
     ) {
         let network_state: NetworkEventTaskState<_, V, _, _> = NetworkEventTaskState {
             network,

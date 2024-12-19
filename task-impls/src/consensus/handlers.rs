@@ -47,6 +47,8 @@ pub(crate) async fn handle_quorum_vote_recv<
         .is_high_qc_for_last_block();
     let we_are_leader = task_state
         .membership
+        .read()
+        .await
         .leader(vote.view_number() + 1, vote.data.epoch)?
         == task_state.public_key;
     ensure!(
@@ -77,10 +79,12 @@ pub(crate) async fn handle_quorum_vote_recv<
     .await?;
 
     // If the vote sender belongs to the next epoch, collect it separately to form the second QC
-    if task_state
+    let has_stake = task_state
         .membership
-        .has_stake(&vote.signing_key(), vote.epoch() + 1)
-    {
+        .read()
+        .await
+        .has_stake(&vote.signing_key(), vote.epoch() + 1);
+    if has_stake {
         handle_vote(
             &mut task_state.next_epoch_vote_collectors,
             &vote.clone().into(),
@@ -114,6 +118,8 @@ pub(crate) async fn handle_timeout_vote_recv<
     ensure!(
         task_state
             .membership
+            .read()
+            .await
             .leader(vote.view_number() + 1, task_state.cur_epoch)?
             == task_state.public_key,
         info!(
@@ -158,6 +164,8 @@ pub async fn send_high_qc<TYPES: NodeType, V: Versions, I: NodeImplementation<TY
     let high_qc = task_state.consensus.read().await.high_qc().clone();
     let leader = task_state
         .membership
+        .read()
+        .await
         .leader(new_view_number, TYPES::Epoch::new(0))?;
     broadcast_event(
         Arc::new(HotShotEvent::HighQcSend(
@@ -258,17 +266,19 @@ pub(crate) async fn handle_view_change<
     // Cancel the old timeout task
     std::mem::replace(&mut task_state.timeout_task, new_timeout_task).abort();
 
+    let old_view_leader_key = task_state
+        .membership
+        .read()
+        .await
+        .leader(old_view_number, task_state.cur_epoch)?;
+
     let consensus_reader = task_state.consensus.read().await;
     consensus_reader
         .metrics
         .current_view
         .set(usize::try_from(task_state.cur_view.u64()).unwrap());
     let cur_view_time = Utc::now().timestamp();
-    if task_state
-        .membership
-        .leader(old_view_number, task_state.cur_epoch)?
-        == task_state.public_key
-    {
+    if old_view_leader_key == task_state.public_key {
         #[allow(clippy::cast_precision_loss)]
         consensus_reader
             .metrics
@@ -320,6 +330,8 @@ pub(crate) async fn handle_timeout<TYPES: NodeType, I: NodeImplementation<TYPES>
     ensure!(
         task_state
             .membership
+            .read()
+            .await
             .has_stake(&task_state.public_key, epoch),
         debug!(
             "We were not chosen for the consensus committee for view {:?}",
@@ -365,25 +377,16 @@ pub(crate) async fn handle_timeout<TYPES: NodeType, I: NodeImplementation<TYPES>
     )
     .await;
 
-    task_state
-        .consensus
+    let leader = task_state
+        .membership
         .read()
         .await
-        .metrics
-        .number_of_timeouts
-        .add(1);
-    if task_state
-        .membership
-        .leader(view_number, task_state.cur_epoch)?
-        == task_state.public_key
-    {
-        task_state
-            .consensus
-            .read()
-            .await
-            .metrics
-            .number_of_timeouts_as_leader
-            .add(1);
+        .leader(view_number, task_state.cur_epoch);
+
+    let consensus_reader = task_state.consensus.read().await;
+    consensus_reader.metrics.number_of_timeouts.add(1);
+    if leader? == task_state.public_key {
+        consensus_reader.metrics.number_of_timeouts_as_leader.add(1);
     }
 
     Ok(())

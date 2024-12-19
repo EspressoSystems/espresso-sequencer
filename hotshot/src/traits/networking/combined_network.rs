@@ -475,8 +475,12 @@ impl<TYPES: NodeType> ConnectedNetwork<TYPES::SignatureKey> for CombinedNetworks
         self.secondary().queue_node_lookup(view_number, pk)
     }
 
-    async fn update_view<'a, T>(&'a self, view: u64, epoch: u64, membership: &T::Membership)
-    where
+    async fn update_view<'a, T>(
+        &'a self,
+        view: u64,
+        epoch: u64,
+        membership: Arc<RwLock<T::Membership>>,
+    ) where
         T: NodeType<SignatureKey = TYPES::SignatureKey> + 'a,
     {
         let delayed_tasks_channels = Arc::clone(&self.delayed_tasks_channels);

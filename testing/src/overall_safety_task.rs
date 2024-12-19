@@ -192,27 +192,23 @@ impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>, V: Versions> TestTas
         }
 
         let epoch = TYPES::Epoch::new(self.ctx.latest_epoch);
-        let len = self
-            .handles
-            .read()
-            .await
-            .first()
-            .unwrap()
-            .handle
-            .memberships
-            .total_nodes(epoch);
+        let memberships_arc = Arc::clone(
+            &self
+                .handles
+                .read()
+                .await
+                .first()
+                .unwrap()
+                .handle
+                .memberships,
+        );
+        let memberships_reader = memberships_arc.read().await;
+        let len = memberships_reader.total_nodes(epoch);
 
         // update view count
-        let threshold = self
-            .handles
-            .read()
-            .await
-            .first()
-            .unwrap()
-            .handle
-            .memberships
-            .success_threshold(epoch)
-            .get() as usize;
+        let threshold = memberships_reader.success_threshold(epoch).get() as usize;
+        drop(memberships_reader);
+        drop(memberships_arc);
 
         let view = self.ctx.round_results.get_mut(&view_number).unwrap();
         if let Some(key) = key {

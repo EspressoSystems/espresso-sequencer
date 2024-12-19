@@ -12,6 +12,7 @@ use std::{
 };
 
 use async_broadcast::Sender;
+use async_lock::RwLock;
 use async_trait::async_trait;
 use either::Either::{self, Left, Right};
 use hotshot_types::{
@@ -51,7 +52,7 @@ pub struct VoteCollectionTaskState<
     pub public_key: TYPES::SignatureKey,
 
     /// Membership for voting
-    pub membership: Arc<TYPES::Membership>,
+    pub membership: Arc<RwLock<TYPES::Membership>>,
 
     /// accumulator handles aggregating the votes
     pub accumulator: Option<VoteAccumulator<TYPES, VOTE, CERT, V>>,
@@ -113,7 +114,7 @@ impl<
             matches!(
                 self.transition_indicator,
                 EpochTransitionIndicator::InTransition
-            ) || vote.leader(&self.membership, self.epoch)? == self.public_key,
+            ) || vote.leader(&*self.membership.read().await, self.epoch)? == self.public_key,
             info!("Received vote for a view in which we were not the leader.")
         );
 
@@ -177,12 +178,16 @@ where
 pub struct AccumulatorInfo<TYPES: NodeType> {
     /// This nodes Pub Key
     pub public_key: TYPES::SignatureKey,
+
     /// Membership we are accumulation votes for
-    pub membership: Arc<TYPES::Membership>,
+    pub membership: Arc<RwLock<TYPES::Membership>>,
+
     /// View of the votes we are collecting
     pub view: TYPES::View,
+
     /// Epoch of the votes we are collecting
     pub epoch: TYPES::Epoch,
+
     /// This nodes id
     pub id: u64,
 }
@@ -256,7 +261,7 @@ pub async fn handle_vote<
     collectors: &mut VoteCollectorsMap<TYPES, VOTE, CERT, V>,
     vote: &VOTE,
     public_key: TYPES::SignatureKey,
-    membership: &Arc<TYPES::Membership>,
+    membership: &Arc<RwLock<TYPES::Membership>>,
     epoch: TYPES::Epoch,
     id: u64,
     event: &Arc<HotShotEvent<TYPES>>,

@@ -938,7 +938,7 @@ impl<TYPES: NodeType> Consensus<TYPES> {
     pub async fn calculate_and_update_vid(
         consensus: OuterConsensus<TYPES>,
         view: <TYPES as NodeType>::View,
-        membership: Arc<TYPES::Membership>,
+        membership: Arc<RwLock<TYPES::Membership>>,
         private_key: &<TYPES::SignatureKey as SignatureKey>::PrivateKey,
     ) -> Option<()> {
         let txns = Arc::clone(consensus.read().await.saved_payloads().get(&view)?);

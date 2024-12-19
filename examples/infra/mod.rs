@@ -15,6 +15,7 @@ use std::{
     time::Instant,
 };
 
+use async_lock::RwLock;
 use async_trait::async_trait;
 use cdn_broker::reexports::crypto::signature::KeyPair;
 use chrono::Utc;
@@ -350,13 +351,17 @@ pub trait RunDa<
         config: NetworkConfig<TYPES::SignatureKey>,
         validator_config: ValidatorConfig<TYPES::SignatureKey>,
         libp2p_advertise_address: Option<String>,
+        membership: &Arc<RwLock<<TYPES as NodeType>::Membership>>,
     ) -> Self;
 
     /// Initializes the genesis state and HotShot instance; does not start HotShot consensus
     /// # Panics if it cannot generate a genesis block, fails to initialize HotShot, or cannot
     /// get the anchored view
     /// Note: sequencing leaf does not have state, so does not return state
-    async fn initialize_state_and_hotshot(&self) -> SystemContextHandle<TYPES, NODE, V> {
+    async fn initialize_state_and_hotshot(
+        &self,
+        membership: Arc<RwLock<<TYPES as NodeType>::Membership>>,
+    ) -> SystemContextHandle<TYPES, NODE, V> {
         let initializer =
             hotshot::HotShotInitializer::<TYPES>::from_genesis::<V>(TestInstanceState::default())
                 .await
@@ -371,20 +376,6 @@ pub trait RunDa<
 
         let network = self.network();
 
-        let all_nodes = if cfg!(feature = "fixed-leader-election") {
-            let mut vec = config.config.known_nodes_with_stake.clone();
-            vec.truncate(config.config.fixed_leader_for_gpuvid);
-            vec
-        } else {
-            config.config.known_nodes_with_stake.clone()
-        };
-
-        let da_nodes = config.config.known_da_nodes.clone();
-
-        // Create the quorum membership from all nodes, specifying the committee
-        // as the known da nodes
-        let memberships = <TYPES as NodeType>::Membership::new(all_nodes, da_nodes);
-
         let marketplace_config = MarketplaceConfig {
             auction_results_provider: TestAuctionResultsProvider::<TYPES>::default().into(),
             // TODO: we need to pass a valid fallback builder url here somehow
@@ -396,7 +387,7 @@ pub trait RunDa<
             sk,
             config.node_index,
             config.config,
-            memberships,
+            membership,
             Arc::from(network),
             initializer,
             ConsensusMetricsValue::default(),
@@ -526,13 +517,15 @@ pub trait RunDa<
                 }
             }
         }
-        let consensus_lock = context.hotshot.consensus();
-        let consensus = consensus_lock.read().await;
         let num_eligible_leaders = context
             .hotshot
             .memberships
+            .read()
+            .await
             .committee_leaders(TYPES::View::genesis(), TYPES::Epoch::genesis())
             .len();
+        let consensus_lock = context.hotshot.consensus();
+        let consensus = consensus_lock.read().await;
         let total_num_views = usize::try_from(consensus.locked_view().u64()).unwrap();
         // `failed_num_views` could include uncommitted views
         let failed_num_views = total_num_views - num_successful_commits;
@@ -622,6 +615,7 @@ where
         config: NetworkConfig<TYPES::SignatureKey>,
         validator_config: ValidatorConfig<TYPES::SignatureKey>,
         _libp2p_advertise_address: Option<String>,
+        _membership: &Arc<RwLock<<TYPES as NodeType>::Membership>>,
     ) -> PushCdnDaRun<TYPES> {
         // Convert to the Push-CDN-compatible type
         let keypair = KeyPair {
@@ -708,6 +702,7 @@ where
         config: NetworkConfig<TYPES::SignatureKey>,
         validator_config: ValidatorConfig<TYPES::SignatureKey>,
         libp2p_advertise_address: Option<String>,
+        membership: &Arc<RwLock<<TYPES as NodeType>::Membership>>,
     ) -> Libp2pDaRun<TYPES> {
         // Extrapolate keys for ease of use
         let public_key = &validator_config.public_key;
@@ -736,11 +731,6 @@ where
             .to_string()
         };
 
-        // Create the quorum membership from the list of known nodes
-        let all_nodes = config.config.known_nodes_with_stake.clone();
-        let da_nodes = config.config.known_da_nodes.clone();
-        let quorum_membership = TYPES::Membership::new(all_nodes, da_nodes);
-
         // Derive the bind address
         let bind_address =
             derive_libp2p_multiaddr(&bind_address).expect("failed to derive bind address");
@@ -748,7 +738,7 @@ where
         // Create the Libp2p network
         let libp2p_network = Libp2pNetwork::from_config(
             config.clone(),
-            quorum_membership,
+            Arc::clone(membership),
             GossipConfig::default(),
             RequestResponseConfig::default(),
             bind_address,
@@ -820,6 +810,7 @@ where
         config: NetworkConfig<TYPES::SignatureKey>,
         validator_config: ValidatorConfig<TYPES::SignatureKey>,
         libp2p_advertise_address: Option<String>,
+        membership: &Arc<RwLock<<TYPES as NodeType>::Membership>>,
     ) -> CombinedDaRun<TYPES> {
         // Initialize our Libp2p network
         let libp2p_network: Libp2pDaRun<TYPES> = <Libp2pDaRun<TYPES> as RunDa<
@@ -831,6 +822,7 @@ where
             config.clone(),
             validator_config.clone(),
             libp2p_advertise_address.clone(),
+            membership,
         )
         .await;
 
@@ -844,6 +836,7 @@ where
             config.clone(),
             validator_config.clone(),
             libp2p_advertise_address,
+            membership,
         )
         .await;
 
@@ -878,6 +871,7 @@ where
     }
 }
 
+#[allow(clippy::too_many_lines)]
 /// Main entry point for validators
 /// # Panics
 /// if unable to get the local ip address
@@ -974,11 +968,27 @@ pub async fn main_entry_point<
             .join(",")
     );
 
+    let all_nodes = if cfg!(feature = "fixed-leader-election") {
+        let mut vec = run_config.config.known_nodes_with_stake.clone();
+        vec.truncate(run_config.config.fixed_leader_for_gpuvid);
+        vec
+    } else {
+        run_config.config.known_nodes_with_stake.clone()
+    };
+    let membership = Arc::new(RwLock::new(<TYPES as NodeType>::Membership::new(
+        all_nodes,
+        run_config.config.known_da_nodes.clone(),
+    )));
+
     info!("Initializing networking");
-    let run =
-        RUNDA::initialize_networking(run_config.clone(), validator_config, args.advertise_address)
-            .await;
-    let hotshot = run.initialize_state_and_hotshot().await;
+    let run = RUNDA::initialize_networking(
+        run_config.clone(),
+        validator_config,
+        args.advertise_address,
+        &membership,
+    )
+    .await;
+    let hotshot = run.initialize_state_and_hotshot(membership).await;
 
     if let Some(task) = builder_task {
         task.start(Box::new(hotshot.event_stream()));

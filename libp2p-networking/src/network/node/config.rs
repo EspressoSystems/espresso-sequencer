@@ -4,8 +4,9 @@
 // You should have received a copy of the MIT License
 // along with the HotShot repository. If not, see <https://mit-license.org/>.
 
-use std::{collections::HashSet, num::NonZeroUsize, time::Duration};
+use std::{collections::HashSet, num::NonZeroUsize, sync::Arc, time::Duration};
 
+use async_lock::RwLock;
 use hotshot_types::traits::node_implementation::NodeType;
 use libp2p::{identity::Keypair, Multiaddr};
 use libp2p_identity::PeerId;
@@ -16,15 +17,17 @@ use super::MAX_GOSSIP_MSG_SIZE;
 pub const DEFAULT_REPLICATION_FACTOR: Option<NonZeroUsize> = NonZeroUsize::new(10);
 
 /// describe the configuration of the network
-#[derive(Clone, Default, derive_builder::Builder, derive_more::Debug)]
+#[derive(Default, derive_builder::Builder, derive_more::Debug)]
 pub struct NetworkNodeConfig<T: NodeType> {
     /// The keypair for the node
     #[builder(setter(into, strip_option), default)]
     #[debug(skip)]
     pub keypair: Option<Keypair>,
+
     /// The address to bind to
     #[builder(default)]
     pub bind_address: Option<Multiaddr>,
+
     /// Replication factor for entries in the DHT
     #[builder(setter(into, strip_option), default = "DEFAULT_REPLICATION_FACTOR")]
     pub replication_factor: Option<NonZeroUsize>,
@@ -39,9 +42,11 @@ pub struct NetworkNodeConfig<T: NodeType> {
 
     /// list of addresses to connect to at initialization
     pub to_connect_addrs: HashSet<(PeerId, Multiaddr)>,
+
     /// republication interval in DHT, must be much less than `ttl`
     #[builder(default)]
     pub republication_interval: Option<Duration>,
+
     /// expiratiry for records in DHT
     #[builder(default)]
     pub ttl: Option<Duration>,
@@ -49,7 +54,7 @@ pub struct NetworkNodeConfig<T: NodeType> {
     /// The stake table. Used for authenticating other nodes. If not supplied
     /// we will not check other nodes against the stake table
     #[builder(default)]
-    pub stake_table: Option<T::Membership>,
+    pub stake_table: Option<Arc<RwLock<T::Membership>>>,
 
     /// The path to the file to save the DHT to
     #[builder(default)]
@@ -63,6 +68,25 @@ pub struct NetworkNodeConfig<T: NodeType> {
     #[builder(default)]
     /// The timeout for DHT lookups.
     pub dht_timeout: Option<Duration>,
+}
+
+impl<T: NodeType> Clone for NetworkNodeConfig<T> {
+    fn clone(&self) -> Self {
+        Self {
+            keypair: self.keypair.clone(),
+            bind_address: self.bind_address.clone(),
+            replication_factor: self.replication_factor,
+            gossip_config: self.gossip_config.clone(),
+            request_response_config: self.request_response_config.clone(),
+            to_connect_addrs: self.to_connect_addrs.clone(),
+            republication_interval: self.republication_interval,
+            ttl: self.ttl,
+            stake_table: self.stake_table.as_ref().map(Arc::clone),
+            dht_file_path: self.dht_file_path.clone(),
+            auth_message: self.auth_message.clone(),
+            dht_timeout: self.dht_timeout,
+        }
+    }
 }
 
 /// Configuration for Libp2p's Gossipsub

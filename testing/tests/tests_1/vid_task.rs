@@ -45,13 +45,14 @@ async fn test_vid_task() {
         .0;
     let pub_key = handle.public_key();
 
-    let membership = (*handle.hotshot.memberships).clone();
+    let membership = Arc::clone(&handle.hotshot.memberships);
 
     let mut vid = vid_scheme_from_view_number::<TestTypes>(
         &membership,
         ViewNumber::new(0),
         EpochNumber::new(0),
-    );
+    )
+    .await;
     let transactions = vec![TestTransaction::new(vec![0])];
 
     let (payload, metadata) = <TestBlockPayload as BlockPayload<TestTypes>>::from_transactions(
@@ -93,7 +94,8 @@ async fn test_vid_task() {
         &membership,
         EpochNumber::new(0),
         None,
-    );
+    )
+    .await;
 
     let vid_proposal = Proposal {
         data: vid_disperse.clone(),
@@ -112,7 +114,7 @@ async fn test_vid_task() {
                 ViewNumber::new(2),
                 EpochNumber::new(0),
                 vec1::vec1![null_block::builder_fee::<TestTypes, TestVersions>(
-                    membership.total_nodes(EpochNumber::new(0)),
+                    membership.read().await.total_nodes(EpochNumber::new(0)),
                     <TestVersions as Versions>::Base::VERSION,
                     *ViewNumber::new(2),
                 )
@@ -134,7 +136,7 @@ async fn test_vid_task() {
                 },
                 ViewNumber::new(2),
                 vec1![null_block::builder_fee::<TestTypes, TestVersions>(
-                    membership.total_nodes(EpochNumber::new(0)),
+                    membership.read().await.total_nodes(EpochNumber::new(0)),
                     <TestVersions as Versions>::Base::VERSION,
                     *ViewNumber::new(2),
                 )

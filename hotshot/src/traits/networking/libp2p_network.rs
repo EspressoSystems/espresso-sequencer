@@ -390,7 +390,7 @@ impl<T: NodeType> Libp2pNetwork<T> {
     #[allow(clippy::too_many_arguments)]
     pub async fn from_config(
         mut config: NetworkConfig<T::SignatureKey>,
-        quorum_membership: T::Membership,
+        membership: Arc<RwLock<T::Membership>>,
         gossip_config: GossipConfig,
         request_response_config: RequestResponseConfig,
         bind_address: Multiaddr,
@@ -421,7 +421,7 @@ impl<T: NodeType> Libp2pNetwork<T> {
 
         // Set the auth message and stake table
         config_builder
-            .stake_table(Some(quorum_membership))
+            .stake_table(Some(membership))
             .auth_message(Some(auth_message));
 
         // The replication factor is the minimum of [the default and 2/3 the number of nodes]
@@ -978,13 +978,18 @@ impl<T: NodeType> ConnectedNetwork<T::SignatureKey> for Libp2pNetwork<T> {
     /// So the logic with libp2p is to prefetch upcoming leaders libp2p address to
     /// save time when we later need to direct message the leader our vote. Hence the
     /// use of the future view and leader to queue the lookups.
-    async fn update_view<'a, TYPES>(&'a self, view: u64, epoch: u64, membership: &TYPES::Membership)
-    where
+    async fn update_view<'a, TYPES>(
+        &'a self,
+        view: u64,
+        epoch: u64,
+        membership: Arc<RwLock<TYPES::Membership>>,
+    ) where
         TYPES: NodeType<SignatureKey = T::SignatureKey> + 'a,
     {
         let future_view = <TYPES as NodeType>::View::new(view) + LOOK_AHEAD;
         let epoch = <TYPES as NodeType>::Epoch::new(epoch);
-        let future_leader = match membership.leader(future_view, epoch) {
+
+        let future_leader = match membership.read().await.leader(future_view, epoch) {
             Ok(l) => l,
             Err(e) => {
                 return tracing::info!(

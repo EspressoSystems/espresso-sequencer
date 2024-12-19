@@ -16,8 +16,9 @@ pub mod transport;
 /// Forked `cbor` codec with altered request/response sizes
 pub mod cbor;
 
-use std::{collections::HashSet, fmt::Debug};
+use std::{collections::HashSet, fmt::Debug, sync::Arc};
 
+use async_lock::RwLock;
 use futures::channel::oneshot::Sender;
 use hotshot_types::traits::{network::NetworkError, node_implementation::NodeType};
 use libp2p::{
@@ -159,7 +160,7 @@ type BoxedTransport = Boxed<(PeerId, StreamMuxerBox)>;
 #[instrument(skip(identity))]
 pub async fn gen_transport<T: NodeType>(
     identity: Keypair,
-    stake_table: Option<T::Membership>,
+    stake_table: Option<Arc<RwLock<T::Membership>>>,
     auth_message: Option<Vec<u8>>,
 ) -> Result<BoxedTransport, NetworkError> {
     // Create the initial `Quic` transport

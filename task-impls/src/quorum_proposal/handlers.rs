@@ -87,7 +87,7 @@ pub struct ProposalDependencyHandle<TYPES: NodeType, V: Versions> {
     pub instance_state: Arc<TYPES::InstanceState>,
 
     /// Membership for Quorum Certs/votes
-    pub quorum_membership: Arc<TYPES::Membership>,
+    pub membership: Arc<RwLock<TYPES::Membership>>,
 
     /// Our public key
     pub public_key: TYPES::SignatureKey,
@@ -100,6 +100,7 @@ pub struct ProposalDependencyHandle<TYPES: NodeType, V: Versions> {
 
     /// View timeout from config.
     pub timeout: u64,
+
     /// The most recent upgrade certificate this node formed.
     /// Note: this is ONLY for certificates that have been formed internally,
     /// so that we can propose with them.
@@ -132,10 +133,16 @@ impl<TYPES: NodeType, V: Versions> ProposalDependencyHandle<TYPES, V> {
     ) -> Option<QuorumCertificate2<TYPES>> {
         while let Ok(event) = rx.recv_direct().await {
             if let HotShotEvent::HighQcRecv(qc, _sender) = event.as_ref() {
+                let membership_reader = self.membership.read().await;
+                let membership_stake_table = membership_reader.stake_table(qc.data.epoch);
+                let membership_success_threshold =
+                    membership_reader.success_threshold(qc.data.epoch);
+                drop(membership_reader);
+
                 if qc
                     .is_valid_cert(
-                        self.quorum_membership.stake_table(qc.data.epoch),
-                        self.quorum_membership.success_threshold(qc.data.epoch),
+                        membership_stake_table,
+                        membership_success_threshold,
                         &self.upgrade_lock,
                     )
                     .await
@@ -267,7 +274,7 @@ impl<TYPES: NodeType, V: Versions> ProposalDependencyHandle<TYPES, V> {
         let (parent_leaf, state) = parent_leaf_and_state(
             &self.sender,
             &self.receiver,
-            Arc::clone(&self.quorum_membership),
+            Arc::clone(&self.membership),
             self.public_key.clone(),
             self.private_key.clone(),
             OuterConsensus::new(Arc::clone(&self.consensus.inner_consensus)),
@@ -370,7 +377,13 @@ impl<TYPES: NodeType, V: Versions> ProposalDependencyHandle<TYPES, V> {
         ));
         // Make sure we are the leader for the view and epoch.
         // We might have ended up here because we were in the epoch transition.
-        if self.quorum_membership.leader(self.view_number, epoch)? != self.public_key {
+        if self
+            .membership
+            .read()
+            .await
+            .leader(self.view_number, epoch)?
+            != self.public_key
+        {
             tracing::debug!(
                 "We are not the leader in the epoch for which we are about to propose. Do not send the quorum proposal."
             );

@@ -70,7 +70,7 @@ async fn test_upgrade_task_with_vote() {
     let consensus = handle.hotshot.consensus().clone();
     let mut consensus_writer = consensus.write().await;
 
-    let membership = (*handle.hotshot.memberships).clone();
+    let membership = Arc::clone(&handle.hotshot.memberships);
     let mut generator = TestViewGenerator::generate(membership);
 
     for view in (&mut generator).take(2).collect::<Vec<_>>().await {
