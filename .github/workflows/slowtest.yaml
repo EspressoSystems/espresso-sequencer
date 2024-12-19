@@ -41,7 +41,7 @@ jobs:
           cache-provider: buildjet
 
       - name: Build and archive tests
-        run: cargo nextest archive --locked --workspace --archive-file nextest-archive-postgres.tar.zst
+        run: cargo nextest archive --locked --release --workspace --archive-file nextest-archive-postgres.tar.zst
 
       - name: Upload archive to workflow
         uses: actions/upload-artifact@v4
@@ -68,7 +68,7 @@ jobs:
           cache-provider: buildjet
 
       - name: Build and archive tests
-        run: cargo nextest archive --locked --features "embedded-db testing" --workspace --archive-file nextest-archive-sqlite.tar.zst
+        run: cargo nextest archive --locked --release --features "embedded-db testing" --workspace --archive-file nextest-archive-sqlite.tar.zst
 
       - name: Upload archive to workflow
         uses: actions/upload-artifact@v4
