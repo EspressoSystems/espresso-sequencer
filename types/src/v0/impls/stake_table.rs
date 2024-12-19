@@ -92,7 +92,7 @@ impl StakeTables {
 /// Type to describe DA and Stake memberships
 pub struct EpochCommittees {
     /// Holds Stake table and da stake
-    state: Arc<RwLock<HashMap<Epoch, Committee>>>,
+    state: HashMap<Epoch, Committee>,
 
     /// Number of blocks in an epoch
     _epoch_size: u64,
@@ -174,15 +174,13 @@ impl EpochCommittees {
             .filter(|entry| entry.stake() > U256::zero())
             .collect();
 
-        let mut state = self.state.write().unwrap();
-
         let committee = Committee {
             eligible_leaders,
             indexed_stake_table,
             indexed_da_members,
         };
 
-        state.insert(epoch, committee.clone());
+        self.state.insert(epoch, committee.clone());
         committee
     }
     // We need a constructor to match our concrete type.
@@ -239,7 +237,7 @@ impl EpochCommittees {
         map.insert(Epoch::genesis() + 1u64, members);
 
         Self {
-            state: Arc::new(RwLock::new(map)),
+            state: map,
             _epoch_size: epoch_size,
             l1_client: instance_state.l1_client.clone(),
         }
@@ -305,15 +303,17 @@ impl Membership<SeqTypes> for EpochCommittees {
         map.insert(Epoch::genesis() + 1u64, members);
 
         Self {
-            state: Arc::new(RwLock::new(map)),
+            state: map,
             _epoch_size: 12,
             l1_client: L1Client::http(Url::from_str("http:://ab.b").unwrap()),
         }
     }
 
     /// Get the stake table for the current view
+    // TODO awaiting addition of `add_epoch_root` to Memberships trait
+    // which we need to avoid `&mut self`.
     fn stake_table(&self, epoch: Epoch) -> Vec<StakeTableEntry<PubKey>> {
-        if let Some(st) = self.state.read().unwrap().get(&epoch) {
+        if let Some(st) = self.state.get(&epoch) {
             st.indexed_stake_table.clone().into_values().collect()
         } else {
             self.update_stake_table(epoch, self.l1_client.stake_table(&epoch))
@@ -324,7 +324,7 @@ impl Membership<SeqTypes> for EpochCommittees {
     }
     /// Get the stake table for the current view
     fn da_stake_table(&self, epoch: Epoch) -> Vec<StakeTableEntry<PubKey>> {
-        if let Some(sc) = self.state.read().unwrap().get(&epoch) {
+        if let Some(sc) = self.state.get(&epoch) {
             sc.indexed_da_members.clone().into_values().collect()
         } else {
             self.update_stake_table(epoch, self.l1_client.stake_table(&epoch))
@@ -340,7 +340,7 @@ impl Membership<SeqTypes> for EpochCommittees {
         _view_number: <SeqTypes as NodeType>::View,
         epoch: Epoch,
     ) -> BTreeSet<PubKey> {
-        if let Some(sc) = self.state.read().unwrap().get(&epoch) {
+        if let Some(sc) = self.state.get(&epoch) {
             sc.indexed_stake_table.clone().into_keys().collect()
         } else {
             self.update_stake_table(epoch, self.l1_client.stake_table(&epoch))
@@ -356,7 +356,7 @@ impl Membership<SeqTypes> for EpochCommittees {
         _view_number: <SeqTypes as NodeType>::View,
         epoch: Epoch,
     ) -> BTreeSet<PubKey> {
-        if let Some(sc) = self.state.read().unwrap().get(&epoch) {
+        if let Some(sc) = self.state.get(&epoch) {
             sc.indexed_da_members.clone().into_keys().collect()
         } else {
             self.update_stake_table(epoch, self.l1_client.stake_table(&epoch))
@@ -373,8 +373,6 @@ impl Membership<SeqTypes> for EpochCommittees {
         epoch: Epoch,
     ) -> BTreeSet<PubKey> {
         self.state
-            .read()
-            .unwrap()
             .get(&epoch)
             .unwrap()
             .eligible_leaders
@@ -387,8 +385,6 @@ impl Membership<SeqTypes> for EpochCommittees {
     fn stake(&self, pub_key: &PubKey, epoch: Epoch) -> Option<StakeTableEntry<PubKey>> {
         // Only return the stake if it is above zero
         self.state
-            .read()
-            .unwrap()
             .get(&epoch)
             .and_then(|h| h.indexed_stake_table.get(pub_key).cloned())
     }
@@ -397,8 +393,6 @@ impl Membership<SeqTypes> for EpochCommittees {
     fn da_stake(&self, pub_key: &PubKey, epoch: Epoch) -> Option<StakeTableEntry<PubKey>> {
         // Only return the stake if it is above zero
         self.state
-            .read()
-            .unwrap()
             .get(&epoch)
             .and_then(|h| h.indexed_da_members.get(pub_key).cloned())
     }
@@ -406,8 +400,6 @@ impl Membership<SeqTypes> for EpochCommittees {
     /// Check if a node has stake in the committee
     fn has_stake(&self, pub_key: &PubKey, epoch: Epoch) -> bool {
         self.state
-            .read()
-            .unwrap()
             .get(&epoch)
             .and_then(|h| h.indexed_stake_table.get(pub_key))
             .map_or(false, |x| x.stake() > U256::zero())
@@ -416,8 +408,6 @@ impl Membership<SeqTypes> for EpochCommittees {
     /// Check if a node has stake in the committee
     fn has_da_stake(&self, pub_key: &PubKey, epoch: Epoch) -> bool {
         self.state
-            .read()
-            .unwrap()
             .get(&epoch)
             .and_then(|h| h.indexed_da_members.get(pub_key))
             .map_or(false, |x| x.stake() > U256::zero())
@@ -431,8 +421,6 @@ impl Membership<SeqTypes> for EpochCommittees {
     ) -> Result<PubKey, Self::Error> {
         let leaders = self
             .state
-            .read()
-            .unwrap()
             .get(&epoch)
             .ok_or(LeaderLookupError)?
             .eligible_leaders
@@ -446,8 +434,6 @@ impl Membership<SeqTypes> for EpochCommittees {
     /// Get the total number of nodes in the committee
     fn total_nodes(&self, epoch: Epoch) -> usize {
         self.state
-            .read()
-            .unwrap()
             .get(&epoch)
             .map(|sc| sc.indexed_stake_table.len())
             .unwrap_or_default()
@@ -456,8 +442,6 @@ impl Membership<SeqTypes> for EpochCommittees {
     /// Get the total number of DA nodes in the committee
     fn da_total_nodes(&self, epoch: Epoch) -> usize {
         self.state
-            .read()
-            .unwrap()
             .get(&epoch)
             .map(|sc: &Committee| sc.indexed_da_members.len())
             .unwrap_or_default()
@@ -465,54 +449,26 @@ impl Membership<SeqTypes> for EpochCommittees {
 
     /// Get the voting success threshold for the committee
     fn success_threshold(&self, epoch: Epoch) -> NonZeroU64 {
-        let quorum = self
-            .state
-            .read()
-            .unwrap()
-            .get(&epoch)
-            .unwrap()
-            .indexed_stake_table
-            .clone();
+        let quorum = self.state.get(&epoch).unwrap().indexed_stake_table.clone();
         NonZeroU64::new(((quorum.len() as u64 * 2) / 3) + 1).unwrap()
     }
 
     /// Get the voting success threshold for the committee
     fn da_success_threshold(&self, epoch: Epoch) -> NonZeroU64 {
-        let da = self
-            .state
-            .read()
-            .unwrap()
-            .get(&epoch)
-            .unwrap()
-            .indexed_da_members
-            .clone();
+        let da = self.state.get(&epoch).unwrap().indexed_da_members.clone();
         NonZeroU64::new(((da.len() as u64 * 2) / 3) + 1).unwrap()
     }
 
     /// Get the voting failure threshold for the committee
     fn failure_threshold(&self, epoch: Epoch) -> NonZeroU64 {
-        let quorum = self
-            .state
-            .read()
-            .unwrap()
-            .get(&epoch)
-            .unwrap()
-            .indexed_stake_table
-            .clone();
+        let quorum = self.state.get(&epoch).unwrap().indexed_stake_table.clone();
 
         NonZeroU64::new(((quorum.len() as u64) / 3) + 1).unwrap()
     }
 
     /// Get the voting upgrade threshold for the committee
     fn upgrade_threshold(&self, epoch: Epoch) -> NonZeroU64 {
-        let quorum = self
-            .state
-            .read()
-            .unwrap()
-            .get(&epoch)
-            .unwrap()
-            .indexed_stake_table
-            .clone();
+        let quorum = self.state.get(&epoch).unwrap().indexed_stake_table.clone();
 
         NonZeroU64::new(max(
             (quorum.len() as u64 * 9) / 10,

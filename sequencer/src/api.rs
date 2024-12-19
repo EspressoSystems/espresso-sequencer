@@ -186,7 +186,6 @@ impl<N: ConnectedNetwork<PubKey>, V: Versions, P: SequencerPersistence>
         } else {
             self.consensus().await.read().await.cur_epoch().await
         };
-
         <SeqTypes as NodeType>::Membership::stake_table(
             &self.consensus().await.read().await.memberships,
             epoch,
