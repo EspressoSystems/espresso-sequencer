@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"struct":["RollupRegistration","RollupRegistrationBody","RollupUpdate","RollupUpdatebody"]};
