@@ -32,7 +32,9 @@ use hotshot_types::{
     data::{DaProposal, QuorumProposal, QuorumProposal2, VidDisperseShare},
     event::{Event, EventType, HotShotAction, LeafInfo},
     message::{convert_proposal, Proposal},
-    simple_certificate::{QuorumCertificate, QuorumCertificate2, UpgradeCertificate},
+    simple_certificate::{
+        NextEpochQuorumCertificate2, QuorumCertificate, QuorumCertificate2, UpgradeCertificate,
+    },
     traits::{
         block_contents::{BlockHeader, BlockPayload},
         node_implementation::ConsensusTime,
@@ -1307,6 +1309,40 @@ impl SequencerPersistence for Persistence {
     ) -> anyhow::Result<()> {
         // TODO: https://github.com/EspressoSystems/espresso-sequencer/issues/2357
         Ok(())
+    }
+
+    async fn store_next_epoch_quorum_certificate(
+        &self,
+        high_qc: NextEpochQuorumCertificate2<SeqTypes>,
+    ) -> anyhow::Result<()> {
+        let qc2_bytes = bincode::serialize(&high_qc).context("serializing next epoch qc")?;
+        let mut tx = self.db.write().await?;
+        tx.upsert(
+            "next_epoch_quorum_certificate",
+            ["id", "data"],
+            ["id"],
+            [(true, qc2_bytes)],
+        )
+        .await?;
+        tx.commit().await
+    }
+
+    async fn load_next_epoch_quorum_certificate(
+        &self,
+    ) -> anyhow::Result<Option<NextEpochQuorumCertificate2<SeqTypes>>> {
+        let result = self
+            .db
+            .read()
+            .await?
+            .fetch_optional("SELECT * FROM next_epoch_quorum_certificate where id = true")
+            .await?;
+
+        result
+            .map(|row| {
+                let bytes: Vec<u8> = row.get("data");
+                anyhow::Result::<_>::Ok(bincode::deserialize(&bytes)?)
+            })
+            .transpose()
     }
 }
 

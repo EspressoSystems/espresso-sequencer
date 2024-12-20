@@ -47,6 +47,9 @@ use vbs::{
 
 #[cfg(feature = "testing")]
 async fn test_message_compat<Ver: StaticVersionType>(_ver: Ver) {
+    use std::sync::Arc;
+
+    use async_lock::RwLock;
     use espresso_types::{EpochCommittees, Leaf, Payload, SeqTypes, Transaction};
     use hotshot_example_types::node_types::TestVersions;
     use hotshot_types::{
@@ -62,8 +65,12 @@ async fn test_message_compat<Ver: StaticVersionType>(_ver: Ver) {
     let (sender, priv_key) = PubKey::generated_from_seed_indexed(Default::default(), 0);
     let signature = PubKey::sign(&priv_key, &[]).unwrap();
     let committee = vec![PeerConfig::default()]; /* one committee member, necessary to generate a VID share */
-    let membership =
-        EpochCommittees::new_stake(committee.clone(), committee, &NodeState::default(), 10);
+    let membership = Arc::new(RwLock::new(EpochCommittees::new_stake(
+        committee.clone(),
+        committee,
+        &NodeState::default(),
+        10,
+    )));
     let upgrade_data = UpgradeProposalData {
         old_version: Version { major: 0, minor: 1 },
         new_version: Version { major: 1, minor: 0 },
@@ -112,7 +119,7 @@ async fn test_message_compat<Ver: StaticVersionType>(_ver: Ver) {
     let consensus_messages = [
         GeneralConsensusMessage::Proposal(Proposal {
             data: QuorumProposal {
-                block_header,
+                block_header: block_header.clone(),
                 view_number: ViewNumber::genesis(),
                 justify_qc: QuorumCertificate::genesis::<TestVersions>(
                     &ValidatedState::default(),
@@ -224,13 +231,17 @@ async fn test_message_compat<Ver: StaticVersionType>(_ver: Ver) {
             Default::default(),
         )),
         DaConsensusMessage::VidDisperseMsg(Proposal {
-            data: VidDisperseShare::from_vid_disperse(VidDisperse::from_membership(
-                ViewNumber::genesis(),
-                vid_scheme(1).disperse(payload.encode()).unwrap(),
-                &membership,
-                EpochNumber::genesis(),
-                Some(EpochNumber::new(1)),
-            ))
+            data: VidDisperseShare::from_vid_disperse(
+                VidDisperse::from_membership(
+                    ViewNumber::genesis(),
+                    vid_scheme(1).disperse(payload.encode()).unwrap(),
+                    &membership,
+                    EpochNumber::genesis(),
+                    EpochNumber::new(1),
+                    Some(block_header.payload_commitment()),
+                )
+                .await,
+            )
             .remove(0),
             signature: signature.clone(),
             _pd: Default::default(),

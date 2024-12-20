@@ -497,8 +497,10 @@ pub trait SequencerPersistence: Sized + Send + Sync + Clone + 'static {
             }
         };
 
-        // TODO load from storage
-        let next_epoch_high_qc = None;
+        let next_epoch_high_qc = self
+            .load_next_epoch_quorum_certificate()
+            .await
+            .context("loading next epoch qc")?;
         let (leaf, high_qc, anchor_view) = match self
             .load_anchor_leaf()
             .await
@@ -697,6 +699,15 @@ pub trait SequencerPersistence: Sized + Send + Sync + Clone + 'static {
             None => Ok(ViewNumber::genesis()),
         }
     }
+
+    async fn store_next_epoch_quorum_certificate(
+        &self,
+        high_qc: NextEpochQuorumCertificate2<SeqTypes>,
+    ) -> anyhow::Result<()>;
+
+    async fn load_next_epoch_quorum_certificate(
+        &self,
+    ) -> anyhow::Result<Option<NextEpochQuorumCertificate2<SeqTypes>>>;
 }
 
 #[async_trait]
@@ -836,10 +847,9 @@ impl<P: SequencerPersistence> Storage<SeqTypes> for Arc<P> {
 
     async fn update_next_epoch_high_qc2(
         &self,
-        _high_qc: NextEpochQuorumCertificate2<SeqTypes>,
+        high_qc: NextEpochQuorumCertificate2<SeqTypes>,
     ) -> anyhow::Result<()> {
-        // TODO
-        Ok(())
+        (**self).store_next_epoch_quorum_certificate(high_qc).await
     }
 }
 

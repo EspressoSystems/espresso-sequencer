@@ -4086,7 +4086,7 @@ dependencies = [
 [[package]]
 name = "hotshot-builder-core"
 version = "0.1.58"
-source = "git+https://github.com/EspressoSystems/marketplace-builder-core?branch=ma%2Fhotshot-0.5.83#8b6361e251840bb601f7af893b9bd868797c6362"
+source = "git+https://github.com/EspressoSystems/marketplace-builder-core?branch=ma%2Fhotshot-0.5.83#b128b5764e5d6e245beeaa42e9db1981f7aab732"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4145,7 +4145,7 @@ dependencies = [
 [[package]]
 name = "hotshot-events-service"
 version = "0.1.57"
-source = "git+https://github.com/EspressoSystems/hotshot-events-service.git?branch=ma%2Fhotshot-0.5.83#89b06b6007e88fd20bfc855d3f400b8fa045f379"
+source = "git+https://github.com/EspressoSystems/hotshot-events-service.git?branch=ma%2Fhotshot-0.5.83#6c60698c3df4ca2788c3352740535c6965d24fe1"
 dependencies = [
  "async-broadcast",
  "async-lock 2.8.0",
@@ -4249,7 +4249,7 @@ dependencies = [
 [[package]]
 name = "hotshot-query-service"
 version = "0.1.76"
-source = "git+https://github.com/EspressoSystems/hotshot-query-service?branch=ma%2Fhotshot-0.5.83#77ad27d40201a8483ca6ad3af9040adf859d5607"
+source = "git+https://github.com/EspressoSystems/hotshot-query-service?branch=ma%2Fhotshot-0.5.83#b6337c1a68949734d7a38acce8ea6b282379c443"
 dependencies = [
  "anyhow",
  "ark-serialize",
@@ -6410,7 +6410,7 @@ dependencies = [
 [[package]]
 name = "marketplace-builder-core"
 version = "0.1.58"
-source = "git+https://github.com/EspressoSystems/marketplace-builder-core?branch=ma%2Fhotshot-0.5.83#8b6361e251840bb601f7af893b9bd868797c6362"
+source = "git+https://github.com/EspressoSystems/marketplace-builder-core?branch=ma%2Fhotshot-0.5.83#b128b5764e5d6e245beeaa42e9db1981f7aab732"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -6435,7 +6435,7 @@ dependencies = [
 [[package]]
 name = "marketplace-builder-shared"
 version = "0.1.58"
-source = "git+https://github.com/EspressoSystems/marketplace-builder-core?branch=ma%2Fhotshot-0.5.83#8b6361e251840bb601f7af893b9bd868797c6362"
+source = "git+https://github.com/EspressoSystems/marketplace-builder-core?branch=ma%2Fhotshot-0.5.83#b128b5764e5d6e245beeaa42e9db1981f7aab732"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -7753,7 +7753,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "81bddcdb20abf9501610992b6759a4c888aef7d1a7247ef75e2404275ac24af1"
 dependencies = [
  "anyhow",
- "itertools 0.12.1",
+ "itertools 0.11.0",
  "proc-macro2",
  "quote",
  "syn 2.0.90",
@@ -9297,7 +9297,7 @@ version = "0.8.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "03c3c6b7927ffe7ecaa769ee0e3994da3b8cafc8f444578982c83ecb161af917"
 dependencies = [
- "heck 0.5.0",
+ "heck 0.4.1",
  "proc-macro2",
  "quote",
  "syn 2.0.90",
