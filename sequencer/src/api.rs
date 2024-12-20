@@ -170,6 +170,10 @@ impl<N: ConnectedNetwork<PubKey>, D: Sync, V: Versions, P: SequencerPersistence>
     ) -> Vec<StakeTableEntry<<SeqTypes as NodeType>::SignatureKey>> {
         self.as_ref().get_stake_table(epoch).await
     }
+
+    async fn get_current_epoch(&self) -> <SeqTypes as NodeType>::Epoch {
+        self.as_ref().get_current_epoch().await
+    }
 }
 
 impl<N: ConnectedNetwork<PubKey>, V: Versions, P: SequencerPersistence>
@@ -191,6 +195,10 @@ impl<N: ConnectedNetwork<PubKey>, V: Versions, P: SequencerPersistence>
             &self.consensus().await.read().await.memberships,
             epoch,
         )
+    }
+
+    async fn get_current_epoch(&self) -> <SeqTypes as NodeType>::Epoch {
+        self.consensus().await.read().await.cur_epoch().await
     }
 }
 

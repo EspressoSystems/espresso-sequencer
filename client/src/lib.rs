@@ -1,7 +1,8 @@
 use anyhow::Context;
-use espresso_types::{FeeAccount, FeeAmount, FeeMerkleTree, Header};
+use espresso_types::{FeeAccount, FeeAmount, FeeMerkleTree, Header, PubKey};
 use ethers::types::Address;
 use futures::{stream::BoxStream, StreamExt};
+use hotshot_types::stake_table::StakeTableEntry;
 use jf_merkle_tree::{
     prelude::{MerkleProof, Sha3Node},
     MerkleTreeScheme,
@@ -25,6 +26,22 @@ pub type FeeMerkleProof = MerkleProof<FeeAmount, FeeAccount, Sha3Node, { FeeMerk
 impl SequencerClient {
     pub fn new(provider: Url) -> Self {
         Self(surf_disco::Client::new(provider))
+    }
+
+    pub async fn current_epoch(&self) -> anyhow::Result<u64> {
+        self.0
+            .get::<u64>("node/current_epoch")
+            .send()
+            .await
+            .context("getting epoch value")
+    }
+
+    pub async fn stake_table(&self, epoch: u64) -> anyhow::Result<Vec<StakeTableEntry<PubKey>>> {
+        self.0
+            .get::<_>(&format!("node/stake-table/{epoch}"))
+            .send()
+            .await
+            .context("getting epoch value")
     }
 
     /// GET Block Height from the node

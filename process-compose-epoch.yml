@@ -1,0 +1,15 @@
+version: "3"
+
+environment:
+  - ESPRESSO_SEQUENCER_GENESIS_FILE=data/genesis/demo-epoch.toml
+  - ESPRESSO_BUILDER_GENESIS_FILE=data/genesis/demo-epoch.toml
+processes:
+  update-permissioned-stake-table:
+    command:
+      update-permissioned-stake-table --update-toml-path ./data/initial_stake_table.toml
+    depends_on:
+      # This process depends on the deploy-prover-contracts rather than the deploy-sequencer-contracts process, 
+      # even though the permissioned stake table contract is deployed by the deploy-sequencer-contracts process
+      # The dependency on prover contracts ensures a consistent deployment order, preventing changes in contract addresses.
+      deploy-prover-contracts:
+        condition: process_completed_successfully

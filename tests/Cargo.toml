@@ -11,12 +11,14 @@ path = "main.rs"
 
 [dev-dependencies]
 anyhow = { workspace = true }
+clap = { workspace = true }
 client = { path = "../client" }
 dotenvy = { workspace = true }
 espresso-types = { path = "../types", features = ["testing"] }
 ethers = { workspace = true }
 futures = { workspace = true }
 reqwest = { workspace = true, features = ["json"] }
+sequencer-utils = { path = "../utils" }
 surf-disco = { workspace = true }
 tokio = { workspace = true }
 vbs = { workspace = true }

@@ -60,12 +60,23 @@ impl From<PermissionedStakeTableConfig> for Vec<NodeInfo> {
 #[serde(bound(deserialize = ""))]
 pub struct PermissionedStakeTableUpdate {
     #[serde(default)]
-    stakers_to_remove: Vec<PeerConfigKeys<BLSPubKey>>,
+    pub stakers_to_remove: Vec<PeerConfigKeys<BLSPubKey>>,
     #[serde(default)]
-    new_stakers: Vec<PeerConfigKeys<BLSPubKey>>,
+    pub new_stakers: Vec<PeerConfigKeys<BLSPubKey>>,
 }
 
 impl PermissionedStakeTableUpdate {
+    // TODO: maybe just for testing
+    pub fn new(
+        stakers_to_remove: Vec<PeerConfigKeys<BLSPubKey>>,
+        new_stakers: Vec<PeerConfigKeys<BLSPubKey>>,
+    ) -> Self {
+        Self {
+            stakers_to_remove,
+            new_stakers,
+        }
+    }
+
     pub fn from_toml_file(path: &Path) -> anyhow::Result<Self> {
         let config_file_as_string: String = fs::read_to_string(path)
             .unwrap_or_else(|_| panic!("Could not read config file located at {}", path.display()));
