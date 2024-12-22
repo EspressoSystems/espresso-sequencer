@@ -160,6 +160,12 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         _initializeState(_genesis, _genesisStakeTableState, _stateHistoryRetentionPeriod);
     }
 
+
+    /// @notice returns the current block number
+    function currentBlockNumber() public view virtual ovverride returns (uint256) {
+        return block.number;
+    }
+
     /// @notice Use this to get the implementation contract version
     /// @return majorVersion The major version of the contract
     /// @return minorVersion The minor version of the contract
@@ -211,7 +217,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
         stateHistoryRetentionPeriod = _stateHistoryRetentionPeriod;
 
-        updateStateHistory(uint64(block.number), uint64(block.timestamp), _genesis);
+        updateStateHistory(uint64(currentBlockNumber()), uint64(block.timestamp), _genesis);
     }
 
     // === State Modifying APIs ===
@@ -252,7 +258,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         // upon successful verification, update the latest finalized state
         finalizedState = newState;
 
-        updateStateHistory(uint64(block.number), uint64(block.timestamp), newState);
+        updateStateHistory(uint64(currentBlockNumber()), uint64(block.timestamp), newState);
 
         emit NewState(newState.viewNum, newState.blockHeight, newState.blockCommRoot);
     }
@@ -371,7 +377,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         // 3. Provided block number is earlier than the first recorded state update
         // the stateHistoryFirstIndex is used to check for the first nonZero element
         if (
-            blockNumber > block.number || updatesCount == 0
+            blockNumber > currentBlockNumber() || updatesCount == 0
                 || blockNumber < stateHistoryCommitments[stateHistoryFirstIndex].l1BlockHeight
         ) {
             revert InsufficientSnapshotHistory();
