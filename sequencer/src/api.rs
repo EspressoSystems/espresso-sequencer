@@ -2452,7 +2452,7 @@ mod test {
             );
             receive_count += 1;
             if receive_count > total_count {
-                tracing::info!("Client Received atleast desired events, exiting loop");
+                tracing::info!("Client Received at least desired events, exiting loop");
                 break;
             }
         }
