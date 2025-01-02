@@ -23,6 +23,7 @@ use crate::{node::BlockHash, types::HeightIndexed};
 use hotshot_types::traits::node_implementation::NodeType;
 use serde::{Deserialize, Serialize};
 use std::{
+    collections::VecDeque,
     fmt::{Debug, Display},
     num::{NonZeroUsize, TryFromIntError},
 };
@@ -380,6 +381,7 @@ where
     BlockQueryData<Types>: HeightIndexed,
     Payload<Types>: QueryablePayload<Types>,
     Header<Types>: QueryableHeader<Types> + ExplorerHeader<Types>,
+    <Types as NodeType>::Transaction: ExplorerTransaction,
 {
     type Error = TimestampConversionError;
 
@@ -399,7 +401,7 @@ where
                 block_confirmed: true,
                 offset: offset as u64,
                 num_transactions: block.num_transactions,
-                size: block.size,
+                size: transaction.payload_size(),
                 time: Timestamp(time::OffsetDateTime::from_unix_timestamp(seconds)?),
                 sequencing_fees: vec![],
                 fee_details: vec![],
@@ -468,10 +470,10 @@ pub struct GenesisOverview {
 /// `block_transactions` for those `block_heights`.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ExplorerHistograms {
-    pub block_time: Vec<Option<u64>>,
-    pub block_size: Vec<Option<u64>>,
-    pub block_transactions: Vec<u64>,
-    pub block_heights: Vec<u64>,
+    pub block_time: VecDeque<Option<u64>>,
+    pub block_size: VecDeque<Option<u64>>,
+    pub block_transactions: VecDeque<u64>,
+    pub block_heights: VecDeque<u64>,
 }
 
 /// [ExplorerSummary] is a struct that represents an at-a-glance snapshot of

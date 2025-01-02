@@ -66,5 +66,9 @@ pub trait ExplorerTransaction {
     /// a representation of it that adheres to the trait restrictions specified.
     type NamespaceId: Clone + Debug + Serialize + DeserializeOwned + Send + Sync + PartialEq + Eq;
 
+    /// namespace_id returns the namespace id of the individual transaction.
     fn namespace_id(&self) -> Self::NamespaceId;
+
+    /// payload_size returns the size of the payload of the transaction.
+    fn payload_size(&self) -> u64;
 }
