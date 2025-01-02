@@ -18,11 +18,11 @@ and robust infrastructure.
 [Official Documentation](https://docs.espressosys.com/sequencer/espresso-sequencer-architecture/readme)
 
 ### Architecture
-The diagram below shows how the Espresso Confirmation Layer fits into the rollup
-centric Ethereum ecosystem. See [Architecture](./doc/architecture.md) for details.
+
+The diagram below shows how the Espresso Confirmation Layer fits into the rollup centric Ethereum ecosystem. See
+[Architecture](./doc/architecture.md) for details.
 
 ![Architecture](./doc/espresso-overview.svg)
-
 
 #### ZK rollups integration
 
@@ -43,9 +43,8 @@ a dockerized Espresso Sequencer network with an example Layer 2 rollup applicati
 
 ## Documentation
 
-The rust code documentation can be found at
-[sequencer.docs.espressosys.com](https://sequencer.docs.espressosys.com). Please note the disclaimer about API
-stability at the end of the readme.
+The rust code documentation can be found at [sequencer.docs.espressosys.com](https://sequencer.docs.espressosys.com).
+Please note the disclaimer about API stability at the end of the readme.
 
 To generate the documentation locally and view it in the browser, run
 
@@ -120,7 +119,7 @@ forge build
 To run the tests
 
 ```shell
-forge test
+just sol-test
 ```
 
 In order to avoid constant warnings about checksum mismatches with [svm-rs](https://github.com/roynalnaruto/svm-rs)
