@@ -4,7 +4,7 @@
 // You should have received a copy of the MIT License
 // along with the HotShot repository. If not, see <https://mit-license.org/>.
 
-//! A example program using the Push CDN
+//! An example program using the Push CDN
 /// The types we're importing
 pub mod types;
 

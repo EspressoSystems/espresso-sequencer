@@ -128,14 +128,14 @@ pub enum NetworkEvent {
 pub enum NetworkEventInternal {
     /// a DHT event
     DHTEvent(libp2p::kad::Event),
-    /// a identify event. Is boxed because this event is much larger than the other ones so we want
+    /// an identify event. Is boxed because this event is much larger than the other ones so we want
     /// to store it on the heap.
     IdentifyEvent(Box<IdentifyEvent>),
     /// a gossip  event
     GossipEvent(Box<GossipEvent>),
     /// a direct message event
     DMEvent(libp2p::request_response::Event<Vec<u8>, Vec<u8>>),
-    /// a autonat event
+    /// an autonat event
     AutonatEvent(libp2p::autonat::Event),
 }
 

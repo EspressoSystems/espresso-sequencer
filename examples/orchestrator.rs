@@ -4,7 +4,7 @@
 // You should have received a copy of the MIT License
 // along with the HotShot repository. If not, see <https://mit-license.org/>.
 
-//! A orchestrator
+//! An orchestrator
 
 use hotshot::helpers::initialize_logging;
 use hotshot_example_types::state_types::TestTypes;
