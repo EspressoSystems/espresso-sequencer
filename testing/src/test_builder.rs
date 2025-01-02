@@ -433,7 +433,7 @@ where
     /// turn a description of a test (e.g. a [`TestDescription`]) into
     /// a [`TestLauncher`] that can be used to launch the test.
     /// # Panics
-    /// if some of the the configuration values are zero
+    /// if some of the configuration values are zero
     pub fn gen_launcher(self, node_id: u64) -> TestLauncher<TYPES, I, V> {
         self.gen_launcher_with_tasks(node_id, vec![])
     }
@@ -442,7 +442,7 @@ where
     /// a [`TestLauncher`] that can be used to launch the test, with
     /// additional testing tasks to run in test harness
     /// # Panics
-    /// if some of the the configuration values are zero
+    /// if some of the configuration values are zero
     #[must_use]
     pub fn gen_launcher_with_tasks(
         self,

@@ -145,7 +145,7 @@ pub enum RequestKind<TYPES: NodeType> {
 }
 
 /// A response for a request.  `SequencingMessage` is the same as other network messages
-/// The kind of message `M` is is determined by what we requested
+/// The kind of message `M` is determined by what we requested
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
 #[serde(bound(deserialize = ""))]
 #[allow(clippy::large_enum_variant)]

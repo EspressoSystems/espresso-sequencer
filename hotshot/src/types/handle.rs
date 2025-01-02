@@ -289,7 +289,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static, V: Versions>
         self.hotshot.consensus()
     }
 
-    /// Shut down the the inner hotshot and wait until all background threads are closed.
+    /// Shut down the inner hotshot and wait until all background threads are closed.
     pub async fn shut_down(&mut self) {
         // this is required because `SystemContextHandle` holds an inactive receiver and
         // `broadcast_direct` below can wait indefinitely
