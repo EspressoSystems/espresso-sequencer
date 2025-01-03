@@ -66,7 +66,7 @@ pub fn build_instance_state<V: Versions>(
     l1_params: L1Params,
     state_peers: Vec<Url>,
 ) -> NodeState {
-    let l1_client = l1_params.options.connect(l1_params.url);
+    let l1_client = l1_params.options.connect(l1_params.urls);
     NodeState::new(
         u64::MAX, // dummy node ID, only used for debugging
         chain_config,

@@ -11,6 +11,7 @@ use espresso_types::{
 use ethers::types::H160;
 use sequencer_utils::deployer::is_proxy_contract;
 use serde::{Deserialize, Serialize};
+use url::Url;
 use vbs::version::Version;
 
 /// Initial configuration of an Espresso stake table.
@@ -85,8 +86,8 @@ impl Genesis {
 }
 
 impl Genesis {
-    pub async fn validate_fee_contract(&self, l1_rpc_url: String) -> anyhow::Result<()> {
-        let l1 = L1Client::new(l1_rpc_url.parse().context("invalid url")?);
+    pub async fn validate_fee_contract(&self, l1_rpc_url: Url) -> anyhow::Result<()> {
+        let l1 = L1Client::new(l1_rpc_url);
 
         if let Some(fee_contract_address) = self.chain_config.fee_contract {
             tracing::info!("validating fee contract at {fee_contract_address:x}");
@@ -593,7 +594,9 @@ mod test {
         let genesis: Genesis = toml::from_str(&toml).unwrap_or_else(|err| panic!("{err:#}"));
 
         // validate the fee_contract address
-        let result = genesis.validate_fee_contract(anvil.endpoint()).await;
+        let result = genesis
+            .validate_fee_contract(anvil.endpoint().parse().unwrap())
+            .await;
 
         // check if the result from the validation is an error
         if let Err(e) = result {
@@ -639,7 +642,9 @@ mod test {
         let genesis: Genesis = toml::from_str(&toml).unwrap_or_else(|err| panic!("{err:#}"));
 
         // Call the validation logic for the fee_contract address
-        let result = genesis.validate_fee_contract(anvil.endpoint()).await;
+        let result = genesis
+            .validate_fee_contract(anvil.endpoint().parse().unwrap())
+            .await;
 
         assert!(
             result.is_ok(),
@@ -711,7 +716,9 @@ mod test {
         let genesis: Genesis = toml::from_str(&toml).unwrap_or_else(|err| panic!("{err:#}"));
 
         // Call the validation logic for the fee_contract address
-        let result = genesis.validate_fee_contract(anvil.endpoint()).await;
+        let result = genesis
+            .validate_fee_contract(anvil.endpoint().parse().unwrap())
+            .await;
 
         assert!(
             result.is_ok(),
@@ -783,7 +790,9 @@ mod test {
         let genesis: Genesis = toml::from_str(&toml).unwrap_or_else(|err| panic!("{err:#}"));
 
         // Call the validation logic for the fee_contract address
-        let result = genesis.validate_fee_contract(anvil.endpoint()).await;
+        let result = genesis
+            .validate_fee_contract(anvil.endpoint().parse().unwrap())
+            .await;
 
         // check if the result from the validation is an error
         if let Err(e) = result {
@@ -851,7 +860,9 @@ mod test {
         let rpc_url = "https://ethereum-sepolia.publicnode.com";
 
         // validate the fee_contract address
-        let result = genesis.validate_fee_contract(rpc_url.to_string()).await;
+        let result = genesis
+            .validate_fee_contract(rpc_url.parse().unwrap())
+            .await;
 
         // check if the result from the validation is an error
         if let Err(e) = result {
@@ -904,7 +915,9 @@ mod test {
         let rpc_url = "https://ethereum-sepolia.publicnode.com";
 
         // validate the fee_contract address
-        let result = genesis.validate_fee_contract(rpc_url.to_string()).await;
+        let result = genesis
+            .validate_fee_contract(rpc_url.parse().unwrap())
+            .await;
 
         // check if the result from the validation is an error
         if let Err(e) = result {

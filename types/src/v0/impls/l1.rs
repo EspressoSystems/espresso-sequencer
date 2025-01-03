@@ -1,32 +1,39 @@
 use std::{
     cmp::{min, Ordering},
+    fmt::Debug,
     num::NonZeroUsize,
     sync::Arc,
+    time::Instant,
 };
 
 use anyhow::Context;
+use async_trait::async_trait;
 use clap::Parser;
 use committable::{Commitment, Committable, RawCommitmentBuilder};
 use contract_bindings::fee_contract::FeeContract;
 use ethers::{
     prelude::{Address, BlockNumber, Middleware, Provider, H256, U256},
-    providers::{Http, Ws},
+    providers::{Http, HttpClientError, JsonRpcClient, JsonRpcError, Ws},
 };
 use futures::{
-    future::Future,
+    future::{Future, FutureExt},
     stream::{self, StreamExt},
 };
 use hotshot_types::traits::metrics::Metrics;
 use lru::LruCache;
+use reqwest::StatusCode;
+use serde::{de::DeserializeOwned, Serialize};
 use tokio::{
     spawn,
     sync::{Mutex, MutexGuard},
-    time::sleep,
+    time::{sleep, Duration},
 };
 use tracing::Instrument;
 use url::Url;
 
-use super::{L1BlockInfo, L1ClientMetrics, L1State, L1UpdateTask};
+use super::{
+    L1BlockInfo, L1ClientMetrics, L1State, L1UpdateTask, MultiRpcClient, MultiRpcClientStatus,
+};
 use crate::{FeeInfo, L1Client, L1ClientOptions, L1Event, L1Snapshot};
 
 impl PartialOrd for L1BlockInfo {
@@ -96,10 +103,13 @@ impl L1ClientOptions {
         self
     }
 
-    /// Instantiate an `L1Client` for a given provider `Url`.
-    pub fn connect(self, url: Url) -> L1Client {
-        let metrics = L1ClientMetrics::new(&**self.metrics);
-        L1Client::with_provider(self, url.to_string().try_into().unwrap(), metrics)
+    /// Instantiate an `L1Client` for a given list of provider `Url`s.
+    pub fn connect(self, urls: impl IntoIterator<Item = Url>) -> L1Client {
+        L1Client::with_provider(Provider::new(MultiRpcClient::new(self, urls)))
+    }
+
+    fn rate_limit_delay(&self) -> Duration {
+        self.l1_rate_limit_delay.unwrap_or(self.l1_retry_delay)
     }
 }
 
@@ -115,23 +125,140 @@ impl L1ClientMetrics {
     }
 }
 
+impl MultiRpcClient {
+    fn new(opt: L1ClientOptions, clients: impl IntoIterator<Item = Url>) -> Self {
+        // The type of messages in this channel is (), i.e. all messages are identical, and we only
+        // ever use it to await the next single failure (see `next_failover`). In other words, it
+        // functions as a oneshot broadcast channel, so a capacity of 1 is safe.
+        let (mut failover_send, failover_recv) = async_broadcast::broadcast(1);
+        failover_send.set_await_active(false);
+        failover_send.set_overflow(true);
+
+        Self {
+            clients: Arc::new(clients.into_iter().map(Http::new).collect()),
+            status: Default::default(),
+            failover_send,
+            failover_recv: failover_recv.deactivate(),
+            opt,
+        }
+    }
+
+    async fn failover(&self, time: Instant, status: &mut MultiRpcClientStatus) {
+        tracing::warn!(
+            ?status,
+            ?time,
+            frequent_failure_tolerance = ?self.opt.l1_frequent_failure_tolerance,
+            consecutive_failure_tolerance = ?self.opt.l1_consecutive_failure_tolerance,
+            current = status.client,
+            "L1 client failing over",
+        );
+        status.client += 1;
+        status.rate_limited_until = None;
+        status.last_failure = None;
+        status.consecutive_failures = 0;
+        self.failover_send.broadcast_direct(()).await.ok();
+    }
+
+    fn next_failover(&self) -> impl Future<Output = ()> {
+        let recv = self.failover_recv.activate_cloned();
+        recv.into_future().map(|_| ())
+    }
+
+    fn options(&self) -> &L1ClientOptions {
+        &self.opt
+    }
+}
+
+#[async_trait]
+impl JsonRpcClient for MultiRpcClient {
+    type Error = HttpClientError;
+
+    async fn request<T, R>(&self, method: &str, params: T) -> Result<R, Self::Error>
+    where
+        T: Debug + Serialize + Send + Sync,
+        R: DeserializeOwned + Send,
+    {
+        let current = {
+            let status = self.status.read().await;
+
+            // If we've been rate limited, back off until the limit (hopefully) expires.
+            if let Some(t) = status.rate_limited_until {
+                if t > Instant::now() {
+                    // Return an error with a non-standard code to indicate client-side rate limit.
+                    return Err(JsonRpcError {
+                        code: -20000,
+                        message: "rate limit exceeded".into(),
+                        data: None,
+                    }
+                    .into());
+                }
+            }
+
+            status.client
+        };
+        let client = &self.clients[current % self.clients.len()];
+        match client.request(method, &params).await {
+            Ok(res) => Ok(res),
+            Err(err) => {
+                let t = Instant::now();
+                tracing::warn!(?t, method, ?params, "L1 client error: {err:#}");
+
+                // Keep track of failures, failing over to the next client if necessary.
+                let mut status = self.status.write().await;
+                if status.client != current {
+                    // Someone else has also gotten a failure, and the client has already been
+                    // failed over.
+                    return Err(err);
+                }
+
+                // Treat rate limited errors specially; these should not cause failover, but instead
+                // should only cause us to temporarily back off on making requests to the RPC
+                // server.
+                if let HttpClientError::ReqwestError(e) = &err {
+                    if matches!(e.status(), Some(StatusCode::TOO_MANY_REQUESTS)) {
+                        status.rate_limited_until = Some(t + self.opt.rate_limit_delay());
+                        return Err(err);
+                    }
+                }
+
+                if let Some(prev) = status.last_failure {
+                    if t - prev < self.opt.l1_frequent_failure_tolerance {
+                        // We have failed twice inside the allowed window, so we should failover to
+                        // the next client.
+                        self.failover(t, &mut status).await;
+                        return Err(err);
+                    }
+                }
+
+                status.consecutive_failures += 1;
+                if status.consecutive_failures >= self.opt.l1_consecutive_failure_tolerance {
+                    // We have failed too many times in a row, albeit not rapidly enough to trigger
+                    // the frequent failure tolerance. Still, we now trigger a failover based on the
+                    // consecutive failures policy.
+                    self.failover(t, &mut status).await;
+                    return Err(err);
+                }
+
+                // If we're not failing over, update the last failure time.
+                status.last_failure = Some(t);
+                Err(err)
+            }
+        }
+    }
+}
+
 impl L1Client {
-    fn with_provider(
-        opt: L1ClientOptions,
-        mut provider: Provider<Http>,
-        metrics: L1ClientMetrics,
-    ) -> Self {
+    fn with_provider(mut provider: Provider<MultiRpcClient>) -> Self {
+        let opt = provider.as_ref().options().clone();
+        let metrics = L1ClientMetrics::new(&**opt.metrics);
+
         let (sender, mut receiver) = async_broadcast::broadcast(opt.l1_events_channel_capacity);
         receiver.set_await_active(false);
         receiver.set_overflow(true);
 
         provider.set_interval(opt.l1_polling_interval);
         Self {
-            retry_delay: opt.l1_retry_delay,
-            subscription_timeout: opt.subscription_timeout,
             provider: Arc::new(provider),
-            ws_provider: opt.ws_provider,
-            events_max_block_range: opt.l1_events_max_block_range,
             state: Arc::new(Mutex::new(L1State::new(opt.l1_blocks_cache_size))),
             sender,
             receiver: receiver.deactivate(),
@@ -142,7 +269,7 @@ impl L1Client {
 
     /// Construct a new L1 client with the default options.
     pub fn new(url: Url) -> Self {
-        L1ClientOptions::default().connect(url)
+        L1ClientOptions::default().connect([url])
     }
 
     /// Start the background tasks which keep the L1 client up to date.
@@ -168,23 +295,27 @@ impl L1Client {
     }
 
     fn update_loop(&self) -> impl Future<Output = ()> {
+        let opt = self.options();
         let rpc = self.provider.clone();
-        let ws_url = self.ws_provider.clone();
-        let retry_delay = self.retry_delay;
-        let subscription_timeout = self.subscription_timeout;
+        let ws_urls = opt.l1_ws_provider.clone();
+        let retry_delay = opt.l1_retry_delay;
+        let subscription_timeout = opt.subscription_timeout;
         let state = self.state.clone();
         let sender = self.sender.clone();
         let metrics = self.metrics.clone();
 
         let span = tracing::warn_span!("L1 client update");
         async move {
-            loop {
-                let mut ws;
+            for i in 0.. {
+                let ws;
 
-                // Subscribe to new blocks. This task cannot fail; retry until we succeed.
-                let mut block_stream = loop {
-                    let res = match &ws_url {
-                        Some(url) => {
+                // Subscribe to new blocks.
+                let mut block_stream = {
+                    let res = match &ws_urls {
+                        Some(urls) => {
+                            // Use a new WebSockets host each time we retry in case there is a
+                            // problem with one of the hosts specifically.
+                            let url = &urls[i % urls.len()];
                             ws = match Provider::<Ws>::connect(url.clone()).await {
                                 Ok(ws) => ws,
                                 Err(err) => {
@@ -195,7 +326,11 @@ impl L1Client {
                             };
                             ws.subscribe_blocks().await.map(StreamExt::boxed)
                         }
-                        None => rpc
+                        None => {
+                            let failover = (*rpc).as_ref().next_failover().map(|()| {
+                                tracing::warn!("aborting subscription stream due to provider failover");
+                            });
+                            rpc
                             .watch_blocks()
                             .await
                             .map(|stream| {
@@ -223,13 +358,16 @@ impl L1Client {
                                     }
                                 })
                             }
-                            .boxed()),
+                            .take_until(failover)
+                            .boxed())
+                        }
                     };
                     match res {
-                        Ok(stream) => break stream,
+                        Ok(stream) => stream,
                         Err(err) => {
                             tracing::error!("error subscribing to L1 blocks: {err:#}");
                             sleep(retry_delay).await;
+                            continue;
                         }
                     }
                 };
@@ -352,7 +490,7 @@ impl L1Client {
 
             // This should not happen: the event stream ended. All we can do is try again.
             tracing::warn!(number, "L1 event stream ended unexpectedly; retry");
-            sleep(self.retry_delay).await;
+            self.retry_delay().await;
         }
     }
 
@@ -398,7 +536,7 @@ impl L1Client {
 
             // This should not happen: the event stream ended. All we can do is try again.
             tracing::warn!(number, "L1 event stream ended unexpectedly; retry",);
-            sleep(self.retry_delay).await;
+            self.retry_delay().await;
         }
     }
 
@@ -440,7 +578,7 @@ impl L1Client {
 
             // This should not happen: the event stream ended. All we can do is try again.
             tracing::warn!(%timestamp, "L1 event stream ended unexpectedly; retry",);
-            sleep(self.retry_delay).await;
+            self.retry_delay().await;
         };
 
         // It is possible there is some earlier block that also has the proper timestamp. Work
@@ -482,18 +620,18 @@ impl L1Client {
                         number,
                         "provider error: finalized L1 block should always be available"
                     );
-                    sleep(self.retry_delay).await;
+                    self.retry_delay().await;
                     continue;
                 }
                 Err(err) => {
                     tracing::warn!(number, "failed to get finalized L1 block: {err:#}");
-                    sleep(self.retry_delay).await;
+                    self.retry_delay().await;
                     continue;
                 }
             };
             let Some(hash) = block.hash else {
                 tracing::warn!(number, ?block, "finalized L1 block has no hash");
-                sleep(self.retry_delay).await;
+                self.retry_delay().await;
                 continue;
             };
             break L1BlockInfo {
@@ -523,6 +661,8 @@ impl L1Client {
             return vec![];
         }
 
+        let opt = self.options();
+
         // `prev` should have already been processed unless we
         // haven't processed *any* blocks yet.
         let prev = prev_finalized.map(|prev| prev + 1).unwrap_or(0);
@@ -531,7 +671,7 @@ impl L1Client {
         // `events_max_block_range`.
         let mut start = prev;
         let end = new_finalized;
-        let chunk_size = self.events_max_block_range;
+        let chunk_size = opt.l1_events_max_block_range;
         let chunks = std::iter::from_fn(move || {
             let chunk_end = min(start + chunk_size - 1, end);
             if chunk_end < start {
@@ -545,7 +685,7 @@ impl L1Client {
 
         // Fetch events for each chunk.
         let events = stream::iter(chunks).then(|(from, to)| {
-            let retry_delay = self.retry_delay;
+            let retry_delay = opt.l1_retry_delay;
             let fee_contract = FeeContract::new(fee_contract_address, self.provider.clone());
             async move {
                 tracing::debug!(from, to, "fetch events in range");
@@ -570,6 +710,14 @@ impl L1Client {
             }
         });
         events.flatten().map(FeeInfo::from).collect().await
+    }
+
+    fn options(&self) -> &L1ClientOptions {
+        (*self.provider).as_ref().options()
+    }
+
+    async fn retry_delay(&self) {
+        sleep(self.options().l1_retry_delay).await;
     }
 }
 
@@ -601,7 +749,9 @@ impl L1State {
     }
 }
 
-async fn get_finalized_block(rpc: &Provider<Http>) -> anyhow::Result<Option<L1BlockInfo>> {
+async fn get_finalized_block(
+    rpc: &Provider<MultiRpcClient>,
+) -> anyhow::Result<Option<L1BlockInfo>> {
     let Some(block) = rpc.get_block(BlockNumber::Finalized).await? else {
         // This can happen in rare cases where the L1 chain is very young and has not finalized a
         // block yet. This is more common in testing and demo environments. In any case, we proceed
@@ -631,6 +781,7 @@ mod test {
     use contract_bindings::fee_contract::FeeContract;
     use ethers::{
         prelude::{LocalWallet, Signer, SignerMiddleware, H160, U64},
+        providers::Http,
         utils::{hex, parse_ether, Anvil, AnvilInstance},
     };
     use portpicker::pick_unused_port;
@@ -645,20 +796,21 @@ mod test {
             l1_events_max_block_range: 1,
             l1_polling_interval: Duration::from_secs(1),
             subscription_timeout: Duration::from_secs(5),
-            ws_provider: if ws {
-                Some(anvil.ws_endpoint().parse().unwrap())
+            l1_ws_provider: if ws {
+                Some(vec![anvil.ws_endpoint().parse().unwrap()])
             } else {
                 None
             },
             ..Default::default()
         }
-        .connect(anvil.endpoint().parse().unwrap());
+        .connect([anvil.endpoint().parse().unwrap()]);
 
         client.spawn_tasks().await;
         client
     }
 
-    async fn test_get_finalized_deposits_helper(ws: bool) -> anyhow::Result<()> {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_get_finalized_deposits() -> anyhow::Result<()> {
         setup_test();
 
         // how many deposits will we make
@@ -667,7 +819,7 @@ mod test {
 
         let anvil = Anvil::new().spawn();
         let wallet_address = anvil.addresses().first().cloned().unwrap();
-        let l1_client = new_l1_client(&anvil, ws).await;
+        let l1_client = new_l1_client(&anvil, false).await;
         let wallet: LocalWallet = anvil.keys()[0].clone().into();
 
         // In order to deposit we need a provider that can sign.
@@ -750,7 +902,7 @@ mod test {
         assert_eq!(deposits + deploy_txn_count, head.as_u64());
 
         // Use non-signing `L1Client` to retrieve data.
-        let l1_client = new_l1_client(&anvil, ws).await;
+        let l1_client = new_l1_client(&anvil, false).await;
         // Set prev deposits to `None` so `Filter` will start at block
         // 0. The test would also succeed if we pass `0` (b/c first
         // block did not deposit).
@@ -815,16 +967,6 @@ mod test {
         assert_eq!(0, pending.len());
 
         Ok(())
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
-    async fn test_get_finalized_deposits_ws() -> anyhow::Result<()> {
-        test_get_finalized_deposits_helper(true).await
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
-    async fn test_get_finalized_deposits_http() -> anyhow::Result<()> {
-        test_get_finalized_deposits_helper(false).await
     }
 
     async fn test_wait_for_finalized_block_helper(ws: bool) {
@@ -989,5 +1131,140 @@ mod test {
     #[tokio::test(flavor = "multi_thread")]
     async fn test_reconnect_update_task_http() {
         test_reconnect_update_task_helper(false).await
+    }
+
+    async fn test_failover_update_task_helper(ws: bool) {
+        setup_test();
+
+        let anvil = Anvil::new().block_time(1u32).spawn();
+
+        // Create an L1 client with fake providers, and check that the state is still updated after
+        // it correctly fails over to the real providers.
+        let client = L1ClientOptions {
+            l1_polling_interval: Duration::from_secs(1),
+            // Use a very long subscription timeout, so that we only succeed by triggering a
+            // failover.
+            subscription_timeout: Duration::from_secs(1000),
+            l1_ws_provider: if ws {
+                Some(vec![
+                    "ws://notarealurl:1234".parse().unwrap(),
+                    anvil.ws_endpoint().parse().unwrap(),
+                ])
+            } else {
+                None
+            },
+            ..Default::default()
+        }
+        .connect([
+            "http://notarealurl:1234".parse().unwrap(),
+            anvil.endpoint().parse().unwrap(),
+        ]);
+
+        client.spawn_tasks().await;
+
+        let initial_state = client.snapshot().await;
+        tracing::info!(?initial_state, "initial state");
+
+        // Check the state is updating.
+        let mut retry = 0;
+        let updated_state = loop {
+            assert!(retry < 10, "state did not update in time");
+
+            let updated_state = client.snapshot().await;
+            if updated_state.head > initial_state.head {
+                break updated_state;
+            }
+            tracing::info!(retry, "waiting for state update");
+            sleep(Duration::from_secs(1)).await;
+            retry += 1;
+        };
+        tracing::info!(?updated_state, "state updated");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_failover_update_task_ws() {
+        test_failover_update_task_helper(true).await;
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_failover_update_task_http() {
+        test_failover_update_task_helper(false).await;
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_failover_consecutive_failures() {
+        setup_test();
+
+        let anvil = Anvil::new().block_time(1u32).spawn();
+        let provider = Provider::new(MultiRpcClient::new(
+            L1ClientOptions {
+                l1_polling_interval: Duration::from_secs(1),
+                // Set a very short tolerance for frequent failovers, so that we will only
+                // successfully trigger a failover via the consecutive failover rule.
+                l1_frequent_failure_tolerance: Duration::from_millis(0),
+                l1_consecutive_failure_tolerance: 3,
+                ..Default::default()
+            },
+            [
+                "http://notarealurl:1234".parse().unwrap(),
+                anvil.endpoint().parse().unwrap(),
+            ],
+        ));
+
+        // Make just enough failed requests not to trigger a failover.
+        for _ in 0..2 {
+            let failover = provider.as_ref().next_failover();
+            provider.get_block_number().await.unwrap_err();
+            assert!(failover.now_or_never().is_none());
+            assert_eq!(provider.as_ref().status.read().await.client, 0);
+        }
+
+        // The final request triggers failover.
+        let failover = provider.as_ref().next_failover();
+        provider.get_block_number().await.unwrap_err();
+        assert!(failover.now_or_never().is_some());
+        assert_eq!(provider.as_ref().status.read().await.client, 1);
+
+        // Now requests succeed.
+        provider.get_block_number().await.unwrap();
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_failover_frequent_failures() {
+        setup_test();
+
+        let anvil = Anvil::new().block_time(1u32).spawn();
+        let provider = Provider::new(MultiRpcClient::new(
+            L1ClientOptions {
+                l1_polling_interval: Duration::from_secs(1),
+                l1_frequent_failure_tolerance: Duration::from_millis(100),
+                ..Default::default()
+            },
+            [
+                "http://notarealurl:1234".parse().unwrap(),
+                anvil.endpoint().parse().unwrap(),
+            ],
+        ));
+
+        // Two failed requests that are not within the tolerance window do not trigger a failover.
+        let failover = provider.as_ref().next_failover();
+        provider.get_block_number().await.unwrap_err();
+        sleep(Duration::from_secs(1)).await;
+        provider.get_block_number().await.unwrap_err();
+
+        // Check that we didn't fail over.
+        assert!(failover.now_or_never().is_none());
+        assert_eq!(provider.as_ref().status.read().await.client, 0);
+
+        // Reset the window.
+        sleep(Duration::from_secs(1)).await;
+
+        // Two failed requests in a row trigger failover.
+        let failover = provider.as_ref().next_failover();
+        provider.get_block_number().await.unwrap_err();
+        provider.get_block_number().await.unwrap_err();
+        provider.get_block_number().await.unwrap();
+        assert!(failover.now_or_never().is_some());
+        assert_eq!(provider.as_ref().status.read().await.client, 1);
     }
 }

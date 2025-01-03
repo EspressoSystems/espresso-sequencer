@@ -185,7 +185,7 @@ pub struct NetworkParams {
 }
 
 pub struct L1Params {
-    pub url: Url,
+    pub urls: Vec<Url>,
     pub options: L1ClientOptions,
 }
 
@@ -491,7 +491,7 @@ pub async fn init_node<P: SequencerPersistence, V: Versions>(
     let l1_client = l1_params
         .options
         .with_metrics(metrics)
-        .connect(l1_params.url);
+        .connect(l1_params.urls);
     l1_client.spawn_tasks().await;
     let l1_genesis = match genesis.l1_finalized {
         L1Finalized::Block(b) => b,
