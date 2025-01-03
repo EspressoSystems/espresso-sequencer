@@ -2,6 +2,7 @@ use crate::parse_duration;
 use async_broadcast::{InactiveReceiver, Sender};
 use async_lock::RwLock;
 use clap::Parser;
+use derive_more::Deref;
 use ethers::{
     prelude::{H256, U256},
     providers::{Http, Provider},
@@ -156,8 +157,6 @@ pub struct L1Client {
     pub(crate) receiver: InactiveReceiver<L1Event>,
     /// Async task which updates the shared state.
     pub(crate) update_task: Arc<L1UpdateTask>,
-    /// Metrics
-    pub(crate) metrics: L1ClientMetrics,
 }
 
 /// In-memory view of the L1 state, updated asynchronously.
@@ -181,6 +180,7 @@ pub(crate) struct L1ClientMetrics {
     pub(crate) head: Arc<dyn Gauge>,
     pub(crate) finalized: Arc<dyn Gauge>,
     pub(crate) reconnects: Arc<dyn Counter>,
+    pub(crate) failovers: Arc<dyn Counter>,
 }
 
 /// An RPC client with multiple remote providers.
@@ -189,11 +189,12 @@ pub(crate) struct L1ClientMetrics {
 /// failing state, it will automatically switch to the next provider in its list.
 #[derive(Clone, Debug)]
 pub(crate) struct MultiRpcClient {
-    pub(crate) clients: Arc<Vec<Http>>,
+    pub(crate) clients: Arc<Vec<L1Provider>>,
     pub(crate) status: Arc<RwLock<MultiRpcClientStatus>>,
     pub(crate) failover_send: Sender<()>,
     pub(crate) failover_recv: InactiveReceiver<()>,
     pub(crate) opt: L1ClientOptions,
+    pub(crate) metrics: L1ClientMetrics,
 }
 
 /// The state of the current provider being used by a [`MultiRpcClient`].
@@ -203,4 +204,12 @@ pub(crate) struct MultiRpcClientStatus {
     pub(crate) last_failure: Option<Instant>,
     pub(crate) consecutive_failures: usize,
     pub(crate) rate_limited_until: Option<Instant>,
+}
+
+/// A single provider in a [`MultiRpcClient`].
+#[derive(Debug, Deref)]
+pub(crate) struct L1Provider {
+    #[deref]
+    pub(crate) inner: Http,
+    pub(crate) failures: Box<dyn Counter>,
 }

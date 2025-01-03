@@ -124,7 +124,8 @@ reexport_unchanged_types!(
 );
 
 pub(crate) use v0_3::{
-    L1ClientMetrics, L1Event, L1State, L1UpdateTask, MultiRpcClient, MultiRpcClientStatus,
+    L1ClientMetrics, L1Event, L1Provider, L1State, L1UpdateTask, MultiRpcClient,
+    MultiRpcClientStatus,
 };
 
 #[derive(

@@ -14,7 +14,8 @@ pub use super::v0_1::{
     NS_ID_BYTE_LEN, NS_OFFSET_BYTE_LEN, NUM_NSS_BYTE_LEN, NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN,
 };
 pub(crate) use super::v0_1::{
-    L1ClientMetrics, L1Event, L1State, L1UpdateTask, MultiRpcClient, MultiRpcClientStatus,
+    L1ClientMetrics, L1Event, L1Provider, L1State, L1UpdateTask, MultiRpcClient,
+    MultiRpcClientStatus,
 };
 
 pub const VERSION: Version = Version { major: 0, minor: 3 };

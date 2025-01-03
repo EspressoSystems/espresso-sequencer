@@ -19,7 +19,7 @@ use futures::{
     future::{Future, FutureExt},
     stream::{self, StreamExt},
 };
-use hotshot_types::traits::metrics::Metrics;
+use hotshot_types::traits::metrics::{CounterFamily, Metrics};
 use lru::LruCache;
 use reqwest::StatusCode;
 use serde::{de::DeserializeOwned, Serialize};
@@ -34,7 +34,7 @@ use url::Url;
 use super::{
     L1BlockInfo, L1ClientMetrics, L1State, L1UpdateTask, MultiRpcClient, MultiRpcClientStatus,
 };
-use crate::{FeeInfo, L1Client, L1ClientOptions, L1Event, L1Snapshot};
+use crate::{FeeInfo, L1Client, L1ClientOptions, L1Event, L1Provider, L1Snapshot};
 
 impl PartialOrd for L1BlockInfo {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
@@ -121,6 +121,16 @@ impl L1ClientMetrics {
             reconnects: metrics
                 .create_counter("stream_reconnects".into(), None)
                 .into(),
+            failovers: metrics.create_counter("failovers".into(), None).into(),
+        }
+    }
+}
+
+impl L1Provider {
+    fn new(url: Url, failures: &dyn CounterFamily) -> Self {
+        Self {
+            failures: failures.create(vec![url.to_string()]),
+            inner: Http::new(url),
         }
     }
 }
@@ -134,12 +144,23 @@ impl MultiRpcClient {
         failover_send.set_await_active(false);
         failover_send.set_overflow(true);
 
+        let metrics = L1ClientMetrics::new(&**opt.metrics);
+        let failures = opt
+            .metrics
+            .counter_family("failed_requests".into(), vec!["provider".into()]);
+
         Self {
-            clients: Arc::new(clients.into_iter().map(Http::new).collect()),
+            clients: Arc::new(
+                clients
+                    .into_iter()
+                    .map(|url| L1Provider::new(url, &*failures))
+                    .collect(),
+            ),
             status: Default::default(),
             failover_send,
             failover_recv: failover_recv.deactivate(),
             opt,
+            metrics,
         }
     }
 
@@ -156,6 +177,7 @@ impl MultiRpcClient {
         status.rate_limited_until = None;
         status.last_failure = None;
         status.consecutive_failures = 0;
+        self.metrics.failovers.add(1);
         self.failover_send.broadcast_direct(()).await.ok();
     }
 
@@ -166,6 +188,10 @@ impl MultiRpcClient {
 
     fn options(&self) -> &L1ClientOptions {
         &self.opt
+    }
+
+    fn metrics(&self) -> &L1ClientMetrics {
+        &self.metrics
     }
 }
 
@@ -202,6 +228,7 @@ impl JsonRpcClient for MultiRpcClient {
             Err(err) => {
                 let t = Instant::now();
                 tracing::warn!(?t, method, ?params, "L1 client error: {err:#}");
+                client.failures.add(1);
 
                 // Keep track of failures, failing over to the next client if necessary.
                 let mut status = self.status.write().await;
@@ -250,7 +277,6 @@ impl JsonRpcClient for MultiRpcClient {
 impl L1Client {
     fn with_provider(mut provider: Provider<MultiRpcClient>) -> Self {
         let opt = provider.as_ref().options().clone();
-        let metrics = L1ClientMetrics::new(&**opt.metrics);
 
         let (sender, mut receiver) = async_broadcast::broadcast(opt.l1_events_channel_capacity);
         receiver.set_await_active(false);
@@ -263,7 +289,6 @@ impl L1Client {
             sender,
             receiver: receiver.deactivate(),
             update_task: Default::default(),
-            metrics,
         }
     }
 
@@ -302,7 +327,7 @@ impl L1Client {
         let subscription_timeout = opt.subscription_timeout;
         let state = self.state.clone();
         let sender = self.sender.clone();
-        let metrics = self.metrics.clone();
+        let metrics = self.metrics().clone();
 
         let span = tracing::warn_span!("L1 client update");
         async move {
@@ -714,6 +739,10 @@ impl L1Client {
 
     fn options(&self) -> &L1ClientOptions {
         (*self.provider).as_ref().options()
+    }
+
+    fn metrics(&self) -> &L1ClientMetrics {
+        (*self.provider).as_ref().metrics()
     }
 
     async fn retry_delay(&self) {
