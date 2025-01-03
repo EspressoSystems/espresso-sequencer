@@ -28,7 +28,9 @@ use hotshot_types::{
         signature_key::SignatureKey,
         BlockPayload, ValidatedState,
     },
-    utils::{epoch_from_block_number, is_last_block_in_epoch, Terminator, View, ViewInner},
+    utils::{
+        epoch_from_block_number, is_epoch_root, is_last_block_in_epoch, Terminator, View, ViewInner,
+    },
     vote::{Certificate, HasViewNumber},
 };
 use tokio::time::timeout;
@@ -163,6 +165,56 @@ pub(crate) async fn fetch_proposal<TYPES: NodeType, V: Versions>(
     Ok((leaf, view))
 }
 
+/// Handles calling add_epoch_root and sync_l1 on Membership if necessary.
+async fn decide_from_proposal_add_epoch_root<TYPES: NodeType>(
+    proposal: &QuorumProposal2<TYPES>,
+    leaf_views: &[LeafInfo<TYPES>],
+    epoch_height: u64,
+    membership: &Arc<RwLock<TYPES::Membership>>,
+) {
+    if leaf_views.is_empty() {
+        return;
+    }
+
+    let decided_block_number = leaf_views
+        .last()
+        .unwrap()
+        .leaf
+        .block_header()
+        .block_number();
+
+    // Skip if this is not the expected block.
+    if epoch_height != 0 && is_epoch_root(decided_block_number, epoch_height) {
+        let next_epoch_number =
+            TYPES::Epoch::new(epoch_from_block_number(decided_block_number, epoch_height) + 1);
+
+        let write_callback = {
+            let membership_reader = membership.read().await;
+            membership_reader
+                .add_epoch_root(next_epoch_number, proposal.block_header.clone())
+                .await
+        };
+
+        if let Some(write_callback) = write_callback {
+            let mut membership_writer = membership.write().await;
+            write_callback(&mut *membership_writer);
+        } else {
+            // If we didn't get a write callback out of add_epoch_root, then don't bother locking and calling sync_l1
+            return;
+        }
+
+        let write_callback = {
+            let membership_reader = membership.read().await;
+            membership_reader.sync_l1().await
+        };
+
+        if let Some(write_callback) = write_callback {
+            let mut membership_writer = membership.write().await;
+            write_callback(&mut *membership_writer);
+        }
+    }
+}
+
 /// Helper type to give names and to the output values of the leaf chain traversal operation.
 #[derive(Debug)]
 pub struct LeafChainTraversalOutcome<TYPES: NodeType> {
@@ -202,7 +254,7 @@ impl<TYPES: NodeType + Default> Default for LeafChainTraversalOutcome<TYPES> {
     }
 }
 
-/// calculate the new decided leaf chain based on the rules of hostuff 2
+/// calculate the new decided leaf chain based on the rules of HotStuff 2
 ///
 /// # Panics
 /// Can't actually panic
@@ -211,6 +263,8 @@ pub async fn decide_from_proposal_2<TYPES: NodeType>(
     consensus: OuterConsensus<TYPES>,
     existing_upgrade_cert: Arc<RwLock<Option<UpgradeCertificate<TYPES>>>>,
     public_key: &TYPES::SignatureKey,
+    with_epochs: bool,
+    membership: &Arc<RwLock<TYPES::Membership>>,
 ) -> LeafChainTraversalOutcome<TYPES> {
     let mut res = LeafChainTraversalOutcome::default();
     let consensus_reader = consensus.read().await;
@@ -282,6 +336,14 @@ pub async fn decide_from_proposal_2<TYPES: NodeType>(
         res.included_txns = Some(txns);
     }
 
+    if with_epochs && res.new_decided_view_number.is_some() {
+        let epoch_height = consensus_reader.epoch_height;
+        drop(consensus_reader);
+
+        decide_from_proposal_add_epoch_root(proposal, &res.leaf_views, epoch_height, membership)
+            .await;
+    }
+
     res
 }
 
@@ -317,6 +379,8 @@ pub async fn decide_from_proposal<TYPES: NodeType>(
     consensus: OuterConsensus<TYPES>,
     existing_upgrade_cert: Arc<RwLock<Option<UpgradeCertificate<TYPES>>>>,
     public_key: &TYPES::SignatureKey,
+    with_epochs: bool,
+    membership: &Arc<RwLock<TYPES::Membership>>,
 ) -> LeafChainTraversalOutcome<TYPES> {
     let consensus_reader = consensus.read().await;
     let existing_upgrade_cert_reader = existing_upgrade_cert.read().await;
@@ -426,6 +490,14 @@ pub async fn decide_from_proposal<TYPES: NodeType>(
         },
     ) {
         tracing::debug!("Leaf ascension failed; error={e}");
+    }
+
+    if with_epochs && res.new_decided_view_number.is_some() {
+        let epoch_height = consensus_reader.epoch_height;
+        drop(consensus_reader);
+
+        decide_from_proposal_add_epoch_root(proposal, &res.leaf_views, epoch_height, membership)
+            .await;
     }
 
     res

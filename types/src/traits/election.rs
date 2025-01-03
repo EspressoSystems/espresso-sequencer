@@ -7,11 +7,13 @@
 //! The election trait, used to decide which node is the leader and determine if a vote is valid.
 use std::{collections::BTreeSet, fmt::Debug, num::NonZeroU64};
 
+use async_trait::async_trait;
 use utils::anytrace::Result;
 
 use super::node_implementation::NodeType;
 use crate::{traits::signature_key::SignatureKey, PeerConfig};
 
+#[async_trait]
 /// A protocol for determining membership in and participating in a committee.
 pub trait Membership<TYPES: NodeType>: Debug + Send + Sync {
     /// The error type returned by methods like `lookup_leader`.
@@ -125,4 +127,23 @@ pub trait Membership<TYPES: NodeType>: Debug + Send + Sync {
 
     /// Returns the threshold required to upgrade the network protocol
     fn upgrade_threshold(&self, epoch: TYPES::Epoch) -> NonZeroU64;
+
+    #[allow(clippy::type_complexity)]
+    /// Handles notifications that a new epoch root has been created
+    /// Is called under a read lock to the Membership. Return a callback
+    /// with Some to have that callback invoked under a write lock.
+    async fn add_epoch_root(
+        &self,
+        _epoch: TYPES::Epoch,
+        _block_header: TYPES::BlockHeader,
+    ) -> Option<Box<dyn FnOnce(&mut Self) + Send>> {
+        None
+    }
+
+    #[allow(clippy::type_complexity)]
+    /// Called after add_epoch_root runs and any callback has been invoked.
+    /// Causes a read lock to be reacquired for this functionality.
+    async fn sync_l1(&self) -> Option<Box<dyn FnOnce(&mut Self) + Send>> {
+        None
+    }
 }

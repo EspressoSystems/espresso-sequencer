@@ -373,6 +373,8 @@ pub(crate) async fn handle_quorum_proposal_validated<
             OuterConsensus::new(Arc::clone(&task_state.consensus.inner_consensus)),
             Arc::clone(&task_state.upgrade_lock.decided_upgrade_certificate),
             &task_state.public_key,
+            version >= V::Epochs::VERSION,
+            &task_state.membership,
         )
         .await
     } else {
@@ -381,6 +383,8 @@ pub(crate) async fn handle_quorum_proposal_validated<
             OuterConsensus::new(Arc::clone(&task_state.consensus.inner_consensus)),
             Arc::clone(&task_state.upgrade_lock.decided_upgrade_certificate),
             &task_state.public_key,
+            version >= V::Epochs::VERSION,
+            &task_state.membership,
         )
         .await
     };
