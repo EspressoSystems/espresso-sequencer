@@ -25,7 +25,6 @@ use hotshot_task::{
 use hotshot_types::{
     consensus::{CommitmentAndMetadata, OuterConsensus},
     data::{Leaf2, QuorumProposal2, VidDisperse, ViewChangeEvidence},
-    drb::{INITIAL_DRB_RESULT, INITIAL_DRB_SEED_INPUT},
     message::Proposal,
     simple_certificate::{NextEpochQuorumCertificate2, QuorumCertificate2, UpgradeCertificate},
     traits::{
@@ -34,7 +33,7 @@ use hotshot_types::{
         node_implementation::{ConsensusTime, NodeType},
         signature_key::SignatureKey,
     },
-    utils::epoch_from_block_number,
+    utils::{epoch_from_block_number, is_last_block_in_epoch},
     vote::{Certificate, HasViewNumber},
 };
 use tracing::instrument;
@@ -399,6 +398,18 @@ impl<TYPES: NodeType, V: Versions> ProposalDependencyHandle<TYPES, V> {
         } else {
             None
         };
+        let next_drb_result =
+            if is_last_block_in_epoch(block_header.block_number(), self.epoch_height) {
+                self.consensus
+                    .read()
+                    .await
+                    .drb_seeds_and_results
+                    .results
+                    .get(&epoch)
+                    .copied()
+            } else {
+                None
+            };
         let proposal = QuorumProposal2 {
             block_header,
             view_number: self.view_number,
@@ -406,8 +417,7 @@ impl<TYPES: NodeType, V: Versions> ProposalDependencyHandle<TYPES, V> {
             next_epoch_justify_qc: next_epoch_qc,
             upgrade_certificate,
             view_change_evidence: proposal_certificate,
-            drb_seed: INITIAL_DRB_SEED_INPUT,
-            drb_result: INITIAL_DRB_RESULT,
+            next_drb_result,
         };
 
         let proposed_leaf = Leaf2::from_quorum_proposal(&proposal);

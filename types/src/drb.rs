@@ -4,11 +4,18 @@
 // You should have received a copy of the MIT License
 // along with the HotShot repository. If not, see <https://mit-license.org/>.
 
-use std::hash::{DefaultHasher, Hash, Hasher};
+use std::{
+    collections::BTreeMap,
+    hash::{DefaultHasher, Hash, Hasher},
+};
 
 use sha2::{Digest, Sha256};
+use tokio::task::JoinHandle;
 
-use crate::traits::{node_implementation::NodeType, signature_key::SignatureKey};
+use crate::traits::{
+    node_implementation::{ConsensusTime, NodeType},
+    signature_key::SignatureKey,
+};
 
 // TODO: Add the following consts once we bench the hash time.
 // <https://github.com/EspressoSystems/HotShot/issues/3880>
@@ -33,6 +40,9 @@ pub type DrbSeedInput = [u8; 32];
 
 /// Alias for DRB result from `compute_drb_result`.
 pub type DrbResult = [u8; 32];
+
+/// Number of previous results and seeds to keep
+pub const KEEP_PREVIOUS_RESULT_COUNT: u64 = 8;
 
 // TODO: Use `HASHES_PER_SECOND` * `VIEW_TIMEOUT` * `DRB_CALCULATION_NUM_VIEW` to calculate this
 // once we bench the hash time.
@@ -85,4 +95,61 @@ pub fn leader<TYPES: NodeType>(
     let index = (hasher.finish() as usize) % stake_table.len();
     let entry = stake_table[index].clone();
     TYPES::SignatureKey::public_key(&entry)
+}
+
+/// Alias for in-progress DRB computation task, if there's any.
+pub type DrbComputation<TYPES> = Option<(<TYPES as NodeType>::Epoch, JoinHandle<DrbResult>)>;
+
+/// Seeds for DRB computation and computed results.
+#[derive(Clone, Debug)]
+pub struct DrbSeedsAndResults<TYPES: NodeType> {
+    /// Stored inputs to computations
+    pub seeds: BTreeMap<TYPES::Epoch, DrbSeedInput>,
+
+    /// Stored results from computations
+    pub results: BTreeMap<TYPES::Epoch, DrbResult>,
+}
+
+impl<TYPES: NodeType> DrbSeedsAndResults<TYPES> {
+    #[must_use]
+    /// Constructor with initial values for epochs 1 and 2.
+    pub fn new() -> Self {
+        Self {
+            seeds: BTreeMap::from([
+                (TYPES::Epoch::new(1), INITIAL_DRB_SEED_INPUT),
+                (TYPES::Epoch::new(2), INITIAL_DRB_SEED_INPUT),
+            ]),
+            results: BTreeMap::from([
+                (TYPES::Epoch::new(1), INITIAL_DRB_RESULT),
+                (TYPES::Epoch::new(2), INITIAL_DRB_RESULT),
+            ]),
+        }
+    }
+
+    /// Stores a seed for a particular epoch for later use by `start_drb_task`.
+    pub fn store_seed(&mut self, epoch: TYPES::Epoch, drb_seed_input: DrbSeedInput) {
+        self.seeds.insert(epoch, drb_seed_input);
+    }
+
+    /// Garbage collects internal data structures
+    pub fn garbage_collect(&mut self, epoch: TYPES::Epoch) {
+        if epoch.u64() < KEEP_PREVIOUS_RESULT_COUNT {
+            return;
+        }
+
+        let retain_epoch = epoch - KEEP_PREVIOUS_RESULT_COUNT;
+        // N.B. x.split_off(y) returns the part of the map where key >= y
+
+        // Remove result entries older than EPOCH
+        self.results = self.results.split_off(&retain_epoch);
+
+        // Remove result entries older than EPOCH+1
+        self.seeds = self.seeds.split_off(&(retain_epoch + 1));
+    }
+}
+
+impl<TYPES: NodeType> Default for DrbSeedsAndResults<TYPES> {
+    fn default() -> Self {
+        Self::new()
+    }
 }

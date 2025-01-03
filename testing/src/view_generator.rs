@@ -26,7 +26,6 @@ use hotshot_types::{
         DaProposal2, EpochNumber, Leaf2, QuorumProposal2, VidDisperse, VidDisperseShare2,
         ViewChangeEvidence, ViewNumber,
     },
-    drb::{INITIAL_DRB_RESULT, INITIAL_DRB_SEED_INPUT},
     message::{Proposal, UpgradeLock},
     simple_certificate::{
         DaCertificate2, QuorumCertificate2, TimeoutCertificate2, UpgradeCertificate,
@@ -144,8 +143,7 @@ impl TestView {
             next_epoch_justify_qc: None,
             upgrade_certificate: None,
             view_change_evidence: None,
-            drb_result: INITIAL_DRB_RESULT,
-            drb_seed: INITIAL_DRB_SEED_INPUT,
+            next_drb_result: None,
         };
 
         let encoded_transactions = Arc::from(TestTransaction::encode(&transactions));
@@ -377,8 +375,7 @@ impl TestView {
             next_epoch_justify_qc: None,
             upgrade_certificate: upgrade_certificate.clone(),
             view_change_evidence,
-            drb_result: INITIAL_DRB_RESULT,
-            drb_seed: INITIAL_DRB_SEED_INPUT,
+            next_drb_result: None,
         };
 
         let mut leaf = Leaf2::from_quorum_proposal(&proposal);

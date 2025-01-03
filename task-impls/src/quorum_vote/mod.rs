@@ -10,7 +10,6 @@ use async_broadcast::{InactiveReceiver, Receiver, Sender};
 use async_lock::RwLock;
 use async_trait::async_trait;
 use committable::Committable;
-use drb_computations::DrbComputations;
 use hotshot_task::{
     dependency::{AndDependency, EventDependency},
     dependency_task::{DependencyTask, HandleDepOutput},
@@ -19,6 +18,7 @@ use hotshot_task::{
 use hotshot_types::{
     consensus::{ConsensusMetricsValue, OuterConsensus},
     data::{Leaf2, QuorumProposal2},
+    drb::DrbComputation,
     event::Event,
     message::{Proposal, UpgradeLock},
     traits::{
@@ -43,9 +43,6 @@ use crate::{
     helpers::broadcast_event,
     quorum_vote::handlers::{handle_quorum_proposal_validated, submit_vote, update_shared_state},
 };
-
-/// Helper for DRB Computations
-pub mod drb_computations;
 
 /// Event handlers for `QuorumProposalValidated`.
 mod handlers;
@@ -296,9 +293,8 @@ pub struct QuorumVoteTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>, V:
     /// Membership for Quorum certs/votes and DA committee certs/votes.
     pub membership: Arc<RwLock<TYPES::Membership>>,
 
-    /// Table for the in-progress DRB computation tasks.
-    //pub drb_computations: BTreeMap<TYPES::Epoch, JoinHandle<DrbResult>>,
-    pub drb_computations: DrbComputations<TYPES>,
+    /// In-progress DRB computation task.
+    pub drb_computation: DrbComputation<TYPES>,
 
     /// Output events to application
     pub output_event_stream: async_broadcast::Sender<Event<TYPES>>,
@@ -570,6 +566,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> QuorumVoteTaskS
 
                 // Validate the VID share.
                 let payload_commitment = &disperse.data.payload_commitment;
+
                 // Check that the signature is valid
                 ensure!(
                     sender.validate(&disperse.signature, payload_commitment.as_ref()),

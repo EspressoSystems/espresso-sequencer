@@ -283,7 +283,6 @@ cross_tests!(
             start_nodes: 11,
             num_bootstrap_nodes: 11,
             da_staked_committee_size: 11,
-
             ..TestDescription::default()
         }
     },
