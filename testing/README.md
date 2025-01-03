@@ -57,7 +57,7 @@ async {
     let hook =
         RoundHook(Arc::new(move |_runner, ctx| {
             async move {
-                tracing::error!("Context for this view is {:#?})", ctx);
+                tracing::error!("Context for this view is {:#?}", ctx);
                 Ok(())
             }
             .boxed_local()
