@@ -374,6 +374,7 @@ contract StakeTable is AbstractStakeTable {
     function requestExit() external override {
         Node memory node = nodes[msg.sender];
 
+        // TODO test this behaviour when re-implementing the logic for handling epochs
         // if the node is not registered, revert
         if (node.account == address(0)) {
             revert NodeNotRegistered();
