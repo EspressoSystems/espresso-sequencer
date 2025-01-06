@@ -32,7 +32,7 @@ hotshot-macros = { path = "../macros" }
 hotshot-task = { path = "../task" }
 hotshot-task-impls = { path = "../task-impls", version = "0.5.36", default-features = false }
 hotshot-types = { path = "../types" }
-itertools = "0.13.0"
+itertools = "0.14.0"
 jf-vid = { workspace = true }
 lru = { workspace = true }
 portpicker = { workspace = true }
