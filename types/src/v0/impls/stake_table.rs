@@ -1,10 +1,12 @@
 use super::{
     v0_3::{DAMembers, StakeTable, StakeTables},
-    L1Client, NodeState, PubKey, SeqTypes,
+    Header, L1Client, NodeState, PubKey, SeqTypes,
 };
 
+use async_trait::async_trait;
 use contract_bindings::permissioned_stake_table::StakersUpdatedFilter;
-use ethers::types::U256;
+use ethers::types::{Address, U256};
+use futures::FutureExt;
 use hotshot::types::SignatureKey as _;
 use hotshot_contract_adapter::stake_table::NodeInfoJf;
 use hotshot_types::{
@@ -18,13 +20,11 @@ use hotshot_types::{
     PeerConfig,
 };
 use itertools::Itertools;
-use std::sync::RwLock;
 use std::{
     cmp::max,
     collections::{BTreeMap, BTreeSet, HashMap},
     num::NonZeroU64,
     str::FromStr,
-    sync::Arc,
 };
 use thiserror::Error;
 
@@ -248,6 +248,7 @@ impl EpochCommittees {
 #[error("Could not lookup leader")] // TODO error variants? message?
 pub struct LeaderLookupError;
 
+#[async_trait]
 impl Membership<SeqTypes> for EpochCommittees {
     type Error = LeaderLookupError;
 
@@ -461,6 +462,26 @@ impl Membership<SeqTypes> for EpochCommittees {
             ((quorum.len() as u64 * 2) / 3) + 1,
         ))
         .unwrap()
+    }
+
+    #[allow(clippy::type_complexity)]
+    async fn add_epoch_root(
+        &self,
+        epoch: Epoch,
+        block_header: Header,
+    ) -> Option<Box<dyn FnOnce(&mut Self) + Send>> {
+        if let Ok(stake_table) = self
+            .l1_client
+            // TODO add contract address to `EpochCommittee`.
+            .get_stake_table(Address::default(), block_header.height())
+            .await
+        {
+            Some(Box::new(move |c| {
+                let _ = c.update_stake_table(epoch, stake_table);
+            }))
+        } else {
+            None
+        }
     }
 }
 
