@@ -6,7 +6,6 @@ use super::{
 use async_trait::async_trait;
 use contract_bindings::permissioned_stake_table::StakersUpdatedFilter;
 use ethers::types::{Address, U256};
-use futures::FutureExt;
 use hotshot::types::SignatureKey as _;
 use hotshot_contract_adapter::stake_table::NodeInfoJf;
 use hotshot_types::{
@@ -464,24 +463,21 @@ impl Membership<SeqTypes> for EpochCommittees {
         .unwrap()
     }
 
-    #[allow(clippy::type_complexity)]
     async fn add_epoch_root(
         &self,
         epoch: Epoch,
         block_header: Header,
     ) -> Option<Box<dyn FnOnce(&mut Self) + Send>> {
-        if let Ok(stake_table) = self
-            .l1_client
-            // TODO add contract address to `EpochCommittee`.
+        self.l1_client
+            // TODO add contract address to `EpochCommittee` or `L1Client`.
             .get_stake_table(Address::default(), block_header.height())
             .await
-        {
-            Some(Box::new(move |c| {
-                let _ = c.update_stake_table(epoch, stake_table);
-            }))
-        } else {
-            None
-        }
+            .ok()
+            .map(|stake_table| -> Box<dyn FnOnce(&mut Self) + Send> {
+                Box::new(move |committee: &mut Self| {
+                    let _ = committee.update_stake_table(epoch, stake_table);
+                })
+            })
     }
 }
 
