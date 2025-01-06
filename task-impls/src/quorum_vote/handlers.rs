@@ -203,7 +203,7 @@ async fn start_drb_task<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versio
 ) {
     let current_epoch_number = TYPES::Epoch::new(epoch_from_block_number(
         proposal.block_header.block_number(),
-        TYPES::EPOCH_HEIGHT,
+        task_state.epoch_height,
     ));
 
     // Start the new task if we're in the committee for this epoch
@@ -615,17 +615,18 @@ pub(crate) async fn submit_vote<TYPES: NodeType, I: NodeImplementation<TYPES>, V
     leaf: Leaf2<TYPES>,
     vid_share: Proposal<TYPES, VidDisperseShare2<TYPES>>,
     extended_vote: bool,
+    epoch_height: u64,
 ) -> Result<()> {
     let epoch_number = TYPES::Epoch::new(epoch_from_block_number(
         leaf.block_header().block_number(),
-        TYPES::EPOCH_HEIGHT,
+        epoch_height,
     ));
 
     let membership_reader = membership.read().await;
     let committee_member_in_current_epoch = membership_reader.has_stake(&public_key, epoch_number);
     // If the proposed leaf is for the last block in the epoch and the node is part of the quorum committee
     // in the next epoch, the node should vote to achieve the double quorum.
-    let committee_member_in_next_epoch = is_last_block_in_epoch(leaf.height(), TYPES::EPOCH_HEIGHT)
+    let committee_member_in_next_epoch = is_last_block_in_epoch(leaf.height(), epoch_height)
         && membership_reader.has_stake(&public_key, epoch_number + 1);
     drop(membership_reader);
 

@@ -42,6 +42,7 @@ async fn test_combined_network() {
                 duration: Duration::from_secs(120),
             },
         ),
+        epoch_height: 0,
         ..TestDescription::default_multiple_rounds()
     };
 
@@ -75,6 +76,7 @@ async fn test_combined_network_cdn_crash() {
                 duration: Duration::from_secs(220),
             },
         ),
+        epoch_height: 0,
         ..TestDescription::default_multiple_rounds()
     };
 
@@ -122,6 +124,7 @@ async fn test_combined_network_reup() {
                 duration: Duration::from_secs(220),
             },
         ),
+        epoch_height: 0,
         ..TestDescription::default_multiple_rounds()
     };
 
@@ -173,6 +176,7 @@ async fn test_combined_network_half_dc() {
                 duration: Duration::from_secs(220),
             },
         ),
+        epoch_height: 0,
         ..TestDescription::default_multiple_rounds()
     };
 
@@ -245,6 +249,7 @@ async fn test_stress_combined_network_fuzzy() {
                 duration: Duration::from_secs(120),
             },
         ),
+        epoch_height: 0,
         ..TestDescription::default_stress()
     };
 

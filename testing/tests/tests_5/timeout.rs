@@ -27,6 +27,7 @@ async fn test_timeout() {
     let mut metadata: TestDescription<TestTypes, MemoryImpl, TestVersions> = TestDescription {
         num_nodes_with_stake: 10,
         start_nodes: 10,
+        epoch_height: 0,
         ..Default::default()
     };
     let dead_nodes = vec![ChangeNode {

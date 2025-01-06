@@ -37,6 +37,7 @@ async fn libp2p_network() {
             next_view_timeout: 4000,
             ..Default::default()
         },
+        epoch_height: 0,
         ..TestDescription::default_multiple_rounds()
     };
 
@@ -68,6 +69,7 @@ async fn libp2p_network_failures_2() {
             next_view_timeout: 4000,
             ..Default::default()
         },
+        epoch_height: 0,
         ..TestDescription::default_multiple_rounds()
     };
 

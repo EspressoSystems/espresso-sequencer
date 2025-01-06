@@ -51,6 +51,7 @@ cross_tests!(
                                              },
                                          ),
             behaviour,
+            epoch_height: 0,
             ..TestDescription::default()
         }
     },
@@ -78,6 +79,7 @@ cross_tests!(
                                          ),
             behaviour,
             num_nodes_with_stake: 12,
+            epoch_height: 0,
             ..TestDescription::default()
         };
 
@@ -115,6 +117,7 @@ cross_tests!(
                                              },
                                          ),
             behaviour,
+            epoch_height: 0,
             ..TestDescription::default()
         };
 
@@ -155,6 +158,7 @@ cross_tests!(
                                              },
                                          ),
             behaviour,
+            epoch_height: 0,
             ..TestDescription::default()
         };
 
@@ -196,6 +200,7 @@ cross_tests!(
                                              },
                                          ),
             behaviour,
+            epoch_height: 0,
             ..TestDescription::default()
         };
 
@@ -237,6 +242,7 @@ cross_tests!(
                     duration: Duration::from_secs(60),
                 },
             ),
+            epoch_height: 0,
             behaviour,
             ..TestDescription::default()
         };

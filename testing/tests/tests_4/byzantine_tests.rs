@@ -41,6 +41,7 @@
 //                                              },
 //                                          ),
 //             behaviour,
+//             epoch_height: 0,
 //             ..TestDescription::default()
 //         };
 

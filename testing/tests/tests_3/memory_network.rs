@@ -52,8 +52,6 @@ use tracing::{instrument, trace};
 pub struct Test;
 
 impl NodeType for Test {
-    const EPOCH_HEIGHT: u64 = 10;
-
     type AuctionResult = TestAuctionResult;
     type View = ViewNumber;
     type Epoch = EpochNumber;

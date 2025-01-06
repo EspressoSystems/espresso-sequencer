@@ -4,9 +4,7 @@
 // You should have received a copy of the MIT License
 // along with the HotShot repository. If not, see <https://mit-license.org/>.
 
-use std::{
-    any::TypeId, collections::HashMap, num::NonZeroUsize, rc::Rc, sync::Arc, time::Duration,
-};
+use std::{collections::HashMap, num::NonZeroUsize, rc::Rc, sync::Arc, time::Duration};
 
 use anyhow::{ensure, Result};
 use async_lock::RwLock;
@@ -17,8 +15,8 @@ use hotshot::{
     HotShotInitializer, MarketplaceConfig, SystemContext, TwinsHandlerState,
 };
 use hotshot_example_types::{
-    auction_results_provider_types::TestAuctionResultsProvider, node_types::EpochsTestVersions,
-    state_types::TestInstanceState, storage_types::TestStorage, testable_delay::DelayConfig,
+    auction_results_provider_types::TestAuctionResultsProvider, state_types::TestInstanceState,
+    storage_types::TestStorage, testable_delay::DelayConfig,
 };
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
@@ -101,6 +99,8 @@ pub struct TestDescription<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Ver
     pub start_solver: bool,
     /// boxed closure used to validate the resulting transactions
     pub validate_transactions: TransactionValidator,
+    /// Number of blocks in an epoch, zero means there are no epochs
+    pub epoch_height: u64,
 }
 
 pub fn nonempty_block_threshold(threshold: (u64, u64)) -> TransactionValidator {
@@ -387,6 +387,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> Default
     fn default() -> Self {
         let num_nodes_with_stake = 7;
         Self {
+            epoch_height: 10,
             timing_data: TimingData::default(),
             num_nodes_with_stake,
             start_nodes: num_nodes_with_stake,
@@ -487,12 +488,6 @@ where
             // This is the config for node 0
             0 < da_staked_committee_size,
         );
-        // let da_committee_nodes = known_nodes[0..da_committee_size].to_vec();
-        let epoch_height = if TypeId::of::<V>() == TypeId::of::<EpochsTestVersions>() {
-            10
-        } else {
-            0
-        };
         let config = HotShotConfig {
             start_threshold: (1, 1),
             num_nodes_with_stake: NonZeroUsize::new(num_nodes_with_stake).unwrap(),
@@ -516,7 +511,7 @@ where
             stop_proposing_time: 0,
             start_voting_time: u64::MAX,
             stop_voting_time: 0,
-            epoch_height,
+            epoch_height: self.epoch_height,
         };
         let TimingData {
             next_view_timeout,

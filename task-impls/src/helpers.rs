@@ -159,7 +159,7 @@ pub(crate) async fn fetch_proposal<TYPES: NodeType, V: Versions>(
             leaf: leaf.commit(),
             state,
             delta: None,
-            epoch: leaf.epoch(),
+            epoch: leaf.epoch(epoch_height),
         },
     };
     Ok((leaf, view))
@@ -814,7 +814,7 @@ pub(crate) async fn validate_proposal_view_and_certs<
     {
         let epoch = TYPES::Epoch::new(epoch_from_block_number(
             proposal.data.block_header.block_number(),
-            TYPES::EPOCH_HEIGHT,
+            validation_info.epoch_height,
         ));
         UpgradeCertificate::validate(
             &proposal.data.upgrade_certificate,

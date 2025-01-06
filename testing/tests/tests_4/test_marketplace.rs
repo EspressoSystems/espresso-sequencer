@@ -37,6 +37,7 @@ cross_tests!(
                                                  duration: Duration::from_secs(60),
                                              },
                                          ),
+            epoch_height: 0,
             fallback_builder:
               BuilderDescription {
                 changes: HashMap::from([(0, BuilderChange::Down)])
@@ -65,6 +66,7 @@ cross_tests!(
                                                  duration: Duration::from_secs(60),
                                              },
                                          ),
+            epoch_height: 0,
             upgrade_view: Some(5),
             validate_transactions: nonempty_block_threshold((40,50)),
             ..TestDescription::default()
@@ -88,6 +90,7 @@ cross_tests!(
                                                  duration: Duration::from_secs(60),
                                              },
                                          ),
+            epoch_height: 0,
             builders: vec1![
               BuilderDescription {
                 changes: HashMap::from([(0, BuilderChange::Down)])
@@ -118,6 +121,7 @@ cross_tests!(
                                                  duration: Duration::from_secs(60),
                                              },
                                          ),
+            epoch_height: 0,
             builders: vec1![
               BuilderDescription {
                 changes: HashMap::from([(0, BuilderChange::Down)])

@@ -37,6 +37,7 @@ cross_tests!(
                                                  duration: Duration::from_secs(60),
                                              },
                                          ),
+            epoch_height: 0,
             ..TestDescription::default()
         }
     },
@@ -56,6 +57,7 @@ cross_tests!(
                                                  duration: Duration::from_secs(60),
                                              },
                                          ),
+            epoch_height: 10,
             ..TestDescription::default()
         }
     },
@@ -75,6 +77,7 @@ cross_tests!(
 //                                                  duration: Duration::from_secs(60),
 //                                              },
 //                                          ),
+//             epoch_height: 10,
 //             ..TestDescription::default()
 //         }
 //     },
@@ -94,6 +97,7 @@ cross_tests!(
                                                  duration: Duration::from_secs(60),
                                              },
                                          ),
+            epoch_height: 0,
             ..TestDescription::default()
         };
 
@@ -126,6 +130,7 @@ cross_tests!(
                                                  duration: Duration::from_secs(60),
                                              },
                                          ),
+            epoch_height: 10,
             ..TestDescription::default()
         };
 
@@ -158,6 +163,7 @@ cross_tests!(
                                                  duration: Duration::from_secs(60),
                                              },
                                          ),
+            epoch_height: 0,
             ..TestDescription::default()
         };
 
@@ -198,6 +204,7 @@ cross_tests!(
                                                  duration: Duration::from_secs(60),
                                              },
                                          ),
+            epoch_height: 10,
             ..TestDescription::default()
         };
 
@@ -232,6 +239,7 @@ cross_tests!(
     Ignore: false,
     Metadata: {
         let mut metadata = TestDescription::default_more_nodes();
+        metadata.epoch_height = 0;
         metadata.num_bootstrap_nodes = 10;
         metadata.num_nodes_with_stake = 12;
         metadata.da_staked_committee_size = 12;
@@ -254,6 +262,7 @@ cross_tests!(
     Metadata: {
         let mut metadata = TestDescription::default_more_nodes();
         metadata.num_bootstrap_nodes = 10;
+        metadata.epoch_height = 10;
         metadata.num_nodes_with_stake = 12;
         metadata.da_staked_committee_size = 12;
         metadata.start_nodes = 12;
@@ -283,6 +292,7 @@ cross_tests!(
             start_nodes: 11,
             num_bootstrap_nodes: 11,
             da_staked_committee_size: 11,
+            epoch_height: 10,
             ..TestDescription::default()
         }
     },
@@ -303,6 +313,7 @@ cross_tests!(
                     duration: Duration::from_millis(100000),
                 },
             ),
+            epoch_height: 10,
             ..TestDescription::default()
         };
         // after the first 3 leaders the next leader is down. It's a hack to make sure we decide in

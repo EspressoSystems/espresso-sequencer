@@ -26,13 +26,12 @@ use hotshot_example_types::{
 use hotshot_task_impls::events::HotShotEvent;
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
-    data::{Leaf2, QuorumProposal2, VidDisperse, VidDisperseShare2},
-    message::{GeneralConsensusMessage, Proposal, UpgradeLock},
+    data::{Leaf2, VidDisperse, VidDisperseShare2},
+    message::{Proposal, UpgradeLock},
     simple_certificate::DaCertificate2,
-    simple_vote::{DaData2, DaVote2, QuorumData2, QuorumVote2, SimpleVote, VersionedVoteData},
+    simple_vote::{DaData2, DaVote2, SimpleVote, VersionedVoteData},
     traits::{
         block_contents::vid_commitment,
-        consensus_api::ConsensusApi,
         election::Membership,
         node_implementation::{ConsensusTime, NodeType, Versions},
     },
@@ -47,7 +46,7 @@ use serde::Serialize;
 
 use crate::{test_builder::TestDescription, test_launcher::TestLauncher};
 
-/// create the [`SystemContextHandle`] from a node id
+/// create the [`SystemContextHandle`] from a node id, with no epochs
 /// # Panics
 /// if cannot create a [`HotShotInitializer`]
 pub async fn build_system_handle<
@@ -65,7 +64,8 @@ pub async fn build_system_handle<
     Sender<Arc<HotShotEvent<TYPES>>>,
     Receiver<Arc<HotShotEvent<TYPES>>>,
 ) {
-    let builder: TestDescription<TYPES, I, V> = TestDescription::default_multiple_rounds();
+    let mut builder: TestDescription<TYPES, I, V> = TestDescription::default_multiple_rounds();
+    builder.epoch_height = 0;
 
     let launcher = builder.gen_launcher(node_id);
     build_system_handle_from_launcher(node_id, &launcher).await
@@ -395,28 +395,6 @@ pub async fn build_da_certificate<TYPES: NodeType, V: Versions>(
         upgrade_lock,
     )
     .await
-}
-
-pub async fn build_vote<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>(
-    handle: &SystemContextHandle<TYPES, I, V>,
-    proposal: QuorumProposal2<TYPES>,
-) -> GeneralConsensusMessage<TYPES> {
-    let view = proposal.view_number;
-
-    let leaf: Leaf2<_> = Leaf2::from_quorum_proposal(&proposal);
-    let vote = QuorumVote2::<TYPES>::create_signed_vote(
-        QuorumData2 {
-            leaf_commit: leaf.commit(),
-            epoch: leaf.epoch(),
-        },
-        view,
-        &handle.public_key(),
-        handle.private_key(),
-        &handle.hotshot.upgrade_lock,
-    )
-    .await
-    .expect("Failed to create quorum vote");
-    GeneralConsensusMessage::<TYPES>::Vote(vote.to_vote())
 }
 
 /// This function permutes the provided input vector `inputs`, given some order provided within the

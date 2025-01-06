@@ -83,6 +83,9 @@ pub struct NetworkRequestState<TYPES: NodeType, I: NodeImplementation<TYPES>> {
 
     /// A flag indicating that `HotShotEvent::Shutdown` has been received
     pub spawned_tasks: BTreeMap<TYPES::View, Vec<JoinHandle<()>>>,
+
+    /// Number of blocks in an epoch, zero means there are no epochs
+    pub epoch_height: u64,
 }
 
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>> Drop for NetworkRequestState<TYPES, I> {
@@ -111,7 +114,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TaskState for NetworkRequest
                 let prop_view = proposal.data.view_number();
                 let prop_epoch = TYPES::Epoch::new(epoch_from_block_number(
                     proposal.data.block_header.block_number(),
-                    TYPES::EPOCH_HEIGHT,
+                    self.epoch_height,
                 ));
 
                 // If we already have the VID shares for the next view, do nothing.

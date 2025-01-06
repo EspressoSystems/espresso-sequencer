@@ -42,6 +42,7 @@ cross_tests!(
     Ignore: false,
     Metadata: {
         let mut metadata = TestDescription::default_more_nodes();
+        metadata.epoch_height = 0;
         metadata.num_bootstrap_nodes = 10;
         metadata.num_nodes_with_stake = 12;
         metadata.da_staked_committee_size = 12;
@@ -84,6 +85,7 @@ cross_tests!(
         metadata.num_nodes_with_stake = 12;
         metadata.da_staked_committee_size = 12;
         metadata.start_nodes = 12;
+        metadata.epoch_height = 10;
         let dead_nodes = vec![
             ChangeNode {
                 idx: 10,
@@ -124,6 +126,7 @@ cross_tests!(
     Ignore: false,
     Metadata: {
         let mut metadata = TestDescription::default_more_nodes();
+        metadata.epoch_height = 0;
         metadata.num_bootstrap_nodes = 10;
         metadata.num_nodes_with_stake = 12;
         metadata.da_staked_committee_size = 12;

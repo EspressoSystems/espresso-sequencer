@@ -202,6 +202,7 @@ where
         // add safety task
         let overall_safety_task_state = OverallSafetyTask {
             handles: Arc::clone(&handles),
+            epoch_height: launcher.metadata.epoch_height,
             ctx: RoundCtx::default(),
             properties: launcher.metadata.overall_safety_properties.clone(),
             error: None,

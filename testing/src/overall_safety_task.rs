@@ -95,6 +95,8 @@ pub struct OverallSafetyTask<TYPES: NodeType, I: TestableNodeImplementation<TYPE
     pub error: Option<Box<OverallSafetyTaskErr<TYPES>>>,
     /// sender to test event channel
     pub test_sender: Sender<TestEvent>,
+    /// Number of blocks in an epoch, zero means there are no epochs
+    pub epoch_height: u64,
 }
 
 impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>, V: Versions>
@@ -186,8 +188,8 @@ impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>, V: Versions> TestTas
         };
 
         if let Some(ref key) = key {
-            if *key.epoch() > self.ctx.latest_epoch {
-                self.ctx.latest_epoch = *key.epoch();
+            if *key.epoch(self.epoch_height) > self.ctx.latest_epoch {
+                self.ctx.latest_epoch = *key.epoch(self.epoch_height);
             }
         }
 

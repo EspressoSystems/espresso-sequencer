@@ -37,6 +37,7 @@ async fn libp2p_network_sync() {
             delay_high_ms: 30,
             delay_low_ms: 4,
         })),
+        epoch_height: 0,
         ..TestDescription::default_multiple_rounds()
     };
 
@@ -71,6 +72,7 @@ async fn test_memory_network_sync() {
             delay_high_ms: 30,
             delay_low_ms: 4,
         })),
+        epoch_height: 0,
         ..TestDescription::default()
     };
     metadata
@@ -108,6 +110,7 @@ async fn libp2p_network_async() {
             delay_low_ms: 4,
             delay_high_ms: 30,
         })),
+        epoch_height: 0,
         ..TestDescription::default_multiple_rounds()
     };
 
@@ -155,6 +158,7 @@ async fn test_memory_network_async() {
             delay_low_ms: 4,
             delay_high_ms: 30,
         })),
+        epoch_height: 0,
         ..TestDescription::default()
     };
     metadata
@@ -206,6 +210,7 @@ async fn test_memory_network_partially_sync() {
             gst: std::time::Duration::from_millis(1000),
             start: Instant::now(),
         })),
+        epoch_height: 0,
         ..TestDescription::default()
     };
     metadata
@@ -244,6 +249,7 @@ async fn libp2p_network_partially_sync() {
             gst: std::time::Duration::from_millis(1000),
             start: Instant::now(),
         })),
+        epoch_height: 0,
         ..TestDescription::default_multiple_rounds()
     };
 
@@ -283,6 +289,7 @@ async fn test_memory_network_chaos() {
             repeat_low: 1,
             repeat_high: 5,
         })),
+        epoch_height: 0,
         ..TestDescription::default()
     };
     metadata
@@ -316,6 +323,7 @@ async fn libp2p_network_chaos() {
             repeat_low: 1,
             repeat_high: 5,
         })),
+        epoch_height: 0,
         ..TestDescription::default_multiple_rounds()
     };
 

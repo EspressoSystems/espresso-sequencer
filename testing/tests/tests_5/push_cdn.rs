@@ -37,6 +37,7 @@ async fn push_cdn_network() {
                 duration: Duration::from_secs(60),
             },
         ),
+        epoch_height: 0,
         ..TestDescription::default()
     };
     metadata
