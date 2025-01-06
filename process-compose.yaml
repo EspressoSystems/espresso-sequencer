@@ -16,12 +16,12 @@ processes:
   # it's using the docker compose service which is a bit easier.
   demo-l1-network:
     command: echo "starting demo-l1-network" && docker compose up demo-l1-network --force-recreate --renew-anon-volumes && echo "stopping demo-l1-network"
-    # readiness_probe:
-    #   exec:
-    #     command: "[ $(docker inspect -f '{{.State.Health.Status}}' espresso-sequencer-demo-l1-network-1) = 'healthy' ]"
-    #   period_seconds: 1
-    #   timeout_seconds: 5
-    #   failure_threshold: 30
+    readiness_probe:
+      exec:
+        command: "[ $(docker inspect -f '{{.State.Health.Status}}' espresso-sequencer-demo-l1-network-1) = 'healthy' ]"
+      period_seconds: 1
+      timeout_seconds: 5
+      failure_threshold: 30
 
   deploy-sequencer-contracts:
     # The contract addresses are implicitly inherited from .env. We need to unset these or else the
@@ -30,7 +30,7 @@ processes:
     namespace: setup
     depends_on:
       demo-l1-network:
-        condition: process_started
+        condition: process_healthy
 
   deploy-prover-contracts:
     # The contract addresses are implicitly inherited from .env. We need to unset these or else the
@@ -39,7 +39,7 @@ processes:
     namespace: setup
     depends_on:
       demo-l1-network:
-        condition: process_started
+        condition: process_healthy
       sequencer0:
         condition: process_healthy
       # Make sure this doesn't start until the other contracts have been deployed, since we use the same mnemonic.
@@ -104,7 +104,7 @@ processes:
       state-relay-server:
         condition: process_healthy
       demo-l1-network:
-        condition: process_started
+        condition: process_healthy
       deploy-prover-contracts:
         condition: process_completed
 
@@ -138,7 +138,7 @@ processes:
       orchestrator:
         condition: process_healthy
       demo-l1-network:
-        condition: process_started
+        condition: process_healthy
       state-relay-server:
         condition: process_healthy
       sequencer-db-0:
@@ -195,7 +195,7 @@ processes:
       orchestrator:
         condition: process_healthy
       demo-l1-network:
-        condition: process_started
+        condition: process_healthy
       state-relay-server:
         condition: process_healthy
       sequencer-db-1:
@@ -244,7 +244,7 @@ processes:
       orchestrator:
         condition: process_healthy
       demo-l1-network:
-        condition: process_started
+        condition: process_healthy
       state-relay-server:
         condition: process_healthy
       broker_0:
@@ -293,7 +293,7 @@ processes:
       orchestrator:
         condition: process_healthy
       demo-l1-network:
-        condition: process_started
+        condition: process_healthy
       state-relay-server:
         condition: process_healthy
       broker_0:
@@ -340,7 +340,7 @@ processes:
       orchestrator:
         condition: process_healthy
       demo-l1-network:
-        condition: process_started
+        condition: process_healthy
       state-relay-server:
         condition: process_healthy
       broker_0:
