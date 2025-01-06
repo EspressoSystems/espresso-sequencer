@@ -1545,7 +1545,6 @@ mod test {
     use hotshot_example_types::node_types::TestVersions;
     use hotshot_types::{
         data::EpochNumber,
-        drb::{INITIAL_DRB_RESULT, INITIAL_DRB_SEED_INPUT},
         simple_certificate::QuorumCertificate,
         traits::{block_contents::vid_commitment, signature_key::SignatureKey, EncodeBytes},
         vid::vid_scheme,
@@ -1575,8 +1574,7 @@ mod test {
                 .to_qc2(),
                 upgrade_certificate: None,
                 view_change_evidence: None,
-                drb_seed: INITIAL_DRB_SEED_INPUT,
-                drb_result: INITIAL_DRB_RESULT,
+                next_drb_result: None,
                 next_epoch_justify_qc: None,
             },
             signature,
@@ -1665,8 +1663,7 @@ mod test {
             justify_qc: leaf.justify_qc().to_qc2(),
             upgrade_certificate: None,
             view_change_evidence: None,
-            drb_seed: INITIAL_DRB_SEED_INPUT,
-            drb_result: INITIAL_DRB_RESULT,
+            next_drb_result: None,
             next_epoch_justify_qc: None,
         };
         let quorum_proposal_signature =
@@ -1791,8 +1788,7 @@ mod test {
             .to_qc2(),
             upgrade_certificate: None,
             view_change_evidence: None,
-            drb_seed: INITIAL_DRB_SEED_INPUT,
-            drb_result: INITIAL_DRB_RESULT,
+            next_drb_result: None,
             next_epoch_justify_qc: None,
         };
         let quorum_proposal_signature =
