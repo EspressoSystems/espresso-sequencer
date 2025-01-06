@@ -230,7 +230,7 @@ pub async fn get_builder_address(url: Url) -> Address {
         if let Ok(body) = reqwest::get(url.clone()).await {
             return body.json::<Address>().await.unwrap();
         } else {
-            sleep(Duration::from_millis(400)).await
+            sleep(Duration::from_millis(1000)).await
         }
     }
     panic!("Error: Failed to retrieve address from builder!");
