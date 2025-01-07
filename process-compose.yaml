@@ -18,9 +18,9 @@ processes:
     command: docker compose up demo-l1-network --force-recreate --renew-anon-volumes
     readiness_probe:
       exec:
-        command: sleep 10
-      period_seconds: 20
-      timeout_seconds: 30
+        command: "[ $(docker inspect -f '{{.State.Health.Status}}' espresso-sequencer-demo-l1-network-1) = 'healthy' ]"
+      period_seconds: 1
+      timeout_seconds: 5
       failure_threshold: 30
 
   deploy-sequencer-contracts:
