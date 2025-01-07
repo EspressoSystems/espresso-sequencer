@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"struct":["GlobalState","RollupRegistrationResult","SolverState","StakeTable"],"trait":["UpdateSolverState"]};
