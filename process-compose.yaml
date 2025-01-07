@@ -18,10 +18,10 @@ processes:
     command: docker compose up demo-l1-network --force-recreate --renew-anon-volumes
     readiness_probe:
       exec:
-        command: docker ps --filter name=demo-l1-network --format "{{.Status}}" | grep "healthy"
-      period_seconds: 1
-      timeout_seconds: 5
-      failure_threshold: 30
+        command: docker ps --filter name=demo-l1-network --format "{{.Status}}" | grep -q "healthy"
+      period_seconds: 2
+      timeout_seconds: 10
+      failure_threshold: 60
 
   deploy-sequencer-contracts:
     # The contract addresses are implicitly inherited from .env. We need to unset these or else the
