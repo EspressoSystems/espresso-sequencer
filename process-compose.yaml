@@ -18,7 +18,7 @@ processes:
     command: echo "starting demo-l1-network" && docker compose up demo-l1-network --force-recreate --renew-anon-volumes && echo "stopping demo-l1-network"
     readiness_probe:
       exec:
-        command: sleep 2
+        command: sleep 10
       period_seconds: 20
       timeout_seconds: 30
       failure_threshold: 30
