@@ -216,7 +216,8 @@ contract StakeTable_register_Test is Test {
 
         assertEq(ERC20(token).balanceOf(exampleTokenCreator), INITIAL_BALANCE);
         vm.prank(exampleTokenCreator);
-        // The call to register is expected to fail because the depositAmount has not been approved
+        // The call to register is expected to fail because the correct depositAmount has not been
+        // approved/supplied
         // and thus the stake table contract cannot lock the stake.
         vm.expectRevert(abi.encodeWithSelector(S.InsufficientStakeAmount.selector, depositAmount));
         stakeTable.register(blsVK, schnorrVK, depositAmount, sig, validUntilEpoch);
@@ -264,7 +265,7 @@ contract StakeTable_register_Test is Test {
         assertTrue(stakeTable._isEqualBlsKey(node.blsVK, blsVK));
         assertTrue(EdOnBN254.isEqual(node.schnorrVK, schnorrVK));
 
-        // lookup the stake and verify the data
+        // lookup the stake and verify the amount
         uint256 stakeAmount = stakeTable.lookupStake(exampleTokenCreator);
         assertEq(stakeAmount, depositAmount);
     }
@@ -495,7 +496,8 @@ contract StakeTable_register_Test is Test {
             BN254.BaseField.wrap(0)
         );
 
-        // Step 3: update the consensus keys with the new schnorr Key but empty bls key
+        // Step 3: update the consensus keys with the new schnorr Key but zero bls key which
+        // indicates no change in the bls key
         vm.expectEmit(false, false, false, true, address(stakeTable));
         emit AbstractStakeTable.UpdatedConsensusKeys(exampleTokenCreator);
         stakeTable.updateConsensusKeys(emptyBlsVK, newSchnorrVK, sig);
@@ -588,7 +590,7 @@ contract StakeTable_register_Test is Test {
     function test_lookupNodeAndLookupStake_fails() public {
         address randomUser = makeAddr("randomUser");
 
-        // lookup the stake for an address that is not registered and verify the data is empty
+        // lookup the stake for an address that is not registered and verify the amount is empty
         uint256 stakeAmount = stakeTable.lookupStake(randomUser);
         assertEq(stakeAmount, 0);
 
@@ -610,7 +612,7 @@ contract StakeTable_register_Test is Test {
         );
         assertTrue(EdOnBN254.isEqual(node.schnorrVK, EdOnBN254.EdOnBN254Point(0, 0)));
 
-        // look up the stake for the zero address and verify the data is empty
+        // look up the stake for the zero address and verify the amount is empty
         stakeAmount = stakeTable.lookupStake(address(0));
         assertEq(stakeAmount, 0);
 
