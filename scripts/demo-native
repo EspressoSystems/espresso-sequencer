@@ -33,21 +33,4 @@ cleanup(){
     fi
 }
 
-# Print the status of the processes of all unhealthy processes every 5 seconds for CI
-(
-    while true; do
-        curl localhost:8080/processes 2>/dev/null | \
-            jq '.data[] | {name: .name, status: .status, healthy: .is_ready}' 2>/dev/null || true
-        docker ps --filter name=demo-l1-network --format '{{.Status}}' | grep 'healthy' || true
-        sleep 1
-    done
-) &
-CURL_PID=$!
-
-# Kill the unhealthy process checker when Ctrl+C is pressed
-trap "kill $CURL_PID; exit" SIGINT
-
-# Kill the unhealthy process checker when the script exits
-trap "kill $CURL_PID" EXIT
-
 process-compose "$@"
