@@ -98,6 +98,9 @@ pub struct EpochCommittees {
 
     /// L1 provider
     l1_client: L1Client,
+
+    /// Address of Stake Table Contract
+    contract_address: Option<Address>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -239,6 +242,7 @@ impl EpochCommittees {
             state: map,
             _epoch_size: epoch_size,
             l1_client: instance_state.l1_client.clone(),
+            contract_address: instance_state.chain_config.stake_table_contract,
         }
     }
 }
@@ -306,6 +310,7 @@ impl Membership<SeqTypes> for EpochCommittees {
             state: map,
             _epoch_size: 12,
             l1_client: L1Client::http(Url::from_str("http:://ab.b").unwrap()),
+            contract_address: None,
         }
     }
 
@@ -468,9 +473,9 @@ impl Membership<SeqTypes> for EpochCommittees {
         epoch: Epoch,
         block_header: Header,
     ) -> Option<Box<dyn FnOnce(&mut Self) + Send>> {
+        let address = self.contract_address?;
         self.l1_client
-            // TODO add contract address to `EpochCommittee` or `L1Client`.
-            .get_stake_table(Address::default(), block_header.height())
+            .get_stake_table(address, block_header.height())
             .await
             .ok()
             .map(|stake_table| -> Box<dyn FnOnce(&mut Self) + Send> {
