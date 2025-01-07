@@ -10,8 +10,7 @@ use hotshot::{types::EventType, HotShotInitializer};
 use hotshot_types::{
     consensus::CommitmentMap,
     data::{
-        DaProposal, DaProposal2, EpochNumber, QuorumProposal, QuorumProposal2, VidDisperseShare,
-        VidDisperseShare2, ViewNumber,
+        DaProposal, EpochNumber, QuorumProposal, QuorumProposal2, VidDisperseShare, ViewNumber,
     },
     event::{HotShotAction, LeafInfo},
     message::{convert_proposal, Proposal},
@@ -744,29 +743,12 @@ impl<P: SequencerPersistence> Storage<SeqTypes> for Arc<P> {
         (**self).append_vid(proposal).await
     }
 
-    async fn append_vid2(
-        &self,
-        proposal: &Proposal<SeqTypes, VidDisperseShare2<SeqTypes>>,
-    ) -> anyhow::Result<()> {
-        let proposal_1 = convert_proposal(proposal.clone());
-        (**self).append_vid(&proposal_1).await
-    }
-
     async fn append_da(
         &self,
         proposal: &Proposal<SeqTypes, DaProposal<SeqTypes>>,
         vid_commit: <VidSchemeType as VidScheme>::Commit,
     ) -> anyhow::Result<()> {
         (**self).append_da(proposal, vid_commit).await
-    }
-
-    async fn append_da2(
-        &self,
-        proposal: &Proposal<SeqTypes, DaProposal2<SeqTypes>>,
-        vid_commit: <VidSchemeType as VidScheme>::Commit,
-    ) -> anyhow::Result<()> {
-        let proposal_1 = convert_proposal(proposal.clone());
-        (**self).append_da(&proposal_1, vid_commit).await
     }
 
     async fn record_action(&self, view: ViewNumber, action: HotShotAction) -> anyhow::Result<()> {
@@ -812,44 +794,6 @@ impl<P: SequencerPersistence> Storage<SeqTypes> for Arc<P> {
         (**self)
             .store_upgrade_certificate(decided_upgrade_certificate)
             .await
-    }
-
-    async fn append_proposal2(
-        &self,
-        proposal: &Proposal<SeqTypes, QuorumProposal2<SeqTypes>>,
-    ) -> anyhow::Result<()> {
-        (**self).append_quorum_proposal(proposal).await
-    }
-
-    async fn update_high_qc2(&self, _high_qc: QuorumCertificate2<SeqTypes>) -> anyhow::Result<()> {
-        Ok(())
-    }
-
-    async fn update_undecided_state2(
-        &self,
-        leaves: CommitmentMap<Leaf2>,
-        state: BTreeMap<ViewNumber, View<SeqTypes>>,
-    ) -> anyhow::Result<()> {
-        (**self).update_undecided_state(leaves, state).await
-    }
-
-    async fn migrate_consensus(
-        &self,
-        migrate_leaf: fn(Leaf) -> Leaf2,
-        migrate_proposal: fn(
-            Proposal<SeqTypes, QuorumProposal<SeqTypes>>,
-        ) -> Proposal<SeqTypes, QuorumProposal2<SeqTypes>>,
-    ) -> anyhow::Result<()> {
-        (**self)
-            .migrate_consensus(migrate_leaf, migrate_proposal)
-            .await
-    }
-
-    async fn update_next_epoch_high_qc2(
-        &self,
-        high_qc: NextEpochQuorumCertificate2<SeqTypes>,
-    ) -> anyhow::Result<()> {
-        (**self).store_next_epoch_quorum_certificate(high_qc).await
     }
 }
 
