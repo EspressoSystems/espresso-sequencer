@@ -38,6 +38,7 @@ cleanup(){
     while true; do
         curl localhost:8080/processes 2>/dev/null | \
             jq '.data[] | {name: .name, status: .status, healthy: .is_ready}' 2>/dev/null || true
+        docker ps --format '{{.Image}}: {{.Status}}'
         sleep 1
     done
 ) &
