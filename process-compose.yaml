@@ -19,9 +19,8 @@ processes:
     readiness_probe:
       exec:
         command: docker ps --filter name=demo-l1-network --format "{{.Status}}" | grep -q "healthy"
-      period_seconds: 2
-      timeout_seconds: 10
-      failure_threshold: 60
+      failure_threshold: 6
+      initial_delay_seconds: 20
 
   deploy-sequencer-contracts:
     # The contract addresses are implicitly inherited from .env. We need to unset these or else the
