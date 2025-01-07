@@ -390,8 +390,8 @@ pub async fn deploy(
         // Transfer ownership to the multisig wallet if provided.
         if let Some(owner) = multisig_address {
             tracing::info!(
-                %light_client_proxy_address,
-                %owner,
+                ?light_client_proxy_address,
+                ?owner,
                 "transferring light client proxy ownership to multisig",
             );
             proxy.transfer_ownership(owner).send().await?.await?;
@@ -429,8 +429,8 @@ pub async fn deploy(
         // Transfer ownership to the multisig wallet if provided.
         if let Some(owner) = multisig_address {
             tracing::info!(
-                %fee_contract_proxy_address,
-                %owner,
+                ?fee_contract_proxy_address,
+                ?owner,
                 "transferring fee contract proxy ownership to multisig",
             );
             proxy.transfer_ownership(owner).send().await?.await?;
@@ -451,8 +451,8 @@ pub async fn deploy(
         // Transfer ownership to the multisig wallet if provided.
         if let Some(owner) = multisig_address {
             tracing::info!(
-                %stake_table_address,
-                %owner,
+                ?stake_table_address,
+                ?owner,
                 "transferring PermissionedStakeTable ownership to multisig",
             );
             stake_table.transfer_ownership(owner).send().await?.await?;
