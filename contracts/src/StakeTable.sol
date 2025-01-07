@@ -7,6 +7,8 @@ import { AbstractStakeTable } from "./interfaces/AbstractStakeTable.sol";
 import { LightClient } from "../src/LightClient.sol";
 import { EdOnBN254 } from "./libraries/EdOnBn254.sol";
 
+using EdOnBN254 for EdOnBN254.EdOnBN254Point;
+
 /// @title Implementation of the Stake Table interface
 contract StakeTable is AbstractStakeTable {
     /// Error to notify restaking is not implemented yet.
@@ -55,6 +57,12 @@ contract StakeTable is AbstractStakeTable {
 
     // Error raised when the staker does not provide a new key
     error NoKeyChange();
+
+    // Error raised when the staker does not provide a new schnorrVK
+    error InvalidSchnorrVK();
+
+    // Error raised when the staker does not provide a new blsVK
+    error InvalidBlsVK();
 
     /// Mapping from a hash of a BLS key to a node struct defined in the abstract contract.
     mapping(address account => Node node) public nodes;
@@ -294,9 +302,29 @@ contract StakeTable is AbstractStakeTable {
             revert InsufficientBalance(balance);
         }
 
+        // Verify that blsVK is not the zero point
+        if (
+            _isEqualBlsKey(
+                blsVK,
+                BN254.G2Point(
+                    BN254.BaseField.wrap(0),
+                    BN254.BaseField.wrap(0),
+                    BN254.BaseField.wrap(0),
+                    BN254.BaseField.wrap(0)
+                )
+            )
+        ) {
+            revert InvalidBlsVK();
+        }
+
         // Verify that the validator can sign for that blsVK
         bytes memory message = abi.encode(msg.sender);
         BLSSig.verifyBlsSig(message, blsSig, blsVK);
+
+        // Verify that the schnorrVK is non-zero
+        if (schnorrVK.isEqual(EdOnBN254.EdOnBN254Point(0, 0))) {
+            revert InvalidSchnorrVK();
+        }
 
         // Find the earliest epoch at which this node can register. Usually, this will be
         // currentEpoch() + 1 (the start of the next full epoch), but in periods of high churn the
@@ -469,7 +497,7 @@ contract StakeTable is AbstractStakeTable {
             revert ExitRequestInProgress();
         }
 
-        // The staker does not provide a key change
+        // The staker does not provide a key change (both keys are the same or both keys are zero)
         if (
             (
                 _isEqualBlsKey(newBlsVK, node.blsVK)
@@ -490,26 +518,22 @@ contract StakeTable is AbstractStakeTable {
             revert NoKeyChange();
         }
 
-        // Update the node's schnorr key once it's not the same as the old one and it's nonzero
-        if (
-            !EdOnBN254.isEqual(newSchnorrVK, node.schnorrVK)
-                && !EdOnBN254.isEqual(newSchnorrVK, EdOnBN254.EdOnBN254Point(0, 0))
-        ) {
+        // Update the node's schnorr key once it's nonzero
+        if (!newSchnorrVK.isEqual(EdOnBN254.EdOnBN254Point(0, 0))) {
             node.schnorrVK = newSchnorrVK;
         }
 
-        // Update the node's bls key once it's not the same as the old one and it's nonzero
+        // Update the node's bls key once it's nonzero
         if (
-            !_isEqualBlsKey(newBlsVK, node.blsVK)
-                && !_isEqualBlsKey(
-                    newBlsVK,
-                    BN254.G2Point(
-                        BN254.BaseField.wrap(0),
-                        BN254.BaseField.wrap(0),
-                        BN254.BaseField.wrap(0),
-                        BN254.BaseField.wrap(0)
-                    )
+            !_isEqualBlsKey(
+                newBlsVK,
+                BN254.G2Point(
+                    BN254.BaseField.wrap(0),
+                    BN254.BaseField.wrap(0),
+                    BN254.BaseField.wrap(0),
+                    BN254.BaseField.wrap(0)
                 )
+            )
         ) {
             // Verify that the validator can sign for that blsVK
             bytes memory message = abi.encode(msg.sender);

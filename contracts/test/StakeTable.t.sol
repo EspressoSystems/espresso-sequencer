@@ -269,6 +269,45 @@ contract StakeTable_register_Test is Test {
         assertEq(stakeAmount, depositAmount);
     }
 
+    /// @dev Tests a correct registration
+    function test_RevertWhen_InvalidBlsVK_or_InvalidSchnorrVK_on_Registration() external {
+        uint64 depositAmount = 10 ether;
+        uint64 validUntilEpoch = 5;
+        string memory seed = "123";
+
+        // generate a valid blsVK and schnorrVK
+        (
+            BN254.G2Point memory blsVK,
+            EdOnBN254.EdOnBN254Point memory schnorrVK,
+            BN254.G1Point memory sig
+        ) = genClientWallet(exampleTokenCreator, seed);
+
+        // Prepare for the token transfer
+        vm.startPrank(exampleTokenCreator);
+        token.approve(address(stakeTable), depositAmount);
+
+        // revert when the blsVK is the zero point
+        BN254.G2Point memory zeroBlsVK = BN254.G2Point(
+            BN254.BaseField.wrap(0),
+            BN254.BaseField.wrap(0),
+            BN254.BaseField.wrap(0),
+            BN254.BaseField.wrap(0)
+        );
+        vm.expectRevert(S.InvalidBlsVK.selector);
+        stakeTable.register(zeroBlsVK, schnorrVK, depositAmount, sig, validUntilEpoch);
+
+        // revert when the schnorrVK is the zero point
+        EdOnBN254.EdOnBN254Point memory zeroSchnorrVK = EdOnBN254.EdOnBN254Point(0, 0);
+        vm.expectRevert(S.InvalidSchnorrVK.selector);
+        stakeTable.register(blsVK, zeroSchnorrVK, depositAmount, sig, validUntilEpoch);
+
+        // lookup the node and verify the data but expect the node to be empty
+        AbstractStakeTable.Node memory node = stakeTable.lookupNode(exampleTokenCreator);
+        assertEq(node.account, address(0));
+
+        vm.stopPrank();
+    }
+
     function test_UpdateConsensusKeys_succeeds() public {
         uint64 depositAmount = 10 ether;
         uint64 validUntilEpoch = 5;
