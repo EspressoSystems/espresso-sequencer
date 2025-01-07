@@ -33,4 +33,20 @@ cleanup(){
     fi
 }
 
+# Print the status of the processes of all unhealthy processes every 5 seconds for CI
+(
+    while true; do
+        curl -sS localhost:8080/processes 2>/dev/null | \
+            jq '.data[] | select(.is_ready == "Not Ready") | {name: .name, status: .status, healthy: .is_ready}' 2>/dev/null || true
+        sleep 5
+    done
+) &
+CURL_PID=$!
+
+# Kill the unhealthy process checker when Ctrl+C is pressed
+trap "kill $CURL_PID; exit" SIGINT
+
+# Kill the unhealthy process checker when the script exits
+trap "kill $CURL_PID" EXIT
+
 process-compose "$@"
