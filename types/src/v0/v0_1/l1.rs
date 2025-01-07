@@ -1,6 +1,5 @@
 use crate::parse_duration;
 use async_broadcast::{InactiveReceiver, Sender};
-use async_lock::RwLock;
 use clap::Parser;
 use derive_more::Deref;
 use ethers::{
@@ -15,7 +14,10 @@ use std::{
     sync::Arc,
     time::{Duration, Instant},
 };
-use tokio::{sync::Mutex, task::JoinHandle};
+use tokio::{
+    sync::{Mutex, RwLock},
+    task::JoinHandle,
+};
 use url::Url;
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, Hash, PartialEq, Eq)]
