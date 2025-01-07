@@ -147,15 +147,15 @@ fn concatenate(error: &String, cause: &String) -> String {
 }
 
 /// Trait for converting error types to a `Result<T>`.
-pub trait Context<T> {
+pub trait Context<T, E> {
     /// Attach context to the given error.
     ///
     /// # Errors
     /// Propagates errors from `self`
-    fn context(self, error: Error) -> Result<T>;
+    fn context(self, error: E) -> Result<T>;
 }
 
-impl<T> Context<T> for Result<T> {
+impl<T> Context<T, Error> for Result<T> {
     fn context(self, error: Error) -> Result<T> {
         match self {
             Ok(t) => Ok(t),
@@ -167,8 +167,32 @@ impl<T> Context<T> for Result<T> {
     }
 }
 
-impl<T> Context<T> for Option<T> {
+impl<T, F> Context<T, F> for Result<T>
+where
+    F: Fn(Error) -> Error,
+{
+    fn context(self, error: F) -> Result<T> {
+        match self {
+            Ok(t) => Ok(t),
+            Err(cause) => Err(Error {
+                level: max(error(cause.clone()).level, cause.level),
+                message: concatenate(&error(cause.clone()).message, &format!("{cause}")),
+            }),
+        }
+    }
+}
+
+impl<T> Context<T, Error> for Option<T> {
     fn context(self, error: Error) -> Result<T> {
+        match self {
+            Some(t) => Ok(t),
+            None => Err(error),
+        }
+    }
+}
+
+impl<'a, T> Context<&'a mut T, Error> for &'a mut Option<T> {
+    fn context(self, error: Error) -> Result<&'a mut T> {
         match self {
             Some(t) => Ok(t),
             None => Err(error),
