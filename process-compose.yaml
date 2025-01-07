@@ -18,10 +18,9 @@ processes:
     command: docker compose up demo-l1-network --force-recreate --renew-anon-volumes
     readiness_probe:
       exec:
-        command: "[ $(docker inspect -f '{{.State.Health.Status}}' espresso-sequencer-demo-l1-network-1) = 'healthy' ]"
-      period_seconds: 1
-      timeout_seconds: 5
-      failure_threshold: 30
+        command: nc -zv localhost $ESPRESSO_SEQUENCER_L1_PORT
+      failure_threshold: 6
+      initial_delay_seconds: 5
 
   deploy-sequencer-contracts:
     # The contract addresses are implicitly inherited from .env. We need to unset these or else the
