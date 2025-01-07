@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":["empty_builder_commitment","init_node","main"],"mod":["api","catchup","context","external_event_handler","genesis","network","options","persistence","proposal_fetcher","run","state","state_signature"],"struct":["L1Params","NetworkParams","Node"],"type":["SequencerApiVersion"]};
