@@ -997,6 +997,20 @@ impl<TYPES: NodeType> Leaf2<TYPES> {
 
         Ok(())
     }
+
+    /// Converts a `Leaf2` to a `Leaf`. This operation is fundamentally unsafe and should not be used.
+    pub fn to_leaf_unsafe(self) -> Leaf<TYPES> {
+        let bytes: [u8; 32] = self.parent_commitment.into();
+
+        Leaf {
+            view_number: self.view_number,
+            justify_qc: self.justify_qc.to_qc(),
+            parent_commitment: Commitment::from_raw(bytes),
+            block_header: self.block_header,
+            upgrade_certificate: self.upgrade_certificate,
+            block_payload: self.block_payload,
+        }
+    }
 }
 
 impl<TYPES: NodeType> Committable for Leaf2<TYPES> {
