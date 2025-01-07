@@ -236,7 +236,11 @@ jobs:
 
   demo-native:
     needs: build-test-bins
+<<<<<<< HEAD
     runs-on: ubuntu-latest
+=======
+    runs-on: ubuntu-22.04
+>>>>>>> parent of 089c30d11 (20 04?)
     steps:
       - name: Install Nix
         uses: cachix/install-nix-action@v30
