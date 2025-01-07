@@ -37,7 +37,7 @@ cleanup(){
 (
     while true; do
         curl -sS localhost:8080/processes 2>/dev/null | \
-            jq '.data[] | select(.is_ready == "Not Ready") | {name: .name, status: .status, healthy: .is_ready}' 2>/dev/null || true
+            jq '.data[] | {name: .name, status: .status, healthy: .is_ready}' 2>/dev/null || true
         sleep 5
     done
 ) &
