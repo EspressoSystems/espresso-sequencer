@@ -15,7 +15,7 @@ processes:
   # Cheating a bit here but since we don't usually have to debug go-ethereum
   # it's using the docker compose service which is a bit easier.
   demo-l1-network:
-    command: echo "starting demo-l1-network" && docker compose up demo-l1-network --force-recreate --renew-anon-volumes && echo "stopping demo-l1-network"
+    command: docker compose up demo-l1-network --force-recreate --renew-anon-volumes
     readiness_probe:
       exec:
         command: sleep 10
@@ -26,7 +26,9 @@ processes:
   deploy-sequencer-contracts:
     # The contract addresses are implicitly inherited from .env. We need to unset these or else the
     # script will think they're already deployed.
-    command: echo "starting deploy-sequencer-contracts" && unset ESPRESSO_SEQUENCER_HOTSHOT_ADDRESS ESPRESSO_SEQUENCER_LIGHT_CLIENT_PROXY_ADDRESS && deploy --only fee-contract,permissioned-stake-table && echo "stopping deploy-sequencer-contracts"
+    command:
+      unset ESPRESSO_SEQUENCER_HOTSHOT_ADDRESS ESPRESSO_SEQUENCER_LIGHT_CLIENT_PROXY_ADDRESS && deploy --only
+      fee-contract,permissioned-stake-table
     namespace: setup
     depends_on:
       demo-l1-network:
@@ -35,7 +37,9 @@ processes:
   deploy-prover-contracts:
     # The contract addresses are implicitly inherited from .env. We need to unset these or else the
     # script will think they're already deployed.
-    command: echo "starting deploy-prover-contracts" && unset ESPRESSO_SEQUENCER_HOTSHOT_ADDRESS ESPRESSO_SEQUENCER_LIGHT_CLIENT_PROXY_ADDRESS && deploy --use-mock-contract --only light-client && echo "stopping deploy-prover-contracts"
+    command:
+      unset ESPRESSO_SEQUENCER_HOTSHOT_ADDRESS ESPRESSO_SEQUENCER_LIGHT_CLIENT_PROXY_ADDRESS && deploy
+      --use-mock-contract --only light-client
     namespace: setup
     depends_on:
       demo-l1-network:
@@ -47,7 +51,7 @@ processes:
         condition: process_completed
 
   fund-builder:
-    command: echo "starting fund-builder" && espresso-bridge deposit && echo "stopping fund-builder"
+    command: espresso-bridge deposit
     namespace: setup
     environment:
       - L1_PROVIDER=http://localhost:$ESPRESSO_SEQUENCER_L1_PORT
@@ -65,7 +69,7 @@ processes:
         condition: process_healthy
 
   orchestrator:
-    command: echo "starting orchestrator" && orchestrator && echo "stopping orchestrator"
+    command: orchestrator
     environment:
       - ESPRESSO_ORCHESTRATOR_BUILDER_URLS=http://localhost:$ESPRESSO_BUILDER_SERVER_PORT
     readiness_probe:
@@ -83,7 +87,7 @@ processes:
       restart: exit_on_failure
 
   state-relay-server:
-    command: echo "starting state-relay-server" && state-relay-server && echo "stopping state-relay-server"
+    command: state-relay-server
     readiness_probe:
       failure_threshold: 10
       period_seconds: 1
@@ -94,7 +98,7 @@ processes:
         path: /healthcheck
 
   prover-service:
-    command: echo "starting prover-service" && state-prover -d && echo "stopping prover-service"
+    command: state-prover -d
     environment:
       - MNEMONIC=$ESPRESSO_SEQUENCER_ETH_MNEMONIC
       - RAYON_NUM_THREADS=$PROVER_RAYON_NUM_THREADS
@@ -109,7 +113,7 @@ processes:
         condition: process_completed
 
   sequencer0:
-    command: echo "starting sequencer0" && sequencer -- storage-sql -- http -- query -- catchup -- status -- submit -- hotshot-events -- config && echo "stopping sequencer0"
+    command: sequencer -- storage-sql -- http -- query -- catchup -- status -- submit -- hotshot-events -- config
     environment:
       - ESPRESSO_SEQUENCER_API_PORT=$ESPRESSO_SEQUENCER_API_PORT
       - ESPRESSO_SEQUENCER_LIBP2P_BIND_ADDRESS=0.0.0.0:$ESPRESSO_DEMO_SEQUENCER_LIBP2P_PORT_0
@@ -165,7 +169,7 @@ processes:
       failure_threshold: 100
 
   sequencer1:
-    command: echo "starting sequencer1" && sequencer -- storage-sql -- http -- query -- catchup -- status -- state -- explorer && echo "stopping sequencer1"  
+    command: sequencer -- storage-sql -- http -- query -- catchup -- status -- state -- explorer
     environment:
       - ESPRESSO_SEQUENCER_API_PORT=$ESPRESSO_SEQUENCER1_API_PORT
       - ESPRESSO_SEQUENCER_LIBP2P_BIND_ADDRESS=0.0.0.0:$ESPRESSO_DEMO_SEQUENCER_LIBP2P_PORT_1
@@ -220,7 +224,7 @@ processes:
       restart: exit_on_failure
 
   sequencer2:
-    command: echo "starting sequencer2" && sequencer -- http -- catchup -- status && echo "stopping sequencer2"
+    command: sequencer -- http -- catchup -- status
     environment:
       - ESPRESSO_SEQUENCER_API_PORT=$ESPRESSO_SEQUENCER2_API_PORT
       - ESPRESSO_SEQUENCER_LIBP2P_BIND_ADDRESS=0.0.0.0:$ESPRESSO_DEMO_SEQUENCER_LIBP2P_PORT_2
@@ -268,7 +272,7 @@ processes:
       restart: exit_on_failure
 
   sequencer3:
-    command: echo "starting sequencer3" && sequencer -- http -- catchup -- status && echo "stopping sequencer3"
+    command: sequencer -- http -- catchup -- status
     environment:
       - ESPRESSO_SEQUENCER_API_PORT=$ESPRESSO_SEQUENCER3_API_PORT
       - ESPRESSO_SEQUENCER_LIBP2P_BIND_ADDRESS=0.0.0.0:$ESPRESSO_DEMO_SEQUENCER_LIBP2P_PORT_3
@@ -317,7 +321,7 @@ processes:
       restart: exit_on_failure
 
   sequencer4:
-    command: echo "starting sequencer4" && sequencer-sqlite -- storage-sql -- http -- query -- catchup -- status && echo "stopping sequencer4"
+    command: sequencer-sqlite -- storage-sql -- http -- query -- catchup -- status
     environment:
       - ESPRESSO_SEQUENCER_API_PORT=$ESPRESSO_SEQUENCER4_API_PORT
       - ESPRESSO_SEQUENCER_STATE_PEERS=http://localhost:$ESPRESSO_SEQUENCER_API_PORT
@@ -364,7 +368,7 @@ processes:
       restart: exit_on_failure
 
   node_validator:
-    command: echo "starting node-validator" && RUST_LOG=debug node-metrics -- && echo "stopping node-validator"
+    command: RUST_LOG=debug node-metrics --
     environment:
       - ESPRESSO_NODE_VALIDATOR_STAKE_TABLE_SOURCE_BASE_URL=http://localhost:$ESPRESSO_SEQUENCER_API_PORT/v0/
       - ESPRESSO_NODE_VALIDATOR_LEAF_STREAM_SOURCE_BASE_URL=http://localhost:$ESPRESSO_SEQUENCER_API_PORT/v0/
@@ -399,7 +403,7 @@ processes:
   # Could do local (SQLite) discovery, but removes some of the spirit
   # from the local demo.
   keydb:
-    command: echo "starting keydb" && docker run --rm -p 0.0.0.0:6379:6379 eqalpha/keydb --requirepass changeme! && echo "stopping keydb"
+    command: docker run --rm -p 0.0.0.0:6379:6379 eqalpha/keydb --requirepass changeme!
     readiness_probe:
       exec:
         command: nc -zv localhost 6379
@@ -409,7 +413,7 @@ processes:
 
   # The CDN system's main entry point; where users contact first.
   marshal_0:
-    command: echo "starting marshal_0" && cdn-marshal -d "redis://:changeme!@localhost:6379" -b $ESPRESSO_CDN_SERVER_PORT -m 127.0.0.1:9093 && echo "stopping marshal_0"
+    command: cdn-marshal -d "redis://:changeme!@localhost:6379" -b $ESPRESSO_CDN_SERVER_PORT -m 127.0.0.1:9093
     depends_on:
       keydb:
         condition: process_healthy
@@ -424,7 +428,7 @@ processes:
 
   # A broker is the main message-routing unit of the CDN
   broker_0:
-    command: echo "starting broker_0" && RUST_LOG=debug cdn-broker -d "redis://:changeme!@localhost:6379" -m 127.0.0.1:9091 && echo "stopping broker_0"
+    command: RUST_LOG=debug cdn-broker -d "redis://:changeme!@localhost:6379" -m 127.0.0.1:9091
     depends_on:
       keydb:
         condition: process_healthy
@@ -440,7 +444,10 @@ processes:
   # A broker is the main message-routing unit of the CDN
   # as we're running a local demo, we need to operate on different ports
   broker_1:
-    command: echo "starting broker_1" &&  RUST_LOG=debug cdn-broker --public-bind-endpoint 0.0.0.0:1740 --public-advertise-endpoint local_ip:1740 --private-bind-endpoint 0.0.0.0:1741 --private-advertise-endpoint local_ip:1741 -d "redis://:changeme!@localhost:6379" -m 127.0.0.1:9092 && echo "stopping broker_1"
+    command:
+      RUST_LOG=debug cdn-broker --public-bind-endpoint 0.0.0.0:1740 --public-advertise-endpoint local_ip:1740
+      --private-bind-endpoint 0.0.0.0:1741 --private-advertise-endpoint local_ip:1741 -d
+      "redis://:changeme!@localhost:6379" -m 127.0.0.1:9092
     depends_on:
       keydb:
         condition: process_healthy
@@ -454,7 +461,7 @@ processes:
       failure_threshold: 100
 
   cdn-whitelist:
-    command: echo "starting cdn-whitelist" && cdn-whitelist -d redis://:changeme!@localhost:6379 -o http://localhost:$ESPRESSO_ORCHESTRATOR_PORT && echo "stopping cdn-whitelist"
+    command: cdn-whitelist -d redis://:changeme!@localhost:6379 -o http://localhost:$ESPRESSO_ORCHESTRATOR_PORT
     namespace: setup
     depends_on:
       orchestrator:
@@ -463,7 +470,7 @@ processes:
         condition: process_healthy
 
   submit-transactions-public:
-    command: echo "starting submit-transactions-public" && submit-transactions && echo "stopping submit-transactions-public"
+    command: submit-transactions
     environment:
       - ESPRESSO_SUBMIT_TRANSACTIONS_PORT=$ESPRESSO_SUBMIT_TRANSACTIONS_PUBLIC_PORT
     depends_on:
@@ -485,7 +492,7 @@ processes:
       exit_on_skipped: true
 
   submit-transactions-private:
-    command: echo "starting submit-transactions-private" && submit-transactions && echo "stopping submit-transactions-private"
+    command: submit-transactions
     environment:
       - ESPRESSO_SUBMIT_TRANSACTIONS_PORT=$ESPRESSO_SUBMIT_TRANSACTIONS_PRIVATE_PORT
       - ESPRESSO_SUBMIT_TRANSACTIONS_SUBMIT_URL=http://localhost:$ESPRESSO_BUILDER_SERVER_PORT/txn_submit
@@ -506,7 +513,7 @@ processes:
       exit_on_skipped: true
 
   permissionless-builder:
-    command: echo "starting permissionless-builder" && permissionless-builder && echo "stopping permissionless-builder"
+    command: permissionless-builder
     ports:
       - "$ESPRESSO_BUILDER_SERVER_PORT:$ESPRESSO_BUILDER_SERVER_PORT"
     environment:
@@ -530,7 +537,7 @@ processes:
       restart: "exit_on_failure"
 
   nasty-client:
-    command: echo "starting nasty-client" && nasty-client && echo "stopping nasty-client"
+    command: nasty-client
     environment:
       # Point the nasty client at sequencer1, the only one running the state API.
       - ESPRESSO_SEQUENCER_URL=http://localhost:$ESPRESSO_SEQUENCER1_API_PORT
@@ -546,7 +553,7 @@ processes:
       failure_threshold: 100
 
   marketplace-solver:
-    command: echo "starting marketplace-solver" && marketplace-solver && echo "stopping marketplace-solver"
+    command: marketplace-solver
     environment:
       - ESPRESSO_MARKETPLACE_SOLVER_API_PORT=$ESPRESSO_MARKETPLACE_SOLVER_API_PORT
       - ESPRESSO_SEQUENCER_HOTSHOT_EVENT_API_URL=http://localhost:$ESPRESSO_SEQUENCER_HOTSHOT_EVENT_STREAMING_API_PORT
@@ -570,7 +577,8 @@ processes:
       failure_threshold: 100
 
   sequencer-db-0:
-    command: echo "starting sequencer-db-0" && docker run -e POSTGRES_PASSWORD -e POSTGRES_USER -e POSTGRES_DB -p $ESPRESSO_SEQUENCER0_DB_PORT:5432 postgres && echo "stopping sequencer-db-0"
+    command:
+      docker run -e POSTGRES_PASSWORD -e POSTGRES_USER -e POSTGRES_DB -p $ESPRESSO_SEQUENCER0_DB_PORT:5432 postgres
     environment:
       - POSTGRES_PASSWORD=password
       - POSTGRES_USER=root
@@ -587,7 +595,8 @@ processes:
       failure_threshold: 20
 
   sequencer-db-1:
-    command: echo "starting sequencer-db-1" && docker run -e POSTGRES_PASSWORD -e POSTGRES_USER -e POSTGRES_DB -p $ESPRESSO_SEQUENCER1_DB_PORT:5432 postgres && echo "stopping sequencer-db-1"
+    command:
+      docker run -e POSTGRES_PASSWORD -e POSTGRES_USER -e POSTGRES_DB -p $ESPRESSO_SEQUENCER1_DB_PORT:5432 postgres
     environment:
       - POSTGRES_PASSWORD=password
       - POSTGRES_USER=root
@@ -604,7 +613,8 @@ processes:
       failure_threshold: 20
 
   solver-db:
-    command: echo "starting solver-db" && docker run -e POSTGRES_PASSWORD -e POSTGRES_USER -e POSTGRES_DB -p $MARKETPLACE_SOLVER_POSTGRES_PORT:5432 postgres && echo "stopping solver-db"
+    command:
+      docker run -e POSTGRES_PASSWORD -e POSTGRES_USER -e POSTGRES_DB -p $MARKETPLACE_SOLVER_POSTGRES_PORT:5432 postgres
     environment:
       - POSTGRES_PASSWORD=password
       - POSTGRES_USER=root
@@ -621,7 +631,9 @@ processes:
       failure_threshold: 20
 
   block-explorer:
-    command: echo "starting block-explorer" && docker run --rm -p $ESPRESSO_BLOCK_EXPLORER_PORT:3000 -e QUERY_SERVICE_URI -e NODE_VALIDATOR_URI ghcr.io/espressosystems/espresso-block-explorer:main && echo "stopping block-explorer"
+    command:
+      docker run --rm -p $ESPRESSO_BLOCK_EXPLORER_PORT:3000 -e QUERY_SERVICE_URI -e NODE_VALIDATOR_URI
+      ghcr.io/espressosystems/espresso-block-explorer:main
     depends_on:
       sequencer1:
         condition: process_healthy

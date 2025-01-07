@@ -25,9 +25,12 @@ cleanup(){
     # Don't run cleanup if running in the CI. We may be running process-compose
     # with --detach and the cleanup will remove the storage path while the
     # services are still running.
-
-    echo "Cleaning up sequencer storage path: $ESPRESSO_BASE_STORAGE_PATH"
-    rm -rv "$ESPRESSO_BASE_STORAGE_PATH"
+    if [ "$CI" = "true" ]; then
+        echo "Running in CI, not cleaning up $ESPRESSO_BASE_STORAGE_PATH"
+    else
+        echo "Cleaning up sequencer storage path: $ESPRESSO_BASE_STORAGE_PATH"
+        rm -rv "$ESPRESSO_BASE_STORAGE_PATH"
+    fi
 }
 
 process-compose "$@"
