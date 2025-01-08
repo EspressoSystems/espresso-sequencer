@@ -2,7 +2,10 @@ use anyhow::Result;
 use clap::Parser;
 use espresso_types::parse_duration;
 use ethers::types::Address;
-use sequencer_utils::{logging, stake_table::{update_stake_table, PermissionedStakeTableUpdate}};
+use sequencer_utils::{
+    logging,
+    stake_table::{update_stake_table, PermissionedStakeTableUpdate},
+};
 use std::{path::PathBuf, time::Duration};
 use url::Url;
 
@@ -89,7 +92,6 @@ async fn main() -> Result<()> {
     opts.logging.init();
     let update = PermissionedStakeTableUpdate::from_toml_file(&opts.update_toml_path)?;
 
-    
     update_stake_table(
         opts.rpc_url,
         opts.l1_polling_interval,

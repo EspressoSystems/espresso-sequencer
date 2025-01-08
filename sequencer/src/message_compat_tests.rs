@@ -28,14 +28,10 @@ use hotshot_types::{
         SequencingMessage,
     },
     simple_certificate::{
-        DaCertificate, QuorumCertificate, TimeoutCertificate, UpgradeCertificate,
-        ViewSyncCommitCertificate2, ViewSyncFinalizeCertificate2, ViewSyncPreCommitCertificate2,
+        DaCertificate, QuorumCertificate, UpgradeCertificate, ViewSyncCommitCertificate2,
+        ViewSyncFinalizeCertificate2, ViewSyncPreCommitCertificate2,
     },
-    simple_vote::{
-        DaData, DaVote, QuorumData, QuorumVote, TimeoutData, TimeoutVote, UpgradeProposalData,
-        UpgradeVote, ViewSyncCommitData, ViewSyncCommitVote, ViewSyncFinalizeData,
-        ViewSyncFinalizeVote, ViewSyncPreCommitData, ViewSyncPreCommitVote,
-    },
+    simple_vote::{DaData, DaVote, QuorumData, QuorumVote, UpgradeProposalData, UpgradeVote},
     traits::{
         node_implementation::ConsensusTime, signature_key::SignatureKey, BlockPayload, EncodeBytes,
     },
@@ -51,15 +47,30 @@ use vbs::{
 
 #[cfg(feature = "testing")]
 async fn test_message_compat<Ver: StaticVersionType>(_ver: Ver) {
+    use std::sync::Arc;
+
+    use async_lock::RwLock;
     use espresso_types::{EpochCommittees, Leaf, Payload, SeqTypes, Transaction};
     use hotshot_example_types::node_types::TestVersions;
-    use hotshot_types::PeerConfig;
+    use hotshot_types::{
+        simple_certificate::TimeoutCertificate2,
+        simple_vote::{
+            TimeoutData2, TimeoutVote2, ViewSyncCommitData2, ViewSyncCommitVote2,
+            ViewSyncFinalizeData2, ViewSyncFinalizeVote2, ViewSyncPreCommitData2,
+            ViewSyncPreCommitVote2,
+        },
+        PeerConfig,
+    };
 
     let (sender, priv_key) = PubKey::generated_from_seed_indexed(Default::default(), 0);
     let signature = PubKey::sign(&priv_key, &[]).unwrap();
     let committee = vec![PeerConfig::default()]; /* one committee member, necessary to generate a VID share */
-    let membership =
-        EpochCommittees::new_stake(committee.clone(), committee, &NodeState::default(), 10);
+    let membership = Arc::new(RwLock::new(EpochCommittees::new_stake(
+        committee.clone(),
+        committee,
+        &NodeState::default(),
+        10,
+    )));
     let upgrade_data = UpgradeProposalData {
         old_version: Version { major: 0, minor: 1 },
         new_version: Version { major: 1, minor: 0 },
@@ -82,20 +93,24 @@ async fn test_message_compat<Ver: StaticVersionType>(_ver: Ver) {
     )
     .await
     .unwrap();
-    let view_sync_pre_commit_data = ViewSyncPreCommitData {
+    let view_sync_pre_commit_data = ViewSyncPreCommitData2 {
         relay: 0,
         round: ViewNumber::genesis(),
+        epoch: EpochNumber::genesis(),
     };
-    let view_sync_commit_data = ViewSyncCommitData {
+    let view_sync_commit_data = ViewSyncCommitData2 {
         relay: 0,
         round: ViewNumber::genesis(),
+        epoch: EpochNumber::genesis(),
     };
-    let view_sync_finalize_data = ViewSyncFinalizeData {
+    let view_sync_finalize_data = ViewSyncFinalizeData2 {
         relay: 0,
         round: ViewNumber::genesis(),
+        epoch: EpochNumber::genesis(),
     };
-    let timeout_data = TimeoutData {
+    let timeout_data = TimeoutData2 {
         view: ViewNumber::genesis(),
+        epoch: EpochNumber::genesis(),
     };
     let da_data = DaData {
         payload_commit: block_header.payload_commitment(),
@@ -104,7 +119,7 @@ async fn test_message_compat<Ver: StaticVersionType>(_ver: Ver) {
     let consensus_messages = [
         GeneralConsensusMessage::Proposal(Proposal {
             data: QuorumProposal {
-                block_header,
+                block_header: block_header.clone(),
                 view_number: ViewNumber::genesis(),
                 justify_qc: QuorumCertificate::genesis::<TestVersions>(
                     &ValidatedState::default(),
@@ -118,7 +133,7 @@ async fn test_message_compat<Ver: StaticVersionType>(_ver: Ver) {
                     Default::default(),
                     Default::default(),
                 )),
-                proposal_certificate: Some(ViewChangeEvidence::Timeout(TimeoutCertificate::new(
+                proposal_certificate: Some(ViewChangeEvidence::Timeout(TimeoutCertificate2::new(
                     timeout_data.clone(),
                     timeout_data.commit(),
                     ViewNumber::genesis(),
@@ -136,43 +151,43 @@ async fn test_message_compat<Ver: StaticVersionType>(_ver: Ver) {
             },
             view_number: ViewNumber::genesis(),
         }),
-        GeneralConsensusMessage::ViewSyncPreCommitVote(ViewSyncPreCommitVote {
+        GeneralConsensusMessage::ViewSyncPreCommitVote2(ViewSyncPreCommitVote2 {
             signature: (sender, signature.clone()),
             data: view_sync_pre_commit_data.clone(),
             view_number: ViewNumber::genesis(),
         }),
-        GeneralConsensusMessage::ViewSyncCommitVote(ViewSyncCommitVote {
+        GeneralConsensusMessage::ViewSyncCommitVote2(ViewSyncCommitVote2 {
             signature: (sender, signature.clone()),
             data: view_sync_commit_data.clone(),
             view_number: ViewNumber::genesis(),
         }),
-        GeneralConsensusMessage::ViewSyncFinalizeVote(ViewSyncFinalizeVote {
+        GeneralConsensusMessage::ViewSyncFinalizeVote2(ViewSyncFinalizeVote2 {
             signature: (sender, signature.clone()),
             data: view_sync_finalize_data.clone(),
             view_number: ViewNumber::genesis(),
         }),
-        GeneralConsensusMessage::ViewSyncPreCommitCertificate(ViewSyncPreCommitCertificate2::new(
+        GeneralConsensusMessage::ViewSyncPreCommitCertificate2(ViewSyncPreCommitCertificate2::new(
             view_sync_pre_commit_data.clone(),
             view_sync_pre_commit_data.commit(),
             ViewNumber::genesis(),
             Default::default(),
             Default::default(),
         )),
-        GeneralConsensusMessage::ViewSyncCommitCertificate(ViewSyncCommitCertificate2::new(
+        GeneralConsensusMessage::ViewSyncCommitCertificate2(ViewSyncCommitCertificate2::new(
             view_sync_commit_data.clone(),
             view_sync_commit_data.commit(),
             ViewNumber::genesis(),
             Default::default(),
             Default::default(),
         )),
-        GeneralConsensusMessage::ViewSyncFinalizeCertificate(ViewSyncFinalizeCertificate2::new(
+        GeneralConsensusMessage::ViewSyncFinalizeCertificate2(ViewSyncFinalizeCertificate2::new(
             view_sync_finalize_data.clone(),
             view_sync_finalize_data.commit(),
             ViewNumber::genesis(),
             Default::default(),
             Default::default(),
         )),
-        GeneralConsensusMessage::TimeoutVote(TimeoutVote {
+        GeneralConsensusMessage::TimeoutVote2(TimeoutVote2 {
             signature: (sender, signature.clone()),
             data: timeout_data,
             view_number: ViewNumber::genesis(),
@@ -181,6 +196,7 @@ async fn test_message_compat<Ver: StaticVersionType>(_ver: Ver) {
             data: UpgradeProposal {
                 upgrade_proposal: upgrade_data.clone(),
                 view_number: ViewNumber::genesis(),
+                epoch: EpochNumber::genesis(),
             },
             signature: signature.clone(),
             _pd: Default::default(),
@@ -197,6 +213,7 @@ async fn test_message_compat<Ver: StaticVersionType>(_ver: Ver) {
                 encoded_transactions: payload.encode(),
                 metadata,
                 view_number: ViewNumber::genesis(),
+                epoch: EpochNumber::genesis(),
             },
             signature: signature.clone(),
             _pd: Default::default(),
@@ -214,12 +231,17 @@ async fn test_message_compat<Ver: StaticVersionType>(_ver: Ver) {
             Default::default(),
         )),
         DaConsensusMessage::VidDisperseMsg(Proposal {
-            data: VidDisperseShare::from_vid_disperse(VidDisperse::from_membership(
-                ViewNumber::genesis(),
-                vid_scheme(1).disperse(payload.encode()).unwrap(),
-                &membership,
-                EpochNumber::genesis(),
-            ))
+            data: VidDisperseShare::from_vid_disperse(
+                VidDisperse::from_membership(
+                    ViewNumber::genesis(),
+                    vid_scheme(1).disperse(payload.encode()).unwrap(),
+                    &membership,
+                    EpochNumber::genesis(),
+                    EpochNumber::new(1),
+                    Some(block_header.payload_commitment()),
+                )
+                .await,
+            )
             .remove(0),
             signature: signature.clone(),
             _pd: Default::default(),
