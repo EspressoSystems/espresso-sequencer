@@ -41,7 +41,7 @@ pub trait Storage<TYPES: NodeType>: Send + Sync + Clone {
         &self,
         proposal: &Proposal<TYPES, VidDisperseShare2<TYPES>>,
     ) -> Result<()> {
-        self.append_vid2(&convert_proposal(proposal.clone())).await
+        self.append_vid(&convert_proposal(proposal.clone())).await
     }
     /// Add a proposal to the stored DA proposals.
     async fn append_da(
