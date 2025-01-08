@@ -56,7 +56,6 @@
                 "Timeout": {
                   "_pd": null,
                   "data": {
-                    "epoch": 0,
                     "view": 0
                   },
                   "signatures": null,
@@ -116,9 +115,8 @@
     "kind": {
       "Consensus": {
         "General": {
-          "ViewSyncPreCommitVote2": {
+          "ViewSyncPreCommitVote": {
             "data": {
-              "epoch": 0,
               "relay": 0,
               "round": 0
             },
@@ -137,9 +135,8 @@
     "kind": {
       "Consensus": {
         "General": {
-          "ViewSyncCommitVote2": {
+          "ViewSyncCommitVote": {
             "data": {
-              "epoch": 0,
               "relay": 0,
               "round": 0
             },
@@ -158,9 +155,8 @@
     "kind": {
       "Consensus": {
         "General": {
-          "ViewSyncFinalizeVote2": {
+          "ViewSyncFinalizeVote": {
             "data": {
-              "epoch": 0,
               "relay": 0,
               "round": 0
             },
@@ -179,10 +175,9 @@
     "kind": {
       "Consensus": {
         "General": {
-          "ViewSyncPreCommitCertificate2": {
+          "ViewSyncPreCommitCertificate": {
             "_pd": null,
             "data": {
-              "epoch": 0,
               "relay": 0,
               "round": 0
             },
@@ -199,10 +194,9 @@
     "kind": {
       "Consensus": {
         "General": {
-          "ViewSyncCommitCertificate2": {
+          "ViewSyncCommitCertificate": {
             "_pd": null,
             "data": {
-              "epoch": 0,
               "relay": 0,
               "round": 0
             },
@@ -219,10 +213,9 @@
     "kind": {
       "Consensus": {
         "General": {
-          "ViewSyncFinalizeCertificate2": {
+          "ViewSyncFinalizeCertificate": {
             "_pd": null,
             "data": {
-              "epoch": 0,
               "relay": 0,
               "round": 0
             },
@@ -239,9 +232,8 @@
     "kind": {
       "Consensus": {
         "General": {
-          "TimeoutVote2": {
+          "TimeoutVote": {
             "data": {
-              "epoch": 0,
               "view": 0
             },
             "signature": [
@@ -262,7 +254,6 @@
           "UpgradeProposal": {
             "_pd": null,
             "data": {
-              "epoch": 0,
               "upgrade_proposal": {
                 "decide_by": 0,
                 "new_version": {
@@ -336,7 +327,6 @@
                 2,
                 3
               ],
-              "epoch": 0,
               "metadata": {
                 "bytes": "AQAAAAEAAAALAAAA"
               },
