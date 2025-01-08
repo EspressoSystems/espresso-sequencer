@@ -1,4 +1,4 @@
-use crate::{parse_duration, v0_3::StakeTables};
+use crate::parse_duration;
 use async_broadcast::{InactiveReceiver, Sender};
 use clap::Parser;
 use derive_more::Deref;
@@ -6,14 +6,13 @@ use ethers::{
     prelude::{H256, U256},
     providers::{Http, Provider},
 };
-use hotshot_types::{
-    data::EpochNumber,
-    traits::metrics::{Counter, Gauge, Metrics, NoMetrics},
-};
+use hotshot_types::traits::metrics::{Counter, Gauge, Metrics, NoMetrics};
 use lru::LruCache;
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::BTreeMap, num::NonZeroUsize, sync::{self, Arc}, time::{Duration, Instant}
+    num::NonZeroUsize,
+    sync::Arc,
+    time::{Duration, Instant},
 };
 use tokio::{
     sync::{Mutex, RwLock},
@@ -154,9 +153,6 @@ pub struct L1Client {
     pub(crate) provider: Arc<Provider<MultiRpcClient>>,
     /// Shared state updated by an asynchronous task which polls the L1.
     pub(crate) state: Arc<Mutex<L1State>>,
-    /// TODO: We need to be able to take out sync locks on this part of the
-    /// state. until the trait definition of Membership is updated in HotShot.
-    pub(crate) stake_table_state: sync::Arc<sync::RwLock<BTreeMap<EpochNumber, StakeTables>>>,
     /// Channel used by the async update task to send events to clients.
     pub(crate) sender: Sender<L1Event>,
     /// Receiver for events from the async update task.

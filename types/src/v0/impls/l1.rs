@@ -21,18 +21,11 @@ use futures::{
     future::{Future, FutureExt},
     stream::{self, StreamExt},
 };
-use hotshot_types::{
-    data::EpochNumber,
-    traits::metrics::{CounterFamily, Metrics},
-};
+use hotshot_types::traits::metrics::{CounterFamily, Metrics};
 use lru::LruCache;
 use reqwest::StatusCode;
 use serde::{de::DeserializeOwned, Serialize};
-use std::{
-    collections::BTreeMap,
-    sync::{self},
-    time::Duration,
-};
+use std::time::Duration;
 use tokio::{
     spawn,
     sync::{Mutex, MutexGuard},
@@ -297,7 +290,6 @@ impl L1Client {
         Self {
             provider: Arc::new(provider),
             state: Arc::new(Mutex::new(L1State::new(opt.l1_blocks_cache_size))),
-            stake_table_state: Arc::new(sync::RwLock::new(BTreeMap::new())),
             sender,
             receiver: receiver.deactivate(),
             update_task: Default::default(),
@@ -315,39 +307,6 @@ impl L1Client {
         if update_task.is_none() {
             *update_task = Some(spawn(self.update_loop()));
         }
-    }
-    pub async fn update_membership(
-        &self,
-        contract: Address,
-        l1_block_number: u64,
-        epoch: EpochNumber,
-    ) {
-        let retry_delay = self.options().l1_retry_delay;
-        let state = self.stake_table_state.clone();
-
-        let span = tracing::warn_span!("L1 client memberships update");
-
-        async move {
-            loop {
-                match self.get_stake_table(contract, l1_block_number).await {
-                    Err(err) => {
-                        tracing::warn!(
-                            ?epoch,
-                            ?l1_block_number,
-                            "error fetching stake table from l1. err {err}"
-                        );
-                    }
-                    Ok(stake_tables) => {
-                        let mut state = state.write().unwrap();
-                        let _ = state.insert(epoch, stake_tables);
-                    }
-                }
-
-                sleep(retry_delay).await;
-            }
-        }
-        .instrument(span)
-        .await
     }
 
     /// Shut down background tasks associated with this L1 client.
@@ -524,16 +483,6 @@ impl L1Client {
     /// Get a snapshot from the l1.
     pub async fn snapshot(&self) -> L1Snapshot {
         self.state.lock().await.snapshot
-    }
-
-    // TODO remove after `Memberships` trait update on hotshot
-    // https://github.com/EspressoSystems/HotShot/issues/3966
-    pub fn stake_table(&self, epoch: &EpochNumber) -> StakeTables {
-        if let Some(stake_tables) = self.stake_table_state.read().unwrap().get(epoch) {
-            stake_tables.clone()
-        } else {
-            StakeTables::new(vec![].into(), vec![].into())
-        }
     }
 
     /// Wait until the highest L1 block number reaches at least `number`.
