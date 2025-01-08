@@ -80,7 +80,6 @@ async fn test_vid_task() {
             num_transactions: encoded_transactions.len() as u64,
         },
         view_number: ViewNumber::new(2),
-        epoch: EpochNumber::new(0),
     };
     let message = Proposal {
         data: proposal.clone(),

@@ -291,7 +291,6 @@ impl<TYPES: NodeType, V: Versions> UpgradeTaskState<TYPES, V> {
                     let upgrade_proposal = UpgradeProposal {
                         upgrade_proposal: upgrade_proposal_data.clone(),
                         view_number: TYPES::View::new(view + UPGRADE_PROPOSE_OFFSET),
-                        epoch: self.cur_epoch,
                     };
 
                     let signature = TYPES::SignatureKey::sign(
