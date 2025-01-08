@@ -27,10 +27,7 @@ use hotshot_types::{
         DaConsensusMessage, DataMessage, GeneralConsensusMessage, Message, MessageKind, Proposal,
         SequencingMessage,
     },
-    simple_certificate::{
-        DaCertificate, QuorumCertificate, UpgradeCertificate, ViewSyncCommitCertificate2,
-        ViewSyncFinalizeCertificate2, ViewSyncPreCommitCertificate2,
-    },
+    simple_certificate::{DaCertificate, QuorumCertificate, UpgradeCertificate},
     simple_vote::{DaData, DaVote, QuorumData, QuorumVote, UpgradeProposalData, UpgradeVote},
     traits::{
         node_implementation::ConsensusTime, signature_key::SignatureKey, BlockPayload, EncodeBytes,
@@ -53,11 +50,14 @@ async fn test_message_compat<Ver: StaticVersionType>(_ver: Ver) {
     use espresso_types::{EpochCommittees, Leaf, Payload, SeqTypes, Transaction};
     use hotshot_example_types::node_types::TestVersions;
     use hotshot_types::{
-        simple_certificate::TimeoutCertificate2,
+        simple_certificate::{
+            TimeoutCertificate2, ViewSyncCommitCertificate, ViewSyncFinalizeCertificate,
+            ViewSyncPreCommitCertificate,
+        },
         simple_vote::{
-            TimeoutData2, TimeoutVote2, ViewSyncCommitData2, ViewSyncCommitVote2,
-            ViewSyncFinalizeData2, ViewSyncFinalizeVote2, ViewSyncPreCommitData2,
-            ViewSyncPreCommitVote2,
+            TimeoutData, TimeoutData2, TimeoutVote, ViewSyncCommitData, ViewSyncCommitVote,
+            ViewSyncFinalizeData, ViewSyncFinalizeVote, ViewSyncPreCommitData,
+            ViewSyncPreCommitVote,
         },
         PeerConfig,
     };
@@ -93,20 +93,17 @@ async fn test_message_compat<Ver: StaticVersionType>(_ver: Ver) {
     )
     .await
     .unwrap();
-    let view_sync_pre_commit_data = ViewSyncPreCommitData2 {
+    let view_sync_pre_commit_data = ViewSyncPreCommitData {
         relay: 0,
         round: ViewNumber::genesis(),
-        epoch: EpochNumber::genesis(),
     };
-    let view_sync_commit_data = ViewSyncCommitData2 {
+    let view_sync_commit_data = ViewSyncCommitData {
         relay: 0,
         round: ViewNumber::genesis(),
-        epoch: EpochNumber::genesis(),
     };
-    let view_sync_finalize_data = ViewSyncFinalizeData2 {
+    let view_sync_finalize_data = ViewSyncFinalizeData {
         relay: 0,
         round: ViewNumber::genesis(),
-        epoch: EpochNumber::genesis(),
     };
     let timeout_data = TimeoutData2 {
         view: ViewNumber::genesis(),
@@ -151,45 +148,47 @@ async fn test_message_compat<Ver: StaticVersionType>(_ver: Ver) {
             },
             view_number: ViewNumber::genesis(),
         }),
-        GeneralConsensusMessage::ViewSyncPreCommitVote2(ViewSyncPreCommitVote2 {
+        GeneralConsensusMessage::ViewSyncPreCommitVote(ViewSyncPreCommitVote {
             signature: (sender, signature.clone()),
             data: view_sync_pre_commit_data.clone(),
             view_number: ViewNumber::genesis(),
         }),
-        GeneralConsensusMessage::ViewSyncCommitVote2(ViewSyncCommitVote2 {
+        GeneralConsensusMessage::ViewSyncCommitVote(ViewSyncCommitVote {
             signature: (sender, signature.clone()),
             data: view_sync_commit_data.clone(),
             view_number: ViewNumber::genesis(),
         }),
-        GeneralConsensusMessage::ViewSyncFinalizeVote2(ViewSyncFinalizeVote2 {
+        GeneralConsensusMessage::ViewSyncFinalizeVote(ViewSyncFinalizeVote {
             signature: (sender, signature.clone()),
             data: view_sync_finalize_data.clone(),
             view_number: ViewNumber::genesis(),
         }),
-        GeneralConsensusMessage::ViewSyncPreCommitCertificate2(ViewSyncPreCommitCertificate2::new(
+        GeneralConsensusMessage::ViewSyncPreCommitCertificate(ViewSyncPreCommitCertificate::new(
             view_sync_pre_commit_data.clone(),
             view_sync_pre_commit_data.commit(),
             ViewNumber::genesis(),
             Default::default(),
             Default::default(),
         )),
-        GeneralConsensusMessage::ViewSyncCommitCertificate2(ViewSyncCommitCertificate2::new(
+        GeneralConsensusMessage::ViewSyncCommitCertificate(ViewSyncCommitCertificate::new(
             view_sync_commit_data.clone(),
             view_sync_commit_data.commit(),
             ViewNumber::genesis(),
             Default::default(),
             Default::default(),
         )),
-        GeneralConsensusMessage::ViewSyncFinalizeCertificate2(ViewSyncFinalizeCertificate2::new(
+        GeneralConsensusMessage::ViewSyncFinalizeCertificate(ViewSyncFinalizeCertificate::new(
             view_sync_finalize_data.clone(),
             view_sync_finalize_data.commit(),
             ViewNumber::genesis(),
             Default::default(),
             Default::default(),
         )),
-        GeneralConsensusMessage::TimeoutVote2(TimeoutVote2 {
+        GeneralConsensusMessage::TimeoutVote(TimeoutVote {
             signature: (sender, signature.clone()),
-            data: timeout_data,
+            data: TimeoutData {
+                view: ViewNumber::genesis(),
+            },
             view_number: ViewNumber::genesis(),
         }),
         GeneralConsensusMessage::UpgradeProposal(Proposal {
