@@ -7,8 +7,8 @@ use data_source::{CatchupDataSource, StakeTableDataSource, SubmitDataSource};
 use derivative::Derivative;
 use espresso_types::{
     retain_accounts, v0::traits::SequencerPersistence, v0_99::ChainConfig, AccountQueryData,
-    BlockMerkleTree, FeeAccount, FeeAccountProof, FeeMerkleTree, NodeState, PubKey,
-    StaticCommittee, Transaction, ValidatedState,
+    BlockMerkleTree, FeeAccount, FeeAccountProof, FeeMerkleTree, NodeState, PubKey, Transaction,
+    ValidatedState,
 };
 use futures::{
     future::{BoxFuture, Future, FutureExt},
@@ -187,10 +187,14 @@ impl<N: ConnectedNetwork<PubKey>, V: Versions, P: SequencerPersistence>
             self.consensus().await.read().await.cur_epoch().await
         };
 
-        <StaticCommittee as Membership<SeqTypes>>::stake_table(
-            &self.consensus().await.read().await.memberships,
-            epoch,
-        )
+        self.consensus()
+            .await
+            .read()
+            .await
+            .memberships
+            .read()
+            .await
+            .stake_table(epoch)
     }
 }
 
@@ -1061,7 +1065,7 @@ mod api_tests {
     use hotshot_query_service::availability::{
         AvailabilityDataSource, BlockQueryData, VidCommonQueryData,
     };
-    use hotshot_types::drb::{INITIAL_DRB_RESULT, INITIAL_DRB_SEED_INPUT};
+    use hotshot_types::data::EpochNumber;
     use hotshot_types::{
         data::{DaProposal, QuorumProposal2, VidDisperseShare},
         event::LeafInfo,
@@ -1259,8 +1263,8 @@ mod api_tests {
             .to_qc2(),
             upgrade_certificate: None,
             view_change_evidence: None,
-            drb_seed: INITIAL_DRB_SEED_INPUT,
-            drb_result: INITIAL_DRB_RESULT,
+            next_drb_result: None,
+            next_epoch_justify_qc: None,
         };
         let mut qc = QuorumCertificate::genesis::<MockSequencerVersions>(
             &ValidatedState::default(),
@@ -1313,6 +1317,7 @@ mod api_tests {
                 encoded_transactions: payload_bytes_arc.clone(),
                 metadata: payload.ns_table().clone(),
                 view_number: leaf.view_number(),
+                epoch: EpochNumber::new(1),
             };
             let da_proposal = Proposal {
                 data: da_proposal_inner,
@@ -1466,8 +1471,8 @@ mod api_tests {
             justify_qc: qc.clone(),
             upgrade_certificate: None,
             view_change_evidence: None,
-            drb_seed: INITIAL_DRB_SEED_INPUT,
-            drb_result: INITIAL_DRB_RESULT,
+            next_drb_result: None,
+            next_epoch_justify_qc: None,
         };
 
         let leaf = Leaf2::from_quorum_proposal(&qp);
@@ -2127,7 +2132,8 @@ mod test {
             .get(&<MockSeqVersions as Versions>::Upgrade::VERSION)
             .unwrap()
             .upgrade_type
-            .data();
+            .chain_config()
+            .unwrap();
 
         const NUM_NODES: usize = 5;
         let config = TestNetworkConfigBuilder::<NUM_NODES, _, _>::with_num_nodes()

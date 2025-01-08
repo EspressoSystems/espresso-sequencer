@@ -3,10 +3,10 @@ use std::{
     path::Path,
 };
 
-use anyhow::Context;
+use anyhow::{Context, Ok};
 use espresso_types::{
     v0_99::ChainConfig, FeeAccount, FeeAmount, GenesisHeader, L1BlockInfo, L1Client, Timestamp,
-    Upgrade, UpgradeType,
+    Upgrade,
 };
 use ethers::types::H160;
 use sequencer_utils::deployer::is_proxy_contract;
@@ -70,13 +70,10 @@ impl Genesis {
         let upgrades: Vec<&Upgrade> = self.upgrades.values().collect();
 
         for upgrade in upgrades {
-            match upgrade.upgrade_type {
-                UpgradeType::Fee { chain_config } => {
-                    base_fee = std::cmp::max(chain_config.base_fee, base_fee);
-                }
-                UpgradeType::Marketplace { chain_config } => {
-                    base_fee = std::cmp::max(chain_config.base_fee, base_fee);
-                }
+            let chain_config = upgrade.upgrade_type.chain_config();
+
+            if let Some(cf) = chain_config {
+                base_fee = std::cmp::max(cf.base_fee, base_fee);
             }
         }
 
@@ -103,24 +100,28 @@ impl Genesis {
 
         // now iterate over each upgrade type and validate the fee contract if it exists
         for (version, upgrade) in &self.upgrades {
-            match &upgrade.upgrade_type {
-                UpgradeType::Fee { chain_config } | UpgradeType::Marketplace { chain_config } => {
-                    if let Some(fee_contract_address) = chain_config.fee_contract {
-                        if fee_contract_address == H160::zero() {
-                            anyhow::bail!("Fee contract cannot use the zero address");
-                        } else if !is_proxy_contract(l1.provider(), fee_contract_address)
-                            .await
-                            .context(format!(
-                                "checking if fee contract is a proxy in upgrade {version}",
-                            ))?
-                        {
-                            anyhow::bail!("Fee contract's address is not a proxy");
-                        }
-                    } else {
-                        // The Fee Contract address has to be provided for an upgrade so return an error
-                        anyhow::bail!("Fee contract's address for the upgrade is missing");
-                    }
+            let chain_config = &upgrade.upgrade_type.chain_config();
+
+            if chain_config.is_none() {
+                continue;
+            }
+
+            let chain_config = chain_config.unwrap();
+
+            if let Some(fee_contract_address) = chain_config.fee_contract {
+                if fee_contract_address == H160::zero() {
+                    anyhow::bail!("Fee contract cannot use the zero address");
+                } else if !is_proxy_contract(l1.provider(), fee_contract_address)
+                    .await
+                    .context(format!(
+                        "checking if fee contract is a proxy in upgrade {version}",
+                    ))?
+                {
+                    anyhow::bail!("Fee contract's address is not a proxy");
                 }
+            } else {
+                // The Fee Contract address has to be provided for an upgrade so return an error
+                anyhow::bail!("Fee contract's address for the upgrade is missing");
             }
         }
         // TODO: it's optional for the fee contract to be included in a proxy in v1 so no need to panic but revisit this after v1 https://github.com/EspressoSystems/espresso-sequencer/pull/2000#discussion_r1765174702
@@ -418,7 +419,7 @@ mod test {
                 fee_recipient: FeeAccount::default(),
                 fee_contract: Some(Address::default()),
                 bid_recipient: None,
-                stake_table_contract: Some(Address::default())
+                stake_table_contract: None
             }
         );
         assert_eq!(

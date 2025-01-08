@@ -3,11 +3,12 @@ use committable::{Commitment, Committable};
 use ethers::types::Address;
 use hotshot_query_service::merklized_state::MerklizedState;
 use hotshot_types::{
-    data::{BlockError, ViewNumber},
+    data::{BlockError, EpochNumber, ViewNumber},
     traits::{
         block_contents::BlockHeader, node_implementation::ConsensusTime,
         signature_key::BuilderSignatureKey, states::StateDelta, ValidatedState as HotShotState,
     },
+    utils::epoch_from_block_number,
     vid::{VidCommon, VidSchemeType},
 };
 use itertools::Itertools;
@@ -23,11 +24,11 @@ use serde::{Deserialize, Serialize};
 use std::ops::Add;
 use thiserror::Error;
 use time::OffsetDateTime;
-use vbs::version::Version;
+use vbs::version::{StaticVersionType, Version};
 
 use super::{
     auction::ExecutionError, fee_info::FeeError, instance_state::NodeState, BlockMerkleCommitment,
-    BlockSize, FeeMerkleCommitment, L1Client,
+    BlockSize, EpochVersion, FeeMerkleCommitment, L1Client,
 };
 use crate::{
     traits::StateCatchup,
@@ -694,6 +695,41 @@ fn validate_builder_fee(
     Ok(())
 }
 
+async fn update_l1_state_stake_tables(
+    instance: &NodeState,
+    header: &Header,
+    chain_config: ChainConfig,
+) -> anyhow::Result<()> {
+    let Some(contract_addr) = chain_config.stake_table_contract else {
+        bail!("stake table contract not found");
+    };
+    let epoch_height = instance
+        .epoch_height
+        .expect("`epoch_height should be set on `NodeState`");
+    let prev_epoch = epoch_from_block_number(header.block_number().saturating_sub(1), epoch_height);
+    let epoch = epoch_from_block_number(header.block_number(), epoch_height);
+
+    if epoch <= prev_epoch {
+        tracing::info!("Epochs are not progressing with HotShot blocks");
+        return Ok(());
+    }
+
+    let l1 = &instance.l1_client;
+    let Some(l1_finalized) = header.l1_finalized() else {
+        tracing::info!("L1 block not finalized. skipping stake table update in L1State ");
+        return Ok(());
+    };
+
+    l1.update_membership(
+        contract_addr,
+        l1_finalized.number(),
+        EpochNumber::new(epoch),
+    )
+    .await;
+
+    Ok(())
+}
+
 impl ValidatedState {
     /// Updates state with [`Header`] proposal.
     ///   * Clones and updates [`ValidatedState`] (avoiding mutation).
@@ -730,6 +766,17 @@ impl ValidatedState {
             chain_config.fee_contract,
         )
         .await;
+
+        // Since this is being called on validators I believe event
+        // will not be emitted until after leader has created a new header.
+        // Is this correct?
+        //
+        // Also, We could just update l1_state here directly instead of emitting an event
+        // since we have access to L1Client and we are in an async context. We wouldn't need
+        // the update_loop in this case.
+        if version >= EpochVersion::VERSION {
+            update_l1_state_stake_tables(instance, proposed_header, chain_config).await?;
+        }
 
         // Find missing fee state entries. We will need to use the builder account which is paying a
         // fee and the recipient account which is receiving it, plus any counts receiving deposits
@@ -814,6 +861,7 @@ impl ValidatedState {
         let cf = match upgrade.upgrade_type {
             UpgradeType::Fee { chain_config } => chain_config,
             UpgradeType::Marketplace { chain_config } => chain_config,
+            UpgradeType::Epoch { chain_config } => chain_config,
         };
 
         self.chain_config = cf.into();
@@ -961,6 +1009,7 @@ impl HotShotState<SeqTypes> for ValidatedState {
         } else {
             BlockMerkleTree::from_commitment(block_header.block_merkle_tree_root())
         };
+
         Self {
             fee_merkle_tree,
             block_merkle_tree,

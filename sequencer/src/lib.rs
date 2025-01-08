@@ -15,13 +15,12 @@ mod message_compat_tests;
 use anyhow::Context;
 use catchup::StatePeers;
 use context::SequencerContext;
-use espresso_types::StaticCommittee;
+use espresso_types::EpochCommittees;
 use espresso_types::{
     traits::EventConsumer, BackoffParams, L1ClientOptions, NodeState, PubKey, SeqTypes,
     SolverAuctionResultsProvider, ValidatedState,
 };
 use genesis::L1Finalized;
-use hotshot_types::traits::election::Membership;
 use proposal_fetcher::ProposalFetcherConfig;
 use std::sync::Arc;
 use tokio::select;
@@ -476,21 +475,22 @@ pub async fn init_node<P: SequencerPersistence, V: Versions>(
         node_id: node_index,
         upgrades: genesis.upgrades,
         current_version: V::Base::VERSION,
+        epoch_height: None,
     };
 
     // Create the HotShot membership
-    let membership = StaticCommittee::new_stake(
+    let membership = EpochCommittees::new_stake(
         network_config.config.known_nodes_with_stake.clone(),
         network_config.config.known_nodes_with_stake.clone(),
         &instance_state,
-        Default::default(),
+        network_config.config.epoch_height,
     );
 
     // Initialize the Libp2p network
     let network = {
         let p2p_network = Libp2pNetwork::from_config(
             network_config.clone(),
-            membership.clone(),
+            Arc::new(async_lock::RwLock::new(membership.clone())),
             gossip_config,
             request_response_config,
             libp2p_bind_address,
@@ -593,7 +593,10 @@ pub mod testing {
         traits::{block_contents::BlockHeader, metrics::NoMetrics, stake_table::StakeTableScheme},
         HotShotConfig, PeerConfig,
     };
-    use marketplace_builder_core::{hooks::NoHooks, service::GlobalState};
+    use marketplace_builder_core::{
+        hooks::NoHooks,
+        service::{BuilderConfig, GlobalState},
+    };
 
     use portpicker::pick_unused_port;
     use tokio::spawn;
@@ -637,20 +640,21 @@ pub mod testing {
             .parse()
             .expect("Failed to parse builder URL");
 
-        let hooks = NoHooks(PhantomData);
-
         // create the global state
-        let global_state: Arc<GlobalState<SeqTypes, NoHooks<SeqTypes>>> = GlobalState::new(
-            (builder_key_pair.fee_account(), builder_key_pair),
-            Duration::from_secs(60),
-            Duration::from_millis(100),
-            Duration::from_secs(60),
-            BUILDER_CHANNEL_CAPACITY_FOR_TEST,
-            10,
-            hooks,
+        let global_state = GlobalState::new(
+            BuilderConfig {
+                builder_keys: (builder_key_pair.fee_account(), builder_key_pair),
+                api_timeout: Duration::from_secs(60),
+                tx_capture_timeout: Duration::from_millis(100),
+                txn_garbage_collect_duration: Duration::from_secs(60),
+                txn_channel_capacity: BUILDER_CHANNEL_CAPACITY_FOR_TEST,
+                tx_status_cache_capacity: 81920,
+                base_fee: 10,
+            },
+            NoHooks(PhantomData),
         );
 
-        // create the proxy global state it will server the builder apis
+        // Create and spawn the tide-disco app to serve the builder APIs
         let app = Arc::clone(&global_state)
             .into_app()
             .expect("Failed to create builder tide-disco app");
@@ -664,6 +668,7 @@ pub mod testing {
             ),
         );
 
+        // Pass on the builder task to be injected in the testing harness
         (
             Box::new(MarketplaceBuilderImplementation { global_state }),
             url,
@@ -960,12 +965,15 @@ pub mod testing {
             )
             .with_current_version(V::Base::version())
             .with_genesis(state)
+            .with_epoch_height(config.epoch_height)
             .with_upgrades(upgrades);
 
             // Create the HotShot membership
-            let membership = StaticCommittee::new(
+            let membership = EpochCommittees::new_stake(
                 config.known_nodes_with_stake.clone(),
                 config.known_nodes_with_stake.clone(),
+                &node_state,
+                100,
             );
 
             tracing::info!(
