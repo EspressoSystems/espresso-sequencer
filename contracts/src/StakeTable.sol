@@ -55,14 +55,14 @@ contract StakeTable is AbstractStakeTable {
     // Error raised when the staker does not register with the correct stakeAmount
     error InsufficientStakeAmount(uint256);
 
-    // Error raised when the staker does not provide a new key
-    error NoKeyChange();
-
     // Error raised when the staker does not provide a new schnorrVK
     error InvalidSchnorrVK();
 
     // Error raised when the staker does not provide a new blsVK
     error InvalidBlsVK();
+
+    // Error raised when zero point keys are provided
+    error NoKeyChange();
 
     /// Mapping from a hash of a BLS key to a node struct defined in the abstract contract.
     mapping(address account => Node node) public nodes;
@@ -479,7 +479,6 @@ contract StakeTable is AbstractStakeTable {
     /// @param newBlsVK The new BLS verification key
     /// @param newSchnorrVK The new Schnorr verification key
     /// @param newBlsSig The BLS signature that the account owns the new BLS key
-    /// TODO: consider emitting the changed keys
     function updateConsensusKeys(
         BN254.G2Point memory newBlsVK,
         EdOnBN254.EdOnBN254Point memory newSchnorrVK,
@@ -488,66 +487,44 @@ contract StakeTable is AbstractStakeTable {
         Node memory node = nodes[msg.sender];
 
         // Verify that the node is already registered.
-        if (node.account == address(0)) {
-            revert NodeNotRegistered();
-        }
+        if (node.account == address(0)) revert NodeNotRegistered();
 
         // Verify that the node is not in the exit queue
-        if (node.exitEpoch != 0) {
-            revert ExitRequestInProgress();
-        }
+        if (node.exitEpoch != 0) revert ExitRequestInProgress();
 
-        // The staker does not provide a key change (both keys are the same or both keys are zero)
-        if (
-            (
-                _isEqualBlsKey(newBlsVK, node.blsVK)
-                    && EdOnBN254.isEqual(newSchnorrVK, node.schnorrVK)
-            )
-                || (
-                    _isEqualBlsKey(
-                        newBlsVK,
-                        BN254.G2Point(
-                            BN254.BaseField.wrap(0),
-                            BN254.BaseField.wrap(0),
-                            BN254.BaseField.wrap(0),
-                            BN254.BaseField.wrap(0)
-                        )
-                    ) && EdOnBN254.isEqual(newSchnorrVK, EdOnBN254.EdOnBN254Point(0, 0))
-                )
-        ) {
+        // Verify that the keys are not the same as the old ones
+        if (_isEqualBlsKey(newBlsVK, node.blsVK) && newSchnorrVK.isEqual(node.schnorrVK)) {
             revert NoKeyChange();
         }
 
-        // Update the node's schnorr key once it's nonzero
-        if (!newSchnorrVK.isEqual(EdOnBN254.EdOnBN254Point(0, 0))) {
-            node.schnorrVK = newSchnorrVK;
-        }
+        // Zero-point constants for verification
+        BN254.G2Point memory zeroBlsKey = BN254.G2Point(
+            BN254.BaseField.wrap(0),
+            BN254.BaseField.wrap(0),
+            BN254.BaseField.wrap(0),
+            BN254.BaseField.wrap(0)
+        );
+        EdOnBN254.EdOnBN254Point memory zeroSchnorrKey = EdOnBN254.EdOnBN254Point(0, 0);
 
-        // Update the node's bls key once it's nonzero
-        if (
-            !_isEqualBlsKey(
-                newBlsVK,
-                BN254.G2Point(
-                    BN254.BaseField.wrap(0),
-                    BN254.BaseField.wrap(0),
-                    BN254.BaseField.wrap(0),
-                    BN254.BaseField.wrap(0)
-                )
-            )
-        ) {
-            // Verify that the validator can sign for that blsVK
+        // Update the node's bls key if the newBlsVK is not a zero point BLS key
+        if (!_isEqualBlsKey(newBlsVK, zeroBlsKey)) {
+            // Verify that the validator can sign for that newBlsVK, otherwise it inner reverts with
+            // BLSSigVerificationFailed
             bytes memory message = abi.encode(msg.sender);
             BLSSig.verifyBlsSig(message, newBlsSig, newBlsVK);
-
-            // Update the node's bls key
             node.blsVK = newBlsVK;
+        }
+
+        // Update the node's schnorr key if the newSchnorrVK is not a zero point Schnorr key
+        if (!newSchnorrVK.isEqual(zeroSchnorrKey)) {
+            node.schnorrVK = newSchnorrVK;
         }
 
         // Update the node in the stake table
         nodes[msg.sender] = node;
 
         // Emit the event
-        emit UpdatedConsensusKeys(msg.sender);
+        emit UpdatedConsensusKeys(msg.sender, node.blsVK, node.schnorrVK);
     }
 
     /// @notice Minimum stake amount
