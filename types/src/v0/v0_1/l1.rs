@@ -1,9 +1,10 @@
 use crate::{parse_duration, v0_3::StakeTables};
 use async_broadcast::{InactiveReceiver, Sender};
 use clap::Parser;
+use derive_more::Deref;
 use ethers::{
     prelude::{H256, U256},
-    providers::{Http, Provider, Ws},
+    providers::{Http, Provider},
 };
 use hotshot_types::{
     data::EpochNumber,
@@ -12,10 +13,7 @@ use hotshot_types::{
 use lru::LruCache;
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::BTreeMap,
-    num::NonZeroUsize,
-    sync::{self, Arc},
-    time::Duration,
+    collections::BTreeMap, num::NonZeroUsize, sync::{self, Arc}, time::{Duration, Instant}
 };
 use tokio::{
     sync::{Mutex, RwLock},
@@ -96,6 +94,49 @@ pub struct L1ClientOptions {
     )]
     pub l1_events_max_block_range: u64,
 
+    /// Maximum time to wait for new heads before considering a stream invalid and reconnecting.
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_L1_SUBSCRIPTION_TIMEOUT",
+        default_value = "1m",
+        value_parser = parse_duration,
+    )]
+    pub subscription_timeout: Duration,
+
+    /// Fail over to another provider if the current provider fails twice within this window.
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_L1_FREQUENT_FAILURE_TOLERANCE",
+        default_value = "1m",
+        value_parser = parse_duration,
+    )]
+    pub l1_frequent_failure_tolerance: Duration,
+
+    /// Fail over to another provider if the current provider fails many times in a row, within any
+    /// time window.
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_L1_CONSECUTIVE_FAILURE_TOLERANCE",
+        default_value = "10"
+    )]
+    pub l1_consecutive_failure_tolerance: usize,
+
+    /// Amount of time to wait after receiving a 429 response before making more L1 RPC requests.
+    ///
+    /// If not set, the general l1-retry-delay will be used.
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_L1_RATE_LIMIT_DELAY",
+        value_parser = parse_duration,
+    )]
+    pub l1_rate_limit_delay: Option<Duration>,
+
+    /// Separate provider to use for subscription feeds.
+    ///
+    /// Typically this would be a WebSockets endpoint while the main provider uses HTTP.
+    #[clap(long, env = "ESPRESSO_SEQUENCER_L1_WS_PROVIDER", value_delimiter = ',')]
+    pub l1_ws_provider: Option<Vec<Url>>,
+
     #[clap(skip = Arc::<Box<dyn Metrics>>::new(Box::new(NoMetrics)))]
     pub metrics: Arc<Box<dyn Metrics>>,
 }
@@ -109,11 +150,8 @@ pub struct L1ClientOptions {
 /// easy to use a subscription instead of polling for new blocks, vastly reducing the number of L1
 /// RPC calls we make.
 pub struct L1Client {
-    pub(crate) retry_delay: Duration,
     /// `Provider` from `ethers-provider`.
-    pub(crate) provider: Arc<Provider<RpcClient>>,
-    /// Maximum number of L1 blocks that can be scanned for events in a single query.
-    pub(crate) events_max_block_range: u64,
+    pub(crate) provider: Arc<Provider<MultiRpcClient>>,
     /// Shared state updated by an asynchronous task which polls the L1.
     pub(crate) state: Arc<Mutex<L1State>>,
     /// TODO: We need to be able to take out sync locks on this part of the
@@ -125,22 +163,6 @@ pub struct L1Client {
     pub(crate) receiver: InactiveReceiver<L1Event>,
     /// Async task which updates the shared state.
     pub(crate) update_task: Arc<L1UpdateTask>,
-}
-
-/// An Ethereum RPC client over HTTP or WebSockets.
-#[derive(Clone, Debug)]
-pub(crate) enum RpcClient {
-    Http {
-        conn: Http,
-        metrics: Arc<L1ClientMetrics>,
-    },
-    Ws {
-        conn: Arc<RwLock<Ws>>,
-        reconnect: Arc<Mutex<L1ReconnectTask>>,
-        url: Url,
-        retry_delay: Duration,
-        metrics: Arc<L1ClientMetrics>,
-    },
 }
 
 /// In-memory view of the L1 state, updated asynchronously.
@@ -159,18 +181,41 @@ pub(crate) enum L1Event {
 #[derive(Debug, Default)]
 pub(crate) struct L1UpdateTask(pub(crate) Mutex<Option<JoinHandle<()>>>);
 
-#[derive(Debug, Default)]
-pub(crate) enum L1ReconnectTask {
-    Reconnecting(JoinHandle<()>),
-    #[default]
-    Idle,
-    Cancelled,
+#[derive(Clone, Debug)]
+pub(crate) struct L1ClientMetrics {
+    pub(crate) head: Arc<dyn Gauge>,
+    pub(crate) finalized: Arc<dyn Gauge>,
+    pub(crate) reconnects: Arc<dyn Counter>,
+    pub(crate) failovers: Arc<dyn Counter>,
 }
 
-#[derive(Debug)]
-pub(crate) struct L1ClientMetrics {
-    pub(crate) head: Box<dyn Gauge>,
-    pub(crate) finalized: Box<dyn Gauge>,
-    pub(crate) ws_reconnects: Box<dyn Counter>,
-    pub(crate) stream_reconnects: Box<dyn Counter>,
+/// An RPC client with multiple remote providers.
+///
+/// This client utilizes one RPC provider at a time, but if it detects that the provider is in a
+/// failing state, it will automatically switch to the next provider in its list.
+#[derive(Clone, Debug)]
+pub(crate) struct MultiRpcClient {
+    pub(crate) clients: Arc<Vec<L1Provider>>,
+    pub(crate) status: Arc<RwLock<MultiRpcClientStatus>>,
+    pub(crate) failover_send: Sender<()>,
+    pub(crate) failover_recv: InactiveReceiver<()>,
+    pub(crate) opt: L1ClientOptions,
+    pub(crate) metrics: L1ClientMetrics,
+}
+
+/// The state of the current provider being used by a [`MultiRpcClient`].
+#[derive(Debug, Default)]
+pub(crate) struct MultiRpcClientStatus {
+    pub(crate) client: usize,
+    pub(crate) last_failure: Option<Instant>,
+    pub(crate) consecutive_failures: usize,
+    pub(crate) rate_limited_until: Option<Instant>,
+}
+
+/// A single provider in a [`MultiRpcClient`].
+#[derive(Debug, Deref)]
+pub(crate) struct L1Provider {
+    #[deref]
+    pub(crate) inner: Http,
+    pub(crate) failures: Box<dyn Counter>,
 }

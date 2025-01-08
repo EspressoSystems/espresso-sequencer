@@ -43,6 +43,7 @@ use sequencer_utils::logging;
 use serde::de::DeserializeOwned;
 use std::{
     borrow::Cow,
+    cmp::max,
     collections::{BTreeMap, HashMap},
     fmt::Debug,
     pin::Pin,
@@ -658,6 +659,7 @@ impl<T: Queryable> ResourceManager<T> {
         let to = self
             .adjust_index(from as u64 + (len as u64) % (max_len as u64))
             .await? as usize;
+        let to = max(from, to);
         match self
             .get::<Vec<T>>(format!("availability/{}/{from}/{to}", Self::singular()))
             .await

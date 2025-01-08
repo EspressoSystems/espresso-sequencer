@@ -340,10 +340,12 @@ pub struct Options {
     #[clap(
         long,
         env = "ESPRESSO_SEQUENCER_L1_PROVIDER",
-        default_value = "http://localhost:8545"
+        default_value = "http://localhost:8545",
+        value_delimiter = ',',
+        num_args = 1..,
     )]
-    #[derivative(Debug(format_with = "Display::fmt"))]
-    pub l1_provider_url: Url,
+    #[derivative(Debug = "ignore")]
+    pub l1_provider_url: Vec<Url>,
 
     /// Configuration for the L1 client.
     #[clap(flatten)]

@@ -309,7 +309,7 @@ impl Membership<SeqTypes> for EpochCommittees {
         Self {
             state: map,
             _epoch_size: 12,
-            l1_client: L1Client::http(Url::from_str("http:://ab.b").unwrap()),
+            l1_client: L1Client::new(Url::from_str("http:://ab.b").unwrap()),
             contract_address: None,
         }
     }
