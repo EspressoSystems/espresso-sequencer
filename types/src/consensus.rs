@@ -314,7 +314,7 @@ pub struct Consensus<TYPES: NodeType> {
     /// Saved payloads.
     ///
     /// Encoded transactions for every view if we got a payload for that view.
-    saved_payloads: BTreeMap<TYPES::View, Arc<[u8]>>,
+    saved_payloads: BTreeMap<TYPES::View, Arc<TYPES::BlockPayload>>,
 
     /// the highqc per spec
     high_qc: QuorumCertificate2<TYPES>,
@@ -418,7 +418,7 @@ impl<TYPES: NodeType> Consensus<TYPES> {
         last_actioned_view: TYPES::View,
         last_proposals: BTreeMap<TYPES::View, Proposal<TYPES, QuorumProposal2<TYPES>>>,
         saved_leaves: CommitmentMap<Leaf2<TYPES>>,
-        saved_payloads: BTreeMap<TYPES::View, Arc<[u8]>>,
+        saved_payloads: BTreeMap<TYPES::View, Arc<TYPES::BlockPayload>>,
         high_qc: QuorumCertificate2<TYPES>,
         next_epoch_high_qc: Option<NextEpochQuorumCertificate2<TYPES>>,
         metrics: Arc<ConsensusMetricsValue>,
@@ -485,7 +485,7 @@ impl<TYPES: NodeType> Consensus<TYPES> {
     }
 
     /// Get the saved payloads.
-    pub fn saved_payloads(&self) -> &BTreeMap<TYPES::View, Arc<[u8]>> {
+    pub fn saved_payloads(&self) -> &BTreeMap<TYPES::View, Arc<TYPES::BlockPayload>> {
         &self.saved_payloads
     }
 
@@ -732,13 +732,13 @@ impl<TYPES: NodeType> Consensus<TYPES> {
     pub fn update_saved_payloads(
         &mut self,
         view_number: TYPES::View,
-        encoded_transaction: Arc<[u8]>,
+        payload: Arc<TYPES::BlockPayload>,
     ) -> Result<()> {
         ensure!(
             !self.saved_payloads.contains_key(&view_number),
             "Payload with the same view already exists."
         );
-        self.saved_payloads.insert(view_number, encoded_transaction);
+        self.saved_payloads.insert(view_number, payload);
         Ok(())
     }
 
@@ -946,7 +946,7 @@ impl<TYPES: NodeType> Consensus<TYPES> {
         membership: Arc<RwLock<TYPES::Membership>>,
         private_key: &<TYPES::SignatureKey as SignatureKey>::PrivateKey,
     ) -> Option<()> {
-        let txns = Arc::clone(consensus.read().await.saved_payloads().get(&view)?);
+        let payload = Arc::clone(consensus.read().await.saved_payloads().get(&view)?);
         let epoch = consensus
             .read()
             .await
@@ -954,8 +954,15 @@ impl<TYPES: NodeType> Consensus<TYPES> {
             .get(&view)?
             .view_inner
             .epoch()?;
-        let vid =
-            VidDisperse::calculate_vid_disperse(txns, &membership, view, epoch, epoch, None).await;
+        let vid = VidDisperse::calculate_vid_disperse(
+            payload.as_ref(),
+            &membership,
+            view,
+            epoch,
+            epoch,
+            None,
+        )
+        .await;
         let shares = VidDisperseShare2::from_vid_disperse(vid);
         let mut consensus_writer = consensus.write().await;
         for share in shares {

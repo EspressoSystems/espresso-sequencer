@@ -259,7 +259,7 @@ impl<TYPES: NodeType> VidDisperse<TYPES> {
     /// Panics if the VID calculation fails, this should not happen.
     #[allow(clippy::panic)]
     pub async fn calculate_vid_disperse(
-        txns: Arc<[u8]>,
+        payload: &TYPES::BlockPayload,
         membership: &Arc<RwLock<TYPES::Membership>>,
         view: TYPES::View,
         target_epoch: TYPES::Epoch,
@@ -268,6 +268,7 @@ impl<TYPES: NodeType> VidDisperse<TYPES> {
     ) -> Self {
         let num_nodes = membership.read().await.total_nodes(target_epoch);
 
+        let txns = payload.encode();
         let txns_clone = Arc::clone(&txns);
         let vid_disperse = spawn_blocking(move || {
             precompute_data

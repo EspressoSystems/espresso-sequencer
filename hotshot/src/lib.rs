@@ -61,7 +61,6 @@ use hotshot_types::{
         signature_key::SignatureKey,
         states::ValidatedState,
         storage::Storage,
-        EncodeBytes,
     },
     utils::epoch_from_block_number,
     HotShotConfig,
@@ -321,9 +320,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> SystemContext<T
             saved_leaves.insert(leaf.commit(), leaf.clone());
         }
         if let Some(payload) = anchored_leaf.block_payload() {
-            let encoded_txns = payload.encode();
-
-            saved_payloads.insert(anchored_leaf.view_number(), Arc::clone(&encoded_txns));
+            saved_payloads.insert(anchored_leaf.view_number(), Arc::new(payload));
         }
 
         let anchored_epoch = if config.epoch_height == 0 {
