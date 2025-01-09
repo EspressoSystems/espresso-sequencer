@@ -506,19 +506,20 @@ contract StakeTable is AbstractStakeTable {
         );
         EdOnBN254.EdOnBN254Point memory zeroSchnorrKey = EdOnBN254.EdOnBN254Point(0, 0);
 
-        // Update the node's bls key if the newBlsVK is not a zero point BLS key
-        if (!_isEqualBlsKey(newBlsVK, zeroBlsKey)) {
-            // Verify that the validator can sign for that newBlsVK, otherwise it inner reverts with
-            // BLSSigVerificationFailed
-            bytes memory message = abi.encode(msg.sender);
-            BLSSig.verifyBlsSig(message, newBlsSig, newBlsVK);
-            node.blsVK = newBlsVK;
-        }
+        if (_isEqualBlsKey(newBlsVK, zeroBlsKey)) revert InvalidBlsVK();
+
+        if (newSchnorrVK.isEqual(zeroSchnorrKey)) revert InvalidSchnorrVK();
+
+        // Verify that the validator can sign for that newBlsVK, otherwise it inner reverts with
+        // BLSSigVerificationFailed
+        bytes memory message = abi.encode(msg.sender);
+        BLSSig.verifyBlsSig(message, newBlsSig, newBlsVK);
+
+        // Update the node's bls key
+        node.blsVK = newBlsVK;
 
         // Update the node's schnorr key if the newSchnorrVK is not a zero point Schnorr key
-        if (!newSchnorrVK.isEqual(zeroSchnorrKey)) {
-            node.schnorrVK = newSchnorrVK;
-        }
+        node.schnorrVK = newSchnorrVK;
 
         // Update the node in the stake table
         nodes[msg.sender] = node;

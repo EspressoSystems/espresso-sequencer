@@ -388,7 +388,7 @@ contract StakeTable_register_Test is Test {
         vm.stopPrank();
     }
 
-    function test_UpdateConsensusKeysWithEmptyKeys_CausesNoChange() public {
+    function test_RevertWhen_UpdateConsensusKeysWithEmptyKeys() public {
         uint64 depositAmount = 10 ether;
         uint64 validUntilEpoch = 5;
         string memory seed = "123";
@@ -419,8 +419,7 @@ contract StakeTable_register_Test is Test {
         EdOnBN254.EdOnBN254Point memory emptySchnorrVK = EdOnBN254.EdOnBN254Point(0, 0);
 
         // Step 2: attempt to update the consensus keys with the same keys
-        vm.expectEmit(false, false, false, true, address(stakeTable));
-        emit AbstractStakeTable.UpdatedConsensusKeys(exampleTokenCreator, blsVK, schnorrVK);
+        vm.expectRevert(S.InvalidBlsVK.selector);
         stakeTable.updateConsensusKeys(emptyBlsVK, emptySchnorrVK, sig);
 
         vm.stopPrank();
@@ -462,7 +461,7 @@ contract StakeTable_register_Test is Test {
         vm.stopPrank();
     }
 
-    function test_UpdateConsensusKeysWithZeroBlsKeyButNewSchnorrVK_Succeeds() public {
+    function test_RevertWhen_UpdateConsensusKeysWithZeroBlsKeyButNewSchnorrVK() public {
         uint64 depositAmount = 10 ether;
         uint64 validUntilEpoch = 5;
         string memory seed = "123";
@@ -499,21 +498,13 @@ contract StakeTable_register_Test is Test {
 
         // Step 3: update the consensus keys with the new schnorr Key but zero bls key which
         // indicates no change in the bls key
-        vm.expectEmit(false, false, false, true, address(stakeTable));
-        emit AbstractStakeTable.UpdatedConsensusKeys(exampleTokenCreator, blsVK, newSchnorrVK);
+        vm.expectRevert(S.InvalidBlsVK.selector);
         stakeTable.updateConsensusKeys(emptyBlsVK, newSchnorrVK, sig);
-
-        // Step 4: verify the update
-        AbstractStakeTable.Node memory node = stakeTable.lookupNode(exampleTokenCreator);
-        assertTrue(stakeTable._isEqualBlsKey(node.blsVK, blsVK)); // same as current bls vk
-        assertTrue(EdOnBN254.isEqual(node.schnorrVK, newSchnorrVK)); // new schnorr vk
-        assertEq(node.balance, depositAmount); //same balance
-        assertEq(node.account, exampleTokenCreator); //same account
 
         vm.stopPrank();
     }
 
-    function test_UpdateConsensusKeysWithZeroSchnorrVKButNewBlsVK_Succeeds() public {
+    function test_RevertWhen_UpdateConsensusKeysWithZeroSchnorrVKButNewBlsVK() public {
         uint64 depositAmount = 10 ether;
         uint64 validUntilEpoch = 5;
         string memory seed = "123";
@@ -539,35 +530,12 @@ contract StakeTable_register_Test is Test {
         (BN254.G2Point memory newBlsVK,, BN254.G1Point memory newSig) =
             genClientWallet(exampleTokenCreator, seed);
 
-        // Step 3: update the consensus keys with the same schnorrVK but new bls keys
-        vm.expectEmit(false, false, false, true, address(stakeTable));
-        emit AbstractStakeTable.UpdatedConsensusKeys(exampleTokenCreator, newBlsVK, schnorrVK);
-        stakeTable.updateConsensusKeys(newBlsVK, schnorrVK, newSig);
-
-        // Step 4: verify the update
-        AbstractStakeTable.Node memory node = stakeTable.lookupNode(exampleTokenCreator);
-        assertTrue(stakeTable._isEqualBlsKey(node.blsVK, newBlsVK)); // same as current bls vk
-        assertTrue(EdOnBN254.isEqual(node.schnorrVK, schnorrVK)); // same as current schnorr vk
-        assertEq(node.balance, depositAmount); //same balance
-        assertEq(node.account, exampleTokenCreator); //same account
-
-        // Step 5: update the consensus keys with the same bls keys but empty schnorrVK
+        // Step 3: generate empty schnorrVK
         EdOnBN254.EdOnBN254Point memory emptySchnorrVK = EdOnBN254.EdOnBN254Point(0, 0);
 
-        // Step 6: generate a new blsVK
-        seed = "235";
-        (BN254.G2Point memory newBlsVK2,, BN254.G1Point memory newSig2) =
-            genClientWallet(exampleTokenCreator, seed);
-        vm.expectEmit(false, false, false, true, address(stakeTable));
-        emit AbstractStakeTable.UpdatedConsensusKeys(exampleTokenCreator, newBlsVK2, schnorrVK);
-        stakeTable.updateConsensusKeys(newBlsVK2, emptySchnorrVK, newSig2);
-
-        // Step 7: verify the update
-        node = stakeTable.lookupNode(exampleTokenCreator);
-        assertTrue(stakeTable._isEqualBlsKey(node.blsVK, newBlsVK2)); // same as current bls vk
-        assertTrue(EdOnBN254.isEqual(node.schnorrVK, schnorrVK)); // same as current schnorr vk
-        assertEq(node.balance, depositAmount); //same balance
-        assertEq(node.account, exampleTokenCreator); //same account
+        // Step 4: update the consensus keys with the new bls keys but empty schnorrVK
+        vm.expectRevert(S.InvalidSchnorrVK.selector);
+        stakeTable.updateConsensusKeys(newBlsVK, emptySchnorrVK, newSig);
 
         vm.stopPrank();
     }
@@ -581,7 +549,7 @@ contract StakeTable_register_Test is Test {
         (
             BN254.G2Point memory blsVK,
             EdOnBN254.EdOnBN254Point memory schnorrVK,
-            BN254.G1Point memory sig
+            BN254.G1Point memory blsSig
         ) = genClientWallet(exampleTokenCreator, seed);
 
         // Prepare for the token transfer by granting allowance to the contract
@@ -593,23 +561,22 @@ contract StakeTable_register_Test is Test {
 
         vm.expectEmit(false, false, false, true, address(stakeTable));
         emit AbstractStakeTable.Registered(exampleTokenCreator, 1, depositAmount);
-        stakeTable.register(blsVK, schnorrVK, depositAmount, sig, validUntilEpoch);
+        stakeTable.register(blsVK, schnorrVK, depositAmount, blsSig, validUntilEpoch);
 
-        // Step 2: generate an empty schnorrVK  and new blsVK
-        EdOnBN254.EdOnBN254Point memory emptySchnorrVK = EdOnBN254.EdOnBN254Point(0, 0);
+        // Step 2: generate a new schnorrVK
         seed = "234";
-        (BN254.G2Point memory newBlsVK,, BN254.G1Point memory newSig) =
+        (, EdOnBN254.EdOnBN254Point memory newSchnorrVK,) =
             genClientWallet(exampleTokenCreator, seed);
 
-        // Step 3: update the consensus keys with the new bls keys but empty schnorrVK
+        // Step 3: update the consensus keys with the new schnorrVK
         vm.expectEmit(false, false, false, true, address(stakeTable));
-        emit AbstractStakeTable.UpdatedConsensusKeys(exampleTokenCreator, newBlsVK, schnorrVK);
-        stakeTable.updateConsensusKeys(newBlsVK, emptySchnorrVK, newSig);
+        emit AbstractStakeTable.UpdatedConsensusKeys(exampleTokenCreator, blsVK, newSchnorrVK);
+        stakeTable.updateConsensusKeys(blsVK, newSchnorrVK, blsSig);
 
         // Step 4: verify the update
         AbstractStakeTable.Node memory node = stakeTable.lookupNode(exampleTokenCreator);
-        assertTrue(stakeTable._isEqualBlsKey(node.blsVK, newBlsVK)); // same as current bls vk
-        assertTrue(EdOnBN254.isEqual(node.schnorrVK, schnorrVK)); // same as current schnorr vk
+        assertTrue(stakeTable._isEqualBlsKey(node.blsVK, blsVK)); // same as current bls vk
+        assertTrue(EdOnBN254.isEqual(node.schnorrVK, newSchnorrVK)); // new schnorr vk
         assertEq(node.balance, depositAmount); //same balance
         assertEq(node.account, exampleTokenCreator); //same account
 
