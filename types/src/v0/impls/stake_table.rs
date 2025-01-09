@@ -393,7 +393,7 @@ impl Membership<SeqTypes> for EpochCommittees {
         self.state
             .get(&epoch)
             .and_then(|h| h.indexed_stake_table.get(pub_key))
-            .map_or(false, |x| x.stake() > U256::zero())
+            .is_some_and(|x| x.stake() > U256::zero())
     }
 
     /// Check if a node has stake in the committee
@@ -401,7 +401,7 @@ impl Membership<SeqTypes> for EpochCommittees {
         self.state
             .get(&epoch)
             .and_then(|h| h.indexed_da_members.get(pub_key))
-            .map_or(false, |x| x.stake() > U256::zero())
+            .is_some_and(|x| x.stake() > U256::zero())
     }
 
     /// Index the vector of public keys with the current view number
