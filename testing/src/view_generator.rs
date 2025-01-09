@@ -24,7 +24,7 @@ use hotshot_example_types::{
 use hotshot_types::{
     data::{
         DaProposal2, EpochNumber, Leaf2, QuorumProposal2, VidDisperse, VidDisperseShare2,
-        ViewChangeEvidence, ViewNumber,
+        ViewChangeEvidence2, ViewNumber,
     },
     message::{Proposal, UpgradeLock},
     simple_certificate::{
@@ -352,9 +352,9 @@ impl TestView {
         };
 
         let view_change_evidence = if let Some(tc) = timeout_certificate {
-            Some(ViewChangeEvidence::Timeout(tc))
+            Some(ViewChangeEvidence2::Timeout(tc))
         } else {
-            view_sync_certificate.map(ViewChangeEvidence::ViewSync)
+            view_sync_certificate.map(ViewChangeEvidence2::ViewSync)
         };
 
         let random = thread_rng().gen_range(0..=u64::MAX);

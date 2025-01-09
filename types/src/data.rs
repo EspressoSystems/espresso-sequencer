@@ -34,8 +34,9 @@ use crate::{
     impl_has_epoch,
     message::{Proposal, UpgradeLock},
     simple_certificate::{
-        NextEpochQuorumCertificate2, QuorumCertificate, QuorumCertificate2, TimeoutCertificate2,
-        UpgradeCertificate, ViewSyncFinalizeCertificate2,
+        NextEpochQuorumCertificate2, QuorumCertificate, QuorumCertificate2, TimeoutCertificate,
+        TimeoutCertificate2, UpgradeCertificate, ViewSyncFinalizeCertificate,
+        ViewSyncFinalizeCertificate2,
     },
     simple_vote::{HasEpoch, QuorumData, QuorumData2, UpgradeProposalData, VersionedVoteData},
     traits::{
@@ -308,9 +309,9 @@ impl<TYPES: NodeType> VidDisperse<TYPES> {
 #[serde(bound(deserialize = ""))]
 pub enum ViewChangeEvidence<TYPES: NodeType> {
     /// Holds a timeout certificate.
-    Timeout(TimeoutCertificate2<TYPES>),
+    Timeout(TimeoutCertificate<TYPES>),
     /// Holds a view sync finalized certificate.
-    ViewSync(ViewSyncFinalizeCertificate2<TYPES>),
+    ViewSync(ViewSyncFinalizeCertificate<TYPES>),
 }
 
 impl<TYPES: NodeType> ViewChangeEvidence<TYPES> {
@@ -319,6 +320,51 @@ impl<TYPES: NodeType> ViewChangeEvidence<TYPES> {
         match self {
             ViewChangeEvidence::Timeout(timeout_cert) => timeout_cert.data().view == *view - 1,
             ViewChangeEvidence::ViewSync(view_sync_cert) => view_sync_cert.view_number == *view,
+        }
+    }
+
+    /// Convert to ViewChangeEvidence2
+    pub fn to_evidence2(self) -> ViewChangeEvidence2<TYPES> {
+        match self {
+            ViewChangeEvidence::Timeout(timeout_cert) => {
+                ViewChangeEvidence2::Timeout(timeout_cert.to_tc2())
+            }
+            ViewChangeEvidence::ViewSync(view_sync_cert) => {
+                ViewChangeEvidence2::ViewSync(view_sync_cert.to_vsc2())
+            }
+        }
+    }
+}
+
+/// Helper type to encapsulate the various ways that proposal certificates can be captured and
+/// stored.
+#[derive(derive_more::Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Hash)]
+#[serde(bound(deserialize = ""))]
+pub enum ViewChangeEvidence2<TYPES: NodeType> {
+    /// Holds a timeout certificate.
+    Timeout(TimeoutCertificate2<TYPES>),
+    /// Holds a view sync finalized certificate.
+    ViewSync(ViewSyncFinalizeCertificate2<TYPES>),
+}
+
+impl<TYPES: NodeType> ViewChangeEvidence2<TYPES> {
+    /// Check that the given ViewChangeEvidence2 is relevant to the current view.
+    pub fn is_valid_for_view(&self, view: &TYPES::View) -> bool {
+        match self {
+            ViewChangeEvidence2::Timeout(timeout_cert) => timeout_cert.data().view == *view - 1,
+            ViewChangeEvidence2::ViewSync(view_sync_cert) => view_sync_cert.view_number == *view,
+        }
+    }
+
+    /// Convert to ViewChangeEvidence
+    pub fn to_evidence(self) -> ViewChangeEvidence<TYPES> {
+        match self {
+            ViewChangeEvidence2::Timeout(timeout_cert) => {
+                ViewChangeEvidence::Timeout(timeout_cert.to_tc())
+            }
+            ViewChangeEvidence2::ViewSync(view_sync_cert) => {
+                ViewChangeEvidence::ViewSync(view_sync_cert.to_vsc())
+            }
         }
     }
 }
@@ -628,7 +674,7 @@ pub struct QuorumProposal2<TYPES: NodeType> {
     pub upgrade_certificate: Option<UpgradeCertificate<TYPES>>,
 
     /// Possible timeout or view sync certificate. If the `justify_qc` is not for a proposal in the immediately preceding view, then either a timeout or view sync certificate must be attached.
-    pub view_change_evidence: Option<ViewChangeEvidence<TYPES>>,
+    pub view_change_evidence: Option<ViewChangeEvidence2<TYPES>>,
 
     /// The DRB result for the next epoch.
     ///
@@ -646,7 +692,9 @@ impl<TYPES: NodeType> From<QuorumProposal<TYPES>> for QuorumProposal2<TYPES> {
             justify_qc: quorum_proposal.justify_qc.to_qc2(),
             next_epoch_justify_qc: None,
             upgrade_certificate: quorum_proposal.upgrade_certificate,
-            view_change_evidence: quorum_proposal.proposal_certificate,
+            view_change_evidence: quorum_proposal
+                .proposal_certificate
+                .map(ViewChangeEvidence::to_evidence2),
             next_drb_result: None,
         }
     }
@@ -659,7 +707,9 @@ impl<TYPES: NodeType> From<QuorumProposal2<TYPES>> for QuorumProposal<TYPES> {
             view_number: quorum_proposal2.view_number,
             justify_qc: quorum_proposal2.justify_qc.to_qc(),
             upgrade_certificate: quorum_proposal2.upgrade_certificate,
-            proposal_certificate: quorum_proposal2.view_change_evidence,
+            proposal_certificate: quorum_proposal2
+                .view_change_evidence
+                .map(ViewChangeEvidence2::to_evidence),
         }
     }
 }
@@ -818,7 +868,7 @@ pub struct Leaf2<TYPES: NodeType> {
     block_payload: Option<TYPES::BlockPayload>,
 
     /// Possible timeout or view sync certificate. If the `justify_qc` is not for a proposal in the immediately preceding view, then either a timeout or view sync certificate must be attached.
-    pub view_change_evidence: Option<ViewChangeEvidence<TYPES>>,
+    pub view_change_evidence: Option<ViewChangeEvidence2<TYPES>>,
 }
 
 impl<TYPES: NodeType> Leaf2<TYPES> {

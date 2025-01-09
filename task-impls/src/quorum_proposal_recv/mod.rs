@@ -16,7 +16,7 @@ use futures::future::{err, join_all};
 use hotshot_task::task::{Task, TaskState};
 use hotshot_types::{
     consensus::{Consensus, OuterConsensus},
-    data::{EpochNumber, Leaf, ViewChangeEvidence},
+    data::{EpochNumber, Leaf, ViewChangeEvidence2},
     event::Event,
     message::UpgradeLock,
     simple_certificate::UpgradeCertificate,

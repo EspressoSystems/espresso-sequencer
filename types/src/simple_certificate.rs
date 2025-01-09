@@ -698,7 +698,7 @@ impl<TYPES: NodeType> ViewSyncFinalizeCertificate2<TYPES> {
 
 impl<TYPES: NodeType> TimeoutCertificate<TYPES> {
     /// Convert a `DaCertificate` into a `DaCertificate2`
-    pub fn to_vsc2(self) -> TimeoutCertificate2<TYPES> {
+    pub fn to_tc2(self) -> TimeoutCertificate2<TYPES> {
         let data = TimeoutData2 {
             view: self.data.view,
             epoch: TYPES::Epoch::new(0),
@@ -719,7 +719,7 @@ impl<TYPES: NodeType> TimeoutCertificate<TYPES> {
 
 impl<TYPES: NodeType> TimeoutCertificate2<TYPES> {
     /// Convert a `DaCertificate` into a `DaCertificate2`
-    pub fn to_vsc(self) -> TimeoutCertificate<TYPES> {
+    pub fn to_tc(self) -> TimeoutCertificate<TYPES> {
         let data = TimeoutData {
             view: self.data.view,
         };

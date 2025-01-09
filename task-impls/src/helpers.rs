@@ -15,7 +15,7 @@ use committable::{Commitment, Committable};
 use hotshot_task::dependency::{Dependency, EventDependency};
 use hotshot_types::{
     consensus::OuterConsensus,
-    data::{Leaf2, QuorumProposal2, ViewChangeEvidence},
+    data::{Leaf2, QuorumProposal2, ViewChangeEvidence2},
     event::{Event, EventType, LeafInfo},
     message::{Proposal, UpgradeLock},
     request_response::ProposalRequestPayload,
@@ -752,7 +752,7 @@ pub(crate) async fn validate_proposal_view_and_certs<
         ))?;
 
         match received_proposal_cert {
-            ViewChangeEvidence::Timeout(timeout_cert) => {
+            ViewChangeEvidence2::Timeout(timeout_cert) => {
                 ensure!(
                     timeout_cert.data().view == view_number - 1,
                     "Timeout certificate for view {} was not for the immediately preceding view",
@@ -778,7 +778,7 @@ pub(crate) async fn validate_proposal_view_and_certs<
                     *view_number
                 );
             }
-            ViewChangeEvidence::ViewSync(view_sync_cert) => {
+            ViewChangeEvidence2::ViewSync(view_sync_cert) => {
                 ensure!(
                     view_sync_cert.view_number == view_number,
                     "View sync cert view number {:?} does not match proposal view number {:?}",

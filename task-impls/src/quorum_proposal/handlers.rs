@@ -24,7 +24,7 @@ use hotshot_task::{
 };
 use hotshot_types::{
     consensus::{CommitmentAndMetadata, OuterConsensus},
-    data::{Leaf2, QuorumProposal2, VidDisperse, ViewChangeEvidence},
+    data::{Leaf2, QuorumProposal2, VidDisperse, ViewChangeEvidence2},
     message::Proposal,
     simple_certificate::{NextEpochQuorumCertificate2, QuorumCertificate2, UpgradeCertificate},
     traits::{
@@ -265,7 +265,7 @@ impl<TYPES: NodeType, V: Versions> ProposalDependencyHandle<TYPES, V> {
         &self,
         commitment_and_metadata: CommitmentAndMetadata<TYPES>,
         vid_share: Proposal<TYPES, VidDisperse<TYPES>>,
-        view_change_evidence: Option<ViewChangeEvidence<TYPES>>,
+        view_change_evidence: Option<ViewChangeEvidence2<TYPES>>,
         formed_upgrade_certificate: Option<UpgradeCertificate<TYPES>>,
         decided_upgrade_certificate: Arc<RwLock<Option<UpgradeCertificate<TYPES>>>>,
         parent_qc: QuorumCertificate2<TYPES>,
@@ -530,9 +530,9 @@ impl<TYPES: NodeType, V: Versions> HandleDepOutput for ProposalDependencyHandle<
         }
 
         let proposal_cert = if let Some(view_sync_cert) = view_sync_finalize_cert {
-            Some(ViewChangeEvidence::ViewSync(view_sync_cert))
+            Some(ViewChangeEvidence2::ViewSync(view_sync_cert))
         } else {
-            timeout_certificate.map(ViewChangeEvidence::Timeout)
+            timeout_certificate.map(ViewChangeEvidence2::Timeout)
         };
 
         if let Err(e) = self
