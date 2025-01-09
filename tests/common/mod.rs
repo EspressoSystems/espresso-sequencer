@@ -94,7 +94,7 @@ impl TestConfig {
         };
 
         // TODO test both builders (probably requires some refactoring).
-        let builder_url = if sequencer_version as u16 >= MarketplaceVersion::VERSION.minor {
+        let builder_url = if sequencer_version as u16 >= MarketplaceVersion::version().minor {
             let url = url_from_port(dotenvy::var("ESPRESSO_RESERVE_BUILDER_SERVER_PORT")?)?;
             let url = Url::from_str(&url)?;
             wait_for_service(url.clone(), 1000, 200).await.unwrap();
