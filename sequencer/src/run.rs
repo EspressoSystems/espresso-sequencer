@@ -28,7 +28,7 @@ pub async fn main() -> anyhow::Result<()> {
 
     // validate that the fee contract is a proxy and panic otherwise
     genesis
-        .validate_fee_contract(opt.l1_provider_url.to_string())
+        .validate_fee_contract(opt.l1_provider_url[0].clone())
         .await
         .unwrap();
 
@@ -130,7 +130,7 @@ where
 {
     let (private_staking_key, private_state_key) = opt.private_keys()?;
     let l1_params = L1Params {
-        url: opt.l1_provider_url,
+        urls: opt.l1_provider_url,
         options: opt.l1_options,
     };
 
