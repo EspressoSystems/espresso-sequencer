@@ -1,11 +1,12 @@
 use anyhow::{anyhow, Result};
 use client::SequencerClient;
-use espresso_types::FeeAmount;
+use espresso_types::{FeeAmount, MarketplaceVersion};
 use ethers::prelude::*;
 use futures::future::join_all;
 use std::{fmt, str::FromStr, time::Duration};
 use surf_disco::Url;
 use tokio::time::{sleep, timeout};
+use vbs::version::StaticVersionType;
 
 const L1_PROVIDER_RETRY_INTERVAL: Duration = Duration::from_secs(1);
 // TODO add to .env
@@ -93,17 +94,18 @@ impl TestConfig {
         };
 
         // TODO test both builders (probably requires some refactoring).
-        let builder_url = if sequencer_version >= 3 {
+        let builder_url = if sequencer_version as u16 >= MarketplaceVersion::VERSION.minor {
             let url = url_from_port(dotenvy::var("ESPRESSO_RESERVE_BUILDER_SERVER_PORT")?)?;
+            let url = Url::from_str(&url)?;
+            wait_for_service(url.clone(), 1000, 200).await.unwrap();
 
-            Url::from_str(&url)?
-                .join("bundle_info/builderaddress")
-                .unwrap()
+            url.join("bundle_info/builderaddress").unwrap()
         } else {
             let url = url_from_port(dotenvy::var("ESPRESSO_BUILDER_SERVER_PORT")?)?;
-            Url::from_str(&url)?
-                .join("block_info/builderaddress")
-                .unwrap()
+            let url = Url::from_str(&url)?;
+            wait_for_service(url.clone(), 1000, 200).await.unwrap();
+
+            url.join("block_info/builderaddress").unwrap()
         };
 
         let builder_address = get_builder_address(builder_url).await;
@@ -222,9 +224,8 @@ impl TestConfig {
     }
 }
 
-/// Get Address from builder after waiting for builder to become ready.
+/// Get Address from builder
 pub async fn get_builder_address(url: Url) -> Address {
-    let _ = wait_for_service(url.clone(), 1000, 200).await;
     for _ in 0..5 {
         // Try to get builder address somehow
         if let Ok(body) = reqwest::get(url.clone()).await {
