@@ -127,9 +127,9 @@ impl L1ClientMetrics {
 }
 
 impl L1Provider {
-    fn new(url: Url, failures: &dyn CounterFamily) -> Self {
+    fn new(index: usize, url: Url, failures: &dyn CounterFamily) -> Self {
         Self {
-            failures: failures.create(vec![url.to_string()]),
+            failures: failures.create(vec![index.to_string()]),
             inner: Http::new(url),
         }
     }
@@ -153,7 +153,8 @@ impl MultiRpcClient {
             clients: Arc::new(
                 clients
                     .into_iter()
-                    .map(|url| L1Provider::new(url, &*failures))
+                    .enumerate()
+                    .map(|(i, url)| L1Provider::new(i, url, &*failures))
                     .collect(),
             ),
             status: Default::default(),
@@ -222,12 +223,13 @@ impl JsonRpcClient for MultiRpcClient {
 
             status.client
         };
-        let client = &self.clients[current % self.clients.len()];
+        let provider = current % self.clients.len();
+        let client = &self.clients[provider];
         match client.request(method, &params).await {
             Ok(res) => Ok(res),
             Err(err) => {
                 let t = Instant::now();
-                tracing::warn!(?t, method, ?params, "L1 client error: {err:#}");
+                tracing::warn!(?t, method, ?params, provider, "L1 client error: {err:#}");
                 client.failures.add(1);
 
                 // Keep track of failures, failing over to the next client if necessary.
@@ -340,11 +342,12 @@ impl L1Client {
                         Some(urls) => {
                             // Use a new WebSockets host each time we retry in case there is a
                             // problem with one of the hosts specifically.
-                            let url = &urls[i % urls.len()];
+                            let provider = i % urls.len();
+                            let url = &urls[provider];
                             ws = match Provider::<Ws>::connect(url.clone()).await {
                                 Ok(ws) => ws,
                                 Err(err) => {
-                                    tracing::warn!(%url, "failed to connect WebSockets provider: {err:#}");
+                                    tracing::warn!(provider, "failed to connect WebSockets provider: {err:#}");
                                     sleep(retry_delay).await;
                                     continue;
                                 }
