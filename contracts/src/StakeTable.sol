@@ -475,7 +475,8 @@ contract StakeTable is AbstractStakeTable {
     /// @dev This function can only be called by the validator itself when it's not in the exit
     /// queue
     /// @dev The validator will need to give up either its old BLS key and/or old Schnorr key
-    /// @dev The validator will need to provide a BLS signature over the new BLS key
+    /// @dev The validator will need to provide a BLS signature to prove that the account owns the
+    /// new BLS key
     /// @param newBlsVK The new BLS verification key
     /// @param newSchnorrVK The new Schnorr verification key
     /// @param newBlsSig The BLS signature that the account owns the new BLS key
