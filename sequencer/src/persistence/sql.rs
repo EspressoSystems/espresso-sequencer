@@ -1544,7 +1544,6 @@ mod test {
     use futures::stream::TryStreamExt;
     use hotshot_example_types::node_types::TestVersions;
     use hotshot_types::{
-        data::EpochNumber,
         simple_certificate::QuorumCertificate,
         traits::{block_contents::vid_commitment, signature_key::SignatureKey, EncodeBytes},
         vid::vid_scheme,
@@ -1682,7 +1681,6 @@ mod test {
                 encoded_transactions: leaf_payload_bytes_arc,
                 metadata: leaf_payload.ns_table().clone(),
                 view_number: ViewNumber::new(0),
-                epoch: EpochNumber::new(1),
             },
             signature: block_payload_signature,
             _pd: Default::default(),
@@ -1807,7 +1805,6 @@ mod test {
                 encoded_transactions: leaf_payload_bytes_arc.clone(),
                 metadata: leaf_payload.ns_table().clone(),
                 view_number: data_view,
-                epoch: EpochNumber::new(1),
             },
             signature: block_payload_signature,
             _pd: Default::default(),

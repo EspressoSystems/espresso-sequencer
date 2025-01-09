@@ -195,7 +195,6 @@ async fn test_message_compat<Ver: StaticVersionType>(_ver: Ver) {
             data: UpgradeProposal {
                 upgrade_proposal: upgrade_data.clone(),
                 view_number: ViewNumber::genesis(),
-                epoch: EpochNumber::genesis(),
             },
             signature: signature.clone(),
             _pd: Default::default(),
@@ -212,7 +211,6 @@ async fn test_message_compat<Ver: StaticVersionType>(_ver: Ver) {
                 encoded_transactions: payload.encode(),
                 metadata,
                 view_number: ViewNumber::genesis(),
-                epoch: EpochNumber::genesis(),
             },
             signature: signature.clone(),
             _pd: Default::default(),

@@ -1065,7 +1065,6 @@ mod api_tests {
     use hotshot_query_service::availability::{
         AvailabilityDataSource, BlockQueryData, VidCommonQueryData,
     };
-    use hotshot_types::data::EpochNumber;
     use hotshot_types::{
         data::{DaProposal, QuorumProposal2, VidDisperseShare},
         event::LeafInfo,
@@ -1317,7 +1316,6 @@ mod api_tests {
                 encoded_transactions: payload_bytes_arc.clone(),
                 metadata: payload.ns_table().clone(),
                 view_number: leaf.view_number(),
-                epoch: EpochNumber::new(1),
             };
             let da_proposal = Proposal {
                 data: da_proposal_inner,

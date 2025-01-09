@@ -247,7 +247,6 @@ mod persistence_tests {
             encoded_transactions: leaf_payload_bytes_arc.clone(),
             metadata: leaf_payload.ns_table().clone(),
             view_number: ViewNumber::new(0),
-            epoch: EpochNumber::new(1),
         };
 
         let da_proposal = Proposal {
@@ -686,7 +685,6 @@ mod persistence_tests {
                 encoded_transactions: leaf_payload_bytes_arc.clone(),
                 metadata: leaf_payload.ns_table().clone(),
                 view_number: ViewNumber::new(0),
-                epoch: EpochNumber::new(1),
             },
             signature: block_payload_signature,
             _pd: Default::default(),
@@ -875,7 +873,6 @@ mod persistence_tests {
                 encoded_transactions: leaf_payload_bytes_arc,
                 metadata: leaf_payload.ns_table().clone(),
                 view_number: ViewNumber::new(0),
-                epoch: EpochNumber::new(1),
             },
             signature: block_payload_signature,
             _pd: Default::default(),
