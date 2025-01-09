@@ -52,7 +52,10 @@ use libp2p_identity::{
 pub use libp2p_networking::network::{GossipConfig, RequestResponseConfig};
 use libp2p_networking::{
     network::{
-        behaviours::dht::record::{Namespace, RecordKey, RecordValue},
+        behaviours::dht::{
+            record::{Namespace, RecordKey, RecordValue},
+            store::persistent::{DhtNoPersistence, DhtPersistentStorage},
+        },
         spawn_network_node,
         transport::construct_auth_message,
         NetworkEvent::{self, DirectRequest, DirectResponse, GossipMsg},
@@ -273,6 +276,7 @@ impl<T: NodeType> TestableNetworkingImplementation<T> for Libp2pNetwork<T> {
                     Arc::new(
                         match Libp2pNetwork::new(
                             Libp2pMetricsValue::default(),
+                            DhtNoPersistence,
                             config,
                             pubkey.clone(),
                             lookup_record_value,
@@ -388,9 +392,10 @@ impl<T: NodeType> Libp2pNetwork<T> {
     /// # Panics
     /// If we are unable to calculate the replication factor
     #[allow(clippy::too_many_arguments)]
-    pub async fn from_config(
+    pub async fn from_config<D: DhtPersistentStorage>(
         mut config: NetworkConfig<T::SignatureKey>,
-        membership: Arc<RwLock<T::Membership>>,
+        dht_persistent_storage: D,
+        quorum_membership: Arc<RwLock<T::Membership>>,
         gossip_config: GossipConfig,
         request_response_config: RequestResponseConfig,
         bind_address: Multiaddr,
@@ -421,7 +426,7 @@ impl<T: NodeType> Libp2pNetwork<T> {
 
         // Set the auth message and stake table
         config_builder
-            .stake_table(Some(membership))
+            .stake_table(Some(quorum_membership))
             .auth_message(Some(auth_message));
 
         // The replication factor is the minimum of [the default and 2/3 the number of nodes]
@@ -469,6 +474,7 @@ impl<T: NodeType> Libp2pNetwork<T> {
 
         Ok(Libp2pNetwork::new(
             metrics,
+            dht_persistent_storage,
             node_config,
             pub_key.clone(),
             lookup_record_value,
@@ -509,8 +515,9 @@ impl<T: NodeType> Libp2pNetwork<T> {
     ///
     /// This will panic if there are less than 5 bootstrap nodes
     #[allow(clippy::too_many_arguments)]
-    pub async fn new(
+    pub async fn new<D: DhtPersistentStorage>(
         metrics: Libp2pMetricsValue,
+        dht_persistent_storage: D,
         config: NetworkNodeConfig<T>,
         pk: T::SignatureKey,
         lookup_record_value: RecordValue<T::SignatureKey>,
@@ -518,9 +525,12 @@ impl<T: NodeType> Libp2pNetwork<T> {
         id: usize,
         #[cfg(feature = "hotshot-testing")] reliability_config: Option<Box<dyn NetworkReliability>>,
     ) -> Result<Libp2pNetwork<T>, NetworkError> {
-        let (mut rx, network_handle) = spawn_network_node::<T>(config.clone(), id)
-            .await
-            .map_err(|e| NetworkError::ConfigError(format!("failed to spawn network node: {e}")))?;
+        let (mut rx, network_handle) =
+            spawn_network_node::<T, D>(config.clone(), dht_persistent_storage, id)
+                .await
+                .map_err(|e| {
+                    NetworkError::ConfigError(format!("failed to spawn network node: {e}"))
+                })?;
 
         // Add our own address to the bootstrap addresses
         let addr = network_handle.listen_addr();

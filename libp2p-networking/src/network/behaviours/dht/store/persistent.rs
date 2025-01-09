@@ -1,27 +1,122 @@
-//! This file contains the `FileBackedStore` struct, which is a wrapper around a `RecordStore`
-//! that occasionally saves the DHT to a file on disk.
+//! This file contains the `PersistentStore` struct, which is a wrapper around a `RecordStore`
+//! that occasionally saves the DHT to a persistent storage.
 
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::{
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc,
+    },
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
+};
 
 use anyhow::Context;
+use async_trait::async_trait;
 use delegate::delegate;
 use libp2p::kad::store::{RecordStore, Result};
 use serde::{Deserialize, Serialize};
+use tokio::{sync::Semaphore, time::timeout};
 use tracing::{debug, warn};
 
-/// A `RecordStore` wrapper that occasionally saves the DHT to a file on disk.
-pub struct FileBackedStore<R: RecordStore> {
-    /// The underlying store
-    underlying_store: R,
+/// A trait that we use to save and load the DHT to a file on disk
+/// or other storage medium
+#[async_trait]
+pub trait DhtPersistentStorage: Send + Sync + 'static + Clone {
+    /// Save the DHT (as a list of serializable records) to the persistent storage
+    ///
+    /// # Errors
+    /// - If we fail to save the DHT to the persistent storage provider
+    async fn save(&self, _records: Vec<SerializableRecord>) -> anyhow::Result<()>;
 
-    /// The path to the file
+    /// Load the DHT (as a list of serializable records) from the persistent storage
+    ///
+    /// # Errors
+    /// - If we fail to load the DHT from the persistent storage provider
+    async fn load(&self) -> anyhow::Result<Vec<SerializableRecord>>;
+}
+
+/// A no-op `PersistentStorage` that does not persist the DHT
+#[derive(Clone)]
+pub struct DhtNoPersistence;
+
+#[async_trait]
+impl DhtPersistentStorage for DhtNoPersistence {
+    async fn save(&self, _records: Vec<SerializableRecord>) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    async fn load(&self) -> anyhow::Result<Vec<SerializableRecord>> {
+        Ok(vec![])
+    }
+}
+
+/// A `PersistentStorage` that persists the DHT to a file on disk. Used mostly for
+/// testing.
+#[derive(Clone)]
+pub struct DhtFilePersistence {
+    /// The path to the file on disk
     path: String,
+}
 
-    /// The maximum number of records that can be added to the store before the store is saved to a file
+impl DhtFilePersistence {
+    /// Create a new `DhtFilePersistence` with the given path
+    #[must_use]
+    pub fn new(path: String) -> Self {
+        Self { path }
+    }
+}
+
+#[async_trait]
+impl DhtPersistentStorage for DhtFilePersistence {
+    /// Save the DHT to the file on disk
+    ///
+    /// # Errors
+    /// - If we fail to serialize the records
+    /// - If we fail to write the serialized records to the file
+    async fn save(&self, records: Vec<SerializableRecord>) -> anyhow::Result<()> {
+        // Bincode-serialize the records
+        let to_save =
+            bincode::serialize(&records).with_context(|| "Failed to serialize records")?;
+
+        // Write the serialized records to the file
+        std::fs::write(&self.path, to_save).with_context(|| "Failed to write records to file")?;
+
+        Ok(())
+    }
+
+    /// Load the DHT from the file on disk
+    ///
+    /// # Errors
+    /// - If we fail to read the file
+    /// - If we fail to deserialize the records
+    async fn load(&self) -> anyhow::Result<Vec<SerializableRecord>> {
+        // Read the contents of the file
+        let contents =
+            std::fs::read(&self.path).with_context(|| "Failed to read records from file")?;
+
+        // Deserialize the contents
+        let records: Vec<SerializableRecord> =
+            bincode::deserialize(&contents).with_context(|| "Failed to deserialize records")?;
+
+        Ok(records)
+    }
+}
+
+/// A `RecordStore` wrapper that occasionally saves the DHT to a persistent storage.
+pub struct PersistentStore<R: RecordStore, D: DhtPersistentStorage> {
+    /// The underlying record store
+    underlying_record_store: R,
+
+    /// The persistent storage
+    persistent_storage: D,
+
+    /// The semaphore for limiting the number of concurrent operations (to one)
+    semaphore: Arc<Semaphore>,
+
+    /// The maximum number of records that can be added to the store before the store is saved to the persistent storage
     max_record_delta: u64,
 
-    /// The running delta between the records in the file and the records in the underlying store
-    record_delta: u64,
+    /// The running delta between the records in the persistent storage and the records in the underlying store
+    record_delta: Arc<AtomicU64>,
 }
 
 /// A serializable version of a Libp2p `Record`
@@ -117,24 +212,30 @@ impl TryFrom<SerializableRecord> for libp2p::kad::Record {
     }
 }
 
-impl<R: RecordStore> FileBackedStore<R> {
-    /// Create a new `FileBackedStore` with the given underlying store and path.
+impl<R: RecordStore, D: DhtPersistentStorage> PersistentStore<R, D> {
+    /// Create a new `PersistentStore` with the given underlying store and path.
+    /// On creation, the DHT is restored from the persistent storage if possible.
     ///
     /// `max_record_delta` is the maximum number of records that can be added to the store before
-    /// the store is saved to a file.
-    pub fn new(underlying_store: R, path: String, max_record_delta: u64) -> Self {
+    /// the store is saved to the persistent storage.
+    pub async fn new(
+        underlying_record_store: R,
+        persistent_storage: D,
+        max_record_delta: u64,
+    ) -> Self {
         // Create the new store
-        let mut store = FileBackedStore {
-            underlying_store,
-            path: path.clone(),
+        let mut store = PersistentStore {
+            underlying_record_store,
+            persistent_storage,
             max_record_delta,
-            record_delta: 0,
+            record_delta: Arc::new(AtomicU64::new(0)),
+            semaphore: Arc::new(Semaphore::new(1)),
         };
 
-        // Try to restore the DHT from a file. If it fails, warn and start with an empty store
-        if let Err(err) = store.restore_from_file(path) {
+        // Try to restore the DHT from the persistent store. If it fails, warn and start with an empty store
+        if let Err(err) = store.restore_from_persistent_storage().await {
             warn!(
-                "Failed to restore DHT from file: {:?}. Starting with empty store",
+                "Failed to restore DHT from persistent storage: {:?}. Starting with empty store",
                 err
             );
         }
@@ -143,17 +244,19 @@ impl<R: RecordStore> FileBackedStore<R> {
         store
     }
 
-    /// Attempt to save the DHT to the file at the given path
+    /// Try saving the DHT to persistent storage if a task is not already in progress.
     ///
-    /// # Errors
-    /// - If we fail to serialize the DHT
-    /// - If we fail to write the serialized DHT to the file
-    pub fn save_to_file(&mut self) -> anyhow::Result<()> {
-        debug!("Saving DHT to file");
+    /// Returns `true` if the DHT was saved, `false` otherwise.
+    fn try_save_to_persistent_storage(&mut self) -> bool {
+        // Try to acquire the semaphore, warning if another save operation is already in progress
+        let Ok(permit) = Arc::clone(&self.semaphore).try_acquire_owned() else {
+            warn!("Skipping DHT save to persistent storage - another save operation is already in progress");
+            return false;
+        };
 
         // Get all records and convert them to their serializable counterparts
         let serializable_records: Vec<_> = self
-            .underlying_store
+            .underlying_record_store
             .records()
             .filter_map(|record| {
                 SerializableRecord::try_from(record.into_owned())
@@ -164,33 +267,50 @@ impl<R: RecordStore> FileBackedStore<R> {
             })
             .collect();
 
-        // Serialize the records
-        let contents = bincode::serialize(&serializable_records)
-            .with_context(|| "Failed to serialize records")?;
+        // Spawn a task to save the DHT to the persistent storage
+        let persistent_storage = self.persistent_storage.clone();
+        let record_delta = Arc::clone(&self.record_delta);
+        tokio::spawn(async move {
+            debug!("Saving DHT to persistent storage");
 
-        // Write the contents to the file
-        std::fs::write(self.path.clone(), contents)
-            .with_context(|| "Failed to write DHT to file")?;
+            // Save the DHT to the persistent storage
+            match timeout(
+                Duration::from_secs(10),
+                persistent_storage.save(serializable_records),
+            )
+            .await
+            .map_err(|_| anyhow::anyhow!("save operation timed out"))
+            {
+                Ok(Ok(())) => {}
+                Ok(Err(error)) | Err(error) => {
+                    warn!("Failed to save DHT to persistent storage: {error}");
+                }
+            };
 
-        debug!("Saved DHT to file");
+            // Reset the record delta
+            record_delta.store(0, Ordering::Release);
 
-        Ok(())
+            drop(permit);
+
+            debug!("Saved DHT to persistent storage");
+        });
+
+        true
     }
 
-    /// Attempt to restore the DHT to the underlying store from the file at the given path
+    /// Attempt to restore the DHT to the underlying store from the persistent storage
     ///
     /// # Errors
-    /// - If we fail to read the file
-    /// - If we fail to deserialize the file
-    pub fn restore_from_file(&mut self, path: String) -> anyhow::Result<()> {
-        debug!("Restoring DHT from file");
+    /// - If we fail to load from the persistent storage
+    pub async fn restore_from_persistent_storage(&mut self) -> anyhow::Result<()> {
+        debug!("Restoring DHT from persistent storage");
 
-        // Read the contents of the file as a `HashMap` of `Key` to `Vec<u8>`
-        let contents = std::fs::read(path).with_context(|| "Failed to read DHT file")?;
-
-        // Convert the contents to a `HashMap` of `RecordKey` to `Vec<u8>`
-        let serializable_records: Vec<SerializableRecord> =
-            bincode::deserialize(&contents).with_context(|| "Failed to parse DHT file")?;
+        // Read the contents of the persistent store
+        let serializable_records = self
+            .persistent_storage
+            .load()
+            .await
+            .with_context(|| "Failed to read DHT from persistent storage")?;
 
         // Put all records into the new store
         for serializable_record in serializable_records {
@@ -198,36 +318,40 @@ impl<R: RecordStore> FileBackedStore<R> {
             match libp2p::kad::Record::try_from(serializable_record) {
                 Ok(record) => {
                     // Put the record into the new store
-                    if let Err(err) = self.underlying_store.put(record) {
-                        warn!("Failed to restore record from file: {:?}", err);
+                    if let Err(err) = self.underlying_record_store.put(record) {
+                        warn!(
+                            "Failed to restore record from persistent storage: {:?}",
+                            err
+                        );
                     }
                 }
                 Err(err) => {
-                    warn!("Failed to parse record from file: {:?}", err);
+                    warn!("Failed to parse record from persistent storage: {:?}", err);
                 }
             };
         }
 
-        debug!("Restored DHT from file");
+        debug!("Restored DHT from persistent storage");
 
         Ok(())
     }
 }
 
-/// Implement the `RecordStore` trait for `FileBackedStore`
-impl<R: RecordStore> RecordStore for FileBackedStore<R> {
+/// Implement the `RecordStore` trait for `PersistentStore`
+impl<R: RecordStore, D: DhtPersistentStorage> RecordStore for PersistentStore<R, D> {
     type ProvidedIter<'a>
         = R::ProvidedIter<'a>
     where
-        R: 'a;
+        R: 'a,
+        D: 'a;
     type RecordsIter<'a>
         = R::RecordsIter<'a>
     where
-        R: 'a;
-
+        R: 'a,
+        D: 'a;
     // Delegate all `RecordStore` methods except `put` to the inner store
     delegate! {
-        to self.underlying_store {
+        to self.underlying_record_store {
             fn add_provider(&mut self, record: libp2p::kad::ProviderRecord) -> libp2p::kad::store::Result<()>;
             fn get(&self, k: &libp2p::kad::RecordKey) -> Option<std::borrow::Cow<'_, libp2p::kad::Record>>;
             fn provided(&self) -> Self::ProvidedIter<'_>;
@@ -237,39 +361,38 @@ impl<R: RecordStore> RecordStore for FileBackedStore<R> {
         }
     }
 
-    /// Overwrite the `put` method to potentially save the record to a file
+    /// Overwrite the `put` method to potentially sync the DHT to the persistent store
     fn put(&mut self, record: libp2p::kad::Record) -> Result<()> {
         // Try to write to the underlying store
-        let result = self.underlying_store.put(record);
+        let result = self.underlying_record_store.put(record);
 
-        // If the record was successfully written, update the record delta
+        // If the record was successfully written,
         if result.is_ok() {
-            self.record_delta += 1;
+            // Update the record delta
+            self.record_delta.fetch_add(1, Ordering::Relaxed);
 
-            // If the record delta is greater than the maximum record delta, try to save the file
-            if self.record_delta > self.max_record_delta {
-                if let Err(e) = self.save_to_file() {
-                    warn!("Failed to save DHT to file: {:?}", e);
-                }
+            // Check if it's above the maximum record delta
+            if self.record_delta.load(Ordering::Relaxed) > self.max_record_delta {
+                // Try to save the DHT to persistent storage
+                self.try_save_to_persistent_storage();
             }
         }
 
         result
     }
 
-    /// Overwrite the `remove` method to potentially remove the record from a file
+    /// Overwrite the `remove` method to potentially sync the DHT to the persistent store
     fn remove(&mut self, k: &libp2p::kad::RecordKey) {
         // Remove the record from the underlying store
-        self.underlying_store.remove(k);
+        self.underlying_record_store.remove(k);
 
         // Update the record delta
-        self.record_delta += 1;
+        self.record_delta.fetch_add(1, Ordering::Relaxed);
 
-        // If the record delta is greater than 10, try to save the file
-        if self.record_delta > 10 {
-            if let Err(e) = self.save_to_file() {
-                warn!("Failed to save DHT to file: {:?}", e);
-            }
+        // Check if it's above the maximum record delta
+        if self.record_delta.load(Ordering::Relaxed) > self.max_record_delta {
+            // Try to save the DHT to persistent storage
+            self.try_save_to_persistent_storage();
         }
     }
 }
@@ -284,19 +407,20 @@ mod tests {
 
     use super::*;
 
-    #[test]
-    fn test_save_and_restore() {
+    #[tokio::test]
+    async fn test_save_and_restore() {
         // Try initializing tracing
         let _ = tracing_subscriber::fmt()
             .with_env_filter(EnvFilter::from_default_env())
             .try_init();
 
         // Create a test store
-        let mut store = FileBackedStore::new(
+        let mut store = PersistentStore::new(
             MemoryStore::new(PeerId::random()),
-            "/tmp/test.dht".to_string(),
+            DhtFilePersistence::new("/tmp/test1.dht".to_string()),
             10,
-        );
+        )
+        .await;
 
         // The key is a random 16-byte array
         let key = RecordKey::new(&rand::random::<[u8; 16]>().to_vec());
@@ -309,15 +433,19 @@ mod tests {
             .put(libp2p::kad::Record::new(key.clone(), random_value.to_vec()))
             .expect("Failed to put record into store");
 
-        // Save the store to a file
-        store.save_to_file().expect("Failed to save store to file");
+        // Try to save the store to a persistent storage
+        assert!(store.try_save_to_persistent_storage());
 
-        // Create a new store from the file
-        let new_store = FileBackedStore::new(
+        // Wait a bit for the save to complete
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        // Create a new store from the persistent storage
+        let new_store = PersistentStore::new(
             MemoryStore::new(PeerId::random()),
-            "/tmp/test.dht".to_string(),
+            DhtFilePersistence::new("/tmp/test1.dht".to_string()),
             10,
-        );
+        )
+        .await;
 
         // Check that the new store has the record
         let restored_record = new_store
@@ -328,19 +456,20 @@ mod tests {
         assert_eq!(restored_record.value, random_value.to_vec());
     }
 
-    #[test]
-    fn test_record_delta() {
+    #[tokio::test]
+    async fn test_record_delta() {
         // Try initializing tracing
         let _ = tracing_subscriber::fmt()
             .with_env_filter(EnvFilter::from_default_env())
             .try_init();
 
         // Create a test store
-        let mut store = FileBackedStore::new(
+        let mut store = PersistentStore::new(
             MemoryStore::new(PeerId::random()),
-            "/tmp/test.dht".to_string(),
+            DhtFilePersistence::new("/tmp/test2.dht".to_string()),
             10,
-        );
+        )
+        .await;
 
         let mut keys = Vec::new();
         let mut values = Vec::new();
@@ -359,12 +488,13 @@ mod tests {
                 .expect("Failed to put record into store");
         }
 
-        // Create a new store from the allegedly unsaved file
-        let new_store = FileBackedStore::new(
+        // Create a new store from the allegedly unpersisted DHT
+        let new_store = PersistentStore::new(
             MemoryStore::new(PeerId::random()),
-            "/tmp/test.dht".to_string(),
+            DhtFilePersistence::new("/tmp/test2.dht".to_string()),
             10,
-        );
+        )
+        .await;
 
         // Check that the new store has none of the records
         for key in &keys {
@@ -379,12 +509,16 @@ mod tests {
             ))
             .expect("Failed to put record into store");
 
-        // Create a new store from the allegedly saved file
-        let new_store = FileBackedStore::new(
+        // Wait a bit for the save to complete
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        // Create a new store from the allegedly saved DHT
+        let new_store = PersistentStore::new(
             MemoryStore::new(PeerId::random()),
-            "/tmp/test.dht".to_string(),
+            DhtFilePersistence::new("/tmp/test2.dht".to_string()),
             10,
-        );
+        )
+        .await;
 
         // Check that the new store has all of the records
         for (i, key) in keys.iter().enumerate() {
@@ -393,7 +527,7 @@ mod tests {
         }
 
         // Check that the record delta is 0
-        assert_eq!(new_store.record_delta, 0);
+        assert_eq!(store.record_delta.load(Ordering::Relaxed), 0);
     }
 
     #[test]

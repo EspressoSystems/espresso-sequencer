@@ -59,7 +59,10 @@ pub use self::{
 use super::{
     behaviours::dht::{
         bootstrap::{DHTBootstrapTask, InputEvent},
-        store::{file_backed::FileBackedStore, validated::ValidatedStore},
+        store::{
+            persistent::{DhtPersistentStorage, PersistentStore},
+            validated::ValidatedStore,
+        },
     },
     cbor::Cbor,
     gen_transport, BoxedTransport, ClientRequest, NetworkDef, NetworkError, NetworkEvent,
@@ -82,23 +85,23 @@ pub const ESTABLISHED_LIMIT_UNWR: u32 = 10;
 
 /// Network definition
 #[derive(derive_more::Debug)]
-pub struct NetworkNode<T: NodeType> {
+pub struct NetworkNode<T: NodeType, D: DhtPersistentStorage> {
     /// peer id of network node
     peer_id: PeerId,
     /// the swarm of networkbehaviours
     #[debug(skip)]
-    swarm: Swarm<NetworkDef<T::SignatureKey>>,
+    swarm: Swarm<NetworkDef<T::SignatureKey, D>>,
     /// the listener id we are listening on, if it exists
     listener_id: Option<ListenerId>,
     /// Handler for direct messages
     direct_message_state: DMBehaviour,
     /// Handler for DHT Events
-    dht_handler: DHTBehaviour<T::SignatureKey>,
+    dht_handler: DHTBehaviour<T::SignatureKey, D>,
     /// Channel to resend requests, set to Some when we call `spawn_listeners`
     resend_tx: Option<UnboundedSender<ClientRequest>>,
 }
 
-impl<T: NodeType> NetworkNode<T> {
+impl<T: NodeType, D: DhtPersistentStorage> NetworkNode<T, D> {
     /// Returns number of peers this node is connected to
     pub fn num_connected(&self) -> usize {
         self.swarm.connected_peers().count()
@@ -157,8 +160,17 @@ impl<T: NodeType> NetworkNode<T> {
     ///       QUIC v1 (RFC 9000) + DNS
     ///   * Generates a connection to the "broadcast" topic
     ///   * Creates a swarm to manage peers and events
-    #[instrument]
-    pub async fn new(config: NetworkNodeConfig<T>) -> Result<Self, NetworkError> {
+    ///
+    /// # Errors
+    /// - If we fail to generate the transport or any of the behaviours
+    ///
+    /// # Panics
+    /// If 5 < 0
+    #[allow(clippy::too_many_lines)]
+    pub async fn new(
+        config: NetworkNodeConfig<T>,
+        dht_persistent_storage: D,
+    ) -> Result<Self, NetworkError> {
         // Generate a random `KeyPair` if one is not specified
         let keypair = config
             .keypair
@@ -177,7 +189,7 @@ impl<T: NodeType> NetworkNode<T> {
         .await?;
 
         // Generate the swarm
-        let mut swarm: Swarm<NetworkDef<T::SignatureKey>> = {
+        let mut swarm: Swarm<NetworkDef<T::SignatureKey, D>> = {
             // Use the `Blake3` hash of the message's contents as the ID
             let message_id_fn = |message: &GossipsubMessage| {
                 let hash = blake3::hash(&message.data);
@@ -253,20 +265,15 @@ impl<T: NodeType> NetworkNode<T> {
                 panic!("Replication factor not set");
             }
 
-            // Extract the DHT file path from the config, defaulting to `libp2p_dht.json`
-            let dht_file_path = config
-                .dht_file_path
-                .clone()
-                .unwrap_or_else(|| "libp2p_dht.bin".into());
-
-            // Create the DHT behaviour
+            // Create the DHT behaviour with the given persistent storage
             let mut kadem = Behaviour::with_config(
                 peer_id,
-                FileBackedStore::new(
+                PersistentStore::new(
                     ValidatedStore::new(MemoryStore::new(peer_id)),
-                    dht_file_path,
-                    10,
-                ),
+                    dht_persistent_storage,
+                    5,
+                )
+                .await,
                 kconfig,
             );
             kadem.set_mode(Some(Mode::Server));
@@ -712,8 +719,10 @@ impl<T: NodeType> NetworkNode<T> {
 
     /// Spawn a task to listen for requests on the returned channel
     /// as well as any events produced by libp2p
-    #[instrument]
-    pub async fn spawn_listeners(
+    ///
+    /// # Errors
+    /// - If we fail to create the channels or the bootstrap channel
+    pub fn spawn_listeners(
         mut self,
     ) -> Result<
         (

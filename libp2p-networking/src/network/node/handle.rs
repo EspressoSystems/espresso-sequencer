@@ -16,7 +16,10 @@ use tokio::{
 use tracing::{debug, info, instrument};
 
 use crate::network::{
-    behaviours::dht::record::{Namespace, RecordKey, RecordValue},
+    behaviours::dht::{
+        record::{Namespace, RecordKey, RecordValue},
+        store::persistent::DhtPersistentStorage,
+    },
     gen_multiaddr, ClientRequest, NetworkEvent, NetworkNode, NetworkNodeConfig,
 };
 
@@ -77,11 +80,12 @@ impl NetworkNodeReceiver {
 /// Spawn a network node task task and return the handle and the receiver for it
 /// # Errors
 /// Errors if spawning the task fails
-pub async fn spawn_network_node<T: NodeType>(
+pub async fn spawn_network_node<T: NodeType, D: DhtPersistentStorage>(
     config: NetworkNodeConfig<T>,
+    dht_persistent_storage: D,
     id: usize,
 ) -> Result<(NetworkNodeReceiver, NetworkNodeHandle<T>), NetworkError> {
-    let mut network = NetworkNode::new(config.clone())
+    let mut network = NetworkNode::new(config.clone(), dht_persistent_storage)
         .await
         .map_err(|e| NetworkError::ConfigError(format!("failed to create network node: {e}")))?;
     // randomly assigned port
@@ -95,7 +99,7 @@ pub async fn spawn_network_node<T: NodeType>(
     })?;
     // pin here to force the future onto the heap since it can be large
     // in the case of flume
-    let (send_chan, recv_chan) = Box::pin(network.spawn_listeners()).await.map_err(|err| {
+    let (send_chan, recv_chan) = network.spawn_listeners().map_err(|err| {
         NetworkError::ListenError(format!("failed to spawn listeners for Libp2p: {err}"))
     })?;
     let receiver = NetworkNodeReceiver {

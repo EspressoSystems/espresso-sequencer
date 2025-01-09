@@ -18,7 +18,10 @@ use libp2p_swarm_derive::NetworkBehaviour;
 use tracing::{debug, error};
 
 use super::{
-    behaviours::dht::store::{file_backed::FileBackedStore, validated::ValidatedStore},
+    behaviours::dht::store::{
+        persistent::{DhtPersistentStorage, PersistentStore},
+        validated::ValidatedStore,
+    },
     cbor, NetworkEventInternal,
 };
 
@@ -29,7 +32,7 @@ use super::{
 /// - connection management
 #[derive(NetworkBehaviour, derive_more::Debug)]
 #[behaviour(to_swarm = "NetworkEventInternal")]
-pub struct NetworkDef<K: SignatureKey + 'static> {
+pub struct NetworkDef<K: SignatureKey + 'static, D: DhtPersistentStorage> {
     /// purpose: broadcasting messages to many peers
     /// NOTE gossipsub works ONLY for sharing messages right now
     /// in the future it may be able to do peer discovery and routing
@@ -37,10 +40,10 @@ pub struct NetworkDef<K: SignatureKey + 'static> {
     #[debug(skip)]
     gossipsub: GossipBehaviour,
 
-    /// The DHT store. We use a `FileBackedStore` to occasionally save the DHT to
-    /// a file on disk and a `ValidatedStore` to validate the records stored.
+    /// The DHT store. We use a `PersistentStore` to occasionally save the DHT to
+    /// some persistent store and a `ValidatedStore` to validate the records stored.
     #[debug(skip)]
-    pub dht: libp2p::kad::Behaviour<FileBackedStore<ValidatedStore<MemoryStore, K>>>,
+    pub dht: libp2p::kad::Behaviour<PersistentStore<ValidatedStore<MemoryStore, K>, D>>,
 
     /// purpose: identifying the addresses from an outside POV
     #[debug(skip)]
@@ -56,16 +59,16 @@ pub struct NetworkDef<K: SignatureKey + 'static> {
     pub autonat: libp2p::autonat::Behaviour,
 }
 
-impl<K: SignatureKey + 'static> NetworkDef<K> {
+impl<K: SignatureKey + 'static, D: DhtPersistentStorage> NetworkDef<K, D> {
     /// Create a new instance of a `NetworkDef`
     #[must_use]
     pub fn new(
         gossipsub: GossipBehaviour,
-        dht: libp2p::kad::Behaviour<FileBackedStore<ValidatedStore<MemoryStore, K>>>,
+        dht: libp2p::kad::Behaviour<PersistentStore<ValidatedStore<MemoryStore, K>, D>>,
         identify: IdentifyBehaviour,
         direct_message: super::cbor::Behaviour<Vec<u8>, Vec<u8>>,
         autonat: autonat::Behaviour,
-    ) -> NetworkDef<K> {
+    ) -> NetworkDef<K, D> {
         Self {
             gossipsub,
             dht,
@@ -77,7 +80,7 @@ impl<K: SignatureKey + 'static> NetworkDef<K> {
 }
 
 /// Address functions
-impl<K: SignatureKey + 'static> NetworkDef<K> {
+impl<K: SignatureKey + 'static, D: DhtPersistentStorage> NetworkDef<K, D> {
     /// Add an address
     pub fn add_address(&mut self, peer_id: &PeerId, address: Multiaddr) {
         // NOTE to get this address to play nice with the other
@@ -91,7 +94,7 @@ impl<K: SignatureKey + 'static> NetworkDef<K> {
 }
 
 /// Gossip functions
-impl<K: SignatureKey + 'static> NetworkDef<K> {
+impl<K: SignatureKey + 'static, D: DhtPersistentStorage> NetworkDef<K, D> {
     /// Publish a given gossip
     pub fn publish_gossip(&mut self, topic: IdentTopic, contents: Vec<u8>) {
         if let Err(e) = self.gossipsub.publish(topic, contents) {
@@ -114,7 +117,7 @@ impl<K: SignatureKey + 'static> NetworkDef<K> {
 }
 
 /// Request/response functions
-impl<K: SignatureKey + 'static> NetworkDef<K> {
+impl<K: SignatureKey + 'static, D: DhtPersistentStorage> NetworkDef<K, D> {
     /// Add a direct request for a given peer
     pub fn add_direct_request(&mut self, peer_id: PeerId, data: Vec<u8>) -> OutboundRequestId {
         self.direct_message.send_request(&peer_id, data)

@@ -62,7 +62,9 @@ use hotshot_types::{
     },
     HotShotConfig, PeerConfig, ValidatorConfig,
 };
-use libp2p_networking::network::{GossipConfig, RequestResponseConfig};
+use libp2p_networking::network::{
+    behaviours::dht::store::persistent::DhtNoPersistence, GossipConfig, RequestResponseConfig,
+};
 use rand::{rngs::StdRng, SeedableRng};
 use surf_disco::Url;
 use tracing::{debug, error, info, warn};
@@ -738,6 +740,7 @@ where
         // Create the Libp2p network
         let libp2p_network = Libp2pNetwork::from_config(
             config.clone(),
+            DhtNoPersistence,
             Arc::clone(membership),
             GossipConfig::default(),
             RequestResponseConfig::default(),

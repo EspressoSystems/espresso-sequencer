@@ -28,7 +28,10 @@ use libp2p::kad::{
     store::RecordStore, Behaviour as KademliaBehaviour, BootstrapError, Event as KademliaEvent,
 };
 use libp2p_identity::PeerId;
-use store::{file_backed::FileBackedStore, validated::ValidatedStore};
+use store::{
+    persistent::{DhtPersistentStorage, PersistentStore},
+    validated::ValidatedStore,
+};
 use tokio::{spawn, sync::mpsc::UnboundedSender, time::sleep};
 use tracing::{debug, error, warn};
 
@@ -57,7 +60,7 @@ use crate::network::{ClientRequest, NetworkEvent};
 /// - bootstrapping into the network
 /// - peer discovery
 #[derive(Debug)]
-pub struct DHTBehaviour<K: SignatureKey + 'static> {
+pub struct DHTBehaviour<K: SignatureKey + 'static, D: DhtPersistentStorage> {
     /// in progress queries for nearby peers
     pub in_progress_get_closest_peers: HashMap<QueryId, Sender<()>>,
     /// List of in-progress get requests
@@ -77,8 +80,8 @@ pub struct DHTBehaviour<K: SignatureKey + 'static> {
     /// Sender to the bootstrap task
     bootstrap_tx: Option<mpsc::Sender<bootstrap::InputEvent>>,
 
-    /// Phantom type for the key
-    phantom: PhantomData<K>,
+    /// Phantom type for the key and persistent storage
+    phantom: PhantomData<(K, D)>,
 }
 
 /// State of bootstrapping
@@ -106,7 +109,7 @@ pub enum DHTEvent {
     IsBootstrapped,
 }
 
-impl<K: SignatureKey + 'static> DHTBehaviour<K> {
+impl<K: SignatureKey + 'static, D: DhtPersistentStorage> DHTBehaviour<K, D> {
     /// Give the handler a way to retry requests.
     pub fn set_retry(&mut self, tx: UnboundedSender<ClientRequest>) {
         self.retry_tx = Some(tx);
@@ -143,7 +146,7 @@ impl<K: SignatureKey + 'static> DHTBehaviour<K> {
     /// print out the routing table to stderr
     pub fn print_routing_table(
         &mut self,
-        kadem: &mut KademliaBehaviour<FileBackedStore<ValidatedStore<MemoryStore, K>>>,
+        kadem: &mut KademliaBehaviour<PersistentStore<ValidatedStore<MemoryStore, K>, D>>,
     ) {
         let mut err = format!("KBUCKETS: PID: {:?}, ", self.peer_id);
         let v = kadem.kbuckets().collect::<Vec<_>>();
@@ -179,7 +182,7 @@ impl<K: SignatureKey + 'static> DHTBehaviour<K> {
         factor: NonZeroUsize,
         backoff: ExponentialBackoff,
         retry_count: u8,
-        kad: &mut KademliaBehaviour<FileBackedStore<ValidatedStore<MemoryStore, K>>>,
+        kad: &mut KademliaBehaviour<PersistentStore<ValidatedStore<MemoryStore, K>, D>>,
     ) {
         // noop
         if retry_count == 0 {
@@ -247,7 +250,7 @@ impl<K: SignatureKey + 'static> DHTBehaviour<K> {
     /// update state based on recv-ed get query
     fn handle_get_query(
         &mut self,
-        store: &mut FileBackedStore<ValidatedStore<MemoryStore, K>>,
+        store: &mut PersistentStore<ValidatedStore<MemoryStore, K>, D>,
         record_results: GetRecordResult,
         id: QueryId,
         mut last: bool,
@@ -405,7 +408,7 @@ impl<K: SignatureKey + 'static> DHTBehaviour<K> {
     pub fn dht_handle_event(
         &mut self,
         event: KademliaEvent,
-        store: &mut FileBackedStore<ValidatedStore<MemoryStore, K>>,
+        store: &mut PersistentStore<ValidatedStore<MemoryStore, K>, D>,
     ) -> Option<NetworkEvent> {
         match event {
             KademliaEvent::OutboundQueryProgressed {
