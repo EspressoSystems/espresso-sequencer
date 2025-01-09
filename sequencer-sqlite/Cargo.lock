@@ -4090,7 +4090,7 @@ dependencies = [
 [[package]]
 name = "hotshot-query-service"
 version = "0.1.75"
-source = "git+https://github.com/EspressoSystems/hotshot-query-service?tag=v0.1.75#dffefa160f441a663723a67bc54efedb11a88b02"
+source = "git+https://github.com/EspressoSystems/hotshot-query-service?tag=v0.1.75-explorer-fixes#d36941606c1a7a9a488963f05e96515fa9cbc1c7"
 dependencies = [
  "anyhow",
  "ark-serialize",
@@ -4113,6 +4113,7 @@ dependencies = [
  "itertools 0.12.1",
  "jf-merkle-tree",
  "jf-vid",
+ "lazy_static",
  "log",
  "prometheus",
  "refinery",
