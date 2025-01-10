@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Result};
 use client::SequencerClient;
-use espresso_types::{FeeAmount, MarketplaceVersion};
+use espresso_types::{FeeAmount, FeeVersion, MarketplaceVersion};
 use ethers::prelude::*;
 use futures::future::join_all;
 use std::{fmt, str::FromStr, time::Duration};
@@ -82,10 +82,10 @@ impl TestConfig {
         // which is the initial mainnet version without any upgrades.
         let sequencer_version: u8 = dotenvy::var("INTEGRATION_TEST_SEQUENCER_VERSION")
             .map(|v| v.parse().unwrap())
-            .unwrap_or(2);
+            .unwrap_or(FeeVersion::version().minor as u8);
 
         // Varies between v0 and v3.
-        let load_generator_url = if sequencer_version >= 3 {
+        let load_generator_url = if sequencer_version >= MarketplaceVersion::version().minor as u8 {
             url_from_port(dotenvy::var(
                 "ESPRESSO_SUBMIT_TRANSACTIONS_PRIVATE_RESERVE_PORT",
             )?)?
