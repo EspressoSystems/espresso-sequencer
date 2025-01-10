@@ -237,20 +237,41 @@ pub async fn get_builder_address(url: Url) -> Address {
     panic!("Error: Failed to retrieve address from builder!");
 }
 
+/// [wait_for_service] will check to see if a service, identified by the given
+/// Url, is available, by checking it's health check endpoint.  If the health
+/// check does not any time before the timeout, then the service will return
+/// an [Err] with the relevant error.
+///
+/// > Note: This function only waits for a single health check pass before
+/// > returning an [Ok] result.
 async fn wait_for_service(url: Url, interval: u64, timeout_duration: u64) -> Result<String> {
+    // utilize the correct path for the health check
+    let Ok(url) = url.join("/healthcheck") else {
+        return Err(anyhow!("Wait for service, could not join url: {}", url));
+    };
+
     timeout(Duration::from_secs(timeout_duration), async {
         loop {
-            if let Ok(body) = reqwest::get(format!("{url}/healthcheck")).await {
-                return body.text().await.map_err(|e| {
-                    anyhow!(
-                        "Wait for service, could not decode response: ({}) {}",
-                        url,
-                        e
-                    )
-                });
-            } else {
+            // Ensure that we get a response from the server
+            let Ok(response) = reqwest::get(url.clone()).await else {
                 sleep(Duration::from_millis(interval)).await;
+                continue;
+            };
+
+            // Check the status code of the response
+            if !response.status().is_success() {
+                // The server did not return a success
+                sleep(Duration::from_millis(interval)).await;
+                continue;
             }
+
+            return response.text().await.map_err(|e| {
+                anyhow!(
+                    "Wait for service, could not decode response: ({}) {}",
+                    url,
+                    e
+                )
+            });
         }
     })
     .await
