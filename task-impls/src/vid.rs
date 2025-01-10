@@ -76,7 +76,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> VidTaskState<TYPES, I> {
                     metadata,
                     view_number,
                     sequencing_fees,
-                    vid_precompute,
                     auction_result,
                     ..
                 } = packed_bundle;
@@ -103,9 +102,9 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> VidTaskState<TYPES, I> {
                     *view_number,
                     epoch,
                     epoch,
-                    vid_precompute.clone(),
                 )
-                .await;
+                .await
+                .ok()?;
                 let payload_commitment = vid_disperse.payload_commitment;
                 let shares = VidDisperseShare2::from_vid_disperse(vid_disperse.clone());
                 let mut consensus_writer = self.consensus.write().await;
@@ -209,9 +208,9 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> VidTaskState<TYPES, I> {
                     proposal_view_number,
                     target_epoch,
                     sender_epoch,
-                    None,
                 )
-                .await;
+                .await
+                .ok()?;
                 let Ok(next_epoch_signature) = TYPES::SignatureKey::sign(
                     &self.private_key,
                     next_epoch_vid_disperse.payload_commitment.as_ref(),

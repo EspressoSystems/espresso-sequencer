@@ -20,12 +20,11 @@ use std::{
 use async_lock::RwLock;
 use bincode::Options;
 use committable::{Commitment, CommitmentBoundsArkless, Committable, RawCommitmentBuilder};
-use jf_vid::{precomputable::Precomputable, VidDisperse as JfVidDisperse, VidScheme};
+use jf_vid::{VidDisperse as JfVidDisperse, VidScheme};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tokio::task::spawn_blocking;
-use tracing::error;
 use utils::anytrace::*;
 use vec1::Vec1;
 
@@ -255,8 +254,8 @@ impl<TYPES: NodeType> VidDisperse<TYPES> {
     /// optionally using precompute data from builder.
     /// If the sender epoch is missing, it means it's the same as the target epoch.
     ///
-    /// # Panics
-    /// Panics if the VID calculation fails, this should not happen.
+    /// # Errors
+    /// Returns an error if the disperse or commitment calculation fails
     #[allow(clippy::panic)]
     pub async fn calculate_vid_disperse(
         payload: &TYPES::BlockPayload,
@@ -264,43 +263,44 @@ impl<TYPES: NodeType> VidDisperse<TYPES> {
         view: TYPES::View,
         target_epoch: TYPES::Epoch,
         data_epoch: TYPES::Epoch,
-        precompute_data: Option<VidPrecomputeData>,
-    ) -> Self {
+    ) -> Result<Self> {
         let num_nodes = membership.read().await.total_nodes(target_epoch);
 
         let txns = payload.encode();
         let txns_clone = Arc::clone(&txns);
-        let vid_disperse = spawn_blocking(move || {
-            precompute_data
-                .map_or_else(
-                    || vid_scheme(num_nodes).disperse(&txns_clone),
-                    |data| vid_scheme(num_nodes).disperse_precompute(&txns_clone, &data)
-                )
-                .unwrap_or_else(|err| panic!("VID disperse failure:(num_storage nodes,payload_byte_len)=({num_nodes},{}) error: {err}", txns_clone.len()))
-        }).await;
-        let data_epoch_payload_commitment = if target_epoch == data_epoch {
+        let num_txns = txns.len();
+
+        let vid_disperse = spawn_blocking(move || vid_scheme(num_nodes).disperse(&txns_clone))
+            .await
+            .wrap()
+            .context(error!("Join error"))?
+            .wrap()
+            .context(|err| error!("Failed to calculate VID disperse. Error: {}", err))?;
+
+        let payload_commitment = if target_epoch == data_epoch {
             None
         } else {
-            let data_epoch_num_nodes = membership.read().await.total_nodes(data_epoch);
-            Some(spawn_blocking(move || {
-                vid_scheme(data_epoch_num_nodes).commit_only(&txns)
-                    .unwrap_or_else(|err| panic!("VID commit_only failure:(num_storage nodes,payload_byte_len)=({num_nodes},{}) error: {err}", txns.len()))
-            }).await)
-        };
-        // Unwrap here will just propagate any panic from the spawned task, it's not a new place we can panic.
-        let vid_disperse = vid_disperse.unwrap();
-        let data_epoch_payload_commitment =
-            data_epoch_payload_commitment.map(|result| result.unwrap());
+            let num_nodes = membership.read().await.total_nodes(data_epoch);
 
-        Self::from_membership(
+            Some(
+              spawn_blocking(move || vid_scheme(num_nodes).commit_only(&txns))
+                .await
+                .wrap()
+                .context(error!("Join error"))?
+                .wrap()
+                .context(|err| error!("Failed to calculate VID commitment with (num_storage_nodes, payload_byte_len) = ({}, {}). Error: {}", num_nodes, num_txns, err))?
+            )
+        };
+
+        Ok(Self::from_membership(
             view,
             vid_disperse,
             membership,
             target_epoch,
             data_epoch,
-            data_epoch_payload_commitment,
+            payload_commitment,
         )
-        .await
+        .await)
     }
 }
 
@@ -409,7 +409,7 @@ impl<TYPES: NodeType> VidDisperseShare<TYPES> {
         let Ok(signature) =
             TYPES::SignatureKey::sign(private_key, self.payload_commitment.as_ref())
         else {
-            error!("VID: failed to sign dispersal share payload");
+            tracing::error!("VID: failed to sign dispersal share payload");
             return None;
         };
         Some(Proposal {
@@ -565,7 +565,7 @@ impl<TYPES: NodeType> VidDisperseShare2<TYPES> {
         let Ok(signature) =
             TYPES::SignatureKey::sign(private_key, self.payload_commitment.as_ref())
         else {
-            error!("VID: failed to sign dispersal share payload");
+            tracing::error!("VID: failed to sign dispersal share payload");
             return None;
         };
         Some(Proposal {

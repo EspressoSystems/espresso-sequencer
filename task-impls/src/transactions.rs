@@ -725,13 +725,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
             bail!("No available blocks");
         }
 
-        let version = match self.upgrade_lock.version(view_number).await {
-            Ok(v) => v,
-            Err(err) => {
-                bail!("Upgrade certificate requires unsupported version, refusing to request blocks: {}", err);
-            }
-        };
-
         for (block_info, builder_idx) in available_blocks {
             // Verify signature over chosen block.
             if !block_info.sender.validate_block_info_signature(
@@ -758,19 +751,9 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
             let response = {
                 let client = &self.builder_clients[builder_idx];
 
-                // If epochs are supported, provide the latest `num_nodes` information to the
-                // builder for VID computation.
-                let (block, header_input) = if version >= V::Epochs::VERSION {
-                    let total_nodes = self.membership.read().await.total_nodes(self.cur_epoch);
-                    futures::join! {
-                        client.claim_block_with_num_nodes(block_info.block_hash.clone(), view_number.u64(), self.public_key.clone(), &request_signature, total_nodes),
-                        client.claim_block_header_input(block_info.block_hash.clone(), view_number.u64(), self.public_key.clone(), &request_signature)
-                    }
-                } else {
-                    futures::join! {
-                        client.claim_block(block_info.block_hash.clone(), view_number.u64(), self.public_key.clone(), &request_signature),
-                        client.claim_block_header_input(block_info.block_hash.clone(), view_number.u64(), self.public_key.clone(), &request_signature)
-                    }
+                let (block, header_input) = futures::join! {
+                    client.claim_block(block_info.block_hash.clone(), view_number.u64(), self.public_key.clone(), &request_signature),
+                    client.claim_block_header_input(block_info.block_hash.clone(), view_number.u64(), self.public_key.clone(), &request_signature)
                 };
 
                 let block_data = match block {
@@ -815,7 +798,11 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
                     fee,
                     block_payload: block_data.block_payload,
                     metadata: block_data.metadata,
-                    precompute_data: Some(header_input.vid_precompute_data),
+                    // we discard the precompute data,
+                    // because we cannot trust that the builder is able to calculate this correctly.
+                    //
+                    // in particular, the builder needs to know `num_nodes` and there aren't any practical ways to verify the result it sent us.
+                    precompute_data: None,
                 }
             };
 
