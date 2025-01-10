@@ -51,13 +51,12 @@ async fn test_message_compat<Ver: StaticVersionType>(_ver: Ver) {
     use hotshot_example_types::node_types::TestVersions;
     use hotshot_types::{
         simple_certificate::{
-            TimeoutCertificate2, ViewSyncCommitCertificate, ViewSyncFinalizeCertificate,
+            TimeoutCertificate, ViewSyncCommitCertificate, ViewSyncFinalizeCertificate,
             ViewSyncPreCommitCertificate,
         },
         simple_vote::{
-            TimeoutData, TimeoutData2, TimeoutVote, ViewSyncCommitData, ViewSyncCommitVote,
-            ViewSyncFinalizeData, ViewSyncFinalizeVote, ViewSyncPreCommitData,
-            ViewSyncPreCommitVote,
+            TimeoutData, TimeoutVote, ViewSyncCommitData, ViewSyncCommitVote, ViewSyncFinalizeData,
+            ViewSyncFinalizeVote, ViewSyncPreCommitData, ViewSyncPreCommitVote,
         },
         PeerConfig,
     };
@@ -105,9 +104,8 @@ async fn test_message_compat<Ver: StaticVersionType>(_ver: Ver) {
         relay: 0,
         round: ViewNumber::genesis(),
     };
-    let timeout_data = TimeoutData2 {
+    let timeout_data = TimeoutData {
         view: ViewNumber::genesis(),
-        epoch: EpochNumber::genesis(),
     };
     let da_data = DaData {
         payload_commit: block_header.payload_commitment(),
@@ -130,7 +128,7 @@ async fn test_message_compat<Ver: StaticVersionType>(_ver: Ver) {
                     Default::default(),
                     Default::default(),
                 )),
-                proposal_certificate: Some(ViewChangeEvidence::Timeout(TimeoutCertificate2::new(
+                proposal_certificate: Some(ViewChangeEvidence::Timeout(TimeoutCertificate::new(
                     timeout_data.clone(),
                     timeout_data.commit(),
                     ViewNumber::genesis(),
