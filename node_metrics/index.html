@@ -1,0 +1,84 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Node Validator Service"><title>node_metrics - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../static.files/rustdoc-42caa33d.css"><meta name="rustdoc-vars" data-root-path="../" data-static-root-path="../static.files/" data-current-crate="node_metrics" data-themes="" data-resource-suffix="" data-rustdoc-version="1.84.0 (9fc6b4312 2025-01-07)" data-channel="1.84.0" data-search-js="search-92e6798f.js" data-settings-js="settings-0f613d39.js" ><script src="../static.files/storage-59e33391.js"></script><script defer src="../crates.js"></script><script defer src="../static.files/main-5f194d8c.js"></script><noscript><link rel="stylesheet" href="../static.files/noscript-893ab5e7.css"></noscript><link rel="alternate icon" type="image/png" href="../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../static.files/favicon-044be391.svg"></head><body class="rustdoc mod crate"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle" title="show sidebar"></button></nav><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../node_metrics/index.html">node_<wbr>metrics</a><span class="version">0.1.0</span></h2></div><div class="sidebar-elems"><ul class="block"><li><a id="all-types" href="all.html">All Items</a></li></ul><section id="rustdoc-toc"><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#node-validator-service" title="Node Validator Service">Node Validator Service</a><ul><li><a href="#storage" title="Storage">Storage</a></li><li><a href="#data-streams" title="Data Streams">Data Streams</a></li></ul></li></ul><h3><a href="#modules">Crate Items</a></h3><ul class="block"><li><a href="#modules" title="Modules">Modules</a></li><li><a href="#structs" title="Structs">Structs</a></li><li><a href="#functions" title="Functions">Functions</a></li></ul></section><div id="rustdoc-modnav"></div></div></nav><div class="sidebar-resizer"></div><main><div class="width-limiter"><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1>Crate <span>node_metrics</span><button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../src/node_metrics/lib.rs.html#13-304">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><h2 id="node-validator-service"><a class="doc-anchor" href="#node-validator-service">§</a>Node Validator Service</h2>
+<p>The Node Validator Service is a general purpose relay service that watches
+data flow from the Hot Shot protocol via the CDN pub sub service. It
+maintains a local state of the network map and is able to relay the
+stored details to any client that requests it. In addition it is also
+able to provide individual state change updates to any client that
+subscribes to that particular event stream.  In order to be able to
+provide identity information to the clients, this identity information
+must be volunteered by the nodes in the network.  This requires the
+nodes to be able to receive and respond to these requests, and relay
+to anyone who desires it, the identity information of the node.</p>
+<h3 id="storage"><a class="doc-anchor" href="#storage">§</a>Storage</h3>
+<p>In order for this service to be effective and efficient it needs to be
+able to store the state of the network in an efficient manner.  The
+storage should be fast and efficient.  We are not expecting a lot of
+data to be stored within this storage, but as things tend to grow and
+change it may be necessary to have more robust storage mechanisms in
+place, or even to have the ability to introduce new storage mechanisms.
+In order to effectively store the data that we need to store, we need
+to ask a fundamental question:</p>
+<p>What states do we need to track?</p>
+<ol>
+<li>Node Information
+a. Node Identity Information
+b. Node State Information (specifically voter participation, latest block
+information, and staking information)</li>
+<li>Network Information
+a. Latest Block
+b. The most recent N blocks (N assumed to be 50 at the moment)
+- Information can be derived from these most recent 50 blocks
+that allows us to derive histogram data, producer data, and
+the most recent block information.  We might be able to get away
+with just storing the header information of these blocks, since we
+don’t need the full block data.
+c. The most recent N votes participants
+d. The top block producers over the latest N blocks
+e. Histogram data for the latest N blocks
+- Block Size
+- Block Time
+- Block Space Used</li>
+</ol>
+<h3 id="data-streams"><a class="doc-anchor" href="#data-streams">§</a>Data Streams</h3>
+<p>In order for clients to be able to receive the information from the node
+validator service, we need to be able to facilitate requests.  We could
+simply just start streaming data to the clients as soon as they connect,
+however, this causes potential compatibility issues with the clients
+in question.  For example, if we want to add a new data stream that
+can be retrieved for the client, and the client isn’t expecting it, they
+won’t know how to handle the data, and it can potentially cause errors.
+As such, it makes sense to only provide data streams when the client asks
+for them.  This allows for new features to be added to the data stream
+without breaking compatibility with the clients, provided that the existing
+streams don’t change in a way that would break the client.</p>
+<p>Starting out, there doesn’t need to be a lot of data that needs to be
+streamed to to the client.  In fact, we might be able to be a little
+naive about this, and broadcast general objects in an event stream, as
+data may be derivable from the objects that are broadcast.  For example,
+if we start out by sending the latest N block information, the client
+may be able to derive histogram data from that information, which would
+prevent us from having to send and store the histogram data.  However,
+there may be some pieces of data that are lacking from this approach which
+would require us to send out additional data streams.</p>
+<p>Ideally, we should strive for a balance between the data we store locally
+and the data that we stream to the clients. In order to know what we
+need to store, we need to know what data we are expecting the client to
+consume, and which data can be derived for these purposes.</p>
+<p>What Data Streams do we need to provide to clients?</p>
+<ol>
+<li>Node Information
+a. Node Identity Information
+- Should be able to be sent in an initial batch
+- Should be able to send individual updates as they occur
+b. Node State Information
+- Should be able to be sent in an initial batch
+- Should be able to send individual updates as they occur
+c. Block Information
+- Should be able to be sent in an initial batch
+- Should be able to send individual updates as they occur</li>
+</ol>
+</div></details><h2 id="modules" class="section-header">Modules<a href="#modules" class="anchor">§</a></h2><ul class="item-table"><li><div class="item-name"><a class="mod" href="api/index.html" title="mod node_metrics::api">api</a></div></li><li><div class="item-name"><a class="mod" href="service/index.html" title="mod node_metrics::service">service</a></div></li></ul><h2 id="structs" class="section-header">Structs<a href="#structs" class="anchor">§</a></h2><ul class="item-table"><li><div class="item-name"><a class="struct" href="struct.MainState.html" title="struct node_metrics::MainState">Main<wbr>State</a><span title="Restricted Visibility">&nbsp;🔒</span> </div><div class="desc docblock-short">MainState represents the State of the application this is available to
+tide_disco.</div></li><li><div class="item-name"><a class="struct" href="struct.Options.html" title="struct node_metrics::Options">Options</a></div><div class="desc docblock-short">Options represents the configuration options that are available for running
+the node validator service via the <a href="fn.run_standalone_service.html" title="fn node_metrics::run_standalone_service">run_standalone_service</a> function.
+These options are configurable via command line arguments or environment
+variables.</div></li></ul><h2 id="functions" class="section-header">Functions<a href="#functions" class="anchor">§</a></h2><ul class="item-table"><li><div class="item-name"><a class="fn" href="fn.run_standalone_service.html" title="fn node_metrics::run_standalone_service">run_<wbr>standalone_<wbr>service</a></div><div class="desc docblock-short">Run the service by itself.</div></li></ul></section></div></main></body></html>
