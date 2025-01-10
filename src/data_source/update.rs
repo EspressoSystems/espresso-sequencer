@@ -35,9 +35,11 @@ use jf_vid::VidScheme;
 use std::iter::once;
 
 fn downgrade_leaf<Types: NodeType>(leaf2: Leaf2<Types>) -> Leaf<Types> {
-    if leaf2.drb_seed != [0; 32] && leaf2.drb_result != [0; 32] {
-        panic!("Downgrade of Leaf2 to Leaf will lose DRB information!");
-    }
+    // TODO do we still need some check here?
+    // `drb_seed` no longer exists on `Leaf2`
+    // if leaf2.drb_seed != [0; 32] && leaf2.drb_result != [0; 32] {
+    //     panic!("Downgrade of Leaf2 to Leaf will lose DRB information!");
+    // }
     let quorum_proposal = QuorumProposal {
         block_header: leaf2.block_header().clone(),
         view_number: leaf2.view_number(),

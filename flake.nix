@@ -68,11 +68,6 @@
           ] ++ lib.optionals (!stdenv.isDarwin) [
             cargo-watch # broken: https://github.com/NixOS/nixpkgs/issues/146349
           ];
-        # nixWithFlakes allows pre v2.4 nix installations to use
-        # flake commands (like `nix flake update`)
-        nixWithFlakes = pkgs.writeShellScriptBin "nix" ''
-          exec ${pkgs.nixFlakes}/bin/nix --experimental-features "nix-command flakes" "$@"
-        '';
         cargo-llvm-cov = pkgs.rustPlatform.buildRustPackage rec {
           pname = "cargo-llvm-cov";
           version = "0.5.0";
@@ -169,7 +164,6 @@
           buildInputs = with pkgs;
             [
               rust-bin.nightly.latest.rust-analyzer
-              nixWithFlakes
               nixpkgs-fmt
               git
               mdbook # make-doc, documentation generation
@@ -183,14 +177,13 @@
             shellHook = shellHook;
             buildInputs = with pkgs;
               [
-                nixWithFlakes
                 git
                 nightlyToolchain
               ] ++ rustDeps;
           };
           perfShell = pkgs.mkShell {
             shellHook = shellHook;
-            buildInputs = [ nixWithFlakes cargo-llvm-cov rustToolchain ] ++ rustDeps;
+            buildInputs = [ cargo-llvm-cov rustToolchain ] ++ rustDeps;
 
             inherit RUST_SRC_PATH RUST_BACKTRACE RUST_LOG RUSTFLAGS CARGO_TARGET_DIR;
           };

@@ -20,6 +20,7 @@ use crate::{
     task::BackgroundTask,
     SignatureKey,
 };
+use async_lock::RwLock;
 use async_trait::async_trait;
 use futures::{
     future::{join_all, Future},
@@ -96,10 +97,10 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
             })
             .collect::<Vec<_>>();
 
-        let membership = MockMembership::new(
+        let membership = Arc::new(RwLock::new(MockMembership::new(
             known_nodes_with_stake.clone(),
             known_nodes_with_stake.clone(),
-        );
+        )));
 
         // Pick a random, unused port for the builder server
         let builder_port = portpicker::pick_unused_port().expect("No ports available");
