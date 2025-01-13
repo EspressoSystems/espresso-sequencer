@@ -1,4 +1,3 @@
-use hotshot::traits::election::static_committee::StaticCommittee;
 use hotshot_types::{
     data::{EpochNumber, ViewNumber},
     signature_key::BLSPubKey,
@@ -16,8 +15,8 @@ pub mod traits;
 mod utils;
 pub use header::Header;
 pub use impls::{
-    get_l1_deposits, retain_accounts, BuilderValidationError, FeeError, ProposalValidationError,
-    StateValidationError,
+    get_l1_deposits, retain_accounts, BuilderValidationError, EpochCommittees, FeeError,
+    ProposalValidationError, StateValidationError,
 };
 pub use utils::*;
 use vbs::version::{StaticVersion, StaticVersionType};
@@ -142,7 +141,7 @@ impl NodeType for SeqTypes {
     type Transaction = Transaction;
     type InstanceState = NodeState;
     type ValidatedState = ValidatedState;
-    type Membership = StaticCommittee<Self>;
+    type Membership = EpochCommittees;
     type BuilderSignatureKey = FeeAccount;
     type AuctionResult = SolverAuctionResults;
 }
@@ -181,6 +180,9 @@ pub type V0_1 = StaticVersion<0, 1>;
 pub type FeeVersion = StaticVersion<0, 2>;
 pub type MarketplaceVersion = StaticVersion<0, 99>;
 pub type EpochVersion = StaticVersion<0, 100>;
+
+// TODO: >>>>>???
+pub const EPOCH_HEIGHT: u64 = 10000;
 
 pub type Leaf = hotshot_types::data::Leaf<SeqTypes>;
 pub type Leaf2 = hotshot_types::data::Leaf2<SeqTypes>;
