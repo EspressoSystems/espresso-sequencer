@@ -9,11 +9,6 @@ interface ArbSys {
 }
 
 contract LightClientArbitrum is LightClient {
-    /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor() {
-        _disableInitializers();
-    }
-
     function currentBlockNumber() public view virtual override returns (uint256) {
         return ArbSys(address(uint160(100))).arbBlockNumber();
     }

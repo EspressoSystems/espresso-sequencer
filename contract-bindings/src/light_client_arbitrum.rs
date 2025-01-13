@@ -14,9 +14,7 @@ pub mod light_client_arbitrum {
     #[allow(deprecated)]
     fn __abi() -> ::ethers::core::abi::Abi {
         ::ethers::core::abi::ethabi::Contract {
-            constructor: ::core::option::Option::Some(::ethers::core::abi::ethabi::Constructor {
-                inputs: ::std::vec![],
-            }),
+            constructor: ::core::option::Option::None,
             functions: ::core::convert::From::from([
                 (
                     ::std::borrow::ToOwned::to_owned("UPGRADE_INTERFACE_VERSION"),
