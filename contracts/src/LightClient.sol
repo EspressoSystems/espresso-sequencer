@@ -154,7 +154,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         StakeTableState memory _genesisStakeTableState,
         uint32 _stateHistoryRetentionPeriod,
         address owner
-    ) public initializer {
+    ) public virtual initializer {
         __Ownable_init(owner); //sets owner of the contract
         __UUPSUpgradeable_init();
         _initializeState(_genesis, _genesisStakeTableState, _stateHistoryRetentionPeriod);
@@ -215,8 +215,6 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         finalizedState = _genesis;
 
         stateHistoryRetentionPeriod = _stateHistoryRetentionPeriod;
-
-        updateStateHistory(uint64(currentBlockNumber()), uint64(block.timestamp), _genesis);
     }
 
     // === State Modifying APIs ===
