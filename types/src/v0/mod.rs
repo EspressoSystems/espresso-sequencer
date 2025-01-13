@@ -181,9 +181,6 @@ pub type FeeVersion = StaticVersion<0, 2>;
 pub type MarketplaceVersion = StaticVersion<0, 99>;
 pub type EpochVersion = StaticVersion<0, 100>;
 
-// TODO: >>>>>???
-pub const EPOCH_HEIGHT: u64 = 10000;
-
 pub type Leaf = hotshot_types::data::Leaf<SeqTypes>;
 pub type Leaf2 = hotshot_types::data::Leaf2<SeqTypes>;
 
