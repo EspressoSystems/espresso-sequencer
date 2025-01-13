@@ -11,7 +11,9 @@ use hotshot_types::{
     data::{DaProposal, QuorumProposal, QuorumProposal2, VidDisperseShare},
     event::{Event, EventType, HotShotAction, LeafInfo},
     message::{convert_proposal, Proposal},
-    simple_certificate::{QuorumCertificate, QuorumCertificate2, UpgradeCertificate},
+    simple_certificate::{
+        NextEpochQuorumCertificate2, QuorumCertificate, QuorumCertificate2, UpgradeCertificate,
+    },
     traits::{
         block_contents::{BlockHeader, BlockPayload},
         node_implementation::ConsensusTime,
@@ -166,6 +168,10 @@ impl Inner {
         self.path.join("upgrade_certificate")
     }
 
+    fn next_epoch_qc(&self) -> PathBuf {
+        self.path.join("next_epoch_quorum_certificate")
+    }
+
     /// Overwrite a file if a condition is met.
     ///
     /// The file at `path`, if it exists, is opened in read mode and passed to `pred`. If `pred`
@@ -313,7 +319,7 @@ impl Inner {
 
             let info = LeafInfo {
                 leaf: leaf.into(),
-                vid_share,
+                vid_share: vid_share.map(Into::into),
 
                 // Note: the following fields are not used in Decide event processing, and should be
                 // removed. For now, we just default them.
@@ -839,6 +845,41 @@ impl SequencerPersistence for Persistence {
                 Ok(())
             },
         )
+    }
+
+    async fn store_next_epoch_quorum_certificate(
+        &self,
+        high_qc: NextEpochQuorumCertificate2<SeqTypes>,
+    ) -> anyhow::Result<()> {
+        let mut inner = self.inner.write().await;
+        let path = &inner.next_epoch_qc();
+
+        inner.replace(
+            path,
+            |_| {
+                // Always overwrite the previous file.
+                Ok(true)
+            },
+            |mut file| {
+                let bytes = bincode::serialize(&high_qc).context("serializing next epoch qc")?;
+                file.write_all(&bytes)?;
+                Ok(())
+            },
+        )
+    }
+
+    async fn load_next_epoch_quorum_certificate(
+        &self,
+    ) -> anyhow::Result<Option<NextEpochQuorumCertificate2<SeqTypes>>> {
+        let inner = self.inner.read().await;
+        let path = inner.next_epoch_qc();
+        if !path.is_file() {
+            return Ok(None);
+        }
+        let bytes = fs::read(&path).context("read")?;
+        Ok(Some(
+            bincode::deserialize(&bytes).context("deserialize next epoch qc")?,
+        ))
     }
 
     async fn migrate_consensus(

@@ -3,14 +3,15 @@ use std::{
     path::Path,
 };
 
-use anyhow::Context;
+use anyhow::{Context, Ok};
 use espresso_types::{
     v0_99::ChainConfig, FeeAccount, FeeAmount, GenesisHeader, L1BlockInfo, L1Client, Timestamp,
-    Upgrade, UpgradeType,
+    Upgrade,
 };
 use ethers::types::H160;
 use sequencer_utils::deployer::is_proxy_contract;
 use serde::{Deserialize, Serialize};
+use url::Url;
 use vbs::version::Version;
 
 /// Initial configuration of an Espresso stake table.
@@ -70,13 +71,10 @@ impl Genesis {
         let upgrades: Vec<&Upgrade> = self.upgrades.values().collect();
 
         for upgrade in upgrades {
-            match upgrade.upgrade_type {
-                UpgradeType::Fee { chain_config } => {
-                    base_fee = std::cmp::max(chain_config.base_fee, base_fee);
-                }
-                UpgradeType::Marketplace { chain_config } => {
-                    base_fee = std::cmp::max(chain_config.base_fee, base_fee);
-                }
+            let chain_config = upgrade.upgrade_type.chain_config();
+
+            if let Some(cf) = chain_config {
+                base_fee = std::cmp::max(cf.base_fee, base_fee);
             }
         }
 
@@ -85,10 +83,8 @@ impl Genesis {
 }
 
 impl Genesis {
-    pub async fn validate_fee_contract(&self, l1_rpc_url: String) -> anyhow::Result<()> {
-        let l1 = L1Client::new(l1_rpc_url.parse().context("invalid url")?)
-            .await
-            .context("connecting L1 client")?;
+    pub async fn validate_fee_contract(&self, l1_rpc_url: Url) -> anyhow::Result<()> {
+        let l1 = L1Client::new(l1_rpc_url);
 
         if let Some(fee_contract_address) = self.chain_config.fee_contract {
             tracing::info!("validating fee contract at {fee_contract_address:x}");
@@ -103,24 +99,28 @@ impl Genesis {
 
         // now iterate over each upgrade type and validate the fee contract if it exists
         for (version, upgrade) in &self.upgrades {
-            match &upgrade.upgrade_type {
-                UpgradeType::Fee { chain_config } | UpgradeType::Marketplace { chain_config } => {
-                    if let Some(fee_contract_address) = chain_config.fee_contract {
-                        if fee_contract_address == H160::zero() {
-                            anyhow::bail!("Fee contract cannot use the zero address");
-                        } else if !is_proxy_contract(l1.provider(), fee_contract_address)
-                            .await
-                            .context(format!(
-                                "checking if fee contract is a proxy in upgrade {version}",
-                            ))?
-                        {
-                            anyhow::bail!("Fee contract's address is not a proxy");
-                        }
-                    } else {
-                        // The Fee Contract address has to be provided for an upgrade so return an error
-                        anyhow::bail!("Fee contract's address for the upgrade is missing");
-                    }
+            let chain_config = &upgrade.upgrade_type.chain_config();
+
+            if chain_config.is_none() {
+                continue;
+            }
+
+            let chain_config = chain_config.unwrap();
+
+            if let Some(fee_contract_address) = chain_config.fee_contract {
+                if fee_contract_address == H160::zero() {
+                    anyhow::bail!("Fee contract cannot use the zero address");
+                } else if !is_proxy_contract(l1.provider(), fee_contract_address)
+                    .await
+                    .context(format!(
+                        "checking if fee contract is a proxy in upgrade {version}",
+                    ))?
+                {
+                    anyhow::bail!("Fee contract's address is not a proxy");
                 }
+            } else {
+                // The Fee Contract address has to be provided for an upgrade so return an error
+                anyhow::bail!("Fee contract's address for the upgrade is missing");
             }
         }
         // TODO: it's optional for the fee contract to be included in a proxy in v1 so no need to panic but revisit this after v1 https://github.com/EspressoSystems/espresso-sequencer/pull/2000#discussion_r1765174702
@@ -417,7 +417,8 @@ mod test {
                 base_fee: 1.into(),
                 fee_recipient: FeeAccount::default(),
                 fee_contract: Some(Address::default()),
-                bid_recipient: None
+                bid_recipient: None,
+                stake_table_contract: None
             }
         );
         assert_eq!(
@@ -489,6 +490,7 @@ mod test {
                 fee_recipient: FeeAccount::default(),
                 bid_recipient: None,
                 fee_contract: None,
+                stake_table_contract: None,
             }
         );
         assert_eq!(
@@ -595,7 +597,9 @@ mod test {
         let genesis: Genesis = toml::from_str(&toml).unwrap_or_else(|err| panic!("{err:#}"));
 
         // validate the fee_contract address
-        let result = genesis.validate_fee_contract(anvil.endpoint()).await;
+        let result = genesis
+            .validate_fee_contract(anvil.endpoint().parse().unwrap())
+            .await;
 
         // check if the result from the validation is an error
         if let Err(e) = result {
@@ -641,7 +645,9 @@ mod test {
         let genesis: Genesis = toml::from_str(&toml).unwrap_or_else(|err| panic!("{err:#}"));
 
         // Call the validation logic for the fee_contract address
-        let result = genesis.validate_fee_contract(anvil.endpoint()).await;
+        let result = genesis
+            .validate_fee_contract(anvil.endpoint().parse().unwrap())
+            .await;
 
         assert!(
             result.is_ok(),
@@ -713,7 +719,9 @@ mod test {
         let genesis: Genesis = toml::from_str(&toml).unwrap_or_else(|err| panic!("{err:#}"));
 
         // Call the validation logic for the fee_contract address
-        let result = genesis.validate_fee_contract(anvil.endpoint()).await;
+        let result = genesis
+            .validate_fee_contract(anvil.endpoint().parse().unwrap())
+            .await;
 
         assert!(
             result.is_ok(),
@@ -785,7 +793,9 @@ mod test {
         let genesis: Genesis = toml::from_str(&toml).unwrap_or_else(|err| panic!("{err:#}"));
 
         // Call the validation logic for the fee_contract address
-        let result = genesis.validate_fee_contract(anvil.endpoint()).await;
+        let result = genesis
+            .validate_fee_contract(anvil.endpoint().parse().unwrap())
+            .await;
 
         // check if the result from the validation is an error
         if let Err(e) = result {
@@ -853,7 +863,9 @@ mod test {
         let rpc_url = "https://ethereum-sepolia.publicnode.com";
 
         // validate the fee_contract address
-        let result = genesis.validate_fee_contract(rpc_url.to_string()).await;
+        let result = genesis
+            .validate_fee_contract(rpc_url.parse().unwrap())
+            .await;
 
         // check if the result from the validation is an error
         if let Err(e) = result {
@@ -906,7 +918,9 @@ mod test {
         let rpc_url = "https://ethereum-sepolia.publicnode.com";
 
         // validate the fee_contract address
-        let result = genesis.validate_fee_contract(rpc_url.to_string()).await;
+        let result = genesis
+            .validate_fee_contract(rpc_url.parse().unwrap())
+            .await;
 
         // check if the result from the validation is an error
         if let Err(e) = result {
