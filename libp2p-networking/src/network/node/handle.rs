@@ -256,7 +256,7 @@ impl<T: NodeType> NetworkNodeHandle<T> {
         let (s, r) = futures::channel::oneshot::channel();
         let req = ClientRequest::GetDHT {
             key: serialized_key.clone(),
-            notify: s,
+            notify: vec![s],
             retry_count,
         };
         self.send_request(req)?;

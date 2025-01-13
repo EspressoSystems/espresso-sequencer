@@ -92,7 +92,7 @@ pub enum ClientRequest {
         /// Key to search for
         key: Vec<u8>,
         /// Channel to notify caller of value (or failure to find value)
-        notify: Sender<Vec<u8>>,
+        notify: Vec<Sender<Vec<u8>>>,
         /// number of retries to make
         retry_count: u8,
     },

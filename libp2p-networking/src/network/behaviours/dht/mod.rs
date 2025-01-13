@@ -6,12 +6,7 @@
 
 /// Task for doing bootstraps at a regular interval
 pub mod bootstrap;
-use std::{
-    collections::{HashMap, HashSet},
-    marker::PhantomData,
-    num::NonZeroUsize,
-    time::Duration,
-};
+use std::{collections::HashMap, marker::PhantomData, num::NonZeroUsize, time::Duration};
 
 /// a local caching layer for the DHT key value pairs
 use futures::{
@@ -65,8 +60,8 @@ pub struct DHTBehaviour<K: SignatureKey + 'static, D: DhtPersistentStorage> {
     pub in_progress_get_closest_peers: HashMap<QueryId, Sender<()>>,
     /// List of in-progress get requests
     in_progress_record_queries: HashMap<QueryId, KadGetQuery>,
-    /// The lookup keys for all outstanding DHT queries
-    outstanding_dht_query_keys: HashSet<Vec<u8>>,
+    /// The list of in-progress get requests by key
+    outstanding_dht_query_keys: HashMap<Vec<u8>, QueryId>,
     /// List of in-progress put requests
     in_progress_put_record_queries: HashMap<QueryId, KadPutQuery>,
     /// State of bootstrapping
@@ -130,7 +125,7 @@ impl<K: SignatureKey + 'static, D: DhtPersistentStorage> DHTBehaviour<K, D> {
             peer_id: pid,
             in_progress_record_queries: HashMap::default(),
             in_progress_put_record_queries: HashMap::default(),
-            outstanding_dht_query_keys: HashSet::default(),
+            outstanding_dht_query_keys: HashMap::default(),
             bootstrap_state: Bootstrap {
                 state: State::NotStarted,
                 backoff: ExponentialBackoff::new(2, Duration::from_secs(1)),
@@ -178,7 +173,7 @@ impl<K: SignatureKey + 'static, D: DhtPersistentStorage> DHTBehaviour<K, D> {
     pub fn get_record(
         &mut self,
         key: Vec<u8>,
-        chan: Sender<Vec<u8>>,
+        chans: Vec<Sender<Vec<u8>>>,
         factor: NonZeroUsize,
         backoff: ExponentialBackoff,
         retry_count: u8,
@@ -191,24 +186,39 @@ impl<K: SignatureKey + 'static, D: DhtPersistentStorage> DHTBehaviour<K, D> {
 
         // Check the cache before making the (expensive) query
         if let Some(entry) = kad.store_mut().get(&key.clone().into()) {
-            // The key already exists in the cache
-            if chan.send(entry.value.clone()).is_err() {
-                error!("Get DHT: channel closed before get record request result could be sent");
+            // The key already exists in the cache, send the value to all channels
+            for chan in chans {
+                if chan.send(entry.value.clone()).is_err() {
+                    warn!("Get DHT: channel closed before get record request result could be sent");
+                }
             }
         } else {
             // Check if the key is already being queried
-            if self.outstanding_dht_query_keys.insert(key.clone()) {
+            if let Some(qid) = self.outstanding_dht_query_keys.get(&key) {
+                // The key was already being queried. Add the channel to the existing query
+                // Try to get the query from the query id
+                let Some(query) = self.in_progress_record_queries.get_mut(qid) else {
+                    warn!("Get DHT: outstanding query not found");
+                    return;
+                };
+
+                // Add the channel to the existing query
+                query.notify.extend(chans);
+            } else {
                 // The key was not already being queried and was not in the cache. Start a new query.
                 let qid = kad.get_record(key.clone().into());
                 let query = KadGetQuery {
                     backoff,
                     progress: DHTProgress::InProgress(qid),
-                    notify: chan,
+                    notify: chans,
                     num_replicas: factor,
-                    key,
+                    key: key.clone(),
                     retry_count: retry_count - 1,
                     records: HashMap::default(),
                 };
+
+                // Add the key to the outstanding queries and in-progress queries
+                self.outstanding_dht_query_keys.insert(key, qid);
                 self.in_progress_record_queries.insert(qid, query);
             }
         }
@@ -308,8 +318,14 @@ impl<K: SignatureKey + 'static, D: DhtPersistentStorage> DHTBehaviour<K, D> {
                 // Remove the key from the outstanding queries so we are in sync
                 self.outstanding_dht_query_keys.remove(&key);
 
-                // if channel has been dropped, cancel request
-                if notify.is_canceled() {
+                // `notify` is all channels that are still open
+                let notify = notify
+                    .into_iter()
+                    .filter(|n| !n.is_canceled())
+                    .collect::<Vec<_>>();
+
+                // If all are closed, we can exit
+                if notify.is_empty() {
                     return;
                 }
 
@@ -332,8 +348,11 @@ impl<K: SignatureKey + 'static, D: DhtPersistentStorage> DHTBehaviour<K, D> {
 
                     // Only return the record if we can store it (validation passed)
                     if store.put(record).is_ok() {
-                        if notify.send(r).is_err() {
-                            error!("Get DHT: channel closed before get record request result could be sent");
+                        // Send the record to all channels that are still open
+                        for n in notify {
+                            if n.send(r.clone()).is_err() {
+                                warn!("Get DHT: channel closed before get record request result could be sent");
+                            }
                         }
                     } else {
                         error!("Failed to store record in local store");
@@ -513,8 +532,8 @@ pub(crate) struct KadGetQuery {
     pub(crate) backoff: ExponentialBackoff,
     /// progress through DHT query
     pub(crate) progress: DHTProgress,
-    /// notify client of result
-    pub(crate) notify: Sender<Vec<u8>>,
+    /// The channels to notify of the result
+    pub(crate) notify: Vec<Sender<Vec<u8>>>,
     /// number of replicas required to replicate over
     pub(crate) num_replicas: NonZeroUsize,
     /// the key to look up
