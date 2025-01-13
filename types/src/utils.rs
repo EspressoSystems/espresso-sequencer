@@ -290,3 +290,30 @@ pub fn is_epoch_root(block_number: u64, epoch_height: u64) -> bool {
         (block_number + 2) % epoch_height == 0
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_epoch_from_block_number() {
+        // block 0 is always epoch 0
+        let epoch = epoch_from_block_number(0, 10);
+        assert_eq!(0, epoch);
+
+        let epoch = epoch_from_block_number(1, 10);
+        assert_eq!(1, epoch);
+
+        let epoch = epoch_from_block_number(10, 10);
+        assert_eq!(1, epoch);
+
+        let epoch = epoch_from_block_number(11, 10);
+        assert_eq!(2, epoch);
+
+        let epoch = epoch_from_block_number(20, 10);
+        assert_eq!(2, epoch);
+
+        let epoch = epoch_from_block_number(21, 10);
+        assert_eq!(3, epoch);
+    }
+}
