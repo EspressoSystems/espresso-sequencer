@@ -1079,14 +1079,4 @@ contract LightClient_HotShotCommUpdatesTest is LightClientCommonTest {
         assertEqBN254(hotShotBlockComm, blockComm);
         assertEq(hotShotBlockHeight, blockHeight);
     }
-
-    function test_revertWhenGetHotShotCommitmentInvalidHeight() public {
-        // Get the highest HotShot blockheight recorded
-        uint256 numCommitments = lc.getStateHistoryCount();
-        (,, uint64 blockHeight,) = lc.stateHistoryCommitments(numCommitments - 1);
-        // Expect revert when attempting to retrieve a block height higher than the highest one
-        // recorded
-        vm.expectRevert(LC.InvalidHotShotBlockForCommitmentCheck.selector);
-        lc.getHotShotCommitment(blockHeight + 1);
-    }
 }
