@@ -67,7 +67,7 @@ tokio = { version = "1", default-features = false, features = [
 hotshot = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.83" }
 # Hotshot imports
 hotshot-builder-api = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.83" }
-hotshot-builder-core = { git = "https://github.com/EspressoSystems/marketplace-builder-core",  tag = "0.1.59" }
+hotshot-builder-core = { git = "https://github.com/EspressoSystems/marketplace-builder-core", tag = "0.1.59" }
 marketplace-builder-core = { git = "https://github.com/EspressoSystems/marketplace-builder-core", tag = "0.1.59" }
 marketplace-builder-shared = { git = "https://github.com/EspressoSystems/marketplace-builder-core", tag = "0.1.59" }
 hotshot-events-service = { git = "https://github.com/EspressoSystems/hotshot-events-service.git", tag = "0.1.57" }
