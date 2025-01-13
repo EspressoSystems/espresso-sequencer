@@ -1,6 +1,6 @@
 [package]
 name = "hotshot-events-service"
-version = "0.1.56"
+version = "0.1.57"
 edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -13,7 +13,7 @@ derivative = "2.2"
 derive_more = "0.99"
 either = { version = "1.12", features = ["serde"] }
 futures = "0.3"
-hotshot-types = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.82" }
+hotshot-types = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.83" }
 libp2p-identity = { version = "0.2", features = ["serde"] }
 rand = "0.8.5"
 serde = { version = "1.0", features = ["derive"] }
@@ -27,6 +27,6 @@ tracing-test = "0.2"
 vbs = "0.1.4"
 
 [dev-dependencies]
-hotshot-example-types = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.82" }
+hotshot-example-types = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.83" }
 portpicker = "0.1.1"
 surf-disco = "0.9"
