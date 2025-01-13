@@ -1,5 +1,5 @@
 use hotshot_types::{
-    data::{DaProposal, Leaf2, QuorumProposal2},
+    data::{DaProposal2, Leaf2, QuorumProposal2},
     message::Proposal,
     traits::{
         block_contents::{precompute_vid_commitment, BlockHeader, BlockPayload},
@@ -55,7 +55,7 @@ pub struct DecideMessage<Types: NodeType> {
 /// DA Proposal Message to be put on the da proposal channel
 #[derive(Clone, Debug, PartialEq)]
 pub struct DaProposalMessage<Types: NodeType> {
-    pub proposal: Arc<Proposal<Types, DaProposal<Types>>>,
+    pub proposal: Arc<Proposal<Types, DaProposal2<Types>>>,
     pub sender: Types::SignatureKey,
 }
 /// Quorum proposal message to be put on the quorum proposal channel
@@ -108,7 +108,7 @@ pub enum Status {
 #[derive(Debug, Clone, PartialEq)]
 pub struct DAProposalInfo<Types: NodeType> {
     pub view_number: Types::View,
-    pub proposal: Arc<Proposal<Types, DaProposal<Types>>>,
+    pub proposal: Arc<Proposal<Types, DaProposal2<Types>>>,
 }
 
 /// [`ALLOW_EMPTY_BLOCK_PERIOD`] is a constant that is used to determine the

@@ -8,7 +8,7 @@ use hotshot_builder_api::{
     v0_2::builder::TransactionStatus,
 };
 use hotshot_types::{
-    data::{DaProposal, Leaf2, QuorumProposal2},
+    data::{DaProposal2, Leaf2, QuorumProposal2},
     event::EventType,
     message::Proposal,
     traits::{
@@ -1287,7 +1287,7 @@ enum HandleDaEventError<Types: NodeType> {
 /// still open.
 async fn handle_da_event<Types: NodeType>(
     da_channel_sender: &BroadcastSender<MessageType<Types>>,
-    da_proposal: Arc<Proposal<Types, DaProposal<Types>>>,
+    da_proposal: Arc<Proposal<Types, DaProposal2<Types>>>,
     sender: <Types as NodeType>::SignatureKey,
 ) {
     // We're explicitly not inspecting this error, as this function is not
@@ -1309,7 +1309,7 @@ async fn handle_da_event<Types: NodeType>(
 /// This function is the implementation for [`handle_da_event`].
 async fn handle_da_event_implementation<Types: NodeType>(
     da_channel_sender: &BroadcastSender<MessageType<Types>>,
-    da_proposal: Arc<Proposal<Types, DaProposal<Types>>>,
+    da_proposal: Arc<Proposal<Types, DaProposal2<Types>>>,
     sender: <Types as NodeType>::SignatureKey,
 ) -> Result<(), HandleDaEventError<Types>> {
     tracing::debug!(
@@ -1642,13 +1642,13 @@ mod test {
         node_types::{TestTypes, TestVersions},
         state_types::{TestInstanceState, TestValidatedState},
     };
+    use hotshot_types::data::DaProposal2;
+    use hotshot_types::data::EpochNumber;
     use hotshot_types::data::Leaf2;
     use hotshot_types::data::QuorumProposal2;
-    use hotshot_types::drb::INITIAL_DRB_RESULT;
-    use hotshot_types::drb::INITIAL_DRB_SEED_INPUT;
     use hotshot_types::traits::block_contents::Transaction;
     use hotshot_types::{
-        data::{DaProposal, Leaf, ViewNumber},
+        data::{Leaf, ViewNumber},
         message::Proposal,
         simple_certificate::QuorumCertificate,
         traits::{
@@ -4140,13 +4140,15 @@ mod test {
             <BLSPubKey as BuilderSignatureKey>::generated_from_seed_indexed([0; 32], 1);
         let (da_channel_sender, _) = async_broadcast::broadcast(10);
         let view_number = ViewNumber::new(10);
+        let epoch = EpochNumber::new(1);
 
-        let da_proposal = DaProposal::<TestTypes> {
+        let da_proposal = DaProposal2::<TestTypes> {
             encoded_transactions: Arc::new([1, 2, 3, 4, 5, 6]),
             metadata: TestMetadata {
                 num_transactions: 1,
             }, // arbitrary
             view_number,
+            epoch,
         };
 
         let encoded_txns_hash = Sha256::digest(&da_proposal.encoded_transactions);
@@ -4196,13 +4198,15 @@ mod test {
         };
 
         let view_number = ViewNumber::new(10);
+        let epoch = EpochNumber::new(1);
 
-        let da_proposal = DaProposal::<TestTypes> {
+        let da_proposal = DaProposal2::<TestTypes> {
             encoded_transactions: Arc::new([1, 2, 3, 4, 5, 6]),
             metadata: TestMetadata {
                 num_transactions: 1,
             }, // arbitrary
             view_number,
+            epoch,
         };
 
         let encoded_txns_hash = Sha256::digest(&da_proposal.encoded_transactions);
@@ -4243,13 +4247,15 @@ mod test {
             <BLSPubKey as BuilderSignatureKey>::generated_from_seed_indexed([0; 32], 0);
         let (da_channel_sender, da_channel_receiver) = async_broadcast::broadcast(10);
         let view_number = ViewNumber::new(10);
+        let epoch = EpochNumber::new(1);
 
-        let da_proposal = DaProposal::<TestTypes> {
+        let da_proposal = DaProposal2::<TestTypes> {
             encoded_transactions: Arc::new([1, 2, 3, 4, 5, 6]),
             metadata: TestMetadata {
                 num_transactions: 1,
             }, // arbitrary
             view_number,
+            epoch,
         };
 
         let encoded_txns_hash = Sha256::digest(&da_proposal.encoded_transactions);
@@ -4328,8 +4334,8 @@ mod test {
                 .to_qc2(),
                 upgrade_certificate: None,
                 view_change_evidence: None,
-                drb_seed: INITIAL_DRB_SEED_INPUT,
-                drb_result: INITIAL_DRB_RESULT,
+                next_epoch_justify_qc: None,
+                next_drb_result: None,
             }
         };
 
@@ -4401,8 +4407,8 @@ mod test {
                 .to_qc2(),
                 upgrade_certificate: None,
                 view_change_evidence: None,
-                drb_seed: INITIAL_DRB_SEED_INPUT,
-                drb_result: INITIAL_DRB_RESULT,
+                next_epoch_justify_qc: None,
+                next_drb_result: None,
             }
         };
 
@@ -4465,8 +4471,8 @@ mod test {
                 .to_qc2(),
                 upgrade_certificate: None,
                 view_change_evidence: None,
-                drb_seed: INITIAL_DRB_SEED_INPUT,
-                drb_result: INITIAL_DRB_RESULT,
+                next_epoch_justify_qc: None,
+                next_drb_result: None,
             }
         };
 

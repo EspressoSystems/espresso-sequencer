@@ -6,7 +6,7 @@ use futures::{
 };
 use hotshot::traits::BlockPayload;
 use hotshot_types::{
-    data::{DaProposal, QuorumProposal2},
+    data::{DaProposal2, QuorumProposal2},
     traits::{
         block_contents::BlockHeader, node_implementation::NodeType,
         signature_key::BuilderSignatureKey,
@@ -48,7 +48,7 @@ where
         }
     }
 
-    pub fn from_da_proposal(proposal: &DaProposal<Types>) -> Self {
+    pub fn from_da_proposal(proposal: &DaProposal2<Types>) -> Self {
         let builder_commitment = <Types::BlockPayload as BlockPayload<Types>>::from_bytes(
             &proposal.encoded_transactions,
             &proposal.metadata,

@@ -12,7 +12,7 @@ use either::Either;
 use hotshot::traits::BlockPayload;
 use hotshot_builder_api::v0_1::builder::TransactionStatus;
 use hotshot_types::{
-    data::{DaProposal, QuorumProposal2},
+    data::{DaProposal2, QuorumProposal2},
     event::LeafInfo,
     traits::{
         block_contents::BlockHeader,
@@ -33,7 +33,7 @@ use crate::{
 pub mod tiered_view_map;
 
 type ProposalMap<Types> =
-    HashMap<ProposalId<Types>, Either<QuorumProposal2<Types>, DaProposal<Types>>>;
+    HashMap<ProposalId<Types>, Either<QuorumProposal2<Types>, DaProposal2<Types>>>;
 
 type BuilderStateMap<Types> = TieredViewMap<BuilderStateId<Types>, Arc<BuilderState<Types>>>;
 
@@ -213,7 +213,7 @@ where
     /// This function should be called whenever new DA Proposal is recieved from HotShot.
     /// Coordinator uses matching Quorum and DA proposals to track creation of new blocks
     /// and spawning corresponding builder states for those.
-    pub async fn handle_da_proposal(&self, da_proposal: DaProposal<Types>) {
+    pub async fn handle_da_proposal(&self, da_proposal: DaProposal2<Types>) {
         let proposal_id = ProposalId::from_da_proposal(&da_proposal);
         self.handle_proposal(proposal_id, Either::Right(da_proposal))
             .await;
@@ -238,7 +238,7 @@ where
     async fn handle_proposal(
         &self,
         proposal_id: ProposalId<Types>,
-        proposal: Either<QuorumProposal2<Types>, DaProposal<Types>>,
+        proposal: Either<QuorumProposal2<Types>, DaProposal2<Types>>,
     ) {
         match self.proposals.lock().await.entry(proposal_id) {
             Entry::Occupied(entry) => {
@@ -308,7 +308,7 @@ where
     async fn spawn_builder_state(
         &self,
         quorum_proposal: QuorumProposal2<Types>,
-        da_proposal: DaProposal<Types>,
+        da_proposal: DaProposal2<Types>,
     ) {
         assert_eq!(quorum_proposal.view_number, da_proposal.view_number);
 

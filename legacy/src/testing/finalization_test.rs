@@ -22,8 +22,7 @@ use hotshot_example_types::{
     state_types::{TestInstanceState, TestValidatedState},
 };
 use hotshot_types::{
-    data::{DaProposal, QuorumProposal2, ViewNumber},
-    drb::{INITIAL_DRB_RESULT, INITIAL_DRB_SEED_INPUT},
+    data::{DaProposal2, EpochNumber, QuorumProposal2, ViewNumber},
     message::Proposal,
     simple_certificate::QuorumCertificate,
     traits::{
@@ -278,10 +277,11 @@ async fn progress_round_with_transactions(
         da_proposal_sender
             .broadcast(MessageType::DaProposalMessage(DaProposalMessage {
                 proposal: Arc::new(Proposal {
-                    data: DaProposal::<TestTypes> {
+                    data: DaProposal2::<TestTypes> {
                         encoded_transactions: encoded_transactions.clone().into(),
                         metadata,
                         view_number: next_view,
+                        epoch: EpochNumber::genesis(), // TODO
                     },
                     signature: da_signature,
                     _pd: Default::default(),
@@ -328,8 +328,8 @@ async fn progress_round_with_transactions(
             .to_qc2(),
             upgrade_certificate: None,
             view_change_evidence: None,
-            drb_seed: INITIAL_DRB_SEED_INPUT,
-            drb_result: INITIAL_DRB_RESULT,
+            next_epoch_justify_qc: None,
+            next_drb_result: None,
         };
 
         let payload_vid_commitment =

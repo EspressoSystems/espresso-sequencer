@@ -9,16 +9,16 @@ use hotshot_example_types::{
     node_types::{TestTypes, TestVersions},
     state_types::{TestInstanceState, TestValidatedState},
 };
+use hotshot_types::data::DaProposal2;
+use hotshot_types::data::EpochNumber;
 use hotshot_types::data::QuorumProposal2;
 use hotshot_types::data::ViewNumber;
-use hotshot_types::drb::INITIAL_DRB_RESULT;
-use hotshot_types::drb::INITIAL_DRB_SEED_INPUT;
 use hotshot_types::event::LeafInfo;
 use hotshot_types::simple_certificate::QuorumCertificate2;
 use hotshot_types::simple_vote::QuorumData2;
 use hotshot_types::traits::block_contents::{vid_commitment, GENESIS_VID_NUM_STORAGE_NODES};
 use hotshot_types::{
-    data::{random_commitment, DaProposal, Leaf, Leaf2},
+    data::{random_commitment, Leaf, Leaf2},
     message::UpgradeLock,
     simple_certificate::QuorumCertificate,
     simple_vote::VersionedVoteData,
@@ -69,7 +69,7 @@ pub async fn decide_leaf_chain_with_transactions(
 }
 
 /// Create mock pair of DA and Quorum proposals
-pub async fn proposals(view: u64) -> (DaProposal<TestTypes>, QuorumProposal2<TestTypes>) {
+pub async fn proposals(view: u64) -> (DaProposal2<TestTypes>, QuorumProposal2<TestTypes>) {
     let transaction = transaction();
     proposals_with_transactions(view, vec![transaction]).await
 }
@@ -78,7 +78,8 @@ pub async fn proposals(view: u64) -> (DaProposal<TestTypes>, QuorumProposal2<Tes
 pub async fn proposals_with_transactions(
     view: u64,
     transactions: Vec<TestTransaction>,
-) -> (DaProposal<TestTypes>, QuorumProposal2<TestTypes>) {
+) -> (DaProposal2<TestTypes>, QuorumProposal2<TestTypes>) {
+    let epoch = EpochNumber::genesis();
     let view_number = <TestTypes as NodeType>::View::new(view);
     let upgrade_lock = UpgradeLock::<TestTypes, TestVersions>::new();
     let validated_state = TestValidatedState::default();
@@ -114,13 +115,14 @@ pub async fn proposals_with_transactions(
         justify_qc: genesis_qc,
         upgrade_certificate: None,
         view_change_evidence: None,
-        drb_seed: INITIAL_DRB_SEED_INPUT,
-        drb_result: INITIAL_DRB_RESULT,
+        next_drb_result: None,
+        next_epoch_justify_qc: None,
     };
     let leaf = Leaf2::from_quorum_proposal(&parent_proposal);
 
     let quorum_data = QuorumData2 {
         leaf_commit: leaf.commit(),
+        epoch,
     };
 
     let versioned_data = VersionedVoteData::<_, _, _>::new_infallible(
@@ -136,10 +138,11 @@ pub async fn proposals_with_transactions(
         QuorumCertificate2::new(quorum_data, commitment, view_number, None, PhantomData);
 
     (
-        DaProposal {
+        DaProposal2 {
             encoded_transactions: encoded_transactions.into(),
             metadata,
             view_number,
+            epoch,
         },
         QuorumProposal2 {
             block_header: leaf.block_header().clone(),
@@ -147,8 +150,8 @@ pub async fn proposals_with_transactions(
             justify_qc,
             upgrade_certificate: None,
             view_change_evidence: None,
-            drb_seed: INITIAL_DRB_SEED_INPUT,
-            drb_result: INITIAL_DRB_RESULT,
+            next_drb_result: None,
+            next_epoch_justify_qc: None,
         },
     )
 }

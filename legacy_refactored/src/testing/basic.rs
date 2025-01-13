@@ -6,7 +6,6 @@ use hotshot_example_types::block_types::{TestBlockHeader, TestMetadata, TestTran
 use hotshot_example_types::node_types::{TestTypes, TestVersions};
 use hotshot_example_types::state_types::{TestInstanceState, TestValidatedState};
 use hotshot_types::data::{Leaf2, QuorumProposal2, ViewNumber};
-use hotshot_types::drb::{INITIAL_DRB_RESULT, INITIAL_DRB_SEED_INPUT};
 use hotshot_types::event::LeafInfo;
 use hotshot_types::simple_certificate::QuorumCertificate;
 use hotshot_types::traits::block_contents::BlockHeader;
@@ -203,8 +202,8 @@ async fn test_pruning() {
         justify_qc: mock_qc.clone(),
         upgrade_certificate: None,
         view_change_evidence: None,
-        drb_seed: INITIAL_DRB_SEED_INPUT,
-        drb_result: INITIAL_DRB_RESULT,
+        next_epoch_justify_qc: None,
+        next_drb_result: None,
     });
     event_stream_sender
         .broadcast(hotshot::types::Event {
