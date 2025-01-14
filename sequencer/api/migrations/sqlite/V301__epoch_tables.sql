@@ -31,7 +31,7 @@ CREATE TABLE undecided_state2 (
 CREATE TABLE quorum_proposals2 (
     view BIGINT PRIMARY KEY,
     leaf_hash VARCHAR,
-    data BYTEA,
+    data BYTEA
 );
 
 CREATE UNIQUE INDEX quorum_proposals2_leaf_hash_idx ON quorum_proposals (leaf_hash);
@@ -51,4 +51,4 @@ CREATE TABLE epoch_migration (
     completed bool DEFAULT FALSE
 );
 
-INSERT INTO epoch_migrations("table_name") VALUES ("anchor_leaf"), ("da_proposal"), ("vid_share"), ("undecided_state"), ("quorum_proposals"), ("quorum_certificates");
+INSERT INTO epoch_migration ("table_name") VALUES ("anchor_leaf"), ("da_proposal"), ("vid_share"), ("undecided_state"), ("quorum_proposals"), ("quorum_certificates");

@@ -1432,6 +1432,8 @@ impl SequencerPersistence for Persistence {
             let mut tx = self.db.write().await?;
             query.execute(tx.as_mut()).await?;
 
+            tx.commit().await?;
+
             if rows.len() < batch_size as usize {
                 break;
             }
@@ -1506,7 +1508,7 @@ impl SequencerPersistence for Persistence {
 
             let mut tx = self.db.write().await?;
             query.execute(tx.as_mut()).await?;
-
+            tx.commit().await?;
             if rows.len() < batch_size as usize {
                 break;
             }
@@ -1631,7 +1633,7 @@ impl SequencerPersistence for Persistence {
 
             let mut tx = self.db.write().await?;
             query.execute(tx.as_mut()).await?;
-
+            tx.commit().await?;
             if rows.len() < batch_size as usize {
                 break;
             }
@@ -1706,7 +1708,7 @@ impl SequencerPersistence for Persistence {
 
             let mut tx = self.db.write().await?;
             query.execute(tx.as_mut()).await?;
-
+            tx.commit().await?;
             if rows.len() < batch_size as usize {
                 break;
             }
