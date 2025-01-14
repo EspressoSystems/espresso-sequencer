@@ -8,7 +8,10 @@ use espresso_types::{
 };
 use hotshot_types::{
     consensus::CommitmentMap,
-    data::{DaProposal, QuorumProposal, QuorumProposal2, VidDisperseShare},
+    data::{
+        DaProposal, DaProposal2, QuorumProposal, QuorumProposal2, VidDisperseShare,
+        VidDisperseShare2,
+    },
     event::{Event, EventType, HotShotAction, LeafInfo},
     message::{convert_proposal, Proposal},
     simple_certificate::{
@@ -381,7 +384,7 @@ impl Inner {
     fn load_da_proposal(
         &self,
         view: ViewNumber,
-    ) -> anyhow::Result<Option<Proposal<SeqTypes, DaProposal<SeqTypes>>>> {
+    ) -> anyhow::Result<Option<Proposal<SeqTypes, DaProposal2<SeqTypes>>>> {
         let dir_path = self.da_dir_path();
 
         let file_path = dir_path.join(view.u64().to_string()).with_extension("txt");
@@ -392,7 +395,7 @@ impl Inner {
 
         let da_bytes = fs::read(file_path)?;
 
-        let da_proposal: Proposal<SeqTypes, DaProposal<SeqTypes>> =
+        let da_proposal: Proposal<SeqTypes, DaProposal2<SeqTypes>> =
             bincode::deserialize(&da_bytes)?;
         Ok(Some(da_proposal))
     }
@@ -400,7 +403,7 @@ impl Inner {
     fn load_vid_share(
         &self,
         view: ViewNumber,
-    ) -> anyhow::Result<Option<Proposal<SeqTypes, VidDisperseShare<SeqTypes>>>> {
+    ) -> anyhow::Result<Option<Proposal<SeqTypes, VidDisperseShare2<SeqTypes>>>> {
         let dir_path = self.vid_dir_path();
 
         let file_path = dir_path.join(view.u64().to_string()).with_extension("txt");
@@ -410,7 +413,7 @@ impl Inner {
         }
 
         let vid_share_bytes = fs::read(file_path)?;
-        let vid_share: Proposal<SeqTypes, VidDisperseShare<SeqTypes>> =
+        let vid_share: Proposal<SeqTypes, VidDisperseShare2<SeqTypes>> =
             bincode::deserialize(&vid_share_bytes)?;
         Ok(Some(vid_share))
     }
@@ -596,14 +599,14 @@ impl SequencerPersistence for Persistence {
     async fn load_da_proposal(
         &self,
         view: ViewNumber,
-    ) -> anyhow::Result<Option<Proposal<SeqTypes, DaProposal<SeqTypes>>>> {
+    ) -> anyhow::Result<Option<Proposal<SeqTypes, DaProposal2<SeqTypes>>>> {
         self.inner.read().await.load_da_proposal(view)
     }
 
     async fn load_vid_share(
         &self,
         view: ViewNumber,
-    ) -> anyhow::Result<Option<Proposal<SeqTypes, VidDisperseShare<SeqTypes>>>> {
+    ) -> anyhow::Result<Option<Proposal<SeqTypes, VidDisperseShare2<SeqTypes>>>> {
         self.inner.read().await.load_vid_share(view)
     }
 
@@ -713,7 +716,7 @@ impl SequencerPersistence for Persistence {
             },
         )
     }
-    async fn append_quorum_proposal(
+    async fn append_quorum_proposal2(
         &self,
         proposal: &Proposal<SeqTypes, QuorumProposal2<SeqTypes>>,
     ) -> anyhow::Result<()> {
@@ -882,14 +885,33 @@ impl SequencerPersistence for Persistence {
         ))
     }
 
-    async fn migrate_consensus(
+    async fn append_vid2(
         &self,
-        _migrate_leaf: fn(Leaf) -> Leaf2,
-        _migrate_proposal: fn(
-            Proposal<SeqTypes, QuorumProposal<SeqTypes>>,
-        ) -> Proposal<SeqTypes, QuorumProposal2<SeqTypes>>,
+        proposal: &Proposal<SeqTypes, VidDisperseShare2<SeqTypes>>,
     ) -> anyhow::Result<()> {
-        // TODO: https://github.com/EspressoSystems/espresso-sequencer/issues/2357
+        Ok(())
+    }
+
+    async fn append_da2(
+        &self,
+        proposal: &Proposal<SeqTypes, DaProposal2<SeqTypes>>,
+        vid_commit: <VidSchemeType as VidScheme>::Commit,
+    ) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    async fn append_proposal2(
+        &self,
+        proposal: &Proposal<SeqTypes, QuorumProposal2<SeqTypes>>,
+    ) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    async fn update_undecided_state2(
+        &self,
+        leaves: CommitmentMap<Leaf2>,
+        state: BTreeMap<ViewNumber, View<SeqTypes>>,
+    ) -> anyhow::Result<()> {
         Ok(())
     }
 }

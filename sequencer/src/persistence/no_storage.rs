@@ -9,7 +9,10 @@ use espresso_types::{
 };
 use hotshot_types::{
     consensus::CommitmentMap,
-    data::{DaProposal, QuorumProposal, QuorumProposal2, VidDisperseShare},
+    data::{
+        DaProposal, DaProposal2, QuorumProposal, QuorumProposal2, VidDisperseShare,
+        VidDisperseShare2,
+    },
     event::{Event, EventType, HotShotAction, LeafInfo},
     message::Proposal,
     simple_certificate::{NextEpochQuorumCertificate2, QuorumCertificate2, UpgradeCertificate},
@@ -97,14 +100,14 @@ impl SequencerPersistence for NoStorage {
     async fn load_da_proposal(
         &self,
         _view: ViewNumber,
-    ) -> anyhow::Result<Option<Proposal<SeqTypes, DaProposal<SeqTypes>>>> {
+    ) -> anyhow::Result<Option<Proposal<SeqTypes, DaProposal2<SeqTypes>>>> {
         Ok(None)
     }
 
     async fn load_vid_share(
         &self,
         _view: ViewNumber,
-    ) -> anyhow::Result<Option<Proposal<SeqTypes, VidDisperseShare<SeqTypes>>>> {
+    ) -> anyhow::Result<Option<Proposal<SeqTypes, VidDisperseShare2<SeqTypes>>>> {
         Ok(None)
     }
 
@@ -148,7 +151,7 @@ impl SequencerPersistence for NoStorage {
     ) -> anyhow::Result<()> {
         Ok(())
     }
-    async fn append_quorum_proposal(
+    async fn append_quorum_proposal2(
         &self,
         _proposal: &Proposal<SeqTypes, QuorumProposal2<SeqTypes>>,
     ) -> anyhow::Result<()> {
@@ -157,16 +160,6 @@ impl SequencerPersistence for NoStorage {
     async fn store_upgrade_certificate(
         &self,
         _decided_upgrade_certificate: Option<UpgradeCertificate<SeqTypes>>,
-    ) -> anyhow::Result<()> {
-        Ok(())
-    }
-
-    async fn migrate_consensus(
-        &self,
-        _: fn(Leaf) -> Leaf2,
-        _: fn(
-            Proposal<SeqTypes, QuorumProposal<SeqTypes>>,
-        ) -> Proposal<SeqTypes, QuorumProposal2<SeqTypes>>,
     ) -> anyhow::Result<()> {
         Ok(())
     }
@@ -182,5 +175,35 @@ impl SequencerPersistence for NoStorage {
         &self,
     ) -> anyhow::Result<Option<NextEpochQuorumCertificate2<SeqTypes>>> {
         Ok(None)
+    }
+
+    async fn append_vid2(
+        &self,
+        proposal: &Proposal<SeqTypes, VidDisperseShare2<SeqTypes>>,
+    ) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    async fn append_da2(
+        &self,
+        proposal: &Proposal<SeqTypes, DaProposal2<SeqTypes>>,
+        vid_commit: <VidSchemeType as VidScheme>::Commit,
+    ) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    async fn append_proposal2(
+        &self,
+        proposal: &Proposal<SeqTypes, QuorumProposal2<SeqTypes>>,
+    ) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    async fn update_undecided_state2(
+        &self,
+        leaves: CommitmentMap<Leaf2>,
+        state: BTreeMap<ViewNumber, View<SeqTypes>>,
+    ) -> anyhow::Result<()> {
+        Ok(())
     }
 }
