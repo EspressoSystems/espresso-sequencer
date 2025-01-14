@@ -21,12 +21,10 @@ members = [
     "sequencer",
     "tests",
     "types",
-    "utils",
+    "utils"
 ]
 
-exclude = [
-  "sequencer-sqlite"
-]
+exclude = ["sequencer-sqlite"]
 
 [workspace.dependencies]
 anyhow = "^1.0"
