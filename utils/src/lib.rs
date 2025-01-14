@@ -5,6 +5,7 @@ use std::{
     time::Duration,
 };
 
+use alloy::{consensus::Transaction, providers::Provider};
 use anyhow::anyhow;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, SerializationError};
 use committable::{Commitment, Committable};
@@ -344,26 +345,21 @@ macro_rules! impl_to_fixed_bytes {
     ($struct_name:ident, $type:ty) => {
         impl $struct_name {
             pub(crate) fn to_fixed_bytes(self) -> [u8; core::mem::size_of::<$type>()] {
-                let mut bytes = [0u8; core::mem::size_of::<$type>()];
-                self.0.to_little_endian(&mut bytes);
-                bytes
+                self.0.to_le_bytes()
             }
         }
     };
 }
 
 /// send a transaction and wait for confirmation before returning the tx receipt and block included.
-pub async fn contract_send<M: Middleware, T: Detokenize, E>(
-    call: &ContractCall<M, T>,
-) -> Result<(TransactionReceipt, u64), anyhow::Error>
-where
-    M::Provider: Clone,
-    E: ContractRevert + Debug,
-{
-    let pending = match call.send().await {
+pub async fn contract_send<P: Provider>(
+    provider: &P,
+    call: &alloy::consensus::TypedTransaction,
+) -> Result<(TransactionReceipt, u64), anyhow::Error> {
+    let pending = match provider.send_transaction(call).await {
         Ok(pending) => pending,
         Err(err) => {
-            let e = err.decode_contract_revert::<E>().unwrap();
+            let e = err.decode::<E>().unwrap();
             tracing::error!("contract revert: {:?}", e);
             return Err(anyhow!("error sending transaction: {:?}", e));
         }

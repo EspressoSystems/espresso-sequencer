@@ -1,6 +1,7 @@
 use ark_ed_on_bn254::EdwardsConfig;
 use ark_std::rand::{CryptoRng, RngCore};
 use ethers::types::U256;
+use ethers_conv::{ToAlloy, ToEthers};
 use hotshot_stake_table::vec_based::StakeTable;
 use hotshot_types::{
     light_client::GenericStakeTableState,
@@ -64,12 +65,12 @@ pub(crate) fn genesis_stake_table_state(
 ) -> GenericStakeTableState<F> {
     let (bls_key_comm, schnorr_key_comm, amount_comm) =
         st.commitment(SnapshotVersion::LastEpochStart).unwrap();
-    let threshold = one_honest_threshold(st.total_stake(SnapshotVersion::LastEpochStart).unwrap());
+    let threshold = one_honest_threshold(st.total_stake(SnapshotVersion::LastEpochStart).unwrap().to_alloy());
 
     GenericStakeTableState {
         bls_key_comm,
         schnorr_key_comm,
         amount_comm,
-        threshold: u256_to_field(&threshold),
+        threshold: u256_to_field::<F>(&threshold.to_ethers()),
     }
 }

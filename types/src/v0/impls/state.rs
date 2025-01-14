@@ -1,6 +1,6 @@
+use alloy::primitives::{Address, U256};
 use anyhow::bail;
 use committable::{Commitment, Committable};
-use ethers::types::Address;
 use hotshot_query_service::merklized_state::MerklizedState;
 use hotshot_types::{
     data::{BlockError, ViewNumber},
@@ -458,8 +458,18 @@ impl<'a> ValidatedTransition<'a> {
             // cases. The hash seems less useful and explodes the size
             // of the error, so we strip it out.
             return Err(ProposalValidationError::L1FinalizedDecrementing {
-                parent: parent_finalized.map(|block| (block.number, block.timestamp.as_u64())),
-                proposed: proposed_finalized.map(|block| (block.number, block.timestamp.as_u64())),
+                parent: parent_finalized.map(|block| {
+                    (
+                        block.number,
+                        block.timestamp.try_into().expect("timestamp overflow"),
+                    )
+                }),
+                proposed: proposed_finalized.map(|block| {
+                    (
+                        block.number,
+                        block.timestamp.try_into().expect("timestamp overflow"),
+                    )
+                }),
             });
         }
         Ok(())
@@ -543,7 +553,7 @@ impl<'a> ValidatedTransition<'a> {
             return Err(ProposalValidationError::SomeFeeAmountOutOfRange);
         };
 
-        if amount < self.expected_chain_config.base_fee * self.proposal.block_size {
+        if amount < self.expected_chain_config.base_fee * U256::from(self.proposal.block_size) {
             return Err(ProposalValidationError::InsufficientFee {
                 max_block_size: self.expected_chain_config.max_block_size,
                 base_fee: self.expected_chain_config.base_fee,
@@ -1059,7 +1069,7 @@ impl MerklizedState<SeqTypes, { Self::ARITY }> for FeeMerkleTree {
 
 #[cfg(test)]
 mod test {
-    use ethers::types::U256;
+    use alloy::primitives::U256;
     use hotshot::{helpers::initialize_logging, traits::BlockPayload};
     use hotshot_query_service::Resolvable;
     use hotshot_types::traits::{
@@ -1073,6 +1083,7 @@ mod test {
     use super::*;
     use crate::{
         eth_signature_key::{BuilderSignature, EthKeyPair},
+        v0::impls::random_address,
         v0_1, v0_2, v0_3,
         v0_99::{self, BidTx},
         BlockSize, FeeAccountProof, FeeMerkleProof, Leaf, Payload, Transaction,
@@ -1232,7 +1243,7 @@ mod test {
         initialize_logging();
 
         let mut tree = ValidatedState::default().fee_merkle_tree;
-        let account1 = Address::random();
+        let account1 = random_address();
         let account2 = Address::default();
         tracing::info!(%account1, %account2);
 
@@ -1250,9 +1261,9 @@ mod test {
         // Non-membership proof.
         let (proof2, balance) = FeeAccountProof::prove(&tree, account2).unwrap();
         tracing::info!(?proof2, %balance);
-        assert_eq!(balance, 0.into());
+        assert_eq!(balance, U256::ZERO);
         assert!(matches!(proof2.proof, FeeMerkleProof::Absence(_)));
-        assert_eq!(proof2.verify(&tree.commitment()).unwrap(), 0.into());
+        assert_eq!(proof2.verify(&tree.commitment()).unwrap(), U256::ZERO);
 
         // Test forget/remember. We cannot generate proofs in a completely sparse tree:
         let mut tree = FeeMerkleTree::from_commitment(tree.commitment());

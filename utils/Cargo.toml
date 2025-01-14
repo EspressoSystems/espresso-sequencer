@@ -9,7 +9,9 @@ edition = "2021"
 testing = []
 
 [dependencies]
+alloy = { workspace = true }
 anyhow = { workspace = true }
+ethers-conv = { path = "../ethers-conv" }
 ark-serialize = { workspace = true, features = ["derive"] }
 async-trait = { workspace = true }
 clap = { workspace = true }

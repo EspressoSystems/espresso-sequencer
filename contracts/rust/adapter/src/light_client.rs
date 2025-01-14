@@ -1,19 +1,16 @@
 //! Helpers and test mocks for Light Client logic
 
+use alloy::primitives::U256;
 use ark_ff::PrimeField;
-use ark_std::str::FromStr;
+use contract_bindings::{iplonkverifier::IPlonkVerifier::PlonkProof, lightclient::LightClient::finalizedStateReturn};
 use diff_test_bn254::{field_to_u256, u256_to_field};
-use ethers::{
-    abi::AbiDecode,
-    abi::Token,
-    abi::Tokenize,
-    prelude::{AbiError, EthAbiCodec, EthAbiType},
-    types::U256,
-};
+use ethers_conv::{ToAlloy, ToEthers};
 use hotshot_types::light_client::{GenericLightClientState, GenericStakeTableState, PublicInput};
 
+use crate::jellyfish::ParsedPlonkProof;
+
 /// Intermediate representations for `LightClientState` in Solidity
-#[derive(Clone, Debug, EthAbiType, EthAbiCodec, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ParsedLightClientState {
     pub view_num: u64,
     pub block_height: u64,
@@ -30,25 +27,41 @@ impl ParsedLightClientState {
         Self {
             view_num: 0,
             block_height: 0,
-            block_comm_root: U256::from(0),
+            block_comm_root: U256::ZERO,
         }
     }
 }
 
-impl FromStr for ParsedLightClientState {
-    type Err = AbiError;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let parsed: (Self,) = AbiDecode::decode_hex(s)?;
-        Ok(parsed.0)
+impl From<contract_bindings::lightclient::LightClient::LightClientState>
+    for ParsedLightClientState
+{
+    fn from(state: contract_bindings::lightclient::LightClient::LightClientState) -> Self {
+        Self {
+            view_num: state.viewNum,
+            block_height: state.blockHeight,
+            block_comm_root: state.blockCommRoot,
+        }
     }
 }
 
-impl From<contract_bindings::light_client::LightClientState> for ParsedLightClientState {
-    fn from(state: contract_bindings::light_client::LightClientState) -> Self {
+impl From<finalizedStateReturn> for ParsedLightClientState {
+    fn from(state: finalizedStateReturn) -> Self {
         Self {
-            view_num: state.view_num,
-            block_height: state.block_height,
-            block_comm_root: state.block_comm_root,
+            view_num: state.viewNum,
+            block_height: state.blockHeight,
+            block_comm_root: state.blockCommRoot,
+        }
+    }
+}
+
+impl From<contract_bindings::lightclientmock::LightClient::LightClientState>
+    for ParsedLightClientState
+{
+    fn from(state: contract_bindings::lightclientmock::LightClient::LightClientState) -> Self {
+        Self {
+            view_num: state.viewNum,
+            block_height: state.blockHeight,
+            block_comm_root: state.blockCommRoot,
         }
     }
 }
@@ -58,7 +71,7 @@ impl<F: PrimeField> From<ParsedLightClientState> for GenericLightClientState<F> 
         Self {
             view_number: v.view_num as usize,
             block_height: v.block_height as usize,
-            block_comm_root: u256_to_field(v.block_comm_root),
+            block_comm_root: u256_to_field(v.block_comm_root.to_ethers()),
         }
     }
 }
@@ -68,7 +81,7 @@ impl<F: PrimeField> From<GenericLightClientState<F>> for ParsedLightClientState 
         Self {
             view_num: v.view_number as u64,
             block_height: v.block_height as u64,
-            block_comm_root: field_to_u256(v.block_comm_root),
+            block_comm_root: field_to_u256(v.block_comm_root).to_alloy(),
         }
     }
 }
@@ -78,7 +91,7 @@ impl From<PublicInput> for ParsedLightClientState {
         Self {
             view_num: field_to_u256(pi.view_number()).as_u64(),
             block_height: field_to_u256(pi.block_height()).as_u64(),
-            block_comm_root: field_to_u256(pi.block_comm_root()),
+            block_comm_root: field_to_u256(pi.block_comm_root()).to_alloy(),
         }
     }
 }
@@ -93,7 +106,18 @@ impl From<(u64, u64, U256)> for ParsedLightClientState {
     }
 }
 
-impl From<ParsedLightClientState> for contract_bindings::light_client::LightClientState {
+impl From<ParsedLightClientState>
+    for contract_bindings::lightclient::LightClient::LightClientState
+{
+    fn from(s: ParsedLightClientState) -> Self {
+        // exactly the same struct with same field types, safe to transmute
+        unsafe { std::mem::transmute(s) }
+    }
+}
+
+impl From<ParsedLightClientState>
+    for contract_bindings::lightclientmock::LightClient::LightClientState
+{
     fn from(s: ParsedLightClientState) -> Self {
         // exactly the same struct with same field types, safe to transmute
         unsafe { std::mem::transmute(s) }
@@ -101,7 +125,7 @@ impl From<ParsedLightClientState> for contract_bindings::light_client::LightClie
 }
 
 /// Parsed Stake State
-#[derive(Clone, Debug, EthAbiType, EthAbiCodec, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ParsedStakeTableState {
     pub threshold: U256,
     pub bls_key_comm: U256,
@@ -128,29 +152,46 @@ impl ParsedStakeTableState {
 impl<F: PrimeField> From<ParsedStakeTableState> for GenericStakeTableState<F> {
     fn from(s: ParsedStakeTableState) -> Self {
         Self {
-            threshold: u256_to_field(s.threshold),
-            bls_key_comm: u256_to_field(s.bls_key_comm),
-            schnorr_key_comm: u256_to_field(s.schnorr_key_comm),
-            amount_comm: u256_to_field(s.amount_comm),
+            threshold: u256_to_field(s.threshold.to_ethers()),
+            bls_key_comm: u256_to_field(s.bls_key_comm.to_ethers()),
+            schnorr_key_comm: u256_to_field(s.schnorr_key_comm.to_ethers()),
+            amount_comm: u256_to_field(s.amount_comm.to_ethers()),
         }
     }
 }
 
-impl FromStr for ParsedStakeTableState {
-    type Err = AbiError;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let parsed: (Self,) = AbiDecode::decode_hex(s)?;
-        Ok(parsed.0)
+impl From<contract_bindings::lightclient::LightClient::StakeTableState> for ParsedStakeTableState {
+    fn from(state: contract_bindings::lightclient::LightClient::StakeTableState) -> Self {
+        Self {
+            threshold: state.threshold,
+            bls_key_comm: state.blsKeyComm,
+            schnorr_key_comm: state.schnorrKeyComm,
+            amount_comm: state.amountComm,
+        }
     }
 }
 
-impl From<contract_bindings::light_client::StakeTableState> for ParsedStakeTableState {
-    fn from(state: contract_bindings::light_client::StakeTableState) -> Self {
+
+impl From<contract_bindings::lightclient::LightClient::genesisStakeTableStateReturn> for ParsedStakeTableState {
+    fn from(state: contract_bindings::lightclient::LightClient::genesisStakeTableStateReturn) -> Self {
         Self {
             threshold: state.threshold,
-            bls_key_comm: state.bls_key_comm,
-            schnorr_key_comm: state.schnorr_key_comm,
-            amount_comm: state.amount_comm,
+            bls_key_comm: state.blsKeyComm,
+            schnorr_key_comm: state.schnorrKeyComm,
+            amount_comm: state.amountComm,
+        }
+    }
+}
+
+impl From<contract_bindings::lightclientmock::LightClient::StakeTableState>
+    for ParsedStakeTableState
+{
+    fn from(state: contract_bindings::lightclientmock::LightClient::StakeTableState) -> Self {
+        Self {
+            threshold: state.threshold,
+            bls_key_comm: state.blsKeyComm,
+            schnorr_key_comm: state.schnorrKeyComm,
+            amount_comm: state.amountComm,
         }
     }
 }
@@ -166,7 +207,16 @@ impl From<(U256, U256, U256, U256)> for ParsedStakeTableState {
     }
 }
 
-impl From<ParsedStakeTableState> for contract_bindings::light_client::StakeTableState {
+impl From<ParsedStakeTableState> for contract_bindings::lightclient::LightClient::StakeTableState {
+    fn from(s: ParsedStakeTableState) -> Self {
+        // exactly the same struct with same field types, safe to transmute
+        unsafe { std::mem::transmute(s) }
+    }
+}
+
+impl From<ParsedStakeTableState>
+    for contract_bindings::lightclientmock::LightClient::StakeTableState
+{
     fn from(s: ParsedStakeTableState) -> Self {
         // exactly the same struct with same field types, safe to transmute
         unsafe { std::mem::transmute(s) }
@@ -176,10 +226,10 @@ impl From<ParsedStakeTableState> for contract_bindings::light_client::StakeTable
 impl<F: PrimeField> From<GenericStakeTableState<F>> for ParsedStakeTableState {
     fn from(v: GenericStakeTableState<F>) -> Self {
         Self {
-            bls_key_comm: field_to_u256(v.bls_key_comm),
-            schnorr_key_comm: field_to_u256(v.schnorr_key_comm),
-            amount_comm: field_to_u256(v.amount_comm),
-            threshold: field_to_u256(v.threshold),
+            bls_key_comm: field_to_u256(v.bls_key_comm).to_alloy(),
+            schnorr_key_comm: field_to_u256(v.schnorr_key_comm).to_alloy(),
+            amount_comm: field_to_u256(v.amount_comm).to_alloy(),
+            threshold: field_to_u256(v.threshold).to_alloy(),
         }
     }
 }
@@ -202,20 +252,5 @@ impl LightClientConstructorArgs {
             stake_table_state: ParsedStakeTableState::dummy_genesis(),
             max_history_seconds: 864000,
         }
-    }
-}
-
-impl Tokenize for LightClientConstructorArgs {
-    /// Converts the `LightClientConstructorArgs` into a vector of tokens.
-    /// the Tokenize trait is used to convert types into Ethereum-compatible ABI tokens
-    ///
-    /// This method is used to serialize the constructor arguments into an
-    /// Ethereum-compatible token that can be read by a smart contract.
-    fn into_tokens(self) -> Vec<Token> {
-        vec![
-            ethers::abi::Token::Tuple(self.light_client_state.into_tokens()),
-            ethers::abi::Token::Tuple(self.stake_table_state.into_tokens()),
-            ethers::abi::Token::Uint(U256::from(self.max_history_seconds)),
-        ]
     }
 }

@@ -2,7 +2,7 @@
 ///
 /// The initial stake table is passed to the permissioned stake table contract
 /// on deployment.
-use contract_bindings::permissioned_stake_table::NodeInfo;
+use contract_bindings::permissionedstaketable::PermissionedStakeTable::NodeInfo;
 use hotshot::types::BLSPubKey;
 use hotshot_contract_adapter::stake_table::NodeInfoJf;
 use hotshot_types::network::PeerConfigKeys;

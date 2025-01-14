@@ -19,3 +19,15 @@ pub use state::{get_l1_deposits, BuilderValidationError, StateValidationError, V
 
 #[cfg(any(test, feature = "testing"))]
 pub use instance_state::mock;
+
+/// A helper function to generate a random address for testing
+#[inline(always)]
+#[cfg(test)]
+fn random_address() -> alloy::primitives::Address {
+    use rand::Rng;
+
+    let mut rng = rand::thread_rng();
+    let mut bytes = [0u8; 20];
+    rng.fill(&mut bytes);
+    alloy::primitives::Address::from_slice(&bytes)
+}

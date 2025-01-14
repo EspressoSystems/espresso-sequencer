@@ -1,4 +1,5 @@
 use crate::jellyfish::u256_to_field;
+use alloy::primitives::U256;
 use ark_ec::{
     short_weierstrass,
     twisted_edwards::{self, Affine, TECurveConfig},
@@ -7,16 +8,13 @@ use ark_ec::{
 use ark_ed_on_bn254::EdwardsConfig;
 use ark_ff::{BigInteger, PrimeField};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
-use contract_bindings::permissioned_stake_table::{self, EdOnBN254Point, NodeInfo};
-use diff_test_bn254::ParsedG2Point;
-use ethers::{
-    abi::AbiDecode,
-    prelude::{AbiError, EthAbiCodec, EthAbiType},
-    types::U256,
+use contract_bindings::permissionedstaketable::{
+    EdOnBN254::EdOnBN254Point, PermissionedStakeTable::NodeInfo, BN254::G2Point,
 };
+use diff_test_bn254::ParsedG2Point;
+use ethers_conv::{ToAlloy, ToEthers};
 use hotshot_types::{light_client::StateVerKey, network::PeerConfigKeys, signature_key::BLSPubKey};
 use serde::{Deserialize, Serialize};
-use std::str::FromStr;
 
 // TODO: (alex) maybe move these commonly shared util to a crate
 /// convert a field element to U256, panic if field size is larger than 256 bit
@@ -24,11 +22,11 @@ pub fn field_to_u256<F: PrimeField>(f: F) -> U256 {
     if F::MODULUS_BIT_SIZE > 256 {
         panic!("Shouldn't convert a >256-bit field to U256");
     }
-    U256::from_little_endian(&f.into_bigint().to_bytes_le())
+    U256::from_le_slice(&f.into_bigint().to_bytes_le())
 }
 
 /// an intermediate representation of `EdOnBN254Point` in solidity.
-#[derive(Clone, PartialEq, Eq, Debug, EthAbiType, EthAbiCodec)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct ParsedEdOnBN254Point {
     /// x coordinate of affine repr
     pub x: U256,
@@ -62,14 +60,6 @@ impl From<EdOnBN254Point> for ParsedEdOnBN254Point {
     }
 }
 
-impl FromStr for ParsedEdOnBN254Point {
-    type Err = AbiError;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let parsed: (Self,) = AbiDecode::decode_hex(s)?;
-        Ok(parsed.0)
-    }
-}
-
 impl<P: TECurveConfig> From<Affine<P>> for ParsedEdOnBN254Point
 where
     P::BaseField: PrimeField,
@@ -99,8 +89,8 @@ where
             Self::default()
         } else {
             Self::new_unchecked(
-                u256_to_field::<P::BaseField>(p.x),
-                u256_to_field::<P::BaseField>(p.y),
+                u256_to_field::<P::BaseField>(p.x.to_ethers()),
+                u256_to_field::<P::BaseField>(p.y.to_ethers()),
             )
         }
     }
@@ -123,14 +113,14 @@ impl From<NodeInfoJf> for NodeInfo {
         let ParsedG2Point { x0, x1, y0, y1 } = stake_table_key.to_affine().into();
         let schnorr: ParsedEdOnBN254Point = state_ver_key.to_affine().into();
         Self {
-            bls_vk: permissioned_stake_table::G2Point {
-                x_0: x0,
-                x_1: x1,
-                y_0: y0,
-                y_1: y1,
+            blsVK: G2Point {
+                x0: x0.to_alloy(),
+                x1: x1.to_alloy(),
+                y0: y0.to_alloy(),
+                y1: y1.to_alloy(),
             },
-            schnorr_vk: schnorr.into(),
-            is_da: da,
+            schnorrVK: schnorr.into(),
+            isDA: da,
         }
     }
 }
@@ -138,16 +128,16 @@ impl From<NodeInfoJf> for NodeInfo {
 impl From<NodeInfo> for NodeInfoJf {
     fn from(value: NodeInfo) -> Self {
         let NodeInfo {
-            bls_vk,
-            schnorr_vk,
-            is_da,
+            blsVK,
+            schnorrVK,
+            isDA,
         } = value;
         let stake_table_key = {
             let g2 = diff_test_bn254::ParsedG2Point {
-                x0: bls_vk.x_0,
-                x1: bls_vk.x_1,
-                y0: bls_vk.y_0,
-                y1: bls_vk.y_1,
+                x0: blsVK.x0.to_ethers(),
+                x1: blsVK.x1.to_ethers(),
+                y0: blsVK.y0.to_ethers(),
+                y1: blsVK.y1.to_ethers(),
             };
             let g2_affine = short_weierstrass::Affine::<ark_bn254::g2::Config>::from(g2);
             let mut bytes = vec![];
@@ -162,14 +152,14 @@ impl From<NodeInfo> for NodeInfoJf {
             BLSPubKey::deserialize_compressed(&bytes[..]).unwrap()
         };
         let state_ver_key = {
-            let g1_point: ParsedEdOnBN254Point = schnorr_vk.into();
+            let g1_point: ParsedEdOnBN254Point = schnorrVK.into();
             let state_sk_affine = twisted_edwards::Affine::<EdwardsConfig>::from(g1_point);
             StateVerKey::from(state_sk_affine)
         };
         Self {
             stake_table_key,
             state_ver_key,
-            da: is_da,
+            da: isDA,
         }
     }
 }

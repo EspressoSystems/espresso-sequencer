@@ -1,6 +1,7 @@
 //! Helpers for connecting types between Jellyfish and Solidity.
 //! Usually used during differential testing (via FFI).
 
+use alloy::{hex, sol_types::SolValue};
 use anyhow::Result;
 use ark_bn254::{Bn254, Fq, Fr, G1Affine, G2Affine};
 use ark_ff::{Fp2, MontFp};
@@ -376,7 +377,18 @@ impl From<ParsedPlonkProof> for Proof<Bn254> {
 // NOTE: this extra "middle-man" conversion is the unfortunate result of type in rust binding is auto-generated,
 // and are mutually oblivious of the types in Jellyfish, thus no From can be implemented at either side.
 // Since we cannot implement foreign traits on foreign types, we can only transit via our own `ParsedPlonkProof`.
-impl From<ParsedPlonkProof> for contract_bindings::i_plonk_verifier::PlonkProof {
+impl From<ParsedPlonkProof> for contract_bindings::iplonkverifier::IPlonkVerifier::PlonkProof {
+    fn from(p: ParsedPlonkProof) -> Self {
+        // parsed_proof is our own defined type, which share exactly the same structure and field types
+        // as the auto-generated rust binding types, thus, we can safely do mem::transmute()
+        unsafe { std::mem::transmute(p) }
+    }
+}
+
+// NOTE: this extra "middle-man" conversion is the unfortunate result of type in rust binding is auto-generated,
+// and are mutually oblivious of the types in Jellyfish, thus no From can be implemented at either side.
+// Since we cannot implement foreign traits on foreign types, we can only transit via our own `ParsedPlonkProof`.
+impl From<ParsedPlonkProof> for contract_bindings::lightclient::IPlonkVerifier::PlonkProof {
     fn from(p: ParsedPlonkProof) -> Self {
         // parsed_proof is our own defined type, which share exactly the same structure and field types
         // as the auto-generated rust binding types, thus, we can safely do mem::transmute()
@@ -390,9 +402,10 @@ fn test_unsafe_plonk_proof_conversion() {
     let mut rng = jf_utils::test_rng();
     for _ in 0..10 {
         let parsed_proof = ParsedPlonkProof::dummy(&mut rng);
-        let proof: contract_bindings::i_plonk_verifier::PlonkProof = parsed_proof.clone().into();
+        let proof: contract_bindings::iplonkverifier::IPlonkVerifier::PlonkProof =
+            parsed_proof.clone().into();
         // this test abi.encode hex string of both struct which includes the types and values
-        assert_eq!(parsed_proof.encode_hex(), proof.encode_hex());
+        assert_eq!(parsed_proof.encode_hex(), hex::encode(proof.abi_encode()));
     }
 }
 

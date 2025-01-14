@@ -451,7 +451,7 @@ impl Header {
         // Enforce that the sequencer block timestamp is not behind the L1 block timestamp. This can
         // only happen if our clock is badly out of sync with L1.
         if let Some(l1_block) = &l1.finalized {
-            let l1_timestamp = l1_block.timestamp.as_u64();
+            let l1_timestamp = l1_block.timestamp.try_into().expect("timestamp overflow");
             if timestamp < l1_timestamp {
                 tracing::warn!("Espresso timestamp {timestamp} behind L1 timestamp {l1_timestamp}, local clock may be out of sync");
                 timestamp = l1_timestamp;
@@ -1012,7 +1012,7 @@ impl BlockHeader<SeqTypes> for Header {
         let missing_accounts = parent_state.forgotten_accounts(
             [builder_fee.fee_account, chain_config.fee_recipient]
                 .into_iter()
-                .chain(l1_deposits.iter().map(|info| info.account())),
+                .chain(l1_deposits.iter().map(|info: &FeeInfo| info.account())),
         );
         if !missing_accounts.is_empty() {
             tracing::warn!(
@@ -1178,17 +1178,17 @@ impl ExplorerHeader<SeqTypes> for Header {
 
 #[cfg(test)]
 mod test_headers {
-
     use std::sync::Arc;
 
-    use ethers::{types::Address, utils::Anvil};
+    use alloy::primitives::{U256, Address};
+    use ethers::utils::Anvil;
     use hotshot_types::{traits::signature_key::BuilderSignatureKey, vid::vid_scheme};
 
     use sequencer_utils::test_utils::setup_test;
     use v0_1::{BlockMerkleTree, FeeMerkleTree, L1Client};
     use vbs::{bincode_serializer::BincodeSerializer, version::StaticVersion, BinarySerializer};
 
-    use crate::{eth_signature_key::EthKeyPair, mock::MockStateCatchup, Leaf};
+    use crate::{eth_signature_key::EthKeyPair, mock::MockStateCatchup, v0::impls::random_address, Leaf};
 
     use super::*;
 
@@ -1356,7 +1356,7 @@ mod test_headers {
     async fn test_new_header_timestamp_behind_finalized_l1_block() {
         let l1_finalized = Some(L1BlockInfo {
             number: 1,
-            timestamp: 1.into(),
+            timestamp: U256::from(1),
             ..Default::default()
         });
         TestCase {
@@ -1442,7 +1442,7 @@ mod test_headers {
             l1_deposits: [
                 (Address::default(), 1),
                 (Address::default(), 2),
-                (Address::random(), 3),
+                (random_address(), 3),
             ]
             .iter()
             .map(|(address, amount)| FeeInfo::new(*address, *amount))

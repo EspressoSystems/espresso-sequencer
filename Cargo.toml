@@ -13,7 +13,7 @@ members = [
     "contract-bindings",
     "contracts/rust/adapter",
     "contracts/rust/diff-test",
-    "contracts/rust/gen-vk-contract",
+    "contracts/rust/gen-vk-contract", "ethers-conv",
     "hotshot-state-prover",
     "marketplace-builder",
     "marketplace-solver",
@@ -29,12 +29,14 @@ exclude = [
 ]
 
 [workspace.dependencies]
+alloy = { version = "0.9", features = ["full", "signers", "signer-local", "reqwest", "signer-mnemonic", "json-rpc", "sol-types", "k256"] }
 anyhow = "^1.0"
 ark-std = "0.4"
 ark-bls12-381 = "0.4"
 ark-bn254 = "0.4"
 ark-ec = "0.4"
 ark-ed-on-bn254 = "0.4"
+parking_lot = "0.12"
 ark-ff = "0.4"
 ark-poly = "0.4"
 ark-serialize = "0.4"

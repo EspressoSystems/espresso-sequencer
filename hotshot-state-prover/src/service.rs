@@ -6,20 +6,26 @@ use std::{
     time::{Duration, Instant},
 };
 
+use alloy::{consensus::TypedTransaction, providers::Provider, rpc::types::TransactionRequest};
+use alloy::{
+    network::{Ethereum, EthereumWallet},
+    primitives::{Address, U256},
+    providers::{
+        fillers::{FillProvider, JoinFill, WalletFiller},
+        Identity, ProviderBuilder, RootProvider,
+    },
+    signers::{k256::ecdsa::SigningKey, local::LocalSigner},
+    sol_types::SolCall,
+    transports::http::Http,
+};
 use anyhow::{anyhow, Context, Result};
-use contract_bindings::light_client::{LightClient, LightClientErrors};
+use contract_bindings::lightclient::LightClient::{finalizedStateCall, LightClientCalls, LightClientErrors};
 use displaydoc::Display;
 use ethers::middleware::{
     gas_oracle::{GasCategory, GasOracle},
     signer::SignerMiddlewareError,
 };
-use ethers::{
-    core::k256::ecdsa::SigningKey,
-    middleware::SignerMiddleware,
-    providers::{Http, Middleware, Provider, ProviderError},
-    signers::{LocalWallet, Signer, Wallet},
-    types::{transaction::eip2718::TypedTransaction, Address, U256},
-};
+use ethers_conv::{ToAlloy, ToEthers};
 use futures::FutureExt;
 use hotshot_contract_adapter::{
     jellyfish::{field_to_u256, ParsedPlonkProof},
@@ -54,8 +60,20 @@ use vbs::version::StaticVersionType;
 
 use crate::snark::{generate_state_update_proof, Proof, ProvingKey};
 
-/// A wallet with local signer and connected to network via http
-pub type SignerWallet = SignerMiddleware<Provider<Http>, LocalWallet>;
+/// A type alias for a provider that has signing capabilities (i.e. can deploy contracts)
+type WalletProvider = FillProvider<
+    JoinFill<Identity, WalletFiller<EthereumWallet>>,
+    RootProvider<Http<alloy::transports::http::Client>>,
+    Http<alloy::transports::http::Client>,
+    Ethereum,
+>;
+
+/// A type alias for the LightClient contract instance
+type LightClientInstance = contract_bindings::lightclient::LightClient::LightClientInstance<
+    Http<alloy::transports::http::Client>,
+    WalletProvider,
+    Ethereum,
+>;
 
 /// Configuration/Parameters used for hotshot state prover
 #[derive(Debug, Clone)]
@@ -85,7 +103,7 @@ pub struct StateProverConfig {
 
 impl StateProverConfig {
     pub async fn validate_light_client_contract(&self) -> anyhow::Result<()> {
-        let provider = Provider::<Http>::try_from(self.provider.to_string())?;
+        let provider = ProviderBuilder::new().on_http(self.provider.clone());
 
         if !is_proxy_contract(&provider, self.light_client_address).await? {
             anyhow::bail!("Light Client contract's address is not a proxy");
@@ -98,7 +116,7 @@ impl StateProverConfig {
 #[inline]
 /// A helper function to compute the quorum threshold given a total amount of stake.
 pub fn one_honest_threshold(total_stake: U256) -> U256 {
-    total_stake / 3 + 1
+    total_stake / U256::from(3) + U256::from(1)
 }
 
 pub fn init_stake_table(
@@ -111,7 +129,7 @@ pub fn init_stake_table(
     let mut st = StakeTable::<BLSPubKey, StateVerKey, CircuitField>::new(stake_table_capacity);
     st.batch_register(
         bls_keys.iter().cloned(),
-        iter::repeat(U256::one()).take(bls_keys.len()),
+        iter::repeat(U256::from(1).to_ethers()).take(bls_keys.len()),
         state_keys.iter().cloned(),
     )?;
     st.advance();
@@ -199,7 +217,8 @@ pub fn light_client_genesis_from_stake_table(
     let (bls_comm, schnorr_comm, stake_comm) = st
         .commitment(SnapshotVersion::LastEpochStart)
         .expect("Commitment computation shouldn't fail.");
-    let threshold = one_honest_threshold(st.total_stake(SnapshotVersion::LastEpochStart)?);
+    let threshold =
+        one_honest_threshold(st.total_stake(SnapshotVersion::LastEpochStart)?.to_alloy());
 
     Ok((
         ParsedLightClientState {
@@ -208,9 +227,9 @@ pub fn light_client_genesis_from_stake_table(
             block_comm_root: U256::from(0u32),
         },
         ParsedStakeTableState {
-            bls_key_comm: field_to_u256(bls_comm),
-            schnorr_key_comm: field_to_u256(schnorr_comm),
-            amount_comm: field_to_u256(stake_comm),
+            bls_key_comm: field_to_u256(bls_comm).to_alloy(),
+            schnorr_key_comm: field_to_u256(schnorr_comm).to_alloy(),
+            amount_comm: field_to_u256(stake_comm).to_alloy(),
             threshold,
         },
     ))
@@ -266,28 +285,34 @@ async fn prepare_contract(
     provider: Url,
     key: SigningKey,
     light_client_address: Address,
-) -> Result<LightClient<SignerWallet>, ProverError> {
-    let provider = Provider::try_from(provider.as_str())
-        .expect("unable to instantiate Provider, likely wrong URL");
-    let signer = Wallet::from(key).with_chain_id(provider.get_chainid().await?.as_u64());
-    let wallet = Arc::new(SignerWallet::new(provider, signer));
+) -> Result<LightClientInstance, ProverError> {
+    // Create a signer from the key
+    let signer = LocalSigner::from_signing_key(key);
 
-    let contract = LightClient::new(light_client_address, wallet);
+    // Create an Ethereum wallet from the signer
+    let deployer_wallet = EthereumWallet::from(signer);
+
+    // Create a new L1 provider with the deployer wallet
+    let mut l1_provider = ProviderBuilder::new()
+        .wallet(deployer_wallet)
+        .on_http(provider);
+
+    let contract = LightClientInstance::new(light_client_address, l1_provider);
     Ok(contract)
 }
 
 /// get the `finalizedState` from the LightClient contract storage on L1
 pub async fn read_contract_state(
-    contract: &LightClient<SignerWallet>,
+    contract: &LightClientInstance,
 ) -> Result<(LightClientState, StakeTableState), ProverError> {
-    let state: ParsedLightClientState = match contract.finalized_state().call().await {
+    let state: ParsedLightClientState = match contract.finalizedState().call().await {
         Ok(s) => s.into(),
         Err(e) => {
             tracing::error!("unable to read finalized_state from contract: {}", e);
             return Err(ProverError::ContractError(e.into()));
         }
     };
-    let st_state: ParsedStakeTableState = match contract.genesis_stake_table_state().call().await {
+    let st_state: ParsedStakeTableState = match contract.genesisStakeTableState().call().await {
         Ok(s) => s.into(),
         Err(e) => {
             tracing::error!(
@@ -305,22 +330,27 @@ pub async fn read_contract_state(
 pub async fn submit_state_and_proof(
     proof: Proof,
     public_input: PublicInput,
-    contract: &LightClient<SignerWallet>,
+    contract: &LightClientInstance,
 ) -> Result<(), ProverError> {
     // prepare the input the contract call and the tx itself
     let proof: ParsedPlonkProof = proof.into();
     let new_state: ParsedLightClientState = public_input.into();
 
-    let mut tx = contract.new_finalized_state(new_state.into(), proof.into());
-
+    let mut tx = contract.newFinalizedState(new_state.into(), proof.into()).into_transaction_request().build_typed_tx().map_err(|e| ProverError::ContractError(anyhow::anyhow!(format!("{:?}", e))))?;
     // only use gas oracle for mainnet
-    if contract.client_ref().get_chainid().await?.as_u64() == 1 {
+    if contract
+        .provider()
+        .get_chain_id()
+        .await
+        .map_err(|i| ProverError::NetworkError(i.into()))?
+        == 1
+    {
         let gas_oracle = BlockNative::new(None).category(GasCategory::SafeLow);
         match gas_oracle.estimate_eip1559_fees().await {
             Ok((max_fee, priority_fee)) => {
-                if let TypedTransaction::Eip1559(inner) = &mut tx.tx {
-                    inner.max_fee_per_gas = Some(max_fee);
-                    inner.max_priority_fee_per_gas = Some(priority_fee);
+                if let TypedTransaction::Eip1559(inner) = &mut tx {
+                    inner.max_fee_per_gas = max_fee.to_alloy().saturating_to::<u128>();
+                    inner.max_priority_fee_per_gas = priority_fee.to_alloy().saturating_to::<u128>();
                     tracing::info!(
                         "Setting maxFeePerGas: {}; maxPriorityFeePerGas to: {}",
                         max_fee,
@@ -335,7 +365,8 @@ pub async fn submit_state_and_proof(
     }
 
     // send the tx
-    let (receipt, included_block) = sequencer_utils::contract_send::<_, _, LightClientErrors>(&tx)
+    let tx_request = TransactionRequest::from_transaction(tx);
+    let (receipt, included_block) = sequencer_utils::contract_send(&contract.provider(), &tx_request)
         .await
         .map_err(ProverError::ContractError)?;
 
@@ -386,7 +417,7 @@ pub async fn sync_state<ApiVer: StaticVersionType>(
         .collect::<Vec<_>>();
     let mut signer_bit_vec = vec![false; entries.len()];
     let mut signatures = vec![Default::default(); entries.len()];
-    let mut accumulated_weight = U256::zero();
+    let mut accumulated_weight = U256::ZERO;
     entries.iter().enumerate().for_each(|(i, (key, stake))| {
         if let Some(sig) = bundle.signatures.get(key) {
             // Check if the signature is valid
@@ -394,12 +425,12 @@ pub async fn sync_state<ApiVer: StaticVersionType>(
             if key.verify(&state_msg, sig, CS_ID_SCHNORR).is_ok() {
                 signer_bit_vec[i] = true;
                 signatures[i] = sig.clone();
-                accumulated_weight += *stake;
+                accumulated_weight.to_alloy() += *stake;
             }
         }
     });
 
-    if accumulated_weight < field_to_u256(st_state.threshold) {
+    if accumulated_weight < field_to_u256(st_state.threshold).to_alloy() {
         return Err(ProverError::InvalidState(
             "The signers' total weight doesn't reach the threshold.".to_string(),
         ));
@@ -559,17 +590,6 @@ impl From<PlonkError> for ProverError {
 impl From<StakeTableError> for ProverError {
     fn from(err: StakeTableError) -> Self {
         Self::StakeTableError(err)
-    }
-}
-
-impl From<ProviderError> for ProverError {
-    fn from(err: ProviderError) -> Self {
-        Self::ContractError(anyhow!("{}", err))
-    }
-}
-impl From<SignerMiddlewareError<Provider<Http>, LocalWallet>> for ProverError {
-    fn from(err: SignerMiddlewareError<Provider<Http>, LocalWallet>) -> Self {
-        Self::ContractError(anyhow!("{}", err))
     }
 }
 

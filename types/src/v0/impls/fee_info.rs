@@ -1,13 +1,13 @@
+use alloy::primitives::{
+    utils::{parse_units, ParseUnits},
+    Address, U256,
+};
 use anyhow::{bail, ensure, Context};
 use ark_serialize::{
     CanonicalDeserialize, CanonicalSerialize, Compress, Read, SerializationError, Valid, Validate,
 };
 use committable::{Commitment, Committable, RawCommitmentBuilder};
-use contract_bindings::fee_contract::DepositFilter;
-use ethers::{
-    prelude::{Address, U256},
-    utils::{parse_units, ParseUnits},
-};
+use contract_bindings::feecontract::FeeContract::Deposit;
 use hotshot_query_service::explorer::MonetaryValue;
 use hotshot_types::traits::block_contents::BuilderFee;
 use itertools::Itertools;
@@ -125,8 +125,8 @@ impl From<BuilderFee<SeqTypes>> for FeeInfo {
     }
 }
 
-impl From<DepositFilter> for FeeInfo {
-    fn from(item: DepositFilter) -> Self {
+impl From<Deposit> for FeeInfo {
+    fn from(item: Deposit) -> Self {
         Self {
             amount: item.amount.into(),
             account: item.user.into(),
@@ -151,13 +151,13 @@ impl_to_fixed_bytes!(FeeAmount, U256);
 
 impl From<u64> for FeeAmount {
     fn from(amt: u64) -> Self {
-        Self(amt.into())
+        Self(U256::from(amt))
     }
 }
 
 impl From<FeeAmount> for MonetaryValue {
     fn from(value: FeeAmount) -> Self {
-        MonetaryValue::eth(value.0.as_u128() as i128)
+        MonetaryValue::eth(value.0.saturating_to::<i128>())
     }
 }
 
@@ -215,8 +215,8 @@ impl FromStringOrInteger for FeeAmount {
 
 impl FeeAmount {
     pub fn as_u64(&self) -> Option<u64> {
-        if self.0 <= u64::MAX.into() {
-            Some(self.0.as_u64())
+        if self.0 <= U256::from(u64::MAX) {
+            Some(self.0.saturating_to::<u64>())
         } else {
             None
         }
@@ -229,11 +229,11 @@ impl FeeAccount {
     }
     /// Return byte slice representation of inner `Address` type
     pub fn as_bytes(&self) -> &[u8] {
-        self.0.as_bytes()
+        self.0 .0 .0.as_slice()
     }
     /// Return array containing underlying bytes of inner `Address` type
     pub fn to_fixed_bytes(self) -> [u8; 20] {
-        self.0.to_fixed_bytes()
+        self.0 .0 .0
     }
     pub fn test_key_pair() -> EthKeyPair {
         EthKeyPair::from_mnemonic(
@@ -285,7 +285,7 @@ impl CanonicalDeserialize for FeeAmount {
     ) -> Result<Self, SerializationError> {
         let mut bytes = [0u8; core::mem::size_of::<U256>()];
         reader.read_exact(&mut bytes)?;
-        let value = U256::from_little_endian(&bytes);
+        let value = U256::from_le_bytes(bytes);
         Ok(Self(value))
     }
 }
@@ -295,7 +295,7 @@ impl CanonicalSerialize for FeeAccount {
         mut writer: W,
         _compress: Compress,
     ) -> Result<(), SerializationError> {
-        Ok(writer.write_all(&self.0.to_fixed_bytes())?)
+        Ok(writer.write_all(&self.to_fixed_bytes())?)
     }
 
     fn serialized_size(&self, _compress: Compress) -> usize {
@@ -317,8 +317,7 @@ impl CanonicalDeserialize for FeeAccount {
 
 impl ToTraversalPath<256> for FeeAccount {
     fn to_traversal_path(&self, height: usize) -> Vec<usize> {
-        self.0
-            .to_fixed_bytes()
+        self.to_fixed_bytes()
             .into_iter()
             .take(height)
             .map(|i| i as usize)
@@ -362,7 +361,7 @@ impl FeeAccountProof {
                     account,
                     proof: FeeMerkleProof::Absence(proof),
                 },
-                0.into(),
+                U256::ZERO,
             )),
             LookupResult::NotInMemory => None,
         }
@@ -386,7 +385,7 @@ impl FeeAccountProof {
                     tree.non_membership_verify(FeeAccount(self.account), proof)?,
                     "invalid proof"
                 );
-                Ok(0.into())
+                Ok(U256::ZERO)
             }
         }
     }
@@ -447,15 +446,14 @@ pub fn retain_accounts(
 
 #[cfg(test)]
 mod test {
-    use ethers::abi::Address;
-
     use crate::{FeeAccount, FeeAmount, FeeInfo};
+    use alloy::primitives::Address;
 
     use super::IterableFeeInfo;
 
     #[test]
     fn test_iterable_fee_info() {
-        let addr = Address::zero();
+        let addr = Address::ZERO;
         let fee = FeeInfo::new(addr, FeeAmount::from(1));
         let fees = vec![fee, fee, fee];
         // check the sum of amounts
@@ -464,6 +462,6 @@ mod test {
 
         // check accounts collector
         let accounts = fees.accounts();
-        assert_eq!(vec![FeeAccount::from(Address::zero())], accounts);
+        assert_eq!(vec![FeeAccount::from(Address::ZERO)], accounts);
     }
 }

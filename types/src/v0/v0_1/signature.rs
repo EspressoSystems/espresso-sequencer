@@ -1,1 +1,1 @@
-pub type BuilderSignature = ethers::prelude::Signature;
+pub type BuilderSignature = alloy::primitives::PrimitiveSignature;

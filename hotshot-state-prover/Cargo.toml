@@ -8,6 +8,8 @@ edition = { workspace = true }
 [dependencies]
 anyhow = { workspace = true }
 ark-bn254 = { workspace = true }
+alloy = { workspace = true }
+ethers-conv = { path = "../ethers-conv" }
 ark-ec = { workspace = true }
 ark-ed-on-bn254 = { workspace = true }
 ark-ff = { workspace = true }

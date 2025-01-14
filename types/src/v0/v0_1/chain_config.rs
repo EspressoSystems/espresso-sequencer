@@ -1,6 +1,6 @@
 use committable::{Commitment, Committable};
 use derive_more::{Deref, Display, From, Into};
-use ethers::types::{Address, U256};
+use alloy::primitives::{Address, U256};
 use itertools::Either;
 
 use serde::{Deserialize, Serialize};

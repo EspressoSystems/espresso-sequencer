@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use alloy::primitives::U256;
 use anyhow::Result;
 use ark_bn254::Bn254;
 use ark_ed_on_bn254::EdwardsConfig;
@@ -8,7 +9,7 @@ use ark_std::{
     rand::{rngs::StdRng, CryptoRng, Rng, RngCore},
     UniformRand,
 };
-use ethers::types::U256;
+use ethers_conv::{ToAlloy, ToEthers};
 use hotshot_contract_adapter::{
     jellyfish::{open_key, u256_to_field},
     light_client::{ParsedLightClientState, ParsedStakeTableState},
@@ -90,10 +91,10 @@ impl MockLedger {
         let (bls_key_comm, schnorr_key_comm, amount_comm) =
             st.commitment(SnapshotVersion::LastEpochStart).unwrap();
         let threshold =
-            one_honest_threshold(st.total_stake(SnapshotVersion::LastEpochStart).unwrap());
+            one_honest_threshold(st.total_stake(SnapshotVersion::LastEpochStart).unwrap().to_alloy());
 
         let stake_table_state = StakeTableState {
-            threshold: u256_to_field(threshold),
+            threshold: u256_to_field(threshold.to_ethers()),
             bls_key_comm,
             schnorr_key_comm,
             amount_comm,
@@ -131,7 +132,8 @@ impl MockLedger {
             self.threshold = one_honest_threshold(
                 self.st
                     .total_stake(SnapshotVersion::LastEpochStart)
-                    .unwrap(),
+                    .unwrap()
+                    .to_alloy()
             );
         }
 
