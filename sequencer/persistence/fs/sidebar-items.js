@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":["migrate_network_config"],"struct":["Inner","Options","Persistence"]};
