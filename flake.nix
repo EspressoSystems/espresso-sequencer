@@ -166,17 +166,10 @@
       };
       devShells.default =
         let
-          stableToolchain = pkgs.rust-bin.stable.latest.minimal.override {
-            extensions = [ "rustfmt" "clippy" "llvm-tools-preview" "rust-src" ];
-          };
+          stableToolchain = pkgs.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml;
           nightlyToolchain = pkgs.rust-bin.selectLatestNightlyWith (toolchain: toolchain.minimal.override {
             extensions = [ "rust-analyzer" ];
           });
-          # nixWithFlakes allows pre v2.4 nix installations to use
-          # flake commands (like `nix flake update`)
-          nixWithFlakes = pkgs.writeShellScriptBin "nix" ''
-            exec ${pkgs.nixFlakes}/bin/nix --experimental-features "nix-command flakes" "$@"
-          '';
           solc = pkgs.solc-bin.latest;
         in
         mkShell (rustEnvVars // {
@@ -200,7 +193,6 @@
             nightlyToolchain.passthru.availableComponents.rust-analyzer
 
             # Tools
-            nixWithFlakes
             nixpkgs-fmt
             entr
             process-compose
