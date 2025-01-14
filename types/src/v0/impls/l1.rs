@@ -10,7 +10,9 @@ use anyhow::Context;
 use async_trait::async_trait;
 use clap::Parser;
 use committable::{Commitment, Committable, RawCommitmentBuilder};
-use contract_bindings::fee_contract::FeeContract;
+use contract_bindings::{
+    fee_contract::FeeContract, permissioned_stake_table::PermissionedStakeTable,
+};
 use ethers::{
     prelude::{Address, BlockNumber, Middleware, Provider, H256, U256},
     providers::{Http, HttpClientError, JsonRpcClient, JsonRpcError, Ws},
@@ -23,16 +25,18 @@ use hotshot_types::traits::metrics::{CounterFamily, Metrics};
 use lru::LruCache;
 use reqwest::StatusCode;
 use serde::{de::DeserializeOwned, Serialize};
+use std::time::Duration;
 use tokio::{
     spawn,
     sync::{Mutex, MutexGuard},
-    time::{sleep, Duration},
+    time::sleep,
 };
 use tracing::Instrument;
 use url::Url;
 
 use super::{
-    L1BlockInfo, L1ClientMetrics, L1State, L1UpdateTask, MultiRpcClient, MultiRpcClientStatus,
+    v0_3::StakeTables, L1BlockInfo, L1ClientMetrics, L1State, L1UpdateTask, MultiRpcClient,
+    MultiRpcClientStatus,
 };
 use crate::{FeeInfo, L1Client, L1ClientOptions, L1Event, L1Provider, L1Snapshot};
 
@@ -737,6 +741,25 @@ impl L1Client {
         events.flatten().map(FeeInfo::from).collect().await
     }
 
+    /// Get `StakeTable` at block height.
+    pub async fn get_stake_table(
+        &self,
+        contract: Address,
+        block: u64,
+    ) -> anyhow::Result<StakeTables> {
+        // TODO stake_table_address needs to be passed in to L1Client
+        // before update loop starts.
+        let stake_table_contract = PermissionedStakeTable::new(contract, self.provider.clone());
+
+        let events = stake_table_contract
+            .stakers_updated_filter()
+            .from_block(0)
+            .to_block(block)
+            .query()
+            .await?;
+
+        Ok(StakeTables::from_l1_events(events.clone()))
+    }
     fn options(&self) -> &L1ClientOptions {
         (*self.provider).as_ref().options()
     }
@@ -807,12 +830,16 @@ async fn get_finalized_block(
 mod test {
     use std::ops::Add;
 
-    use contract_bindings::fee_contract::FeeContract;
+    use contract_bindings::{
+        fee_contract::FeeContract,
+        permissioned_stake_table::{NodeInfo, PermissionedStakeTable},
+    };
     use ethers::{
         prelude::{LocalWallet, Signer, SignerMiddleware, H160, U64},
         providers::Http,
         utils::{hex, parse_ether, Anvil, AnvilInstance},
     };
+    use hotshot_contract_adapter::stake_table::NodeInfoJf;
     use portpicker::pick_unused_port;
     use sequencer_utils::test_utils::setup_test;
     use std::time::Duration;
@@ -1152,6 +1179,47 @@ mod test {
         tracing::info!(?final_state, "state updated");
     }
 
+    #[tokio::test]
+    async fn test_fetch_stake_table() -> anyhow::Result<()> {
+        setup_test();
+
+        let anvil = Anvil::new().spawn();
+        let l1_client = L1Client::new(anvil.endpoint().parse().unwrap());
+        let wallet: LocalWallet = anvil.keys()[0].clone().into();
+
+        // In order to deposit we need a provider that can sign.
+        let provider =
+            Provider::<Http>::try_from(anvil.endpoint())?.interval(Duration::from_millis(10u64));
+        let client =
+            SignerMiddleware::new(provider.clone(), wallet.with_chain_id(anvil.chain_id()));
+        let client = Arc::new(client);
+
+        let v: Vec<NodeInfo> = Vec::new();
+        // deploy the stake_table contract
+        let stake_table_contract = PermissionedStakeTable::deploy(client.clone(), v.clone())
+            .unwrap()
+            .send()
+            .await?;
+
+        let address = stake_table_contract.address();
+
+        let mut rng = rand::thread_rng();
+        let node = NodeInfoJf::random(&mut rng);
+
+        let new_nodes: Vec<NodeInfo> = vec![node.into()];
+        let updater = stake_table_contract.update(v, new_nodes);
+        updater.send().await?.await?;
+
+        let block = client.get_block(BlockNumber::Latest).await?.unwrap();
+        let nodes = l1_client
+            .get_stake_table(address, block.number.unwrap().as_u64())
+            .await
+            .unwrap();
+
+        let result = nodes.stake_table.0[0].clone();
+        assert_eq!(result.stake_amount.as_u64(), 1);
+        Ok(())
+    }
     #[tokio::test(flavor = "multi_thread")]
     async fn test_reconnect_update_task_ws() {
         test_reconnect_update_task_helper(true).await

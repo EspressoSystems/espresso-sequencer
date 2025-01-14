@@ -1,5 +1,3 @@
-use std::pin::Pin;
-
 use anyhow::{bail, Context};
 use async_lock::RwLock;
 use async_once_cell::Lazy;
@@ -34,6 +32,7 @@ use hotshot_types::{
 };
 use hotshot_types::{stake_table::StakeTableEntry, traits::election::Membership};
 use jf_merkle_tree::MerkleTreeScheme;
+use std::pin::Pin;
 use std::sync::Arc;
 
 use self::data_source::{
@@ -193,6 +192,8 @@ impl<N: ConnectedNetwork<PubKey>, V: Versions, P: SequencerPersistence>
             .read()
             .await
             .memberships
+            .read()
+            .await
             .stake_table(epoch)
     }
 }
@@ -1064,7 +1065,6 @@ mod api_tests {
     use hotshot_query_service::availability::{
         AvailabilityDataSource, BlockQueryData, VidCommonQueryData,
     };
-    use hotshot_types::drb::{INITIAL_DRB_RESULT, INITIAL_DRB_SEED_INPUT};
     use hotshot_types::{
         data::{DaProposal, QuorumProposal2, VidDisperseShare},
         event::LeafInfo,
@@ -1262,8 +1262,8 @@ mod api_tests {
             .to_qc2(),
             upgrade_certificate: None,
             view_change_evidence: None,
-            drb_seed: INITIAL_DRB_SEED_INPUT,
-            drb_result: INITIAL_DRB_RESULT,
+            next_drb_result: None,
+            next_epoch_justify_qc: None,
         };
         let mut qc = QuorumCertificate::genesis::<MockSequencerVersions>(
             &ValidatedState::default(),
@@ -1469,8 +1469,8 @@ mod api_tests {
             justify_qc: qc.clone(),
             upgrade_certificate: None,
             view_change_evidence: None,
-            drb_seed: INITIAL_DRB_SEED_INPUT,
-            drb_result: INITIAL_DRB_RESULT,
+            next_drb_result: None,
+            next_epoch_justify_qc: None,
         };
 
         let leaf = Leaf2::from_quorum_proposal(&qp);
@@ -2130,7 +2130,8 @@ mod test {
             .get(&<MockSeqVersions as Versions>::Upgrade::VERSION)
             .unwrap()
             .upgrade_type
-            .data();
+            .chain_config()
+            .unwrap();
 
         const NUM_NODES: usize = 5;
         let config = TestNetworkConfigBuilder::<NUM_NODES, _, _>::with_num_nodes()
@@ -2452,7 +2453,7 @@ mod test {
             );
             receive_count += 1;
             if receive_count > total_count {
-                tracing::info!("Client Received atleast desired events, exiting loop");
+                tracing::info!("Client Received at least desired events, exiting loop");
                 break;
             }
         }

@@ -838,11 +838,12 @@ impl BlockHeader<SeqTypes> for Header {
         let mut validated_state = parent_state.clone();
 
         let chain_config = if version >= MarketplaceVersion::version() {
-            match instance_state.upgrades.get(&version) {
-                Some(upgrade) => match upgrade.upgrade_type {
-                    UpgradeType::Marketplace { chain_config } => chain_config,
-                    UpgradeType::Fee { chain_config } => chain_config,
-                },
+            match instance_state
+                .upgrades
+                .get(&version)
+                .and_then(|u| u.upgrade_type.chain_config())
+            {
+                Some(cf) => cf,
                 None => Header::get_chain_config(&validated_state, instance_state).await?,
             }
         } else {
