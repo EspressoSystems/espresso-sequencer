@@ -10,7 +10,8 @@ use hotshot::{types::EventType, HotShotInitializer};
 use hotshot_types::{
     consensus::CommitmentMap,
     data::{
-        DaProposal, EpochNumber, QuorumProposal, QuorumProposal2, VidDisperseShare, ViewNumber,
+        DaProposal, DaProposal2, EpochNumber, QuorumProposal, QuorumProposal2, VidDisperseShare,
+        VidDisperseShare2, ViewNumber,
     },
     event::{HotShotAction, LeafInfo},
     message::{convert_proposal, Proposal},
@@ -461,11 +462,11 @@ pub trait SequencerPersistence: Sized + Send + Sync + Clone + 'static {
     async fn load_vid_share(
         &self,
         view: ViewNumber,
-    ) -> anyhow::Result<Option<Proposal<SeqTypes, VidDisperseShare<SeqTypes>>>>;
+    ) -> anyhow::Result<Option<Proposal<SeqTypes, VidDisperseShare2<SeqTypes>>>>;
     async fn load_da_proposal(
         &self,
         view: ViewNumber,
-    ) -> anyhow::Result<Option<Proposal<SeqTypes, DaProposal<SeqTypes>>>>;
+    ) -> anyhow::Result<Option<Proposal<SeqTypes, DaProposal2<SeqTypes>>>>;
     async fn load_upgrade_certificate(
         &self,
     ) -> anyhow::Result<Option<UpgradeCertificate<SeqTypes>>>;
@@ -676,7 +677,7 @@ pub trait SequencerPersistence: Sized + Send + Sync + Clone + 'static {
         leaves: CommitmentMap<Leaf2>,
         state: BTreeMap<ViewNumber, View<SeqTypes>>,
     ) -> anyhow::Result<()>;
-    async fn append_quorum_proposal(
+    async fn append_quorum_proposal2(
         &self,
         proposal: &Proposal<SeqTypes, QuorumProposal2<SeqTypes>>,
     ) -> anyhow::Result<()>;
@@ -686,11 +687,37 @@ pub trait SequencerPersistence: Sized + Send + Sync + Clone + 'static {
     ) -> anyhow::Result<()>;
     async fn migrate_consensus(
         &self,
-        migrate_leaf: fn(Leaf) -> Leaf2,
-        migrate_proposal: fn(
+        _migrate_leaf: fn(Leaf) -> Leaf2,
+        _migrate_proposal: fn(
             Proposal<SeqTypes, QuorumProposal<SeqTypes>>,
         ) -> Proposal<SeqTypes, QuorumProposal2<SeqTypes>>,
-    ) -> anyhow::Result<()>;
+    ) -> anyhow::Result<()> {
+        self.migrate_anchor_leaf().await?;
+        self.migrate_da_proposals().await?;
+        self.migrate_vid_shares().await?;
+        self.migrate_undecided_state().await?;
+        self.migrate_quorum_proposals().await?;
+        self.migrate_quorum_certificates().await
+    }
+
+    async fn migrate_anchor_leaf(&self) -> anyhow::Result<()> {
+        Ok(())
+    }
+    async fn migrate_da_proposals(&self) -> anyhow::Result<()> {
+        Ok(())
+    }
+    async fn migrate_vid_shares(&self) -> anyhow::Result<()> {
+        Ok(())
+    }
+    async fn migrate_undecided_state(&self) -> anyhow::Result<()> {
+        Ok(())
+    }
+    async fn migrate_quorum_proposals(&self) -> anyhow::Result<()> {
+        Ok(())
+    }
+    async fn migrate_quorum_certificates(&self) -> anyhow::Result<()> {
+        Ok(())
+    }
 
     async fn load_anchor_view(&self) -> anyhow::Result<ViewNumber> {
         match self.load_anchor_leaf().await? {
@@ -707,6 +734,30 @@ pub trait SequencerPersistence: Sized + Send + Sync + Clone + 'static {
     async fn load_next_epoch_quorum_certificate(
         &self,
     ) -> anyhow::Result<Option<NextEpochQuorumCertificate2<SeqTypes>>>;
+
+    async fn append_vid2(
+        &self,
+        proposal: &Proposal<SeqTypes, VidDisperseShare2<SeqTypes>>,
+    ) -> anyhow::Result<()>;
+
+    async fn append_da2(
+        &self,
+        proposal: &Proposal<SeqTypes, DaProposal2<SeqTypes>>,
+        vid_commit: <VidSchemeType as VidScheme>::Commit,
+    ) -> anyhow::Result<()>;
+
+    async fn append_proposal2(
+        &self,
+        proposal: &Proposal<SeqTypes, QuorumProposal2<SeqTypes>>,
+    ) -> anyhow::Result<()> {
+        self.append_quorum_proposal2(proposal).await
+    }
+
+    async fn update_undecided_state2(
+        &self,
+        leaves: CommitmentMap<Leaf2>,
+        state: BTreeMap<ViewNumber, View<SeqTypes>>,
+    ) -> anyhow::Result<()>;
 }
 
 #[async_trait]
@@ -783,7 +834,7 @@ impl<P: SequencerPersistence> Storage<SeqTypes> for Arc<P> {
         proposal: &Proposal<SeqTypes, QuorumProposal<SeqTypes>>,
     ) -> anyhow::Result<()> {
         (**self)
-            .append_quorum_proposal(&convert_proposal(proposal.clone()))
+            .append_quorum_proposal2(&convert_proposal(proposal.clone()))
             .await
     }
 

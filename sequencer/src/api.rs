@@ -1288,7 +1288,7 @@ mod api_tests {
                 PubKey::sign(&privkey, &bincode::serialize(&quorum_proposal).unwrap())
                     .expect("Failed to sign quorum_proposal");
             persistence
-                .append_quorum_proposal(&Proposal {
+                .append_quorum_proposal2(&Proposal {
                     data: quorum_proposal.clone(),
                     signature: quorum_proposal_signature,
                     _pd: Default::default(),
