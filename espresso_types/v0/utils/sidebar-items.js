@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["BACKOFF_FACTOR","BACKOFF_JITTER","MAX_RETRY_DELAY","MIN_RETRY_DELAY"],"enum":["ParseRatioError","Update"],"fn":["downgrade_commitment_map","downgrade_leaf","parse_duration","parse_size","upgrade_commitment_map"],"struct":["BackoffParams","GenesisHeader","ParseDurationError","ParseSizeError","Ratio","Timestamp"]};
