@@ -21,12 +21,10 @@ members = [
     "sequencer",
     "tests",
     "types",
-    "utils",
+    "utils"
 ]
 
-exclude = [
-  "sequencer-sqlite"
-]
+exclude = ["sequencer-sqlite"]
 
 [workspace.dependencies]
 anyhow = "^1.0"
@@ -165,5 +163,14 @@ opt-level = 0
 [profile.test.package.hotshot-state-prover]
 opt-level = 3
 
-# patch
-# https://github.com/rust-lang/cargo/issues/5478
+[patch."https://github.com/EspressoSystems/HotShot.git"]
+hotshot = { git = "https://www.github.com/EspressoSystems/HotShot.git", tag = "0.5.83-patch1" }
+hotshot-builder-api = { git = "https://www.github.com/EspressoSystems/HotShot.git", tag = "0.5.83-patch1" }
+hotshot-orchestrator = { git = "https://www.github.com/EspressoSystems/HotShot.git", tag = "0.5.83-patch1" }
+hotshot-stake-table = { git = "https://www.github.com/EspressoSystems/HotShot.git", tag = "0.5.83-patch1" }
+hotshot-task = { git = "https://www.github.com/EspressoSystems/HotShot.git", tag = "0.5.83-patch1" }
+hotshot-task-impls = { git = "https://www.github.com/EspressoSystems/HotShot.git", tag = "0.5.83-patch1" }
+hotshot-testing = { git = "https://www.github.com/EspressoSystems/HotShot.git", tag = "0.5.83-patch1" }
+hotshot-types = { git = "https://www.github.com/EspressoSystems/HotShot.git", tag = "0.5.83-patch1" }
+libp2p-networking = { git = "https://www.github.com/EspressoSystems/HotShot.git", tag = "0.5.83-patch1" }
+hotshot-example-types = { git = "https://www.github.com/EspressoSystems/HotShot.git", tag = "0.5.83-patch1" }
