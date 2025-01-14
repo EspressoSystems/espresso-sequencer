@@ -76,7 +76,7 @@ impl NodeState {
         Self::new(
             0,
             ChainConfig::default(),
-            L1Client::new("http://localhost:3331".parse().unwrap()),
+            L1Client::new(vec!["http://localhost:3331".parse().unwrap()]),
             mock::MockStateCatchup::default(),
             StaticVersion::<0, 1>::version(),
         )
@@ -89,7 +89,7 @@ impl NodeState {
         Self::new(
             0,
             ChainConfig::default(),
-            L1Client::new("http://localhost:3331".parse().unwrap()),
+            L1Client::new(vec!["http://localhost:3331".parse().unwrap()]),
             mock::MockStateCatchup::default(),
             StaticVersion::<0, 2>::version(),
         )
@@ -102,7 +102,7 @@ impl NodeState {
         Self::new(
             0,
             ChainConfig::default(),
-            L1Client::new("http://localhost:3331".parse().unwrap()),
+            L1Client::new(vec!["http://localhost:3331".parse().unwrap()]),
             mock::MockStateCatchup::default(),
             StaticVersion::<0, 99>::version(),
         )
@@ -149,7 +149,7 @@ impl Default for NodeState {
         Self::new(
             1u64,
             ChainConfig::default(),
-            L1Client::new("http://localhost:3331".parse().unwrap()),
+            L1Client::new(vec!["http://localhost:3331".parse().unwrap()]),
             mock::MockStateCatchup::default(),
             StaticVersion::<0, 1>::version(),
         )

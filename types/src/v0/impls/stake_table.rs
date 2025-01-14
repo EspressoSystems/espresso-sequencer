@@ -4,8 +4,9 @@ use super::{
 };
 
 use async_trait::async_trait;
-use contract_bindings::permissioned_stake_table::StakersUpdatedFilter;
+use contract_bindings_alloy::permissionedstaketable::PermissionedStakeTable::StakersUpdated;
 use ethers::types::{Address, U256};
+use ethers_conv::ToAlloy;
 use hotshot::types::SignatureKey as _;
 use hotshot_contract_adapter::stake_table::NodeInfoJf;
 use hotshot_types::{
@@ -47,7 +48,7 @@ impl StakeTables {
     /// PermissionedStakeTable contract over the liftetime of the contract so it
     /// should not significantly affect performance to fetch all events and
     /// perform the computation in this functions once per epoch.
-    pub fn from_l1_events(updates: Vec<StakersUpdatedFilter>) -> Self {
+    pub fn from_l1_events(updates: Vec<StakersUpdated>) -> Self {
         let changes_per_node = updates
             .into_iter()
             .flat_map(|event| {
@@ -309,7 +310,7 @@ impl Membership<SeqTypes> for EpochCommittees {
         Self {
             state: map,
             _epoch_size: 12,
-            l1_client: L1Client::new(Url::from_str("http:://ab.b").unwrap()),
+            l1_client: L1Client::new(vec![Url::from_str("http:://ab.b").unwrap()]),
             contract_address: None,
         }
     }
@@ -475,7 +476,7 @@ impl Membership<SeqTypes> for EpochCommittees {
     ) -> Option<Box<dyn FnOnce(&mut Self) + Send>> {
         let address = self.contract_address?;
         self.l1_client
-            .get_stake_table(address, block_header.height())
+            .get_stake_table(address.to_alloy(), block_header.height())
             .await
             .ok()
             .map(|stake_table| -> Box<dyn FnOnce(&mut Self) + Send> {
@@ -488,7 +489,7 @@ impl Membership<SeqTypes> for EpochCommittees {
 
 #[cfg(test)]
 mod tests {
-    use contract_bindings::permissioned_stake_table::NodeInfo;
+    use contract_bindings_alloy::permissionedstaketable::PermissionedStakeTable::NodeInfo;
 
     use super::*;
 
@@ -502,7 +503,7 @@ mod tests {
         let mut consensus_node = NodeInfoJf::random(&mut rng);
         consensus_node.da = false;
         let added: Vec<NodeInfo> = vec![da_node.clone().into(), consensus_node.clone().into()];
-        let mut updates = vec![StakersUpdatedFilter {
+        let mut updates = vec![StakersUpdated {
             removed: vec![],
             added,
         }];
@@ -526,7 +527,7 @@ mod tests {
         // DA status.
         let mut new_da_node = consensus_node.clone();
         new_da_node.da = true;
-        updates.push(StakersUpdatedFilter {
+        updates.push(StakersUpdated {
             removed: vec![consensus_node.clone().into()],
             added: vec![new_da_node.clone().into()],
         });
@@ -543,7 +544,7 @@ mod tests {
         assert_eq!(st.stake_table.0[1].stake_key, new_da_node.stake_table_key);
 
         // Simulate removing the second node
-        updates.push(StakersUpdatedFilter {
+        updates.push(StakersUpdated {
             removed: vec![new_da_node.clone().into()],
             added: vec![],
         });

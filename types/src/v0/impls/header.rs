@@ -1,6 +1,7 @@
 use anyhow::{ensure, Context};
 use ark_serialize::CanonicalSerialize;
 use committable::{Commitment, Committable, RawCommitmentBuilder};
+use ethers_conv::ToAlloy;
 use hotshot_query_service::{availability::QueryableHeader, explorer::ExplorerHeader};
 use hotshot_types::{
     traits::{
@@ -451,7 +452,7 @@ impl Header {
         // Enforce that the sequencer block timestamp is not behind the L1 block timestamp. This can
         // only happen if our clock is badly out of sync with L1.
         if let Some(l1_block) = &l1.finalized {
-            let l1_timestamp = l1_block.timestamp.as_u64();
+            let l1_timestamp = l1_block.timestamp.saturating_to::<u64>();
             if timestamp < l1_timestamp {
                 tracing::warn!("Espresso timestamp {timestamp} behind L1 timestamp {l1_timestamp}, local clock may be out of sync");
                 timestamp = l1_timestamp;
@@ -861,7 +862,7 @@ impl BlockHeader<SeqTypes> for Header {
             instance_state
                 .l1_client
                 .get_finalized_deposits(
-                    addr,
+                    addr.to_alloy(),
                     parent_leaf
                         .block_header()
                         .l1_finalized()
@@ -996,7 +997,7 @@ impl BlockHeader<SeqTypes> for Header {
             instance_state
                 .l1_client
                 .get_finalized_deposits(
-                    addr,
+                    addr.to_alloy(),
                     parent_leaf
                         .block_header()
                         .l1_finalized()
@@ -1182,6 +1183,7 @@ mod test_headers {
 
     use std::sync::Arc;
 
+    use alloy::primitives::U256;
     use ethers::{types::Address, utils::Anvil};
     use hotshot_types::{traits::signature_key::BuilderSignatureKey, vid::vid_scheme};
 
@@ -1357,7 +1359,7 @@ mod test_headers {
     async fn test_new_header_timestamp_behind_finalized_l1_block() {
         let l1_finalized = Some(L1BlockInfo {
             number: 1,
-            timestamp: 1.into(),
+            timestamp: U256::from(1),
             ..Default::default()
         });
         TestCase {
@@ -1487,7 +1489,7 @@ mod test_headers {
 
         let anvil = Anvil::new().block_time(1u32).spawn();
         let mut genesis_state = NodeState::mock()
-            .with_l1(L1Client::new(anvil.endpoint().parse().unwrap()))
+            .with_l1(L1Client::new(vec![anvil.endpoint().parse().unwrap()]))
             .with_current_version(StaticVersion::<0, 1>::version());
 
         let genesis = GenesisForTest::default().await;
@@ -1551,7 +1553,7 @@ mod test_headers {
         let mut proposal_state = parent_state.clone();
         for fee_info in genesis_state
             .l1_client
-            .get_finalized_deposits(Address::default(), None, 0)
+            .get_finalized_deposits(Address::default().to_alloy(), None, 0)
             .await
         {
             proposal_state.insert_fee_deposit(fee_info).unwrap();

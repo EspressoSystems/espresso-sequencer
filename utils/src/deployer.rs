@@ -1,6 +1,6 @@
 use anyhow::{ensure, Context};
 use clap::{builder::OsStr, Parser, ValueEnum};
-use contract_bindings::{
+use contract_bindings_ethers::{
     erc1967_proxy::ERC1967Proxy,
     fee_contract::FeeContract,
     light_client::{LightClient, LIGHTCLIENT_ABI},
@@ -499,7 +499,7 @@ pub enum ContractGroup {
 pub mod test_helpers {
 
     use anyhow::{ensure, Context};
-    use contract_bindings::{
+    use contract_bindings_ethers::{
         erc1967_proxy::ERC1967Proxy,
         fee_contract::{FeeContract, FEECONTRACT_ABI, FEECONTRACT_BYTECODE},
         light_client::{LightClient, LIGHTCLIENT_ABI},

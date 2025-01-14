@@ -2,7 +2,7 @@
 ///
 /// The initial stake table is passed to the permissioned stake table contract
 /// on deployment.
-use contract_bindings::permissioned_stake_table::{NodeInfo, PermissionedStakeTable};
+use contract_bindings_ethers::permissioned_stake_table::{NodeInfo, PermissionedStakeTable};
 use ethers::{
     middleware::SignerMiddleware,
     providers::{Http, Middleware as _, Provider},

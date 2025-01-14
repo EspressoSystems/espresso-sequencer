@@ -1,6 +1,7 @@
 use anyhow::bail;
 use committable::{Commitment, Committable};
 use ethers::types::Address;
+use ethers_conv::ToAlloy;
 use hotshot_query_service::merklized_state::MerklizedState;
 use hotshot_types::{
     data::{BlockError, ViewNumber},
@@ -458,8 +459,10 @@ impl<'a> ValidatedTransition<'a> {
             // cases. The hash seems less useful and explodes the size
             // of the error, so we strip it out.
             return Err(ProposalValidationError::L1FinalizedDecrementing {
-                parent: parent_finalized.map(|block| (block.number, block.timestamp.as_u64())),
-                proposed: proposed_finalized.map(|block| (block.number, block.timestamp.as_u64())),
+                parent: parent_finalized
+                    .map(|block| (block.number, block.timestamp.saturating_to::<u64>())),
+                proposed: proposed_finalized
+                    .map(|block| (block.number, block.timestamp.saturating_to::<u64>())),
             });
         }
         Ok(())
@@ -868,7 +871,7 @@ pub async fn get_l1_deposits(
         instance
             .l1_client
             .get_finalized_deposits(
-                addr,
+                addr.to_alloy(),
                 parent_leaf
                     .block_header()
                     .l1_finalized()

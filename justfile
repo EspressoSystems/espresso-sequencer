@@ -103,7 +103,23 @@ build-docker-images:
 # generate rust bindings for contracts
 REGEXP := "^LightClient$|^LightClientStateUpdateVK$|^FeeContract$|PlonkVerifier$|^ERC1967Proxy$|^LightClientMock$|^LightClientStateUpdateVKMock$|^PlonkVerifier2$|^PermissionedStakeTable$"
 gen-bindings:
-    forge bind --contracts ./contracts/src/ --crate-name contract-bindings --bindings-path contract-bindings --select "{{REGEXP}}" --overwrite --force
+    # Delete the existing bindings
+    rm -rf contract-bindings-alloy
+    rm -rf contract-bindings-ethers
+
+    # Update the git submodules
+    git submodule update --init --recursive
+
+    # Generate the ethers bindings
+    forge bind --contracts ./contracts/src/ --ethers --crate-name contract-bindings-ethers --bindings-path contract-bindings-ethers --select "{{REGEXP}}" --overwrite --force
+
+    # Generate the alloy bindings
+    # For now, to compile these, you need to fork `alloy-core` and change the `RESOLVE_LIMIT`. From there, you need to
+    # patch `foundry` to use the fork and compile `forge`
+    forge bind --skip test --skip script --libraries contracts/src/libraries/PlonkVerifier.sol:PlonkVerifier:0xB0bfeE1e1A7Ef832149EDe013B34AD6248176385 --alloy --contracts ./contracts/src/ --crate-name contract-bindings-alloy --bindings-path contract-bindings-alloy --select "{{REGEXP}}" --overwrite --force
+
+    # For some reason `alloy` likes to use the wrong verison of itself in `contract-bindings`. You need to manually replace
+    # it with the workspace version.
 
     # Foundry doesn't include bytecode in the bindings for LightClient.sol, since it links with
     # libraries. However, this bytecode is still needed to link and deploy the contract. Copy it to
@@ -112,6 +128,10 @@ gen-bindings:
     mkdir -p contract-bindings/artifacts
     jq '.bytecode.object' < contracts/out/LightClient.sol/LightClient.json > contract-bindings/artifacts/LightClient_bytecode.json
     jq '.bytecode.object' < contracts/out/LightClientMock.sol/LightClientMock.json > contract-bindings/artifacts/LightClientMock_bytecode.json
+    
+    # # Alloy requires us to copy the ABI in since it's not included in the bindings
+    # jq '.abi' < contracts/out/LightClient.sol/LightClient.json > contract-bindings/artifacts/LightClient_abi.json
+    # jq '.abi' < contracts/out/LightClientMock.sol/LightClientMock.json > contract-bindings/artifacts/LightClientMock_abi.json
 
     cargo fmt --all
     cargo sort -g -w

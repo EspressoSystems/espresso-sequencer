@@ -1,30 +1,29 @@
 use crate::parse_duration;
+use alloy::{
+    primitives::{B256, U256},
+    providers::RootProvider,
+    transports::http::{Client, Http},
+};
 use async_broadcast::{InactiveReceiver, Sender};
 use clap::Parser;
 use derive_more::Deref;
-use ethers::{
-    prelude::{H256, U256},
-    providers::{Http, Provider},
-};
 use hotshot_types::traits::metrics::{Counter, Gauge, Metrics, NoMetrics};
 use lru::LruCache;
+use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::{
     num::NonZeroUsize,
     sync::Arc,
     time::{Duration, Instant},
 };
-use tokio::{
-    sync::{Mutex, RwLock},
-    task::JoinHandle,
-};
+use tokio::{sync::Mutex, task::JoinHandle};
 use url::Url;
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, Hash, PartialEq, Eq)]
 pub struct L1BlockInfo {
     pub number: u64,
     pub timestamp: U256,
-    pub hash: H256,
+    pub hash: B256,
 }
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, Hash, PartialEq, Eq)]
@@ -140,7 +139,7 @@ pub struct L1ClientOptions {
     pub metrics: Arc<Box<dyn Metrics>>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Deref)]
 /// An Ethereum provider and configuration to interact with the L1.
 ///
 /// This client runs asynchronously, updating an in-memory snapshot of the relevant L1 information
@@ -149,8 +148,9 @@ pub struct L1ClientOptions {
 /// easy to use a subscription instead of polling for new blocks, vastly reducing the number of L1
 /// RPC calls we make.
 pub struct L1Client {
-    /// `Provider` from `ethers-provider`.
-    pub(crate) provider: Arc<Provider<MultiRpcClient>>,
+    /// A `RootProvider` from `alloy` which wraps our custom `MultiRpcClient`
+    #[deref]
+    pub provider: RootProvider<MultiRpcClient>,
     /// Shared state updated by an asynchronous task which polls the L1.
     pub(crate) state: Arc<Mutex<L1State>>,
     /// Channel used by the async update task to send events to clients.
@@ -190,7 +190,7 @@ pub(crate) struct L1ClientMetrics {
 /// This client utilizes one RPC provider at a time, but if it detects that the provider is in a
 /// failing state, it will automatically switch to the next provider in its list.
 #[derive(Clone, Debug)]
-pub(crate) struct MultiRpcClient {
+pub struct MultiRpcClient {
     pub(crate) clients: Arc<Vec<L1Provider>>,
     pub(crate) status: Arc<RwLock<MultiRpcClientStatus>>,
     pub(crate) failover_send: Sender<()>,
@@ -209,9 +209,9 @@ pub(crate) struct MultiRpcClientStatus {
 }
 
 /// A single provider in a [`MultiRpcClient`].
-#[derive(Debug, Deref)]
+#[derive(Debug, Deref, Clone)]
 pub(crate) struct L1Provider {
     #[deref]
-    pub(crate) inner: Http,
-    pub(crate) failures: Box<dyn Counter>,
+    pub(crate) inner: Http<Client>,
+    pub(crate) failures: Arc<Box<dyn Counter>>,
 }

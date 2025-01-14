@@ -20,6 +20,7 @@ use espresso_types::{
     traits::EventConsumer, BackoffParams, L1ClientOptions, NodeState, PubKey, SeqTypes,
     SolverAuctionResultsProvider, ValidatedState,
 };
+use ethers_conv::ToAlloy;
 use genesis::L1Finalized;
 use proposal_fetcher::ProposalFetcherConfig;
 use std::sync::Arc;
@@ -443,7 +444,7 @@ pub async fn init_node<P: SequencerPersistence, V: Versions>(
         L1Finalized::Number { number } => l1_client.wait_for_finalized_block(number).await,
         L1Finalized::Timestamp { timestamp } => {
             l1_client
-                .wait_for_finalized_block_with_timestamp(timestamp.unix_timestamp().into())
+                .wait_for_finalized_block_with_timestamp(timestamp.unix_timestamp().to_alloy())
                 .await
         }
     };
@@ -960,7 +961,7 @@ pub mod testing {
             let node_state = NodeState::new(
                 i as u64,
                 state.chain_config.resolve().unwrap_or_default(),
-                L1Client::new(self.l1_url.clone()),
+                L1Client::new(vec![self.l1_url.clone()]),
                 catchup::local_and_remote(persistence.clone(), catchup).await,
                 V::Base::VERSION,
             )

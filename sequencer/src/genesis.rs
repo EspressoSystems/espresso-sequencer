@@ -9,7 +9,7 @@ use espresso_types::{
     Upgrade,
 };
 use ethers::types::H160;
-use sequencer_utils::deployer::is_proxy_contract;
+use ethers_conv::ToAlloy;
 use serde::{Deserialize, Serialize};
 use url::Url;
 use vbs::version::Version;
@@ -84,12 +84,13 @@ impl Genesis {
 
 impl Genesis {
     pub async fn validate_fee_contract(&self, l1_rpc_url: Url) -> anyhow::Result<()> {
-        let l1 = L1Client::new(l1_rpc_url);
+        let l1 = L1Client::new(vec![l1_rpc_url]);
 
         if let Some(fee_contract_address) = self.chain_config.fee_contract {
             tracing::info!("validating fee contract at {fee_contract_address:x}");
 
-            if !is_proxy_contract(l1.provider(), fee_contract_address)
+            if !l1
+                .is_proxy_contract(fee_contract_address.to_alloy())
                 .await
                 .context("checking if fee contract is a proxy")?
             {
@@ -110,7 +111,8 @@ impl Genesis {
             if let Some(fee_contract_address) = chain_config.fee_contract {
                 if fee_contract_address == H160::zero() {
                     anyhow::bail!("Fee contract cannot use the zero address");
-                } else if !is_proxy_contract(l1.provider(), fee_contract_address)
+                } else if !l1
+                    .is_proxy_contract(fee_contract_address.to_alloy())
                     .await
                     .context(format!(
                         "checking if fee contract is a proxy in upgrade {version}",
@@ -319,6 +321,7 @@ impl Genesis {
 
 #[cfg(test)]
 mod test {
+    use alloy::primitives::B256;
     use ethers::middleware::Middleware;
     use ethers::prelude::*;
     use ethers::signers::Signer;
@@ -330,7 +333,7 @@ mod test {
 
     use anyhow::Result;
 
-    use contract_bindings::fee_contract::FeeContract;
+    use contract_bindings_ethers::fee_contract::FeeContract;
     use espresso_types::{
         L1BlockInfo, TimeBasedUpgrade, Timestamp, UpgradeMode, UpgradeType, ViewBasedUpgrade,
     };
@@ -446,8 +449,8 @@ mod test {
             genesis.l1_finalized,
             L1Finalized::Block(L1BlockInfo {
                 number: 64,
-                timestamp: 0x123def.into(),
-                hash: H256([
+                timestamp: U256::from(0x123def).to_alloy(),
+                hash: B256::from_slice(&[
                     0x80, 0xf5, 0xdd, 0x11, 0xf2, 0xbd, 0xda, 0x28, 0x14, 0xcb, 0x1a, 0xd9, 0x4e,
                     0xf3, 0x0a, 0x47, 0xde, 0x02, 0xcf, 0x28, 0xad, 0x68, 0xc8, 0x9e, 0x10, 0x4c,
                     0x00, 0xc4, 0xe5, 0x1b, 0xb7, 0xa5
