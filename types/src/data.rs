@@ -728,6 +728,7 @@ impl<TYPES: NodeType> From<Leaf<TYPES>> for Leaf2<TYPES> {
             upgrade_certificate: leaf.upgrade_certificate,
             block_payload: leaf.block_payload,
             view_change_evidence: None,
+            next_drb_result: None,
         }
     }
 }
@@ -870,6 +871,13 @@ pub struct Leaf2<TYPES: NodeType> {
 
     /// Possible timeout or view sync certificate. If the `justify_qc` is not for a proposal in the immediately preceding view, then either a timeout or view sync certificate must be attached.
     pub view_change_evidence: Option<ViewChangeEvidence2<TYPES>>,
+
+    /// The DRB result for the next epoch.
+    ///
+    /// This is required only for the last block of the epoch. Nodes will verify that it's
+    /// consistent with the result from their computations.
+    #[serde(with = "serde_bytes")]
+    pub next_drb_result: Option<DrbResult>,
 }
 
 impl<TYPES: NodeType> Leaf2<TYPES> {
@@ -922,6 +930,7 @@ impl<TYPES: NodeType> Leaf2<TYPES> {
             block_header: block_header.clone(),
             block_payload: Some(payload),
             view_change_evidence: None,
+            next_drb_result: None,
         }
     }
     /// Time when this leaf was created.
@@ -1103,6 +1112,7 @@ impl<TYPES: NodeType> PartialEq for Leaf2<TYPES> {
             upgrade_certificate,
             block_payload: _,
             view_change_evidence,
+            next_drb_result,
         } = self;
 
         *view_number == other.view_number
@@ -1112,6 +1122,7 @@ impl<TYPES: NodeType> PartialEq for Leaf2<TYPES> {
             && *block_header == other.block_header
             && *upgrade_certificate == other.upgrade_certificate
             && *view_change_evidence == other.view_change_evidence
+            && *next_drb_result == other.next_drb_result
     }
 }
 
@@ -1475,7 +1486,7 @@ impl<TYPES: NodeType> Leaf2<TYPES> {
             block_header,
             upgrade_certificate,
             view_change_evidence,
-            next_drb_result: _,
+            next_drb_result,
         } = quorum_proposal;
 
         Self {
@@ -1487,6 +1498,7 @@ impl<TYPES: NodeType> Leaf2<TYPES> {
             upgrade_certificate: upgrade_certificate.clone(),
             block_payload: None,
             view_change_evidence: view_change_evidence.clone(),
+            next_drb_result: *next_drb_result,
         }
     }
 }
