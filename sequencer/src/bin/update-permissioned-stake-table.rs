@@ -61,9 +61,6 @@ struct Options {
     /// stakers_to_remove = [
     ///   {
     ///     stake_table_key = "BLS_VER_KEY~...",
-    ///     state_ver_key = "SCHNORR_VER_KEY~...",
-    ///     da = false,
-    ///     stake = 1, # this value is ignored, but needs to be set
     ///   },
     /// ]
     ///

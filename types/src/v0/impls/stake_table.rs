@@ -516,7 +516,7 @@ mod tests {
         let mut new_da_node = consensus_node.clone();
         new_da_node.da = true;
         updates.push(StakersUpdatedFilter {
-            removed: vec![consensus_node.clone().into()],
+            removed: vec![consensus_node.stake_table_key_sol()],
             added: vec![new_da_node.clone().into()],
         });
         let st = StakeTables::from_l1_events(updates.clone());
@@ -533,7 +533,7 @@ mod tests {
 
         // Simulate removing the second node
         updates.push(StakersUpdatedFilter {
-            removed: vec![new_da_node.clone().into()],
+            removed: vec![new_da_node.stake_table_key_sol()],
             added: vec![],
         });
         let st = StakeTables::from_l1_events(updates);

@@ -3,6 +3,7 @@
 /// The initial stake table is passed to the permissioned stake table contract
 /// on deployment.
 use contract_bindings::permissioned_stake_table::{G2Point, NodeInfo, PermissionedStakeTable};
+use derive_more::derive::From;
 use ethers::{
     middleware::SignerMiddleware,
     providers::{Http, Middleware as _, Provider},
@@ -55,12 +56,23 @@ impl From<PermissionedStakeTableConfig> for Vec<NodeInfo> {
     }
 }
 
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug, From, PartialEq)]
+struct StakerIdentity {
+    stake_table_key: BLSPubKey,
+}
+
+impl From<StakerIdentity> for BLSPubKey {
+    fn from(value: StakerIdentity) -> Self {
+        value.stake_table_key
+    }
+}
+
 /// Information to add and remove stakers in the permissioned stake table contract.
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 #[serde(bound(deserialize = ""))]
 pub struct PermissionedStakeTableUpdate {
     #[serde(default)]
-    stakers_to_remove: Vec<BLSPubKey>,
+    stakers_to_remove: Vec<StakerIdentity>,
     #[serde(default)]
     new_stakers: Vec<PeerConfigKeys<BLSPubKey>>,
 }
@@ -83,7 +95,7 @@ impl PermissionedStakeTableUpdate {
     fn stakers_to_remove(&self) -> Vec<G2Point> {
         self.stakers_to_remove
             .iter()
-            .map(|v| bls_jf_to_sol(*v))
+            .map(|v| bls_jf_to_sol(v.clone().into()))
             .collect()
     }
 
@@ -130,15 +142,20 @@ pub async fn update_stake_table(
 
 #[cfg(test)]
 mod test {
-    use crate::stake_table::PermissionedStakeTableConfig;
+    use crate::stake_table::{PermissionedStakeTableConfig, PermissionedStakeTableUpdate};
     use crate::test_utils::setup_test;
     use hotshot::types::{BLSPubKey, SignatureKey};
     use hotshot_types::{light_client::StateKeyPair, network::PeerConfigKeys};
     use toml::toml;
-    #[test]
-    fn test_permissioned_stake_table_from_toml() {
-        setup_test();
 
+    fn assert_peer_config_eq(p1: &PeerConfigKeys<BLSPubKey>, p2: &PeerConfigKeys<BLSPubKey>) {
+        assert_eq!(p1.stake_table_key, p2.stake_table_key);
+        assert_eq!(p1.state_ver_key, p2.state_ver_key);
+        assert_eq!(p1.stake, p2.stake);
+        assert_eq!(p1.da, p2.da);
+    }
+
+    fn mk_keys() -> Vec<PeerConfigKeys<BLSPubKey>> {
         let mut keys = Vec::new();
         for i in 0..3 {
             let (pubkey, _) = BLSPubKey::generated_from_seed_indexed([0; 32], i);
@@ -147,10 +164,18 @@ mod test {
             keys.push(PeerConfigKeys {
                 stake_table_key: pubkey,
                 state_ver_key: ver_key,
-                stake: 1,
+                stake: i + 1,
                 da: i == 0,
             });
         }
+        keys
+    }
+
+    #[test]
+    fn test_permissioned_stake_table_from_toml() {
+        setup_test();
+
+        let keys = mk_keys();
 
         let st_key_1 = keys[0].stake_table_key.to_string();
         let verkey_1 = keys[0].state_ver_key.to_string();
@@ -174,13 +199,13 @@ mod test {
             [[public_keys]]
             stake_table_key =  st_key_2
             state_ver_key  =  verkey_2
-            stake = 1
+            stake = 2
             da = da_2
 
             [[public_keys]]
             stake_table_key = st_key_3
             state_ver_key  =  verkey_3
-            stake = 2
+            stake = 3
             da = da_3
 
         }
@@ -190,29 +215,52 @@ mod test {
 
         assert_eq!(toml_st.public_keys.len(), 3);
 
-        // TODO: add `PartialEq` to PeerConfigKeys
-        assert_eq!(toml_st.public_keys[0].state_ver_key, keys[0].state_ver_key);
-        assert_eq!(
-            toml_st.public_keys[0].stake_table_key,
-            keys[0].stake_table_key
-        );
-        assert_eq!(toml_st.public_keys[0].da, da_1);
-        assert_eq!(toml_st.public_keys[0].stake, 1);
+        assert_peer_config_eq(&toml_st.public_keys[0], &keys[0]);
+        assert_peer_config_eq(&toml_st.public_keys[1], &keys[1]);
+        assert_peer_config_eq(&toml_st.public_keys[2], &keys[2]);
+    }
 
-        assert_eq!(toml_st.public_keys[1].state_ver_key, keys[1].state_ver_key);
-        assert_eq!(
-            toml_st.public_keys[1].stake_table_key,
-            keys[1].stake_table_key
-        );
-        assert_eq!(toml_st.public_keys[1].da, da_2);
-        assert_eq!(toml_st.public_keys[1].stake, 1);
+    #[test]
+    fn test_permissioned_stake_table_update_from_toml() {
+        setup_test();
 
-        assert_eq!(toml_st.public_keys[2].state_ver_key, keys[2].state_ver_key);
-        assert_eq!(
-            toml_st.public_keys[2].stake_table_key,
-            keys[2].stake_table_key
-        );
-        assert_eq!(toml_st.public_keys[2].da, da_3);
-        assert_eq!(toml_st.public_keys[2].stake, 2);
+        let keys = mk_keys();
+
+        let st_key_1 = keys[0].stake_table_key.to_string();
+
+        let st_key_2 = keys[1].stake_table_key.to_string();
+        let verkey_2 = keys[1].state_ver_key.to_string();
+        let da_2 = keys[1].da;
+
+        let st_key_3 = keys[2].stake_table_key.to_string();
+        let verkey_3 = keys[2].state_ver_key.to_string();
+        let da_3 = keys[2].da;
+
+        let toml = toml! {
+            [[stakers_to_remove]]
+            stake_table_key =  st_key_1
+
+            [[new_stakers]]
+            stake_table_key =  st_key_2
+            state_ver_key  =  verkey_2
+            stake = 2
+            da = da_2
+
+            [[new_stakers]]
+            stake_table_key = st_key_3
+            state_ver_key  =  verkey_3
+            stake = 3
+            da = da_3
+        }
+        .to_string();
+
+        let update: PermissionedStakeTableUpdate = toml::from_str(&toml).unwrap();
+
+        assert_eq!(update.stakers_to_remove.len(), 1);
+        assert_eq!(update.stakers_to_remove[0], keys[0].stake_table_key.into());
+
+        assert_eq!(update.new_stakers.len(), 2);
+        assert_peer_config_eq(&update.new_stakers[0], &keys[1]);
+        assert_peer_config_eq(&update.new_stakers[1], &keys[2]);
     }
 }

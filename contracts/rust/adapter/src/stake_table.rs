@@ -133,6 +133,10 @@ impl NodeInfoJf {
             da: rng.gen(),
         }
     }
+
+    pub fn stake_table_key_sol(&self) -> permissioned_stake_table::G2Point {
+        bls_jf_to_sol(self.stake_table_key)
+    }
 }
 
 impl From<NodeInfoJf> for NodeInfo {
