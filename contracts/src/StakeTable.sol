@@ -152,7 +152,6 @@ contract StakeTable is AbstractStakeTable {
 
     /// @notice Get the next available epoch and queue size in that epoch
     /// TODO modify this according to the current spec
-    /// TODO modify this according to the current spec
     function nextRegistrationEpoch() external view override returns (uint64, uint64) {
         uint64 epoch;
         uint64 queueSize;
@@ -175,7 +174,6 @@ contract StakeTable is AbstractStakeTable {
     // @param queueSize current size of the registration queue (after insertion of new element in
     // the queue)
     /// TODO modify this according to the current spec
-    /// TODO modify this according to the current spec
     function appendRegistrationQueue(uint64 epoch, uint64 queueSize) private {
         firstAvailableRegistrationEpoch = epoch;
         _numPendingRegistrations = queueSize + 1;
@@ -183,13 +181,11 @@ contract StakeTable is AbstractStakeTable {
 
     /// @notice Get the number of pending registration requests in the waiting queue
     /// TODO modify this according to the current spec
-    /// TODO modify this according to the current spec
     function numPendingRegistrations() external view override returns (uint64) {
         return _numPendingRegistrations;
     }
 
     /// @notice Get the next available epoch for exit and queue size in that epoch
-    /// TODO modify this according to the current spec
     /// TODO modify this according to the current spec
     function nextExitEpoch() external view override returns (uint64, uint64) {
         uint64 epoch;
@@ -212,14 +208,12 @@ contract StakeTable is AbstractStakeTable {
     // @param epoch next available exit epoch
     // @param queueSize current size of the exit queue (after insertion of new element in the queue)
     /// TODO modify this according to the current spec
-    /// TODO modify this according to the current spec
     function appendExitQueue(uint64 epoch, uint64 queueSize) private {
         firstAvailableExitEpoch = epoch;
         _numPendingExits = queueSize + 1;
     }
 
     /// @notice Get the number of pending exit requests in the waiting queue
-    /// TODO modify this according to the current spec
     /// TODO modify this according to the current spec
     function numPendingExits() external view override returns (uint64) {
         return _numPendingExits;
@@ -239,7 +233,6 @@ contract StakeTable is AbstractStakeTable {
     /// withdraw.
     /// @param node node which is assigned an exit escrow period.
     /// @return Number of epochs post exit after which funds can be withdrawn.
-    /// TODO modify this according to the current spec
     /// TODO modify this according to the current spec
     function exitEscrowPeriod(Node memory node) public pure returns (uint64) {
         if (node.balance > 100) {
@@ -402,7 +395,6 @@ contract StakeTable is AbstractStakeTable {
     function requestExit() external override {
         Node memory node = nodes[msg.sender];
 
-        // TODO test this behaviour when re-implementing the logic for handling epochs
         // if the node is not registered, revert
         if (node.account == address(0)) {
             revert NodeNotRegistered();
@@ -437,6 +429,8 @@ contract StakeTable is AbstractStakeTable {
     /// withdraw past their `exitEpoch`.
     ///
     /// @return The total amount withdrawn, equal to `Node.balance` associated with `blsVK`
+    /// TODO: add epoch logic so that we can ensure the node has first requested to exit and waiting
+    /// for the exit escrow period to be over
     function withdrawFunds() external override returns (uint256) {
         Node memory node = nodes[msg.sender];
 
@@ -456,10 +450,11 @@ contract StakeTable is AbstractStakeTable {
             revert InsufficientStakeBalance(0);
         }
 
-        // Verify that the exit escrow period is over.
-        if (currentEpoch() < node.exitEpoch + exitEscrowPeriod(node)) {
-            revert PrematureWithdrawal();
-        }
+        // // Verify that the exit escrow period is over.
+        // if (currentEpoch() < node.exitEpoch + exitEscrowPeriod(node)) {
+        //     revert PrematureWithdrawal();
+        // }
+        totalStake -= balance;
 
         // Delete the node from the stake table.
         delete nodes[msg.sender];
