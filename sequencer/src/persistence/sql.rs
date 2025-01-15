@@ -5,7 +5,7 @@ use committable::Committable;
 use derivative::Derivative;
 use derive_more::derive::{From, Into};
 use espresso_types::{
-    downgrade_commitment_map, downgrade_leaf, parse_duration, upgrade_commitment_map,
+    parse_duration, upgrade_commitment_map,
     v0::traits::{EventConsumer, PersistenceOptions, SequencerPersistence, StateCatchup},
     BackoffParams, Leaf, Leaf2, NetworkConfig, Payload,
 };
@@ -20,7 +20,7 @@ use hotshot_query_service::{
                 Transaction, TransactionMode, Write,
             },
         },
-        SqlDataSource, Transaction as _, VersionedDataSource,
+        Transaction as _, VersionedDataSource,
     },
     fetching::{
         request::{LeafRequest, PayloadRequest, VidCommonRequest},
@@ -34,8 +34,7 @@ use hotshot_types::{
         VidDisperseShare2,
     },
     event::{Event, EventType, HotShotAction, LeafInfo},
-    message::{convert_proposal, Proposal},
-    qc,
+    message::Proposal,
     simple_certificate::{
         NextEpochQuorumCertificate2, QuorumCertificate, QuorumCertificate2, UpgradeCertificate,
     },
@@ -2037,17 +2036,8 @@ mod test {
     use espresso_types::{traits::NullEventConsumer, Header, Leaf, NodeState, ValidatedState};
     use futures::stream::TryStreamExt;
     use hotshot_example_types::node_types::TestVersions;
-    use hotshot_query_service::testing::mocks::MockVersions;
     use hotshot_types::{
-        data::EpochNumber,
-        simple_certificate::QuorumCertificate,
-        simple_vote::QuorumData,
-        traits::{
-            block_contents::{vid_commitment, GENESIS_VID_NUM_STORAGE_NODES},
-            signature_key::SignatureKey,
-            EncodeBytes,
-        },
-        vid::vid_scheme,
+        data::EpochNumber, message::convert_proposal, simple_certificate::QuorumCertificate, simple_vote::QuorumData, traits::{block_contents::vid_commitment, signature_key::SignatureKey, EncodeBytes}, vid::vid_scheme
     };
     use jf_vid::VidScheme;
     use sequencer_utils::test_utils::setup_test;
@@ -2395,12 +2385,70 @@ mod test {
 
         let storage = opt.create().await.unwrap();
 
-        for i in 0..200 {
-            let (qp, leaf) = generate_leaf(i).await;
-            let qc = generate_qc(i).await;
+        let rows = 300;
+
+        for i in 0..rows {
+            let view = ViewNumber::new(i);
+            let validated_state = ValidatedState::default();
+            let instance_state = NodeState::default();
+
+            let (pubkey, privkey) = BLSPubKey::generated_from_seed_indexed([0; 32], i);
+            let (payload, metadata) =
+                Payload::from_transactions([], &validated_state, &instance_state)
+                    .await
+                    .unwrap();
+            let builder_commitment = payload.builder_commitment(&metadata);
+            let payload_bytes = payload.encode();
+
+            let payload_commitment = vid_commitment(&payload_bytes, 4);
+
+            let block_header = Header::genesis(
+                &instance_state,
+                payload_commitment,
+                builder_commitment,
+                metadata,
+            );
+
+            let null_quorum_data = QuorumData {
+                leaf_commit: Commitment::<Leaf>::default_commitment_no_preimage(),
+            };
+
+            let justify_qc = QuorumCertificate::new(
+                null_quorum_data.clone(),
+                null_quorum_data.commit(),
+                view,
+                None,
+                PhantomData,
+            );
+
+            let quorum_proposal = QuorumProposal {
+                block_header,
+                view_number: view,
+                justify_qc: justify_qc.clone(),
+                upgrade_certificate: None,
+                proposal_certificate: None,
+            };
+
+            let quorum_proposal_signature =
+                BLSPubKey::sign(&privkey, &bincode::serialize(&quorum_proposal).unwrap())
+                    .expect("Failed to sign quorum proposal");
+
+            let proposal_bytes = bincode::serialize(&quorum_proposal)
+                .context("serializing proposal")
+                .unwrap();
+
+            let proposal = Proposal {
+                data: quorum_proposal.clone(),
+                signature: quorum_proposal_signature,
+                _pd: PhantomData,
+            };
+
+            let mut leaf = Leaf::from_quorum_proposal(&quorum_proposal);
+            leaf.fill_block_payload(payload, 4).unwrap();
+
             let mut tx = storage.db.write().await.unwrap();
 
-            let qc_bytes = bincode::serialize(&qc).unwrap();
+            let qc_bytes = bincode::serialize(&justify_qc).unwrap();
             let leaf_bytes = bincode::serialize(&leaf).unwrap();
 
             tx.upsert(
@@ -2413,16 +2461,8 @@ mod test {
             .unwrap();
             tx.commit().await.unwrap();
 
-            let genesis_payload = Leaf::genesis(&ValidatedState::default(), &NodeState::default())
-                .await
-                .block_payload()
-                .unwrap();
+            let disperse = vid_scheme(4).disperse(payload_bytes.clone()).unwrap();
 
-            let leaf_payload_bytes_arc = genesis_payload.encode();
-            let disperse = vid_scheme(2)
-                .disperse(leaf_payload_bytes_arc.clone())
-                .unwrap();
-            let (pubkey, privkey) = BLSPubKey::generated_from_seed_indexed([0; 32], i);
             let vid = VidDisperseShare::<SeqTypes> {
                 view_number: ViewNumber::new(i),
                 payload_commitment: Default::default(),
@@ -2442,8 +2482,8 @@ mod test {
                 view_number: ViewNumber::new(i),
             };
 
-            let block_payload_signature = BLSPubKey::sign(&privkey, &leaf_payload_bytes_arc)
-                .expect("Failed to sign block payload");
+            let block_payload_signature =
+                BLSPubKey::sign(&privkey, &payload_bytes).expect("Failed to sign block payload");
 
             let da_proposal = Proposal {
                 data: da,
@@ -2459,9 +2499,39 @@ mod test {
                 .append_da(&da_proposal, disperse.commit)
                 .await
                 .unwrap();
+
+            let leaf_hash = Committable::commit(&leaf);
+            let mut tx = storage.db.write().await.expect("failed to start write tx");
+            tx.upsert(
+                "quorum_proposals",
+                ["view", "leaf_hash", "data"],
+                ["view"],
+                [(i as i64, leaf_hash.to_string(), proposal_bytes)],
+            )
+            .await
+            .expect("failed to upsert quorum proposal");
+
+            let justify_qc = &proposal.data.justify_qc;
+            let justify_qc_bytes = bincode::serialize(&justify_qc)
+                .context("serializing QC")
+                .unwrap();
+            tx.upsert(
+                "quorum_certificate",
+                ["view", "leaf_hash", "data"],
+                ["view"],
+                [(
+                    justify_qc.view_number.u64() as i64,
+                    justify_qc.data.leaf_commit.to_string(),
+                    &justify_qc_bytes,
+                )],
+            )
+            .await
+            .expect("failed to upsert qc");
+
+            tx.commit().await.expect("failed to commit");
         }
 
-        let x = |v: Proposal<SeqTypes, QuorumProposal<SeqTypes>>| {
+        let qp_fn = |v: Proposal<SeqTypes, QuorumProposal<SeqTypes>>| {
             let qc = v.data;
 
             let qc2 = qc.into();
@@ -2473,94 +2543,54 @@ mod test {
             }
         };
 
-        storage.migrate_consensus(Leaf2::from, x).await.unwrap();
-    }
+        storage.migrate_consensus(Leaf2::from, qp_fn).await.unwrap();
 
-    async fn generate_qc(view: u64) -> QuorumCertificate<SeqTypes> {
-        let mut qc = QuorumCertificate::<SeqTypes>::genesis::<MockVersions>(
-            &ValidatedState::default(),
-            &NodeState::default(),
-        )
-        .await;
-        qc.view_number = ViewNumber::new(view);
-
-        qc
-    }
-
-    async fn generate_vid_share(view: u64) -> VidDisperseShare<SeqTypes> {
-        let genesis_payload = Leaf::genesis(&ValidatedState::default(), &NodeState::default())
+        let mut tx = storage.db.read().await.unwrap();
+        let (anchor_leaf2_count,) = query_as::<(i64,)>("SELECT COUNT(*) from anchor_leaf2")
+            .fetch_one(tx.as_mut())
             .await
-            .block_payload()
             .unwrap();
+        assert_eq!(
+            anchor_leaf2_count, rows as i64,
+            "anchor leaf count does not match rows",
+        );
 
-        let leaf_payload_bytes_arc = genesis_payload.encode();
-        let disperse = vid_scheme(2)
-            .disperse(leaf_payload_bytes_arc.clone())
+        let (da_proposal_count,) = query_as::<(i64,)>("SELECT COUNT(*) from da_proposal2")
+            .fetch_one(tx.as_mut())
+            .await
             .unwrap();
-        let (pubkey, privkey) = BLSPubKey::generated_from_seed_indexed([0; 32], 1);
-        let vid = VidDisperseShare::<SeqTypes> {
-            view_number: ViewNumber::new(view),
-            payload_commitment: Default::default(),
-            share: disperse.shares[0].clone(),
-            common: disperse.common,
-            recipient_key: pubkey,
-        };
+        assert_eq!(
+            da_proposal_count, rows as i64,
+            "da proposal count does not match rows",
+        );
 
-        let (payload, metadata) =
-            Payload::from_transactions([], &ValidatedState::default(), &NodeState::default())
+        let (vid_share_count,) = query_as::<(i64,)>("SELECT COUNT(*) from vid_share2")
+            .fetch_one(tx.as_mut())
+            .await
+            .unwrap();
+        assert_eq!(
+            vid_share_count, rows as i64,
+            "vid share count does not match rows"
+        );
+
+        let (quorum_proposals_count,) =
+            query_as::<(i64,)>("SELECT COUNT(*) from quorum_proposals2")
+                .fetch_one(tx.as_mut())
                 .await
                 .unwrap();
-
-        let da = DaProposal::<SeqTypes> {
-            encoded_transactions: payload.encode(),
-            metadata,
-            view_number: ViewNumber::new(view),
-        };
-
-        vid
-    }
-
-    async fn generate_leaf(view: u64) -> (QuorumProposal<SeqTypes>, Leaf) {
-        let view = ViewNumber::new(view);
-
-        let validated_state = ValidatedState::default();
-        let instance_state = NodeState::default();
-        let (payload, metadata) = Payload::from_transactions([], &validated_state, &instance_state)
-            .await
-            .unwrap();
-        let builder_commitment = payload.builder_commitment(&metadata);
-        let payload_bytes = payload.encode();
-
-        let payload_commitment = vid_commitment(&payload_bytes, GENESIS_VID_NUM_STORAGE_NODES);
-
-        let block_header = Header::genesis(
-            &instance_state,
-            payload_commitment,
-            builder_commitment,
-            metadata,
+        assert_eq!(
+            quorum_proposals_count, rows as i64,
+            "quorum proposals count does not match rows",
         );
 
-        let null_quorum_data = QuorumData {
-            leaf_commit: Commitment::<Leaf>::default_commitment_no_preimage(),
-        };
-
-        let justify_qc = QuorumCertificate::new(
-            null_quorum_data.clone(),
-            null_quorum_data.commit(),
-            view,
-            None,
-            PhantomData,
+        let (quorum_certificates_count,) =
+            query_as::<(i64,)>("SELECT COUNT(*) from quorum_certificate2")
+                .fetch_one(tx.as_mut())
+                .await
+                .unwrap();
+        assert_eq!(
+            quorum_certificates_count, rows as i64,
+            "quorum certificates count does not match rows",
         );
-
-        let quorum_proposal = QuorumProposal {
-            block_header,
-            view_number: view,
-            justify_qc,
-            upgrade_certificate: None,
-            proposal_certificate: None,
-        };
-        let leaf = Leaf::from_quorum_proposal(&quorum_proposal);
-
-        (quorum_proposal, leaf)
     }
 }

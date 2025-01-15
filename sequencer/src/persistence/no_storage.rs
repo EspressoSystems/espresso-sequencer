@@ -5,14 +5,11 @@ use anyhow::bail;
 use async_trait::async_trait;
 use espresso_types::{
     v0::traits::{EventConsumer, PersistenceOptions, SequencerPersistence},
-    Leaf, Leaf2, NetworkConfig,
+    Leaf2, NetworkConfig,
 };
 use hotshot_types::{
     consensus::CommitmentMap,
-    data::{
-        DaProposal, DaProposal2, QuorumProposal, QuorumProposal2, VidDisperseShare,
-        VidDisperseShare2,
-    },
+    data::{DaProposal, DaProposal2, QuorumProposal2, VidDisperseShare, VidDisperseShare2},
     event::{Event, EventType, HotShotAction, LeafInfo},
     message::Proposal,
     simple_certificate::{NextEpochQuorumCertificate2, QuorumCertificate2, UpgradeCertificate},
@@ -179,30 +176,30 @@ impl SequencerPersistence for NoStorage {
 
     async fn append_vid2(
         &self,
-        proposal: &Proposal<SeqTypes, VidDisperseShare2<SeqTypes>>,
+        _proposal: &Proposal<SeqTypes, VidDisperseShare2<SeqTypes>>,
     ) -> anyhow::Result<()> {
         Ok(())
     }
 
     async fn append_da2(
         &self,
-        proposal: &Proposal<SeqTypes, DaProposal2<SeqTypes>>,
-        vid_commit: <VidSchemeType as VidScheme>::Commit,
+        _proposal: &Proposal<SeqTypes, DaProposal2<SeqTypes>>,
+        _vid_commit: <VidSchemeType as VidScheme>::Commit,
     ) -> anyhow::Result<()> {
         Ok(())
     }
 
     async fn append_proposal2(
         &self,
-        proposal: &Proposal<SeqTypes, QuorumProposal2<SeqTypes>>,
+        _proposal: &Proposal<SeqTypes, QuorumProposal2<SeqTypes>>,
     ) -> anyhow::Result<()> {
         Ok(())
     }
 
     async fn update_undecided_state2(
         &self,
-        leaves: CommitmentMap<Leaf2>,
-        state: BTreeMap<ViewNumber, View<SeqTypes>>,
+        _leaves: CommitmentMap<Leaf2>,
+        _state: BTreeMap<ViewNumber, View<SeqTypes>>,
     ) -> anyhow::Result<()> {
         Ok(())
     }
