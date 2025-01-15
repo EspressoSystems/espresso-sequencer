@@ -878,8 +878,10 @@ mod test {
     use std::ops::Add;
 
     use alloy::{network::EthereumWallet, signers::local::LocalSigner};
+    use contract_bindings_alloy::permissionedstaketable::PermissionedStakeTable::NodeInfo;
     use ethers::utils::{Anvil, AnvilInstance};
     use ethers_conv::ToAlloy;
+    use hotshot_contract_adapter::stake_table::NodeInfoJf;
     use portpicker::pick_unused_port;
     use sequencer_utils::test_utils::setup_test;
     use std::time::Duration;
@@ -1234,6 +1236,53 @@ mod test {
             retry += 1;
         };
         tracing::info!(?final_state, "state updated");
+    }
+
+    #[tokio::test]
+    async fn test_fetch_stake_table() -> anyhow::Result<()> {
+        setup_test();
+
+        let anvil = Anvil::new().spawn();
+        let l1_client = L1Client::new(vec![anvil.endpoint().parse().unwrap()]);
+
+        // Create a local signer from the anvil keys
+        let signer = LocalSigner::from_signing_key(anvil.keys()[0].clone().into());
+
+        // Create an Ethereum wallet from the signer
+        let wallet = EthereumWallet::new(signer);
+
+        // Create a provider that includes the wallet
+        let deployer_provider = ProviderBuilder::new()
+            .wallet(wallet)
+            .on_http(Url::parse(&anvil.endpoint())?);
+
+        let v: Vec<NodeInfo> = Vec::new();
+        // deploy the stake_table contract
+        let stake_table_contract =
+            PermissionedStakeTableInstance::deploy(deployer_provider.clone(), v.clone()).await?;
+
+        let address = stake_table_contract.address();
+
+        let mut rng = rand::thread_rng();
+        let node = NodeInfoJf::random(&mut rng);
+
+        let new_nodes: Vec<NodeInfo> = vec![node.into()];
+        let updater = stake_table_contract.update(v, new_nodes);
+        let receipt = updater.send().await?.get_receipt().await?;
+        assert!(receipt.status());
+
+        let block = l1_client
+            .get_block(BlockId::latest(), BlockTransactionsKind::Hashes)
+            .await?
+            .unwrap();
+        let nodes = l1_client
+            .get_stake_table(*address, block.header.inner.number)
+            .await
+            .unwrap();
+
+        let result = nodes.stake_table.0[0].clone();
+        assert_eq!(result.stake_amount.as_u64(), 1);
+        Ok(())
     }
 
     #[tokio::test(flavor = "multi_thread")]

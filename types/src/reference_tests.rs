@@ -23,8 +23,8 @@
 
 use std::{fmt::Debug, path::Path, str::FromStr};
 
-use alloy::primitives::U256;
 use committable::Committable;
+use ethers_conv::ToAlloy;
 use hotshot_query_service::availability::QueryablePayload;
 use hotshot_types::traits::{
     block_contents::vid_commitment, signature_key::BuilderSignatureKey, BlockPayload, EncodeBytes,
@@ -85,7 +85,7 @@ const REFERENCE_NS_TABLE_COMMITMENT: &str = "NSTABLE~tMW0-hGn0563bgYgvsO9r95f2AU
 fn reference_l1_block() -> L1BlockInfo {
     L1BlockInfo {
         number: 123,
-        timestamp: U256::from(0x456),
+        timestamp: ethers::types::U256::from(0x456).to_alloy(),
         hash: "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
             .parse()
             .unwrap(),

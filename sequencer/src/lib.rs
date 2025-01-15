@@ -444,7 +444,9 @@ pub async fn init_node<P: SequencerPersistence, V: Versions>(
         L1Finalized::Number { number } => l1_client.wait_for_finalized_block(number).await,
         L1Finalized::Timestamp { timestamp } => {
             l1_client
-                .wait_for_finalized_block_with_timestamp(timestamp.unix_timestamp().to_alloy())
+                .wait_for_finalized_block_with_timestamp(
+                    ethers::types::U256::from(timestamp.unix_timestamp()).to_alloy(),
+                )
                 .await
         }
     };
