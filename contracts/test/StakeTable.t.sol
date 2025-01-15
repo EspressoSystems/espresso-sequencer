@@ -708,6 +708,10 @@ contract StakeTable_register_Test is Test {
         assertEq(stakeTable.lookupNode(exampleTokenCreator).balance, 0);
         assertEq(stakeTable.lookupNode(exampleTokenCreator).account, address(0));
 
+        // test withdraw fails if the user tries to withdraw again
+        vm.expectRevert(S.NodeNotRegistered.selector);
+        stakeTable.withdrawFunds();
+
         vm.stopPrank();
     }
 
