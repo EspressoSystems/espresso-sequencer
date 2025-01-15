@@ -115,10 +115,10 @@ gen-bindings:
 
     # Generate the alloy bindings
     # For now, to compile these, you need to fork `alloy-core` and change the `RESOLVE_LIMIT`. From there, you need to
-    # patch `foundry` to use the fork and compile `forge`
+    # patch `foundry` to use the fork and compile `forge`. The `RESOLVE_LIMIT` to use is 128.
     forge bind --skip test --skip script --libraries contracts/src/libraries/PlonkVerifier.sol:PlonkVerifier:0xB0bfeE1e1A7Ef832149EDe013B34AD6248176385 --alloy --contracts ./contracts/src/ --crate-name contract-bindings-alloy --bindings-path contract-bindings-alloy --select "{{REGEXP}}" --overwrite --force
 
-    # For some reason `alloy` likes to use the wrong verison of itself in `contract-bindings`. You need to manually replace
+    # For some reason `alloy` likes to use the wrong version of itself in `contract-bindings`. You need to manually replace
     # it with the workspace version.
 
     # Foundry doesn't include bytecode in the bindings for LightClient.sol, since it links with
