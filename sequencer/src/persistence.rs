@@ -43,11 +43,11 @@ mod testing {
 #[cfg(test)]
 #[espresso_macros::generic_tests]
 mod persistence_tests {
-    use std::collections::BTreeMap;
+    use std::{collections::BTreeMap, marker::PhantomData};
 
     use anyhow::bail;
     use async_lock::RwLock;
-    use committable::Committable;
+    use committable::{Commitment, Committable};
     use espresso_types::{
         traits::{EventConsumer, NullEventConsumer, PersistenceOptions},
         Event, Leaf, Leaf2, NodeState, PubKey, SeqTypes, ValidatedState,
@@ -55,12 +55,11 @@ mod persistence_tests {
     use hotshot::types::{BLSPubKey, SignatureKey};
     use hotshot_example_types::node_types::TestVersions;
     use hotshot_types::{
-        data::{DaProposal, QuorumProposal2, VidDisperseShare, ViewNumber},
-        drb::{INITIAL_DRB_RESULT, INITIAL_DRB_SEED_INPUT},
+        data::{DaProposal, EpochNumber, QuorumProposal2, VidDisperseShare, ViewNumber},
         event::{EventType, HotShotAction, LeafInfo},
-        message::Proposal,
-        simple_certificate::{QuorumCertificate, UpgradeCertificate},
-        simple_vote::UpgradeProposalData,
+        message::{Proposal, UpgradeLock},
+        simple_certificate::{NextEpochQuorumCertificate2, QuorumCertificate, UpgradeCertificate},
+        simple_vote::{NextEpochQuorumData2, QuorumData2, UpgradeProposalData, VersionedVoteData},
         traits::{block_contents::vid_commitment, node_implementation::ConsensusTime, EncodeBytes},
         vid::vid_scheme,
     };
@@ -195,8 +194,8 @@ mod persistence_tests {
                 .to_qc2(),
                 upgrade_certificate: None,
                 view_change_evidence: None,
-                drb_seed: INITIAL_DRB_SEED_INPUT,
-                drb_result: INITIAL_DRB_RESULT,
+                next_drb_result: None,
+                next_epoch_justify_qc: None,
             },
             signature,
             _pd: Default::default(),
@@ -559,6 +558,67 @@ mod persistence_tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
+    pub async fn test_next_epoch_quorum_certificate<P: TestablePersistence>() {
+        setup_test();
+
+        let tmp = P::tmp_storage().await;
+        let storage = P::connect(&tmp).await;
+
+        //  test that next epoch qc2 does not exist
+        assert_eq!(
+            storage.load_next_epoch_quorum_certificate().await.unwrap(),
+            None
+        );
+
+        let upgrade_lock = UpgradeLock::<SeqTypes, TestVersions>::new();
+
+        let genesis_view = ViewNumber::genesis();
+
+        let data: NextEpochQuorumData2<SeqTypes> = QuorumData2 {
+            leaf_commit: Leaf2::genesis(&ValidatedState::default(), &NodeState::default())
+                .await
+                .commit(),
+            epoch: EpochNumber::new(1),
+        }
+        .into();
+
+        let versioned_data =
+            VersionedVoteData::new_infallible(data.clone(), genesis_view, &upgrade_lock).await;
+
+        let bytes: [u8; 32] = versioned_data.commit().into();
+
+        let next_epoch_qc = NextEpochQuorumCertificate2::new(
+            data,
+            Commitment::from_raw(bytes),
+            genesis_view,
+            None,
+            PhantomData,
+        );
+
+        let res = storage
+            .store_next_epoch_quorum_certificate(next_epoch_qc.clone())
+            .await;
+        assert!(res.is_ok());
+
+        let res = storage.load_next_epoch_quorum_certificate().await.unwrap();
+        let view_number = res.unwrap().view_number;
+        assert_eq!(view_number, ViewNumber::genesis());
+
+        let new_view_number_for_qc = ViewNumber::new(50);
+        let mut new_qc = next_epoch_qc.clone();
+        new_qc.view_number = new_view_number_for_qc;
+
+        let res = storage
+            .store_next_epoch_quorum_certificate(new_qc.clone())
+            .await;
+        assert!(res.is_ok());
+
+        let res = storage.load_next_epoch_quorum_certificate().await.unwrap();
+        let view_number = res.unwrap().view_number;
+        assert_eq!(view_number, new_view_number_for_qc);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
     pub async fn test_decide_with_failing_event_consumer<P: TestablePersistence>() {
         #[derive(Clone, Copy, Debug)]
         struct FailConsumer;
@@ -608,8 +668,8 @@ mod persistence_tests {
             .to_qc2(),
             upgrade_certificate: None,
             view_change_evidence: None,
-            drb_seed: INITIAL_DRB_SEED_INPUT,
-            drb_result: INITIAL_DRB_RESULT,
+            next_drb_result: None,
+            next_epoch_justify_qc: None,
         };
         let mut qc = QuorumCertificate::genesis::<TestVersions>(
             &ValidatedState::default(),
@@ -794,8 +854,8 @@ mod persistence_tests {
             .to_qc2(),
             upgrade_certificate: None,
             view_change_evidence: None,
-            drb_seed: INITIAL_DRB_SEED_INPUT,
-            drb_result: INITIAL_DRB_RESULT,
+            next_drb_result: None,
+            next_epoch_justify_qc: None,
         };
         let quorum_proposal_signature =
             BLSPubKey::sign(&privkey, &bincode::serialize(&quorum_proposal).unwrap())
