@@ -7,6 +7,8 @@ import { AbstractStakeTable } from "./interfaces/AbstractStakeTable.sol";
 import { LightClient } from "../src/LightClient.sol";
 import { EdOnBN254 } from "./libraries/EdOnBn254.sol";
 
+using EdOnBN254 for EdOnBN254.EdOnBN254Point;
+
 /// @title Implementation of the Stake Table interface
 contract StakeTable is AbstractStakeTable {
     /// Error to notify restaking is not implemented yet.
@@ -53,7 +55,13 @@ contract StakeTable is AbstractStakeTable {
     // Error raised when the staker does not register with the correct stakeAmount
     error InsufficientStakeAmount(uint256);
 
-    // Error raised when the staker does not provide a new key
+    // Error raised when the staker does not provide a new schnorrVK
+    error InvalidSchnorrVK();
+
+    // Error raised when the staker does not provide a new blsVK
+    error InvalidBlsVK();
+
+    // Error raised when zero point keys are provided
     error NoKeyChange();
 
     /// Mapping from a hash of a BLS key to a node struct defined in the abstract contract.
@@ -144,7 +152,6 @@ contract StakeTable is AbstractStakeTable {
 
     /// @notice Get the next available epoch and queue size in that epoch
     /// TODO modify this according to the current spec
-    /// TODO modify this according to the current spec
     function nextRegistrationEpoch() external view override returns (uint64, uint64) {
         uint64 epoch;
         uint64 queueSize;
@@ -167,7 +174,6 @@ contract StakeTable is AbstractStakeTable {
     // @param queueSize current size of the registration queue (after insertion of new element in
     // the queue)
     /// TODO modify this according to the current spec
-    /// TODO modify this according to the current spec
     function appendRegistrationQueue(uint64 epoch, uint64 queueSize) private {
         firstAvailableRegistrationEpoch = epoch;
         _numPendingRegistrations = queueSize + 1;
@@ -175,13 +181,11 @@ contract StakeTable is AbstractStakeTable {
 
     /// @notice Get the number of pending registration requests in the waiting queue
     /// TODO modify this according to the current spec
-    /// TODO modify this according to the current spec
     function numPendingRegistrations() external view override returns (uint64) {
         return _numPendingRegistrations;
     }
 
     /// @notice Get the next available epoch for exit and queue size in that epoch
-    /// TODO modify this according to the current spec
     /// TODO modify this according to the current spec
     function nextExitEpoch() external view override returns (uint64, uint64) {
         uint64 epoch;
@@ -204,14 +208,12 @@ contract StakeTable is AbstractStakeTable {
     // @param epoch next available exit epoch
     // @param queueSize current size of the exit queue (after insertion of new element in the queue)
     /// TODO modify this according to the current spec
-    /// TODO modify this according to the current spec
     function appendExitQueue(uint64 epoch, uint64 queueSize) private {
         firstAvailableExitEpoch = epoch;
         _numPendingExits = queueSize + 1;
     }
 
     /// @notice Get the number of pending exit requests in the waiting queue
-    /// TODO modify this according to the current spec
     /// TODO modify this according to the current spec
     function numPendingExits() external view override returns (uint64) {
         return _numPendingExits;
@@ -231,7 +233,6 @@ contract StakeTable is AbstractStakeTable {
     /// withdraw.
     /// @param node node which is assigned an exit escrow period.
     /// @return Number of epochs post exit after which funds can be withdrawn.
-    /// TODO modify this according to the current spec
     /// TODO modify this according to the current spec
     function exitEscrowPeriod(Node memory node) public pure returns (uint64) {
         if (node.balance > 100) {
@@ -294,9 +295,29 @@ contract StakeTable is AbstractStakeTable {
             revert InsufficientBalance(balance);
         }
 
+        // Verify that blsVK is not the zero point
+        if (
+            _isEqualBlsKey(
+                blsVK,
+                BN254.G2Point(
+                    BN254.BaseField.wrap(0),
+                    BN254.BaseField.wrap(0),
+                    BN254.BaseField.wrap(0),
+                    BN254.BaseField.wrap(0)
+                )
+            )
+        ) {
+            revert InvalidBlsVK();
+        }
+
         // Verify that the validator can sign for that blsVK
         bytes memory message = abi.encode(msg.sender);
         BLSSig.verifyBlsSig(message, blsSig, blsVK);
+
+        // Verify that the schnorrVK is non-zero
+        if (schnorrVK.isEqual(EdOnBN254.EdOnBN254Point(0, 0))) {
+            revert InvalidSchnorrVK();
+        }
 
         // Find the earliest epoch at which this node can register. Usually, this will be
         // currentEpoch() + 1 (the start of the next full epoch), but in periods of high churn the
@@ -418,6 +439,11 @@ contract StakeTable is AbstractStakeTable {
             revert NodeNotRegistered();
         }
 
+        // The exit request must come from the node's withdrawal account.
+        if (node.account != msg.sender) {
+            revert Unauthenticated();
+        }
+
         // Verify that the balance is greater than zero
         uint256 balance = node.balance;
         if (balance == 0) {
@@ -444,11 +470,11 @@ contract StakeTable is AbstractStakeTable {
     /// @dev This function can only be called by the validator itself when it's not in the exit
     /// queue
     /// @dev The validator will need to give up either its old BLS key and/or old Schnorr key
-    /// @dev The validator will need to provide a BLS signature over the new BLS key
+    /// @dev The validator will need to provide a BLS signature to prove that the account owns the
+    /// new BLS key
     /// @param newBlsVK The new BLS verification key
     /// @param newSchnorrVK The new Schnorr verification key
     /// @param newBlsSig The BLS signature that the account owns the new BLS key
-    /// TODO: consider emitting the changed keys
     function updateConsensusKeys(
         BN254.G2Point memory newBlsVK,
         EdOnBN254.EdOnBN254Point memory newSchnorrVK,
@@ -457,70 +483,45 @@ contract StakeTable is AbstractStakeTable {
         Node memory node = nodes[msg.sender];
 
         // Verify that the node is already registered.
-        if (node.account == address(0)) {
-            revert NodeNotRegistered();
-        }
+        if (node.account == address(0)) revert NodeNotRegistered();
 
         // Verify that the node is not in the exit queue
-        if (node.exitEpoch != 0) {
-            revert ExitRequestInProgress();
-        }
+        if (node.exitEpoch != 0) revert ExitRequestInProgress();
 
-        // The staker does not provide a key change
-        if (
-            (
-                _isEqualBlsKey(newBlsVK, node.blsVK)
-                    && EdOnBN254.isEqual(newSchnorrVK, node.schnorrVK)
-            )
-                || (
-                    _isEqualBlsKey(
-                        newBlsVK,
-                        BN254.G2Point(
-                            BN254.BaseField.wrap(0),
-                            BN254.BaseField.wrap(0),
-                            BN254.BaseField.wrap(0),
-                            BN254.BaseField.wrap(0)
-                        )
-                    ) && EdOnBN254.isEqual(newSchnorrVK, EdOnBN254.EdOnBN254Point(0, 0))
-                )
-        ) {
+        // Verify that the keys are not the same as the old ones
+        if (_isEqualBlsKey(newBlsVK, node.blsVK) && newSchnorrVK.isEqual(node.schnorrVK)) {
             revert NoKeyChange();
         }
 
-        // Update the node's schnorr key once it's not the same as the old one and it's nonzero
-        if (
-            !EdOnBN254.isEqual(newSchnorrVK, node.schnorrVK)
-                && !EdOnBN254.isEqual(newSchnorrVK, EdOnBN254.EdOnBN254Point(0, 0))
-        ) {
-            node.schnorrVK = newSchnorrVK;
-        }
+        // Zero-point constants for verification
+        BN254.G2Point memory zeroBlsKey = BN254.G2Point(
+            BN254.BaseField.wrap(0),
+            BN254.BaseField.wrap(0),
+            BN254.BaseField.wrap(0),
+            BN254.BaseField.wrap(0)
+        );
+        EdOnBN254.EdOnBN254Point memory zeroSchnorrKey = EdOnBN254.EdOnBN254Point(0, 0);
 
-        // Update the node's bls key once it's not the same as the old one and it's nonzero
-        if (
-            !_isEqualBlsKey(newBlsVK, node.blsVK)
-                && !_isEqualBlsKey(
-                    newBlsVK,
-                    BN254.G2Point(
-                        BN254.BaseField.wrap(0),
-                        BN254.BaseField.wrap(0),
-                        BN254.BaseField.wrap(0),
-                        BN254.BaseField.wrap(0)
-                    )
-                )
-        ) {
-            // Verify that the validator can sign for that blsVK
-            bytes memory message = abi.encode(msg.sender);
-            BLSSig.verifyBlsSig(message, newBlsSig, newBlsVK);
+        if (_isEqualBlsKey(newBlsVK, zeroBlsKey)) revert InvalidBlsVK();
 
-            // Update the node's bls key
-            node.blsVK = newBlsVK;
-        }
+        if (newSchnorrVK.isEqual(zeroSchnorrKey)) revert InvalidSchnorrVK();
+
+        // Verify that the validator can sign for that newBlsVK, otherwise it inner reverts with
+        // BLSSigVerificationFailed
+        bytes memory message = abi.encode(msg.sender);
+        BLSSig.verifyBlsSig(message, newBlsSig, newBlsVK);
+
+        // Update the node's bls key
+        node.blsVK = newBlsVK;
+
+        // Update the node's schnorr key if the newSchnorrVK is not a zero point Schnorr key
+        node.schnorrVK = newSchnorrVK;
 
         // Update the node in the stake table
         nodes[msg.sender] = node;
 
         // Emit the event
-        emit UpdatedConsensusKeys(msg.sender);
+        emit UpdatedConsensusKeys(msg.sender, node.blsVK, node.schnorrVK);
     }
 
     /// @notice Minimum stake amount

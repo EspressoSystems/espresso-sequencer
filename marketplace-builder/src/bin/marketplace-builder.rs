@@ -48,8 +48,13 @@ struct NonPermissionedBuilderOptions {
     eth_account_index: u32,
 
     /// Url we will use for RPC communication with L1.
-    #[clap(long, env = "ESPRESSO_BUILDER_L1_PROVIDER")]
-    l1_provider_url: Url,
+    #[clap(
+        long,
+        env = "ESPRESSO_BUILDER_L1_PROVIDER",
+        value_delimiter = ',',
+        num_args = 1..,
+    )]
+    l1_provider_url: Vec<Url>,
 
     /// Peer nodes use to fetch missing state
     #[clap(long, env = "ESPRESSO_SEQUENCER_STATE_PEERS", value_delimiter = ',')]
@@ -140,7 +145,7 @@ async fn run<V: Versions>(
     opt: NonPermissionedBuilderOptions,
 ) -> anyhow::Result<()> {
     let l1_params = L1Params {
-        url: opt.l1_provider_url,
+        urls: opt.l1_provider_url,
         options: Default::default(),
     };
 
@@ -160,9 +165,7 @@ async fn run<V: Versions>(
     let builder_server_url: Url = format!("http://0.0.0.0:{}", opt.port).parse().unwrap();
 
     let instance_state =
-        build_instance_state::<V>(genesis.chain_config, l1_params, opt.state_peers)
-            .await
-            .unwrap();
+        build_instance_state::<V>(genesis.chain_config, l1_params, opt.state_peers);
 
     let base_fee = genesis.max_base_fee();
     tracing::info!(?base_fee, "base_fee");

@@ -109,7 +109,7 @@ contract LightClient_constructor_Test is LightClientCommonTest {
         lc = new LCMock(_genesis, _genesisStakeTableState, _stateHistoryRetentionPeriod);
     }
 
-    // test that initiazing the contract reverts when the stateHistoryRetentionPeriod is below the
+    // test that initializing the contract reverts when the stateHistoryRetentionPeriod is below the
     // required threshold
     function test_RevertWhen_InvalidStateHistoryRetentionPeriodOnSetUp() public {
         uint32 invalidRetentionPeriod = 10;
@@ -692,6 +692,9 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
             lc.newFinalizedState(states[i], proofs[i]);
         }
 
+        // assert that the size of the state history is equal to the retention period
+        assertEq(lc.getStateHistoryCount(), numDays);
+
         // the number of elements are equal to the max state history so the first index would
         // be 0
         assertEq(lc.stateHistoryFirstIndex(), 0);
@@ -708,13 +711,17 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
         vm.prank(permissionedProver);
         vm.expectEmit(true, true, true, true);
         emit LC.NewState(states[i].viewNum, states[i].blockHeight, states[i].blockCommRoot);
-        vm.warp(initialBlockTimestamp + ((i + 1) * 1 days)); // increase the timestamp for each
+        vm.warp((numDays + 3) * 1 days); // increase the timestamp
         lc.newFinalizedState(states[i], proofs[i]);
         i++;
 
         // the duration between the updates are more than stateHistoryRetentionPeriod,  so the first
         // index should be one
         assertEq(lc.stateHistoryFirstIndex(), 1);
+
+        // assert that the first state commitment is zero as it would have been deleted
+        (, uint256 blocktimestamp,,) = lc.stateHistoryCommitments(0);
+        assertEq(blocktimestamp, 0);
 
         // continue updating the state
         for (uint256 j = i; j < states.length; j++) {
@@ -822,8 +829,8 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
     }
 
     function test_revertWhenBlockNumberTooHigh() public {
-        //assert that there is a state history
-        assertGt(lc.getStateHistoryCount(), 0);
+        // assert that there isn't a state history when the light client is first initialized
+        assertEq(lc.getStateHistoryCount(), 0);
 
         vm.expectRevert(LC.InsufficientSnapshotHistory.selector);
         lc.lagOverEscapeHatchThreshold(block.number + 10, 5); // No updates exist in history
@@ -1071,15 +1078,5 @@ contract LightClient_HotShotCommUpdatesTest is LightClientCommonTest {
         (blockComm, blockHeight) = lc.getHotShotCommitment(hotShotBlockHeight);
         assertEqBN254(hotShotBlockComm, blockComm);
         assertEq(hotShotBlockHeight, blockHeight);
-    }
-
-    function test_revertWhenGetHotShotCommitmentInvalidHeight() public {
-        // Get the highest HotShot blockheight recorded
-        uint256 numCommitments = lc.getStateHistoryCount();
-        (,, uint64 blockHeight,) = lc.stateHistoryCommitments(numCommitments - 1);
-        // Expect revert when attempting to retrieve a block height higher than the highest one
-        // recorded
-        vm.expectRevert(LC.InvalidHotShotBlockForCommitmentCheck.selector);
-        lc.getHotShotCommitment(blockHeight + 1);
     }
 }

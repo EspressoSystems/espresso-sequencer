@@ -1,4 +1,3 @@
-use hotshot::traits::election::static_committee::StaticCommittee;
 use hotshot_types::{
     data::{EpochNumber, ViewNumber},
     signature_key::BLSPubKey,
@@ -16,8 +15,8 @@ pub mod traits;
 mod utils;
 pub use header::Header;
 pub use impls::{
-    get_l1_deposits, retain_accounts, BuilderValidationError, FeeError, ProposalValidationError,
-    StateValidationError,
+    get_l1_deposits, retain_accounts, BuilderValidationError, EpochCommittees, FeeError,
+    ProposalValidationError, StateValidationError,
 };
 pub use utils::*;
 use vbs::version::{StaticVersion, StaticVersionType};
@@ -124,7 +123,8 @@ reexport_unchanged_types!(
 );
 
 pub(crate) use v0_3::{
-    L1ClientMetrics, L1Event, L1ReconnectTask, L1State, L1UpdateTask, RpcClient,
+    L1ClientMetrics, L1Event, L1Provider, L1State, L1UpdateTask, MultiRpcClient,
+    MultiRpcClientStatus,
 };
 
 #[derive(
@@ -141,7 +141,7 @@ impl NodeType for SeqTypes {
     type Transaction = Transaction;
     type InstanceState = NodeState;
     type ValidatedState = ValidatedState;
-    type Membership = StaticCommittee<Self>;
+    type Membership = EpochCommittees;
     type BuilderSignatureKey = FeeAccount;
     type AuctionResult = SolverAuctionResults;
 }

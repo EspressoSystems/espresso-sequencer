@@ -66,6 +66,22 @@ pub mod light_client_mock {
                     },],
                 ),
                 (
+                    ::std::borrow::ToOwned::to_owned("currentBlockNumber"),
+                    ::std::vec![::ethers::core::abi::ethabi::Function {
+                        name: ::std::borrow::ToOwned::to_owned("currentBlockNumber"),
+                        inputs: ::std::vec![],
+                        outputs: ::std::vec![::ethers::core::abi::ethabi::Param {
+                            name: ::std::string::String::new(),
+                            kind: ::ethers::core::abi::ethabi::ParamType::Uint(256usize,),
+                            internal_type: ::core::option::Option::Some(
+                                ::std::borrow::ToOwned::to_owned("uint256"),
+                            ),
+                        },],
+                        constant: ::core::option::Option::None,
+                        state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
+                    },],
+                ),
+                (
                     ::std::borrow::ToOwned::to_owned("disablePermissionedProverMode"),
                     ::std::vec![::ethers::core::abi::ethabi::Function {
                         name: ::std::borrow::ToOwned::to_owned("disablePermissionedProverMode",),
@@ -1063,6 +1079,14 @@ pub mod light_client_mock {
         ) -> ::ethers::contract::builders::ContractCall<M, ::std::string::String> {
             self.0
                 .method_hash([173, 60, 177, 204], ())
+                .expect("method not found (this should never happen)")
+        }
+        ///Calls the contract's `currentBlockNumber` (0x378ec23b) function
+        pub fn current_block_number(
+            &self,
+        ) -> ::ethers::contract::builders::ContractCall<M, ::ethers::core::types::U256> {
+            self.0
+                .method_hash([55, 142, 194, 59], ())
                 .expect("method not found (this should never happen)")
         }
         ///Calls the contract's `disablePermissionedProverMode` (0x69cc6a04) function
@@ -2357,6 +2381,21 @@ pub mod light_client_mock {
         abi = "UPGRADE_INTERFACE_VERSION()"
     )]
     pub struct UpgradeInterfaceVersionCall;
+    ///Container type for all input parameters for the `currentBlockNumber` function with signature `currentBlockNumber()` and selector `0x378ec23b`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthCall,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    #[ethcall(name = "currentBlockNumber", abi = "currentBlockNumber()")]
+    pub struct CurrentBlockNumberCall;
     ///Container type for all input parameters for the `disablePermissionedProverMode` function with signature `disablePermissionedProverMode()` and selector `0x69cc6a04`
     #[derive(
         Clone,
@@ -2804,6 +2843,7 @@ pub mod light_client_mock {
     #[derive(Clone, ::ethers::contract::EthAbiType, serde::Serialize, serde::Deserialize)]
     pub enum LightClientMockCalls {
         UpgradeInterfaceVersion(UpgradeInterfaceVersionCall),
+        CurrentBlockNumber(CurrentBlockNumberCall),
         DisablePermissionedProverMode(DisablePermissionedProverModeCall),
         FinalizedState(FinalizedStateCall),
         GenesisStakeTableState(GenesisStakeTableStateCall),
@@ -2840,6 +2880,11 @@ pub mod light_client_mock {
                 <UpgradeInterfaceVersionCall as ::ethers::core::abi::AbiDecode>::decode(data)
             {
                 return Ok(Self::UpgradeInterfaceVersion(decoded));
+            }
+            if let Ok(decoded) =
+                <CurrentBlockNumberCall as ::ethers::core::abi::AbiDecode>::decode(data)
+            {
+                return Ok(Self::CurrentBlockNumber(decoded));
             }
             if let Ok(decoded) =
                 <DisablePermissionedProverModeCall as ::ethers::core::abi::AbiDecode>::decode(data)
@@ -2971,6 +3016,9 @@ pub mod light_client_mock {
                 Self::UpgradeInterfaceVersion(element) => {
                     ::ethers::core::abi::AbiEncode::encode(element)
                 }
+                Self::CurrentBlockNumber(element) => {
+                    ::ethers::core::abi::AbiEncode::encode(element)
+                }
                 Self::DisablePermissionedProverMode(element) => {
                     ::ethers::core::abi::AbiEncode::encode(element)
                 }
@@ -3030,6 +3078,7 @@ pub mod light_client_mock {
         fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
             match self {
                 Self::UpgradeInterfaceVersion(element) => ::core::fmt::Display::fmt(element, f),
+                Self::CurrentBlockNumber(element) => ::core::fmt::Display::fmt(element, f),
                 Self::DisablePermissionedProverMode(element) => {
                     ::core::fmt::Display::fmt(element, f)
                 }
@@ -3066,6 +3115,11 @@ pub mod light_client_mock {
     impl ::core::convert::From<UpgradeInterfaceVersionCall> for LightClientMockCalls {
         fn from(value: UpgradeInterfaceVersionCall) -> Self {
             Self::UpgradeInterfaceVersion(value)
+        }
+    }
+    impl ::core::convert::From<CurrentBlockNumberCall> for LightClientMockCalls {
+        fn from(value: CurrentBlockNumberCall) -> Self {
+            Self::CurrentBlockNumber(value)
         }
     }
     impl ::core::convert::From<DisablePermissionedProverModeCall> for LightClientMockCalls {
@@ -3212,6 +3266,20 @@ pub mod light_client_mock {
         Hash,
     )]
     pub struct UpgradeInterfaceVersionReturn(pub ::std::string::String);
+    ///Container type for all return fields from the `currentBlockNumber` function with signature `currentBlockNumber()` and selector `0x378ec23b`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthAbiType,
+        ::ethers::contract::EthAbiCodec,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    pub struct CurrentBlockNumberReturn(pub ::ethers::core::types::U256);
     ///Container type for all return fields from the `finalizedState` function with signature `finalizedState()` and selector `0x9fdb54a7`
     #[derive(
         Clone,

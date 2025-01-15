@@ -814,6 +814,7 @@ impl ValidatedState {
         let cf = match upgrade.upgrade_type {
             UpgradeType::Fee { chain_config } => chain_config,
             UpgradeType::Marketplace { chain_config } => chain_config,
+            UpgradeType::Epoch { chain_config } => chain_config,
         };
 
         self.chain_config = cf.into();
@@ -961,6 +962,7 @@ impl HotShotState<SeqTypes> for ValidatedState {
         } else {
             BlockMerkleTree::from_commitment(block_header.block_merkle_tree_root())
         };
+
         Self {
             fee_merkle_tree,
             block_merkle_tree,

@@ -838,11 +838,12 @@ impl BlockHeader<SeqTypes> for Header {
         let mut validated_state = parent_state.clone();
 
         let chain_config = if version >= MarketplaceVersion::version() {
-            match instance_state.upgrades.get(&version) {
-                Some(upgrade) => match upgrade.upgrade_type {
-                    UpgradeType::Marketplace { chain_config } => chain_config,
-                    UpgradeType::Fee { chain_config } => chain_config,
-                },
+            match instance_state
+                .upgrades
+                .get(&version)
+                .and_then(|u| u.upgrade_type.chain_config())
+            {
+                Some(cf) => cf,
                 None => Header::get_chain_config(&validated_state, instance_state).await?,
             }
         } else {
@@ -1486,11 +1487,7 @@ mod test_headers {
 
         let anvil = Anvil::new().block_time(1u32).spawn();
         let mut genesis_state = NodeState::mock()
-            .with_l1(
-                L1Client::new(anvil.endpoint().parse().unwrap())
-                    .await
-                    .unwrap(),
-            )
+            .with_l1(L1Client::new(anvil.endpoint().parse().unwrap()))
             .with_current_version(StaticVersion::<0, 1>::version());
 
         let genesis = GenesisForTest::default().await;

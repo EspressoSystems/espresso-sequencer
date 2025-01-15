@@ -41,7 +41,11 @@ abstract contract AbstractStakeTable {
 
     /// @notice Signals a consensus key update for a validator
     /// @param account the address of the validator
-    event UpdatedConsensusKeys(address account);
+    /// @param newBlsVK the new BLS verification key
+    /// @param newSchnorrVK the new Schnorr verification key
+    event UpdatedConsensusKeys(
+        address account, BN254.G2Point newBlsVK, EdOnBN254.EdOnBN254Point newSchnorrVK
+    );
 
     /// @dev (sadly, Solidity doesn't support type alias on non-primitive types)
     // We avoid declaring another struct even if the type info helps with readability,
