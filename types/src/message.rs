@@ -557,6 +557,11 @@ impl<TYPES: NodeType, V: Versions> UpgradeLock<TYPES, V> {
         }
     }
 
+    /// Return whether epochs are enabled in the given view
+    pub async fn epochs_enabled(&self, view: TYPES::View) -> bool {
+        self.version_infallible(view).await >= V::Epochs::VERSION
+    }
+
     /// Serialize a message with a version number, using `message.view_number()` and an optional decided upgrade certificate to determine the message's version.
     ///
     /// # Errors
