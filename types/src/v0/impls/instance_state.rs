@@ -24,6 +24,7 @@ pub struct NodeState {
     pub genesis_header: GenesisHeader,
     pub genesis_state: ValidatedState,
     pub l1_genesis: Option<L1BlockInfo>,
+    pub epoch_height: Option<u64>,
 
     /// Map containing all planned and executed upgrades.
     ///
@@ -64,6 +65,7 @@ impl NodeState {
             l1_genesis: None,
             upgrades: Default::default(),
             current_version,
+            epoch_height: None,
         }
     }
 
@@ -74,7 +76,7 @@ impl NodeState {
         Self::new(
             0,
             ChainConfig::default(),
-            L1Client::http("http://localhost:3331".parse().unwrap()),
+            L1Client::new("http://localhost:3331".parse().unwrap()),
             mock::MockStateCatchup::default(),
             StaticVersion::<0, 1>::version(),
         )
@@ -87,7 +89,7 @@ impl NodeState {
         Self::new(
             0,
             ChainConfig::default(),
-            L1Client::http("http://localhost:3331".parse().unwrap()),
+            L1Client::new("http://localhost:3331".parse().unwrap()),
             mock::MockStateCatchup::default(),
             StaticVersion::<0, 2>::version(),
         )
@@ -100,7 +102,7 @@ impl NodeState {
         Self::new(
             0,
             ChainConfig::default(),
-            L1Client::http("http://localhost:3331".parse().unwrap()),
+            L1Client::new("http://localhost:3331".parse().unwrap()),
             mock::MockStateCatchup::default(),
             StaticVersion::<0, 99>::version(),
         )
@@ -130,6 +132,13 @@ impl NodeState {
         self.current_version = ver;
         self
     }
+
+    // TODO remove following `Memberships` trait update:
+    // https://github.com/EspressoSystems/HotShot/issues/3966
+    pub fn with_epoch_height(mut self, epoch_height: u64) -> Self {
+        self.epoch_height = Some(epoch_height);
+        self
+    }
 }
 
 // This allows us to turn on `Default` on InstanceState trait
@@ -140,7 +149,7 @@ impl Default for NodeState {
         Self::new(
             1u64,
             ChainConfig::default(),
-            L1Client::http("http://localhost:3331".parse().unwrap()),
+            L1Client::new("http://localhost:3331".parse().unwrap()),
             mock::MockStateCatchup::default(),
             StaticVersion::<0, 1>::version(),
         )

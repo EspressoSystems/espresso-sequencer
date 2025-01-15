@@ -7,6 +7,7 @@ use ark_ec::{
 use ark_ed_on_bn254::EdwardsConfig;
 use ark_ff::{BigInteger, PrimeField};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
+use ark_std::rand::{Rng, RngCore};
 use contract_bindings::permissioned_stake_table::{self, EdOnBN254Point, NodeInfo};
 use diff_test_bn254::ParsedG2Point;
 use ethers::{
@@ -14,7 +15,13 @@ use ethers::{
     prelude::{AbiError, EthAbiCodec, EthAbiType},
     types::U256,
 };
-use hotshot_types::{light_client::StateVerKey, network::PeerConfigKeys, signature_key::BLSPubKey};
+use hotshot_types::{
+    light_client::{StateKeyPair, StateVerKey},
+    network::PeerConfigKeys,
+    signature_key::BLSPubKey,
+    stake_table::StakeTableEntry,
+    traits::signature_key::SignatureKey as _,
+};
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 
@@ -113,6 +120,21 @@ pub struct NodeInfoJf {
     pub da: bool,
 }
 
+impl NodeInfoJf {
+    pub fn random(rng: &mut impl RngCore) -> Self {
+        let mut seed = [0u8; 32];
+        rng.fill_bytes(&mut seed);
+
+        let (stake_table_key, _) = BLSPubKey::generated_from_seed_indexed(seed, 0);
+        let state_key_pair = StateKeyPair::generate_from_seed_indexed(seed, 0);
+        Self {
+            stake_table_key,
+            state_ver_key: state_key_pair.ver_key(),
+            da: rng.gen(),
+        }
+    }
+}
+
 impl From<NodeInfoJf> for NodeInfo {
     fn from(value: NodeInfoJf) -> Self {
         let NodeInfoJf {
@@ -131,6 +153,15 @@ impl From<NodeInfoJf> for NodeInfo {
             },
             schnorr_vk: schnorr.into(),
             is_da: da,
+        }
+    }
+}
+
+impl From<NodeInfoJf> for StakeTableEntry<BLSPubKey> {
+    fn from(value: NodeInfoJf) -> Self {
+        StakeTableEntry {
+            stake_key: value.stake_table_key,
+            stake_amount: U256::from(1), // dummy stake amount
         }
     }
 }
@@ -193,27 +224,10 @@ impl From<PeerConfigKeys<BLSPubKey>> for NodeInfoJf {
 #[cfg(test)]
 mod test {
     use super::*;
-    use ark_std::rand::{Rng, RngCore};
-    use hotshot_types::{light_client::StateKeyPair, traits::signature_key::BuilderSignatureKey};
-
-    impl NodeInfoJf {
-        fn random(rng: &mut impl RngCore) -> Self {
-            let mut seed = [0u8; 32];
-            rng.fill_bytes(&mut seed);
-
-            let (stake_table_key, _) = BLSPubKey::generated_from_seed_indexed(seed, 0);
-            let state_key_pair = StateKeyPair::generate_from_seed_indexed(seed, 0);
-            Self {
-                stake_table_key,
-                state_ver_key: state_key_pair.ver_key(),
-                da: rng.gen(),
-            }
-        }
-    }
 
     #[test]
     fn test_node_info_round_trip() {
-        let mut rng = ark_std::rand::thread_rng();
+        let mut rng = rand::thread_rng();
         for _ in 0..20 {
             let jf = NodeInfoJf::random(&mut rng);
             let sol: NodeInfo = jf.clone().into();
