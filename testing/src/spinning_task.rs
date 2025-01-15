@@ -166,6 +166,7 @@ where
                                             None,
                                             Vec::new(),
                                             BTreeMap::new(),
+                                            None,
                                         );
                                         // We assign node's public key and stake value rather than read from config file since it's a test
                                         let validator_config =
@@ -256,6 +257,7 @@ where
                                     read_storage.decided_upgrade_certificate().await,
                                     Vec::new(),
                                     BTreeMap::new(),
+                                    Some(read_storage.vids_cloned().await),
                                 );
                                 // We assign node's public key and stake value rather than read from config file since it's a test
                                 let validator_config = ValidatorConfig::generated_from_seed_indexed(

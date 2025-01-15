@@ -23,7 +23,7 @@ use rand::Rng;
 use serde::{Deserialize, Serialize};
 use vbs::version::Version;
 
-pub use crate::node_types::TestTypes;
+pub use crate::node_types::{TestTwoStakeTablesTypes, TestTypes};
 use crate::{
     block_types::{TestBlockPayload, TestTransaction},
     testable_delay::{DelayConfig, SupportedTraitTypesForAsyncDelay, TestableDelay},

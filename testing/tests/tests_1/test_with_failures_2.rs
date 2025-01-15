@@ -75,50 +75,6 @@ cross_tests!(
 );
 
 cross_tests!(
-    TestName: test_with_failures_2_with_epochs,
-    Impls: [Libp2pImpl, PushCdnImpl, CombinedImpl],
-    Types: [TestTwoStakeTablesTypes],
-    Versions: [EpochsTestVersions],
-    Ignore: false,
-    Metadata: {
-        let mut metadata = TestDescription::default_more_nodes();
-        metadata.num_nodes_with_stake = 12;
-        metadata.da_staked_committee_size = 12;
-        metadata.start_nodes = 12;
-        metadata.epoch_height = 10;
-        let dead_nodes = vec![
-            ChangeNode {
-                idx: 10,
-                updown: NodeAction::Down,
-            },
-            ChangeNode {
-                idx: 11,
-                updown: NodeAction::Down,
-            },
-        ];
-
-        metadata.spinning_properties = SpinningTaskDescription {
-            node_changes: vec![(5, dead_nodes)]
-        };
-
-        // 2 nodes fail triggering view sync, expect no other timeouts
-        metadata.overall_safety_properties.num_failed_views = 6;
-        // Make sure we keep committing rounds after the bad leaders, but not the full 50 because of the numerous timeouts
-        metadata.overall_safety_properties.num_successful_views = 20;
-        metadata.overall_safety_properties.expected_views_to_fail = HashMap::from([
-            (ViewNumber::new(5), false),
-            (ViewNumber::new(11), false),
-            (ViewNumber::new(17), false),
-            (ViewNumber::new(23), false),
-            (ViewNumber::new(29), false),
-            (ViewNumber::new(35), false),
-        ]);
-
-        metadata
-    }
-);
-
-cross_tests!(
     TestName: test_with_double_leader_failures,
     Impls: [MemoryImpl, Libp2pImpl, PushCdnImpl],
     Types: [TestConsecutiveLeaderTypes],

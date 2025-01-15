@@ -33,11 +33,11 @@ use jf_vid::VidScheme;
 
 use crate::testable_delay::{DelayConfig, SupportedTraitTypesForAsyncDelay, TestableDelay};
 
-type VidShares<TYPES> = HashMap<
+type VidShares<TYPES> = BTreeMap<
     <TYPES as NodeType>::View,
     HashMap<<TYPES as NodeType>::SignatureKey, Proposal<TYPES, VidDisperseShare<TYPES>>>,
 >;
-type VidShares2<TYPES> = HashMap<
+type VidShares2<TYPES> = BTreeMap<
     <TYPES as NodeType>::View,
     HashMap<<TYPES as NodeType>::SignatureKey, Proposal<TYPES, VidDisperseShare2<TYPES>>>,
 >;
@@ -61,8 +61,8 @@ pub struct TestStorageState<TYPES: NodeType> {
 impl<TYPES: NodeType> Default for TestStorageState<TYPES> {
     fn default() -> Self {
         Self {
-            vids: HashMap::new(),
-            vid2: HashMap::new(),
+            vids: BTreeMap::new(),
+            vid2: BTreeMap::new(),
             das: HashMap::new(),
             da2s: HashMap::new(),
             proposals: BTreeMap::new(),
@@ -126,6 +126,9 @@ impl<TYPES: NodeType> TestStorage<TYPES> {
     }
     pub async fn last_actioned_epoch(&self) -> TYPES::Epoch {
         self.inner.read().await.epoch
+    }
+    pub async fn vids_cloned(&self) -> VidShares2<TYPES> {
+        self.inner.read().await.vid2.clone()
     }
 }
 

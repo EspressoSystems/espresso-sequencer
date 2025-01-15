@@ -411,6 +411,7 @@ impl<TYPES: NodeType> Consensus<TYPES> {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         validated_state_map: BTreeMap<TYPES::View, View<TYPES>>,
+        vid_shares: Option<VidShares<TYPES>>,
         cur_view: TYPES::View,
         cur_epoch: TYPES::Epoch,
         locked_view: TYPES::View,
@@ -426,7 +427,7 @@ impl<TYPES: NodeType> Consensus<TYPES> {
     ) -> Self {
         Consensus {
             validated_state_map,
-            vid_shares: BTreeMap::new(),
+            vid_shares: vid_shares.unwrap_or_default(),
             saved_da_certs: HashMap::new(),
             cur_view,
             cur_epoch,
@@ -535,9 +536,8 @@ impl<TYPES: NodeType> Consensus<TYPES> {
         };
         let parent_vid = self
             .vid_shares()
-            .get(&parent_view_number)?
-            .get(public_key)
-            .cloned()
+            .get(&parent_view_number)
+            .and_then(|inner_map| inner_map.get(public_key).cloned())
             .map(|prop| prop.data);
 
         Some(LeafInfo {
@@ -861,6 +861,10 @@ impl<TYPES: NodeType> Consensus<TYPES> {
     /// # Panics
     /// On inconsistent stored entries
     pub fn collect_garbage(&mut self, old_anchor_view: TYPES::View, new_anchor_view: TYPES::View) {
+        // Nothing to collect
+        if new_anchor_view <= old_anchor_view {
+            return;
+        }
         let gc_view = TYPES::View::new(new_anchor_view.saturating_sub(1));
         // state check
         let anchor_entry = self
