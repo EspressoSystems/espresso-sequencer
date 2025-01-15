@@ -1,20 +1,20 @@
 CREATE TABLE anchor_leaf2 (
     view   BIGINT PRIMARY KEY,
-    leaf2   BYTEA,
-    qc2    BYTEA
+    leaf2   BLOB,
+    qc2    BLOB
 );
 
  
 CREATE TABLE da_proposal2 (
     view BIGINT PRIMARY KEY,
     payload_hash VARCHAR,
-    data BYTEA
+    data BLOB
 );
 
 CREATE TABLE vid_share2 (
     view BIGINT PRIMARY KEY,
     payload_hash VARCHAR,
-    data BYTEA
+    data BLOB
 );
 
 
@@ -23,15 +23,15 @@ CREATE TABLE undecided_state2 (
     -- update that there is only a single entry in this table: the latest known state.
     id INT PRIMARY KEY,
 
-    leaves2 BYTEA NOT NULL,
-    state  BYTEA NOT NULL
+    leaves BLOB NOT NULL,
+    state  BLOB NOT NULL
 );
 
 
 CREATE TABLE quorum_proposals2 (
     view BIGINT PRIMARY KEY,
     leaf_hash VARCHAR,
-    data BYTEA
+    data BLOB
 );
 
 CREATE UNIQUE INDEX quorum_proposals2_leaf_hash_idx ON quorum_proposals (leaf_hash);
@@ -41,7 +41,7 @@ CREATE INDEX vid_share2_payload_hash_idx ON vid_share (payload_hash);
 CREATE TABLE quorum_certificate2 (
     view BIGINT PRIMARY KEY,
     leaf_hash VARCHAR NOT NULL,
-    data BYTEA NOT NULL
+    data BLOB NOT NULL
 );
 
 CREATE INDEX quorum_certificate2_leaf_hash_idx ON quorum_certificate (leaf_hash);

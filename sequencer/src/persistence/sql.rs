@@ -1304,7 +1304,7 @@ impl SequencerPersistence for Persistence {
             let mut tx = self.db.read().await?;
 
             let (is_completed,) = query_as::<(bool,)>(
-                "SELECT is_completed from epoch_migration WHERE table_name = anchor_leaf",
+                "SELECT completed from epoch_migration WHERE table_name = 'anchor_leaf'",
             )
             .fetch_one(tx.as_mut())
             .await?;
@@ -1315,21 +1315,24 @@ impl SequencerPersistence for Persistence {
                 return Ok(());
             }
 
-            let rows = query("SELECT leaf, qc FROM anchor_leaf ORDER BY view LIMIT $1 OFFSET $2")
-                .bind(batch_size)
-                .bind(offset)
-                .fetch_all(tx.as_mut())
-                .await?;
+            let rows =
+                query("SELECT view, leaf, qc FROM anchor_leaf ORDER BY view LIMIT $1 OFFSET $2")
+                    .bind(batch_size)
+                    .bind(offset)
+                    .fetch_all(tx.as_mut())
+                    .await?;
 
             drop(tx);
-
+            if rows.is_empty() {
+                break;
+            }
             let mut values = Vec::new();
 
             for row in rows.iter() {
-                let leaf = row.try_get("leaf")?;
-                let qc = row.try_get("qc")?;
-                let leaf1: Leaf = serde_json::from_value(leaf)?;
-                let qc1: QuorumCertificate<SeqTypes> = serde_json::from_value(qc)?;
+                let leaf: Vec<u8> = row.try_get("leaf")?;
+                let qc: Vec<u8> = row.try_get("qc")?;
+                let leaf1: Leaf = bincode::deserialize(&leaf)?;
+                let qc1: QuorumCertificate<SeqTypes> = bincode::deserialize(&qc)?;
                 let view: i64 = row.try_get("view")?;
 
                 let leaf2: Leaf2 = leaf1.into();
@@ -1364,7 +1367,7 @@ impl SequencerPersistence for Persistence {
         let mut tx = self.db.write().await?;
         tx.upsert(
             "epoch_migration",
-            ["table_name", "is_completed"],
+            ["table_name", "completed"],
             ["table_name"],
             [("anchor_leaf".to_string(), true)],
         )
@@ -1382,7 +1385,7 @@ impl SequencerPersistence for Persistence {
             let mut tx = self.db.read().await?;
 
             let (is_completed,) = query_as::<(bool,)>(
-                "SELECT is_completed from epoch_migration WHERE table_name = da_proposal",
+                "SELECT completed from epoch_migration WHERE table_name = 'da_proposal'",
             )
             .fetch_one(tx.as_mut())
             .await?;
@@ -1402,14 +1405,16 @@ impl SequencerPersistence for Persistence {
             .await?;
 
             drop(tx);
-
+            if rows.is_empty() {
+                break;
+            }
             let mut values = Vec::new();
 
             for row in rows.iter() {
-                let data = row.try_get("data")?;
+                let data: Vec<u8> = row.try_get("data")?;
                 let payload_hash: String = row.try_get("payload_hash")?;
 
-                let da_proposal: DaProposal<SeqTypes> = serde_json::from_value(data)?;
+                let da_proposal: DaProposal<SeqTypes> = bincode::deserialize(&data)?;
                 let da_proposal2: DaProposal2<SeqTypes> = da_proposal.into();
 
                 let view = da_proposal2.view_number.u64() as i64;
@@ -1442,7 +1447,7 @@ impl SequencerPersistence for Persistence {
         let mut tx = self.db.write().await?;
         tx.upsert(
             "epoch_migration",
-            ["table_name", "is_completed"],
+            ["table_name", "completed"],
             ["table_name"],
             [("da_proposal".to_string(), true)],
         )
@@ -1460,7 +1465,7 @@ impl SequencerPersistence for Persistence {
             let mut tx = self.db.read().await?;
 
             let (is_completed,) = query_as::<(bool,)>(
-                "SELECT is_completed from epoch_migration WHERE table_name = vid_share",
+                "SELECT completed from epoch_migration WHERE table_name = 'vid_share'",
             )
             .fetch_one(tx.as_mut())
             .await?;
@@ -1479,14 +1484,16 @@ impl SequencerPersistence for Persistence {
                     .await?;
 
             drop(tx);
-
+            if rows.is_empty() {
+                break;
+            }
             let mut values = Vec::new();
 
             for row in rows.iter() {
-                let data = row.try_get("data")?;
+                let data: Vec<u8> = row.try_get("data")?;
                 let payload_hash: String = row.try_get("payload_hash")?;
 
-                let vid_share: VidDisperseShare<SeqTypes> = serde_json::from_value(data)?;
+                let vid_share: VidDisperseShare<SeqTypes> = bincode::deserialize(&data)?;
                 let vid_share2: VidDisperseShare2<SeqTypes> = vid_share.into();
 
                 let view = vid_share2.view_number().u64() as i64;
@@ -1517,7 +1524,7 @@ impl SequencerPersistence for Persistence {
         let mut tx = self.db.write().await?;
         tx.upsert(
             "epoch_migration",
-            ["table_name", "is_completed"],
+            ["table_name", "completed"],
             ["table_name"],
             [("vid_share".to_string(), true)],
         )
@@ -1535,7 +1542,7 @@ impl SequencerPersistence for Persistence {
             .await?;
 
         let (is_completed,) = query_as::<(bool,)>(
-            "SELECT is_completed from epoch_migration WHERE table_name = undecided_state",
+            "SELECT completed from epoch_migration WHERE table_name = 'undecided_state'",
         )
         .fetch_one(tx.as_mut())
         .await?;
@@ -1567,7 +1574,7 @@ impl SequencerPersistence for Persistence {
         let mut tx = self.db.write().await?;
         tx.upsert(
             "epoch_migration",
-            ["table_name", "is_completed"],
+            ["table_name", "completed"],
             ["table_name"],
             [("undecided_state".to_string(), true)],
         )
@@ -1585,7 +1592,7 @@ impl SequencerPersistence for Persistence {
             let mut tx = self.db.read().await?;
 
             let (is_completed,) = query_as::<(bool,)>(
-                "SELECT is_completed from epoch_migration WHERE table_name = quorum_proposals",
+                "SELECT completed from epoch_migration WHERE table_name = 'quorum_proposals'",
             )
             .fetch_one(tx.as_mut())
             .await?;
@@ -1597,7 +1604,7 @@ impl SequencerPersistence for Persistence {
             }
 
             let rows =
-                query("SELECT view, leaf_hash, data FROM quorum_proposals2 ORDER BY view LIMIT $1 OFFSET $2")
+                query("SELECT view, leaf_hash, data FROM quorum_proposals ORDER BY view LIMIT $1 OFFSET $2")
                     .bind(batch_size)
                     .bind(offset)
                     .fetch_all(tx.as_mut())
@@ -1605,13 +1612,17 @@ impl SequencerPersistence for Persistence {
 
             drop(tx);
 
+            if rows.is_empty() {
+                break;
+            }
+
             let mut values = Vec::new();
 
             for row in rows.iter() {
                 let leaf_hash: String = row.try_get("leaf_hash")?;
-                let data = row.try_get("data")?;
+                let data: Vec<u8> = row.try_get("data")?;
 
-                let quorum_proposal: QuorumProposal<SeqTypes> = serde_json::from_value(data)?;
+                let quorum_proposal: QuorumProposal<SeqTypes> = bincode::deserialize(&data)?;
                 let quorum_proposal2: QuorumProposal2<SeqTypes> = quorum_proposal.into();
 
                 let view = quorum_proposal2.view_number().u64() as i64;
@@ -1642,7 +1653,7 @@ impl SequencerPersistence for Persistence {
         let mut tx = self.db.write().await?;
         tx.upsert(
             "epoch_migration",
-            ["table_name", "is_completed"],
+            ["table_name", "completed"],
             ["table_name"],
             [("quorum_proposals".to_string(), true)],
         )
@@ -1660,7 +1671,7 @@ impl SequencerPersistence for Persistence {
             let mut tx = self.db.read().await?;
 
             let (is_completed,) = query_as::<(bool,)>(
-                "SELECT is_completed from epoch_migration WHERE table_name = quorum_certificates",
+                "SELECT completed from epoch_migration WHERE table_name = 'quorum_certificates'",
             )
             .fetch_one(tx.as_mut())
             .await?;
@@ -1679,14 +1690,16 @@ impl SequencerPersistence for Persistence {
                     .await?;
 
             drop(tx);
-
+            if rows.is_empty() {
+                break;
+            }
             let mut values = Vec::new();
 
             for row in rows.iter() {
                 let leaf_hash: String = row.try_get("leaf_hash")?;
-                let data = row.try_get("data")?;
+                let data: Vec<u8> = row.try_get("data")?;
 
-                let qc: QuorumCertificate<SeqTypes> = serde_json::from_value(data)?;
+                let qc: QuorumCertificate<SeqTypes> = bincode::deserialize(&data)?;
                 let qc2: QuorumCertificate2<SeqTypes> = qc.to_qc2();
 
                 let view = qc2.view_number().u64() as i64;
@@ -1717,7 +1730,7 @@ impl SequencerPersistence for Persistence {
         let mut tx = self.db.write().await?;
         tx.upsert(
             "epoch_migration",
-            ["table_name", "is_completed"],
+            ["table_name", "completed"],
             ["table_name"],
             [("quorum_certificates".to_string(), true)],
         )
@@ -2016,15 +2029,24 @@ mod generic_tests {
 #[cfg(test)]
 mod test {
 
+    use std::marker::PhantomData;
+
     use super::*;
     use crate::{persistence::testing::TestablePersistence, BLSPubKey, PubKey};
-    use espresso_types::{traits::NullEventConsumer, Leaf, NodeState, ValidatedState};
+    use committable::{Commitment, CommitmentBoundsArkless};
+    use espresso_types::{traits::NullEventConsumer, Header, Leaf, NodeState, ValidatedState};
     use futures::stream::TryStreamExt;
     use hotshot_example_types::node_types::TestVersions;
+    use hotshot_query_service::testing::mocks::MockVersions;
     use hotshot_types::{
         data::EpochNumber,
         simple_certificate::QuorumCertificate,
-        traits::{block_contents::vid_commitment, signature_key::SignatureKey, EncodeBytes},
+        simple_vote::QuorumData,
+        traits::{
+            block_contents::{vid_commitment, GENESIS_VID_NUM_STORAGE_NODES},
+            signature_key::SignatureKey,
+            EncodeBytes,
+        },
         vid::vid_scheme,
     };
     use jf_vid::VidScheme;
@@ -2362,5 +2384,183 @@ mod test {
             target_usage: u64::MAX,
         })
         .await
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_consensus_migration() {
+        setup_test();
+
+        let tmp = Persistence::tmp_storage().await;
+        let mut opt = Persistence::options(&tmp);
+
+        let storage = opt.create().await.unwrap();
+
+        for i in 0..200 {
+            let (qp, leaf) = generate_leaf(i).await;
+            let qc = generate_qc(i).await;
+            let mut tx = storage.db.write().await.unwrap();
+
+            let qc_bytes = bincode::serialize(&qc).unwrap();
+            let leaf_bytes = bincode::serialize(&leaf).unwrap();
+
+            tx.upsert(
+                "anchor_leaf",
+                ["view", "leaf", "qc"],
+                ["view"],
+                [(i as i64, leaf_bytes, qc_bytes)],
+            )
+            .await
+            .unwrap();
+            tx.commit().await.unwrap();
+
+            let genesis_payload = Leaf::genesis(&ValidatedState::default(), &NodeState::default())
+                .await
+                .block_payload()
+                .unwrap();
+
+            let leaf_payload_bytes_arc = genesis_payload.encode();
+            let disperse = vid_scheme(2)
+                .disperse(leaf_payload_bytes_arc.clone())
+                .unwrap();
+            let (pubkey, privkey) = BLSPubKey::generated_from_seed_indexed([0; 32], i);
+            let vid = VidDisperseShare::<SeqTypes> {
+                view_number: ViewNumber::new(i),
+                payload_commitment: Default::default(),
+                share: disperse.shares[0].clone(),
+                common: disperse.common,
+                recipient_key: pubkey,
+            };
+
+            let (payload, metadata) =
+                Payload::from_transactions([], &ValidatedState::default(), &NodeState::default())
+                    .await
+                    .unwrap();
+
+            let da = DaProposal::<SeqTypes> {
+                encoded_transactions: payload.encode(),
+                metadata,
+                view_number: ViewNumber::new(i),
+            };
+
+            let block_payload_signature = BLSPubKey::sign(&privkey, &leaf_payload_bytes_arc)
+                .expect("Failed to sign block payload");
+
+            let da_proposal = Proposal {
+                data: da,
+                signature: block_payload_signature,
+                _pd: Default::default(),
+            };
+
+            storage
+                .append_vid(&vid.to_proposal(&privkey).unwrap())
+                .await
+                .unwrap();
+            storage
+                .append_da(&da_proposal, disperse.commit)
+                .await
+                .unwrap();
+        }
+
+        let x = |v: Proposal<SeqTypes, QuorumProposal<SeqTypes>>| {
+            let qc = v.data;
+
+            let qc2 = qc.into();
+
+            Proposal {
+                data: qc2,
+                signature: v.signature,
+                _pd: PhantomData,
+            }
+        };
+
+        storage.migrate_consensus(Leaf2::from, x).await.unwrap();
+    }
+
+    async fn generate_qc(view: u64) -> QuorumCertificate<SeqTypes> {
+        let mut qc = QuorumCertificate::<SeqTypes>::genesis::<MockVersions>(
+            &ValidatedState::default(),
+            &NodeState::default(),
+        )
+        .await;
+        qc.view_number = ViewNumber::new(view);
+
+        qc
+    }
+
+    async fn generate_vid_share(view: u64) -> VidDisperseShare<SeqTypes> {
+        let genesis_payload = Leaf::genesis(&ValidatedState::default(), &NodeState::default())
+            .await
+            .block_payload()
+            .unwrap();
+
+        let leaf_payload_bytes_arc = genesis_payload.encode();
+        let disperse = vid_scheme(2)
+            .disperse(leaf_payload_bytes_arc.clone())
+            .unwrap();
+        let (pubkey, privkey) = BLSPubKey::generated_from_seed_indexed([0; 32], 1);
+        let vid = VidDisperseShare::<SeqTypes> {
+            view_number: ViewNumber::new(view),
+            payload_commitment: Default::default(),
+            share: disperse.shares[0].clone(),
+            common: disperse.common,
+            recipient_key: pubkey,
+        };
+
+        let (payload, metadata) =
+            Payload::from_transactions([], &ValidatedState::default(), &NodeState::default())
+                .await
+                .unwrap();
+
+        let da = DaProposal::<SeqTypes> {
+            encoded_transactions: payload.encode(),
+            metadata,
+            view_number: ViewNumber::new(view),
+        };
+
+        vid
+    }
+
+    async fn generate_leaf(view: u64) -> (QuorumProposal<SeqTypes>, Leaf) {
+        let view = ViewNumber::new(view);
+
+        let validated_state = ValidatedState::default();
+        let instance_state = NodeState::default();
+        let (payload, metadata) = Payload::from_transactions([], &validated_state, &instance_state)
+            .await
+            .unwrap();
+        let builder_commitment = payload.builder_commitment(&metadata);
+        let payload_bytes = payload.encode();
+
+        let payload_commitment = vid_commitment(&payload_bytes, GENESIS_VID_NUM_STORAGE_NODES);
+
+        let block_header = Header::genesis(
+            &instance_state,
+            payload_commitment,
+            builder_commitment,
+            metadata,
+        );
+
+        let null_quorum_data = QuorumData {
+            leaf_commit: Commitment::<Leaf>::default_commitment_no_preimage(),
+        };
+
+        let justify_qc = QuorumCertificate::new(
+            null_quorum_data.clone(),
+            null_quorum_data.commit(),
+            view,
+            None,
+            PhantomData,
+        );
+
+        let quorum_proposal = QuorumProposal {
+            block_header,
+            view_number: view,
+            justify_qc,
+            upgrade_certificate: None,
+            proposal_certificate: None,
+        };
+        let leaf = Leaf::from_quorum_proposal(&quorum_proposal);
+
+        (quorum_proposal, leaf)
     }
 }
