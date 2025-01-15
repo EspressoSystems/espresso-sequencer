@@ -103,10 +103,6 @@ build-docker-images:
 # generate rust bindings for contracts
 REGEXP := "^LightClient$|^LightClientArbitrum$|^LightClientStateUpdateVK$|^FeeContract$|PlonkVerifier$|^ERC1967Proxy$|^LightClientMock$|^LightClientStateUpdateVKMock$|^PlonkVerifier2$|^PermissionedStakeTable$"
 gen-bindings:
-    # Delete the existing bindings
-    rm -rf contract-bindings-alloy
-    rm -rf contract-bindings-ethers
-
     # Update the git submodules
     git submodule update --init --recursive
 
