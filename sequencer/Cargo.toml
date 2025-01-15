@@ -7,12 +7,12 @@ edition = "2021"
 
 [features]
 testing = [
-  "hotshot-testing",
-  "marketplace-builder-core",
-  "marketplace-builder-shared",
-  "espresso-types/testing",
-  "sequencer-utils/testing",
-  "hotshot-query-service/testing",
+    "hotshot-testing",
+    "marketplace-builder-core",
+    "marketplace-builder-shared",
+    "espresso-types/testing",
+    "sequencer-utils/testing",
+    "hotshot-query-service/testing"
 ]
 benchmarking = []
 embedded-db = ["hotshot-query-service/embedded-db"]
