@@ -19,6 +19,7 @@ use contract_bindings_alloy::{
         PermissionedStakeTableInstance, StakersUpdated,
     },
 };
+use ethers_conv::ToEthers;
 use futures::{
     future::{Future, FutureExt},
     stream::{self, StreamExt},
@@ -62,7 +63,8 @@ impl Ord for L1BlockInfo {
 
 impl Committable for L1BlockInfo {
     fn commit(&self) -> Commitment<Self> {
-        let timestamp: [u8; 32] = self.timestamp.to_le_bytes();
+        let mut timestamp = [0u8; 32];
+        self.timestamp.to_little_endian(&mut timestamp);
 
         RawCommitmentBuilder::new(&Self::tag())
             .u64_field("number", self.number)
@@ -84,11 +86,11 @@ impl L1BlockInfo {
         self.number
     }
 
-    pub fn timestamp(&self) -> U256 {
-        U256::from(self.timestamp)
+    pub fn timestamp(&self) -> ethers::types::U256 {
+        self.timestamp
     }
 
-    pub fn hash(&self) -> B256 {
+    pub fn hash(&self) -> ethers::types::H256 {
         self.hash
     }
 }
@@ -604,7 +606,7 @@ impl L1Client {
             {
                 let state = self.state.lock().await;
                 if let Some(finalized) = state.snapshot.finalized {
-                    if finalized.timestamp >= timestamp {
+                    if finalized.timestamp >= timestamp.to_ethers() {
                         break 'outer (state, finalized);
                     }
                 }
@@ -620,7 +622,7 @@ impl L1Client {
                 let L1Event::NewFinalized { finalized } = event else {
                     continue;
                 };
-                if finalized.timestamp >= timestamp {
+                if finalized.timestamp >= timestamp.to_ethers() {
                     tracing::info!(%timestamp, ?finalized, "got finalized block");
                     break 'outer (self.state.lock().await, finalized);
                 }
@@ -636,7 +638,7 @@ impl L1Client {
         // backwards until we find the true earliest block.
         loop {
             let (state_lock, parent) = self.get_finalized_block(state, block.number - 1).await;
-            if parent.timestamp < timestamp {
+            if parent.timestamp < timestamp.to_ethers() {
                 return block;
             }
             state = state_lock;
@@ -686,8 +688,8 @@ impl L1Client {
             };
             break L1BlockInfo {
                 number: block.header.number,
-                hash: block.header.hash,
-                timestamp: U256::from(block.header.timestamp),
+                hash: block.header.hash.to_ethers(),
+                timestamp: ethers::types::U256::from(block.header.timestamp),
             };
         };
 
@@ -868,8 +870,8 @@ async fn get_finalized_block(
 
     Ok(Some(L1BlockInfo {
         number: block.header.number,
-        timestamp: U256::from(block.header.timestamp),
-        hash: block.header.hash,
+        timestamp: ethers::types::U256::from(block.header.timestamp),
+        hash: block.header.hash.to_ethers(),
     }))
 }
 
@@ -1084,9 +1086,9 @@ mod test {
             .unwrap();
         assert_eq!(
             block.timestamp,
-            U256::from(true_block.header.inner.timestamp)
+            ethers::types::U256::from(true_block.header.inner.timestamp)
         );
-        assert_eq!(block.hash, true_block.header.hash);
+        assert_eq!(block.hash, true_block.header.hash.to_ethers());
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -1112,7 +1114,7 @@ mod test {
             .wait_for_finalized_block_with_timestamp(timestamp)
             .await;
         assert!(
-            block.timestamp >= timestamp,
+            block.timestamp >= timestamp.to_ethers(),
             "wait_for_finalized_block_with_timestamp({timestamp}) returned too early a block: {block:?}",
         );
         let parent = provider
@@ -1139,9 +1141,9 @@ mod test {
             .unwrap();
         assert_eq!(
             block.timestamp,
-            U256::from(true_block.header.inner.timestamp)
+            ethers::types::U256::from(true_block.header.inner.timestamp)
         );
-        assert_eq!(block.hash, true_block.header.hash);
+        assert_eq!(block.hash, true_block.header.hash.to_ethers());
     }
 
     #[tokio::test(flavor = "multi_thread")]

@@ -459,10 +459,8 @@ impl<'a> ValidatedTransition<'a> {
             // cases. The hash seems less useful and explodes the size
             // of the error, so we strip it out.
             return Err(ProposalValidationError::L1FinalizedDecrementing {
-                parent: parent_finalized
-                    .map(|block| (block.number, block.timestamp.saturating_to::<u64>())),
-                proposed: proposed_finalized
-                    .map(|block| (block.number, block.timestamp.saturating_to::<u64>())),
+                parent: parent_finalized.map(|block| (block.number, block.timestamp.as_u64())),
+                proposed: proposed_finalized.map(|block| (block.number, block.timestamp.as_u64())),
             });
         }
         Ok(())

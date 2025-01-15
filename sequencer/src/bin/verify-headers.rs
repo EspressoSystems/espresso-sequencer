@@ -5,7 +5,6 @@ use std::{cmp::max, process::exit, time::Duration};
 use clap::Parser;
 use espresso_types::{Header, L1BlockInfo};
 use ethers::prelude::*;
-use ethers_conv::ToAlloy;
 use futures::future::join_all;
 use itertools::Itertools;
 use sequencer::SequencerApiVersion;
@@ -164,8 +163,8 @@ async fn get_l1_block(l1: &Provider<Http>, height: u64) -> L1BlockInfo {
 
         return L1BlockInfo {
             number: height,
-            hash: hash.to_alloy(),
-            timestamp: block.timestamp.to_alloy(),
+            hash,
+            timestamp: block.timestamp,
         };
     }
 }

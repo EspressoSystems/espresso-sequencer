@@ -321,7 +321,6 @@ impl Genesis {
 
 #[cfg(test)]
 mod test {
-    use alloy::primitives::B256;
     use ethers::middleware::Middleware;
     use ethers::prelude::*;
     use ethers::signers::Signer;
@@ -449,8 +448,9 @@ mod test {
             genesis.l1_finalized,
             L1Finalized::Block(L1BlockInfo {
                 number: 64,
-                timestamp: ethers::types::U256::from(0x123def).to_alloy(),
-                hash: B256::from_slice(&[
+                timestamp: 0x123def.into(),
+                // Can't do B256 here directly because it's the wrong endianness
+                hash: H256([
                     0x80, 0xf5, 0xdd, 0x11, 0xf2, 0xbd, 0xda, 0x28, 0x14, 0xcb, 0x1a, 0xd9, 0x4e,
                     0xf3, 0x0a, 0x47, 0xde, 0x02, 0xcf, 0x28, 0xad, 0x68, 0xc8, 0x9e, 0x10, 0x4c,
                     0x00, 0xc4, 0xe5, 0x1b, 0xb7, 0xa5

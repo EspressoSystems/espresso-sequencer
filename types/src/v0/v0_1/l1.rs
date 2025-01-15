@@ -1,6 +1,5 @@
 use crate::parse_duration;
 use alloy::{
-    primitives::{B256, U256},
     providers::RootProvider,
     transports::http::{Client, Http},
 };
@@ -22,8 +21,8 @@ use url::Url;
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, Hash, PartialEq, Eq)]
 pub struct L1BlockInfo {
     pub number: u64,
-    pub timestamp: U256,
-    pub hash: B256,
+    pub timestamp: ethers::types::U256,
+    pub hash: ethers::types::H256,
 }
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, Hash, PartialEq, Eq)]

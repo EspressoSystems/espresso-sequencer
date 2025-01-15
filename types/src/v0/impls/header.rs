@@ -452,7 +452,7 @@ impl Header {
         // Enforce that the sequencer block timestamp is not behind the L1 block timestamp. This can
         // only happen if our clock is badly out of sync with L1.
         if let Some(l1_block) = &l1.finalized {
-            let l1_timestamp = l1_block.timestamp.saturating_to::<u64>();
+            let l1_timestamp = l1_block.timestamp.as_u64();
             if timestamp < l1_timestamp {
                 tracing::warn!("Espresso timestamp {timestamp} behind L1 timestamp {l1_timestamp}, local clock may be out of sync");
                 timestamp = l1_timestamp;
@@ -1183,7 +1183,6 @@ mod test_headers {
 
     use std::sync::Arc;
 
-    use alloy::primitives::U256;
     use ethers::{types::Address, utils::Anvil};
     use hotshot_types::{traits::signature_key::BuilderSignatureKey, vid::vid_scheme};
 
@@ -1359,7 +1358,7 @@ mod test_headers {
     async fn test_new_header_timestamp_behind_finalized_l1_block() {
         let l1_finalized = Some(L1BlockInfo {
             number: 1,
-            timestamp: U256::from(1),
+            timestamp: 1.into(),
             ..Default::default()
         });
         TestCase {
