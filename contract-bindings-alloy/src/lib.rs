@@ -7,6 +7,7 @@ pub mod erc1967proxy;
 pub mod feecontract;
 pub mod iplonkverifier;
 pub mod lightclient;
+pub mod lightclientarbitrum;
 pub mod lightclientmock;
 pub mod lightclientstateupdatevk;
 pub mod lightclientstateupdatevkmock;

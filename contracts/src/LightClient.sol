@@ -215,8 +215,6 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         finalizedState = _genesis;
 
         stateHistoryRetentionPeriod = _stateHistoryRetentionPeriod;
-
-        updateStateHistory(uint64(currentBlockNumber()), uint64(block.timestamp), _genesis);
     }
 
     // === State Modifying APIs ===
