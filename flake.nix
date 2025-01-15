@@ -124,6 +124,20 @@
               types_or = [ "rust" "toml" ];
               pass_filenames = false;
             };
+            cargo-lock = {
+              enable = true;
+              description = "Ensure Cargo.lock is compatible with Cargo.toml";
+              entry = "cargo update --workspace --verbose";
+              types_or = [ "toml" ];
+              pass_filenames = false;
+            };
+            cargo-lock-sqlite = {
+              enable = true;
+              description = "Ensure Cargo.lock is compatible with Cargo.toml";
+              entry = "cargo update --manifest-path sequencer-sqlite/Cargo.toml --workspace --verbose";
+              types_or = [ "toml" ];
+              pass_filenames = false;
+            };
             forge-fmt = {
               enable = true;
               description = "Enforce forge fmt";
@@ -166,17 +180,10 @@
       };
       devShells.default =
         let
-          stableToolchain = pkgs.rust-bin.stable.latest.minimal.override {
-            extensions = [ "rustfmt" "clippy" "llvm-tools-preview" "rust-src" ];
-          };
+          stableToolchain = pkgs.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml;
           nightlyToolchain = pkgs.rust-bin.selectLatestNightlyWith (toolchain: toolchain.minimal.override {
             extensions = [ "rust-analyzer" ];
           });
-          # nixWithFlakes allows pre v2.4 nix installations to use
-          # flake commands (like `nix flake update`)
-          nixWithFlakes = pkgs.writeShellScriptBin "nix" ''
-            exec ${pkgs.nixFlakes}/bin/nix --experimental-features "nix-command flakes" "$@"
-          '';
           solc = pkgs.solc-bin.latest;
         in
         mkShell (rustEnvVars // {
@@ -200,7 +207,6 @@
             nightlyToolchain.passthru.availableComponents.rust-analyzer
 
             # Tools
-            nixWithFlakes
             nixpkgs-fmt
             entr
             process-compose
