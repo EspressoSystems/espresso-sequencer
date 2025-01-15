@@ -52,11 +52,10 @@ contract PermissionedStakeTableTest is Test {
     }
 
     // Empty array of NodeInfo
-    function emptyNodes() private pure returns (PermissionedStakeTable.NodeInfo[] memory nodes) {}
+    function emptyNodes() private pure returns (PermissionedStakeTable.NodeInfo[] memory nodes) { }
 
     // Empty array of BLS keys
-    function emptyKeys() private pure returns (BN254.G2Point[] memory keys) {}
-
+    function emptyKeys() private pure returns (BN254.G2Point[] memory keys) { }
 
     function testInsert() public {
         vm.prank(owner);
