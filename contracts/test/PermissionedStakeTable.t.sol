@@ -52,9 +52,11 @@ contract PermissionedStakeTableTest is Test {
     }
 
     // Empty array of NodeInfo
+    // solhint-disable-next-line no-empty-blocks
     function emptyNodes() private pure returns (PermissionedStakeTable.NodeInfo[] memory nodes) { }
 
     // Empty array of BLS keys
+    // solhint-disable-next-line no-empty-blocks
     function emptyKeys() private pure returns (BN254.G2Point[] memory keys) { }
 
     function testInsert() public {
