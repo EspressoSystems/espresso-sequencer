@@ -10,6 +10,7 @@ use alloy::{
     },
     transports::{http::Http, RpcError, TransportErrorKind},
 };
+use anyhow::Context;
 use async_trait::async_trait;
 use clap::Parser;
 use committable::{Commitment, Committable, RawCommitmentBuilder};
@@ -21,11 +22,12 @@ use contract_bindings_alloy::{
 };
 use ethers_conv::ToEthers;
 use futures::{
-    future::{Future, FutureExt},
+    future::Future,
     stream::{self, StreamExt},
 };
-use hotshot_types::traits::metrics::{CounterFamily, Metrics};
+use hotshot_types::traits::metrics::Metrics;
 use lru::LruCache;
+use parking_lot::RwLock;
 use std::result::Result as StdResult;
 use std::{
     cmp::{min, Ordering},
@@ -44,10 +46,11 @@ use tracing::Instrument;
 use url::Url;
 
 use super::{
-    v0_3::StakeTables, L1BlockInfo, L1ClientMetrics, L1State, L1UpdateTask, MultiRpcClient,
-    MultiRpcClientStatus,
+    v0_1::{SingleTransport, SingleTransportStatus, SwitchingTransport},
+    v0_3::StakeTables,
+    L1BlockInfo, L1ClientMetrics, L1State, L1UpdateTask,
 };
-use crate::{FeeInfo, L1Client, L1ClientOptions, L1Event, L1Provider, L1Snapshot};
+use crate::{FeeInfo, L1Client, L1ClientOptions, L1Event, L1Snapshot};
 
 impl PartialOrd for L1BlockInfo {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
@@ -117,13 +120,17 @@ impl L1ClientOptions {
     }
 
     /// Instantiate an `L1Client` for a given list of provider `Url`s.
-    pub fn connect(self, urls: impl IntoIterator<Item = Url>) -> L1Client {
+    pub fn connect(self, urls: Vec<Url>) -> anyhow::Result<L1Client> {
         // Create a new RPC client with the given URLs
-        let rpc_client = RpcClient::new(MultiRpcClient::new(self, urls), false);
+        let rpc_client = RpcClient::new(
+            SwitchingTransport::new(self, urls)
+                .with_context(|| "failed to create switching transport")?,
+            false,
+        );
         // Create a new provider with that RPC client
         let provider = ProviderBuilder::new().on_client(rpc_client);
         // Create a new L1 client with the provider
-        L1Client::with_provider(provider)
+        Ok(L1Client::with_provider(provider))
     }
 
     fn rate_limit_delay(&self) -> Duration {
@@ -132,7 +139,16 @@ impl L1ClientOptions {
 }
 
 impl L1ClientMetrics {
-    fn new(metrics: &(impl Metrics + ?Sized)) -> Self {
+    fn new(metrics: &(impl Metrics + ?Sized), num_urls: usize) -> Self {
+        // Create a counter family for the failures per URL
+        let failures = metrics.counter_family("failed_requests".into(), vec!["provider".into()]);
+
+        // Create a counter for each URL
+        let mut failure_metrics = Vec::with_capacity(num_urls);
+        for url_index in 0..num_urls {
+            failure_metrics.push(failures.create(vec![url_index.to_string()]));
+        }
+
         Self {
             head: metrics.create_gauge("head".into(), None).into(),
             finalized: metrics.create_gauge("finalized".into(), None).into(),
@@ -140,69 +156,31 @@ impl L1ClientMetrics {
                 .create_counter("stream_reconnects".into(), None)
                 .into(),
             failovers: metrics.create_counter("failovers".into(), None).into(),
+            failures: Arc::new(failure_metrics),
         }
     }
 }
 
-impl L1Provider {
-    fn new(index: usize, url: Url, failures: &dyn CounterFamily) -> Self {
-        Self {
-            failures: Arc::new(failures.create(vec![index.to_string()])),
-            inner: Http::new(url),
-        }
-    }
-}
+impl SwitchingTransport {
+    /// Create a new `SwitchingTransport` with the given options and URLs
+    fn new(opt: L1ClientOptions, urls: Vec<Url>) -> anyhow::Result<Self> {
+        // Return early if there were no URLs provided
+        let Some(first_url) = urls.first().cloned() else {
+            return Err(anyhow::anyhow!("No valid URLs provided"));
+        };
 
-impl MultiRpcClient {
-    fn new(opt: L1ClientOptions, clients: impl IntoIterator<Item = Url>) -> Self {
-        // The type of messages in this channel is (), i.e. all messages are identical, and we only
-        // ever use it to await the next single failure (see `next_failover`). In other words, it
-        // functions as a oneshot broadcast channel, so a capacity of 1 is safe.
-        let (mut failover_send, failover_recv) = async_broadcast::broadcast(1);
-        failover_send.set_await_active(false);
-        failover_send.set_overflow(true);
+        // Create the metrics
+        let metrics = L1ClientMetrics::new(&**opt.metrics, urls.len());
 
-        let metrics = L1ClientMetrics::new(&**opt.metrics);
-        let failures = opt
-            .metrics
-            .counter_family("failed_requests".into(), vec!["provider".into()]);
+        // Create a new `SingleTransport` for the first URL
+        let first_transport = Arc::new(RwLock::new(SingleTransport::new(&first_url, 0)));
 
-        Self {
-            clients: Arc::new(
-                clients
-                    .into_iter()
-                    .enumerate()
-                    .map(|(i, url)| L1Provider::new(i, url, &*failures))
-                    .collect(),
-            ),
-            status: Default::default(),
-            failover_send,
-            failover_recv: failover_recv.deactivate(),
-            opt,
+        Ok(Self {
+            urls: Arc::new(urls),
+            current_transport: first_transport,
+            opt: Arc::new(opt),
             metrics,
-        }
-    }
-
-    fn failover(&self, time: Instant, status: &mut MultiRpcClientStatus) {
-        tracing::warn!(
-            ?status,
-            ?time,
-            frequent_failure_tolerance = ?self.opt.l1_frequent_failure_tolerance,
-            consecutive_failure_tolerance = ?self.opt.l1_consecutive_failure_tolerance,
-            current = status.client,
-            "L1 client failing over",
-        );
-        status.client += 1;
-        status.rate_limited_until = None;
-        status.last_failure = None;
-        status.consecutive_failures = 0;
-        self.metrics.failovers.add(1);
-        self.failover_send.try_broadcast(()).ok();
-    }
-
-    fn next_failover(&self) -> impl Future<Output = ()> {
-        let recv = self.failover_recv.activate_cloned();
-        recv.into_future().map(|_| ())
+        })
     }
 
     fn options(&self) -> &L1ClientOptions {
@@ -212,16 +190,80 @@ impl MultiRpcClient {
     fn metrics(&self) -> &L1ClientMetrics {
         &self.metrics
     }
+}
 
-    /// Get the current client we are supposed to use along with its index
-    fn get_current_client(&self) -> (L1Provider, usize) {
-        let client = &self.clients[self.status.read().client % self.clients.len()];
-        (client.clone(), self.status.read().client)
+impl SingleTransportStatus {
+    /// Create a new `SingleTransportStatus` at the given URL index
+    fn new(url_index: usize) -> Self {
+        Self {
+            url_index,
+            last_failure: None,
+            consecutive_failures: 0,
+            rate_limited_until: None,
+            switching: false,
+        }
+    }
+
+    /// Log a successful call to the inner transport
+    fn log_success(&mut self) {
+        self.consecutive_failures = 0;
+    }
+
+    /// Log a failure to call the inner transport. Returns whether or not the transport should be switched to the next URL
+    fn log_failure(&mut self, opt: &L1ClientOptions) -> bool {
+        // Increment the consecutive failures
+        self.consecutive_failures += 1;
+
+        // Check if we should switch to the next URL
+        let should_switch = self.should_switch(opt);
+
+        // Update the last failure time
+        self.last_failure = Some(Instant::now());
+
+        // Return whether or not we should switch
+        should_switch
+    }
+
+    /// Whether or not the transport should be switched to the next URL
+    fn should_switch(&mut self, opt: &L1ClientOptions) -> bool {
+        // If someone else already beat us to switching, return false
+        if self.switching {
+            return false;
+        }
+
+        // If we've reached the max number of consecutive failures, switch to the next URL
+        if self.consecutive_failures >= opt.l1_consecutive_failure_tolerance {
+            self.switching = true;
+            return true;
+        }
+
+        // If we've failed recently, switch to the next URL
+        let now = Instant::now();
+        if let Some(prev) = self.last_failure {
+            if now.saturating_duration_since(prev) < opt.l1_frequent_failure_tolerance {
+                self.switching = true;
+                return true;
+            }
+        }
+
+        false
     }
 }
 
+impl SingleTransport {
+    /// Create a new `SingleTransport` with the given URL
+    fn new(url: &Url, url_index: usize) -> Self {
+        Self {
+            client: Http::new(url.clone()),
+            status: Arc::new(RwLock::new(SingleTransportStatus::new(url_index))),
+        }
+    }
+}
+
+/// We need to implement this trait from `tower_service`. It is what `alloy_provider` expects
+/// from a transport
 #[async_trait]
-impl Service<RequestPacket> for MultiRpcClient {
+impl Service<RequestPacket> for SwitchingTransport {
     type Error = RpcError<TransportErrorKind>;
     type Response = ResponsePacket;
     type Future =
@@ -231,43 +273,47 @@ impl Service<RequestPacket> for MultiRpcClient {
         &mut self,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<StdResult<(), Self::Error>> {
-        // Just poll the inner client
-        (&self.get_current_client().0.inner).poll_ready(cx)
+        // Just poll the (current) inner client
+        self.current_transport.read().clone().client.poll_ready(cx)
     }
 
     fn call(&mut self, req: RequestPacket) -> Self::Future {
-        // Clone self for the future
+        // Clone ourselves
         let self_clone = self.clone();
 
-        // Pin and box the future
+        // Pin and box, which turns this into a future
         Box::pin(async move {
+            // Clone the current transport
+            let mut current_transport = self_clone.current_transport.read().clone();
+
             // If we've been rate limited, back off until the limit (hopefully) expires.
-            if let Some(t) = self_clone.status.read().rate_limited_until {
+            if let Some(t) = current_transport.status.read().rate_limited_until {
                 if t > Instant::now() {
                     // Return an error with a non-standard code to indicate client-side rate limit.
                     return Err(RpcError::Transport(TransportErrorKind::Custom(
                         "Rate limit exceeded".into(),
                     )));
+                } else {
+                    // Reset the rate limit if we are passed it so we don't check every time
+                    current_transport.status.write().rate_limited_until = None;
                 }
             }
 
-            // Get the current client
-            let (mut client, client_index) = self_clone.get_current_client().clone();
-
-            // Call the real client
-            match client.inner.call(req).await {
-                Ok(res) => Ok(res),
+            // Call the inner client, match on the result
+            match current_transport.client.call(req).await {
+                Ok(res) => {
+                    // If it's okay, log the success to the status
+                    current_transport.status.write().log_success();
+                    Ok(res)
+                }
                 Err(err) => {
-                    let t = Instant::now();
-                    tracing::warn!(?t, client_index, "L1 client error: {err:#}");
-                    client.failures.add(1);
-
-                    // Keep track of failures, failing over to the next client if necessary.
-                    let mut status = self_clone.status.write();
-                    if status.client != client_index {
-                        // Someone else has also gotten a failure, and the client has already been
-                        // failed over.
-                        return Err(err);
+                    // Increment the failure metric
+                    if let Some(f) = self_clone
+                        .metrics
+                        .failures
+                        .get(current_transport.status.read().url_index)
+                    {
+                        f.add(1);
                     }
 
                     // Treat rate limited errors specially; these should not cause failover, but instead
@@ -276,33 +322,37 @@ impl Service<RequestPacket> for MultiRpcClient {
                     if let RpcError::ErrorResp(e) = &err {
                         // 429 == Too Many Requests
                         if e.code == 429 {
-                            status.rate_limited_until = Some(t + self_clone.opt.rate_limit_delay());
+                            current_transport.status.write().rate_limited_until =
+                                Some(Instant::now() + self_clone.opt.rate_limit_delay());
                             return Err(err);
                         }
                     }
 
-                    if let Some(prev) = status.last_failure {
-                        if t - prev < self_clone.opt.l1_frequent_failure_tolerance {
-                            // We have failed twice inside the allowed window, so we should failover to
-                            // the next client.
-                            self_clone.failover(t, &mut status);
-                            return Err(err);
-                        }
-                    }
+                    // Log the error and indicate a failure
+                    tracing::warn!(?err, "L1 client error");
 
-                    status.consecutive_failures += 1;
-                    if status.consecutive_failures
-                        >= self_clone.opt.l1_consecutive_failure_tolerance
+                    // If the transport should switch, do so. We don't need to worry about
+                    // race conditions here, since it will only return true once.
+                    if current_transport
+                        .status
+                        .write()
+                        .log_failure(&self_clone.opt)
                     {
-                        // We have failed too many times in a row, albeit not rapidly enough to trigger
-                        // the frequent failure tolerance. Still, we now trigger a failover based on the
-                        // consecutive failures policy.
-                        self_clone.failover(t, &mut status);
-                        return Err(err);
+                        // Increment the failovers metric
+                        self_clone.metrics.failovers.add(1);
+
+                        // Calculate the next URL index
+                        let next_index =
+                            current_transport.status.read().url_index + 1 % self_clone.urls.len();
+                        let url = self_clone.urls[next_index].clone();
+
+                        // Create a new transport from the next URL and index
+                        let new_transport = SingleTransport::new(&url, next_index);
+
+                        // Switch to the next URL
+                        *self_clone.current_transport.write() = new_transport;
                     }
 
-                    // If we're not failing over, update the last failure time.
-                    status.last_failure = Some(t);
                     Err(err)
                 }
             }
@@ -311,7 +361,7 @@ impl Service<RequestPacket> for MultiRpcClient {
 }
 
 impl L1Client {
-    fn with_provider(provider: RootProvider<MultiRpcClient>) -> Self {
+    fn with_provider(provider: RootProvider<SwitchingTransport>) -> Self {
         let opt = provider.client().transport().options().clone();
 
         let (sender, mut receiver) = async_broadcast::broadcast(opt.l1_events_channel_capacity);
@@ -328,7 +378,7 @@ impl L1Client {
     }
 
     /// Construct a new L1 client with the default options.
-    pub fn new(url: Vec<Url>) -> Self {
+    pub fn new(url: Vec<Url>) -> anyhow::Result<Self> {
         L1ClientOptions::default().connect(url)
     }
 
@@ -384,10 +434,7 @@ impl L1Client {
                             ws.subscribe_blocks().await.map(|stream| stream.into_stream().boxed())
                         }
                         None => {
-                            let failover = rpc.client().transport().next_failover().map(|()| {
-                                tracing::warn!("aborting subscription stream due to provider failover");
-                            });
-                            rpc
+                           rpc
                             .watch_blocks()
                             .await
                             .map(|poller_builder| {
@@ -418,7 +465,6 @@ impl L1Client {
                                     }
                                 })
                             }
-                            .take_until(failover)
                             .boxed())
                         }
                     };
@@ -854,7 +900,7 @@ impl L1State {
 }
 
 async fn get_finalized_block(
-    rpc: &RootProvider<MultiRpcClient>,
+    rpc: &RootProvider<SwitchingTransport>,
 ) -> anyhow::Result<Option<L1BlockInfo>> {
     let Some(block) = rpc
         .get_block(BlockId::finalized(), BlockTransactionsKind::Hashes)
@@ -903,7 +949,8 @@ mod test {
             },
             ..Default::default()
         }
-        .connect([anvil.endpoint().parse().unwrap()]);
+        .connect(vec![anvil.endpoint().parse().unwrap()])
+        .expect("Failed to create L1 client");
 
         client.spawn_tasks().await;
         client
@@ -1245,7 +1292,8 @@ mod test {
         setup_test();
 
         let anvil = Anvil::new().spawn();
-        let l1_client = L1Client::new(vec![anvil.endpoint().parse().unwrap()]);
+        let l1_client = L1Client::new(vec![anvil.endpoint().parse().unwrap()])
+            .expect("Failed to create L1 client");
 
         // Create a local signer from the anvil keys
         let signer = LocalSigner::from_signing_key(anvil.keys()[0].clone().into());
@@ -1297,6 +1345,19 @@ mod test {
         test_reconnect_update_task_helper(false).await
     }
 
+    /// A helper function to get the index of the current provider in the failover list.
+    fn get_failover_index(provider: &L1Client) -> usize {
+        provider
+            .provider
+            .client()
+            .transport()
+            .current_transport
+            .read()
+            .status
+            .read()
+            .url_index
+    }
+
     async fn test_failover_update_task_helper(ws: bool) {
         setup_test();
 
@@ -1319,10 +1380,11 @@ mod test {
             },
             ..Default::default()
         }
-        .connect([
+        .connect(vec![
             "http://notarealurl:1234".parse().unwrap(),
             anvil.endpoint().parse().unwrap(),
-        ]);
+        ])
+        .expect("Failed to create L1 client");
 
         client.spawn_tasks().await;
 
@@ -1368,24 +1430,22 @@ mod test {
             ..Default::default()
         };
 
-        let provider = l1_options.connect([
-            "http://notarealurl:1234".parse().unwrap(),
-            anvil.endpoint().parse().unwrap(),
-        ]);
+        let provider = l1_options
+            .connect(vec![
+                "http://notarealurl:1234".parse().unwrap(),
+                anvil.endpoint().parse().unwrap(),
+            ])
+            .expect("Failed to create L1 client");
 
         // Make just enough failed requests not to trigger a failover.
         for _ in 0..2 {
-            let failover = provider.client().transport().next_failover();
             provider.get_block_number().await.unwrap_err();
-            assert!(failover.now_or_never().is_none());
-            assert_eq!(provider.client().transport().status.read().client, 0);
+            assert!(get_failover_index(&provider) == 0);
         }
 
         // The final request triggers failover.
-        let failover = provider.client().transport().next_failover();
         provider.get_block_number().await.unwrap_err();
-        assert!(failover.now_or_never().is_some());
-        assert_eq!(provider.client().transport().status.read().client, 1);
+        assert!(get_failover_index(&provider) == 1);
 
         // Now requests succeed.
         provider.get_block_number().await.unwrap();
@@ -1401,30 +1461,27 @@ mod test {
             l1_frequent_failure_tolerance: Duration::from_millis(100),
             ..Default::default()
         }
-        .connect([
+        .connect(vec![
             "http://notarealurl:1234".parse().unwrap(),
             anvil.endpoint().parse().unwrap(),
-        ]);
+        ])
+        .expect("Failed to create L1 client");
 
         // Two failed requests that are not within the tolerance window do not trigger a failover.
-        let failover = provider.client().transport().next_failover();
         provider.get_block_number().await.unwrap_err();
         sleep(Duration::from_secs(1)).await;
         provider.get_block_number().await.unwrap_err();
 
         // Check that we didn't fail over.
-        assert!(failover.now_or_never().is_none());
-        assert_eq!(provider.client().transport().status.read().client, 0);
+        assert!(get_failover_index(&provider) == 0);
 
         // Reset the window.
         sleep(Duration::from_secs(1)).await;
 
         // Two failed requests in a row trigger failover.
-        let failover = provider.client().transport().next_failover();
         provider.get_block_number().await.unwrap_err();
         provider.get_block_number().await.unwrap_err();
         provider.get_block_number().await.unwrap();
-        assert!(failover.now_or_never().is_some());
-        assert_eq!(provider.client().transport().status.read().client, 1);
+        assert!(get_failover_index(&provider) == 1);
     }
 }

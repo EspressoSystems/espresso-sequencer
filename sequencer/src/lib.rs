@@ -437,7 +437,9 @@ pub async fn init_node<P: SequencerPersistence, V: Versions>(
     let l1_client = l1_params
         .options
         .with_metrics(metrics)
-        .connect(l1_params.urls);
+        .connect(l1_params.urls)
+        .with_context(|| "failed to create L1 client")?;
+
     l1_client.spawn_tasks().await;
     let l1_genesis = match genesis.l1_finalized {
         L1Finalized::Block(b) => b,
@@ -963,7 +965,7 @@ pub mod testing {
             let node_state = NodeState::new(
                 i as u64,
                 state.chain_config.resolve().unwrap_or_default(),
-                L1Client::new(vec![self.l1_url.clone()]),
+                L1Client::new(vec![self.l1_url.clone()]).expect("failed to create L1 client"),
                 catchup::local_and_remote(persistence.clone(), catchup).await,
                 V::Base::VERSION,
             )

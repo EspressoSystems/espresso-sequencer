@@ -310,7 +310,8 @@ impl Membership<SeqTypes> for EpochCommittees {
         Self {
             state: map,
             _epoch_size: 12,
-            l1_client: L1Client::new(vec![Url::from_str("http:://ab.b").unwrap()]),
+            l1_client: L1Client::new(vec![Url::from_str("http:://ab.b").unwrap()])
+                .expect("Failed to create L1 client"),
             contract_address: None,
         }
     }

@@ -84,7 +84,7 @@ impl Genesis {
 
 impl Genesis {
     pub async fn validate_fee_contract(&self, l1_rpc_url: Url) -> anyhow::Result<()> {
-        let l1 = L1Client::new(vec![l1_rpc_url]);
+        let l1 = L1Client::new(vec![l1_rpc_url]).with_context(|| "failed to create L1 client")?;
 
         if let Some(fee_contract_address) = self.chain_config.fee_contract {
             tracing::info!("validating fee contract at {fee_contract_address:x}");

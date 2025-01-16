@@ -147,9 +147,9 @@ pub struct L1ClientOptions {
 /// easy to use a subscription instead of polling for new blocks, vastly reducing the number of L1
 /// RPC calls we make.
 pub struct L1Client {
-    /// A `RootProvider` from `alloy` which wraps our custom `MultiRpcClient`
+    /// A `RootProvider` from `alloy` which uses our custom `SwitchingTransport`
     #[deref]
-    pub provider: RootProvider<MultiRpcClient>,
+    pub provider: RootProvider<SwitchingTransport>,
     /// Shared state updated by an asynchronous task which polls the L1.
     pub(crate) state: Arc<Mutex<L1State>>,
     /// Channel used by the async update task to send events to clients.
@@ -182,35 +182,37 @@ pub(crate) struct L1ClientMetrics {
     pub(crate) finalized: Arc<dyn Gauge>,
     pub(crate) reconnects: Arc<dyn Counter>,
     pub(crate) failovers: Arc<dyn Counter>,
+    pub(crate) failures: Arc<Vec<Box<dyn Counter>>>,
 }
 
-/// An RPC client with multiple remote providers.
+/// An RPC client with multiple remote (HTTP) providers.
 ///
 /// This client utilizes one RPC provider at a time, but if it detects that the provider is in a
 /// failing state, it will automatically switch to the next provider in its list.
 #[derive(Clone, Debug)]
-pub struct MultiRpcClient {
-    pub(crate) clients: Arc<Vec<L1Provider>>,
-    pub(crate) status: Arc<RwLock<MultiRpcClientStatus>>,
-    pub(crate) failover_send: Sender<()>,
-    pub(crate) failover_recv: InactiveReceiver<()>,
-    pub(crate) opt: L1ClientOptions,
+pub struct SwitchingTransport {
+    /// The transport currently being used by the client
+    pub(crate) current_transport: Arc<RwLock<SingleTransport>>,
+    /// The list of configured HTTP URLs to use for RPC requests
+    pub(crate) urls: Arc<Vec<Url>>,
+    pub(crate) opt: Arc<L1ClientOptions>,
     pub(crate) metrics: L1ClientMetrics,
 }
 
-/// The state of the current provider being used by a [`MultiRpcClient`].
-#[derive(Debug, Default)]
-pub(crate) struct MultiRpcClientStatus {
-    pub(crate) client: usize,
+/// The state of the current provider being used by a [`SwitchingTransport`].
+/// This is cloneable and returns a reference to the same underlying data.
+#[derive(Debug, Clone)]
+pub(crate) struct SingleTransport {
+    pub(crate) client: Http<Client>,
+    pub(crate) status: Arc<RwLock<SingleTransportStatus>>,
+}
+
+/// The status of a single transport
+#[derive(Debug)]
+pub(crate) struct SingleTransportStatus {
+    pub(crate) url_index: usize,
     pub(crate) last_failure: Option<Instant>,
     pub(crate) consecutive_failures: usize,
     pub(crate) rate_limited_until: Option<Instant>,
-}
-
-/// A single provider in a [`MultiRpcClient`].
-#[derive(Debug, Deref, Clone)]
-pub(crate) struct L1Provider {
-    #[deref]
-    pub(crate) inner: Http<Client>,
-    pub(crate) failures: Arc<Box<dyn Counter>>,
+    pub(crate) switching: bool,
 }
