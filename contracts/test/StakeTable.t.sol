@@ -673,4 +673,76 @@ contract StakeTable_register_Test is Test {
         );
         assertTrue(EdOnBN254.isEqual(node.schnorrVK, EdOnBN254.EdOnBN254Point(0, 0)));
     }
+
+    function test_WithdrawFunds_succeeds() public {
+        // Register the node and set exit epoch
+        uint64 depositAmount = 10 ether;
+        uint64 validUntilEpoch = 5;
+        string memory seed = "123";
+
+        (
+            BN254.G2Point memory blsVK,
+            EdOnBN254.EdOnBN254Point memory schnorrVK,
+            BN254.G1Point memory sig
+        ) = genClientWallet(exampleTokenCreator, seed);
+
+        // Prepare for the token transfer by granting allowance to the contract
+        vm.startPrank(exampleTokenCreator);
+        token.approve(address(stakeTable), depositAmount);
+
+        // Balances before registration
+        assertEq(token.balanceOf(exampleTokenCreator), INITIAL_BALANCE);
+
+        // register the node
+        vm.expectEmit(false, false, false, true, address(stakeTable));
+        emit AbstractStakeTable.Registered(exampleTokenCreator, 1, depositAmount);
+        stakeTable.register(blsVK, schnorrVK, depositAmount, sig, validUntilEpoch);
+
+        // Withdraw the funds
+        uint256 balance = stakeTable.withdrawFunds();
+
+        // verify the withdraw
+        assertEq(balance, depositAmount);
+        assertEq(token.balanceOf(exampleTokenCreator), INITIAL_BALANCE);
+        assertEq(stakeTable.totalStake(), 0);
+        assertEq(stakeTable.lookupNode(exampleTokenCreator).balance, 0);
+        assertEq(stakeTable.lookupNode(exampleTokenCreator).account, address(0));
+
+        // test withdraw fails if the user tries to withdraw again
+        vm.expectRevert(S.NodeNotRegistered.selector);
+        stakeTable.withdrawFunds();
+
+        vm.stopPrank();
+    }
+
+    function test_WithdrawFunds_RevertWhen_NodeNotRegistered() public {
+        // Register the node and set exit epoch
+        uint64 depositAmount = 10 ether;
+        uint64 validUntilEpoch = 5;
+        string memory seed = "123";
+
+        // generate a new blsVK and schnorrVK and register this node
+        (
+            BN254.G2Point memory blsVK,
+            EdOnBN254.EdOnBN254Point memory schnorrVK,
+            BN254.G1Point memory sig
+        ) = genClientWallet(exampleTokenCreator, seed);
+
+        // Prepare for the token transfer by granting allowance to the contract
+        vm.startPrank(exampleTokenCreator);
+        token.approve(address(stakeTable), depositAmount);
+
+        // register the node
+        vm.expectEmit(false, false, false, true, address(stakeTable));
+        emit AbstractStakeTable.Registered(exampleTokenCreator, 1, depositAmount);
+        stakeTable.register(blsVK, schnorrVK, depositAmount, sig, validUntilEpoch);
+
+        vm.stopPrank();
+
+        vm.startPrank(makeAddr("randomUser"));
+        // withdraw the funds
+        vm.expectRevert(S.NodeNotRegistered.selector);
+        stakeTable.withdrawFunds();
+        vm.stopPrank();
+    }
 }
