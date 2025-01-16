@@ -211,7 +211,11 @@ mod test {
         }
         .to_string();
 
-        let toml_st: PermissionedStakeTableConfig = toml::from_str(&toml).unwrap();
+        let tmpdir = tempfile::tempdir().unwrap();
+        let toml_path = tmpdir.path().join("stake_table.toml");
+        std::fs::write(&toml_path, toml).unwrap();
+
+        let toml_st = PermissionedStakeTableConfig::from_toml_file(&toml_path).unwrap();
 
         assert_eq!(toml_st.public_keys.len(), 3);
 
@@ -254,7 +258,10 @@ mod test {
         }
         .to_string();
 
-        let update: PermissionedStakeTableUpdate = toml::from_str(&toml).unwrap();
+        let tmpdir = tempfile::tempdir().unwrap();
+        let toml_path = tmpdir.path().join("stake_table_update.toml");
+        std::fs::write(&toml_path, toml).unwrap();
+        let update = PermissionedStakeTableUpdate::from_toml_file(&toml_path).unwrap();
 
         assert_eq!(update.stakers_to_remove.len(), 1);
         assert_eq!(update.stakers_to_remove[0], keys[0].stake_table_key.into());
