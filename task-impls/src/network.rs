@@ -17,7 +17,7 @@ use hotshot_task::task::TaskState;
 use hotshot_types::{
     consensus::OuterConsensus,
     data::{VidDisperse, VidDisperseShare, VidDisperseShare2},
-    event::{Event, EventType, HotShotAction},
+    event::{Event, HotShotAction},
     message::{
         convert_proposal, DaConsensusMessage, DataMessage, GeneralConsensusMessage, Message,
         MessageKind, Proposal, SequencingMessage, UpgradeLock,
@@ -226,22 +226,6 @@ impl<TYPES: NodeType> NetworkMessageTaskState<TYPES> {
                     }
                 }
             },
-
-            // Handle external messages
-            MessageKind::External(data) => {
-                if sender == self.public_key {
-                    return;
-                }
-                // Send the external message to the external event stream so it can be processed
-                broadcast_event(
-                    Event {
-                        view_number: TYPES::View::new(1),
-                        event: EventType::ExternalMessageReceived { sender, data },
-                    },
-                    &self.external_event_stream,
-                )
-                .await;
-            }
         }
     }
 }

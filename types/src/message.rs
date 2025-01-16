@@ -123,8 +123,6 @@ pub enum MessageKind<TYPES: NodeType> {
     Consensus(SequencingMessage<TYPES>),
     /// Messages relating to sharing data between nodes
     Data(DataMessage<TYPES>),
-    /// A (still serialized) message to be passed through to external listeners
-    External(Vec<u8>),
 }
 
 /// List of keys to send a message to, or broadcast to all known keys
@@ -162,7 +160,6 @@ impl<TYPES: NodeType> ViewMessage<TYPES> for MessageKind<TYPES> {
                 ResponseMessage::Found(m) => m.view_number(),
                 ResponseMessage::NotFound | ResponseMessage::Denied => TYPES::View::new(1),
             },
-            MessageKind::External(_) => TYPES::View::new(1),
         }
     }
 }
