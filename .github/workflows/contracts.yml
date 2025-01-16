@@ -62,8 +62,8 @@ jobs:
       - name: Build all contracts
         run: nix develop --accept-flake-config -c forge build
 
-      - name: Check if bindings up to date
-        run: nix develop --accept-flake-config -c pre-commit run contract-bindings --all-files --show-diff-on-failure
+      - name: Check if ethers bindings are up to date
+        run: nix develop --accept-flake-config -c pre-commit run contract-bindings-ethers --all-files --show-diff-on-failure
 
       - name: Print changes to bindings
         if: ${{ failure() }}
