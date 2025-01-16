@@ -15,7 +15,10 @@ use std::{
     sync::Arc,
     time::{Duration, Instant},
 };
-use tokio::{sync::Mutex, task::JoinHandle};
+use tokio::{
+    sync::{Mutex, Notify},
+    task::JoinHandle,
+};
 use url::Url;
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, Hash, PartialEq, Eq)]
@@ -197,6 +200,7 @@ pub struct SwitchingTransport {
     pub(crate) urls: Arc<Vec<Url>>,
     pub(crate) opt: Arc<L1ClientOptions>,
     pub(crate) metrics: L1ClientMetrics,
+    pub(crate) switch_notify: Arc<Notify>,
 }
 
 /// The state of the current provider being used by a [`SwitchingTransport`].

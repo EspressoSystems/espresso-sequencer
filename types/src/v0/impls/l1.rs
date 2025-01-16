@@ -38,7 +38,7 @@ use std::{
 };
 use tokio::{
     spawn,
-    sync::{Mutex, MutexGuard},
+    sync::{Mutex, MutexGuard, Notify},
     time::{sleep, Duration},
 };
 use tower_service::Service;
@@ -180,7 +180,13 @@ impl SwitchingTransport {
             current_transport: first_transport,
             opt: Arc::new(opt),
             metrics,
+            switch_notify: Arc::new(Notify::new()),
         })
+    }
+
+    /// Returns when the transport has been switched
+    async fn wait_switch(&self) {
+        self.switch_notify.notified().await;
     }
 
     fn options(&self) -> &L1ClientOptions {
@@ -351,6 +357,9 @@ impl Service<RequestPacket> for SwitchingTransport {
 
                         // Switch to the next URL
                         *self_clone.current_transport.write() = new_transport;
+
+                        // Notify the transport that it has been switched
+                        self_clone.switch_notify.notify_waiters();
                     }
 
                     Err(err)
@@ -409,6 +418,7 @@ impl L1Client {
         let state = self.state.clone();
         let sender = self.sender.clone();
         let metrics = self.metrics().clone();
+        let polling_interval = opt.l1_polling_interval;
 
         let span = tracing::warn_span!("L1 client update");
         async move {
@@ -426,7 +436,7 @@ impl L1Client {
                             ws = match ProviderBuilder::new().on_ws(WsConnect::new(url.clone())).await {
                                 Ok(ws) => ws,
                                 Err(err) => {
-                                    tracing::warn!(provider, "failed to connect WebSockets provider: {err:#}");
+                                    tracing::warn!(provider, "Failed to connect WebSockets provider: {err:#}");
                                     sleep(retry_delay).await;
                                     continue;
                                 }
@@ -438,8 +448,8 @@ impl L1Client {
                             .watch_blocks()
                             .await
                             .map(|poller_builder| {
-                                // Convert the poller builder into a stream
-                                let stream = poller_builder.into_stream();
+                                // Configure it and get the stream
+                                let stream = poller_builder.with_poll_interval(polling_interval).into_stream();
 
                                 let rpc = rpc.clone();
 
@@ -458,27 +468,28 @@ impl L1Client {
                                                 None
                                             }
                                             Err(err) => {
-                                                tracing::warn!(%hash, "error fetching block from HTTP stream: {err:#}");
+                                                tracing::warn!(%hash, "Error fetching block from HTTP stream: {err:#}");
                                                 None
                                             }
                                         }
                                     }
                                 })
-                            }
+                                // Take until the transport is switched, so we will call `watch_blocks` instantly on it
+                            }.take_until(rpc.client().transport().wait_switch())
                             .boxed())
                         }
                     };
                     match res {
                         Ok(stream) => stream,
                         Err(err) => {
-                            tracing::error!("error subscribing to L1 blocks: {err:#}");
+                            tracing::error!("Error subscribing to L1 blocks: {err:#}");
                             sleep(retry_delay).await;
                             continue;
                         }
                     }
                 };
 
-                tracing::info!("established L1 block stream");
+                tracing::info!("Established L1 block stream");
                 loop {
                     // Wait for a block, timing out if we don't get one soon enough
                     let block_timeout = tokio::time::timeout(subscription_timeout, block_stream.next()).await;
@@ -486,7 +497,7 @@ impl L1Client {
                         // We got a block
                         Ok(Some(head)) => {
                             let head = head.number;
-                            tracing::debug!(head, "received L1 block");
+                            tracing::debug!(head, "Received L1 block");
 
                             // A new block has been produced. This happens fairly rarely, so it is now ok to
                             // poll to see if a new block has been finalized.
@@ -494,7 +505,7 @@ impl L1Client {
                                 match get_finalized_block(&rpc).await {
                                     Ok(finalized) => break finalized,
                                     Err(err) => {
-                                        tracing::warn!("error getting finalized block: {err:#}");
+                                        tracing::warn!("Error getting finalized block: {err:#}");
                                         sleep(retry_delay).await;
                                     }
                                 }
@@ -530,7 +541,7 @@ impl L1Client {
                                         .ok();
                                 }
                             }
-                            tracing::debug!("updated L1 snapshot to {:?}", state.snapshot);
+                            tracing::debug!("Updated L1 snapshot to {:?}", state.snapshot);
                         }
                         // The stream ended
                         Ok(None) => {
@@ -539,7 +550,7 @@ impl L1Client {
                         }
                         // We timed out waiting for a block
                         Err(_) => {
-                            tracing::error!("No block received for 60 seconds, trying to re-establish block stream");
+                            tracing::error!("No block received for {} seconds, trying to re-establish block stream", subscription_timeout.as_secs());
                             break;
                         }
                     }
@@ -572,7 +583,7 @@ impl L1Client {
                 if state.snapshot.head >= number {
                     return;
                 }
-                tracing::info!(number, head = state.snapshot.head, "waiting for l1 block");
+                tracing::info!(number, head = state.snapshot.head, "Waiting for l1 block");
             }
 
             // Wait for the block.
@@ -581,10 +592,10 @@ impl L1Client {
                     continue;
                 };
                 if head >= number {
-                    tracing::info!(number, head, "got L1 block");
+                    tracing::info!(number, head, "Got L1 block");
                     return;
                 }
-                tracing::debug!(number, head, "waiting for L1 block");
+                tracing::debug!(number, head, "Waiting for L1 block");
             }
 
             // This should not happen: the event stream ended. All we can do is try again.
@@ -925,9 +936,13 @@ async fn get_finalized_block(
 mod test {
     use std::ops::Add;
 
-    use alloy::{network::EthereumWallet, signers::local::LocalSigner};
-    use contract_bindings_alloy::permissionedstaketable::PermissionedStakeTable::NodeInfo;
-    use ethers::utils::{Anvil, AnvilInstance};
+    use ethers::{
+        middleware::SignerMiddleware,
+        providers::Middleware,
+        signers::LocalWallet,
+        types::{H160, U64},
+        utils::{parse_ether, Anvil, AnvilInstance},
+    };
     use ethers_conv::ToAlloy;
     use hotshot_contract_adapter::stake_table::NodeInfoJf;
     use portpicker::pick_unused_port;
@@ -958,6 +973,8 @@ mod test {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_get_finalized_deposits() -> anyhow::Result<()> {
+        use ethers::signers::Signer;
+
         setup_test();
 
         // how many deposits will we make
@@ -967,56 +984,68 @@ mod test {
         let anvil = Anvil::new().spawn();
         let wallet_address = anvil.addresses().first().cloned().unwrap();
         let l1_client = new_l1_client(&anvil, false).await;
+        let wallet: LocalWallet = anvil.keys()[0].clone().into();
 
-        // Create a local signer from the anvil keys
-        let signer = LocalSigner::from_signing_key(anvil.keys()[0].clone().into());
-
-        // Create an Ethereum wallet from the signer
-        let wallet = EthereumWallet::new(signer);
-
-        // Create a provider that includes the wallet
-        let deployer_provider = ProviderBuilder::new()
-            .wallet(wallet)
-            .on_http(Url::parse(&anvil.endpoint())?);
+        // In order to deposit we need a provider that can sign.
+        let provider =
+            ethers::providers::Provider::<ethers::providers::Http>::try_from(anvil.endpoint())?
+                .interval(Duration::from_millis(10u64));
+        let client =
+            SignerMiddleware::new(provider.clone(), wallet.with_chain_id(anvil.chain_id()));
+        let client = Arc::new(client);
 
         // Initialize a contract with some deposits
+
         // deploy the fee contract
-        let fee_contract =
-            contract_bindings_alloy::feecontract::FeeContract::deploy(&deployer_provider)
-                .await
-                .unwrap();
+        let fee_contract = contract_bindings_ethers::fee_contract::FeeContract::deploy(
+            Arc::new(client.clone()),
+            (),
+        )
+        .unwrap()
+        .send()
+        .await?;
 
         // prepare the initialization data to be sent with the proxy when the proxy is deployed
-        let initialize_data = fee_contract.initialize(wallet_address.to_alloy()); // Here, you simulate the call to get the transaction data without actually sending it.
+        let initialize_data = fee_contract
+            .initialize(wallet_address) // Here, you simulate the call to get the transaction data without actually sending it.
+            .calldata()
+            .expect("Failed to encode initialization data");
 
         // deploy the proxy contract and set the implementation address as the address of the fee contract and send the initialization data
-        let proxy_contract = contract_bindings_alloy::erc1967proxy::ERC1967Proxy::deploy(
-            &deployer_provider,
-            *fee_contract.address(),
-            initialize_data.calldata().clone(),
+        let proxy_contract = contract_bindings_ethers::erc1967_proxy::ERC1967Proxy::deploy(
+            client.clone(),
+            (fee_contract.address(), initialize_data),
         )
-        .await
-        .unwrap();
+        .unwrap()
+        .send()
+        .await?;
 
         // cast the proxy to be of type fee contract so that we can interact with the implementation methods via the proxy
-        let fee_contract_proxy =
-            FeeContractInstance::new(*proxy_contract.address(), l1_client.provider.clone());
+        let fee_contract_proxy = contract_bindings_ethers::fee_contract::FeeContract::new(
+            proxy_contract.address(),
+            client.clone(),
+        );
 
         // confirm that the owner of the contract is the address that was sent as part of the initialization data
-        let fee_contract_proxy_owner = fee_contract_proxy.owner().call().await.unwrap()._0;
-        assert_eq!(fee_contract_proxy_owner, wallet_address.to_alloy());
+        let owner = fee_contract_proxy.owner().await;
+        assert_eq!(owner.unwrap(), wallet_address.clone());
 
         // confirm that the implementation address is the address of the fee contract deployed above
         // using the implementation slot, 0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc, which is the keccak-256 hash of "eip1967.proxy.implementation" subtracted by 1
         let hex_bytes =
             hex::decode("360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc")
                 .expect("Failed to decode hex string");
-        let implementation_slot = B256::from_slice(&hex_bytes);
-        let storage = l1_client
-            .get_storage_at(*fee_contract_proxy.address(), implementation_slot.into())
+        let implementation_slot = ethers::types::H256::from_slice(&hex_bytes);
+        let storage = provider
+            .clone()
+            .get_storage_at(
+                fee_contract_proxy.clone().address(),
+                implementation_slot,
+                None,
+            )
             .await?;
-        let implementation_address = Address::from_slice(&storage.to_be_bytes::<32>()[12..]);
-        assert_eq!(*fee_contract.address(), implementation_address);
+        let implementation_address = H160::from_slice(&storage[12..]);
+        assert_eq!(fee_contract.clone().address(), implementation_address);
 
         // Anvil will produce a bock for every transaction.
         let head = l1_client.provider.get_block_number().await.unwrap();
@@ -1028,14 +1057,14 @@ mod test {
             // Varied amounts are less boring.
             let amount = n as f32 / 10.0;
             let receipt = fee_contract_proxy
-                .deposit(wallet_address.to_alloy())
-                .value(U256::from(amount))
+                .deposit(wallet_address)
+                .value(parse_ether(amount).unwrap())
                 .send()
                 .await?
-                .get_receipt()
                 .await?;
 
-            assert!(receipt.status());
+            // Successful transactions have `status` of `1`.
+            assert_eq!(Some(U64::from(1)), receipt.clone().unwrap().status);
         }
 
         let head = l1_client.provider.get_block_number().await.unwrap();
@@ -1049,7 +1078,7 @@ mod test {
         // block did not deposit).
         let pending = l1_client
             .get_finalized_deposits(
-                *fee_contract_proxy.address(),
+                fee_contract_proxy.address().to_alloy(),
                 None,
                 deposits + deploy_txn_count,
             )
@@ -1066,7 +1095,7 @@ mod test {
         // check a few more cases
         let pending = l1_client
             .get_finalized_deposits(
-                *fee_contract_proxy.address(),
+                fee_contract_proxy.address().to_alloy(),
                 Some(0),
                 deposits + deploy_txn_count,
             )
@@ -1074,18 +1103,18 @@ mod test {
         assert_eq!(deposits as usize, pending.len());
 
         let pending = l1_client
-            .get_finalized_deposits(*fee_contract_proxy.address(), Some(0), 0)
+            .get_finalized_deposits(fee_contract_proxy.address().to_alloy(), Some(0), 0)
             .await;
         assert_eq!(0, pending.len());
 
         let pending = l1_client
-            .get_finalized_deposits(*fee_contract_proxy.address(), Some(0), 1)
+            .get_finalized_deposits(fee_contract_proxy.address().to_alloy(), Some(0), 1)
             .await;
         assert_eq!(0, pending.len());
 
         let pending = l1_client
             .get_finalized_deposits(
-                *fee_contract_proxy.address(),
+                fee_contract_proxy.address().to_alloy(),
                 Some(deploy_txn_count),
                 deploy_txn_count,
             )
@@ -1094,7 +1123,7 @@ mod test {
 
         let pending = l1_client
             .get_finalized_deposits(
-                *fee_contract_proxy.address(),
+                fee_contract_proxy.address().to_alloy(),
                 Some(deploy_txn_count),
                 deploy_txn_count + 1,
             )
@@ -1103,7 +1132,11 @@ mod test {
 
         // what happens if `new_finalized` is `0`?
         let pending = l1_client
-            .get_finalized_deposits(*fee_contract_proxy.address(), Some(deploy_txn_count), 0)
+            .get_finalized_deposits(
+                fee_contract_proxy.address().to_alloy(),
+                Some(deploy_txn_count),
+                0,
+            )
             .await;
         assert_eq!(0, pending.len());
 
@@ -1289,44 +1322,51 @@ mod test {
 
     #[tokio::test]
     async fn test_fetch_stake_table() -> anyhow::Result<()> {
+        use ethers::signers::Signer;
         setup_test();
 
         let anvil = Anvil::new().spawn();
         let l1_client = L1Client::new(vec![anvil.endpoint().parse().unwrap()])
             .expect("Failed to create L1 client");
+        let wallet: LocalWallet = anvil.keys()[0].clone().into();
 
-        // Create a local signer from the anvil keys
-        let signer = LocalSigner::from_signing_key(anvil.keys()[0].clone().into());
+        // In order to deposit we need a provider that can sign.
+        let deployer_provider =
+            ethers::providers::Provider::<ethers::providers::Http>::try_from(anvil.endpoint())?
+                .interval(Duration::from_millis(10u64));
+        let deployer_client = SignerMiddleware::new(
+            deployer_provider.clone(),
+            wallet.with_chain_id(anvil.chain_id()),
+        );
+        let deployer_client = Arc::new(deployer_client);
 
-        // Create an Ethereum wallet from the signer
-        let wallet = EthereumWallet::new(signer);
-
-        // Create a provider that includes the wallet
-        let deployer_provider = ProviderBuilder::new()
-            .wallet(wallet)
-            .on_http(Url::parse(&anvil.endpoint())?);
-
-        let v: Vec<NodeInfo> = Vec::new();
+        let v: Vec<contract_bindings_ethers::permissioned_stake_table::NodeInfo> = Vec::new();
         // deploy the stake_table contract
         let stake_table_contract =
-            PermissionedStakeTableInstance::deploy(deployer_provider.clone(), v.clone()).await?;
+            contract_bindings_ethers::permissioned_stake_table::PermissionedStakeTable::deploy(
+                deployer_client.clone(),
+                v.clone(),
+            )
+            .unwrap()
+            .send()
+            .await?;
 
         let address = stake_table_contract.address();
 
         let mut rng = rand::thread_rng();
         let node = NodeInfoJf::random(&mut rng);
 
-        let new_nodes: Vec<NodeInfo> = vec![node.into()];
+        let new_nodes: Vec<contract_bindings_ethers::permissioned_stake_table::NodeInfo> =
+            vec![node.into()];
         let updater = stake_table_contract.update(v, new_nodes);
-        let receipt = updater.send().await?.get_receipt().await?;
-        assert!(receipt.status());
+        updater.send().await?.await?;
 
         let block = l1_client
             .get_block(BlockId::latest(), BlockTransactionsKind::Hashes)
             .await?
             .unwrap();
         let nodes = l1_client
-            .get_stake_table(*address, block.header.inner.number)
+            .get_stake_table(address.to_alloy(), block.header.inner.number)
             .await
             .unwrap();
 
