@@ -23,8 +23,8 @@ use hotshot_example_types::{
 };
 use hotshot_types::{
     data::{
-        DaProposal2, EpochNumber, Leaf2, QuorumProposal2, VidDisperse, VidDisperseShare2,
-        ViewChangeEvidence2, ViewNumber,
+        DaProposal2, EpochNumber, Leaf2, QuorumProposal2, QuorumProposalWrapper, VidDisperse,
+        VidDisperseShare2, ViewChangeEvidence2, ViewNumber,
     },
     message::{Proposal, UpgradeLock},
     simple_certificate::{
@@ -37,12 +37,13 @@ use hotshot_types::{
     },
     traits::{
         consensus_api::ConsensusApi,
-        node_implementation::{ConsensusTime, NodeType},
+        node_implementation::{ConsensusTime, NodeType, Versions},
         BlockPayload,
     },
 };
 use rand::{thread_rng, Rng};
 use sha2::{Digest, Sha256};
+use vbs::version::StaticVersionType;
 
 use crate::helpers::{
     build_cert, build_da_certificate, build_vid_proposal, da_payload_commitment, key_pair_for_id,
@@ -51,10 +52,10 @@ use crate::helpers::{
 #[derive(Clone)]
 pub struct TestView {
     pub da_proposal: Proposal<TestTypes, DaProposal2<TestTypes>>,
-    pub quorum_proposal: Proposal<TestTypes, QuorumProposal2<TestTypes>>,
+    pub quorum_proposal: Proposal<TestTypes, QuorumProposalWrapper<TestTypes>>,
     pub leaf: Leaf2<TestTypes>,
     pub view_number: ViewNumber,
-    pub epoch_number: EpochNumber,
+    pub epoch_number: Option<EpochNumber>,
     pub membership: Arc<RwLock<<TestTypes as NodeType>::Membership>>,
     pub vid_disperse: Proposal<TestTypes, VidDisperse<TestTypes>>,
     pub vid_proposal: (
@@ -72,9 +73,11 @@ pub struct TestView {
 }
 
 impl TestView {
-    pub async fn genesis(membership: &Arc<RwLock<<TestTypes as NodeType>::Membership>>) -> Self {
+    pub async fn genesis<V: Versions>(
+        membership: &Arc<RwLock<<TestTypes as NodeType>::Membership>>,
+    ) -> Self {
         let genesis_view = ViewNumber::new(1);
-        let genesis_epoch = EpochNumber::new(0);
+        let genesis_epoch = None;
         let upgrade_lock = UpgradeLock::new();
 
         let transactions = Vec::new();
@@ -122,7 +125,7 @@ impl TestView {
         .await;
 
         let block_header = TestBlockHeader::new(
-            &Leaf2::<TestTypes>::genesis(
+            &Leaf2::<TestTypes>::genesis::<V>(
                 &TestValidatedState::default(),
                 &TestInstanceState::default(),
             )
@@ -132,18 +135,22 @@ impl TestView {
             metadata,
         );
 
-        let quorum_proposal_inner = QuorumProposal2::<TestTypes> {
-            block_header: block_header.clone(),
-            view_number: genesis_view,
-            justify_qc: QuorumCertificate2::genesis::<TestVersions>(
-                &TestValidatedState::default(),
-                &TestInstanceState::default(),
-            )
-            .await,
-            next_epoch_justify_qc: None,
-            upgrade_certificate: None,
-            view_change_evidence: None,
-            next_drb_result: None,
+        let quorum_proposal_inner = QuorumProposalWrapper::<TestTypes> {
+            proposal: QuorumProposal2::<TestTypes> {
+                block_header: block_header.clone(),
+                view_number: genesis_view,
+                justify_qc: QuorumCertificate2::genesis::<TestVersions>(
+                    &TestValidatedState::default(),
+                    &TestInstanceState::default(),
+                )
+                .await,
+                next_epoch_justify_qc: None,
+                upgrade_certificate: None,
+                view_change_evidence: None,
+                next_drb_result: None,
+            },
+            // #3967 REVIEW NOTE: Is this right?
+            with_epoch: V::Base::VERSION >= V::Epochs::VERSION,
         };
 
         let encoded_transactions = Arc::from(TestTransaction::encode(&transactions));
@@ -368,14 +375,18 @@ impl TestView {
             random,
         };
 
-        let proposal = QuorumProposal2::<TestTypes> {
-            block_header: block_header.clone(),
-            view_number: next_view,
-            justify_qc: quorum_certificate.clone(),
-            next_epoch_justify_qc: None,
-            upgrade_certificate: upgrade_certificate.clone(),
-            view_change_evidence,
-            next_drb_result: None,
+        let proposal = QuorumProposalWrapper::<TestTypes> {
+            proposal: QuorumProposal2::<TestTypes> {
+                block_header: block_header.clone(),
+                view_number: next_view,
+                justify_qc: quorum_certificate.clone(),
+                next_epoch_justify_qc: None,
+                upgrade_certificate: upgrade_certificate.clone(),
+                view_change_evidence,
+                next_drb_result: None,
+            },
+            // #3967 REVIEW NOTE: Is this right?
+            with_epoch: self.upgrade_lock.epochs_enabled(next_view).await,
         };
 
         let mut leaf = Leaf2::from_quorum_proposal(&proposal);
@@ -492,16 +503,18 @@ impl TestView {
     }
 }
 
-pub struct TestViewGenerator {
+pub struct TestViewGenerator<V: Versions> {
     pub current_view: Option<TestView>,
     pub membership: Arc<RwLock<<TestTypes as NodeType>::Membership>>,
+    pub _pd: PhantomData<fn(V)>,
 }
 
-impl TestViewGenerator {
+impl<V: Versions> TestViewGenerator<V> {
     pub fn generate(membership: Arc<RwLock<<TestTypes as NodeType>::Membership>>) -> Self {
         TestViewGenerator {
             current_view: None,
             membership,
+            _pd: PhantomData,
         }
     }
 
@@ -574,7 +587,7 @@ impl TestViewGenerator {
     }
 }
 
-impl Stream for TestViewGenerator {
+impl<V: Versions> Stream for TestViewGenerator<V> {
     type Item = TestView;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
@@ -584,7 +597,7 @@ impl Stream for TestViewGenerator {
         let mut fut = if let Some(ref view) = curr_view {
             async move { TestView::next_view(view).await }.boxed()
         } else {
-            async move { TestView::genesis(&mem).await }.boxed()
+            async move { TestView::genesis::<V>(&mem).await }.boxed()
         };
 
         match fut.as_mut().poll(cx) {

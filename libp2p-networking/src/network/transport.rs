@@ -10,9 +10,7 @@ use anyhow::{ensure, Context, Result as AnyhowResult};
 use async_lock::RwLock;
 use futures::{future::poll_fn, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use hotshot_types::traits::{
-    election::Membership,
-    node_implementation::{ConsensusTime, NodeType},
-    signature_key::SignatureKey,
+    election::Membership, node_implementation::NodeType, signature_key::SignatureKey,
 };
 use libp2p::{
     core::{
@@ -137,11 +135,7 @@ impl<T: Transport, Types: NodeType, C: StreamMuxer + Unpin> StakeTableAuthentica
             }
 
             // Check if the public key is in the stake table
-            if !stake_table
-                .read()
-                .await
-                .has_stake(&public_key, Types::Epoch::new(0))
-            {
+            if !stake_table.read().await.has_stake(&public_key, None) {
                 return Err(anyhow::anyhow!("Peer not in stake table"));
             }
         }

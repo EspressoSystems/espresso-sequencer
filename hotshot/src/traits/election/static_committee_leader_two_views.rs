@@ -102,7 +102,7 @@ impl<TYPES: NodeType> Membership<TYPES> for StaticCommitteeLeaderForTwoViews<TYP
     /// Get the stake table for the current view
     fn stake_table(
         &self,
-        _epoch: <TYPES as NodeType>::Epoch,
+        _epoch: Option<<TYPES as NodeType>::Epoch>,
     ) -> Vec<<<TYPES as NodeType>::SignatureKey as SignatureKey>::StakeTableEntry> {
         self.stake_table.clone()
     }
@@ -110,7 +110,7 @@ impl<TYPES: NodeType> Membership<TYPES> for StaticCommitteeLeaderForTwoViews<TYP
     /// Get the stake table for the current view
     fn da_stake_table(
         &self,
-        _epoch: <TYPES as NodeType>::Epoch,
+        _epoch: Option<<TYPES as NodeType>::Epoch>,
     ) -> Vec<<<TYPES as NodeType>::SignatureKey as SignatureKey>::StakeTableEntry> {
         self.da_stake_table.clone()
     }
@@ -119,7 +119,7 @@ impl<TYPES: NodeType> Membership<TYPES> for StaticCommitteeLeaderForTwoViews<TYP
     fn committee_members(
         &self,
         _view_number: <TYPES as NodeType>::View,
-        _epoch: <TYPES as NodeType>::Epoch,
+        _epoch: Option<<TYPES as NodeType>::Epoch>,
     ) -> std::collections::BTreeSet<<TYPES as NodeType>::SignatureKey> {
         self.stake_table
             .iter()
@@ -131,7 +131,7 @@ impl<TYPES: NodeType> Membership<TYPES> for StaticCommitteeLeaderForTwoViews<TYP
     fn da_committee_members(
         &self,
         _view_number: <TYPES as NodeType>::View,
-        _epoch: <TYPES as NodeType>::Epoch,
+        _epoch: Option<<TYPES as NodeType>::Epoch>,
     ) -> std::collections::BTreeSet<<TYPES as NodeType>::SignatureKey> {
         self.da_stake_table
             .iter()
@@ -143,7 +143,7 @@ impl<TYPES: NodeType> Membership<TYPES> for StaticCommitteeLeaderForTwoViews<TYP
     fn committee_leaders(
         &self,
         _view_number: <TYPES as NodeType>::View,
-        _epoch: <TYPES as NodeType>::Epoch,
+        _epoch: Option<<TYPES as NodeType>::Epoch>,
     ) -> std::collections::BTreeSet<<TYPES as NodeType>::SignatureKey> {
         self.eligible_leaders
             .iter()
@@ -155,7 +155,7 @@ impl<TYPES: NodeType> Membership<TYPES> for StaticCommitteeLeaderForTwoViews<TYP
     fn stake(
         &self,
         pub_key: &<TYPES as NodeType>::SignatureKey,
-        _epoch: <TYPES as NodeType>::Epoch,
+        _epoch: Option<<TYPES as NodeType>::Epoch>,
     ) -> Option<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry> {
         // Only return the stake if it is above zero
         self.indexed_stake_table.get(pub_key).cloned()
@@ -165,7 +165,7 @@ impl<TYPES: NodeType> Membership<TYPES> for StaticCommitteeLeaderForTwoViews<TYP
     fn da_stake(
         &self,
         pub_key: &<TYPES as NodeType>::SignatureKey,
-        _epoch: <TYPES as NodeType>::Epoch,
+        _epoch: Option<<TYPES as NodeType>::Epoch>,
     ) -> Option<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry> {
         // Only return the stake if it is above zero
         self.indexed_da_stake_table.get(pub_key).cloned()
@@ -175,7 +175,7 @@ impl<TYPES: NodeType> Membership<TYPES> for StaticCommitteeLeaderForTwoViews<TYP
     fn has_stake(
         &self,
         pub_key: &<TYPES as NodeType>::SignatureKey,
-        _epoch: <TYPES as NodeType>::Epoch,
+        _epoch: Option<<TYPES as NodeType>::Epoch>,
     ) -> bool {
         self.indexed_stake_table
             .get(pub_key)
@@ -186,7 +186,7 @@ impl<TYPES: NodeType> Membership<TYPES> for StaticCommitteeLeaderForTwoViews<TYP
     fn has_da_stake(
         &self,
         pub_key: &<TYPES as NodeType>::SignatureKey,
-        _epoch: <TYPES as NodeType>::Epoch,
+        _epoch: Option<<TYPES as NodeType>::Epoch>,
     ) -> bool {
         self.indexed_da_stake_table
             .get(pub_key)
@@ -196,8 +196,8 @@ impl<TYPES: NodeType> Membership<TYPES> for StaticCommitteeLeaderForTwoViews<TYP
     /// Index the vector of public keys with the current view number
     fn lookup_leader(
         &self,
-        view_number: TYPES::View,
-        _epoch: <TYPES as NodeType>::Epoch,
+        view_number: <TYPES as NodeType>::View,
+        _epoch: Option<<TYPES as NodeType>::Epoch>,
     ) -> Result<TYPES::SignatureKey> {
         let index =
             usize::try_from((*view_number / 2) % self.eligible_leaders.len() as u64).unwrap();
@@ -207,32 +207,32 @@ impl<TYPES: NodeType> Membership<TYPES> for StaticCommitteeLeaderForTwoViews<TYP
     }
 
     /// Get the total number of nodes in the committee
-    fn total_nodes(&self, _epoch: <TYPES as NodeType>::Epoch) -> usize {
+    fn total_nodes(&self, _epoch: Option<<TYPES as NodeType>::Epoch>) -> usize {
         self.stake_table.len()
     }
 
     /// Get the total number of DA nodes in the committee
-    fn da_total_nodes(&self, _epoch: <TYPES as NodeType>::Epoch) -> usize {
+    fn da_total_nodes(&self, _epoch: Option<<TYPES as NodeType>::Epoch>) -> usize {
         self.da_stake_table.len()
     }
 
     /// Get the voting success threshold for the committee
-    fn success_threshold(&self, _epoch: TYPES::Epoch) -> NonZeroU64 {
+    fn success_threshold(&self, _epoch: Option<<TYPES as NodeType>::Epoch>) -> NonZeroU64 {
         NonZeroU64::new(((self.stake_table.len() as u64 * 2) / 3) + 1).unwrap()
     }
 
     /// Get the voting success threshold for the committee
-    fn da_success_threshold(&self, _epoch: TYPES::Epoch) -> NonZeroU64 {
+    fn da_success_threshold(&self, _epoch: Option<<TYPES as NodeType>::Epoch>) -> NonZeroU64 {
         NonZeroU64::new(((self.da_stake_table.len() as u64 * 2) / 3) + 1).unwrap()
     }
 
     /// Get the voting failure threshold for the committee
-    fn failure_threshold(&self, _epoch: TYPES::Epoch) -> NonZeroU64 {
+    fn failure_threshold(&self, _epoch: Option<<TYPES as NodeType>::Epoch>) -> NonZeroU64 {
         NonZeroU64::new(((self.stake_table.len() as u64) / 3) + 1).unwrap()
     }
 
     /// Get the voting upgrade threshold for the committee
-    fn upgrade_threshold(&self, _epoch: TYPES::Epoch) -> NonZeroU64 {
+    fn upgrade_threshold(&self, _epoch: Option<<TYPES as NodeType>::Epoch>) -> NonZeroU64 {
         NonZeroU64::new(((self.stake_table.len() as u64 * 9) / 10) + 1).unwrap()
     }
 }

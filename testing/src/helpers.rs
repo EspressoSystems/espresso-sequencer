@@ -33,9 +33,9 @@ use hotshot_types::{
     traits::{
         block_contents::vid_commitment,
         election::Membership,
-        node_implementation::{ConsensusTime, NodeType, Versions},
+        node_implementation::{NodeType, Versions},
     },
-    utils::{epoch_from_block_number, View, ViewInner},
+    utils::{option_epoch_from_block_number, View, ViewInner},
     vid::{vid_scheme, VidCommitment, VidProposal, VidSchemeType},
     vote::{Certificate, HasViewNumber, Vote},
     ValidatorConfig,
@@ -144,7 +144,7 @@ pub async fn build_cert<
     data: DATAType,
     membership: &Arc<RwLock<TYPES::Membership>>,
     view: TYPES::View,
-    epoch: TYPES::Epoch,
+    epoch: Option<TYPES::Epoch>,
     public_key: &TYPES::SignatureKey,
     private_key: &<TYPES::SignatureKey as SignatureKey>::PrivateKey,
     upgrade_lock: &UpgradeLock<TYPES, V>,
@@ -210,7 +210,7 @@ pub async fn build_assembled_sig<
     data: &DATAType,
     membership: &Arc<RwLock<TYPES::Membership>>,
     view: TYPES::View,
-    epoch: TYPES::Epoch,
+    epoch: Option<TYPES::Epoch>,
     upgrade_lock: &UpgradeLock<TYPES, V>,
 ) -> <TYPES::SignatureKey as SignatureKey>::QcType {
     let membership_reader = membership.read().await;
@@ -272,7 +272,7 @@ pub fn key_pair_for_id<TYPES: NodeType>(
 pub async fn vid_scheme_from_view_number<TYPES: NodeType>(
     membership: &Arc<RwLock<TYPES::Membership>>,
     view_number: TYPES::View,
-    epoch_number: TYPES::Epoch,
+    epoch_number: Option<TYPES::Epoch>,
 ) -> VidSchemeType {
     let num_storage_nodes = membership
         .read()
@@ -285,7 +285,7 @@ pub async fn vid_scheme_from_view_number<TYPES: NodeType>(
 pub async fn vid_payload_commitment<TYPES: NodeType>(
     membership: &Arc<RwLock<<TYPES as NodeType>::Membership>>,
     view_number: TYPES::View,
-    epoch_number: TYPES::Epoch,
+    epoch_number: Option<TYPES::Epoch>,
     transactions: Vec<TestTransaction>,
 ) -> VidCommitment {
     let mut vid = vid_scheme_from_view_number::<TYPES>(membership, view_number, epoch_number).await;
@@ -298,7 +298,7 @@ pub async fn vid_payload_commitment<TYPES: NodeType>(
 pub async fn da_payload_commitment<TYPES: NodeType>(
     membership: &Arc<RwLock<<TYPES as NodeType>::Membership>>,
     transactions: Vec<TestTransaction>,
-    epoch_number: TYPES::Epoch,
+    epoch_number: Option<TYPES::Epoch>,
 ) -> VidCommitment {
     let encoded_transactions = TestTransaction::encode(&transactions);
 
@@ -311,7 +311,7 @@ pub async fn da_payload_commitment<TYPES: NodeType>(
 pub async fn build_payload_commitment<TYPES: NodeType>(
     membership: &Arc<RwLock<<TYPES as NodeType>::Membership>>,
     view: TYPES::View,
-    epoch: TYPES::Epoch,
+    epoch: Option<TYPES::Epoch>,
 ) -> <VidSchemeType as VidScheme>::Commit {
     // Make some empty encoded transactions, we just care about having a commitment handy for the
     // later calls. We need the VID commitment to be able to propose later.
@@ -324,7 +324,7 @@ pub async fn build_payload_commitment<TYPES: NodeType>(
 pub async fn build_vid_proposal<TYPES: NodeType>(
     membership: &Arc<RwLock<<TYPES as NodeType>::Membership>>,
     view_number: TYPES::View,
-    epoch_number: TYPES::Epoch,
+    epoch_number: Option<TYPES::Epoch>,
     transactions: Vec<TestTransaction>,
     private_key: &<TYPES::SignatureKey as SignatureKey>::PrivateKey,
 ) -> VidProposal<TYPES> {
@@ -367,7 +367,7 @@ pub async fn build_vid_proposal<TYPES: NodeType>(
 pub async fn build_da_certificate<TYPES: NodeType, V: Versions>(
     membership: &Arc<RwLock<<TYPES as NodeType>::Membership>>,
     view_number: TYPES::View,
-    epoch_number: TYPES::Epoch,
+    epoch_number: Option<TYPES::Epoch>,
     transactions: Vec<TestTransaction>,
     public_key: &TYPES::SignatureKey,
     private_key: &<TYPES::SignatureKey as SignatureKey>::PrivateKey,
@@ -437,7 +437,7 @@ pub async fn build_fake_view_with_leaf_and_state<V: Versions>(
     epoch_height: u64,
 ) -> View<TestTypes> {
     let epoch =
-        <TestTypes as NodeType>::Epoch::new(epoch_from_block_number(leaf.height(), epoch_height));
+        option_epoch_from_block_number::<TestTypes>(leaf.with_epoch, leaf.height(), epoch_height);
     View {
         view_inner: ViewInner::Leaf {
             leaf: leaf.commit(),

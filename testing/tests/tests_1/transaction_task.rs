@@ -33,10 +33,13 @@ async fn test_transaction_task_leader_two_views_in_a_row() {
     let mut output = Vec::new();
 
     let current_view = ViewNumber::new(4);
-    input.push(HotShotEvent::ViewChange(current_view, EpochNumber::new(1)));
+    input.push(HotShotEvent::ViewChange(
+        current_view,
+        Some(EpochNumber::new(1)),
+    ));
     input.push(HotShotEvent::ViewChange(
         current_view + 1,
-        EpochNumber::new(1),
+        Some(EpochNumber::new(1)),
     ));
     input.push(HotShotEvent::Shutdown);
 
@@ -47,7 +50,7 @@ async fn test_transaction_task_leader_two_views_in_a_row() {
             .memberships
             .read()
             .await
-            .total_nodes(EpochNumber::new(0)),
+            .total_nodes(Some(EpochNumber::new(0))),
     );
 
     // current view
@@ -57,7 +60,7 @@ async fn test_transaction_task_leader_two_views_in_a_row() {
             num_transactions: 0,
         },
         current_view,
-        EpochNumber::new(1),
+        Some(EpochNumber::new(1)),
         vec1::vec1![
             null_block::builder_fee::<TestConsecutiveLeaderTypes, TestVersions>(
                 handle
@@ -65,7 +68,7 @@ async fn test_transaction_task_leader_two_views_in_a_row() {
                     .memberships
                     .read()
                     .await
-                    .total_nodes(EpochNumber::new(0)),
+                    .total_nodes(Some(EpochNumber::new(0))),
                 <TestVersions as Versions>::Base::VERSION,
                 *ViewNumber::new(4),
             )

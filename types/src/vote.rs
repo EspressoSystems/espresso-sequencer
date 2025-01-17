@@ -85,26 +85,26 @@ pub trait Certificate<TYPES: NodeType, T>: HasViewNumber<TYPES> {
     // TODO: Make this a static ratio of the total stake of `Membership`
     fn threshold<MEMBERSHIP: Membership<TYPES>>(
         membership: &MEMBERSHIP,
-        epoch: TYPES::Epoch,
+        epoch: Option<TYPES::Epoch>,
     ) -> u64;
 
     /// Get  Stake Table from Membership implementation.
     fn stake_table<MEMBERSHIP: Membership<TYPES>>(
         membership: &MEMBERSHIP,
-        epoch: TYPES::Epoch,
+        epoch: Option<TYPES::Epoch>,
     ) -> Vec<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry>;
 
     /// Get Total Nodes from Membership implementation.
     fn total_nodes<MEMBERSHIP: Membership<TYPES>>(
         membership: &MEMBERSHIP,
-        epoch: TYPES::Epoch,
+        epoch: Option<TYPES::Epoch>,
     ) -> usize;
 
     /// Get  `StakeTableEntry` from Membership implementation.
     fn stake_table_entry<MEMBERSHIP: Membership<TYPES>>(
         membership: &MEMBERSHIP,
         pub_key: &TYPES::SignatureKey,
-        epoch: TYPES::Epoch,
+        epoch: Option<TYPES::Epoch>,
     ) -> Option<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry>;
 
     /// Get the commitment which was voted on
@@ -165,7 +165,7 @@ impl<
         &mut self,
         vote: &VOTE,
         membership: &Arc<RwLock<TYPES::Membership>>,
-        epoch: TYPES::Epoch,
+        epoch: Option<TYPES::Epoch>,
     ) -> Either<(), CERT> {
         let key = vote.signing_key();
 

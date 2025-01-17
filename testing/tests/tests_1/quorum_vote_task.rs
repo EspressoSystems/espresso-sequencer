@@ -23,7 +23,7 @@ use hotshot_testing::{
     script::{Expectations, InputOrder, TaskScript},
 };
 use hotshot_types::{
-    data::{EpochNumber, Leaf2, ViewNumber},
+    data::{Leaf2, ViewNumber},
     traits::node_implementation::ConsensusTime,
 };
 
@@ -47,7 +47,7 @@ async fn test_quorum_vote_task_success() {
 
     let membership = Arc::clone(&handle.hotshot.memberships);
 
-    let mut generator = TestViewGenerator::generate(membership);
+    let mut generator = TestViewGenerator::<TestVersions>::generate(membership);
 
     let mut proposals = Vec::new();
     let mut leaves = Vec::new();
@@ -83,7 +83,7 @@ async fn test_quorum_vote_task_success() {
     let expectations = vec![Expectations::from_outputs(all_predicates![
         exact(DaCertificateValidated(dacs[1].clone())),
         exact(VidShareValidated(vids[1].0[0].clone())),
-        exact(ViewChange(ViewNumber::new(3), EpochNumber::new(0))),
+        exact(ViewChange(ViewNumber::new(3), None)),
         quorum_vote_send(),
     ])];
 
@@ -114,7 +114,7 @@ async fn test_quorum_vote_task_miss_dependency() {
 
     let membership = Arc::clone(&handle.hotshot.memberships);
 
-    let mut generator = TestViewGenerator::generate(membership);
+    let mut generator = TestViewGenerator::<TestVersions>::generate(membership);
 
     let mut proposals = Vec::new();
     let mut leaders = Vec::new();
@@ -198,7 +198,7 @@ async fn test_quorum_vote_task_incorrect_dependency() {
 
     let membership = Arc::clone(&handle.hotshot.memberships);
 
-    let mut generator = TestViewGenerator::generate(membership);
+    let mut generator = TestViewGenerator::<TestVersions>::generate(membership);
 
     let mut proposals = Vec::new();
     let mut leaves = Vec::new();

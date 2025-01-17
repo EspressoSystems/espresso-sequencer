@@ -22,7 +22,7 @@ use hotshot_testing::{
     view_generator::TestViewGenerator,
 };
 use hotshot_types::{
-    data::{null_block, EpochNumber, PackedBundle, ViewNumber},
+    data::{null_block, PackedBundle, ViewNumber},
     simple_vote::DaData2,
     traits::{
         block_contents::precompute_vid_commitment,
@@ -48,15 +48,10 @@ async fn test_da_task() {
     let encoded_transactions = Arc::from(TestTransaction::encode(&transactions));
     let (payload_commit, precompute) = precompute_vid_commitment(
         &encoded_transactions,
-        handle
-            .hotshot
-            .memberships
-            .read()
-            .await
-            .total_nodes(EpochNumber::new(0)),
+        handle.hotshot.memberships.read().await.total_nodes(None),
     );
 
-    let mut generator = TestViewGenerator::generate(membership.clone());
+    let mut generator = TestViewGenerator::<TestVersions>::generate(membership.clone());
 
     let mut proposals = Vec::new();
     let mut leaders = Vec::new();
@@ -102,17 +97,17 @@ async fn test_da_task() {
 
     let inputs = vec![
         serial![
-            ViewChange(ViewNumber::new(1), EpochNumber::new(0)),
-            ViewChange(ViewNumber::new(2), EpochNumber::new(0)),
+            ViewChange(ViewNumber::new(1), None),
+            ViewChange(ViewNumber::new(2), None),
             BlockRecv(PackedBundle::new(
                 encoded_transactions.clone(),
                 TestMetadata {
                     num_transactions: transactions.len() as u64
                 },
                 ViewNumber::new(2),
-                EpochNumber::new(0),
+                None,
                 vec1::vec1![null_block::builder_fee::<TestTypes, TestVersions>(
-                    membership.read().await.total_nodes(EpochNumber::new(0)),
+                    membership.read().await.total_nodes(None),
                     <TestVersions as Versions>::Base::VERSION,
                     *ViewNumber::new(2),
                 )
@@ -161,15 +156,10 @@ async fn test_da_task_storage_failure() {
     let encoded_transactions = Arc::from(TestTransaction::encode(&transactions));
     let (payload_commit, precompute) = precompute_vid_commitment(
         &encoded_transactions,
-        handle
-            .hotshot
-            .memberships
-            .read()
-            .await
-            .total_nodes(EpochNumber::new(0)),
+        handle.hotshot.memberships.read().await.total_nodes(None),
     );
 
-    let mut generator = TestViewGenerator::generate(Arc::clone(&membership));
+    let mut generator = TestViewGenerator::<TestVersions>::generate(Arc::clone(&membership));
 
     let mut proposals = Vec::new();
     let mut leaders = Vec::new();
@@ -215,17 +205,17 @@ async fn test_da_task_storage_failure() {
 
     let inputs = vec![
         serial![
-            ViewChange(ViewNumber::new(1), EpochNumber::new(0)),
-            ViewChange(ViewNumber::new(2), EpochNumber::new(0)),
+            ViewChange(ViewNumber::new(1), None),
+            ViewChange(ViewNumber::new(2), None),
             BlockRecv(PackedBundle::new(
                 encoded_transactions.clone(),
                 TestMetadata {
                     num_transactions: transactions.len() as u64
                 },
                 ViewNumber::new(2),
-                EpochNumber::new(0),
+                None,
                 vec1::vec1![null_block::builder_fee::<TestTypes, TestVersions>(
-                    membership.read().await.total_nodes(EpochNumber::new(0)),
+                    membership.read().await.total_nodes(None),
                     <TestVersions as Versions>::Base::VERSION,
                     *ViewNumber::new(2),
                 )

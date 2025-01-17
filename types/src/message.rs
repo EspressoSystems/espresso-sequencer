@@ -26,8 +26,8 @@ use vbs::{
 
 use crate::{
     data::{
-        DaProposal, DaProposal2, Leaf, Leaf2, QuorumProposal, QuorumProposal2, UpgradeProposal,
-        VidDisperseShare, VidDisperseShare2,
+        DaProposal, DaProposal2, Leaf, Leaf2, QuorumProposal, QuorumProposal2,
+        QuorumProposalWrapper, UpgradeProposal, VidDisperseShare, VidDisperseShare2,
     },
     request_response::ProposalRequestPayload,
     simple_certificate::{
@@ -47,7 +47,7 @@ use crate::{
         node_implementation::{ConsensusTime, NodeType, Versions},
         signature_key::SignatureKey,
     },
-    utils::{epoch_from_block_number, mnemonic},
+    utils::{mnemonic, option_epoch_from_block_number},
     vote::HasViewNumber,
 };
 
@@ -430,15 +430,11 @@ where
     pub async fn validate_signature<V: Versions>(
         &self,
         membership: &TYPES::Membership,
-        epoch_height: u64,
+        _epoch_height: u64,
         upgrade_lock: &UpgradeLock<TYPES, V>,
     ) -> Result<()> {
         let view_number = self.data.view_number();
-        let proposal_epoch = TYPES::Epoch::new(epoch_from_block_number(
-            self.data.block_header.block_number(),
-            epoch_height,
-        ));
-        let view_leader_key = membership.leader(view_number, proposal_epoch)?;
+        let view_leader_key = membership.leader(view_number, None)?;
         let proposed_leaf = Leaf::from_quorum_proposal(&self.data);
 
         ensure!(
@@ -453,7 +449,7 @@ where
     }
 }
 
-impl<TYPES> Proposal<TYPES, QuorumProposal2<TYPES>>
+/*impl<TYPES> Proposal<TYPES, QuorumProposal2<TYPES>>
 where
     TYPES: NodeType,
 {
@@ -466,10 +462,41 @@ where
         epoch_height: u64,
     ) -> Result<()> {
         let view_number = self.data.view_number();
-        let proposal_epoch = TYPES::Epoch::new(epoch_from_block_number(
+        let proposal_epoch = option_epoch_from_block_number::<TYPES>(
+            true,
             self.data.block_header.block_number(),
             epoch_height,
-        ));
+        );
+        let view_leader_key = membership.leader(view_number, proposal_epoch)?;
+        let proposed_leaf = Leaf2::from_quorum_proposal(&self.data);
+
+        ensure!(
+            view_leader_key.validate(&self.signature, proposed_leaf.commit().as_ref()),
+            "Proposal signature is invalid."
+        );
+
+        Ok(())
+    }
+}*/
+
+impl<TYPES> Proposal<TYPES, QuorumProposalWrapper<TYPES>>
+where
+    TYPES: NodeType,
+{
+    /// Checks that the signature of the quorum proposal is valid.
+    /// # Errors
+    /// Returns an error when the proposal signature is invalid.
+    pub fn validate_signature(
+        &self,
+        membership: &TYPES::Membership,
+        epoch_height: u64,
+    ) -> Result<()> {
+        let view_number = self.data.proposal.view_number();
+        let proposal_epoch = option_epoch_from_block_number::<TYPES>(
+            self.data.with_epoch,
+            self.data.block_header().block_number(),
+            epoch_height,
+        );
         let view_leader_key = membership.leader(view_number, proposal_epoch)?;
         let proposed_leaf = Leaf2::from_quorum_proposal(&self.data);
 

@@ -37,7 +37,6 @@ use hotshot_types::{
 use tokio::{spawn, task::JoinHandle};
 use tracing::instrument;
 use utils::anytrace::*;
-use vbs::version::StaticVersionType;
 
 use crate::{
     events::{HotShotEvent, HotShotTaskCompleted},
@@ -46,7 +45,7 @@ use crate::{
 
 /// the network message task state
 #[derive(Clone)]
-pub struct NetworkMessageTaskState<TYPES: NodeType> {
+pub struct NetworkMessageTaskState<TYPES: NodeType, V: Versions> {
     /// Sender to send internal events this task generates to other tasks
     pub internal_event_stream: Sender<Arc<HotShotEvent<TYPES>>>,
 
@@ -58,9 +57,12 @@ pub struct NetworkMessageTaskState<TYPES: NodeType> {
 
     /// Transaction Cache to ignore previously seen transactions
     pub transactions_cache: lru::LruCache<u64, ()>,
+
+    /// Lock for a decided upgrade
+    pub upgrade_lock: UpgradeLock<TYPES, V>,
 }
 
-impl<TYPES: NodeType> NetworkMessageTaskState<TYPES> {
+impl<TYPES: NodeType, V: Versions> NetworkMessageTaskState<TYPES, V> {
     #[instrument(skip_all, name = "Network message task", level = "trace")]
     /// Handles a (deserialized) message from the network
     pub async fn handle_message(&mut self, message: Message<TYPES>) {
@@ -74,68 +76,228 @@ impl<TYPES: NodeType> NetworkMessageTaskState<TYPES> {
                 let event = match consensus_message {
                     SequencingMessage::General(general_message) => match general_message {
                         GeneralConsensusMessage::Proposal(proposal) => {
+                            if self
+                                .upgrade_lock
+                                .epochs_enabled(proposal.data.view_number())
+                                .await
+                            {
+                                tracing::warn!("received GeneralConsensusMessage::Proposal for view {} but epochs are enabled for that view", proposal.data.view_number());
+                                return;
+                            }
                             HotShotEvent::QuorumProposalRecv(convert_proposal(proposal), sender)
                         }
                         GeneralConsensusMessage::Proposal2(proposal) => {
-                            HotShotEvent::QuorumProposalRecv(proposal, sender)
+                            if !self
+                                .upgrade_lock
+                                .epochs_enabled(proposal.data.view_number())
+                                .await
+                            {
+                                tracing::warn!("received GeneralConsensusMessage::Proposal2 for view {} but epochs are not enabled for that view", proposal.data.view_number());
+                                return;
+                            }
+                            HotShotEvent::QuorumProposalRecv(convert_proposal(proposal), sender)
                         }
                         GeneralConsensusMessage::ProposalRequested(req, sig) => {
                             HotShotEvent::QuorumProposalRequestRecv(req, sig)
                         }
                         GeneralConsensusMessage::ProposalResponse(proposal) => {
+                            if self
+                                .upgrade_lock
+                                .epochs_enabled(proposal.data.view_number())
+                                .await
+                            {
+                                tracing::warn!("received GeneralConsensusMessage::ProposalResponse for view {} but epochs are enabled for that view", proposal.data.view_number());
+                                return;
+                            }
                             HotShotEvent::QuorumProposalResponseRecv(convert_proposal(proposal))
                         }
                         GeneralConsensusMessage::ProposalResponse2(proposal) => {
-                            HotShotEvent::QuorumProposalResponseRecv(proposal)
+                            if !self
+                                .upgrade_lock
+                                .epochs_enabled(proposal.data.view_number())
+                                .await
+                            {
+                                tracing::warn!("received GeneralConsensusMessage::ProposalResponse2 for view {} but epochs are not enabled for that view", proposal.data.view_number());
+                                return;
+                            }
+                            HotShotEvent::QuorumProposalResponseRecv(convert_proposal(proposal))
                         }
                         GeneralConsensusMessage::Vote(vote) => {
+                            if self.upgrade_lock.epochs_enabled(vote.view_number()).await {
+                                tracing::warn!("received GeneralConsensusMessage::Vote for view {} but epochs are enabled for that view", vote.view_number());
+                                return;
+                            }
                             HotShotEvent::QuorumVoteRecv(vote.to_vote2())
                         }
-                        GeneralConsensusMessage::Vote2(vote) => HotShotEvent::QuorumVoteRecv(vote),
+                        GeneralConsensusMessage::Vote2(vote) => {
+                            if !self.upgrade_lock.epochs_enabled(vote.view_number()).await {
+                                tracing::warn!("received GeneralConsensusMessage::Vote2 for view {} but epochs are not enabled for that view", vote.view_number());
+                                return;
+                            }
+                            HotShotEvent::QuorumVoteRecv(vote)
+                        }
                         GeneralConsensusMessage::ViewSyncPreCommitVote(view_sync_message) => {
+                            if self
+                                .upgrade_lock
+                                .epochs_enabled(view_sync_message.view_number())
+                                .await
+                            {
+                                tracing::warn!("received GeneralConsensusMessage::ViewSyncPreCommitVote for view {} but epochs are enabled for that view", view_sync_message.view_number());
+                                return;
+                            }
                             HotShotEvent::ViewSyncPreCommitVoteRecv(view_sync_message.to_vote2())
                         }
                         GeneralConsensusMessage::ViewSyncPreCommitVote2(view_sync_message) => {
+                            if !self
+                                .upgrade_lock
+                                .epochs_enabled(view_sync_message.view_number())
+                                .await
+                            {
+                                tracing::warn!("received GeneralConsensusMessage::ViewSyncPreCommitVote2 for view {} but epochs are not enabled for that view", view_sync_message.view_number());
+                                return;
+                            }
                             HotShotEvent::ViewSyncPreCommitVoteRecv(view_sync_message)
                         }
                         GeneralConsensusMessage::ViewSyncPreCommitCertificate(
                             view_sync_message,
-                        ) => HotShotEvent::ViewSyncPreCommitCertificateRecv(
-                            view_sync_message.to_vsc2(),
-                        ),
+                        ) => {
+                            if self
+                                .upgrade_lock
+                                .epochs_enabled(view_sync_message.view_number())
+                                .await
+                            {
+                                tracing::warn!("received GeneralConsensusMessage::ViewSyncPreCommitCertificate for view {} but epochs are enabled for that view", view_sync_message.view_number());
+                                return;
+                            }
+                            HotShotEvent::ViewSyncPreCommitCertificateRecv(
+                                view_sync_message.to_vsc2(),
+                            )
+                        }
                         GeneralConsensusMessage::ViewSyncPreCommitCertificate2(
                             view_sync_message,
-                        ) => HotShotEvent::ViewSyncPreCommitCertificateRecv(view_sync_message),
+                        ) => {
+                            if !self
+                                .upgrade_lock
+                                .epochs_enabled(view_sync_message.view_number())
+                                .await
+                            {
+                                tracing::warn!("received GeneralConsensusMessage::ViewSyncPreCommitCertificate2 for view {} but epochs are not enabled for that view", view_sync_message.view_number());
+                                return;
+                            }
+                            HotShotEvent::ViewSyncPreCommitCertificateRecv(view_sync_message)
+                        }
                         GeneralConsensusMessage::ViewSyncCommitVote(view_sync_message) => {
+                            if self
+                                .upgrade_lock
+                                .epochs_enabled(view_sync_message.view_number())
+                                .await
+                            {
+                                tracing::warn!("received GeneralConsensusMessage::ViewSyncCommitVote for view {} but epochs are enabled for that view", view_sync_message.view_number());
+                                return;
+                            }
                             HotShotEvent::ViewSyncCommitVoteRecv(view_sync_message.to_vote2())
                         }
                         GeneralConsensusMessage::ViewSyncCommitVote2(view_sync_message) => {
+                            if !self
+                                .upgrade_lock
+                                .epochs_enabled(view_sync_message.view_number())
+                                .await
+                            {
+                                tracing::warn!("received GeneralConsensusMessage::ViewSyncCommitVote2 for view {} but epochs are not enabled for that view", view_sync_message.view_number());
+                                return;
+                            }
                             HotShotEvent::ViewSyncCommitVoteRecv(view_sync_message)
                         }
                         GeneralConsensusMessage::ViewSyncCommitCertificate(view_sync_message) => {
+                            if self
+                                .upgrade_lock
+                                .epochs_enabled(view_sync_message.view_number())
+                                .await
+                            {
+                                tracing::warn!("received GeneralConsensusMessage::ViewSyncCommitCertificate for view {} but epochs are enabled for that view", view_sync_message.view_number());
+                                return;
+                            }
                             HotShotEvent::ViewSyncCommitCertificateRecv(view_sync_message.to_vsc2())
                         }
                         GeneralConsensusMessage::ViewSyncCommitCertificate2(view_sync_message) => {
+                            if !self
+                                .upgrade_lock
+                                .epochs_enabled(view_sync_message.view_number())
+                                .await
+                            {
+                                tracing::warn!("received GeneralConsensusMessage::ViewSyncCommitCertificate2 for view {} but epochs are not enabled for that view", view_sync_message.view_number());
+                                return;
+                            }
                             HotShotEvent::ViewSyncCommitCertificateRecv(view_sync_message)
                         }
                         GeneralConsensusMessage::ViewSyncFinalizeVote(view_sync_message) => {
+                            if self
+                                .upgrade_lock
+                                .epochs_enabled(view_sync_message.view_number())
+                                .await
+                            {
+                                tracing::warn!("received GeneralConsensusMessage::ViewSyncFinalizeVote for view {} but epochs are enabled for that view", view_sync_message.view_number());
+                                return;
+                            }
                             HotShotEvent::ViewSyncFinalizeVoteRecv(view_sync_message.to_vote2())
                         }
                         GeneralConsensusMessage::ViewSyncFinalizeVote2(view_sync_message) => {
+                            if !self
+                                .upgrade_lock
+                                .epochs_enabled(view_sync_message.view_number())
+                                .await
+                            {
+                                tracing::warn!("received GeneralConsensusMessage::ViewSyncFinalizeVote2 for view {} but epochs are not enabled for that view", view_sync_message.view_number());
+                                return;
+                            }
                             HotShotEvent::ViewSyncFinalizeVoteRecv(view_sync_message)
                         }
                         GeneralConsensusMessage::ViewSyncFinalizeCertificate(view_sync_message) => {
+                            if self
+                                .upgrade_lock
+                                .epochs_enabled(view_sync_message.view_number())
+                                .await
+                            {
+                                tracing::warn!("received GeneralConsensusMessage::ViewSyncFinalizeCertificate for view {} but epochs are enabled for that view", view_sync_message.view_number());
+                                return;
+                            }
                             HotShotEvent::ViewSyncFinalizeCertificateRecv(
                                 view_sync_message.to_vsc2(),
                             )
                         }
                         GeneralConsensusMessage::ViewSyncFinalizeCertificate2(
                             view_sync_message,
-                        ) => HotShotEvent::ViewSyncFinalizeCertificateRecv(view_sync_message),
+                        ) => {
+                            if !self
+                                .upgrade_lock
+                                .epochs_enabled(view_sync_message.view_number())
+                                .await
+                            {
+                                tracing::warn!("received GeneralConsensusMessage::ViewSyncFinalizeCertificate2 for view {} but epochs are not enabled for that view", view_sync_message.view_number());
+                                return;
+                            }
+                            HotShotEvent::ViewSyncFinalizeCertificateRecv(view_sync_message)
+                        }
                         GeneralConsensusMessage::TimeoutVote(message) => {
+                            if self
+                                .upgrade_lock
+                                .epochs_enabled(message.view_number())
+                                .await
+                            {
+                                tracing::warn!("received GeneralConsensusMessage::TimeoutVote for view {} but epochs are enabled for that view", message.view_number());
+                                return;
+                            }
                             HotShotEvent::TimeoutVoteRecv(message.to_vote2())
                         }
                         GeneralConsensusMessage::TimeoutVote2(message) => {
+                            if !self
+                                .upgrade_lock
+                                .epochs_enabled(message.view_number())
+                                .await
+                            {
+                                tracing::warn!("received GeneralConsensusMessage::TimeoutVote2 for view {} but epochs are not enabled for that view", message.view_number());
+                                return;
+                            }
                             HotShotEvent::TimeoutVoteRecv(message)
                         }
                         GeneralConsensusMessage::UpgradeProposal(message) => {
@@ -149,26 +311,76 @@ impl<TYPES: NodeType> NetworkMessageTaskState<TYPES> {
                     },
                     SequencingMessage::Da(da_message) => match da_message {
                         DaConsensusMessage::DaProposal(proposal) => {
+                            if self
+                                .upgrade_lock
+                                .epochs_enabled(proposal.data.view_number())
+                                .await
+                            {
+                                tracing::warn!("received DaConsensusMessage::DaProposal for view {} but epochs are enabled for that view", proposal.data.view_number());
+                                return;
+                            }
                             HotShotEvent::DaProposalRecv(convert_proposal(proposal), sender)
                         }
+                        DaConsensusMessage::DaProposal2(proposal) => {
+                            if !self
+                                .upgrade_lock
+                                .epochs_enabled(proposal.data.view_number())
+                                .await
+                            {
+                                tracing::warn!("received DaConsensusMessage::DaProposal2 for view {} but epochs are not enabled for that view", proposal.data.view_number());
+                                return;
+                            }
+                            HotShotEvent::DaProposalRecv(proposal, sender)
+                        }
                         DaConsensusMessage::DaVote(vote) => {
+                            if self.upgrade_lock.epochs_enabled(vote.view_number()).await {
+                                tracing::warn!("received DaConsensusMessage::DaVote for view {} but epochs are enabled for that view", vote.view_number());
+                                return;
+                            }
                             HotShotEvent::DaVoteRecv(vote.clone().to_vote2())
                         }
+                        DaConsensusMessage::DaVote2(vote) => {
+                            if !self.upgrade_lock.epochs_enabled(vote.view_number()).await {
+                                tracing::warn!("received DaConsensusMessage::DaVote2 for view {} but epochs are not enabled for that view", vote.view_number());
+                                return;
+                            }
+                            HotShotEvent::DaVoteRecv(vote.clone())
+                        }
                         DaConsensusMessage::DaCertificate(cert) => {
+                            if self.upgrade_lock.epochs_enabled(cert.view_number()).await {
+                                tracing::warn!("received DaConsensusMessage::DaCertificate for view {} but epochs are enabled for that view", cert.view_number());
+                                return;
+                            }
                             HotShotEvent::DaCertificateRecv(cert.to_dac2())
                         }
+                        DaConsensusMessage::DaCertificate2(cert) => {
+                            if !self.upgrade_lock.epochs_enabled(cert.view_number()).await {
+                                tracing::warn!("received DaConsensusMessage::DaCertificate2 for view {} but epochs are not enabled for that view", cert.view_number());
+                                return;
+                            }
+                            HotShotEvent::DaCertificateRecv(cert)
+                        }
                         DaConsensusMessage::VidDisperseMsg(proposal) => {
+                            if self
+                                .upgrade_lock
+                                .epochs_enabled(proposal.data.view_number())
+                                .await
+                            {
+                                tracing::warn!("received DaConsensusMessage::VidDisperseMsg for view {} but epochs are enabled for that view", proposal.data.view_number());
+                                return;
+                            }
                             HotShotEvent::VidShareRecv(sender, convert_proposal(proposal))
                         }
                         DaConsensusMessage::VidDisperseMsg2(proposal) => {
+                            if !self
+                                .upgrade_lock
+                                .epochs_enabled(proposal.data.view_number())
+                                .await
+                            {
+                                tracing::warn!("received DaConsensusMessage::VidDisperseMsg2 for view {} but epochs are not enabled for that view", proposal.data.view_number());
+                                return;
+                            }
                             HotShotEvent::VidShareRecv(sender, proposal)
-                        }
-                        DaConsensusMessage::DaProposal2(proposal) => {
-                            HotShotEvent::DaProposalRecv(proposal, sender)
-                        }
-                        DaConsensusMessage::DaVote2(vote) => HotShotEvent::DaVoteRecv(vote.clone()),
-                        DaConsensusMessage::DaCertificate2(cert) => {
-                            HotShotEvent::DaCertificateRecv(cert)
                         }
                     },
                 };
@@ -244,7 +456,7 @@ pub struct NetworkEventTaskState<
     pub view: TYPES::View,
 
     /// epoch number
-    pub epoch: TYPES::Epoch,
+    pub epoch: Option<TYPES::Epoch>,
 
     /// network memberships
     pub membership: Arc<RwLock<TYPES::Membership>>,
@@ -321,9 +533,8 @@ impl<
             let recipient = proposal.data.recipient_key.clone();
             let message = if self
                 .upgrade_lock
-                .version_infallible(proposal.data.view_number())
+                .epochs_enabled(proposal.data.view_number())
                 .await
-                >= V::Epochs::VERSION
             {
                 Message {
                     sender: sender.clone(),
@@ -440,12 +651,11 @@ impl<
 
                 let message = if self
                     .upgrade_lock
-                    .version_infallible(proposal.data.view_number())
+                    .epochs_enabled(proposal.data.view_number())
                     .await
-                    >= V::Epochs::VERSION
                 {
                     MessageKind::<TYPES>::from_consensus_message(SequencingMessage::General(
-                        GeneralConsensusMessage::Proposal2(proposal),
+                        GeneralConsensusMessage::Proposal2(convert_proposal(proposal)),
                     ))
                 } else {
                     MessageKind::<TYPES>::from_consensus_message(SequencingMessage::General(
@@ -477,12 +687,7 @@ impl<
                     }
                 };
 
-                let message = if self
-                    .upgrade_lock
-                    .version_infallible(vote.view_number())
-                    .await
-                    >= V::Epochs::VERSION
-                {
+                let message = if self.upgrade_lock.epochs_enabled(vote.view_number()).await {
                     MessageKind::<TYPES>::from_consensus_message(SequencingMessage::General(
                         GeneralConsensusMessage::Vote2(vote.clone()),
                     ))
@@ -496,12 +701,7 @@ impl<
             }
             HotShotEvent::ExtendedQuorumVoteSend(vote) => {
                 *maybe_action = Some(HotShotAction::Vote);
-                let message = if self
-                    .upgrade_lock
-                    .version_infallible(vote.view_number())
-                    .await
-                    >= V::Epochs::VERSION
-                {
+                let message = if self.upgrade_lock.epochs_enabled(vote.view_number()).await {
                     MessageKind::<TYPES>::from_consensus_message(SequencingMessage::General(
                         GeneralConsensusMessage::Vote2(vote.clone()),
                     ))
@@ -523,12 +723,11 @@ impl<
             HotShotEvent::QuorumProposalResponseSend(sender_key, proposal) => {
                 let message = if self
                     .upgrade_lock
-                    .version_infallible(proposal.data.view_number())
+                    .epochs_enabled(proposal.data.view_number())
                     .await
-                    >= V::Epochs::VERSION
                 {
                     MessageKind::<TYPES>::from_consensus_message(SequencingMessage::General(
-                        GeneralConsensusMessage::ProposalResponse2(proposal),
+                        GeneralConsensusMessage::ProposalResponse2(convert_proposal(proposal)),
                     ))
                 } else {
                     MessageKind::<TYPES>::from_consensus_message(SequencingMessage::General(
@@ -551,9 +750,8 @@ impl<
 
                 let message = if self
                     .upgrade_lock
-                    .version_infallible(proposal.data.view_number())
+                    .epochs_enabled(proposal.data.view_number())
                     .await
-                    >= V::Epochs::VERSION
                 {
                     MessageKind::<TYPES>::from_consensus_message(SequencingMessage::Da(
                         DaConsensusMessage::DaProposal2(proposal),
@@ -582,9 +780,7 @@ impl<
                     }
                 };
 
-                let message = if self.upgrade_lock.version_infallible(view_number).await
-                    >= V::Epochs::VERSION
-                {
+                let message = if self.upgrade_lock.epochs_enabled(view_number).await {
                     MessageKind::<TYPES>::from_consensus_message(SequencingMessage::Da(
                         DaConsensusMessage::DaVote2(vote.clone()),
                     ))
@@ -600,9 +796,8 @@ impl<
                 *maybe_action = Some(HotShotAction::DaCert);
                 let message = if self
                     .upgrade_lock
-                    .version_infallible(certificate.view_number())
+                    .epochs_enabled(certificate.view_number())
                     .await
-                    >= V::Epochs::VERSION
                 {
                     MessageKind::<TYPES>::from_consensus_message(SequencingMessage::Da(
                         DaConsensusMessage::DaCertificate2(certificate),
@@ -628,12 +823,7 @@ impl<
                         return None;
                     }
                 };
-                let message = if self
-                    .upgrade_lock
-                    .version_infallible(vote.view_number())
-                    .await
-                    >= V::Epochs::VERSION
-                {
+                let message = if self.upgrade_lock.epochs_enabled(vote.view_number()).await {
                     MessageKind::<TYPES>::from_consensus_message(SequencingMessage::General(
                         GeneralConsensusMessage::ViewSyncPreCommitVote2(vote.clone()),
                     ))
@@ -659,12 +849,7 @@ impl<
                         return None;
                     }
                 };
-                let message = if self
-                    .upgrade_lock
-                    .version_infallible(vote.view_number())
-                    .await
-                    >= V::Epochs::VERSION
-                {
+                let message = if self.upgrade_lock.epochs_enabled(vote.view_number()).await {
                     MessageKind::<TYPES>::from_consensus_message(SequencingMessage::General(
                         GeneralConsensusMessage::ViewSyncCommitVote2(vote.clone()),
                     ))
@@ -690,12 +875,7 @@ impl<
                         return None;
                     }
                 };
-                let message = if self
-                    .upgrade_lock
-                    .version_infallible(vote.view_number())
-                    .await
-                    >= V::Epochs::VERSION
-                {
+                let message = if self.upgrade_lock.epochs_enabled(vote.view_number()).await {
                     MessageKind::<TYPES>::from_consensus_message(SequencingMessage::General(
                         GeneralConsensusMessage::ViewSyncFinalizeVote2(vote.clone()),
                     ))
@@ -709,9 +889,7 @@ impl<
             }
             HotShotEvent::ViewSyncPreCommitCertificateSend(certificate, sender) => {
                 let view_number = certificate.view_number();
-                let message = if self.upgrade_lock.version_infallible(view_number).await
-                    >= V::Epochs::VERSION
-                {
+                let message = if self.upgrade_lock.epochs_enabled(view_number).await {
                     MessageKind::<TYPES>::from_consensus_message(SequencingMessage::General(
                         GeneralConsensusMessage::ViewSyncPreCommitCertificate2(certificate),
                     ))
@@ -725,9 +903,7 @@ impl<
             }
             HotShotEvent::ViewSyncCommitCertificateSend(certificate, sender) => {
                 let view_number = certificate.view_number();
-                let message = if self.upgrade_lock.version_infallible(view_number).await
-                    >= V::Epochs::VERSION
-                {
+                let message = if self.upgrade_lock.epochs_enabled(view_number).await {
                     MessageKind::<TYPES>::from_consensus_message(SequencingMessage::General(
                         GeneralConsensusMessage::ViewSyncCommitCertificate2(certificate),
                     ))
@@ -741,9 +917,7 @@ impl<
             }
             HotShotEvent::ViewSyncFinalizeCertificateSend(certificate, sender) => {
                 let view_number = certificate.view_number();
-                let message = if self.upgrade_lock.version_infallible(view_number).await
-                    >= V::Epochs::VERSION
-                {
+                let message = if self.upgrade_lock.epochs_enabled(view_number).await {
                     MessageKind::<TYPES>::from_consensus_message(SequencingMessage::General(
                         GeneralConsensusMessage::ViewSyncFinalizeCertificate2(certificate),
                     ))
@@ -769,12 +943,7 @@ impl<
                         return None;
                     }
                 };
-                let message = if self
-                    .upgrade_lock
-                    .version_infallible(vote.view_number())
-                    .await
-                    >= V::Epochs::VERSION
-                {
+                let message = if self.upgrade_lock.epochs_enabled(vote.view_number()).await {
                     MessageKind::<TYPES>::from_consensus_message(SequencingMessage::General(
                         GeneralConsensusMessage::TimeoutVote2(vote.clone()),
                     ))
@@ -823,7 +992,7 @@ impl<
                 let keep_view = TYPES::View::new(view.saturating_sub(1));
                 self.cancel_tasks(keep_view);
                 let net = Arc::clone(&self.network);
-                let epoch = self.epoch.u64();
+                let epoch = self.epoch.map(|x| x.u64());
                 let mem = Arc::clone(&self.membership);
                 spawn(async move {
                     net.update_view::<TYPES>(*keep_view, epoch, mem).await;
@@ -838,9 +1007,8 @@ impl<
             HotShotEvent::VidResponseSend(sender, to, proposal) => {
                 let message = if self
                     .upgrade_lock
-                    .version_infallible(proposal.data.view_number())
+                    .epochs_enabled(proposal.data.view_number())
                     .await
-                    >= V::Epochs::VERSION
                 {
                     MessageKind::Data(DataMessage::DataResponse(ResponseMessage::Found(
                         SequencingMessage::Da(DaConsensusMessage::VidDisperseMsg2(proposal)),

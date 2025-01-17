@@ -320,7 +320,6 @@ impl Versions for EpochUpgradeTestVersions {
 mod tests {
     use committable::{Commitment, Committable};
     use hotshot_types::{
-        data::EpochNumber,
         impl_has_epoch,
         message::UpgradeLock,
         simple_vote::{HasEpoch, VersionedVoteData},
@@ -333,7 +332,7 @@ mod tests {
     /// Dummy data used for test
     struct TestData<TYPES: NodeType> {
         data: u64,
-        epoch: TYPES::Epoch,
+        epoch: Option<TYPES::Epoch>,
     }
 
     impl<TYPES: NodeType> Committable for TestData<TYPES> {
@@ -353,7 +352,7 @@ mod tests {
 
         let data = TestData {
             data: 10,
-            epoch: EpochNumber::new(0),
+            epoch: None,
         };
 
         let view_0 = <TestTypes as NodeType>::View::new(0);

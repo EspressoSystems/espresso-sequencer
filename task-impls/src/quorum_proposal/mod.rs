@@ -43,7 +43,7 @@ pub struct QuorumProposalTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>
     pub latest_proposed_view: TYPES::View,
 
     /// Current epoch
-    pub cur_epoch: TYPES::Epoch,
+    pub cur_epoch: Option<TYPES::Epoch>,
 
     /// Table for the in-progress proposal dependency tasks.
     pub proposal_dependencies: BTreeMap<TYPES::View, JoinHandle<()>>,
@@ -274,7 +274,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
     async fn create_dependency_task_if_new(
         &mut self,
         view_number: TYPES::View,
-        epoch_number: TYPES::Epoch,
+        epoch_number: Option<TYPES::Epoch>,
         event_receiver: Receiver<Arc<HotShotEvent<TYPES>>>,
         event_sender: Sender<Arc<HotShotEvent<TYPES>>>,
         event: Arc<HotShotEvent<TYPES>>,
@@ -285,11 +285,14 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
             membership_reader.leader(view_number, epoch_number)? == self.public_key;
         // If we are in the epoch transition and we are the leader in the next epoch,
         // we might want to start collecting dependencies for our next epoch proposal.
-        let leader_in_next_epoch = matches!(
-            epoch_transition_indicator,
-            EpochTransitionIndicator::InTransition
-        ) && membership_reader.leader(view_number, epoch_number + 1)?
-            == self.public_key;
+
+        let leader_in_next_epoch = epoch_number.is_some()
+            && matches!(
+                epoch_transition_indicator,
+                EpochTransitionIndicator::InTransition
+            )
+            && membership_reader.leader(view_number, epoch_number.map(|x| x + 1))?
+                == self.public_key;
         drop(membership_reader);
 
         // Don't even bother making the task if we are not entitled to propose anyway.
@@ -369,7 +372,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
     }
 
     /// Handles a consensus event received on the event stream
-    #[instrument(skip_all, fields(id = self.id, latest_proposed_view = *self.latest_proposed_view, epoch = *self.cur_epoch), name = "handle method", level = "error", target = "QuorumProposalTaskState")]
+    #[instrument(skip_all, fields(id = self.id, latest_proposed_view = *self.latest_proposed_view, epoch = self.cur_epoch.map(|x| *x)), name = "handle method", level = "error", target = "QuorumProposalTaskState")]
     pub async fn handle(
         &mut self,
         event: Arc<HotShotEvent<TYPES>>,

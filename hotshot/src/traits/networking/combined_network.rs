@@ -478,7 +478,7 @@ impl<TYPES: NodeType> ConnectedNetwork<TYPES::SignatureKey> for CombinedNetworks
     async fn update_view<'a, T>(
         &'a self,
         view: u64,
-        epoch: u64,
+        epoch: Option<u64>,
         membership: Arc<RwLock<T::Membership>>,
     ) where
         T: NodeType<SignatureKey = TYPES::SignatureKey> + 'a,

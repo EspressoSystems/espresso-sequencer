@@ -11,7 +11,7 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    data::{DaProposal2, Leaf2, QuorumProposal2, UpgradeProposal, VidDisperseShare2},
+    data::{DaProposal2, Leaf2, QuorumProposalWrapper, UpgradeProposal, VidDisperseShare2},
     error::HotShotError,
     message::Proposal,
     simple_certificate::QuorumCertificate2,
@@ -160,7 +160,7 @@ pub enum EventType<TYPES: NodeType> {
     /// or submitted to the network by us
     QuorumProposal {
         /// Contents of the proposal
-        proposal: Proposal<TYPES, QuorumProposal2<TYPES>>,
+        proposal: Proposal<TYPES, QuorumProposalWrapper<TYPES>>,
         /// Public key of the leader submitting the proposal
         sender: TYPES::SignatureKey,
     },

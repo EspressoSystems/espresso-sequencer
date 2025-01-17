@@ -30,34 +30,34 @@ pub trait Membership<TYPES: NodeType>: Debug + Send + Sync {
     /// Get all participants in the committee (including their stake) for a specific epoch
     fn stake_table(
         &self,
-        epoch: TYPES::Epoch,
+        epoch: Option<TYPES::Epoch>,
     ) -> Vec<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry>;
 
     /// Get all participants in the committee (including their stake) for a specific epoch
     fn da_stake_table(
         &self,
-        epoch: TYPES::Epoch,
+        epoch: Option<TYPES::Epoch>,
     ) -> Vec<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry>;
 
     /// Get all participants in the committee for a specific view for a specific epoch
     fn committee_members(
         &self,
         view_number: TYPES::View,
-        epoch: TYPES::Epoch,
+        epoch: Option<TYPES::Epoch>,
     ) -> BTreeSet<TYPES::SignatureKey>;
 
     /// Get all participants in the committee for a specific view for a specific epoch
     fn da_committee_members(
         &self,
         view_number: TYPES::View,
-        epoch: TYPES::Epoch,
+        epoch: Option<TYPES::Epoch>,
     ) -> BTreeSet<TYPES::SignatureKey>;
 
     /// Get all leaders in the committee for a specific view for a specific epoch
     fn committee_leaders(
         &self,
         view_number: TYPES::View,
-        epoch: TYPES::Epoch,
+        epoch: Option<TYPES::Epoch>,
     ) -> BTreeSet<TYPES::SignatureKey>;
 
     /// Get the stake table entry for a public key, returns `None` if the
@@ -65,7 +65,7 @@ pub trait Membership<TYPES: NodeType>: Debug + Send + Sync {
     fn stake(
         &self,
         pub_key: &TYPES::SignatureKey,
-        epoch: TYPES::Epoch,
+        epoch: Option<TYPES::Epoch>,
     ) -> Option<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry>;
 
     /// Get the DA stake table entry for a public key, returns `None` if the
@@ -73,14 +73,14 @@ pub trait Membership<TYPES: NodeType>: Debug + Send + Sync {
     fn da_stake(
         &self,
         pub_key: &TYPES::SignatureKey,
-        epoch: TYPES::Epoch,
+        epoch: Option<TYPES::Epoch>,
     ) -> Option<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry>;
 
     /// See if a node has stake in the committee in a specific epoch
-    fn has_stake(&self, pub_key: &TYPES::SignatureKey, epoch: TYPES::Epoch) -> bool;
+    fn has_stake(&self, pub_key: &TYPES::SignatureKey, epoch: Option<TYPES::Epoch>) -> bool;
 
     /// See if a node has stake in the committee in a specific epoch
-    fn has_da_stake(&self, pub_key: &TYPES::SignatureKey, epoch: TYPES::Epoch) -> bool;
+    fn has_da_stake(&self, pub_key: &TYPES::SignatureKey, epoch: Option<TYPES::Epoch>) -> bool;
 
     /// The leader of the committee for view `view_number` in `epoch`.
     ///
@@ -89,7 +89,11 @@ pub trait Membership<TYPES: NodeType>: Debug + Send + Sync {
     ///
     /// # Errors
     /// Returns an error if the leader cannot be calculated.
-    fn leader(&self, view: TYPES::View, epoch: TYPES::Epoch) -> Result<TYPES::SignatureKey> {
+    fn leader(
+        &self,
+        view: TYPES::View,
+        epoch: Option<TYPES::Epoch>,
+    ) -> Result<TYPES::SignatureKey> {
         use utils::anytrace::*;
 
         self.lookup_leader(view, epoch).wrap().context(info!(
@@ -107,31 +111,33 @@ pub trait Membership<TYPES: NodeType>: Debug + Send + Sync {
     fn lookup_leader(
         &self,
         view: TYPES::View,
-        epoch: TYPES::Epoch,
+        epoch: Option<TYPES::Epoch>,
     ) -> std::result::Result<TYPES::SignatureKey, Self::Error>;
 
     /// Returns the number of total nodes in the committee in an epoch `epoch`
-    fn total_nodes(&self, epoch: TYPES::Epoch) -> usize;
+    fn total_nodes(&self, epoch: Option<TYPES::Epoch>) -> usize;
 
     /// Returns the number of total DA nodes in the committee in an epoch `epoch`
-    fn da_total_nodes(&self, epoch: TYPES::Epoch) -> usize;
+    fn da_total_nodes(&self, epoch: Option<TYPES::Epoch>) -> usize;
 
     /// Returns the threshold for a specific `Membership` implementation
-    fn success_threshold(&self, epoch: TYPES::Epoch) -> NonZeroU64;
+    fn success_threshold(&self, epoch: Option<TYPES::Epoch>) -> NonZeroU64;
 
     /// Returns the DA threshold for a specific `Membership` implementation
-    fn da_success_threshold(&self, epoch: TYPES::Epoch) -> NonZeroU64;
+    fn da_success_threshold(&self, epoch: Option<TYPES::Epoch>) -> NonZeroU64;
 
     /// Returns the threshold for a specific `Membership` implementation
-    fn failure_threshold(&self, epoch: TYPES::Epoch) -> NonZeroU64;
+    fn failure_threshold(&self, epoch: Option<TYPES::Epoch>) -> NonZeroU64;
 
     /// Returns the threshold required to upgrade the network protocol
-    fn upgrade_threshold(&self, epoch: TYPES::Epoch) -> NonZeroU64;
+    fn upgrade_threshold(&self, epoch: Option<TYPES::Epoch>) -> NonZeroU64;
 
     #[allow(clippy::type_complexity)]
     /// Handles notifications that a new epoch root has been created
     /// Is called under a read lock to the Membership. Return a callback
     /// with Some to have that callback invoked under a write lock.
+    ///
+    /// #3967 REVIEW NOTE: this is only called if epoch is Some. Is there any reason to do otherwise?
     async fn add_epoch_root(
         &self,
         _epoch: TYPES::Epoch,

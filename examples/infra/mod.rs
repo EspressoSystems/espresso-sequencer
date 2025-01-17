@@ -60,6 +60,7 @@ use hotshot_types::{
         node_implementation::{ConsensusTime, NodeType, Versions},
         states::TestableState,
     },
+    utils::genesis_epoch_from_version,
     HotShotConfig, PeerConfig, ValidatorConfig,
 };
 use libp2p_networking::network::{
@@ -524,11 +525,15 @@ pub trait RunDa<
             .memberships
             .read()
             .await
-            .committee_leaders(TYPES::View::genesis(), TYPES::Epoch::genesis())
+            .committee_leaders(
+                TYPES::View::genesis(),
+                genesis_epoch_from_version::<V, TYPES>(),
+            )
             .len();
         let consensus_lock = context.hotshot.consensus();
-        let consensus = consensus_lock.read().await;
-        let total_num_views = usize::try_from(consensus.locked_view().u64()).unwrap();
+        let consensus_reader = consensus_lock.read().await;
+        let total_num_views = usize::try_from(consensus_reader.locked_view().u64()).unwrap();
+        drop(consensus_reader);
         // `failed_num_views` could include uncommitted views
         let failed_num_views = total_num_views - num_successful_commits;
         // When posting to the orchestrator, note that the total number of views also include un-finalized views.

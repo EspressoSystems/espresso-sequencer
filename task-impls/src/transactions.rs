@@ -89,7 +89,7 @@ pub struct TransactionTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>, V
     pub cur_view: TYPES::View,
 
     /// Epoch number this node is executing in.
-    pub cur_epoch: TYPES::Epoch,
+    pub cur_epoch: Option<TYPES::Epoch>,
 
     /// Reference to consensus. Leader will require a read lock on this.
     pub consensus: OuterConsensus<TYPES>,
@@ -131,7 +131,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
         &mut self,
         event_stream: &Sender<Arc<HotShotEvent<TYPES>>>,
         block_view: TYPES::View,
-        block_epoch: TYPES::Epoch,
+        block_epoch: Option<TYPES::Epoch>,
     ) -> Option<HotShotTaskCompleted> {
         let version = match self.upgrade_lock.version(block_view).await {
             Ok(v) => v,
@@ -156,7 +156,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
         &mut self,
         event_stream: &Sender<Arc<HotShotEvent<TYPES>>>,
         block_view: TYPES::View,
-        block_epoch: TYPES::Epoch,
+        block_epoch: Option<TYPES::Epoch>,
     ) -> Option<HotShotTaskCompleted> {
         let version = match self.upgrade_lock.version(block_view).await {
             Ok(v) => v,
@@ -257,7 +257,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
     async fn produce_block_marketplace(
         &mut self,
         block_view: TYPES::View,
-        block_epoch: TYPES::Epoch,
+        block_epoch: Option<TYPES::Epoch>,
         task_start_time: Instant,
     ) -> Result<PackedBundle<TYPES>> {
         ensure!(
@@ -361,7 +361,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
     pub async fn null_block(
         &self,
         block_view: TYPES::View,
-        block_epoch: TYPES::Epoch,
+        block_epoch: Option<TYPES::Epoch>,
         version: Version,
     ) -> Option<PackedBundle<TYPES>> {
         let membership_total_nodes = self.membership.read().await.total_nodes(self.cur_epoch);
@@ -394,7 +394,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
         &mut self,
         event_stream: &Sender<Arc<HotShotEvent<TYPES>>>,
         block_view: TYPES::View,
-        block_epoch: TYPES::Epoch,
+        block_epoch: Option<TYPES::Epoch>,
     ) -> Option<HotShotTaskCompleted> {
         let task_start_time = Instant::now();
 
@@ -447,7 +447,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
         &mut self,
         event_stream: &Sender<Arc<HotShotEvent<TYPES>>>,
         block_view: TYPES::View,
-        block_epoch: TYPES::Epoch,
+        block_epoch: Option<TYPES::Epoch>,
     ) -> Option<HotShotTaskCompleted> {
         if self.consensus.read().await.is_high_qc_forming_eqc() {
             tracing::info!("Reached end of epoch. Not getting a new block until we form an eQC.");
@@ -459,7 +459,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
     }
 
     /// main task event handler
-    #[instrument(skip_all, fields(id = self.id, view = *self.cur_view, epoch = *self.cur_epoch), name = "Transaction task", level = "error", target = "TransactionTaskState")]
+    #[instrument(skip_all, fields(id = self.id, view = *self.cur_view, epoch = self.cur_epoch.map(|x| *x)), name = "Transaction task", level = "error", target = "TransactionTaskState")]
     pub async fn handle(
         &mut self,
         event: Arc<HotShotEvent<TYPES>>,
@@ -480,13 +480,17 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
             }
             HotShotEvent::ViewChange(view, epoch) => {
                 let view = TYPES::View::new(std::cmp::max(1, **view));
-                let epoch = if self.epoch_height != 0 {
-                    TYPES::Epoch::new(std::cmp::max(1, **epoch))
+                let epoch = if self.upgrade_lock.epochs_enabled(view).await {
+                    // #3967 REVIEW NOTE: Double check this logic
+                    Some(TYPES::Epoch::new(std::cmp::max(
+                        1,
+                        epoch.map(|x| *x).unwrap_or(0),
+                    )))
                 } else {
                     *epoch
                 };
                 ensure!(
-                    *view > *self.cur_view && *epoch >= *self.cur_epoch,
+                    *view > *self.cur_view && epoch >= self.cur_epoch,
                     debug!(
                       "Received a view change to an older view and epoch: tried to change view to {:?}\
                       and epoch {:?} though we are at view {:?} and epoch {:?}",

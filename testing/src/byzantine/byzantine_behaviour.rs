@@ -19,7 +19,7 @@ use hotshot_task_impls::{
 };
 use hotshot_types::{
     consensus::{Consensus, OuterConsensus},
-    data::QuorumProposal2,
+    data::QuorumProposalWrapper,
     message::{Proposal, UpgradeLock},
     simple_vote::QuorumVote2,
     traits::node_implementation::{ConsensusTime, NodeImplementation, NodeType, Versions},
@@ -57,7 +57,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> EventTransforme
                 for n in 1..self.multiplier {
                     let mut modified_proposal = proposal.clone();
 
-                    modified_proposal.data.view_number += n * self.increment;
+                    modified_proposal.data.proposal.view_number += n * self.increment;
 
                     result.push(HotShotEvent::QuorumProposalSend(
                         modified_proposal,
@@ -106,7 +106,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> EventTransforme
 /// An `EventHandlerState` that modifies justify_qc on `QuorumProposalSend` to that of a previous view to mock dishonest leader
 pub struct DishonestLeader<TYPES: NodeType> {
     /// Store events from previous views
-    pub validated_proposals: Vec<QuorumProposal2<TYPES>>,
+    pub validated_proposals: Vec<QuorumProposalWrapper<TYPES>>,
     /// How many times current node has been elected leader and sent proposal
     pub total_proposals_from_node: u64,
     /// Which proposals to be dishonest at
@@ -126,7 +126,7 @@ impl<TYPES: NodeType> DishonestLeader<TYPES> {
     async fn handle_proposal_send_event(
         &self,
         event: &HotShotEvent<TYPES>,
-        proposal: &Proposal<TYPES, QuorumProposal2<TYPES>>,
+        proposal: &Proposal<TYPES, QuorumProposalWrapper<TYPES>>,
         sender: &TYPES::SignatureKey,
     ) -> HotShotEvent<TYPES> {
         let length = self.validated_proposals.len();
@@ -149,11 +149,11 @@ impl<TYPES: NodeType> DishonestLeader<TYPES> {
 
         // Create a dishonest proposal by using the old proposals qc
         let mut dishonest_proposal = proposal.clone();
-        dishonest_proposal.data.justify_qc = proposal_from_look_back.justify_qc;
+        dishonest_proposal.data.proposal.justify_qc = proposal_from_look_back.proposal.justify_qc;
 
         // Save the view we sent the dishonest proposal on (used for coordination attacks with other byzantine replicas)
         let mut dishonest_proposal_sent = self.dishonest_proposal_view_numbers.write().await;
-        dishonest_proposal_sent.insert(proposal.data.view_number);
+        dishonest_proposal_sent.insert(proposal.data.view_number());
 
         HotShotEvent::QuorumProposalSend(dishonest_proposal, sender.clone())
     }
@@ -344,7 +344,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + std::fmt::Debug, V: Version
         let network_state: NetworkEventTaskState<_, V, _, _> = NetworkEventTaskState {
             network,
             view: TYPES::View::genesis(),
-            epoch: TYPES::Epoch::genesis(),
+            epoch: None,
             membership,
             storage: Arc::clone(&handle.storage()),
             consensus: OuterConsensus::new(handle.consensus()),
@@ -396,7 +396,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + std::fmt::Debug, V: Version
             HotShotEvent::QuorumProposalRecv(proposal, _sender) => {
                 // Check if view is a dishonest proposal, if true send a vote
                 let dishonest_proposals = self.dishonest_proposal_view_numbers.read().await;
-                if dishonest_proposals.contains(&proposal.data.view_number) {
+                if dishonest_proposals.contains(&proposal.data.view_number()) {
                     // Create a vote using data from most recent vote and the current event number
                     // We wont update internal consensus state for this Byzantine replica but we are at least
                     // Going to send a vote to the next honest leader

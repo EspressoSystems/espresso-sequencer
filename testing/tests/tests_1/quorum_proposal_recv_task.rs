@@ -58,7 +58,7 @@ async fn test_quorum_proposal_recv_task() {
     let consensus = handle.hotshot.consensus();
     let mut consensus_writer = consensus.write().await;
 
-    let mut generator = TestViewGenerator::generate(membership);
+    let mut generator = TestViewGenerator::<TestVersions>::generate(membership);
     let mut proposals = Vec::new();
     let mut leaders = Vec::new();
     let mut votes = Vec::new();
@@ -96,7 +96,7 @@ async fn test_quorum_proposal_recv_task() {
             proposals[1].clone(),
             leaves[0].clone(),
         )),
-        exact(ViewChange(ViewNumber::new(2), EpochNumber::new(0))),
+        exact(ViewChange(ViewNumber::new(2), None)),
     ])];
 
     let state =
@@ -133,7 +133,7 @@ async fn test_quorum_proposal_recv_task_liveness_check() {
     let consensus = handle.hotshot.consensus();
     let mut consensus_writer = consensus.write().await;
 
-    let mut generator = TestViewGenerator::generate(membership);
+    let mut generator = TestViewGenerator::<TestVersions>::generate(membership);
     let mut proposals = Vec::new();
     let mut leaders = Vec::new();
     let mut votes = Vec::new();
@@ -166,7 +166,7 @@ async fn test_quorum_proposal_recv_task_liveness_check() {
     // ourselves here instead. This is a bit cheesy, but it'll work as we expect for the
     // purposes of the test.
     consensus_writer
-        .update_high_qc(proposals[3].data.justify_qc.clone())
+        .update_high_qc(proposals[3].data.justify_qc().clone())
         .unwrap();
 
     drop(consensus_writer);
@@ -189,7 +189,7 @@ async fn test_quorum_proposal_recv_task_liveness_check() {
 
     let expectations = vec![Expectations::from_outputs(all_predicates![
         exact(QuorumProposalPreliminarilyValidated(proposals[2].clone())),
-        exact(ViewChange(ViewNumber::new(3), EpochNumber::new(0))),
+        exact(ViewChange(ViewNumber::new(3), None)),
         exact(QuorumProposalRequestSend(req, signature)),
     ])];
 

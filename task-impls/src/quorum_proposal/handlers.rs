@@ -24,16 +24,14 @@ use hotshot_task::{
 };
 use hotshot_types::{
     consensus::{CommitmentAndMetadata, OuterConsensus},
-    data::{Leaf2, QuorumProposal2, VidDisperse, ViewChangeEvidence2},
+    data::{Leaf2, QuorumProposal2, QuorumProposalWrapper, VidDisperse, ViewChangeEvidence2},
     message::Proposal,
     simple_certificate::{NextEpochQuorumCertificate2, QuorumCertificate2, UpgradeCertificate},
     traits::{
-        block_contents::BlockHeader,
-        election::Membership,
-        node_implementation::{ConsensusTime, NodeType},
+        block_contents::BlockHeader, election::Membership, node_implementation::NodeType,
         signature_key::SignatureKey,
     },
-    utils::{epoch_from_block_number, is_last_block_in_epoch},
+    utils::{is_last_block_in_epoch, option_epoch_from_block_number},
     vote::{Certificate, HasViewNumber},
 };
 use tracing::instrument;
@@ -370,10 +368,12 @@ impl<TYPES: NodeType, V: Versions> ProposalDependencyHandle<TYPES, V> {
             .context(warn!("Failed to construct marketplace block header"))?
         };
 
-        let epoch = TYPES::Epoch::new(epoch_from_block_number(
+        let epoch = option_epoch_from_block_number::<TYPES>(
+            version >= V::Epochs::VERSION,
             block_header.block_number(),
             self.epoch_height,
-        ));
+        );
+
         // Make sure we are the leader for the view and epoch.
         // We might have ended up here because we were in the epoch transition.
         if self
@@ -400,24 +400,31 @@ impl<TYPES: NodeType, V: Versions> ProposalDependencyHandle<TYPES, V> {
         };
         let next_drb_result =
             if is_last_block_in_epoch(block_header.block_number(), self.epoch_height) {
-                self.consensus
-                    .read()
-                    .await
-                    .drb_seeds_and_results
-                    .results
-                    .get(&epoch)
-                    .copied()
+                if let Some(epoch_val) = &epoch {
+                    self.consensus
+                        .read()
+                        .await
+                        .drb_seeds_and_results
+                        .results
+                        .get(epoch_val)
+                        .copied()
+                } else {
+                    None
+                }
             } else {
                 None
             };
-        let proposal = QuorumProposal2 {
-            block_header,
-            view_number: self.view_number,
-            justify_qc: parent_qc,
-            next_epoch_justify_qc: next_epoch_qc,
-            upgrade_certificate,
-            view_change_evidence: proposal_certificate,
-            next_drb_result,
+        let proposal = QuorumProposalWrapper {
+            proposal: QuorumProposal2 {
+                block_header,
+                view_number: self.view_number,
+                justify_qc: parent_qc,
+                next_epoch_justify_qc: next_epoch_qc,
+                upgrade_certificate,
+                view_change_evidence: proposal_certificate,
+                next_drb_result,
+            },
+            with_epoch: version >= V::Epochs::VERSION,
         };
 
         let proposed_leaf = Leaf2::from_quorum_proposal(&proposal);

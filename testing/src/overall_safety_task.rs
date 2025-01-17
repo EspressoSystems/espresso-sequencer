@@ -188,12 +188,23 @@ impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>, V: Versions> TestTas
         };
 
         if let Some(ref key) = key {
-            if *key.epoch(self.epoch_height) > self.ctx.latest_epoch {
-                self.ctx.latest_epoch = *key.epoch(self.epoch_height);
+            match (
+                key.epoch(self.epoch_height).map(|x| *x),
+                self.ctx.latest_epoch,
+            ) {
+                (Some(key_epoch), Some(latest_epoch)) => {
+                    if key_epoch > latest_epoch {
+                        self.ctx.latest_epoch = Some(key_epoch);
+                    }
+                }
+                (Some(key_epoch), None) => {
+                    self.ctx.latest_epoch = Some(key_epoch);
+                }
+                _ => {}
             }
         }
 
-        let epoch = TYPES::Epoch::new(self.ctx.latest_epoch);
+        let epoch = self.ctx.latest_epoch.map(TYPES::Epoch::new);
         let memberships_arc = Arc::clone(
             &self
                 .handles
@@ -376,7 +387,7 @@ impl<TYPES: NodeType> Default for RoundCtx<TYPES> {
             round_results: HashMap::default(),
             failed_views: HashSet::default(),
             successful_views: HashSet::default(),
-            latest_epoch: 0u64,
+            latest_epoch: None,
         }
     }
 }
@@ -395,7 +406,7 @@ pub struct RoundCtx<TYPES: NodeType> {
     /// successful views
     pub successful_views: HashSet<TYPES::View>,
     /// latest epoch, updated when a leaf with a higher epoch is seen
-    pub latest_epoch: u64,
+    pub latest_epoch: Option<u64>,
 }
 
 impl<TYPES: NodeType> RoundCtx<TYPES> {

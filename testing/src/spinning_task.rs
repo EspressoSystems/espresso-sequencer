@@ -33,6 +33,7 @@ use hotshot_types::{
         network::{AsyncGenerator, ConnectedNetwork},
         node_implementation::{ConsensusTime, NodeImplementation, NodeType, Versions},
     },
+    utils::genesis_epoch_from_version,
     vote::HasViewNumber,
     ValidatorConfig,
 };
@@ -115,8 +116,8 @@ where
             sender: _,
         } = event
         {
-            if proposal.data.justify_qc.view_number() > self.high_qc.view_number() {
-                self.high_qc = proposal.data.justify_qc.clone();
+            if proposal.data.justify_qc().view_number() > self.high_qc.view_number() {
+                self.high_qc = proposal.data.justify_qc().clone();
             }
         }
 
@@ -158,7 +159,7 @@ where
                                             TestInstanceState::new(self.async_delay_config.clone()),
                                             None,
                                             TYPES::View::genesis(),
-                                            TYPES::Epoch::genesis(),
+                                            genesis_epoch_from_version::<V, TYPES>(), // #3967 is this right now after our earlier discussion? or should i be doing (epoch_height > 0).then(TYPES::Epoch::genesis)
                                             TYPES::View::genesis(),
                                             BTreeMap::new(),
                                             self.high_qc.clone(),

@@ -183,8 +183,10 @@ pub trait ConsensusTime:
     fn genesis() -> Self {
         Self::new(0)
     }
+
     /// Create a new instance of this time unit
     fn new(val: u64) -> Self;
+
     /// Get the u64 format of time
     fn u64(&self) -> u64;
 }

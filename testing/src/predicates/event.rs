@@ -175,7 +175,7 @@ where
     let info = "QuorumProposalSend with UpgradeCertificate attached".to_string();
     let check: EventCallback<TYPES> =
         Arc::new(move |e: Arc<HotShotEvent<TYPES>>| match e.as_ref() {
-            QuorumProposalSend(proposal, _) => proposal.data.upgrade_certificate.is_some(),
+            QuorumProposalSend(proposal, _) => proposal.data.upgrade_certificate().is_some(),
             _ => false,
         });
     Box::new(EventPredicate { info, check })
@@ -212,7 +212,7 @@ where
     let check: EventCallback<TYPES> =
         Arc::new(move |e: Arc<HotShotEvent<TYPES>>| match e.as_ref() {
             QuorumProposalSend(proposal, _) => {
-                Some(proposal.data.block_header.payload_commitment())
+                Some(proposal.data.block_header().payload_commitment())
                     == null_block::commitment(num_storage_nodes)
             }
             _ => false,

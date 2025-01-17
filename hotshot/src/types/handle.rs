@@ -20,7 +20,7 @@ use hotshot_task::{
 use hotshot_task_impls::{events::HotShotEvent, helpers::broadcast_event};
 use hotshot_types::{
     consensus::Consensus,
-    data::{Leaf2, QuorumProposal2},
+    data::{Leaf2, QuorumProposalWrapper},
     error::HotShotError,
     message::Proposal,
     request_response::ProposalRequestPayload,
@@ -28,7 +28,6 @@ use hotshot_types::{
         consensus_api::ConsensusApi, election::Membership, network::ConnectedNetwork,
         node_implementation::NodeType, signature_key::SignatureKey,
     },
-    vote::HasViewNumber,
 };
 use tracing::instrument;
 
@@ -101,7 +100,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static, V: Versions>
         &self,
         view: TYPES::View,
         leaf_commitment: Commitment<Leaf2<TYPES>>,
-    ) -> Result<impl futures::Future<Output = Result<Proposal<TYPES, QuorumProposal2<TYPES>>>>>
+    ) -> Result<impl futures::Future<Output = Result<Proposal<TYPES, QuorumProposalWrapper<TYPES>>>>>
     {
         // We need to be able to sign this request before submitting it to the network. Compute the
         // payload first.
@@ -285,7 +284,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static, V: Versions>
     pub async fn leader(
         &self,
         view_number: TYPES::View,
-        epoch_number: TYPES::Epoch,
+        epoch_number: Option<TYPES::Epoch>,
     ) -> Result<TYPES::SignatureKey> {
         self.hotshot
             .memberships
@@ -325,7 +324,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static, V: Versions>
 
     /// Wrapper to get the epoch number this node is on.
     #[instrument(skip_all, target = "SystemContextHandle", fields(id = self.hotshot.id))]
-    pub async fn cur_epoch(&self) -> TYPES::Epoch {
+    pub async fn cur_epoch(&self) -> Option<TYPES::Epoch> {
         self.hotshot.consensus.read().await.cur_epoch()
     }
 

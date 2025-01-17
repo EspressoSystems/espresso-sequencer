@@ -28,7 +28,7 @@ use vbs::{
 fn version_number_at_start_of_serialization() {
     let sender = BLSPubKey::generated_from_seed_indexed([0u8; 32], 0).0;
     let view_number = ConsensusTime::new(17);
-    let epoch = ConsensusTime::new(0);
+    let epoch = None;
     // The version we set for the message
     const MAJOR: u16 = 37;
     const MINOR: u16 = 17;
@@ -68,8 +68,8 @@ async fn test_certificate2_validity() {
     use hotshot_example_types::node_types::{MemoryImpl, TestTypes, TestVersions};
     use hotshot_testing::{helpers::build_system_handle, view_generator::TestViewGenerator};
     use hotshot_types::{
-        data::{EpochNumber, Leaf, Leaf2},
-        traits::{election::Membership, node_implementation::ConsensusTime},
+        data::{Leaf, Leaf2},
+        traits::election::Membership,
         vote::Certificate,
     };
 
@@ -81,7 +81,7 @@ async fn test_certificate2_validity() {
         .0;
     let membership = Arc::clone(&handle.hotshot.memberships);
 
-    let mut generator = TestViewGenerator::generate(Arc::clone(&membership));
+    let mut generator = TestViewGenerator::<TestVersions>::generate(Arc::clone(&membership));
 
     let mut proposals = Vec::new();
     let mut leaders = Vec::new();
@@ -101,12 +101,12 @@ async fn test_certificate2_validity() {
     let parent_proposal = proposals[2].clone();
 
     // ensure that we don't break certificate validation
-    let qc2 = proposal.data.justify_qc.clone();
+    let qc2 = proposal.data.justify_qc().clone();
     let qc = qc2.clone().to_qc();
 
     let membership_reader = membership.read().await;
-    let membership_stake_table = membership_reader.stake_table(EpochNumber::new(0));
-    let membership_success_threshold = membership_reader.success_threshold(EpochNumber::new(0));
+    let membership_stake_table = membership_reader.stake_table(None);
+    let membership_success_threshold = membership_reader.success_threshold(None);
     drop(membership_reader);
 
     assert!(

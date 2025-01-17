@@ -37,6 +37,7 @@ use hotshot_types::{
         network::ConnectedNetwork,
         node_implementation::{ConsensusTime, NodeImplementation, NodeType, Versions},
     },
+    utils::genesis_epoch_from_version,
     HotShotConfig, ValidatorConfig,
 };
 use tide_disco::Url;
@@ -179,7 +180,7 @@ where
             late_start,
             latest_view: None,
             changes,
-            last_decided_leaf: Leaf2::genesis(
+            last_decided_leaf: Leaf2::genesis::<V>(
                 &TestValidatedState::default(),
                 &TestInstanceState::default(),
             )
@@ -405,7 +406,8 @@ where
             config.known_nodes_with_stake.clone(),
             config.known_da_nodes.clone(),
         );
-        let num_nodes = temp_memberships.total_nodes(TYPES::Epoch::new(0));
+        // #3967 is it enough to check versions now? Or should we also be checking epoch_height?
+        let num_nodes = temp_memberships.total_nodes(genesis_epoch_from_version::<V, TYPES>());
         let (mut builder_tasks, builder_urls, fallback_builder_url) =
             self.init_builders::<B>(num_nodes).await;
 
@@ -657,6 +659,7 @@ where
             internal_channel,
             external_channel,
         )
+        .await
     }
 }
 

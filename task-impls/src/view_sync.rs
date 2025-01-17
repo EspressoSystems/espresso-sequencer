@@ -71,7 +71,7 @@ pub struct ViewSyncTaskState<TYPES: NodeType, V: Versions> {
     pub next_view: TYPES::View,
 
     /// Epoch HotShot is currently in
-    pub cur_epoch: TYPES::Epoch,
+    pub cur_epoch: Option<TYPES::Epoch>,
 
     /// Membership for the quorum
     pub membership: Arc<RwLock<TYPES::Membership>>,
@@ -143,7 +143,7 @@ pub struct ViewSyncReplicaTaskState<TYPES: NodeType, V: Versions> {
     pub next_view: TYPES::View,
 
     /// Current epoch HotShot is in
-    pub cur_epoch: TYPES::Epoch,
+    pub cur_epoch: Option<TYPES::Epoch>,
 
     /// The relay index we are currently on
     pub relay: u64,
@@ -255,7 +255,7 @@ impl<TYPES: NodeType, V: Versions> ViewSyncTaskState<TYPES, V> {
         task_map.insert(view, replica_state);
     }
 
-    #[instrument(skip_all, fields(id = self.id, view = *self.cur_view, epoch = *self.cur_epoch), name = "View Sync Main Task", level = "error")]
+    #[instrument(skip_all, fields(id = self.id, view = *self.cur_view, epoch = self.cur_epoch.map(|x| *x)), name = "View Sync Main Task", level = "error")]
     #[allow(clippy::type_complexity)]
     /// Handles incoming events for the main view sync task
     pub async fn handle(
@@ -530,7 +530,7 @@ impl<TYPES: NodeType, V: Versions> ViewSyncTaskState<TYPES, V> {
 }
 
 impl<TYPES: NodeType, V: Versions> ViewSyncReplicaTaskState<TYPES, V> {
-    #[instrument(skip_all, fields(id = self.id, view = *self.cur_view, epoch = *self.cur_epoch), name = "View Sync Replica Task", level = "error")]
+    #[instrument(skip_all, fields(id = self.id, view = *self.cur_view, epoch = self.cur_epoch.map(|x| *x)), name = "View Sync Replica Task", level = "error")]
     /// Handle incoming events for the view sync replica task
     pub async fn handle(
         &mut self,

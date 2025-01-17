@@ -71,7 +71,7 @@ async fn test_upgrade_task_with_vote() {
     let mut consensus_writer = consensus.write().await;
 
     let membership = Arc::clone(&handle.hotshot.memberships);
-    let mut generator = TestViewGenerator::generate(membership);
+    let mut generator = TestViewGenerator::<TestVersions>::generate(membership);
 
     for view in (&mut generator).take(2).collect::<Vec<_>>().await {
         proposals.push(view.quorum_proposal.clone());
@@ -132,14 +132,14 @@ async fn test_upgrade_task_with_vote() {
         Expectations::from_outputs(all_predicates![
             exact(DaCertificateValidated(dacs[1].clone())),
             exact(VidShareValidated(vids[1].0[0].clone())),
-            exact(ViewChange(ViewNumber::new(3), EpochNumber::new(0))),
+            exact(ViewChange(ViewNumber::new(3), None)),
             quorum_vote_send(),
         ]),
         Expectations::from_outputs_and_task_states(
             all_predicates![
                 exact(DaCertificateValidated(dacs[2].clone())),
                 exact(VidShareValidated(vids[2].0[0].clone())),
-                exact(ViewChange(ViewNumber::new(4), EpochNumber::new(0))),
+                exact(ViewChange(ViewNumber::new(4), None)),
                 quorum_vote_send(),
             ],
             vec![no_decided_upgrade_certificate()],
@@ -148,7 +148,7 @@ async fn test_upgrade_task_with_vote() {
             all_predicates![
                 exact(DaCertificateValidated(dacs[3].clone())),
                 exact(VidShareValidated(vids[3].0[0].clone())),
-                exact(ViewChange(ViewNumber::new(5), EpochNumber::new(0))),
+                exact(ViewChange(ViewNumber::new(5), None)),
                 quorum_vote_send(),
             ],
             vec![no_decided_upgrade_certificate()],
@@ -157,7 +157,7 @@ async fn test_upgrade_task_with_vote() {
             all_predicates![
                 exact(DaCertificateValidated(dacs[4].clone())),
                 exact(VidShareValidated(vids[4].0[0].clone())),
-                exact(ViewChange(ViewNumber::new(6), EpochNumber::new(0))),
+                exact(ViewChange(ViewNumber::new(6), None)),
                 quorum_vote_send(),
             ],
             vec![no_decided_upgrade_certificate()],

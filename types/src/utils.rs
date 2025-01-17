@@ -26,10 +26,14 @@ use serde::{Deserialize, Serialize};
 use sha2::Digest;
 use tagged_base64::tagged;
 use typenum::Unsigned;
+use vbs::version::StaticVersionType;
 
 use crate::{
     data::Leaf2,
-    traits::{node_implementation::NodeType, ValidatedState},
+    traits::{
+        node_implementation::{ConsensusTime, NodeType, Versions},
+        ValidatedState,
+    },
     vid::VidCommitment,
 };
 
@@ -46,7 +50,7 @@ pub enum ViewInner<TYPES: NodeType> {
         /// Payload commitment to the available block.
         payload_commitment: VidCommitment,
         /// An epoch to which the data belongs to. Relevant for validating against the correct stake table
-        epoch: TYPES::Epoch,
+        epoch: Option<TYPES::Epoch>,
     },
     /// Undecided view
     Leaf {
@@ -57,7 +61,7 @@ pub enum ViewInner<TYPES: NodeType> {
         /// Optional state delta.
         delta: Option<Arc<<TYPES::ValidatedState as ValidatedState<TYPES>>::Delta>>,
         /// An epoch to which the data belongs to. Relevant for validating against the correct stake table
-        epoch: TYPES::Epoch,
+        epoch: Option<TYPES::Epoch>,
     },
     /// Leaf has failed
     Failed,
@@ -151,7 +155,8 @@ impl<TYPES: NodeType> ViewInner<TYPES> {
     }
 
     /// Returns `Epoch` if possible
-    pub fn epoch(&self) -> Option<TYPES::Epoch> {
+    /// #3967 REVIEW NOTE: This type is kinda ugly, should we Result<Option<Epoch>> instead?
+    pub fn epoch(&self) -> Option<Option<TYPES::Epoch>> {
         match self {
             Self::Da { epoch, .. } | Self::Leaf { epoch, .. } => Some(*epoch),
             Self::Failed => None,
@@ -250,6 +255,34 @@ pub fn epoch_from_block_number(block_number: u64, epoch_height: u64) -> u64 {
     } else {
         block_number / epoch_height + 1
     }
+}
+
+/// Returns an Option<Epoch> based on a boolean condition of whether or not epochs are enabled, a block number,
+/// and the epoch height. If epochs are disabled or the epoch height is zero, returns None.
+#[must_use]
+pub fn option_epoch_from_block_number<TYPES: NodeType>(
+    with_epoch: bool,
+    block_number: u64,
+    epoch_height: u64,
+) -> Option<TYPES::Epoch> {
+    if with_epoch {
+        if epoch_height == 0 {
+            None
+        } else if block_number % epoch_height == 0 {
+            Some(block_number / epoch_height)
+        } else {
+            Some(block_number / epoch_height + 1)
+        }
+        .map(TYPES::Epoch::new)
+    } else {
+        None
+    }
+}
+
+/// Returns Some(0) if epochs are enabled by V::Base, otherwise returns None
+#[must_use]
+pub fn genesis_epoch_from_version<V: Versions, TYPES: NodeType>() -> Option<TYPES::Epoch> {
+    (V::Base::VERSION >= V::Epochs::VERSION).then(|| TYPES::Epoch::new(0))
 }
 
 /// A function for generating a cute little user mnemonic from a hash

@@ -991,13 +991,13 @@ impl<T: NodeType> ConnectedNetwork<T::SignatureKey> for Libp2pNetwork<T> {
     async fn update_view<'a, TYPES>(
         &'a self,
         view: u64,
-        epoch: u64,
+        epoch: Option<u64>,
         membership: Arc<RwLock<TYPES::Membership>>,
     ) where
         TYPES: NodeType<SignatureKey = T::SignatureKey> + 'a,
     {
         let future_view = <TYPES as NodeType>::View::new(view) + LOOK_AHEAD;
-        let epoch = <TYPES as NodeType>::Epoch::new(epoch);
+        let epoch = epoch.map(<TYPES as NodeType>::Epoch::new);
 
         let future_leader = match membership.read().await.leader(future_view, epoch) {
             Ok(l) => l,

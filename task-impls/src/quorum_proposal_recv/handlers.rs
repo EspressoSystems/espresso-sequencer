@@ -13,7 +13,7 @@ use async_lock::{RwLock, RwLockUpgradableReadGuard};
 use committable::Committable;
 use hotshot_types::{
     consensus::OuterConsensus,
-    data::{Leaf2, QuorumProposal, QuorumProposal2},
+    data::{Leaf2, QuorumProposal, QuorumProposalWrapper},
     message::Proposal,
     simple_certificate::QuorumCertificate,
     traits::{
@@ -24,7 +24,7 @@ use hotshot_types::{
         storage::Storage,
         ValidatedState,
     },
-    utils::{epoch_from_block_number, View, ViewInner},
+    utils::{option_epoch_from_block_number, View, ViewInner},
     vote::{Certificate, HasViewNumber},
 };
 use tokio::spawn;
@@ -44,7 +44,7 @@ use crate::{
 /// Update states in the event that the parent state is not found for a given `proposal`.
 #[instrument(skip_all)]
 async fn validate_proposal_liveness<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>(
-    proposal: &Proposal<TYPES, QuorumProposal2<TYPES>>,
+    proposal: &Proposal<TYPES, QuorumProposalWrapper<TYPES>>,
     validation_info: &ValidationInfo<TYPES, I, V>,
 ) -> Result<()> {
     let mut consensus_writer = validation_info.consensus.write().await;
@@ -52,7 +52,7 @@ async fn validate_proposal_liveness<TYPES: NodeType, I: NodeImplementation<TYPES
     let leaf = Leaf2::from_quorum_proposal(&proposal.data);
 
     let state = Arc::new(
-        <TYPES::ValidatedState as ValidatedState<TYPES>>::from_header(&proposal.data.block_header),
+        <TYPES::ValidatedState as ValidatedState<TYPES>>::from_header(proposal.data.block_header()),
     );
 
     if let Err(e) = consensus_writer.update_leaf(leaf.clone(), state, None) {
@@ -72,8 +72,8 @@ async fn validate_proposal_liveness<TYPES: NodeType, I: NodeImplementation<TYPES
         tracing::warn!("Couldn't store undecided state.  Error: {:?}", e);
     }
 
-    let liveness_check =
-        proposal.data.justify_qc.clone().view_number() > consensus_writer.locked_view();
+    // #3967 REVIEW NOTE: Why are we cloning justify_qc here just to get the view_number out?
+    let liveness_check = proposal.data.justify_qc().view_number() > consensus_writer.locked_view();
     // if we are using HS2 we update our locked view for any QC from a leader greater than our current lock
     if liveness_check
         && validation_info
@@ -82,7 +82,7 @@ async fn validate_proposal_liveness<TYPES: NodeType, I: NodeImplementation<TYPES
             .await
             .is_ok_and(|v| v >= V::Epochs::VERSION)
     {
-        consensus_writer.update_locked_view(proposal.data.justify_qc.clone().view_number())?;
+        consensus_writer.update_locked_view(proposal.data.justify_qc().view_number())?;
     }
 
     drop(consensus_writer);
@@ -139,7 +139,7 @@ pub(crate) async fn handle_quorum_proposal_recv<
     I: NodeImplementation<TYPES>,
     V: Versions,
 >(
-    proposal: &Proposal<TYPES, QuorumProposal2<TYPES>>,
+    proposal: &Proposal<TYPES, QuorumProposalWrapper<TYPES>>,
     quorum_proposal_sender_key: &TYPES::SignatureKey,
     event_sender: &Sender<Arc<HotShotEvent<TYPES>>>,
     event_receiver: &Receiver<Arc<HotShotEvent<TYPES>>>,
@@ -153,14 +153,15 @@ pub(crate) async fn handle_quorum_proposal_recv<
 
     let view_number = proposal.data.view_number();
 
-    let justify_qc = proposal.data.justify_qc.clone();
-    let maybe_next_epoch_justify_qc = proposal.data.next_epoch_justify_qc.clone();
+    let justify_qc = proposal.data.justify_qc().clone();
+    let maybe_next_epoch_justify_qc = proposal.data.next_epoch_justify_qc().clone();
 
-    let proposal_block_number = proposal.data.block_header.block_number();
-    let proposal_epoch = TYPES::Epoch::new(epoch_from_block_number(
+    let proposal_block_number = proposal.data.block_header().block_number();
+    let proposal_epoch = option_epoch_from_block_number::<TYPES>(
+        proposal.data.with_epoch,
         proposal_block_number,
         validation_info.epoch_height,
-    ));
+    );
 
     let membership_reader = validation_info.membership.read().await;
     let membership_stake_table = membership_reader.stake_table(justify_qc.data.epoch);
@@ -190,9 +191,10 @@ pub(crate) async fn handle_quorum_proposal_recv<
         }
 
         let membership_reader = validation_info.membership.read().await;
-        let membership_next_stake_table = membership_reader.stake_table(justify_qc.data.epoch + 1);
+        let membership_next_stake_table =
+            membership_reader.stake_table(justify_qc.data.epoch.map(|x| x + 1));
         let membership_next_success_threshold =
-            membership_reader.success_threshold(justify_qc.data.epoch + 1);
+            membership_reader.success_threshold(justify_qc.data.epoch.map(|x| x + 1));
         drop(membership_reader);
 
         // Validate the next epoch justify qc as well
@@ -302,9 +304,9 @@ pub(crate) async fn handle_quorum_proposal_recv<
         );
         validate_proposal_liveness(proposal, &validation_info).await?;
         tracing::trace!(
-            "Sending ViewChange for view {} and epoch {}",
+            "Sending ViewChange for view {} and epoch {:?}",
             view_number,
-            *proposal_epoch
+            proposal_epoch
         );
         broadcast_event(
             Arc::new(HotShotEvent::ViewChange(view_number, proposal_epoch)),
@@ -325,9 +327,9 @@ pub(crate) async fn handle_quorum_proposal_recv<
     .await?;
 
     tracing::trace!(
-        "Sending ViewChange for view {} and epoch {}",
+        "Sending ViewChange for view {} and epoch {:?}",
         view_number,
-        *proposal_epoch
+        proposal_epoch
     );
     broadcast_event(
         Arc::new(HotShotEvent::ViewChange(view_number, proposal_epoch)),

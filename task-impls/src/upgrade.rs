@@ -48,7 +48,7 @@ pub struct UpgradeTaskState<TYPES: NodeType, V: Versions> {
     pub cur_view: TYPES::View,
 
     /// Epoch number this node is executing in.
-    pub cur_epoch: TYPES::Epoch,
+    pub cur_epoch: Option<TYPES::Epoch>,
 
     /// Membership for Quorum Certs/votes
     pub membership: Arc<RwLock<TYPES::Membership>>,
@@ -104,7 +104,7 @@ impl<TYPES: NodeType, V: Versions> UpgradeTaskState<TYPES, V> {
     }
 
     /// main task event handler
-    #[instrument(skip_all, fields(id = self.id, view = *self.cur_view, epoch = *self.cur_epoch), name = "Upgrade Task", level = "error")]
+    #[instrument(skip_all, fields(id = self.id, view = *self.cur_view, epoch = self.cur_epoch.map(|x| *x)), name = "Upgrade Task", level = "error")]
     pub async fn handle(
         &mut self,
         event: Arc<HotShotEvent<TYPES>>,

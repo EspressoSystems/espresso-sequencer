@@ -42,7 +42,7 @@ pub trait Threshold<TYPES: NodeType> {
     /// Calculate a threshold based on the membership
     fn threshold<MEMBERSHIP: Membership<TYPES>>(
         membership: &MEMBERSHIP,
-        epoch: TYPES::Epoch,
+        epoch: Option<TYPES::Epoch>,
     ) -> u64;
 }
 
@@ -53,7 +53,7 @@ pub struct SuccessThreshold {}
 impl<TYPES: NodeType> Threshold<TYPES> for SuccessThreshold {
     fn threshold<MEMBERSHIP: Membership<TYPES>>(
         membership: &MEMBERSHIP,
-        epoch: TYPES::Epoch,
+        epoch: Option<TYPES::Epoch>,
     ) -> u64 {
         membership.success_threshold(epoch).into()
     }
@@ -66,7 +66,7 @@ pub struct OneHonestThreshold {}
 impl<TYPES: NodeType> Threshold<TYPES> for OneHonestThreshold {
     fn threshold<MEMBERSHIP: Membership<TYPES>>(
         membership: &MEMBERSHIP,
-        epoch: TYPES::Epoch,
+        epoch: Option<TYPES::Epoch>,
     ) -> u64 {
         membership.failure_threshold(epoch).into()
     }
@@ -79,7 +79,7 @@ pub struct UpgradeThreshold {}
 impl<TYPES: NodeType> Threshold<TYPES> for UpgradeThreshold {
     fn threshold<MEMBERSHIP: Membership<TYPES>>(
         membership: &MEMBERSHIP,
-        epoch: TYPES::Epoch,
+        epoch: Option<TYPES::Epoch>,
     ) -> u64 {
         membership.upgrade_threshold(epoch).into()
     }
@@ -190,7 +190,7 @@ impl<TYPES: NodeType, THRESHOLD: Threshold<TYPES>> Certificate<TYPES, DaData>
     fn stake_table_entry<MEMBERSHIP: Membership<TYPES>>(
         membership: &MEMBERSHIP,
         pub_key: &TYPES::SignatureKey,
-        epoch: TYPES::Epoch,
+        epoch: Option<TYPES::Epoch>,
     ) -> Option<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry> {
         membership.da_stake(pub_key, epoch)
     }
@@ -198,20 +198,20 @@ impl<TYPES: NodeType, THRESHOLD: Threshold<TYPES>> Certificate<TYPES, DaData>
     /// Proxy's to `Membership.da_stake_table`
     fn stake_table<MEMBERSHIP: Membership<TYPES>>(
         membership: &MEMBERSHIP,
-        epoch: TYPES::Epoch,
+        epoch: Option<TYPES::Epoch>,
     ) -> Vec<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry> {
         membership.da_stake_table(epoch)
     }
     /// Proxy's to `Membership.da_total_nodes`
     fn total_nodes<MEMBERSHIP: Membership<TYPES>>(
         membership: &MEMBERSHIP,
-        epoch: TYPES::Epoch,
+        epoch: Option<TYPES::Epoch>,
     ) -> usize {
         membership.da_total_nodes(epoch)
     }
     fn threshold<MEMBERSHIP: Membership<TYPES>>(
         membership: &MEMBERSHIP,
-        epoch: TYPES::Epoch,
+        epoch: Option<TYPES::Epoch>,
     ) -> u64 {
         membership.da_success_threshold(epoch).into()
     }
@@ -278,7 +278,7 @@ impl<TYPES: NodeType, THRESHOLD: Threshold<TYPES>> Certificate<TYPES, DaData2<TY
     fn stake_table_entry<MEMBERSHIP: Membership<TYPES>>(
         membership: &MEMBERSHIP,
         pub_key: &TYPES::SignatureKey,
-        epoch: TYPES::Epoch,
+        epoch: Option<TYPES::Epoch>,
     ) -> Option<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry> {
         membership.da_stake(pub_key, epoch)
     }
@@ -286,20 +286,20 @@ impl<TYPES: NodeType, THRESHOLD: Threshold<TYPES>> Certificate<TYPES, DaData2<TY
     /// Proxy's to `Membership.da_stake_table`
     fn stake_table<MEMBERSHIP: Membership<TYPES>>(
         membership: &MEMBERSHIP,
-        epoch: TYPES::Epoch,
+        epoch: Option<TYPES::Epoch>,
     ) -> Vec<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry> {
         membership.da_stake_table(epoch)
     }
     /// Proxy's to `Membership.da_total_nodes`
     fn total_nodes<MEMBERSHIP: Membership<TYPES>>(
         membership: &MEMBERSHIP,
-        epoch: TYPES::Epoch,
+        epoch: Option<TYPES::Epoch>,
     ) -> usize {
         membership.da_total_nodes(epoch)
     }
     fn threshold<MEMBERSHIP: Membership<TYPES>>(
         membership: &MEMBERSHIP,
-        epoch: TYPES::Epoch,
+        epoch: Option<TYPES::Epoch>,
     ) -> u64 {
         membership.da_success_threshold(epoch).into()
     }
@@ -367,7 +367,7 @@ impl<
     }
     fn threshold<MEMBERSHIP: Membership<TYPES>>(
         membership: &MEMBERSHIP,
-        epoch: TYPES::Epoch,
+        epoch: Option<TYPES::Epoch>,
     ) -> u64 {
         THRESHOLD::threshold(membership, epoch)
     }
@@ -375,14 +375,14 @@ impl<
     fn stake_table_entry<MEMBERSHIP: Membership<TYPES>>(
         membership: &MEMBERSHIP,
         pub_key: &TYPES::SignatureKey,
-        epoch: TYPES::Epoch,
+        epoch: Option<TYPES::Epoch>,
     ) -> Option<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry> {
         membership.stake(pub_key, epoch)
     }
 
     fn stake_table<MEMBERSHIP: Membership<TYPES>>(
         membership: &MEMBERSHIP,
-        epoch: TYPES::Epoch,
+        epoch: Option<TYPES::Epoch>,
     ) -> Vec<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry> {
         membership.stake_table(epoch)
     }
@@ -390,7 +390,7 @@ impl<
     /// Proxy's to `Membership.total_nodes`
     fn total_nodes<MEMBERSHIP: Membership<TYPES>>(
         membership: &MEMBERSHIP,
-        epoch: TYPES::Epoch,
+        epoch: Option<TYPES::Epoch>,
     ) -> usize {
         membership.total_nodes(epoch)
     }
@@ -452,7 +452,7 @@ impl<TYPES: NodeType> UpgradeCertificate<TYPES> {
     pub async fn validate<V: Versions>(
         upgrade_certificate: &Option<Self>,
         membership: &RwLock<TYPES::Membership>,
-        epoch: TYPES::Epoch,
+        epoch: Option<TYPES::Epoch>,
         upgrade_lock: &UpgradeLock<TYPES, V>,
     ) -> Result<()> {
         if let Some(ref cert) = upgrade_certificate {
@@ -489,7 +489,7 @@ impl<TYPES: NodeType> QuorumCertificate<TYPES> {
         let bytes: [u8; 32] = self.data.leaf_commit.into();
         let data = QuorumData2 {
             leaf_commit: Commitment::from_raw(bytes),
-            epoch: TYPES::Epoch::genesis(),
+            epoch: None,
         };
 
         let bytes: [u8; 32] = self.vote_commitment.into();
@@ -531,7 +531,7 @@ impl<TYPES: NodeType> DaCertificate<TYPES> {
     pub fn to_dac2(self) -> DaCertificate2<TYPES> {
         let data = DaData2 {
             payload_commit: self.data.payload_commit,
-            epoch: TYPES::Epoch::new(0),
+            epoch: None,
         };
 
         let bytes: [u8; 32] = self.vote_commitment.into();
@@ -573,7 +573,7 @@ impl<TYPES: NodeType> ViewSyncPreCommitCertificate<TYPES> {
         let data = ViewSyncPreCommitData2 {
             relay: self.data.relay,
             round: self.data.round,
-            epoch: TYPES::Epoch::new(0),
+            epoch: None,
         };
 
         let bytes: [u8; 32] = self.vote_commitment.into();
@@ -616,7 +616,7 @@ impl<TYPES: NodeType> ViewSyncCommitCertificate<TYPES> {
         let data = ViewSyncCommitData2 {
             relay: self.data.relay,
             round: self.data.round,
-            epoch: TYPES::Epoch::new(0),
+            epoch: None,
         };
 
         let bytes: [u8; 32] = self.vote_commitment.into();
@@ -659,7 +659,7 @@ impl<TYPES: NodeType> ViewSyncFinalizeCertificate<TYPES> {
         let data = ViewSyncFinalizeData2 {
             relay: self.data.relay,
             round: self.data.round,
-            epoch: TYPES::Epoch::new(0),
+            epoch: None,
         };
 
         let bytes: [u8; 32] = self.vote_commitment.into();
@@ -701,7 +701,7 @@ impl<TYPES: NodeType> TimeoutCertificate<TYPES> {
     pub fn to_tc2(self) -> TimeoutCertificate2<TYPES> {
         let data = TimeoutData2 {
             view: self.data.view,
-            epoch: TYPES::Epoch::new(0),
+            epoch: None,
         };
 
         let bytes: [u8; 32] = self.vote_commitment.into();

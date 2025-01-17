@@ -262,7 +262,7 @@ pub trait ConnectedNetwork<K: SignatureKey + 'static>: Clone + Send + Sync + 'st
     async fn update_view<'a, TYPES>(
         &'a self,
         _view: u64,
-        _epoch: u64,
+        _epoch: Option<u64>,
         _membership: Arc<RwLock<TYPES::Membership>>,
     ) where
         TYPES: NodeType<SignatureKey = K> + 'a,

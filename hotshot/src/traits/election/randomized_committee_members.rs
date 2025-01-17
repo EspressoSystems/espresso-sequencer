@@ -127,68 +127,90 @@ impl<TYPES: NodeType, CONFIG: QuorumFilterConfig> Membership<TYPES>
     /// Get the stake table for the current view
     fn stake_table(
         &self,
-        epoch: <TYPES as NodeType>::Epoch,
+        epoch: Option<<TYPES as NodeType>::Epoch>,
     ) -> Vec<<<TYPES as NodeType>::SignatureKey as SignatureKey>::StakeTableEntry> {
-        let filter = self.make_quorum_filter(epoch);
-        //self.stake_table.clone()s
-        self.stake_table
-            .iter()
-            .enumerate()
-            .filter(|(idx, _)| filter.contains(idx))
-            .map(|(_, v)| v.clone())
-            .collect()
+        if let Some(epoch) = epoch {
+            let filter = self.make_quorum_filter(epoch);
+            //self.stake_table.clone()s
+            self.stake_table
+                .iter()
+                .enumerate()
+                .filter(|(idx, _)| filter.contains(idx))
+                .map(|(_, v)| v.clone())
+                .collect()
+        } else {
+            self.stake_table.clone()
+        }
     }
 
     /// Get the da stake table for the current view
     fn da_stake_table(
         &self,
-        epoch: <TYPES as NodeType>::Epoch,
+        epoch: Option<<TYPES as NodeType>::Epoch>,
     ) -> Vec<<<TYPES as NodeType>::SignatureKey as SignatureKey>::StakeTableEntry> {
-        let filter = self.make_da_quorum_filter(epoch);
-        //self.stake_table.clone()s
-        self.da_stake_table
-            .iter()
-            .enumerate()
-            .filter(|(idx, _)| filter.contains(idx))
-            .map(|(_, v)| v.clone())
-            .collect()
+        if let Some(epoch) = epoch {
+            let filter = self.make_da_quorum_filter(epoch);
+            //self.stake_table.clone()s
+            self.da_stake_table
+                .iter()
+                .enumerate()
+                .filter(|(idx, _)| filter.contains(idx))
+                .map(|(_, v)| v.clone())
+                .collect()
+        } else {
+            self.da_stake_table.clone()
+        }
     }
 
     /// Get all members of the committee for the current view
     fn committee_members(
         &self,
         _view_number: <TYPES as NodeType>::View,
-        epoch: <TYPES as NodeType>::Epoch,
+        epoch: Option<<TYPES as NodeType>::Epoch>,
     ) -> BTreeSet<<TYPES as NodeType>::SignatureKey> {
-        let filter = self.make_quorum_filter(epoch);
-        self.stake_table
-            .iter()
-            .enumerate()
-            .filter(|(idx, _)| filter.contains(idx))
-            .map(|(_, v)| TYPES::SignatureKey::public_key(v))
-            .collect()
+        if let Some(epoch) = epoch {
+            let filter = self.make_quorum_filter(epoch);
+            self.stake_table
+                .iter()
+                .enumerate()
+                .filter(|(idx, _)| filter.contains(idx))
+                .map(|(_, v)| TYPES::SignatureKey::public_key(v))
+                .collect()
+        } else {
+            self.stake_table
+                .iter()
+                .map(TYPES::SignatureKey::public_key)
+                .collect()
+        }
     }
 
     /// Get all members of the committee for the current view
     fn da_committee_members(
         &self,
         _view_number: <TYPES as NodeType>::View,
-        epoch: <TYPES as NodeType>::Epoch,
+        epoch: Option<<TYPES as NodeType>::Epoch>,
     ) -> BTreeSet<<TYPES as NodeType>::SignatureKey> {
-        let filter = self.make_da_quorum_filter(epoch);
-        self.da_stake_table
-            .iter()
-            .enumerate()
-            .filter(|(idx, _)| filter.contains(idx))
-            .map(|(_, v)| TYPES::SignatureKey::public_key(v))
-            .collect()
+        if let Some(epoch) = epoch {
+            let filter = self.make_da_quorum_filter(epoch);
+            self.da_stake_table
+                .iter()
+                .enumerate()
+                .filter(|(idx, _)| filter.contains(idx))
+                .map(|(_, v)| TYPES::SignatureKey::public_key(v))
+                .collect()
+        } else {
+            self.da_stake_table
+                .iter()
+                .map(TYPES::SignatureKey::public_key)
+                .collect()
+        }
     }
 
     /// Get all eligible leaders of the committee for the current view
     fn committee_leaders(
         &self,
         view_number: <TYPES as NodeType>::View,
-        epoch: <TYPES as NodeType>::Epoch,
+        epoch: Option<<TYPES as NodeType>::Epoch>,
     ) -> BTreeSet<<TYPES as NodeType>::SignatureKey> {
         self.committee_members(view_number, epoch)
     }
@@ -197,23 +219,27 @@ impl<TYPES: NodeType, CONFIG: QuorumFilterConfig> Membership<TYPES>
     fn stake(
         &self,
         pub_key: &<TYPES as NodeType>::SignatureKey,
-        epoch: <TYPES as NodeType>::Epoch,
+        epoch: Option<<TYPES as NodeType>::Epoch>,
     ) -> Option<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry> {
-        let filter = self.make_quorum_filter(epoch);
-        let actual_members: BTreeSet<_> = self
-            .stake_table
-            .iter()
-            .enumerate()
-            .filter(|(idx, _)| filter.contains(idx))
-            .map(|(_, v)| TYPES::SignatureKey::public_key(v))
-            .collect();
+        if let Some(epoch) = epoch {
+            let filter = self.make_quorum_filter(epoch);
+            let actual_members: BTreeSet<_> = self
+                .stake_table
+                .iter()
+                .enumerate()
+                .filter(|(idx, _)| filter.contains(idx))
+                .map(|(_, v)| TYPES::SignatureKey::public_key(v))
+                .collect();
 
-        if actual_members.contains(pub_key) {
-            // Only return the stake if it is above zero
-            self.indexed_stake_table.get(pub_key).cloned()
+            if actual_members.contains(pub_key) {
+                // Only return the stake if it is above zero
+                self.indexed_stake_table.get(pub_key).cloned()
+            } else {
+                // Skip members which aren't included based on the quorum filter
+                None
+            }
         } else {
-            // Skip members which aren't included based on the quorum filter
-            None
+            self.indexed_stake_table.get(pub_key).cloned()
         }
     }
 
@@ -221,23 +247,27 @@ impl<TYPES: NodeType, CONFIG: QuorumFilterConfig> Membership<TYPES>
     fn da_stake(
         &self,
         pub_key: &<TYPES as NodeType>::SignatureKey,
-        epoch: <TYPES as NodeType>::Epoch,
+        epoch: Option<<TYPES as NodeType>::Epoch>,
     ) -> Option<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry> {
-        let filter = self.make_da_quorum_filter(epoch);
-        let actual_members: BTreeSet<_> = self
-            .da_stake_table
-            .iter()
-            .enumerate()
-            .filter(|(idx, _)| filter.contains(idx))
-            .map(|(_, v)| TYPES::SignatureKey::public_key(v))
-            .collect();
+        if let Some(epoch) = epoch {
+            let filter = self.make_da_quorum_filter(epoch);
+            let actual_members: BTreeSet<_> = self
+                .da_stake_table
+                .iter()
+                .enumerate()
+                .filter(|(idx, _)| filter.contains(idx))
+                .map(|(_, v)| TYPES::SignatureKey::public_key(v))
+                .collect();
 
-        if actual_members.contains(pub_key) {
-            // Only return the stake if it is above zero
-            self.indexed_da_stake_table.get(pub_key).cloned()
+            if actual_members.contains(pub_key) {
+                // Only return the stake if it is above zero
+                self.indexed_da_stake_table.get(pub_key).cloned()
+            } else {
+                // Skip members which aren't included based on the quorum filter
+                None
+            }
         } else {
-            // Skip members which aren't included based on the quorum filter
-            None
+            self.indexed_da_stake_table.get(pub_key).cloned()
         }
     }
 
@@ -245,24 +275,30 @@ impl<TYPES: NodeType, CONFIG: QuorumFilterConfig> Membership<TYPES>
     fn has_stake(
         &self,
         pub_key: &<TYPES as NodeType>::SignatureKey,
-        epoch: <TYPES as NodeType>::Epoch,
+        epoch: Option<<TYPES as NodeType>::Epoch>,
     ) -> bool {
-        let filter = self.make_quorum_filter(epoch);
-        let actual_members: BTreeSet<_> = self
-            .stake_table
-            .iter()
-            .enumerate()
-            .filter(|(idx, _)| filter.contains(idx))
-            .map(|(_, v)| TYPES::SignatureKey::public_key(v))
-            .collect();
+        if let Some(epoch) = epoch {
+            let filter = self.make_quorum_filter(epoch);
+            let actual_members: BTreeSet<_> = self
+                .stake_table
+                .iter()
+                .enumerate()
+                .filter(|(idx, _)| filter.contains(idx))
+                .map(|(_, v)| TYPES::SignatureKey::public_key(v))
+                .collect();
 
-        if actual_members.contains(pub_key) {
+            if actual_members.contains(pub_key) {
+                self.indexed_stake_table
+                    .get(pub_key)
+                    .is_some_and(|x| x.stake() > U256::zero())
+            } else {
+                // Skip members which aren't included based on the quorum filter
+                false
+            }
+        } else {
             self.indexed_stake_table
                 .get(pub_key)
                 .is_some_and(|x| x.stake() > U256::zero())
-        } else {
-            // Skip members which aren't included based on the quorum filter
-            false
         }
     }
 
@@ -270,83 +306,109 @@ impl<TYPES: NodeType, CONFIG: QuorumFilterConfig> Membership<TYPES>
     fn has_da_stake(
         &self,
         pub_key: &<TYPES as NodeType>::SignatureKey,
-        epoch: <TYPES as NodeType>::Epoch,
+        epoch: Option<<TYPES as NodeType>::Epoch>,
     ) -> bool {
-        let filter = self.make_da_quorum_filter(epoch);
-        let actual_members: BTreeSet<_> = self
-            .da_stake_table
-            .iter()
-            .enumerate()
-            .filter(|(idx, _)| filter.contains(idx))
-            .map(|(_, v)| TYPES::SignatureKey::public_key(v))
-            .collect();
+        if let Some(epoch) = epoch {
+            let filter = self.make_da_quorum_filter(epoch);
+            let actual_members: BTreeSet<_> = self
+                .da_stake_table
+                .iter()
+                .enumerate()
+                .filter(|(idx, _)| filter.contains(idx))
+                .map(|(_, v)| TYPES::SignatureKey::public_key(v))
+                .collect();
 
-        if actual_members.contains(pub_key) {
+            if actual_members.contains(pub_key) {
+                self.indexed_da_stake_table
+                    .get(pub_key)
+                    .is_some_and(|x| x.stake() > U256::zero())
+            } else {
+                // Skip members which aren't included based on the quorum filter
+                false
+            }
+        } else {
             self.indexed_da_stake_table
                 .get(pub_key)
                 .is_some_and(|x| x.stake() > U256::zero())
-        } else {
-            // Skip members which aren't included based on the quorum filter
-            false
         }
     }
 
     /// Index the vector of public keys with the current view number
     fn lookup_leader(
         &self,
-        view_number: TYPES::View,
-        epoch: <TYPES as NodeType>::Epoch,
+        view_number: <TYPES as NodeType>::View,
+        epoch: Option<<TYPES as NodeType>::Epoch>,
     ) -> Result<TYPES::SignatureKey> {
-        let filter = self.make_quorum_filter(epoch);
-        let leader_vec: Vec<_> = self
-            .stake_table
-            .iter()
-            .enumerate()
-            .filter(|(idx, _)| filter.contains(idx))
-            .map(|(_, v)| v.clone())
-            .collect();
+        if let Some(epoch) = epoch {
+            let filter = self.make_quorum_filter(epoch);
+            let leader_vec: Vec<_> = self
+                .stake_table
+                .iter()
+                .enumerate()
+                .filter(|(idx, _)| filter.contains(idx))
+                .map(|(_, v)| v.clone())
+                .collect();
 
-        let mut rng: StdRng = rand::SeedableRng::seed_from_u64(*view_number);
+            let mut rng: StdRng = rand::SeedableRng::seed_from_u64(*view_number);
 
-        let randomized_view_number: u64 = rng.gen_range(0..=u64::MAX);
-        #[allow(clippy::cast_possible_truncation)]
-        let index = randomized_view_number as usize % leader_vec.len();
+            let randomized_view_number: u64 = rng.gen_range(0..=u64::MAX);
+            #[allow(clippy::cast_possible_truncation)]
+            let index = randomized_view_number as usize % leader_vec.len();
 
-        let res = leader_vec[index].clone();
+            let res = leader_vec[index].clone();
 
-        Ok(TYPES::SignatureKey::public_key(&res))
+            Ok(TYPES::SignatureKey::public_key(&res))
+        } else {
+            let mut rng: StdRng = rand::SeedableRng::seed_from_u64(*view_number);
+
+            let randomized_view_number: u64 = rng.gen_range(0..=u64::MAX);
+            #[allow(clippy::cast_possible_truncation)]
+            let index = randomized_view_number as usize % self.eligible_leaders.len();
+
+            let res = self.eligible_leaders[index].clone();
+
+            Ok(TYPES::SignatureKey::public_key(&res))
+        }
     }
 
     /// Get the total number of nodes in the committee
-    fn total_nodes(&self, epoch: <TYPES as NodeType>::Epoch) -> usize {
-        self.make_quorum_filter(epoch).len()
+    fn total_nodes(&self, epoch: Option<<TYPES as NodeType>::Epoch>) -> usize {
+        if let Some(epoch) = epoch {
+            self.make_quorum_filter(epoch).len()
+        } else {
+            self.stake_table.len()
+        }
     }
 
     /// Get the total number of nodes in the committee
-    fn da_total_nodes(&self, epoch: <TYPES as NodeType>::Epoch) -> usize {
-        self.make_da_quorum_filter(epoch).len()
+    fn da_total_nodes(&self, epoch: Option<<TYPES as NodeType>::Epoch>) -> usize {
+        if let Some(epoch) = epoch {
+            self.make_da_quorum_filter(epoch).len()
+        } else {
+            self.da_stake_table.len()
+        }
     }
 
     /// Get the voting success threshold for the committee
-    fn success_threshold(&self, epoch: <TYPES as NodeType>::Epoch) -> NonZeroU64 {
+    fn success_threshold(&self, epoch: Option<<TYPES as NodeType>::Epoch>) -> NonZeroU64 {
         let len = self.total_nodes(epoch);
         NonZeroU64::new(((len as u64 * 2) / 3) + 1).unwrap()
     }
 
     /// Get the voting success threshold for the committee
-    fn da_success_threshold(&self, epoch: <TYPES as NodeType>::Epoch) -> NonZeroU64 {
+    fn da_success_threshold(&self, epoch: Option<<TYPES as NodeType>::Epoch>) -> NonZeroU64 {
         let len = self.da_total_nodes(epoch);
         NonZeroU64::new(((len as u64 * 2) / 3) + 1).unwrap()
     }
 
     /// Get the voting failure threshold for the committee
-    fn failure_threshold(&self, epoch: <TYPES as NodeType>::Epoch) -> NonZeroU64 {
+    fn failure_threshold(&self, epoch: Option<<TYPES as NodeType>::Epoch>) -> NonZeroU64 {
         let len = self.total_nodes(epoch);
         NonZeroU64::new(((len as u64) / 3) + 1).unwrap()
     }
 
     /// Get the voting upgrade threshold for the committee
-    fn upgrade_threshold(&self, epoch: <TYPES as NodeType>::Epoch) -> NonZeroU64 {
+    fn upgrade_threshold(&self, epoch: Option<<TYPES as NodeType>::Epoch>) -> NonZeroU64 {
         let len = self.total_nodes(epoch);
         NonZeroU64::new(max((len as u64 * 9) / 10, ((len as u64 * 2) / 3) + 1)).unwrap()
     }

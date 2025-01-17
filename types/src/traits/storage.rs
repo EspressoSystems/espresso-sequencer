@@ -20,8 +20,8 @@ use super::node_implementation::NodeType;
 use crate::{
     consensus::{CommitmentMap, View},
     data::{
-        DaProposal, DaProposal2, Leaf, Leaf2, QuorumProposal, QuorumProposal2, VidDisperseShare,
-        VidDisperseShare2,
+        DaProposal, DaProposal2, Leaf, Leaf2, QuorumProposal, QuorumProposal2,
+        QuorumProposalWrapper, VidDisperseShare, VidDisperseShare2,
     },
     event::HotShotAction,
     message::{convert_proposal, Proposal},
@@ -67,6 +67,14 @@ pub trait Storage<TYPES: NodeType>: Send + Sync + Clone {
     async fn append_proposal2(
         &self,
         proposal: &Proposal<TYPES, QuorumProposal2<TYPES>>,
+    ) -> Result<()> {
+        self.append_proposal(&convert_proposal(proposal.clone()))
+            .await
+    }
+    /// Add a proposal we sent to the store
+    async fn append_proposal_wrapper(
+        &self,
+        proposal: &Proposal<TYPES, QuorumProposalWrapper<TYPES>>,
     ) -> Result<()> {
         self.append_proposal(&convert_proposal(proposal.clone()))
             .await

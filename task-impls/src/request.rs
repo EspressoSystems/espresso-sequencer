@@ -26,10 +26,10 @@ use hotshot_types::{
         block_contents::BlockHeader,
         election::Membership,
         network::{ConnectedNetwork, DataRequest, RequestKind},
-        node_implementation::{ConsensusTime, NodeImplementation, NodeType},
+        node_implementation::{NodeImplementation, NodeType},
         signature_key::SignatureKey,
     },
-    utils::epoch_from_block_number,
+    utils::option_epoch_from_block_number,
     vote::HasViewNumber,
 };
 use rand::{seq::SliceRandom, thread_rng};
@@ -112,10 +112,11 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TaskState for NetworkRequest
         match event.as_ref() {
             HotShotEvent::QuorumProposalValidated(proposal, _) => {
                 let prop_view = proposal.data.view_number();
-                let prop_epoch = TYPES::Epoch::new(epoch_from_block_number(
-                    proposal.data.block_header.block_number(),
+                let prop_epoch = option_epoch_from_block_number::<TYPES>(
+                    proposal.data.with_epoch,
+                    proposal.data.block_header().block_number(),
                     self.epoch_height,
-                ));
+                );
 
                 // If we already have the VID shares for the next view, do nothing.
                 if prop_view >= self.view
@@ -162,7 +163,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> NetworkRequestState<TYPES, I
     async fn spawn_requests(
         &mut self,
         view: TYPES::View,
-        epoch: TYPES::Epoch,
+        epoch: Option<TYPES::Epoch>,
         sender: &Sender<Arc<HotShotEvent<TYPES>>>,
         receiver: &Receiver<Arc<HotShotEvent<TYPES>>>,
     ) {
@@ -191,7 +192,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> NetworkRequestState<TYPES, I
         sender: Sender<Arc<HotShotEvent<TYPES>>>,
         receiver: Receiver<Arc<HotShotEvent<TYPES>>>,
         view: TYPES::View,
-        epoch: TYPES::Epoch,
+        epoch: Option<TYPES::Epoch>,
     ) {
         let consensus = OuterConsensus::new(Arc::clone(&self.consensus.inner_consensus));
         let network = Arc::clone(&self.network);
