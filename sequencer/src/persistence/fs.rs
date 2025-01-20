@@ -472,7 +472,7 @@ impl Inner {
     }
 
     fn load_anchor_leaf(&self) -> anyhow::Result<Option<(Leaf2, QuorumCertificate2<SeqTypes>)>> {
-        if self.decided_leaf_path().is_dir() {
+        if self.decided_leaf2_path().is_dir() {
             let mut anchor: Option<(Leaf2, QuorumCertificate2<SeqTypes>)> = None;
 
             // Return the latest decided leaf.

@@ -1,7 +1,7 @@
 CREATE TABLE anchor_leaf2 (
     view   BIGINT PRIMARY KEY,
-    leaf2   BLOB,
-    qc2    BLOB
+    leaf  BLOB,
+    qc   BLOB
 );
 
  
@@ -51,4 +51,4 @@ CREATE TABLE epoch_migration (
     completed bool NOT NULL DEFAULT FALSE
 );
 
-INSERT INTO epoch_migration ("table_name") VALUES ("anchor_leaf"), ("da_proposal"), ("vid_share"), ("undecided_state"), ("quorum_proposals"), ("quorum_certificates");
+INSERT INTO epoch_migration (table_name) VALUES ('anchor_leaf'), ('da_proposal'), ('vid_share'), ('undecided_state'), ('quorum_proposals'), ('quorum_certificate');

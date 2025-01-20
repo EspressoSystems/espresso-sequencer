@@ -55,13 +55,12 @@ mod persistence_tests {
     use hotshot::types::{BLSPubKey, SignatureKey};
     use hotshot_example_types::node_types::TestVersions;
     use hotshot_types::{
-        data::{
-            DaProposal, DaProposal2, EpochNumber, QuorumProposal2, VidDisperseShare,
-            VidDisperseShare2, ViewNumber,
-        },
+        data::{DaProposal2, EpochNumber, QuorumProposal2, VidDisperseShare2, ViewNumber},
         event::{EventType, HotShotAction, LeafInfo},
         message::{Proposal, UpgradeLock},
-        simple_certificate::{NextEpochQuorumCertificate2, QuorumCertificate, UpgradeCertificate},
+        simple_certificate::{
+            NextEpochQuorumCertificate2, QuorumCertificate, QuorumCertificate2, UpgradeCertificate,
+        },
         simple_vote::{NextEpochQuorumData2, QuorumData2, UpgradeProposalData, VersionedVoteData},
         traits::{block_contents::vid_commitment, node_implementation::ConsensusTime, EncodeBytes},
         vid::vid_scheme,
@@ -190,12 +189,11 @@ mod persistence_tests {
             data: QuorumProposal2::<SeqTypes> {
                 block_header: leaf.block_header().clone(),
                 view_number: ViewNumber::genesis(),
-                justify_qc: QuorumCertificate::genesis::<TestVersions>(
+                justify_qc: QuorumCertificate2::genesis::<TestVersions>(
                     &ValidatedState::default(),
                     &NodeState::mock(),
                 )
-                .await
-                .to_qc2(),
+                .await,
                 upgrade_certificate: None,
                 view_change_evidence: None,
                 next_drb_result: None,
@@ -652,12 +650,15 @@ mod persistence_tests {
             .disperse(leaf_payload_bytes_arc.clone())
             .unwrap();
         let (pubkey, privkey) = BLSPubKey::generated_from_seed_indexed([0; 32], 1);
-        let mut vid = VidDisperseShare::<SeqTypes> {
+        let mut vid = VidDisperseShare2::<SeqTypes> {
             view_number: ViewNumber::new(0),
             payload_commitment: Default::default(),
             share: disperse.shares[0].clone(),
             common: disperse.common,
             recipient_key: pubkey,
+            epoch: EpochNumber::new(0),
+            target_epoch: EpochNumber::new(0),
+            data_epoch_payload_commitment: None,
         }
         .to_proposal(&privkey)
         .unwrap()
@@ -665,31 +666,30 @@ mod persistence_tests {
         let mut quorum_proposal = QuorumProposal2::<SeqTypes> {
             block_header: leaf.block_header().clone(),
             view_number: ViewNumber::genesis(),
-            justify_qc: QuorumCertificate::genesis::<TestVersions>(
+            justify_qc: QuorumCertificate2::genesis::<TestVersions>(
                 &ValidatedState::default(),
                 &NodeState::mock(),
             )
-            .await
-            .to_qc2(),
+            .await,
             upgrade_certificate: None,
             view_change_evidence: None,
             next_drb_result: None,
             next_epoch_justify_qc: None,
         };
-        let mut qc = QuorumCertificate::genesis::<TestVersions>(
+        let mut qc = QuorumCertificate2::genesis::<TestVersions>(
             &ValidatedState::default(),
             &NodeState::mock(),
         )
-        .await
-        .to_qc2();
+        .await;
 
         let block_payload_signature = BLSPubKey::sign(&privkey, &leaf_payload_bytes_arc)
             .expect("Failed to sign block payload");
         let mut da_proposal = Proposal {
-            data: DaProposal::<SeqTypes> {
+            data: DaProposal2::<SeqTypes> {
                 encoded_transactions: leaf_payload_bytes_arc.clone(),
                 metadata: leaf_payload.ns_table().clone(),
                 view_number: ViewNumber::new(0),
+                epoch: EpochNumber::new(0),
             },
             signature: block_payload_signature,
             _pd: Default::default(),
@@ -710,8 +710,8 @@ mod persistence_tests {
         // Add proposals.
         for (_, _, vid, da) in &chain {
             tracing::info!(?da, ?vid, "insert proposal");
-            storage.append_da(da, vid_commitment).await.unwrap();
-            storage.append_vid(vid).await.unwrap();
+            storage.append_da2(da, vid_commitment).await.unwrap();
+            storage.append_vid2(vid).await.unwrap();
         }
 
         // Decide 2 leaves, but fail in event processing.

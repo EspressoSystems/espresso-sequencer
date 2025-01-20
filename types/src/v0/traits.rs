@@ -523,12 +523,8 @@ pub trait SequencerPersistence: Sized + Send + Sync + Clone + 'static {
             None => {
                 tracing::info!("no saved leaf, starting from genesis leaf");
                 (
-                    hotshot_types::data::Leaf::genesis(&genesis_validated_state, &state)
-                        .await
-                        .into(),
-                    QuorumCertificate::genesis::<V>(&genesis_validated_state, &state)
-                        .await
-                        .to_qc2(),
+                    hotshot_types::data::Leaf2::genesis(&genesis_validated_state, &state).await,
+                    QuorumCertificate2::genesis::<V>(&genesis_validated_state, &state).await,
                     None,
                 )
             }

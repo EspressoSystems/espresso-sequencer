@@ -632,9 +632,10 @@ impl Persistence {
             };
 
             let mut parent = None;
-            let mut rows = query("SELECT leaf, qc FROM anchor_leaf WHERE view >= $1 ORDER BY view")
-                .bind(from_view)
-                .fetch(tx.as_mut());
+            let mut rows =
+                query("SELECT leaf, qc FROM anchor_leaf2 WHERE view >= $1 ORDER BY view")
+                    .bind(from_view)
+                    .fetch(tx.as_mut());
             let mut leaves = vec![];
             let mut final_qc = None;
             while let Some(row) = rows.next().await {
@@ -649,9 +650,9 @@ impl Persistence {
                 };
 
                 let leaf_data: Vec<u8> = row.get("leaf");
-                let leaf = bincode::deserialize::<Leaf>(&leaf_data)?;
+                let leaf = bincode::deserialize::<Leaf2>(&leaf_data)?;
                 let qc_data: Vec<u8> = row.get("qc");
-                let qc = bincode::deserialize::<QuorumCertificate<SeqTypes>>(&qc_data)?;
+                let qc = bincode::deserialize::<QuorumCertificate2<SeqTypes>>(&qc_data)?;
                 let height = leaf.block_header().block_number();
 
                 // Ensure we are only dealing with a consecutive chain of leaves. We don't want to
@@ -687,7 +688,7 @@ impl Persistence {
             // Collect VID shares for the decide event.
             let mut vid_shares = tx
                 .fetch_all(
-                    query("SELECT view, data FROM vid_share where view >= $1 AND view <= $2")
+                    query("SELECT view, data FROM vid_share2 where view >= $1 AND view <= $2")
                         .bind(from_view.u64() as i64)
                         .bind(to_view.u64() as i64),
                 )
@@ -697,7 +698,7 @@ impl Persistence {
                     let view: i64 = row.get("view");
                     let data: Vec<u8> = row.get("data");
                     let vid_proposal = bincode::deserialize::<
-                        Proposal<SeqTypes, VidDisperseShare<SeqTypes>>,
+                        Proposal<SeqTypes, VidDisperseShare2<SeqTypes>>,
                     >(&data)?;
                     Ok((view as u64, vid_proposal.data))
                 })
@@ -706,7 +707,7 @@ impl Persistence {
             // Collect DA proposals for the decide event.
             let mut da_proposals = tx
                 .fetch_all(
-                    query("SELECT view, data FROM da_proposal where view >= $1 AND view <= $2")
+                    query("SELECT view, data FROM da_proposal2 where view >= $1 AND view <= $2")
                         .bind(from_view.u64() as i64)
                         .bind(to_view.u64() as i64),
                 )
@@ -716,7 +717,7 @@ impl Persistence {
                     let view: i64 = row.get("view");
                     let data: Vec<u8> = row.get("data");
                     let da_proposal =
-                        bincode::deserialize::<Proposal<SeqTypes, DaProposal<SeqTypes>>>(&data)?;
+                        bincode::deserialize::<Proposal<SeqTypes, DaProposal2<SeqTypes>>>(&data)?;
                     Ok((view as u64, da_proposal.data))
                 })
                 .collect::<anyhow::Result<BTreeMap<_, _>>>()?;
@@ -751,7 +752,7 @@ impl Persistence {
                     }
 
                     LeafInfo {
-                        leaf: leaf.into(),
+                        leaf,
                         vid_share: vid_share.map(Into::into),
                         // Note: the following fields are not used in Decide event processing, and
                         // should be removed. For now, we just default them.
@@ -768,7 +769,7 @@ impl Persistence {
                     view_number: to_view,
                     event: EventType::Decide {
                         leaf_chain: Arc::new(leaf_chain),
-                        qc: Arc::new(final_qc.to_qc2()),
+                        qc: Arc::new(final_qc),
                         block_size: None,
                     },
                 })
@@ -791,25 +792,25 @@ impl Persistence {
 
             // Delete the data that has been fully processed.
             tx.execute(
-                query("DELETE FROM vid_share where view >= $1 AND view <= $2")
+                query("DELETE FROM vid_share2 where view >= $1 AND view <= $2")
                     .bind(from_view.u64() as i64)
                     .bind(to_view.u64() as i64),
             )
             .await?;
             tx.execute(
-                query("DELETE FROM da_proposal where view >= $1 AND view <= $2")
+                query("DELETE FROM da_proposal2 where view >= $1 AND view <= $2")
                     .bind(from_view.u64() as i64)
                     .bind(to_view.u64() as i64),
             )
             .await?;
             tx.execute(
-                query("DELETE FROM quorum_proposals where view >= $1 AND view <= $2")
+                query("DELETE FROM quorum_proposals2 where view >= $1 AND view <= $2")
                     .bind(from_view.u64() as i64)
                     .bind(to_view.u64() as i64),
             )
             .await?;
             tx.execute(
-                query("DELETE FROM quorum_certificate where view >= $1 AND view <= $2")
+                query("DELETE FROM quorum_certificate2 where view >= $1 AND view <= $2")
                     .bind(from_view.u64() as i64)
                     .bind(to_view.u64() as i64),
             )
@@ -819,7 +820,7 @@ impl Persistence {
             // less than the given value). This is necessary to ensure that, in case of a restart,
             // we can resume from the last decided leaf.
             tx.execute(
-                query("DELETE FROM anchor_leaf WHERE view >= $1 AND view < $2")
+                query("DELETE FROM anchor_leaf2 WHERE view >= $1 AND view < $2")
                     .bind(from_view.u64() as i64)
                     .bind(to_view.u64() as i64),
             )
@@ -977,7 +978,7 @@ impl SequencerPersistence for Persistence {
         // event consumer later fails, there is no need to abort the storage of the leaves.
         let mut tx = self.db.write().await?;
 
-        tx.upsert("anchor_leaf2", ["view", "leaf2", "qc2"], ["view"], values)
+        tx.upsert("anchor_leaf2", ["view", "leaf", "qc"], ["view"], values)
             .await?;
         tx.commit().await?;
 
@@ -1020,16 +1021,16 @@ impl SequencerPersistence for Persistence {
             .db
             .read()
             .await?
-            .fetch_optional("SELECT leaf2, qc2 FROM anchor_leaf2 ORDER BY view DESC LIMIT 1")
+            .fetch_optional("SELECT leaf, qc FROM anchor_leaf2 ORDER BY view DESC LIMIT 1")
             .await?
         else {
             return Ok(None);
         };
 
-        let leaf_bytes: Vec<u8> = row.get("leaf2");
+        let leaf_bytes: Vec<u8> = row.get("leaf");
         let leaf2: Leaf2 = bincode::deserialize(&leaf_bytes)?;
 
-        let qc_bytes: Vec<u8> = row.get("qc2");
+        let qc_bytes: Vec<u8> = row.get("qc");
         let qc2: QuorumCertificate2<SeqTypes> = bincode::deserialize(&qc_bytes)?;
 
         Ok(Some((leaf2, qc2)))
@@ -1037,7 +1038,7 @@ impl SequencerPersistence for Persistence {
 
     async fn load_anchor_view(&self) -> anyhow::Result<ViewNumber> {
         let mut tx = self.db.read().await?;
-        let (view,) = query_as::<(i64,)>("SELECT coalesce(max(view), 0) FROM anchor_leaf")
+        let (view,) = query_as::<(i64,)>("SELECT coalesce(max(view), 0) FROM anchor_leaf2")
             .fetch_one(tx.as_mut())
             .await?;
         Ok(ViewNumber::new(view as u64))
@@ -1074,7 +1075,7 @@ impl SequencerPersistence for Persistence {
             .read()
             .await?
             .fetch_optional(
-                query("SELECT data FROM da_proposal where view = $1").bind(view.u64() as i64),
+                query("SELECT data FROM da_proposal2 where view = $1").bind(view.u64() as i64),
             )
             .await?;
 
@@ -1095,7 +1096,7 @@ impl SequencerPersistence for Persistence {
             .read()
             .await?
             .fetch_optional(
-                query("SELECT data FROM vid_share where view = $1").bind(view.u64() as i64),
+                query("SELECT data FROM vid_share2 where view = $1").bind(view.u64() as i64),
             )
             .await?;
 
@@ -1323,7 +1324,7 @@ impl SequencerPersistence for Persistence {
             }
 
             let mut query_builder: sqlx::QueryBuilder<Db> =
-                sqlx::QueryBuilder::new("INSERT INTO anchor_leaf2 (view, leaf2, qc2) ");
+                sqlx::QueryBuilder::new("INSERT INTO anchor_leaf2 (view, leaf, qc) ");
 
             query_builder.push_values(values.into_iter(), |mut b, (view, leaf, qc)| {
                 b.push_bind(view).push_bind(leaf).push_bind(qc);
@@ -1649,7 +1650,7 @@ impl SequencerPersistence for Persistence {
             let mut tx = self.db.read().await?;
 
             let (is_completed,) = query_as::<(bool,)>(
-                "SELECT completed from epoch_migration WHERE table_name = 'quorum_certificates'",
+                "SELECT completed from epoch_migration WHERE table_name = 'quorum_certificate'",
             )
             .fetch_one(tx.as_mut())
             .await?;
@@ -1710,7 +1711,7 @@ impl SequencerPersistence for Persistence {
             "epoch_migration",
             ["table_name", "completed"],
             ["table_name"],
-            [("quorum_certificates".to_string(), true)],
+            [("quorum_certificate".to_string(), true)],
         )
         .await?;
         tx.commit().await?;
@@ -1929,10 +1930,10 @@ impl Provider<SeqTypes, LeafRequest<SeqTypes>> for Persistence {
 async fn fetch_leaf_from_proposals<Mode: TransactionMode>(
     tx: &mut Transaction<Mode>,
     req: LeafRequest<SeqTypes>,
-) -> anyhow::Result<(Leaf, QuorumCertificate<SeqTypes>)> {
+) -> anyhow::Result<(Leaf2, QuorumCertificate2<SeqTypes>)> {
     // Look for a quorum proposal corresponding to this leaf.
     let (proposal_bytes,) =
-        query_as::<(Vec<u8>,)>("SELECT data FROM quorum_proposals WHERE leaf_hash = $1 LIMIT 1")
+        query_as::<(Vec<u8>,)>("SELECT data FROM quorum_proposals2 WHERE leaf_hash = $1 LIMIT 1")
             .bind(req.expected_leaf.to_string())
             .fetch_one(tx.as_mut())
             .await
@@ -1940,18 +1941,18 @@ async fn fetch_leaf_from_proposals<Mode: TransactionMode>(
 
     // Look for a QC corresponding to this leaf.
     let (qc_bytes,) =
-        query_as::<(Vec<u8>,)>("SELECT data FROM quorum_certificate WHERE leaf_hash = $1 LIMIT 1")
+        query_as::<(Vec<u8>,)>("SELECT data FROM quorum_certificate2 WHERE leaf_hash = $1 LIMIT 1")
             .bind(req.expected_leaf.to_string())
             .fetch_one(tx.as_mut())
             .await
             .context("fetching QC")?;
 
-    let proposal: Proposal<SeqTypes, QuorumProposal<SeqTypes>> =
+    let proposal: Proposal<SeqTypes, QuorumProposal2<SeqTypes>> =
         bincode::deserialize(&proposal_bytes).context("deserializing quorum proposal")?;
-    let qc: QuorumCertificate<SeqTypes> =
+    let qc: QuorumCertificate2<SeqTypes> =
         bincode::deserialize(&qc_bytes).context("deserializing quorum certificate")?;
 
-    let leaf = Leaf::from_quorum_proposal(&proposal.data);
+    let leaf = Leaf2::from_quorum_proposal(&proposal.data);
     Ok((leaf, qc))
 }
 
@@ -2112,7 +2113,7 @@ mod test {
         let storage = Persistence::connect(&tmp).await;
 
         // Mock up some data.
-        let leaf = Leaf::genesis(&ValidatedState::default(), &NodeState::mock()).await;
+        let leaf = Leaf2::genesis(&ValidatedState::default(), &NodeState::mock()).await;
         let leaf_payload = leaf.block_payload().unwrap();
         let leaf_payload_bytes_arc = leaf_payload.encode();
         let disperse = vid_scheme(2)
@@ -2134,7 +2135,7 @@ mod test {
         let quorum_proposal = QuorumProposal2::<SeqTypes> {
             block_header: leaf.block_header().clone(),
             view_number: leaf.view_number(),
-            justify_qc: leaf.justify_qc().to_qc2(),
+            justify_qc: leaf.justify_qc(),
             upgrade_certificate: None,
             view_change_evidence: None,
             next_drb_result: None,
@@ -2164,8 +2165,7 @@ mod test {
         let mut next_quorum_proposal = quorum_proposal.clone();
         next_quorum_proposal.data.view_number += 1;
         next_quorum_proposal.data.justify_qc.view_number += 1;
-        next_quorum_proposal.data.justify_qc.data.leaf_commit =
-            Committable::commit(&leaf.clone().into());
+        next_quorum_proposal.data.justify_qc.data.leaf_commit = Committable::commit(&leaf.clone());
         let qc = &next_quorum_proposal.data.justify_qc;
 
         // Add to database.
@@ -2201,12 +2201,12 @@ mod test {
                 .unwrap()
         );
         assert_eq!(
-            LeafQueryData::new(leaf.clone(), qc.clone().to_qc()).unwrap(),
+            LeafQueryData::new(leaf.clone(), qc.clone()).unwrap(),
             storage
                 .fetch(LeafRequest::new(
                     leaf.block_header().block_number(),
                     Committable::commit(&leaf),
-                    qc.clone().to_qc().commit()
+                    qc.clone().commit()
                 ))
                 .await
                 .unwrap()

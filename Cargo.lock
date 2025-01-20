@@ -4250,7 +4250,7 @@ dependencies = [
 [[package]]
 name = "hotshot-query-service"
 version = "0.1.76"
-source = "git+https://github.com/EspressoSystems/hotshot-query-service?tag=v0.1.76#f27507fca3d54fb80c18d952c22f39b04f7d195f"
+source = "git+https://github.com/EspressoSystems/hotshot-query-service?branch=ab%2Fleaf2-migration#91412f2c93dcdc007ffba619654a40178c8d6b3e"
 dependencies = [
  "anyhow",
  "ark-serialize",
@@ -9325,7 +9325,7 @@ version = "0.8.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "03c3c6b7927ffe7ecaa769ee0e3994da3b8cafc8f444578982c83ecb161af917"
 dependencies = [
- "heck 0.4.1",
+ "heck 0.5.0",
  "proc-macro2",
  "quote",
  "syn 2.0.95",
