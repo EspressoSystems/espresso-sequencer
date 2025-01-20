@@ -672,7 +672,8 @@ pub trait SequencerPersistence: Sized + Send + Sync + Clone + 'static {
         vid_commit: <VidSchemeType as VidScheme>::Commit,
     ) -> anyhow::Result<()>;
     async fn record_action(&self, view: ViewNumber, action: HotShotAction) -> anyhow::Result<()>;
-    async fn update_undecided_state(
+
+    async fn update_undecided_state2(
         &self,
         leaves: CommitmentMap<Leaf2>,
         state: BTreeMap<ViewNumber, View<SeqTypes>>,
@@ -692,6 +693,8 @@ pub trait SequencerPersistence: Sized + Send + Sync + Clone + 'static {
             Proposal<SeqTypes, QuorumProposal<SeqTypes>>,
         ) -> Proposal<SeqTypes, QuorumProposal2<SeqTypes>>,
     ) -> anyhow::Result<()> {
+        tracing::info!("migrating consensus data");
+
         self.migrate_anchor_leaf().await?;
         self.migrate_da_proposals().await?;
         self.migrate_vid_shares().await?;
@@ -752,12 +755,6 @@ pub trait SequencerPersistence: Sized + Send + Sync + Clone + 'static {
     ) -> anyhow::Result<()> {
         self.append_quorum_proposal2(proposal).await
     }
-
-    async fn update_undecided_state2(
-        &self,
-        leaves: CommitmentMap<Leaf2>,
-        state: BTreeMap<ViewNumber, View<SeqTypes>>,
-    ) -> anyhow::Result<()>;
 }
 
 #[async_trait]
@@ -816,7 +813,7 @@ impl<P: SequencerPersistence> Storage<SeqTypes> for Arc<P> {
         state: BTreeMap<ViewNumber, View<SeqTypes>>,
     ) -> anyhow::Result<()> {
         (**self)
-            .update_undecided_state(
+            .update_undecided_state2(
                 leaves
                     .into_values()
                     .map(|leaf| {
@@ -828,7 +825,6 @@ impl<P: SequencerPersistence> Storage<SeqTypes> for Arc<P> {
             )
             .await
     }
-
     async fn append_proposal(
         &self,
         proposal: &Proposal<SeqTypes, QuorumProposal<SeqTypes>>,

@@ -141,7 +141,7 @@ impl SequencerPersistence for NoStorage {
     async fn record_action(&self, _view: ViewNumber, _action: HotShotAction) -> anyhow::Result<()> {
         Ok(())
     }
-    async fn update_undecided_state(
+    async fn update_undecided_state2(
         &self,
         _leaves: CommitmentMap<Leaf2>,
         _state: BTreeMap<ViewNumber, View<SeqTypes>>,
@@ -192,14 +192,6 @@ impl SequencerPersistence for NoStorage {
     async fn append_proposal2(
         &self,
         _proposal: &Proposal<SeqTypes, QuorumProposal2<SeqTypes>>,
-    ) -> anyhow::Result<()> {
-        Ok(())
-    }
-
-    async fn update_undecided_state2(
-        &self,
-        _leaves: CommitmentMap<Leaf2>,
-        _state: BTreeMap<ViewNumber, View<SeqTypes>>,
     ) -> anyhow::Result<()> {
         Ok(())
     }

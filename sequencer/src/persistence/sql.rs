@@ -1200,28 +1200,7 @@ impl SequencerPersistence for Persistence {
         tx.execute(query(&stmt).bind(view.u64() as i64)).await?;
         tx.commit().await
     }
-    async fn update_undecided_state(
-        &self,
-        leaves: CommitmentMap<Leaf2>,
-        state: BTreeMap<ViewNumber, View<SeqTypes>>,
-    ) -> anyhow::Result<()> {
-        if !self.store_undecided_state {
-            return Ok(());
-        }
 
-        let leaves_bytes = bincode::serialize(&leaves).context("serializing leaves")?;
-        let state_bytes = bincode::serialize(&state).context("serializing state")?;
-
-        let mut tx = self.db.write().await?;
-        tx.upsert(
-            "undecided_state2",
-            ["id", "leaves", "state"],
-            ["id"],
-            [(0_i32, leaves_bytes, state_bytes)],
-        )
-        .await?;
-        tx.commit().await
-    }
     async fn append_quorum_proposal2(
         &self,
         proposal: &Proposal<SeqTypes, QuorumProposal2<SeqTypes>>,
@@ -2037,7 +2016,12 @@ mod test {
     use futures::stream::TryStreamExt;
     use hotshot_example_types::node_types::TestVersions;
     use hotshot_types::{
-        data::EpochNumber, message::convert_proposal, simple_certificate::QuorumCertificate, simple_vote::QuorumData, traits::{block_contents::vid_commitment, signature_key::SignatureKey, EncodeBytes}, vid::vid_scheme
+        data::EpochNumber,
+        message::convert_proposal,
+        simple_certificate::QuorumCertificate,
+        simple_vote::QuorumData,
+        traits::{block_contents::vid_commitment, signature_key::SignatureKey, EncodeBytes},
+        vid::vid_scheme,
     };
     use jf_vid::VidScheme;
     use sequencer_utils::test_utils::setup_test;

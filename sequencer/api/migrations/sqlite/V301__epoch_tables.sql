@@ -48,7 +48,7 @@ CREATE INDEX quorum_certificate2_leaf_hash_idx ON quorum_certificate (leaf_hash)
 
 CREATE TABLE epoch_migration (
     table_name TEXT PRIMARY KEY,
-    completed bool DEFAULT FALSE
+    completed bool NOT NULL DEFAULT FALSE
 );
 
 INSERT INTO epoch_migration ("table_name") VALUES ("anchor_leaf"), ("da_proposal"), ("vid_share"), ("undecided_state"), ("quorum_proposals"), ("quorum_certificates");
