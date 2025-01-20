@@ -1832,10 +1832,11 @@ impl Provider<SeqTypes, VidCommonRequest> for Persistence {
             "SELECT data FROM vid_share WHERE payload_hash = $1 LIMIT 1",
         )
         .bind(req.0.to_string())
-        .fetch_one(tx.as_mut())
+        .fetch_optional(tx.as_mut())
         .await
         {
-            Ok((bytes,)) => bytes,
+            Ok(Some((bytes,))) => bytes,
+            Ok(None) => return None,
             Err(err) => {
                 tracing::warn!("error loading VID share: {err:#}");
                 return None;
@@ -1871,10 +1872,11 @@ impl Provider<SeqTypes, PayloadRequest> for Persistence {
             "SELECT data FROM da_proposal WHERE payload_hash = $1 LIMIT 1",
         )
         .bind(req.0.to_string())
-        .fetch_one(tx.as_mut())
+        .fetch_optional(tx.as_mut())
         .await
         {
-            Ok((bytes,)) => bytes,
+            Ok(Some((bytes,))) => bytes,
+            Ok(None) => return None,
             Err(err) => {
                 tracing::warn!("error loading DA proposal: {err:#}");
                 return None;
@@ -1910,7 +1912,7 @@ impl Provider<SeqTypes, LeafRequest<SeqTypes>> for Persistence {
         };
 
         let (leaf, qc) = match fetch_leaf_from_proposals(&mut tx, req).await {
-            Ok(res) => res,
+            Ok(res) => res?,
             Err(err) => {
                 tracing::info!("requested leaf not found in undecided proposals: {err:#}");
                 return None;
@@ -1930,22 +1932,28 @@ impl Provider<SeqTypes, LeafRequest<SeqTypes>> for Persistence {
 async fn fetch_leaf_from_proposals<Mode: TransactionMode>(
     tx: &mut Transaction<Mode>,
     req: LeafRequest<SeqTypes>,
-) -> anyhow::Result<(Leaf2, QuorumCertificate2<SeqTypes>)> {
+) -> anyhow::Result<Option<(Leaf2, QuorumCertificate2<SeqTypes>)>> {
     // Look for a quorum proposal corresponding to this leaf.
-    let (proposal_bytes,) =
+    let Some((proposal_bytes,)) =
         query_as::<(Vec<u8>,)>("SELECT data FROM quorum_proposals2 WHERE leaf_hash = $1 LIMIT 1")
             .bind(req.expected_leaf.to_string())
-            .fetch_one(tx.as_mut())
+            .fetch_optional(tx.as_mut())
             .await
-            .context("fetching proposal")?;
+            .context("fetching proposal")?
+    else {
+        return Ok(None);
+    };
 
     // Look for a QC corresponding to this leaf.
-    let (qc_bytes,) =
+    let Some((qc_bytes,)) =
         query_as::<(Vec<u8>,)>("SELECT data FROM quorum_certificate2 WHERE leaf_hash = $1 LIMIT 1")
             .bind(req.expected_leaf.to_string())
-            .fetch_one(tx.as_mut())
+            .fetch_optional(tx.as_mut())
             .await
-            .context("fetching QC")?;
+            .context("fetching QC")?
+    else {
+        return Ok(None);
+    };
 
     let proposal: Proposal<SeqTypes, QuorumProposal2<SeqTypes>> =
         bincode::deserialize(&proposal_bytes).context("deserializing quorum proposal")?;
@@ -1953,7 +1961,7 @@ async fn fetch_leaf_from_proposals<Mode: TransactionMode>(
         bincode::deserialize(&qc_bytes).context("deserializing quorum certificate")?;
 
     let leaf = Leaf2::from_quorum_proposal(&proposal.data);
-    Ok((leaf, qc))
+    Ok(Some((leaf, qc)))
 }
 
 #[cfg(test)]

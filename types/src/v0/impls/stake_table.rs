@@ -6,8 +6,8 @@ use super::{
 use async_trait::async_trait;
 use contract_bindings::permissioned_stake_table::StakersUpdatedFilter;
 use ethers::types::{Address, U256};
-use hotshot::types::SignatureKey as _;
-use hotshot_contract_adapter::stake_table::NodeInfoJf;
+use hotshot::types::{BLSPubKey, SignatureKey as _};
+use hotshot_contract_adapter::stake_table::{bls_sol_to_jf, NodeInfoJf};
 use hotshot_types::{
     data::EpochNumber,
     stake_table::StakeTableEntry,
@@ -54,15 +54,15 @@ impl StakeTables {
                 event
                     .removed
                     .into_iter()
-                    .map(|node_info| StakeTableDelta::remove(node_info.into()))
+                    .map(|key| StakeTableChange::Remove(bls_sol_to_jf(key)))
                     .chain(
                         event
                             .added
                             .into_iter()
-                            .map(|node_info| StakeTableDelta::add(node_info.into())),
+                            .map(|node_info| StakeTableChange::Add(node_info.into())),
                     )
             })
-            .group_by(|delta| delta.node_info.stake_table_key);
+            .group_by(|change| change.key());
 
         // If the last event for a stakers is `Added` the staker is currently
         // staking, if the last event is removed or (or the staker is not present)
@@ -70,9 +70,9 @@ impl StakeTables {
         let currently_staking = changes_per_node
             .into_iter()
             .map(|(_pub_key, deltas)| deltas.last().expect("deltas non-empty").clone())
-            .filter_map(|delta| match delta.change {
-                StakeTableChange::Add => Some(delta.node_info),
-                StakeTableChange::Remove => None,
+            .filter_map(|change| match change {
+                StakeTableChange::Add(node_info) => Some(node_info),
+                StakeTableChange::Remove(_) => None,
             });
 
         let mut consensus_stake_table: Vec<StakeTableEntry<PubKey>> = vec![];
@@ -105,30 +105,19 @@ pub struct EpochCommittees {
 
 #[derive(Debug, Clone, PartialEq)]
 enum StakeTableChange {
-    Add,
-    Remove,
+    Add(NodeInfoJf),
+    Remove(BLSPubKey),
 }
 
-#[derive(Debug, Clone)]
-struct StakeTableDelta {
-    change: StakeTableChange,
-    node_info: NodeInfoJf,
-}
-
-impl StakeTableDelta {
-    fn add(node_info: NodeInfoJf) -> Self {
-        Self {
-            change: StakeTableChange::Add,
-            node_info,
-        }
-    }
-    fn remove(node_info: NodeInfoJf) -> Self {
-        Self {
-            change: StakeTableChange::Remove,
-            node_info,
+impl StakeTableChange {
+    pub(crate) fn key(&self) -> BLSPubKey {
+        match self {
+            StakeTableChange::Add(node_info) => node_info.stake_table_key,
+            StakeTableChange::Remove(key) => *key,
         }
     }
 }
+
 /// Holds Stake table and da stake
 #[derive(Clone, Debug)]
 struct Committee {
@@ -527,7 +516,7 @@ mod tests {
         let mut new_da_node = consensus_node.clone();
         new_da_node.da = true;
         updates.push(StakersUpdatedFilter {
-            removed: vec![consensus_node.clone().into()],
+            removed: vec![consensus_node.stake_table_key_sol()],
             added: vec![new_da_node.clone().into()],
         });
         let st = StakeTables::from_l1_events(updates.clone());
@@ -544,7 +533,7 @@ mod tests {
 
         // Simulate removing the second node
         updates.push(StakersUpdatedFilter {
-            removed: vec![new_da_node.clone().into()],
+            removed: vec![new_da_node.stake_table_key_sol()],
             added: vec![],
         });
         let st = StakeTables::from_l1_events(updates);
