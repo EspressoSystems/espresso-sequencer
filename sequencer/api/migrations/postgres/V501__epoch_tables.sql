@@ -23,7 +23,7 @@ CREATE TABLE undecided_state2 (
     -- update that there is only a single entry in this table: the latest known state.
     id INT PRIMARY KEY,
 
-    leaves2 BYTEA NOT NULL,
+    leaves BYTEA NOT NULL,
     state  BYTEA NOT NULL
 );
 
