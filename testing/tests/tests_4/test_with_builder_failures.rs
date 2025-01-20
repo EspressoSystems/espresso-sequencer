@@ -23,14 +23,14 @@ cross_tests!(
     Ignore: false,
     Metadata: {
         let mut metadata = TestDescription::default_multiple_rounds();
-        metadata.epoch_height = 0;
+        metadata.test_config.epoch_height = 0;
         // Every block should contain at least one transaction - builders are never offline
         // simultaneously
         metadata.overall_safety_properties.transaction_threshold = 1;
         // Generate a lot of transactions so that freshly restarted builders still have
         // transactions
         metadata.txn_description = TxnTaskDescription::RoundRobinTimeBased(Duration::from_millis(1));
-        metadata.epoch_height = 0;
+        metadata.test_config.epoch_height = 0;
 
         // Two builders running as follows:
         // view 1st  2nd

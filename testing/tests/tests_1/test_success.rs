@@ -28,16 +28,19 @@ cross_tests!(
     Versions: [TestVersions],
     Ignore: false,
     Metadata: {
-        TestDescription {
+        let mut metadata = TestDescription {
             // allow more time to pass in CI
             completion_task_description: CompletionTaskDescription::TimeBasedCompletionTaskBuilder(
                                              TimeBasedCompletionTaskDescription {
                                                  duration: Duration::from_secs(60),
                                              },
                                          ),
-            epoch_height: 0,
             ..TestDescription::default()
-        }
+        };
+
+        metadata.test_config.epoch_height = 0;
+
+        metadata
     },
 );
 
@@ -55,9 +58,9 @@ cross_tests!(
                                                  duration: Duration::from_secs(60),
                                              },
                                          ),
-            epoch_height: 0,
             ..TestDescription::default()
         };
+        metadata.test_config.epoch_height = 0;
 
         metadata.overall_safety_properties.num_failed_views = 0;
         metadata.overall_safety_properties.num_successful_views = 0;
@@ -88,9 +91,9 @@ cross_tests!(
                                                  duration: Duration::from_secs(60),
                                              },
                                          ),
-            epoch_height: 0,
             ..TestDescription::default()
         };
+        metadata.test_config.epoch_height = 0;
 
         metadata.overall_safety_properties.num_failed_views = 0;
         metadata.overall_safety_properties.num_successful_views = 10;
@@ -122,12 +125,9 @@ cross_tests!(
     Versions: [TestVersions],
     Ignore: false,
     Metadata: {
-        let mut metadata = TestDescription::default_more_nodes();
-        metadata.epoch_height = 0;
-        metadata.num_bootstrap_nodes = 10;
-        metadata.num_nodes_with_stake = 12;
-        metadata.da_staked_committee_size = 12;
-        metadata.start_nodes = 12;
+        let mut metadata = TestDescription::default_more_nodes().set_num_nodes(12,12);
+        metadata.test_config.epoch_height = 0;
+        metadata.test_config.num_bootstrap = 10;
 
         metadata.overall_safety_properties.num_failed_views = 0;
 

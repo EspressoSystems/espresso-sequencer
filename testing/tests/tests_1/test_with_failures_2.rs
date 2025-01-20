@@ -41,12 +41,9 @@ cross_tests!(
     Versions: [TestVersions],
     Ignore: false,
     Metadata: {
-        let mut metadata = TestDescription::default_more_nodes();
-        metadata.epoch_height = 0;
-        metadata.num_bootstrap_nodes = 10;
-        metadata.num_nodes_with_stake = 12;
-        metadata.da_staked_committee_size = 12;
-        metadata.start_nodes = 12;
+        let mut metadata = TestDescription::default_more_nodes().set_num_nodes(12,12);
+        metadata.test_config.epoch_height = 0;
+        metadata.test_config.num_bootstrap = 10;
         // The first 14 (i.e., 20 - f) nodes are in the DA committee and we may shutdown the
         // remaining 6 (i.e., f) nodes. We could remove this restriction after fixing the
         // following issue.
@@ -81,12 +78,10 @@ cross_tests!(
     Versions: [TestVersions],
     Ignore: false,
     Metadata: {
-        let mut metadata = TestDescription::default_more_nodes();
-        metadata.epoch_height = 0;
-        metadata.num_bootstrap_nodes = 10;
-        metadata.num_nodes_with_stake = 12;
-        metadata.da_staked_committee_size = 12;
-        metadata.start_nodes = 12;
+        let mut metadata = TestDescription::default_more_nodes().set_num_nodes(12, 12);
+        metadata.test_config.epoch_height = 0;
+        metadata.test_config.num_bootstrap = 10;
+
         let dead_nodes = vec![
             ChangeNode {
                 idx: 3,
@@ -113,7 +108,7 @@ cross_tests!(
         metadata.overall_safety_properties.num_successful_views = 13;
 
         // only turning off 1 node, so expected should be num_nodes_with_stake - 1
-        let expected_nodes_in_view_sync = metadata.num_nodes_with_stake - 1;
+        let expected_nodes_in_view_sync = 11;
         metadata.view_sync_properties = ViewSyncTaskDescription::Threshold(expected_nodes_in_view_sync, expected_nodes_in_view_sync);
 
         metadata

@@ -35,10 +35,12 @@ use super::{
     ValidatedState,
 };
 use crate::{
+    constants::DEFAULT_UPGRADE_CONSTANTS,
     data::{Leaf2, TestableLeaf},
     traits::{
         election::Membership, signature_key::SignatureKey, states::InstanceState, BlockPayload,
     },
+    upgrade_config::UpgradeConstants,
 };
 
 /// This trait guarantees that a particular type has urls that can be extracted from it. This trait
@@ -208,6 +210,8 @@ pub trait NodeType:
     + Sync
     + 'static
 {
+    /// Constants used to construct upgrade proposals
+    const UPGRADE_CONSTANTS: UpgradeConstants = DEFAULT_UPGRADE_CONSTANTS;
     /// The time type that this hotshot setup is using.
     ///
     /// This should be the same `Time` that `ValidatedState::Time` is using.

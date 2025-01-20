@@ -206,7 +206,7 @@ impl TestData {
             async fn #test_name() {
                 hotshot::helpers::initialize_logging();
 
-                hotshot_testing::test_builder::TestDescription::<#ty, #imply, #version>::gen_launcher((#metadata), 0).launch().run_test::<#builder_impl>().await;
+                hotshot_testing::test_builder::TestDescription::<#ty, #imply, #version>::gen_launcher((#metadata)).launch().run_test::<#builder_impl>().await;
             }
         }
     }

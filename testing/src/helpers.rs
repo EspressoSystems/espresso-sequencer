@@ -64,10 +64,11 @@ pub async fn build_system_handle<
     Sender<Arc<HotShotEvent<TYPES>>>,
     Receiver<Arc<HotShotEvent<TYPES>>>,
 ) {
-    let mut builder: TestDescription<TYPES, I, V> = TestDescription::default_multiple_rounds();
-    builder.epoch_height = 0;
+    let builder: TestDescription<TYPES, I, V> = TestDescription::default_multiple_rounds();
 
-    let launcher = builder.gen_launcher(node_id);
+    let launcher = builder.gen_launcher().map_hotshot_config(|hotshot_config| {
+        hotshot_config.epoch_height = 0;
+    });
     build_system_handle_from_launcher(node_id, &launcher).await
 }
 
@@ -90,10 +91,10 @@ pub async fn build_system_handle_from_launcher<
     Sender<Arc<HotShotEvent<TYPES>>>,
     Receiver<Arc<HotShotEvent<TYPES>>>,
 ) {
-    let network = (launcher.resource_generator.channel_generator)(node_id).await;
-    let storage = (launcher.resource_generator.storage)(node_id);
-    let marketplace_config = (launcher.resource_generator.marketplace_config)(node_id);
-    let config = launcher.resource_generator.config.clone();
+    let network = (launcher.resource_generators.channel_generator)(node_id).await;
+    let storage = (launcher.resource_generators.storage)(node_id);
+    let marketplace_config = (launcher.resource_generators.marketplace_config)(node_id);
+    let hotshot_config = (launcher.resource_generators.hotshot_config)(node_id);
 
     let initializer = HotShotInitializer::<TYPES>::from_genesis::<V>(TestInstanceState::new(
         launcher.metadata.async_delay_config.clone(),
@@ -102,7 +103,7 @@ pub async fn build_system_handle_from_launcher<
     .unwrap();
 
     // See whether or not we should be DA
-    let is_da = node_id < config.da_staked_committee_size as u64;
+    let is_da = node_id < hotshot_config.da_staked_committee_size as u64;
 
     // We assign node's public key and stake value rather than read from config file since it's a test
     let validator_config: ValidatorConfig<TYPES::SignatureKey> =
@@ -111,15 +112,15 @@ pub async fn build_system_handle_from_launcher<
     let public_key = validator_config.public_key.clone();
 
     let memberships = Arc::new(RwLock::new(TYPES::Membership::new(
-        config.known_nodes_with_stake.clone(),
-        config.known_da_nodes.clone(),
+        hotshot_config.known_nodes_with_stake.clone(),
+        hotshot_config.known_da_nodes.clone(),
     )));
 
     SystemContext::init(
         public_key,
         private_key,
         node_id,
-        config,
+        hotshot_config,
         memberships,
         network,
         initializer,

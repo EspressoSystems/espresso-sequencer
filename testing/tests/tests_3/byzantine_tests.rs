@@ -43,7 +43,7 @@ cross_tests!(
           _ => Behaviour::Standard,
           } });
 
-        TestDescription {
+        let mut metadata = TestDescription {
             // allow more time to pass in CI
             completion_task_description: CompletionTaskDescription::TimeBasedCompletionTaskBuilder(
                                              TimeBasedCompletionTaskDescription {
@@ -51,9 +51,11 @@ cross_tests!(
                                              },
                                          ),
             behaviour,
-            epoch_height: 0,
             ..TestDescription::default()
-        }
+        };
+        metadata.test_config.epoch_height = 0;
+
+        metadata
     },
 );
 
@@ -78,11 +80,10 @@ cross_tests!(
                                              },
                                          ),
             behaviour,
-            num_nodes_with_stake: 12,
-            epoch_height: 0,
             ..TestDescription::default()
-        };
+        }.set_num_nodes(12,12);
 
+        metadata.test_config.epoch_height = 0;
         metadata.overall_safety_properties.num_failed_views = 15;
         metadata
     },
@@ -117,12 +118,11 @@ cross_tests!(
                                              },
                                          ),
             behaviour,
-            epoch_height: 0,
             ..TestDescription::default()
-        };
+        }.set_num_nodes(5,5);
 
+        metadata.test_config.epoch_height = 0;
         metadata.overall_safety_properties.num_failed_views = 2;
-        metadata.num_nodes_with_stake = 5;
         metadata.overall_safety_properties.expected_views_to_fail = HashMap::from([
             (ViewNumber::new(7), false),
             (ViewNumber::new(12), false)
@@ -158,11 +158,10 @@ cross_tests!(
                                              },
                                          ),
             behaviour,
-            epoch_height: 0,
             ..TestDescription::default()
-        };
+        }.set_num_nodes(10,10);
 
-        metadata.num_nodes_with_stake = 10;
+        metadata.test_config.epoch_height = 0;
         metadata
     },
 );
@@ -174,13 +173,13 @@ cross_tests!(
     Versions: [MarketplaceTestVersions],
     Ignore: false,
     Metadata: {
-        let nodes_count: usize = 10;
+        let nodes_count = 10;
         let behaviour = Rc::new(move |node_id| {
             let dishonest_voting = DishonestVoting {
-                view_increment: nodes_count as u64,
+                view_increment: nodes_count,
                 modifier: Arc::new(move |_pk, message_kind, transmit_type: &mut TransmitType<TestTypes>, membership: &<TestTypes as NodeType>::Membership| {
                     if let MessageKind::Consensus(SequencingMessage::General(GeneralConsensusMessage::Vote(vote))) = message_kind {
-                        *transmit_type = TransmitType::Direct(membership.leader(vote.view_number() + 1 - nodes_count as u64, None).unwrap());
+                        *transmit_type = TransmitType::Direct(membership.leader(vote.view_number() + 1 - nodes_count, None).unwrap());
                     } else {
                         {}
                     }
@@ -200,11 +199,10 @@ cross_tests!(
                                              },
                                          ),
             behaviour,
-            epoch_height: 0,
             ..TestDescription::default()
-        };
+        }.set_num_nodes(nodes_count, nodes_count);
 
-        metadata.num_nodes_with_stake = nodes_count;
+        metadata.test_config.epoch_height = 0;
         metadata
     },
 );
@@ -242,13 +240,12 @@ cross_tests!(
                     duration: Duration::from_secs(60),
                 },
             ),
-            epoch_height: 0,
             behaviour,
             ..TestDescription::default()
-        };
+        }.set_num_nodes(10,10);
 
+        metadata.test_config.epoch_height = 0;
         metadata.overall_safety_properties.num_failed_views = 1;
-        metadata.num_nodes_with_stake = 10;
         metadata.overall_safety_properties.expected_views_to_fail = HashMap::from([
             (ViewNumber::new(14), false),
         ]);

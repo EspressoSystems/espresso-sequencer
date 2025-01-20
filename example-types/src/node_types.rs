@@ -21,9 +21,11 @@ use hotshot::traits::{
     NodeImplementation,
 };
 use hotshot_types::{
+    constants::TEST_UPGRADE_CONSTANTS,
     data::{EpochNumber, ViewNumber},
     signature_key::{BLSPubKey, BuilderKey},
     traits::node_implementation::{NodeType, Versions},
+    upgrade_config::UpgradeConstants,
 };
 use serde::{Deserialize, Serialize};
 use vbs::version::StaticVersion;
@@ -52,6 +54,8 @@ use crate::{
 /// to select our traits
 pub struct TestTypes;
 impl NodeType for TestTypes {
+    const UPGRADE_CONSTANTS: UpgradeConstants = TEST_UPGRADE_CONSTANTS;
+
     type AuctionResult = TestAuctionResult;
     type View = ViewNumber;
     type Epoch = EpochNumber;
@@ -82,6 +86,8 @@ impl NodeType for TestTypes {
 /// to select our traits
 pub struct TestTypesRandomizedLeader;
 impl NodeType for TestTypesRandomizedLeader {
+    const UPGRADE_CONSTANTS: UpgradeConstants = TEST_UPGRADE_CONSTANTS;
+
     type AuctionResult = TestAuctionResult;
     type View = ViewNumber;
     type Epoch = EpochNumber;
@@ -115,6 +121,8 @@ pub struct TestTypesRandomizedCommitteeMembers<CONFIG: QuorumFilterConfig> {
 }
 
 impl<CONFIG: QuorumFilterConfig> NodeType for TestTypesRandomizedCommitteeMembers<CONFIG> {
+    const UPGRADE_CONSTANTS: UpgradeConstants = TEST_UPGRADE_CONSTANTS;
+
     type AuctionResult = TestAuctionResult;
     type View = ViewNumber;
     type Epoch = EpochNumber;
@@ -146,6 +154,8 @@ impl<CONFIG: QuorumFilterConfig> NodeType for TestTypesRandomizedCommitteeMember
 /// to select our traits
 pub struct TestConsecutiveLeaderTypes;
 impl NodeType for TestConsecutiveLeaderTypes {
+    const UPGRADE_CONSTANTS: UpgradeConstants = TEST_UPGRADE_CONSTANTS;
+
     type AuctionResult = TestAuctionResult;
     type View = ViewNumber;
     type Epoch = EpochNumber;
@@ -176,6 +186,8 @@ impl NodeType for TestConsecutiveLeaderTypes {
 /// to select our traits
 pub struct TestTwoStakeTablesTypes;
 impl NodeType for TestTwoStakeTablesTypes {
+    const UPGRADE_CONSTANTS: UpgradeConstants = TEST_UPGRADE_CONSTANTS;
+
     type AuctionResult = TestAuctionResult;
     type View = ViewNumber;
     type Epoch = EpochNumber;

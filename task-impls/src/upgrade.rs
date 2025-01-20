@@ -12,10 +12,6 @@ use async_trait::async_trait;
 use committable::Committable;
 use hotshot_task::task::TaskState;
 use hotshot_types::{
-    constants::{
-        UPGRADE_BEGIN_OFFSET, UPGRADE_DECIDE_BY_OFFSET, UPGRADE_FINISH_OFFSET,
-        UPGRADE_PROPOSE_OFFSET,
-    },
     data::UpgradeProposal,
     event::{Event, EventType},
     message::{Proposal, UpgradeLock},
@@ -267,7 +263,7 @@ impl<TYPES: NodeType, V: Versions> UpgradeTaskState<TYPES, V> {
                     .as_secs();
 
                 let leader = self.membership.read().await.leader(
-                    TYPES::View::new(view + UPGRADE_PROPOSE_OFFSET),
+                    TYPES::View::new(view + TYPES::UPGRADE_CONSTANTS.propose_offset),
                     self.cur_epoch,
                 )?;
 
@@ -283,14 +279,22 @@ impl<TYPES: NodeType, V: Versions> UpgradeTaskState<TYPES, V> {
                         old_version: V::Base::VERSION,
                         new_version: V::Upgrade::VERSION,
                         new_version_hash: V::UPGRADE_HASH.to_vec(),
-                        old_version_last_view: TYPES::View::new(view + UPGRADE_BEGIN_OFFSET),
-                        new_version_first_view: TYPES::View::new(view + UPGRADE_FINISH_OFFSET),
-                        decide_by: TYPES::View::new(view + UPGRADE_DECIDE_BY_OFFSET),
+                        old_version_last_view: TYPES::View::new(
+                            view + TYPES::UPGRADE_CONSTANTS.begin_offset,
+                        ),
+                        new_version_first_view: TYPES::View::new(
+                            view + TYPES::UPGRADE_CONSTANTS.finish_offset,
+                        ),
+                        decide_by: TYPES::View::new(
+                            view + TYPES::UPGRADE_CONSTANTS.decide_by_offset,
+                        ),
                     };
 
                     let upgrade_proposal = UpgradeProposal {
                         upgrade_proposal: upgrade_proposal_data.clone(),
-                        view_number: TYPES::View::new(view + UPGRADE_PROPOSE_OFFSET),
+                        view_number: TYPES::View::new(
+                            view + TYPES::UPGRADE_CONSTANTS.propose_offset,
+                        ),
                     };
 
                     let signature = TYPES::SignatureKey::sign(

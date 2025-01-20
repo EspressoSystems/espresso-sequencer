@@ -4,7 +4,7 @@
 // You should have received a copy of the MIT License
 // along with the HotShot repository. If not, see <https://mit-license.org/>.
 
-use std::{collections::HashMap, marker::PhantomData, sync::Arc};
+use std::{collections::HashMap, marker::PhantomData, rc::Rc, sync::Arc};
 
 use hotshot::{
     traits::{NodeImplementation, TestableNodeImplementation},
@@ -26,7 +26,7 @@ use crate::test_task::TestTaskStateSeed;
 pub type Network<TYPES, I> = Arc<<I as NodeImplementation<TYPES>>::Network>;
 
 /// Wrapper for a function that takes a `node_id` and returns an instance of `T`.
-pub type Generator<T> = Box<dyn Fn(u64) -> T + 'static>;
+pub type Generator<T> = Rc<dyn Fn(u64) -> T>;
 
 /// generators for resources used by each node
 pub struct ResourceGenerators<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> {
@@ -35,9 +35,9 @@ pub struct ResourceGenerators<TYPES: NodeType, I: TestableNodeImplementation<TYP
     /// generate new storage for each node
     pub storage: Generator<TestStorage<TYPES>>,
     /// configuration used to generate each hotshot node
-    pub config: HotShotConfig<TYPES::SignatureKey>,
+    pub hotshot_config: Generator<HotShotConfig<TYPES::SignatureKey>>,
     /// config that contains the signature keys
-    pub validator_config: ValidatorConfig<TYPES::SignatureKey>,
+    pub validator_config: Generator<ValidatorConfig<TYPES::SignatureKey>>,
     /// generate a new marketplace config for each node
     pub marketplace_config: Generator<MarketplaceConfig<TYPES, I>>,
 }
@@ -45,7 +45,7 @@ pub struct ResourceGenerators<TYPES: NodeType, I: TestableNodeImplementation<TYP
 /// test launcher
 pub struct TestLauncher<TYPES: NodeType, I: TestableNodeImplementation<TYPES>, V: Versions> {
     /// generator for resources
-    pub resource_generator: ResourceGenerators<TYPES, I>,
+    pub resource_generators: ResourceGenerators<TYPES, I>,
     /// metadata used for tasks
     pub metadata: TestDescription<TYPES, I, V>,
     /// any additional test tasks to run
@@ -67,11 +67,24 @@ impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>, V: Versions> TestLau
     }
     /// Modifies the config used when generating nodes with `f`
     #[must_use]
-    pub fn modify_default_config(
+    pub fn map_hotshot_config(
         mut self,
-        mut f: impl FnMut(&mut HotShotConfig<TYPES::SignatureKey>),
+        f: impl Fn(&mut HotShotConfig<TYPES::SignatureKey>) + 'static,
     ) -> Self {
-        f(&mut self.resource_generator.config);
+        let mut test_config = self.metadata.test_config.clone();
+        f(&mut test_config);
+
+        let hotshot_config_generator = self.resource_generators.hotshot_config.clone();
+        let hotshot_config: Generator<_> = Rc::new(move |node_id| {
+            let mut result = (hotshot_config_generator)(node_id);
+            f(&mut result);
+
+            result
+        });
+
+        self.metadata.test_config = test_config;
+        self.resource_generators.hotshot_config = hotshot_config;
+
         self
     }
 }

@@ -26,7 +26,7 @@ async fn test_combined_network() {
 
     hotshot::helpers::initialize_logging();
 
-    let metadata: TestDescription<TestTypes, CombinedImpl, TestVersions> = TestDescription {
+    let mut metadata: TestDescription<TestTypes, CombinedImpl, TestVersions> = TestDescription {
         timing_data: TimingData {
             next_view_timeout: 10_000,
 
@@ -42,12 +42,12 @@ async fn test_combined_network() {
                 duration: Duration::from_secs(120),
             },
         ),
-        epoch_height: 0,
         ..TestDescription::default_multiple_rounds()
     };
 
+    metadata.test_config.epoch_height = 0;
     metadata
-        .gen_launcher(0)
+        .gen_launcher()
         .launch()
         .run_test::<SimpleBuilderImplementation>()
         .await;
@@ -76,24 +76,24 @@ async fn test_combined_network_cdn_crash() {
                 duration: Duration::from_secs(220),
             },
         ),
-        epoch_height: 0,
         ..TestDescription::default_multiple_rounds()
     };
 
     let mut all_nodes = vec![];
-    for node in 0..metadata.num_nodes_with_stake {
+    for node in 0..metadata.test_config.num_nodes_with_stake.into() {
         all_nodes.push(ChangeNode {
             idx: node,
             updown: NodeAction::NetworkDown,
         });
     }
 
+    metadata.test_config.epoch_height = 0;
     metadata.spinning_properties = SpinningTaskDescription {
         node_changes: vec![(5, all_nodes)],
     };
 
     metadata
-        .gen_launcher(0)
+        .gen_launcher()
         .launch()
         .run_test::<SimpleBuilderImplementation>()
         .await;
@@ -124,13 +124,12 @@ async fn test_combined_network_reup() {
                 duration: Duration::from_secs(220),
             },
         ),
-        epoch_height: 0,
         ..TestDescription::default_multiple_rounds()
     };
 
     let mut all_down = vec![];
     let mut all_up = vec![];
-    for node in 0..metadata.num_nodes_with_stake {
+    for node in 0..metadata.test_config.num_nodes_with_stake.into() {
         all_down.push(ChangeNode {
             idx: node,
             updown: NodeAction::NetworkDown,
@@ -141,12 +140,13 @@ async fn test_combined_network_reup() {
         });
     }
 
+    metadata.test_config.epoch_height = 0;
     metadata.spinning_properties = SpinningTaskDescription {
         node_changes: vec![(13, all_up), (5, all_down)],
     };
 
     metadata
-        .gen_launcher(0)
+        .gen_launcher()
         .launch()
         .run_test::<SimpleBuilderImplementation>()
         .await;
@@ -176,24 +176,24 @@ async fn test_combined_network_half_dc() {
                 duration: Duration::from_secs(220),
             },
         ),
-        epoch_height: 0,
         ..TestDescription::default_multiple_rounds()
     };
 
     let mut half = vec![];
-    for node in 0..metadata.num_nodes_with_stake / 2 {
+    for node in 0..usize::from(metadata.test_config.num_nodes_with_stake) / 2 {
         half.push(ChangeNode {
             idx: node,
             updown: NodeAction::NetworkDown,
         });
     }
 
+    metadata.test_config.epoch_height = 0;
     metadata.spinning_properties = SpinningTaskDescription {
         node_changes: vec![(5, half)],
     };
 
     metadata
-        .gen_launcher(0)
+        .gen_launcher()
         .launch()
         .run_test::<SimpleBuilderImplementation>()
         .await;
@@ -235,10 +235,6 @@ async fn test_stress_combined_network_fuzzy() {
     hotshot::helpers::initialize_logging();
 
     let mut metadata: TestDescription<TestTypes, CombinedImpl, TestVersions> = TestDescription {
-        num_bootstrap_nodes: 10,
-        num_nodes_with_stake: 20,
-        start_nodes: 20,
-
         timing_data: TimingData {
             next_view_timeout: 10_000,
             ..Default::default()
@@ -249,19 +245,20 @@ async fn test_stress_combined_network_fuzzy() {
                 duration: Duration::from_secs(120),
             },
         ),
-        epoch_height: 0,
         ..TestDescription::default_stress()
-    };
+    }
+    .set_num_nodes(20, 20);
 
+    metadata.test_config.epoch_height = 0;
     metadata.spinning_properties = SpinningTaskDescription {
         node_changes: generate_random_node_changes(
-            metadata.num_nodes_with_stake,
+            metadata.test_config.num_nodes_with_stake.into(),
             metadata.overall_safety_properties.num_successful_views * 2,
         ),
     };
 
     metadata
-        .gen_launcher(0)
+        .gen_launcher()
         .launch()
         .run_test::<SimpleBuilderImplementation>()
         .await;

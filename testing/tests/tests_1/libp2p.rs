@@ -23,7 +23,7 @@ use tracing::instrument;
 async fn libp2p_network() {
     hotshot::helpers::initialize_logging();
 
-    let metadata: TestDescription<TestTypes, Libp2pImpl, TestVersions> = TestDescription {
+    let mut metadata: TestDescription<TestTypes, Libp2pImpl, TestVersions> = TestDescription {
         overall_safety_properties: OverallSafetyPropertiesDescription {
             check_leaf: true,
             ..Default::default()
@@ -37,12 +37,12 @@ async fn libp2p_network() {
             next_view_timeout: 4000,
             ..Default::default()
         },
-        epoch_height: 0,
         ..TestDescription::default_multiple_rounds()
     };
+    metadata.test_config.epoch_height = 0;
 
     metadata
-        .gen_launcher(0)
+        .gen_launcher()
         .launch()
         .run_test::<SimpleBuilderImplementation>()
         .await;
@@ -69,9 +69,10 @@ async fn libp2p_network_failures_2() {
             next_view_timeout: 4000,
             ..Default::default()
         },
-        epoch_height: 0,
         ..TestDescription::default_multiple_rounds()
-    };
+    }
+    .set_num_nodes(12, 12);
+    metadata.test_config.epoch_height = 0;
 
     let dead_nodes = vec![ChangeNode {
         idx: 11,
@@ -81,16 +82,13 @@ async fn libp2p_network_failures_2() {
     metadata.spinning_properties = SpinningTaskDescription {
         node_changes: vec![(3, dead_nodes)],
     };
-    metadata.num_nodes_with_stake = 12;
-    metadata.da_staked_committee_size = 12;
-    metadata.start_nodes = 12;
     // 2 nodes fail triggering view sync, expect no other timeouts
     metadata.overall_safety_properties.num_failed_views = 1;
     // Make sure we keep committing rounds after the bad leaders, but not the full 50 because of the numerous timeouts
     metadata.overall_safety_properties.num_successful_views = 15;
 
     metadata
-        .gen_launcher(0)
+        .gen_launcher()
         .launch()
         .run_test::<SimpleBuilderImplementation>()
         .await;
@@ -107,7 +105,7 @@ async fn test_stress_libp2p_network() {
     let metadata: TestDescription<TestTypes, Libp2pImpl, TestVersions> =
         TestDescription::default_stress();
     metadata
-        .gen_launcher(0)
+        .gen_launcher()
         .launch()
         .run_test::<SimpleBuilderImplementation>()
         .await;

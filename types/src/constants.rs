@@ -8,6 +8,8 @@
 
 use std::time::Duration;
 
+use crate::upgrade_config::UpgradeConstants;
+
 /// timeout for fetching auction results from the solver
 pub const AUCTION_RESULTS_FETCH_TIMEOUT: Duration = Duration::from_millis(500);
 
@@ -41,21 +43,21 @@ pub const EVENT_CHANNEL_SIZE: usize = 100_000;
 /// Default channel size for HotShot -> application communication
 pub const EXTERNAL_EVENT_CHANNEL_SIZE: usize = 100_000;
 
-/// The offset for how far in the future we will send out a `QuorumProposal` with an `UpgradeCertificate` we form. This is also how far in advance of sending a `QuorumProposal` we begin collecting votes on an `UpgradeProposal`.
-pub const UPGRADE_PROPOSE_OFFSET: u64 = 5;
+/// Default values for the upgrade constants
+pub const DEFAULT_UPGRADE_CONSTANTS: UpgradeConstants = UpgradeConstants {
+    propose_offset: 5,
+    decide_by_offset: 105,
+    begin_offset: 110,
+    finish_offset: 115,
+};
 
-#[cfg(test)]
-/// The offset for how far in the future the upgrade certificate we attach should be decided on (or else discarded).
-pub const UPGRADE_DECIDE_BY_OFFSET: u64 = UPGRADE_PROPOSE_OFFSET + 5;
-#[cfg(not(test))]
-/// The offset for how far in the future the upgrade certificate we attach should be decided on (or else discarded).
-pub const UPGRADE_DECIDE_BY_OFFSET: u64 = UPGRADE_PROPOSE_OFFSET + 100;
-
-/// The offset for how far in the future the upgrade actually begins.
-pub const UPGRADE_BEGIN_OFFSET: u64 = UPGRADE_DECIDE_BY_OFFSET + 5;
-
-/// The offset for how far in the future the upgrade ends.
-pub const UPGRADE_FINISH_OFFSET: u64 = UPGRADE_BEGIN_OFFSET + 5;
+/// Default values for the upgrade constants to be used in testing
+pub const TEST_UPGRADE_CONSTANTS: UpgradeConstants = UpgradeConstants {
+    propose_offset: 5,
+    decide_by_offset: 10,
+    begin_offset: 15,
+    finish_offset: 20,
+};
 
 /// For `STAKE_TABLE_CAPACITY=200`, the light client prover (a.k.a. `hotshot-state-prover`)
 /// would need to generate proof for a circuit of slightly below 2^20 gates.

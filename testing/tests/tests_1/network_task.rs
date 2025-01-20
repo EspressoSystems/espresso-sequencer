@@ -46,14 +46,14 @@ async fn test_network_task() {
     let handle = build_system_handle::<TestTypes, MemoryImpl, TestVersions>(node_id)
         .await
         .0;
-    let launcher = builder.gen_launcher(node_id);
+    let launcher = builder.gen_launcher();
 
-    let network = (launcher.resource_generator.channel_generator)(node_id).await;
+    let network = (launcher.resource_generators.channel_generator)(node_id).await;
 
-    let storage = Arc::new(RwLock::new((launcher.resource_generator.storage)(node_id)));
+    let storage = Arc::new(RwLock::new((launcher.resource_generators.storage)(node_id)));
     let consensus = OuterConsensus::new(handle.hotshot.consensus());
-    let config = launcher.resource_generator.config.clone();
-    let validator_config = launcher.resource_generator.validator_config.clone();
+    let config = (launcher.resource_generators.hotshot_config)(node_id);
+    let validator_config = (launcher.resource_generators.validator_config)(node_id);
     let public_key = validator_config.public_key;
 
     let all_nodes = config.known_nodes_with_stake.clone();
@@ -125,15 +125,15 @@ async fn test_network_storage_fail() {
     let handle = build_system_handle::<TestTypes, MemoryImpl, TestVersions>(node_id)
         .await
         .0;
-    let launcher = builder.gen_launcher(node_id);
+    let launcher = builder.gen_launcher();
 
-    let network = (launcher.resource_generator.channel_generator)(node_id).await;
+    let network = (launcher.resource_generators.channel_generator)(node_id).await;
 
     let consensus = OuterConsensus::new(handle.hotshot.consensus());
-    let storage = Arc::new(RwLock::new((launcher.resource_generator.storage)(node_id)));
+    let storage = Arc::new(RwLock::new((launcher.resource_generators.storage)(node_id)));
     storage.write().await.should_return_err = true;
-    let config = launcher.resource_generator.config.clone();
-    let validator_config = launcher.resource_generator.validator_config.clone();
+    let config = (launcher.resource_generators.hotshot_config)(node_id);
+    let validator_config = (launcher.resource_generators.validator_config)(node_id);
     let public_key = validator_config.public_key;
     let all_nodes = config.known_nodes_with_stake.clone();
     let upgrade_lock = UpgradeLock::<TestTypes, TestVersions>::new();
