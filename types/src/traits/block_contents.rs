@@ -19,7 +19,7 @@ use std::{
 
 use async_trait::async_trait;
 use committable::{Commitment, Committable};
-use jf_vid::{precomputable::Precomputable, VidScheme};
+use jf_vid::VidScheme;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use vbs::version::Version;
 
@@ -151,22 +151,6 @@ pub fn vid_commitment(
 ) -> <VidSchemeType as VidScheme>::Commit {
     let encoded_tx_len = encoded_transactions.len();
     vid_scheme(num_storage_nodes).commit_only(encoded_transactions).unwrap_or_else(|err| panic!("VidScheme::commit_only failure:(num_storage_nodes,payload_byte_len)=({num_storage_nodes},{encoded_tx_len}) error: {err}"))
-}
-
-/// Compute the VID payload commitment along with precompute data reducing time in VID Disperse
-/// # Panics
-/// If the VID computation fails.
-#[must_use]
-#[allow(clippy::panic)]
-pub fn precompute_vid_commitment(
-    encoded_transactions: &[u8],
-    num_storage_nodes: usize,
-) -> (
-    <VidSchemeType as VidScheme>::Commit,
-    <VidSchemeType as Precomputable>::PrecomputeData,
-) {
-    let encoded_tx_len = encoded_transactions.len();
-    vid_scheme(num_storage_nodes).commit_only_precompute(encoded_transactions).unwrap_or_else(|err| panic!("VidScheme::commit_only failure:(num_storage_nodes,payload_byte_len)=({num_storage_nodes},{encoded_tx_len}) error: {err}"))
 }
 
 /// The number of storage nodes to use when computing the genesis VID commitment.

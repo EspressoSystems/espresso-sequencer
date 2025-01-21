@@ -25,7 +25,6 @@ use hotshot_types::{
     data::{null_block, PackedBundle, ViewNumber},
     simple_vote::DaData2,
     traits::{
-        block_contents::precompute_vid_commitment,
         election::Membership,
         node_implementation::{ConsensusTime, Versions},
     },
@@ -45,8 +44,8 @@ async fn test_da_task() {
     // Make some empty encoded transactions, we just care about having a commitment handy for the
     // later calls. We need the VID commitment to be able to propose later.
     let transactions = vec![TestTransaction::new(vec![0])];
-    let encoded_transactions = Arc::from(TestTransaction::encode(&transactions));
-    let (payload_commit, precompute) = precompute_vid_commitment(
+    let encoded_transactions: Arc<[u8]> = Arc::from(TestTransaction::encode(&transactions));
+    let payload_commit = hotshot_types::traits::block_contents::vid_commitment(
         &encoded_transactions,
         handle.hotshot.memberships.read().await.total_nodes(None),
     );
@@ -112,7 +111,6 @@ async fn test_da_task() {
                     *ViewNumber::new(2),
                 )
                 .unwrap()],
-                Some(precompute),
                 None,
             )),
         ],
@@ -153,8 +151,8 @@ async fn test_da_task_storage_failure() {
     // Make some empty encoded transactions, we just care about having a commitment handy for the
     // later calls. We need the VID commitment to be able to propose later.
     let transactions = vec![TestTransaction::new(vec![0])];
-    let encoded_transactions = Arc::from(TestTransaction::encode(&transactions));
-    let (payload_commit, precompute) = precompute_vid_commitment(
+    let encoded_transactions: Arc<[u8]> = Arc::from(TestTransaction::encode(&transactions));
+    let payload_commit = hotshot_types::traits::block_contents::vid_commitment(
         &encoded_transactions,
         handle.hotshot.memberships.read().await.total_nodes(None),
     );
@@ -220,7 +218,6 @@ async fn test_da_task_storage_failure() {
                     *ViewNumber::new(2),
                 )
                 .unwrap()],
-                Some(precompute),
                 None,
             ),)
         ],

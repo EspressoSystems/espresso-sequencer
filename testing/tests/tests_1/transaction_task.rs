@@ -10,7 +10,6 @@ use hotshot_testing::helpers::build_system_handle;
 use hotshot_types::{
     data::{null_block, EpochNumber, PackedBundle, ViewNumber},
     traits::{
-        block_contents::precompute_vid_commitment,
         election::Membership,
         node_implementation::{ConsensusTime, Versions},
     },
@@ -43,16 +42,6 @@ async fn test_transaction_task_leader_two_views_in_a_row() {
     ));
     input.push(HotShotEvent::Shutdown);
 
-    let (_, precompute_data) = precompute_vid_commitment(
-        &[],
-        handle
-            .hotshot
-            .memberships
-            .read()
-            .await
-            .total_nodes(Some(EpochNumber::new(0))),
-    );
-
     // current view
     let mut exp_packed_bundle = PackedBundle::new(
         vec![].into(),
@@ -74,7 +63,6 @@ async fn test_transaction_task_leader_two_views_in_a_row() {
             )
             .unwrap()
         ],
-        Some(precompute_data.clone()),
         None,
     );
     output.push(HotShotEvent::BlockRecv(exp_packed_bundle.clone()));

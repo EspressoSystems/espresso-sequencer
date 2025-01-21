@@ -22,14 +22,14 @@ use hotshot_types::{
     message::UpgradeLock,
     traits::{
         auction_results_provider::AuctionResultsProvider,
-        block_contents::{precompute_vid_commitment, BuilderFee, EncodeBytes},
+        block_contents::{BuilderFee, EncodeBytes},
         election::Membership,
         node_implementation::{ConsensusTime, HasUrls, NodeImplementation, NodeType, Versions},
         signature_key::{BuilderSignatureKey, SignatureKey},
         BlockPayload,
     },
     utils::ViewInner,
-    vid::{VidCommitment, VidPrecomputeData},
+    vid::VidCommitment,
 };
 use tokio::time::{sleep, timeout};
 use tracing::instrument;
@@ -72,9 +72,6 @@ pub struct BuilderResponse<TYPES: NodeType> {
 
     /// Block metadata
     pub metadata: <TYPES::BlockPayload as BlockPayload<TYPES>>::Metadata,
-
-    /// Optional precomputed commitment
-    pub precompute_data: Option<VidPrecomputeData>,
 }
 
 /// Tracks state of a Transaction task
@@ -186,7 +183,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
             block_payload,
             metadata,
             fee,
-            precompute_data,
         }) = block
         {
             broadcast_event(
@@ -196,7 +192,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
                     block_view,
                     block_epoch,
                     vec1::vec1![fee],
-                    precompute_data,
                     None,
                 ))),
                 event_stream,
@@ -228,8 +223,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
             // Create an empty block payload and metadata
             let (_, metadata) = <TYPES as NodeType>::BlockPayload::empty();
 
-            let (_, precompute_data) = precompute_vid_commitment(&[], membership_total_nodes);
-
             // Broadcast the empty block
             broadcast_event(
                 Arc::new(HotShotEvent::BlockRecv(PackedBundle::new(
@@ -238,7 +231,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
                     block_view,
                     block_epoch,
                     vec1::vec1![null_fee],
-                    Some(precompute_data),
                     None,
                 ))),
                 event_stream,
@@ -352,7 +344,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
             block_view,
             block_epoch,
             sequencing_fees,
-            None,
             Some(auction_result),
         ))
     }
@@ -375,15 +366,12 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
         // Create an empty block payload and metadata
         let (_, metadata) = <TYPES as NodeType>::BlockPayload::empty();
 
-        let (_, precompute_data) = precompute_vid_commitment(&[], membership_total_nodes);
-
         Some(PackedBundle::new(
             vec![].into(),
             metadata,
             block_view,
             block_epoch,
             vec1::vec1![null_fee],
-            Some(precompute_data),
             Some(TYPES::AuctionResult::default()),
         ))
     }
@@ -802,11 +790,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
                     fee,
                     block_payload: block_data.block_payload,
                     metadata: block_data.metadata,
-                    // we discard the precompute data,
-                    // because we cannot trust that the builder is able to calculate this correctly.
-                    //
-                    // in particular, the builder needs to know `num_nodes` and there aren't any practical ways to verify the result it sent us.
-                    precompute_data: None,
                 }
             };
 
