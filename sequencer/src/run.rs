@@ -9,8 +9,8 @@ use super::{
 };
 use clap::Parser;
 use espresso_types::{
-    traits::NullEventConsumer, FeeVersion, MarketplaceVersion, SequencerVersions,
-    SolverAuctionResultsProvider, V0_0,
+    traits::NullEventConsumer, EpochVersion, FeeVersion, MarketplaceVersion, SequencerVersions,
+    SolverAuctionResultsProvider,
 };
 use futures::future::FutureExt;
 use hotshot::MarketplaceConfig;
@@ -38,30 +38,21 @@ pub async fn main() -> anyhow::Result<()> {
     let upgrade = genesis.upgrade_version;
 
     match (base, upgrade) {
+        (FeeVersion::VERSION, EpochVersion::VERSION) => {
+            run(
+                genesis,
+                modules,
+                opt,
+                SequencerVersions::<FeeVersion, EpochVersion>::new(),
+            )
+            .await
+        }
         (FeeVersion::VERSION, MarketplaceVersion::VERSION) => {
             run(
                 genesis,
                 modules,
                 opt,
                 SequencerVersions::<FeeVersion, MarketplaceVersion>::new(),
-            )
-            .await
-        }
-        (FeeVersion::VERSION, _) => {
-            run(
-                genesis,
-                modules,
-                opt,
-                SequencerVersions::<FeeVersion, V0_0>::new(),
-            )
-            .await
-        }
-        (MarketplaceVersion::VERSION, _) => {
-            run(
-                genesis,
-                modules,
-                opt,
-                SequencerVersions::<MarketplaceVersion, V0_0>::new(),
             )
             .await
         }

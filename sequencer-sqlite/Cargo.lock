@@ -1661,6 +1661,7 @@ dependencies = [
  "espresso-types",
  "ethers",
  "futures",
+ "hotshot-types",
  "jf-merkle-tree",
  "surf-disco",
  "tokio",

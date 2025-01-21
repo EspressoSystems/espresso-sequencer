@@ -29,6 +29,10 @@ build profile="test":
 demo-native-mp *args: build
     scripts/demo-native -f process-compose.yaml -f process-compose-mp.yml {{args}}
 
+demo-native-epoch *args: build
+    # export DEMO_GENESIS_FILE=data/genesis/demo-epoch.toml
+    scripts/demo-native -f process-compose.yaml {{args}}
+
 demo-native-benchmark:
     cargo build --release --features benchmarking
     scripts/demo-native
