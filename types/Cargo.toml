@@ -54,6 +54,7 @@ url = { workspace = true }
 utils = { path = "../utils" }
 vbs = { workspace = true }
 vec1 = { workspace = true }
+workspace-hack = { version = "0.1", path = "../workspace-hack" }
 
 [features]
 gpu-vid = ["jf-vid/gpu-vid"]

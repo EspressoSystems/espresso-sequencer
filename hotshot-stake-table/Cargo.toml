@@ -21,6 +21,7 @@ jf-utils = { workspace = true }
 primitive-types = { workspace = true }
 serde = { workspace = true, features = ["rc"] }
 tagged-base64 = { workspace = true }
+workspace-hack = { version = "0.1", path = "../workspace-hack" }
 
 [dev-dependencies]
 rand_chacha = { workspace = true }

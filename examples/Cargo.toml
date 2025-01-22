@@ -9,7 +9,6 @@ rust-version = { workspace = true }
 
 [features]
 default = ["docs", "doc-images", "hotshot-testing"]
-gpu-vid = ["hotshot-example-types/gpu-vid"]
 
 # Build the extended documentation
 docs = []
@@ -103,6 +102,7 @@ tokio = { workspace = true }
 
 tracing = { workspace = true }
 url = { workspace = true }
+workspace-hack = { version = "0.1", path = "../workspace-hack" }
 
 [dev-dependencies]
 anyhow = { workspace = true }

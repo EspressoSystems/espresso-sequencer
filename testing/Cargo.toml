@@ -9,9 +9,7 @@ authors = { workspace = true }
 default = []
 # NOTE this is used to activate the slow tests we don't wish to run in CI
 slow-tests = []
-gpu-vid = ["hotshot-types/gpu-vid"]
 rewind = ["hotshot/rewind"]
-test-srs = ["jf-vid/test-srs"]
 broken_3_chain_fixed = []
 
 [dependencies]
@@ -49,3 +47,4 @@ tracing = { workspace = true }
 url = { workspace = true }
 vbs = { workspace = true }
 vec1 = { workspace = true }
+workspace-hack = { version = "0.1", path = "../workspace-hack" }

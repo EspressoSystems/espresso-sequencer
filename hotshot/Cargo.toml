@@ -10,7 +10,6 @@ rust-version = { workspace = true }
 [features]
 default = ["docs", "doc-images"]
 example-upgrade = ["hotshot-task-impls/example-upgrade"]
-gpu-vid = ["hotshot-task-impls/gpu-vid"]
 rewind = ["hotshot-task-impls/rewind"]
 
 # Build the extended documentation
@@ -56,6 +55,7 @@ tracing-subscriber = { workspace = true }
 url = { workspace = true }
 utils = { path = "../utils" }
 vbs = { workspace = true }
+workspace-hack = { version = "0.1", path = "../workspace-hack" }
 
 [dev-dependencies]
 blake3 = { workspace = true }

@@ -9,7 +9,6 @@ authors = { workspace = true }
 default = []
 # NOTE this is used to activate the slow tests we don't wish to run in CI
 slow-tests = []
-gpu-vid = ["hotshot-task-impls/gpu-vid"]
 
 [dependencies]
 anyhow = { workspace = true }
@@ -30,3 +29,4 @@ time = { workspace = true }
 tokio = { workspace = true }
 url = { workspace = true }
 vbs = { workspace = true }
+workspace-hack = { version = "0.1", path = "../workspace-hack" }
