@@ -14,7 +14,7 @@ use std::{
 use async_broadcast::Sender;
 use async_lock::RwLock;
 use async_trait::async_trait;
-use either::Either::{self, Left, Right};
+use either::Either::{Left, Right};
 use hotshot_types::{
     message::UpgradeLock,
     simple_certificate::{
@@ -135,8 +135,8 @@ impl<
             .accumulate(vote, &self.membership, sender_epoch)
             .await
         {
-            Either::Left(()) => Ok(None),
-            Either::Right(cert) => {
+            None => Ok(None),
+            Some(cert) => {
                 tracing::debug!("Certificate Formed! {:?}", cert);
 
                 broadcast_event(

@@ -16,7 +16,6 @@ use std::{
 use async_lock::RwLock;
 use bitvec::{bitvec, vec::BitVec};
 use committable::{Commitment, Committable};
-use either::Either;
 use primitive_types::U256;
 use tracing::error;
 use utils::anytrace::Result;
@@ -166,7 +165,7 @@ impl<
         vote: &VOTE,
         membership: &Arc<RwLock<TYPES::Membership>>,
         epoch: Option<TYPES::Epoch>,
-    ) -> Either<(), CERT> {
+    ) -> Option<CERT> {
         let key = vote.signing_key();
 
         let vote_commitment = match VersionedVoteData::new(
@@ -179,31 +178,25 @@ impl<
             Ok(data) => data.commit(),
             Err(e) => {
                 tracing::warn!("Failed to generate versioned vote data: {e}");
-                return Either::Left(());
+                return None;
             }
         };
 
         if !key.validate(&vote.signature(), vote_commitment.as_ref()) {
             error!("Invalid vote! Vote Data {:?}", vote.date());
-            return Either::Left(());
+            return None;
         }
 
         let membership_reader = membership.read().await;
-        let Some(stake_table_entry) = CERT::stake_table_entry(&*membership_reader, &key, epoch)
-        else {
-            return Either::Left(());
-        };
+        let stake_table_entry = CERT::stake_table_entry(&*membership_reader, &key, epoch)?;
         let stake_table = CERT::stake_table(&*membership_reader, epoch);
         let total_nodes = CERT::total_nodes(&*membership_reader, epoch);
         let threshold = CERT::threshold(&*membership_reader, epoch);
         drop(membership_reader);
 
-        let Some(vote_node_id) = stake_table
+        let vote_node_id = stake_table
             .iter()
-            .position(|x| *x == stake_table_entry.clone())
-        else {
-            return Either::Left(());
-        };
+            .position(|x| *x == stake_table_entry.clone())?;
 
         let original_signature: <TYPES::SignatureKey as SignatureKey>::PureAssembledSignatureType =
             vote.signature();
@@ -215,7 +208,7 @@ impl<
 
         // Check for duplicate vote
         if total_vote_map.contains_key(&key) {
-            return Either::Left(());
+            return None;
         }
         let (signers, sig_list) = self
             .signers
@@ -223,7 +216,7 @@ impl<
             .or_insert((bitvec![0; total_nodes], Vec::new()));
         if signers.get(vote_node_id).as_deref() == Some(&true) {
             error!("Node id is already in signers list");
-            return Either::Left(());
+            return None;
         }
         signers.set(vote_node_id, true);
         sig_list.push(original_signature);
@@ -251,9 +244,9 @@ impl<
                 real_qc_sig,
                 vote.view_number(),
             );
-            return Either::Right(cert);
+            return Some(cert);
         }
-        Either::Left(())
+        None
     }
 }
 
