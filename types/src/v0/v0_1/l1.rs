@@ -153,6 +153,7 @@ pub struct L1Client {
     pub(crate) provider: Arc<Provider<MultiRpcClient>>,
     /// Shared state updated by an asynchronous task which polls the L1.
     pub(crate) state: Arc<Mutex<L1State>>,
+    // pub(crate) pos_state: Arc<Mutex<L1State>>,
     /// Channel used by the async update task to send events to clients.
     pub(crate) sender: Sender<L1Event>,
     /// Receiver for events from the async update task.
