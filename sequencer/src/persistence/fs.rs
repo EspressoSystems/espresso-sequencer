@@ -103,13 +103,9 @@ impl PersistenceOptions for Options {
 
         let migration_path = path.join("migration");
         let migrated = if migration_path.is_file() {
-            let bytes = fs::read(&path).context(format!(
-                "unable to read leaf migration from {}",
-                path.display()
-            ))?;
-            let json = serde_json::from_slice(&bytes).context("config file is not valid JSON")?;
-
-            serde_json::from_value(json).context("malformed config file")?
+            let bytes = fs::read(&path)
+                .context(format!("unable to read migration from {}", path.display()))?;
+            bincode::deserialize(&bytes).context("malformed migration file")?
         } else {
             HashSet::new()
         };
