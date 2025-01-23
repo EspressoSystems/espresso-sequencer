@@ -13,7 +13,7 @@ use async_lock::{Mutex, RwLock};
 use committable::{Commitment, Committable};
 use hotshot::traits::{BlockPayload, ValidatedState};
 use hotshot_types::{
-    data::{DaProposal2, Leaf2, QuorumProposal2},
+    data::{DaProposal2, Leaf2, QuorumProposalWrapper},
     traits::{block_contents::BlockHeader, node_implementation::NodeType},
 };
 
@@ -142,7 +142,7 @@ where
 
     pub(crate) async fn new_child(
         self: Arc<Self>,
-        quorum_proposal: QuorumProposal2<Types>,
+        quorum_proposal: QuorumProposalWrapper<Types>,
         da_proposal: DaProposal2<Types>,
     ) -> Arc<Self> {
         let leaf = Leaf2::from_quorum_proposal(&quorum_proposal);
@@ -163,17 +163,17 @@ where
             self.parent_block_references.last_nonempty_view
         } else {
             // This block is non-empty
-            Some(quorum_proposal.view_number)
+            Some(quorum_proposal.view_number())
         };
 
         // We replace our parent_block_references with information from the
         // quorum proposal.  This is identifying the block that this specific
         // instance of [BuilderState] is attempting to build for.
         let parent_block_references = ParentBlockReferences {
-            view_number: quorum_proposal.view_number,
-            vid_commitment: quorum_proposal.block_header.payload_commitment(),
+            view_number: quorum_proposal.view_number(),
+            vid_commitment: quorum_proposal.block_header().payload_commitment(),
             leaf_commit: Committable::commit(&leaf),
-            builder_commitment: quorum_proposal.block_header.builder_commitment(),
+            builder_commitment: quorum_proposal.block_header().builder_commitment(),
             tx_count: txn_commitments.len(),
             last_nonempty_view,
         };

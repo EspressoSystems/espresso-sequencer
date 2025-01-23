@@ -13,7 +13,7 @@ use hotshot::{
     types::{BLSPubKey, SignatureKey},
 };
 use hotshot_types::{
-    data::{DaProposal2, EpochNumber, Leaf2, QuorumProposal2, ViewNumber},
+    data::{DaProposal2, Leaf2, QuorumProposal2, QuorumProposalWrapper, ViewNumber},
     message::Proposal,
     simple_certificate::{QuorumCertificate, SimpleCertificate, SuccessThreshold},
     simple_vote::QuorumData2,
@@ -111,10 +111,10 @@ pub async fn create_builder_state(
 pub async fn calc_proposal_msg(
     num_storage_nodes: usize,
     round: usize,
-    prev_quorum_proposal: Option<QuorumProposal2<TestTypes>>,
+    prev_quorum_proposal: Option<QuorumProposalWrapper<TestTypes>>,
     transactions: Vec<TestTransaction>,
 ) -> (
-    QuorumProposal2<TestTypes>,
+    QuorumProposalWrapper<TestTypes>,
     QuorumProposalMessage<TestTypes>,
     DaProposalMessage<TestTypes>,
     BuilderStateId<TestTypes>,
@@ -144,7 +144,7 @@ pub async fn calc_proposal_msg(
                 num_transactions: encoded_transactions.len() as u64,
             },
             view_number: ViewNumber::new(round as u64),
-            epoch: EpochNumber::new(1),
+            epoch: None,
         };
         let encoded_transactions_hash = Sha256::digest(&encoded_transactions);
         let da_signature =
@@ -181,17 +181,17 @@ pub async fn calc_proposal_msg(
         .await
         .to_qc2(),
         Some(prev_proposal) => {
-            let prev_justify_qc = &prev_proposal.justify_qc;
+            let prev_justify_qc = prev_proposal.justify_qc();
             let quorum_data = QuorumData2::<TestTypes> {
                 leaf_commit: Leaf2::from_quorum_proposal(prev_proposal).commit(),
-                epoch: EpochNumber::new(1),
+                epoch: None,
             };
 
             // form a justify qc
             SimpleCertificate::<TestTypes, QuorumData2<TestTypes>, SuccessThreshold>::new(
                 quorum_data.clone(),
                 quorum_data.commit(),
-                prev_proposal.view_number,
+                prev_proposal.view_number(),
                 prev_justify_qc.signatures.clone(),
                 PhantomData,
             )
@@ -200,14 +200,17 @@ pub async fn calc_proposal_msg(
 
     tracing::debug!("Iteration: {} justify_qc: {:?}", round, justify_qc);
 
-    let quorum_proposal = QuorumProposal2::<TestTypes> {
-        block_header,
-        view_number: ViewNumber::new(round as u64),
-        justify_qc: justify_qc.clone(),
-        upgrade_certificate: None,
-        view_change_evidence: None,
-        next_epoch_justify_qc: None,
-        next_drb_result: None,
+    let quorum_proposal = QuorumProposalWrapper::<TestTypes> {
+        proposal: QuorumProposal2::<TestTypes> {
+            block_header,
+            view_number: ViewNumber::new(round as u64),
+            justify_qc: justify_qc.clone(),
+            upgrade_certificate: None,
+            view_change_evidence: None,
+            next_epoch_justify_qc: None,
+            next_drb_result: None,
+        },
+        with_epoch: false,
     };
 
     let quorum_signature =

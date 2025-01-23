@@ -17,7 +17,7 @@ use hotshot_example_types::{
     state_types::{TestInstanceState, TestValidatedState},
 };
 use hotshot_types::{
-    data::{DaProposal2, EpochNumber, Leaf2, QuorumProposal2, ViewNumber},
+    data::{DaProposal2, EpochNumber, Leaf2, QuorumProposal2, QuorumProposalWrapper, ViewNumber},
     message::Proposal,
     simple_certificate::{QuorumCertificate, SimpleCertificate, SuccessThreshold},
     simple_vote::QuorumData2,
@@ -26,16 +26,16 @@ use hotshot_types::{
 use sha2::{Digest, Sha256};
 
 pub struct SimulatedChainState {
-    epoch: EpochNumber,
+    epoch: Option<EpochNumber>,
     round: ViewNumber,
-    previous_quorum_proposal: Option<QuorumProposal2<TestTypes>>,
+    previous_quorum_proposal: Option<QuorumProposalWrapper<TestTypes>>,
     event_stream_sender: Sender<Event<TestTypes>>,
 }
 
 impl SimulatedChainState {
     pub fn new(event_stream_sender: Sender<Event<TestTypes>>) -> Self {
         Self {
-            epoch: EpochNumber::genesis(),
+            epoch: None,
             round: ViewNumber::genesis(),
             previous_quorum_proposal: None,
             event_stream_sender,
@@ -100,7 +100,7 @@ impl SimulatedChainState {
             .await
             .to_qc2(),
             Some(prev_proposal) => {
-                let prev_justify_qc = &prev_proposal.justify_qc;
+                let prev_justify_qc = &prev_proposal.justify_qc();
                 let quorum_data = QuorumData2::<TestTypes> {
                     leaf_commit: Committable::commit(&Leaf2::from_quorum_proposal(prev_proposal)),
                     epoch: self.epoch,
@@ -110,7 +110,7 @@ impl SimulatedChainState {
                 SimpleCertificate::<TestTypes, QuorumData2<TestTypes>, SuccessThreshold>::new(
                     quorum_data.clone(),
                     quorum_data.commit(),
-                    prev_proposal.view_number,
+                    prev_proposal.view_number(),
                     prev_justify_qc.signatures.clone(),
                     PhantomData,
                 )
@@ -119,15 +119,18 @@ impl SimulatedChainState {
 
         tracing::debug!("Iteration: {} justify_qc: {:?}", self.round, justify_qc);
 
-        let quorum_proposal = QuorumProposal2::<TestTypes> {
-            block_header,
-            view_number: self.round,
-            justify_qc: justify_qc.clone(),
-            upgrade_certificate: None,
-            view_change_evidence: None,
+        let quorum_proposal = QuorumProposalWrapper::<TestTypes> {
+            proposal: QuorumProposal2::<TestTypes> {
+                block_header,
+                view_number: self.round,
+                justify_qc: justify_qc.clone(),
+                upgrade_certificate: None,
+                view_change_evidence: None,
 
-            next_drb_result: None,
-            next_epoch_justify_qc: None,
+                next_drb_result: None,
+                next_epoch_justify_qc: None,
+            },
+            with_epoch: false,
         };
 
         let quorum_proposal_event = EventType::QuorumProposal {

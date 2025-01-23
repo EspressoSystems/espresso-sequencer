@@ -65,7 +65,6 @@ pub async fn run_test<V: Versions, BuilderImpl: TestBuilderImplementation<TestTy
         V,
     >::gen_launcher_with_tasks(
         description,
-        0,
         vec![
             Box::new(validation_config),
             Box::new(transaction_generation_config),

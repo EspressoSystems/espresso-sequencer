@@ -6,7 +6,7 @@ use futures::{
 };
 use hotshot::traits::BlockPayload;
 use hotshot_types::{
-    data::{DaProposal2, QuorumProposal2},
+    data::{DaProposal2, QuorumProposalWrapper},
     traits::{
         block_contents::BlockHeader, node_implementation::NodeType,
         signature_key::BuilderSignatureKey,
@@ -41,10 +41,10 @@ impl<Types> ProposalId<Types>
 where
     Types: NodeType,
 {
-    pub fn from_quorum_proposal(proposal: &QuorumProposal2<Types>) -> Self {
+    pub fn from_quorum_proposal(proposal: &QuorumProposalWrapper<Types>) -> Self {
         Self {
-            builder_commitment: proposal.block_header.builder_commitment(),
-            view_number: proposal.view_number,
+            builder_commitment: proposal.block_header().builder_commitment(),
+            view_number: proposal.view_number(),
         }
     }
 

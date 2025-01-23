@@ -22,7 +22,7 @@ use hotshot_example_types::{
     state_types::{TestInstanceState, TestValidatedState},
 };
 use hotshot_types::{
-    data::{DaProposal2, EpochNumber, QuorumProposal2, ViewNumber},
+    data::{DaProposal2, EpochNumber, QuorumProposal2, QuorumProposalWrapper, ViewNumber},
     message::Proposal,
     simple_certificate::QuorumCertificate,
     traits::{
@@ -281,7 +281,7 @@ async fn progress_round_with_transactions(
                         encoded_transactions: encoded_transactions.clone().into(),
                         metadata,
                         view_number: next_view,
-                        epoch: EpochNumber::genesis(), // TODO
+                        epoch: None, // TODO
                     },
                     signature: da_signature,
                     _pd: Default::default(),
@@ -317,24 +317,27 @@ async fn progress_round_with_transactions(
             random: 0,
         };
 
-        let qc_proposal = QuorumProposal2::<TestTypes> {
-            block_header,
-            view_number: next_view,
-            justify_qc: QuorumCertificate::<TestTypes>::genesis::<TestVersions>(
-                &TestValidatedState::default(),
-                &TestInstanceState::default(),
-            )
-            .await
-            .to_qc2(),
-            upgrade_certificate: None,
-            view_change_evidence: None,
-            next_epoch_justify_qc: None,
-            next_drb_result: None,
+        let qc_proposal = QuorumProposalWrapper::<TestTypes> {
+            proposal: QuorumProposal2::<TestTypes> {
+                block_header,
+                view_number: next_view,
+                justify_qc: QuorumCertificate::<TestTypes>::genesis::<TestVersions>(
+                    &TestValidatedState::default(),
+                    &TestInstanceState::default(),
+                )
+                .await
+                .to_qc2(),
+                upgrade_certificate: None,
+                view_change_evidence: None,
+                next_epoch_justify_qc: None,
+                next_drb_result: None,
+            },
+            with_epoch: false,
         };
 
         let payload_vid_commitment =
             <TestBlockHeader as BlockHeader<TestTypes>>::payload_commitment(
-                &qc_proposal.block_header,
+                qc_proposal.block_header(),
             );
 
         let qc_signature = <TestTypes as hotshot_types::traits::node_implementation::NodeType>::SignatureKey::sign(

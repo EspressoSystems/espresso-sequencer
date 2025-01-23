@@ -4,7 +4,7 @@ use hotshot_builder_api::v0_1::{
     builder::{define_api, submit_api, BuildError, Error as BuilderApiError, TransactionStatus},
     data_source::{AcceptsTxnSubmits, BuilderDataSource},
 };
-use hotshot_types::traits::block_contents::{precompute_vid_commitment, Transaction};
+use hotshot_types::traits::block_contents::Transaction;
 use hotshot_types::traits::EncodeBytes;
 use hotshot_types::{
     event::EventType,
@@ -19,7 +19,7 @@ use hotshot_types::{
 use marketplace_builder_shared::coordinator::BuilderStateLookup;
 use marketplace_builder_shared::error::Error;
 use marketplace_builder_shared::state::BuilderState;
-use marketplace_builder_shared::utils::{BuilderKeys, WaitAndKeep};
+use marketplace_builder_shared::utils::BuilderKeys;
 use tide_disco::app::AppError;
 use tokio::spawn;
 use tokio::time::{sleep, timeout};
@@ -402,12 +402,8 @@ where
         // or upon initialization.
         let num_nodes = self.num_nodes.load(Ordering::Relaxed);
 
-        let fut = async move {
-            let join_handle = tokio::task::spawn_blocking(move || {
-                precompute_vid_commitment(&encoded_txns, num_nodes)
-            });
-            join_handle.await.unwrap()
-        };
+        let vid_commitment =
+            hotshot_types::traits::block_contents::vid_commitment(&encoded_txns, num_nodes);
 
         info!(
             builder_id = %builder.id(),
@@ -420,7 +416,7 @@ where
             block_payload: payload,
             block_size,
             metadata,
-            vid_data: WaitAndKeep::new(Box::pin(fut)),
+            vid_commitment,
             offered_fee,
             truncated,
         }))
@@ -528,7 +524,6 @@ where
                 .get_block(&block_id)
                 .ok_or(Error::NotFound)?;
 
-            block_info.vid_data.start();
             (
                 block_info.block_payload.clone(),
                 block_info.metadata.clone(),
@@ -568,7 +563,7 @@ where
         let metadata;
         let offered_fee;
         let truncated;
-        let vid_data;
+        let vid_commitment;
         {
             // We store this read lock guard separately to make it explicit
             // that this will end up holding a lock for the duration of this
@@ -586,10 +581,8 @@ where
             metadata = block_info.metadata.clone();
             offered_fee = block_info.offered_fee;
             truncated = block_info.truncated;
-            vid_data = block_info.vid_data.clone();
+            vid_commitment = block_info.vid_commitment;
         };
-
-        let (vid_commitment, vid_precompute_data) = vid_data.resolve().await;
 
         // sign over the vid commitment
         let signature_over_vid_commitment =
@@ -609,7 +602,6 @@ where
 
         let response = AvailableBlockHeaderInput::<Types> {
             vid_commitment,
-            vid_precompute_data,
             fee_signature: signature_over_fee_info,
             message_signature: signature_over_vid_commitment,
             sender: self.builder_keys.0.clone(),

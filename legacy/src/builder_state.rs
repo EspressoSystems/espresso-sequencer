@@ -1,13 +1,13 @@
 use hotshot_types::{
-    data::{DaProposal2, Leaf2, QuorumProposal2},
+    data::{DaProposal2, Leaf2, QuorumProposalWrapper},
     message::Proposal,
     traits::{
-        block_contents::{precompute_vid_commitment, BlockHeader, BlockPayload},
+        block_contents::{BlockHeader, BlockPayload},
         node_implementation::{ConsensusTime, NodeType},
         EncodeBytes,
     },
     utils::BuilderCommitment,
-    vid::{VidCommitment, VidPrecomputeData},
+    vid::VidCommitment,
 };
 use marketplace_builder_shared::block::{BlockId, BuilderStateId, ParentBlockReferences};
 
@@ -23,11 +23,7 @@ use futures::StreamExt;
 
 use tokio::{
     spawn,
-    sync::{
-        mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
-        oneshot,
-    },
-    task::spawn_blocking,
+    sync::{mpsc::UnboundedSender, oneshot},
     time::sleep,
 };
 
@@ -61,7 +57,7 @@ pub struct DaProposalMessage<Types: NodeType> {
 /// Quorum proposal message to be put on the quorum proposal channel
 #[derive(Clone, Debug, PartialEq)]
 pub struct QuorumProposalMessage<Types: NodeType> {
-    pub proposal: Arc<Proposal<Types, QuorumProposal2<Types>>>,
+    pub proposal: Arc<Proposal<Types, QuorumProposalWrapper<Types>>>,
     pub sender: Types::SignatureKey,
 }
 /// Request Message to be put on the request channel
@@ -86,7 +82,7 @@ pub struct BuildBlockInfo<Types: NodeType> {
     pub block_payload: Types::BlockPayload,
     pub metadata: <<Types as NodeType>::BlockPayload as BlockPayload<Types>>::Metadata,
     pub vid_trigger: oneshot::Sender<TriggerStatus>,
-    pub vid_receiver: UnboundedReceiver<(VidCommitment, VidPrecomputeData)>,
+    pub vid_commitment: VidCommitment,
     // Could we have included more transactions, but chose not to?
     pub truncated: bool,
 }
@@ -143,8 +139,10 @@ pub struct BuilderState<Types: NodeType> {
 
     /// `quorum_proposal_payload_commit` to `quorum_proposal`
     #[allow(clippy::type_complexity)]
-    pub quorum_proposal_payload_commit_to_quorum_proposal:
-        HashMap<(BuilderCommitment, Types::View), Arc<Proposal<Types, QuorumProposal2<Types>>>>,
+    pub quorum_proposal_payload_commit_to_quorum_proposal: HashMap<
+        (BuilderCommitment, Types::View),
+        Arc<Proposal<Types, QuorumProposalWrapper<Types>>>,
+    >,
 
     /// Spawned-from references to the parent block.
     pub parent_block_references: ParentBlockReferences<Types>,
@@ -210,9 +208,9 @@ pub struct BuilderState<Types: NodeType> {
 /// itself.
 ///
 /// In an ideal circumstance the best [`BuilderState`] to extend from is going to
-/// be the one that is immediately preceding the [`QuorumProposal2`] that we are
+/// be the one that is immediately preceding the [`QuorumProposalWrapper`] that we are
 /// attempting to extend from. However, if all we know is the view number of
-/// the [`QuorumProposal2`] that we are attempting to extend from, then we may end
+/// the [`QuorumProposalWrapper`] that we are attempting to extend from, then we may end
 /// up in a scenario where we have multiple [`BuilderState`]s that are all equally
 /// valid to extend from.  When this happens, we have the potential for a data
 /// race.
@@ -221,7 +219,7 @@ pub struct BuilderState<Types: NodeType> {
 /// [`ProxyGlobalState`](crate::service::ProxyGlobalState)'s API.  In general,
 /// we want to be able to retrieve a [`BuilderState`] via the [`BuilderStateId`].
 /// The [`BuilderStateId`] only references a [`ViewNumber`](hotshot_types::data::ViewNumber)
-/// and a [`VidCommitment`] While this information is available in the [`QuorumProposal2`],
+/// and a [`VidCommitment`] While this information is available in the [`QuorumProposalWrapper`],
 /// it only helps us to rule out [`BuilderState`]s that already exist.
 /// It does **NOT** help us to pick a [`BuilderState`] that is the best fit to extend from.
 ///
@@ -235,7 +233,7 @@ pub struct BuilderState<Types: NodeType> {
 /// This function determines the best [`BuilderState`] in the following steps:
 ///
 /// 1. If we have a [`BuilderState`] that is already spawned for the current
-///    [`QuorumProposal2`], then we should should return no states, as one already
+///    [`QuorumProposalWrapper`], then we should should return no states, as one already
 ///    exists.  This will prevent us from attempting to spawn duplicate
 ///    [`BuilderState`]s.
 /// 2. Attempt to find all [`BuilderState`]s that are recorded within
@@ -243,7 +241,7 @@ pub struct BuilderState<Types: NodeType> {
 ///    *should* only be one of these.  But all would be valid extension points.
 /// 3. If we can't find any [`BuilderState`]s that match the view number
 ///    and leaf commitment, then we should return for the maximum stored view
-///    number that is smaller than the current [`QuorumProposal2`].
+///    number that is smaller than the current [`QuorumProposalWrapper`].
 /// 4. If there is is only one [`BuilderState`] stored in the [`GlobalState`], then
 ///    we should return that [`BuilderState`] as the best fit.
 /// 5. If none of the other criteria match, we return an empty result as it is
@@ -256,11 +254,11 @@ pub struct BuilderState<Types: NodeType> {
 /// > entries in the resulting [HashSet], but this is not done here in order
 /// > to allow us to highlight the possibility of the race.
 async fn best_builder_states_to_extend<Types: NodeType>(
-    quorum_proposal: Arc<Proposal<Types, QuorumProposal2<Types>>>,
+    quorum_proposal: Arc<Proposal<Types, QuorumProposalWrapper<Types>>>,
     global_state: Arc<RwLock<GlobalState<Types>>>,
 ) -> HashSet<BuilderStateId<Types>> {
-    let current_view_number = quorum_proposal.data.view_number;
-    let current_commitment = quorum_proposal.data.block_header.payload_commitment();
+    let current_view_number = quorum_proposal.data.view_number();
+    let current_commitment = quorum_proposal.data.block_header().payload_commitment();
     let current_builder_state_id = BuilderStateId::<Types> {
         parent_commitment: current_commitment,
         parent_view: current_view_number,
@@ -286,7 +284,7 @@ async fn best_builder_states_to_extend<Types: NodeType>(
     // We do this by checking the `justify_qc` stored within the
     // [QuorumProposal], and checking it against the current spawned
     // [BuilderState]s
-    let justify_qc = &quorum_proposal.data.justify_qc;
+    let justify_qc = quorum_proposal.data.justify_qc();
     let existing_states: HashSet<_> = global_state_read_lock
         .spawned_builder_states
         .iter()
@@ -367,7 +365,7 @@ impl<Types: NodeType> BuilderState<Types> {
     /// we are among the best [`BuilderState`]s to extend from.
     async fn am_i_the_best_builder_state_to_extend(
         &self,
-        quorum_proposal: Arc<Proposal<Types, QuorumProposal2<Types>>>,
+        quorum_proposal: Arc<Proposal<Types, QuorumProposalWrapper<Types>>>,
     ) -> bool {
         let best_builder_states_to_extend =
             best_builder_states_to_extend(quorum_proposal.clone(), self.global_state.clone()).await;
@@ -384,8 +382,8 @@ impl<Types: NodeType> BuilderState<Types> {
                     builder_state_id.parent_view.u64()
                 ))
                 .collect::<Vec<String>>(),
-            quorum_proposal.data.block_header.payload_commitment(),
-            quorum_proposal.data.view_number.u64(),
+            quorum_proposal.data.block_header().payload_commitment(),
+            quorum_proposal.data.view_number().u64(),
         );
 
         // We are a best fit if we are contained within the returned set of
@@ -458,7 +456,7 @@ impl<Types: NodeType> BuilderState<Types> {
         //  if (this is the correct parent or
         //      (the correct parent is missing and this is the highest view))
         //    spawn a clone
-        if quorum_proposal.data.view_number != view_number {
+        if quorum_proposal.data.view_number() != view_number {
             tracing::debug!("Not spawning a clone despite matching DA and quorum payload commitments, as they corresponds to different view numbers");
             return;
         }
@@ -481,7 +479,7 @@ impl<Types: NodeType> BuilderState<Types> {
     async fn process_quorum_proposal(&mut self, quorum_msg: QuorumProposalMessage<Types>) {
         tracing::debug!(
             "Builder Received Quorum proposal message for view {:?}",
-            quorum_msg.proposal.data.view_number
+            quorum_msg.proposal.data.view_number()
         );
 
         // Two cases to handle:
@@ -491,8 +489,8 @@ impl<Types: NodeType> BuilderState<Types> {
         // and only doing the insertion if and only if intended builder state for a particulat view is not present
         // check the presence of quorum_proposal.data.view_number-1 in the spawned_builder_states list
         let quorum_proposal = &quorum_msg.proposal;
-        let view_number = quorum_proposal.data.view_number;
-        let payload_builder_commitment = quorum_proposal.data.block_header.builder_commitment();
+        let view_number = quorum_proposal.data.view_number();
+        let payload_builder_commitment = quorum_proposal.data.block_header().builder_commitment();
 
         tracing::debug!(
             "Extracted payload builder commitment from the quorum proposal: {:?}",
@@ -543,11 +541,11 @@ impl<Types: NodeType> BuilderState<Types> {
     ///
     /// This helper function also adds additional checks in order to ensure
     /// that the [`BuilderState`] that is being spawned is the best fit for the
-    /// [`QuorumProposal2`] that is being extended from.
+    /// [`QuorumProposalWrapper`] that is being extended from.
     async fn spawn_clone_that_extends_self(
         &mut self,
         da_proposal_info: DAProposalInfo<Types>,
-        quorum_proposal: Arc<Proposal<Types, QuorumProposal2<Types>>>,
+        quorum_proposal: Arc<Proposal<Types, QuorumProposalWrapper<Types>>>,
     ) {
         if !self
             .am_i_the_best_builder_state_to_extend(quorum_proposal.clone())
@@ -556,8 +554,8 @@ impl<Types: NodeType> BuilderState<Types> {
             tracing::debug!(
                 "{} is not the best fit for forking, {}@{}, so ignoring the quorum proposal, and leaving it to another BuilderState",
                 self.parent_block_references,
-                quorum_proposal.data.block_header.payload_commitment(),
-                quorum_proposal.data.view_number.u64(),
+                quorum_proposal.data.block_header().payload_commitment(),
+                quorum_proposal.data.view_number().u64(),
             );
             return;
         }
@@ -567,8 +565,8 @@ impl<Types: NodeType> BuilderState<Types> {
         tracing::debug!(
             "extending BuilderState with a clone from {} with new proposal {}@{}",
             self.parent_block_references,
-            quorum_proposal.data.block_header.payload_commitment(),
-            quorum_proposal.data.view_number.u64()
+            quorum_proposal.data.block_header().payload_commitment(),
+            quorum_proposal.data.view_number().u64()
         );
         // We literally fork ourselves
         self.clone_with_receiver(req_receiver)
@@ -615,7 +613,7 @@ impl<Types: NodeType> BuilderState<Types> {
     async fn spawn_clone(
         mut self,
         da_proposal_info: DAProposalInfo<Types>,
-        quorum_proposal: Arc<Proposal<Types, QuorumProposal2<Types>>>,
+        quorum_proposal: Arc<Proposal<Types, QuorumProposalWrapper<Types>>>,
         req_sender: BroadcastSender<MessageType<Types>>,
     ) {
         let leaf = Leaf2::from_quorum_proposal(&quorum_proposal.data);
@@ -624,10 +622,10 @@ impl<Types: NodeType> BuilderState<Types> {
         // quorum proposal.  This is identifying the block that this specific
         // instance of [BuilderState] is attempting to build for.
         self.parent_block_references = ParentBlockReferences {
-            view_number: quorum_proposal.data.view_number,
-            vid_commitment: quorum_proposal.data.block_header.payload_commitment(),
+            view_number: quorum_proposal.data.view_number(),
+            vid_commitment: quorum_proposal.data.block_header().payload_commitment(),
             leaf_commit: leaf.commit(),
-            builder_commitment: quorum_proposal.data.block_header.builder_commitment(),
+            builder_commitment: quorum_proposal.data.block_header().builder_commitment(),
             // Unused in old legacy builder:
             last_nonempty_view: None,
             tx_count: 0,
@@ -792,24 +790,10 @@ impl<Types: NodeType> BuilderState<Types> {
         // or upon initialization.
         let num_nodes = self.global_state.read_arc().await.num_nodes;
 
-        let (trigger_send, trigger_recv) = oneshot::channel();
+        let (trigger_send, _) = oneshot::channel();
 
-        // spawn a task to calculate the VID commitment, and pass the handle to the global state
-        // later global state can await on it before replying to the proposer
-        let (unbounded_sender, unbounded_receiver) = unbounded_channel();
-        #[allow(unused_must_use)]
-        spawn(async move {
-            let Ok(TriggerStatus::Start) = trigger_recv.await else {
-                return;
-            };
-
-            let join_handle =
-                spawn_blocking(move || precompute_vid_commitment(&encoded_txns, num_nodes));
-
-            let (vidc, pre_compute_data) = join_handle.await.unwrap();
-
-            unbounded_sender.send((vidc, pre_compute_data));
-        });
+        let vid_commitment =
+            hotshot_types::traits::block_contents::vid_commitment(&encoded_txns, num_nodes);
 
         tracing::info!(
             "Builder view num {:?}, building block with {:?} txns, with builder hash {:?}",
@@ -828,7 +812,7 @@ impl<Types: NodeType> BuilderState<Types> {
             block_payload: payload,
             metadata,
             vid_trigger: trigger_send,
-            vid_receiver: unbounded_receiver,
+            vid_commitment,
             truncated: actual_txn_count < self.tx_queue.len(),
         })
     }
@@ -955,7 +939,7 @@ impl<Types: NodeType> BuilderState<Types> {
                         match quorum {
                             Some(quorum) => {
                                 if let MessageType::QuorumProposalMessage(rquorum_msg) = quorum {
-                                    tracing::debug!("Received quorum proposal msg in builder {:?}:\n {:?} for view ", self.parent_block_references, rquorum_msg.proposal.data.view_number);
+                                    tracing::debug!("Received quorum proposal msg in builder {:?}:\n {:?} for view ", self.parent_block_references, rquorum_msg.proposal.data.view_number());
                                     self.process_quorum_proposal(rquorum_msg).await;
                                 } else {
                                     tracing::warn!("Unexpected message on quorum proposals channel: {:?}", quorum);
@@ -1145,7 +1129,8 @@ mod test {
     use hotshot_example_types::block_types::TestTransaction;
     use hotshot_example_types::node_types::TestTypes;
     use hotshot_types::data::Leaf2;
-    use hotshot_types::data::{QuorumProposal2, ViewNumber};
+    use hotshot_types::data::QuorumProposalWrapper;
+    use hotshot_types::data::ViewNumber;
     use hotshot_types::traits::node_implementation::{ConsensusTime, NodeType};
     use hotshot_types::utils::BuilderCommitment;
     use marketplace_builder_shared::testing::constants::TEST_NUM_NODES_IN_VID_COMPUTATION;
@@ -1318,10 +1303,10 @@ mod test {
                 quorum_proposal_msg
                     .proposal
                     .data
-                    .block_header
+                    .block_header()
                     .builder_commitment
                     .clone(),
-                quorum_proposal_msg.proposal.data.view_number,
+                quorum_proposal_msg.proposal.data.view_number(),
             ),
             quorum_proposal_msg.proposal,
         );
@@ -1412,7 +1397,7 @@ mod test {
                     .collect::<Vec<_>>()
             })
             .collect::<Vec<_>>();
-        let mut prev_quorum_proposal: Option<QuorumProposal2<TestTypes>> = None;
+        let mut prev_quorum_proposal: Option<QuorumProposalWrapper<TestTypes>> = None;
         // register some builder states for later decide event
         #[allow(clippy::needless_range_loop)]
         for round in 0..NUM_ROUNDS {
@@ -1435,10 +1420,10 @@ mod test {
             global_state.write_arc().await.register_builder_state(
                 builder_state_id,
                 ParentBlockReferences {
-                    view_number: quorum_proposal.view_number,
-                    vid_commitment: quorum_proposal.block_header.payload_commitment,
+                    view_number: quorum_proposal.view_number(),
+                    vid_commitment: quorum_proposal.block_header().payload_commitment,
                     leaf_commit,
-                    builder_commitment: quorum_proposal.block_header.builder_commitment,
+                    builder_commitment: quorum_proposal.block_header().builder_commitment.clone(),
                     // Unused in old legacy builder:
                     last_nonempty_view: None,
                     tx_count: 0,

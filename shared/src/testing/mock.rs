@@ -10,9 +10,8 @@ use hotshot_example_types::{
     state_types::{TestInstanceState, TestValidatedState},
 };
 use hotshot_types::data::DaProposal2;
-use hotshot_types::data::EpochNumber;
-use hotshot_types::data::QuorumProposal2;
 use hotshot_types::data::ViewNumber;
+use hotshot_types::data::{QuorumProposal2, QuorumProposalWrapper};
 use hotshot_types::event::LeafInfo;
 use hotshot_types::simple_certificate::QuorumCertificate2;
 use hotshot_types::simple_vote::QuorumData2;
@@ -69,7 +68,7 @@ pub async fn decide_leaf_chain_with_transactions(
 }
 
 /// Create mock pair of DA and Quorum proposals
-pub async fn proposals(view: u64) -> (DaProposal2<TestTypes>, QuorumProposal2<TestTypes>) {
+pub async fn proposals(view: u64) -> (DaProposal2<TestTypes>, QuorumProposalWrapper<TestTypes>) {
     let transaction = transaction();
     proposals_with_transactions(view, vec![transaction]).await
 }
@@ -78,8 +77,8 @@ pub async fn proposals(view: u64) -> (DaProposal2<TestTypes>, QuorumProposal2<Te
 pub async fn proposals_with_transactions(
     view: u64,
     transactions: Vec<TestTransaction>,
-) -> (DaProposal2<TestTypes>, QuorumProposal2<TestTypes>) {
-    let epoch = EpochNumber::genesis();
+) -> (DaProposal2<TestTypes>, QuorumProposalWrapper<TestTypes>) {
+    let epoch = None;
     let view_number = <TestTypes as NodeType>::View::new(view);
     let upgrade_lock = UpgradeLock::<TestTypes, TestVersions>::new();
     let validated_state = TestValidatedState::default();
@@ -109,14 +108,17 @@ pub async fn proposals_with_transactions(
     )
     .await
     .to_qc2();
-    let parent_proposal = QuorumProposal2 {
-        block_header: header,
-        view_number: ViewNumber::new(view_number.saturating_sub(1)),
-        justify_qc: genesis_qc,
-        upgrade_certificate: None,
-        view_change_evidence: None,
-        next_drb_result: None,
-        next_epoch_justify_qc: None,
+    let parent_proposal = QuorumProposalWrapper {
+        proposal: QuorumProposal2 {
+            block_header: header,
+            view_number: ViewNumber::new(view_number.saturating_sub(1)),
+            justify_qc: genesis_qc,
+            upgrade_certificate: None,
+            view_change_evidence: None,
+            next_drb_result: None,
+            next_epoch_justify_qc: None,
+        },
+        with_epoch: false,
     };
     let leaf = Leaf2::from_quorum_proposal(&parent_proposal);
 
@@ -144,14 +146,17 @@ pub async fn proposals_with_transactions(
             view_number,
             epoch,
         },
-        QuorumProposal2 {
-            block_header: leaf.block_header().clone(),
-            view_number,
-            justify_qc,
-            upgrade_certificate: None,
-            view_change_evidence: None,
-            next_drb_result: None,
-            next_epoch_justify_qc: None,
+        QuorumProposalWrapper {
+            proposal: QuorumProposal2 {
+                block_header: leaf.block_header().clone(),
+                view_number,
+                justify_qc,
+                upgrade_certificate: None,
+                view_change_evidence: None,
+                next_drb_result: None,
+                next_epoch_justify_qc: None,
+            },
+            with_epoch: false,
         },
     )
 }

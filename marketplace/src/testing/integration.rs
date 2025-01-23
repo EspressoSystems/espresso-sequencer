@@ -154,7 +154,6 @@ mod tests {
                     num_failed_views: 5,
                     ..Default::default()
                 },
-                epoch_height: 0,
                 ..TestDescription::default()
             },
             BuilderValidationConfig {
@@ -189,7 +188,6 @@ mod tests {
                                 duration: Duration::from_secs(120),
                             },
                 ),
-                epoch_height: 0,
                 overall_safety_properties: OverallSafetyPropertiesDescription {
                     num_successful_views: 50,
                     num_failed_views: 5,

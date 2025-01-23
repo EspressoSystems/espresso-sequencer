@@ -5,7 +5,7 @@ use hotshot_builder_api::v0_1::data_source::BuilderDataSource;
 use hotshot_example_types::block_types::{TestBlockHeader, TestMetadata, TestTransaction};
 use hotshot_example_types::node_types::{TestTypes, TestVersions};
 use hotshot_example_types::state_types::{TestInstanceState, TestValidatedState};
-use hotshot_types::data::{Leaf2, QuorumProposal2, ViewNumber};
+use hotshot_types::data::{Leaf2, QuorumProposal2, QuorumProposalWrapper, ViewNumber};
 use hotshot_types::event::LeafInfo;
 use hotshot_types::simple_certificate::QuorumCertificate;
 use hotshot_types::traits::block_contents::BlockHeader;
@@ -189,21 +189,24 @@ async fn test_pruning() {
         QuorumCertificate::genesis::<TestVersions>(&Default::default(), &Default::default())
             .await
             .to_qc2();
-    let leaf = Leaf2::from_quorum_proposal(&QuorumProposal2 {
-        block_header: <TestBlockHeader as BlockHeader<TestTypes>>::genesis(
-            &Default::default(),
-            Default::default(),
-            BuilderCommitment::from_bytes([]),
-            TestMetadata {
-                num_transactions: 0,
-            },
-        ),
-        view_number: ViewNumber::new(DECIDE_VIEW),
-        justify_qc: mock_qc.clone(),
-        upgrade_certificate: None,
-        view_change_evidence: None,
-        next_epoch_justify_qc: None,
-        next_drb_result: None,
+    let leaf = Leaf2::from_quorum_proposal(&QuorumProposalWrapper {
+        proposal: QuorumProposal2 {
+            block_header: <TestBlockHeader as BlockHeader<TestTypes>>::genesis(
+                &Default::default(),
+                Default::default(),
+                BuilderCommitment::from_bytes([]),
+                TestMetadata {
+                    num_transactions: 0,
+                },
+            ),
+            view_number: ViewNumber::new(DECIDE_VIEW),
+            justify_qc: mock_qc.clone(),
+            upgrade_certificate: None,
+            view_change_evidence: None,
+            next_epoch_justify_qc: None,
+            next_drb_result: None,
+        },
+        with_epoch: false,
     });
     event_stream_sender
         .broadcast(hotshot::types::Event {

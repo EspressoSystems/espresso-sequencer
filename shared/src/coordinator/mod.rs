@@ -12,7 +12,7 @@ use either::Either;
 use hotshot::traits::BlockPayload;
 use hotshot_builder_api::v0_1::builder::TransactionStatus;
 use hotshot_types::{
-    data::{DaProposal2, QuorumProposal2},
+    data::{DaProposal2, QuorumProposalWrapper},
     event::LeafInfo,
     traits::{
         block_contents::BlockHeader,
@@ -33,7 +33,7 @@ use crate::{
 pub mod tiered_view_map;
 
 type ProposalMap<Types> =
-    HashMap<ProposalId<Types>, Either<QuorumProposal2<Types>, DaProposal2<Types>>>;
+    HashMap<ProposalId<Types>, Either<QuorumProposalWrapper<Types>, DaProposal2<Types>>>;
 
 type BuilderStateMap<Types> = TieredViewMap<BuilderStateId<Types>, Arc<BuilderState<Types>>>;
 
@@ -222,7 +222,7 @@ where
     /// This function should be called whenever new Quorum Proposal is recieved from HotShot.
     /// Coordinator uses matching Quorum and DA proposals to track creation of new blocks
     /// and spawning corresponding builder states for those.
-    pub async fn handle_quorum_proposal(&self, quorum_proposal: QuorumProposal2<Types>) {
+    pub async fn handle_quorum_proposal(&self, quorum_proposal: QuorumProposalWrapper<Types>) {
         let proposal_id = ProposalId::from_quorum_proposal(&quorum_proposal);
         self.handle_proposal(proposal_id, Either::Left(quorum_proposal))
             .await;
@@ -238,7 +238,7 @@ where
     async fn handle_proposal(
         &self,
         proposal_id: ProposalId<Types>,
-        proposal: Either<QuorumProposal2<Types>, DaProposal2<Types>>,
+        proposal: Either<QuorumProposalWrapper<Types>, DaProposal2<Types>>,
     ) {
         match self.proposals.lock().await.entry(proposal_id) {
             Entry::Occupied(entry) => {
@@ -307,10 +307,10 @@ where
     /// Spawn a new builder state off of matching pair of Quorum and DA proposals, store it in [`Self::builder_states`]
     async fn spawn_builder_state(
         &self,
-        quorum_proposal: QuorumProposal2<Types>,
+        quorum_proposal: QuorumProposalWrapper<Types>,
         da_proposal: DaProposal2<Types>,
     ) {
-        assert_eq!(quorum_proposal.view_number, da_proposal.view_number);
+        assert_eq!(quorum_proposal.view_number(), da_proposal.view_number);
 
         let mut candidate_parents = self.find_builder_states_to_extend(&quorum_proposal).await;
 
@@ -401,12 +401,12 @@ where
     #[must_use]
     async fn find_builder_states_to_extend(
         &self,
-        quorum_proposal: &QuorumProposal2<Types>,
+        quorum_proposal: &QuorumProposalWrapper<Types>,
     ) -> Vec<Arc<BuilderState<Types>>> {
         // This is ID of the state we want to spawn
         let current_builder_state_id = BuilderStateId {
-            parent_view: quorum_proposal.view_number,
-            parent_commitment: quorum_proposal.block_header.payload_commitment(),
+            parent_view: quorum_proposal.view_number(),
+            parent_commitment: quorum_proposal.block_header().payload_commitment(),
         };
 
         let builder_states = self.builder_states.read().await;
@@ -426,7 +426,7 @@ where
         // We do this by checking the `justify_qc` stored within the
         // [QuorumProposal], and checking it against the current spawned
         // [BuilderState]s
-        let justify_qc = &quorum_proposal.justify_qc;
+        let justify_qc = quorum_proposal.justify_qc();
 
         let existing_states = builder_states
             .bucket(&justify_qc.view_number)
