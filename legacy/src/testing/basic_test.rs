@@ -360,7 +360,7 @@ mod tests {
                         let previous_justify_qc = previous_quorum_proposal.justify_qc().clone();
                         // metadata
                         let _metadata = <TestBlockHeader as BlockHeader<TestTypes>>::metadata(
-                            &previous_quorum_proposal.block_header(),
+                            previous_quorum_proposal.block_header(),
                         );
                         let leaf = Leaf2::from_quorum_proposal(&previous_quorum_proposal);
 
@@ -439,7 +439,7 @@ mod tests {
                             let block_payload = BlockPayload::<TestTypes>::from_bytes(
                                 &encoded_transactions,
                                 <TestBlockHeader as BlockHeader<TestTypes>>::metadata(
-                                    &quorum_certificate_message.proposal.data.block_header(),
+                                    quorum_certificate_message.proposal.data.block_header(),
                                 ),
                             );
                             let mut current_leaf = Leaf2::from_quorum_proposal(

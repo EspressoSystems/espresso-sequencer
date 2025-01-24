@@ -22,7 +22,7 @@ use hotshot_example_types::{
     state_types::{TestInstanceState, TestValidatedState},
 };
 use hotshot_types::{
-    data::{DaProposal2, EpochNumber, QuorumProposal2, QuorumProposalWrapper, ViewNumber},
+    data::{DaProposal2, QuorumProposal2, QuorumProposalWrapper, ViewNumber},
     message::Proposal,
     simple_certificate::QuorumCertificate,
     traits::{
