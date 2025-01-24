@@ -257,6 +257,19 @@ pub fn epoch_from_block_number(block_number: u64, epoch_height: u64) -> u64 {
     }
 }
 
+/// Returns the block number of the epoch root in the given epoch
+///
+/// WARNING: This is NOT the root block for the given epoch.
+/// To find that root block number for epoch e, call `root_block_in_epoch(e-2,_)`.
+#[must_use]
+pub fn root_block_in_epoch(epoch: u64, epoch_height: u64) -> u64 {
+    if epoch_height == 0 || epoch < 1 {
+        0
+    } else {
+        epoch_height * epoch - 2
+    }
+}
+
 /// Returns an Option<Epoch> based on a boolean condition of whether or not epochs are enabled, a block number,
 /// and the epoch height. If epochs are disabled or the epoch height is zero, returns None.
 #[must_use]
@@ -348,5 +361,22 @@ mod test {
 
         let epoch = epoch_from_block_number(21, 10);
         assert_eq!(3, epoch);
+    }
+
+    #[test]
+    fn test_root_block_in_epoch() {
+        // block 0 is always epoch 0
+        let epoch = 3;
+        let epoch_height = 10;
+        let epoch_root_block_number = root_block_in_epoch(3, epoch_height);
+
+        assert!(is_epoch_root(28, epoch_height));
+
+        assert_eq!(epoch_root_block_number, 28);
+
+        assert_eq!(
+            epoch,
+            epoch_from_block_number(epoch_root_block_number, epoch_height)
+        );
     }
 }
