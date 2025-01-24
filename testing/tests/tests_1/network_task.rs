@@ -112,6 +112,98 @@ async fn test_network_task() {
 
 #[cfg(test)]
 #[tokio::test(flavor = "multi_thread")]
+async fn test_network_external_mnessages() {
+    use hotshot::types::EventType;
+    use hotshot_testing::helpers::build_system_handle_from_launcher;
+    use hotshot_types::message::RecipientList;
+
+    hotshot::helpers::initialize_logging();
+
+    let builder: TestDescription<TestTypes, MemoryImpl, TestVersions> =
+        TestDescription::default_multiple_rounds();
+
+    let launcher = builder.gen_launcher();
+
+    let mut handles = vec![];
+    let mut event_streams = vec![];
+    for i in 0..launcher.metadata.test_config.num_nodes_with_stake.into() {
+        let handle = build_system_handle_from_launcher::<TestTypes, MemoryImpl, TestVersions>(
+            i.try_into().unwrap(),
+            &launcher,
+        )
+        .await
+        .0;
+        event_streams.push(handle.event_stream_known_impl());
+        handles.push(handle);
+    }
+
+    // Send a message from 1 -> 2
+    handles[1]
+        .send_external_message(vec![1, 2], RecipientList::Direct(handles[2].public_key()))
+        .await
+        .unwrap();
+    let event = tokio::time::timeout(Duration::from_millis(100), event_streams[2].recv())
+        .await
+        .unwrap()
+        .unwrap()
+        .event;
+
+    // check that 2 received the message
+    assert!(matches!(
+        event,
+        EventType::ExternalMessageReceived {
+            sender,
+            data,
+        } if sender == handles[1].public_key() && data == vec![1, 2]
+    ));
+
+    // Send a message from 2 -> 1
+    handles[2]
+        .send_external_message(vec![2, 1], RecipientList::Direct(handles[1].public_key()))
+        .await
+        .unwrap();
+    let event = tokio::time::timeout(Duration::from_millis(100), event_streams[1].recv())
+        .await
+        .unwrap()
+        .unwrap()
+        .event;
+
+    // check that 1 received the message
+    assert!(matches!(
+        event,
+        EventType::ExternalMessageReceived {
+            sender,
+            data,
+        } if sender == handles[2].public_key() && data == vec![2,1]
+    ));
+
+    // Check broadcast works
+    handles[0]
+        .send_external_message(vec![0, 0, 0], RecipientList::Broadcast)
+        .await
+        .unwrap();
+    // All other nodes get the broadcast
+    for stream in event_streams.iter_mut().skip(1) {
+        let event = tokio::time::timeout(Duration::from_millis(100), stream.recv())
+            .await
+            .unwrap()
+            .unwrap()
+            .event;
+        assert!(matches!(
+            event,
+            EventType::ExternalMessageReceived {
+                sender,
+                data,
+            } if sender == handles[0].public_key() && data == vec![0,0,0]
+        ));
+    }
+    // No event on 0 even after short sleep
+    tokio::time::sleep(Duration::from_millis(2)).await;
+    assert!(event_streams[0].is_empty());
+}
+
+#[cfg(test)]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_network_storage_fail() {
     use std::collections::BTreeMap;
 

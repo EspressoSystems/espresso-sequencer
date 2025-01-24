@@ -22,11 +22,14 @@ use hotshot_types::{
     consensus::Consensus,
     data::{Leaf2, QuorumProposalWrapper},
     error::HotShotError,
-    message::Proposal,
+    message::{Message, MessageKind, Proposal, RecipientList},
     request_response::ProposalRequestPayload,
     traits::{
-        consensus_api::ConsensusApi, election::Membership, network::ConnectedNetwork,
-        node_implementation::NodeType, signature_key::SignatureKey,
+        consensus_api::ConsensusApi,
+        election::Membership,
+        network::{BroadcastDelay, ConnectedNetwork, Topic},
+        node_implementation::NodeType,
+        signature_key::SignatureKey,
     },
 };
 use tracing::instrument;
@@ -88,6 +91,43 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static, V: Versions>
     /// obtains a stream to expose to the user
     pub fn event_stream(&self) -> impl Stream<Item = Event<TYPES>> {
         self.output_event_stream.1.activate_cloned()
+    }
+
+    /// Message other participants with a serialized message from the application
+    /// Receivers of this message will get an `Event::ExternalMessageReceived` via
+    /// the event stream.
+    ///
+    /// # Errors
+    /// Errors if serializing the request fails, or the request fails to be sent
+    pub async fn send_external_message(
+        &self,
+        msg: Vec<u8>,
+        recipients: RecipientList<TYPES::SignatureKey>,
+    ) -> Result<()> {
+        let message = Message {
+            sender: self.public_key().clone(),
+            kind: MessageKind::External(msg),
+        };
+        let serialized_message = self.hotshot.upgrade_lock.serialize(&message).await?;
+
+        match recipients {
+            RecipientList::Broadcast => {
+                self.network
+                    .broadcast_message(serialized_message, Topic::Global, BroadcastDelay::None)
+                    .await?;
+            }
+            RecipientList::Direct(recipient) => {
+                self.network
+                    .direct_message(serialized_message, recipient)
+                    .await?;
+            }
+            RecipientList::Many(recipients) => {
+                self.network
+                    .da_broadcast_message(serialized_message, recipients, BroadcastDelay::None)
+                    .await?;
+            }
+        }
+        Ok(())
     }
 
     /// Request a proposal from the all other nodes.  Will block until some node
