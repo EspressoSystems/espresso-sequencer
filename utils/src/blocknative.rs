@@ -11,7 +11,7 @@ use reqwest::{header::AUTHORIZATION, Client};
 use serde::Deserialize;
 use url::Url;
 
-const URL: &str = "https://api.blocknative.com/gasprices/blockprices";
+const URL: &str = "";
 
 /// A client over HTTP for the [BlockNative](https://www.blocknative.com/gas-estimator) gas tracker API
 /// that implements the `GasOracle` trait.
