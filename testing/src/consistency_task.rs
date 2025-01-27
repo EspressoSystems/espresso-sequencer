@@ -104,9 +104,7 @@ async fn validate_node_map<TYPES: NodeType, V: Versions>(
 
         // We want to make sure the commitment matches,
         // but allow for the possibility that we may have skipped views in between.
-        if child.justify_qc().view_number == parent.view_number()
-            && child.justify_qc().data.leaf_commit != parent.commit()
-        {
+        if child.justify_qc().data.leaf_commit != parent.commit() {
             bail!("The node has provided leaf:\n\n{child:?}\n\nwhich points to:\n\n{parent:?}\n\nbut the commits do not match.");
         }
 

@@ -54,6 +54,8 @@ pub struct SpinningTask<
     I: TestableNodeImplementation<TYPES>,
     V: Versions,
 > {
+    /// epoch height
+    pub epoch_height: u64,
     /// handle to the nodes
     pub(crate) handles: Arc<RwLock<Vec<Node<TYPES, I, V>>>>,
     /// late start nodes
@@ -154,18 +156,16 @@ where
                                             marketplace_config,
                                         } = late_context_params;
 
-                                        let initializer = HotShotInitializer::<TYPES>::from_reload(
-                                            self.last_decided_leaf.clone(),
+                                        let initializer = HotShotInitializer::<TYPES>::load(
                                             TestInstanceState::new(self.async_delay_config.clone()),
-                                            None,
-                                            TYPES::View::genesis(),
-                                            genesis_epoch_from_version::<V, TYPES>(), // #3967 is this right now after our earlier discussion? or should i be doing (epoch_height > 0).then(TYPES::Epoch::genesis)
-                                            TYPES::View::genesis(),
+                                            self.epoch_height,
+                                            self.last_decided_leaf.clone(),
+                                            (
+                                                TYPES::View::genesis(),
+                                                genesis_epoch_from_version::<V, TYPES>(),
+                                            ),
+                                            (self.high_qc.clone(), self.next_epoch_high_qc.clone()),
                                             BTreeMap::new(),
-                                            self.high_qc.clone(),
-                                            self.next_epoch_high_qc.clone(),
-                                            None,
-                                            Vec::new(),
                                             BTreeMap::new(),
                                             None,
                                         );
@@ -238,27 +238,33 @@ where
                                 let config = node.handle.hotshot.config.clone();
                                 let marketplace_config =
                                     node.handle.hotshot.marketplace_config.clone();
+
                                 let read_storage = storage.read().await;
-                                let initializer = HotShotInitializer::<TYPES>::from_reload(
-                                    self.last_decided_leaf.clone(),
+                                let next_epoch_high_qc =
+                                    read_storage.next_epoch_high_qc_cloned().await;
+                                let start_view = read_storage.last_actioned_view().await;
+                                let start_epoch = read_storage.last_actioned_epoch().await;
+                                let high_qc = read_storage.high_qc_cloned().await.unwrap_or(
+                                    QuorumCertificate2::genesis::<V>(
+                                        &TestValidatedState::default(),
+                                        &TestInstanceState::default(),
+                                    )
+                                    .await,
+                                );
+                                let saved_proposals = read_storage.proposals_cloned().await;
+                                let saved_vid_shares = read_storage.vids_cloned().await;
+                                let decided_upgrade_certificate =
+                                    read_storage.decided_upgrade_certificate().await;
+
+                                let initializer = HotShotInitializer::<TYPES>::load(
                                     TestInstanceState::new(self.async_delay_config.clone()),
-                                    None,
-                                    read_storage.last_actioned_view().await,
-                                    read_storage.last_actioned_epoch().await,
-                                    read_storage.last_actioned_view().await,
-                                    read_storage.proposals_cloned().await,
-                                    read_storage.high_qc_cloned().await.unwrap_or(
-                                        QuorumCertificate2::genesis::<V>(
-                                            &TestValidatedState::default(),
-                                            &TestInstanceState::default(),
-                                        )
-                                        .await,
-                                    ),
-                                    read_storage.next_epoch_high_qc_cloned().await,
-                                    read_storage.decided_upgrade_certificate().await,
-                                    Vec::new(),
-                                    BTreeMap::new(),
-                                    Some(read_storage.vids_cloned().await),
+                                    self.epoch_height,
+                                    self.last_decided_leaf.clone(),
+                                    (start_view, start_epoch),
+                                    (high_qc, next_epoch_high_qc),
+                                    saved_proposals,
+                                    saved_vid_shares,
+                                    decided_upgrade_certificate,
                                 );
                                 // We assign node's public key and stake value rather than read from config file since it's a test
                                 let validator_config = ValidatorConfig::generated_from_seed_indexed(

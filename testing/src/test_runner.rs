@@ -180,6 +180,7 @@ where
         }
 
         let spinning_task_state = SpinningTask {
+            epoch_height: launcher.metadata.test_config.epoch_height,
             handles: Arc::clone(&handles),
             late_start,
             latest_view: None,
@@ -486,6 +487,7 @@ where
                 } else {
                     let initializer = HotShotInitializer::<TYPES>::from_genesis::<V>(
                         TestInstanceState::new(self.launcher.metadata.async_delay_config.clone()),
+                        config.epoch_height,
                     )
                     .await
                     .unwrap();

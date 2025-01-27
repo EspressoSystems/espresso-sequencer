@@ -234,9 +234,10 @@ pub async fn create_test_handle<
     storage: I::Storage,
     marketplace_config: MarketplaceConfig<TYPES, I>,
 ) -> SystemContextHandle<TYPES, I, V> {
-    let initializer = HotShotInitializer::<TYPES>::from_genesis::<V>(TestInstanceState::new(
-        metadata.async_delay_config,
-    ))
+    let initializer = HotShotInitializer::<TYPES>::from_genesis::<V>(
+        TestInstanceState::new(metadata.async_delay_config),
+        metadata.test_config.epoch_height,
+    )
     .await
     .unwrap();
 

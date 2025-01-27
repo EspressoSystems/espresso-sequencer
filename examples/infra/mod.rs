@@ -365,10 +365,12 @@ pub trait RunDa<
         &self,
         membership: Arc<RwLock<<TYPES as NodeType>::Membership>>,
     ) -> SystemContextHandle<TYPES, NODE, V> {
-        let initializer =
-            hotshot::HotShotInitializer::<TYPES>::from_genesis::<V>(TestInstanceState::default())
-                .await
-                .expect("Couldn't generate genesis block");
+        let initializer = hotshot::HotShotInitializer::<TYPES>::from_genesis::<V>(
+            TestInstanceState::default(),
+            self.config().config.epoch_height,
+        )
+        .await
+        .expect("Couldn't generate genesis block");
 
         let config = self.config();
         let validator_config = self.validator_config();

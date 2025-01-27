@@ -96,9 +96,10 @@ pub async fn build_system_handle_from_launcher<
     let marketplace_config = (launcher.resource_generators.marketplace_config)(node_id);
     let hotshot_config = (launcher.resource_generators.hotshot_config)(node_id);
 
-    let initializer = HotShotInitializer::<TYPES>::from_genesis::<V>(TestInstanceState::new(
-        launcher.metadata.async_delay_config.clone(),
-    ))
+    let initializer = HotShotInitializer::<TYPES>::from_genesis::<V>(
+        TestInstanceState::new(launcher.metadata.async_delay_config.clone()),
+        launcher.metadata.test_config.epoch_height,
+    )
     .await
     .unwrap();
 
