@@ -680,7 +680,7 @@ impl L1Client {
     fn chunky(&self, start: u64, end: u64) -> FromFn<impl FnMut() -> Option<(u64, u64)>> {
         let mut start = start;
         let chunk_size = self.options().l1_events_max_block_range;
-        let chunks = std::iter::from_fn(move || {
+        std::iter::from_fn(move || {
             let chunk_end = min(start + chunk_size - 1, end);
             if chunk_end < start {
                 return None;
@@ -689,9 +689,7 @@ impl L1Client {
             let chunk = (start, chunk_end);
             start = chunk_end + 1;
             Some(chunk)
-        });
-        chunks
-
+        })
     }
 
     /// Get fee info for each `Deposit` occurring between `prev`
