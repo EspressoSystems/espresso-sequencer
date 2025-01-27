@@ -29,7 +29,6 @@ async-std = { version = "1", features = ["attributes", "tokio1", "unstable"] }
 async-tungstenite = { version = "0.13", features = ["async-native-tls", "async-tls"] }
 base64-3c51e837cfc5589a = { package = "base64", version = "0.22" }
 base64-594e8ee84c453af0 = { package = "base64", version = "0.13" }
-byteorder = { version = "1" }
 bytes = { version = "1", features = ["serde"] }
 concurrent-queue = { version = "2" }
 crossbeam-utils = { version = "0.8" }
@@ -40,14 +39,14 @@ derive_more = { version = "1", features = ["debug", "deref", "from"] }
 digest-274715c4dabd11b0 = { package = "digest", version = "0.9", default-features = false, features = ["std"] }
 digest-93f6ce9d446188ac = { package = "digest", version = "0.10", features = ["mac", "rand_core", "std"] }
 downcast-rs = { version = "1", default-features = false, features = ["std"] }
-either = { version = "1", features = ["serde"] }
+either = { version = "1" }
 event-listener = { version = "5" }
 event-listener-strategy = { version = "0.5" }
 form_urlencoded = { version = "1" }
 futures = { version = "0.3", features = ["thread-pool"] }
 futures-channel = { version = "0.3", features = ["sink"] }
 futures-core = { version = "0.3" }
-futures-executor = { version = "0.3", features = ["thread-pool"] }
+futures-executor = { version = "0.3", default-features = false, features = ["thread-pool"] }
 futures-io = { version = "0.3" }
 futures-sink = { version = "0.3" }
 futures-task = { version = "0.3", default-features = false, features = ["std"] }
@@ -56,7 +55,7 @@ generic-array = { version = "0.14", default-features = false, features = ["more_
 getrandom = { version = "0.2", default-features = false, features = ["std"] }
 hashbrown-3575ec1268b04181 = { package = "hashbrown", version = "0.15" }
 hashbrown-582f2526e08bb6a0 = { package = "hashbrown", version = "0.14", features = ["raw"] }
-idna = { version = "1", default-features = false, features = ["compiled_data", "std"] }
+hex = { version = "0.4" }
 itertools = { version = "0.12" }
 jf-relation = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.5", default-features = false, features = ["parallel", "std"] }
 jf-rescue = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.5" }
@@ -70,17 +69,15 @@ multihash = { version = "0.19", features = ["serde-codec"] }
 num-bigint = { version = "0.4" }
 num-integer = { version = "0.1", default-features = false, features = ["i128", "std"] }
 num-traits = { version = "0.2", features = ["i128"] }
+percent-encoding = { version = "2" }
 rand = { version = "0.8", features = ["small_rng"] }
 regex = { version = "1" }
 regex-automata = { version = "0.4", default-features = false, features = ["dfa-onepass", "hybrid", "meta", "nfa-backtrack", "perf-inline", "perf-literal", "unicode"] }
 regex-syntax = { version = "0.8" }
 rustls-pki-types = { version = "1", features = ["std"] }
-serde = { version = "1", features = ["alloc", "derive", "rc"] }
 sha2 = { version = "0.9" }
 sha3 = { version = "0.10" }
 smallvec = { version = "1", default-features = false, features = ["const_generics"] }
-sqlx-core = { version = "0.8", features = ["_rt-tokio", "any", "migrate", "offline", "time"] }
-sqlx-sqlite = { version = "0.8", default-features = false, features = ["migrate", "offline", "time"] }
 standback = { version = "0.2", default-features = false, features = ["std"] }
 subtle = { version = "2", default-features = false, features = ["std"] }
 time = { version = "0.3", features = ["formatting", "macros", "parsing"] }
@@ -94,7 +91,6 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 tungstenite = { version = "0.13", default-features = false, features = ["native-tls"] }
 uint = { version = "0.9" }
 url = { version = "2", features = ["serde"] }
-zerocopy = { version = "0.7", features = ["derive", "simd"] }
 zeroize = { version = "1", features = ["std", "zeroize_derive"] }
 
 [build-dependencies]
@@ -112,7 +108,6 @@ async-std = { version = "1", features = ["attributes", "tokio1", "unstable"] }
 async-tungstenite = { version = "0.13", features = ["async-native-tls", "async-tls"] }
 base64-3c51e837cfc5589a = { package = "base64", version = "0.22" }
 base64-594e8ee84c453af0 = { package = "base64", version = "0.13" }
-byteorder = { version = "1" }
 bytes = { version = "1", features = ["serde"] }
 concurrent-queue = { version = "2" }
 crossbeam-utils = { version = "0.8" }
@@ -125,14 +120,14 @@ digest-274715c4dabd11b0 = { package = "digest", version = "0.9", default-feature
 digest-93f6ce9d446188ac = { package = "digest", version = "0.10", features = ["mac", "rand_core", "std"] }
 displaydoc = { version = "0.2" }
 downcast-rs = { version = "1", default-features = false, features = ["std"] }
-either = { version = "1", features = ["serde"] }
+either = { version = "1" }
 event-listener = { version = "5" }
 event-listener-strategy = { version = "0.5" }
 form_urlencoded = { version = "1" }
 futures = { version = "0.3", features = ["thread-pool"] }
 futures-channel = { version = "0.3", features = ["sink"] }
 futures-core = { version = "0.3" }
-futures-executor = { version = "0.3", features = ["thread-pool"] }
+futures-executor = { version = "0.3", default-features = false, features = ["thread-pool"] }
 futures-io = { version = "0.3" }
 futures-sink = { version = "0.3" }
 futures-task = { version = "0.3", default-features = false, features = ["std"] }
@@ -141,7 +136,7 @@ generic-array = { version = "0.14", default-features = false, features = ["more_
 getrandom = { version = "0.2", default-features = false, features = ["std"] }
 hashbrown-3575ec1268b04181 = { package = "hashbrown", version = "0.15" }
 hashbrown-582f2526e08bb6a0 = { package = "hashbrown", version = "0.14", features = ["raw"] }
-idna = { version = "1", default-features = false, features = ["compiled_data", "std"] }
+hex = { version = "0.4" }
 itertools = { version = "0.12" }
 jf-relation = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.5", default-features = false, features = ["parallel", "std"] }
 jf-rescue = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.5" }
@@ -155,17 +150,15 @@ multihash = { version = "0.19", features = ["serde-codec"] }
 num-bigint = { version = "0.4" }
 num-integer = { version = "0.1", default-features = false, features = ["i128", "std"] }
 num-traits = { version = "0.2", features = ["i128"] }
+percent-encoding = { version = "2" }
 rand = { version = "0.8", features = ["small_rng"] }
 regex = { version = "1" }
 regex-automata = { version = "0.4", default-features = false, features = ["dfa-onepass", "hybrid", "meta", "nfa-backtrack", "perf-inline", "perf-literal", "unicode"] }
 regex-syntax = { version = "0.8" }
 rustls-pki-types = { version = "1", features = ["std"] }
-serde = { version = "1", features = ["alloc", "derive", "rc"] }
 sha2 = { version = "0.9" }
 sha3 = { version = "0.10" }
 smallvec = { version = "1", default-features = false, features = ["const_generics"] }
-sqlx-core = { version = "0.8", features = ["_rt-tokio", "any", "migrate", "offline", "time"] }
-sqlx-sqlite = { version = "0.8", default-features = false, features = ["migrate", "offline", "time"] }
 standback = { version = "0.2", default-features = false, features = ["std"] }
 subtle = { version = "2", default-features = false, features = ["std"] }
 syn = { version = "2", features = ["extra-traits", "fold", "full", "visit", "visit-mut"] }
@@ -180,7 +173,6 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 tungstenite = { version = "0.13", default-features = false, features = ["native-tls"] }
 uint = { version = "0.9" }
 url = { version = "2", features = ["serde"] }
-zerocopy = { version = "0.7", features = ["derive", "simd"] }
 zeroize = { version = "1", features = ["std", "zeroize_derive"] }
 
 ### END HAKARI SECTION
