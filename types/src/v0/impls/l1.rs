@@ -757,23 +757,34 @@ impl L1Client {
         let last_fetched_block = 0;
         let chunks = self.chunky(last_fetched_block, block);
 
-       // Fetch events for each chunk.
-        let events = stream::iter(chunks).then(|(from, to)| {
-            // TODO stake_table_address needs to be passed in to L1Client
-            // before update loop starts.
-            let stake_table_contract = PermissionedStakeTable::new(contract, self.provider.clone());
-            let retry_delay = self.options().l1_retry_delay;
-            async move {
-                tracing::debug!(from, to, "fetch events in range");
+        // TODO state will hold
+        // 1. last fetched block height, so when we fetch we fetch between then and the new one
+        // 2. `StakeTables` by block height
+        
+        let mut state = self.stake.lock().await;
+        let last = state.last_seen;
+        if let Some(st) = state.cache.get(&block) {
+            return Ok(st.clone());
+        } else {
+            // TODO unlikely else block since `add_epoch_root` is only called once per view
 
-                // query for stake table events, loop until successful.
-                loop {
-                    match stake_table_contract
-                        .stakers_updated_filter()
-                        .from_block(0)
-                        .to_block(block)
-                        .query()
-                        .await
+            // Fetch events for each chunk.
+            let events = stream::iter(chunks).then(|(from, to)| {
+                // TODO stake_table_address needs to be passed in to L1Client
+                // before update loop starts.
+                let stake_table_contract = PermissionedStakeTable::new(contract, self.provider.clone());
+                let retry_delay = self.options().l1_retry_delay;
+                async move {
+                    tracing::debug!(from, to, "fetch events in range");
+
+                    // query for stake table events, loop until successful.
+                    loop {
+                        match stake_table_contract
+                            .stakers_updated_filter()
+                            .from_block(last)
+                            .to_block(block)
+                            .query()
+                            .await
                     {
                         Ok(events) => break stream::iter(events),
                         Err(err) => {
@@ -781,13 +792,15 @@ impl L1Client {
                             sleep(retry_delay).await;
                         }
                     }
+                    }
                 }
-            }
-        });
+            });
+            state.last_seen = block;
+            let events = events.flatten().collect::<Vec<_>>().await;
 
-        let events = events.flatten().collect::<Vec<_>>().await;
-
-        Ok(StakeTables::from_l1_events(events))
+            return Ok(StakeTables::from_l1_events(events));
+           
+        };
     }
 
     fn options(&self) -> &L1ClientOptions {

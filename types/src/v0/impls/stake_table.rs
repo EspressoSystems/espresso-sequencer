@@ -126,10 +126,10 @@ struct Committee {
     /// leader but without voting rights.
     eligible_leaders: Vec<StakeTableEntry<PubKey>>,
 
-    /// TODO: add comment
+    /// Stake Table entries indexed by Staker's `PubKey`
     indexed_stake_table: BTreeMap<PubKey, StakeTableEntry<PubKey>>,
 
-    /// TODO: comment
+    /// Stake Holder's that are also DA members, indexed by `PubKey`
     indexed_da_members: BTreeMap<PubKey, StakeTableEntry<PubKey>>,
 }
 
