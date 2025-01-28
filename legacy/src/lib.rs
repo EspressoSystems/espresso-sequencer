@@ -34,7 +34,6 @@ pub enum WaitAndKeep<T> {
 
 #[derive(Debug)]
 pub(crate) enum WaitAndKeepGetError {
-    #[allow(dead_code)]
     FailedToResolvedVidCommitmentFromChannel,
 }
 
@@ -49,7 +48,6 @@ impl From<WaitAndKeepGetError> for BuildError {
 }
 
 impl<T: Clone> WaitAndKeep<T> {
-    #[allow(dead_code)]
     /// get will return a clone of the value that is already stored within the
     /// value of `WaitAndKeep::Keep` if the value is already resolved.  Otherwise
     /// it will poll the next value from the channel and replace the locally

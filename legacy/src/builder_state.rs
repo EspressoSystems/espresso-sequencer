@@ -23,7 +23,11 @@ use futures::StreamExt;
 
 use tokio::{
     spawn,
-    sync::{mpsc::UnboundedSender, oneshot},
+    sync::{
+        mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
+        oneshot,
+    },
+    task::spawn_blocking,
     time::sleep,
 };
 
@@ -82,7 +86,7 @@ pub struct BuildBlockInfo<Types: NodeType> {
     pub block_payload: Types::BlockPayload,
     pub metadata: <<Types as NodeType>::BlockPayload as BlockPayload<Types>>::Metadata,
     pub vid_trigger: oneshot::Sender<TriggerStatus>,
-    pub vid_commitment: VidCommitment,
+    pub vid_receiver: UnboundedReceiver<VidCommitment>,
     // Could we have included more transactions, but chose not to?
     pub truncated: bool,
 }
@@ -790,10 +794,25 @@ impl<Types: NodeType> BuilderState<Types> {
         // or upon initialization.
         let num_nodes = self.global_state.read_arc().await.num_nodes;
 
-        let (trigger_send, _) = oneshot::channel();
+        let (trigger_send, trigger_recv) = oneshot::channel();
 
-        let vid_commitment =
-            hotshot_types::traits::block_contents::vid_commitment(&encoded_txns, num_nodes);
+        // spawn a task to calculate the VID commitment, and pass the handle to the global state
+        // later global state can await on it before replying to the proposer
+        let (unbounded_sender, unbounded_receiver) = unbounded_channel();
+        #[allow(unused_must_use)]
+        spawn(async move {
+            let Ok(TriggerStatus::Start) = trigger_recv.await else {
+                return;
+            };
+
+            let join_handle = spawn_blocking(move || {
+                hotshot_types::traits::block_contents::vid_commitment(&encoded_txns, num_nodes)
+            });
+
+            let vidc = join_handle.await.unwrap();
+
+            unbounded_sender.send(vidc);
+        });
 
         tracing::info!(
             "Builder view num {:?}, building block with {:?} txns, with builder hash {:?}",
@@ -812,7 +831,7 @@ impl<Types: NodeType> BuilderState<Types> {
             block_payload: payload,
             metadata,
             vid_trigger: trigger_send,
-            vid_commitment,
+            vid_receiver: unbounded_receiver,
             truncated: actual_txn_count < self.tx_queue.len(),
         })
     }

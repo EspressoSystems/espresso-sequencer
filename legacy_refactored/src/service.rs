@@ -19,7 +19,7 @@ use hotshot_types::{
 use marketplace_builder_shared::coordinator::BuilderStateLookup;
 use marketplace_builder_shared::error::Error;
 use marketplace_builder_shared::state::BuilderState;
-use marketplace_builder_shared::utils::BuilderKeys;
+use marketplace_builder_shared::utils::{BuilderKeys, WaitAndKeep};
 use tide_disco::app::AppError;
 use tokio::spawn;
 use tokio::time::{sleep, timeout};
@@ -402,8 +402,12 @@ where
         // or upon initialization.
         let num_nodes = self.num_nodes.load(Ordering::Relaxed);
 
-        let vid_commitment =
-            hotshot_types::traits::block_contents::vid_commitment(&encoded_txns, num_nodes);
+        let fut = async move {
+            let join_handle = tokio::task::spawn_blocking(move || {
+                hotshot_types::traits::block_contents::vid_commitment(&encoded_txns, num_nodes)
+            });
+            join_handle.await.unwrap()
+        };
 
         info!(
             builder_id = %builder.id(),
@@ -416,7 +420,7 @@ where
             block_payload: payload,
             block_size,
             metadata,
-            vid_commitment,
+            vid_data: WaitAndKeep::new(Box::pin(fut)),
             offered_fee,
             truncated,
         }))
@@ -563,7 +567,7 @@ where
         let metadata;
         let offered_fee;
         let truncated;
-        let vid_commitment;
+        let vid_data;
         {
             // We store this read lock guard separately to make it explicit
             // that this will end up holding a lock for the duration of this
@@ -581,8 +585,10 @@ where
             metadata = block_info.metadata.clone();
             offered_fee = block_info.offered_fee;
             truncated = block_info.truncated;
-            vid_commitment = block_info.vid_commitment;
+            vid_data = block_info.vid_data.clone();
         };
+
+        let vid_commitment = vid_data.resolve().await;
 
         // sign over the vid commitment
         let signature_over_vid_commitment =
