@@ -243,9 +243,12 @@ async fn init_consensus(
                     config,
                     Arc::new(RwLock::new(membership)),
                     network,
-                    HotShotInitializer::from_genesis::<MockVersions>(TestInstanceState::default())
-                        .await
-                        .unwrap(),
+                    HotShotInitializer::from_genesis::<MockVersions>(
+                        TestInstanceState::default(),
+                        0,
+                    )
+                    .await
+                    .unwrap(),
                     ConsensusMetricsValue::new(&*data_source.populate_metrics()),
                     storage,
                     MarketplaceConfig {

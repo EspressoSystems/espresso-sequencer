@@ -181,6 +181,7 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
                             network,
                             HotShotInitializer::from_genesis::<MockVersions>(
                                 TestInstanceState::default(),
+                                0,
                             )
                             .await
                             .unwrap(),
