@@ -358,21 +358,11 @@ impl L1Client {
                     let L1Event::NewHead { head } = event else {
                         continue;
                     };
-                    match stake_table_contract
-                        .stakers_updated_filter()
-                        .from_block(last_head)
-                        .to_block(head)
-                        .query()
-                        .await
+                    if let Some(tables) = L1Client::update_stake_table(last_head, head).await.ok()
                     {
-                        Ok(events) => {
-                            let tables = StakeTables::from_l1_events(events);
-                            state.lock().await.stake.put(head, tables);
-                        },
-                        Err(err) => {
-                            tracing::warn!(last_head, head, %err, "StakeTable L1Event Error");
-                            sleep(retry_delay).await;
-                        }
+                        state.lock().await.stake.put(head, tables);
+                    } else {
+                        sleep(retry_delay).await;
                     }
                 }
                 sleep(retry_delay).await;
@@ -494,12 +484,6 @@ impl L1Client {
                             let snapshot_head = state.snapshot.head;
                             if head > snapshot_head {
                                 tracing::debug!(head, old_head = state.snapshot.head, "L1 head updated");
-                                // update stake-table state. We get the get the value at `head`
-                                // and mutate that instead of passing in the cache.
-                                // 
-                                // This avoids https://github.com/rust-lang/rust/issues/42940
-                                // let mut stake = state.stake.get_mut(&head); // should be `None`
-                                // self.update_stake_table(head, snapshot_head).await;
                                 metrics.head.set(head as usize);
                                 state.snapshot.head = head;
                                 // Emit an event about the new L1 head. Ignore send errors; it just means no
@@ -834,17 +818,14 @@ impl L1Client {
     //     };
     // }
     async fn update_stake_table(
-        &self,
         from_block: u64,
         to_block: u64,
-    ) -> StakeTables {
+    ) -> anyhow::Result<StakeTables> {
         // Fetch events for each chunk.
         let stake_table_contract =
             PermissionedStakeTable::new(Address::default(), self.provider.clone());
-        let retry_delay = self.options().l1_retry_delay;
 
         // query for stake table events, loop until successful.
-        let events = loop {
             match stake_table_contract
                 .stakers_updated_filter()
                 .from_block(from_block)
@@ -852,15 +833,13 @@ impl L1Client {
                 .query()
                 .await
             {
-                Ok(events) => break events,
+                Ok(events) => Ok(StakeTables::from_l1_events(events)),
                 Err(err) => {
                     tracing::warn!(from_block, to_block, %err, "StakeTable L1Event Error");
-                    sleep(retry_delay).await;
+                    anyhow::bail!(err);
                 }
             }
-        };
 
-        StakeTables::from_l1_events(events)
     }
     fn options(&self) -> &L1ClientOptions {
         (*self.provider).as_ref().options()
