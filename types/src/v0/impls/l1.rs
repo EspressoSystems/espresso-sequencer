@@ -1,5 +1,10 @@
 use std::{
-    cmp::{min, Ordering}, fmt::Debug, iter::FromFn, num::NonZeroUsize, sync::Arc, time::Instant
+    cmp::{min, Ordering},
+    fmt::Debug,
+    iter::FromFn,
+    num::NonZeroUsize,
+    sync::Arc,
+    time::Instant,
 };
 
 use anyhow::Context;
@@ -433,6 +438,12 @@ impl L1Client {
                             let mut state = state.lock().await;
                             if head > state.snapshot.head {
                                 tracing::debug!(head, old_head = state.snapshot.head, "L1 head updated");
+                                // update stake-table state. We get the get the value at `head`
+                                // and mutate that instead of passing in the cache.
+                                // 
+                                // This avoids https://github.com/rust-lang/rust/issues/42940
+                                let stake = state.stake.get_mut(&head); // should be `None`
+                                self.update_stake_table(head, state.snapshot.head, stake).await;
                                 metrics.head.set(head as usize);
                                 state.snapshot.head = head;
                                 // Emit an event about the new L1 head. Ignore send errors; it just means no
@@ -745,64 +756,60 @@ impl L1Client {
         events.flatten().map(FeeInfo::from).collect().await
     }
 
-    /// Get `StakeTable` at block height.
-    pub async fn get_stake_table(
+    // /// Get `StakeTable` at block height.
+    // pub async fn get_stake_table(
+    //     &self,
+    //     _contract: Address,
+    //     block: u64,
+    // ) -> anyhow::Result<StakeTables> {
+    //     if let Some(st) = self.stake.lock().await.cache.get(&block) {
+    //         return Ok(st.clone());
+    //     } else {
+    //         self.wait_for_block(block).await;
+    //         // TODO instead of error we might should loop for ever
+    //         return self
+    //             .stake
+    //             .lock()
+    //             .await
+    //             .cache
+    //             .get(&block)
+    //             .map(|st| st.clone())
+    //             .ok_or_else(|| anyhow::anyhow!("stake table not found"));
+    //     };
+    // }
+    async fn update_stake_table(
         &self,
-        contract: Address,
-        block: u64,
-    ) -> anyhow::Result<StakeTables> {
+        from_block: u64,
+        to_block: u64,
+        stake: Option<StakeTables>
+        // stake: &mut LruCache<u64, StakeTables>,
+    ) -> Option<StakeTables> {
+        // Fetch events for each chunk.
+        let stake_table_contract =
+            PermissionedStakeTable::new(Address::default(), self.provider.clone());
+        let retry_delay = self.options().l1_retry_delay;
 
-        // TODO 1. check l1 cache for last known, 2. fetch missing
-        // then: get last known block, so we need to store last fetched block in state
-        let last_fetched_block = 0;
-        let chunks = self.chunky(last_fetched_block, block);
-
-        // TODO state will hold
-        // 1. last fetched block height, so when we fetch we fetch between then and the new one
-        // 2. `StakeTables` by block height
-        
-        let mut state = self.stake.lock().await;
-        let last = state.last_seen;
-        if let Some(st) = state.cache.get(&block) {
-            return Ok(st.clone());
-        } else {
-            // TODO unlikely else block since `add_epoch_root` is only called once per view
-
-            // Fetch events for each chunk.
-            let events = stream::iter(chunks).then(|(from, to)| {
-                // TODO stake_table_address needs to be passed in to L1Client
-                // before update loop starts.
-                let stake_table_contract = PermissionedStakeTable::new(contract, self.provider.clone());
-                let retry_delay = self.options().l1_retry_delay;
-                async move {
-                    tracing::debug!(from, to, "fetch events in range");
-
-                    // query for stake table events, loop until successful.
-                    loop {
-                        match stake_table_contract
-                            .stakers_updated_filter()
-                            .from_block(last)
-                            .to_block(block)
-                            .query()
-                            .await
-                    {
-                        Ok(events) => break stream::iter(events),
-                        Err(err) => {
-                            tracing::warn!(from, to, %err, "StakeTable L1Event Error");
-                            sleep(retry_delay).await;
-                        }
-                    }
-                    }
+        // query for stake table events, loop until successful.
+        let events = loop {
+            match stake_table_contract
+                .stakers_updated_filter()
+                .from_block(from_block)
+                .to_block(to_block)
+                .query()
+                .await
+            {
+                Ok(events) => break events,
+                Err(err) => {
+                    tracing::warn!(from_block, to_block, %err, "StakeTable L1Event Error");
+                    sleep(retry_delay).await;
                 }
-            });
-            state.last_seen = block;
-            let events = events.flatten().collect::<Vec<_>>().await;
-
-            return Ok(StakeTables::from_l1_events(events));
-           
+            }
         };
+        // TODO lifetime problem.
+        // maybe we need to store a something that implements copy
+        let tables = StakeTables::from_l1_events(events);
+        stake = Some(tables);
     }
-
     fn options(&self) -> &L1ClientOptions {
         (*self.provider).as_ref().options()
     }
@@ -821,6 +828,7 @@ impl L1State {
         Self {
             snapshot: Default::default(),
             finalized: LruCache::new(cache_size),
+            stake: LruCache::new(cache_size),
         }
     }
 
@@ -1222,17 +1230,18 @@ mod test {
         tracing::info!(?final_state, "state updated");
     }
 
-
     #[tokio::test]
     async fn test_chunky() {
-
         let anvil = Anvil::new().spawn();
-        let opt = L1ClientOptions { l1_events_max_block_range: 2, ..Default::default()};
+        let opt = L1ClientOptions {
+            l1_events_max_block_range: 2,
+            ..Default::default()
+        };
         let l1_client = opt.connect(vec![anvil.endpoint().parse().unwrap()]);
         let chunks = l1_client.chunky(3, 10);
         let v = stream::iter(chunks).collect::<Vec<_>>().await;
 
-        assert_eq![vec![(3,4), (5,6), (7,8), (9,10)], v];
+        assert_eq![vec![(3, 4), (5, 6), (7, 8), (9, 10)], v];
     }
 
     #[tokio::test]

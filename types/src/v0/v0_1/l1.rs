@@ -153,8 +153,6 @@ pub struct L1Client {
     pub(crate) provider: Arc<Provider<MultiRpcClient>>,
     /// Shared state updated by an asynchronous task which polls the L1.
     pub(crate) state: Arc<Mutex<L1State>>,
-    /// Cache of stake tables
-    pub(crate) stake: Arc<Mutex<StakeState>>,
     /// Channel used by the async update task to send events to clients.
     pub(crate) sender: Sender<L1Event>,
     /// Receiver for events from the async update task.
@@ -163,19 +161,12 @@ pub struct L1Client {
     pub(crate) update_task: Arc<L1UpdateTask>,
 }
 
-#[derive(Debug)]
-pub struct StakeState {
-    ////the last block height that was tried. starting point for the
-    /// next l1 filter
-    pub last_seen: u64,
-    pub cache: LruCache<u64, StakeTables>
-}
-
 /// In-memory view of the L1 state, updated asynchronously.
 #[derive(Debug)]
 pub(crate) struct L1State {
     pub(crate) snapshot: L1Snapshot,
     pub(crate) finalized: LruCache<u64, L1BlockInfo>,
+    pub(crate) stake: LruCache<u64, StakeTables>
 }
 
 #[derive(Clone, Debug)]
