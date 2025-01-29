@@ -173,11 +173,10 @@ pub(crate) struct L1State {
 pub(crate) enum L1Event {
     NewHead { head: u64 },
     NewFinalized { finalized: L1BlockInfo },
-    // POS { finalized: L1BlockInfo }, possiby this should even be another enum
 }
 
 #[derive(Debug, Default)]
-pub(crate) struct L1UpdateTask(pub(crate) Mutex<Option<JoinHandle<()>>>);
+pub(crate) struct L1UpdateTask(pub(crate) Mutex<Option<Vec<JoinHandle<()>>>>);
 
 #[derive(Clone, Debug)]
 pub(crate) struct L1ClientMetrics {
