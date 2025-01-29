@@ -721,7 +721,7 @@ mod tests {
 
         {
             // transactions with size larger than max_block_size result in an error
-            let extremely_large_tx = Transaction::new(100_u32.into(), vec![0; 7*1000*1000]);
+            let extremely_large_tx = Transaction::new(100_u32.into(), vec![0; 7 * 1000 * 1000]);
             api_client
                 .post::<Commitment<Transaction>>("submit/submit")
                 .body_json(&extremely_large_tx)
