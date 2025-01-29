@@ -44,6 +44,9 @@ use hotshot_types::{
     vote::HasViewNumber,
 };
 use itertools::Itertools;
+use libp2p_networking::network::behaviours::dht::store::persistent::{
+    DhtPersistentStorage, SerializableRecord,
+};
 use sqlx::Row;
 use sqlx::{query, Executor};
 use std::{collections::BTreeMap, path::PathBuf, str::FromStr, sync::Arc, time::Duration};
@@ -1343,6 +1346,66 @@ impl SequencerPersistence for Persistence {
                 anyhow::Result::<_>::Ok(bincode::deserialize(&bytes)?)
             })
             .transpose()
+    }
+}
+
+#[async_trait]
+impl DhtPersistentStorage for Persistence {
+    /// Save the DHT to the database
+    ///
+    /// # Errors
+    /// - If we fail to serialize the records
+    /// - If we fail to write the serialized records to the DB
+    async fn save(&self, records: Vec<SerializableRecord>) -> anyhow::Result<()> {
+        // Bincode-serialize the records
+        let to_save =
+            bincode::serialize(&records).with_context(|| "failed to serialize records")?;
+
+        // Prepare the statement
+        let stmt =
+            format!("INSERT OR REPLACE INTO libp2p_dht (id, serialized_records) VALUES (0, $1)");
+
+        // Execute the query
+        let mut tx = self
+            .db
+            .write()
+            .await
+            .with_context(|| "failed to start an atomic DB transaction")?;
+        tx.execute(query(&stmt).bind(to_save))
+            .await
+            .with_context(|| "failed to execute DB query")?;
+
+        // Commit the state
+        tx.commit().await.with_context(|| "failed to commit to DB")
+    }
+
+    /// Load the DHT from the database
+    ///
+    /// # Errors
+    /// - If we fail to read from the DB
+    /// - If we fail to deserialize the records
+    async fn load(&self) -> anyhow::Result<Vec<SerializableRecord>> {
+        // Fetch the results from the DB
+        let Some(result) = self
+            .db
+            .read()
+            .await
+            .with_context(|| "failed to start a DB read transaction")?
+            .fetch_optional("SELECT * FROM libp2p_dht where id = 0")
+            .await
+            .with_context(|| "failed to fetch from DB")?
+        else {
+            anyhow::bail!("no rows returned")
+        };
+
+        // Get the `serialized_records` row
+        let serialied_records: Vec<u8> = result.get("serialized_records");
+
+        // Deserialize it
+        let records: Vec<SerializableRecord> = bincode::deserialize(&serialied_records)
+            .with_context(|| "Failed to deserialize records")?;
+
+        Ok(records)
     }
 }
 

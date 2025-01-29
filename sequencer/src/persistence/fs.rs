@@ -23,6 +23,9 @@ use hotshot_types::{
     vote::HasViewNumber,
 };
 use jf_vid::VidScheme;
+use libp2p_networking::network::behaviours::dht::store::persistent::{
+    DhtPersistentStorage, SerializableRecord,
+};
 use std::sync::Arc;
 use std::{
     collections::BTreeMap,
@@ -170,6 +173,10 @@ impl Inner {
 
     fn next_epoch_qc(&self) -> PathBuf {
         self.path.join("next_epoch_quorum_certificate")
+    }
+
+    fn libp2p_dht_path(&self) -> PathBuf {
+        self.path.join("libp2p_dht")
     }
 
     /// Overwrite a file if a condition is met.
@@ -894,6 +901,42 @@ impl SequencerPersistence for Persistence {
     }
 }
 
+#[async_trait]
+impl DhtPersistentStorage for Persistence {
+    /// Save the DHT to the file on disk
+    ///
+    /// # Errors
+    /// - If we fail to serialize the records
+    /// - If we fail to write the serialized records to the file
+    async fn save(&self, records: Vec<SerializableRecord>) -> anyhow::Result<()> {
+        // Bincode-serialize the records
+        let to_save =
+            bincode::serialize(&records).with_context(|| "Failed to serialize records")?;
+
+        // Write the serialized records to the file
+        std::fs::write(&self.inner.read().await.libp2p_dht_path(), to_save)
+            .with_context(|| "Failed to write records to file")?;
+
+        Ok(())
+    }
+
+    /// Load the DHT from the file on disk
+    ///
+    /// # Errors
+    /// - If we fail to read the file
+    /// - If we fail to deserialize the records
+    async fn load(&self) -> anyhow::Result<Vec<SerializableRecord>> {
+        // Read the contents of the file
+        let contents = std::fs::read(&self.inner.read().await.libp2p_dht_path())
+            .with_context(|| "Failed to read records from file")?;
+
+        // Deserialize the contents
+        let records: Vec<SerializableRecord> =
+            bincode::deserialize(&contents).with_context(|| "Failed to deserialize records")?;
+
+        Ok(records)
+    }
+}
 /// Update a `NetworkConfig` that may have originally been persisted with an old version.
 fn migrate_network_config(
     mut network_config: serde_json::Value,

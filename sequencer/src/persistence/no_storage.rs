@@ -17,6 +17,9 @@ use hotshot_types::{
     vid::VidSchemeType,
 };
 use jf_vid::VidScheme;
+use libp2p_networking::network::behaviours::dht::store::persistent::{
+    DhtPersistentStorage, SerializableRecord,
+};
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
@@ -182,5 +185,18 @@ impl SequencerPersistence for NoStorage {
         &self,
     ) -> anyhow::Result<Option<NextEpochQuorumCertificate2<SeqTypes>>> {
         Ok(None)
+    }
+}
+
+#[async_trait]
+impl DhtPersistentStorage for NoStorage {
+    /// Don't do anything
+    async fn save(&self, _records: Vec<SerializableRecord>) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    /// Don't do anything
+    async fn load(&self) -> anyhow::Result<Vec<SerializableRecord>> {
+        Ok(vec![])
     }
 }

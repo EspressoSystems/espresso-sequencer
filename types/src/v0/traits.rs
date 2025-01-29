@@ -27,6 +27,7 @@ use hotshot_types::{
 };
 use itertools::Itertools;
 use jf_vid::VidScheme;
+use libp2p_networking::network::behaviours::dht::store::persistent::DhtPersistentStorage;
 use serde::{de::DeserializeOwned, Serialize};
 
 use crate::{
@@ -422,7 +423,9 @@ pub trait PersistenceOptions: Clone + Send + Sync + 'static {
 }
 
 #[async_trait]
-pub trait SequencerPersistence: Sized + Send + Sync + Clone + 'static {
+pub trait SequencerPersistence:
+    Sized + Send + Sync + Clone + 'static + DhtPersistentStorage
+{
     /// Use this storage as a state catchup backend, if supported.
     fn into_catchup_provider(
         self,

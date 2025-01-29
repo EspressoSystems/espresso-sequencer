@@ -2878,6 +2878,7 @@ dependencies = [
  "jf-signature 0.2.0",
  "jf-utils",
  "jf-vid",
+ "libp2p-networking",
  "lru 0.12.5",
  "num-traits",
  "paste",
