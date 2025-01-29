@@ -361,7 +361,6 @@ impl L1Client {
                     if let Some(tables) =
                         L1Client::update_stake_table(last_head, head, stake_table_contract.clone())
                             .await
-                            .ok()
                     {
                         state.lock().await.stake.put(head, tables);
                     }
@@ -799,31 +798,28 @@ impl L1Client {
     }
 
     // /// Get `StakeTable` at block height.
-    // pub async fn get_stake_table(
-    //     &self,
-    //     _contract: Address,
-    //     block: u64,
-    // ) -> anyhow::Result<StakeTables> {
-    //     if let Some(st) = self.stake.lock().await.cache.get(&block) {
-    //         return Ok(st.clone());
-    //     } else {
-    //         self.wait_for_block(block).await;
-    //         // TODO instead of error we might should loop for ever
-    //         return self
-    //             .stake
-    //             .lock()
-    //             .await
-    //             .cache
-    //             .get(&block)
-    //             .map(|st| st.clone())
-    //             .ok_or_else(|| anyhow::anyhow!("stake table not found"));
-    //     };
-    // }
+    pub async fn get_stake_table(
+        &self,
+        contract: Address,
+        block: u64,
+    ) -> Option<StakeTables> {
+        if let Some(st) = self.state.lock().await.stake.get(&block) {
+            Some(st.clone())
+        } else {
+
+            let contract =
+                // TODO attach address to L1Client
+                PermissionedStakeTable::new(contract, self.provider.clone());
+            let last_head = self.state.lock().await.snapshot.head;
+            L1Client::update_stake_table(last_head, block, contract).await
+        }
+    }
+
     async fn update_stake_table(
         from_block: u64,
         to_block: u64,
         contract: PermissionedStakeTable<Provider<MultiRpcClient>>,
-    ) -> anyhow::Result<StakeTables> {
+    ) -> Option<StakeTables> {
         // query for stake table events, loop until successful.
         match contract
             .stakers_updated_filter()
@@ -832,13 +828,14 @@ impl L1Client {
             .query()
             .await
         {
-            Ok(events) => Ok(StakeTables::from_l1_events(events)),
+            Ok(events) => Some(StakeTables::from_l1_events(events)),
             Err(err) => {
                 tracing::warn!(from_block, to_block, %err, "StakeTable L1Event Error");
-                anyhow::bail!(err);
+                None
             }
         }
     }
+
     fn options(&self) -> &L1ClientOptions {
         (*self.provider).as_ref().options()
     }
@@ -1305,13 +1302,13 @@ mod test {
         updater.send().await?.await?;
 
         let block = client.get_block(BlockNumber::Latest).await?.unwrap();
-        // let nodes = l1_client
-        //     .get_stake_table(address, block.number.unwrap().as_u64())
-        //     .await
-        //     .unwrap();
+        let nodes = l1_client
+            .get_stake_table(address, block.number.unwrap().as_u64())
+            .await
+            .unwrap();
 
-        // let result = nodes.stake_table.0[0].clone();
-        // assert_eq!(result.stake_amount.as_u64(), 1);
+        let result = nodes.stake_table.0[0].clone();
+        assert_eq!(result.stake_amount.as_u64(), 1);
         Ok(())
     }
     #[tokio::test(flavor = "multi_thread")]
