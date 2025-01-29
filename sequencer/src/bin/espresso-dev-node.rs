@@ -145,6 +145,15 @@ struct Args {
     #[clap(short, long, env = "ESPRESSO_DEV_NODE_PORT", default_value = "20000")]
     dev_node_port: u16,
 
+    /// Port for connecting to the builder.
+    #[clap(
+        short,
+        long,
+        env = "ESPRESSO_DEV_NODE_MAX_BLOCK_SIZE",
+        default_value = "1000000"
+    )]
+    max_block_size: u64,
+
     #[clap(flatten)]
     sql: persistence::sql::Options,
 
@@ -177,6 +186,7 @@ async fn main() -> anyhow::Result<()> {
         alt_prover_retry_intervals,
         alt_prover_update_intervals,
         l1_interval,
+        max_block_size,
     } = cli_params;
 
     logging.init();
@@ -215,6 +225,7 @@ async fn main() -> anyhow::Result<()> {
     let config = TestNetworkConfigBuilder::<NUM_NODES, _, _>::with_num_nodes()
         .api_config(api_options)
         .network_config(network_config)
+        .with_max_block_size(max_block_size)
         .build();
 
     let network =
@@ -620,6 +631,7 @@ mod tests {
                 tmp_dir.path().as_os_str(),
             )
             .env("ESPRESSO_SEQUENCER_DATABASE_MAX_CONNECTIONS", "25")
+            .env("ESPRESSO_DEV_NODE_MAX_BLOCK_SIZE", "500000")
             .spawn()
             .unwrap();
 
@@ -709,7 +721,7 @@ mod tests {
 
         {
             // transactions with size larger than max_block_size result in an error
-            let extremely_large_tx = Transaction::new(100_u32.into(), vec![0; 50120]);
+            let extremely_large_tx = Transaction::new(100_u32.into(), vec![0; 7*1000*1000]);
             api_client
                 .post::<Commitment<Transaction>>("submit/submit")
                 .body_json(&extremely_large_tx)
