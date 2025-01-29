@@ -798,20 +798,41 @@ impl L1Client {
     }
 
     // /// Get `StakeTable` at block height.
-    pub async fn get_stake_table(
-        &self,
-        contract: Address,
-        block: u64,
-    ) -> Option<StakeTables> {
+    pub async fn get_stake_table(&self, contract_address: Address, block: u64) -> StakeTables {
+        let retry_delay = self.options().l1_retry_delay;
         if let Some(st) = self.state.lock().await.stake.get(&block) {
-            Some(st.clone())
+            st.clone()
         } else {
-
-            let contract =
-                // TODO attach address to L1Client
-                PermissionedStakeTable::new(contract, self.provider.clone());
             let last_head = self.state.lock().await.snapshot.head;
-            L1Client::update_stake_table(last_head, block, contract).await
+
+            let chunks = self.chunky(last_head, block);
+
+            // Fetch events for each chunk.
+            let events = stream::iter(chunks).then(|(from, to)| {
+                async move {
+                    let contract =
+                PermissionedStakeTable::new(contract_address, self.provider.clone());
+                    tracing::debug!(from, to, "fetch events in range");
+
+                    // query for deposit events, loop until successful.
+                    loop {
+                        match contract
+                            .stakers_updated_filter()
+                            .from_block(from)
+                            .to_block(to)
+                            .query()
+                            .await
+                        {
+                            Ok(events) => break stream::iter(events),
+                            Err(err) => {
+                                tracing::warn!(from, to, %err, "Fee L1Event Error");
+                                sleep(retry_delay).await;
+                            }
+                        }
+                    }
+                }
+            });
+            StakeTables::from_l1_events(events.flatten().collect().await)
         }
     }
 
@@ -1304,8 +1325,7 @@ mod test {
         let block = client.get_block(BlockNumber::Latest).await?.unwrap();
         let nodes = l1_client
             .get_stake_table(address, block.number.unwrap().as_u64())
-            .await
-            .unwrap();
+            .await;
 
         let result = nodes.stake_table.0[0].clone();
         assert_eq!(result.stake_amount.as_u64(), 1);
