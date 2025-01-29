@@ -358,12 +358,14 @@ impl L1Client {
                     let L1Event::NewHead { head } = event else {
                         continue;
                     };
-                    if let Some(tables) = L1Client::update_stake_table(last_head, head).await.ok()
+                    if let Some(tables) =
+                        L1Client::update_stake_table(last_head, head, stake_table_contract.clone())
+                            .await
+                            .ok()
                     {
                         state.lock().await.stake.put(head, tables);
-                    } else {
-                        sleep(retry_delay).await;
                     }
+                    sleep(retry_delay).await;
                 }
                 sleep(retry_delay).await;
             }
@@ -820,26 +822,22 @@ impl L1Client {
     async fn update_stake_table(
         from_block: u64,
         to_block: u64,
+        contract: PermissionedStakeTable<Provider<MultiRpcClient>>,
     ) -> anyhow::Result<StakeTables> {
-        // Fetch events for each chunk.
-        let stake_table_contract =
-            PermissionedStakeTable::new(Address::default(), self.provider.clone());
-
         // query for stake table events, loop until successful.
-            match stake_table_contract
-                .stakers_updated_filter()
-                .from_block(from_block)
-                .to_block(to_block)
-                .query()
-                .await
-            {
-                Ok(events) => Ok(StakeTables::from_l1_events(events)),
-                Err(err) => {
-                    tracing::warn!(from_block, to_block, %err, "StakeTable L1Event Error");
-                    anyhow::bail!(err);
-                }
+        match contract
+            .stakers_updated_filter()
+            .from_block(from_block)
+            .to_block(to_block)
+            .query()
+            .await
+        {
+            Ok(events) => Ok(StakeTables::from_l1_events(events)),
+            Err(err) => {
+                tracing::warn!(from_block, to_block, %err, "StakeTable L1Event Error");
+                anyhow::bail!(err);
             }
-
+        }
     }
     fn options(&self) -> &L1ClientOptions {
         (*self.provider).as_ref().options()
