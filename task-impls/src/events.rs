@@ -12,7 +12,7 @@ use hotshot_task::task::TaskEvent;
 use hotshot_types::{
     data::{
         DaProposal2, Leaf2, PackedBundle, QuorumProposal2, QuorumProposalWrapper, UpgradeProposal,
-        VidDisperse, VidDisperseShare2,
+        VidDisperse, VidDisperseShare,
     },
     message::Proposal,
     request_response::ProposalRequestPayload,
@@ -198,10 +198,10 @@ pub enum HotShotEvent<TYPES: NodeType> {
     /// Like [`HotShotEvent::DaProposalRecv`].
     VidShareRecv(
         TYPES::SignatureKey,
-        Proposal<TYPES, VidDisperseShare2<TYPES>>,
+        Proposal<TYPES, VidDisperseShare<TYPES>>,
     ),
     /// VID share data is validated.
-    VidShareValidated(Proposal<TYPES, VidDisperseShare2<TYPES>>),
+    VidShareValidated(Proposal<TYPES, VidDisperseShare<TYPES>>),
     /// Upgrade proposal has been received from the network
     UpgradeProposalRecv(Proposal<TYPES, UpgradeProposal<TYPES>>, TYPES::SignatureKey),
     /// Upgrade proposal has been sent to the network
@@ -240,13 +240,13 @@ pub enum HotShotEvent<TYPES: NodeType> {
         TYPES::SignatureKey,
         /// Recipient key
         TYPES::SignatureKey,
-        Proposal<TYPES, VidDisperseShare2<TYPES>>,
+        Proposal<TYPES, VidDisperseShare<TYPES>>,
     ),
 
     /// Receive a VID response from the network; received by the node that triggered the VID request.
     VidResponseRecv(
         TYPES::SignatureKey,
-        Proposal<TYPES, VidDisperseShare2<TYPES>>,
+        Proposal<TYPES, VidDisperseShare<TYPES>>,
     ),
 
     /// A replica send us a High QC
@@ -340,7 +340,7 @@ impl<TYPES: NodeType> HotShotEvent<TYPES> {
             HotShotEvent::VidRequestSend(request, _, _)
             | HotShotEvent::VidRequestRecv(request, _) => Some(request.view),
             HotShotEvent::VidResponseSend(_, _, proposal)
-            | HotShotEvent::VidResponseRecv(_, proposal) => Some(proposal.data.view_number),
+            | HotShotEvent::VidResponseRecv(_, proposal) => Some(proposal.data.view_number()),
             HotShotEvent::HighQcRecv(qc, _) | HotShotEvent::HighQcSend(qc, ..) => {
                 Some(qc.view_number())
             }

@@ -11,7 +11,7 @@ use async_lock::RwLock;
 use committable::Committable;
 use hotshot_types::{
     consensus::{Consensus, LockedConsensusState, OuterConsensus},
-    data::VidDisperseShare2,
+    data::VidDisperseShare,
     message::Proposal,
     traits::{
         election::Membership, network::DataRequest, node_implementation::NodeType,
@@ -145,7 +145,7 @@ impl<TYPES: NodeType> NetworkResponseState<TYPES> {
         &self,
         view: TYPES::View,
         key: &TYPES::SignatureKey,
-    ) -> Option<Proposal<TYPES, VidDisperseShare2<TYPES>>> {
+    ) -> Option<Proposal<TYPES, VidDisperseShare<TYPES>>> {
         let consensus_reader = self.consensus.read().await;
         if let Some(view) = consensus_reader.vid_shares().get(&view) {
             if let Some(share) = view.get(key) {

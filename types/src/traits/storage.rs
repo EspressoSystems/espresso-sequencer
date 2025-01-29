@@ -20,8 +20,9 @@ use super::node_implementation::NodeType;
 use crate::{
     consensus::{CommitmentMap, View},
     data::{
+        vid_disperse::{ADVZDisperseShare, VidDisperseShare2},
         DaProposal, DaProposal2, Leaf, Leaf2, QuorumProposal, QuorumProposal2,
-        QuorumProposalWrapper, VidDisperseShare, VidDisperseShare2,
+        QuorumProposalWrapper,
     },
     event::HotShotAction,
     message::{convert_proposal, Proposal},
@@ -35,8 +36,9 @@ use crate::{
 #[async_trait]
 pub trait Storage<TYPES: NodeType>: Send + Sync + Clone {
     /// Add a proposal to the stored VID proposals.
-    async fn append_vid(&self, proposal: &Proposal<TYPES, VidDisperseShare<TYPES>>) -> Result<()>;
+    async fn append_vid(&self, proposal: &Proposal<TYPES, ADVZDisperseShare<TYPES>>) -> Result<()>;
     /// Add a proposal to the stored VID proposals.
+    /// TODO(Chengyu): change here because in the future disperse share types might not be convertible.
     async fn append_vid2(
         &self,
         proposal: &Proposal<TYPES, VidDisperseShare2<TYPES>>,

@@ -339,10 +339,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> NetworkRequestState<TYPES, I
                 if let HotShotEvent::VidResponseRecv(sender_key, proposal) = event {
                     proposal.data.view_number() == view
                         && da_members_for_view.contains(sender_key)
-                        && sender_key.validate(
-                            &proposal.signature,
-                            proposal.data.payload_commitment.as_ref(),
-                        )
+                        && sender_key
+                            .validate(&proposal.signature, proposal.data.payload_commitment_ref())
                 } else {
                     false
                 }

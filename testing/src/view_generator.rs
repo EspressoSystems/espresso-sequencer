@@ -24,7 +24,7 @@ use hotshot_example_types::{
 use hotshot_types::{
     data::{
         DaProposal2, EpochNumber, Leaf2, QuorumProposal2, QuorumProposalWrapper, VidDisperse,
-        VidDisperseShare2, ViewChangeEvidence2, ViewNumber,
+        VidDisperseShare, ViewChangeEvidence2, ViewNumber,
     },
     message::{Proposal, UpgradeLock},
     simple_certificate::{
@@ -59,7 +59,7 @@ pub struct TestView {
     pub membership: Arc<RwLock<<TestTypes as NodeType>::Membership>>,
     pub vid_disperse: Proposal<TestTypes, VidDisperse<TestTypes>>,
     pub vid_proposal: (
-        Vec<Proposal<TestTypes, VidDisperseShare2<TestTypes>>>,
+        Vec<Proposal<TestTypes, VidDisperseShare<TestTypes>>>,
         <TestTypes as NodeType>::SignatureKey,
     ),
     pub leader_public_key: <TestTypes as NodeType>::SignatureKey,

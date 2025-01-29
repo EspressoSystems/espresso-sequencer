@@ -153,8 +153,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                         }
                     }
                     ProposalDependency::VidShare => {
-                        if let HotShotEvent::VidDisperseSend(vid_share, _) = event {
-                            vid_share.data.view_number()
+                        if let HotShotEvent::VidDisperseSend(vid_disperse, _) = event {
+                            vid_disperse.data.view_number()
                         } else {
                             return false;
                         }
@@ -528,8 +528,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                     "Failed to update latest proposed view"
                 );
             }
-            HotShotEvent::VidDisperseSend(vid_share, _) => {
-                let view_number = vid_share.data.view_number();
+            HotShotEvent::VidDisperseSend(vid_disperse, _) => {
+                let view_number = vid_disperse.data.view_number();
                 self.create_dependency_task_if_new(
                     view_number,
                     epoch_number,

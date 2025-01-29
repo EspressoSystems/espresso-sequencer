@@ -343,7 +343,7 @@ impl<TYPES: NodeType, V: Versions> ProposalDependencyHandle<TYPES, V> {
                 builder_commitment,
                 metadata,
                 commitment_and_metadata.fees.first().clone(),
-                vid_share.data.common.clone(),
+                vid_share.data.vid_common_ref().clone(),
                 version,
             )
             .await
@@ -359,7 +359,7 @@ impl<TYPES: NodeType, V: Versions> ProposalDependencyHandle<TYPES, V> {
                 commitment_and_metadata.metadata,
                 commitment_and_metadata.fees.to_vec(),
                 *self.view_number,
-                vid_share.data.common.clone(),
+                vid_share.data.vid_common_ref().clone(),
                 commitment_and_metadata.auction_result,
                 version,
             )

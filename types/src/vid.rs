@@ -36,7 +36,7 @@ use sha2::Sha256;
 
 use crate::{
     constants::SRS_DEGREE,
-    data::{VidDisperse as HotShotVidDisperse, VidDisperseShare2},
+    data::{VidDisperse as HotShotVidDisperse, VidDisperseShare},
     message::Proposal,
 };
 
@@ -111,7 +111,7 @@ pub type VidShare = <VidSchemeType as VidScheme>::Share;
 /// VID proposal type
 pub type VidProposal<TYPES> = (
     Proposal<TYPES, HotShotVidDisperse<TYPES>>,
-    Vec<Proposal<TYPES, VidDisperseShare2<TYPES>>>,
+    Vec<Proposal<TYPES, VidDisperseShare<TYPES>>>,
 );
 
 #[cfg(not(feature = "gpu-vid"))]

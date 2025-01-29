@@ -28,6 +28,7 @@ use hotshot_types::{
     constants::EVENT_CHANNEL_SIZE,
     data::Leaf2,
     event::Event,
+    message::convert_proposal,
     simple_certificate::{NextEpochQuorumCertificate2, QuorumCertificate2},
     traits::{
         network::{AsyncGenerator, ConnectedNetwork},
@@ -252,7 +253,14 @@ where
                                     .await,
                                 );
                                 let saved_proposals = read_storage.proposals_cloned().await;
-                                let saved_vid_shares = read_storage.vids_cloned().await;
+                                let mut vid_shares = BTreeMap::new();
+                                for (view, hash_map) in read_storage.vids_cloned().await {
+                                    let mut converted_hash_map = HashMap::new();
+                                    for (key, proposal) in hash_map {
+                                        converted_hash_map.insert(key, convert_proposal(proposal));
+                                    }
+                                    vid_shares.insert(view, converted_hash_map);
+                                }
                                 let decided_upgrade_certificate =
                                     read_storage.decided_upgrade_certificate().await;
 
@@ -263,7 +271,7 @@ where
                                     (start_view, start_epoch),
                                     (high_qc, next_epoch_high_qc),
                                     saved_proposals,
-                                    saved_vid_shares,
+                                    vid_shares,
                                     decided_upgrade_certificate,
                                 );
                                 // We assign node's public key and stake value rather than read from config file since it's a test
