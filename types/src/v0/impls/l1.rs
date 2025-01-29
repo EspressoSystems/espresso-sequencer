@@ -90,8 +90,10 @@ impl L1BlockInfo {
 
 impl Drop for L1UpdateTask {
     fn drop(&mut self) {
-        if let Some(task) = self.0.get_mut().take() {
-            task.abort();
+        if let Some(tasks) = self.0.get_mut().take() {
+            for task in tasks {
+                task.abort();
+            }
         }
     }
 }
@@ -334,53 +336,49 @@ impl L1Client {
     pub fn provider(&self) -> &impl Middleware<Error: 'static> {
         &self.provider
     }
-
+    /// Update stake-table cache on `L1Event::NewHead`.
     fn stake_update_loop(&self) -> impl Future<Output = ()> {
-        let state = self.state.clone();
-
+        let opt = self.options();
+        let retry_delay = opt.l1_retry_delay;
         let span = tracing::warn_span!("L1 client update");
-        async move {
-            for i in 0.. {
-                // Subscribe to events before checking the current state, to ensure we don't miss a
-                // relevant event.
-                let mut events = self.receiver.activate_cloned();
+        let state = self.state.clone();
+        let stake_table_contract =
+            // TODO attach address to L1Client
+            PermissionedStakeTable::new(Address::default(), self.provider.clone());
 
+        let mut events = self.receiver.activate_cloned();
+
+        async move {
+            loop {
                 let last_head = {
                     let state = state.lock().await;
                     state.snapshot.head
                 };
-
-                // Wait for the block.
                 while let Some(event) = events.next().await {
                     let L1Event::NewHead { head } = event else {
                         continue;
                     };
-                    // Fetch events for each chunk.
-                    let stake_table_contract =
-                        PermissionedStakeTable::new(Address::default(), self.provider.clone());
-                    let retry_delay = self.options().l1_retry_delay;
-
-                    // query for stake table events, loop until successful.
-                    // let events = loop {
-                    //     match stake_table_contract
-                    //         .stakers_updated_filter()
-                    //         .from_block(last_head)
-                    //         .to_block(head)
-                    //         .query()
-                    //         .await
-                    //     {
-                    //         Ok(events) => break 'outer events,
-                    //         Err(err) => {
-                    //             tracing::warn!(last_head, head, %err, "StakeTable L1Event Error");
-                    //             sleep(retry_delay).await;
-                    //         }
-                    //     };
-                    // };
-                };
-
-                self.retry_delay().await;
+                    match stake_table_contract
+                        .stakers_updated_filter()
+                        .from_block(last_head)
+                        .to_block(head)
+                        .query()
+                        .await
+                    {
+                        Ok(events) => {
+                            let tables = StakeTables::from_l1_events(events);
+                            state.lock().await.stake.put(head, tables);
+                        },
+                        Err(err) => {
+                            tracing::warn!(last_head, head, %err, "StakeTable L1Event Error");
+                            sleep(retry_delay).await;
+                        }
+                    }
+                }
+                sleep(retry_delay).await;
             }
-        }.instrument(span)
+        }
+        .instrument(span)
     }
 
     fn update_loop(&self) -> impl Future<Output = ()> {
@@ -835,13 +833,11 @@ impl L1Client {
     //             .ok_or_else(|| anyhow::anyhow!("stake table not found"));
     //     };
     // }
-    async fn update_stake_table<'a>(
+    async fn update_stake_table(
         &self,
         from_block: u64,
         to_block: u64,
-        // mut stake: Option<&mut StakeTables>
-        // stake: &mut LruCache<u64, StakeTables>,
-    ) {
+    ) -> StakeTables {
         // Fetch events for each chunk.
         let stake_table_contract =
             PermissionedStakeTable::new(Address::default(), self.provider.clone());
@@ -863,10 +859,8 @@ impl L1Client {
                 }
             }
         };
-        // TODO lifetime problem.
-        // maybe we need to store a something that implements copy
-        // let tables = StakeTables::from_l1_events(events);
-        // self.state.lock().await.stake.put(from_block, tables);
+
+        StakeTables::from_l1_events(events)
     }
     fn options(&self) -> &L1ClientOptions {
         (*self.provider).as_ref().options()
