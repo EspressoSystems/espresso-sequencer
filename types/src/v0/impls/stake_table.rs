@@ -201,7 +201,7 @@ impl EpochCommittees {
         let da_members: Vec<_> = da_members
             .iter()
             .map(|member| member.stake_table_entry.clone())
-            .filter(|entry| (entry.stake() > U256::zero()) && entry.da)
+            .filter(|entry| entry.stake() > U256::zero())
             .collect();
 
         // Index the stake table by public key
@@ -269,7 +269,7 @@ impl Membership<SeqTypes> for EpochCommittees {
         let da_members: Vec<_> = da_members
             .iter()
             .map(|member| member.stake_table_entry.clone())
-            .filter(|entry| entry.stake() > U256::zero() && entry.da)
+            .filter(|entry| entry.stake() > U256::zero())
             .collect();
 
         // Index the stake table by public key
