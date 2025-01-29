@@ -30,7 +30,7 @@ cdn-client = { workspace = true }
 cdn-marshal = { workspace = true }
 chrono = { workspace = true }
 committable = { workspace = true }
-dashmap = "6"
+dashmap = { workspace = true }
 derive_more = { workspace = true }
 either = { workspace = true }
 futures = { workspace = true }
@@ -41,7 +41,7 @@ libp2p-identity = { workspace = true }
 libp2p-networking = { workspace = true }
 lru = { workspace = true }
 num_enum = "0.7"
-parking_lot = "0.12"
+parking_lot.workspace = true
 portpicker = "0.1"
 primitive-types = { workspace = true }
 rand = { workspace = true }

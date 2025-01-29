@@ -21,7 +21,7 @@ bincode = { workspace = true }
 blake3 = { workspace = true }
 cbor4ii = { workspace = true }
 delegate = "0.13"
-derive_builder = "0.20"
+derive_builder.workspace = true
 derive_more = { workspace = true }
 futures = { workspace = true }
 hotshot-types = { path = "../types" }

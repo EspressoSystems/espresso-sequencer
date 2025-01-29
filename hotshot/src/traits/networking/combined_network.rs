@@ -7,9 +7,8 @@
 //! Networking Implementation that has a primary and a fallback network.  If the primary
 //! Errors we will use the backup to send or receive
 use std::{
-    collections::{hash_map::DefaultHasher, BTreeMap, HashMap},
+    collections::{BTreeMap, HashMap},
     future::Future,
-    hash::{Hash, Hasher},
     num::NonZeroUsize,
     sync::{
         atomic::{AtomicBool, AtomicU64, Ordering},
@@ -47,13 +46,6 @@ use tracing::{debug, info, warn};
 use super::{push_cdn_network::PushCdnNetwork, NetworkError};
 use crate::traits::implementations::Libp2pNetwork;
 
-/// Helper function to calculate a hash of a type that implements Hash
-pub fn calculate_hash_of<T: Hash>(t: &T) -> u64 {
-    let mut s = DefaultHasher::new();
-    t.hash(&mut s);
-    s.finish()
-}
-
 /// Thread-safe ref counted lock to a map of channels to the delayed tasks
 type DelayedTasksChannelsMap = Arc<RwLock<BTreeMap<u64, (Sender<()>, InactiveReceiver<()>)>>>;
 
@@ -65,7 +57,7 @@ pub struct CombinedNetworks<TYPES: NodeType> {
     networks: Arc<UnderlyingCombinedNetworks<TYPES>>,
 
     /// Last n seen messages to prevent processing duplicates
-    message_cache: Arc<PlRwLock<LruCache<u64, ()>>>,
+    message_cache: Arc<PlRwLock<LruCache<blake3::Hash, ()>>>,
 
     /// How many times primary failed to deliver
     primary_fail_counter: Arc<AtomicU64>,
@@ -457,7 +449,7 @@ impl<TYPES: NodeType> ConnectedNetwork<TYPES::SignatureKey> for CombinedNetworks
             };
 
             // Calculate hash of the message
-            let message_hash = calculate_hash_of(&message);
+            let message_hash = blake3::hash(&message);
 
             // Check if the hash is in the cache and update the cache
             if self.message_cache.write().put(message_hash, ()).is_none() {
