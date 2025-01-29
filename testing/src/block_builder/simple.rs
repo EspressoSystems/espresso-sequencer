@@ -31,12 +31,13 @@ use hotshot_builder_api::{
     },
     v0_99,
 };
+use hotshot_example_types::node_types::TestVersions;
 use hotshot_types::{
     bundle::Bundle,
     constants::{LEGACY_BUILDER_MODULE, MARKETPLACE_BUILDER_MODULE},
     traits::{
         block_contents::{BlockHeader, BuilderFee},
-        node_implementation::NodeType,
+        node_implementation::{NodeType, Versions},
         signature_key::BuilderSignatureKey,
     },
     utils::BuilderCommitment,
@@ -246,11 +247,14 @@ where
             return Ok(vec![]);
         }
 
-        let block_entry = build_block(
+        // Let new VID scheme ships with Epochs upgrade
+        let version = <TestVersions as Versions>::Epochs::VERSION;
+        let block_entry = build_block::<TYPES, TestVersions>(
             transactions,
             self.num_nodes.clone(),
             self.pub_key.clone(),
             self.priv_key.clone(),
+            version,
         )
         .await;
 

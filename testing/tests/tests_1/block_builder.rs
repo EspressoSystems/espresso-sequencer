@@ -33,6 +33,9 @@ use vbs::version::StaticVersion;
 #[tokio::test(flavor = "multi_thread")]
 #[ignore]
 async fn test_random_block_builder() {
+    use hotshot_example_types::node_types::TestVersions;
+    use vbs::version::Version;
+
     let port = portpicker::pick_unused_port().expect("No free ports");
     let api_url = Url::parse(&format!("http://localhost:{port}")).expect("Valid URL");
     let task: Box<dyn BuilderTask<TestTypes>> = RandomBuilderImplementation::start(
@@ -58,11 +61,13 @@ async fn test_random_block_builder() {
         .expect("Failed to create dummy signature");
     let dummy_view_number = 0u64;
 
+    let version = Version { major: 0, minor: 0 };
+
     let mut blocks = loop {
         // Test getting blocks
         let blocks = client
             .available_blocks(
-                vid_commitment(&[], 1),
+                vid_commitment::<TestVersions>(&[], 1, version),
                 dummy_view_number,
                 pub_key,
                 &signature,

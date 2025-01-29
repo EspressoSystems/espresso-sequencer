@@ -179,9 +179,11 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> DaTaskState<TYP
                 let num_nodes = membership_reader.total_nodes(epoch_number);
                 drop(membership_reader);
 
+                let version = self.upgrade_lock.version_infallible(view_number).await;
+
                 let txns = Arc::clone(&proposal.data.encoded_transactions);
                 let payload_commitment =
-                    spawn_blocking(move || vid_commitment(&txns, num_nodes)).await;
+                    spawn_blocking(move || vid_commitment::<V>(&txns, num_nodes, version)).await;
                 let payload_commitment = payload_commitment.unwrap();
 
                 self.storage
@@ -233,12 +235,14 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> DaTaskState<TYP
                     let pk = self.private_key.clone();
                     let public_key = self.public_key.clone();
                     let chan = event_stream.clone();
+                    let upgrade_lock = self.upgrade_lock.clone();
                     spawn(async move {
-                        Consensus::calculate_and_update_vid(
+                        Consensus::calculate_and_update_vid::<V>(
                             OuterConsensus::new(Arc::clone(&consensus.inner_consensus)),
                             view_number,
                             membership,
                             &pk,
+                            &upgrade_lock,
                         )
                         .await;
                         if let Some(Some(vid_share)) = consensus

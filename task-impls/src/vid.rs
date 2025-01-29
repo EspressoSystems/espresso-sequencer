@@ -99,12 +99,13 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> VidTaskState<TY
                     );
                     return None;
                 }
-                let vid_disperse = VidDisperse::calculate_vid_disperse(
+                let vid_disperse = VidDisperse::calculate_vid_disperse::<V>(
                     &payload,
                     &Arc::clone(&self.membership),
                     *view_number,
                     epoch,
                     epoch,
+                    &self.upgrade_lock,
                 )
                 .await
                 .ok()?;
@@ -203,12 +204,13 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> VidTaskState<TY
                 let payload = Arc::clone(payload);
                 drop(consensus_reader);
 
-                let next_epoch_vid_disperse = VidDisperse::calculate_vid_disperse(
+                let next_epoch_vid_disperse = VidDisperse::calculate_vid_disperse::<V>(
                     payload.as_ref(),
                     &Arc::clone(&self.membership),
                     proposal_view_number,
                     target_epoch,
                     sender_epoch,
+                    &self.upgrade_lock,
                 )
                 .await
                 .ok()?;

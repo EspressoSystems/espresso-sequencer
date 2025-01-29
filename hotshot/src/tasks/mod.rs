@@ -80,18 +80,21 @@ pub async fn add_request_network_task<
 pub fn add_response_task<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>(
     handle: &mut SystemContextHandle<TYPES, I, V>,
 ) {
-    let state = NetworkResponseState::<TYPES>::new(
+    let state = NetworkResponseState::<TYPES, V>::new(
         handle.hotshot.consensus(),
         Arc::clone(&handle.memberships),
         handle.public_key().clone(),
         handle.private_key().clone(),
         handle.hotshot.id,
+        handle.hotshot.upgrade_lock.clone(),
     );
-    handle.network_registry.register(run_response_task::<TYPES>(
-        state,
-        handle.internal_event_stream.1.activate_cloned(),
-        handle.internal_event_stream.0.clone(),
-    ));
+    handle
+        .network_registry
+        .register(run_response_task::<TYPES, V>(
+            state,
+            handle.internal_event_stream.1.activate_cloned(),
+            handle.internal_event_stream.0.clone(),
+        ));
 }
 
 /// Add a task which updates our queue length metric at a set interval

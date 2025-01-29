@@ -151,14 +151,20 @@ async fn test_upgrade_task_with_proposal() {
 
     let upgrade_vote_recvs: Vec<_> = upgrade_votes.into_iter().map(UpgradeVoteRecv).collect();
 
+    let upgrade_lock = &upgrade_state.upgrade_lock;
+    let version_1 = upgrade_lock.version_infallible(ViewNumber::new(1)).await;
+    let version_2 = upgrade_lock.version_infallible(ViewNumber::new(2)).await;
+    let version_3 = upgrade_lock.version_infallible(ViewNumber::new(3)).await;
+
     let inputs = vec![
         random![
             Qc2Formed(either::Left(genesis_cert.clone())),
             SendPayloadCommitmentAndMetadata(
-                build_payload_commitment::<TestTypes>(
+                build_payload_commitment::<TestTypes, TestVersions>(
                     &membership,
                     ViewNumber::new(1),
-                    Some(EpochNumber::new(1))
+                    Some(EpochNumber::new(1)),
+                    version_1,
                 )
                 .await,
                 builder_commitment.clone(),
@@ -175,10 +181,11 @@ async fn test_upgrade_task_with_proposal() {
             QuorumProposalPreliminarilyValidated(proposals[0].clone()),
             Qc2Formed(either::Left(proposals[1].data.justify_qc().clone())),
             SendPayloadCommitmentAndMetadata(
-                build_payload_commitment::<TestTypes>(
+                build_payload_commitment::<TestTypes, TestVersions>(
                     &membership,
                     ViewNumber::new(2),
-                    Some(EpochNumber::new(1))
+                    Some(EpochNumber::new(1)),
+                    version_2,
                 )
                 .await,
                 builder_commitment.clone(),
@@ -194,10 +201,11 @@ async fn test_upgrade_task_with_proposal() {
             QuorumProposalPreliminarilyValidated(proposals[1].clone()),
             Qc2Formed(either::Left(proposals[2].data.justify_qc().clone())),
             SendPayloadCommitmentAndMetadata(
-                build_payload_commitment::<TestTypes>(
+                build_payload_commitment::<TestTypes, TestVersions>(
                     &membership,
                     ViewNumber::new(3),
-                    Some(EpochNumber::new(1))
+                    Some(EpochNumber::new(1)),
+                    version_3,
                 )
                 .await,
                 builder_commitment.clone(),

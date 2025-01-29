@@ -30,7 +30,7 @@ use hotshot_types::{
     },
 };
 use jf_vid::VidScheme;
-use vbs::version::StaticVersionType;
+use vbs::version::{StaticVersionType, Version};
 use vec1::vec1;
 
 #[tokio::test(flavor = "multi_thread")]
@@ -47,8 +47,15 @@ async fn test_vid_task() {
 
     let membership = Arc::clone(&handle.hotshot.memberships);
 
-    let mut vid =
-        vid_scheme_from_view_number::<TestTypes>(&membership, ViewNumber::new(0), None).await;
+    let default_version = Version { major: 0, minor: 0 };
+
+    let mut vid = vid_scheme_from_view_number::<TestTypes, TestVersions>(
+        &membership,
+        ViewNumber::new(0),
+        None,
+        default_version,
+    )
+    .await;
     let transactions = vec![TestTransaction::new(vec![0])];
 
     let (payload, metadata) = <TestBlockPayload as BlockPayload<TestTypes>>::from_transactions(
