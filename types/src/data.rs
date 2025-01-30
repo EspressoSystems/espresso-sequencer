@@ -1076,13 +1076,39 @@ impl<TYPES: NodeType> Leaf2<TYPES> {
 
 impl<TYPES: NodeType> Committable for Leaf2<TYPES> {
     fn commit(&self) -> committable::Commitment<Self> {
-        RawCommitmentBuilder::new("leaf commitment")
-            .u64_field("view number", *self.view_number)
-            .field("parent leaf commitment", self.parent_commitment)
-            .field("block header", self.block_header.commit())
-            .field("justify qc", self.justify_qc.commit())
-            .optional("upgrade certificate", &self.upgrade_certificate)
-            .finalize()
+        let Leaf2 {
+            view_number,
+            justify_qc,
+            next_epoch_justify_qc,
+            parent_commitment,
+            block_header,
+            upgrade_certificate,
+            block_payload: _,
+            view_change_evidence: _,
+            next_drb_result,
+            with_epoch,
+        } = self;
+
+        let mut cb = RawCommitmentBuilder::new("leaf commitment")
+            .u64_field("view number", **view_number)
+            .field("parent leaf commitment", *parent_commitment)
+            .field("block header", block_header.commit())
+            .field("justify qc", justify_qc.commit())
+            .optional("upgrade certificate", upgrade_certificate);
+
+        if *with_epoch {
+            cb = cb
+                .constant_str("with_epoch")
+                .optional("next_epoch_justify_qc", next_epoch_justify_qc);
+
+            if let Some(next_drb_result) = next_drb_result {
+                cb = cb
+                    .constant_str("next_drb_result")
+                    .fixed_size_bytes(next_drb_result);
+            }
+        }
+
+        cb.finalize()
     }
 }
 

@@ -355,22 +355,31 @@ impl<TYPES: NodeType> Committable for QuorumData<TYPES> {
 
 impl<TYPES: NodeType> Committable for QuorumData2<TYPES> {
     fn commit(&self) -> Commitment<Self> {
-        let QuorumData2 {
-            leaf_commit,
-            epoch: _,
-        } = self;
+        let QuorumData2 { leaf_commit, epoch } = self;
 
-        committable::RawCommitmentBuilder::new("Quorum data")
-            .var_size_bytes(leaf_commit.as_ref())
-            .finalize()
+        let mut cb = committable::RawCommitmentBuilder::new("Quorum data")
+            .var_size_bytes(leaf_commit.as_ref());
+
+        if let Some(ref epoch) = *epoch {
+            cb = cb.u64_field("epoch number", **epoch);
+        }
+
+        cb.finalize()
     }
 }
 
 impl<TYPES: NodeType> Committable for NextEpochQuorumData2<TYPES> {
     fn commit(&self) -> Commitment<Self> {
-        committable::RawCommitmentBuilder::new("Quorum data")
-            .var_size_bytes(self.leaf_commit.as_ref())
-            .finalize()
+        let NextEpochQuorumData2(QuorumData2 { leaf_commit, epoch }) = self;
+
+        let mut cb = committable::RawCommitmentBuilder::new("Quorum data")
+            .var_size_bytes(leaf_commit.as_ref());
+
+        if let Some(ref epoch) = *epoch {
+            cb = cb.u64_field("epoch number", **epoch);
+        }
+
+        cb.finalize()
     }
 }
 
@@ -404,12 +413,17 @@ impl<TYPES: NodeType> Committable for DaData2<TYPES> {
     fn commit(&self) -> Commitment<Self> {
         let DaData2 {
             payload_commit,
-            epoch: _,
+            epoch,
         } = self;
 
-        committable::RawCommitmentBuilder::new("DA data")
-            .var_size_bytes(payload_commit.as_ref())
-            .finalize()
+        let mut cb = committable::RawCommitmentBuilder::new("DA data")
+            .var_size_bytes(payload_commit.as_ref());
+
+        if let Some(ref epoch) = *epoch {
+            cb = cb.u64_field("epoch number", **epoch);
+        }
+
+        cb.finalize()
     }
 }
 
@@ -446,7 +460,7 @@ impl<TYPES: NodeType> Committable for UpgradeData2<TYPES> {
             .var_size_bytes(hash.as_slice());
 
         if let Some(ref epoch) = *epoch {
-            cb = cb.u64(**epoch);
+            cb = cb.u64_field("epoch number", **epoch);
         }
 
         cb.finalize()
@@ -457,15 +471,22 @@ impl<TYPES: NodeType> Committable for UpgradeData2<TYPES> {
 fn view_and_relay_commit<TYPES: NodeType, T: Committable>(
     view: TYPES::View,
     relay: u64,
+    epoch: Option<TYPES::Epoch>,
     tag: &str,
 ) -> Commitment<T> {
     let builder = committable::RawCommitmentBuilder::new(tag);
-    builder.u64(*view).u64(relay).finalize()
+    let mut cb = builder.u64(*view).u64(relay);
+
+    if let Some(epoch) = epoch {
+        cb = cb.u64_field("epoch number", *epoch);
+    }
+
+    cb.finalize()
 }
 
 impl<TYPES: NodeType> Committable for ViewSyncPreCommitData<TYPES> {
     fn commit(&self) -> Commitment<Self> {
-        view_and_relay_commit::<TYPES, Self>(self.round, self.relay, "View Sync Precommit")
+        view_and_relay_commit::<TYPES, Self>(self.round, self.relay, None, "View Sync Precommit")
     }
 }
 
@@ -474,16 +495,16 @@ impl<TYPES: NodeType> Committable for ViewSyncPreCommitData2<TYPES> {
         let ViewSyncPreCommitData2 {
             relay,
             round,
-            epoch: _,
+            epoch,
         } = self;
 
-        view_and_relay_commit::<TYPES, Self>(*round, *relay, "View Sync Precommit")
+        view_and_relay_commit::<TYPES, Self>(*round, *relay, *epoch, "View Sync Precommit")
     }
 }
 
 impl<TYPES: NodeType> Committable for ViewSyncFinalizeData<TYPES> {
     fn commit(&self) -> Commitment<Self> {
-        view_and_relay_commit::<TYPES, Self>(self.round, self.relay, "View Sync Finalize")
+        view_and_relay_commit::<TYPES, Self>(self.round, self.relay, None, "View Sync Finalize")
     }
 }
 
@@ -492,16 +513,16 @@ impl<TYPES: NodeType> Committable for ViewSyncFinalizeData2<TYPES> {
         let ViewSyncFinalizeData2 {
             relay,
             round,
-            epoch: _,
+            epoch,
         } = self;
 
-        view_and_relay_commit::<TYPES, Self>(*round, *relay, "View Sync Finalize")
+        view_and_relay_commit::<TYPES, Self>(*round, *relay, *epoch, "View Sync Finalize")
     }
 }
 
 impl<TYPES: NodeType> Committable for ViewSyncCommitData<TYPES> {
     fn commit(&self) -> Commitment<Self> {
-        view_and_relay_commit::<TYPES, Self>(self.round, self.relay, "View Sync Commit")
+        view_and_relay_commit::<TYPES, Self>(self.round, self.relay, None, "View Sync Commit")
     }
 }
 
@@ -510,10 +531,10 @@ impl<TYPES: NodeType> Committable for ViewSyncCommitData2<TYPES> {
         let ViewSyncCommitData2 {
             relay,
             round,
-            epoch: _,
+            epoch,
         } = self;
 
-        view_and_relay_commit::<TYPES, Self>(*round, *relay, "View Sync Commit")
+        view_and_relay_commit::<TYPES, Self>(*round, *relay, *epoch, "View Sync Commit")
     }
 }
 
