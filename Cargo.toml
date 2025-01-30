@@ -21,7 +21,7 @@ members = [
     "sequencer",
     "tests",
     "types",
-    "utils"
+    "utils",
 ]
 
 exclude = ["sequencer-sqlite"]
@@ -164,13 +164,13 @@ opt-level = 0
 opt-level = 3
 
 [patch."https://github.com/EspressoSystems/HotShot.git"]
-hotshot = { git = "https://www.github.com/EspressoSystems/HotShot.git", branch = "release-labrador" }
-hotshot-builder-api = { git = "https://www.github.com/EspressoSystems/HotShot.git", branch = "release-labrador" }
-hotshot-orchestrator = { git = "https://www.github.com/EspressoSystems/HotShot.git", branch = "release-labrador" }
-hotshot-stake-table = { git = "https://www.github.com/EspressoSystems/HotShot.git", branch = "release-labrador" }
-hotshot-task = { git = "https://www.github.com/EspressoSystems/HotShot.git", branch = "release-labrador" }
-hotshot-task-impls = { git = "https://www.github.com/EspressoSystems/HotShot.git", branch = "release-labrador" }
-hotshot-testing = { git = "https://www.github.com/EspressoSystems/HotShot.git", branch = "release-labrador" }
-hotshot-types = { git = "https://www.github.com/EspressoSystems/HotShot.git", branch = "release-labrador" }
-libp2p-networking = { git = "https://www.github.com/EspressoSystems/HotShot.git", branch = "release-labrador" }
-hotshot-example-types = { git = "https://www.github.com/EspressoSystems/HotShot.git", branch = "release-labrador" }
+hotshot = { git = "https://www.github.com/EspressoSystems/HotShot.git", branch = "release-labrador-debug-2" }
+hotshot-builder-api = { git = "https://www.github.com/EspressoSystems/HotShot.git", branch = "release-labrador-debug-2" }
+hotshot-orchestrator = { git = "https://www.github.com/EspressoSystems/HotShot.git", branch = "release-labrador-debug-2" }
+hotshot-stake-table = { git = "https://www.github.com/EspressoSystems/HotShot.git", branch = "release-labrador-debug-2" }
+hotshot-task = { git = "https://www.github.com/EspressoSystems/HotShot.git", branch = "release-labrador-debug-2" }
+hotshot-task-impls = { git = "https://www.github.com/EspressoSystems/HotShot.git", branch = "release-labrador-debug-2" }
+hotshot-testing = { git = "https://www.github.com/EspressoSystems/HotShot.git", branch = "release-labrador-debug-2" }
+hotshot-types = { git = "https://www.github.com/EspressoSystems/HotShot.git", branch = "release-labrador-debug-2" }
+libp2p-networking = { git = "https://www.github.com/EspressoSystems/HotShot.git", branch = "release-labrador-debug-2" }
+hotshot-example-types = { git = "https://www.github.com/EspressoSystems/HotShot.git", branch = "release-labrador-debug-2" }
