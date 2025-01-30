@@ -126,16 +126,16 @@ struct Committee {
     /// leader but without voting rights.
     eligible_leaders: Vec<StakeTableEntry<PubKey>>,
 
-    /// Stake table
+    /// Keys for nodes participating in the network
     stake_table: Vec<StakeTableEntry<PubKey>>,
 
-    /// DA members
+    /// Keys for DA members
     da_members: Vec<StakeTableEntry<PubKey>>,
 
-    /// Stake table indexed by public key, for efficient lookup.
+    /// Stake entries indexed by public key, for efficient lookup.
     indexed_stake_table: HashMap<PubKey, StakeTableEntry<PubKey>>,
 
-    /// DA members indexed by public key, for efficient lookup.
+    /// DA entries indexed by public key, for efficient lookup.
     indexed_da_members: HashMap<PubKey, StakeTableEntry<PubKey>>,
 }
 
