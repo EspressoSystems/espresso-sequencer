@@ -427,7 +427,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         returns (BN254.ScalarField hotShotBlockCommRoot, uint64 hotshotBlockHeight)
     {
         uint256 commitmentsHeight = stateHistoryCommitments.length;
-        if (hotShotBlockHeight > stateHistoryCommitments[commitmentsHeight - 1].hotShotBlockHeight)
+        if (hotShotBlockHeight >= stateHistoryCommitments[commitmentsHeight - 1].hotShotBlockHeight)
         {
             revert InvalidHotShotBlockForCommitmentCheck();
         }
