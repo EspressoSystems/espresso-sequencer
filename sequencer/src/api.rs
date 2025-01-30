@@ -187,14 +187,19 @@ impl<N: ConnectedNetwork<PubKey>, V: Versions, P: SequencerPersistence>
             self.consensus().await.read().await.cur_epoch().await
         };
 
-        self.consensus()
+        let st_table = self
+            .consensus()
             .await
             .read()
             .await
             .memberships
             .read()
             .await
-            .stake_table(epoch)
+            .stake_table(epoch);
+
+        println!("st table: {:?}", st_table);
+
+        st_table
     }
 }
 
