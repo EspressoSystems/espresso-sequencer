@@ -168,17 +168,20 @@ pub(crate) async fn handle_quorum_proposal_recv<
     let membership_success_threshold = membership_reader.success_threshold(justify_qc.data.epoch);
     drop(membership_reader);
 
-    if !justify_qc
-        .is_valid_cert(
-            membership_stake_table,
-            membership_success_threshold,
-            &validation_info.upgrade_lock,
-        )
-        .await
     {
         let consensus_reader = validation_info.consensus.read().await;
-        consensus_reader.metrics.invalid_qc.update(1);
-        bail!("Invalid justify_qc in proposal for view {}", *view_number);
+        justify_qc
+            .is_valid_cert(
+                membership_stake_table,
+                membership_success_threshold,
+                &validation_info.upgrade_lock,
+            )
+            .await
+            .context(|e| {
+                consensus_reader.metrics.invalid_qc.update(1);
+
+                warn!("Invalid certificate for view {}: {}", *view_number, e)
+            })?;
     }
 
     if let Some(ref next_epoch_justify_qc) = maybe_next_epoch_justify_qc {
@@ -198,19 +201,14 @@ pub(crate) async fn handle_quorum_proposal_recv<
         drop(membership_reader);
 
         // Validate the next epoch justify qc as well
-        if !next_epoch_justify_qc
+        next_epoch_justify_qc
             .is_valid_cert(
                 membership_next_stake_table,
                 membership_next_success_threshold,
                 &validation_info.upgrade_lock,
             )
             .await
-        {
-            bail!(
-                "Invalid next_epoch_justify_qc in proposal for view {}",
-                *view_number
-            );
-        }
+            .context(|e| warn!("Invalid certificate for view {}: {}", *view_number, e))?;
     }
 
     broadcast_event(

@@ -109,23 +109,23 @@ async fn test_certificate2_validity() {
     let membership_success_threshold = membership_reader.success_threshold(None);
     drop(membership_reader);
 
-    assert!(
-        qc.is_valid_cert(
+    assert!(qc
+        .is_valid_cert(
             membership_stake_table.clone(),
             membership_success_threshold,
             &handle.hotshot.upgrade_lock
         )
         .await
-    );
+        .is_ok());
 
-    assert!(
-        qc2.is_valid_cert(
+    assert!(qc2
+        .is_valid_cert(
             membership_stake_table,
             membership_success_threshold,
             &handle.hotshot.upgrade_lock
         )
         .await
-    );
+        .is_ok());
 
     // ensure that we don't break the leaf commitment chain
     let leaf2 = Leaf2::from_quorum_proposal(&proposal.data);

@@ -1,10 +1,12 @@
 //! This crate contains a general request-response protocol. It is used to send requests to
 //! a set of recipients and wait for responses.
 
-use std::collections::HashMap;
-use std::sync::Weak;
-use std::time::Instant;
-use std::{marker::PhantomData, sync::Arc, time::Duration};
+use std::{
+    collections::HashMap,
+    marker::PhantomData,
+    sync::{Arc, Weak},
+    time::{Duration, Instant},
+};
 
 use anyhow::{anyhow, Context, Result};
 use data_source::DataSource;
@@ -17,8 +19,10 @@ use parking_lot::RwLock;
 use rand::seq::SliceRandom;
 use recipient_source::RecipientSource;
 use request::{Request, Response};
-use tokio::spawn;
-use tokio::time::{sleep, timeout};
+use tokio::{
+    spawn,
+    time::{sleep, timeout},
+};
 use tokio_util::task::AbortOnDropHandle;
 use tracing::{error, warn};
 use util::BoundedVecDeque;

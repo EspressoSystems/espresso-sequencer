@@ -477,19 +477,20 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                     membership_reader.success_threshold(epoch_number);
                 drop(membership_reader);
 
-                ensure!(
-                    certificate
-                        .is_valid_cert(
-                            membership_stake_table,
-                            membership_success_threshold,
-                            &self.upgrade_lock
-                        )
-                        .await,
-                    warn!(
-                        "View Sync Finalize certificate {:?} was invalid",
-                        certificate.data()
+                certificate
+                    .is_valid_cert(
+                        membership_stake_table,
+                        membership_success_threshold,
+                        &self.upgrade_lock,
                     )
-                );
+                    .await
+                    .context(|e| {
+                        warn!(
+                            "View Sync Finalize certificate {:?} was invalid: {}",
+                            certificate.data(),
+                            e
+                        )
+                    })?;
 
                 let view_number = certificate.view_number;
 
@@ -561,15 +562,14 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                     membership_reader.success_threshold(cert_epoch_number);
                 drop(membership_reader);
 
-                ensure!(
-                    qc.is_valid_cert(
-                        membership_stake_table,
-                        membership_success_threshold,
-                        &self.upgrade_lock
-                    )
-                    .await,
-                    warn!("Quorum certificate {:?} was invalid", qc.data())
-                );
+                qc.is_valid_cert(
+                    membership_stake_table,
+                    membership_success_threshold,
+                    &self.upgrade_lock,
+                )
+                .await
+                .context(|e| warn!("Quorum certificate {:?} was invalid: {}", qc.data(), e))?;
+
                 self.highest_qc = qc.clone();
             }
             HotShotEvent::NextEpochQc2Formed(Either::Left(next_epoch_qc)) => {

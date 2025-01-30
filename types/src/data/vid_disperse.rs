@@ -6,6 +6,14 @@
 
 //! This module provides types for VID disperse related data structures.
 
+use std::{collections::BTreeMap, fmt::Debug, hash::Hash, marker::PhantomData, sync::Arc};
+
+use async_lock::RwLock;
+use jf_vid::{VidDisperse as JfVidDisperse, VidScheme};
+use serde::{Deserialize, Serialize};
+use tokio::task::spawn_blocking;
+use utils::anytrace::*;
+
 use crate::{
     impl_has_epoch,
     message::Proposal,
@@ -17,12 +25,6 @@ use crate::{
     vid::{advz_scheme, VidCommitment, VidCommon, VidSchemeType, VidShare},
     vote::HasViewNumber,
 };
-use async_lock::RwLock;
-use jf_vid::{VidDisperse as JfVidDisperse, VidScheme};
-use serde::{Deserialize, Serialize};
-use std::{collections::BTreeMap, fmt::Debug, hash::Hash, marker::PhantomData, sync::Arc};
-use tokio::task::spawn_blocking;
-use utils::anytrace::*;
 
 impl_has_epoch!(ADVZDisperse<TYPES>, VidDisperseShare2<TYPES>);
 

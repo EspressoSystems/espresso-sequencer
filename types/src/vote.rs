@@ -18,7 +18,7 @@ use bitvec::{bitvec, vec::BitVec};
 use committable::{Commitment, Committable};
 use primitive_types::U256;
 use tracing::error;
-use utils::anytrace::Result;
+use utils::anytrace::*;
 
 use crate::{
     message::UpgradeLock,
@@ -79,7 +79,7 @@ pub trait Certificate<TYPES: NodeType, T>: HasViewNumber<TYPES> {
         stake_table: Vec<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry>,
         threshold: NonZeroU64,
         upgrade_lock: &UpgradeLock<TYPES, V>,
-    ) -> impl std::future::Future<Output = bool>;
+    ) -> impl std::future::Future<Output = Result<()>>;
     /// Returns the amount of stake needed to create this certificate
     // TODO: Make this a static ratio of the total stake of `Membership`
     fn threshold<MEMBERSHIP: Membership<TYPES>>(

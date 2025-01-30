@@ -143,6 +143,7 @@ impl<TYPES: NodeType, V: Versions> ProposalDependencyHandle<TYPES, V> {
                         &self.upgrade_lock,
                     )
                     .await
+                    .is_ok()
                 {
                     return Some(qc.clone());
                 }

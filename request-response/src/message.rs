@@ -294,9 +294,8 @@ mod tests {
     use hotshot_types::signature_key::BLSPubKey;
     use rand::Rng;
 
-    use crate::request::Response;
-
     use super::*;
+    use crate::request::Response;
 
     // A testing implementation of the [`Serializable`] trait for [`Vec<u8>`]
     impl Serializable for Vec<u8> {

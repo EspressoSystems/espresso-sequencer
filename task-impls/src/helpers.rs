@@ -136,16 +136,20 @@ pub(crate) async fn fetch_proposal<TYPES: NodeType, V: Versions>(
     let membership_success_threshold = membership_reader.success_threshold(justify_qc_epoch);
     drop(membership_reader);
 
-    if !justify_qc
+    justify_qc
         .is_valid_cert(
             membership_stake_table,
             membership_success_threshold,
             upgrade_lock,
         )
         .await
-    {
-        bail!("Invalid justify_qc in proposal for view {}", *view_number);
-    }
+        .context(|e| {
+            warn!(
+                "Invalid justify_qc in proposal for view {}: {}",
+                *view_number, e
+            )
+        })?;
+
     let mut consensus_writer = consensus.write().await;
     let leaf = Leaf2::from_quorum_proposal(&proposal.data);
     let state = Arc::new(
@@ -763,17 +767,19 @@ pub(crate) async fn validate_proposal_view_and_certs<
                     membership_reader.success_threshold(timeout_cert_epoch);
                 drop(membership_reader);
 
-                ensure!(
-                    timeout_cert
-                        .is_valid_cert(
-                            membership_stake_table,
-                            membership_success_threshold,
-                            &validation_info.upgrade_lock
+                timeout_cert
+                    .is_valid_cert(
+                        membership_stake_table,
+                        membership_success_threshold,
+                        &validation_info.upgrade_lock,
+                    )
+                    .await
+                    .context(|e| {
+                        warn!(
+                            "Timeout certificate for view {} was invalid: {}",
+                            *view_number, e
                         )
-                        .await,
-                    "Timeout certificate for view {} was invalid",
-                    *view_number
-                );
+                    })?;
             }
             ViewChangeEvidence2::ViewSync(view_sync_cert) => {
                 ensure!(
@@ -792,16 +798,14 @@ pub(crate) async fn validate_proposal_view_and_certs<
                 drop(membership_reader);
 
                 // View sync certs must also be valid.
-                ensure!(
-                    view_sync_cert
-                        .is_valid_cert(
-                            membership_stake_table,
-                            membership_success_threshold,
-                            &validation_info.upgrade_lock
-                        )
-                        .await,
-                    "Invalid view sync finalize cert provided"
-                );
+                view_sync_cert
+                    .is_valid_cert(
+                        membership_stake_table,
+                        membership_success_threshold,
+                        &validation_info.upgrade_lock,
+                    )
+                    .await
+                    .context(|e| warn!("Invalid view sync finalize cert provided: {}", e))?;
             }
         }
     }

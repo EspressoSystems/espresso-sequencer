@@ -531,15 +531,13 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> QuorumVoteTaskS
                 drop(membership_reader);
 
                 // Validate the DAC.
-                ensure!(
-                    cert.is_valid_cert(
-                        membership_da_stake_table,
-                        membership_da_success_threshold,
-                        &self.upgrade_lock
-                    )
-                    .await,
-                    warn!("Invalid DAC")
-                );
+                cert.is_valid_cert(
+                    membership_da_stake_table,
+                    membership_da_success_threshold,
+                    &self.upgrade_lock,
+                )
+                .await
+                .context(|e| warn!("Invalid DAC: {}", e))?;
 
                 // Add to the storage.
                 self.consensus
