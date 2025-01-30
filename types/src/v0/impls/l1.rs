@@ -366,7 +366,7 @@ impl L1Client {
                     let chunks: Vec<&[u64]> = v.chunks(max_block_range as usize).collect();
                     let mut events: Vec<StakersUpdatedFilter> = Vec::new();
                     for chunk in chunks {
-                        if let [from, to] = &chunk[..] {
+                        if let [from, to] = chunk {
                             match stake_table_contract
                                 .stakers_updated_filter()
                                 .from_block(*from)
@@ -378,6 +378,7 @@ impl L1Client {
                                     for event in e {
                                         events.push(event)
                                     }
+                                    break;
                                 }
                                 Err(err) => {
                                     tracing::warn!(from, to, %err, "Stake Table L1Event Error");
@@ -843,47 +844,37 @@ impl L1Client {
         let opt = self.options();
         let retry_delay = opt.l1_retry_delay;
         let max_block_range = opt.l1_events_max_block_range;
-        dbg!(max_block_range);
         let mut lock = self.state.lock().await;
 
         if let Some(st) = lock.stake.get(&block) {
-            dbg!(&st);
             Some(st.clone())
         } else {
-            dbg!("else");
             let last_head = lock.snapshot.head;
-            dbg!(&last_head);
 
-            let v: Vec<u64> = (last_head..block).collect();
-            dbg!(&v);
-            let chunks: Vec<&[u64]> = v.chunks(max_block_range as usize).collect();
-            dbg!(&chunks);
+            let chunks = self.chunky2(last_head, block);
             let contract = PermissionedStakeTable::new(contract_address, self.provider.clone());
             // tracing::debug!(from, to, "fetch stake table events in range");
 
             let mut events: Vec<StakersUpdatedFilter> = Vec::new();
-            for chunk in chunks {
-                dbg!(&chunk);
-                if let [from, to] = chunk {
-                    dbg!(from, to);
-                    loop {
-                        match contract
-                            .stakers_updated_filter()
-                            .from_block(*from)
-                            .to_block(*to)
-                            .query()
-                            .await
-                        {
-                            Ok(e) => {
-                                for event in e {
-                                    events.push(event)
-                                }
-                                break;
+
+            for (from, to) in chunks {
+                loop {
+                    match contract
+                        .stakers_updated_filter()
+                        .from_block(from)
+                        .to_block(to)
+                        .query()
+                        .await
+                    {
+                        Ok(e) => {
+                            for event in e {
+                                events.push(event)
                             }
-                            Err(err) => {
-                                tracing::warn!(from, to, %err, "Stake Table L1Event Error");
-                                sleep(retry_delay).await;
-                            }
+                            break;
+                        }
+                        Err(err) => {
+                            tracing::warn!(from, to, %err, "Stake Table L1Event Error");
+                            sleep(retry_delay).await;
                         }
                     }
                 }
@@ -1345,44 +1336,10 @@ mod test {
         let chunks = l1_client.chunky(3, 10);
         let tups = stream::iter(chunks).collect::<Vec<_>>().await;
 
-        assert_eq![vec![(3, 5), (6, 8), (9, 11)], tups];
+        assert_eq![vec![(3, 5), (6, 8), (9, 10)], tups];
 
-        let chunks: Vec<u64> = (3..=10).collect();
-        let tups: Vec<(u64, u64)> = chunks
-            .chunks(3)
-            .map(|s| {
-                // should never be empty
-                s.first().cloned().zip(s.last().cloned()).unwrap()
-            })
-            .collect();
-
-        assert_eq![vec![(3, 5), (6, 8), (9, 11)], tups];
-    }
-
-    #[test]
-    fn test_chunky2() {
-        let v: Vec<u64> = (3..=11).collect();
-        let slices: Vec<(&u64, &u64)> = v
-            .rchunks(3)
-            .map(|s| {
-                let first = s.first().unwrap();
-                let last = s.last().unwrap();
-                (first, last) // might bet the same
-            })
-            .collect();
-        // let tups: (u64, u64) = slices
-        //     .iter()
-        //     .map(|s| {
-        //         let a = s.first().map(|a|{
-        //
-        //         });
-        //         let b = s.last();
-        //         (a, b)
-        //     })
-        //     .collect();
-        dbg!(&slices);
-        // assert_eq![vec![&[3, 4], &[5, 6], &[7, 8], &[9, 10]], slices[..4]];
-        // assert_eq![&[11], slices.last().unwrap()];
+        let tups = l1_client.chunky2(3, 10);
+        assert_eq![vec![(3, 5), (6, 8), (9, 10)], tups];
     }
 
     #[tokio::test]
