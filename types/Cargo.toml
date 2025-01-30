@@ -35,6 +35,7 @@ jf-merkle-tree = { workspace = true }
 jf-signature = { workspace = true }
 jf-utils = { workspace = true }                                                     # TODO temporary: used only for test_rng()
 jf-vid = { workspace = true }
+libp2p-networking = { workspace = true }
 lru = { workspace = true }
 num-traits = { workspace = true }
 paste = { workspace = true }
@@ -55,7 +56,6 @@ tokio = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
 vbs = { workspace = true }
-libp2p-networking = { workspace = true }
 
 [dev-dependencies]
 portpicker = { workspace = true }
