@@ -17,6 +17,7 @@ import { EdOnBN254 } from "../src/libraries/EdOnBn254.sol";
 import { AbstractStakeTable } from "../src/interfaces/AbstractStakeTable.sol";
 import { LightClient } from "../src/LightClient.sol";
 import { LightClientMock } from "../test/mocks/LightClientMock.sol";
+import { IPlonkVerifier as V } from "../src/interfaces/IPlonkVerifier.sol";
 
 // Token contract
 import { ExampleToken } from "../src/ExampleToken.sol";
@@ -30,6 +31,8 @@ contract StakeTable_register_Test is Test {
     LightClientMock public lcMock;
     uint256 public constant INITIAL_BALANCE = 10 ether;
     address public exampleTokenCreator;
+    uint64 public churnRate = 10;
+    uint64 public hotShotBlocksPerEpoch = 1;
 
     function genClientWallet(address sender, string memory seed)
         private
@@ -77,7 +80,12 @@ contract StakeTable_register_Test is Test {
 
         lcMock = new LightClientMock(genesis, genesisStakeTableState, 864000);
         address lightClientAddress = address(lcMock);
-        stakeTable = new S(address(token), lightClientAddress, 10);
+        stakeTable = new S(address(token), lightClientAddress, churnRate, hotShotBlocksPerEpoch);
+    }
+
+    function test_RevertWhen_InvalidHotShotBlocksPerEpoch() external {
+        vm.expectRevert(S.InvalidHotShotBlocksPerEpoch.selector);
+        new S(address(token), address(lcMock), churnRate, 0);
     }
 
     function testFuzz_RevertWhen_InvalidBLSSig(uint256 scalar) external {
@@ -744,5 +752,69 @@ contract StakeTable_register_Test is Test {
         vm.expectRevert(S.NodeNotRegistered.selector);
         stakeTable.withdrawFunds();
         vm.stopPrank();
+    }
+
+    // TESTS FOR CURRENT EPOCH
+    function test_initialEpoch_isZero() public {
+        // assert the current block height is initialBlockHeight
+        uint64 initialBlockHeight = 0;
+        (, uint64 currentBlockHeight,) = lcMock.finalizedState();
+        assertEq(currentBlockHeight, initialBlockHeight);
+
+        // Calculate the expected epoch
+        uint64 expectedEpoch = initialBlockHeight / hotShotBlocksPerEpoch;
+
+        // Call the currentEpoch function
+        uint64 currentEpoch = stakeTable.currentEpoch();
+
+        // Assert that the current epoch is calculated correctly
+        assertEq(currentEpoch, expectedEpoch);
+        assertEq(currentEpoch, 0);
+    }
+
+    function test_currentEpoch_isUpdated() public {
+        test_initialEpoch_isZero();
+
+        // set new finalized state on the light client contract
+        lcMock.setFinalizedState(LightClient.LightClientState(0, 10, BN254.ScalarField.wrap(0)));
+
+        // verify the current epoch is updated and is non-zero
+        assertNotEq(stakeTable.currentEpoch(), 0);
+
+        // verify the expected epoch
+        (, uint64 blockHeight,) = lcMock.finalizedState();
+        uint64 expectedEpoch = blockHeight / hotShotBlocksPerEpoch;
+        assertEq(stakeTable.currentEpoch(), expectedEpoch);
+    }
+
+    // test various edge cases for the currentEpoch
+    function test_currentEpoch_edgeCases() public {
+        // test edge case when the block height is less than the hotShotBlocksPerEpoch
+        uint64 hotShotBlockHeight = 0;
+        lcMock.setFinalizedState(
+            LightClient.LightClientState(0, hotShotBlockHeight, BN254.ScalarField.wrap(0))
+        );
+        assertEq(stakeTable.currentEpoch(), 0);
+
+        // test edge case when the block height is exactly divisible by the hotShotBlocksPerEpoch
+        hotShotBlockHeight = 1;
+        lcMock.setFinalizedState(
+            LightClient.LightClientState(0, hotShotBlockHeight, BN254.ScalarField.wrap(0))
+        );
+        assertEq(stakeTable.currentEpoch(), 1);
+
+        // test edge case when the block height is greater than the hotShotBlocksPerEpoch
+        hotShotBlockHeight = 2;
+        lcMock.setFinalizedState(
+            LightClient.LightClientState(0, hotShotBlockHeight, BN254.ScalarField.wrap(0))
+        );
+        assertEq(stakeTable.currentEpoch(), 2);
+
+        // test edge case when the block height is very large
+        hotShotBlockHeight = type(uint64).max;
+        lcMock.setFinalizedState(
+            LightClient.LightClientState(0, hotShotBlockHeight, BN254.ScalarField.wrap(0))
+        );
+        assertEq(stakeTable.currentEpoch(), hotShotBlockHeight / hotShotBlocksPerEpoch);
     }
 }

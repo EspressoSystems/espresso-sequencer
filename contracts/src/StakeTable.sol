@@ -64,6 +64,12 @@ contract StakeTable is AbstractStakeTable {
     // Error raised when zero point keys are provided
     error NoKeyChange();
 
+    // Error raised when the caller is not the admin
+    error Unauthorized();
+
+    // Error raised when the hotShotBlocksPerEpoch is zero
+    error InvalidHotShotBlocksPerEpoch();
+
     /// Mapping from a hash of a BLS key to a node struct defined in the abstract contract.
     mapping(address account => Node node) public nodes;
 
@@ -91,8 +97,16 @@ contract StakeTable is AbstractStakeTable {
     uint64 private _numPendingExits;
 
     uint64 public maxChurnRate;
+    uint64 public hotShotBlocksPerEpoch;
 
-    constructor(address _tokenAddress, address _lightClientAddress, uint64 churnRate) {
+    address public admin;
+
+    constructor(
+        address _tokenAddress,
+        address _lightClientAddress,
+        uint64 churnRate,
+        uint64 _hotShotBlocksPerEpoch
+    ) {
         tokenAddress = _tokenAddress;
         lightClient = LightClient(_lightClientAddress);
 
@@ -105,6 +119,14 @@ contract StakeTable is AbstractStakeTable {
         // It is not possible to exit during the first epoch.
         firstAvailableExitEpoch = 1;
         _numPendingExits = 0;
+
+        // Set the hotShotBlocksPerEpoch
+        if (_hotShotBlocksPerEpoch == 0) {
+            revert InvalidHotShotBlocksPerEpoch();
+        }
+        hotShotBlocksPerEpoch = _hotShotBlocksPerEpoch;
+
+        admin = msg.sender;
     }
 
     /// @dev Computes a hash value of some G2 point.
@@ -129,11 +151,17 @@ contract StakeTable is AbstractStakeTable {
             && BN254.BaseField.unwrap(a.y1) == BN254.BaseField.unwrap(b.y1);
     }
 
-    /// TODO handle this logic more appropriately when epochs are re-introduced
-    /// @dev Fetches the current epoch from the light client contract.
-    /// @return current epoch (computed from the current block)
-    function currentEpoch() public pure returns (uint64) {
-        return 0;
+    /// @dev Fetches the last hotshot block number from the light client contract to calculate the
+    /// epoch.
+    /// @return current epoch (computed from the last known hotshot block number)
+    function currentEpoch() public view returns (uint64) {
+        // get the last hotshot block number from the light client contract
+        (, uint64 lastHotshotBlockNumber,) = lightClient.finalizedState();
+
+        // calculate the epoch from the last hotshot block number
+        uint64 epoch = lastHotshotBlockNumber / hotShotBlocksPerEpoch;
+
+        return epoch;
     }
 
     /// @notice Look up the balance of `account`
