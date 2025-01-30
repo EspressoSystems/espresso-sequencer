@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["PRUNE_TABLES"],"fn":["build_sqlite_path","fetch_leaf_from_proposals","prune_to_view"],"struct":["ConsensusPruningOptions","Options","Persistence","PostgresOptions","PruningOptions","SqliteOptions"]};
