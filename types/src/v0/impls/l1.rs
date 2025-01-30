@@ -768,14 +768,17 @@ impl L1Client {
 
     /// Divide the range `start..=end` into chunks of size
     /// `events_max_block_range`.
-    fn chunky2(start: u64, end: u64, max_block_range: u64) -> Option<Vec<(u64, u64)>> {
-        let v: Vec<u64> = (3..10).collect();
-        let slices: Vec<&[u64]> = v.chunks(2).collect();
-        let tups: Vec<(u64, u64)> = slices
-            .into_iter()
-            .map(|s| s.iter().cloned().collect_tuple::<(u64, u64)>().unwrap())
+    fn chunky2(&self, start: u64, end: u64) -> Vec<(u64, u64)> {
+        let chunks: Vec<u64> = (start..=end).collect();
+        let tups: Vec<(u64, u64)> = chunks
+            .chunks(3)
+            .map(|s| {
+                // should never be empty
+                s.first().cloned().zip(s.last().cloned()).unwrap()
+            })
             .collect();
-        Some(tups)
+
+        tups
     }
 
     /// Get fee info for each `Deposit` occurring between `prev`
@@ -840,41 +843,52 @@ impl L1Client {
         let opt = self.options();
         let retry_delay = opt.l1_retry_delay;
         let max_block_range = opt.l1_events_max_block_range;
+        dbg!(max_block_range);
+        let mut lock = self.state.lock().await;
 
-        if let Some(st) = self.state.lock().await.stake.get(&block) {
+        if let Some(st) = lock.stake.get(&block) {
+            dbg!(&st);
             Some(st.clone())
         } else {
-            let last_head = self.state.lock().await.snapshot.head;
-            let chunks = self.chunky(last_head, block);
-            None
-            // // Fetch events for each chunk.
-            // let events = stream::iter(chunks).then(|(from, to)| {
-            //     async move {
-            //         let contract =
-            //             PermissionedStakeTable::new(contract_address, self.provider.clone());
-            //         tracing::debug!(from, to, "fetch stake table events in range");
+            dbg!("else");
+            let last_head = lock.snapshot.head;
+            dbg!(&last_head);
 
-            //         // query for deposit events, loop until successful.
-            //         loop {
-            //             match contract
-            //                 .stakers_updated_filter()
-            //                 .from_block(from)
-            //                 .to_block(to)
-            //                 .query()
-            //                 .await
-            //             {
-            //                 Ok(events) => break stream::iter(events),
-            //                 Err(err) => {
-            //                     tracing::warn!(from, to, %err, "Stake Table L1Event Error");
-            //                     sleep(retry_delay).await;
-            //                 }
-            //             }
-            //         }
-            //     }
-            // });
-            // Some(StakeTables::from_l1_events(
-            //     events.flatten().collect().await,
-            // ))
+            let v: Vec<u64> = (last_head..block).collect();
+            dbg!(&v);
+            let chunks: Vec<&[u64]> = v.chunks(max_block_range as usize).collect();
+            dbg!(&chunks);
+            let contract = PermissionedStakeTable::new(contract_address, self.provider.clone());
+            // tracing::debug!(from, to, "fetch stake table events in range");
+
+            let mut events: Vec<StakersUpdatedFilter> = Vec::new();
+            for chunk in chunks {
+                dbg!(&chunk);
+                if let [from, to] = chunk {
+                    dbg!(from, to);
+                    loop {
+                        match contract
+                            .stakers_updated_filter()
+                            .from_block(*from)
+                            .to_block(*to)
+                            .query()
+                            .await
+                        {
+                            Ok(e) => {
+                                for event in e {
+                                    events.push(event)
+                                }
+                                break;
+                            }
+                            Err(err) => {
+                                tracing::warn!(from, to, %err, "Stake Table L1Event Error");
+                                sleep(retry_delay).await;
+                            }
+                        }
+                    }
+                }
+            }
+            Some(StakeTables::from_l1_events(events))
         }
     }
 
@@ -1323,31 +1337,52 @@ mod test {
     async fn test_chunky() {
         let anvil = Anvil::new().spawn();
         let opt = L1ClientOptions {
-            l1_events_max_block_range: 2,
+            l1_events_max_block_range: 3,
             ..Default::default()
         };
         let l1_client = opt.connect(vec![anvil.endpoint().parse().unwrap()]);
+
         let chunks = l1_client.chunky(3, 10);
-        let v = stream::iter(chunks).collect::<Vec<_>>().await;
+        let tups = stream::iter(chunks).collect::<Vec<_>>().await;
 
-        assert_eq![vec![(3, 4), (5, 6), (7, 8), (9, 10)], v];
+        assert_eq![vec![(3, 5), (6, 8), (9, 11)], tups];
 
-        let v: Vec<u64> = (3..10).collect();
-        let slices: Vec<&[u64]> = v.chunks(2).collect();
-        let tups: Vec<(u64, u64)> = slices
-            .into_iter()
-            .map(|s| s.iter().cloned().collect_tuple::<(u64, u64)>().unwrap())
+        let chunks: Vec<u64> = (3..=10).collect();
+        let tups: Vec<(u64, u64)> = chunks
+            .chunks(3)
+            .map(|s| {
+                // should never be empty
+                s.first().cloned().zip(s.last().cloned()).unwrap()
+            })
             .collect();
 
-        assert_eq![vec![(3, 4), (5, 6), (7, 8), (9, 10)], tups];
+        assert_eq![vec![(3, 5), (6, 8), (9, 11)], tups];
     }
 
     #[test]
     fn test_chunky2() {
-        let v: Vec<u64> = (3..10).collect();
-        let slices: Vec<&[u64]> = v.chunks(2).collect();
-
-        assert_eq![vec![&[3, 4], &[5, 6], &[7, 8], &[9, 10]], slices];
+        let v: Vec<u64> = (3..=11).collect();
+        let slices: Vec<(&u64, &u64)> = v
+            .rchunks(3)
+            .map(|s| {
+                let first = s.first().unwrap();
+                let last = s.last().unwrap();
+                (first, last) // might bet the same
+            })
+            .collect();
+        // let tups: (u64, u64) = slices
+        //     .iter()
+        //     .map(|s| {
+        //         let a = s.first().map(|a|{
+        //
+        //         });
+        //         let b = s.last();
+        //         (a, b)
+        //     })
+        //     .collect();
+        dbg!(&slices);
+        // assert_eq![vec![&[3, 4], &[5, 6], &[7, 8], &[9, 10]], slices[..4]];
+        // assert_eq![&[11], slices.last().unwrap()];
     }
 
     #[tokio::test]
@@ -1355,7 +1390,7 @@ mod test {
         setup_test();
 
         let anvil = Anvil::new().spawn();
-        let l1_client = L1Client::new(anvil.endpoint().parse().unwrap());
+        let l1_client = new_l1_client(&anvil, false).await;
         let wallet: LocalWallet = anvil.keys()[0].clone().into();
 
         // In order to deposit we need a provider that can sign.
