@@ -10,7 +10,7 @@ use hotshot::traits::ValidatedState as _;
 use hotshot_query_service::{
     availability::LeafId,
     data_source::{
-        sql::{Config, SqlDataSource, Transaction},
+        sql::{Config, LeafOnlySqlDataSource, SqlDataSource, Transaction},
         storage::{
             sql::{query_as, Db, TransactionMode, Write},
             AvailabilityStorage, MerklizedStateStorage, NodeStorage, SqlStorage,
@@ -73,6 +73,21 @@ impl SequencerDataSource for DataSource {
         }
 
         builder.build().await
+    }
+}
+
+#[async_trait]
+impl SequencerDataSource for LeafOnlySqlDataSource<SeqTypes> {
+    type Options = Options;
+
+    async fn create(opt: Self::Options, _provider: Provider, reset: bool) -> anyhow::Result<Self> {
+        let mut cfg = Config::try_from(&opt)?;
+
+        if reset {
+            cfg = cfg.reset_schema();
+        }
+
+        LeafOnlySqlDataSource::build(cfg).await
     }
 }
 
@@ -157,6 +172,36 @@ impl CatchupStorage for SqlStorage {
 }
 
 impl CatchupStorage for DataSource {
+    async fn get_accounts(
+        &self,
+        instance: &NodeState,
+        height: u64,
+        view: ViewNumber,
+        accounts: &[FeeAccount],
+    ) -> anyhow::Result<(FeeMerkleTree, Leaf2)> {
+        self.as_ref()
+            .get_accounts(instance, height, view, accounts)
+            .await
+    }
+
+    async fn get_frontier(
+        &self,
+        instance: &NodeState,
+        height: u64,
+        view: ViewNumber,
+    ) -> anyhow::Result<BlocksFrontier> {
+        self.as_ref().get_frontier(instance, height, view).await
+    }
+
+    async fn get_chain_config(
+        &self,
+        commitment: Commitment<ChainConfig>,
+    ) -> anyhow::Result<ChainConfig> {
+        self.as_ref().get_chain_config(commitment).await
+    }
+}
+
+impl CatchupStorage for LeafOnlySqlDataSource<SeqTypes> {
     async fn get_accounts(
         &self,
         instance: &NodeState,

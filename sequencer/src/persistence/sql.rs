@@ -7,7 +7,7 @@ use derive_more::derive::{From, Into};
 use espresso_types::{
     downgrade_commitment_map, downgrade_leaf, parse_duration, upgrade_commitment_map,
     v0::traits::{EventConsumer, PersistenceOptions, SequencerPersistence, StateCatchup},
-    BackoffParams, Leaf, Leaf2, NetworkConfig, Payload,
+    BackoffParams, BlockMerkleTree, FeeMerkleTree, Leaf, Leaf2, NetworkConfig, Payload,
 };
 use futures::stream::StreamExt;
 use hotshot_query_service::{
@@ -26,6 +26,7 @@ use hotshot_query_service::{
         request::{LeafRequest, PayloadRequest, VidCommonRequest},
         Provider,
     },
+    merklized_state::MerklizedState,
 };
 use hotshot_types::{
     consensus::CommitmentMap,
@@ -181,6 +182,10 @@ pub struct Options {
     /// fetching from peers.
     #[clap(long, env = "ESPRESSO_SEQUENCER_ARCHIVE", conflicts_with = "prune")]
     pub(crate) archive: bool,
+
+    /// TODO:
+    #[clap(long, env = "ESPRESSO_SEQUENCER_LIGHTWEIGHT")]
+    pub(crate) lightweight: bool,
 
     /// The maximum idle time of a database connection.
     ///
@@ -467,6 +472,11 @@ impl From<PruningOptions> for PrunerCfg {
         if let Some(interval) = opt.interval {
             cfg = cfg.with_interval(interval);
         }
+
+        cfg = cfg.with_state_tables(vec![
+            BlockMerkleTree::state_type().to_string(),
+            FeeMerkleTree::state_type().to_string(),
+        ]);
 
         cfg
     }

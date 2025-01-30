@@ -250,8 +250,6 @@ impl<S: TestableSequencerDataSource> TestNode<S> {
         let storage = S::create_storage().await;
         let mut modules = Modules {
             http: Some(api::options::Http::with_port(node.api_port)),
-            status: Some(Default::default()),
-            catchup: Some(Default::default()),
             ..Default::default()
         };
         if node.is_da {
@@ -262,7 +260,6 @@ impl<S: TestableSequencerDataSource> TestNode<S> {
                     .map(|port| format!("http://127.0.0.1:{port}").parse().unwrap())
                     .collect(),
             });
-            modules.state = Some(Default::default());
         }
 
         let mut opt = Options::parse_from([
