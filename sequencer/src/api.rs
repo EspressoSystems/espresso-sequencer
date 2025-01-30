@@ -562,6 +562,7 @@ pub mod test_helpers {
         api_config: Options,
     }
 
+    #[derive(Clone)]
     pub struct TestNetworkConfigBuilder<const NUM_NODES: usize, P, C>
     where
         P: PersistenceOptions,
@@ -599,6 +600,19 @@ pub mod test_helpers {
                 network_config: None,
                 api_config: None,
             }
+        }
+
+        pub fn with_max_block_size(&self, max_block_size: u64) -> Self {
+            let cf = ChainConfig {
+                max_block_size: max_block_size.into(),
+                ..Default::default()
+            }
+            .into();
+
+            let mut cfg = self.clone();
+            cfg.state.iter_mut().for_each(|s| s.chain_config = cf);
+
+            cfg
         }
     }
 
