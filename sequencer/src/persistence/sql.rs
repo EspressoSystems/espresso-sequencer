@@ -1362,8 +1362,7 @@ impl DhtPersistentStorage for Persistence {
             bincode::serialize(&records).with_context(|| "failed to serialize records")?;
 
         // Prepare the statement
-        let stmt =
-            format!("INSERT OR REPLACE INTO libp2p_dht (id, serialized_records) VALUES (0, $1)");
+        let stmt = "INSERT OR REPLACE INTO libp2p_dht (id, serialized_records) VALUES (0, $1)";
 
         // Execute the query
         let mut tx = self
@@ -1371,7 +1370,7 @@ impl DhtPersistentStorage for Persistence {
             .write()
             .await
             .with_context(|| "failed to start an atomic DB transaction")?;
-        tx.execute(query(&stmt).bind(to_save))
+        tx.execute(query(stmt).bind(to_save))
             .await
             .with_context(|| "failed to execute DB query")?;
 

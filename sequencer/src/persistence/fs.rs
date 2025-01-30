@@ -914,7 +914,7 @@ impl DhtPersistentStorage for Persistence {
             bincode::serialize(&records).with_context(|| "Failed to serialize records")?;
 
         // Write the serialized records to the file
-        std::fs::write(&self.inner.read().await.libp2p_dht_path(), to_save)
+        std::fs::write(self.inner.read().await.libp2p_dht_path(), to_save)
             .with_context(|| "Failed to write records to file")?;
 
         Ok(())
@@ -927,7 +927,7 @@ impl DhtPersistentStorage for Persistence {
     /// - If we fail to deserialize the records
     async fn load(&self) -> anyhow::Result<Vec<SerializableRecord>> {
         // Read the contents of the file
-        let contents = std::fs::read(&self.inner.read().await.libp2p_dht_path())
+        let contents = std::fs::read(self.inner.read().await.libp2p_dht_path())
             .with_context(|| "Failed to read records from file")?;
 
         // Deserialize the contents
