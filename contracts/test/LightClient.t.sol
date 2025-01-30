@@ -1064,10 +1064,11 @@ contract LightClient_HotShotCommUpdatesTest is LightClientCommonTest {
         assertEqBN254(hotShotBlockComm, newState.blockCommRoot);
         assertEq(hotShotBlockHeight, newState.blockHeight);
 
-        // Test for max hotShotBlockHeight stored on contract
+        // Test for max hotShotBlockHeight stored on contract that is available (max
+        // hotshotBlockHeight -1)
         // Get the highest HotShot blockheight recorded
         uint256 numCommitments = lc.getStateHistoryCount();
-        (,, hotShotBlockHeight, hotShotBlockComm) = lc.stateHistoryCommitments(numCommitments - 1);
+        (,, hotShotBlockHeight, hotShotBlockComm) = lc.stateHistoryCommitments(numCommitments - 2);
         (BN254.ScalarField blockComm, uint64 blockHeight) =
             lc.getHotShotCommitment(hotShotBlockHeight);
         assertEqBN254(hotShotBlockComm, blockComm);
