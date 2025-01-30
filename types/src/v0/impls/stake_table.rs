@@ -137,10 +137,16 @@ struct Committee {
     /// leader but without voting rights.
     eligible_leaders: Vec<StakeTableEntry<PubKey>>,
 
-    /// TODO: add comment
+    /// Stake table
+    stake_table: Vec<StakeTableEntry<PubKey>>,
+
+    /// DA members
+    da_members: Vec<StakeTableEntry<PubKey>>,
+
+    /// Stake table indexed by public key, for efficient lookup.
     indexed_stake_table: BTreeMap<PubKey, StakeTableEntry<PubKey>>,
 
-    /// TODO: comment
+    /// DA members indexed by public key, for efficient lookup.
     indexed_da_members: BTreeMap<PubKey, StakeTableEntry<PubKey>>,
 }
 
@@ -154,6 +160,10 @@ impl EpochCommittees {
         // This works because `get_stake_table` is fetching *all*
         // update events and building the table for us. We will need
         // more subtlety when start fetching only the events since last update.
+
+        let stake_table = st.stake_table.0.clone();
+
+        let da_members = st.da_members.0.clone();
 
         let indexed_stake_table: BTreeMap<PubKey, _> = st
             .stake_table
@@ -178,6 +188,8 @@ impl EpochCommittees {
 
         let committee = Committee {
             eligible_leaders,
+            stake_table,
+            da_members,
             indexed_stake_table,
             indexed_da_members,
         };
@@ -202,7 +214,7 @@ impl EpochCommittees {
             .collect();
 
         // For each member, get the stake table entry
-        let members: Vec<_> = committee_members
+        let stake_table: Vec<_> = committee_members
             .iter()
             .map(|member| member.stake_table_entry.clone())
             .filter(|entry| entry.stake() > U256::zero())
@@ -216,7 +228,7 @@ impl EpochCommittees {
             .collect();
 
         // Index the stake table by public key
-        let indexed_stake_table: BTreeMap<PubKey, _> = members
+        let indexed_stake_table: BTreeMap<PubKey, _> = stake_table
             .iter()
             .map(|entry| (PubKey::public_key(entry), entry.clone()))
             .collect();
@@ -229,6 +241,8 @@ impl EpochCommittees {
 
         let members = Committee {
             eligible_leaders,
+            stake_table,
+            da_members,
             indexed_stake_table,
             indexed_da_members,
         };
@@ -270,7 +284,7 @@ impl Membership<SeqTypes> for EpochCommittees {
             .collect();
 
         // For each member, get the stake table entry
-        let members: Vec<_> = committee_members
+        let stake_table: Vec<_> = committee_members
             .iter()
             .map(|member| member.stake_table_entry.clone())
             .filter(|entry| entry.stake() > U256::zero())
@@ -284,7 +298,7 @@ impl Membership<SeqTypes> for EpochCommittees {
             .collect();
 
         // Index the stake table by public key
-        let indexed_stake_table: BTreeMap<PubKey, _> = members
+        let indexed_stake_table: BTreeMap<PubKey, _> = stake_table
             .iter()
             .map(|entry| (PubKey::public_key(entry), entry.clone()))
             .collect();
@@ -297,6 +311,8 @@ impl Membership<SeqTypes> for EpochCommittees {
 
         let members = Committee {
             eligible_leaders,
+            stake_table,
+            da_members,
             indexed_stake_table,
             indexed_da_members,
         };
@@ -317,7 +333,7 @@ impl Membership<SeqTypes> for EpochCommittees {
     /// Get the stake table for the current view
     fn stake_table(&self, epoch: Epoch) -> Vec<StakeTableEntry<PubKey>> {
         if let Some(st) = self.state.get(&epoch) {
-            st.indexed_stake_table.clone().into_values().collect()
+            st.stake_table.clone()
         } else {
             vec![]
         }
@@ -325,7 +341,7 @@ impl Membership<SeqTypes> for EpochCommittees {
     /// Get the stake table for the current view
     fn da_stake_table(&self, epoch: Epoch) -> Vec<StakeTableEntry<PubKey>> {
         if let Some(sc) = self.state.get(&epoch) {
-            sc.indexed_da_members.clone().into_values().collect()
+            sc.da_members.clone()
         } else {
             vec![]
         }
@@ -426,7 +442,7 @@ impl Membership<SeqTypes> for EpochCommittees {
     fn total_nodes(&self, epoch: Epoch) -> usize {
         self.state
             .get(&epoch)
-            .map(|sc| sc.indexed_stake_table.len())
+            .map(|sc| sc.stake_table.len())
             .unwrap_or_default()
     }
 
@@ -434,36 +450,36 @@ impl Membership<SeqTypes> for EpochCommittees {
     fn da_total_nodes(&self, epoch: Epoch) -> usize {
         self.state
             .get(&epoch)
-            .map(|sc: &Committee| sc.indexed_da_members.len())
+            .map(|sc: &Committee| sc.da_members.len())
             .unwrap_or_default()
     }
 
     /// Get the voting success threshold for the committee
     fn success_threshold(&self, epoch: Epoch) -> NonZeroU64 {
-        let quorum = self.state.get(&epoch).unwrap().indexed_stake_table.clone();
-        NonZeroU64::new(((quorum.len() as u64 * 2) / 3) + 1).unwrap()
+        let quorum_len = self.state.get(&epoch).unwrap().stake_table.len();
+        NonZeroU64::new(((quorum_len as u64 * 2) / 3) + 1).unwrap()
     }
 
     /// Get the voting success threshold for the committee
     fn da_success_threshold(&self, epoch: Epoch) -> NonZeroU64 {
-        let da = self.state.get(&epoch).unwrap().indexed_da_members.clone();
-        NonZeroU64::new(((da.len() as u64 * 2) / 3) + 1).unwrap()
+        let da_len = self.state.get(&epoch).unwrap().da_members.len();
+        NonZeroU64::new(((da_len as u64 * 2) / 3) + 1).unwrap()
     }
 
     /// Get the voting failure threshold for the committee
     fn failure_threshold(&self, epoch: Epoch) -> NonZeroU64 {
-        let quorum = self.state.get(&epoch).unwrap().indexed_stake_table.clone();
+        let quorum_len = self.state.get(&epoch).unwrap().stake_table.len();
 
-        NonZeroU64::new(((quorum.len() as u64) / 3) + 1).unwrap()
+        NonZeroU64::new(((quorum_len as u64) / 3) + 1).unwrap()
     }
 
     /// Get the voting upgrade threshold for the committee
     fn upgrade_threshold(&self, epoch: Epoch) -> NonZeroU64 {
-        let quorum = self.state.get(&epoch).unwrap().indexed_stake_table.clone();
+        let quorum_len = self.state.get(&epoch).unwrap().indexed_stake_table.len();
 
         NonZeroU64::new(max(
-            (quorum.len() as u64 * 9) / 10,
-            ((quorum.len() as u64 * 2) / 3) + 1,
+            (quorum_len as u64 * 9) / 10,
+            ((quorum_len as u64 * 2) / 3) + 1,
         ))
         .unwrap()
     }
