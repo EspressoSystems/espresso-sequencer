@@ -24,9 +24,10 @@ import { ExampleToken } from "../src/ExampleToken.sol";
 
 // Target contract
 import { StakeTable as S } from "../src/StakeTable.sol";
+import { StakeTableMock } from "../test/mocks/StakeTableMock.sol";
 
 contract StakeTable_register_Test is Test {
-    S public stakeTable;
+    StakeTableMock public stakeTable;
     ExampleToken public token;
     LightClientMock public lcMock;
     uint256 public constant INITIAL_BALANCE = 10 ether;
@@ -80,12 +81,13 @@ contract StakeTable_register_Test is Test {
 
         lcMock = new LightClientMock(genesis, genesisStakeTableState, 864000);
         address lightClientAddress = address(lcMock);
-        stakeTable = new S(address(token), lightClientAddress, churnRate, hotShotBlocksPerEpoch);
+        stakeTable =
+            new StakeTableMock(address(token), lightClientAddress, churnRate, hotShotBlocksPerEpoch);
     }
 
     function test_RevertWhen_InvalidHotShotBlocksPerEpoch() external {
         vm.expectRevert(S.InvalidHotShotBlocksPerEpoch.selector);
-        new S(address(token), address(lcMock), churnRate, 0);
+        new StakeTableMock(address(token), address(lcMock), churnRate, 0);
     }
 
     function testFuzz_RevertWhen_InvalidBLSSig(uint256 scalar) external {
@@ -816,5 +818,130 @@ contract StakeTable_register_Test is Test {
             LightClient.LightClientState(0, hotShotBlockHeight, BN254.ScalarField.wrap(0))
         );
         assertEq(stakeTable.currentEpoch(), hotShotBlockHeight / hotShotBlocksPerEpoch);
+    }
+
+    // TESTS FOR NEXT REGISTRATION EPOCH
+
+    /// @notice test the next available epoch (registration/exit) when the current epoch is zero
+    function test_nextAvailableEpoch_whenCurrentEpochIsZero() public {
+        // test for registration
+        // check that the current epoch is zero
+        assertEq(stakeTable.currentEpoch(), 0);
+
+        // check that the first registration epoch is equal to one
+        assertEq(stakeTable.firstAvailableRegistrationEpoch(), 1);
+
+        // assert that the next registration epoch is equal to the first available registration
+        // epoch
+        (uint64 epoch, uint64 queueSize) =
+            stakeTable.nextAvailableEpoch(stakeTable.firstAvailableRegistrationEpoch(), 0);
+        assertEq(epoch, 1);
+        assertEq(queueSize, 0);
+
+        // test for exit
+        // assert that the next exit epoch is equal to the first available exit epoch
+        assertEq(stakeTable.firstAvailableExitEpoch(), 1);
+        (epoch, queueSize) = stakeTable.nextAvailableEpoch(stakeTable.firstAvailableExitEpoch(), 0);
+        assertEq(epoch, 1);
+        assertEq(queueSize, 0);
+    }
+
+    /// @notice test the next available epoch (registration/exit) when the current epoch + 1
+    /// is greater than the first available registration/exit epoch
+    function test_nextAvailableEpoch_whenCurrentEpochPlusOneIsGreaterThanFirstAvailableRegistrationEpoch(
+    ) public {
+        // test for registration
+        // set the current epoch to 1 by updating the latest hotshot block number on the LC contract
+        lcMock.setFinalizedState(LightClient.LightClientState(0, 1, BN254.ScalarField.wrap(0)));
+        assertEq(stakeTable.currentEpoch(), 1);
+
+        // assert that the firstAvailableRegistrationEpoch is 1
+        assertEq(stakeTable.firstAvailableRegistrationEpoch(), 1);
+
+        // assert that the next registration epoch is equal to stakeTable.currentEpoch() + 1
+        (uint64 epoch, uint64 queueSize) =
+            stakeTable.nextAvailableEpoch(stakeTable.firstAvailableRegistrationEpoch(), 0);
+        assertEq(epoch, stakeTable.currentEpoch() + 1);
+        assertEq(queueSize, 0);
+
+        // test for exit
+        // set the first available exit epoch to 2
+        uint64 firstAvailableExitEpoch = 2;
+        stakeTable.setFirstAvailableExitEpoch(firstAvailableExitEpoch);
+
+        // assert that the next exit epoch is equal to 2
+        (epoch, queueSize) = stakeTable.nextAvailableEpoch(firstAvailableExitEpoch, 0);
+        assertEq(epoch, firstAvailableExitEpoch);
+        assertEq(queueSize, 0);
+    }
+
+    /// @notice test nextAvailableEpoch when firstAvailableEpoch (registration/exit) is greater than
+    /// currentEpoch + 1
+    function test_nextAvailableEpoch_whenFirstAvailableEpochIsGreaterThanCurrentEpochPlusOne()
+        public
+    {
+        // test for registration
+        // set the current epoch to 1 by updating the latest hotshot block number on the LC contract
+        lcMock.setFinalizedState(LightClient.LightClientState(0, 1, BN254.ScalarField.wrap(0)));
+        assertEq(stakeTable.currentEpoch(), 1);
+
+        // set the first available registration epoch to 3
+        uint64 firstAvailableRegistrationEpoch = 3;
+        stakeTable.setFirstAvailableRegistrationEpoch(firstAvailableRegistrationEpoch);
+
+        // assert that the next registration epoch is equal to 3
+        (uint64 epoch, uint64 queueSize) =
+            stakeTable.nextAvailableEpoch(firstAvailableRegistrationEpoch, 0);
+        assertEq(epoch, firstAvailableRegistrationEpoch);
+        assertEq(queueSize, 0);
+
+        // set the first available registration epoch to max uint64
+        firstAvailableRegistrationEpoch = type(uint64).max;
+        stakeTable.setFirstAvailableRegistrationEpoch(firstAvailableRegistrationEpoch);
+
+        // assert that the next registration epoch is equal to max uint64
+        (epoch, queueSize) = stakeTable.nextAvailableEpoch(firstAvailableRegistrationEpoch, 0);
+        assertEq(epoch, firstAvailableRegistrationEpoch);
+        assertEq(queueSize, 0);
+
+        // test for exit
+        // set the first available exit epoch to 3
+        uint64 firstAvailableExitEpoch = 3;
+        stakeTable.setFirstAvailableExitEpoch(firstAvailableExitEpoch);
+
+        // assert that the next exit epoch is equal to 3
+        (epoch, queueSize) = stakeTable.nextAvailableEpoch(firstAvailableExitEpoch, 0);
+        assertEq(epoch, firstAvailableExitEpoch);
+        assertEq(queueSize, 0);
+    }
+
+    /// @notice test nextAvailableEpoch when the current epoch + 1 is equal to the first available
+    /// registration/exit epoch
+    function test_nextAvailableEpoch_whenCurrentEpochPlusOneIsEqualToFirstAvailableRegistrationEpoch(
+    ) public {
+        // test for registration
+        // set the current epoch to 1 by updating the latest hotshot block number on the LC contract
+        lcMock.setFinalizedState(LightClient.LightClientState(0, 1, BN254.ScalarField.wrap(0)));
+        assertEq(stakeTable.currentEpoch(), 1);
+
+        // set the first available registration epoch to 2
+        uint64 firstAvailableRegistrationEpoch = 2;
+        stakeTable.setFirstAvailableRegistrationEpoch(firstAvailableRegistrationEpoch);
+
+        // assert that the next registration epoch is equal to 2
+        (uint64 epoch, uint64 queueSize) =
+            stakeTable.nextAvailableEpoch(firstAvailableRegistrationEpoch, 0);
+        assertEq(epoch, firstAvailableRegistrationEpoch);
+        assertEq(queueSize, 0);
+
+        // test for exit
+        // set the first available exit epoch to 2
+        uint64 firstAvailableExitEpoch = 2;
+        stakeTable.setFirstAvailableExitEpoch(firstAvailableExitEpoch);
+
+        // assert that the next exit epoch is equal to 2
+        (epoch, queueSize) = stakeTable.nextAvailableEpoch(firstAvailableExitEpoch, 0);
+        assertEq(epoch, firstAvailableExitEpoch);
+        assertEq(queueSize, 0);
     }
 }

@@ -82,14 +82,16 @@ contract StakeTable is AbstractStakeTable {
     /// Reference to the light client contract.
     LightClient public lightClient;
 
-    /// @notice the first available epoch for registration, please use `nextRegistrationEpoch()` to
+    /// @notice the first available epoch for registration, please use
+    /// `nextAvailableEpoch(firstAvailableRegistrationEpoch, _numPendingRegistrations)` to
     /// get the correct epoch
     uint64 public firstAvailableRegistrationEpoch;
     /// @notice number of pending registrations in the `firstAvailableRegistrationEpoch` (not the
     /// total pending queue size!)
     uint64 private _numPendingRegistrations;
 
-    /// @notice the first available epoch for exit, please use `nextExitEpoch()` to get the correct
+    /// @notice the first available epoch for exit, please use
+    /// `nextAvailableEpoch(firstAvailableExitEpoch, _numPendingExits)` to get the correct
     /// epoch
     uint64 public firstAvailableExitEpoch;
     /// @notice number of pending exits in the `firstAvailableExitEpoch` (not the total pending
@@ -164,6 +166,34 @@ contract StakeTable is AbstractStakeTable {
         return epoch;
     }
 
+    /// @notice get the next available epoch based and queue size
+    /// @param firstAvailableEpoch The first available epoch (for registration or exit)
+    /// @param numPending The number of pending exits or registrations
+    /// @return epoch The next available epoch
+    /// @return queueSize The size of the queue in that epoch
+    /// TODO handle overflow when max uint64 is reached
+    function nextAvailableEpoch(uint64 firstAvailableEpoch, uint64 numPending)
+        external
+        view
+        override
+        returns (uint64, uint64)
+    {
+        uint64 epoch;
+        uint64 queueSize;
+
+        if (firstAvailableEpoch < currentEpoch() + 1) {
+            epoch = currentEpoch() + 1;
+            queueSize = 0;
+        } else if (numPending >= maxChurnRate) {
+            epoch = firstAvailableEpoch + 1;
+            queueSize = 0;
+        } else {
+            epoch = firstAvailableEpoch;
+            queueSize = numPending;
+        }
+        return (epoch, queueSize);
+    }
+
     /// @notice Look up the balance of `account`
     /// @param account account controlled by the user.
     /// @return Current balance owned by the user.
@@ -176,25 +206,6 @@ contract StakeTable is AbstractStakeTable {
     /// @return Node indexed by account
     function lookupNode(address account) external view override returns (Node memory) {
         return nodes[account];
-    }
-
-    /// @notice Get the next available epoch and queue size in that epoch
-    /// TODO modify this according to the current spec
-    function nextRegistrationEpoch() external view override returns (uint64, uint64) {
-        uint64 epoch;
-        uint64 queueSize;
-
-        if (firstAvailableRegistrationEpoch < currentEpoch() + 1) {
-            epoch = currentEpoch() + 1;
-            queueSize = 0;
-        } else if (_numPendingRegistrations >= maxChurnRate) {
-            epoch = firstAvailableRegistrationEpoch + 1;
-            queueSize = 0;
-        } else {
-            epoch = firstAvailableRegistrationEpoch;
-            queueSize = _numPendingRegistrations;
-        }
-        return (epoch, queueSize);
     }
 
     // @notice Update the registration queue
@@ -211,25 +222,6 @@ contract StakeTable is AbstractStakeTable {
     /// TODO modify this according to the current spec
     function numPendingRegistrations() external view override returns (uint64) {
         return _numPendingRegistrations;
-    }
-
-    /// @notice Get the next available epoch for exit and queue size in that epoch
-    /// TODO modify this according to the current spec
-    function nextExitEpoch() external view override returns (uint64, uint64) {
-        uint64 epoch;
-        uint64 queueSize;
-
-        if (firstAvailableExitEpoch < currentEpoch() + 1) {
-            epoch = currentEpoch() + 1;
-            queueSize = 0;
-        } else if (_numPendingExits >= maxChurnRate) {
-            epoch = firstAvailableExitEpoch + 1;
-            queueSize = 0;
-        } else {
-            epoch = firstAvailableExitEpoch;
-            queueSize = _numPendingExits;
-        }
-        return (epoch, queueSize);
     }
 
     // @notice Update the exit queue
@@ -351,7 +343,8 @@ contract StakeTable is AbstractStakeTable {
         // currentEpoch() + 1 (the start of the next full epoch), but in periods of high churn the
         // queue may fill up and it may be later. If the queue is so full that the wait time exceeds
         // the caller's desired maximum wait, abort.
-        (uint64 registerEpoch, uint64 queueSize) = this.nextRegistrationEpoch();
+        (uint64 registerEpoch, uint64 queueSize) =
+            this.nextAvailableEpoch(firstAvailableRegistrationEpoch, _numPendingRegistrations);
         if (registerEpoch > validUntilEpoch) {
             revert InvalidNextRegistrationEpoch(registerEpoch, validUntilEpoch);
         }
@@ -445,7 +438,8 @@ contract StakeTable is AbstractStakeTable {
         }
 
         // Prepare the node to exit.
-        (uint64 exitEpoch, uint64 queueSize) = this.nextExitEpoch();
+        (uint64 exitEpoch, uint64 queueSize) =
+            this.nextAvailableEpoch(firstAvailableExitEpoch, _numPendingExits);
         nodes[msg.sender].exitEpoch = exitEpoch;
 
         appendExitQueue(exitEpoch, queueSize);
