@@ -32,7 +32,7 @@ use std::time::Duration;
 use tokio::{
     spawn,
     sync::{Mutex, MutexGuard},
-    task::JoinHandle,
+    task::{JoinHandle, JoinSet},
     time::sleep,
 };
 use tracing::Instrument;
@@ -92,10 +92,8 @@ impl L1BlockInfo {
 
 impl Drop for L1UpdateTask {
     fn drop(&mut self) {
-        if let Some(tasks) = self.0.get_mut().take() {
-            for task in tasks {
-                task.abort();
-            }
+        if let Some(mut tasks) = self.0.get_mut().take() {
+            tasks.abort_all()
         }
     }
 }
@@ -313,11 +311,9 @@ impl L1Client {
     pub async fn spawn_tasks(&self) {
         let mut update_task = self.update_task.0.lock().await;
         if update_task.is_none() {
-            // TODO either explictly order or use JoinSet
-            let tasks: Vec<JoinHandle<()>> = vec![self.update_loop()]
-                .into_iter()
-                .map(|x| spawn(x))
-                .collect();
+            let mut tasks = JoinSet::new();
+            tasks.spawn(self.update_loop());
+            tasks.spawn(self.stake_update_loop());
             *update_task = Some(tasks);
         }
     }
@@ -327,11 +323,9 @@ impl L1Client {
     /// The L1 client will still be usable, but will stop updating until [`start`](Self::start) is
     /// called again.
     pub async fn shut_down_tasks(&self) {
-        if let Some(update_task) = self.update_task.0.lock().await.take() {
+        if let Some(mut update_task) = self.update_task.0.lock().await.take() {
             // TODO review order
-            for task in update_task {
-                task.abort();
-            }
+            update_task.abort_all();
         }
     }
 
@@ -341,8 +335,8 @@ impl L1Client {
     /// Update stake-table cache on `L1Event::NewHead`.
     fn stake_update_loop(&self) -> impl Future<Output = ()> {
         let opt = self.options();
-        let max_block_range = opt.l1_events_max_block_range;
         let retry_delay = opt.l1_retry_delay;
+        let chunk_size = opt.l1_events_max_block_range as usize;
         let span = tracing::warn_span!("L1 client update");
         let state = self.state.clone();
         let stake_table_contract =
@@ -362,14 +356,14 @@ impl L1Client {
                         continue;
                     };
 
-                    let chunks = self.chunky2(last_head, block);
+                    let chunks = L1Client::chunky2(last_head, head, chunk_size);
                     let mut events: Vec<StakersUpdatedFilter> = Vec::new();
                     for (from, to) in chunks {
                         tracing::debug!(from, to, "fetch stake table events in range");
                         match stake_table_contract
                             .stakers_updated_filter()
-                            .from_block(*from)
-                            .to_block(*to)
+                            .from_block(from)
+                            .to_block(to)
                             .query()
                             .await
                         {
@@ -767,10 +761,12 @@ impl L1Client {
 
     /// Divide the range `start..=end` into chunks of size
     /// `events_max_block_range`.
-    fn chunky2(&self, start: u64, end: u64) -> Vec<(u64, u64)> {
+    fn chunky2(start: u64, end: u64, chunk_size: usize) -> Vec<(u64, u64)> {
+        // let opt = self.options();
+        // let chunk_size = opt.l1_events_max_block_range as usize;
         let chunks: Vec<u64> = (start..=end).collect();
         let tups: Vec<(u64, u64)> = chunks
-            .chunks(3)
+            .chunks(chunk_size)
             .map(|s| {
                 // should never be empty
                 s.first().cloned().zip(s.last().cloned()).unwrap()
@@ -841,43 +837,45 @@ impl L1Client {
     ) -> Option<StakeTables> {
         let opt = self.options();
         let retry_delay = opt.l1_retry_delay;
-        let max_block_range = opt.l1_events_max_block_range;
-        let mut lock = self.state.lock().await;
+        let chunk_size = opt.l1_events_max_block_range as usize;
 
-        if let Some(st) = lock.stake.get(&block) {
-            Some(st.clone())
-        } else {
-            let last_head = lock.snapshot.head;
+        let last_head = {
+            let mut state = self.state.lock().await;
+            if let Some(st) = state.stake.get(&block) {
+                return Some(st.clone());
+            } else {
+                state.snapshot.head
+            }
+        };
 
-            let chunks = self.chunky2(last_head, block);
-            let contract = PermissionedStakeTable::new(contract_address, self.provider.clone());
+        let chunks = L1Client::chunky2(last_head, block, chunk_size);
+        let contract = PermissionedStakeTable::new(contract_address, self.provider.clone());
 
-            let mut events: Vec<StakersUpdatedFilter> = Vec::new();
-            for (from, to) in chunks {
-                tracing::debug!(from, to, "fetch stake table events in range");
-                loop {
-                    match contract
-                        .stakers_updated_filter()
-                        .from_block(from)
-                        .to_block(to)
-                        .query()
-                        .await
-                    {
-                        Ok(e) => {
-                            for event in e {
-                                events.push(event)
-                            }
-                            break;
+        let mut events: Vec<StakersUpdatedFilter> = Vec::new();
+        for (from, to) in chunks {
+            tracing::debug!(from, to, "fetch stake table events in range");
+            loop {
+                match contract
+                    .stakers_updated_filter()
+                    .from_block(from)
+                    .to_block(to)
+                    .query()
+                    .await
+                {
+                    Ok(e) => {
+                        for event in e {
+                            events.push(event)
                         }
-                        Err(err) => {
-                            tracing::warn!(from, to, %err, "Stake Table L1Event Error");
-                            sleep(retry_delay).await;
-                        }
+                        break;
+                    }
+                    Err(err) => {
+                        tracing::warn!(from, to, %err, "Stake Table L1Event Error");
+                        sleep(retry_delay).await;
                     }
                 }
             }
-            Some(StakeTables::from_l1_events(events))
         }
+        Some(StakeTables::from_l1_events(events))
     }
 
     fn options(&self) -> &L1ClientOptions {
@@ -1314,7 +1312,7 @@ mod test {
 
         assert_eq![vec![(3, 5), (6, 8), (9, 10)], tups];
 
-        let tups = l1_client.chunky2(3, 10);
+        let tups = L1Client::chunky2(3, 10, 3);
         assert_eq![vec![(3, 5), (6, 8), (9, 10)], tups];
     }
 
