@@ -65,12 +65,12 @@ tokio = { version = "1", default-features = false, features = [
 hotshot = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.83" }
 # Hotshot imports
 hotshot-builder-api = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.83" }
-hotshot-builder-core = { git = "https://github.com/EspressoSystems/marketplace-builder-core", tag = "0.1.59" }
+hotshot-builder-core = { git = "https://github.com/EspressoSystems/marketplace-builder-core", tag = "0.5.84" }
 marketplace-builder-core = { git = "https://github.com/EspressoSystems/marketplace-builder-core", tag = "0.1.59" }
 marketplace-builder-shared = { git = "https://github.com/EspressoSystems/marketplace-builder-core", tag = "0.1.59" }
-hotshot-events-service = { git = "https://github.com/EspressoSystems/hotshot-events-service.git", tag = "0.1.57" }
+hotshot-events-service = { git = "https://github.com/EspressoSystems/hotshot-events-service.git", tag = "0.1.58" }
 hotshot-orchestrator = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.83" }
-hotshot-query-service = { git = "https://github.com/EspressoSystems/hotshot-query-service", tag = "v0.1.76" }
+hotshot-query-service = { git = "https://github.com/EspressoSystems/hotshot-query-service", tag = "v0.1.77" }
 hotshot-stake-table = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.83" }
 hotshot-state-prover = { version = "0.1.0", path = "hotshot-state-prover" }
 hotshot-task = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.83" }
