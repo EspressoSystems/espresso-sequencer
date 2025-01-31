@@ -6,8 +6,8 @@ use super::{
 use async_trait::async_trait;
 use contract_bindings::permissioned_stake_table::StakersUpdatedFilter;
 use ethers::types::{Address, U256};
-use hotshot::types::SignatureKey as _;
-use hotshot_contract_adapter::stake_table::NodeInfoJf;
+use hotshot::types::{BLSPubKey, SignatureKey as _};
+use hotshot_contract_adapter::stake_table::{bls_sol_to_jf, NodeInfoJf};
 use hotshot_types::{
     data::EpochNumber,
     stake_table::StakeTableEntry,
@@ -21,7 +21,7 @@ use hotshot_types::{
 use itertools::Itertools;
 use std::{
     cmp::max,
-    collections::{BTreeMap, BTreeSet, HashMap},
+    collections::{BTreeSet, HashMap},
     num::NonZeroU64,
     str::FromStr,
 };
@@ -54,15 +54,15 @@ impl StakeTables {
                 event
                     .removed
                     .into_iter()
-                    .map(|node_info| StakeTableDelta::remove(node_info.into()))
+                    .map(|key| StakeTableChange::Remove(bls_sol_to_jf(key)))
                     .chain(
                         event
                             .added
                             .into_iter()
-                            .map(|node_info| StakeTableDelta::add(node_info.into())),
+                            .map(|node_info| StakeTableChange::Add(node_info.into())),
                     )
             })
-            .group_by(|delta| delta.node_info.stake_table_key);
+            .group_by(|change| change.key());
 
         // If the last event for a stakers is `Added` the staker is currently
         // staking, if the last event is removed or (or the staker is not present)
@@ -70,9 +70,9 @@ impl StakeTables {
         let currently_staking = changes_per_node
             .into_iter()
             .map(|(_pub_key, deltas)| deltas.last().expect("deltas non-empty").clone())
-            .filter_map(|delta| match delta.change {
-                StakeTableChange::Add => Some(delta.node_info),
-                StakeTableChange::Remove => None,
+            .filter_map(|change| match change {
+                StakeTableChange::Add(node_info) => Some(node_info),
+                StakeTableChange::Remove(_) => None,
             });
 
         let mut consensus_stake_table: Vec<StakeTableEntry<PubKey>> = vec![];
@@ -90,6 +90,9 @@ impl StakeTables {
 #[derive(Clone, Debug)]
 /// Type to describe DA and Stake memberships
 pub struct EpochCommittees {
+    /// Committee used when we're in pre-epoch state
+    non_epoch_committee: Committee,
+
     /// Holds Stake table and da stake
     state: HashMap<Epoch, Committee>,
 
@@ -105,30 +108,19 @@ pub struct EpochCommittees {
 
 #[derive(Debug, Clone, PartialEq)]
 enum StakeTableChange {
-    Add,
-    Remove,
+    Add(NodeInfoJf),
+    Remove(BLSPubKey),
 }
 
-#[derive(Debug, Clone)]
-struct StakeTableDelta {
-    change: StakeTableChange,
-    node_info: NodeInfoJf,
-}
-
-impl StakeTableDelta {
-    fn add(node_info: NodeInfoJf) -> Self {
-        Self {
-            change: StakeTableChange::Add,
-            node_info,
-        }
-    }
-    fn remove(node_info: NodeInfoJf) -> Self {
-        Self {
-            change: StakeTableChange::Remove,
-            node_info,
+impl StakeTableChange {
+    pub(crate) fn key(&self) -> BLSPubKey {
+        match self {
+            StakeTableChange::Add(node_info) => node_info.stake_table_key,
+            StakeTableChange::Remove(key) => *key,
         }
     }
 }
+
 /// Holds Stake table and da stake
 #[derive(Clone, Debug)]
 struct Committee {
@@ -137,17 +129,17 @@ struct Committee {
     /// leader but without voting rights.
     eligible_leaders: Vec<StakeTableEntry<PubKey>>,
 
-    /// Stake table
+    /// Keys for nodes participating in the network
     stake_table: Vec<StakeTableEntry<PubKey>>,
 
-    /// DA members
+    /// Keys for DA members
     da_members: Vec<StakeTableEntry<PubKey>>,
 
-    /// Stake table indexed by public key, for efficient lookup.
-    indexed_stake_table: BTreeMap<PubKey, StakeTableEntry<PubKey>>,
+    /// Stake entries indexed by public key, for efficient lookup.
+    indexed_stake_table: HashMap<PubKey, StakeTableEntry<PubKey>>,
 
-    /// DA members indexed by public key, for efficient lookup.
-    indexed_da_members: BTreeMap<PubKey, StakeTableEntry<PubKey>>,
+    /// DA entries indexed by public key, for efficient lookup.
+    indexed_da_members: HashMap<PubKey, StakeTableEntry<PubKey>>,
 }
 
 impl EpochCommittees {
@@ -165,14 +157,14 @@ impl EpochCommittees {
 
         let da_members = st.da_members.0.clone();
 
-        let indexed_stake_table: BTreeMap<PubKey, _> = st
+        let indexed_stake_table: HashMap<PubKey, _> = st
             .stake_table
             .0
             .iter()
             .map(|entry| (PubKey::public_key(entry), entry.clone()))
             .collect();
 
-        let indexed_da_members: BTreeMap<PubKey, _> = st
+        let indexed_da_members: HashMap<PubKey, _> = st
             .da_members
             .0
             .iter()
@@ -197,6 +189,7 @@ impl EpochCommittees {
         self.state.insert(epoch, committee.clone());
         committee
     }
+
     // We need a constructor to match our concrete type.
     pub fn new_stake(
         // TODO remove `new` from trait and rename this to `new`.
@@ -228,13 +221,13 @@ impl EpochCommittees {
             .collect();
 
         // Index the stake table by public key
-        let indexed_stake_table: BTreeMap<PubKey, _> = stake_table
+        let indexed_stake_table: HashMap<PubKey, _> = stake_table
             .iter()
             .map(|entry| (PubKey::public_key(entry), entry.clone()))
             .collect();
 
         // Index the stake table by public key
-        let indexed_da_members: BTreeMap<PubKey, _> = da_members
+        let indexed_da_members: HashMap<PubKey, _> = da_members
             .iter()
             .map(|entry| (PubKey::public_key(entry), entry.clone()))
             .collect();
@@ -250,13 +243,22 @@ impl EpochCommittees {
         let mut map = HashMap::new();
         map.insert(Epoch::genesis(), members.clone());
         // TODO: remove this, workaround for hotshot asking for stake tables from epoch 1
-        map.insert(Epoch::genesis() + 1u64, members);
+        map.insert(Epoch::genesis() + 1u64, members.clone());
 
         Self {
+            non_epoch_committee: members,
             state: map,
             _epoch_size: epoch_size,
             l1_client: instance_state.l1_client.clone(),
             contract_address: instance_state.chain_config.stake_table_contract,
+        }
+    }
+
+    fn state(&self, epoch: &Option<Epoch>) -> Option<&Committee> {
+        if let Some(epoch) = epoch {
+            self.state.get(epoch)
+        } else {
+            Some(&self.non_epoch_committee)
         }
     }
 }
@@ -298,13 +300,13 @@ impl Membership<SeqTypes> for EpochCommittees {
             .collect();
 
         // Index the stake table by public key
-        let indexed_stake_table: BTreeMap<PubKey, _> = stake_table
+        let indexed_stake_table: HashMap<PubKey, _> = stake_table
             .iter()
             .map(|entry| (PubKey::public_key(entry), entry.clone()))
             .collect();
 
         // Index the stake table by public key
-        let indexed_da_members: BTreeMap<PubKey, _> = da_members
+        let indexed_da_members: HashMap<PubKey, _> = da_members
             .iter()
             .map(|entry| (PubKey::public_key(entry), entry.clone()))
             .collect();
@@ -320,9 +322,10 @@ impl Membership<SeqTypes> for EpochCommittees {
         let mut map = HashMap::new();
         map.insert(Epoch::genesis(), members.clone());
         // TODO: remove this, workaround for hotshot asking for stake tables from epoch 1
-        map.insert(Epoch::genesis() + 1u64, members);
+        map.insert(Epoch::genesis() + 1u64, members.clone());
 
         Self {
+            non_epoch_committee: members,
             state: map,
             _epoch_size: 12,
             l1_client: L1Client::new(Url::from_str("http:://ab.b").unwrap()),
@@ -331,16 +334,16 @@ impl Membership<SeqTypes> for EpochCommittees {
     }
 
     /// Get the stake table for the current view
-    fn stake_table(&self, epoch: Epoch) -> Vec<StakeTableEntry<PubKey>> {
-        if let Some(st) = self.state.get(&epoch) {
+    fn stake_table(&self, epoch: Option<Epoch>) -> Vec<StakeTableEntry<PubKey>> {
+        if let Some(st) = self.state(&epoch) {
             st.stake_table.clone()
         } else {
             vec![]
         }
     }
     /// Get the stake table for the current view
-    fn da_stake_table(&self, epoch: Epoch) -> Vec<StakeTableEntry<PubKey>> {
-        if let Some(sc) = self.state.get(&epoch) {
+    fn da_stake_table(&self, epoch: Option<Epoch>) -> Vec<StakeTableEntry<PubKey>> {
+        if let Some(sc) = self.state(&epoch) {
             sc.da_members.clone()
         } else {
             vec![]
@@ -351,9 +354,9 @@ impl Membership<SeqTypes> for EpochCommittees {
     fn committee_members(
         &self,
         _view_number: <SeqTypes as NodeType>::View,
-        epoch: Epoch,
+        epoch: Option<Epoch>,
     ) -> BTreeSet<PubKey> {
-        if let Some(sc) = self.state.get(&epoch) {
+        if let Some(sc) = self.state(&epoch) {
             sc.indexed_stake_table.clone().into_keys().collect()
         } else {
             BTreeSet::new()
@@ -364,9 +367,9 @@ impl Membership<SeqTypes> for EpochCommittees {
     fn da_committee_members(
         &self,
         _view_number: <SeqTypes as NodeType>::View,
-        epoch: Epoch,
+        epoch: Option<Epoch>,
     ) -> BTreeSet<PubKey> {
-        if let Some(sc) = self.state.get(&epoch) {
+        if let Some(sc) = self.state(&epoch) {
             sc.indexed_da_members.clone().into_keys().collect()
         } else {
             BTreeSet::new()
@@ -377,10 +380,9 @@ impl Membership<SeqTypes> for EpochCommittees {
     fn committee_leaders(
         &self,
         _view_number: <SeqTypes as NodeType>::View,
-        epoch: Epoch,
+        epoch: Option<Epoch>,
     ) -> BTreeSet<PubKey> {
-        self.state
-            .get(&epoch)
+        self.state(&epoch)
             .unwrap()
             .eligible_leaders
             .iter()
@@ -389,33 +391,29 @@ impl Membership<SeqTypes> for EpochCommittees {
     }
 
     /// Get the stake table entry for a public key
-    fn stake(&self, pub_key: &PubKey, epoch: Epoch) -> Option<StakeTableEntry<PubKey>> {
+    fn stake(&self, pub_key: &PubKey, epoch: Option<Epoch>) -> Option<StakeTableEntry<PubKey>> {
         // Only return the stake if it is above zero
-        self.state
-            .get(&epoch)
+        self.state(&epoch)
             .and_then(|h| h.indexed_stake_table.get(pub_key).cloned())
     }
 
     /// Get the DA stake table entry for a public key
-    fn da_stake(&self, pub_key: &PubKey, epoch: Epoch) -> Option<StakeTableEntry<PubKey>> {
+    fn da_stake(&self, pub_key: &PubKey, epoch: Option<Epoch>) -> Option<StakeTableEntry<PubKey>> {
         // Only return the stake if it is above zero
-        self.state
-            .get(&epoch)
+        self.state(&epoch)
             .and_then(|h| h.indexed_da_members.get(pub_key).cloned())
     }
 
     /// Check if a node has stake in the committee
-    fn has_stake(&self, pub_key: &PubKey, epoch: Epoch) -> bool {
-        self.state
-            .get(&epoch)
+    fn has_stake(&self, pub_key: &PubKey, epoch: Option<Epoch>) -> bool {
+        self.state(&epoch)
             .and_then(|h| h.indexed_stake_table.get(pub_key))
             .is_some_and(|x| x.stake() > U256::zero())
     }
 
     /// Check if a node has stake in the committee
-    fn has_da_stake(&self, pub_key: &PubKey, epoch: Epoch) -> bool {
-        self.state
-            .get(&epoch)
+    fn has_da_stake(&self, pub_key: &PubKey, epoch: Option<Epoch>) -> bool {
+        self.state(&epoch)
             .and_then(|h| h.indexed_da_members.get(pub_key))
             .is_some_and(|x| x.stake() > U256::zero())
     }
@@ -424,11 +422,10 @@ impl Membership<SeqTypes> for EpochCommittees {
     fn lookup_leader(
         &self,
         view_number: <SeqTypes as NodeType>::View,
-        epoch: Epoch,
+        epoch: Option<Epoch>,
     ) -> Result<PubKey, Self::Error> {
         let leaders = self
-            .state
-            .get(&epoch)
+            .state(&epoch)
             .ok_or(LeaderLookupError)?
             .eligible_leaders
             .clone();
@@ -439,43 +436,41 @@ impl Membership<SeqTypes> for EpochCommittees {
     }
 
     /// Get the total number of nodes in the committee
-    fn total_nodes(&self, epoch: Epoch) -> usize {
-        self.state
-            .get(&epoch)
+    fn total_nodes(&self, epoch: Option<Epoch>) -> usize {
+        self.state(&epoch)
             .map(|sc| sc.stake_table.len())
             .unwrap_or_default()
     }
 
     /// Get the total number of DA nodes in the committee
-    fn da_total_nodes(&self, epoch: Epoch) -> usize {
-        self.state
-            .get(&epoch)
+    fn da_total_nodes(&self, epoch: Option<Epoch>) -> usize {
+        self.state(&epoch)
             .map(|sc: &Committee| sc.da_members.len())
             .unwrap_or_default()
     }
 
     /// Get the voting success threshold for the committee
-    fn success_threshold(&self, epoch: Epoch) -> NonZeroU64 {
-        let quorum_len = self.state.get(&epoch).unwrap().stake_table.len();
+    fn success_threshold(&self, epoch: Option<Epoch>) -> NonZeroU64 {
+        let quorum_len = self.state(&epoch).unwrap().stake_table.len();
         NonZeroU64::new(((quorum_len as u64 * 2) / 3) + 1).unwrap()
     }
 
     /// Get the voting success threshold for the committee
-    fn da_success_threshold(&self, epoch: Epoch) -> NonZeroU64 {
-        let da_len = self.state.get(&epoch).unwrap().da_members.len();
+    fn da_success_threshold(&self, epoch: Option<Epoch>) -> NonZeroU64 {
+        let da_len = self.state(&epoch).unwrap().da_members.len();
         NonZeroU64::new(((da_len as u64 * 2) / 3) + 1).unwrap()
     }
 
     /// Get the voting failure threshold for the committee
-    fn failure_threshold(&self, epoch: Epoch) -> NonZeroU64 {
-        let quorum_len = self.state.get(&epoch).unwrap().stake_table.len();
+    fn failure_threshold(&self, epoch: Option<Epoch>) -> NonZeroU64 {
+        let quorum_len = self.state(&epoch).unwrap().stake_table.len();
 
         NonZeroU64::new(((quorum_len as u64) / 3) + 1).unwrap()
     }
 
     /// Get the voting upgrade threshold for the committee
-    fn upgrade_threshold(&self, epoch: Epoch) -> NonZeroU64 {
-        let quorum_len = self.state.get(&epoch).unwrap().indexed_stake_table.len();
+    fn upgrade_threshold(&self, epoch: Option<Epoch>) -> NonZeroU64 {
+        let quorum_len = self.state(&epoch).unwrap().indexed_stake_table.len();
 
         NonZeroU64::new(max(
             (quorum_len as u64 * 9) / 10,
@@ -543,7 +538,7 @@ mod tests {
         let mut new_da_node = consensus_node.clone();
         new_da_node.da = true;
         updates.push(StakersUpdatedFilter {
-            removed: vec![consensus_node.clone().into()],
+            removed: vec![consensus_node.stake_table_key_sol()],
             added: vec![new_da_node.clone().into()],
         });
         let st = StakeTables::from_l1_events(updates.clone());
@@ -560,7 +555,7 @@ mod tests {
 
         // Simulate removing the second node
         updates.push(StakersUpdatedFilter {
-            removed: vec![new_da_node.clone().into()],
+            removed: vec![new_da_node.stake_table_key_sol()],
             added: vec![],
         });
         let st = StakeTables::from_l1_events(updates);

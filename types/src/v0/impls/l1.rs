@@ -1197,12 +1197,12 @@ mod test {
             SignerMiddleware::new(provider.clone(), wallet.with_chain_id(anvil.chain_id()));
         let client = Arc::new(client);
 
-        let v: Vec<NodeInfo> = Vec::new();
         // deploy the stake_table contract
-        let stake_table_contract = PermissionedStakeTable::deploy(client.clone(), v.clone())
-            .unwrap()
-            .send()
-            .await?;
+        let stake_table_contract =
+            PermissionedStakeTable::deploy(client.clone(), Vec::<NodeInfo>::new())
+                .unwrap()
+                .send()
+                .await?;
 
         let address = stake_table_contract.address();
 
@@ -1210,7 +1210,7 @@ mod test {
         let node = NodeInfoJf::random(&mut rng);
 
         let new_nodes: Vec<NodeInfo> = vec![node.into()];
-        let updater = stake_table_contract.update(v, new_nodes);
+        let updater = stake_table_contract.update(vec![], new_nodes);
         updater.send().await?.await?;
 
         let block = client.get_block(BlockNumber::Latest).await?.unwrap();
