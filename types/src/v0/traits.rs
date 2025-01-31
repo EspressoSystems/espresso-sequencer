@@ -10,7 +10,8 @@ use hotshot::{types::EventType, HotShotInitializer};
 use hotshot_types::{
     consensus::CommitmentMap,
     data::{
-        DaProposal, EpochNumber, QuorumProposal, QuorumProposal2, VidDisperseShare, ViewNumber,
+        DaProposal, EpochNumber, QuorumProposal, QuorumProposal2, QuorumProposalWrapper,
+        VidDisperseShare, ViewNumber,
     },
     event::{HotShotAction, LeafInfo},
     message::{convert_proposal, Proposal},
@@ -22,7 +23,7 @@ use hotshot_types::{
         storage::Storage,
         ValidatedState as HotShotState,
     },
-    utils::View,
+    utils::{genesis_epoch_from_version, View},
     vid::VidSchemeType,
 };
 use itertools::Itertools;
@@ -451,12 +452,12 @@ pub trait SequencerPersistence: Sized + Send + Sync + Clone + 'static {
     /// Load the proposals saved by consensus
     async fn load_quorum_proposals(
         &self,
-    ) -> anyhow::Result<BTreeMap<ViewNumber, Proposal<SeqTypes, QuorumProposal2<SeqTypes>>>>;
+    ) -> anyhow::Result<BTreeMap<ViewNumber, Proposal<SeqTypes, QuorumProposalWrapper<SeqTypes>>>>;
 
     async fn load_quorum_proposal(
         &self,
         view: ViewNumber,
-    ) -> anyhow::Result<Proposal<SeqTypes, QuorumProposal2<SeqTypes>>>;
+    ) -> anyhow::Result<Proposal<SeqTypes, QuorumProposalWrapper<SeqTypes>>>;
 
     async fn load_vid_share(
         &self,
@@ -547,7 +548,7 @@ pub trait SequencerPersistence: Sized + Send + Sync + Clone + 'static {
         // unnecessary catchup from starting in a view earlier than the anchor leaf.
         let view = max(highest_voted_view, leaf.view_number());
         // TODO:
-        let epoch = EpochNumber::genesis();
+        let epoch = genesis_epoch_from_version::<V, SeqTypes>();
 
         let (undecided_leaves, undecided_state) = self
             .load_undecided_state()
@@ -578,21 +579,28 @@ pub trait SequencerPersistence: Sized + Send + Sync + Clone + 'static {
             "loaded consensus state"
         );
 
+        let epoch_height = state.epoch_height.unwrap_or(0);
         Ok((
-            HotShotInitializer::from_reload(
-                leaf,
-                state,
-                validated_state,
-                view,
-                epoch,
-                highest_voted_view,
+            HotShotInitializer {
+                instance_state: state,
+                epoch_height,
+                anchor_leaf: leaf,
+                anchor_state: validated_state.unwrap_or_default(),
+                anchor_state_delta: None,
+                start_view: view,
+                start_epoch: epoch,
+                last_actioned_view: highest_voted_view,
                 saved_proposals,
                 high_qc,
                 next_epoch_high_qc,
-                upgrade_certificate,
-                undecided_leaves.into_values().collect(),
+                decided_upgrade_certificate: upgrade_certificate,
+                undecided_leaves: undecided_leaves
+                    .into_values()
+                    .map(|e| (e.view_number(), e))
+                    .collect(),
                 undecided_state,
-            ),
+                saved_vid_shares: Default::default(), // TODO: implement saved_vid_shares
+            },
             anchor_view,
         ))
     }
