@@ -362,28 +362,26 @@ impl L1Client {
                         continue;
                     };
 
-                    let v: Vec<u64> = (last_head..head).collect();
-                    let chunks: Vec<&[u64]> = v.chunks(max_block_range as usize).collect();
+                    let chunks = self.chunky2(last_head, block);
                     let mut events: Vec<StakersUpdatedFilter> = Vec::new();
-                    for chunk in chunks {
-                        if let [from, to] = chunk {
-                            match stake_table_contract
-                                .stakers_updated_filter()
-                                .from_block(*from)
-                                .to_block(*to)
-                                .query()
-                                .await
-                            {
-                                Ok(e) => {
-                                    for event in e {
-                                        events.push(event)
-                                    }
-                                    break;
+                    for (from, to) in chunks {
+                        tracing::debug!(from, to, "fetch stake table events in range");
+                        match stake_table_contract
+                            .stakers_updated_filter()
+                            .from_block(*from)
+                            .to_block(*to)
+                            .query()
+                            .await
+                        {
+                            Ok(e) => {
+                                for event in e {
+                                    events.push(event)
                                 }
-                                Err(err) => {
-                                    tracing::warn!(from, to, %err, "Stake Table L1Event Error");
-                                    sleep(retry_delay).await;
-                                }
+                                break;
+                            }
+                            Err(err) => {
+                                tracing::warn!(from, to, %err, "Stake Table L1Event Error");
+                                sleep(retry_delay).await;
                             }
                         }
                     }
@@ -853,11 +851,10 @@ impl L1Client {
 
             let chunks = self.chunky2(last_head, block);
             let contract = PermissionedStakeTable::new(contract_address, self.provider.clone());
-            // tracing::debug!(from, to, "fetch stake table events in range");
 
             let mut events: Vec<StakersUpdatedFilter> = Vec::new();
-
             for (from, to) in chunks {
+                tracing::debug!(from, to, "fetch stake table events in range");
                 loop {
                     match contract
                         .stakers_updated_filter()
@@ -882,27 +879,6 @@ impl L1Client {
             Some(StakeTables::from_l1_events(events))
         }
     }
-
-    // async fn update_stake_table(
-    //     from_block: u64,
-    //     to_block: u64,
-    //     contract: PermissionedStakeTable<Provider<MultiRpcClient>>,
-    // ) -> Option<StakeTables> {
-    //     // query for stake table events, loop until successful.
-    //     match contract
-    //         .stakers_updated_filter()
-    //         .from_block(from_block)
-    //         .to_block(to_block)
-    //         .query()
-    //         .await
-    //     {
-    //         Ok(events) => Some(events)),
-    //         Err(err) => {
-    //             tracing::warn!(from_block, to_block, %err, "StakeTable L1Event Error");
-    //             None
-    //         }
-    //     }
-    // }
 
     fn options(&self) -> &L1ClientOptions {
         (*self.provider).as_ref().options()
