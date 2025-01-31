@@ -9,11 +9,10 @@ use espresso_types::{
     BackoffParams, Leaf, NetworkConfig, Payload,
 };
 use futures::stream::StreamExt;
-use hotshot_query_service::data_source::storage::sql::Write;
 use hotshot_query_service::data_source::{
     storage::{
         pruning::PrunerCfg,
-        sql::{include_migrations, query_as, Config, SqlStorage, Transaction},
+        sql::{include_migrations, query_as, Config, SqlStorage},
     },
     Transaction as _, VersionedDataSource,
 };
@@ -402,8 +401,8 @@ impl SequencerPersistence for Persistence {
         // Generate an event for the new leaves and, only if it succeeds, clean up data we no longer
         // need.
         let consumer = dyn_clone::clone(consumer);
-        let tx = self.db.write().await?;
-        if let Err(err) = collect_garbage(tx, view, consumer).await {
+
+        if let Err(err) = collect_garbage(&self.db, view, consumer).await {
             // GC/event processing failure is not an error, since by this point we have at least
             // managed to persist the decided leaves successfully, and GC will just run again at the
             // next decide. Log an error but do not return it.
@@ -690,15 +689,15 @@ impl SequencerPersistence for Persistence {
 }
 
 async fn collect_garbage(
-    mut tx: Transaction<Write>,
+    db: &SqlStorage,
     view: ViewNumber,
     consumer: impl EventConsumer,
 ) -> anyhow::Result<()> {
     // Clean up and collect VID shares.
-
+    let mut tx = db.read().await?;
     let mut vid_shares = tx
         .fetch_all(
-            query("DELETE FROM vid_share where view <= $1 RETURNING view, data")
+            query("SELECT view, data from  vid_share where view <= $1 RETURNING view, data")
                 .bind(view.u64() as i64),
         )
         .await?
@@ -715,7 +714,7 @@ async fn collect_garbage(
     // Clean up and collect DA proposals.
     let mut da_proposals = tx
         .fetch_all(
-            query("DELETE FROM da_proposal where view <= $1 RETURNING view, data")
+            query("SELECT view, data FROM da_proposal where view <= $1 RETURNING view, data")
                 .bind(view.u64() as i64),
         )
         .await?
@@ -749,14 +748,6 @@ async fn collect_garbage(
             Ok((view as u64, (leaf, qc)))
         })
         .collect::<anyhow::Result<BTreeMap<_, _>>>()?;
-
-    tx.execute(query("DELETE FROM anchor_leaf WHERE view < $1").bind(view.u64() as i64))
-        .await?;
-
-    // Clean up old proposals. These are not part of the decide event we generate for the consumer,
-    // so we don't need to return them.
-    tx.execute(query("DELETE FROM quorum_proposals where view <= $1").bind(view.u64() as i64))
-        .await?;
 
     // Exclude from the decide event any leaves which have definitely already been processed. We may
     // have selected an already-processed leaf because the oldest leaf -- the last leaf processed in
@@ -837,6 +828,10 @@ async fn collect_garbage(
             .await?;
     }
 
+    drop(tx);
+
+    let mut tx = db.write().await?;
+
     // Now that we have definitely processed leaves up to `view`, we can update
     // `last_processed_view` so we don't process these leaves again. We may still fail at this
     // point, or shut down, and fail to complete this update. At worst this will lead to us sending
@@ -849,6 +844,20 @@ async fn collect_garbage(
         [(1i32, view.u64() as i64)],
     )
     .await?;
+
+    tx.execute(query("DELETE FROM vid_share where view <= $1").bind(view.u64() as i64))
+        .await?;
+
+    tx.execute(query("DELETE FROM da_proposal where view <= $1 ").bind(view.u64() as i64))
+        .await?;
+
+    tx.execute(query("DELETE FROM anchor_leaf WHERE view < $1").bind(view.u64() as i64))
+        .await?;
+
+    // Clean up old proposals. These are not part of the decide event we generate for the consumer,
+    // so we don't need to return them.
+    tx.execute(query("DELETE FROM quorum_proposals where view <= $1").bind(view.u64() as i64))
+        .await?;
 
     tx.commit().await
 }
