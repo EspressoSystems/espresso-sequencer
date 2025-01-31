@@ -24,7 +24,7 @@
 //! resources do not consume resources. This is important because in general, passive requests may
 //! be for resources that are not guaranteed to exist, and thus may never terminate. Just like we
 //! avoid spawning a task for passive requests, since it may never complete, we need receivers for
-//! passive requests not to persist beyond the lifetime of the requst, or they may never be closed.
+//! passive requests not to persist beyond the lifetime of the request, or they may never be closed.
 //!
 //! This requirement is implemented via garbage collection: each time a message is sent, resources
 //! belonging to dropped receivers are cleaned up. Thus, strictly speaking, dropped receivers do
@@ -47,7 +47,7 @@
 //!
 //! This is important because subscriptions are requested in response to read-only client requests,
 //! which are supposed to run in parallel as much as possible. By contrast, notifications are
-//! ususally send from internal server tasks (e.g. the background task that updates the data source
+//! usually send from internal server tasks (e.g. the background task that updates the data source
 //! when new blocks are committed). It is less of a problem if these internal tasks contend with
 //! each other, because they are not directly blocking responses to clients, and we have more
 //! control over how and when they acquire shared resources.
@@ -310,7 +310,7 @@ mod test {
             .await
             .unwrap_err();
 
-        // Check subscribers. The first subsciber should have been cleaned up when it was notified.
+        // Check subscribers. The first subscriber should have been cleaned up when it was notified.
         // The second should have been closed when it was dropped without completing, but not yet
         // garbage collected.
         let active = n.active.lock().await;

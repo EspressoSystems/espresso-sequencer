@@ -42,13 +42,13 @@ pub(super) mod explorer;
 pub(super) mod node;
 pub(super) mod state;
 
-/// Helper type for programatically constructing queries.
+/// Helper type for programmatically constructing queries.
 ///
 /// This type can be used to bind arguments of various types, similar to [`Query`] or [`QueryAs`].
 /// With [`QueryBuilder`], though, the arguments are bound *first* and the SQL statement is given
 /// last. Each time an argument is bound, a SQL fragment is returned as a string which can be used
 /// to represent that argument in the statement (e.g. `$1` for the first argument bound). This makes
-/// it easier to programatically construct queries where the statement is not a compile time
+/// it easier to programmatically construct queries where the statement is not a compile time
 /// constant.
 ///
 /// # Example

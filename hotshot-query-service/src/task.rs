@@ -10,7 +10,7 @@
 // You should have received a copy of the GNU General Public License along with this program. If not,
 // see <https://www.gnu.org/licenses/>.
 
-//! Async task utilites.
+//! Async task utilities.
 
 use derivative::Derivative;
 use futures::future::Future;

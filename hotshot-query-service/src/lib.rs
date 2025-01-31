@@ -143,7 +143,7 @@
 //! you are using. Check the documentation for your data source implementation to see how it can be
 //! extended.
 //!
-//! For the latter, you can modify the default availablity API with the addition of a new endpoint
+//! For the latter, you can modify the default availability API with the addition of a new endpoint
 //! that accesses the custom state you have added to the data source. It is good practice to define
 //! a trait for accessing this custom state, so that if you want to switch data sources in the
 //! future, you can easily extend the new data source, implement the trait, and then transparently

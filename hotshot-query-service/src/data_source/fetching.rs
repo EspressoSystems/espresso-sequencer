@@ -179,7 +179,7 @@ impl<Types, S, P> Builder<Types, S, P> {
             rate_limit: 32,
             range_chunk_size: 25,
             // By default, we run minor proactive scans fairly frequently: once every minute. These
-            // scans are cheap (moreso the more frequently they run) and can help us keep up with
+            // scans are cheap (more the more frequently they run) and can help us keep up with
             // the head of the chain even if our attached consensus instance is behind.
             minor_scan_interval: Duration::from_secs(60),
             // Major scans, on the other hand, are rather expensive and not especially important for
@@ -786,7 +786,7 @@ where
     active_fetch_delay: Duration,
     // Duration to sleep after each chunk fetched
     chunk_fetch_delay: Duration,
-    // Exponential backoff when retrying failed oeprations.
+    // Exponential backoff when retrying failed operations.
     backoff: ExponentialBackoff,
     // Semaphore limiting the number of simultaneous DB accesses we can have from tasks spawned to
     // retry failed loads.
@@ -1210,7 +1210,7 @@ where
             .collect()
     }
 
-    /// Try to get a range of objects from local storage, intializing fetches if any are missing.
+    /// Try to get a range of objects from local storage, initializing fetches if any are missing.
     ///
     /// If this function succeeded, then for each object in the requested range, either:
     /// * the object was available locally, and corresponds to `Some(_)` object in the result

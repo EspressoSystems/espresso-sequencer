@@ -79,7 +79,7 @@ where
     {
         // We don't actively fetch transactions, because without a satisfying block payload, we have
         // no way of knowing whether a block with such a transaction actually exists, and we don't
-        // want to bother peers with requests for non-existant transactions.
+        // want to bother peers with requests for non-existent transactions.
         tracing::debug!("not fetching unknown transaction {req:?}");
         Ok(())
     }

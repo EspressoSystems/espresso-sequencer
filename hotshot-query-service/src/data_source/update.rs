@@ -234,7 +234,7 @@ pub trait VersionedDataSource: Send + Sync {
     fn read(&self) -> impl Future<Output = anyhow::Result<Self::ReadOnly<'_>>> + Send;
 }
 
-/// A unit of atomicity for updating a shared data sourec.
+/// A unit of atomicity for updating a shared data source.
 ///
 /// The methods provided by this trait can be used to write such pending changes back to persistent
 /// storage ([commit](Self::commit)) so that they become visible to other clients of the same
