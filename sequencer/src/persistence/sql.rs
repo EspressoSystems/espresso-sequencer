@@ -697,7 +697,7 @@ async fn collect_garbage(
     let mut tx = db.read().await?;
     let mut vid_shares = tx
         .fetch_all(
-            query("SELECT view, data from  vid_share where view <= $1 RETURNING view, data")
+            query("SELECT view, data from  vid_share where view <= $1")
                 .bind(view.u64() as i64),
         )
         .await?
@@ -714,7 +714,7 @@ async fn collect_garbage(
     // Clean up and collect DA proposals.
     let mut da_proposals = tx
         .fetch_all(
-            query("SELECT view, data FROM da_proposal where view <= $1 RETURNING view, data")
+            query("SELECT view, data FROM da_proposal where view <= $1")
                 .bind(view.u64() as i64),
         )
         .await?
