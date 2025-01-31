@@ -1183,7 +1183,8 @@ mod test_headers {
     use std::sync::Arc;
 
     use ethers::{types::Address, utils::Anvil};
-    use hotshot_types::{traits::signature_key::BuilderSignatureKey, vid::vid_scheme};
+    use hotshot_example_types::node_types::TestVersions;
+    use hotshot_types::{traits::signature_key::BuilderSignatureKey, vid::advz_scheme};
 
     use sequencer_utils::test_utils::setup_test;
     use v0_1::{BlockMerkleTree, FeeMerkleTree, L1Client};
@@ -1466,7 +1467,7 @@ mod test_headers {
         async fn default() -> Self {
             let instance_state = NodeState::mock();
             let validated_state = ValidatedState::genesis(&instance_state).0;
-            let leaf: Leaf2 = Leaf::genesis(&validated_state, &instance_state)
+            let leaf: Leaf2 = Leaf::genesis::<TestVersions>(&validated_state, &instance_state)
                 .await
                 .into();
             let header = leaf.block_header().clone();
@@ -1491,7 +1492,7 @@ mod test_headers {
             .with_current_version(StaticVersion::<0, 1>::version());
 
         let genesis = GenesisForTest::default().await;
-        let vid_common = vid_scheme(1).disperse([]).unwrap().common;
+        let vid_common = advz_scheme(1).disperse([]).unwrap().common;
 
         let mut parent_state = genesis.validated_state.clone();
 

@@ -9,7 +9,7 @@ use crate::{
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use hotshot::traits::BlockPayload;
 use hotshot_query_service::availability::QueryablePayload;
-use hotshot_types::{traits::EncodeBytes, vid::vid_scheme};
+use hotshot_types::{traits::EncodeBytes, vid::advz_scheme};
 use jf_vid::VidScheme;
 use rand::RngCore;
 use std::collections::HashMap;
@@ -26,7 +26,7 @@ async fn basic_correctness() {
     let mut rng = jf_utils::test_rng();
     let valid_tests = ValidTest::many_from_tx_lengths(test_cases, &mut rng);
 
-    let mut vid = vid_scheme(10);
+    let mut vid = advz_scheme(10);
 
     for mut test in valid_tests {
         let mut all_txs = test.all_txs();

@@ -239,7 +239,7 @@ impl QueryablePayload<SeqTypes> for Payload {
         // Need a `VidCommon` to proceed. Need to modify `QueryablePayload`
         // trait to add a `VidCommon` arg. In the meantime tests fail if I leave
         // it `todo!()`, so this hack allows tests to pass.
-        let common = hotshot_types::vid::vid_scheme(10)
+        let common = hotshot_types::vid::advz_scheme(10)
             .disperse(&self.raw_payload)
             .unwrap()
             .common;

@@ -29,7 +29,10 @@ use hotshot_query_service::{
 };
 use hotshot_types::{
     consensus::CommitmentMap,
-    data::{DaProposal, QuorumProposal, QuorumProposal2, QuorumProposalWrapper, VidDisperseShare},
+    data::{
+        vid_disperse::ADVZDisperseShare, DaProposal, QuorumProposal, QuorumProposal2,
+        QuorumProposalWrapper, VidDisperseShare,
+    },
     event::{Event, EventType, HotShotAction, LeafInfo},
     message::{convert_proposal, Proposal},
     simple_certificate::{
@@ -1090,7 +1093,7 @@ impl SequencerPersistence for Persistence {
     async fn load_vid_share(
         &self,
         view: ViewNumber,
-    ) -> anyhow::Result<Option<Proposal<SeqTypes, VidDisperseShare<SeqTypes>>>> {
+    ) -> anyhow::Result<Option<Proposal<SeqTypes, ADVZDisperseShare<SeqTypes>>>> {
         let result = self
             .db
             .read()
@@ -1150,10 +1153,11 @@ impl SequencerPersistence for Persistence {
 
     async fn append_vid(
         &self,
-        proposal: &Proposal<SeqTypes, VidDisperseShare<SeqTypes>>,
+        proposal: &Proposal<SeqTypes, ADVZDisperseShare<SeqTypes>>,
     ) -> anyhow::Result<()> {
-        let view = proposal.data.view_number.u64();
+        let view = proposal.data.view_number().u64();
         let payload_hash = proposal.data.payload_commitment;
+
         let data_bytes = bincode::serialize(proposal).unwrap();
 
         let mut tx = self.db.write().await?;
@@ -1383,7 +1387,10 @@ impl Provider<SeqTypes, VidCommonRequest> for Persistence {
                 }
             };
 
-        Some(share.data.common)
+        match share.data {
+            VidDisperseShare::V0(vid_share) => Some(vid_share.common),
+            VidDisperseShare::V1(vid_share) => Some(vid_share.common),
+        }
     }
 }
 
@@ -1554,20 +1561,25 @@ mod test {
     use hotshot_example_types::node_types::TestVersions;
     use hotshot_types::{
         simple_certificate::QuorumCertificate,
-        traits::{block_contents::vid_commitment, signature_key::SignatureKey, EncodeBytes},
-        vid::vid_scheme,
+        traits::{
+            block_contents::vid_commitment, node_implementation::Versions,
+            signature_key::SignatureKey, EncodeBytes,
+        },
+        vid::advz_scheme,
     };
     use jf_vid::VidScheme;
     use sequencer_utils::test_utils::setup_test;
+    use vbs::version::StaticVersionType;
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_quorum_proposals_leaf_hash_migration() {
         setup_test();
 
         // Create some quorum proposals to test with.
-        let leaf: Leaf2 = Leaf::genesis(&ValidatedState::default(), &NodeState::mock())
-            .await
-            .into();
+        let leaf: Leaf2 =
+            Leaf::genesis::<TestVersions>(&ValidatedState::default(), &NodeState::mock())
+                .await
+                .into();
         let privkey = BLSPubKey::generated_from_seed_indexed([0; 32], 1).1;
         let signature = PubKey::sign(&privkey, &[]).unwrap();
         let mut quorum_proposal = Proposal {
@@ -1646,15 +1658,16 @@ mod test {
         let storage = Persistence::connect(&tmp).await;
 
         // Mock up some data.
-        let leaf = Leaf::genesis(&ValidatedState::default(), &NodeState::mock()).await;
+        let leaf =
+            Leaf::genesis::<TestVersions>(&ValidatedState::default(), &NodeState::mock()).await;
         let leaf_payload = leaf.block_payload().unwrap();
         let leaf_payload_bytes_arc = leaf_payload.encode();
-        let disperse = vid_scheme(2)
+        let disperse = advz_scheme(2)
             .disperse(leaf_payload_bytes_arc.clone())
             .unwrap();
         let payload_commitment = disperse.commit;
         let (pubkey, privkey) = BLSPubKey::generated_from_seed_indexed([0; 32], 1);
-        let vid_share = VidDisperseShare::<SeqTypes> {
+        let vid_share = ADVZDisperseShare::<SeqTypes> {
             view_number: ViewNumber::new(0),
             payload_commitment,
             share: disperse.shares[0].clone(),
@@ -1772,16 +1785,21 @@ mod test {
         let data_view = ViewNumber::new(1);
 
         // Populate some data.
-        let leaf = Leaf::genesis(&ValidatedState::default(), &NodeState::mock()).await;
+        let leaf =
+            Leaf::genesis::<TestVersions>(&ValidatedState::default(), &NodeState::mock()).await;
         let leaf_payload = leaf.block_payload().unwrap();
         let leaf_payload_bytes_arc = leaf_payload.encode();
 
-        let disperse = vid_scheme(2)
+        let disperse = advz_scheme(2)
             .disperse(leaf_payload_bytes_arc.clone())
             .unwrap();
-        let payload_commitment = vid_commitment(&leaf_payload_bytes_arc, 2);
+        let payload_commitment = vid_commitment::<TestVersions>(
+            &leaf_payload_bytes_arc,
+            2,
+            <TestVersions as Versions>::Base::VERSION,
+        );
         let (pubkey, privkey) = BLSPubKey::generated_from_seed_indexed([0; 32], 1);
-        let vid = VidDisperseShare::<SeqTypes> {
+        let vid = ADVZDisperseShare::<SeqTypes> {
             view_number: data_view,
             payload_commitment,
             share: disperse.shares[0].clone(),

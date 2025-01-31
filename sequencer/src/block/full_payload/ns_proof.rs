@@ -7,7 +7,7 @@ use crate::{
 };
 use hotshot_types::{
     traits::EncodeBytes,
-    vid::{vid_scheme, LargeRangeProofType, VidCommitment, VidCommon, VidSchemeType},
+    vid::{advz_scheme, LargeRangeProofType, VidCommitment, VidCommon, VidSchemeType},
 };
 use jf_vid::{
     payload_prover::{PayloadProver, Statement},
@@ -51,9 +51,9 @@ impl NsProof {
         }
         let ns_payload_range = payload.ns_table().ns_range(index, &payload_byte_len);
 
-        // TODO vid_scheme() arg should be u32 to match get_num_storage_nodes
+        // TODO advz_scheme() arg should be u32 to match get_num_storage_nodes
         // https://github.com/EspressoSystems/HotShot/issues/3298
-        let vid = vid_scheme(
+        let vid = advz_scheme(
             VidSchemeType::get_num_storage_nodes(common)
                 .try_into()
                 .ok()?, // error: failure to convert u32 to usize
@@ -105,9 +105,9 @@ impl NsProof {
 
         match (&self.ns_proof, range.is_empty()) {
             (Some(proof), false) => {
-                // TODO vid_scheme() arg should be u32 to match get_num_storage_nodes
+                // TODO advz_scheme() arg should be u32 to match get_num_storage_nodes
                 // https://github.com/EspressoSystems/HotShot/issues/3298
-                let vid = vid_scheme(
+                let vid = advz_scheme(
                     VidSchemeType::get_num_storage_nodes(common)
                         .try_into()
                         .ok()?, // error: failure to convert u32 to usize

@@ -9,7 +9,7 @@ edition = { workspace = true }
 testing = ["serde_json", "espresso-types/testing"]
 
 [dev-dependencies]
-node-metrics = { path = ".", features = [ "testing" ] }
+node-metrics = { path = ".", features = ["testing"] }
 
 [dependencies]
 async-lock = { workspace = true }
@@ -27,6 +27,7 @@ tokio = { workspace = true }
 
 # Dependencies for feature `testing`
 hotshot-types = { workspace = true }
+hotshot-example-types = { workspace = true }
 prometheus-parse = { version = "^0.2.5" }
 reqwest = { workspace = true }
 serde = { workspace = true }

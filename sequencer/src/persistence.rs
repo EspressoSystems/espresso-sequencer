@@ -56,21 +56,25 @@ mod persistence_tests {
     use hotshot_example_types::node_types::TestVersions;
     use hotshot_types::{
         data::{
-            DaProposal, EpochNumber, QuorumProposal2, QuorumProposalWrapper, VidDisperseShare,
-            ViewNumber,
+            vid_disperse::ADVZDisperseShare, DaProposal, EpochNumber, QuorumProposal2,
+            QuorumProposalWrapper, VidDisperseShare, ViewNumber,
         },
         event::{EventType, HotShotAction, LeafInfo},
         message::{Proposal, UpgradeLock},
         simple_certificate::{NextEpochQuorumCertificate2, QuorumCertificate, UpgradeCertificate},
         simple_vote::{NextEpochQuorumData2, QuorumData2, UpgradeProposalData, VersionedVoteData},
-        traits::{block_contents::vid_commitment, node_implementation::ConsensusTime, EncodeBytes},
-        vid::vid_scheme,
+        traits::{
+            block_contents::vid_commitment,
+            node_implementation::{ConsensusTime, Versions},
+            EncodeBytes,
+        },
+        vid::advz_scheme,
     };
     use jf_vid::VidScheme;
     use sequencer_utils::test_utils::setup_test;
     use std::sync::Arc;
     use testing::TestablePersistence;
-    use vbs::version::Version;
+    use vbs::version::{StaticVersionType, Version};
 
     use super::*;
 
@@ -168,17 +172,18 @@ mod persistence_tests {
             None
         );
 
-        let leaf: Leaf2 = Leaf::genesis(&ValidatedState::default(), &NodeState::mock())
-            .await
-            .into();
+        let leaf: Leaf2 =
+            Leaf::genesis::<TestVersions>(&ValidatedState::default(), &NodeState::mock())
+                .await
+                .into();
         let leaf_payload = leaf.block_payload().unwrap();
         let leaf_payload_bytes_arc = leaf_payload.encode();
-        let disperse = vid_scheme(2)
+        let disperse = advz_scheme(2)
             .disperse(leaf_payload_bytes_arc.clone())
             .unwrap();
         let (pubkey, privkey) = BLSPubKey::generated_from_seed_indexed([0; 32], 1);
         let signature = PubKey::sign(&privkey, &[]).unwrap();
-        let mut vid = VidDisperseShare::<SeqTypes> {
+        let mut vid = ADVZDisperseShare::<SeqTypes> {
             view_number: ViewNumber::new(0),
             payload_commitment: Default::default(),
             share: disperse.shares[0].clone(),
@@ -261,7 +266,11 @@ mod persistence_tests {
             _pd: Default::default(),
         };
 
-        let vid_commitment = vid_commitment(&leaf_payload_bytes_arc, 2);
+        let vid_commitment = vid_commitment::<TestVersions>(
+            &leaf_payload_bytes_arc,
+            2,
+            <TestVersions as Versions>::Base::VERSION,
+        );
 
         storage
             .append_da(&da_proposal, vid_commitment)
@@ -457,7 +466,14 @@ mod persistence_tests {
         for (leaf, info) in leaves.iter().zip(consumer.leaf_chain().await.iter()) {
             assert_eq!(info.leaf, *leaf);
             let decided_vid_share = info.vid_share.as_ref().unwrap();
-            assert_eq!(decided_vid_share.view_number, leaf.view_number());
+            match decided_vid_share {
+                VidDisperseShare::V0(vid_share) => {
+                    assert_eq!(vid_share.view_number, leaf.view_number())
+                }
+                VidDisperseShare::V1(vid_share) => {
+                    assert_eq!(vid_share.view_number, leaf.view_number())
+                }
+            };
         }
 
         // The decided leaf should not have been garbage collected.
@@ -647,16 +663,17 @@ mod persistence_tests {
         // Create a short blockchain.
         let mut chain = vec![];
 
-        let leaf: Leaf2 = Leaf::genesis(&ValidatedState::default(), &NodeState::mock())
-            .await
-            .into();
+        let leaf: Leaf2 =
+            Leaf::genesis::<TestVersions>(&ValidatedState::default(), &NodeState::mock())
+                .await
+                .into();
         let leaf_payload = leaf.block_payload().unwrap();
         let leaf_payload_bytes_arc = leaf_payload.encode();
-        let disperse = vid_scheme(2)
+        let disperse = advz_scheme(2)
             .disperse(leaf_payload_bytes_arc.clone())
             .unwrap();
         let (pubkey, privkey) = BLSPubKey::generated_from_seed_indexed([0; 32], 1);
-        let mut vid = VidDisperseShare::<SeqTypes> {
+        let mut vid = ADVZDisperseShare::<SeqTypes> {
             view_number: ViewNumber::new(0),
             payload_commitment: Default::default(),
             share: disperse.shares[0].clone(),
@@ -702,7 +719,11 @@ mod persistence_tests {
             _pd: Default::default(),
         };
 
-        let vid_commitment = vid_commitment(&leaf_payload_bytes_arc, 2);
+        let vid_commitment = vid_commitment::<TestVersions>(
+            &leaf_payload_bytes_arc,
+            2,
+            <TestVersions as Versions>::Base::VERSION,
+        );
 
         for i in 0..4 {
             quorum_proposal.proposal.view_number = ViewNumber::new(i);
@@ -820,7 +841,14 @@ mod persistence_tests {
         for ((leaf, _, _, _), info) in chain.iter().zip(leaf_chain.iter()) {
             assert_eq!(info.leaf, *leaf);
             let decided_vid_share = info.vid_share.as_ref().unwrap();
-            assert_eq!(decided_vid_share.view_number, leaf.view_number());
+            match decided_vid_share {
+                VidDisperseShare::V0(vid_share) => {
+                    assert_eq!(vid_share.view_number, leaf.view_number());
+                }
+                VidDisperseShare::V1(vid_share) => {
+                    assert_eq!(vid_share.view_number, leaf.view_number());
+                }
+            }
             assert!(info.leaf.block_payload().is_some());
         }
     }
@@ -836,15 +864,16 @@ mod persistence_tests {
         let storage = options.create().await.unwrap();
 
         // Add some "old" data, from view 0.
-        let leaf = Leaf::genesis(&ValidatedState::default(), &NodeState::mock()).await;
+        let leaf =
+            Leaf::genesis::<TestVersions>(&ValidatedState::default(), &NodeState::mock()).await;
         let leaf_payload = leaf.block_payload().unwrap();
         let leaf_payload_bytes_arc = leaf_payload.encode();
-        let disperse = vid_scheme(2)
+        let disperse = advz_scheme(2)
             .disperse(leaf_payload_bytes_arc.clone())
             .unwrap();
         let payload_commitment = disperse.commit;
         let (pubkey, privkey) = BLSPubKey::generated_from_seed_indexed([0; 32], 1);
-        let vid_share = VidDisperseShare::<SeqTypes> {
+        let vid_share = ADVZDisperseShare::<SeqTypes> {
             view_number: ViewNumber::new(0),
             payload_commitment,
             share: disperse.shares[0].clone(),

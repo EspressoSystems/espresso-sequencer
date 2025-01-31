@@ -8,7 +8,10 @@ use espresso_types::{
 };
 use hotshot_types::{
     consensus::CommitmentMap,
-    data::{DaProposal, QuorumProposal, QuorumProposal2, QuorumProposalWrapper, VidDisperseShare},
+    data::{
+        vid_disperse::ADVZDisperseShare, DaProposal, QuorumProposal, QuorumProposal2,
+        QuorumProposalWrapper, VidDisperseShare,
+    },
     event::{Event, EventType, HotShotAction, LeafInfo},
     message::{convert_proposal, Proposal},
     simple_certificate::{
@@ -400,7 +403,7 @@ impl Inner {
     fn load_vid_share(
         &self,
         view: ViewNumber,
-    ) -> anyhow::Result<Option<Proposal<SeqTypes, VidDisperseShare<SeqTypes>>>> {
+    ) -> anyhow::Result<Option<Proposal<SeqTypes, ADVZDisperseShare<SeqTypes>>>> {
         let dir_path = self.vid_dir_path();
 
         let file_path = dir_path.join(view.u64().to_string()).with_extension("txt");
@@ -410,7 +413,7 @@ impl Inner {
         }
 
         let vid_share_bytes = fs::read(file_path)?;
-        let vid_share: Proposal<SeqTypes, VidDisperseShare<SeqTypes>> =
+        let vid_share: Proposal<SeqTypes, ADVZDisperseShare<SeqTypes>> =
             bincode::deserialize(&vid_share_bytes)?;
         Ok(Some(vid_share))
     }
@@ -603,13 +606,13 @@ impl SequencerPersistence for Persistence {
     async fn load_vid_share(
         &self,
         view: ViewNumber,
-    ) -> anyhow::Result<Option<Proposal<SeqTypes, VidDisperseShare<SeqTypes>>>> {
+    ) -> anyhow::Result<Option<Proposal<SeqTypes, ADVZDisperseShare<SeqTypes>>>> {
         self.inner.read().await.load_vid_share(view)
     }
 
     async fn append_vid(
         &self,
-        proposal: &Proposal<SeqTypes, VidDisperseShare<SeqTypes>>,
+        proposal: &Proposal<SeqTypes, ADVZDisperseShare<SeqTypes>>,
     ) -> anyhow::Result<()> {
         let mut inner = self.inner.write().await;
         let view_number = proposal.data.view_number().u64();
