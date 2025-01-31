@@ -20,8 +20,7 @@ use committable::Committable;
 use espresso_types::{NodeState, PubKey, ValidatedState};
 use hotshot_types::{
     data::{
-        DaProposal, EpochNumber, QuorumProposal, UpgradeProposal, VidDisperse, VidDisperseShare,
-        ViewChangeEvidence, ViewNumber,
+        DaProposal, EpochNumber, QuorumProposal, UpgradeProposal, ViewChangeEvidence, ViewNumber,
     },
     message::{
         DaConsensusMessage, DataMessage, GeneralConsensusMessage, Message, MessageKind, Proposal,

@@ -11,7 +11,7 @@ use hotshot_types::{
     consensus::CommitmentMap,
     data::{
         vid_disperse::ADVZDisperseShare, DaProposal, QuorumProposal, QuorumProposal2,
-        QuorumProposalWrapper, VidDisperseShare,
+        QuorumProposalWrapper,
     },
     event::{Event, EventType, HotShotAction, LeafInfo},
     message::Proposal,
