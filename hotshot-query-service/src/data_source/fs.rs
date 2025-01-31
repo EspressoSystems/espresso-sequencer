@@ -32,7 +32,7 @@ pub use super::storage::fs::Transaction;
 ///
 /// Note that because [`AtomicStore`](atomic_store::AtomicStore) only allows changes to be made to
 /// the underlying store, a [`Transaction`] takes full control of the whole store, and does not
-/// permit concurrent readers or other transactions while in flight. This is enfored internally via
+/// permit concurrent readers or other transactions while in flight. This is enforced internally via
 /// a global `RwLock`, and is a significant downside of this storage implementation, compared to the
 /// more relaxed concurrency semantics of a SQL implementation.
 ///

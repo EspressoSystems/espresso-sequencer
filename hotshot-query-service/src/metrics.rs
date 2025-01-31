@@ -60,7 +60,7 @@ impl From<prometheus::Error> for MetricsError {
 ///
 /// [PrometheusMetrics] also supports querying for individual metrics by name, unlike
 /// [prometheus::Registry]. This provides a programming interface for inspecting the values of
-/// specific metrics at run-time, if that is preferrable to exporting all metrics wholesale.
+/// specific metrics at run-time, if that is preferable to exporting all metrics wholesale.
 #[derive(Clone, Debug, Default)]
 pub struct PrometheusMetrics {
     metrics: Registry,

@@ -151,7 +151,7 @@ impl TransactionMode for Read {
         //
         // With SQLite, there is nothing to be done here, as SQLite automatically starts
         // transactions in read-only mode, and always has serializable concurrency unless we
-        // explicity opt in to dirty reads with a pragma.
+        // explicitly opt in to dirty reads with a pragma.
         #[cfg(not(feature = "embedded-db"))]
         conn.execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE, READ ONLY, DEFERRABLE")
             .await?;
@@ -707,7 +707,7 @@ impl<Types: NodeType, State: MerklizedState<Types, ARITY>, const ARITY: usize>
                                     .decode_error("malformed merkle node hash")?;
 
                                 children_values.push(hash);
-                                // Mark the entry as 1 in bitvec to indiciate a non-empty child
+                                // Mark the entry as 1 in bitvec to indicate a non-empty child
                                 children_bitvec.push(true);
                             }
                         }

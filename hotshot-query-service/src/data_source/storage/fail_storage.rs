@@ -38,7 +38,7 @@ use hotshot_types::traits::node_implementation::NodeType;
 use std::ops::RangeBounds;
 use std::sync::Arc;
 
-/// A specific action that can be targetted to inject an error.
+/// A specific action that can be targeted to inject an error.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FailableAction {
     // TODO currently we implement failable actions for the availability methods, but if needed we
@@ -65,9 +65,9 @@ pub enum FailableAction {
 }
 
 impl FailableAction {
-    /// Should `self` being targetted for failure cause `action` to fail?
+    /// Should `self` being targeted for failure cause `action` to fail?
     fn matches(self, action: Self) -> bool {
-        // Fail if this is the action specifically targetted for failure or if we are failing any
+        // Fail if this is the action specifically targeted for failure or if we are failing any
         // action right now.
         self == action || self == Self::Any
     }
@@ -98,7 +98,7 @@ impl FailureMode {
 }
 
 #[derive(Debug, Default)]
-struct Failer {
+struct Failure {
     on_read: FailureMode,
     on_write: FailureMode,
     on_commit: FailureMode,
@@ -110,95 +110,95 @@ struct Failer {
 #[derive(Clone, Debug)]
 pub struct FailStorage<S> {
     inner: S,
-    failer: Arc<Mutex<Failer>>,
+    failure: Arc<Mutex<Failure>>,
 }
 
 impl<S> From<S> for FailStorage<S> {
     fn from(inner: S) -> Self {
         Self {
             inner,
-            failer: Default::default(),
+            failure: Default::default(),
         }
     }
 }
 
 impl<S> FailStorage<S> {
     pub async fn fail_reads(&self, action: FailableAction) {
-        self.failer.lock().await.on_read = FailureMode::Always(action);
+        self.failure.lock().await.on_read = FailureMode::Always(action);
     }
 
     pub async fn fail_writes(&self, action: FailableAction) {
-        self.failer.lock().await.on_write = FailureMode::Always(action);
+        self.failure.lock().await.on_write = FailureMode::Always(action);
     }
 
     pub async fn fail_commits(&self, action: FailableAction) {
-        self.failer.lock().await.on_commit = FailureMode::Always(action);
+        self.failure.lock().await.on_commit = FailureMode::Always(action);
     }
 
     pub async fn fail_begins_writable(&self, action: FailableAction) {
-        self.failer.lock().await.on_begin_writable = FailureMode::Always(action);
+        self.failure.lock().await.on_begin_writable = FailureMode::Always(action);
     }
 
     pub async fn fail_begins_read_only(&self, action: FailableAction) {
-        self.failer.lock().await.on_begin_read_only = FailureMode::Always(action);
+        self.failure.lock().await.on_begin_read_only = FailureMode::Always(action);
     }
 
     pub async fn fail(&self, action: FailableAction) {
-        let mut failer = self.failer.lock().await;
-        failer.on_read = FailureMode::Always(action);
-        failer.on_write = FailureMode::Always(action);
-        failer.on_commit = FailureMode::Always(action);
-        failer.on_begin_writable = FailureMode::Always(action);
-        failer.on_begin_read_only = FailureMode::Always(action);
+        let mut failure = self.failure.lock().await;
+        failure.on_read = FailureMode::Always(action);
+        failure.on_write = FailureMode::Always(action);
+        failure.on_commit = FailureMode::Always(action);
+        failure.on_begin_writable = FailureMode::Always(action);
+        failure.on_begin_read_only = FailureMode::Always(action);
     }
 
     pub async fn pass_reads(&self) {
-        self.failer.lock().await.on_read = FailureMode::Never;
+        self.failure.lock().await.on_read = FailureMode::Never;
     }
 
     pub async fn pass_writes(&self) {
-        self.failer.lock().await.on_write = FailureMode::Never;
+        self.failure.lock().await.on_write = FailureMode::Never;
     }
 
     pub async fn pass_commits(&self) {
-        self.failer.lock().await.on_commit = FailureMode::Never;
+        self.failure.lock().await.on_commit = FailureMode::Never;
     }
 
     pub async fn pass_begins_writable(&self) {
-        self.failer.lock().await.on_begin_writable = FailureMode::Never;
+        self.failure.lock().await.on_begin_writable = FailureMode::Never;
     }
 
     pub async fn pass_begins_read_only(&self) {
-        self.failer.lock().await.on_begin_read_only = FailureMode::Never;
+        self.failure.lock().await.on_begin_read_only = FailureMode::Never;
     }
 
     pub async fn pass(&self) {
-        let mut failer = self.failer.lock().await;
-        failer.on_read = FailureMode::Never;
-        failer.on_write = FailureMode::Never;
-        failer.on_commit = FailureMode::Never;
-        failer.on_begin_writable = FailureMode::Never;
-        failer.on_begin_read_only = FailureMode::Never;
+        let mut failure = self.failure.lock().await;
+        failure.on_read = FailureMode::Never;
+        failure.on_write = FailureMode::Never;
+        failure.on_commit = FailureMode::Never;
+        failure.on_begin_writable = FailureMode::Never;
+        failure.on_begin_read_only = FailureMode::Never;
     }
 
     pub async fn fail_one_read(&self, action: FailableAction) {
-        self.failer.lock().await.on_read = FailureMode::Once(action);
+        self.failure.lock().await.on_read = FailureMode::Once(action);
     }
 
     pub async fn fail_one_write(&self, action: FailableAction) {
-        self.failer.lock().await.on_write = FailureMode::Once(action);
+        self.failure.lock().await.on_write = FailureMode::Once(action);
     }
 
     pub async fn fail_one_commit(&self, action: FailableAction) {
-        self.failer.lock().await.on_commit = FailureMode::Once(action);
+        self.failure.lock().await.on_commit = FailureMode::Once(action);
     }
 
     pub async fn fail_one_begin_writable(&self, action: FailableAction) {
-        self.failer.lock().await.on_begin_writable = FailureMode::Once(action);
+        self.failure.lock().await.on_begin_writable = FailureMode::Once(action);
     }
 
     pub async fn fail_one_begin_read_only(&self, action: FailableAction) {
-        self.failer.lock().await.on_begin_read_only = FailureMode::Once(action);
+        self.failure.lock().await.on_begin_read_only = FailureMode::Once(action);
     }
 }
 
@@ -216,26 +216,26 @@ where
         Self: 'a;
 
     async fn write(&self) -> anyhow::Result<<Self as VersionedDataSource>::Transaction<'_>> {
-        self.failer
+        self.failure
             .lock()
             .await
             .on_begin_writable
             .maybe_fail(FailableAction::Any)?;
         Ok(Transaction {
             inner: self.inner.write().await?,
-            failer: self.failer.clone(),
+            failure: self.failure.clone(),
         })
     }
 
     async fn read(&self) -> anyhow::Result<<Self as VersionedDataSource>::ReadOnly<'_>> {
-        self.failer
+        self.failure
             .lock()
             .await
             .on_begin_read_only
             .maybe_fail(FailableAction::Any)?;
         Ok(Transaction {
             inner: self.inner.read().await?,
-            failer: self.failer.clone(),
+            failure: self.failure.clone(),
         })
     }
 }
@@ -281,20 +281,20 @@ where
 #[derive(Debug)]
 pub struct Transaction<T> {
     inner: T,
-    failer: Arc<Mutex<Failer>>,
+    failure: Arc<Mutex<Failure>>,
 }
 
 impl<T> Transaction<T> {
     async fn maybe_fail_read(&self, action: FailableAction) -> QueryResult<()> {
-        self.failer.lock().await.on_read.maybe_fail(action)
+        self.failure.lock().await.on_read.maybe_fail(action)
     }
 
     async fn maybe_fail_write(&self, action: FailableAction) -> QueryResult<()> {
-        self.failer.lock().await.on_write.maybe_fail(action)
+        self.failure.lock().await.on_write.maybe_fail(action)
     }
 
     async fn maybe_fail_commit(&self, action: FailableAction) -> QueryResult<()> {
-        self.failer.lock().await.on_commit.maybe_fail(action)
+        self.failure.lock().await.on_commit.maybe_fail(action)
     }
 }
 

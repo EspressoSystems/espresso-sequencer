@@ -44,7 +44,7 @@ where
         #[derivative(Debug = "ignore")]
         fetcher: Arc<Fetcher<Types, S, P>>,
     },
-    /// Callback when fetching the leaf in order to then look up the corresopnding VID common data.
+    /// Callback when fetching the leaf in order to then look up the corresponding VID common data.
     VidCommon {
         #[derivative(Debug = "ignore")]
         fetcher: Arc<Fetcher<Types, S, P>>,
@@ -158,7 +158,7 @@ where
             fetch_leaf_with_callbacks(tx, callback.fetcher(), n.into(), [callback.into()]).await?;
         }
         BlockId::Hash(h) => {
-            // Given only the hash, we cannot tell if the corresonding leaf actually exists, since
+            // Given only the hash, we cannot tell if the corresponding leaf actually exists, since
             // we don't have a corresponding header. Therefore, we will not spawn an active fetch.
             tracing::debug!("not fetching unknown block {h}");
         }

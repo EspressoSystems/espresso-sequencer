@@ -193,7 +193,7 @@ where
         LeafId::Hash(h) => {
             // We don't actively fetch leaves when requested by hash, because we have no way of
             // knowing whether a leaf with such a hash actually exists, and we don't want to bother
-            // peers with requests for non-existant leaves.
+            // peers with requests for non-existent leaves.
             tracing::debug!("not fetching unknown leaf {h}");
         }
     }
@@ -354,7 +354,7 @@ impl<Types: NodeType, S, P> Eq for LeafCallback<Types, S, P> {}
 impl<Types: NodeType, S, P> Ord for LeafCallback<Types, S, P> {
     fn cmp(&self, other: &Self) -> Ordering {
         match (self, other) {
-            // Store leaves in the database before storing derived objecs.
+            // Store leaves in the database before storing derived objects.
             (Self::Leaf { .. }, Self::Continuation { .. }) => Ordering::Less,
             (Self::Continuation { .. }, Self::Leaf { .. }) => Ordering::Greater,
 

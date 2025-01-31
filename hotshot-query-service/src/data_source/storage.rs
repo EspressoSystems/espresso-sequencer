@@ -46,8 +46,8 @@
 //!   of an additional lifetime parameter.
 //! * We run into a longstanding [`rustc` bug](https://github.com/rust-lang/rust/issues/85063) in
 //!   which type inference diverges when given trait bounds on reference types, even when
-//!   theoretically the types are uniquely inferrable. This issue can be worked around by [explicitly
-//!   specifying type paramters at every call site](https://users.rust-lang.org/t/type-recursion-when-trait-bound-is-added-on-reference-type/74525/2),
+//!   theoretically the types are uniquely inferable. This issue can be worked around by [explicitly
+//!   specifying type parameters at every call site](https://users.rust-lang.org/t/type-recursion-when-trait-bound-is-added-on-reference-type/74525/2),
 //!   but this further exacerbates the ergonomic issues with this approach, past the point of
 //!   viability.
 //!

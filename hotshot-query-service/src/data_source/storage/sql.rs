@@ -128,7 +128,7 @@ macro_rules! include_migrations {
     };
 }
 
-/// The migrations requied to build the default schema for this version of [`SqlStorage`].
+/// The migrations required to build the default schema for this version of [`SqlStorage`].
 pub fn default_migrations() -> Vec<Migration> {
     #[cfg(not(feature = "embedded-db"))]
     let mut migrations =

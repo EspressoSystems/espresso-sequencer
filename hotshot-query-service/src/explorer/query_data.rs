@@ -631,7 +631,7 @@ impl From<crate::QueryError> for GetBlockSummariesError {
 }
 
 /// [GetTransactionDetailError] represents an error that has occurred in
-/// response to the `get_tranaction_detail` request.
+/// response to the `get_transaction_detail` request.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum GetTransactionDetailError {

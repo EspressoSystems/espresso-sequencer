@@ -49,7 +49,7 @@ pub trait QueryableHeader<Types: NodeType>: BlockHeader<Types> {
 
 /// A block payload whose contents (e.g. individual transactions) can be examined.
 ///
-/// Note to implementors: this trait has only a few required methods. The provided methods, for
+/// Note to implementers: this trait has only a few required methods. The provided methods, for
 /// querying transactions in various ways, are implemented in terms of the required
 /// [`iter`](Self::iter) and [`transaction_with_proof`](Self::transaction_with_proof) methods, and
 /// the default implementations may be inefficient (e.g. performing an O(n) search, or computing an
@@ -83,7 +83,7 @@ pub trait QueryablePayload<Types: NodeType>: traits::BlockPayload<Types> {
     /// applications proving stronger or weaker statements depending on the trust assumptions at
     /// play. Some may prove a very strong statement (for example, a shared sequencer proving that
     /// the transaction belongs not only to the block but to a section of the block dedicated to a
-    /// specific rollup), otherws may prove something substantially weaker (for example, a trusted
+    /// specific rollup), otherwise may prove something substantially weaker (for example, a trusted
     /// query service may use `()` for the proof).
     type InclusionProof: Clone + Debug + PartialEq + Eq + Serialize + DeserializeOwned + Send + Sync;
 
