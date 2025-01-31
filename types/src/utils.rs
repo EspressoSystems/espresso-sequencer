@@ -141,7 +141,7 @@ impl<TYPES: NodeType> ViewInner<TYPES> {
         }
     }
 
-    /// return the underlying block paylod commitment if it exists
+    /// return the underlying block payload commitment if it exists
     #[must_use]
     pub fn payload_commitment(&self) -> Option<VidCommitment> {
         if let Self::Da {
