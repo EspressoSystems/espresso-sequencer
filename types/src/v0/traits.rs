@@ -10,8 +10,8 @@ use hotshot::{types::EventType, HotShotInitializer};
 use hotshot_types::{
     consensus::CommitmentMap,
     data::{
-        DaProposal, EpochNumber, QuorumProposal, QuorumProposal2, QuorumProposalWrapper,
-        VidDisperseShare, ViewNumber,
+        DaProposal, QuorumProposal, QuorumProposal2, QuorumProposalWrapper, VidDisperseShare,
+        ViewNumber,
     },
     event::{HotShotAction, LeafInfo},
     message::{convert_proposal, Proposal},
