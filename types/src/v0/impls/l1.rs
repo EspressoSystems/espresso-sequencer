@@ -24,15 +24,13 @@ use futures::{
     stream::{self, StreamExt},
 };
 use hotshot_types::traits::metrics::{CounterFamily, Metrics};
-use itertools::Itertools;
 use lru::LruCache;
 use reqwest::StatusCode;
 use serde::{de::DeserializeOwned, Serialize};
 use std::time::Duration;
 use tokio::{
-    spawn,
     sync::{Mutex, MutexGuard},
-    task::{JoinHandle, JoinSet},
+    task::JoinSet,
     time::sleep,
 };
 use tracing::Instrument;

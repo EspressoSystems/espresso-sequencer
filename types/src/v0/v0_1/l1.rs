@@ -1,4 +1,4 @@
-use crate::{parse_duration, v0_3::StakeTables, EpochCommittees};
+use crate::{parse_duration, v0_3::StakeTables};
 use async_broadcast::{InactiveReceiver, Sender};
 use clap::Parser;
 use derive_more::Deref;
@@ -16,7 +16,7 @@ use std::{
 };
 use tokio::{
     sync::{Mutex, RwLock},
-    task::{JoinHandle, JoinSet},
+    task::JoinSet,
 };
 use url::Url;
 
