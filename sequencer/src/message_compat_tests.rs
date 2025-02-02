@@ -231,8 +231,8 @@ async fn test_message_compat<Ver: StaticVersionType>(_ver: Ver) {
                     ViewNumber::genesis(),
                     vid_scheme(1).disperse(payload.encode()).unwrap(),
                     &membership,
-                    EpochNumber::genesis(),
-                    EpochNumber::new(1),
+                    Some(EpochNumber::genesis()),
+                    Some(EpochNumber::new(1)),
                     Some(block_header.payload_commitment()),
                 )
                 .await,

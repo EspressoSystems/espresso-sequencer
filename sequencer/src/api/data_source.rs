@@ -117,10 +117,15 @@ pub(crate) trait NodeStateDataSource {
 }
 
 pub(crate) trait StakeTableDataSource<T: NodeType> {
-    /// Get the stake table for a given epoch or the current epoch if not provided
+    /// Get the stake table for a given epoch
     fn get_stake_table(
         &self,
         epoch: Option<<T as NodeType>::Epoch>,
+    ) -> impl Send + Future<Output = Vec<StakeTableEntry<T::SignatureKey>>>;
+
+    /// Get the stake table for  the current epoch if not provided
+    fn get_stake_table_current(
+        &self,
     ) -> impl Send + Future<Output = Vec<StakeTableEntry<T::SignatureKey>>>;
 }
 

@@ -62,24 +62,24 @@ tokio = { version = "1", default-features = false, features = [
     "sync",
 ] }
 
-hotshot = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.83" }
+hotshot = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.84" }
 # Hotshot imports
-hotshot-builder-api = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.83" }
-hotshot-builder-core = { git = "https://github.com/EspressoSystems/marketplace-builder-core", tag = "0.1.59" }
-marketplace-builder-core = { git = "https://github.com/EspressoSystems/marketplace-builder-core", tag = "0.1.59" }
-marketplace-builder-shared = { git = "https://github.com/EspressoSystems/marketplace-builder-core", tag = "0.1.59" }
-hotshot-events-service = { git = "https://github.com/EspressoSystems/hotshot-events-service.git", tag = "0.1.57" }
-hotshot-orchestrator = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.83" }
-hotshot-query-service = { path = "/home/abdul/Documents/hotshot-query-service" }
-hotshot-stake-table = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.83" }
+hotshot-builder-api = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.84" }
+hotshot-builder-core = { git = "https://github.com/EspressoSystems/marketplace-builder-core", tag = "0.5.84" }
+marketplace-builder-core = { git = "https://github.com/EspressoSystems/marketplace-builder-core", tag = "0.5.84" }
+marketplace-builder-shared = { git = "https://github.com/EspressoSystems/marketplace-builder-core", tag = "0.5.84" }
+hotshot-events-service = { git = "https://github.com/EspressoSystems/hotshot-events-service.git", tag = "0.1.58" }
+hotshot-orchestrator = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.84" }
+hotshot-query-service = { path = "../../Documents/hotshot-query-service" }
+hotshot-stake-table = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.84" }
 hotshot-state-prover = { version = "0.1.0", path = "hotshot-state-prover" }
-hotshot-task = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.83" }
-hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.83" }
-hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.83" }
-libp2p-networking = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.83" }
+hotshot-task = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.84" }
+hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.84" }
+hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.84" }
+libp2p-networking = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.84" }
 hotshot-contract-adapter = { version = "0.1.0", path = "contracts/rust/adapter" }
 # Temporary, used to pull in the mock auction results provider
-hotshot-example-types = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.83" }
+hotshot-example-types = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.84" }
 
 # Push CDN imports
 cdn-broker = { git = "https://github.com/EspressoSystems/Push-CDN", tag = "0.5.1-upgrade", package = "cdn-broker" }
@@ -116,7 +116,7 @@ log-panics = { version = "2.0", features = ["with-backtrace"] }
 lru = "0.12"
 strum = { version = "0.26", features = ["derive"] }
 surf-disco = "0.9"
-sqlx = "0.8"
+sqlx = "=0.8.2"
 tagged-base64 = "0.4"
 tide-disco = "0.9.3"
 thiserror = "1.0.69"
@@ -162,15 +162,3 @@ opt-level = 0
 opt-level = 0
 [profile.test.package.hotshot-state-prover]
 opt-level = 3
-
-[patch."https://github.com/EspressoSystems/HotShot.git"]
-hotshot = { git = "https://www.github.com/EspressoSystems/HotShot.git", tag = "0.5.83-patch1" }
-hotshot-builder-api = { git = "https://www.github.com/EspressoSystems/HotShot.git", tag = "0.5.83-patch1" }
-hotshot-orchestrator = { git = "https://www.github.com/EspressoSystems/HotShot.git", tag = "0.5.83-patch1" }
-hotshot-stake-table = { git = "https://www.github.com/EspressoSystems/HotShot.git", tag = "0.5.83-patch1" }
-hotshot-task = { git = "https://www.github.com/EspressoSystems/HotShot.git", tag = "0.5.83-patch1" }
-hotshot-task-impls = { git = "https://www.github.com/EspressoSystems/HotShot.git", tag = "0.5.83-patch1" }
-hotshot-testing = { git = "https://www.github.com/EspressoSystems/HotShot.git", tag = "0.5.83-patch1" }
-hotshot-types = { git = "https://www.github.com/EspressoSystems/HotShot.git", tag = "0.5.83-patch1" }
-libp2p-networking = { git = "https://www.github.com/EspressoSystems/HotShot.git", tag = "0.5.83-patch1" }
-hotshot-example-types = { git = "https://www.github.com/EspressoSystems/HotShot.git", tag = "0.5.83-patch1" }

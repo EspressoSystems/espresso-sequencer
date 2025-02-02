@@ -481,7 +481,7 @@ pub async fn init_node<P: SequencerPersistence, V: Versions>(
     // Create the HotShot membership
     let membership = EpochCommittees::new_stake(
         network_config.config.known_nodes_with_stake.clone(),
-        network_config.config.known_nodes_with_stake.clone(),
+        network_config.config.known_da_nodes.clone(),
         &instance_state,
         network_config.config.epoch_height,
     );
