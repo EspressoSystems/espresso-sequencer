@@ -29,7 +29,7 @@ build profile="test":
 demo-native-mp *args: build
     scripts/demo-native -f process-compose.yaml -f process-compose-mp.yml {{args}}
 
-demo-native-epoch *args: build
+demo-native-pos *args: build
     DEMO_GENESIS_FILE=data/genesis/demo-epoch.toml scripts/demo-native -f process-compose.yaml {{args}}
 
 demo-native-benchmark:
@@ -74,9 +74,14 @@ test-all:
 test-integration:
 	@echo 'NOTE that demo-native must be running for this test to succeed.'
 	INTEGRATION_TEST_SEQUENCER_VERSION=2 cargo nextest run --all-features --nocapture --profile integration smoke
+
 test-integration-mp:
     @echo 'NOTE that demo-native-mp must be running for this test to succeed.'
     INTEGRATION_TEST_SEQUENCER_VERSION=99 cargo nextest run --all-features --nocapture --profile integration
+
+test-integration-pos:
+    @echo 'NOTE that demo-native-pos must be running for this test to succeed.'
+    INTEGRATION_TEST_SEQUENCER_VERSION=3 cargo nextest run --all-features --nocapture --profile integration smoke
 
 clippy:
     @echo 'features: "embedded-db"'
