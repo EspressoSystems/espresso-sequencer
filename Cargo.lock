@@ -4275,7 +4275,7 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.95",
- "workspace-hack",
+ "workspace-hack 0.1.0 (git+https://github.com/EspressoSystems/hotshot?branch=release-labrador-debug-2)",
 ]
 
 [[package]]
@@ -4611,7 +4611,7 @@ dependencies = [
  "serde_json",
  "sha2 0.10.8",
  "tagged-base64",
- "thiserror 2.0.11",
+ "thiserror 2.0.10",
  "time 0.3.37",
  "tokio",
  "toml 0.8.19",
@@ -10632,7 +10632,7 @@ dependencies = [
  "serde",
  "serde_spanned",
  "toml_datetime",
- "winnow 0.6.22",
+ "winnow 0.7.0",
 ]
 
 [[package]]
@@ -11680,9 +11680,9 @@ dependencies = [
 
 [[package]]
 name = "winnow"
-version = "0.6.22"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "39281189af81c07ec09db316b302a3e67bf9bd7cbf6c820b50e35fee9c2fa980"
+checksum = "7e49d2d35d3fad69b39b94139037ecfb4f359f08958b9c11e7315ce770462419"
 dependencies = [
  "memchr",
 ]
@@ -11703,7 +11703,7 @@ version = "0.33.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3268f3d866458b787f390cf61f4bbb563b922d091359f9608842999eaee3943c"
 dependencies = [
- "bitflags 2.8.0",
+ "bitflags 2.6.0",
 ]
 
 [[package]]
@@ -11866,7 +11866,7 @@ dependencies = [
  "smallvec",
  "standback",
  "subtle",
- "syn 2.0.96",
+ "syn 2.0.95",
  "time 0.3.37",
  "tokio",
  "tokio-util",
