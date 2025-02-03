@@ -41,7 +41,9 @@ testing = [
     "portpicker",
     "rand",
     "spin_sleep",
-    "tempfile"
+    "tempfile",
+    "sql-data-source",
+    "file-system-data-source"
 ]
 
 [[example]]
@@ -49,10 +51,10 @@ name = "simple-server"
 required-features = ["sql-data-source", "testing"]
 
 [dependencies]
-anyhow = "1.0"
-ark-serialize = "0.4.2"
-async-lock = "3"
-async-trait = "0.1"
+anyhow = { workspace = true }
+ark-serialize = { workspace = true }
+async-lock = { workspace = true }
+async-trait = { workspace = true }
 backoff = "0.4"
 bincode = "1.3"
 chrono = "0.4"
