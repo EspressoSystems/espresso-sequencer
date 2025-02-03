@@ -336,10 +336,13 @@ mod tests {
         message::UpgradeLock,
         simple_vote::{HasEpoch, VersionedVoteData},
         traits::node_implementation::ConsensusTime,
+        utils::{genesis_epoch_from_version, option_epoch_from_block_number},
     };
     use serde::{Deserialize, Serialize};
 
-    use crate::node_types::{MarketplaceTestVersions, NodeType, TestTypes};
+    use crate::node_types::{
+        EpochsTestVersions, MarketplaceTestVersions, NodeType, TestTypes, TestVersions,
+    };
     #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Hash, Eq)]
     /// Dummy data used for test
     struct TestData<TYPES: NodeType> {
@@ -392,5 +395,45 @@ mod tests {
             versioned_data_commitment_0 != versioned_data_commitment_1,
             "left: {versioned_data_commitment_0:?}, right: {versioned_data_commitment_1:?}"
         );
+    }
+
+    #[test]
+    fn test_option_epoch_from_block_number() {
+        // block 0 is always epoch 0
+        let epoch = option_epoch_from_block_number::<TestTypes>(true, 0, 10);
+        assert_eq!(Some(<TestTypes as NodeType>::Epoch::new(0)), epoch);
+
+        let epoch = option_epoch_from_block_number::<TestTypes>(true, 1, 10);
+        assert_eq!(Some(<TestTypes as NodeType>::Epoch::new(1)), epoch);
+
+        let epoch = option_epoch_from_block_number::<TestTypes>(true, 10, 10);
+        assert_eq!(Some(<TestTypes as NodeType>::Epoch::new(1)), epoch);
+
+        let epoch = option_epoch_from_block_number::<TestTypes>(true, 11, 10);
+        assert_eq!(Some(<TestTypes as NodeType>::Epoch::new(2)), epoch);
+
+        let epoch = option_epoch_from_block_number::<TestTypes>(true, 20, 10);
+        assert_eq!(Some(<TestTypes as NodeType>::Epoch::new(2)), epoch);
+
+        let epoch = option_epoch_from_block_number::<TestTypes>(true, 21, 10);
+        assert_eq!(Some(<TestTypes as NodeType>::Epoch::new(3)), epoch);
+
+        let epoch = option_epoch_from_block_number::<TestTypes>(true, 21, 0);
+        assert_eq!(None, epoch);
+
+        let epoch = option_epoch_from_block_number::<TestTypes>(false, 21, 10);
+        assert_eq!(None, epoch);
+
+        let epoch = option_epoch_from_block_number::<TestTypes>(false, 21, 0);
+        assert_eq!(None, epoch);
+    }
+
+    #[test]
+    fn test_genesis_epoch_from_version() {
+        let epoch = genesis_epoch_from_version::<TestVersions, TestTypes>();
+        assert_eq!(None, epoch);
+
+        let epoch = genesis_epoch_from_version::<EpochsTestVersions, TestTypes>();
+        assert_eq!(Some(<TestTypes as NodeType>::Epoch::new(0)), epoch);
     }
 }
