@@ -335,8 +335,7 @@ where
     }
 }
 
-impl<'a, Types> update::Transaction
-    for Transaction<RwLockReadGuard<'a, FileSystemStorageInner<Types>>>
+impl<Types> update::Transaction for Transaction<RwLockReadGuard<'_, FileSystemStorageInner<Types>>>
 where
     Types: NodeType,
     Payload<Types>: QueryablePayload<Types>,
