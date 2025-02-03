@@ -41,7 +41,9 @@ testing = [
     "portpicker",
     "rand",
     "spin_sleep",
-    "tempfile"
+    "tempfile",
+    "sql-data-source",
+    "file-system-data-source"
 ]
 
 [[example]]
@@ -52,7 +54,7 @@ required-features = ["sql-data-source", "testing"]
 anyhow = { workspace = true }
 ark-serialize = { workspace = true }
 async-lock = { workspace = true }
-async-trait =  { workspace = true }
+async-trait = { workspace = true }
 backoff = "0.4"
 bincode = { workspace = true }
 chrono = "0.4"
