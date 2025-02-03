@@ -1458,6 +1458,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "cbor4ii"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "189a2a2e5eec2f203b2bb8bc4c2db55c7253770d2c6bf3ae5f79ace5a15c305f"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "cc"
 version = "1.2.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3812,11 +3821,11 @@ dependencies = [
 
 [[package]]
 name = "hashlink"
-version = "0.10.0"
+version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7382cf6263419f2d8df38c55d7da83da5c18aef87fc7a7fc1fb1e344edfe14c1"
+checksum = "6ba4ff7128dee98c7dc9794b6a411377e1404dba1c97deb8d1a55297bd25d8af"
 dependencies = [
- "hashbrown 0.15.2",
+ "hashbrown 0.14.5",
 ]
 
 [[package]]
@@ -4025,8 +4034,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot"
-version = "0.5.79"
-source = "git+https://www.github.com/EspressoSystems/HotShot.git?tag=0.5.83-patch1#99929f7d717100e174c568ac7728bbf63e43ed8b"
+version = "0.5.84"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.84#310553bfe3333cb16592941043191e3b7e1b5dbf"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4064,12 +4073,13 @@ dependencies = [
  "url",
  "utils",
  "vbs",
+ "workspace-hack",
 ]
 
 [[package]]
 name = "hotshot-builder-api"
 version = "0.1.7"
-source = "git+https://www.github.com/EspressoSystems/HotShot.git?tag=0.5.83-patch1#99929f7d717100e174c568ac7728bbf63e43ed8b"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.84#310553bfe3333cb16592941043191e3b7e1b5dbf"
 dependencies = [
  "async-trait",
  "clap",
@@ -4083,12 +4093,13 @@ dependencies = [
  "tide-disco",
  "toml 0.8.19",
  "vbs",
+ "workspace-hack",
 ]
 
 [[package]]
 name = "hotshot-builder-core"
 version = "0.1.59"
-source = "git+https://github.com/EspressoSystems/marketplace-builder-core?tag=0.1.59#4647c30a3d447e65deea8cc8024c0f860fca169f"
+source = "git+https://github.com/EspressoSystems/marketplace-builder-core?tag=0.5.84#80fb768e8d0358f998c74509cec6a9a2bdb59d64"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4147,7 +4158,7 @@ dependencies = [
 [[package]]
 name = "hotshot-events-service"
 version = "0.1.57"
-source = "git+https://github.com/EspressoSystems/hotshot-events-service.git?tag=0.1.57#176c1f2166fa77951c3ebed404135ec8f7386010"
+source = "git+https://github.com/EspressoSystems/hotshot-events-service.git?tag=0.1.58#f1aedb948344d7b03d8f34fa74b60896fff92966"
 dependencies = [
  "async-broadcast",
  "async-lock 2.8.0",
@@ -4173,8 +4184,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-example-types"
-version = "0.5.79"
-source = "git+https://www.github.com/EspressoSystems/HotShot.git?tag=0.5.83-patch1#99929f7d717100e174c568ac7728bbf63e43ed8b"
+version = "0.5.84"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.84#310553bfe3333cb16592941043191e3b7e1b5dbf"
 dependencies = [
  "anyhow",
  "async-lock 3.4.0",
@@ -4194,12 +4205,13 @@ dependencies = [
  "tokio",
  "url",
  "vbs",
+ "workspace-hack",
 ]
 
 [[package]]
 name = "hotshot-fakeapi"
-version = "0.5.79"
-source = "git+https://www.github.com/EspressoSystems/HotShot.git?tag=0.5.83-patch1#99929f7d717100e174c568ac7728bbf63e43ed8b"
+version = "0.5.84"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.84#310553bfe3333cb16592941043191e3b7e1b5dbf"
 dependencies = [
  "anyhow",
  "async-lock 3.4.0",
@@ -4212,23 +4224,25 @@ dependencies = [
  "tokio",
  "toml 0.8.19",
  "vbs",
+ "workspace-hack",
 ]
 
 [[package]]
 name = "hotshot-macros"
-version = "0.5.79"
-source = "git+https://www.github.com/EspressoSystems/HotShot.git?tag=0.5.83-patch1#99929f7d717100e174c568ac7728bbf63e43ed8b"
+version = "0.5.84"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.84#310553bfe3333cb16592941043191e3b7e1b5dbf"
 dependencies = [
  "derive_builder",
  "proc-macro2",
  "quote",
  "syn 2.0.95",
+ "workspace-hack",
 ]
 
 [[package]]
 name = "hotshot-orchestrator"
-version = "0.5.79"
-source = "git+https://www.github.com/EspressoSystems/HotShot.git?tag=0.5.83-patch1#99929f7d717100e174c568ac7728bbf63e43ed8b"
+version = "0.5.84"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.84#310553bfe3333cb16592941043191e3b7e1b5dbf"
 dependencies = [
  "anyhow",
  "async-lock 3.4.0",
@@ -4246,12 +4260,13 @@ dependencies = [
  "toml 0.8.19",
  "tracing",
  "vbs",
+ "workspace-hack",
 ]
 
 [[package]]
 name = "hotshot-query-service"
 version = "0.1.76"
-source = "git+https://github.com/EspressoSystems/hotshot-query-service?tag=v0.1.76#f27507fca3d54fb80c18d952c22f39b04f7d195f"
+source = "git+https://github.com/EspressoSystems/hotshot-query-service?tag=v0.1.77#8eb2603e3abc3c77344598a1763f707b52b92cad"
 dependencies = [
  "anyhow",
  "ark-serialize",
@@ -4306,8 +4321,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-stake-table"
-version = "0.5.79"
-source = "git+https://www.github.com/EspressoSystems/HotShot.git?tag=0.5.83-patch1#99929f7d717100e174c568ac7728bbf63e43ed8b"
+version = "0.5.84"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.84#310553bfe3333cb16592941043191e3b7e1b5dbf"
 dependencies = [
  "ark-bn254",
  "ark-ed-on-bn254",
@@ -4323,6 +4338,7 @@ dependencies = [
  "primitive-types",
  "serde",
  "tagged-base64",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -4368,8 +4384,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-task"
-version = "0.5.79"
-source = "git+https://www.github.com/EspressoSystems/HotShot.git?tag=0.5.83-patch1#99929f7d717100e174c568ac7728bbf63e43ed8b"
+version = "0.5.84"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.84#310553bfe3333cb16592941043191e3b7e1b5dbf"
 dependencies = [
  "async-broadcast",
  "async-trait",
@@ -4377,12 +4393,13 @@ dependencies = [
  "tokio",
  "tracing",
  "utils",
+ "workspace-hack",
 ]
 
 [[package]]
 name = "hotshot-task-impls"
-version = "0.5.79"
-source = "git+https://www.github.com/EspressoSystems/HotShot.git?tag=0.5.83-patch1#99929f7d717100e174c568ac7728bbf63e43ed8b"
+version = "0.5.84"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.84#310553bfe3333cb16592941043191e3b7e1b5dbf"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4411,12 +4428,13 @@ dependencies = [
  "utils",
  "vbs",
  "vec1",
+ "workspace-hack",
 ]
 
 [[package]]
 name = "hotshot-testing"
-version = "0.5.79"
-source = "git+https://www.github.com/EspressoSystems/HotShot.git?tag=0.5.83-patch1#99929f7d717100e174c568ac7728bbf63e43ed8b"
+version = "0.5.84"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.84#310553bfe3333cb16592941043191e3b7e1b5dbf"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4452,12 +4470,13 @@ dependencies = [
  "url",
  "vbs",
  "vec1",
+ "workspace-hack",
 ]
 
 [[package]]
 name = "hotshot-types"
 version = "0.1.11"
-source = "git+https://www.github.com/EspressoSystems/HotShot.git?tag=0.5.83-patch1#99929f7d717100e174c568ac7728bbf63e43ed8b"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.84#310553bfe3333cb16592941043191e3b7e1b5dbf"
 dependencies = [
  "anyhow",
  "ark-bn254",
@@ -4507,6 +4526,7 @@ dependencies = [
  "utils",
  "vbs",
  "vec1",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -6028,15 +6048,15 @@ dependencies = [
 
 [[package]]
 name = "libp2p-networking"
-version = "0.5.79"
-source = "git+https://www.github.com/EspressoSystems/HotShot.git?tag=0.5.83-patch1#99929f7d717100e174c568ac7728bbf63e43ed8b"
+version = "0.5.84"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.84#310553bfe3333cb16592941043191e3b7e1b5dbf"
 dependencies = [
  "anyhow",
  "async-lock 3.4.0",
  "async-trait",
  "bincode",
  "blake3",
- "cbor4ii",
+ "cbor4ii 1.0.0",
  "delegate",
  "derive_builder",
  "derive_more 1.0.0",
@@ -6052,6 +6072,7 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber 0.3.19",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -6085,7 +6106,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1356c9e376a94a75ae830c42cdaea3d4fe1290ba409a22c809033d1b7dcab0a6"
 dependencies = [
  "async-trait",
- "cbor4ii",
+ "cbor4ii 0.3.3",
  "futures",
  "futures-bounded",
  "futures-timer",
@@ -6435,7 +6456,7 @@ dependencies = [
 [[package]]
 name = "marketplace-builder-core"
 version = "0.1.59"
-source = "git+https://github.com/EspressoSystems/marketplace-builder-core?tag=0.1.59#4647c30a3d447e65deea8cc8024c0f860fca169f"
+source = "git+https://github.com/EspressoSystems/marketplace-builder-core?tag=0.5.84#80fb768e8d0358f998c74509cec6a9a2bdb59d64"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -6460,7 +6481,7 @@ dependencies = [
 [[package]]
 name = "marketplace-builder-shared"
 version = "0.1.59"
-source = "git+https://github.com/EspressoSystems/marketplace-builder-core?tag=0.1.59#4647c30a3d447e65deea8cc8024c0f860fca169f"
+source = "git+https://github.com/EspressoSystems/marketplace-builder-core?tag=0.5.84#80fb768e8d0358f998c74509cec6a9a2bdb59d64"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -7100,9 +7121,9 @@ dependencies = [
 
 [[package]]
 name = "openssl"
-version = "0.10.68"
+version = "0.10.70"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6174bc48f102d208783c2c84bf931bb75927a617866870de8a4ea85597f871f5"
+checksum = "61cfb4e166a8bb8c9b55c500bc2308550148ece889be90f609377e58140f42c6"
 dependencies = [
  "bitflags 2.6.0",
  "cfg-if",
@@ -7132,9 +7153,9 @@ checksum = "ff011a302c396a5197692431fc1948019154afc178baf7d8e37367442a4601cf"
 
 [[package]]
 name = "openssl-sys"
-version = "0.9.104"
+version = "0.9.105"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "45abf306cbf99debc8195b66b7346498d7b10c210de50418b5ccd7ceba08c741"
+checksum = "8b22d5b84be05a8d6947c7cb71f7c849aa0f112acd4bf51c2a7c1c988ac0a9dc"
 dependencies = [
  "cc",
  "libc",
@@ -7778,7 +7799,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "81bddcdb20abf9501610992b6759a4c888aef7d1a7247ef75e2404275ac24af1"
 dependencies = [
  "anyhow",
- "itertools 0.11.0",
+ "itertools 0.12.1",
  "proc-macro2",
  "quote",
  "syn 2.0.95",
@@ -9326,7 +9347,7 @@ version = "0.8.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "03c3c6b7927ffe7ecaa769ee0e3994da3b8cafc8f444578982c83ecb161af917"
 dependencies = [
- "heck 0.4.1",
+ "heck 0.5.0",
  "proc-macro2",
  "quote",
  "syn 2.0.95",
@@ -9410,10 +9431,20 @@ dependencies = [
 ]
 
 [[package]]
-name = "sqlx"
-version = "0.8.3"
+name = "sqlformat"
+version = "0.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4410e73b3c0d8442c5f99b425d7a435b5ee0ae4167b3196771dd3f7a01be745f"
+checksum = "7bba3a93db0cc4f7bdece8bb09e77e2e785c20bfebf79eb8340ed80708048790"
+dependencies = [
+ "nom",
+ "unicode_categories",
+]
+
+[[package]]
+name = "sqlx"
+version = "0.8.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "93334716a037193fac19df402f8571269c84a00852f6a7066b5d2616dcd64d3e"
 dependencies = [
  "sqlx-core",
  "sqlx-macros",
@@ -9424,33 +9455,39 @@ dependencies = [
 
 [[package]]
 name = "sqlx-core"
-version = "0.8.3"
+version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6a007b6936676aa9ab40207cde35daab0a04b823be8ae004368c0793b96a61e0"
+checksum = "d4d8060b456358185f7d50c55d9b5066ad956956fddec42ee2e8567134a8936e"
 dependencies = [
+ "atoi",
  "bit-vec",
+ "byteorder",
  "bytes 1.9.0",
  "crc",
  "crossbeam-queue",
  "either",
  "event-listener 5.4.0",
+ "futures-channel",
  "futures-core",
  "futures-intrusive",
  "futures-io",
  "futures-util",
- "hashbrown 0.15.2",
- "hashlink 0.10.0",
+ "hashbrown 0.14.5",
+ "hashlink 0.9.1",
+ "hex",
  "indexmap 2.7.0",
  "log",
  "memchr",
  "native-tls",
  "once_cell",
+ "paste",
  "percent-encoding",
  "serde",
  "serde_json",
  "sha2 0.10.8",
  "smallvec",
- "thiserror 2.0.10",
+ "sqlformat",
+ "thiserror 1.0.69",
  "time 0.3.37",
  "tokio",
  "tokio-stream",
@@ -9460,9 +9497,9 @@ dependencies = [
 
 [[package]]
 name = "sqlx-macros"
-version = "0.8.3"
+version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3112e2ad78643fef903618d78cf0aec1cb3134b019730edb039b69eaf531f310"
+checksum = "cac0692bcc9de3b073e8d747391827297e075c7710ff6276d9f7a1f3d58c6657"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -9473,9 +9510,9 @@ dependencies = [
 
 [[package]]
 name = "sqlx-macros-core"
-version = "0.8.3"
+version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4e9f90acc5ab146a99bf5061a7eb4976b573f560bc898ef3bf8435448dd5e7ad"
+checksum = "1804e8a7c7865599c9c79be146dc8a9fd8cc86935fa641d3ea58e5f0688abaa5"
 dependencies = [
  "dotenvy",
  "either",
@@ -9499,9 +9536,9 @@ dependencies = [
 
 [[package]]
 name = "sqlx-mysql"
-version = "0.8.3"
+version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4560278f0e00ce64938540546f59f590d60beee33fffbd3b9cd47851e5fff233"
+checksum = "64bb4714269afa44aef2755150a0fc19d756fb580a67db8885608cf02f47d06a"
 dependencies = [
  "atoi",
  "base64 0.22.1",
@@ -9534,7 +9571,7 @@ dependencies = [
  "smallvec",
  "sqlx-core",
  "stringprep",
- "thiserror 2.0.10",
+ "thiserror 1.0.69",
  "time 0.3.37",
  "tracing",
  "whoami",
@@ -9542,9 +9579,9 @@ dependencies = [
 
 [[package]]
 name = "sqlx-postgres"
-version = "0.8.3"
+version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c5b98a57f363ed6764d5b3a12bfedf62f07aa16e1856a7ddc2a0bb190a959613"
+checksum = "6fa91a732d854c5d7726349bb4bb879bb9478993ceb764247660aee25f67c2f8"
 dependencies = [
  "atoi",
  "base64 0.22.1",
@@ -9556,6 +9593,7 @@ dependencies = [
  "etcetera",
  "futures-channel",
  "futures-core",
+ "futures-io",
  "futures-util",
  "hex",
  "hkdf 0.12.4",
@@ -9573,7 +9611,7 @@ dependencies = [
  "smallvec",
  "sqlx-core",
  "stringprep",
- "thiserror 2.0.10",
+ "thiserror 1.0.69",
  "time 0.3.37",
  "tracing",
  "whoami",
@@ -9581,9 +9619,9 @@ dependencies = [
 
 [[package]]
 name = "sqlx-sqlite"
-version = "0.8.3"
+version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f85ca71d3a5b24e64e1d08dd8fe36c6c95c339a896cc33068148906784620540"
+checksum = "d5b2cf34a45953bfd3daaf3db0f7a7878ab9b7a6b91b422d24a7a9e4c857b680"
 dependencies = [
  "atoi",
  "flume 0.11.1",
@@ -10841,6 +10879,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ebc1c04c71510c7f702b52b7c350734c9ff1295c464a03335b00bb84fc54f853"
 
 [[package]]
+name = "unicode_categories"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "39ec24b3121d976906ece63c9daad25b85969647682eee313cb5779fdd69e14e"
+
+[[package]]
 name = "universal-hash"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -10928,10 +10972,11 @@ checksum = "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821"
 
 [[package]]
 name = "utils"
-version = "0.5.79"
-source = "git+https://www.github.com/EspressoSystems/HotShot.git?tag=0.5.83-patch1#99929f7d717100e174c568ac7728bbf63e43ed8b"
+version = "0.5.84"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.84#310553bfe3333cb16592941043191e3b7e1b5dbf"
 dependencies = [
  "tracing",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -11535,6 +11580,93 @@ checksum = "524e57b2c537c0f9b1e69f1965311ec12182b4122e45035b1508cd24d2adadb1"
 dependencies = [
  "cfg-if",
  "windows-sys 0.48.0",
+]
+
+[[package]]
+name = "workspace-hack"
+version = "0.1.0"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.84#310553bfe3333cb16592941043191e3b7e1b5dbf"
+dependencies = [
+ "ark-bls12-377",
+ "ark-bls12-381",
+ "ark-bn254",
+ "ark-bw6-761",
+ "ark-crypto-primitives",
+ "ark-ff",
+ "ark-relations",
+ "ark-serialize",
+ "ark-std",
+ "arrayvec",
+ "async-std",
+ "async-tungstenite",
+ "base64 0.13.1",
+ "base64 0.22.1",
+ "bytes 1.9.0",
+ "concurrent-queue",
+ "crossbeam-utils",
+ "crunchy",
+ "crypto-common",
+ "data-encoding",
+ "derive_more 1.0.0",
+ "derive_more-impl",
+ "digest 0.10.7",
+ "digest 0.9.0",
+ "displaydoc",
+ "downcast-rs",
+ "either",
+ "event-listener 5.4.0",
+ "event-listener-strategy",
+ "form_urlencoded",
+ "futures",
+ "futures-channel",
+ "futures-core",
+ "futures-executor",
+ "futures-io",
+ "futures-sink",
+ "futures-task",
+ "futures-util",
+ "generic-array",
+ "getrandom 0.2.15",
+ "hashbrown 0.14.5",
+ "hashbrown 0.15.2",
+ "hex",
+ "itertools 0.12.1",
+ "jf-relation",
+ "jf-rescue",
+ "jf-signature 0.2.0",
+ "jf-utils",
+ "libp2p-identity",
+ "libsecp256k1-core",
+ "log",
+ "memchr",
+ "multihash",
+ "num-bigint",
+ "num-integer",
+ "num-traits",
+ "percent-encoding",
+ "rand 0.8.5",
+ "regex",
+ "regex-automata 0.4.9",
+ "regex-syntax 0.8.5",
+ "rustls-pki-types",
+ "sha2 0.9.9",
+ "sha3",
+ "smallvec",
+ "standback",
+ "subtle",
+ "syn 2.0.95",
+ "time 0.3.37",
+ "tokio",
+ "toml_datetime",
+ "toml_edit 0.22.22",
+ "tracing",
+ "tracing-core",
+ "tracing-log",
+ "tracing-subscriber 0.3.19",
+ "tungstenite 0.13.0",
+ "uint",
+ "url",
+ "zeroize",
 ]
 
 [[package]]
