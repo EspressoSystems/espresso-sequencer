@@ -1267,9 +1267,9 @@ dependencies = [
  "hotshot",
  "hotshot-builder-api",
  "hotshot-builder-core",
- "hotshot-events-service",
+ "hotshot-events-service 0.1.57 (git+https://github.com/EspressoSystems/hotshot-events-service.git?branch=release-labrador-debug-2)",
  "hotshot-state-prover",
- "hotshot-types",
+ "hotshot-types 0.1.11 (git+https://github.com/EspressoSystems/hotshot?branch=release-labrador-debug-2)",
  "jf-signature 0.2.0",
  "marketplace-builder-shared",
  "portpicker",
@@ -1288,9 +1288,9 @@ dependencies = [
 
 [[package]]
 name = "bumpalo"
-version = "3.16.0"
+version = "3.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "79296716171880943b8470b5f8d03aa55eb2e645a4874bdbb28adb49162e012c"
+checksum = "1628fb46dfa0b37568d12e5edd512553eccf6a22a78e8bde00bb4aed84d5bdbf"
 
 [[package]]
 name = "byte-slice-cast"
@@ -2038,9 +2038,9 @@ dependencies = [
 
 [[package]]
 name = "cpufeatures"
-version = "0.2.16"
+version = "0.2.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "16b80225097f2e5ae4e7179dd2266824648f3e2f49d9134d584b76389d31c4c3"
+checksum = "59ed5838eebb26a2bb2e58f6d5b5316989ae9d08bab10e0e6d103e656d1b0280"
 dependencies = [
  "libc",
 ]
@@ -2880,8 +2880,9 @@ dependencies = [
  "futures",
  "hotshot",
  "hotshot-contract-adapter",
+ "hotshot-example-types",
  "hotshot-query-service",
- "hotshot-types",
+ "hotshot-types 0.1.11 (git+https://github.com/EspressoSystems/hotshot?branch=release-labrador-debug-2)",
  "itertools 0.12.1",
  "jf-merkle-tree",
  "jf-signature 0.2.0",
@@ -3667,6 +3668,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "getrandom"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "43a49c392881ce6d5c3b8cb70f98717b7c07aabbdff06687b9030dbfbe2725f8"
+dependencies = [
+ "cfg-if",
+ "libc",
+ "wasi 0.13.3+wasi-0.2.2",
+ "windows-targets 0.52.6",
+]
+
+[[package]]
 name = "ghash"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4034,7 +4047,7 @@ dependencies = [
 [[package]]
 name = "hotshot"
 version = "0.5.84"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.84#310553bfe3333cb16592941043191e3b7e1b5dbf"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=release-labrador-debug-2#ee33cdba49f290272e3e06f2b9fbe20961535f8c"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4054,7 +4067,7 @@ dependencies = [
  "futures",
  "hotshot-task",
  "hotshot-task-impls",
- "hotshot-types",
+ "hotshot-types 0.1.11 (git+https://github.com/EspressoSystems/hotshot?branch=release-labrador-debug-2)",
  "libp2p-identity",
  "libp2p-networking",
  "lru 0.12.5",
@@ -4070,35 +4083,35 @@ dependencies = [
  "tracing",
  "tracing-subscriber 0.3.19",
  "url",
- "utils",
+ "utils 0.5.84 (git+https://github.com/EspressoSystems/hotshot?branch=release-labrador-debug-2)",
  "vbs",
- "workspace-hack",
+ "workspace-hack 0.1.0 (git+https://github.com/EspressoSystems/hotshot?branch=release-labrador-debug-2)",
 ]
 
 [[package]]
 name = "hotshot-builder-api"
 version = "0.1.7"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.84#310553bfe3333cb16592941043191e3b7e1b5dbf"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=release-labrador-debug-2#ee33cdba49f290272e3e06f2b9fbe20961535f8c"
 dependencies = [
  "async-trait",
  "clap",
  "committable",
  "derive_more 1.0.0",
  "futures",
- "hotshot-types",
+ "hotshot-types 0.1.11 (git+https://github.com/EspressoSystems/hotshot?branch=release-labrador-debug-2)",
  "serde",
  "tagged-base64",
  "thiserror 2.0.10",
  "tide-disco",
  "toml 0.8.19",
  "vbs",
- "workspace-hack",
+ "workspace-hack 0.1.0 (git+https://github.com/EspressoSystems/hotshot?branch=release-labrador-debug-2)",
 ]
 
 [[package]]
 name = "hotshot-builder-core"
 version = "0.1.59"
-source = "git+https://github.com/EspressoSystems/marketplace-builder-core?tag=0.5.84#80fb768e8d0358f998c74509cec6a9a2bdb59d64"
+source = "git+https://github.com/EspressoSystems/marketplace-builder-core?branch=release-labrador-debug-2#51f8f24617066acbe7e53232f2dcbe7b54876876"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4113,7 +4126,7 @@ dependencies = [
  "futures",
  "hotshot",
  "hotshot-builder-api",
- "hotshot-types",
+ "hotshot-types 0.1.11 (git+https://github.com/EspressoSystems/hotshot?branch=release-labrador-debug-2)",
  "lru 0.12.5",
  "marketplace-builder-shared",
  "once_cell",
@@ -4143,7 +4156,7 @@ dependencies = [
  "derive_more 1.0.0",
  "diff-test-bn254",
  "ethers",
- "hotshot-types",
+ "hotshot-types 0.1.11 (git+https://github.com/EspressoSystems/hotshot?branch=release-labrador-debug-2)",
  "jf-pcs",
  "jf-plonk",
  "jf-utils",
@@ -4167,7 +4180,34 @@ dependencies = [
  "derive_more 0.99.18",
  "either",
  "futures",
- "hotshot-types",
+ "hotshot-types 0.1.11 (git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.84)",
+ "libp2p-identity",
+ "rand 0.8.5",
+ "serde",
+ "snafu 0.8.5",
+ "tagged-base64",
+ "tide-disco",
+ "tokio",
+ "toml 0.8.19",
+ "tracing",
+ "tracing-test",
+ "vbs",
+]
+
+[[package]]
+name = "hotshot-events-service"
+version = "0.1.57"
+source = "git+https://github.com/EspressoSystems/hotshot-events-service.git?branch=release-labrador-debug-2#af3b9a1119c74875dae70bed5a07bb9ee35f678c"
+dependencies = [
+ "async-broadcast",
+ "async-lock 2.8.0",
+ "async-trait",
+ "clap",
+ "derivative",
+ "derive_more 0.99.18",
+ "either",
+ "futures",
+ "hotshot-types 0.1.11 (git+https://github.com/EspressoSystems/hotshot?branch=release-labrador-debug-2)",
  "libp2p-identity",
  "rand 0.8.5",
  "serde",
@@ -4184,7 +4224,7 @@ dependencies = [
 [[package]]
 name = "hotshot-example-types"
 version = "0.5.84"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.84#310553bfe3333cb16592941043191e3b7e1b5dbf"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=release-labrador-debug-2#ee33cdba49f290272e3e06f2b9fbe20961535f8c"
 dependencies = [
  "anyhow",
  "async-lock 3.4.0",
@@ -4192,7 +4232,7 @@ dependencies = [
  "committable",
  "hotshot",
  "hotshot-task-impls",
- "hotshot-types",
+ "hotshot-types 0.1.11 (git+https://github.com/EspressoSystems/hotshot?branch=release-labrador-debug-2)",
  "jf-vid",
  "rand 0.8.5",
  "reqwest 0.12.12",
@@ -4204,44 +4244,44 @@ dependencies = [
  "tokio",
  "url",
  "vbs",
- "workspace-hack",
+ "workspace-hack 0.1.0 (git+https://github.com/EspressoSystems/hotshot?branch=release-labrador-debug-2)",
 ]
 
 [[package]]
 name = "hotshot-fakeapi"
 version = "0.5.84"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.84#310553bfe3333cb16592941043191e3b7e1b5dbf"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=release-labrador-debug-2#ee33cdba49f290272e3e06f2b9fbe20961535f8c"
 dependencies = [
  "anyhow",
  "async-lock 3.4.0",
  "async-trait",
  "futures",
  "hotshot-example-types",
- "hotshot-types",
+ "hotshot-types 0.1.11 (git+https://github.com/EspressoSystems/hotshot?branch=release-labrador-debug-2)",
  "rand 0.8.5",
  "tide-disco",
  "tokio",
  "toml 0.8.19",
  "vbs",
- "workspace-hack",
+ "workspace-hack 0.1.0 (git+https://github.com/EspressoSystems/hotshot?branch=release-labrador-debug-2)",
 ]
 
 [[package]]
 name = "hotshot-macros"
 version = "0.5.84"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.84#310553bfe3333cb16592941043191e3b7e1b5dbf"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=release-labrador-debug-2#ee33cdba49f290272e3e06f2b9fbe20961535f8c"
 dependencies = [
  "derive_builder",
  "proc-macro2",
  "quote",
  "syn 2.0.95",
- "workspace-hack",
+ "workspace-hack 0.1.0 (git+https://github.com/EspressoSystems/hotshot?branch=release-labrador-debug-2)",
 ]
 
 [[package]]
 name = "hotshot-orchestrator"
 version = "0.5.84"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.84#310553bfe3333cb16592941043191e3b7e1b5dbf"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=release-labrador-debug-2#ee33cdba49f290272e3e06f2b9fbe20961535f8c"
 dependencies = [
  "anyhow",
  "async-lock 3.4.0",
@@ -4249,7 +4289,7 @@ dependencies = [
  "clap",
  "csv",
  "futures",
- "hotshot-types",
+ "hotshot-types 0.1.11 (git+https://github.com/EspressoSystems/hotshot?branch=release-labrador-debug-2)",
  "libp2p-identity",
  "multiaddr",
  "serde",
@@ -4259,13 +4299,13 @@ dependencies = [
  "toml 0.8.19",
  "tracing",
  "vbs",
- "workspace-hack",
+ "workspace-hack 0.1.0 (git+https://github.com/EspressoSystems/hotshot?branch=release-labrador-debug-2)",
 ]
 
 [[package]]
 name = "hotshot-query-service"
 version = "0.1.76"
-source = "git+https://github.com/EspressoSystems/hotshot-query-service?tag=v0.1.77#8eb2603e3abc3c77344598a1763f707b52b92cad"
+source = "git+https://github.com/EspressoSystems/hotshot-query-service?branch=release-labrador-debug-2#dd09b555abf42d6153a10c51973cb45a11736d95"
 dependencies = [
  "anyhow",
  "ark-serialize",
@@ -4285,7 +4325,7 @@ dependencies = [
  "hotshot",
  "hotshot-example-types",
  "hotshot-testing",
- "hotshot-types",
+ "hotshot-types 0.1.11 (git+https://github.com/EspressoSystems/hotshot?branch=release-labrador-debug-2)",
  "include_dir",
  "itertools 0.12.1",
  "jf-merkle-tree",
@@ -4321,7 +4361,7 @@ dependencies = [
 [[package]]
 name = "hotshot-stake-table"
 version = "0.5.84"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.84#310553bfe3333cb16592941043191e3b7e1b5dbf"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=release-labrador-debug-2#ee33cdba49f290272e3e06f2b9fbe20961535f8c"
 dependencies = [
  "ark-bn254",
  "ark-ed-on-bn254",
@@ -4329,7 +4369,7 @@ dependencies = [
  "ark-serialize",
  "ark-std",
  "digest 0.10.7",
- "hotshot-types",
+ "hotshot-types 0.1.11 (git+https://github.com/EspressoSystems/hotshot?branch=release-labrador-debug-2)",
  "jf-crhf",
  "jf-rescue",
  "jf-signature 0.2.0",
@@ -4337,7 +4377,7 @@ dependencies = [
  "primitive-types",
  "serde",
  "tagged-base64",
- "workspace-hack",
+ "workspace-hack 0.1.0 (git+https://github.com/EspressoSystems/hotshot?branch=release-labrador-debug-2)",
 ]
 
 [[package]]
@@ -4359,7 +4399,7 @@ dependencies = [
  "futures",
  "hotshot-contract-adapter",
  "hotshot-stake-table",
- "hotshot-types",
+ "hotshot-types 0.1.11 (git+https://github.com/EspressoSystems/hotshot?branch=release-labrador-debug-2)",
  "itertools 0.12.1",
  "jf-crhf",
  "jf-pcs",
@@ -4384,21 +4424,21 @@ dependencies = [
 [[package]]
 name = "hotshot-task"
 version = "0.5.84"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.84#310553bfe3333cb16592941043191e3b7e1b5dbf"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=release-labrador-debug-2#ee33cdba49f290272e3e06f2b9fbe20961535f8c"
 dependencies = [
  "async-broadcast",
  "async-trait",
  "futures",
  "tokio",
  "tracing",
- "utils",
- "workspace-hack",
+ "utils 0.5.84 (git+https://github.com/EspressoSystems/hotshot?branch=release-labrador-debug-2)",
+ "workspace-hack 0.1.0 (git+https://github.com/EspressoSystems/hotshot?branch=release-labrador-debug-2)",
 ]
 
 [[package]]
 name = "hotshot-task-impls"
 version = "0.5.84"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.84#310553bfe3333cb16592941043191e3b7e1b5dbf"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=release-labrador-debug-2#ee33cdba49f290272e3e06f2b9fbe20961535f8c"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4411,7 +4451,7 @@ dependencies = [
  "futures",
  "hotshot-builder-api",
  "hotshot-task",
- "hotshot-types",
+ "hotshot-types 0.1.11 (git+https://github.com/EspressoSystems/hotshot?branch=release-labrador-debug-2)",
  "jf-vid",
  "lru 0.12.5",
  "rand 0.8.5",
@@ -4424,16 +4464,16 @@ dependencies = [
  "tokio",
  "tracing",
  "url",
- "utils",
+ "utils 0.5.84 (git+https://github.com/EspressoSystems/hotshot?branch=release-labrador-debug-2)",
  "vbs",
  "vec1",
- "workspace-hack",
+ "workspace-hack 0.1.0 (git+https://github.com/EspressoSystems/hotshot?branch=release-labrador-debug-2)",
 ]
 
 [[package]]
 name = "hotshot-testing"
 version = "0.5.84"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.84#310553bfe3333cb16592941043191e3b7e1b5dbf"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=release-labrador-debug-2#ee33cdba49f290272e3e06f2b9fbe20961535f8c"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4451,7 +4491,7 @@ dependencies = [
  "hotshot-macros",
  "hotshot-task",
  "hotshot-task-impls",
- "hotshot-types",
+ "hotshot-types 0.1.11 (git+https://github.com/EspressoSystems/hotshot?branch=release-labrador-debug-2)",
  "itertools 0.14.0",
  "jf-vid",
  "lru 0.12.5",
@@ -4469,13 +4509,13 @@ dependencies = [
  "url",
  "vbs",
  "vec1",
- "workspace-hack",
+ "workspace-hack 0.1.0 (git+https://github.com/EspressoSystems/hotshot?branch=release-labrador-debug-2)",
 ]
 
 [[package]]
 name = "hotshot-types"
 version = "0.1.11"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.84#310553bfe3333cb16592941043191e3b7e1b5dbf"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.84#310553bfe3333cb16592941043191e3b7e1b5dbf"
 dependencies = [
  "anyhow",
  "ark-bn254",
@@ -4522,10 +4562,66 @@ dependencies = [
  "tracing",
  "typenum",
  "url",
- "utils",
+ "utils 0.5.84 (git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.84)",
  "vbs",
  "vec1",
- "workspace-hack",
+ "workspace-hack 0.1.0 (git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.84)",
+]
+
+[[package]]
+name = "hotshot-types"
+version = "0.1.11"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=release-labrador-debug-2#ee33cdba49f290272e3e06f2b9fbe20961535f8c"
+dependencies = [
+ "anyhow",
+ "ark-bn254",
+ "ark-ed-on-bn254",
+ "ark-ff",
+ "ark-serialize",
+ "ark-srs",
+ "ark-std",
+ "async-lock 3.4.0",
+ "async-trait",
+ "bincode",
+ "bitvec",
+ "blake3",
+ "clap",
+ "committable",
+ "derive_more 1.0.0",
+ "digest 0.10.7",
+ "displaydoc",
+ "dyn-clone",
+ "either",
+ "futures",
+ "jf-pcs",
+ "jf-signature 0.2.0",
+ "jf-utils",
+ "jf-vid",
+ "lazy_static",
+ "libp2p-identity",
+ "memoize",
+ "mnemonic",
+ "multiaddr",
+ "primitive-types",
+ "rand 0.8.5",
+ "rand_chacha 0.3.1",
+ "serde",
+ "serde-inline-default",
+ "serde_bytes",
+ "serde_json",
+ "sha2 0.10.8",
+ "tagged-base64",
+ "thiserror 2.0.10",
+ "time 0.3.37",
+ "tokio",
+ "toml 0.8.19",
+ "tracing",
+ "typenum",
+ "url",
+ "utils 0.5.84 (git+https://github.com/EspressoSystems/hotshot?branch=release-labrador-debug-2)",
+ "vbs",
+ "vec1",
+ "workspace-hack 0.1.0 (git+https://github.com/EspressoSystems/hotshot?branch=release-labrador-debug-2)",
 ]
 
 [[package]]
@@ -4622,9 +4718,9 @@ dependencies = [
 
 [[package]]
 name = "httparse"
-version = "1.9.5"
+version = "1.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7d71d3574edd2771538b901e6549113b4006ece66150fb69c0fb6d9a2adae946"
+checksum = "f2d708df4e7140240a16cd6ab0ab65c972d7433ab77819ea693fde9c43811e2a"
 
 [[package]]
 name = "httpdate"
@@ -4664,9 +4760,9 @@ dependencies = [
 
 [[package]]
 name = "hyper"
-version = "1.5.2"
+version = "1.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "256fb8d4bd6413123cc9d91832d78325c48ff41677595be797d90f42969beae0"
+checksum = "cc2b571658e38e0c01b1fdca3bbbe93c00d3d71693ff2770043f8c29bc7d6f80"
 dependencies = [
  "bytes 1.9.0",
  "futures-channel",
@@ -4704,7 +4800,7 @@ checksum = "2d191583f3da1305256f22463b9bb0471acad48a4e534a5218b9963e9c1f59b2"
 dependencies = [
  "futures-util",
  "http 1.2.0",
- "hyper 1.5.2",
+ "hyper 1.6.0",
  "hyper-util",
  "rustls 0.23.20",
  "rustls-pki-types",
@@ -4746,7 +4842,7 @@ checksum = "70206fc6890eaca9fde8a0bf71caa2ddfc9fe045ac9e5c70df101a7dbde866e0"
 dependencies = [
  "bytes 1.9.0",
  "http-body-util",
- "hyper 1.5.2",
+ "hyper 1.6.0",
  "hyper-util",
  "native-tls",
  "tokio",
@@ -4765,7 +4861,7 @@ dependencies = [
  "futures-util",
  "http 1.2.0",
  "http-body 1.0.1",
- "hyper 1.5.2",
+ "hyper 1.6.0",
  "pin-project-lite 0.2.16",
  "socket2 0.5.8",
  "tokio",
@@ -6048,7 +6144,7 @@ dependencies = [
 [[package]]
 name = "libp2p-networking"
 version = "0.5.84"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.84#310553bfe3333cb16592941043191e3b7e1b5dbf"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=release-labrador-debug-2#ee33cdba49f290272e3e06f2b9fbe20961535f8c"
 dependencies = [
  "anyhow",
  "async-lock 3.4.0",
@@ -6060,7 +6156,7 @@ dependencies = [
  "derive_builder",
  "derive_more 1.0.0",
  "futures",
- "hotshot-types",
+ "hotshot-types 0.1.11 (git+https://github.com/EspressoSystems/hotshot?branch=release-labrador-debug-2)",
  "lazy_static",
  "libp2p 0.54.1",
  "libp2p-identity",
@@ -6071,7 +6167,7 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber 0.3.19",
- "workspace-hack",
+ "workspace-hack 0.1.0 (git+https://github.com/EspressoSystems/hotshot?branch=release-labrador-debug-2)",
 ]
 
 [[package]]
@@ -6429,11 +6525,11 @@ dependencies = [
  "futures",
  "hotshot",
  "hotshot-builder-api",
- "hotshot-events-service",
+ "hotshot-events-service 0.1.57 (git+https://github.com/EspressoSystems/hotshot-events-service.git?branch=release-labrador-debug-2)",
  "hotshot-orchestrator",
  "hotshot-query-service",
  "hotshot-stake-table",
- "hotshot-types",
+ "hotshot-types 0.1.11 (git+https://github.com/EspressoSystems/hotshot?branch=release-labrador-debug-2)",
  "jf-merkle-tree",
  "jf-signature 0.2.0",
  "marketplace-builder-core",
@@ -6455,7 +6551,7 @@ dependencies = [
 [[package]]
 name = "marketplace-builder-core"
 version = "0.1.59"
-source = "git+https://github.com/EspressoSystems/marketplace-builder-core?tag=0.5.84#80fb768e8d0358f998c74509cec6a9a2bdb59d64"
+source = "git+https://github.com/EspressoSystems/marketplace-builder-core?branch=release-labrador-debug-2#51f8f24617066acbe7e53232f2dcbe7b54876876"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -6466,7 +6562,7 @@ dependencies = [
  "futures",
  "hotshot",
  "hotshot-builder-api",
- "hotshot-types",
+ "hotshot-types 0.1.11 (git+https://github.com/EspressoSystems/hotshot?branch=release-labrador-debug-2)",
  "marketplace-builder-shared",
  "sha2 0.10.8",
  "tagged-base64",
@@ -6480,7 +6576,7 @@ dependencies = [
 [[package]]
 name = "marketplace-builder-shared"
 version = "0.1.59"
-source = "git+https://github.com/EspressoSystems/marketplace-builder-core?tag=0.5.84#80fb768e8d0358f998c74509cec6a9a2bdb59d64"
+source = "git+https://github.com/EspressoSystems/marketplace-builder-core?branch=release-labrador-debug-2#51f8f24617066acbe7e53232f2dcbe7b54876876"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -6495,11 +6591,11 @@ dependencies = [
  "hex",
  "hotshot",
  "hotshot-builder-api",
- "hotshot-events-service",
+ "hotshot-events-service 0.1.57 (git+https://github.com/EspressoSystems/hotshot-events-service.git?tag=0.1.58)",
  "hotshot-example-types",
  "hotshot-task-impls",
  "hotshot-testing",
- "hotshot-types",
+ "hotshot-types 0.1.11 (git+https://github.com/EspressoSystems/hotshot?branch=release-labrador-debug-2)",
  "jf-vid",
  "nonempty-collections",
  "once_cell",
@@ -6530,9 +6626,9 @@ dependencies = [
  "espresso-types",
  "futures",
  "hotshot",
- "hotshot-events-service",
+ "hotshot-events-service 0.1.57 (git+https://github.com/EspressoSystems/hotshot-events-service.git?branch=release-labrador-debug-2)",
  "hotshot-query-service",
- "hotshot-types",
+ "hotshot-types 0.1.11 (git+https://github.com/EspressoSystems/hotshot?branch=release-labrador-debug-2)",
  "marketplace-solver",
  "portpicker",
  "rand 0.8.5",
@@ -6747,9 +6843,9 @@ dependencies = [
 
 [[package]]
 name = "native-tls"
-version = "0.2.12"
+version = "0.2.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a8614eb2c83d59d1c8cc974dd3f920198647674a0a035e1af1fa58707e317466"
+checksum = "0dab59f8e050d5df8e4dd87d9206fb6f65a483e20ac9fda365ade4fab353196c"
 dependencies = [
  "libc",
  "log",
@@ -6882,9 +6978,10 @@ dependencies = [
  "espresso-types",
  "futures",
  "hotshot",
+ "hotshot-example-types",
  "hotshot-query-service",
  "hotshot-stake-table",
- "hotshot-types",
+ "hotshot-types 0.1.11 (git+https://github.com/EspressoSystems/hotshot?branch=release-labrador-debug-2)",
  "node-metrics",
  "prometheus-parse",
  "reqwest 0.12.12",
@@ -7674,7 +7771,7 @@ version = "3.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8ecf48c7ca261d60b74ab1a7b20da18bede46776b2e55535cb958eb595c5fa7b"
 dependencies = [
- "toml_edit 0.22.22",
+ "toml_edit 0.22.23",
 ]
 
 [[package]]
@@ -8284,7 +8381,7 @@ dependencies = [
  "http 1.2.0",
  "http-body 1.0.1",
  "http-body-util",
- "hyper 1.5.2",
+ "hyper 1.6.0",
  "hyper-rustls 0.27.5",
  "hyper-tls 0.6.0",
  "hyper-util",
@@ -8631,9 +8728,9 @@ dependencies = [
 
 [[package]]
 name = "rustls-pki-types"
-version = "1.10.1"
+version = "1.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d2bf47e6ff922db3825eb750c4e2ff784c6ff8fb9e13046ef6a1d1c5401b0b37"
+checksum = "917ce264624a4b4db1c364dcc35bfca9ded014d0a958cd47ad3e960e988ea51c"
 dependencies = [
  "web-time",
 ]
@@ -8678,9 +8775,9 @@ dependencies = [
 
 [[package]]
 name = "ryu"
-version = "1.0.18"
+version = "1.0.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f3cb5ba0dc43242ce17de99c180e96db90b235b8a9fdc9543c96d2209116bd9f"
+checksum = "6ea1a2d0a644769cc99faa24c3ad26b379b786fe7c36fd3c546254801650e6dd"
 
 [[package]]
 name = "salsa20"
@@ -8885,14 +8982,14 @@ dependencies = [
  "futures",
  "hotshot",
  "hotshot-contract-adapter",
- "hotshot-events-service",
+ "hotshot-events-service 0.1.57 (git+https://github.com/EspressoSystems/hotshot-events-service.git?branch=release-labrador-debug-2)",
  "hotshot-example-types",
  "hotshot-orchestrator",
  "hotshot-query-service",
  "hotshot-stake-table",
  "hotshot-state-prover",
  "hotshot-testing",
- "hotshot-types",
+ "hotshot-types 0.1.11 (git+https://github.com/EspressoSystems/hotshot?branch=release-labrador-debug-2)",
  "include_dir",
  "itertools 0.12.1",
  "jf-crhf",
@@ -8954,7 +9051,7 @@ dependencies = [
  "futures",
  "hotshot",
  "hotshot-contract-adapter",
- "hotshot-types",
+ "hotshot-types 0.1.11 (git+https://github.com/EspressoSystems/hotshot?branch=release-labrador-debug-2)",
  "log-panics",
  "portpicker",
  "reqwest 0.11.27",
@@ -10032,13 +10129,13 @@ checksum = "55937e1799185b12863d447f42597ed69d9928686b8d88a1df17376a097d8369"
 
 [[package]]
 name = "tempfile"
-version = "3.15.0"
+version = "3.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9a8a559c81686f576e8cd0290cd2a24a2a9ad80c98b3478856500fcbd7acd704"
+checksum = "38c246215d7d24f48ae091a2902398798e05d978b24315d6efbc00ede9a8bb91"
 dependencies = [
  "cfg-if",
  "fastrand 2.3.0",
- "getrandom 0.2.15",
+ "getrandom 0.3.1",
  "once_cell",
  "rustix 0.38.43",
  "windows-sys 0.59.0",
@@ -10473,6 +10570,8 @@ dependencies = [
  "bytes 1.9.0",
  "futures-core",
  "futures-sink",
+ "futures-util",
+ "hashbrown 0.14.5",
  "pin-project-lite 0.2.16",
  "tokio",
 ]
@@ -10498,7 +10597,7 @@ dependencies = [
  "serde",
  "serde_spanned",
  "toml_datetime",
- "toml_edit 0.22.22",
+ "toml_edit 0.22.23",
 ]
 
 [[package]]
@@ -10525,15 +10624,15 @@ dependencies = [
 
 [[package]]
 name = "toml_edit"
-version = "0.22.22"
+version = "0.22.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4ae48d6208a266e853d946088ed816055e556cc6028c5e8e2b84d9fa5dd7c7f5"
+checksum = "02a8b472d1a3d7c18e2d61a489aee3453fd9031c33e4f55bd533f4a7adca1bee"
 dependencies = [
  "indexmap 2.7.0",
  "serde",
  "serde_spanned",
  "toml_datetime",
- "winnow 0.6.22",
+ "winnow 0.7.0",
 ]
 
 [[package]]
@@ -10929,7 +11028,7 @@ dependencies = [
  "rustls 0.23.20",
  "rustls-pki-types",
  "url",
- "webpki-roots 0.26.7",
+ "webpki-roots 0.26.8",
 ]
 
 [[package]]
@@ -10971,10 +11070,19 @@ checksum = "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821"
 [[package]]
 name = "utils"
 version = "0.5.84"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.84#310553bfe3333cb16592941043191e3b7e1b5dbf"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.84#310553bfe3333cb16592941043191e3b7e1b5dbf"
 dependencies = [
  "tracing",
- "workspace-hack",
+ "workspace-hack 0.1.0 (git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.84)",
+]
+
+[[package]]
+name = "utils"
+version = "0.5.84"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=release-labrador-debug-2#ee33cdba49f290272e3e06f2b9fbe20961535f8c"
+dependencies = [
+ "tracing",
+ "workspace-hack 0.1.0 (git+https://github.com/EspressoSystems/hotshot?branch=release-labrador-debug-2)",
 ]
 
 [[package]]
@@ -11151,6 +11259,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9c8d87e72b64a3b4db28d11ce29237c246188f4f51057d65a7eab63b7987e423"
 
 [[package]]
+name = "wasi"
+version = "0.13.3+wasi-0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "26816d2e1a4a36a2940b96c5296ce403917633dff8f3440e9b236ed6f6bacad2"
+dependencies = [
+ "wit-bindgen-rt",
+]
+
+[[package]]
 name = "wasite"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -11281,9 +11398,9 @@ checksum = "5f20c57d8d7db6d3b86154206ae5d8fba62dd39573114de97c2cb0578251f8e1"
 
 [[package]]
 name = "webpki-roots"
-version = "0.26.7"
+version = "0.26.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5d642ff16b7e79272ae451b7322067cdc17cadf68c23264be9d94a32319efe7e"
+checksum = "2210b291f7ea53617fbafcc4939f10914214ec15aace5ba62293a668f322c5c9"
 dependencies = [
  "rustls-pki-types",
 ]
@@ -11563,9 +11680,9 @@ dependencies = [
 
 [[package]]
 name = "winnow"
-version = "0.6.22"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "39281189af81c07ec09db316b302a3e67bf9bd7cbf6c820b50e35fee9c2fa980"
+checksum = "7e49d2d35d3fad69b39b94139037ecfb4f359f08958b9c11e7315ce770462419"
 dependencies = [
  "memchr",
 ]
@@ -11581,9 +11698,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "wit-bindgen-rt"
+version = "0.33.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3268f3d866458b787f390cf61f4bbb563b922d091359f9608842999eaee3943c"
+dependencies = [
+ "bitflags 2.6.0",
+]
+
+[[package]]
 name = "workspace-hack"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.84#310553bfe3333cb16592941043191e3b7e1b5dbf"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.84#310553bfe3333cb16592941043191e3b7e1b5dbf"
 dependencies = [
  "ark-bls12-377",
  "ark-bls12-381",
@@ -11656,7 +11782,96 @@ dependencies = [
  "time 0.3.37",
  "tokio",
  "toml_datetime",
- "toml_edit 0.22.22",
+ "toml_edit 0.22.23",
+ "tracing",
+ "tracing-core",
+ "tracing-log",
+ "tracing-subscriber 0.3.19",
+ "tungstenite 0.13.0",
+ "uint",
+ "url",
+ "zeroize",
+]
+
+[[package]]
+name = "workspace-hack"
+version = "0.1.0"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=release-labrador-debug-2#ee33cdba49f290272e3e06f2b9fbe20961535f8c"
+dependencies = [
+ "ark-bls12-377",
+ "ark-bls12-381",
+ "ark-bn254",
+ "ark-bw6-761",
+ "ark-crypto-primitives",
+ "ark-ff",
+ "ark-relations",
+ "ark-serialize",
+ "ark-std",
+ "arrayvec",
+ "async-std",
+ "async-tungstenite",
+ "base64 0.13.1",
+ "base64 0.22.1",
+ "bytes 1.9.0",
+ "concurrent-queue",
+ "crossbeam-utils",
+ "crunchy",
+ "crypto-common",
+ "data-encoding",
+ "derive_more 1.0.0",
+ "derive_more-impl",
+ "digest 0.10.7",
+ "digest 0.9.0",
+ "displaydoc",
+ "downcast-rs",
+ "either",
+ "event-listener 5.4.0",
+ "event-listener-strategy",
+ "form_urlencoded",
+ "futures",
+ "futures-channel",
+ "futures-core",
+ "futures-executor",
+ "futures-io",
+ "futures-sink",
+ "futures-task",
+ "futures-util",
+ "generic-array",
+ "getrandom 0.2.15",
+ "hashbrown 0.14.5",
+ "hashbrown 0.15.2",
+ "hex",
+ "itertools 0.12.1",
+ "jf-relation",
+ "jf-rescue",
+ "jf-signature 0.2.0",
+ "jf-utils",
+ "libp2p-identity",
+ "libsecp256k1-core",
+ "log",
+ "memchr",
+ "multihash",
+ "num-bigint",
+ "num-integer",
+ "num-traits",
+ "parking_lot",
+ "percent-encoding",
+ "rand 0.8.5",
+ "regex",
+ "regex-automata 0.4.9",
+ "regex-syntax 0.8.5",
+ "rustls-pki-types",
+ "sha2 0.9.9",
+ "sha3",
+ "smallvec",
+ "standback",
+ "subtle",
+ "syn 2.0.95",
+ "time 0.3.37",
+ "tokio",
+ "tokio-util",
+ "toml_datetime",
+ "toml_edit 0.22.23",
  "tracing",
  "tracing-core",
  "tracing-log",

@@ -119,7 +119,11 @@ impl BuilderConfig {
 
         let vid_commitment = {
             let payload_bytes = genesis_payload.encode();
-            vid_commitment(&payload_bytes, GENESIS_VID_NUM_STORAGE_NODES)
+            vid_commitment::<V>(
+                &payload_bytes,
+                GENESIS_VID_NUM_STORAGE_NODES,
+                <V as Versions>::Base::VERSION,
+            )
         };
 
         // create the global state
