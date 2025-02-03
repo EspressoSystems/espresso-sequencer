@@ -37,7 +37,7 @@ use crate::{
         ViewSyncFinalizeCertificate2, ViewSyncPreCommitCertificate, ViewSyncPreCommitCertificate2,
     },
     simple_vote::{
-        DaVote, DaVote2, QuorumVote, QuorumVote2, TimeoutVote, TimeoutVote2, UpgradeVote,
+        DaVote, DaVote2, HasEpoch, QuorumVote, QuorumVote2, TimeoutVote, TimeoutVote2, UpgradeVote,
         ViewSyncCommitVote, ViewSyncCommitVote2, ViewSyncFinalizeVote, ViewSyncFinalizeVote2,
         ViewSyncPreCommitVote, ViewSyncPreCommitVote2,
     },
@@ -164,6 +164,22 @@ impl<TYPES: NodeType> ViewMessage<TYPES> for MessageKind<TYPES> {
                 ResponseMessage::NotFound | ResponseMessage::Denied => TYPES::View::new(1),
             },
             MessageKind::External(_) => TYPES::View::new(1),
+        }
+    }
+}
+
+impl<TYPES: NodeType> HasEpoch<TYPES> for MessageKind<TYPES> {
+    fn epoch(&self) -> Option<TYPES::Epoch> {
+        match &self {
+            MessageKind::Consensus(message) => message.epoch_number(),
+            MessageKind::Data(
+                DataMessage::SubmitTransaction(_, _) | DataMessage::RequestData(_),
+            )
+            | MessageKind::External(_) => None,
+            MessageKind::Data(DataMessage::DataResponse(msg)) => match msg {
+                ResponseMessage::Found(m) => m.epoch_number(),
+                ResponseMessage::NotFound | ResponseMessage::Denied => None,
+            },
         }
     }
 }
@@ -376,6 +392,76 @@ impl<TYPES: NodeType> SequencingMessage<TYPES> {
             }
         }
     }
+
+    /// Get the epoch number this message relates to, if applicable
+    fn epoch_number(&self) -> Option<TYPES::Epoch> {
+        match &self {
+            SequencingMessage::General(general_message) => {
+                match general_message {
+                    GeneralConsensusMessage::Proposal(p) => {
+                        // view of leader in the leaf when proposal
+                        // this should match replica upon receipt
+                        p.data.epoch()
+                    }
+                    GeneralConsensusMessage::Proposal2(p) => {
+                        // view of leader in the leaf when proposal
+                        // this should match replica upon receipt
+                        p.data.epoch()
+                    }
+                    GeneralConsensusMessage::ProposalRequested(_, _) => None,
+                    GeneralConsensusMessage::ProposalResponse(proposal) => proposal.data.epoch(),
+                    GeneralConsensusMessage::ProposalResponse2(proposal) => proposal.data.epoch(),
+                    GeneralConsensusMessage::Vote(vote_message) => vote_message.epoch(),
+                    GeneralConsensusMessage::Vote2(vote_message) => vote_message.epoch(),
+                    GeneralConsensusMessage::TimeoutVote(message) => message.epoch(),
+                    GeneralConsensusMessage::ViewSyncPreCommitVote(message) => message.epoch(),
+                    GeneralConsensusMessage::ViewSyncCommitVote(message) => message.epoch(),
+                    GeneralConsensusMessage::ViewSyncFinalizeVote(message) => message.epoch(),
+                    GeneralConsensusMessage::ViewSyncPreCommitCertificate(message) => {
+                        message.epoch()
+                    }
+                    GeneralConsensusMessage::ViewSyncCommitCertificate(message) => message.epoch(),
+                    GeneralConsensusMessage::ViewSyncFinalizeCertificate(message) => {
+                        message.epoch()
+                    }
+                    GeneralConsensusMessage::TimeoutVote2(message) => message.epoch(),
+                    GeneralConsensusMessage::ViewSyncPreCommitVote2(message) => message.epoch(),
+                    GeneralConsensusMessage::ViewSyncCommitVote2(message) => message.epoch(),
+                    GeneralConsensusMessage::ViewSyncFinalizeVote2(message) => message.epoch(),
+                    GeneralConsensusMessage::ViewSyncPreCommitCertificate2(message) => {
+                        message.epoch()
+                    }
+                    GeneralConsensusMessage::ViewSyncCommitCertificate2(message) => message.epoch(),
+                    GeneralConsensusMessage::ViewSyncFinalizeCertificate2(message) => {
+                        message.epoch()
+                    }
+                    GeneralConsensusMessage::UpgradeProposal(message) => message.data.epoch(),
+                    GeneralConsensusMessage::UpgradeVote(message) => message.epoch(),
+                    GeneralConsensusMessage::HighQc(qc) => qc.epoch(),
+                }
+            }
+            SequencingMessage::Da(da_message) => {
+                match da_message {
+                    DaConsensusMessage::DaProposal(p) => {
+                        // view of leader in the leaf when proposal
+                        // this should match replica upon receipt
+                        p.data.epoch()
+                    }
+                    DaConsensusMessage::DaVote(vote_message) => vote_message.epoch(),
+                    DaConsensusMessage::DaCertificate(cert) => cert.epoch(),
+                    DaConsensusMessage::VidDisperseMsg(disperse) => disperse.data.epoch(),
+                    DaConsensusMessage::VidDisperseMsg2(disperse) => disperse.data.epoch(),
+                    DaConsensusMessage::DaProposal2(p) => {
+                        // view of leader in the leaf when proposal
+                        // this should match replica upon receipt
+                        p.data.epoch()
+                    }
+                    DaConsensusMessage::DaVote2(vote_message) => vote_message.epoch(),
+                    DaConsensusMessage::DaCertificate2(cert) => cert.epoch(),
+                }
+            }
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
@@ -397,7 +483,10 @@ pub enum DataMessage<TYPES: NodeType> {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
 #[serde(bound(deserialize = ""))]
 /// Prepare qc from the leader
-pub struct Proposal<TYPES: NodeType, PROPOSAL: HasViewNumber<TYPES> + DeserializeOwned> {
+pub struct Proposal<
+    TYPES: NodeType,
+    PROPOSAL: HasViewNumber<TYPES> + HasEpoch<TYPES> + DeserializeOwned,
+> {
     // NOTE: optimization could include view number to help look up parent leaf
     // could even do 16 bit numbers if we want
     /// The data being proposed.
@@ -414,8 +503,8 @@ pub fn convert_proposal<TYPES, PROPOSAL, PROPOSAL2>(
 ) -> Proposal<TYPES, PROPOSAL2>
 where
     TYPES: NodeType,
-    PROPOSAL: HasViewNumber<TYPES> + DeserializeOwned,
-    PROPOSAL2: HasViewNumber<TYPES> + DeserializeOwned + From<PROPOSAL>,
+    PROPOSAL: HasViewNumber<TYPES> + HasEpoch<TYPES> + DeserializeOwned,
+    PROPOSAL2: HasViewNumber<TYPES> + HasEpoch<TYPES> + DeserializeOwned + From<PROPOSAL>,
 {
     Proposal {
         data: proposal.data.into(),
@@ -497,7 +586,7 @@ where
     ) -> Result<()> {
         let view_number = self.data.proposal.view_number();
         let proposal_epoch = option_epoch_from_block_number::<TYPES>(
-            self.data.with_epoch,
+            self.data.proposal.epoch().is_some(),
             self.data.block_header().block_number(),
             epoch_height,
         );

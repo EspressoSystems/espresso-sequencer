@@ -814,7 +814,7 @@ pub(crate) async fn validate_proposal_view_and_certs<
     // Note that we don't do anything with the certificate directly if this passes; it eventually gets stored as part of the leaf if nothing goes wrong.
     {
         let epoch = option_epoch_from_block_number::<TYPES>(
-            proposal.data.with_epoch,
+            proposal.data.epoch().is_some(),
             proposal.data.block_header().block_number(),
             validation_info.epoch_height,
         );

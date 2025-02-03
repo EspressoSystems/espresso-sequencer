@@ -419,13 +419,13 @@ impl<TYPES: NodeType, V: Versions> ProposalDependencyHandle<TYPES, V> {
             proposal: QuorumProposal2 {
                 block_header,
                 view_number: self.view_number,
+                epoch,
                 justify_qc: parent_qc,
                 next_epoch_justify_qc: next_epoch_qc,
                 upgrade_certificate,
                 view_change_evidence: proposal_certificate,
                 next_drb_result,
             },
-            with_epoch: version >= V::Epochs::VERSION,
         };
 
         let proposed_leaf = Leaf2::from_quorum_proposal(&proposal);

@@ -16,6 +16,7 @@ use hotshot_types::{
     data::{Leaf2, QuorumProposal, QuorumProposalWrapper},
     message::Proposal,
     simple_certificate::QuorumCertificate,
+    simple_vote::HasEpoch,
     traits::{
         block_contents::BlockHeader,
         election::Membership,
@@ -145,6 +146,10 @@ pub(crate) async fn handle_quorum_proposal_recv<
     event_receiver: &Receiver<Arc<HotShotEvent<TYPES>>>,
     validation_info: ValidationInfo<TYPES, I, V>,
 ) -> Result<()> {
+    proposal
+        .data
+        .validate_epoch(&validation_info.upgrade_lock, validation_info.epoch_height)
+        .await?;
     let quorum_proposal_sender_key = quorum_proposal_sender_key.clone();
 
     validate_proposal_view_and_certs(proposal, &validation_info)
@@ -158,7 +163,7 @@ pub(crate) async fn handle_quorum_proposal_recv<
 
     let proposal_block_number = proposal.data.block_header().block_number();
     let proposal_epoch = option_epoch_from_block_number::<TYPES>(
-        proposal.data.with_epoch,
+        proposal.data.epoch().is_some(),
         proposal_block_number,
         validation_info.epoch_height,
     );

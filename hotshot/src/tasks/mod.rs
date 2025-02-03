@@ -207,6 +207,7 @@ pub fn add_network_event_task<
         consensus: OuterConsensus::new(handle.consensus()),
         upgrade_lock: handle.hotshot.upgrade_lock.clone(),
         transmit_tasks: BTreeMap::new(),
+        epoch_height: handle.epoch_height,
     };
     let task = Task::new(
         network_state,

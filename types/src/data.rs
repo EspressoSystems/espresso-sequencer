@@ -30,7 +30,7 @@ use vid_disperse::{ADVZDisperse, ADVZDisperseShare, VidDisperseShare2};
 
 use crate::{
     drb::DrbResult,
-    impl_has_epoch,
+    impl_has_epoch, impl_has_none_epoch,
     message::{convert_proposal, Proposal, UpgradeLock},
     simple_certificate::{
         NextEpochQuorumCertificate2, QuorumCertificate, QuorumCertificate2, TimeoutCertificate,
@@ -593,6 +593,9 @@ pub struct QuorumProposal2<TYPES: NodeType> {
     /// view number for the proposal
     pub view_number: TYPES::View,
 
+    /// The epoch number corresponding to the block number. Can be `None` for pre-epoch version.
+    pub epoch: Option<TYPES::Epoch>,
+
     /// certificate that the proposal is chaining from
     pub justify_qc: QuorumCertificate2<TYPES>,
 
@@ -619,9 +622,28 @@ pub struct QuorumProposal2<TYPES: NodeType> {
 pub struct QuorumProposalWrapper<TYPES: NodeType> {
     /// The wrapped proposal
     pub proposal: QuorumProposal2<TYPES>,
+}
 
-    /// Indicates whether or not epochs were enabled for this proposal. This is checked when building a QuorumProposalWrapper
-    pub with_epoch: bool,
+impl<TYPES: NodeType> QuorumProposal2<TYPES> {
+    /// Validates whether the epoch is consistent with the version and the block number
+    /// # Errors
+    /// Returns an error if the epoch is inconsistent with the version or the block number
+    pub async fn validate_epoch<V: Versions>(
+        &self,
+        upgrade_lock: &UpgradeLock<TYPES, V>,
+        epoch_height: u64,
+    ) -> Result<()> {
+        let calculated_epoch = option_epoch_from_block_number::<TYPES>(
+            upgrade_lock.epochs_enabled(self.view_number()).await,
+            self.block_header.block_number(),
+            epoch_height,
+        );
+        ensure!(
+            calculated_epoch == self.epoch(),
+            "Quorum proposal invalid: inconsistent epoch."
+        );
+        Ok(())
+    }
 }
 
 impl<TYPES: NodeType> QuorumProposalWrapper<TYPES> {
@@ -659,13 +681,25 @@ impl<TYPES: NodeType> QuorumProposalWrapper<TYPES> {
     pub fn next_drb_result(&self) -> &Option<DrbResult> {
         &self.proposal.next_drb_result
     }
+
+    /// Validates whether the epoch is consistent with the version and the block number
+    /// # Errors
+    /// Returns an error if the epoch is inconsistent with the version or the block number
+    pub async fn validate_epoch<V: Versions>(
+        &self,
+        upgrade_lock: &UpgradeLock<TYPES, V>,
+        epoch_height: u64,
+    ) -> Result<()> {
+        self.proposal
+            .validate_epoch(upgrade_lock, epoch_height)
+            .await
+    }
 }
 
 impl<TYPES: NodeType> From<QuorumProposal<TYPES>> for QuorumProposalWrapper<TYPES> {
     fn from(quorum_proposal: QuorumProposal<TYPES>) -> Self {
         Self {
             proposal: quorum_proposal.into(),
-            with_epoch: false,
         }
     }
 }
@@ -674,7 +708,6 @@ impl<TYPES: NodeType> From<QuorumProposal2<TYPES>> for QuorumProposalWrapper<TYP
     fn from(quorum_proposal2: QuorumProposal2<TYPES>) -> Self {
         Self {
             proposal: quorum_proposal2,
-            with_epoch: true,
         }
     }
 }
@@ -696,6 +729,7 @@ impl<TYPES: NodeType> From<QuorumProposal<TYPES>> for QuorumProposal2<TYPES> {
         Self {
             block_header: quorum_proposal.block_header,
             view_number: quorum_proposal.view_number,
+            epoch: None,
             justify_qc: quorum_proposal.justify_qc.to_qc2(),
             next_epoch_justify_qc: None,
             upgrade_certificate: quorum_proposal.upgrade_certificate,
@@ -776,7 +810,22 @@ impl<TYPES: NodeType> HasViewNumber<TYPES> for UpgradeProposal<TYPES> {
     }
 }
 
-impl_has_epoch!(DaProposal2<TYPES>);
+impl_has_epoch!(QuorumProposal2<TYPES>, DaProposal2<TYPES>);
+
+impl_has_none_epoch!(
+    QuorumProposal<TYPES>,
+    DaProposal<TYPES>,
+    UpgradeProposal<TYPES>,
+    ADVZDisperseShare<TYPES>
+);
+
+impl<TYPES: NodeType> HasEpoch<TYPES> for QuorumProposalWrapper<TYPES> {
+    /// Return an underlying proposal's epoch
+    #[allow(clippy::panic)]
+    fn epoch(&self) -> Option<TYPES::Epoch> {
+        self.proposal.epoch()
+    }
+}
 
 /// The error type for block and its transactions.
 #[derive(Error, Debug, Serialize, Deserialize)]
@@ -1525,6 +1574,7 @@ impl<TYPES: NodeType> Leaf2<TYPES> {
             proposal:
                 QuorumProposal2 {
                     view_number,
+                    epoch,
                     justify_qc,
                     next_epoch_justify_qc,
                     block_header,
@@ -1532,7 +1582,6 @@ impl<TYPES: NodeType> Leaf2<TYPES> {
                     view_change_evidence,
                     next_drb_result,
                 },
-            with_epoch,
         } = quorum_proposal;
 
         Self {
@@ -1545,7 +1594,7 @@ impl<TYPES: NodeType> Leaf2<TYPES> {
             block_payload: None,
             view_change_evidence: view_change_evidence.clone(),
             next_drb_result: *next_drb_result,
-            with_epoch: *with_epoch,
+            with_epoch: epoch.is_some(),
         }
     }
 }

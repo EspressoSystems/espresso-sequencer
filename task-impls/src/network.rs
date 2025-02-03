@@ -491,6 +491,9 @@ pub struct NetworkEventTaskState<
 
     /// map view number to transmit tasks
     pub transmit_tasks: BTreeMap<TYPES::View, Vec<JoinHandle<()>>>,
+
+    /// Number of blocks in an epoch, zero means there are no epochs
+    pub epoch_height: u64,
 }
 
 #[async_trait]
@@ -545,6 +548,7 @@ impl<
         sender: &<TYPES as NodeType>::SignatureKey,
     ) -> Option<HotShotTaskCompleted> {
         let view = vid_proposal.data.view_number();
+        let epoch = vid_proposal.data.epoch();
         let vid_share_proposals = VidDisperseShare::to_vid_share_proposals(vid_proposal);
         let mut messages = HashMap::new();
 
@@ -615,6 +619,7 @@ impl<
                 storage,
                 consensus,
                 view,
+                epoch,
             )
             .await
             .is_err()
@@ -636,6 +641,7 @@ impl<
         storage: Arc<RwLock<S>>,
         consensus: OuterConsensus<TYPES>,
         view: <TYPES as NodeType>::View,
+        epoch: Option<<TYPES as NodeType>::Epoch>,
     ) -> std::result::Result<(), ()> {
         if let Some(mut action) = maybe_action {
             if !consensus.write().await.update_action(action, view) {
@@ -646,7 +652,12 @@ impl<
             if matches!(action, HotShotAction::ViewSyncVote) {
                 action = HotShotAction::Vote;
             }
-            match storage.write().await.record_action(view, action).await {
+            match storage
+                .write()
+                .await
+                .record_action(view, epoch, action)
+                .await
+            {
                 Ok(()) => Ok(()),
                 Err(e) => {
                     tracing::warn!("Not Sending {:?} because of storage error: {:?}", action, e);
@@ -1122,6 +1133,7 @@ impl<
             kind: message_kind,
         };
         let view_number = message.kind.view_number();
+        let epoch = message.kind.epoch();
         let committee_topic = Topic::Global;
         let da_committee = self
             .membership
@@ -1138,6 +1150,7 @@ impl<
                 Arc::clone(&storage),
                 consensus,
                 view_number,
+                epoch,
             )
             .await
             .is_err()

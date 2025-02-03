@@ -565,7 +565,32 @@ impl_has_epoch!(
     TimeoutData2<TYPES>,
     ViewSyncPreCommitData2<TYPES>,
     ViewSyncCommitData2<TYPES>,
-    ViewSyncFinalizeData2<TYPES>
+    ViewSyncFinalizeData2<TYPES>,
+    UpgradeData2<TYPES>
+);
+
+/// Helper macro for trivial implementation of the `HasEpoch` trait for types that have no epoch
+#[macro_export]
+macro_rules! impl_has_none_epoch {
+    ($($t:ty),*) => {
+        $(
+            impl<TYPES: NodeType> HasEpoch<TYPES> for $t {
+                fn epoch(&self) -> Option<TYPES::Epoch> {
+                    None
+                }
+            }
+        )*
+    };
+}
+
+impl_has_none_epoch!(
+    QuorumData<TYPES>,
+    DaData,
+    TimeoutData<TYPES>,
+    ViewSyncPreCommitData<TYPES>,
+    ViewSyncCommitData<TYPES>,
+    ViewSyncFinalizeData<TYPES>,
+    UpgradeProposalData<TYPES>
 );
 
 impl<TYPES: NodeType, DATA: Voteable<TYPES> + HasEpoch<TYPES>> HasEpoch<TYPES>

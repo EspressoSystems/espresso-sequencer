@@ -253,14 +253,20 @@ impl<TYPES: NodeType> Storage<TYPES> for TestStorage<TYPES> {
     async fn record_action(
         &self,
         view: <TYPES as NodeType>::View,
+        epoch: Option<TYPES::Epoch>,
         action: hotshot_types::event::HotShotAction,
     ) -> Result<()> {
         if self.should_return_err {
             bail!("Failed to append Action to storage");
         }
         let mut inner = self.inner.write().await;
-        if view > inner.action && matches!(action, HotShotAction::Vote | HotShotAction::Propose) {
-            inner.action = view;
+        if matches!(action, HotShotAction::Vote | HotShotAction::Propose) {
+            if view > inner.action {
+                inner.action = view;
+            }
+            if epoch > inner.epoch {
+                inner.epoch = epoch;
+            }
         }
         Self::run_delay_settings_from_config(&self.delay_config).await;
         Ok(())

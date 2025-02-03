@@ -24,8 +24,8 @@ use crate::{
     data::serialize_signature2,
     message::UpgradeLock,
     simple_vote::{
-        DaData, DaData2, NextEpochQuorumData2, QuorumData, QuorumData2, QuorumMarker, TimeoutData,
-        TimeoutData2, UpgradeProposalData, VersionedVoteData, ViewSyncCommitData,
+        DaData, DaData2, HasEpoch, NextEpochQuorumData2, QuorumData, QuorumData2, QuorumMarker,
+        TimeoutData, TimeoutData2, UpgradeProposalData, VersionedVoteData, ViewSyncCommitData,
         ViewSyncCommitData2, ViewSyncFinalizeData, ViewSyncFinalizeData2, ViewSyncPreCommitData,
         ViewSyncPreCommitData2, Voteable,
     },
@@ -420,6 +420,18 @@ impl<TYPES: NodeType, VOTEABLE: Voteable<TYPES> + 'static, THRESHOLD: Threshold<
         self.view_number
     }
 }
+
+impl<
+        TYPES: NodeType,
+        VOTEABLE: Voteable<TYPES> + HasEpoch<TYPES> + 'static,
+        THRESHOLD: Threshold<TYPES>,
+    > HasEpoch<TYPES> for SimpleCertificate<TYPES, VOTEABLE, THRESHOLD>
+{
+    fn epoch(&self) -> Option<TYPES::Epoch> {
+        self.data.epoch()
+    }
+}
+
 impl<TYPES: NodeType> Display for QuorumCertificate<TYPES> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "view: {:?}", self.view_number)

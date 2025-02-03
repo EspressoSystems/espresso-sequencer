@@ -40,10 +40,10 @@ use hotshot_types::{
         node_implementation::{ConsensusTime, NodeType, Versions},
         BlockPayload,
     },
+    utils::genesis_epoch_from_version,
 };
 use rand::{thread_rng, Rng};
 use sha2::{Digest, Sha256};
-use vbs::version::StaticVersionType;
 
 use crate::helpers::{
     build_cert, build_da_certificate, build_vid_proposal, da_payload_commitment, key_pair_for_id,
@@ -77,7 +77,7 @@ impl TestView {
         membership: &Arc<RwLock<<TestTypes as NodeType>::Membership>>,
     ) -> Self {
         let genesis_view = ViewNumber::new(1);
-        let genesis_epoch = None;
+        let genesis_epoch = genesis_epoch_from_version::<V, TestTypes>();
         let upgrade_lock = UpgradeLock::new();
 
         let transactions = Vec::new();
@@ -146,6 +146,7 @@ impl TestView {
             proposal: QuorumProposal2::<TestTypes> {
                 block_header: block_header.clone(),
                 view_number: genesis_view,
+                epoch: genesis_epoch,
                 justify_qc: QuorumCertificate2::genesis::<TestVersions>(
                     &TestValidatedState::default(),
                     &TestInstanceState::default(),
@@ -156,8 +157,6 @@ impl TestView {
                 view_change_evidence: None,
                 next_drb_result: None,
             },
-            // #3967 REVIEW NOTE: Is this right?
-            with_epoch: V::Base::VERSION >= V::Epochs::VERSION,
         };
 
         let encoded_transactions = Arc::from(TestTransaction::encode(&transactions));
@@ -392,14 +391,13 @@ impl TestView {
             proposal: QuorumProposal2::<TestTypes> {
                 block_header: block_header.clone(),
                 view_number: next_view,
+                epoch: old_epoch,
                 justify_qc: quorum_certificate.clone(),
                 next_epoch_justify_qc: None,
                 upgrade_certificate: upgrade_certificate.clone(),
                 view_change_evidence,
                 next_drb_result: None,
             },
-            // #3967 REVIEW NOTE: Is this right?
-            with_epoch: self.upgrade_lock.epochs_enabled(next_view).await,
         };
 
         let mut leaf = Leaf2::from_quorum_proposal(&proposal);

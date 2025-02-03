@@ -22,6 +22,7 @@ use hotshot_task::{
 };
 use hotshot_types::{
     consensus::OuterConsensus,
+    simple_vote::HasEpoch,
     traits::{
         block_contents::BlockHeader,
         election::Membership,
@@ -45,7 +46,7 @@ use utils::anytrace::Result;
 use crate::{events::HotShotEvent, helpers::broadcast_event};
 
 /// Amount of time to try for a request before timing out.
-pub const REQUEST_TIMEOUT: Duration = Duration::from_millis(500);
+pub const REQUEST_TIMEOUT: Duration = Duration::from_millis(2000);
 
 /// Long running task which will request information after a proposal is received.
 /// The task will wait a it's `delay` and then send a request iteratively to peers
@@ -113,7 +114,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TaskState for NetworkRequest
             HotShotEvent::QuorumProposalValidated(proposal, _) => {
                 let prop_view = proposal.data.view_number();
                 let prop_epoch = option_epoch_from_block_number::<TYPES>(
-                    proposal.data.with_epoch,
+                    proposal.data.epoch().is_some(),
                     proposal.data.block_header().block_number(),
                     self.epoch_height,
                 );

@@ -6,10 +6,20 @@
 
 use std::{collections::btree_map::Entry, sync::Arc};
 
+use super::QuorumVoteTaskState;
+use crate::{
+    events::HotShotEvent,
+    helpers::{
+        broadcast_event, decide_from_proposal, decide_from_proposal_2, fetch_proposal,
+        LeafChainTraversalOutcome,
+    },
+    quorum_vote::Versions,
+};
 use async_broadcast::{InactiveReceiver, Sender};
 use async_lock::RwLock;
 use chrono::Utc;
 use committable::Committable;
+use hotshot_types::simple_vote::HasEpoch;
 use hotshot_types::{
     consensus::OuterConsensus,
     data::{Leaf2, QuorumProposalWrapper, VidDisperseShare},
@@ -35,16 +45,6 @@ use tokio::spawn;
 use tracing::instrument;
 use utils::anytrace::*;
 use vbs::version::StaticVersionType;
-
-use super::QuorumVoteTaskState;
-use crate::{
-    events::HotShotEvent,
-    helpers::{
-        broadcast_event, decide_from_proposal, decide_from_proposal_2, fetch_proposal,
-        LeafChainTraversalOutcome,
-    },
-    quorum_vote::Versions,
-};
 
 /// Store the DRB result from the computation task to the shared `results` table.
 ///
@@ -162,7 +162,7 @@ async fn start_drb_task<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versio
     task_state: &mut QuorumVoteTaskState<TYPES, I, V>,
 ) {
     // #3967 REVIEW NOTE: Should we just exit early if we aren't doing epochs?
-    if !proposal.with_epoch {
+    if proposal.epoch().is_none() {
         return;
     }
 
