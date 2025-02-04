@@ -10,7 +10,7 @@ use super::{
 use clap::Parser;
 use espresso_types::{
     traits::NullEventConsumer, EpochVersion, FeeVersion, MarketplaceVersion, SequencerVersions,
-    SolverAuctionResultsProvider,
+    SolverAuctionResultsProvider, V0_0,
 };
 use futures::future::FutureExt;
 use hotshot::MarketplaceConfig;
@@ -44,6 +44,15 @@ pub async fn main() -> anyhow::Result<()> {
                 modules,
                 opt,
                 SequencerVersions::<FeeVersion, EpochVersion>::new(),
+            )
+            .await
+        }
+        (EpochVersion::VERSION, _) => {
+            run(
+                genesis,
+                modules,
+                opt,
+                SequencerVersions::<EpochVersion, V0_0>::new(),
             )
             .await
         }

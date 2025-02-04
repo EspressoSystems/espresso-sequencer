@@ -188,7 +188,7 @@ jobs:
             compose: "-f process-compose.yaml -D"
           - version: 03
             env:
-              DEMO_GENESIS_FILE: data/genesis/demo-epoch.toml 
+              DEMO_GENESIS_FILE: data/genesis/demo-pos.toml 
             compose: "-f process-compose.yaml -D"
           - version: 99
             compose: "-f process-compose.yaml -f process-compose-mp.yml -D"

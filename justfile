@@ -30,7 +30,10 @@ demo-native-mp *args: build
     scripts/demo-native -f process-compose.yaml -f process-compose-mp.yml {{args}}
 
 demo-native-pos *args: build
-    DEMO_GENESIS_FILE=data/genesis/demo-epoch.toml scripts/demo-native -f process-compose.yaml {{args}}
+    DEMO_GENESIS_FILE=data/genesis/demo-pos.toml scripts/demo-native -f process-compose.yaml {{args}}
+
+demo-native-pos-base *args: build
+    DEMO_GENESIS_FILE=data/genesis/demo-pos-base.toml scripts/demo-native -f process-compose.yaml {{args}}
 
 demo-native-benchmark:
     cargo build --release --features benchmarking
