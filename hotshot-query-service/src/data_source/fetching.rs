@@ -437,7 +437,7 @@ where
     Payload<Types>: QueryablePayload<Types>,
     S: PruneStorage + Send + Sync + 'static,
 {
-    pub(crate) async fn new(storage: Arc<S>) -> Self {
+    async fn new(storage: Arc<S>) -> Self {
         let cfg = storage.get_pruning_config();
         let Some(cfg) = cfg else {
             return Self {
@@ -910,12 +910,12 @@ where
 
 /// Asynchronous retrieval and storage of [`Fetchable`] resources.
 #[derive(Debug)]
-pub(crate) struct Fetcher<Types, S, P>
+struct Fetcher<Types, S, P>
 where
     Types: NodeType,
 {
-    pub(crate) storage: Arc<S>,
-    pub(crate) notifiers: Notifiers<Types>,
+    storage: Arc<S>,
+    notifiers: Notifiers<Types>,
     provider: Arc<P>,
     payload_fetcher: Option<Arc<PayloadFetcher<Types, S, P>>>,
     leaf_fetcher: Arc<LeafFetcher<Types, S, P>>,
@@ -926,11 +926,11 @@ where
     // Duration to sleep after each chunk fetched
     chunk_fetch_delay: Duration,
     // Exponential backoff when retrying failed operations.
-    pub(crate) backoff: ExponentialBackoff,
+    backoff: ExponentialBackoff,
     // Semaphore limiting the number of simultaneous DB accesses we can have from tasks spawned to
     // retry failed loads.
     retry_semaphore: Arc<Semaphore>,
-    pub(crate) leaf_only: bool,
+    leaf_only: bool,
 }
 
 impl<Types, S, P> VersionedDataSource for Fetcher<Types, S, P>
@@ -1006,7 +1006,7 @@ where
     for<'a> S::ReadOnly<'a>: AvailabilityStorage<Types> + NodeStorage<Types> + PrunedHeightStorage,
     P: AvailabilityProvider<Types>,
 {
-    pub(crate) async fn get<T>(self: &Arc<Self>, req: impl Into<T::Request> + Send) -> Fetch<T>
+    async fn get<T>(self: &Arc<Self>, req: impl Into<T::Request> + Send) -> Fetch<T>
     where
         T: Fetchable<Types>,
     {
@@ -1132,7 +1132,7 @@ where
     /// Objects are loaded and fetched in chunks, which strikes a good balance of limiting the total
     /// number of storage and network requests, while also keeping the amount of simultaneous
     /// resource consumption bounded.
-    pub(crate) fn get_range<R, T>(self: Arc<Self>, range: R) -> BoxStream<'static, Fetch<T>>
+    fn get_range<R, T>(self: Arc<Self>, range: R) -> BoxStream<'static, Fetch<T>>
     where
         R: RangeBounds<usize> + Send + 'static,
         T: RangedFetchable<Types>,
@@ -1190,7 +1190,7 @@ where
     /// if the range has no upper bound, this function requires there to be a defined upper bound,
     /// otherwise we don't know where the reversed stream should _start_. The `end` bound given here
     /// is inclusive; i.e. the first item yielded by the stream will have height `end`.
-    pub(crate) fn get_range_rev<T>(
+    fn get_range_rev<T>(
         self: Arc<Self>,
         start: Bound<usize>,
         end: usize,
@@ -1770,7 +1770,7 @@ where
 }
 
 #[derive(Debug)]
-pub(crate) struct Notifiers<Types>
+struct Notifiers<Types>
 where
     Types: NodeType,
 {
@@ -1793,7 +1793,7 @@ where
 }
 
 #[derive(Clone, Copy, Debug)]
-pub(crate) struct Heights {
+struct Heights {
     height: u64,
     pruned_height: Option<u64>,
 }
@@ -2030,7 +2030,7 @@ impl<Types: NodeType, P> AvailabilityProvider<Types> for P where
 {
 }
 
-pub(crate) trait FetchRequest: Copy + Debug + Send + Sync + 'static {
+trait FetchRequest: Copy + Debug + Send + Sync + 'static {
     /// Indicate whether it is possible this object could exist.
     ///
     /// This can filter out requests quickly for objects that cannot possibly exist, such as
@@ -2052,7 +2052,7 @@ pub(crate) trait FetchRequest: Copy + Debug + Send + Sync + 'static {
 /// logistics of fetching are shared between all objects, and only the low-level particulars are
 /// type-specific.
 #[async_trait]
-pub(crate) trait Fetchable<Types>: Clone + Send + Sync + 'static
+trait Fetchable<Types>: Clone + Send + Sync + 'static
 where
     Types: NodeType,
     Payload<Types>: QueryablePayload<Types>,
@@ -2108,8 +2108,7 @@ where
 type PassiveFetch<T> = BoxFuture<'static, Option<T>>;
 
 #[async_trait]
-pub(crate) trait RangedFetchable<Types>:
-    Fetchable<Types, Request = Self::RangedRequest> + HeightIndexed
+trait RangedFetchable<Types>: Fetchable<Types, Request = Self::RangedRequest> + HeightIndexed
 where
     Types: NodeType,
     Payload<Types>: QueryablePayload<Types>,
@@ -2124,7 +2123,7 @@ where
 }
 
 /// An object which can be stored in the database.
-pub(crate) trait Storable<Types: NodeType>: HeightIndexed + Clone {
+trait Storable<Types: NodeType>: HeightIndexed + Clone {
     /// The name of this type of object, for debugging purposes.
     fn name() -> &'static str;
 
@@ -2172,7 +2171,7 @@ impl<Types: NodeType> Storable<Types> for BlockInfo<Types> {
 }
 
 /// Break a range into fixed-size chunks.
-pub(crate) fn range_chunks<R>(range: R, chunk_size: usize) -> impl Iterator<Item = Range<usize>>
+fn range_chunks<R>(range: R, chunk_size: usize) -> impl Iterator<Item = Range<usize>>
 where
     R: RangeBounds<usize>,
 {
@@ -2235,7 +2234,7 @@ fn range_chunks_rev(
     })
 }
 
-pub(crate) trait ResultExt<T, E> {
+trait ResultExt<T, E> {
     fn ok_or_trace(self) -> Option<T>
     where
         E: Display;
@@ -2345,7 +2344,7 @@ impl AggregatorMetrics {
 /// Turn a fallible passive fetch future into an infallible "fetch".
 ///
 /// Basically, we ignore failures due to a channel sender being dropped, which should never happen.
-pub(crate) fn passive<T>(
+fn passive<T>(
     req: impl Debug + Send + 'static,
     fut: impl Future<Output = Option<T>> + Send + 'static,
 ) -> Fetch<T>

@@ -31,7 +31,7 @@ use hotshot_types::traits::node_implementation::NodeType;
 use std::sync::Arc;
 
 #[derive(Clone, Copy, Debug, From)]
-pub(crate) struct TransactionRequest<Types: NodeType>(TransactionHash<Types>);
+pub(super) struct TransactionRequest<Types: NodeType>(TransactionHash<Types>);
 
 impl<Types: NodeType> FetchRequest for TransactionRequest<Types> {}
 

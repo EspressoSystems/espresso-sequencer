@@ -38,11 +38,11 @@ use hotshot_types::traits::{block_contents::BlockHeader, node_implementation::No
 use std::sync::Arc;
 use std::{cmp::Ordering, future::IntoFuture, iter::once, ops::RangeBounds};
 
-pub(crate) type VidCommonFetcher<Types, S, P> =
+pub(super) type VidCommonFetcher<Types, S, P> =
     fetching::Fetcher<request::VidCommonRequest, VidCommonCallback<Types, S, P>>;
 
 #[derive(Clone, Copy, Debug, From)]
-pub(crate) struct VidCommonRequest<Types: NodeType>(BlockId<Types>);
+pub(super) struct VidCommonRequest<Types: NodeType>(BlockId<Types>);
 
 impl<Types: NodeType> From<usize> for VidCommonRequest<Types> {
     fn from(n: usize) -> Self {

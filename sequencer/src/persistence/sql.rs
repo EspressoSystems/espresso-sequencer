@@ -148,7 +148,7 @@ pub struct Options {
     /// - batch_size: 1000
     /// - max_usage: 80%
     /// - interval: 1 hour
-    #[clap(long, env = "ESPRESSO_SEQUENCER_POSTGRES_PRUNE")]
+    #[clap(long, env = "ESPRESSO_SEQUENCER_DATABASE_PRUNE")]
     pub(crate) prune: bool,
 
     /// Pruning parameters.
@@ -180,7 +180,7 @@ pub struct Options {
     /// reconstruct data that was pruned in a previous run where pruning was enabled. This option
     /// instructs the service to run without pruning _and_ reconstruct all previously pruned data by
     /// fetching from peers.
-    #[clap(long, env = "ESPRESSO_SEQUENCER_ARCHIVE", conflicts_with = "prune")]
+    #[clap(long, env = "ESPRESSO_SEQUENCER_ARCHIVE", conflicts_with = "prune, light_weight")]
     pub(crate) archive: bool,
 
     /// Turns on leaf only data storage
