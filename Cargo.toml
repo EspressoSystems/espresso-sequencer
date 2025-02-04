@@ -15,13 +15,14 @@ members = [
     "contracts/rust/diff-test",
     "contracts/rust/gen-vk-contract",
     "hotshot-state-prover",
+    "hotshot-events-service",
     "marketplace-builder",
     "marketplace-solver",
     "node-metrics",
     "sequencer",
     "tests",
     "types",
-    "utils"
+    "utils",
 ]
 
 exclude = ["sequencer-sqlite"]
@@ -68,7 +69,7 @@ hotshot-builder-api = { git = "https://github.com/EspressoSystems/hotshot", tag 
 hotshot-builder-core = { git = "https://github.com/EspressoSystems/marketplace-builder-core", tag = "0.5.84" }
 marketplace-builder-core = { git = "https://github.com/EspressoSystems/marketplace-builder-core", tag = "0.5.84" }
 marketplace-builder-shared = { git = "https://github.com/EspressoSystems/marketplace-builder-core", tag = "0.5.84" }
-hotshot-events-service = { git = "https://github.com/EspressoSystems/hotshot-events-service.git", tag = "0.1.58" }
+hotshot-events-service = { path = "hotshot-events-service" }
 hotshot-orchestrator = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.84" }
 hotshot-query-service = { path = "hotshot-query-service" }
 hotshot-stake-table = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.84" }

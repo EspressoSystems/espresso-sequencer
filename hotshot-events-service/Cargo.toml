@@ -5,28 +5,28 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-async-broadcast = "0.7"
-async-lock = "2.8"
-async-trait = "0.1"
-clap = { version = "4.4", features = ["derive", "env"] }
-derivative = "2.2"
-derive_more = "0.99"
-either = { version = "1.12", features = ["serde"] }
-futures = "0.3"
-hotshot-types = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.84" }
+async-broadcast = { workspace = true }
+async-lock = { workspace = true }
+async-trait = { workspace = true }
+clap = { workspace = true }
+derivative = { workspace = true }
+derive_more = { workspace = true }
+# either = { version = "1.12", features = ["serde"] }
+futures = { workspace = true }
+hotshot-types = { workspace = true }
 libp2p-identity = { version = "0.2", features = ["serde"] }
-rand = "0.8.5"
-serde = { version = "1.0", features = ["derive"] }
+rand = { workspace = true }
+serde = { workspace = true }
 snafu = "0.8"
-tagged-base64 = "0.4"
+tagged-base64 = { workspace = true }
 tide-disco = "0.9"
-tokio = { version = "1.41", features = ["macros"] }
-toml = "0.8"
-tracing = "0.1"
+tokio = { workspace = true }
+toml = { workspace = true }
+tracing = { workspace = true }
 tracing-test = "0.2"
-vbs = "0.1.4"
+vbs = { workspace = true }
 
 [dev-dependencies]
-hotshot-example-types = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.84" }
+hotshot-example-types = { workspace = true }
 portpicker = "0.1.1"
 surf-disco = "0.9"
