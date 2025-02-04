@@ -1,0 +1,50 @@
+name: Build
+
+on:
+  push:
+    branches:
+      - main
+      - release-*
+  pull_request:
+    branches:
+      - main
+      - release-*
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      RUST_LOG: info
+    steps:
+      - uses: styfle/cancel-workflow-action@0.12.1
+        name: Cancel Outdated Builds
+        with:
+          all_but_latest: true
+          access_token: ${{ github.token }}
+
+      - uses: actions/checkout@v4
+        name: Checkout Repository
+
+      - uses: Swatinem/rust-cache@v2
+        name: Enable Rust Caching
+
+      - name: Build
+        run: |
+          cargo build --release
+
+      - name: Format Check
+        run: cargo fmt -- --check
+
+      - name: Clippy
+        run: cargo clippy --workspace --all-features --all-targets -- -D warnings
+
+      - name: Test
+        run: |
+          cargo test --workspace --release --all-features --no-run
+          cargo test --workspace --release --all-features --verbose -- --test-threads 2
+        timeout-minutes: 60
+
+      - name: Generate Documentation
+        run: |
+          cargo doc --no-deps --lib --release --all-features

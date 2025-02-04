@@ -1,0 +1,47 @@
+name: Nix
+
+on:
+  push:
+    branches:
+      - main
+      - release-*
+  schedule:
+    - cron: '0 0 * * 1'
+  workflow_dispatch:
+
+jobs:
+  nix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Configure Git
+        run: |
+          git config --global url."https://ancient123:${{ secrets.ORG_GITHUB_PAT }}@github.com/".insteadOf git://github.com/
+          git config --global url."https://ancient123:${{ secrets.ORG_GITHUB_PAT }}@github.com/".insteadOf ssh://git@github.com/
+
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v24
+
+      # - uses: cachix/cachix-action@v12
+      #   with:
+      #     name: espresso-systems-private
+      #     authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
+
+      - name: Cache cargo
+        uses: actions/cache@v3.3.2
+        with:
+          path: |
+            ~/.cargo-nix/registry/index
+            ~/.cargo-nix/registry/cache
+            ~/.cargo-nix/git
+            target
+          key: espresso-nix-v2-${{ hashFiles('Cargo.lock') }}
+
+      - name: "Sanity Check: nix environment loads"
+        run: nix-shell --run "echo Success"
+
+      - name: "Sanity Check: nix environment builds all targets"
+        run: nix-shell --run "cargo build --all-targets --all-features --release --workspace"
