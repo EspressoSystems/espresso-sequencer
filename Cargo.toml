@@ -49,7 +49,7 @@ bincode = "1.3.3"
 bitvec = "1.0.1"
 blake3 = "1.5"
 circular-buffer = "0.1.9"
-clap = { version = "4.4", features = ["derive", "env", "string"] }
+clap = { version = "4.5", features = ["derive", "env", "string"] }
 cld = "0.5"
 derive_more = { version = "1.0", features = ["full"] }
 es-version = { git = "https://github.com/EspressoSystems/es-version.git", branch = "main" }
@@ -112,7 +112,7 @@ jf-relation = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4
     "std",
 ] }
 jf-utils = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.5" }
-libp2p = { version = "0.53", default-features = false }
+libp2p = { version = "0.54", default-features = false }
 log-panics = { version = "2.0", features = ["with-backtrace"] }
 lru = "0.12"
 strum = { version = "0.26", features = ["derive"] }
@@ -120,17 +120,17 @@ surf-disco = "0.9"
 sqlx = "=0.8.2"
 tagged-base64 = "0.4"
 tide-disco = "0.9.3"
-thiserror = "1.0.69"
+thiserror = "2.0.10"
 tracing = "0.1"
 bytesize = "1.3"
-itertools = "0.12"
+itertools = "0.14"
 priority-queue = "2"
 rand_chacha = "0.3"
 rand_distr = "0.4"
 reqwest = "0.12"
 serde = { version = "1.0.195", features = ["derive"] }
-serde_json = "^1.0.113"
-tempfile = "3.10"
+serde_json = "^1.0.138"
+tempfile = "3.16"
 toml = "0.8"
 url = "2.3"
 vbs = "0.1"
@@ -144,7 +144,7 @@ static_assertions = "1.1"
 num-traits = "0.2"
 derivative = "2.2"
 paste = "1.0"
-rand = "0.8.5"
+rand = "0.9.0"
 time = "0.3"
 trait-set = "0.3.0"
 
