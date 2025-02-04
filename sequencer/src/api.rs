@@ -503,6 +503,7 @@ pub mod test_helpers {
     use committable::Committable;
     use hotshot_state_prover::service::light_client_genesis_from_stake_table;
     use std::time::Duration;
+    use tempfile::TempDir;
     use tokio::{spawn, time::sleep};
 
     use crate::network;
@@ -549,6 +550,8 @@ pub mod test_helpers {
         pub server: SequencerContext<network::Memory, P::Persistence, V>,
         pub peers: Vec<SequencerContext<network::Memory, P::Persistence, V>>,
         pub cfg: TestConfig<{ NUM_NODES }>,
+        // todo (abdul): remove this when fs storage is removed
+        pub temp_dir: Option<TempDir>,
     }
 
     pub struct TestNetworkConfig<const NUM_NODES: usize, P, C>
@@ -703,11 +706,24 @@ pub mod test_helpers {
                 marketplace_builder_url = url;
             }
 
+            // add default storage if none is provided as query module is now required
+            let mut opt = cfg.api_config.clone();
+            let temp_dir = if opt.storage_fs.is_none() && opt.storage_sql.is_none() {
+                let temp_dir = tempfile::tempdir().unwrap();
+                opt = opt.query_fs(
+                    Default::default(),
+                    crate::persistence::fs::Options::new(temp_dir.path().to_path_buf()),
+                );
+                Some(temp_dir)
+            } else {
+                None
+            };
+
             let mut nodes = join_all(
                 izip!(cfg.state, cfg.persistence, cfg.catchup)
                     .enumerate()
                     .map(|(i, (state, persistence, catchup))| {
-                        let opt = cfg.api_config.clone();
+                        let opt = opt.clone();
                         let cfg = &cfg.network_config;
                         let upgrades_map = cfg.upgrades();
                         let marketplace_builder_url = marketplace_builder_url.clone();
@@ -773,6 +789,7 @@ pub mod test_helpers {
                 server,
                 peers,
                 cfg: cfg.network_config,
+                temp_dir,
             }
         }
 
