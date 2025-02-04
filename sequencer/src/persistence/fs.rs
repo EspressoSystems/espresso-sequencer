@@ -754,43 +754,66 @@ impl SequencerPersistence for Persistence {
 
         // Then, we want to get the entries in this directory since they'll be the
         // key/value pairs for our map.
-        let files: Vec<fs::DirEntry> = fs::read_dir(dir_path.clone())?
-            .filter_map(|entry| {
-                entry
-                    .ok()
-                    .filter(|e| e.file_type().map(|ft| ft.is_file()).unwrap_or(false))
-            })
-            .collect();
-
-        // Read all of the files
-        let proposal_files = files
-            .into_iter()
-            .map(|entry| dir_path.join(entry.file_name()).with_extension("txt"));
+        let files = fs::read_dir(dir_path.clone())?.filter_map(|entry| {
+            let entry = entry.ok()?;
+            if entry.file_type().ok()?.is_file() && entry.path().extension()? == "txt" {
+                Some(entry.path())
+            } else {
+                None
+            }
+        });
 
         let mut map = BTreeMap::new();
-        for file in proposal_files.into_iter() {
-            // This operation shouldn't fail, but we don't want to panic here if the filesystem
-            // somehow gets corrupted. We get the stem to remove the ".txt" from the end.
-            if let Some(file_name) = file.file_stem() {
-                // We need to convert the filename (which corresponds to the view)
-                let view_number = ViewNumber::new(
-                    file_name
-                        .to_string_lossy()
-                        .parse::<u64>()
-                        .context("convert file name to u64")?,
+        for file in files {
+            // Parse each file into a proposal if possible. We ignore files we don't recognize or
+            // can't parse, as sometimes we can end up with random extra files (e.g. swap files) in
+            // the directory.
+            //
+            // Get the stem to remove the ".txt" from the end.
+            let Some(file_name) = file.file_stem() else {
+                continue;
+            };
+
+            // Parse the filename (which corresponds to the view)
+            let file_name = file_name.to_string_lossy();
+            let Ok(view_number) = file_name.parse::<u64>() else {
+                tracing::info!(
+                    %file_name,
+                    "ignoring extraneous file in quorum proposals directory"
                 );
+                continue;
+            };
 
-                // Now, we'll try and load the proposal associated with this function.
-                let proposal_bytes = fs::read(file)?;
+            // Now, we'll try and load the proposal associated with this function. In this case we
+            // do propagate errors: errors from the file system are more likely to be some transient
+            // issue (e.g. failure to connect to a network-mounted file system) than an issue with
+            // the file itself (like a swap file being left over in the directory). Thus, this file
+            // likely does have good data even if we can't read it, so we do want to propagate the
+            // error and eventually retry.
+            let proposal_bytes = fs::read(file)?;
 
-                // Then, deserialize.
-                let proposal: Proposal<SeqTypes, QuorumProposal<SeqTypes>> =
-                    bincode::deserialize(&proposal_bytes)?;
-                let proposal2 = convert_proposal(proposal);
+            // Then, deserialize.
+            let proposal: Proposal<SeqTypes, QuorumProposal<SeqTypes>> =
+                match bincode::deserialize(&proposal_bytes) {
+                    Ok(proposal) => proposal,
+                    Err(err) => {
+                        // At this point, if the file contents are invalid, it is most likely an
+                        // error rather than a miscellaneous file somehow ending up in the
+                        // directory. However, we continue on, because it is better to collect as
+                        // many proposals as we can rather than letting one bad proposal cause the
+                        // entire operation to fail, and it is still possible that this was just
+                        // some unintended file whose name happened to match the naming convention.
+                        tracing::warn!(
+                            view_number,
+                            "ignoring malformed quorum proposal file: {err:#}"
+                        );
+                        continue;
+                    }
+                };
+            let proposal2 = convert_proposal(proposal);
 
-                // Push to the map and we're done.
-                map.insert(view_number, proposal2);
-            }
+            // Push to the map and we're done.
+            map.insert(ViewNumber::new(view_number), proposal2);
         }
 
         Ok(map)
@@ -988,9 +1011,14 @@ mod generic_tests {
 
 #[cfg(test)]
 mod test {
+    use espresso_types::{NodeState, PubKey};
+    use hotshot::types::SignatureKey;
+    use hotshot_example_types::node_types::TestVersions;
+    use sequencer_utils::test_utils::setup_test;
     use serde_json::json;
 
     use super::*;
+    use crate::persistence::testing::TestablePersistence;
 
     #[test]
     fn test_config_migrations_add_builder_urls() {
@@ -1088,5 +1116,128 @@ mod test {
         });
 
         assert_eq!(migrate_network_config(before.clone()).unwrap(), before);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_load_quorum_proposals_invalid_extension() {
+        setup_test();
+
+        let tmp = Persistence::tmp_storage().await;
+        let storage = Persistence::connect(&tmp).await;
+
+        // Generate a couple of valid quorum proposals.
+        let leaf: Leaf2 = Leaf::genesis(&Default::default(), &NodeState::mock())
+            .await
+            .into();
+        let privkey = PubKey::generated_from_seed_indexed([0; 32], 1).1;
+        let signature = PubKey::sign(&privkey, &[]).unwrap();
+        let mut quorum_proposal = Proposal {
+            data: QuorumProposalWrapper::<SeqTypes> {
+                proposal: QuorumProposal2::<SeqTypes> {
+                    block_header: leaf.block_header().clone(),
+                    view_number: ViewNumber::genesis(),
+                    justify_qc: QuorumCertificate::genesis::<TestVersions>(
+                        &Default::default(),
+                        &NodeState::mock(),
+                    )
+                    .await
+                    .to_qc2(),
+                    upgrade_certificate: None,
+                    view_change_evidence: None,
+                    next_drb_result: None,
+                    next_epoch_justify_qc: None,
+                },
+                with_epoch: false,
+            },
+            signature,
+            _pd: Default::default(),
+        };
+
+        // Store quorum proposals.
+        let quorum_proposal1 = quorum_proposal.clone();
+        storage
+            .append_quorum_proposal(&quorum_proposal1)
+            .await
+            .unwrap();
+        quorum_proposal.data.proposal.view_number = ViewNumber::new(1);
+        let quorum_proposal2 = quorum_proposal.clone();
+        storage
+            .append_quorum_proposal(&quorum_proposal2)
+            .await
+            .unwrap();
+
+        // Change one of the file extensions. It can happen that we end up with files with the wrong
+        // extension if, for example, the node is killed before cleaning up a swap file.
+        fs::rename(
+            tmp.path().join("quorum_proposals/1.txt"),
+            tmp.path().join("quorum_proposals/1.swp"),
+        )
+        .unwrap();
+
+        // Loading should simply ignore the unrecognized extension.
+        assert_eq!(
+            storage.load_quorum_proposals().await.unwrap(),
+            [(ViewNumber::genesis(), quorum_proposal1)]
+                .into_iter()
+                .collect::<BTreeMap<_, _>>()
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_load_quorum_proposals_malformed_data() {
+        setup_test();
+
+        let tmp = Persistence::tmp_storage().await;
+        let storage = Persistence::connect(&tmp).await;
+
+        // Generate a valid quorum proposal.
+        let leaf: Leaf2 = Leaf::genesis(&Default::default(), &NodeState::mock())
+            .await
+            .into();
+        let privkey = PubKey::generated_from_seed_indexed([0; 32], 1).1;
+        let signature = PubKey::sign(&privkey, &[]).unwrap();
+        let quorum_proposal = Proposal {
+            data: QuorumProposalWrapper::<SeqTypes> {
+                proposal: QuorumProposal2::<SeqTypes> {
+                    block_header: leaf.block_header().clone(),
+                    view_number: ViewNumber::new(1),
+                    justify_qc: QuorumCertificate::genesis::<TestVersions>(
+                        &Default::default(),
+                        &NodeState::mock(),
+                    )
+                    .await
+                    .to_qc2(),
+                    upgrade_certificate: None,
+                    view_change_evidence: None,
+                    next_drb_result: None,
+                    next_epoch_justify_qc: None,
+                },
+                with_epoch: false,
+            },
+            signature,
+            _pd: Default::default(),
+        };
+
+        // First store an invalid quorum proposal.
+        fs::create_dir_all(tmp.path().join("quorum_proposals")).unwrap();
+        fs::write(
+            tmp.path().join("quorum_proposals/0.txt"),
+            "invalid data".as_bytes(),
+        )
+        .unwrap();
+
+        // Store valid quorum proposal.
+        storage
+            .append_quorum_proposal(&quorum_proposal)
+            .await
+            .unwrap();
+
+        // Loading should ignore the invalid data and return the valid proposal.
+        assert_eq!(
+            storage.load_quorum_proposals().await.unwrap(),
+            [(ViewNumber::new(1), quorum_proposal)]
+                .into_iter()
+                .collect::<BTreeMap<_, _>>()
+        );
     }
 }
