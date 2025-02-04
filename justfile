@@ -110,12 +110,12 @@ gen-bindings:
     forge bind --contracts ./contracts/src/ --ethers --crate-name contract-bindings-ethers --bindings-path contract-bindings-ethers --select "{{REGEXP}}" --overwrite --force
 
     # Generate the alloy bindings
-    # For now, to compile these, you need to fork `alloy-core` and change the `RESOLVE_LIMIT`. From there, you need to
-    # patch `foundry` to use the fork and compile `forge`. The `RESOLVE_LIMIT` to use is 128.
-    forge bind --skip test --skip script --libraries contracts/src/libraries/PlonkVerifier.sol:PlonkVerifier:0xB0bfeE1e1A7Ef832149EDe013B34AD6248176385 --alloy --contracts ./contracts/src/ --crate-name contract-bindings-alloy --bindings-path contract-bindings-alloy --select "{{REGEXP}}" --overwrite --force
+    # TODO: `forge bind --alloy ...` fails if there's an unliked library but what are the implications of setting the address here?
+    forge bind --skip test --skip script --libraries contracts/src/libraries/PlonkVerifier.sol:PlonkVerifier:0x5fbdb2315678afecb367f032d93f642f64180aa3 --alloy --contracts ./contracts/src/ --crate-name contract-bindings-alloy --bindings-path contract-bindings-alloy --select "{{REGEXP}}" --overwrite --force
 
-    # For some reason `alloy` likes to use the wrong version of itself in `contract-bindings`. You need to manually replace
-    # it with the workspace version.
+    # For some reason `alloy` likes to use the wrong version of itself in `contract-bindings`.
+    # Use the workspace version.
+    sed -i 's|{.*https://github.com/alloy-rs/alloy.*}|{ workspace = true }|' contract-bindings-alloy/Cargo.toml
 
     # Foundry doesn't include bytecode in the bindings for LightClient.sol, since it links with
     # libraries. However, this bytecode is still needed to link and deploy the contract. Copy it to
