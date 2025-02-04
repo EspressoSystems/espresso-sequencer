@@ -162,7 +162,7 @@ impl Options {
                 )
                 .await?
             } else {
-                bail!("query module requested but no storage options provided");
+                bail!("query module is required for all nodes, but no storage options provided");
             };
         let ctx = init_context(metrics, consumer).await?;
         send_ctx

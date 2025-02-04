@@ -296,6 +296,8 @@ mod test {
 
         let modules = Modules {
             http: Some(Http::with_port(port)),
+            query: Some(Default::default()),
+            storage_fs: Some(fs::Options::new(tmp.path().into())),
             ..Default::default()
         };
         let opt = Options::parse_from([
