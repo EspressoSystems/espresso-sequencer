@@ -60,6 +60,15 @@ pub struct L1ClientOptions {
     )]
     pub l1_retry_delay: Duration,
 
+    /// Timeout for connecting to the L1 provider.
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_L1_CONNECT_TIMEOUT",
+        default_value = "2s",
+        value_parser = parse_duration,
+    )]
+    pub connect_timeout: Duration,
+
     /// Request rate when polling L1.
     #[clap(
         long,
