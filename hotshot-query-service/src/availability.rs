@@ -180,7 +180,7 @@ where
                     Some(height) => LeafId::Number(height),
                     None => LeafId::Hash(req.blob_param("hash")?),
                 };
-                let fetch = state.read(|state| state.get_leaf(id).boxed()).await?;
+                let fetch = state.read(|state| state.get_leaf(id).boxed()).await;
                 fetch.with_timeout(timeout).await.context(FetchLeafSnafu {
                     resource: id.to_string(),
                 })
@@ -195,7 +195,7 @@ where
 
                 let leaves = state
                     .read(|state| state.get_leaf_range(from..until).boxed())
-                    .await?;
+                    .await;
                 leaves
                     .enumerate()
                     .then(|(index, fetch)| async move {
@@ -213,7 +213,7 @@ where
                 let height = req.integer_param("height")?;
                 state
                     .read(|state| {
-                        async move { Ok(state.subscribe_leaves(height).await?.map(Ok)) }.boxed()
+                        async move { Ok(state.subscribe_leaves(height).await.map(Ok)) }.boxed()
                     })
                     .await
             }
@@ -244,7 +244,7 @@ where
 
                 let headers = state
                     .read(|state| state.get_header_range(from..until).boxed())
-                    .await?;
+                    .await;
                 headers
                     .enumerate()
                     .then(|(index, fetch)| async move {
@@ -262,7 +262,7 @@ where
                 let height = req.integer_param("height")?;
                 state
                     .read(|state| {
-                        async move { Ok(state.subscribe_headers(height).await?.map(Ok)) }.boxed()
+                        async move { Ok(state.subscribe_headers(height).await.map(Ok)) }.boxed()
                     })
                     .await
             }
@@ -376,7 +376,7 @@ where
                 } else {
                     BlockId::PayloadHash(req.blob_param("payload-hash")?)
                 };
-                let fetch = state.read(|state| state.get_vid_common(id).boxed()).await?;
+                let fetch = state.read(|state| state.get_vid_common(id).boxed()).await;
                 fetch.with_timeout(timeout).await.context(FetchBlockSnafu {
                     resource: id.to_string(),
                 })
@@ -388,7 +388,7 @@ where
                 let height = req.integer_param("height")?;
                 state
                     .read(|state| {
-                        async move { Ok(state.subscribe_vid_common(height).await?.map(Ok)) }.boxed()
+                        async move { Ok(state.subscribe_vid_common(height).await.map(Ok)) }.boxed()
                     })
                     .await
             }
@@ -401,7 +401,7 @@ where
                     Some(hash) => {
                         let fetch = state
                             .read(|state| state.get_transaction(hash).boxed())
-                            .await?;
+                            .await;
                         fetch
                             .with_timeout(timeout)
                             .await

@@ -96,7 +96,6 @@ mod test_helpers {
     {
         ds.get_leaf_range(bound_range(ds, range).await)
             .await
-            .expect("failed to get leaf range")
             .then(Fetch::resolve)
             .boxed()
     }
@@ -155,8 +154,8 @@ pub mod availability_tests {
 
             // Check indices.
             tracing::info!("looking up leaf {i} various ways");
-            assert_eq!(leaf, ds.get_leaf(i).await.unwrap().await);
-            assert_eq!(leaf, ds.get_leaf(leaf.hash()).await.unwrap().await);
+            assert_eq!(leaf, ds.get_leaf(i).await.await);
+            assert_eq!(leaf, ds.get_leaf(leaf.hash()).await.await);
 
             tracing::info!("looking up block {i} various ways");
             let block = ds.get_block(i).await.unwrap().await;
@@ -235,18 +234,13 @@ pub mod availability_tests {
 
             // Look up the common VID data.
             tracing::info!("looking up VID common {i} various ways");
-            let common = ds
-                .get_vid_common(block.height() as usize)
-                .await
-                .unwrap()
-                .await;
-            assert_eq!(common, ds.get_vid_common(block.hash()).await.unwrap().await);
+            let common = ds.get_vid_common(block.height() as usize).await.await;
+            assert_eq!(common, ds.get_vid_common(block.hash()).await.await);
             // Similar to the above, we can't guarantee which index we will get when passively
             // fetching this data, so only check the index if the data is available locally.
             if let Ok(res) = ds
                 .get_vid_common(BlockId::PayloadHash(block.payload_hash()))
                 .await
-                .unwrap()
                 .try_resolve()
             {
                 if *ix == i as u64 {
@@ -261,7 +255,6 @@ pub mod availability_tests {
                 let res = ds
                     .get_vid_common(BlockId::PayloadHash(block.payload_hash()))
                     .await
-                    .unwrap()
                     .await;
                 assert_eq!(res.payload_hash(), common.payload_hash());
             }
@@ -279,12 +272,7 @@ pub mod availability_tests {
                 let ix = seen_transactions
                     .entry(txn.commit())
                     .or_insert((i as u64, j));
-                if let Ok(tx_data) = ds
-                    .get_transaction(txn.commit())
-                    .await
-                    .unwrap()
-                    .try_resolve()
-                {
+                if let Ok(tx_data) = ds.get_transaction(txn.commit()).await.try_resolve() {
                     assert_eq!(tx_data.transaction(), &txn);
                     assert_eq!(tx_data.block_height(), ix.0);
                     assert_eq!(tx_data.index(), ix.1 as u64);
@@ -293,7 +281,7 @@ pub mod availability_tests {
                         "skipping transaction index check for missing transaction {j} {txn:?}"
                     );
                     // At least check that _some_ transaction can be fetched.
-                    ds.get_transaction(txn.commit()).await.unwrap().await;
+                    ds.get_transaction(txn.commit()).await.await;
                 }
             }
         }
@@ -363,14 +351,12 @@ pub mod availability_tests {
             assert_eq!(
                 ds.get_leaf_range(..block_height)
                     .await
-                    .unwrap()
                     .map(|fetch| fetch.try_resolve().ok())
                     .collect::<Vec<_>>()
                     .await,
                 storage
                     .get_leaf_range(..block_height)
                     .await
-                    .unwrap()
                     .map(|fetch| fetch.try_resolve().ok())
                     .collect::<Vec<_>>()
                     .await
@@ -419,15 +405,12 @@ pub mod availability_tests {
     {
         tracing::info!("testing range {range:?}");
 
-        let mut leaves = ds.get_leaf_range(range.clone()).await.unwrap();
+        let mut leaves = ds.get_leaf_range(range.clone()).await;
         let mut blocks = ds.get_block_range(range.clone()).await.unwrap();
         let mut payloads = ds.get_payload_range(range.clone()).await.unwrap();
         let mut payloads_meta = ds.get_payload_metadata_range(range.clone()).await.unwrap();
-        let mut vid_common = ds.get_vid_common_range(range.clone()).await.unwrap();
-        let mut vid_common_meta = ds
-            .get_vid_common_metadata_range(range.clone())
-            .await
-            .unwrap();
+        let mut vid_common = ds.get_vid_common_range(range.clone()).await;
+        let mut vid_common_meta = ds.get_vid_common_metadata_range(range.clone()).await;
 
         for i in expected_indices {
             tracing::info!(i, "check entries");
@@ -441,7 +424,7 @@ pub mod availability_tests {
             assert_eq!(block.height(), i);
             assert_eq!(payload, ds.get_payload(i as usize).await.unwrap().await);
             assert_eq!(payload_meta, block.into());
-            assert_eq!(common, ds.get_vid_common(i as usize).await.unwrap().await);
+            assert_eq!(common, ds.get_vid_common(i as usize).await.await);
             assert_eq!(common_meta, common.into());
         }
 
@@ -491,7 +474,7 @@ pub mod availability_tests {
         network.start().await;
 
         // Wait for there to be at least 5 blocks.
-        ds.subscribe_leaves(5).await.unwrap().next().await.unwrap();
+        ds.subscribe_leaves(5).await.next().await.unwrap();
 
         // Test inclusive, exclusive and unbounded lower bound.
         do_range_rev_test(&ds, Bound::Included(1), 5, 1..=5).await;
@@ -509,15 +492,12 @@ pub mod availability_tests {
     {
         tracing::info!("testing range {start:?}-{end}");
 
-        let mut leaves = ds.get_leaf_range_rev(start, end).await.unwrap();
+        let mut leaves = ds.get_leaf_range_rev(start, end).await;
         let mut blocks = ds.get_block_range_rev(start, end).await.unwrap();
         let mut payloads = ds.get_payload_range_rev(start, end).await.unwrap();
         let mut payloads_meta = ds.get_payload_metadata_range_rev(start, end).await.unwrap();
-        let mut vid_common = ds.get_vid_common_range_rev(start, end).await.unwrap();
-        let mut vid_common_meta = ds
-            .get_vid_common_metadata_range_rev(start, end)
-            .await
-            .unwrap();
+        let mut vid_common = ds.get_vid_common_range_rev(start, end).await;
+        let mut vid_common_meta = ds.get_vid_common_metadata_range_rev(start, end).await;
 
         for i in expected_indices.rev() {
             tracing::info!(i, "check entries");
@@ -531,10 +511,10 @@ pub mod availability_tests {
             assert_eq!(block.height(), i);
             assert_eq!(payload.height(), i);
             assert_eq!(payload_meta.height(), i);
-            assert_eq!(common, ds.get_vid_common(i as usize).await.unwrap().await);
+            assert_eq!(common, ds.get_vid_common(i as usize).await.await);
             assert_eq!(
                 common_meta,
-                ds.get_vid_common_metadata(i as usize).await.unwrap().await
+                ds.get_vid_common_metadata(i as usize).await.await
             );
         }
 
@@ -639,7 +619,7 @@ pub mod persistence_tests {
                 .unwrap(),
             0
         );
-        ds.get_leaf(1).await.unwrap().try_resolve().unwrap_err();
+        ds.get_leaf(1).await.try_resolve().unwrap_err();
         ds.get_block(1).await.unwrap().try_resolve().unwrap_err();
     }
 
@@ -686,7 +666,7 @@ pub mod persistence_tests {
                 .unwrap(),
             2
         );
-        assert_eq!(leaf, ds.get_leaf(1).await.unwrap().await);
+        assert_eq!(leaf, ds.get_leaf(1).await.await);
         assert_eq!(block, ds.get_block(1).await.unwrap().await);
 
         drop(ds);
@@ -699,7 +679,7 @@ pub mod persistence_tests {
                 .unwrap(),
             0
         );
-        ds.get_leaf(1).await.unwrap().try_resolve().unwrap_err();
+        ds.get_leaf(1).await.try_resolve().unwrap_err();
         ds.get_block(1).await.unwrap().try_resolve().unwrap_err();
     }
 
@@ -778,13 +758,9 @@ pub mod persistence_tests {
                 .unwrap(),
             height + 1
         );
-        assert_eq!(leaf, ds.get_leaf(height).await.unwrap().await);
+        assert_eq!(leaf, ds.get_leaf(height).await.await);
         assert_eq!(block, ds.get_block(height).await.unwrap().await);
-        ds.get_leaf(height - 1)
-            .await
-            .unwrap()
-            .try_resolve()
-            .unwrap_err();
+        ds.get_leaf(height - 1).await.try_resolve().unwrap_err();
         ds.get_block(height - 1)
             .await
             .unwrap()
@@ -954,7 +930,7 @@ pub mod node_tests {
         // data. These would have just ignored the insertion of `vid[0]` (the share) and
         // `leaves[1]`. Detect if this is the case; then we allow 1 missing leaf and 1 missing VID
         // share.
-        let expected_missing = if ds.get_leaf(1).await.unwrap().try_resolve().is_err() {
+        let expected_missing = if ds.get_leaf(1).await.try_resolve().is_err() {
             tracing::warn!(
                 "data source does not support out-of-order filling, allowing one missing leaf and VID share"
             );
@@ -1081,7 +1057,7 @@ pub mod node_tests {
         network.start().await;
 
         // Check VID shares for a few blocks.
-        let mut leaves = ds.subscribe_leaves(0).await.unwrap().take(3);
+        let mut leaves = ds.subscribe_leaves(0).await.take(3);
         while let Some(leaf) = leaves.next().await {
             tracing::info!("got leaf {}", leaf.height());
             let mut tx = ds.read().await.unwrap();
@@ -1130,7 +1106,7 @@ pub mod node_tests {
         .unwrap();
 
         {
-            assert_eq!(ds.get_vid_common(0).await.unwrap().await, common);
+            assert_eq!(ds.get_vid_common(0).await.await, common);
             assert_eq!(ds.vid_share(0).await.unwrap(), disperse.shares[0]);
         }
 
@@ -1142,7 +1118,7 @@ pub mod node_tests {
             tx.commit().await.unwrap();
         }
         {
-            assert_eq!(ds.get_vid_common(0).await.unwrap().await, common);
+            assert_eq!(ds.get_vid_common(0).await.await, common);
             assert_eq!(ds.vid_share(0).await.unwrap(), disperse.shares[0]);
         }
     }
@@ -1182,7 +1158,7 @@ pub mod node_tests {
 
         // Get VID common data and verify it.
         tracing::info!("fetching common data");
-        let common = ds.get_vid_common(height).await.unwrap().await;
+        let common = ds.get_vid_common(height).await.await;
         let common = common.common();
         VidSchemeType::is_consistent(&commit, common).unwrap();
 
@@ -1195,7 +1171,7 @@ pub mod node_tests {
 
             // Wait until the node has processed up to the desired block; since we have thus far
             // only interacted with node 0, it is possible other nodes are slightly behind.
-            let mut leaves = ds.subscribe_leaves(height).await.unwrap();
+            let mut leaves = ds.subscribe_leaves(height).await;
             let leaf = leaves.next().await.unwrap();
             assert_eq!(leaf.height(), height as u64);
             assert_eq!(leaf.payload_hash(), commit);
@@ -1230,7 +1206,7 @@ pub mod node_tests {
 
         // Wait for blocks with at least three different timestamps to be sequenced. This lets us
         // test all the edge cases.
-        let mut leaves = ds.subscribe_leaves(0).await.unwrap();
+        let mut leaves = ds.subscribe_leaves(0).await;
         // `test_blocks` is a list of lists of headers with the same timestamp. The flattened list
         // of headers is contiguous.
         let mut test_blocks: Vec<Vec<Header<MockTypes>>> = vec![];

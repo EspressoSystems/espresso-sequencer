@@ -252,8 +252,8 @@ where
             "updating state storage"
         );
 
-        let parent_leaf = storage.get_leaf(height).await?;
-        let leaves = storage.subscribe_leaves(height + 1).await?;
+        let parent_leaf = storage.get_leaf(height).await;
+        let leaves = storage.subscribe_leaves(height + 1).await;
         (last_height, parent_leaf, leaves)
     };
     // resolve the parent leaf future _after_ dropping our lock on the state, in case it is not

@@ -416,7 +416,7 @@ mod test {
             .await
             .unwrap();
 
-        assert_eq!(ds.get_vid_common(0).await.unwrap().await, common);
+        assert_eq!(ds.get_vid_common(0).await.await, common);
         NodeStorage::<MockTypes>::vid_share(&mut ds.read().await.unwrap(), 0)
             .await
             .unwrap_err();
@@ -427,7 +427,7 @@ mod test {
             .await
             .unwrap();
         tx.commit().await.unwrap();
-        assert_eq!(ds.get_vid_common(0).await.unwrap().await, common);
+        assert_eq!(ds.get_vid_common(0).await.await, common);
         assert_eq!(
             NodeStorage::<MockTypes>::vid_share(&mut ds.read().await.unwrap(), 0)
                 .await

@@ -127,7 +127,7 @@ pub trait AvailabilityDataSource<Types: NodeType>
 where
     Payload<Types>: QueryablePayload<Types>,
 {
-    async fn get_leaf<ID>(&self, id: ID) -> QueryResult<Fetch<LeafQueryData<Types>>>
+    async fn get_leaf<ID>(&self, id: ID) -> Fetch<LeafQueryData<Types>>
     where
         ID: Into<LeafId<Types>> + Send + Sync;
 
@@ -147,22 +147,19 @@ where
     where
         ID: Into<BlockId<Types>> + Send + Sync;
 
-    async fn get_vid_common<ID>(&self, id: ID) -> QueryResult<Fetch<VidCommonQueryData<Types>>>
+    async fn get_vid_common<ID>(&self, id: ID) -> Fetch<VidCommonQueryData<Types>>
     where
         ID: Into<BlockId<Types>> + Send + Sync;
 
-    async fn get_vid_common_metadata<ID>(
-        &self,
-        id: ID,
-    ) -> QueryResult<Fetch<VidCommonMetadata<Types>>>
+    async fn get_vid_common_metadata<ID>(&self, id: ID) -> Fetch<VidCommonMetadata<Types>>
     where
         ID: Into<BlockId<Types>> + Send + Sync;
 
-    async fn get_leaf_range<R>(&self, range: R) -> QueryResult<FetchStream<LeafQueryData<Types>>>
+    async fn get_leaf_range<R>(&self, range: R) -> FetchStream<LeafQueryData<Types>>
     where
         R: RangeBounds<usize> + Send + 'static;
 
-    async fn get_header_range<R>(&self, range: R) -> QueryResult<FetchStream<Header<Types>>>
+    async fn get_header_range<R>(&self, range: R) -> FetchStream<Header<Types>>
     where
         R: RangeBounds<usize> + Send + 'static;
 
@@ -184,17 +181,14 @@ where
     where
         R: RangeBounds<usize> + Send + 'static;
 
-    async fn get_vid_common_range<R>(
-        &self,
-        range: R,
-    ) -> QueryResult<FetchStream<VidCommonQueryData<Types>>>
+    async fn get_vid_common_range<R>(&self, range: R) -> FetchStream<VidCommonQueryData<Types>>
     where
         R: RangeBounds<usize> + Send + 'static;
 
     async fn get_vid_common_metadata_range<R>(
         &self,
         range: R,
-    ) -> QueryResult<FetchStream<VidCommonMetadata<Types>>>
+    ) -> FetchStream<VidCommonMetadata<Types>>
     where
         R: RangeBounds<usize> + Send + 'static;
 
@@ -202,7 +196,7 @@ where
         &self,
         start: Bound<usize>,
         end: usize,
-    ) -> QueryResult<FetchStream<LeafQueryData<Types>>>;
+    ) -> FetchStream<LeafQueryData<Types>>;
 
     async fn get_block_range_rev(
         &self,
@@ -226,19 +220,19 @@ where
         &self,
         start: Bound<usize>,
         end: usize,
-    ) -> QueryResult<FetchStream<VidCommonQueryData<Types>>>;
+    ) -> FetchStream<VidCommonQueryData<Types>>;
 
     async fn get_vid_common_metadata_range_rev(
         &self,
         start: Bound<usize>,
         end: usize,
-    ) -> QueryResult<FetchStream<VidCommonMetadata<Types>>>;
+    ) -> FetchStream<VidCommonMetadata<Types>>;
 
     /// Returns the transaction with the given `hash`.
     async fn get_transaction(
         &self,
         hash: TransactionHash<Types>,
-    ) -> QueryResult<Fetch<TransactionQueryData<Types>>>;
+    ) -> Fetch<TransactionQueryData<Types>>;
 
     async fn subscribe_blocks(
         &self,
@@ -273,48 +267,38 @@ where
             .boxed())
     }
 
-    async fn subscribe_leaves(
-        &self,
-        from: usize,
-    ) -> QueryResult<BoxStream<'static, LeafQueryData<Types>>> {
-        Ok(self
-            .get_leaf_range(from..)
-            .await?
+    async fn subscribe_leaves(&self, from: usize) -> BoxStream<'static, LeafQueryData<Types>> {
+        self.get_leaf_range(from..)
+            .await
             .then(Fetch::resolve)
-            .boxed())
+            .boxed()
     }
 
-    async fn subscribe_headers(
-        &self,
-        from: usize,
-    ) -> QueryResult<BoxStream<'static, Header<Types>>> {
-        Ok(self
-            .get_header_range(from..)
-            .await?
+    async fn subscribe_headers(&self, from: usize) -> BoxStream<'static, Header<Types>> {
+        self.get_header_range(from..)
+            .await
             .then(Fetch::resolve)
-            .boxed())
+            .boxed()
     }
 
     async fn subscribe_vid_common(
         &self,
         from: usize,
-    ) -> QueryResult<BoxStream<'static, VidCommonQueryData<Types>>> {
-        Ok(self
-            .get_vid_common_range(from..)
-            .await?
+    ) -> BoxStream<'static, VidCommonQueryData<Types>> {
+        self.get_vid_common_range(from..)
+            .await
             .then(Fetch::resolve)
-            .boxed())
+            .boxed()
     }
 
     async fn subscribe_vid_common_metadata(
         &self,
         from: usize,
-    ) -> QueryResult<BoxStream<'static, VidCommonMetadata<Types>>> {
-        Ok(self
-            .get_vid_common_metadata_range(from..)
-            .await?
+    ) -> BoxStream<'static, VidCommonMetadata<Types>> {
+        self.get_vid_common_metadata_range(from..)
+            .await
             .then(Fetch::resolve)
-            .boxed())
+            .boxed()
     }
 }
 

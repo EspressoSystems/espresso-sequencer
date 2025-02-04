@@ -500,6 +500,7 @@ where
     }
 
     async fn new(builder: Builder<Types, S, P>) -> anyhow::Result<Self> {
+        let leaf_only = builder.is_leaf_only();
         let aggregator = builder.aggregator;
         let aggregator_chunk_size = builder
             .aggregator_chunk_size
@@ -515,7 +516,7 @@ where
         let aggregator_metrics = AggregatorMetrics::new(builder.storage.metrics());
 
         let fetcher = Arc::new(Fetcher::new(builder).await?);
-        let scanner = if proactive_fetching {
+        let scanner = if proactive_fetching && !leaf_only {
             Some(BackgroundTask::spawn(
                 "proactive scanner",
                 fetcher.clone().proactive_scan(
@@ -530,7 +531,7 @@ where
             None
         };
 
-        let aggregator = if aggregator {
+        let aggregator = if aggregator && !leaf_only {
             Some(BackgroundTask::spawn(
                 "aggregator",
                 fetcher
@@ -614,11 +615,11 @@ where
     for<'a> S::ReadOnly<'a>: AvailabilityStorage<Types> + NodeStorage<Types> + PrunedHeightStorage,
     P: AvailabilityProvider<Types>,
 {
-    async fn get_leaf<ID>(&self, id: ID) -> QueryResult<Fetch<LeafQueryData<Types>>>
+    async fn get_leaf<ID>(&self, id: ID) -> Fetch<LeafQueryData<Types>>
     where
         ID: Into<LeafId<Types>> + Send + Sync,
     {
-        Ok(self.fetcher.get(id.into()).await)
+        self.fetcher.get(id.into()).await
     }
 
     async fn get_header<ID>(&self, id: ID) -> QueryResult<Fetch<Header<Types>>>
@@ -674,28 +675,25 @@ where
         Ok(self.fetcher.get(id.into()).await)
     }
 
-    async fn get_vid_common<ID>(&self, id: ID) -> QueryResult<Fetch<VidCommonQueryData<Types>>>
+    async fn get_vid_common<ID>(&self, id: ID) -> Fetch<VidCommonQueryData<Types>>
     where
         ID: Into<BlockId<Types>> + Send + Sync,
     {
-        Ok(self.fetcher.get(VidCommonRequest::from(id.into())).await)
+        self.fetcher.get(VidCommonRequest::from(id.into())).await
     }
 
-    async fn get_vid_common_metadata<ID>(
-        &self,
-        id: ID,
-    ) -> QueryResult<Fetch<VidCommonMetadata<Types>>>
+    async fn get_vid_common_metadata<ID>(&self, id: ID) -> Fetch<VidCommonMetadata<Types>>
     where
         ID: Into<BlockId<Types>> + Send + Sync,
     {
-        Ok(self.fetcher.get(VidCommonRequest::from(id.into())).await)
+        self.fetcher.get(VidCommonRequest::from(id.into())).await
     }
 
-    async fn get_leaf_range<R>(&self, range: R) -> QueryResult<FetchStream<LeafQueryData<Types>>>
+    async fn get_leaf_range<R>(&self, range: R) -> FetchStream<LeafQueryData<Types>>
     where
         R: RangeBounds<usize> + Send + 'static,
     {
-        Ok(self.fetcher.clone().get_range(range))
+        self.fetcher.clone().get_range(range)
     }
 
     async fn get_block_range<R>(&self, range: R) -> QueryResult<FetchStream<BlockQueryData<Types>>>
@@ -710,15 +708,15 @@ where
         Ok(self.fetcher.clone().get_range(range))
     }
 
-    async fn get_header_range<R>(&self, range: R) -> QueryResult<FetchStream<Header<Types>>>
+    async fn get_header_range<R>(&self, range: R) -> FetchStream<Header<Types>>
     where
         R: RangeBounds<usize> + Send + 'static,
     {
         let leaves: FetchStream<LeafQueryData<Types>> = self.fetcher.clone().get_range(range);
 
-        Ok(leaves
+        leaves
             .map(|fetch| fetch.map(|leaf| leaf.leaf.block_header().clone()))
-            .boxed())
+            .boxed()
     }
 
     async fn get_payload_range<R>(
@@ -753,32 +751,29 @@ where
         Ok(self.fetcher.clone().get_range(range))
     }
 
-    async fn get_vid_common_range<R>(
-        &self,
-        range: R,
-    ) -> QueryResult<FetchStream<VidCommonQueryData<Types>>>
+    async fn get_vid_common_range<R>(&self, range: R) -> FetchStream<VidCommonQueryData<Types>>
     where
         R: RangeBounds<usize> + Send + 'static,
     {
-        Ok(self.fetcher.clone().get_range(range))
+        self.fetcher.clone().get_range(range)
     }
 
     async fn get_vid_common_metadata_range<R>(
         &self,
         range: R,
-    ) -> QueryResult<FetchStream<VidCommonMetadata<Types>>>
+    ) -> FetchStream<VidCommonMetadata<Types>>
     where
         R: RangeBounds<usize> + Send + 'static,
     {
-        Ok(self.fetcher.clone().get_range(range))
+        self.fetcher.clone().get_range(range)
     }
 
     async fn get_leaf_range_rev(
         &self,
         start: Bound<usize>,
         end: usize,
-    ) -> QueryResult<FetchStream<LeafQueryData<Types>>> {
-        Ok(self.fetcher.clone().get_range_rev(start, end))
+    ) -> FetchStream<LeafQueryData<Types>> {
+        self.fetcher.clone().get_range_rev(start, end)
     }
 
     async fn get_block_range_rev(
@@ -828,23 +823,23 @@ where
         &self,
         start: Bound<usize>,
         end: usize,
-    ) -> QueryResult<FetchStream<VidCommonQueryData<Types>>> {
-        Ok(self.fetcher.clone().get_range_rev(start, end))
+    ) -> FetchStream<VidCommonQueryData<Types>> {
+        self.fetcher.clone().get_range_rev(start, end)
     }
 
     async fn get_vid_common_metadata_range_rev(
         &self,
         start: Bound<usize>,
         end: usize,
-    ) -> QueryResult<FetchStream<VidCommonMetadata<Types>>> {
-        Ok(self.fetcher.clone().get_range_rev(start, end))
+    ) -> FetchStream<VidCommonMetadata<Types>> {
+        self.fetcher.clone().get_range_rev(start, end)
     }
 
     async fn get_transaction(
         &self,
         hash: TransactionHash<Types>,
-    ) -> QueryResult<Fetch<TransactionQueryData<Types>>> {
-        Ok(self.fetcher.get(TransactionRequest::from(hash)).await)
+    ) -> Fetch<TransactionQueryData<Types>> {
+        self.fetcher.get(TransactionRequest::from(hash)).await
     }
 }
 

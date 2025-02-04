@@ -183,7 +183,7 @@ pub struct Options {
     #[clap(long, env = "ESPRESSO_SEQUENCER_ARCHIVE", conflicts_with = "prune")]
     pub(crate) archive: bool,
 
-    /// TODO:
+    /// Turns on leaf only data storage
     #[clap(long, env = "ESPRESSO_SEQUENCER_LIGHTWEIGHT")]
     pub(crate) lightweight: bool,
 

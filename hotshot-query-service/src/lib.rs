@@ -615,7 +615,7 @@ mod test {
 
     #[async_trait]
     impl AvailabilityDataSource<MockTypes> for CompositeState {
-        async fn get_leaf<ID>(&self, id: ID) -> QueryResult<Fetch<LeafQueryData<MockTypes>>>
+        async fn get_leaf<ID>(&self, id: ID) -> Fetch<LeafQueryData<MockTypes>>
         where
             ID: Into<LeafId<MockTypes>> + Send + Sync,
         {
@@ -649,28 +649,19 @@ mod test {
         {
             self.hotshot_qs.get_payload_metadata(id).await
         }
-        async fn get_vid_common<ID>(
-            &self,
-            id: ID,
-        ) -> QueryResult<Fetch<VidCommonQueryData<MockTypes>>>
+        async fn get_vid_common<ID>(&self, id: ID) -> Fetch<VidCommonQueryData<MockTypes>>
         where
             ID: Into<BlockId<MockTypes>> + Send + Sync,
         {
             self.hotshot_qs.get_vid_common(id).await
         }
-        async fn get_vid_common_metadata<ID>(
-            &self,
-            id: ID,
-        ) -> QueryResult<Fetch<VidCommonMetadata<MockTypes>>>
+        async fn get_vid_common_metadata<ID>(&self, id: ID) -> Fetch<VidCommonMetadata<MockTypes>>
         where
             ID: Into<BlockId<MockTypes>> + Send + Sync,
         {
             self.hotshot_qs.get_vid_common_metadata(id).await
         }
-        async fn get_leaf_range<R>(
-            &self,
-            range: R,
-        ) -> QueryResult<FetchStream<LeafQueryData<MockTypes>>>
+        async fn get_leaf_range<R>(&self, range: R) -> FetchStream<LeafQueryData<MockTypes>>
         where
             R: RangeBounds<usize> + Send + 'static,
         {
@@ -686,7 +677,7 @@ mod test {
             self.hotshot_qs.get_block_range(range).await
         }
 
-        async fn get_header_range<R>(&self, range: R) -> QueryResult<FetchStream<Header<MockTypes>>>
+        async fn get_header_range<R>(&self, range: R) -> FetchStream<Header<MockTypes>>
         where
             R: RangeBounds<usize> + Send + 'static,
         {
@@ -713,7 +704,7 @@ mod test {
         async fn get_vid_common_range<R>(
             &self,
             range: R,
-        ) -> QueryResult<FetchStream<VidCommonQueryData<MockTypes>>>
+        ) -> FetchStream<VidCommonQueryData<MockTypes>>
         where
             R: RangeBounds<usize> + Send + 'static,
         {
@@ -722,7 +713,7 @@ mod test {
         async fn get_vid_common_metadata_range<R>(
             &self,
             range: R,
-        ) -> QueryResult<FetchStream<VidCommonMetadata<MockTypes>>>
+        ) -> FetchStream<VidCommonMetadata<MockTypes>>
         where
             R: RangeBounds<usize> + Send + 'static,
         {
@@ -732,7 +723,7 @@ mod test {
             &self,
             start: Bound<usize>,
             end: usize,
-        ) -> QueryResult<FetchStream<LeafQueryData<MockTypes>>> {
+        ) -> FetchStream<LeafQueryData<MockTypes>> {
             self.hotshot_qs.get_leaf_range_rev(start, end).await
         }
         async fn get_block_range_rev(
@@ -762,14 +753,14 @@ mod test {
             &self,
             start: Bound<usize>,
             end: usize,
-        ) -> QueryResult<FetchStream<VidCommonQueryData<MockTypes>>> {
+        ) -> FetchStream<VidCommonQueryData<MockTypes>> {
             self.hotshot_qs.get_vid_common_range_rev(start, end).await
         }
         async fn get_vid_common_metadata_range_rev(
             &self,
             start: Bound<usize>,
             end: usize,
-        ) -> QueryResult<FetchStream<VidCommonMetadata<MockTypes>>> {
+        ) -> FetchStream<VidCommonMetadata<MockTypes>> {
             self.hotshot_qs
                 .get_vid_common_metadata_range_rev(start, end)
                 .await
@@ -777,7 +768,7 @@ mod test {
         async fn get_transaction(
             &self,
             hash: TransactionHash<MockTypes>,
-        ) -> QueryResult<Fetch<TransactionQueryData<MockTypes>>> {
+        ) -> Fetch<TransactionQueryData<MockTypes>> {
             self.hotshot_qs.get_transaction(hash).await
         }
     }

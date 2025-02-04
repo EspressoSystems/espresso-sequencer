@@ -273,7 +273,7 @@ mod test {
         // * Block
         // * Payload
         // * VID common
-        let leaves = network.data_source().subscribe_leaves(1).await.unwrap();
+        let leaves = network.data_source().subscribe_leaves(1).await;
         let leaves = leaves.take(5).collect::<Vec<_>>().await;
         let test_leaf = &leaves[0];
         let test_block = &leaves[1];
@@ -284,19 +284,12 @@ mod test {
         tracing::info!("requesting unfetchable resources");
         let mut fetches = vec![];
         // * An unknown leaf hash.
-        fetches.push(
-            data_source
-                .get_leaf(test_leaf.hash())
-                .await
-                .unwrap()
-                .map(ignore),
-        );
+        fetches.push(data_source.get_leaf(test_leaf.hash()).await.map(ignore));
         // * An unknown leaf height.
         fetches.push(
             data_source
                 .get_leaf(test_leaf.height() as usize)
                 .await
-                .unwrap()
                 .map(ignore),
         );
         // * An unknown block hash.
@@ -318,7 +311,7 @@ mod test {
             data_source
                 .get_vid_common(test_common.block_hash())
                 .await
-                .unwrap()
+                 
                 .map(ignore),
         );
         // * An unknown block height.
@@ -340,17 +333,17 @@ mod test {
             data_source
                 .get_vid_common(test_common.height() as usize)
                 .await
-                .unwrap()
+                
                 .map(ignore),
         );
         // * Genesis VID common (no VID for genesis)
-        fetches.push(data_source.get_vid_common(0).await.unwrap().map(ignore));
+        fetches.push(data_source.get_vid_common(0).await.map(ignore));
         // * An unknown transaction.
         fetches.push(
             data_source
                 .get_transaction(mock_transaction(vec![]).commit())
                 .await
-                .unwrap()
+              
                 .map(ignore),
         );
 
@@ -376,7 +369,7 @@ mod test {
         let req_leaf = data_source
             .get_leaf(test_leaf.height() as usize)
             .await
-            .unwrap();
+            ;
         let req_block = data_source
             .get_block(test_block.height() as usize)
             .await
@@ -388,7 +381,7 @@ mod test {
         let req_common = data_source
             .get_vid_common(test_common.height() as usize)
             .await
-            .unwrap();
+            ;
 
         // Give the requests some extra time to complete, and check that they still haven't
         // resolved, since the provider is blocked. This just ensures the integrity of the test by
@@ -406,7 +399,7 @@ mod test {
         let leaf = data_source
             .get_leaf(test_leaf.height() as usize)
             .await
-            .unwrap()
+            
             .await;
         let block = data_source
             .get_block(test_block.height() as usize)
@@ -421,7 +414,7 @@ mod test {
         let common = data_source
             .get_vid_common(test_common.height() as usize)
             .await
-            .unwrap()
+           
             .await;
         {
             // Verify the data.
@@ -431,7 +424,7 @@ mod test {
                 truth
                     .get_leaf(test_leaf.height() as usize)
                     .await
-                    .unwrap()
+                   
                     .await
             );
             assert_eq!(
@@ -455,7 +448,7 @@ mod test {
                 truth
                     .get_vid_common(test_common.height() as usize)
                     .await
-                    .unwrap()
+                   
                     .await
             );
         }
@@ -470,7 +463,7 @@ mod test {
             let fetched_leaf = data_source
                 .get_leaf(leaf.height() as usize)
                 .await
-                .unwrap()
+                
                 .await;
             assert_eq!(*leaf, fetched_leaf);
         }
@@ -540,7 +533,7 @@ mod test {
 
         // Wait until the block height reaches 3. This gives us the genesis block, one additional
         // block at the end, and then one block that we can use to test fetching.
-        let leaves = network.data_source().subscribe_leaves(1).await.unwrap();
+        let leaves = network.data_source().subscribe_leaves(1).await;
         let leaves = leaves.take(2).collect::<Vec<_>>().await;
         let test_leaf = &leaves[0];
 
@@ -554,7 +547,7 @@ mod test {
             data_source
                 .get_leaf(test_leaf.height() as usize)
                 .await
-                .unwrap()
+               
                 .into_future(),
             data_source
                 .get_block(test_leaf.height() as usize)
@@ -600,7 +593,7 @@ mod test {
 
         // Wait until the block height reaches 4. This gives us the genesis block, one additional
         // block at the end, and then two blocks that we can use to test fetching.
-        let leaves = network.data_source().subscribe_leaves(1).await.unwrap();
+        let leaves = network.data_source().subscribe_leaves(1).await;
         let leaves = leaves.take(4).collect::<Vec<_>>().await;
 
         // Tell the node about a leaf after the range of interest so it learns about the block
@@ -664,11 +657,11 @@ mod test {
 
         // Subscribe to objects from the future.
         let blocks = data_source.subscribe_blocks(0).await.unwrap();
-        let leaves = data_source.subscribe_leaves(0).await.unwrap();
-        let common = data_source.subscribe_vid_common(0).await.unwrap();
+        let leaves = data_source.subscribe_leaves(0).await;
+        let common = data_source.subscribe_vid_common(0).await;
 
         // Wait for a few blocks to be finalized.
-        let finalized_leaves = network.data_source().subscribe_leaves(0).await.unwrap();
+        let finalized_leaves = network.data_source().subscribe_leaves(0).await;
         let finalized_leaves = finalized_leaves.take(5).collect::<Vec<_>>().await;
 
         // Tell the node about a leaf after the range of interest so it learns about the block
@@ -688,7 +681,7 @@ mod test {
             assert_eq!(blocks[i].header(), finalized_leaves[i].header());
             assert_eq!(
                 common[i],
-                data_source.get_vid_common(i).await.unwrap().await
+                data_source.get_vid_common(i).await.await
             );
         }
     }
@@ -725,7 +718,7 @@ mod test {
         network.start().await;
 
         // Wait for a few blocks to be finalized.
-        let finalized_leaves = network.data_source().subscribe_leaves(0).await.unwrap();
+        let finalized_leaves = network.data_source().subscribe_leaves(0).await;
         let finalized_leaves = finalized_leaves.take(5).collect::<Vec<_>>().await;
 
         // Tell the node about a leaf after the range of interest (so it learns about the block
@@ -740,7 +733,7 @@ mod test {
         let leaves = data_source
             .get_leaf_range(..5)
             .await
-            .unwrap()
+           
             .then(Fetch::resolve)
             .collect::<Vec<_>>()
             .await;
@@ -776,7 +769,7 @@ mod test {
         let data_source = data_source(&db, &NoFetching).await;
 
         // Subscribe to blocks.
-        let mut leaves = network.data_source().subscribe_leaves(1).await.unwrap();
+        let mut leaves = network.data_source().subscribe_leaves(1).await;
         let mut blocks = network.data_source().subscribe_blocks(1).await.unwrap();
 
         // Start consensus.
@@ -786,7 +779,7 @@ mod test {
         // and works without a fetcher; we don't trigger fetches for transactions that we don't know
         // exist.
         let tx = mock_transaction(vec![1, 2, 3]);
-        let fut = data_source.get_transaction(tx.commit()).await.unwrap();
+        let fut = data_source.get_transaction(tx.commit()).await;
 
         // Sequence the transaction.
         network.submit_transaction(tx.clone()).await;
@@ -820,7 +813,7 @@ mod test {
             data_source
                 .get_transaction(tx.commit())
                 .await
-                .unwrap()
+                
                 .await
         );
     }
@@ -863,7 +856,7 @@ mod test {
 
         // Wait until the block height reaches 3. This gives us the genesis block, one additional
         // block at the end, and one block to try fetching.
-        let leaves = network.data_source().subscribe_leaves(1).await.unwrap();
+        let leaves = network.data_source().subscribe_leaves(1).await;
         let leaves = leaves.take(2).collect::<Vec<_>>().await;
         let test_leaf = &leaves[0];
 
@@ -881,7 +874,7 @@ mod test {
         let fut = data_source
             .get_leaf(test_leaf.height() as usize)
             .await
-            .unwrap();
+            ;
 
         // Wait a few retries and check that the request has not completed, since the provider is
         // failing.
@@ -894,7 +887,7 @@ mod test {
             data_source
                 .get_leaf(test_leaf.height() as usize)
                 .await
-                .unwrap()
+                
                 .await,
             *test_leaf
         );
@@ -1030,7 +1023,7 @@ mod test {
         network.start().await;
 
         // Wait until a few blocks are produced.
-        let leaves = network.data_source().subscribe_leaves(1).await.unwrap();
+        let leaves = network.data_source().subscribe_leaves(1).await;
         let leaves = leaves.take(5).collect::<Vec<_>>().await;
 
         // The disconnected data source has no data yet, so it hasn't done any pruning.
@@ -1053,7 +1046,7 @@ mod test {
         for i in 1..=last_leaf.height() {
             tracing::info!(i, "fetching leaf");
             assert_eq!(
-                data_source.get_leaf(i as usize).await.unwrap().await,
+                data_source.get_leaf(i as usize).await.await,
                 leaves[i as usize - 1]
             );
         }
@@ -1184,7 +1177,7 @@ mod test {
         network.start().await;
 
         // Wait until a couple of blocks are produced.
-        let leaves = network.data_source().subscribe_leaves(1).await.unwrap();
+        let leaves = network.data_source().subscribe_leaves(1).await;
         let leaves = leaves.take(2).collect::<Vec<_>>().await;
 
         // Send the last leaf to the disconnected data source so it learns about the height.
@@ -1205,7 +1198,7 @@ mod test {
             FailureType::Write => data_source.as_ref().fail_writes(FailableAction::Any).await,
             FailureType::Commit => data_source.as_ref().fail_commits(FailableAction::Any).await,
         }
-        assert_eq!(leaves[0], data_source.get_leaf(1).await.unwrap().await);
+        assert_eq!(leaves[0], data_source.get_leaf(1).await.await);
         data_source.as_ref().pass().await;
 
         // It is possible that the fetch above completes, notifies the subscriber,
@@ -1217,7 +1210,7 @@ mod test {
         // We can get the same leaf again, this will again trigger an active fetch since storage
         // failed the first time.
         tracing::info!("fetch with write success");
-        let fetch = data_source.get_leaf(1).await.unwrap();
+        let fetch = data_source.get_leaf(1).await;
         assert!(fetch.is_pending());
         assert_eq!(leaves[0], fetch.await);
 
@@ -1225,7 +1218,7 @@ mod test {
 
         // Finally, we should have the leaf locally and not need to fetch it.
         tracing::info!("retrieve from storage");
-        let fetch = data_source.get_leaf(1).await.unwrap();
+        let fetch = data_source.get_leaf(1).await;
         assert_eq!(leaves[0], fetch.try_resolve().ok().unwrap());
     }
 
@@ -1282,7 +1275,7 @@ mod test {
         network.start().await;
 
         // Wait until a couple of blocks are produced.
-        let leaves = network.data_source().subscribe_leaves(1).await.unwrap();
+        let leaves = network.data_source().subscribe_leaves(1).await;
         let leaves = leaves.take(2).collect::<Vec<_>>().await;
 
         // Send the last leaf to the disconnected data source so it learns about the height.
@@ -1313,7 +1306,7 @@ mod test {
                     .await
             }
         }
-        assert_eq!(leaves[0], data_source.get_leaf(1).await.unwrap().await);
+        assert_eq!(leaves[0], data_source.get_leaf(1).await.await);
 
         // Check that the leaf ended up in local storage.
         let mut tx = data_source.read().await.unwrap();
@@ -1376,7 +1369,7 @@ mod test {
             .data_source()
             .subscribe_leaves(1)
             .await
-            .unwrap()
+            
             .next()
             .await
             .unwrap();
@@ -1439,7 +1432,7 @@ mod test {
         network.start().await;
 
         // Wait until a couple of blocks are produced.
-        let leaves = network.data_source().subscribe_leaves(1).await.unwrap();
+        let leaves = network.data_source().subscribe_leaves(1).await;
         let leaves = leaves.take(2).collect::<Vec<_>>().await;
 
         // Send the last leaf to the disconnected data source so it learns about the height.
@@ -1455,7 +1448,7 @@ mod test {
             .as_ref()
             .fail_one_begin_read_only(FailableAction::Any)
             .await;
-        assert_eq!(leaves[0], data_source.get_leaf(1).await.unwrap().await);
+        assert_eq!(leaves[0], data_source.get_leaf(1).await.await);
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -1497,7 +1490,7 @@ mod test {
         network.start().await;
 
         // Wait until a block is produced.
-        let mut leaves = network.data_source().subscribe_leaves(1).await.unwrap();
+        let mut leaves = network.data_source().subscribe_leaves(1).await;
         let leaf = leaves.next().await.unwrap();
 
         // Send the leaf to the disconnected data source, so the corresponding block becomes
@@ -1579,7 +1572,7 @@ mod test {
             .data_source()
             .get_transaction(tx.commit())
             .await
-            .unwrap()
+            
             .await;
 
         // Send the block containing the transaction to the disconnected data source.
@@ -1588,7 +1581,7 @@ mod test {
                 .data_source()
                 .get_leaf(tx.block_height() as usize)
                 .await
-                .unwrap()
+                
                 .await;
             let block = network
                 .data_source()
@@ -1606,7 +1599,7 @@ mod test {
         tracing::info!("fetch success");
         assert_eq!(
             tx,
-            data_source.get_transaction(tx.hash()).await.unwrap().await
+            data_source.get_transaction(tx.hash()).await.await
         );
 
         // Fetch the transaction with storage failures.
@@ -1627,7 +1620,7 @@ mod test {
             .await;
         let fetch = data_source.get_transaction(tx.hash()).await;
 
-        assert_eq!(tx, fetch.unwrap().await);
+        assert_eq!(tx, fetch.await);
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -1670,7 +1663,7 @@ mod test {
         network.start().await;
 
         // Wait until a few blocks are produced.
-        let leaves = network.data_source().subscribe_leaves(1).await.unwrap();
+        let leaves = network.data_source().subscribe_leaves(1).await;
         let leaves = leaves.take(5).collect::<Vec<_>>().await;
 
         // Send the last leaf to the disconnected data source so it learns about the height.
@@ -1691,7 +1684,7 @@ mod test {
             data_source
                 .subscribe_leaves(1)
                 .await
-                .unwrap()
+                
                 .take(5)
                 .collect::<Vec<_>>()
                 .await
@@ -1738,7 +1731,7 @@ mod test {
         network.start().await;
 
         // Wait until a few blocks are produced.
-        let leaves = network.data_source().subscribe_leaves(1).await.unwrap();
+        let leaves = network.data_source().subscribe_leaves(1).await;
         let leaves = leaves.take(5).collect::<Vec<_>>().await;
 
         // Send the last leaf to the disconnected data source, so the blocks becomes fetchable.
@@ -1811,7 +1804,7 @@ mod test {
         network.start().await;
 
         // Wait until a few blocks are produced.
-        let leaves = network.data_source().subscribe_leaves(1).await.unwrap();
+        let leaves = network.data_source().subscribe_leaves(1).await;
         let leaves = leaves.take(3).collect::<Vec<_>>().await;
 
         // Send the last leaf to the disconnected data source, so the blocks becomes fetchable.
@@ -1824,9 +1817,9 @@ mod test {
         // * leaf present but not full object (from the last leaf)
         // * full object present but inaccessible due to storage failures (first object)
         // * nothing present (middle object)
-        let leaf = network.data_source().get_leaf(1).await.unwrap().await;
+        let leaf = network.data_source().get_leaf(1).await.await;
         let block = network.data_source().get_block(1).await.unwrap().await;
-        let vid = network.data_source().get_vid_common(1).await.unwrap().await;
+        let vid = network.data_source().get_vid_common(1).await.await;
         data_source
             .append(BlockInfo::new(leaf, Some(block), Some(vid), None))
             .await
@@ -1860,7 +1853,7 @@ mod test {
                 let vids = data_source
                     .subscribe_vid_common_metadata(1)
                     .await
-                    .unwrap()
+                    
                     .take(3);
 
                 // Give some time for a few reads to fail before letting them succeed.

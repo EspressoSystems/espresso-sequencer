@@ -1411,11 +1411,7 @@ mod api_tests {
         // information.
         for (leaf, qc) in chain1.iter().chain(&chain2) {
             tracing::info!(height = leaf.height(), "check archive");
-            let qd = data_source
-                .get_leaf(leaf.height() as usize)
-                .await
-                .unwrap()
-                .await;
+            let qd = data_source.get_leaf(leaf.height() as usize).await.await;
             let stored_leaf: Leaf2 = qd.leaf().clone().into();
             let stored_qc = qd.qc().clone().to_qc2();
             assert_eq!(&stored_leaf, leaf);
@@ -1431,7 +1427,6 @@ mod api_tests {
             data_source
                 .get_vid_common(leaf.height() as usize)
                 .await
-                .unwrap()
                 .try_resolve()
                 .ok()
                 .unwrap();
@@ -1543,16 +1538,9 @@ mod api_tests {
         // Check that we still processed the leaf.
         assert_eq!(
             leaf,
-            data_source
-                .get_leaf(1)
-                .await
-                .unwrap()
-                .await
-                .leaf()
-                .clone()
-                .into()
+            data_source.get_leaf(1).await.await.leaf().clone().into()
         );
-        assert!(data_source.get_vid_common(1).await.unwrap().is_pending());
+        assert!(data_source.get_vid_common(1).await.is_pending());
         assert!(data_source.get_block(1).await.unwrap().is_pending());
     }
 
@@ -1587,7 +1575,6 @@ mod test {
     use hotshot::types::EventType;
     use hotshot_query_service::{
         availability::{BlockQueryData, LeafQueryData, VidCommonQueryData},
-        data_source::FetchingDataSource,
         types::HeightIndexed,
     };
     use hotshot_types::{
@@ -1669,8 +1656,7 @@ mod test {
 
         let storage = SqlDataSource::create_storage().await;
 
-        let options = SqlDataSource::light_weight_options(&storage, Options::with_port(port));
-        options.query_sql(Query::default(), storage);
+        let options = SqlDataSource::options(&storage, Options::with_port(port));
 
         let anvil = Anvil::new().spawn();
         let l1 = anvil.endpoint().parse().unwrap();
@@ -1749,7 +1735,8 @@ mod test {
         let port = pick_unused_port().expect("No ports free");
 
         let storage = SqlDataSource::create_storage().await;
-        let options = SqlDataSource::leaf_only_ds_options(&storage, Options::with_port(port));
+        let options =
+            SqlDataSource::leaf_only_ds_options(&storage, Options::with_port(port)).unwrap();
 
         let anvil = Anvil::new().spawn();
         let l1 = anvil.endpoint().parse().unwrap();

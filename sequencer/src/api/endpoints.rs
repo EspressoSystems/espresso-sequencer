@@ -126,7 +126,6 @@ where
                     state
                         .get_vid_common(height)
                         .await
-                        .unwrap()
                         .with_timeout(timeout)
                         .await
                         .context(FetchBlockSnafu {
