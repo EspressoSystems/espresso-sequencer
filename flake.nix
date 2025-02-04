@@ -144,10 +144,10 @@
               types_or = [ "solidity" ];
               pass_filenames = true;
             };
-            contract-bindings-ethers = {
+            contract-bindings = {
               enable = true;
-              description = "Generate ethers contract bindings";
-              entry = "just check-bindings-ethers";
+              description = "Generate contract bindings";
+              entry = "just gen-bindings";
               types_or = [ "solidity" ];
               pass_filenames = false;
             };

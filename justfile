@@ -100,23 +100,6 @@ dev-sequencer:
 build-docker-images:
     scripts/build-docker-images-native
 
-# We need this to make sure the ethers bindings are up to date
-# TODO: Remove this when we can use `alloy` without having to patch `foundry`
-check-bindings-ethers:
-    forge bind --contracts ./contracts/src/ --crate-name contract-bindings-ethers --bindings-path contract-bindings-ethers --select "{{REGEXP}}" --overwrite --force
-
-    # Foundry doesn't include bytecode in the bindings for LightClient.sol, since it links with
-    # libraries. However, this bytecode is still needed to link and deploy the contract. Copy it to
-    # the source tree so that the deploy script can be compiled whenever the bindings are up to
-    # date, without needed to recompile the contracts.
-    mkdir -p contract-bindings/artifacts
-    jq '.bytecode.object' < contracts/out/LightClient.sol/LightClient.json > contract-bindings/artifacts/LightClient_bytecode.json
-    jq '.bytecode.object' < contracts/out/LightClientArbitrum.sol/LightClientArbitrum.json > contract-bindings/artifacts/LightClientArbitrum_bytecode.json
-    jq '.bytecode.object' < contracts/out/LightClientMock.sol/LightClientMock.json > contract-bindings/artifacts/LightClientMock_bytecode.json
-
-    cargo fmt --all
-    cargo sort -g -w
-
 # generate rust bindings for contracts
 REGEXP := "^LightClient$|^LightClientArbitrum$|^LightClientStateUpdateVK$|^FeeContract$|PlonkVerifier$|^ERC1967Proxy$|^LightClientMock$|^LightClientStateUpdateVKMock$|^PlonkVerifier2$|^PermissionedStakeTable$"
 gen-bindings:
