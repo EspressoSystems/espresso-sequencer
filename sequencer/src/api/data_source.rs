@@ -435,7 +435,7 @@ pub mod testing {
         type Storage: Sync;
 
         async fn create_storage() -> Self::Storage;
-        fn persistence_options(storage: &Self::Storage) -> Options;
+        fn persistence_options(storage: &Self::Storage) -> Self::Options;
         fn leaf_only_ds_options(
             _storage: &Self::Storage,
             _opt: Options,
