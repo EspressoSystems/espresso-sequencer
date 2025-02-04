@@ -313,9 +313,7 @@ impl<T: Revert> Drop for Transaction<T> {
         self.inner.revert();
     }
 }
-
-impl<'a, Types> update::Transaction
-    for Transaction<RwLockWriteGuard<'a, FileSystemStorageInner<Types>>>
+impl<Types> update::Transaction for Transaction<RwLockWriteGuard<'_, FileSystemStorageInner<Types>>>
 where
     Types: NodeType,
     Payload<Types>: QueryablePayload<Types>,
@@ -336,8 +334,7 @@ where
     }
 }
 
-impl<'a, Types> update::Transaction
-    for Transaction<RwLockReadGuard<'a, FileSystemStorageInner<Types>>>
+impl<Types> update::Transaction for Transaction<RwLockReadGuard<'_, FileSystemStorageInner<Types>>>
 where
     Types: NodeType,
     Payload<Types>: QueryablePayload<Types>,
@@ -378,7 +375,6 @@ where
         })
     }
 }
-
 fn range_iter<T>(
     mut iter: Iter<'_, T>,
     range: impl RangeBounds<usize>,
@@ -578,8 +574,8 @@ where
     }
 }
 
-impl<'a, Types: NodeType> UpdateAvailabilityStorage<Types>
-    for Transaction<RwLockWriteGuard<'a, FileSystemStorageInner<Types>>>
+impl<Types: NodeType> UpdateAvailabilityStorage<Types>
+    for Transaction<RwLockWriteGuard<'_, FileSystemStorageInner<Types>>>
 where
     Payload<Types>: QueryablePayload<Types>,
     Header<Types>: QueryableHeader<Types>,
