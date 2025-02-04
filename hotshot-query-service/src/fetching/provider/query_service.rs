@@ -311,7 +311,6 @@ mod test {
             data_source
                 .get_vid_common(test_common.block_hash())
                 .await
-                 
                 .map(ignore),
         );
         // * An unknown block height.
@@ -333,7 +332,6 @@ mod test {
             data_source
                 .get_vid_common(test_common.height() as usize)
                 .await
-                
                 .map(ignore),
         );
         // * Genesis VID common (no VID for genesis)
@@ -343,7 +341,6 @@ mod test {
             data_source
                 .get_transaction(mock_transaction(vec![]).commit())
                 .await
-              
                 .map(ignore),
         );
 
@@ -366,10 +363,7 @@ mod test {
             .unwrap();
 
         tracing::info!("requesting fetchable resources");
-        let req_leaf = data_source
-            .get_leaf(test_leaf.height() as usize)
-            .await
-            ;
+        let req_leaf = data_source.get_leaf(test_leaf.height() as usize).await;
         let req_block = data_source
             .get_block(test_block.height() as usize)
             .await
@@ -380,8 +374,7 @@ mod test {
             .unwrap();
         let req_common = data_source
             .get_vid_common(test_common.height() as usize)
-            .await
-            ;
+            .await;
 
         // Give the requests some extra time to complete, and check that they still haven't
         // resolved, since the provider is blocked. This just ensures the integrity of the test by
@@ -399,7 +392,6 @@ mod test {
         let leaf = data_source
             .get_leaf(test_leaf.height() as usize)
             .await
-            
             .await;
         let block = data_source
             .get_block(test_block.height() as usize)
@@ -414,18 +406,13 @@ mod test {
         let common = data_source
             .get_vid_common(test_common.height() as usize)
             .await
-           
             .await;
         {
             // Verify the data.
             let truth = network.data_source();
             assert_eq!(
                 leaf,
-                truth
-                    .get_leaf(test_leaf.height() as usize)
-                    .await
-                   
-                    .await
+                truth.get_leaf(test_leaf.height() as usize).await.await
             );
             assert_eq!(
                 block,
@@ -448,7 +435,6 @@ mod test {
                 truth
                     .get_vid_common(test_common.height() as usize)
                     .await
-                   
                     .await
             );
         }
@@ -460,11 +446,7 @@ mod test {
         provider.block().await;
         for leaf in [test_block, test_payload] {
             tracing::info!("fetching existing leaf {}", leaf.height());
-            let fetched_leaf = data_source
-                .get_leaf(leaf.height() as usize)
-                .await
-                
-                .await;
+            let fetched_leaf = data_source.get_leaf(leaf.height() as usize).await.await;
             assert_eq!(*leaf, fetched_leaf);
         }
 
@@ -547,7 +529,6 @@ mod test {
             data_source
                 .get_leaf(test_leaf.height() as usize)
                 .await
-               
                 .into_future(),
             data_source
                 .get_block(test_leaf.height() as usize)
@@ -679,10 +660,7 @@ mod test {
             tracing::info!("checking block {i}");
             assert_eq!(leaves[i], finalized_leaves[i]);
             assert_eq!(blocks[i].header(), finalized_leaves[i].header());
-            assert_eq!(
-                common[i],
-                data_source.get_vid_common(i).await.await
-            );
+            assert_eq!(common[i], data_source.get_vid_common(i).await.await);
         }
     }
 
@@ -733,7 +711,6 @@ mod test {
         let leaves = data_source
             .get_leaf_range(..5)
             .await
-           
             .then(Fetch::resolve)
             .collect::<Vec<_>>()
             .await;
@@ -810,11 +787,7 @@ mod test {
         // Future queries for this transaction resolve immediately.
         assert_eq!(
             fetched_tx,
-            data_source
-                .get_transaction(tx.commit())
-                .await
-                
-                .await
+            data_source.get_transaction(tx.commit()).await.await
         );
     }
 
@@ -871,10 +844,7 @@ mod test {
             .unwrap();
 
         tracing::info!("requesting leaf from failing providers");
-        let fut = data_source
-            .get_leaf(test_leaf.height() as usize)
-            .await
-            ;
+        let fut = data_source.get_leaf(test_leaf.height() as usize).await;
 
         // Wait a few retries and check that the request has not completed, since the provider is
         // failing.
@@ -887,7 +857,6 @@ mod test {
             data_source
                 .get_leaf(test_leaf.height() as usize)
                 .await
-                
                 .await,
             *test_leaf
         );
@@ -1369,7 +1338,6 @@ mod test {
             .data_source()
             .subscribe_leaves(1)
             .await
-            
             .next()
             .await
             .unwrap();
@@ -1572,7 +1540,6 @@ mod test {
             .data_source()
             .get_transaction(tx.commit())
             .await
-            
             .await;
 
         // Send the block containing the transaction to the disconnected data source.
@@ -1581,7 +1548,6 @@ mod test {
                 .data_source()
                 .get_leaf(tx.block_height() as usize)
                 .await
-                
                 .await;
             let block = network
                 .data_source()
@@ -1597,10 +1563,7 @@ mod test {
 
         // Check that the transaction is there.
         tracing::info!("fetch success");
-        assert_eq!(
-            tx,
-            data_source.get_transaction(tx.hash()).await.await
-        );
+        assert_eq!(tx, data_source.get_transaction(tx.hash()).await.await);
 
         // Fetch the transaction with storage failures.
         //
@@ -1684,7 +1647,6 @@ mod test {
             data_source
                 .subscribe_leaves(1)
                 .await
-                
                 .take(5)
                 .collect::<Vec<_>>()
                 .await
@@ -1850,11 +1812,7 @@ mod test {
                 }
             }
             MetadataType::Vid => {
-                let vids = data_source
-                    .subscribe_vid_common_metadata(1)
-                    .await
-                    
-                    .take(3);
+                let vids = data_source.subscribe_vid_common_metadata(1).await.take(3);
 
                 // Give some time for a few reads to fail before letting them succeed.
                 sleep(Duration::from_secs(2)).await;
