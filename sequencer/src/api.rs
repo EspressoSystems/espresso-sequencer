@@ -1569,7 +1569,7 @@ mod test {
     };
     use hotshot::types::EventType;
     use hotshot_query_service::{
-        availability::{BlockQueryData, LeafQueryData},
+        availability::{BlockQueryData, LeafQueryData, VidCommonQueryData},
         types::HeightIndexed,
     };
     use hotshot_types::{
@@ -1596,6 +1596,7 @@ mod test {
     };
     use super::*;
     use crate::{
+        api::sql::LightWeightDataSource,
         catchup::{NullStateCatchup, StatePeers},
         persistence::no_storage,
         testing::{TestConfig, TestConfigBuilder},
@@ -1663,7 +1664,7 @@ mod test {
         let url = format!("http://localhost:{port}").parse().unwrap();
         let client: Client<ServerError, SequencerApiVersion> = Client::new(url);
 
-        client.connect(None).await;
+        client.connect(Some(Duration::from_secs(15))).await;
 
         // Wait until some blocks have been decided.
         tracing::info!("waiting for blocks");
@@ -1720,6 +1721,94 @@ mod test {
             .unwrap();
         let expected = ethers::types::U256::max_value();
         assert_eq!(expected, amount.0);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_light_weight_data_source() {
+        setup_test();
+
+        let port = pick_unused_port().expect("No ports free");
+
+        let storage = LightWeightDataSource::create_storage().await;
+        let options = LightWeightDataSource::options(&storage, Options::with_port(port));
+
+        let anvil = Anvil::new().spawn();
+        let l1 = anvil.endpoint().parse().unwrap();
+        let network_config = TestConfigBuilder::default().l1_url(l1).build();
+        let config = TestNetworkConfigBuilder::default()
+            .api_config(options)
+            .network_config(network_config)
+            .build();
+        let _network = TestNetwork::new(config, MockSequencerVersions::new()).await;
+        let url = format!("http://localhost:{port}").parse().unwrap();
+        let client: Client<ServerError, SequencerApiVersion> = Client::new(url);
+
+        tracing::info!("waiting for blocks");
+        client.connect(Some(Duration::from_secs(15))).await;
+        // Wait until some blocks have been decided.
+
+        let account = TestConfig::<5>::builder_key().fee_account();
+
+        let headers = client
+            .socket("availability/stream/headers/0")
+            .subscribe::<Header>()
+            .await
+            .unwrap()
+            .take(10)
+            .try_collect::<Vec<_>>()
+            .await
+            .unwrap();
+
+        for i in 1..5 {
+            let leaf = client
+                .get::<LeafQueryData<SeqTypes>>(&format!("availability/leaf/{i}"))
+                .send()
+                .await
+                .unwrap();
+
+            assert_eq!(leaf.height(), i);
+
+            let header = client
+                .get::<Header>(&format!("availability/header/{i}"))
+                .send()
+                .await
+                .unwrap();
+
+            assert_eq!(header.height(), i);
+
+            let vid = client
+                .get::<VidCommonQueryData<SeqTypes>>(&format!("availability/vid/common/{i}"))
+                .send()
+                .await
+                .unwrap();
+
+            assert_eq!(vid.height(), i);
+
+            client
+                .get::<MerkleProof<Commitment<Header>, u64, Sha3Node, 3>>(&format!(
+                    "block-state/{i}/{}",
+                    i - 1
+                ))
+                .send()
+                .await
+                .unwrap();
+
+            client
+                .get::<MerkleProof<FeeAmount, FeeAccount, Sha3Node, 256>>(&format!(
+                    "fee-state/{}/{}",
+                    i + 1,
+                    account
+                ))
+                .send()
+                .await
+                .unwrap();
+        }
+
+        client
+            .get::<BlockQueryData<SeqTypes>>("availability/block/1")
+            .send()
+            .await
+            .unwrap_err();
     }
 
     #[tokio::test(flavor = "multi_thread")]

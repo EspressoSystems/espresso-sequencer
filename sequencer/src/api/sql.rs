@@ -76,18 +76,36 @@ impl SequencerDataSource for DataSource {
     }
 }
 
+pub type LightWeightDataSource = LeafOnlySqlDataSource<SeqTypes, Provider>;
+
 #[async_trait]
-impl SequencerDataSource for LeafOnlySqlDataSource<SeqTypes> {
+impl SequencerDataSource for LightWeightDataSource {
     type Options = Options;
 
-    async fn create(opt: Self::Options, _provider: Provider, reset: bool) -> anyhow::Result<Self> {
+    async fn create(opt: Self::Options, provider: Provider, reset: bool) -> anyhow::Result<Self> {
+        let fetch_limit = opt.fetch_rate_limit;
+        let active_fetch_delay = opt.active_fetch_delay;
+        let chunk_fetch_delay = opt.chunk_fetch_delay;
         let mut cfg = Config::try_from(&opt)?;
 
         if reset {
             cfg = cfg.reset_schema();
         }
 
-        LeafOnlySqlDataSource::build(cfg).await
+        let mut builder = cfg.builder(provider).await?;
+
+        if let Some(limit) = fetch_limit {
+            builder = builder.with_rate_limit(limit);
+        }
+
+        if let Some(delay) = active_fetch_delay {
+            builder = builder.with_active_fetch_delay(delay);
+        }
+        if let Some(delay) = chunk_fetch_delay {
+            builder = builder.with_chunk_fetch_delay(delay);
+        }
+
+        LeafOnlySqlDataSource::new(builder).await
     }
 }
 
@@ -201,7 +219,7 @@ impl CatchupStorage for DataSource {
     }
 }
 
-impl CatchupStorage for LeafOnlySqlDataSource<SeqTypes> {
+impl CatchupStorage for LightWeightDataSource {
     async fn get_accounts(
         &self,
         instance: &NodeState,
@@ -539,6 +557,25 @@ mod impl_testable_data_source {
 
         fn options(storage: &Self::Storage, opt: api::Options) -> api::Options {
             opt.query_sql(Default::default(), tmp_options(storage))
+        }
+    }
+
+    #[async_trait]
+    impl TestableSequencerDataSource for LightWeightDataSource {
+        type Storage = TmpDb;
+
+        async fn create_storage() -> Self::Storage {
+            TmpDb::init().await
+        }
+
+        fn persistence_options(storage: &Self::Storage) -> Self::Options {
+            tmp_options(storage)
+        }
+
+        fn options(storage: &Self::Storage, opt: api::Options) -> api::Options {
+            let mut options = tmp_options(storage);
+            options.lightweight = true;
+            opt.query_sql(Default::default(), options)
         }
     }
 }

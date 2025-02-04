@@ -272,26 +272,32 @@ impl Options {
         for<'a> D::Transaction<'a>: SequencerStateUpdate,
         N: ConnectedNetwork<PubKey>,
     {
+        tracing::info!("0x000A");
+
         // Initialize merklized state module for block merkle tree
         app.register_module(
             "block-state",
             endpoints::merklized_state::<N, P, _, BlockMerkleTree, _, 3>()?,
         )?;
+        tracing::info!("0x000B");
         // Initialize merklized state module for fee merkle tree
         app.register_module(
             "fee-state",
             endpoints::get_balance::<_, SequencerApiVersion>()?,
         )?;
+        tracing::info!("0x000C");
 
         let get_node_state = {
-            let node_state = state.node_state().await.clone();
-            async move { node_state }
+            let state = state.clone();
+            async move { state.node_state().await.clone() }
         };
+        tracing::info!("0x000D");
         tasks.spawn(
             "merklized state storage update loop",
             update_state_storage_loop(ds.clone(), get_node_state),
         );
 
+        tracing::info!("0x000E");
         if self.hotshot_events.is_some() {
             self.init_and_spawn_hotshot_event_streaming_module(state, tasks)?;
         }
@@ -312,8 +318,16 @@ impl Options {
         P: SequencerPersistence,
     {
         let mut provider = Provider::default();
-
+        // Use the database itself as a fetching provider: sometimes we can fetch data that is
+        // missing from the query service from ephemeral consensus storage.
+        provider = provider.with_provider(mod_opt.clone().create().await?);
+        // If that fails, fetch missing data from peers.
+        for peer in query_opt.peers.clone() {
+            tracing::info!("will fetch missing data from {peer}");
+            provider = provider.with_provider(QueryServiceProvider::new(peer, bind_version));
+        }
         if mod_opt.lightweight {
+            tracing::info!("using light weight data source");
             let ds = LeafOnlySqlDataSource::create(mod_opt.clone(), provider, false).await?;
             let (metrics, ds, mut app) = self
                 .init_app_modules(ds, state.clone(), bind_version)
@@ -327,30 +341,25 @@ impl Options {
             );
             Ok((metrics, Box::new(ApiEventConsumer::from(ds))))
         } else {
-            // Use the database itself as a fetching provider: sometimes we can fetch data that is
-            // missing from the query service from ephemeral consensus storage.
-            provider = provider.with_provider(mod_opt.clone().create().await?);
-            // If that fails, fetch missing data from peers.
-            for peer in query_opt.peers.clone() {
-                tracing::info!("will fetch missing data from {peer}");
-                provider = provider.with_provider(QueryServiceProvider::new(peer, bind_version));
-            }
-
             let ds = sql::DataSource::create(mod_opt.clone(), provider, false).await?;
+            tracing::info!("0x001");
             let (metrics, ds, mut app) = self
                 .init_app_modules(ds, state.clone(), bind_version)
                 .await?;
-
+            tracing::info!("0x002");
             if self.explorer.is_some() {
                 app.register_module("explorer", endpoints::explorer()?)?;
             };
-
+            tracing::info!("0x003");
             self.init_state_and_event_modules(&mut app, state.clone(), tasks, ds.clone())
                 .await?;
+            tracing::info!("0x004");
             tasks.spawn(
                 "API server",
                 self.listen(self.http.port, app, SequencerApiVersion::instance()),
             );
+
+            tracing::info!(">>>>> 111");
             Ok((metrics, Box::new(ApiEventConsumer::from(ds))))
         }
     }
