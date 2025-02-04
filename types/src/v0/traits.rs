@@ -582,7 +582,8 @@ pub trait SequencerPersistence: Sized + Send + Sync + Clone + 'static {
         Ok((
             HotShotInitializer {
                 instance_state: state,
-                epoch_height: 0,
+                // todo(abdul): load from storage?
+                epoch_height: 150,
                 anchor_leaf: leaf,
                 anchor_state: validated_state.unwrap_or_default(),
                 anchor_state_delta: None,

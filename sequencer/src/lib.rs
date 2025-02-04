@@ -361,6 +361,9 @@ pub async fn init_node<P: SequencerPersistence, V: Versions>(
         upgrade.set_hotshot_config_parameters(&mut network_config.config);
     }
 
+    //todo(abdul): get from genesis file
+    network_config.config.epoch_height = 150;
+
     // If the `Libp2p` bootstrap nodes were supplied via the command line, override those
     // present in the config file.
     if let Some(bootstrap_nodes) = network_params.libp2p_bootstrap_nodes {
@@ -806,7 +809,7 @@ pub mod testing {
                 start_voting_time: 0,
                 stop_proposing_time: 0,
                 stop_voting_time: 0,
-                epoch_height: 0,
+                epoch_height: 150,
             };
 
             Self {
