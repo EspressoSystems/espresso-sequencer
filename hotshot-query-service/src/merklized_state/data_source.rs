@@ -27,7 +27,6 @@ use jf_merkle_tree::{
     MerkleCommitment, NodeValue, ToTraversalPath,
 };
 use serde::{de::DeserializeOwned, Serialize};
-use std::fmt::Display;
 use std::{fmt::Debug, str::FromStr};
 use tagged_base64::TaggedBase64;
 
@@ -83,9 +82,9 @@ type StateCommitment<Types, T, const ARITY: usize> = <T as MerklizedState<Types,
     Hash(bound = "")
 )]
 pub enum Snapshot<Types: NodeType, T: MerklizedState<Types, ARITY>, const ARITY: usize> {
-    #[display(fmt = "{_0}")]
+    #[display("{_0}")]
     Commit(StateCommitment<Types, T, ARITY>),
-    #[display(fmt = "{_0}")]
+    #[display("{_0}")]
     Index(u64),
 }
 

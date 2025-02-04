@@ -145,7 +145,7 @@ where
         Err(QueryError::Error { message }) => {
             // An error occurred while querying the database. We don't know if we need to fetch the
             // header or not. Return an error so we can try again.
-            bail!("failed to fetch header for block {req}: {message}");
+            bail!("failed to fetch header for block {req:?}: {message}");
         }
     }
 

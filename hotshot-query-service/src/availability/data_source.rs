@@ -43,9 +43,9 @@ use std::{
     Hash(bound = "")
 )]
 pub enum LeafId<Types: NodeType> {
-    #[display(fmt = "{_0}")]
+    #[display("{_0}")]
     Number(usize),
-    #[display(fmt = "{_0}")]
+    #[display("{_0}")]
     Hash(LeafHash<Types>),
 }
 
@@ -72,11 +72,11 @@ impl<Types: NodeType> PartialOrd for LeafId<Types> {
     Hash(bound = "")
 )]
 pub enum BlockId<Types: NodeType> {
-    #[display(fmt = "{_0}")]
+    #[display("{_0}")]
     Number(usize),
-    #[display(fmt = "{_0}")]
+    #[display("{_0}")]
     Hash(BlockHash<Types>),
-    #[display(fmt = "{_0}")]
+    #[display("{_0}")]
     #[from(ignore)]
     PayloadHash(VidCommitment),
 }
