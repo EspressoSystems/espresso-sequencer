@@ -361,8 +361,10 @@ impl<Mode> Transaction<Mode> {
               ORDER BY h.height
               LIMIT 1"
         );
+
         let row = query.query(&sql).fetch_one(self.as_mut()).await?;
         let header = parse_header::<Types>(row)?;
+
         Ok(header)
     }
 }

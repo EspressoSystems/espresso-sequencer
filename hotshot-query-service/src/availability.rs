@@ -26,7 +26,7 @@
 //! chain which is tabulated by this specific node and not subject to full consensus agreement, try
 //! the [node](crate::node) API.
 
-use crate::{api::load_api, Payload};
+use crate::{api::load_api, Payload, QueryError};
 use derive_more::From;
 use futures::{FutureExt, StreamExt, TryFutureExt, TryStreamExt};
 use hotshot_types::traits::node_implementation::NodeType;
@@ -125,6 +125,10 @@ pub enum Error {
         until: usize,
         limit: usize,
     },
+    #[snafu(display("{source}"))]
+    Query {
+        source: QueryError,
+    },
     Custom {
         message: String,
         status: StatusCode,
@@ -145,7 +149,7 @@ impl Error {
             Self::FetchLeaf { .. } | Self::FetchBlock { .. } | Self::FetchTransaction { .. } => {
                 StatusCode::NOT_FOUND
             }
-            Self::InvalidTransactionIndex { .. } => StatusCode::NOT_FOUND,
+            Self::InvalidTransactionIndex { .. } | Self::Query { .. } => StatusCode::NOT_FOUND,
             Self::Custom { status, .. } => *status,
         }
     }
@@ -176,7 +180,7 @@ where
                     Some(height) => LeafId::Number(height),
                     None => LeafId::Hash(req.blob_param("hash")?),
                 };
-                let fetch = state.read(|state| state.get_leaf(id).boxed()).await;
+                let fetch = state.read(|state| state.get_leaf(id).boxed()).await?;
                 fetch.with_timeout(timeout).await.context(FetchLeafSnafu {
                     resource: id.to_string(),
                 })
@@ -191,7 +195,7 @@ where
 
                 let leaves = state
                     .read(|state| state.get_leaf_range(from..until).boxed())
-                    .await;
+                    .await?;
                 leaves
                     .enumerate()
                     .then(|(index, fetch)| async move {
@@ -209,7 +213,7 @@ where
                 let height = req.integer_param("height")?;
                 state
                     .read(|state| {
-                        async move { Ok(state.subscribe_leaves(height).await.map(Ok)) }.boxed()
+                        async move { Ok(state.subscribe_leaves(height).await?.map(Ok)) }.boxed()
                     })
                     .await
             }
@@ -225,15 +229,10 @@ where
                 } else {
                     BlockId::PayloadHash(req.blob_param("payload-hash")?)
                 };
-                let fetch = state.read(|state| state.get_block(id).boxed()).await;
-                Ok(fetch
-                    .with_timeout(timeout)
-                    .await
-                    .context(FetchBlockSnafu {
-                        resource: id.to_string(),
-                    })?
-                    .header()
-                    .clone())
+                let fetch = state.read(|state| state.get_header(id).boxed()).await?;
+                fetch.with_timeout(timeout).await.context(FetchBlockSnafu {
+                    resource: id.to_string(),
+                })
             }
             .boxed()
         })?
@@ -244,8 +243,8 @@ where
                 enforce_range_limit(from, until, large_object_range_limit)?;
 
                 let headers = state
-                    .read(|state| state.get_block_range(from..until).boxed())
-                    .await;
+                    .read(|state| state.get_header_range(from..until).boxed())
+                    .await?;
                 headers
                     .enumerate()
                     .then(|(index, fetch)| async move {
@@ -253,7 +252,6 @@ where
                             resource: (index + from).to_string(),
                         })
                     })
-                    .map(|r| r.map(|block| block.header().clone()))
                     .try_collect::<Vec<_>>()
                     .await
             }
@@ -262,17 +260,11 @@ where
         .stream("stream_headers", move |req, state| {
             async move {
                 let height = req.integer_param("height")?;
-                Ok(state
+                state
                     .read(|state| {
-                        async move {
-                            state
-                                .subscribe_blocks(height)
-                                .await
-                                .map(|block| Ok(block.header))
-                        }
-                        .boxed()
+                        async move { Ok(state.subscribe_headers(height).await?.map(Ok)) }.boxed()
                     })
-                    .await)
+                    .await
             }
             .try_flatten_stream()
             .boxed()
@@ -286,7 +278,7 @@ where
                 } else {
                     BlockId::PayloadHash(req.blob_param("payload-hash")?)
                 };
-                let fetch = state.read(|state| state.get_block(id).boxed()).await;
+                let fetch = state.read(|state| state.get_block(id).boxed()).await?;
                 fetch.with_timeout(timeout).await.context(FetchBlockSnafu {
                     resource: id.to_string(),
                 })
@@ -301,7 +293,7 @@ where
 
                 let blocks = state
                     .read(|state| state.get_block_range(from..until).boxed())
-                    .await;
+                    .await?;
                 blocks
                     .enumerate()
                     .then(|(index, fetch)| async move {
@@ -317,11 +309,11 @@ where
         .stream("stream_blocks", move |req, state| {
             async move {
                 let height = req.integer_param("height")?;
-                Ok(state
+                state
                     .read(|state| {
-                        async move { state.subscribe_blocks(height).await.map(Ok) }.boxed()
+                        async move { Ok(state.subscribe_blocks(height).await?.map(Ok)) }.boxed()
                     })
-                    .await)
+                    .await
             }
             .try_flatten_stream()
             .boxed()
@@ -335,7 +327,7 @@ where
                 } else {
                     BlockId::Hash(req.blob_param("block-hash")?)
                 };
-                let fetch = state.read(|state| state.get_payload(id).boxed()).await;
+                let fetch = state.read(|state| state.get_payload(id).boxed()).await?;
                 fetch.with_timeout(timeout).await.context(FetchBlockSnafu {
                     resource: id.to_string(),
                 })
@@ -350,7 +342,7 @@ where
 
                 let payloads = state
                     .read(|state| state.get_payload_range(from..until).boxed())
-                    .await;
+                    .await?;
                 payloads
                     .enumerate()
                     .then(|(index, fetch)| async move {
@@ -366,11 +358,11 @@ where
         .stream("stream_payloads", move |req, state| {
             async move {
                 let height = req.integer_param("height")?;
-                Ok(state
+                state
                     .read(|state| {
-                        async move { state.subscribe_payloads(height).await.map(Ok) }.boxed()
+                        async move { Ok(state.subscribe_payloads(height).await?.map(Ok)) }.boxed()
                     })
-                    .await)
+                    .await
             }
             .try_flatten_stream()
             .boxed()
@@ -384,7 +376,7 @@ where
                 } else {
                     BlockId::PayloadHash(req.blob_param("payload-hash")?)
                 };
-                let fetch = state.read(|state| state.get_vid_common(id).boxed()).await;
+                let fetch = state.read(|state| state.get_vid_common(id).boxed()).await?;
                 fetch.with_timeout(timeout).await.context(FetchBlockSnafu {
                     resource: id.to_string(),
                 })
@@ -394,11 +386,11 @@ where
         .stream("stream_vid_common", move |req, state| {
             async move {
                 let height = req.integer_param("height")?;
-                Ok(state
+                state
                     .read(|state| {
-                        async move { state.subscribe_vid_common(height).await.map(Ok) }.boxed()
+                        async move { Ok(state.subscribe_vid_common(height).await?.map(Ok)) }.boxed()
                     })
-                    .await)
+                    .await
             }
             .try_flatten_stream()
             .boxed()
@@ -409,7 +401,7 @@ where
                     Some(hash) => {
                         let fetch = state
                             .read(|state| state.get_transaction(hash).boxed())
-                            .await;
+                            .await?;
                         fetch
                             .with_timeout(timeout)
                             .await
@@ -421,7 +413,7 @@ where
                         let height: u64 = req.integer_param("height")?;
                         let fetch = state
                             .read(|state| state.get_block(height as usize).boxed())
-                            .await;
+                            .await?;
                         let block = fetch.with_timeout(timeout).await.context(FetchBlockSnafu {
                             resource: height.to_string(),
                         })?;
@@ -441,7 +433,7 @@ where
             async move {
                 let id: usize = req.integer_param("height")?;
 
-                let fetch = state.read(|state| state.get_block(id).boxed()).await;
+                let fetch = state.read(|state| state.get_block(id).boxed()).await?;
                 fetch
                     .with_timeout(timeout)
                     .await
@@ -460,7 +452,7 @@ where
 
                 let blocks = state
                     .read(|state| state.get_block_range(from..until).boxed())
-                    .await;
+                    .await?;
                 let result: Vec<BlockSummaryQueryData<Types>> = blocks
                     .enumerate()
                     .then(|(index, fetch)| async move {
@@ -901,7 +893,7 @@ mod test {
                 .unwrap(),
             1
         );
-        assert_eq!(block, data_source.get_block(0).await.await);
+        assert_eq!(block, data_source.get_block(0).await.unwrap().await);
 
         // Create the API extensions specification.
         let extensions = toml! {

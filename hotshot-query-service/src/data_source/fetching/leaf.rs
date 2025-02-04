@@ -140,6 +140,26 @@ where
                         fetching = leaf.height() - 1,
                         "do not have necessary leaf; trigger fetch of a later leaf"
                     );
+
+                    let mut callbacks = vec![LeafCallback::Leaf {
+                        fetcher: fetcher.clone(),
+                    }];
+
+                    if !fetcher.lightweight {
+                        callbacks.push(
+                            HeaderCallback::Payload {
+                                fetcher: fetcher.clone(),
+                            }
+                            .into(),
+                        );
+                        callbacks.push(
+                            HeaderCallback::VidCommon {
+                                fetcher: fetcher.clone(),
+                            }
+                            .into(),
+                        );
+                    }
+
                     fetcher.leaf_fetcher.clone().spawn_fetch(
                         request::LeafRequest::new(
                             leaf.height() - 1,
@@ -149,19 +169,7 @@ where
                         fetcher.provider.clone(),
                         // After getting the leaf, grab the other data as well; that will be missing
                         // whenever the leaf was.
-                        [
-                            LeafCallback::Leaf {
-                                fetcher: fetcher.clone(),
-                            },
-                            HeaderCallback::Payload {
-                                fetcher: fetcher.clone(),
-                            }
-                            .into(),
-                            HeaderCallback::VidCommon {
-                                fetcher: fetcher.clone(),
-                            }
-                            .into(),
-                        ],
+                        callbacks,
                     );
                     return Ok(());
                 }
@@ -193,7 +201,7 @@ where
         LeafId::Hash(h) => {
             // We don't actively fetch leaves when requested by hash, because we have no way of
             // knowing whether a leaf with such a hash actually exists, and we don't want to bother
-            // peers with requests for non-existent leaves.
+            // peers with requests for non-existant leaves.
             tracing::debug!("not fetching unknown leaf {h}");
         }
     }

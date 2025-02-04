@@ -686,6 +686,7 @@ impl PruneStorage for SqlStorage {
         })?;
         let batch_size = cfg.batch_size();
         let max_usage = cfg.max_usage();
+        let state_tables = cfg.state_tables();
 
         // If a pruner run was already in progress, some variables may already be set,
         // depending on whether a batch was deleted and which batch it was (target or minimum retention).
@@ -720,7 +721,7 @@ impl PruneStorage for SqlStorage {
             if height < target_height {
                 height = min(height + batch_size, target_height);
                 let mut tx = self.write().await?;
-                tx.delete_batch(height).await?;
+                tx.delete_batch(state_tables, height).await?;
                 tx.commit().await.map_err(|e| QueryError::Error {
                     message: format!("failed to commit {e}"),
                 })?;
@@ -759,7 +760,7 @@ impl PruneStorage for SqlStorage {
                     {
                         height = min(height + batch_size, min_retention_height);
                         let mut tx = self.write().await?;
-                        tx.delete_batch(height).await?;
+                        tx.delete_batch(state_tables, height).await?;
                         tx.commit().await.map_err(|e| QueryError::Error {
                             message: format!("failed to commit {e}"),
                         })?;
@@ -1105,6 +1106,9 @@ mod test {
         node_types::TestVersions,
         state_types::{TestInstanceState, TestValidatedState},
     };
+    use jf_merkle_tree::{
+        prelude::UniversalMerkleTree, MerkleTreeScheme, ToTraversalPath, UniversalMerkleTreeScheme,
+    };
     use std::time::Duration;
     use tokio::time::sleep;
 
@@ -1112,7 +1116,11 @@ mod test {
     use crate::{
         availability::LeafQueryData,
         data_source::storage::{pruning::PrunedHeightStorage, UpdateAvailabilityStorage},
-        testing::{mocks::MockTypes, setup_test},
+        merklized_state::{MerklizedState, UpdateStateData},
+        testing::{
+            mocks::{MockMerkleTree, MockTypes},
+            setup_test,
+        },
     };
 
     #[tokio::test(flavor = "multi_thread")]
@@ -1286,6 +1294,107 @@ mod test {
             usage_before_pruning > usage_after_pruning,
             " disk usage should decrease after pruning"
         )
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_merklized_state_pruning() {
+        setup_test();
+
+        let db = TmpDb::init().await;
+        let config = db.config();
+
+        let pruner_cfg = PrunerCfg::new()
+            .with_interval(Duration::from_secs(5))
+            .with_target_retention(Duration::from_secs(60));
+
+        let config = config.pruner_cfg(pruner_cfg).unwrap();
+        let storage = SqlStorage::connect(config).await.unwrap();
+        let mut test_tree: UniversalMerkleTree<_, _, _, 8, _> =
+            MockMerkleTree::new(MockMerkleTree::tree_height());
+
+        // insert some entries into the tree and the header table
+        // Header table is used the get_path query to check if the header exists for the block height.
+        let mut tx = storage.write().await.unwrap();
+        let mut block_height = 0;
+        loop {
+            test_tree.update(block_height, block_height).unwrap();
+
+            // data field of the header
+            let test_data = serde_json::json!({ MockMerkleTree::header_state_commitment_field() : serde_json::to_value(test_tree.commitment()).unwrap()});
+            tx.upsert(
+                "header",
+                ["height", "hash", "payload_hash", "timestamp", "data"],
+                ["height"],
+                [(
+                    block_height as i64,
+                    format!("randomHash{block_height}"),
+                    "t".to_string(),
+                    0,
+                    test_data,
+                )],
+            )
+            .await
+            .unwrap();
+            // proof for the index from the tree
+            let (_, proof) = test_tree.lookup(block_height).expect_ok().unwrap();
+            // traversal path for the index.
+            let traversal_path =
+                <usize as ToTraversalPath<8>>::to_traversal_path(&block_height, test_tree.height());
+
+            UpdateStateData::<_, MockMerkleTree, 8>::insert_merkle_nodes(
+                &mut tx,
+                proof.clone(),
+                traversal_path.clone(),
+                block_height as u64,
+            )
+            .await
+            .expect("failed to insert nodes");
+
+            block_height += 1;
+
+            if block_height == 150 {
+                break;
+            }
+        }
+
+        // update saved state height
+        UpdateStateData::<_, MockMerkleTree, 8>::set_last_state_height(&mut tx, block_height)
+            .await
+            .unwrap();
+        tx.commit().await.unwrap();
+
+        let mut tx = storage.read().await.unwrap();
+
+        // checking if the data is inserted correctly
+        // there should be multiple nodes with same index but different created time
+        let (count,) = query_as::<(i64,)>(
+            " SELECT count(*) FROM (SELECT count(*) as count FROM test_tree GROUP BY path having count(*) > 1)",
+        )
+        .fetch_one(tx.as_mut())
+        .await
+        .unwrap();
+
+        tracing::info!("Number of nodes with multiple snapshots : {count}");
+        assert!(count > 0);
+
+        // This should delete all the nodes having height < 150 and is not the newest node with its position
+        let mut tx = storage.write().await.unwrap();
+        tx.delete_batch(vec!["test_tree".to_string()], 150)
+            .await
+            .unwrap();
+
+        tx.commit().await.unwrap();
+        let mut tx = storage.read().await.unwrap();
+        let (count,) = query_as::<(i64,)>(
+            "SELECT count(*) FROM (SELECT count(*) as count FROM test_tree GROUP BY path having count(*) > 1)",
+        )
+        .fetch_one(tx.as_mut())
+        .await
+        .unwrap();
+
+        tracing::info!("Number of nodes with multiple snapshots : {count}");
+
+        assert!(count == 0);
     }
 
     #[tokio::test(flavor = "multi_thread")]

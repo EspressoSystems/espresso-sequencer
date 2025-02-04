@@ -76,7 +76,7 @@
 use super::{
     notifier::Notifier,
     storage::{
-        pruning::{PruneStorage, PrunedHeightStorage},
+        pruning::{PruneStorage, PrunedHeightDataSource, PrunedHeightStorage},
         Aggregate, AggregatesStorage, AvailabilityStorage, ExplorerStorage,
         MerklizedStateHeightStorage, MerklizedStateStorage, NodeStorage, UpdateAggregatesStorage,
         UpdateAvailabilityStorage,
@@ -159,6 +159,7 @@ pub struct Builder<Types, S, P> {
     proactive_fetching: bool,
     aggregator: bool,
     aggregator_chunk_size: Option<usize>,
+    lightweight: bool,
     _types: PhantomData<Types>,
 }
 
@@ -179,7 +180,7 @@ impl<Types, S, P> Builder<Types, S, P> {
             rate_limit: 32,
             range_chunk_size: 25,
             // By default, we run minor proactive scans fairly frequently: once every minute. These
-            // scans are cheap (more the more frequently they run) and can help us keep up with
+            // scans are cheap (moreso the more frequently they run) and can help us keep up with
             // the head of the chain even if our attached consensus instance is behind.
             minor_scan_interval: Duration::from_secs(60),
             // Major scans, on the other hand, are rather expensive and not especially important for
@@ -195,8 +196,14 @@ impl<Types, S, P> Builder<Types, S, P> {
             proactive_fetching: true,
             aggregator: true,
             aggregator_chunk_size: None,
+            lightweight: false,
             _types: Default::default(),
         }
+    }
+
+    pub fn with_lightweight(mut self) -> Self {
+        self.lightweight = true;
+        self
     }
 
     /// Set the minimum delay between retries of failed operations.
@@ -350,6 +357,10 @@ impl<Types, S, P> Builder<Types, S, P> {
         self.aggregator_chunk_size = Some(chunk_size);
         self
     }
+
+    pub fn is_lightweight(&self) -> bool {
+        self.lightweight
+    }
 }
 
 impl<Types, S, P> Builder<Types, S, P>
@@ -400,28 +411,34 @@ where
     scanner: Option<BackgroundTask>,
     // The aggregator task, which derives aggregate statistics from a block stream.
     aggregator: Option<BackgroundTask>,
-    pruner: Pruner<Types, S, P>,
+    pruner: Pruner<Types, S>,
 }
 
 #[derive(Derivative)]
-#[derivative(Clone(bound = ""), Debug(bound = "S: Debug, P: Debug"))]
-pub struct Pruner<Types, S, P>
+#[derivative(Clone(bound = ""), Debug(bound = "S: Debug,   "))]
+pub struct Pruner<Types, S>
 where
     Types: NodeType,
 {
     handle: Option<BackgroundTask>,
-    _types: PhantomData<(Types, S, P)>,
+    _types: PhantomData<(Types, S)>,
 }
 
-impl<Types, S, P> Pruner<Types, S, P>
+impl<Types, S, P> Fetcher<Types, S, P>
+where
+    Types: NodeType,
+    S: PruneStorage + Sync,
+{
+}
+
+impl<Types, S> Pruner<Types, S>
 where
     Types: NodeType,
     Payload<Types>: QueryablePayload<Types>,
     S: PruneStorage + Send + Sync + 'static,
-    P: AvailabilityProvider<Types>,
 {
-    async fn new(fetcher: Arc<Fetcher<Types, S, P>>) -> Self {
-        let cfg = fetcher.storage.get_pruning_config();
+    pub(crate) async fn new(storage: Arc<S>) -> Self {
+        let cfg = storage.get_pruning_config();
         let Some(cfg) = cfg else {
             return Self {
                 handle: None,
@@ -432,7 +449,7 @@ where
         let future = async move {
             for i in 1.. {
                 tracing::warn!("starting pruner run {i} ");
-                fetcher.prune().await;
+                Self::prune(storage.clone()).await;
                 sleep(cfg.interval()).await;
             }
         };
@@ -442,6 +459,26 @@ where
         Self {
             handle: Some(task),
             _types: Default::default(),
+        }
+    }
+
+    async fn prune(storage: Arc<S>) {
+        // We loop until the whole run pruner run is complete
+        let mut pruner = S::Pruner::default();
+        loop {
+            match storage.prune(&mut pruner).await {
+                Ok(Some(height)) => {
+                    tracing::warn!("Pruned to height {height}");
+                }
+                Ok(None) => {
+                    tracing::warn!("pruner run complete.");
+                    break;
+                }
+                Err(e) => {
+                    tracing::error!("pruner run failed: {e:?}");
+                    break;
+                }
+            }
         }
     }
 }
@@ -504,7 +541,9 @@ where
             None
         };
 
-        let pruner = Pruner::new(fetcher.clone()).await;
+        let storage = fetcher.storage.clone();
+
+        let pruner = Pruner::new(storage).await;
         let ds = Self {
             fetcher,
             scanner,
@@ -552,6 +591,20 @@ where
 }
 
 #[async_trait]
+impl<Types, S, P> PrunedHeightDataSource for FetchingDataSource<Types, S, P>
+where
+    Types: NodeType,
+    S: VersionedDataSource + HasMetrics + Send + Sync + 'static,
+    for<'a> S::ReadOnly<'a>: PrunedHeightStorage,
+    P: Send + Sync,
+{
+    async fn load_pruned_height(&self) -> anyhow::Result<Option<u64>> {
+        let mut tx = self.read().await?;
+        tx.load_pruned_height().await
+    }
+}
+
+#[async_trait]
 impl<Types, S, P> AvailabilityDataSource<Types> for FetchingDataSource<Types, S, P>
 where
     Types: NodeType,
@@ -561,146 +614,177 @@ where
     for<'a> S::ReadOnly<'a>: AvailabilityStorage<Types> + NodeStorage<Types> + PrunedHeightStorage,
     P: AvailabilityProvider<Types>,
 {
-    async fn get_leaf<ID>(&self, id: ID) -> Fetch<LeafQueryData<Types>>
+    async fn get_leaf<ID>(&self, id: ID) -> QueryResult<Fetch<LeafQueryData<Types>>>
     where
         ID: Into<LeafId<Types>> + Send + Sync,
     {
-        self.fetcher.get(id.into()).await
+        Ok(self.fetcher.get(id.into()).await)
     }
 
-    async fn get_block<ID>(&self, id: ID) -> Fetch<BlockQueryData<Types>>
+    async fn get_header<ID>(&self, id: ID) -> QueryResult<Fetch<Header<Types>>>
     where
         ID: Into<BlockId<Types>> + Send + Sync,
     {
-        self.fetcher.get(id.into()).await
+        let block: Fetch<BlockQueryData<Types>> = self.fetcher.get(id.into()).await;
+        Ok(block.map(|b| b.header().clone()))
     }
 
-    async fn get_payload<ID>(&self, id: ID) -> Fetch<PayloadQueryData<Types>>
+    async fn get_block<ID>(&self, id: ID) -> QueryResult<Fetch<BlockQueryData<Types>>>
     where
         ID: Into<BlockId<Types>> + Send + Sync,
     {
-        self.fetcher.get(id.into()).await
+        Ok(self.fetcher.get(id.into()).await)
     }
 
-    async fn get_payload_metadata<ID>(&self, id: ID) -> Fetch<PayloadMetadata<Types>>
+    async fn get_payload<ID>(&self, id: ID) -> QueryResult<Fetch<PayloadQueryData<Types>>>
     where
         ID: Into<BlockId<Types>> + Send + Sync,
     {
-        self.fetcher.get(id.into()).await
+        Ok(self.fetcher.get(id.into()).await)
     }
 
-    async fn get_vid_common<ID>(&self, id: ID) -> Fetch<VidCommonQueryData<Types>>
+    async fn get_payload_metadata<ID>(&self, id: ID) -> QueryResult<Fetch<PayloadMetadata<Types>>>
     where
         ID: Into<BlockId<Types>> + Send + Sync,
     {
-        self.fetcher.get(VidCommonRequest::from(id.into())).await
+        Ok(self.fetcher.get(id.into()).await)
     }
 
-    async fn get_vid_common_metadata<ID>(&self, id: ID) -> Fetch<VidCommonMetadata<Types>>
+    async fn get_vid_common<ID>(&self, id: ID) -> QueryResult<Fetch<VidCommonQueryData<Types>>>
     where
         ID: Into<BlockId<Types>> + Send + Sync,
     {
-        self.fetcher.get(VidCommonRequest::from(id.into())).await
+        Ok(self.fetcher.get(VidCommonRequest::from(id.into())).await)
     }
 
-    async fn get_leaf_range<R>(&self, range: R) -> FetchStream<LeafQueryData<Types>>
+    async fn get_vid_common_metadata<ID>(
+        &self,
+        id: ID,
+    ) -> QueryResult<Fetch<VidCommonMetadata<Types>>>
+    where
+        ID: Into<BlockId<Types>> + Send + Sync,
+    {
+        Ok(self.fetcher.get(VidCommonRequest::from(id.into())).await)
+    }
+
+    async fn get_leaf_range<R>(&self, range: R) -> QueryResult<FetchStream<LeafQueryData<Types>>>
     where
         R: RangeBounds<usize> + Send + 'static,
     {
-        self.fetcher.clone().get_range(range)
+        Ok(self.fetcher.clone().get_range(range))
     }
 
-    async fn get_block_range<R>(&self, range: R) -> FetchStream<BlockQueryData<Types>>
+    async fn get_block_range<R>(&self, range: R) -> QueryResult<FetchStream<BlockQueryData<Types>>>
     where
         R: RangeBounds<usize> + Send + 'static,
     {
-        self.fetcher.clone().get_range(range)
+        Ok(self.fetcher.clone().get_range(range))
     }
 
-    async fn get_payload_range<R>(&self, range: R) -> FetchStream<PayloadQueryData<Types>>
+    async fn get_header_range<R>(&self, range: R) -> QueryResult<FetchStream<Header<Types>>>
     where
         R: RangeBounds<usize> + Send + 'static,
     {
-        self.fetcher.clone().get_range(range)
+        let blocks: FetchStream<BlockQueryData<Types>> = self.fetcher.clone().get_range(range);
+
+        Ok(blocks
+            .map(|fetch| fetch.map(|b| b.header().clone()))
+            .boxed())
     }
 
-    async fn get_payload_metadata_range<R>(&self, range: R) -> FetchStream<PayloadMetadata<Types>>
+    async fn get_payload_range<R>(
+        &self,
+        range: R,
+    ) -> QueryResult<FetchStream<PayloadQueryData<Types>>>
     where
         R: RangeBounds<usize> + Send + 'static,
     {
-        self.fetcher.clone().get_range(range)
+        Ok(self.fetcher.clone().get_range(range))
     }
 
-    async fn get_vid_common_range<R>(&self, range: R) -> FetchStream<VidCommonQueryData<Types>>
+    async fn get_payload_metadata_range<R>(
+        &self,
+        range: R,
+    ) -> QueryResult<FetchStream<PayloadMetadata<Types>>>
     where
         R: RangeBounds<usize> + Send + 'static,
     {
-        self.fetcher.clone().get_range(range)
+        Ok(self.fetcher.clone().get_range(range))
+    }
+
+    async fn get_vid_common_range<R>(
+        &self,
+        range: R,
+    ) -> QueryResult<FetchStream<VidCommonQueryData<Types>>>
+    where
+        R: RangeBounds<usize> + Send + 'static,
+    {
+        Ok(self.fetcher.clone().get_range(range))
     }
 
     async fn get_vid_common_metadata_range<R>(
         &self,
         range: R,
-    ) -> FetchStream<VidCommonMetadata<Types>>
+    ) -> QueryResult<FetchStream<VidCommonMetadata<Types>>>
     where
         R: RangeBounds<usize> + Send + 'static,
     {
-        self.fetcher.clone().get_range(range)
+        Ok(self.fetcher.clone().get_range(range))
     }
 
     async fn get_leaf_range_rev(
         &self,
         start: Bound<usize>,
         end: usize,
-    ) -> FetchStream<LeafQueryData<Types>> {
-        self.fetcher.clone().get_range_rev(start, end)
+    ) -> QueryResult<FetchStream<LeafQueryData<Types>>> {
+        Ok(self.fetcher.clone().get_range_rev(start, end))
     }
 
     async fn get_block_range_rev(
         &self,
         start: Bound<usize>,
         end: usize,
-    ) -> FetchStream<BlockQueryData<Types>> {
-        self.fetcher.clone().get_range_rev(start, end)
+    ) -> QueryResult<FetchStream<BlockQueryData<Types>>> {
+        Ok(self.fetcher.clone().get_range_rev(start, end))
     }
 
     async fn get_payload_range_rev(
         &self,
         start: Bound<usize>,
         end: usize,
-    ) -> FetchStream<PayloadQueryData<Types>> {
-        self.fetcher.clone().get_range_rev(start, end)
+    ) -> QueryResult<FetchStream<PayloadQueryData<Types>>> {
+        Ok(self.fetcher.clone().get_range_rev(start, end))
     }
 
     async fn get_payload_metadata_range_rev(
         &self,
         start: Bound<usize>,
         end: usize,
-    ) -> FetchStream<PayloadMetadata<Types>> {
-        self.fetcher.clone().get_range_rev(start, end)
+    ) -> QueryResult<FetchStream<PayloadMetadata<Types>>> {
+        Ok(self.fetcher.clone().get_range_rev(start, end))
     }
 
     async fn get_vid_common_range_rev(
         &self,
         start: Bound<usize>,
         end: usize,
-    ) -> FetchStream<VidCommonQueryData<Types>> {
-        self.fetcher.clone().get_range_rev(start, end)
+    ) -> QueryResult<FetchStream<VidCommonQueryData<Types>>> {
+        Ok(self.fetcher.clone().get_range_rev(start, end))
     }
 
     async fn get_vid_common_metadata_range_rev(
         &self,
         start: Bound<usize>,
         end: usize,
-    ) -> FetchStream<VidCommonMetadata<Types>> {
-        self.fetcher.clone().get_range_rev(start, end)
+    ) -> QueryResult<FetchStream<VidCommonMetadata<Types>>> {
+        Ok(self.fetcher.clone().get_range_rev(start, end))
     }
 
     async fn get_transaction(
         &self,
         hash: TransactionHash<Types>,
-    ) -> Fetch<TransactionQueryData<Types>> {
-        self.fetcher.get(TransactionRequest::from(hash)).await
+    ) -> QueryResult<Fetch<TransactionQueryData<Types>>> {
+        Ok(self.fetcher.get(TransactionRequest::from(hash)).await)
     }
 }
 
@@ -771,14 +855,14 @@ where
 
 /// Asynchronous retrieval and storage of [`Fetchable`] resources.
 #[derive(Debug)]
-struct Fetcher<Types, S, P>
+pub(crate) struct Fetcher<Types, S, P>
 where
     Types: NodeType,
 {
-    storage: S,
-    notifiers: Notifiers<Types>,
+    pub(crate) storage: Arc<S>,
+    pub(crate) notifiers: Notifiers<Types>,
     provider: Arc<P>,
-    payload_fetcher: Arc<PayloadFetcher<Types, S, P>>,
+    payload_fetcher: Option<Arc<PayloadFetcher<Types, S, P>>>,
     leaf_fetcher: Arc<LeafFetcher<Types, S, P>>,
     vid_common_fetcher: Arc<VidCommonFetcher<Types, S, P>>,
     range_chunk_size: usize,
@@ -786,11 +870,12 @@ where
     active_fetch_delay: Duration,
     // Duration to sleep after each chunk fetched
     chunk_fetch_delay: Duration,
-    // Exponential backoff when retrying failed operations.
-    backoff: ExponentialBackoff,
+    // Exponential backoff when retrying failed oeprations.
+    pub(crate) backoff: ExponentialBackoff,
     // Semaphore limiting the number of simultaneous DB accesses we can have from tasks spawned to
     // retry failed loads.
     retry_semaphore: Arc<Semaphore>,
+    pub(crate) lightweight: bool,
 }
 
 impl<Types, S, P> VersionedDataSource for Fetcher<Types, S, P>
@@ -823,19 +908,28 @@ where
     S: VersionedDataSource + Sync,
     for<'a> S::ReadOnly<'a>: PrunedHeightStorage + NodeStorage<Types>,
 {
-    async fn new(builder: Builder<Types, S, P>) -> anyhow::Result<Self> {
+    pub async fn new(builder: Builder<Types, S, P>) -> anyhow::Result<Self> {
         let retry_semaphore = Arc::new(Semaphore::new(builder.rate_limit));
         let backoff = builder.backoff.build();
 
-        let payload_fetcher = fetching::Fetcher::new(retry_semaphore.clone(), backoff.clone());
+        let payload_fetcher = if builder.is_lightweight() {
+            None
+        } else {
+            Some(Arc::new(fetching::Fetcher::new(
+                retry_semaphore.clone(),
+                backoff.clone(),
+            )))
+        };
         let leaf_fetcher = fetching::Fetcher::new(retry_semaphore.clone(), backoff.clone());
         let vid_common_fetcher = fetching::Fetcher::new(retry_semaphore.clone(), backoff.clone());
 
+        let lightweight = builder.lightweight;
+
         Ok(Self {
-            storage: builder.storage,
+            storage: Arc::new(builder.storage),
             notifiers: Default::default(),
             provider: Arc::new(builder.provider),
-            payload_fetcher: Arc::new(payload_fetcher),
+            payload_fetcher,
             leaf_fetcher: Arc::new(leaf_fetcher),
             vid_common_fetcher: Arc::new(vid_common_fetcher),
             range_chunk_size: builder.range_chunk_size,
@@ -843,6 +937,7 @@ where
             chunk_fetch_delay: builder.chunk_fetch_delay,
             backoff,
             retry_semaphore,
+            lightweight,
         })
     }
 }
@@ -856,7 +951,7 @@ where
     for<'a> S::ReadOnly<'a>: AvailabilityStorage<Types> + NodeStorage<Types> + PrunedHeightStorage,
     P: AvailabilityProvider<Types>,
 {
-    async fn get<T>(self: &Arc<Self>, req: impl Into<T::Request> + Send) -> Fetch<T>
+    pub(crate) async fn get<T>(self: &Arc<Self>, req: impl Into<T::Request> + Send) -> Fetch<T>
     where
         T: Fetchable<Types>,
     {
@@ -982,7 +1077,7 @@ where
     /// Objects are loaded and fetched in chunks, which strikes a good balance of limiting the total
     /// number of storage and network requests, while also keeping the amount of simultaneous
     /// resource consumption bounded.
-    fn get_range<R, T>(self: Arc<Self>, range: R) -> BoxStream<'static, Fetch<T>>
+    pub(crate) fn get_range<R, T>(self: Arc<Self>, range: R) -> BoxStream<'static, Fetch<T>>
     where
         R: RangeBounds<usize> + Send + 'static,
         T: RangedFetchable<Types>,
@@ -1040,7 +1135,7 @@ where
     /// if the range has no upper bound, this function requires there to be a defined upper bound,
     /// otherwise we don't know where the reversed stream should _start_. The `end` bound given here
     /// is inclusive; i.e. the first item yielded by the stream will have height `end`.
-    fn get_range_rev<T>(
+    pub(crate) fn get_range_rev<T>(
         self: Arc<Self>,
         start: Bound<usize>,
         end: usize,
@@ -1619,34 +1714,8 @@ where
     }
 }
 
-impl<Types, S, P> Fetcher<Types, S, P>
-where
-    Types: NodeType,
-    S: PruneStorage + Sync,
-{
-    async fn prune(&self) {
-        // We loop until the whole run pruner run is complete
-        let mut pruner = S::Pruner::default();
-        loop {
-            match self.storage.prune(&mut pruner).await {
-                Ok(Some(height)) => {
-                    tracing::warn!("Pruned to height {height}");
-                }
-                Ok(None) => {
-                    tracing::warn!("pruner run complete.");
-                    break;
-                }
-                Err(e) => {
-                    tracing::error!("pruner run failed: {e:?}");
-                    break;
-                }
-            }
-        }
-    }
-}
-
 #[derive(Debug)]
-struct Notifiers<Types>
+pub(crate) struct Notifiers<Types>
 where
     Types: NodeType,
 {
@@ -1669,7 +1738,7 @@ where
 }
 
 #[derive(Clone, Copy, Debug)]
-struct Heights {
+pub(crate) struct Heights {
     height: u64,
     pruned_height: Option<u64>,
 }
@@ -1906,7 +1975,7 @@ impl<Types: NodeType, P> AvailabilityProvider<Types> for P where
 {
 }
 
-trait FetchRequest: Copy + Debug + Send + Sync + 'static {
+pub(crate) trait FetchRequest: Copy + Debug + Send + Sync + 'static {
     /// Indicate whether it is possible this object could exist.
     ///
     /// This can filter out requests quickly for objects that cannot possibly exist, such as
@@ -1928,7 +1997,7 @@ trait FetchRequest: Copy + Debug + Send + Sync + 'static {
 /// logistics of fetching are shared between all objects, and only the low-level particulars are
 /// type-specific.
 #[async_trait]
-trait Fetchable<Types>: Clone + Send + Sync + 'static
+pub(crate) trait Fetchable<Types>: Clone + Send + Sync + 'static
 where
     Types: NodeType,
     Payload<Types>: QueryablePayload<Types>,
@@ -1984,7 +2053,8 @@ where
 type PassiveFetch<T> = BoxFuture<'static, Option<T>>;
 
 #[async_trait]
-trait RangedFetchable<Types>: Fetchable<Types, Request = Self::RangedRequest> + HeightIndexed
+pub(crate) trait RangedFetchable<Types>:
+    Fetchable<Types, Request = Self::RangedRequest> + HeightIndexed
 where
     Types: NodeType,
     Payload<Types>: QueryablePayload<Types>,
@@ -1999,7 +2069,7 @@ where
 }
 
 /// An object which can be stored in the database.
-trait Storable<Types: NodeType>: HeightIndexed + Clone {
+pub(crate) trait Storable<Types: NodeType>: HeightIndexed + Clone {
     /// The name of this type of object, for debugging purposes.
     fn name() -> &'static str;
 
@@ -2047,7 +2117,7 @@ impl<Types: NodeType> Storable<Types> for BlockInfo<Types> {
 }
 
 /// Break a range into fixed-size chunks.
-fn range_chunks<R>(range: R, chunk_size: usize) -> impl Iterator<Item = Range<usize>>
+pub(crate) fn range_chunks<R>(range: R, chunk_size: usize) -> impl Iterator<Item = Range<usize>>
 where
     R: RangeBounds<usize>,
 {
@@ -2110,7 +2180,7 @@ fn range_chunks_rev(
     })
 }
 
-trait ResultExt<T, E> {
+pub(crate) trait ResultExt<T, E> {
     fn ok_or_trace(self) -> Option<T>
     where
         E: Display;
@@ -2220,7 +2290,7 @@ impl AggregatorMetrics {
 /// Turn a fallible passive fetch future into an infallible "fetch".
 ///
 /// Basically, we ignore failures due to a channel sender being dropped, which should never happen.
-fn passive<T>(
+pub(crate) fn passive<T>(
     req: impl Debug + Send + 'static,
     fut: impl Future<Output = Option<T>> + Send + 'static,
 ) -> Fetch<T>

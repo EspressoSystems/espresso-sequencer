@@ -314,7 +314,8 @@ impl<T: Revert> Drop for Transaction<T> {
     }
 }
 
-impl<Types> update::Transaction for Transaction<RwLockWriteGuard<'_, FileSystemStorageInner<Types>>>
+impl<'a, Types> update::Transaction
+    for Transaction<RwLockWriteGuard<'a, FileSystemStorageInner<Types>>>
 where
     Types: NodeType,
     Payload<Types>: QueryablePayload<Types>,
@@ -335,7 +336,8 @@ where
     }
 }
 
-impl<Types> update::Transaction for Transaction<RwLockReadGuard<'_, FileSystemStorageInner<Types>>>
+impl<'a, Types> update::Transaction
+    for Transaction<RwLockReadGuard<'a, FileSystemStorageInner<Types>>>
 where
     Types: NodeType,
     Payload<Types>: QueryablePayload<Types>,
@@ -576,8 +578,8 @@ where
     }
 }
 
-impl<Types: NodeType> UpdateAvailabilityStorage<Types>
-    for Transaction<RwLockWriteGuard<'_, FileSystemStorageInner<Types>>>
+impl<'a, Types: NodeType> UpdateAvailabilityStorage<Types>
+    for Transaction<RwLockWriteGuard<'a, FileSystemStorageInner<Types>>>
 where
     Payload<Types>: QueryablePayload<Types>,
     Header<Types>: QueryableHeader<Types>,

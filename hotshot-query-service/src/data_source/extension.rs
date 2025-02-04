@@ -11,6 +11,7 @@
 // see <https://www.gnu.org/licenses/>.
 
 use super::VersionedDataSource;
+use crate::data_source::storage::pruning::PrunedHeightDataSource;
 use crate::{
     availability::{
         AvailabilityDataSource, BlockId, BlockInfo, BlockQueryData, Fetch, FetchStream, LeafId,
@@ -33,7 +34,6 @@ use hotshot_types::traits::node_implementation::NodeType;
 use jf_merkle_tree::prelude::MerkleProof;
 use std::ops::{Bound, RangeBounds};
 use tagged_base64::TaggedBase64;
-
 /// Wrapper to add extensibility to an existing data source.
 ///
 /// [`ExtensibleDataSource`] adds app-specific data to any existing data source. It implements all
@@ -140,6 +140,17 @@ where
 }
 
 #[async_trait]
+impl<D, U> PrunedHeightDataSource for ExtensibleDataSource<D, U>
+where
+    D: PrunedHeightDataSource + Send + Sync,
+    U: Send + Sync,
+{
+    async fn load_pruned_height(&self) -> anyhow::Result<Option<u64>> {
+        self.data_source.load_pruned_height().await
+    }
+}
+
+#[async_trait]
 impl<D, U, Types> AvailabilityDataSource<Types> for ExtensibleDataSource<D, U>
 where
     D: AvailabilityDataSource<Types> + Send + Sync,
@@ -147,67 +158,94 @@ where
     Types: NodeType,
     Payload<Types>: QueryablePayload<Types>,
 {
-    async fn get_leaf<ID>(&self, id: ID) -> Fetch<LeafQueryData<Types>>
+    async fn get_leaf<ID>(&self, id: ID) -> QueryResult<Fetch<LeafQueryData<Types>>>
     where
         ID: Into<LeafId<Types>> + Send + Sync,
     {
         self.data_source.get_leaf(id).await
     }
-    async fn get_block<ID>(&self, id: ID) -> Fetch<BlockQueryData<Types>>
+
+    async fn get_header<ID>(&self, id: ID) -> QueryResult<Fetch<Header<Types>>>
+    where
+        ID: Into<BlockId<Types>> + Send + Sync,
+    {
+        self.data_source.get_header(id).await
+    }
+
+    async fn get_block<ID>(&self, id: ID) -> QueryResult<Fetch<BlockQueryData<Types>>>
     where
         ID: Into<BlockId<Types>> + Send + Sync,
     {
         self.data_source.get_block(id).await
     }
-    async fn get_payload<ID>(&self, id: ID) -> Fetch<PayloadQueryData<Types>>
+    async fn get_payload<ID>(&self, id: ID) -> QueryResult<Fetch<PayloadQueryData<Types>>>
     where
         ID: Into<BlockId<Types>> + Send + Sync,
     {
         self.data_source.get_payload(id).await
     }
-    async fn get_payload_metadata<ID>(&self, id: ID) -> Fetch<PayloadMetadata<Types>>
+    async fn get_payload_metadata<ID>(&self, id: ID) -> QueryResult<Fetch<PayloadMetadata<Types>>>
     where
         ID: Into<BlockId<Types>> + Send + Sync,
     {
         self.data_source.get_payload_metadata(id).await
     }
-    async fn get_vid_common<ID>(&self, id: ID) -> Fetch<VidCommonQueryData<Types>>
+    async fn get_vid_common<ID>(&self, id: ID) -> QueryResult<Fetch<VidCommonQueryData<Types>>>
     where
         ID: Into<BlockId<Types>> + Send + Sync,
     {
         self.data_source.get_vid_common(id).await
     }
-    async fn get_vid_common_metadata<ID>(&self, id: ID) -> Fetch<VidCommonMetadata<Types>>
+    async fn get_vid_common_metadata<ID>(
+        &self,
+        id: ID,
+    ) -> QueryResult<Fetch<VidCommonMetadata<Types>>>
     where
         ID: Into<BlockId<Types>> + Send + Sync,
     {
         self.data_source.get_vid_common_metadata(id).await
     }
-    async fn get_leaf_range<R>(&self, range: R) -> FetchStream<LeafQueryData<Types>>
+    async fn get_leaf_range<R>(&self, range: R) -> QueryResult<FetchStream<LeafQueryData<Types>>>
     where
         R: RangeBounds<usize> + Send + 'static,
     {
         self.data_source.get_leaf_range(range).await
     }
-    async fn get_block_range<R>(&self, range: R) -> FetchStream<BlockQueryData<Types>>
+    async fn get_block_range<R>(&self, range: R) -> QueryResult<FetchStream<BlockQueryData<Types>>>
     where
         R: RangeBounds<usize> + Send + 'static,
     {
         self.data_source.get_block_range(range).await
     }
-    async fn get_payload_range<R>(&self, range: R) -> FetchStream<PayloadQueryData<Types>>
+
+    async fn get_header_range<R>(&self, range: R) -> QueryResult<FetchStream<Header<Types>>>
+    where
+        R: RangeBounds<usize> + Send + 'static,
+    {
+        self.data_source.get_header_range(range).await
+    }
+    async fn get_payload_range<R>(
+        &self,
+        range: R,
+    ) -> QueryResult<FetchStream<PayloadQueryData<Types>>>
     where
         R: RangeBounds<usize> + Send + 'static,
     {
         self.data_source.get_payload_range(range).await
     }
-    async fn get_payload_metadata_range<R>(&self, range: R) -> FetchStream<PayloadMetadata<Types>>
+    async fn get_payload_metadata_range<R>(
+        &self,
+        range: R,
+    ) -> QueryResult<FetchStream<PayloadMetadata<Types>>>
     where
         R: RangeBounds<usize> + Send + 'static,
     {
         self.data_source.get_payload_metadata_range(range).await
     }
-    async fn get_vid_common_range<R>(&self, range: R) -> FetchStream<VidCommonQueryData<Types>>
+    async fn get_vid_common_range<R>(
+        &self,
+        range: R,
+    ) -> QueryResult<FetchStream<VidCommonQueryData<Types>>>
     where
         R: RangeBounds<usize> + Send + 'static,
     {
@@ -216,7 +254,7 @@ where
     async fn get_vid_common_metadata_range<R>(
         &self,
         range: R,
-    ) -> FetchStream<VidCommonMetadata<Types>>
+    ) -> QueryResult<FetchStream<VidCommonMetadata<Types>>>
     where
         R: RangeBounds<usize> + Send + 'static,
     {
@@ -227,28 +265,28 @@ where
         &self,
         start: Bound<usize>,
         end: usize,
-    ) -> FetchStream<LeafQueryData<Types>> {
+    ) -> QueryResult<FetchStream<LeafQueryData<Types>>> {
         self.data_source.get_leaf_range_rev(start, end).await
     }
     async fn get_block_range_rev(
         &self,
         start: Bound<usize>,
         end: usize,
-    ) -> FetchStream<BlockQueryData<Types>> {
+    ) -> QueryResult<FetchStream<BlockQueryData<Types>>> {
         self.data_source.get_block_range_rev(start, end).await
     }
     async fn get_payload_range_rev(
         &self,
         start: Bound<usize>,
         end: usize,
-    ) -> FetchStream<PayloadQueryData<Types>> {
+    ) -> QueryResult<FetchStream<PayloadQueryData<Types>>> {
         self.data_source.get_payload_range_rev(start, end).await
     }
     async fn get_payload_metadata_range_rev(
         &self,
         start: Bound<usize>,
         end: usize,
-    ) -> FetchStream<PayloadMetadata<Types>> {
+    ) -> QueryResult<FetchStream<PayloadMetadata<Types>>> {
         self.data_source
             .get_payload_metadata_range_rev(start, end)
             .await
@@ -257,14 +295,14 @@ where
         &self,
         start: Bound<usize>,
         end: usize,
-    ) -> FetchStream<VidCommonQueryData<Types>> {
+    ) -> QueryResult<FetchStream<VidCommonQueryData<Types>>> {
         self.data_source.get_vid_common_range_rev(start, end).await
     }
     async fn get_vid_common_metadata_range_rev(
         &self,
         start: Bound<usize>,
         end: usize,
-    ) -> FetchStream<VidCommonMetadata<Types>> {
+    ) -> QueryResult<FetchStream<VidCommonMetadata<Types>>> {
         self.data_source
             .get_vid_common_metadata_range_rev(start, end)
             .await
@@ -272,7 +310,7 @@ where
     async fn get_transaction(
         &self,
         hash: TransactionHash<Types>,
-    ) -> Fetch<TransactionQueryData<Types>> {
+    ) -> QueryResult<Fetch<TransactionQueryData<Types>>> {
         self.data_source.get_transaction(hash).await
     }
 }

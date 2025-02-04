@@ -16,8 +16,8 @@ use super::{
     super::transaction::{query_as, Transaction, TransactionMode, Write},
     DecodeError, QueryBuilder,
 };
-use crate::data_source::storage::sql::build_where_in;
 use crate::data_source::storage::sql::sqlx::Row;
+use crate::data_source::storage::{pruning::PrunedHeightStorage, sql::build_where_in};
 use crate::{
     data_source::storage::{MerklizedStateHeightStorage, MerklizedStateStorage},
     merklized_state::{MerklizedState, Snapshot},
@@ -44,7 +44,7 @@ where
     Types: NodeType,
     State: MerklizedState<Types, ARITY> + 'static,
 {
-    /// Retrieves a Merkle path from the database
+    /// Retreives a Merkle path from the database
     async fn get_path(
         &mut self,
         snapshot: Snapshot<Types, State, ARITY>,
@@ -234,7 +234,7 @@ where
         if commitment_from_path != merkle_commitment.digest() {
             return Err(QueryError::Error {
                 message:
-                    format!("Commitment calculated from merkle path ({commitment_from_path:?}) does not match the commitment in the header ({:?})", merkle_commitment.digest()),
+                    format!("Commitment calcuated from merkle path ({commitment_from_path:?}) does not match the commitment in the header ({:?})", merkle_commitment.digest()),
             });
         }
 
@@ -296,7 +296,7 @@ impl<Mode: TransactionMode> Transaction<Mode> {
             Snapshot::Index(created) => {
                 let created = created as i64;
                 let (commit,) = query_as::<(String,)>(&format!(
-                    "SELECT {header_state_commitment_field} AS root_commitment
+                    "SELECT {header_state_commitment_field} AS root_commmitment
                        FROM header
                       WHERE height = $1
                       LIMIT 1"
@@ -311,10 +311,20 @@ impl<Mode: TransactionMode> Transaction<Mode> {
         };
 
         // Make sure the requested snapshot is up to date.
-
         let height = self.get_last_state_height().await?;
 
         if height < (created as usize) {
+            return Err(QueryError::NotFound);
+        }
+
+        let pruned_height = self
+            .load_pruned_height()
+            .await
+            .map_err(|e| QueryError::Error {
+                message: format!("failed to load pruned height: {e}"),
+            })?;
+
+        if pruned_height.map_or(false, |h| height < h as usize) {
             return Err(QueryError::NotFound);
         }
 

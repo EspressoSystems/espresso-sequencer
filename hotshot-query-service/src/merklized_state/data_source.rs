@@ -27,6 +27,7 @@ use jf_merkle_tree::{
     MerkleCommitment, NodeValue, ToTraversalPath,
 };
 use serde::{de::DeserializeOwned, Serialize};
+
 use std::{fmt::Debug, str::FromStr};
 use tagged_base64::TaggedBase64;
 

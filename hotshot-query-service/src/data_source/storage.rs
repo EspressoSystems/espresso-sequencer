@@ -145,6 +145,20 @@ where
     ) -> QueryResult<Vec<QueryResult<BlockQueryData<Types>>>>
     where
         R: RangeBounds<usize> + Send + 'static;
+
+    async fn get_header_range<R>(
+        &mut self,
+        range: R,
+    ) -> QueryResult<Vec<QueryResult<Header<Types>>>>
+    where
+        R: RangeBounds<usize> + Send + 'static,
+    {
+        let blocks = self.get_block_range(range).await?;
+        Ok(blocks
+            .into_iter()
+            .map(|block| block.map(|block| block.header))
+            .collect())
+    }
     async fn get_payload_range<R>(
         &mut self,
         range: R,

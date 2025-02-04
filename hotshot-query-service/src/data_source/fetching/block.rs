@@ -96,6 +96,11 @@ where
             AvailabilityStorage<Types> + NodeStorage<Types> + PrunedHeightStorage,
         P: AvailabilityProvider<Types>,
     {
+        // Do not fetch if we are in light weight mode
+        if fetcher.lightweight {
+            return Ok(());
+        }
+
         fetch_header_and_then(
             tx,
             req,
@@ -161,13 +166,18 @@ pub(super) fn fetch_block_with_header<Types, S, P>(
     for<'a> S::Transaction<'a>: UpdateAvailabilityStorage<Types>,
     P: AvailabilityProvider<Types>,
 {
+    let Some(payload_fetcher) = fetcher.payload_fetcher.as_ref() else {
+        // If we're in light-weight mode, we don't need to fetch the VID common data.
+        return;
+    };
+
     // Now that we have the header, we only need to retrieve the payload.
     tracing::info!(
         "spawned active fetch for payload {:?} (height {})",
         header.payload_commitment(),
         header.block_number()
     );
-    fetcher.payload_fetcher.spawn_fetch(
+    payload_fetcher.spawn_fetch(
         PayloadRequest(header.payload_commitment()),
         fetcher.provider.clone(),
         once(PayloadCallback {
@@ -218,6 +228,10 @@ where
             AvailabilityStorage<Types> + NodeStorage<Types> + PrunedHeightStorage,
         P: AvailabilityProvider<Types>,
     {
+        // If we're in light-weight mode, we don't need to fetch the VID common data.
+        if fetcher.lightweight {
+            return Ok(());
+        }
         // We don't have storage for the payload alone, only the whole block. So if we need to fetch
         // the payload, we just fetch the whole block (which may end up fetching only the payload,
         // if that's all that's needed to complete the block).
@@ -332,6 +346,10 @@ where
             AvailabilityStorage<Types> + NodeStorage<Types> + PrunedHeightStorage,
         P: AvailabilityProvider<Types>,
     {
+        // If we're in light-weight mode, we don't need to fetch the VID common data.
+        if fetcher.lightweight {
+            return Ok(());
+        }
         // Trigger the full block to be fetched. This will be enough to satisfy this request for the
         // payload summary.
         BlockQueryData::active_fetch(tx, fetcher, req).await

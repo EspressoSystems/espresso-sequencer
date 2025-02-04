@@ -38,11 +38,11 @@ use hotshot_types::traits::{block_contents::BlockHeader, node_implementation::No
 use std::sync::Arc;
 use std::{cmp::Ordering, future::IntoFuture, iter::once, ops::RangeBounds};
 
-pub(super) type VidCommonFetcher<Types, S, P> =
+pub(crate) type VidCommonFetcher<Types, S, P> =
     fetching::Fetcher<request::VidCommonRequest, VidCommonCallback<Types, S, P>>;
 
 #[derive(Clone, Copy, Debug, From)]
-pub(super) struct VidCommonRequest<Types: NodeType>(BlockId<Types>);
+pub(crate) struct VidCommonRequest<Types: NodeType>(BlockId<Types>);
 
 impl<Types: NodeType> From<usize> for VidCommonRequest<Types> {
     fn from(n: usize) -> Self {
@@ -99,6 +99,11 @@ where
             AvailabilityStorage<Types> + NodeStorage<Types> + PrunedHeightStorage,
         P: AvailabilityProvider<Types>,
     {
+        // do not fetch if we are in light weight mode
+        if fetcher.lightweight {
+            return Ok(());
+        }
+
         fetch_header_and_then(
             tx,
             req.0,
@@ -283,6 +288,11 @@ where
             AvailabilityStorage<Types> + NodeStorage<Types> + PrunedHeightStorage,
         P: AvailabilityProvider<Types>,
     {
+        // If we're in light-weight mode, we don't need to fetch the VID common data.
+
+        if fetcher.lightweight {
+            return Ok(());
+        }
         // Trigger the full VID object to be fetched. This will be enough to satisfy this request
         // for the summary.
         VidCommonQueryData::active_fetch(tx, fetcher, req).await
