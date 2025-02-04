@@ -955,6 +955,7 @@ impl<TYPES: NodeType> Consensus<TYPES> {
     pub async fn calculate_and_update_vid<V: Versions>(
         consensus: OuterConsensus<TYPES>,
         view: <TYPES as NodeType>::View,
+        target_epoch: Option<<TYPES as NodeType>::Epoch>,
         membership: Arc<RwLock<TYPES::Membership>>,
         private_key: &<TYPES::SignatureKey as SignatureKey>::PrivateKey,
         upgrade_lock: &UpgradeLock<TYPES, V>,
@@ -972,7 +973,7 @@ impl<TYPES: NodeType> Consensus<TYPES> {
             payload.as_ref(),
             &membership,
             view,
-            epoch,
+            target_epoch,
             epoch,
             upgrade_lock,
         )

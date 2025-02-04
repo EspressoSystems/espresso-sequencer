@@ -84,14 +84,22 @@ impl<TYPES: NodeType, V: Versions> NetworkResponseState<TYPES, V> {
                     match event.as_ref() {
                         HotShotEvent::VidRequestRecv(request, sender) => {
                             let cur_epoch = self.consensus.read().await.cur_epoch();
+                            let next_epoch = cur_epoch.map(|epoch| epoch + 1);
+                            let target_epoch = if self.valid_sender(sender, cur_epoch).await {
+                                cur_epoch
+                            } else if self.valid_sender(sender, next_epoch).await {
+                                next_epoch
+                            } else {
+                                // The sender neither belongs to the current nor to the next epoch.
+                                continue;
+                            };
                             // Verify request is valid
-                            if !self.valid_sender(sender, cur_epoch).await
-                                || !valid_signature::<TYPES>(request, sender)
-                            {
+                            if !valid_signature::<TYPES>(request, sender) {
                                 continue;
                             }
-                            if let Some(proposal) =
-                                self.get_or_calc_vid_share(request.view, sender).await
+                            if let Some(proposal) = self
+                                .get_or_calc_vid_share(request.view, target_epoch, sender)
+                                .await
                             {
                                 broadcast_event(
                                     HotShotEvent::VidResponseSend(
@@ -151,6 +159,7 @@ impl<TYPES: NodeType, V: Versions> NetworkResponseState<TYPES, V> {
     async fn get_or_calc_vid_share(
         &self,
         view: TYPES::View,
+        target_epoch: Option<TYPES::Epoch>,
         key: &TYPES::SignatureKey,
     ) -> Option<Proposal<TYPES, VidDisperseShare<TYPES>>> {
         let consensus_reader = self.consensus.read().await;
@@ -165,6 +174,7 @@ impl<TYPES: NodeType, V: Versions> NetworkResponseState<TYPES, V> {
         if Consensus::calculate_and_update_vid::<V>(
             OuterConsensus::new(Arc::clone(&self.consensus)),
             view,
+            target_epoch,
             Arc::clone(&self.membership),
             &self.private_key,
             &self.upgrade_lock,
@@ -177,6 +187,7 @@ impl<TYPES: NodeType, V: Versions> NetworkResponseState<TYPES, V> {
             Consensus::calculate_and_update_vid::<V>(
                 OuterConsensus::new(Arc::clone(&self.consensus)),
                 view,
+                target_epoch,
                 Arc::clone(&self.membership),
                 &self.private_key,
                 &self.upgrade_lock,

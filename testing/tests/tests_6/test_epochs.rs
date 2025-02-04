@@ -4,8 +4,6 @@
 // You should have received a copy of the MIT License
 // along with the HotShot repository. If not, see <https://mit-license.org/>.
 
-use std::{collections::HashMap, time::Duration};
-
 use hotshot_example_types::{
     node_types::{
         CombinedImpl, EpochUpgradeTestVersions, EpochsTestVersions, Libp2pImpl, MemoryImpl,
@@ -24,6 +22,7 @@ use hotshot_testing::{
     view_sync_task::ViewSyncTaskDescription,
 };
 use hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime};
+use std::{collections::HashMap, time::Duration};
 
 cross_tests!(
     TestName: test_success_with_epochs,
@@ -555,5 +554,51 @@ cross_tests!(
       };
 
       metadata
+    },
+);
+
+// A run where the CDN crashes part-way through, epochs enabled.
+cross_tests!(
+    TestName: test_combined_network_cdn_crash_with_epochs,
+    Impls: [CombinedImpl],
+    Types: [TestTypes, TestTwoStakeTablesTypes],
+    Versions: [EpochsTestVersions],
+    Ignore: false,
+    Metadata: {
+        let timing_data = TimingData {
+            next_view_timeout: 10_000,
+            ..Default::default()
+        };
+
+        let overall_safety_properties = OverallSafetyPropertiesDescription {
+            num_failed_views: 0,
+            num_successful_views: 35,
+            ..Default::default()
+        };
+
+        let completion_task_description = CompletionTaskDescription::TimeBasedCompletionTaskBuilder(
+            TimeBasedCompletionTaskDescription {
+                duration: Duration::from_secs(220),
+            },
+        );
+
+        let mut metadata = TestDescription::default_multiple_rounds();
+        metadata.timing_data = timing_data;
+        metadata.overall_safety_properties = overall_safety_properties;
+        metadata.completion_task_description = completion_task_description;
+
+        let mut all_nodes = vec![];
+        for node in 0..metadata.test_config.num_nodes_with_stake.into() {
+            all_nodes.push(ChangeNode {
+                idx: node,
+                updown: NodeAction::NetworkDown,
+            });
+        }
+
+        metadata.spinning_properties = SpinningTaskDescription {
+            node_changes: vec![(5, all_nodes)],
+        };
+
+        metadata
     },
 );

@@ -536,15 +536,15 @@ impl<K: SignatureKey + 'static> ConnectedNetwork<K> for PushCdnNetwork<K> {
     /// - If we fail to serialize the message
     /// - If we fail to send the direct message
     async fn direct_message(&self, message: Vec<u8>, recipient: K) -> Result<(), NetworkError> {
-        // If we're paused, don't send the message
-        #[cfg(feature = "hotshot-testing")]
-        if self.is_paused.load(Ordering::Relaxed) {
-            return Ok(());
-        }
-
         // If the message is to ourselves, just add it to the internal queue
         if recipient == self.public_key {
             self.internal_queue.lock().push_back(message);
+            return Ok(());
+        }
+
+        // If we're paused, don't send the message
+        #[cfg(feature = "hotshot-testing")]
+        if self.is_paused.load(Ordering::Relaxed) {
             return Ok(());
         }
 
