@@ -247,9 +247,15 @@ impl<S: TestableSequencerDataSource> TestNode<S> {
     async fn new(network: NetworkParams<'_>, node: &NodeParams) -> Self {
         tracing::info!(?network, ?node, "creating node",);
 
+        let opts = api::Options::from(api::options::Http::with_port(node.api_port));
         let storage = S::create_storage().await;
+        let opt = S::options(&storage, opts);
+
         let mut modules = Modules {
             http: Some(api::options::Http::with_port(node.api_port)),
+            query: Some(Default::default()),
+            storage_fs: opt.storage_fs,
+            storage_sql: opt.storage_sql,
             ..Default::default()
         };
         if node.is_da {
