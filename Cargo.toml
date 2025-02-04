@@ -22,7 +22,7 @@ members = [
     "sequencer",
     "tests",
     "types",
-    "utils",
+    "utils"
 ]
 
 exclude = ["sequencer-sqlite"]
