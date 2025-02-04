@@ -56,14 +56,14 @@ ark-serialize = { workspace = true }
 async-lock = { workspace = true }
 async-trait = { workspace = true }
 backoff = "0.4"
-bincode = "1.3"
+bincode = { workspace = true }
 chrono = "0.4"
-committable = "0.2"
+committable = { workspace = true }
 custom_debug = "0.6"
-derivative = "2.2"
-derive_more = "0.99"
+derivative = { workspace = true }
+derive_more = { workspace = true }
 either = "1.12"
-futures = "0.3"
+futures = { workspace = true }
 hotshot = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.84" }
 hotshot-testing = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.84" }
 hotshot-types = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.84" }
