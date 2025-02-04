@@ -1,0 +1,31 @@
+[package]
+name = "hotshot-events-service"
+version = "0.1.57"
+edition = "2021"
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+async-broadcast = { workspace = true }
+async-lock = { workspace = true }
+async-trait = { workspace = true }
+clap = { workspace = true }
+derivative = { workspace = true }
+derive_more = { workspace = true }
+futures = { workspace = true }
+hotshot-types = { workspace = true }
+libp2p-identity = { version = "0.2", features = ["serde"] }
+rand = { workspace = true }
+serde = { workspace = true }
+snafu = "0.8"
+tagged-base64 = { workspace = true }
+tide-disco = "0.9"
+tokio = { workspace = true }
+toml = { workspace = true }
+tracing = { workspace = true }
+tracing-test = "0.2"
+vbs = { workspace = true }
+
+[dev-dependencies]
+hotshot-example-types = { workspace = true }
+portpicker = "0.1.1"
+surf-disco = "0.9"
