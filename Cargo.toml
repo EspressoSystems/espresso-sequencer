@@ -70,7 +70,7 @@ marketplace-builder-core = { git = "https://github.com/EspressoSystems/marketpla
 marketplace-builder-shared = { git = "https://github.com/EspressoSystems/marketplace-builder-core", tag = "0.5.84" }
 hotshot-events-service = { git = "https://github.com/EspressoSystems/hotshot-events-service.git", tag = "0.1.58" }
 hotshot-orchestrator = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.84" }
-hotshot-query-service = { path = "../../Documents/hotshot-query-service" }
+hotshot-query-service = { path = "hotshot-query-service" }
 hotshot-stake-table = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.84" }
 hotshot-state-prover = { version = "0.1.0", path = "hotshot-state-prover" }
 hotshot-task = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.84" }

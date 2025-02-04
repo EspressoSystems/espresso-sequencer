@@ -4105,7 +4105,7 @@ dependencies = [
  "committable",
  "custom_debug",
  "derivative",
- "derive_more 0.99.18",
+ "derive_more 1.0.0",
  "either",
  "futures",
  "hotshot",
