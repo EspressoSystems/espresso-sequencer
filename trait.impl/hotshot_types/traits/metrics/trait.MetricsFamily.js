@@ -1,9 +1,0 @@
-(function() {
-    var implementors = Object.fromEntries([["hotshot_query_service",[["impl MetricsFamily&lt;<a class=\"primitive\" href=\"https://doc.rust-lang.org/1.84.1/std/primitive.unit.html\">()</a>&gt; for <a class=\"struct\" href=\"hotshot_query_service/metrics/struct.TextFamily.html\" title=\"struct hotshot_query_service::metrics::TextFamily\">TextFamily</a>"],["impl MetricsFamily&lt;<a class=\"struct\" href=\"https://doc.rust-lang.org/1.84.1/alloc/boxed/struct.Box.html\" title=\"struct alloc::boxed::Box\">Box</a>&lt;dyn Counter&gt;&gt; for <a class=\"struct\" href=\"hotshot_query_service/metrics/struct.CounterFamily.html\" title=\"struct hotshot_query_service::metrics::CounterFamily\">CounterFamily</a>"],["impl MetricsFamily&lt;<a class=\"struct\" href=\"https://doc.rust-lang.org/1.84.1/alloc/boxed/struct.Box.html\" title=\"struct alloc::boxed::Box\">Box</a>&lt;dyn Gauge&gt;&gt; for <a class=\"struct\" href=\"hotshot_query_service/metrics/struct.GaugeFamily.html\" title=\"struct hotshot_query_service::metrics::GaugeFamily\">GaugeFamily</a>"],["impl MetricsFamily&lt;<a class=\"struct\" href=\"https://doc.rust-lang.org/1.84.1/alloc/boxed/struct.Box.html\" title=\"struct alloc::boxed::Box\">Box</a>&lt;dyn Histogram&gt;&gt; for <a class=\"struct\" href=\"hotshot_query_service/metrics/struct.HistogramFamily.html\" title=\"struct hotshot_query_service::metrics::HistogramFamily\">HistogramFamily</a>"]]]]);
-    if (window.register_implementors) {
-        window.register_implementors(implementors);
-    } else {
-        window.pending_implementors = implementors;
-    }
-})()
-//{"start":57,"fragment_lengths":[1370]}

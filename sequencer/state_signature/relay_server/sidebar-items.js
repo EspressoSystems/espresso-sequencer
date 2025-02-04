@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":["define_api","run_relay_server"],"struct":["Options","StateRelayServerState"],"trait":["StateRelayServerDataSource"],"type":["Error","State"]};
