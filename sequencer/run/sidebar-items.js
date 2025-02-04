@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":["init_with_storage","main","run","run_with_storage"]};

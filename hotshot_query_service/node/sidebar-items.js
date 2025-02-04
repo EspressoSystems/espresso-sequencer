@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["Error","WindowStart"],"fn":["define_api"],"mod":["data_source","query_data"],"struct":["CustomSnafu","Limits","Options","QuerySnafu","QueryVidSnafu","QueryWindowSnafu","RequestSnafu","SyncStatus","TimeWindowQueryData"],"trait":["NodeDataSource"]};

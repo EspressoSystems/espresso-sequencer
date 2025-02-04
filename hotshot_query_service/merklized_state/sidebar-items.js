@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["Error","Snapshot"],"fn":["define_api"],"mod":["data_source"],"struct":["CustomSnafu","Options","QuerySnafu","RequestSnafu"],"trait":["MerklizedState","MerklizedStateDataSource","MerklizedStateHeightPersistence","UpdateStateData"]};
