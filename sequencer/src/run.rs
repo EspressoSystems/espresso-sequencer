@@ -38,15 +38,6 @@ pub async fn main() -> anyhow::Result<()> {
     let upgrade = genesis.upgrade_version;
 
     match (base, upgrade) {
-        (FeeVersion::VERSION, EpochVersion::VERSION) => {
-            run(
-                genesis,
-                modules,
-                opt,
-                SequencerVersions::<FeeVersion, EpochVersion>::new(),
-            )
-            .await
-        }
         (EpochVersion::VERSION, _) => {
             run(
                 genesis,
@@ -56,15 +47,7 @@ pub async fn main() -> anyhow::Result<()> {
             )
             .await
         }
-        (FeeVersion::VERSION, MarketplaceVersion::VERSION) => {
-            run(
-                genesis,
-                modules,
-                opt,
-                SequencerVersions::<FeeVersion, MarketplaceVersion>::new(),
-            )
-            .await
-        }
+
         _ => panic!(
             "Invalid base ({base}) and upgrade ({upgrade}) versions specified in the toml file."
         ),
