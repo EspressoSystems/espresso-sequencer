@@ -180,11 +180,15 @@ pub struct Options {
     /// reconstruct data that was pruned in a previous run where pruning was enabled. This option
     /// instructs the service to run without pruning _and_ reconstruct all previously pruned data by
     /// fetching from peers.
-    #[clap(long, env = "ESPRESSO_SEQUENCER_ARCHIVE", conflicts_with = "prune, light_weight")]
+    #[clap(long, env = "ESPRESSO_SEQUENCER_ARCHIVE", conflicts_with = "prune")]
     pub(crate) archive: bool,
 
     /// Turns on leaf only data storage
-    #[clap(long, env = "ESPRESSO_SEQUENCER_LIGHTWEIGHT")]
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_LIGHTWEIGHT",
+        conflicts_with = "archive"
+    )]
     pub(crate) lightweight: bool,
 
     /// The maximum idle time of a database connection.

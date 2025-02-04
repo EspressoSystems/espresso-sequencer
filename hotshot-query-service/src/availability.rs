@@ -107,6 +107,11 @@ pub enum Error {
     FetchBlock {
         resource: String,
     },
+    #[snafu(display("header {resource} missing or not available"))]
+    #[from(ignore)]
+    FetchHeader {
+        resource: String,
+    },
     #[snafu(display("transaction {resource} missing or not available"))]
     #[from(ignore)]
     FetchTransaction {
@@ -146,9 +151,10 @@ impl Error {
     pub fn status(&self) -> StatusCode {
         match self {
             Self::Request { .. } | Self::RangeLimit { .. } => StatusCode::BAD_REQUEST,
-            Self::FetchLeaf { .. } | Self::FetchBlock { .. } | Self::FetchTransaction { .. } => {
-                StatusCode::NOT_FOUND
-            }
+            Self::FetchLeaf { .. }
+            | Self::FetchBlock { .. }
+            | Self::FetchTransaction { .. }
+            | Self::FetchHeader { .. } => StatusCode::NOT_FOUND,
             Self::InvalidTransactionIndex { .. } | Self::Query { .. } => StatusCode::NOT_FOUND,
             Self::Custom { status, .. } => *status,
         }
@@ -230,7 +236,7 @@ where
                     BlockId::PayloadHash(req.blob_param("payload-hash")?)
                 };
                 let fetch = state.read(|state| state.get_header(id).boxed()).await?;
-                fetch.with_timeout(timeout).await.context(FetchBlockSnafu {
+                fetch.with_timeout(timeout).await.context(FetchHeaderSnafu {
                     resource: id.to_string(),
                 })
             }
@@ -248,7 +254,7 @@ where
                 headers
                     .enumerate()
                     .then(|(index, fetch)| async move {
-                        fetch.with_timeout(timeout).await.context(FetchBlockSnafu {
+                        fetch.with_timeout(timeout).await.context(FetchLeafSnafu {
                             resource: (index + from).to_string(),
                         })
                     })
