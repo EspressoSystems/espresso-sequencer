@@ -54,7 +54,7 @@ pub struct NetworkNodeConfig<T: NodeType> {
     /// The stake table. Used for authenticating other nodes. If not supplied
     /// we will not check other nodes against the stake table
     #[builder(default)]
-    pub stake_table: Option<Arc<RwLock<T::Membership>>>,
+    pub membership: Option<Arc<RwLock<T::Membership>>>,
 
     /// The path to the file to save the DHT to
     #[builder(default)]
@@ -81,7 +81,7 @@ impl<T: NodeType> Clone for NetworkNodeConfig<T> {
             to_connect_addrs: self.to_connect_addrs.clone(),
             republication_interval: self.republication_interval,
             ttl: self.ttl,
-            stake_table: self.stake_table.as_ref().map(Arc::clone),
+            membership: self.membership.as_ref().map(Arc::clone),
             dht_file_path: self.dht_file_path.clone(),
             auth_message: self.auth_message.clone(),
             dht_timeout: self.dht_timeout,

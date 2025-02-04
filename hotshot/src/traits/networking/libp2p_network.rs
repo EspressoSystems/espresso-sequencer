@@ -426,7 +426,7 @@ impl<T: NodeType> Libp2pNetwork<T> {
 
         // Set the auth message and stake table
         config_builder
-            .stake_table(Some(quorum_membership))
+            .membership(Some(quorum_membership))
             .auth_message(Some(auth_message));
 
         // The replication factor is the minimum of [the default and 2/3 the number of nodes]

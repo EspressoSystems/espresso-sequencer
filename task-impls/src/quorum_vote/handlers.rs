@@ -6,27 +6,17 @@
 
 use std::{collections::btree_map::Entry, sync::Arc};
 
-use super::QuorumVoteTaskState;
-use crate::{
-    events::HotShotEvent,
-    helpers::{
-        broadcast_event, decide_from_proposal, decide_from_proposal_2, fetch_proposal,
-        LeafChainTraversalOutcome,
-    },
-    quorum_vote::Versions,
-};
 use async_broadcast::{InactiveReceiver, Sender};
 use async_lock::RwLock;
 use chrono::Utc;
 use committable::Committable;
-use hotshot_types::simple_vote::HasEpoch;
 use hotshot_types::{
     consensus::OuterConsensus,
     data::{Leaf2, QuorumProposalWrapper, VidDisperseShare},
     drb::{compute_drb_result, DrbResult},
     event::{Event, EventType},
     message::{convert_proposal, Proposal, UpgradeLock},
-    simple_vote::{QuorumData2, QuorumVote2},
+    simple_vote::{HasEpoch, QuorumData2, QuorumVote2},
     traits::{
         block_contents::BlockHeader,
         election::Membership,
@@ -45,6 +35,16 @@ use tokio::spawn;
 use tracing::instrument;
 use utils::anytrace::*;
 use vbs::version::StaticVersionType;
+
+use super::QuorumVoteTaskState;
+use crate::{
+    events::HotShotEvent,
+    helpers::{
+        broadcast_event, decide_from_proposal, decide_from_proposal_2, fetch_proposal,
+        LeafChainTraversalOutcome,
+    },
+    quorum_vote::Versions,
+};
 
 /// Store the DRB result from the computation task to the shared `results` table.
 ///

@@ -10,14 +10,13 @@ use async_broadcast::{Receiver, Sender};
 use async_lock::RwLock;
 use async_trait::async_trait;
 use hotshot_task::task::TaskState;
-use hotshot_types::simple_vote::HasEpoch;
 use hotshot_types::{
     consensus::{Consensus, OuterConsensus},
     data::{DaProposal2, PackedBundle},
     event::{Event, EventType},
     message::{Proposal, UpgradeLock},
     simple_certificate::DaCertificate2,
-    simple_vote::{DaData2, DaVote2},
+    simple_vote::{DaData2, DaVote2, HasEpoch},
     traits::{
         block_contents::vid_commitment,
         election::Membership,

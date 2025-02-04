@@ -4,6 +4,8 @@
 // You should have received a copy of the MIT License
 // along with the HotShot repository. If not, see <https://mit-license.org/>.
 
+use std::{collections::HashMap, time::Duration};
+
 use hotshot_example_types::{
     node_types::{
         CombinedImpl, EpochUpgradeTestVersions, EpochsTestVersions, Libp2pImpl, MemoryImpl,
@@ -22,7 +24,6 @@ use hotshot_testing::{
     view_sync_task::ViewSyncTaskDescription,
 };
 use hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime};
-use std::{collections::HashMap, time::Duration};
 
 cross_tests!(
     TestName: test_success_with_epochs,

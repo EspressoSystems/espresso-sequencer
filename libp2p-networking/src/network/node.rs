@@ -180,10 +180,10 @@ impl<T: NodeType, D: DhtPersistentStorage> NetworkNode<T, D> {
         // Get the `PeerId` from the `KeyPair`
         let peer_id = PeerId::from(keypair.public());
 
-        // Generate the transport from the keypair, stake table, and auth message
+        // Generate the transport from the keypair, membership, and auth message
         let transport: BoxedTransport = gen_transport::<T>(
             keypair.clone(),
-            config.stake_table.clone(),
+            config.membership.clone(),
             config.auth_message.clone(),
         )
         .await?;
