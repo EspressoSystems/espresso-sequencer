@@ -417,15 +417,21 @@ impl Transaction<Write> {
         self.execute(query("DELETE FROM header WHERE height <= $1").bind(height as i64))
             .await?;
 
-        // delete merklized state data
-        // only delete nodes which have a newer version of the data
-        // i.e with higher created than the height h being pruned
-
+        // prune merklized state tables
+        // only delete nodes having created < h AND
+        // is not the newest node with its position
         for state_table in state_tables {
             self.execute(
-                query(&format!("DELETE FROM {state_table} WHERE (path, created) IN
-            (SELECT path, created FROM (SELECT path, created, ROW_NUMBER() OVER (PARTITION BY path ORDER BY created DESC) as rank FROM {state_table} WHERE created < $1) ranked_nodes WHERE rank != 1)")).bind(height as i64)
-                )
+                query(&format!(
+                    "
+                DELETE FROM {state_table} WHERE (path, created) IN
+                (SELECT path, created FROM 
+                (SELECT path, created, 
+                ROW_NUMBER() OVER (PARTITION BY path ORDER BY created DESC) as rank 
+                FROM {state_table} WHERE created < $1) ranked_nodes WHERE rank != 1)"
+                ))
+                .bind(height as i64),
+            )
             .await?;
         }
 

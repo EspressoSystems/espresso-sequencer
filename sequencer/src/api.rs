@@ -1749,7 +1749,7 @@ mod test {
 
         let account = TestConfig::<5>::builder_key().fee_account();
 
-        let headers = client
+        let _headers = client
             .socket("availability/stream/headers/0")
             .subscribe::<Header>()
             .await
