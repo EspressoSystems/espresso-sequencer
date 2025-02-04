@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["fetch_vid_common_with_header"],"struct":["VidCommonCallback","VidCommonRequest"],"type":["VidCommonFetcher"]};
