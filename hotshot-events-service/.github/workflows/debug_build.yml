@@ -1,0 +1,45 @@
+name: Debug Build
+
+on:
+  schedule:
+    - cron: "0 0 * * *"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+        RUSTFLAGS: "--cfg async_executor_impl=\"async-std\" --cfg async_channel_impl=\"async-std\""
+        RUST_LOG: info
+        RUST_MIN_STACK: '3145728'
+    steps:
+      - name: Install Protoc
+        uses: arduino/setup-protoc@v2
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: styfle/cancel-workflow-action@0.12.0
+        name: Cancel Outdated Builds
+        with:
+          all_but_latest: true
+          access_token: ${{ github.token }}
+
+      - uses: actions/checkout@v4
+        name: Checkout Repository
+
+      - name: Configure Git
+        run: |
+          git config --global url."https://ancient123:${{ secrets.ORG_GITHUB_PAT }}@github.com".insteadOf git://github.com
+          git config --global url."https://ancient123:${{ secrets.ORG_GITHUB_PAT }}@github.com".insteadOf ssh://git@github.com
+
+      - uses: Swatinem/rust-cache@v2
+        name: Enable Rust Caching
+
+      - name: Build
+        run: |
+          cargo build --workspace --all-features
+
+      - name: Test
+        run: |
+          cargo test --workspace --all-features --no-run
+          cargo test --workspace --all-features --verbose -- --test-threads 2
+        timeout-minutes: 60

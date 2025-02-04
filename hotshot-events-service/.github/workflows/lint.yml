@@ -1,0 +1,53 @@
+name: Lint
+
+on:
+  push:
+    branches:
+      - main
+      - release-*
+  pull_request:
+    branches:
+      - main
+      - release-*
+  workflow_dispatch:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # Lint with many combinations of feature flags
+        features:
+          # No optional features
+          - ''
+    env:
+        RUSTFLAGS: "--cfg async_executor_impl=\"async-std\" --cfg async_channel_impl=\"async-std\""
+        RUST_LOG: info
+    steps:
+      - uses: styfle/cancel-workflow-action@0.12.0
+        name: Cancel Outdated Builds
+        with:
+          all_but_latest: true
+          access_token: ${{ github.token }}
+
+      - uses: actions/checkout@v4
+        name: Checkout Repository
+
+      - name: Install Protoc
+        uses: arduino/setup-protoc@v2
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Configure Git
+        run: |
+          git config --global url."https://ancient123:${{ secrets.ORG_GITHUB_PAT }}@github.com".insteadOf git://github.com
+          git config --global url."https://ancient123:${{ secrets.ORG_GITHUB_PAT }}@github.com".insteadOf ssh://git@github.com
+
+      - uses: Swatinem/rust-cache@v2
+        name: Enable Rust Caching
+
+      - uses: actions-rs/clippy-check@v1
+        name: Clippy
+        with:
+          token: ${{ github.token }}
+          args: --workspace --no-default-features --features "${{ matrix.features }}" -- -D warnings
