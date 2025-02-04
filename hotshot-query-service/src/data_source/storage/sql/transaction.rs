@@ -724,7 +724,7 @@ impl<Types: NodeType, State: MerklizedState<Types, ARITY>, const ARITY: usize>
                                     .decode_error("malformed merkle node hash")?;
 
                                 children_values.push(hash);
-                                // Mark the entry as 1 in bitvec to indiciate a non-empty child
+                                // Mark the entry as 1 in bitvec to indicate a non-empty child
                                 children_bitvec.push(true);
                             }
                         }

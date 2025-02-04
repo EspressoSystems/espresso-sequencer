@@ -201,7 +201,7 @@ where
         LeafId::Hash(h) => {
             // We don't actively fetch leaves when requested by hash, because we have no way of
             // knowing whether a leaf with such a hash actually exists, and we don't want to bother
-            // peers with requests for non-existant leaves.
+            // peers with requests for non-existent leaves.
             tracing::debug!("not fetching unknown leaf {h}");
         }
     }

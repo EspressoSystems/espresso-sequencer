@@ -10,7 +10,7 @@ use hotshot::traits::ValidatedState as _;
 use hotshot_query_service::{
     availability::LeafId,
     data_source::{
-        sql::{Config, SqlDataSource, Transaction},
+        sql::{Config, LeafOnlySqlDataSource, SqlDataSource, Transaction},
         storage::{
             sql::{query_as, Db, TransactionMode, Write},
             AvailabilityStorage, MerklizedStateStorage, NodeStorage, SqlStorage,
@@ -73,6 +73,39 @@ impl SequencerDataSource for DataSource {
         }
 
         builder.build().await
+    }
+}
+
+pub type LightWeightDataSource = LeafOnlySqlDataSource<SeqTypes, Provider>;
+
+#[async_trait]
+impl SequencerDataSource for LightWeightDataSource {
+    type Options = Options;
+
+    async fn create(opt: Self::Options, provider: Provider, reset: bool) -> anyhow::Result<Self> {
+        let fetch_limit = opt.fetch_rate_limit;
+        let active_fetch_delay = opt.active_fetch_delay;
+        let chunk_fetch_delay = opt.chunk_fetch_delay;
+        let mut cfg = Config::try_from(&opt)?;
+
+        if reset {
+            cfg = cfg.reset_schema();
+        }
+
+        let mut builder = cfg.builder(provider).await?;
+
+        if let Some(limit) = fetch_limit {
+            builder = builder.with_rate_limit(limit);
+        }
+
+        if let Some(delay) = active_fetch_delay {
+            builder = builder.with_active_fetch_delay(delay);
+        }
+        if let Some(delay) = chunk_fetch_delay {
+            builder = builder.with_chunk_fetch_delay(delay);
+        }
+
+        LeafOnlySqlDataSource::new(builder).await
     }
 }
 
@@ -157,6 +190,36 @@ impl CatchupStorage for SqlStorage {
 }
 
 impl CatchupStorage for DataSource {
+    async fn get_accounts(
+        &self,
+        instance: &NodeState,
+        height: u64,
+        view: ViewNumber,
+        accounts: &[FeeAccount],
+    ) -> anyhow::Result<(FeeMerkleTree, Leaf2)> {
+        self.as_ref()
+            .get_accounts(instance, height, view, accounts)
+            .await
+    }
+
+    async fn get_frontier(
+        &self,
+        instance: &NodeState,
+        height: u64,
+        view: ViewNumber,
+    ) -> anyhow::Result<BlocksFrontier> {
+        self.as_ref().get_frontier(instance, height, view).await
+    }
+
+    async fn get_chain_config(
+        &self,
+        commitment: Commitment<ChainConfig>,
+    ) -> anyhow::Result<ChainConfig> {
+        self.as_ref().get_chain_config(commitment).await
+    }
+}
+
+impl CatchupStorage for LightWeightDataSource {
     async fn get_accounts(
         &self,
         instance: &NodeState,
@@ -494,6 +557,25 @@ mod impl_testable_data_source {
 
         fn options(storage: &Self::Storage, opt: api::Options) -> api::Options {
             opt.query_sql(Default::default(), tmp_options(storage))
+        }
+    }
+
+    #[async_trait]
+    impl TestableSequencerDataSource for LightWeightDataSource {
+        type Storage = TmpDb;
+
+        async fn create_storage() -> Self::Storage {
+            TmpDb::init().await
+        }
+
+        fn persistence_options(storage: &Self::Storage) -> Self::Options {
+            tmp_options(storage)
+        }
+
+        fn options(storage: &Self::Storage, opt: api::Options) -> api::Options {
+            let mut options = tmp_options(storage);
+            options.lightweight = true;
+            opt.query_sql(Default::default(), options)
         }
     }
 }

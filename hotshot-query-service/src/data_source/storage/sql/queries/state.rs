@@ -44,7 +44,7 @@ where
     Types: NodeType,
     State: MerklizedState<Types, ARITY> + 'static,
 {
-    /// Retreives a Merkle path from the database
+    /// Retrieves a Merkle path from the database
     async fn get_path(
         &mut self,
         snapshot: Snapshot<Types, State, ARITY>,
@@ -234,7 +234,7 @@ where
         if commitment_from_path != merkle_commitment.digest() {
             return Err(QueryError::Error {
                 message:
-                    format!("Commitment calcuated from merkle path ({commitment_from_path:?}) does not match the commitment in the header ({:?})", merkle_commitment.digest()),
+                    format!("Commitment calculated from merkle path ({commitment_from_path:?}) does not match the commitment in the header ({:?})", merkle_commitment.digest()),
             });
         }
 
@@ -296,7 +296,7 @@ impl<Mode: TransactionMode> Transaction<Mode> {
             Snapshot::Index(created) => {
                 let created = created as i64;
                 let (commit,) = query_as::<(String,)>(&format!(
-                    "SELECT {header_state_commitment_field} AS root_commmitment
+                    "SELECT {header_state_commitment_field} AS root_commitment
                        FROM header
                       WHERE height = $1
                       LIMIT 1"

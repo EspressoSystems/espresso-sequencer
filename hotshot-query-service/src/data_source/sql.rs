@@ -69,7 +69,7 @@ impl Config {
 /// This data source will automatically connect to and perform queries on a remote SQL database.
 /// However, _administration_ of the database, such as initialization, resetting, and backups, is
 /// left out of the scope of this implementation, and is expected to be performed manually using
-/// off-the-shelf DBMS adminstration tools. The one exception is migrations, which are handled
+/// off-the-shelf DBMS administration tools. The one exception is migrations, which are handled
 /// transparently by the [`SqlDataSource`].
 ///
 /// ## Schema
@@ -178,7 +178,7 @@ impl Config {
 /// with extreme caution.
 ///
 /// It is standard to store custom migrations as SQL files in a sub-directory of the crate. For ease
-/// of release and deploymenet, such directories can be embedded into a Rust binary and parsed into
+/// of release and deployment, such directories can be embedded into a Rust binary and parsed into
 /// a list of [`Migration`] objects using the [`include_migrations`] macro.
 ///
 /// It is also possible to take complete control over migrating the schema using
@@ -241,7 +241,7 @@ impl Config {
 /// create an aggregate struct containing both [`SqlDataSource`] and your additional module
 /// states, as described in the [composition guide](crate#composition). If the additional modules
 /// have data that should live in the same database as the [`SqlDataSource`] data, you can follow
-/// the steps in [custom migrations](#custom-migrations) to accomodate this.
+/// the steps in [custom migrations](#custom-migrations) to accommodate this.
 ///
 /// ```
 /// # use futures::StreamExt;
