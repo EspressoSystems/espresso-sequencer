@@ -667,7 +667,7 @@ fn validate_builder_fee(
         // TODO Marketplace signatures are placeholders for now. In
         // finished Marketplace signatures will cover the full
         // transaction.
-        if version.minor >= 3 {
+        if version.minor >= 99 {
             fee_info
                 .account()
                 .validate_sequencing_fee_signature_marketplace(
