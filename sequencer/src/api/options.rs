@@ -272,32 +272,27 @@ impl Options {
         for<'a> D::Transaction<'a>: SequencerStateUpdate,
         N: ConnectedNetwork<PubKey>,
     {
-        tracing::info!("0x000A");
-
         // Initialize merklized state module for block merkle tree
         app.register_module(
             "block-state",
             endpoints::merklized_state::<N, P, _, BlockMerkleTree, _, 3>()?,
         )?;
-        tracing::info!("0x000B");
         // Initialize merklized state module for fee merkle tree
         app.register_module(
             "fee-state",
             endpoints::get_balance::<_, SequencerApiVersion>()?,
         )?;
-        tracing::info!("0x000C");
 
         let get_node_state = {
             let state = state.clone();
             async move { state.node_state().await.clone() }
         };
-        tracing::info!("0x000D");
+
         tasks.spawn(
             "merklized state storage update loop",
             update_state_storage_loop(ds.clone(), get_node_state),
         );
 
-        tracing::info!("0x000E");
         if self.hotshot_events.is_some() {
             self.init_and_spawn_hotshot_event_streaming_module(state, tasks)?;
         }
@@ -344,7 +339,6 @@ impl Options {
             self.listen(self.http.port, app, SequencerApiVersion::instance()),
         );
 
-        tracing::info!(">>>>> 111");
         Ok((metrics, Box::new(ApiEventConsumer::from(ds))))
     }
 
