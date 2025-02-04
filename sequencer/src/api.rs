@@ -163,30 +163,30 @@ impl<N: ConnectedNetwork<PubKey>, D: Send + Sync, V: Versions, P: SequencerPersi
 impl<N: ConnectedNetwork<PubKey>, D: Sync, V: Versions, P: SequencerPersistence>
     StakeTableDataSource<SeqTypes> for StorageState<N, P, D, V>
 {
-    /// Get the stake table for a given epoch or the current epoch if not provided
+    /// Get the stake table for a given epoch
     async fn get_stake_table(
         &self,
         epoch: Option<<SeqTypes as NodeType>::Epoch>,
     ) -> Vec<StakeTableEntry<<SeqTypes as NodeType>::SignatureKey>> {
         self.as_ref().get_stake_table(epoch).await
     }
+
+    /// Get the stake table for the current epoch if not provided
+    async fn get_stake_table_current(
+        &self,
+    ) -> Vec<StakeTableEntry<<SeqTypes as NodeType>::SignatureKey>> {
+        self.as_ref().get_stake_table_current().await
+    }
 }
 
 impl<N: ConnectedNetwork<PubKey>, V: Versions, P: SequencerPersistence>
     StakeTableDataSource<SeqTypes> for ApiState<N, P, V>
 {
-    /// Get the stake table for a given epoch or the current epoch if not provided
+    /// Get the stake table for a given epoch
     async fn get_stake_table(
         &self,
         epoch: Option<<SeqTypes as NodeType>::Epoch>,
     ) -> Vec<StakeTableEntry<<SeqTypes as NodeType>::SignatureKey>> {
-        // Get the epoch from the argument or the current epoch if not provided
-        let epoch = if let Some(epoch) = epoch {
-            epoch
-        } else {
-            self.consensus().await.read().await.cur_epoch().await
-        };
-
         self.consensus()
             .await
             .read()
@@ -195,6 +195,15 @@ impl<N: ConnectedNetwork<PubKey>, V: Versions, P: SequencerPersistence>
             .read()
             .await
             .stake_table(epoch)
+    }
+
+    /// Get the stake table for the current epoch if not provided
+    async fn get_stake_table_current(
+        &self,
+    ) -> Vec<StakeTableEntry<<SeqTypes as NodeType>::SignatureKey>> {
+        let epoch = self.consensus().await.read().await.cur_epoch().await;
+
+        self.get_stake_table(epoch).await
     }
 }
 
@@ -554,6 +563,7 @@ pub mod test_helpers {
         api_config: Options,
     }
 
+    #[derive(Clone)]
     pub struct TestNetworkConfigBuilder<const NUM_NODES: usize, P, C>
     where
         P: PersistenceOptions,
@@ -591,6 +601,19 @@ pub mod test_helpers {
                 network_config: None,
                 api_config: None,
             }
+        }
+
+        pub fn with_max_block_size(&self, max_block_size: u64) -> Self {
+            let cf = ChainConfig {
+                max_block_size: max_block_size.into(),
+                ..Default::default()
+            }
+            .into();
+
+            let mut cfg = self.clone();
+            cfg.state.iter_mut().for_each(|s| s.chain_config = cf);
+
+            cfg
         }
     }
 
@@ -1054,7 +1077,6 @@ mod api_tests {
     use committable::Committable;
     use data_source::testing::TestableSequencerDataSource;
     use endpoints::NamespaceProofQueryData;
-
     use espresso_types::MockSequencerVersions;
     use espresso_types::{
         traits::{EventConsumer, PersistenceOptions},
@@ -1065,8 +1087,9 @@ mod api_tests {
     use hotshot_query_service::availability::{
         AvailabilityDataSource, BlockQueryData, VidCommonQueryData,
     };
+
     use hotshot_types::{
-        data::{DaProposal, QuorumProposal2, VidDisperseShare},
+        data::{DaProposal, QuorumProposal2, QuorumProposalWrapper, VidDisperseShare},
         event::LeafInfo,
         message::Proposal,
         simple_certificate::QuorumCertificate,
@@ -1251,19 +1274,22 @@ mod api_tests {
         let payload_bytes_arc = payload.encode();
         let disperse = vid_scheme(2).disperse(payload_bytes_arc.clone()).unwrap();
         let payload_commitment = disperse.commit;
-        let mut quorum_proposal = QuorumProposal2::<SeqTypes> {
-            block_header: genesis.block_header().clone(),
-            view_number: ViewNumber::genesis(),
-            justify_qc: QuorumCertificate::genesis::<MockSequencerVersions>(
-                &ValidatedState::default(),
-                &NodeState::mock(),
-            )
-            .await
-            .to_qc2(),
-            upgrade_certificate: None,
-            view_change_evidence: None,
-            next_drb_result: None,
-            next_epoch_justify_qc: None,
+        let mut quorum_proposal = QuorumProposalWrapper::<SeqTypes> {
+            proposal: QuorumProposal2::<SeqTypes> {
+                block_header: genesis.block_header().clone(),
+                view_number: ViewNumber::genesis(),
+                justify_qc: QuorumCertificate::genesis::<MockSequencerVersions>(
+                    &ValidatedState::default(),
+                    &NodeState::mock(),
+                )
+                .await
+                .to_qc2(),
+                upgrade_certificate: None,
+                view_change_evidence: None,
+                next_drb_result: None,
+                next_epoch_justify_qc: None,
+            },
+            with_epoch: false,
         };
         let mut qc = QuorumCertificate::genesis::<MockSequencerVersions>(
             &ValidatedState::default(),
@@ -1274,9 +1300,9 @@ mod api_tests {
 
         let mut justify_qc = qc.clone();
         for i in 0..5 {
-            *quorum_proposal.block_header.height_mut() = i;
-            quorum_proposal.view_number = ViewNumber::new(i);
-            quorum_proposal.justify_qc = justify_qc;
+            *quorum_proposal.proposal.block_header.height_mut() = i;
+            quorum_proposal.proposal.view_number = ViewNumber::new(i);
+            quorum_proposal.proposal.justify_qc = justify_qc;
             let leaf = Leaf2::from_quorum_proposal(&quorum_proposal);
             qc.view_number = leaf.view_number();
             qc.data.leaf_commit = Committable::commit(&leaf);
@@ -1463,14 +1489,17 @@ mod api_tests {
         // Create another leaf, with missing data.
         let mut block_header = leaf.block_header().clone();
         *block_header.height_mut() += 1;
-        let qp = QuorumProposal2 {
-            block_header,
-            view_number: leaf.view_number() + 1,
-            justify_qc: qc.clone(),
-            upgrade_certificate: None,
-            view_change_evidence: None,
-            next_drb_result: None,
-            next_epoch_justify_qc: None,
+        let qp = QuorumProposalWrapper {
+            proposal: QuorumProposal2 {
+                block_header,
+                view_number: leaf.view_number() + 1,
+                justify_qc: qc.clone(),
+                upgrade_certificate: None,
+                view_change_evidence: None,
+                next_drb_result: None,
+                next_epoch_justify_qc: None,
+            },
+            with_epoch: false,
         };
 
         let leaf = Leaf2::from_quorum_proposal(&qp);

@@ -156,9 +156,9 @@ dependencies = [
 
 [[package]]
 name = "alloy-chains"
-version = "0.1.55"
+version = "0.1.58"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1e39f295f876b61a1222d937e1dd31f965e4a1acc3bba98e448dd7e84b1a4566"
+checksum = "5d0d6c784abf2e061139798d51299da278fc8f02d7b7546662b898d9b22ab5e9"
 dependencies = [
  "alloy-primitives",
  "num_enum",
@@ -219,9 +219,9 @@ dependencies = [
 
 [[package]]
 name = "alloy-core"
-version = "0.8.18"
+version = "0.8.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d0713007d14d88a6edb8e248cddab783b698dbb954a28b8eee4bab21cfb7e578"
+checksum = "074e41c92e2a3cc36448d4a9b94ba05b8faac466d7981d158ed68fd88e22d3b7"
 dependencies = [
  "alloy-dyn-abi",
  "alloy-json-abi",
@@ -231,9 +231,9 @@ dependencies = [
 
 [[package]]
 name = "alloy-dyn-abi"
-version = "0.8.18"
+version = "0.8.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "44e3b98c37b3218924cd1d2a8570666b89662be54e5b182643855f783ea68b33"
+checksum = "7f2d547eba3f2d331b0e08f64a24e202f66d4f291e2a3e0073914c0e1400ced3"
 dependencies = [
  "alloy-json-abi",
  "alloy-primitives",
@@ -243,7 +243,7 @@ dependencies = [
  "itoa",
  "serde",
  "serde_json",
- "winnow 0.6.22",
+ "winnow 0.7.1",
 ]
 
 [[package]]
@@ -289,9 +289,9 @@ dependencies = [
 
 [[package]]
 name = "alloy-json-abi"
-version = "0.8.18"
+version = "0.8.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "731ea743b3d843bc657e120fb1d1e9cc94f5dab8107e35a82125a63e6420a102"
+checksum = "d62cf1b25f5a50ca2d329b0b4aeb0a0dedeaf225ad3c5099d83b1a4c4616186e"
 dependencies = [
  "alloy-primitives",
  "alloy-sol-type-parser",
@@ -353,9 +353,9 @@ dependencies = [
 
 [[package]]
 name = "alloy-primitives"
-version = "0.8.18"
+version = "0.8.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "788bb18e8f61d5d9340b52143f27771daf7e1dccbaf2741621d2493f9debf52e"
+checksum = "bc1360603efdfba91151e623f13a4f4d3dc4af4adc1cbd90bf37c81e84db4c77"
 dependencies = [
  "alloy-rlp",
  "bytes 1.9.0",
@@ -438,9 +438,9 @@ dependencies = [
 
 [[package]]
 name = "alloy-rlp"
-version = "0.3.10"
+version = "0.3.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f542548a609dca89fcd72b3b9f355928cf844d4363c5eed9c5273a3dd225e097"
+checksum = "3d6c1d995bff8d011f7cd6c81820d51825e6e06d6db73914c1630ecf544d83d6"
 dependencies = [
  "alloy-rlp-derive",
  "arrayvec",
@@ -449,9 +449,9 @@ dependencies = [
 
 [[package]]
 name = "alloy-rlp-derive"
-version = "0.3.10"
+version = "0.3.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5a833d97bf8a5f0f878daf2c8451fff7de7f9de38baa5a45d936ec718d81255a"
+checksum = "a40e1ef334153322fd878d07e86af7a529bcb86b2439525920a88eba87bcf943"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -569,9 +569,9 @@ dependencies = [
 
 [[package]]
 name = "alloy-sol-macro"
-version = "0.8.18"
+version = "0.8.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a07b74d48661ab2e4b50bb5950d74dbff5e61dd8ed03bb822281b706d54ebacb"
+checksum = "13f28f2131dc3a7b8e2cda882758ad4d5231ca26281b9861d4b18c700713e2da"
 dependencies = [
  "alloy-sol-macro-expander",
  "alloy-sol-macro-input",
@@ -583,9 +583,9 @@ dependencies = [
 
 [[package]]
 name = "alloy-sol-macro-expander"
-version = "0.8.18"
+version = "0.8.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "19cc9c7f20b90f9be1a8f71a3d8e283a43745137b0837b1a1cb13159d37cad72"
+checksum = "1ee2da033256a3b27131c030933eab0460a709fbcc4d4bd57bf9a5650b2441c5"
 dependencies = [
  "alloy-json-abi",
  "alloy-sol-macro-input",
@@ -602,9 +602,9 @@ dependencies = [
 
 [[package]]
 name = "alloy-sol-macro-input"
-version = "0.8.18"
+version = "0.8.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "713b7e6dfe1cb2f55c80fb05fd22ed085a1b4e48217611365ed0ae598a74c6ac"
+checksum = "4e9d9918b0abb632818bf27e2dfb86b209be8433baacf22100b190bbc0904bd4"
 dependencies = [
  "alloy-json-abi",
  "const-hex",
@@ -619,19 +619,19 @@ dependencies = [
 
 [[package]]
 name = "alloy-sol-type-parser"
-version = "0.8.18"
+version = "0.8.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1eda2711ab2e1fb517fc6e2ffa9728c9a232e296d16810810e6957b781a1b8bc"
+checksum = "a971129d242338d92009470a2f750d3b2630bc5da00a40a94d51f5d456b5712f"
 dependencies = [
  "serde",
- "winnow 0.6.22",
+ "winnow 0.7.1",
 ]
 
 [[package]]
 name = "alloy-sol-types"
-version = "0.8.18"
+version = "0.8.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e3b478bc9c0c4737a04cd976accde4df7eba0bdc0d90ad6ff43d58bc93cf79c1"
+checksum = "75f306fc801b3aa2e3c4785b7b5252ec8b19f77b30e3b75babfd23849c81bd8c"
 dependencies = [
  "alloy-json-abi",
  "alloy-primitives",
@@ -1709,6 +1709,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "backtrace-on-stack-overflow"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7fd2d70527f3737a1ad17355e260706c1badebabd1fa06a7a053407380df841b"
+dependencies = [
+ "backtrace",
+ "libc",
+ "nix 0.23.2",
+]
+
+[[package]]
 name = "base-x"
 version = "0.2.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1781,16 +1792,7 @@ version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0700ddab506f33b20a03b13996eccd309a48e5ff77d0d95926aa0210fb4e95f1"
 dependencies = [
- "bit-vec 0.6.3",
-]
-
-[[package]]
-name = "bit-set"
-version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "08807e080ed7f9d5433fa9b275196cfc35414f66a0c79d864dc51a0d825231a3"
-dependencies = [
- "bit-vec 0.8.0",
+ "bit-vec",
 ]
 
 [[package]]
@@ -1798,12 +1800,6 @@ name = "bit-vec"
 version = "0.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "349f9b6a179ed607305526ca489b34ad0a41aed5f7980fa90eb03160b69598fb"
-
-[[package]]
-name = "bit-vec"
-version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5e764a1d40d510daf35e07be9eb06e75770908c27d411ee6c92109c9840eaaf7"
 
 [[package]]
 name = "bitflags"
@@ -2124,6 +2120,15 @@ name = "cbor4ii"
 version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "472931dd4dfcc785075b09be910147f9c6258883fc4591d0dac6116392b2daa6"
+dependencies = [
+ "serde",
+]
+
+[[package]]
+name = "cbor4ii"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "189a2a2e5eec2f203b2bb8bc4c2db55c7253770d2c6bf3ae5f79ace5a15c305f"
 dependencies = [
  "serde",
 ]
@@ -3993,6 +3998,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "fastrlp"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ce8dba4714ef14b8274c371879b175aa55b16b30f269663f19d576f380018dc4"
+dependencies = [
+ "arrayvec",
+ "auto_impl",
+ "bytes 1.9.0",
+]
+
+[[package]]
 name = "ff"
 version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4520,11 +4536,11 @@ dependencies = [
 
 [[package]]
 name = "hashlink"
-version = "0.10.0"
+version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7382cf6263419f2d8df38c55d7da83da5c18aef87fc7a7fc1fb1e344edfe14c1"
+checksum = "6ba4ff7128dee98c7dc9794b6a411377e1404dba1c97deb8d1a55297bd25d8af"
 dependencies = [
- "hashbrown 0.15.2",
+ "hashbrown 0.14.5",
 ]
 
 [[package]]
@@ -4736,8 +4752,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot"
-version = "0.5.79"
-source = "git+https://www.github.com/EspressoSystems/HotShot.git?tag=0.5.83-patch1#99929f7d717100e174c568ac7728bbf63e43ed8b"
+version = "0.5.84"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.84#310553bfe3333cb16592941043191e3b7e1b5dbf"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4775,12 +4791,13 @@ dependencies = [
  "url",
  "utils",
  "vbs",
+ "workspace-hack",
 ]
 
 [[package]]
 name = "hotshot-builder-api"
 version = "0.1.7"
-source = "git+https://www.github.com/EspressoSystems/HotShot.git?tag=0.5.83-patch1#99929f7d717100e174c568ac7728bbf63e43ed8b"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.84#310553bfe3333cb16592941043191e3b7e1b5dbf"
 dependencies = [
  "async-trait",
  "clap",
@@ -4794,12 +4811,13 @@ dependencies = [
  "tide-disco",
  "toml 0.8.19",
  "vbs",
+ "workspace-hack",
 ]
 
 [[package]]
 name = "hotshot-builder-core"
 version = "0.1.59"
-source = "git+https://github.com/EspressoSystems/marketplace-builder-core?tag=0.1.59#4647c30a3d447e65deea8cc8024c0f860fca169f"
+source = "git+https://github.com/EspressoSystems/marketplace-builder-core?tag=0.5.84#80fb768e8d0358f998c74509cec6a9a2bdb59d64"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4860,7 +4878,7 @@ dependencies = [
 [[package]]
 name = "hotshot-events-service"
 version = "0.1.57"
-source = "git+https://github.com/EspressoSystems/hotshot-events-service.git?tag=0.1.57#176c1f2166fa77951c3ebed404135ec8f7386010"
+source = "git+https://github.com/EspressoSystems/hotshot-events-service.git?tag=0.1.58#f1aedb948344d7b03d8f34fa74b60896fff92966"
 dependencies = [
  "async-broadcast",
  "async-lock 2.8.0",
@@ -4886,8 +4904,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-example-types"
-version = "0.5.79"
-source = "git+https://www.github.com/EspressoSystems/HotShot.git?tag=0.5.83-patch1#99929f7d717100e174c568ac7728bbf63e43ed8b"
+version = "0.5.84"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.84#310553bfe3333cb16592941043191e3b7e1b5dbf"
 dependencies = [
  "anyhow",
  "async-lock 3.4.0",
@@ -4907,12 +4925,13 @@ dependencies = [
  "tokio",
  "url",
  "vbs",
+ "workspace-hack",
 ]
 
 [[package]]
 name = "hotshot-fakeapi"
-version = "0.5.79"
-source = "git+https://www.github.com/EspressoSystems/HotShot.git?tag=0.5.83-patch1#99929f7d717100e174c568ac7728bbf63e43ed8b"
+version = "0.5.84"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.84#310553bfe3333cb16592941043191e3b7e1b5dbf"
 dependencies = [
  "anyhow",
  "async-lock 3.4.0",
@@ -4925,23 +4944,25 @@ dependencies = [
  "tokio",
  "toml 0.8.19",
  "vbs",
+ "workspace-hack",
 ]
 
 [[package]]
 name = "hotshot-macros"
-version = "0.5.79"
-source = "git+https://www.github.com/EspressoSystems/HotShot.git?tag=0.5.83-patch1#99929f7d717100e174c568ac7728bbf63e43ed8b"
+version = "0.5.84"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.84#310553bfe3333cb16592941043191e3b7e1b5dbf"
 dependencies = [
  "derive_builder",
  "proc-macro2",
  "quote",
  "syn 2.0.95",
+ "workspace-hack",
 ]
 
 [[package]]
 name = "hotshot-orchestrator"
-version = "0.5.79"
-source = "git+https://www.github.com/EspressoSystems/HotShot.git?tag=0.5.83-patch1#99929f7d717100e174c568ac7728bbf63e43ed8b"
+version = "0.5.84"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.84#310553bfe3333cb16592941043191e3b7e1b5dbf"
 dependencies = [
  "anyhow",
  "async-lock 3.4.0",
@@ -4959,12 +4980,12 @@ dependencies = [
  "toml 0.8.19",
  "tracing",
  "vbs",
+ "workspace-hack",
 ]
 
 [[package]]
 name = "hotshot-query-service"
 version = "0.1.76"
-source = "git+https://github.com/EspressoSystems/hotshot-query-service?tag=v0.1.76#f27507fca3d54fb80c18d952c22f39b04f7d195f"
 dependencies = [
  "anyhow",
  "ark-serialize 0.4.2",
@@ -4972,15 +4993,18 @@ dependencies = [
  "async-trait",
  "atomic_store",
  "backoff",
+ "backtrace-on-stack-overflow",
  "bincode",
  "chrono",
+ "clap",
  "committable",
  "custom_debug",
  "derivative",
- "derive_more 0.99.18",
+ "derive_more 1.0.0",
  "either",
  "espresso-macros",
  "futures",
+ "generic-array",
  "hotshot",
  "hotshot-example-types",
  "hotshot-testing",
@@ -4996,6 +5020,7 @@ dependencies = [
  "rand 0.8.5",
  "refinery",
  "refinery-core",
+ "reqwest 0.12.12",
  "serde",
  "serde_json",
  "snafu 0.8.5",
@@ -5019,8 +5044,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-stake-table"
-version = "0.5.79"
-source = "git+https://www.github.com/EspressoSystems/HotShot.git?tag=0.5.83-patch1#99929f7d717100e174c568ac7728bbf63e43ed8b"
+version = "0.5.84"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.84#310553bfe3333cb16592941043191e3b7e1b5dbf"
 dependencies = [
  "ark-bn254",
  "ark-ed-on-bn254",
@@ -5036,6 +5061,7 @@ dependencies = [
  "primitive-types",
  "serde",
  "tagged-base64",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -5081,8 +5107,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-task"
-version = "0.5.79"
-source = "git+https://www.github.com/EspressoSystems/HotShot.git?tag=0.5.83-patch1#99929f7d717100e174c568ac7728bbf63e43ed8b"
+version = "0.5.84"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.84#310553bfe3333cb16592941043191e3b7e1b5dbf"
 dependencies = [
  "async-broadcast",
  "async-trait",
@@ -5090,12 +5116,13 @@ dependencies = [
  "tokio",
  "tracing",
  "utils",
+ "workspace-hack",
 ]
 
 [[package]]
 name = "hotshot-task-impls"
-version = "0.5.79"
-source = "git+https://www.github.com/EspressoSystems/HotShot.git?tag=0.5.83-patch1#99929f7d717100e174c568ac7728bbf63e43ed8b"
+version = "0.5.84"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.84#310553bfe3333cb16592941043191e3b7e1b5dbf"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -5124,12 +5151,13 @@ dependencies = [
  "utils",
  "vbs",
  "vec1",
+ "workspace-hack",
 ]
 
 [[package]]
 name = "hotshot-testing"
-version = "0.5.79"
-source = "git+https://www.github.com/EspressoSystems/HotShot.git?tag=0.5.83-patch1#99929f7d717100e174c568ac7728bbf63e43ed8b"
+version = "0.5.84"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.84#310553bfe3333cb16592941043191e3b7e1b5dbf"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -5165,12 +5193,13 @@ dependencies = [
  "url",
  "vbs",
  "vec1",
+ "workspace-hack",
 ]
 
 [[package]]
 name = "hotshot-types"
 version = "0.1.11"
-source = "git+https://www.github.com/EspressoSystems/HotShot.git?tag=0.5.83-patch1#99929f7d717100e174c568ac7728bbf63e43ed8b"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.84#310553bfe3333cb16592941043191e3b7e1b5dbf"
 dependencies = [
  "anyhow",
  "ark-bn254",
@@ -5220,6 +5249,7 @@ dependencies = [
  "utils",
  "vbs",
  "vec1",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -6281,7 +6311,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "55cb077ad656299f160924eb2912aa147d7339ea7d69e1b5517326fdcec3c1ca"
 dependencies = [
  "ascii-canvas",
- "bit-set 0.5.3",
+ "bit-set",
  "ena",
  "itertools 0.11.0",
  "lalrpop-util",
@@ -6751,15 +6781,15 @@ dependencies = [
 
 [[package]]
 name = "libp2p-networking"
-version = "0.5.79"
-source = "git+https://www.github.com/EspressoSystems/HotShot.git?tag=0.5.83-patch1#99929f7d717100e174c568ac7728bbf63e43ed8b"
+version = "0.5.84"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.84#310553bfe3333cb16592941043191e3b7e1b5dbf"
 dependencies = [
  "anyhow",
  "async-lock 3.4.0",
  "async-trait",
  "bincode",
  "blake3",
- "cbor4ii",
+ "cbor4ii 1.0.0",
  "delegate",
  "derive_builder",
  "derive_more 1.0.0",
@@ -6775,6 +6805,7 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber 0.3.19",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -6808,7 +6839,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1356c9e376a94a75ae830c42cdaea3d4fe1290ba409a22c809033d1b7dcab0a6"
 dependencies = [
  "async-trait",
- "cbor4ii",
+ "cbor4ii 0.3.3",
  "futures",
  "futures-bounded",
  "futures-timer",
@@ -7158,7 +7189,7 @@ dependencies = [
 [[package]]
 name = "marketplace-builder-core"
 version = "0.1.59"
-source = "git+https://github.com/EspressoSystems/marketplace-builder-core?tag=0.1.59#4647c30a3d447e65deea8cc8024c0f860fca169f"
+source = "git+https://github.com/EspressoSystems/marketplace-builder-core?tag=0.5.84#80fb768e8d0358f998c74509cec6a9a2bdb59d64"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -7183,7 +7214,7 @@ dependencies = [
 [[package]]
 name = "marketplace-builder-shared"
 version = "0.1.59"
-source = "git+https://github.com/EspressoSystems/marketplace-builder-core?tag=0.1.59#4647c30a3d447e65deea8cc8024c0f860fca169f"
+source = "git+https://github.com/EspressoSystems/marketplace-builder-core?tag=0.5.84#80fb768e8d0358f998c74509cec6a9a2bdb59d64"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -7309,6 +7340,15 @@ name = "memchr"
 version = "2.7.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "78ca9ab1a0babb1e7d5695e3530886289c18cf2f87ec19a575a0abdce112e3a3"
+
+[[package]]
+name = "memoffset"
+version = "0.6.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5aa361d4faea93603064a027415f07bd8e1d5c88c9fbf68bf56a285428fd79ce"
+dependencies = [
+ "autocfg",
+]
 
 [[package]]
 name = "memoize"
@@ -7560,6 +7600,19 @@ name = "new_debug_unreachable"
 version = "1.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "650eef8c711430f1a879fdd01d4745a7deea475becfb90269c06775983bbf086"
+
+[[package]]
+name = "nix"
+version = "0.23.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8f3790c00a0150112de0f4cd161e3d7fc4b2d8a5542ffc35f099a2562aecb35c"
+dependencies = [
+ "bitflags 1.3.2",
+ "cc",
+ "cfg-if",
+ "libc",
+ "memoffset",
+]
 
 [[package]]
 name = "nix"
@@ -7834,9 +7887,9 @@ dependencies = [
 
 [[package]]
 name = "openssl"
-version = "0.10.68"
+version = "0.10.70"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6174bc48f102d208783c2c84bf931bb75927a617866870de8a4ea85597f871f5"
+checksum = "61cfb4e166a8bb8c9b55c500bc2308550148ece889be90f609377e58140f42c6"
 dependencies = [
  "bitflags 2.6.0",
  "cfg-if",
@@ -7866,9 +7919,9 @@ checksum = "ff011a302c396a5197692431fc1948019154afc178baf7d8e37367442a4601cf"
 
 [[package]]
 name = "openssl-sys"
-version = "0.9.104"
+version = "0.9.105"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "45abf306cbf99debc8195b66b7346498d7b10c210de50418b5ccd7ceba08c741"
+checksum = "8b22d5b84be05a8d6947c7cb71f7c849aa0f112acd4bf51c2a7c1c988ac0a9dc"
 dependencies = [
  "cc",
  "libc",
@@ -8503,12 +8556,12 @@ dependencies = [
 
 [[package]]
 name = "proptest"
-version = "1.6.0"
+version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "14cae93065090804185d3b75f0bf93b8eeda30c7a9b4a33d3bdb3988d6229e50"
+checksum = "b4c2511913b88df1637da85cc8d96ec8e43a3f8bb8ccb71ee1ac240d6f3df58d"
 dependencies = [
- "bit-set 0.8.0",
- "bit-vec 0.8.0",
+ "bit-set",
+ "bit-vec",
  "bitflags 2.6.0",
  "lazy_static",
  "num-traits",
@@ -9225,23 +9278,25 @@ dependencies = [
  "netlink-packet-utils",
  "netlink-proto",
  "netlink-sys",
- "nix",
+ "nix 0.26.4",
  "thiserror 1.0.69",
  "tokio",
 ]
 
 [[package]]
 name = "ruint"
-version = "1.12.3"
+version = "1.12.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2c3cc4c2511671f327125da14133d0c5c5d137f006a1017a16f557bc85b16286"
+checksum = "f5ef8fb1dd8de3870cb8400d51b4c2023854bbafd5431a3ac7e7317243e22d2f"
 dependencies = [
  "alloy-rlp",
  "ark-ff 0.3.0",
  "ark-ff 0.4.2",
  "bytes 1.9.0",
- "fastrlp",
+ "fastrlp 0.3.1",
+ "fastrlp 0.4.0",
  "num-bigint",
+ "num-integer",
  "num-traits",
  "parity-scale-codec",
  "primitive-types",
@@ -10264,10 +10319,20 @@ dependencies = [
 ]
 
 [[package]]
-name = "sqlx"
-version = "0.8.3"
+name = "sqlformat"
+version = "0.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4410e73b3c0d8442c5f99b425d7a435b5ee0ae4167b3196771dd3f7a01be745f"
+checksum = "7bba3a93db0cc4f7bdece8bb09e77e2e785c20bfebf79eb8340ed80708048790"
+dependencies = [
+ "nom",
+ "unicode_categories",
+]
+
+[[package]]
+name = "sqlx"
+version = "0.8.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "93334716a037193fac19df402f8571269c84a00852f6a7066b5d2616dcd64d3e"
 dependencies = [
  "sqlx-core",
  "sqlx-macros",
@@ -10278,33 +10343,39 @@ dependencies = [
 
 [[package]]
 name = "sqlx-core"
-version = "0.8.3"
+version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6a007b6936676aa9ab40207cde35daab0a04b823be8ae004368c0793b96a61e0"
+checksum = "d4d8060b456358185f7d50c55d9b5066ad956956fddec42ee2e8567134a8936e"
 dependencies = [
- "bit-vec 0.6.3",
+ "atoi",
+ "bit-vec",
+ "byteorder",
  "bytes 1.9.0",
  "crc",
  "crossbeam-queue",
  "either",
  "event-listener 5.4.0",
+ "futures-channel",
  "futures-core",
  "futures-intrusive",
  "futures-io",
  "futures-util",
- "hashbrown 0.15.2",
- "hashlink 0.10.0",
+ "hashbrown 0.14.5",
+ "hashlink 0.9.1",
+ "hex",
  "indexmap 2.7.0",
  "log",
  "memchr",
  "native-tls",
  "once_cell",
+ "paste",
  "percent-encoding",
  "serde",
  "serde_json",
  "sha2 0.10.8",
  "smallvec",
- "thiserror 2.0.10",
+ "sqlformat",
+ "thiserror 1.0.69",
  "time 0.3.37",
  "tokio",
  "tokio-stream",
@@ -10314,9 +10385,9 @@ dependencies = [
 
 [[package]]
 name = "sqlx-macros"
-version = "0.8.3"
+version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3112e2ad78643fef903618d78cf0aec1cb3134b019730edb039b69eaf531f310"
+checksum = "cac0692bcc9de3b073e8d747391827297e075c7710ff6276d9f7a1f3d58c6657"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -10327,9 +10398,9 @@ dependencies = [
 
 [[package]]
 name = "sqlx-macros-core"
-version = "0.8.3"
+version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4e9f90acc5ab146a99bf5061a7eb4976b573f560bc898ef3bf8435448dd5e7ad"
+checksum = "1804e8a7c7865599c9c79be146dc8a9fd8cc86935fa641d3ea58e5f0688abaa5"
 dependencies = [
  "dotenvy",
  "either",
@@ -10353,9 +10424,9 @@ dependencies = [
 
 [[package]]
 name = "sqlx-mysql"
-version = "0.8.3"
+version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4560278f0e00ce64938540546f59f590d60beee33fffbd3b9cd47851e5fff233"
+checksum = "64bb4714269afa44aef2755150a0fc19d756fb580a67db8885608cf02f47d06a"
 dependencies = [
  "atoi",
  "base64 0.22.1",
@@ -10388,7 +10459,7 @@ dependencies = [
  "smallvec",
  "sqlx-core",
  "stringprep",
- "thiserror 2.0.10",
+ "thiserror 1.0.69",
  "time 0.3.37",
  "tracing",
  "whoami",
@@ -10396,13 +10467,13 @@ dependencies = [
 
 [[package]]
 name = "sqlx-postgres"
-version = "0.8.3"
+version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c5b98a57f363ed6764d5b3a12bfedf62f07aa16e1856a7ddc2a0bb190a959613"
+checksum = "6fa91a732d854c5d7726349bb4bb879bb9478993ceb764247660aee25f67c2f8"
 dependencies = [
  "atoi",
  "base64 0.22.1",
- "bit-vec 0.6.3",
+ "bit-vec",
  "bitflags 2.6.0",
  "byteorder",
  "crc",
@@ -10410,6 +10481,7 @@ dependencies = [
  "etcetera",
  "futures-channel",
  "futures-core",
+ "futures-io",
  "futures-util",
  "hex",
  "hkdf 0.12.4",
@@ -10427,7 +10499,7 @@ dependencies = [
  "smallvec",
  "sqlx-core",
  "stringprep",
- "thiserror 2.0.10",
+ "thiserror 1.0.69",
  "time 0.3.37",
  "tracing",
  "whoami",
@@ -10435,9 +10507,9 @@ dependencies = [
 
 [[package]]
 name = "sqlx-sqlite"
-version = "0.8.3"
+version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f85ca71d3a5b24e64e1d08dd8fe36c6c95c339a896cc33068148906784620540"
+checksum = "d5b2cf34a45953bfd3daaf3db0f7a7878ab9b7a6b91b422d24a7a9e4c857b680"
 dependencies = [
  "atoi",
  "flume 0.11.1",
@@ -10749,9 +10821,9 @@ dependencies = [
 
 [[package]]
 name = "syn-solidity"
-version = "0.8.18"
+version = "0.8.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "31e89d8bf2768d277f40573c83a02a099e96d96dd3104e13ea676194e61ac4b0"
+checksum = "b7f6a4b9002584ea56d0a19713b65da44cbbf6070aca9ae0360577cba5c4db68"
 dependencies = [
  "paste",
  "proc-macro2",
@@ -11743,6 +11815,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ebc1c04c71510c7f702b52b7c350734c9ff1295c464a03335b00bb84fc54f853"
 
 [[package]]
+name = "unicode_categories"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "39ec24b3121d976906ece63c9daad25b85969647682eee313cb5779fdd69e14e"
+
+[[package]]
 name = "universal-hash"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -11830,10 +11908,11 @@ checksum = "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821"
 
 [[package]]
 name = "utils"
-version = "0.5.79"
-source = "git+https://www.github.com/EspressoSystems/HotShot.git?tag=0.5.83-patch1#99929f7d717100e174c568ac7728bbf63e43ed8b"
+version = "0.5.84"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.84#310553bfe3333cb16592941043191e3b7e1b5dbf"
 dependencies = [
  "tracing",
+ "workspace-hack",
 ]
 
 [[package]]
@@ -11947,9 +12026,9 @@ checksum = "6a02e4885ed3bc0f2de90ea6dd45ebcbb66dacffe03547fadbb0eeae2770887d"
 
 [[package]]
 name = "wait-timeout"
-version = "0.2.0"
+version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9f200f5b12eb75f8c1ed65abd4b2db8a6e1b138a20de009dacee265a2498f3f6"
+checksum = "09ac3b126d3914f9849036f826e054cbabdc8519970b8998ddaf3b5bd3c65f11"
 dependencies = [
  "libc",
 ]
@@ -12453,6 +12532,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "winnow"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "86e376c75f4f43f44db463cf729e0d3acbf954d13e22c51e26e4c264b4ab545f"
+dependencies = [
+ "memchr",
+]
+
+[[package]]
 name = "winreg"
 version = "0.50.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -12460,6 +12548,93 @@ checksum = "524e57b2c537c0f9b1e69f1965311ec12182b4122e45035b1508cd24d2adadb1"
 dependencies = [
  "cfg-if",
  "windows-sys 0.48.0",
+]
+
+[[package]]
+name = "workspace-hack"
+version = "0.1.0"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.84#310553bfe3333cb16592941043191e3b7e1b5dbf"
+dependencies = [
+ "ark-bls12-377",
+ "ark-bls12-381",
+ "ark-bn254",
+ "ark-bw6-761",
+ "ark-crypto-primitives",
+ "ark-ff 0.4.2",
+ "ark-relations",
+ "ark-serialize 0.4.2",
+ "ark-std 0.4.0",
+ "arrayvec",
+ "async-std",
+ "async-tungstenite",
+ "base64 0.13.1",
+ "base64 0.22.1",
+ "bytes 1.9.0",
+ "concurrent-queue",
+ "crossbeam-utils",
+ "crunchy",
+ "crypto-common",
+ "data-encoding",
+ "derive_more 1.0.0",
+ "derive_more-impl",
+ "digest 0.10.7",
+ "digest 0.9.0",
+ "displaydoc",
+ "downcast-rs",
+ "either",
+ "event-listener 5.4.0",
+ "event-listener-strategy",
+ "form_urlencoded",
+ "futures",
+ "futures-channel",
+ "futures-core",
+ "futures-executor",
+ "futures-io",
+ "futures-sink",
+ "futures-task",
+ "futures-util",
+ "generic-array",
+ "getrandom 0.2.15",
+ "hashbrown 0.14.5",
+ "hashbrown 0.15.2",
+ "hex",
+ "itertools 0.12.1",
+ "jf-relation",
+ "jf-rescue",
+ "jf-signature 0.2.0",
+ "jf-utils",
+ "libp2p-identity",
+ "libsecp256k1-core",
+ "log",
+ "memchr",
+ "multihash",
+ "num-bigint",
+ "num-integer",
+ "num-traits",
+ "percent-encoding",
+ "rand 0.8.5",
+ "regex",
+ "regex-automata 0.4.9",
+ "regex-syntax 0.8.5",
+ "rustls-pki-types",
+ "sha2 0.9.9",
+ "sha3",
+ "smallvec",
+ "standback",
+ "subtle",
+ "syn 2.0.95",
+ "time 0.3.37",
+ "tokio",
+ "toml_datetime",
+ "toml_edit 0.22.22",
+ "tracing",
+ "tracing-core",
+ "tracing-log",
+ "tracing-subscriber 0.3.19",
+ "tungstenite 0.13.0",
+ "uint",
+ "url",
+ "zeroize",
 ]
 
 [[package]]

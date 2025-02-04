@@ -6,6 +6,7 @@ extend-exclude = [
   "**/*.pdf",
   "doc/*.svg",
   "doc/*.puml",
+  "**/*.drawio",
   "contracts/lib",
   "contract-bindings-alloy",
   "contract-bindings-ethers",

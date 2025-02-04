@@ -1340,12 +1340,11 @@ mod test {
         );
         let deployer_client = Arc::new(deployer_client);
 
-        let v: Vec<contract_bindings_ethers::permissioned_stake_table::NodeInfo> = Vec::new();
         // deploy the stake_table contract
         let stake_table_contract =
             contract_bindings_ethers::permissioned_stake_table::PermissionedStakeTable::deploy(
                 deployer_client.clone(),
-                v.clone(),
+                Vec::<contract_bindings_ethers::permissioned_stake_table::NodeInfo>::new(),
             )
             .unwrap()
             .send()
@@ -1358,7 +1357,7 @@ mod test {
 
         let new_nodes: Vec<contract_bindings_ethers::permissioned_stake_table::NodeInfo> =
             vec![node.into()];
-        let updater = stake_table_contract.update(v, new_nodes);
+        let updater = stake_table_contract.update(vec![], new_nodes);
         updater.send().await?.await?;
 
         let block = l1_client

@@ -10,7 +10,7 @@ use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_std::rand::{Rng, RngCore};
 use contract_bindings_alloy::permissionedstaketable::{
     EdOnBN254::EdOnBN254Point as EdOnBN254PointAlloy,
-    PermissionedStakeTable::NodeInfo as NodeInfoAlloy, BN254::G2Point,
+    PermissionedStakeTable::NodeInfo as NodeInfoAlloy, BN254::G2Point as G2PointAlloy,
 };
 use contract_bindings_ethers::permissioned_stake_table::{self, EdOnBN254Point, NodeInfo};
 use diff_test_bn254::ParsedG2Point;
@@ -157,6 +157,10 @@ impl NodeInfoJf {
             da: rng.gen(),
         }
     }
+
+    pub fn stake_table_key_alloy(&self) -> G2PointAlloy {
+        bls_jf_to_alloy(self.stake_table_key)
+    }
 }
 
 impl From<NodeInfoJf> for NodeInfo {
@@ -191,7 +195,7 @@ impl From<NodeInfoJf> for NodeInfoAlloy {
         let ParsedG2Point { x0, x1, y0, y1 } = stake_table_key.to_affine().into();
         let schnorr: ParsedEdOnBN254Point = state_ver_key.to_affine().into();
         Self {
-            blsVK: G2Point {
+            blsVK: G2PointAlloy {
                 x0: x0.to_alloy(),
                 x1: x1.to_alloy(),
                 y0: y0.to_alloy(),
@@ -219,25 +223,7 @@ impl From<NodeInfo> for NodeInfoJf {
             schnorr_vk,
             is_da,
         } = value;
-        let stake_table_key = {
-            let g2 = diff_test_bn254::ParsedG2Point {
-                x0: bls_vk.x_0,
-                x1: bls_vk.x_1,
-                y0: bls_vk.y_0,
-                y1: bls_vk.y_1,
-            };
-            let g2_affine = short_weierstrass::Affine::<ark_bn254::g2::Config>::from(g2);
-            let mut bytes = vec![];
-            // TODO: remove serde round-trip once jellyfin provides a way to
-            // convert from Affine representation to VerKey.
-            //
-            // Serialization and de-serialization shouldn't fail.
-            g2_affine
-                .into_group()
-                .serialize_compressed(&mut bytes)
-                .unwrap();
-            BLSPubKey::deserialize_compressed(&bytes[..]).unwrap()
-        };
+        let stake_table_key = bls_sol_to_jf(bls_vk);
         let state_ver_key = {
             let g1_point: ParsedEdOnBN254Point = schnorr_vk.into();
             let state_sk_affine = twisted_edwards::Affine::<EdwardsConfig>::from(g1_point);
@@ -303,6 +289,60 @@ impl From<PeerConfigKeys<BLSPubKey>> for NodeInfoJf {
             state_ver_key,
             da,
         }
+    }
+}
+
+pub fn bls_jf_to_sol(bls_vk: BLSPubKey) -> permissioned_stake_table::G2Point {
+    let ParsedG2Point { x0, x1, y0, y1 } = bls_vk.to_affine().into();
+    permissioned_stake_table::G2Point {
+        x_0: x0,
+        x_1: x1,
+        y_0: y0,
+        y_1: y1,
+    }
+}
+
+fn bls_conv_helper(g2: diff_test_bn254::ParsedG2Point) -> BLSPubKey {
+    let g2_affine = short_weierstrass::Affine::<ark_bn254::g2::Config>::from(g2);
+    let mut bytes = vec![];
+    // TODO: remove serde round-trip once jellyfin provides a way to
+    // convert from Affine representation to VerKey.
+    //
+    // Serialization and de-serialization shouldn't fail.
+    g2_affine
+        .into_group()
+        .serialize_compressed(&mut bytes)
+        .unwrap();
+    BLSPubKey::deserialize_compressed(&bytes[..]).unwrap()
+}
+
+pub fn bls_sol_to_jf(bls_vk: permissioned_stake_table::G2Point) -> BLSPubKey {
+    let g2 = diff_test_bn254::ParsedG2Point {
+        x0: bls_vk.x_0,
+        x1: bls_vk.x_1,
+        y0: bls_vk.y_0,
+        y1: bls_vk.y_1,
+    };
+    bls_conv_helper(g2)
+}
+
+pub fn bls_alloy_to_jf(bls_vk: G2PointAlloy) -> BLSPubKey {
+    let g2 = diff_test_bn254::ParsedG2Point {
+        x0: bls_vk.x0.to_ethers(),
+        x1: bls_vk.x1.to_ethers(),
+        y0: bls_vk.y0.to_ethers(),
+        y1: bls_vk.y1.to_ethers(),
+    };
+    bls_conv_helper(g2)
+}
+
+pub fn bls_jf_to_alloy(bls_vk: BLSPubKey) -> G2PointAlloy {
+    let ParsedG2Point { x0, x1, y0, y1 } = bls_vk.to_affine().into();
+    G2PointAlloy {
+        x0: x0.to_alloy(),
+        x1: x1.to_alloy(),
+        y0: y0.to_alloy(),
+        y1: y1.to_alloy(),
     }
 }
 

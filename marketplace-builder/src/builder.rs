@@ -402,7 +402,7 @@ mod test {
     /// Get the view number and commitment if given a `QuorumProposal` event.
     async fn proposal_view_number_and_commitment(event: Event) -> Option<(u64, VidCommitment)> {
         if let EventType::QuorumProposal { proposal, .. } = event.event {
-            let view_number = *proposal.data.view_number;
+            let view_number = *proposal.data.view_number();
             let commitment = Leaf2::from_quorum_proposal(&proposal.data).payload_commitment();
             return Some((view_number, commitment));
         }

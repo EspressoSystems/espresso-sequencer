@@ -1,11 +1,12 @@
 use anyhow::{anyhow, Result};
 use client::SequencerClient;
-use espresso_types::FeeAmount;
+use espresso_types::{FeeAmount, FeeVersion, MarketplaceVersion};
 use ethers::prelude::*;
 use futures::future::join_all;
 use std::{fmt, str::FromStr, time::Duration};
 use surf_disco::Url;
 use tokio::time::{sleep, timeout};
+use vbs::version::StaticVersionType;
 
 const L1_PROVIDER_RETRY_INTERVAL: Duration = Duration::from_secs(1);
 // TODO add to .env
@@ -81,10 +82,10 @@ impl TestConfig {
         // which is the initial mainnet version without any upgrades.
         let sequencer_version: u8 = dotenvy::var("INTEGRATION_TEST_SEQUENCER_VERSION")
             .map(|v| v.parse().unwrap())
-            .unwrap_or(2);
+            .unwrap_or(FeeVersion::version().minor as u8);
 
         // Varies between v0 and v3.
-        let load_generator_url = if sequencer_version >= 3 {
+        let load_generator_url = if sequencer_version >= MarketplaceVersion::version().minor as u8 {
             url_from_port(dotenvy::var(
                 "ESPRESSO_SUBMIT_TRANSACTIONS_PRIVATE_RESERVE_PORT",
             )?)?
@@ -93,17 +94,18 @@ impl TestConfig {
         };
 
         // TODO test both builders (probably requires some refactoring).
-        let builder_url = if sequencer_version >= 3 {
+        let builder_url = if sequencer_version as u16 >= MarketplaceVersion::version().minor {
             let url = url_from_port(dotenvy::var("ESPRESSO_RESERVE_BUILDER_SERVER_PORT")?)?;
+            let url = Url::from_str(&url)?;
+            wait_for_service(url.clone(), 1000, 200).await.unwrap();
 
-            Url::from_str(&url)?
-                .join("bundle_info/builderaddress")
-                .unwrap()
+            url.join("bundle_info/builderaddress").unwrap()
         } else {
             let url = url_from_port(dotenvy::var("ESPRESSO_BUILDER_SERVER_PORT")?)?;
-            Url::from_str(&url)?
-                .join("block_info/builderaddress")
-                .unwrap()
+            let url = Url::from_str(&url)?;
+            wait_for_service(url.clone(), 1000, 200).await.unwrap();
+
+            url.join("block_info/builderaddress").unwrap()
         };
 
         let builder_address = get_builder_address(builder_url).await;
@@ -222,9 +224,8 @@ impl TestConfig {
     }
 }
 
-/// Get Address from builder after waiting for builder to become ready.
+/// Get Address from builder
 pub async fn get_builder_address(url: Url) -> Address {
-    let _ = wait_for_service(url.clone(), 1000, 200).await;
     for _ in 0..5 {
         // Try to get builder address somehow
         if let Ok(body) = reqwest::get(url.clone()).await {
@@ -236,20 +237,41 @@ pub async fn get_builder_address(url: Url) -> Address {
     panic!("Error: Failed to retrieve address from builder!");
 }
 
+/// [wait_for_service] will check to see if a service, identified by the given
+/// Url, is available, by checking it's health check endpoint.  If the health
+/// check does not any time before the timeout, then the service will return
+/// an [Err] with the relevant error.
+///
+/// > Note: This function only waits for a single health check pass before
+/// > returning an [Ok] result.
 async fn wait_for_service(url: Url, interval: u64, timeout_duration: u64) -> Result<String> {
+    // utilize the correct path for the health check
+    let Ok(url) = url.join("/healthcheck") else {
+        return Err(anyhow!("Wait for service, could not join url: {}", url));
+    };
+
     timeout(Duration::from_secs(timeout_duration), async {
         loop {
-            if let Ok(body) = reqwest::get(format!("{url}/healthcheck")).await {
-                return body.text().await.map_err(|e| {
-                    anyhow!(
-                        "Wait for service, could not decode response: ({}) {}",
-                        url,
-                        e
-                    )
-                });
-            } else {
+            // Ensure that we get a response from the server
+            let Ok(response) = reqwest::get(url.clone()).await else {
                 sleep(Duration::from_millis(interval)).await;
+                continue;
+            };
+
+            // Check the status code of the response
+            if !response.status().is_success() {
+                // The server did not return a success
+                sleep(Duration::from_millis(interval)).await;
+                continue;
             }
+
+            return response.text().await.map_err(|e| {
+                anyhow!(
+                    "Wait for service, could not decode response: ({}) {}",
+                    url,
+                    e
+                )
+            });
         }
     })
     .await
