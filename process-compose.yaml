@@ -522,15 +522,13 @@ processes:
     depends_on:
       sequencer0:
         condition: process_healthy
-      fund-builder:
-        condition: process_completed
     readiness_probe:
       http_get:
         scheme: http
         host: localhost
         port: $ESPRESSO_BUILDER_SERVER_PORT
         path: /healthcheck
-      failure_threshold: 100
+      failure_threshold: 5
       period_seconds: 1
     availability:
       restart: "exit_on_failure"
