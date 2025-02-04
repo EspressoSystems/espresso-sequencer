@@ -29,7 +29,6 @@
 mod extension;
 pub mod fetching;
 pub mod fs;
-pub mod leaf_only;
 mod metrics;
 mod notifier;
 pub mod sql;

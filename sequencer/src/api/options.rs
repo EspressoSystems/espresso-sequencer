@@ -12,7 +12,7 @@ use futures::{
 };
 use hotshot_events_service::events::Error as EventStreamingError;
 use hotshot_query_service::{
-    data_source::{sql::LeafOnlySqlDataSource, ExtensibleDataSource},
+    data_source::ExtensibleDataSource,
     fetching::provider::QueryServiceProvider,
     merklized_state::MerklizedStateDataSource,
     status::{self, UpdateStatusData},
@@ -326,42 +326,26 @@ impl Options {
             tracing::info!("will fetch missing data from {peer}");
             provider = provider.with_provider(QueryServiceProvider::new(peer, bind_version));
         }
-        if mod_opt.lightweight {
-            tracing::info!("using light weight data source");
-            let ds = LeafOnlySqlDataSource::create(mod_opt.clone(), provider, false).await?;
-            let (metrics, ds, mut app) = self
-                .init_app_modules(ds, state.clone(), bind_version)
-                .await?;
+        let ds = sql::DataSource::create(mod_opt.clone(), provider, false).await?;
 
-            self.init_state_and_event_modules(&mut app, state.clone(), tasks, ds.clone())
-                .await?;
-            tasks.spawn(
-                "API server",
-                self.listen(self.http.port, app, SequencerApiVersion::instance()),
-            );
-            Ok((metrics, Box::new(ApiEventConsumer::from(ds))))
-        } else {
-            let ds = sql::DataSource::create(mod_opt.clone(), provider, false).await?;
-            tracing::info!("0x001");
-            let (metrics, ds, mut app) = self
-                .init_app_modules(ds, state.clone(), bind_version)
-                .await?;
-            tracing::info!("0x002");
-            if self.explorer.is_some() {
-                app.register_module("explorer", endpoints::explorer()?)?;
-            };
-            tracing::info!("0x003");
-            self.init_state_and_event_modules(&mut app, state.clone(), tasks, ds.clone())
-                .await?;
-            tracing::info!("0x004");
-            tasks.spawn(
-                "API server",
-                self.listen(self.http.port, app, SequencerApiVersion::instance()),
-            );
+        let (metrics, ds, mut app) = self
+            .init_app_modules(ds, state.clone(), bind_version)
+            .await?;
 
-            tracing::info!(">>>>> 111");
-            Ok((metrics, Box::new(ApiEventConsumer::from(ds))))
-        }
+        if self.explorer.is_some() {
+            app.register_module("explorer", endpoints::explorer()?)?;
+        };
+
+        self.init_state_and_event_modules(&mut app, state.clone(), tasks, ds.clone())
+            .await?;
+
+        tasks.spawn(
+            "API server",
+            self.listen(self.http.port, app, SequencerApiVersion::instance()),
+        );
+
+        tracing::info!(">>>>> 111");
+        Ok((metrics, Box::new(ApiEventConsumer::from(ds))))
     }
 
     // Enable the events streaming api module

@@ -145,7 +145,7 @@ where
                         fetcher: fetcher.clone(),
                     }];
 
-                    if !fetcher.lightweight {
+                    if !fetcher.leaf_only {
                         callbacks.push(
                             HeaderCallback::Payload {
                                 fetcher: fetcher.clone(),

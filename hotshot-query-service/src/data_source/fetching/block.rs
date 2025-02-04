@@ -97,7 +97,7 @@ where
         P: AvailabilityProvider<Types>,
     {
         // Do not fetch if we are in light weight mode
-        if fetcher.lightweight {
+        if fetcher.leaf_only {
             return Ok(());
         }
 
@@ -229,7 +229,7 @@ where
         P: AvailabilityProvider<Types>,
     {
         // If we're in light-weight mode, we don't need to fetch the VID common data.
-        if fetcher.lightweight {
+        if fetcher.leaf_only {
             return Ok(());
         }
         // We don't have storage for the payload alone, only the whole block. So if we need to fetch
@@ -347,7 +347,7 @@ where
         P: AvailabilityProvider<Types>,
     {
         // If we're in light-weight mode, we don't need to fetch the VID common data.
-        if fetcher.lightweight {
+        if fetcher.leaf_only {
             return Ok(());
         }
         // Trigger the full block to be fetched. This will be enough to satisfy this request for the

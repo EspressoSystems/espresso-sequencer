@@ -1587,6 +1587,7 @@ mod test {
     use hotshot::types::EventType;
     use hotshot_query_service::{
         availability::{BlockQueryData, LeafQueryData, VidCommonQueryData},
+        data_source::FetchingDataSource,
         types::HeightIndexed,
     };
     use hotshot_types::{
@@ -1613,7 +1614,6 @@ mod test {
     };
     use super::*;
     use crate::{
-        api::sql::LightWeightDataSource,
         catchup::{NullStateCatchup, StatePeers},
         persistence::no_storage,
         testing::{TestConfig, TestConfigBuilder},
@@ -1668,7 +1668,9 @@ mod test {
         let port = pick_unused_port().expect("No ports free");
 
         let storage = SqlDataSource::create_storage().await;
-        let options = SqlDataSource::options(&storage, Options::with_port(port));
+
+        let options = SqlDataSource::light_weight_options(&storage, Options::with_port(port));
+        options.query_sql(Query::default(), storage);
 
         let anvil = Anvil::new().spawn();
         let l1 = anvil.endpoint().parse().unwrap();
@@ -1741,13 +1743,13 @@ mod test {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn test_light_weight_data_source() {
+    async fn test_leaf_only_data_source() {
         setup_test();
 
         let port = pick_unused_port().expect("No ports free");
 
-        let storage = LightWeightDataSource::create_storage().await;
-        let options = LightWeightDataSource::options(&storage, Options::with_port(port));
+        let storage = SqlDataSource::create_storage().await;
+        let options = SqlDataSource::leaf_only_ds_options(&storage, Options::with_port(port));
 
         let anvil = Anvil::new().spawn();
         let l1 = anvil.endpoint().parse().unwrap();

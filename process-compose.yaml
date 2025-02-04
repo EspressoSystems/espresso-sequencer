@@ -223,7 +223,7 @@ processes:
       restart: exit_on_failure
 
   sequencer2:
-    command: sequencer-sqlite -- http -- query -- storage-sql
+    command: sequencer -- http -- query -- storage-fs
     environment:
       - ESPRESSO_SEQUENCER_LIGHTWEIGHT=true
       - ESPRESSO_SEQUENCER_API_PORT=$ESPRESSO_SEQUENCER2_API_PORT
@@ -272,7 +272,7 @@ processes:
       restart: exit_on_failure
 
   sequencer3:
-    command: sequencer-sqlite -- http -- query -- storage-sql
+    command: sequencer -- http -- query -- storage-fs
     environment:
       - ESPRESSO_SEQUENCER_LIGHTWEIGHT=true
       - ESPRESSO_SEQUENCER_API_PORT=$ESPRESSO_SEQUENCER3_API_PORT
@@ -322,7 +322,7 @@ processes:
       restart: exit_on_failure
 
   sequencer4:
-    command: sequencer-sqlite -- storage-sql -- http -- query
+    command: sequencer -- storage-fs -- http -- query
     environment:
       - ESPRESSO_SEQUENCER_API_PORT=$ESPRESSO_SEQUENCER4_API_PORT
       - ESPRESSO_SEQUENCER_STATE_PEERS=http://localhost:$ESPRESSO_SEQUENCER_API_PORT

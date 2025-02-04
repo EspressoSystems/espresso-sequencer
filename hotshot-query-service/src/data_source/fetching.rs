@@ -159,7 +159,7 @@ pub struct Builder<Types, S, P> {
     proactive_fetching: bool,
     aggregator: bool,
     aggregator_chunk_size: Option<usize>,
-    lightweight: bool,
+    leaf_only: bool,
     _types: PhantomData<Types>,
 }
 
@@ -196,13 +196,13 @@ impl<Types, S, P> Builder<Types, S, P> {
             proactive_fetching: true,
             aggregator: true,
             aggregator_chunk_size: None,
-            lightweight: false,
+            leaf_only: false,
             _types: Default::default(),
         }
     }
 
-    pub fn with_lightweight(mut self) -> Self {
-        self.lightweight = true;
+    pub fn leaf_only(mut self) -> Self {
+        self.leaf_only = true;
         self
     }
 
@@ -358,8 +358,8 @@ impl<Types, S, P> Builder<Types, S, P> {
         self
     }
 
-    pub fn is_lightweight(&self) -> bool {
-        self.lightweight
+    pub fn is_leaf_only(&self) -> bool {
+        self.leaf_only
     }
 }
 
@@ -625,6 +625,13 @@ where
     where
         ID: Into<BlockId<Types>> + Send + Sync,
     {
+        if self.fetcher.leaf_only {
+            let mut tx = self.read().await.map_err(|err| QueryError::Error {
+                message: err.to_string(),
+            })?;
+            return tx.get_header(id.into()).await.map(Fetch::Ready);
+        }
+
         let block: Fetch<BlockQueryData<Types>> = self.fetcher.get(id.into()).await;
         Ok(block.map(|b| b.header().clone()))
     }
@@ -633,6 +640,12 @@ where
     where
         ID: Into<BlockId<Types>> + Send + Sync,
     {
+        if self.fetcher.leaf_only {
+            return Err(QueryError::Error {
+                message: "block is not supported for leaf only data source".to_string(),
+            });
+        }
+
         Ok(self.fetcher.get(id.into()).await)
     }
 
@@ -640,6 +653,12 @@ where
     where
         ID: Into<BlockId<Types>> + Send + Sync,
     {
+        if self.fetcher.leaf_only {
+            return Err(QueryError::Error {
+                message: "payload is not supported for leaf only data source".to_string(),
+            });
+        }
+
         Ok(self.fetcher.get(id.into()).await)
     }
 
@@ -647,6 +666,11 @@ where
     where
         ID: Into<BlockId<Types>> + Send + Sync,
     {
+        if self.fetcher.leaf_only {
+            return Err(QueryError::Error {
+                message: "payload metadata is not supported for leaf only data source".to_string(),
+            });
+        }
         Ok(self.fetcher.get(id.into()).await)
     }
 
@@ -678,6 +702,11 @@ where
     where
         R: RangeBounds<usize> + Send + 'static,
     {
+        if self.fetcher.leaf_only {
+            return Err(QueryError::Error {
+                message: "block range is not supported for leaf only data source".to_string(),
+            });
+        }
         Ok(self.fetcher.clone().get_range(range))
     }
 
@@ -685,10 +714,10 @@ where
     where
         R: RangeBounds<usize> + Send + 'static,
     {
-        let blocks: FetchStream<BlockQueryData<Types>> = self.fetcher.clone().get_range(range);
+        let leaves: FetchStream<LeafQueryData<Types>> = self.fetcher.clone().get_range(range);
 
-        Ok(blocks
-            .map(|fetch| fetch.map(|b| b.header().clone()))
+        Ok(leaves
+            .map(|fetch| fetch.map(|leaf| leaf.leaf.block_header().clone()))
             .boxed())
     }
 
@@ -699,6 +728,12 @@ where
     where
         R: RangeBounds<usize> + Send + 'static,
     {
+        if self.fetcher.leaf_only {
+            return Err(QueryError::Error {
+                message: "payload range is not supported for leaf only data source".to_string(),
+            });
+        }
+
         Ok(self.fetcher.clone().get_range(range))
     }
 
@@ -709,6 +744,12 @@ where
     where
         R: RangeBounds<usize> + Send + 'static,
     {
+        if self.fetcher.leaf_only {
+            return Err(QueryError::Error {
+                message: "payload metadata range is not supported for leaf only data source"
+                    .to_string(),
+            });
+        }
         Ok(self.fetcher.clone().get_range(range))
     }
 
@@ -745,6 +786,12 @@ where
         start: Bound<usize>,
         end: usize,
     ) -> QueryResult<FetchStream<BlockQueryData<Types>>> {
+        if self.fetcher.leaf_only {
+            return Err(QueryError::Error {
+                message: "block range is not supported for leaf only data source".to_string(),
+            });
+        }
+
         Ok(self.fetcher.clone().get_range_rev(start, end))
     }
 
@@ -753,6 +800,12 @@ where
         start: Bound<usize>,
         end: usize,
     ) -> QueryResult<FetchStream<PayloadQueryData<Types>>> {
+        if self.fetcher.leaf_only {
+            return Err(QueryError::Error {
+                message: "payload range is not supported for leaf only data source".to_string(),
+            });
+        }
+
         Ok(self.fetcher.clone().get_range_rev(start, end))
     }
 
@@ -761,6 +814,13 @@ where
         start: Bound<usize>,
         end: usize,
     ) -> QueryResult<FetchStream<PayloadMetadata<Types>>> {
+        if self.fetcher.leaf_only {
+            return Err(QueryError::Error {
+                message: "payload metadata range is not supported for leaf only data source"
+                    .to_string(),
+            });
+        }
+
         Ok(self.fetcher.clone().get_range_rev(start, end))
     }
 
@@ -875,7 +935,7 @@ where
     // Semaphore limiting the number of simultaneous DB accesses we can have from tasks spawned to
     // retry failed loads.
     retry_semaphore: Arc<Semaphore>,
-    pub(crate) lightweight: bool,
+    pub(crate) leaf_only: bool,
 }
 
 impl<Types, S, P> VersionedDataSource for Fetcher<Types, S, P>
@@ -912,7 +972,7 @@ where
         let retry_semaphore = Arc::new(Semaphore::new(builder.rate_limit));
         let backoff = builder.backoff.build();
 
-        let payload_fetcher = if builder.is_lightweight() {
+        let payload_fetcher = if builder.is_leaf_only() {
             None
         } else {
             Some(Arc::new(fetching::Fetcher::new(
@@ -923,7 +983,7 @@ where
         let leaf_fetcher = fetching::Fetcher::new(retry_semaphore.clone(), backoff.clone());
         let vid_common_fetcher = fetching::Fetcher::new(retry_semaphore.clone(), backoff.clone());
 
-        let lightweight = builder.lightweight;
+        let leaf_only = builder.leaf_only;
 
         Ok(Self {
             storage: Arc::new(builder.storage),
@@ -937,7 +997,7 @@ where
             chunk_fetch_delay: builder.chunk_fetch_delay,
             backoff,
             retry_semaphore,
-            lightweight,
+            leaf_only,
         })
     }
 }

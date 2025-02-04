@@ -100,7 +100,7 @@ where
         P: AvailabilityProvider<Types>,
     {
         // do not fetch if we are in light weight mode
-        if fetcher.lightweight {
+        if fetcher.leaf_only {
             return Ok(());
         }
 
@@ -290,7 +290,7 @@ where
     {
         // If we're in light-weight mode, we don't need to fetch the VID common data.
 
-        if fetcher.lightweight {
+        if fetcher.leaf_only {
             return Ok(());
         }
         // Trigger the full VID object to be fetched. This will be enough to satisfy this request

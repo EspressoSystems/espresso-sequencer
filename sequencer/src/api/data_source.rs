@@ -43,7 +43,7 @@ use crate::{
 };
 
 pub trait DataSourceOptions: PersistenceOptions {
-    type DataSource: SequencerDataSource;
+    type DataSource: SequencerDataSource<Options = Self>;
 
     fn enable_query_module(&self, opt: Options, query: Query) -> Options;
 }
@@ -77,7 +77,7 @@ pub trait SequencerDataSource:
     + VersionedDataSource
     + Sized
 {
-    type Options: DataSourceOptions;
+    type Options: DataSourceOptions<DataSource = Self>;
 
     /// Instantiate a data source from command line options.
     async fn create(opt: Self::Options, provider: Provider, reset: bool) -> anyhow::Result<Self>;
@@ -435,7 +435,13 @@ pub mod testing {
         type Storage: Sync;
 
         async fn create_storage() -> Self::Storage;
-        fn persistence_options(storage: &Self::Storage) -> Self::Options;
+        fn persistence_options(storage: &Self::Storage) -> Options;
+        fn leaf_only_ds_options(
+            _storage: &Self::Storage,
+            _opt: Options,
+        ) -> anyhow::Result<Options> {
+            anyhow::bail!("not supported")
+        }
         fn options(storage: &Self::Storage, opt: Options) -> Options;
     }
 }

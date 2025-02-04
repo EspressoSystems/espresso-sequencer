@@ -17,7 +17,6 @@ use super::{
     storage::sql::{self, SqlStorage},
     AvailabilityProvider, FetchingDataSource,
 };
-use crate::data_source::leaf_only::LeafOnlyDataSource;
 pub use crate::include_migrations;
 use crate::{
     availability::{QueryableHeader, QueryablePayload},
@@ -315,8 +314,6 @@ where
         Ok(Self::builder(SqlStorage::connect(config).await?, provider))
     }
 }
-
-pub type LeafOnlySqlDataSource<Types, P> = LeafOnlyDataSource<Types, SqlStorage, P>;
 
 // These tests run the `postgres` Docker image, which doesn't work on Windows.
 #[cfg(all(any(test, feature = "testing"), not(target_os = "windows")))]

@@ -1,8 +1,10 @@
-use sequencer::{api::data_source::SequencerDataSource, persistence};
+use sequencer::{
+    api::data_source::{DataSourceOptions, SequencerDataSource},
+    persistence,
+};
 
 use clap::Subcommand;
-use espresso_types::v0::traits::PersistenceOptions;
-use sequencer::api::sql;
+
 /// Options for resetting persistent storage.
 ///
 /// This will remove all the persistent storage of a sequencer node or marketplace solver, effectively resetting it to
@@ -18,6 +20,8 @@ pub enum Commands {
 
 #[derive(Clone, Debug, Subcommand)]
 pub enum SequencerStorage {
+    /// Reset file system storage.
+    Fs(persistence::fs::Options),
     /// Reset SQL storage.
     Sql(Box<persistence::sql::Options>),
 }
@@ -25,11 +29,13 @@ pub enum SequencerStorage {
 pub async fn run(opt: Commands) -> anyhow::Result<()> {
     match opt {
         Commands::Sequencer(query_resetter) => match query_resetter {
+            SequencerStorage::Fs(opt) => {
+                tracing::warn!("resetting sequencer file system storage {opt:?}");
+                reset_storage(opt).await
+            }
             SequencerStorage::Sql(opt) => {
-                tracing::warn!("resetting SQL storage {opt:?}");
-
-                sql::DataSource::create(*opt.clone(), Default::default(), true).await?;
-                opt.reset().await
+                tracing::warn!("resetting sequencer SQL storage {opt:?}");
+                reset_storage(*opt).await
             }
         },
 
@@ -41,4 +47,13 @@ pub async fn run(opt: Commands) -> anyhow::Result<()> {
             Ok(())
         }
     }
+}
+
+async fn reset_storage<O: DataSourceOptions>(opt: O) -> anyhow::Result<()> {
+    // Reset query service storage.
+    O::DataSource::create(opt.clone(), Default::default(), true).await?;
+    // Reset consensus storage.
+    opt.reset().await?;
+
+    Ok(())
 }
