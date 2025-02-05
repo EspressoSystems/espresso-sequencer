@@ -240,10 +240,11 @@ impl EpochCommittees {
             indexed_da_members,
         };
 
+        // TODO: remove this, workaround for hotshot asking for stake tables from epoch 1 and 2
         let mut map = HashMap::new();
-        map.insert(Epoch::genesis(), members.clone());
-        // TODO: remove this, workaround for hotshot asking for stake tables from epoch 1
-        map.insert(Epoch::genesis() + 1u64, members.clone());
+        for epoch in Epoch::genesis().u64()..=2 {
+            map.insert(Epoch::new(epoch), members.clone());
+        }
 
         Self {
             non_epoch_committee: members,
