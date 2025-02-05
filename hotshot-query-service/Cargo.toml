@@ -56,12 +56,12 @@ async-lock = { workspace = true }
 async-trait = { workspace = true }
 backoff = "0.4"
 bincode = { workspace = true }
-chrono = "0.4"
+chrono = { workspace = true }
 committable = { workspace = true }
 custom_debug = "0.6"
 derivative = { workspace = true }
 derive_more = { workspace = true }
-either = "1.12"
+either = { workspace = true }
 futures = { workspace = true }
 hotshot = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.84" }
 hotshot-testing = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.84" }
@@ -91,7 +91,7 @@ tokio = { version = "1", default-features = false, features = [
 ] }
 toml = "0.8"
 tracing = "0.1"
-tracing-subscriber = "0.3"
+tracing-subscriber = { workspace = true }
 trait-variant = "0.1"
 url = "2"
 vbs = "0.1"
