@@ -36,7 +36,7 @@ hotshot-types = { workspace = true }
 itertools = { workspace = true }
 jf-merkle-tree = { workspace = true }
 jf-signature = { workspace = true }
-jf-utils = { workspace = true }                                      # TODO temporary: used only for test_rng()
+jf-utils = { workspace = true }                                                     # TODO temporary: used only for test_rng()
 jf-vid = { workspace = true }
 lru = { workspace = true }
 num-traits = { workspace = true }
@@ -44,11 +44,11 @@ parking_lot = "0.12"
 paste = { workspace = true }
 pretty_assertions = { workspace = true }
 rand = { workspace = true }
-reqwest = "0.11" # Same version used by ethers
+reqwest = "0.11"                                                                    # Same version used by ethers
 sequencer-utils = { path = "../utils" }
 serde = { workspace = true }
 serde_json = { workspace = true }
-sha2 = "0.10"                                                        # TODO temporary, used only for VID, should be set in hotshot
+sha2 = { workspace = true }                                                         # TODO temporary, used only for VID, should be set in hotshot
 static_assertions = { workspace = true }
 surf-disco = { workspace = true }
 tagged-base64 = { workspace = true }
