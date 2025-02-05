@@ -236,13 +236,17 @@ where
     // get last saved merklized state
     let (last_height, parent_leaf, mut leaves) = {
         let last_height = storage.get_last_state_height().await?;
-        let pruned_height = storage.load_pruned_height().await?.unwrap_or(0) as usize;
+        let pruned_height = storage.load_pruned_height().await?;
 
-        // If `last_height > pruned_height`, start from `last_height`
-        // as it represents the latest state in storage.
-        // If `pruned_height > last_height`, start from `pruned_height`
-        // as data below this height is no longer needed and will be pruned again during the next pruner run.
-        let height = max(last_height, pruned_height + 1);
+        let height = match pruned_height {
+            // If `last_height > pruned_height`, start from `last_height`
+            // as it represents the latest state in storage.
+            // If `pruned_height > last_height`, start from `pruned_height`
+            // as data below this height is no longer needed and will be pruned again during the next pruner run.
+            Some(p) => max(last_height, p as usize),
+            // if we have not pruned any data then just start from last_height
+            None => last_height,
+        };
 
         let current_height = storage.block_height().await?;
         tracing::info!(
