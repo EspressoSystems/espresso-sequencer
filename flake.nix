@@ -20,6 +20,7 @@
 
   inputs.flake-utils.url = "github:numtide/flake-utils";
 
+  inputs.solc-bin.url = "github:EspressoSystems/nix-solc-bin";
   inputs.flake-compat.url = "github:edolstra/flake-compat";
   inputs.flake-compat.flake = false;
 
@@ -32,6 +33,7 @@
     , nixpkgs-cross-overlay
     , flake-utils
     , pre-commit-hooks
+    , solc-bin
     , ...
     }:
     flake-utils.lib.eachDefaultSystem (system:
@@ -59,6 +61,7 @@
 
       overlays = [
         (import rust-overlay)
+        solc-bin.overlays.default
         (final: prev: {
           solhint =
             solhintPkg { inherit (prev) buildNpmPackage fetchFromGitHub; };
@@ -176,7 +179,7 @@
           nightlyToolchain = pkgs.rust-bin.selectLatestNightlyWith (toolchain: toolchain.minimal.override {
             extensions = [ "rust-analyzer" ];
           });
-          solc = pkgs.solc;
+          solc = pkgs.solc-bin."0.8.23";
         in
         mkShell (rustEnvVars // {
           buildInputs = [

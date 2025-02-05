@@ -112,23 +112,27 @@ gen-bindings:
     # Generate the ethers bindings
     forge bind --contracts ./contracts/src/ --ethers --crate-name contract-bindings-ethers --bindings-path contract-bindings-ethers --select "{{REGEXP}}" --overwrite --force
 
+    # Foundry doesn't include bytecode in the bindings for LightClient.sol, since it links with
+    # libraries. However, this bytecode is still needed to link and deploy the contract. Copy it to
+    # the source tree so that the deploy script can be compiled whenever the bindings are up to
+    # date, without needed to recompile the contracts.
+    #
+    # The bytecode is extracted *before* the forge bind --alloy ... step because we're forced to
+    # parse a library address to genrate the bindings which leads to the bytecode being pre-linked
+    # with that library address. We need the unlinked contract bytecode to later link it at runtime.
+    mkdir -p contract-bindings/artifacts
+    jq '.bytecode.object' < contracts/out/LightClient.sol/LightClient.json > contract-bindings/artifacts/LightClient_bytecode.json
+    jq '.bytecode.object' < contracts/out/LightClientArbitrum.sol/LightClientArbitrum.json > contract-bindings/artifacts/LightClientArbitrum_bytecode.json
+    jq '.bytecode.object' < contracts/out/LightClientMock.sol/LightClientMock.json > contract-bindings/artifacts/LightClientMock_bytecode.json
+
     # Generate the alloy bindings
-    # TODO: `forge bind --alloy ...` fails if there's an unliked library but what are the implications of setting the address here?
+    # TODO: `forge bind --alloy ...` fails if there's an unliked library so we pass pass it an address for the PlonkVerifier contract.
     forge bind --skip test --skip script --libraries contracts/src/libraries/PlonkVerifier.sol:PlonkVerifier:0x5fbdb2315678afecb367f032d93f642f64180aa3 --alloy --contracts ./contracts/src/ --crate-name contract-bindings-alloy --bindings-path contract-bindings-alloy --select "{{REGEXP}}" --overwrite --force
 
     # For some reason `alloy` likes to use the wrong version of itself in `contract-bindings`.
     # Use the workspace version.
     sed -i 's|{.*https://github.com/alloy-rs/alloy.*}|{ workspace = true }|' contract-bindings-alloy/Cargo.toml
 
-    # Foundry doesn't include bytecode in the bindings for LightClient.sol, since it links with
-    # libraries. However, this bytecode is still needed to link and deploy the contract. Copy it to
-    # the source tree so that the deploy script can be compiled whenever the bindings are up to
-    # date, without needed to recompile the contracts.
-    mkdir -p contract-bindings/artifacts
-    jq '.bytecode.object' < contracts/out/LightClient.sol/LightClient.json > contract-bindings/artifacts/LightClient_bytecode.json
-    jq '.bytecode.object' < contracts/out/LightClientArbitrum.sol/LightClientArbitrum.json > contract-bindings/artifacts/LightClientArbitrum_bytecode.json
-    jq '.bytecode.object' < contracts/out/LightClientMock.sol/LightClientMock.json > contract-bindings/artifacts/LightClientMock_bytecode.json
-    
     # # Alloy requires us to copy the ABI in since it's not included in the bindings
     # jq '.abi' < contracts/out/LightClient.sol/LightClient.json > contract-bindings/artifacts/LightClient_abi.json
     # jq '.abi' < contracts/out/LightClientMock.sol/LightClientMock.json > contract-bindings/artifacts/LightClientMock_abi.json
