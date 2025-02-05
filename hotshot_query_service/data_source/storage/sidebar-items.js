@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"mod":["fs","ledger_log","pruning","sql"],"struct":["Aggregate"],"trait":["AggregatesStorage","AvailabilityStorage","ExplorerStorage","MerklizedStateHeightStorage","MerklizedStateStorage","NodeStorage","UpdateAggregatesStorage","UpdateAvailabilityStorage"]};

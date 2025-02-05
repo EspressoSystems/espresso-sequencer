@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":["provider"],"struct":["PublicHotShotConfig","PublicNetworkConfig","PublicValidatorConfig"],"trait":["CatchupDataSource","DataSourceOptions","HotShotConfigDataSource","NodeStateDataSource","SequencerDataSource","StakeTableDataSource","StateSignatureDataSource","SubmitDataSource"],"type":["Provider"]};
