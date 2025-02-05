@@ -9,7 +9,6 @@ edition = "2021"
 testing = []
 
 [dependencies]
-alloy = { workspace = true }
 anyhow = { workspace = true }
 ark-serialize = { workspace = true, features = ["derive"] }
 async-trait = { workspace = true }
