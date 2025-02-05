@@ -4696,15 +4696,13 @@ dependencies = [
 [[package]]
 name = "hotshot-events-service"
 version = "0.1.57"
-source = "git+https://github.com/EspressoSystems/hotshot-events-service.git?tag=0.1.58#f1aedb948344d7b03d8f34fa74b60896fff92966"
 dependencies = [
  "async-broadcast",
- "async-lock 2.8.0",
+ "async-lock 3.4.0",
  "async-trait",
  "clap",
  "derivative",
- "derive_more 0.99.18",
- "either",
+ "derive_more 1.0.0",
  "futures",
  "hotshot-types",
  "libp2p-identity",
