@@ -118,7 +118,7 @@ gen-bindings:
     # date, without needed to recompile the contracts.
     #
     # The bytecode is extracted *before* the forge bind --alloy ... step because we're forced to
-    # parse a library address to genrate the bindings which leads to the bytecode being pre-linked
+    # parse a library address to generate the bindings which leads to the bytecode being pre-linked
     # with that library address. We need the unlinked contract bytecode to later link it at runtime.
     mkdir -p contract-bindings/artifacts
     jq '.bytecode.object' < contracts/out/LightClient.sol/LightClient.json > contract-bindings/artifacts/LightClient_bytecode.json
