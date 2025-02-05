@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":["main","random_seed","random_transaction","server","submit_transactions"],"struct":["Options","SubmittedTransaction"]};
