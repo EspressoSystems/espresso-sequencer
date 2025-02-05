@@ -1730,16 +1730,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
 
 [[package]]
-name = "base64-bytes"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7ce54e4e485fa0eed9c3aa5348162be09168f75bb5be7bc6587bcf2a65ee1386"
-dependencies = [
- "base64 0.22.1",
- "serde",
-]
-
-[[package]]
 name = "base64ct"
 version = "1.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3403,9 +3393,7 @@ dependencies = [
  "anyhow",
  "ark-serialize 0.4.2",
  "async-broadcast",
- "async-lock 3.4.0",
  "async-trait",
- "base64-bytes",
  "bincode",
  "blake3",
  "bytesize",
@@ -3415,7 +3403,6 @@ dependencies = [
  "contract-bindings-alloy",
  "contract-bindings-ethers",
  "derive_more 1.0.0",
- "diff-test-bn254",
  "ethers",
  "ethers-conv",
  "fluent-asserter",
@@ -3426,7 +3413,6 @@ dependencies = [
  "hotshot-types",
  "itertools 0.12.1",
  "jf-merkle-tree",
- "jf-signature 0.2.0",
  "jf-utils",
  "jf-vid",
  "lru 0.12.5",
@@ -3435,7 +3421,6 @@ dependencies = [
  "paste",
  "pretty_assertions",
  "rand 0.8.5",
- "reqwest 0.11.27",
  "sequencer-utils",
  "serde",
  "serde_json",
@@ -5253,19 +5238,6 @@ dependencies = [
  "pin-project-lite 0.2.16",
  "tokio",
  "tokio-io-timeout",
-]
-
-[[package]]
-name = "hyper-tls"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d6183ddfa99b85da61a140bea0efc93fdf56ceaa041b37d553518030827f9905"
-dependencies = [
- "bytes 1.9.0",
- "hyper 0.14.32",
- "native-tls",
- "tokio",
- "tokio-native-tls",
 ]
 
 [[package]]
@@ -8652,12 +8624,10 @@ dependencies = [
  "http-body 0.4.6",
  "hyper 0.14.32",
  "hyper-rustls 0.24.2",
- "hyper-tls 0.5.0",
  "ipnet",
  "js-sys",
  "log",
  "mime",
- "native-tls",
  "once_cell",
  "percent-encoding",
  "pin-project-lite 0.2.16",
@@ -8669,7 +8639,6 @@ dependencies = [
  "sync_wrapper 0.1.2",
  "system-configuration 0.5.1",
  "tokio",
- "tokio-native-tls",
  "tokio-rustls 0.24.1",
  "tower-service",
  "url",
@@ -8697,7 +8666,7 @@ dependencies = [
  "http-body-util",
  "hyper 1.5.2",
  "hyper-rustls 0.27.5",
- "hyper-tls 0.6.0",
+ "hyper-tls",
  "hyper-util",
  "ipnet",
  "js-sys",

@@ -40,7 +40,6 @@ testing = [
     "hotshot-example-types",
     "portpicker",
     "rand",
-    "spin_sleep",
     "tempfile",
     "sql-data-source",
     "file-system-data-source"
@@ -94,7 +93,6 @@ toml = "0.8"
 tracing = "0.1"
 tracing-subscriber = "0.3"
 trait-variant = "0.1"
-typenum = "1"
 url = "2"
 vbs = "0.1"
 vec1 = "1.12"
@@ -120,7 +118,6 @@ espresso-macros = { git = "https://github.com/EspressoSystems/espresso-macros.gi
 hotshot-example-types = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.84", optional = true }
 portpicker = { version = "0.1", optional = true }
 rand = { version = "0.8", optional = true }
-spin_sleep = { version = "1.2", optional = true }
 tempfile = { version = "3.10", optional = true }
 
 # Dependencies enabled by feature "backtrace-on-stack-overflow".
@@ -142,5 +139,4 @@ hotshot-example-types = { git = "https://github.com/EspressoSystems/HotShot.git"
 portpicker = "0.1"
 rand = "0.8"
 reqwest = "0.12.3"
-spin_sleep = "1.2"
 tempfile = "3.10"
