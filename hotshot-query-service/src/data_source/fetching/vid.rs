@@ -154,6 +154,7 @@ where
     async fn store(
         self,
         storage: &mut (impl UpdateAvailabilityStorage<Types> + Send),
+        _leaf_only: bool,
     ) -> anyhow::Result<()> {
         storage.insert_vid(self, None).await
     }
@@ -174,6 +175,7 @@ where
     async fn store(
         self,
         storage: &mut (impl UpdateAvailabilityStorage<Types> + Send),
+        _leaf_only: bool,
     ) -> anyhow::Result<()> {
         storage.insert_vid(self.0, self.1).await
     }

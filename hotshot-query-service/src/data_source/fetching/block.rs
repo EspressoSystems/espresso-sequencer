@@ -160,7 +160,12 @@ where
     async fn store(
         self,
         storage: &mut (impl UpdateAvailabilityStorage<Types> + Send),
+        leaf_only: bool,
     ) -> anyhow::Result<()> {
+        if leaf_only {
+            return Ok(());
+        }
+
         storage.insert_block(self).await
     }
 }

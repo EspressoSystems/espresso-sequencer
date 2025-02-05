@@ -337,6 +337,7 @@ where
     async fn store(
         self,
         storage: &mut (impl UpdateAvailabilityStorage<Types> + Send),
+        _leaf_only: bool,
     ) -> anyhow::Result<()> {
         storage.insert_leaf(self).await
     }

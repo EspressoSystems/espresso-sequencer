@@ -1647,17 +1647,9 @@ where
     where
         T: Storable<Types>,
     {
-        // If leaf only mode is enabled
-        // - If it is a leaf, store it and then notify subscribers.
-        // - Otherwise, notify subscribers without storing and return.
-        if !T::should_store(self.leaf_only) {
-            obj.notify(&self.notifiers).await;
-            return;
-        }
-
         let try_store = || async {
             let mut tx = self.storage.write().await?;
-            obj.clone().store(&mut tx).await?;
+            obj.clone().store(&mut tx, self.leaf_only).await?;
             tx.commit().await
         };
 
@@ -2072,10 +2064,6 @@ trait Storable<Types: NodeType>: HeightIndexed + Clone {
     /// The name of this type of object, for debugging purposes.
     fn name() -> &'static str;
 
-    fn should_store(leaf_only: bool) -> bool {
-        !(leaf_only && Self::name() != "leaf")
-    }
-
     /// Notify anyone waiting for this object that it has become available.
     fn notify(&self, notifiers: &Notifiers<Types>) -> impl Send + Future<Output = ()>;
 
@@ -2083,6 +2071,7 @@ trait Storable<Types: NodeType>: HeightIndexed + Clone {
     fn store(
         self,
         storage: &mut (impl UpdateAvailabilityStorage<Types> + Send),
+        leaf_only: bool,
     ) -> impl Send + Future<Output = anyhow::Result<()>>;
 }
 
@@ -2105,15 +2094,22 @@ impl<Types: NodeType> Storable<Types> for BlockInfo<Types> {
     async fn store(
         self,
         storage: &mut (impl UpdateAvailabilityStorage<Types> + Send),
+        leaf_only: bool,
     ) -> anyhow::Result<()> {
-        self.leaf.store(storage).await?;
-
-        if let Some(block) = self.block {
-            block.store(storage).await?;
-        }
+        self.leaf.store(storage, leaf_only).await?;
 
         if let Some(common) = self.vid_common {
-            (common, self.vid_share).store(storage).await?;
+            (common, self.vid_share).store(storage, leaf_only).await?;
+        }
+
+        // return early if leaf only mode is enabled
+        // this would skip storing block payloads
+        if leaf_only {
+            return Ok(());
+        }
+
+        if let Some(block) = self.block {
+            block.store(storage, leaf_only).await?;
         }
 
         Ok(())

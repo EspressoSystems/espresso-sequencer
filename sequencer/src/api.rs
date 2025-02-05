@@ -1809,15 +1809,13 @@ mod test {
                 .unwrap();
         }
 
-        // this should timeout as we don't store blocks in light weight node
-        tokio::time::timeout(
-            Duration::from_secs(5),
-            client
-                .get::<BlockQueryData<SeqTypes>>("availability/block/1")
-                .send(),
-        )
-        .await
-        .unwrap_err();
+        // This would fail even though we have processed atleast 10 leaves
+        // this is because light weight nodes only support leaves, headers and VID
+        client
+            .get::<BlockQueryData<SeqTypes>>("availability/block/1")
+            .send()
+            .await
+            .unwrap_err();
     }
 
     #[tokio::test(flavor = "multi_thread")]
