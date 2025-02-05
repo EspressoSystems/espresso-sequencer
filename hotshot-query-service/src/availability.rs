@@ -26,7 +26,7 @@
 //! chain which is tabulated by this specific node and not subject to full consensus agreement, try
 //! the [node](crate::node) API.
 
-use crate::{api::load_api, Payload};
+use crate::{api::load_api, Payload, QueryError};
 use derive_more::From;
 use futures::{FutureExt, StreamExt, TryFutureExt, TryStreamExt};
 use hotshot_types::traits::node_implementation::NodeType;
@@ -107,6 +107,11 @@ pub enum Error {
     FetchBlock {
         resource: String,
     },
+    #[snafu(display("header {resource} missing or not available"))]
+    #[from(ignore)]
+    FetchHeader {
+        resource: String,
+    },
     #[snafu(display("transaction {resource} missing or not available"))]
     #[from(ignore)]
     FetchTransaction {
@@ -125,6 +130,10 @@ pub enum Error {
         until: usize,
         limit: usize,
     },
+    #[snafu(display("{source}"))]
+    Query {
+        source: QueryError,
+    },
     Custom {
         message: String,
         status: StatusCode,
@@ -142,10 +151,11 @@ impl Error {
     pub fn status(&self) -> StatusCode {
         match self {
             Self::Request { .. } | Self::RangeLimit { .. } => StatusCode::BAD_REQUEST,
-            Self::FetchLeaf { .. } | Self::FetchBlock { .. } | Self::FetchTransaction { .. } => {
-                StatusCode::NOT_FOUND
-            }
-            Self::InvalidTransactionIndex { .. } => StatusCode::NOT_FOUND,
+            Self::FetchLeaf { .. }
+            | Self::FetchBlock { .. }
+            | Self::FetchTransaction { .. }
+            | Self::FetchHeader { .. } => StatusCode::NOT_FOUND,
+            Self::InvalidTransactionIndex { .. } | Self::Query { .. } => StatusCode::NOT_FOUND,
             Self::Custom { status, .. } => *status,
         }
     }
@@ -225,15 +235,10 @@ where
                 } else {
                     BlockId::PayloadHash(req.blob_param("payload-hash")?)
                 };
-                let fetch = state.read(|state| state.get_block(id).boxed()).await;
-                Ok(fetch
-                    .with_timeout(timeout)
-                    .await
-                    .context(FetchBlockSnafu {
-                        resource: id.to_string(),
-                    })?
-                    .header()
-                    .clone())
+                let fetch = state.read(|state| state.get_header(id).boxed()).await;
+                fetch.with_timeout(timeout).await.context(FetchHeaderSnafu {
+                    resource: id.to_string(),
+                })
             }
             .boxed()
         })?
@@ -244,16 +249,15 @@ where
                 enforce_range_limit(from, until, large_object_range_limit)?;
 
                 let headers = state
-                    .read(|state| state.get_block_range(from..until).boxed())
+                    .read(|state| state.get_header_range(from..until).boxed())
                     .await;
                 headers
                     .enumerate()
                     .then(|(index, fetch)| async move {
-                        fetch.with_timeout(timeout).await.context(FetchBlockSnafu {
+                        fetch.with_timeout(timeout).await.context(FetchHeaderSnafu {
                             resource: (index + from).to_string(),
                         })
                     })
-                    .map(|r| r.map(|block| block.header().clone()))
                     .try_collect::<Vec<_>>()
                     .await
             }
@@ -262,17 +266,11 @@ where
         .stream("stream_headers", move |req, state| {
             async move {
                 let height = req.integer_param("height")?;
-                Ok(state
+                state
                     .read(|state| {
-                        async move {
-                            state
-                                .subscribe_blocks(height)
-                                .await
-                                .map(|block| Ok(block.header))
-                        }
-                        .boxed()
+                        async move { Ok(state.subscribe_headers(height).await.map(Ok)) }.boxed()
                     })
-                    .await)
+                    .await
             }
             .try_flatten_stream()
             .boxed()
@@ -317,11 +315,11 @@ where
         .stream("stream_blocks", move |req, state| {
             async move {
                 let height = req.integer_param("height")?;
-                Ok(state
+                state
                     .read(|state| {
-                        async move { state.subscribe_blocks(height).await.map(Ok) }.boxed()
+                        async move { Ok(state.subscribe_blocks(height).await.map(Ok)) }.boxed()
                     })
-                    .await)
+                    .await
             }
             .try_flatten_stream()
             .boxed()
@@ -366,11 +364,11 @@ where
         .stream("stream_payloads", move |req, state| {
             async move {
                 let height = req.integer_param("height")?;
-                Ok(state
+                state
                     .read(|state| {
-                        async move { state.subscribe_payloads(height).await.map(Ok) }.boxed()
+                        async move { Ok(state.subscribe_payloads(height).await.map(Ok)) }.boxed()
                     })
-                    .await)
+                    .await
             }
             .try_flatten_stream()
             .boxed()
@@ -394,11 +392,11 @@ where
         .stream("stream_vid_common", move |req, state| {
             async move {
                 let height = req.integer_param("height")?;
-                Ok(state
+                state
                     .read(|state| {
-                        async move { state.subscribe_vid_common(height).await.map(Ok) }.boxed()
+                        async move { Ok(state.subscribe_vid_common(height).await.map(Ok)) }.boxed()
                     })
-                    .await)
+                    .await
             }
             .try_flatten_stream()
             .boxed()
@@ -498,12 +496,14 @@ fn enforce_range_limit(from: usize, until: usize, limit: usize) -> Result<(), Er
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::data_source::storage::AvailabilityStorage;
+    use crate::data_source::VersionedDataSource;
     use crate::{
         data_source::ExtensibleDataSource,
         status::StatusDataSource,
         task::BackgroundTask,
         testing::{
-            consensus::{MockDataSource, MockNetwork},
+            consensus::{MockDataSource, MockNetwork, MockSqlDataSource},
             mocks::{mock_transaction, MockBase, MockHeader, MockPayload, MockTypes},
             setup_test,
         },
@@ -1059,6 +1059,118 @@ mod test {
             large_object_range_limit,
         )
         .await;
+
+        network.shut_down().await;
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_header_endpoint() {
+        setup_test();
+
+        // Create the consensus network.
+        let mut network = MockNetwork::<MockSqlDataSource>::init().await;
+        network.start().await;
+
+        // Start the web server.
+        let port = pick_unused_port().unwrap();
+        let mut app = App::<_, Error>::with_state(ApiState::from(network.data_source()));
+        app.register_module(
+            "availability",
+            define_api(&Default::default(), MockBase::instance()).unwrap(),
+        )
+        .unwrap();
+        network.spawn(
+            "server",
+            app.serve(format!("0.0.0.0:{}", port), MockBase::instance()),
+        );
+
+        let ds = network.data_source();
+
+        // Get the current block height and fetch header for some later block height
+        // This fetch will only resolve when we receive a leaf or block for that block height
+        let block_height = ds.block_height().await.unwrap();
+        let fetch = ds
+            .get_header(BlockId::<MockTypes>::Number(block_height + 25))
+            .await;
+
+        assert!(fetch.is_pending());
+        let header = fetch.await;
+        assert_eq!(header.height() as usize, block_height + 25);
+
+        network.shut_down().await;
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_leaf_only_ds() {
+        setup_test();
+
+        // Create the consensus network.
+        let mut network = MockNetwork::<MockSqlDataSource>::init_with_leaf_ds().await;
+        network.start().await;
+
+        // Start the web server.
+        let port = pick_unused_port().unwrap();
+        let mut app = App::<_, Error>::with_state(ApiState::from(network.data_source()));
+        app.register_module(
+            "availability",
+            define_api(&Default::default(), MockBase::instance()).unwrap(),
+        )
+        .unwrap();
+        network.spawn(
+            "server",
+            app.serve(format!("0.0.0.0:{}", port), MockBase::instance()),
+        );
+
+        // Start a client.
+        let client = Client::<Error, MockBase>::new(
+            format!("http://localhost:{}/availability", port)
+                .parse()
+                .unwrap(),
+        );
+        assert!(client.connect(Some(Duration::from_secs(60))).await);
+
+        // Wait for some headers to be produced.
+        client
+            .socket("stream/headers/0")
+            .subscribe::<Header<MockTypes>>()
+            .await
+            .unwrap()
+            .take(5)
+            .try_collect::<Vec<_>>()
+            .await
+            .unwrap();
+
+        // Wait for some leaves to be produced.
+        client
+            .socket("stream/leaves/5")
+            .subscribe::<LeafQueryData<MockTypes>>()
+            .await
+            .unwrap()
+            .take(5)
+            .try_collect::<Vec<_>>()
+            .await
+            .unwrap();
+
+        let ds = network.data_source();
+
+        // Get the current block height and fetch header for some later block height
+        // This fetch will only resolve if we get a block notification
+        // However, this block will never be stored
+        let block_height = ds.block_height().await.unwrap();
+        let target_block_height = block_height + 20;
+        let fetch = ds
+            .get_block(BlockId::<MockTypes>::Number(target_block_height))
+            .await;
+
+        assert!(fetch.is_pending());
+        let block = fetch.await;
+        assert_eq!(block.height() as usize, target_block_height);
+
+        let mut tx = ds.read().await.unwrap();
+        tx.get_block(BlockId::<MockTypes>::Number(target_block_height))
+            .await
+            .unwrap_err();
+        drop(tx);
 
         network.shut_down().await;
     }

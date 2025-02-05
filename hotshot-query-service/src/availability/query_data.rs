@@ -278,6 +278,22 @@ impl<Types: NodeType> HeightIndexed for LeafQueryData<Types> {
     }
 }
 
+#[derive(Clone, Debug, Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(bound = "")]
+pub struct HeaderQueryData<Types: NodeType> {
+    pub header: Header<Types>,
+}
+
+impl<Types: NodeType> HeaderQueryData<Types> {
+    pub fn new(header: Header<Types>) -> Self {
+        Self { header }
+    }
+
+    pub fn header(&self) -> &Header<Types> {
+        &self.header
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(bound = "")]
 pub struct BlockQueryData<Types: NodeType> {

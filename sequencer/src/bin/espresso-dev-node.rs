@@ -195,8 +195,6 @@ async fn main() -> anyhow::Result<()> {
         port: sequencer_api_port,
         max_connections: sequencer_api_max_connections,
     })
-    .status(Default::default())
-    .state(Default::default())
     .submit(Default::default())
     .query_sql(Default::default(), sql);
 

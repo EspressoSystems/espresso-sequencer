@@ -627,6 +627,13 @@ mod test {
         {
             self.hotshot_qs.get_block(id).await
         }
+
+        async fn get_header<ID>(&self, id: ID) -> Fetch<Header<MockTypes>>
+        where
+            ID: Into<BlockId<MockTypes>> + Send + Sync,
+        {
+            self.hotshot_qs.get_header(id).await
+        }
         async fn get_payload<ID>(&self, id: ID) -> Fetch<PayloadQueryData<MockTypes>>
         where
             ID: Into<BlockId<MockTypes>> + Send + Sync,
@@ -662,6 +669,13 @@ mod test {
             R: RangeBounds<usize> + Send + 'static,
         {
             self.hotshot_qs.get_block_range(range).await
+        }
+
+        async fn get_header_range<R>(&self, range: R) -> FetchStream<Header<MockTypes>>
+        where
+            R: RangeBounds<usize> + Send + 'static,
+        {
+            self.hotshot_qs.get_header_range(range).await
         }
         async fn get_payload_range<R>(&self, range: R) -> FetchStream<PayloadQueryData<MockTypes>>
         where

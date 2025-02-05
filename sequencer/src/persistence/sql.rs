@@ -5,9 +5,9 @@ use committable::Committable;
 use derivative::Derivative;
 use derive_more::derive::{From, Into};
 use espresso_types::{
-    downgrade_commitment_map, downgrade_leaf, parse_duration, upgrade_commitment_map,
+    downgrade_commitment_map, downgrade_leaf, parse_duration, parse_size, upgrade_commitment_map,
     v0::traits::{EventConsumer, PersistenceOptions, SequencerPersistence, StateCatchup},
-    BackoffParams, Leaf, Leaf2, NetworkConfig, Payload,
+    BackoffParams, BlockMerkleTree, FeeMerkleTree, Leaf, Leaf2, NetworkConfig, Payload,
 };
 use futures::stream::StreamExt;
 use hotshot_query_service::{
@@ -26,6 +26,7 @@ use hotshot_query_service::{
         request::{LeafRequest, PayloadRequest, VidCommonRequest},
         Provider,
     },
+    merklized_state::MerklizedState,
 };
 use hotshot_types::{
     consensus::CommitmentMap,
@@ -147,7 +148,7 @@ pub struct Options {
     /// - batch_size: 1000
     /// - max_usage: 80%
     /// - interval: 1 hour
-    #[clap(long, env = "ESPRESSO_SEQUENCER_POSTGRES_PRUNE")]
+    #[clap(long, env = "ESPRESSO_SEQUENCER_DATABASE_PRUNE")]
     pub(crate) prune: bool,
 
     /// Pruning parameters.
@@ -181,6 +182,14 @@ pub struct Options {
     /// fetching from peers.
     #[clap(long, env = "ESPRESSO_SEQUENCER_ARCHIVE", conflicts_with = "prune")]
     pub(crate) archive: bool,
+
+    /// Turns on leaf only data storage
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_LIGHTWEIGHT",
+        conflicts_with = "archive"
+    )]
+    pub(crate) lightweight: bool,
 
     /// The maximum idle time of a database connection.
     ///
@@ -403,7 +412,7 @@ pub struct PruningOptions {
     /// Threshold for pruning, specified in bytes.
     /// If the disk usage surpasses this threshold, pruning is initiated for data older than the specified minimum retention period.
     /// Pruning continues until the disk usage drops below the MAX USAGE.
-    #[clap(long, env = "ESPRESSO_SEQUENCER_PRUNER_PRUNING_THRESHOLD")]
+    #[clap(long, env = "ESPRESSO_SEQUENCER_PRUNER_PRUNING_THRESHOLD", value_parser = parse_size)]
     pruning_threshold: Option<u64>,
 
     /// Minimum retention period.
@@ -467,6 +476,11 @@ impl From<PruningOptions> for PrunerCfg {
         if let Some(interval) = opt.interval {
             cfg = cfg.with_interval(interval);
         }
+
+        cfg = cfg.with_state_tables(vec![
+            BlockMerkleTree::state_type().to_string(),
+            FeeMerkleTree::state_type().to_string(),
+        ]);
 
         cfg
     }

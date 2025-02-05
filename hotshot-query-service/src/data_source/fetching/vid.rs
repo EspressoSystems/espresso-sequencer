@@ -149,6 +149,7 @@ where
     async fn store(
         self,
         storage: &mut (impl UpdateAvailabilityStorage<Types> + Send),
+        _leaf_only: bool,
     ) -> anyhow::Result<()> {
         storage.insert_vid(self, None).await
     }
@@ -169,6 +170,7 @@ where
     async fn store(
         self,
         storage: &mut (impl UpdateAvailabilityStorage<Types> + Send),
+        _leaf_only: bool,
     ) -> anyhow::Result<()> {
         storage.insert_vid(self.0, self.1).await
     }
@@ -184,13 +186,18 @@ pub(super) fn fetch_vid_common_with_header<Types, S, P>(
     for<'a> S::Transaction<'a>: UpdateAvailabilityStorage<Types>,
     P: AvailabilityProvider<Types>,
 {
+    let Some(vid_fetcher) = fetcher.vid_common_fetcher.as_ref() else {
+        tracing::info!("not fetching vid because of leaf only mode");
+        return;
+    };
+
     // Now that we have the header, we only need to retrieve the VID common data.
     tracing::info!(
         "spawned active fetch for VID common {:?} (height {})",
         header.payload_commitment(),
         header.block_number()
     );
-    fetcher.vid_common_fetcher.spawn_fetch(
+    vid_fetcher.spawn_fetch(
         request::VidCommonRequest(header.payload_commitment()),
         fetcher.provider.clone(),
         once(VidCommonCallback {
@@ -283,6 +290,10 @@ where
             AvailabilityStorage<Types> + NodeStorage<Types> + PrunedHeightStorage,
         P: AvailabilityProvider<Types>,
     {
+        // Do not fetch if we are in leaf only mode
+        if fetcher.leaf_only {
+            return Ok(());
+        }
         // Trigger the full VID object to be fetched. This will be enough to satisfy this request
         // for the summary.
         VidCommonQueryData::active_fetch(tx, fetcher, req).await

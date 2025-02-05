@@ -16,6 +16,11 @@ use super::{
     block::fetch_block_with_header, leaf::fetch_leaf_with_callbacks,
     vid::fetch_vid_common_with_header, AvailabilityProvider, Fetcher,
 };
+use crate::data_source::fetching::Fetchable;
+use crate::data_source::fetching::HeaderQueryData;
+use crate::data_source::fetching::LeafQueryData;
+use crate::data_source::fetching::Notifiers;
+use crate::QueryResult;
 use crate::{
     availability::{BlockId, QueryablePayload},
     data_source::{
@@ -28,10 +33,94 @@ use crate::{
     Header, Payload, QueryError,
 };
 use anyhow::bail;
+use async_trait::async_trait;
+use committable::Committable;
 use derivative::Derivative;
+use futures::future::BoxFuture;
+use futures::FutureExt;
 use hotshot_types::traits::{block_contents::BlockHeader, node_implementation::NodeType};
 use std::cmp::Ordering;
+use std::future::IntoFuture;
 use std::sync::Arc;
+
+impl<Types: NodeType> From<LeafQueryData<Types>> for HeaderQueryData<Types> {
+    fn from(leaf: LeafQueryData<Types>) -> Self {
+        let header = leaf.header().clone();
+
+        Self { header }
+    }
+}
+
+fn satisfies_header_req_from_leaf<Types>(leaf: &LeafQueryData<Types>, req: BlockId<Types>) -> bool
+where
+    Types: NodeType,
+    Payload<Types>: QueryablePayload<Types>,
+{
+    HeaderQueryData::satisfies(&HeaderQueryData::new(leaf.header().clone()), req)
+}
+
+#[async_trait]
+impl<Types> Fetchable<Types> for HeaderQueryData<Types>
+where
+    Types: NodeType,
+    Payload<Types>: QueryablePayload<Types>,
+{
+    type Request = BlockId<Types>;
+
+    fn satisfies(&self, req: Self::Request) -> bool {
+        let header = self.header();
+        match req {
+            BlockId::Number(n) => header.block_number() as usize == n,
+            BlockId::Hash(h) => header.commit() == h,
+            BlockId::PayloadHash(h) => header.payload_commitment() == h,
+        }
+    }
+
+    async fn passive_fetch(
+        notifiers: &Notifiers<Types>,
+        req: Self::Request,
+    ) -> BoxFuture<'static, Option<Self>> {
+        notifiers
+            .leaf
+            .wait_for(move |leaf| satisfies_header_req_from_leaf(leaf, req))
+            .await
+            .into_future()
+            .map(|leaf| leaf.map(HeaderQueryData::from))
+            .boxed()
+    }
+
+    async fn active_fetch<S, P>(
+        tx: &mut impl AvailabilityStorage<Types>,
+        fetcher: Arc<Fetcher<Types, S, P>>,
+        req: Self::Request,
+    ) -> anyhow::Result<()>
+    where
+        S: VersionedDataSource + 'static,
+        for<'a> S::Transaction<'a>: UpdateAvailabilityStorage<Types>,
+        for<'a> S::ReadOnly<'a>:
+            AvailabilityStorage<Types> + NodeStorage<Types> + PrunedHeightStorage,
+        P: AvailabilityProvider<Types>,
+    {
+        // Note: if leaf only mode is enabled
+        // the payload callback will not do any active fetching and just return
+        // This is because we don't have payload fetcher for leaf only mode
+        fetch_header_and_then(
+            tx,
+            req,
+            HeaderCallback::Payload {
+                fetcher: fetcher.clone(),
+            },
+        )
+        .await
+    }
+
+    async fn load<S>(storage: &mut S, req: Self::Request) -> QueryResult<Self>
+    where
+        S: AvailabilityStorage<Types>,
+    {
+        storage.get_header(req).await.map(|header| Self { header })
+    }
+}
 
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""))]
@@ -145,7 +234,7 @@ where
         Err(QueryError::Error { message }) => {
             // An error occurred while querying the database. We don't know if we need to fetch the
             // header or not. Return an error so we can try again.
-            bail!("failed to fetch header for block {req}: {message}");
+            bail!("failed to fetch header for block {req:?}: {message}");
         }
     }
 

@@ -17,6 +17,7 @@ use super::{
     QueryBuilder, BLOCK_COLUMNS, LEAF_COLUMNS, PAYLOAD_COLUMNS, PAYLOAD_METADATA_COLUMNS,
     VID_COMMON_COLUMNS, VID_COMMON_METADATA_COLUMNS,
 };
+use crate::data_source::storage::sql::sqlx::Row;
 use crate::{
     availability::{
         BlockId, BlockQueryData, LeafId, LeafQueryData, PayloadQueryData, QueryableHeader,
@@ -206,6 +207,31 @@ where
             .map_err(QueryError::from)
             .collect()
             .await)
+    }
+
+    async fn get_header_range<R>(
+        &mut self,
+        range: R,
+    ) -> QueryResult<Vec<QueryResult<Header<Types>>>>
+    where
+        R: RangeBounds<usize> + Send,
+    {
+        let mut query = QueryBuilder::default();
+        let where_clause = query.bounds_to_where_clause(range, "h.height")?;
+
+        let headers = query
+            .query(&format!(
+                "SELECT data
+                  FROM header AS h
+                  {where_clause}
+                  ORDER BY h.height"
+            ))
+            .fetch(self.as_mut())
+            .map(|res| serde_json::from_value(res?.get("data")).unwrap())
+            .collect()
+            .await;
+
+        Ok(headers)
     }
 
     async fn get_payload_range<R>(

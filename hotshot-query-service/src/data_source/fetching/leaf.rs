@@ -140,6 +140,26 @@ where
                         fetching = leaf.height() - 1,
                         "do not have necessary leaf; trigger fetch of a later leaf"
                     );
+
+                    let mut callbacks = vec![LeafCallback::Leaf {
+                        fetcher: fetcher.clone(),
+                    }];
+
+                    if !fetcher.leaf_only {
+                        callbacks.push(
+                            HeaderCallback::Payload {
+                                fetcher: fetcher.clone(),
+                            }
+                            .into(),
+                        );
+                        callbacks.push(
+                            HeaderCallback::VidCommon {
+                                fetcher: fetcher.clone(),
+                            }
+                            .into(),
+                        );
+                    }
+
                     fetcher.leaf_fetcher.clone().spawn_fetch(
                         request::LeafRequest::new(
                             leaf.height() - 1,
@@ -149,19 +169,7 @@ where
                         fetcher.provider.clone(),
                         // After getting the leaf, grab the other data as well; that will be missing
                         // whenever the leaf was.
-                        [
-                            LeafCallback::Leaf {
-                                fetcher: fetcher.clone(),
-                            },
-                            HeaderCallback::Payload {
-                                fetcher: fetcher.clone(),
-                            }
-                            .into(),
-                            HeaderCallback::VidCommon {
-                                fetcher: fetcher.clone(),
-                            }
-                            .into(),
-                        ],
+                        callbacks,
                     );
                     return Ok(());
                 }
@@ -323,6 +331,7 @@ where
     async fn store(
         self,
         storage: &mut (impl UpdateAvailabilityStorage<Types> + Send),
+        _leaf_only: bool,
     ) -> anyhow::Result<()> {
         storage.insert_leaf(self).await
     }

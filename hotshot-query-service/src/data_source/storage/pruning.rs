@@ -22,6 +22,7 @@ pub struct PrunerCfg {
     batch_size: u64,
     max_usage: u16,
     interval: Duration,
+    state_tables: Vec<String>,
 }
 
 #[async_trait]
@@ -40,6 +41,13 @@ pub trait PruneStorage: PrunerConfig {
 #[async_trait]
 pub trait PrunedHeightStorage: Sized {
     async fn load_pruned_height(&mut self) -> anyhow::Result<Option<u64>> {
+        Ok(None)
+    }
+}
+
+#[async_trait]
+pub trait PrunedHeightDataSource: Sized {
+    async fn load_pruned_height(&self) -> anyhow::Result<Option<u64>> {
         Ok(None)
     }
 }
@@ -68,6 +76,11 @@ impl PrunerCfg {
         }
 
         Ok(())
+    }
+
+    pub fn with_state_tables(mut self, state_tables: Vec<String>) -> Self {
+        self.state_tables = state_tables;
+        self
     }
 
     pub fn with_pruning_threshold(mut self, pruning_threshold: u64) -> Self {
@@ -142,6 +155,11 @@ impl PrunerCfg {
     pub fn interval(&self) -> Duration {
         self.interval
     }
+
+    /// State tables to prune
+    pub fn state_tables(&self) -> Vec<String> {
+        self.state_tables.clone()
+    }
 }
 
 impl Default for PrunerCfg {
@@ -158,6 +176,7 @@ impl Default for PrunerCfg {
             max_usage: 8000,
             // 1.5 hour
             interval: Duration::from_secs(5400),
+            state_tables: Vec::new(),
         }
     }
 }

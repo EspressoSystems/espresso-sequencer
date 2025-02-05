@@ -436,6 +436,12 @@ pub mod testing {
 
         async fn create_storage() -> Self::Storage;
         fn persistence_options(storage: &Self::Storage) -> Self::Options;
+        fn leaf_only_ds_options(
+            _storage: &Self::Storage,
+            _opt: Options,
+        ) -> anyhow::Result<Options> {
+            anyhow::bail!("not supported")
+        }
         fn options(storage: &Self::Storage, opt: Options) -> Options;
     }
 }
