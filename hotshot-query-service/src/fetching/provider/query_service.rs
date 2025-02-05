@@ -297,14 +297,12 @@ mod test {
             data_source
                 .get_block(test_block.block_hash())
                 .await
-                .unwrap()
                 .map(ignore),
         );
         fetches.push(
             data_source
                 .get_payload(test_payload.block_hash())
                 .await
-                .unwrap()
                 .map(ignore),
         );
         fetches.push(
@@ -318,14 +316,12 @@ mod test {
             data_source
                 .get_block(test_block.height() as usize)
                 .await
-                .unwrap()
                 .map(ignore),
         );
         fetches.push(
             data_source
                 .get_payload(test_payload.height() as usize)
                 .await
-                .unwrap()
                 .map(ignore),
         );
         fetches.push(
@@ -364,14 +360,10 @@ mod test {
 
         tracing::info!("requesting fetchable resources");
         let req_leaf = data_source.get_leaf(test_leaf.height() as usize).await;
-        let req_block = data_source
-            .get_block(test_block.height() as usize)
-            .await
-            .unwrap();
+        let req_block = data_source.get_block(test_block.height() as usize).await;
         let req_payload = data_source
             .get_payload(test_payload.height() as usize)
-            .await
-            .unwrap();
+            .await;
         let req_common = data_source
             .get_vid_common(test_common.height() as usize)
             .await;
@@ -396,12 +388,10 @@ mod test {
         let block = data_source
             .get_block(test_block.height() as usize)
             .await
-            .unwrap()
             .await;
         let payload = data_source
             .get_payload(test_payload.height() as usize)
             .await
-            .unwrap()
             .await;
         let common = data_source
             .get_vid_common(test_common.height() as usize)
@@ -416,18 +406,13 @@ mod test {
             );
             assert_eq!(
                 block,
-                truth
-                    .get_block(test_block.height() as usize)
-                    .await
-                    .unwrap()
-                    .await
+                truth.get_block(test_block.height() as usize).await.await
             );
             assert_eq!(
                 payload,
                 truth
                     .get_payload(test_payload.height() as usize)
                     .await
-                    .unwrap()
                     .await
             );
             assert_eq!(
@@ -457,11 +442,7 @@ mod test {
         tracing::info!("fetching block by hash");
         provider.unblock().await;
         {
-            let block = data_source
-                .get_block(test_leaf.block_hash())
-                .await
-                .unwrap()
-                .await;
+            let block = data_source.get_block(test_leaf.block_hash()).await.await;
             assert_eq!(block.hash(), leaf.block_hash());
         }
 
@@ -471,11 +452,7 @@ mod test {
         tracing::info!("fetching payload by hash");
         {
             let leaf = leaves.last().unwrap();
-            let payload = data_source
-                .get_payload(leaf.block_hash())
-                .await
-                .unwrap()
-                .await;
+            let payload = data_source.get_payload(leaf.block_hash()).await.await;
             assert_eq!(payload.height(), leaf.height());
             assert_eq!(payload.block_hash(), leaf.block_hash());
             assert_eq!(payload.hash(), leaf.payload_hash());
@@ -533,7 +510,6 @@ mod test {
             data_source
                 .get_block(test_leaf.height() as usize)
                 .await
-                .unwrap()
                 .into_future(),
         )
         .await;
@@ -592,12 +568,10 @@ mod test {
             data_source
                 .get_block(leaves[0].height() as usize)
                 .await
-                .unwrap()
                 .into_future(),
             data_source
                 .get_block(leaves[1].height() as usize)
                 .await
-                .unwrap()
                 .into_future(),
         )
         .await;
@@ -637,7 +611,7 @@ mod test {
         network.start().await;
 
         // Subscribe to objects from the future.
-        let blocks = data_source.subscribe_blocks(0).await.unwrap();
+        let blocks = data_source.subscribe_blocks(0).await;
         let leaves = data_source.subscribe_leaves(0).await;
         let common = data_source.subscribe_vid_common(0).await;
 
@@ -747,7 +721,7 @@ mod test {
 
         // Subscribe to blocks.
         let mut leaves = network.data_source().subscribe_leaves(1).await;
-        let mut blocks = network.data_source().subscribe_blocks(1).await.unwrap();
+        let mut blocks = network.data_source().subscribe_blocks(1).await;
 
         // Start consensus.
         network.start().await;
@@ -1485,7 +1459,7 @@ mod test {
             .as_ref()
             .fail_one_read(FailableAction::GetHeader)
             .await;
-        let fetch = data_source.get_block(leaf.block_hash()).await.unwrap();
+        let fetch = data_source.get_block(leaf.block_hash()).await;
 
         // Give some time for a few reads to fail before letting them succeed.
         sleep(Duration::from_secs(2)).await;
@@ -1553,7 +1527,6 @@ mod test {
                 .data_source()
                 .get_block(tx.block_height() as usize)
                 .await
-                .unwrap()
                 .await;
             let mut tx = data_source.write().await.unwrap();
             tx.insert_leaf(leaf.clone()).await.unwrap();
@@ -1708,7 +1681,6 @@ mod test {
         let fetches = data_source
             .get_block_range(1..=5)
             .await
-            .unwrap()
             .collect::<Vec<_>>()
             .await;
 
@@ -1780,7 +1752,7 @@ mod test {
         // * full object present but inaccessible due to storage failures (first object)
         // * nothing present (middle object)
         let leaf = network.data_source().get_leaf(1).await.await;
-        let block = network.data_source().get_block(1).await.unwrap().await;
+        let block = network.data_source().get_block(1).await.await;
         let vid = network.data_source().get_vid_common(1).await.await;
         data_source
             .append(BlockInfo::new(leaf, Some(block), Some(vid), None))
@@ -1795,11 +1767,7 @@ mod test {
             .await;
         match stream {
             MetadataType::Payload => {
-                let payloads = data_source
-                    .subscribe_payload_metadata(1)
-                    .await
-                    .unwrap()
-                    .take(3);
+                let payloads = data_source.subscribe_payload_metadata(1).await.take(3);
 
                 // Give some time for a few reads to fail before letting them succeed.
                 sleep(Duration::from_secs(2)).await;

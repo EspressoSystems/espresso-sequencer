@@ -18,7 +18,7 @@ use super::{
         VidCommonQueryData,
     },
 };
-use crate::{types::HeightIndexed, Header, Payload, QueryResult, VidCommitment, VidShare};
+use crate::{types::HeightIndexed, Header, Payload, VidCommitment, VidShare};
 use async_trait::async_trait;
 use derivative::Derivative;
 use derive_more::{Display, From};
@@ -131,19 +131,19 @@ where
     where
         ID: Into<LeafId<Types>> + Send + Sync;
 
-    async fn get_header<ID>(&self, id: ID) -> QueryResult<Fetch<Header<Types>>>
+    async fn get_header<ID>(&self, id: ID) -> Fetch<Header<Types>>
     where
         ID: Into<BlockId<Types>> + Send + Sync;
 
-    async fn get_block<ID>(&self, id: ID) -> QueryResult<Fetch<BlockQueryData<Types>>>
+    async fn get_block<ID>(&self, id: ID) -> Fetch<BlockQueryData<Types>>
     where
         ID: Into<BlockId<Types>> + Send + Sync;
 
-    async fn get_payload<ID>(&self, id: ID) -> QueryResult<Fetch<PayloadQueryData<Types>>>
+    async fn get_payload<ID>(&self, id: ID) -> Fetch<PayloadQueryData<Types>>
     where
         ID: Into<BlockId<Types>> + Send + Sync;
 
-    async fn get_payload_metadata<ID>(&self, id: ID) -> QueryResult<Fetch<PayloadMetadata<Types>>>
+    async fn get_payload_metadata<ID>(&self, id: ID) -> Fetch<PayloadMetadata<Types>>
     where
         ID: Into<BlockId<Types>> + Send + Sync;
 
@@ -163,21 +163,15 @@ where
     where
         R: RangeBounds<usize> + Send + 'static;
 
-    async fn get_block_range<R>(&self, range: R) -> QueryResult<FetchStream<BlockQueryData<Types>>>
+    async fn get_block_range<R>(&self, range: R) -> FetchStream<BlockQueryData<Types>>
     where
         R: RangeBounds<usize> + Send + 'static;
 
-    async fn get_payload_range<R>(
-        &self,
-        range: R,
-    ) -> QueryResult<FetchStream<PayloadQueryData<Types>>>
+    async fn get_payload_range<R>(&self, range: R) -> FetchStream<PayloadQueryData<Types>>
     where
         R: RangeBounds<usize> + Send + 'static;
 
-    async fn get_payload_metadata_range<R>(
-        &self,
-        range: R,
-    ) -> QueryResult<FetchStream<PayloadMetadata<Types>>>
+    async fn get_payload_metadata_range<R>(&self, range: R) -> FetchStream<PayloadMetadata<Types>>
     where
         R: RangeBounds<usize> + Send + 'static;
 
@@ -202,19 +196,19 @@ where
         &self,
         start: Bound<usize>,
         end: usize,
-    ) -> QueryResult<FetchStream<BlockQueryData<Types>>>;
+    ) -> FetchStream<BlockQueryData<Types>>;
 
     async fn get_payload_range_rev(
         &self,
         start: Bound<usize>,
         end: usize,
-    ) -> QueryResult<FetchStream<PayloadQueryData<Types>>>;
+    ) -> FetchStream<PayloadQueryData<Types>>;
 
     async fn get_payload_metadata_range_rev(
         &self,
         start: Bound<usize>,
         end: usize,
-    ) -> QueryResult<FetchStream<PayloadMetadata<Types>>>;
+    ) -> FetchStream<PayloadMetadata<Types>>;
 
     async fn get_vid_common_range_rev(
         &self,
@@ -234,37 +228,28 @@ where
         hash: TransactionHash<Types>,
     ) -> Fetch<TransactionQueryData<Types>>;
 
-    async fn subscribe_blocks(
-        &self,
-        from: usize,
-    ) -> QueryResult<BoxStream<'static, BlockQueryData<Types>>> {
-        Ok(self
-            .get_block_range(from..)
-            .await?
+    async fn subscribe_blocks(&self, from: usize) -> BoxStream<'static, BlockQueryData<Types>> {
+        self.get_block_range(from..)
+            .await
             .then(Fetch::resolve)
-            .boxed())
+            .boxed()
     }
 
-    async fn subscribe_payloads(
-        &self,
-        from: usize,
-    ) -> QueryResult<BoxStream<'static, PayloadQueryData<Types>>> {
-        Ok(self
-            .get_payload_range(from..)
-            .await?
+    async fn subscribe_payloads(&self, from: usize) -> BoxStream<'static, PayloadQueryData<Types>> {
+        self.get_payload_range(from..)
+            .await
             .then(Fetch::resolve)
-            .boxed())
+            .boxed()
     }
 
     async fn subscribe_payload_metadata(
         &self,
         from: usize,
-    ) -> QueryResult<BoxStream<'static, PayloadMetadata<Types>>> {
-        Ok(self
-            .get_payload_metadata_range(from..)
-            .await?
+    ) -> BoxStream<'static, PayloadMetadata<Types>> {
+        self.get_payload_metadata_range(from..)
+            .await
             .then(Fetch::resolve)
-            .boxed())
+            .boxed()
     }
 
     async fn subscribe_leaves(&self, from: usize) -> BoxStream<'static, LeafQueryData<Types>> {

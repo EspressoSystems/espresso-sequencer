@@ -165,26 +165,26 @@ where
         self.data_source.get_leaf(id).await
     }
 
-    async fn get_header<ID>(&self, id: ID) -> QueryResult<Fetch<Header<Types>>>
+    async fn get_header<ID>(&self, id: ID) -> Fetch<Header<Types>>
     where
         ID: Into<BlockId<Types>> + Send + Sync,
     {
         self.data_source.get_header(id).await
     }
 
-    async fn get_block<ID>(&self, id: ID) -> QueryResult<Fetch<BlockQueryData<Types>>>
+    async fn get_block<ID>(&self, id: ID) -> Fetch<BlockQueryData<Types>>
     where
         ID: Into<BlockId<Types>> + Send + Sync,
     {
         self.data_source.get_block(id).await
     }
-    async fn get_payload<ID>(&self, id: ID) -> QueryResult<Fetch<PayloadQueryData<Types>>>
+    async fn get_payload<ID>(&self, id: ID) -> Fetch<PayloadQueryData<Types>>
     where
         ID: Into<BlockId<Types>> + Send + Sync,
     {
         self.data_source.get_payload(id).await
     }
-    async fn get_payload_metadata<ID>(&self, id: ID) -> QueryResult<Fetch<PayloadMetadata<Types>>>
+    async fn get_payload_metadata<ID>(&self, id: ID) -> Fetch<PayloadMetadata<Types>>
     where
         ID: Into<BlockId<Types>> + Send + Sync,
     {
@@ -208,7 +208,7 @@ where
     {
         self.data_source.get_leaf_range(range).await
     }
-    async fn get_block_range<R>(&self, range: R) -> QueryResult<FetchStream<BlockQueryData<Types>>>
+    async fn get_block_range<R>(&self, range: R) -> FetchStream<BlockQueryData<Types>>
     where
         R: RangeBounds<usize> + Send + 'static,
     {
@@ -221,19 +221,13 @@ where
     {
         self.data_source.get_header_range(range).await
     }
-    async fn get_payload_range<R>(
-        &self,
-        range: R,
-    ) -> QueryResult<FetchStream<PayloadQueryData<Types>>>
+    async fn get_payload_range<R>(&self, range: R) -> FetchStream<PayloadQueryData<Types>>
     where
         R: RangeBounds<usize> + Send + 'static,
     {
         self.data_source.get_payload_range(range).await
     }
-    async fn get_payload_metadata_range<R>(
-        &self,
-        range: R,
-    ) -> QueryResult<FetchStream<PayloadMetadata<Types>>>
+    async fn get_payload_metadata_range<R>(&self, range: R) -> FetchStream<PayloadMetadata<Types>>
     where
         R: RangeBounds<usize> + Send + 'static,
     {
@@ -266,21 +260,21 @@ where
         &self,
         start: Bound<usize>,
         end: usize,
-    ) -> QueryResult<FetchStream<BlockQueryData<Types>>> {
+    ) -> FetchStream<BlockQueryData<Types>> {
         self.data_source.get_block_range_rev(start, end).await
     }
     async fn get_payload_range_rev(
         &self,
         start: Bound<usize>,
         end: usize,
-    ) -> QueryResult<FetchStream<PayloadQueryData<Types>>> {
+    ) -> FetchStream<PayloadQueryData<Types>> {
         self.data_source.get_payload_range_rev(start, end).await
     }
     async fn get_payload_metadata_range_rev(
         &self,
         start: Bound<usize>,
         end: usize,
-    ) -> QueryResult<FetchStream<PayloadMetadata<Types>>> {
+    ) -> FetchStream<PayloadMetadata<Types>> {
         self.data_source
             .get_payload_metadata_range_rev(start, end)
             .await

@@ -99,7 +99,7 @@ where
             AvailabilityStorage<Types> + NodeStorage<Types> + PrunedHeightStorage,
         P: AvailabilityProvider<Types>,
     {
-        // do not fetch if we are in light weight mode
+        // Do not fetch if we are in leaf only mode
         if fetcher.leaf_only {
             return Ok(());
         }
@@ -189,13 +189,18 @@ pub(super) fn fetch_vid_common_with_header<Types, S, P>(
     for<'a> S::Transaction<'a>: UpdateAvailabilityStorage<Types>,
     P: AvailabilityProvider<Types>,
 {
+    let Some(vid_fetcher) = fetcher.vid_common_fetcher.as_ref() else {
+        tracing::info!("not fetching vid because of leaf only mode");
+        return;
+    };
+
     // Now that we have the header, we only need to retrieve the VID common data.
     tracing::info!(
         "spawned active fetch for VID common {:?} (height {})",
         header.payload_commitment(),
         header.block_number()
     );
-    fetcher.vid_common_fetcher.spawn_fetch(
+    vid_fetcher.spawn_fetch(
         request::VidCommonRequest(header.payload_commitment()),
         fetcher.provider.clone(),
         once(VidCommonCallback {
@@ -288,8 +293,7 @@ where
             AvailabilityStorage<Types> + NodeStorage<Types> + PrunedHeightStorage,
         P: AvailabilityProvider<Types>,
     {
-        // If we're in light-weight mode, we don't need to fetch the VID common data.
-
+        // Do not fetch if we are in leaf only mode
         if fetcher.leaf_only {
             return Ok(());
         }

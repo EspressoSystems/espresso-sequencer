@@ -115,7 +115,6 @@ where
                     state
                         .get_block(height)
                         .await
-                        .unwrap()
                         .with_timeout(timeout)
                         .await
                         .context(FetchBlockSnafu {

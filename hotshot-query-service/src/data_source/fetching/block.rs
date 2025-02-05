@@ -18,7 +18,10 @@ use super::{
     Storable,
 };
 use crate::{
-    availability::{BlockId, BlockQueryData, PayloadMetadata, PayloadQueryData, QueryablePayload},
+    availability::{
+        BlockId, BlockQueryData, HeaderQueryData, PayloadMetadata, PayloadQueryData,
+        QueryablePayload,
+    },
     data_source::{
         storage::{
             pruning::PrunedHeightStorage, AvailabilityStorage, NodeStorage,
@@ -36,10 +39,10 @@ use crate::{
 };
 use async_trait::async_trait;
 use derivative::Derivative;
+use derive_more::From;
 use futures::future::{BoxFuture, FutureExt};
 use hotshot_types::traits::{block_contents::BlockHeader, node_implementation::NodeType};
 use std::{cmp::Ordering, future::IntoFuture, iter::once, ops::RangeBounds, sync::Arc};
-
 pub(super) type PayloadFetcher<Types, S, P> =
     fetching::Fetcher<request::PayloadRequest, PayloadCallback<Types, S, P>>;
 
@@ -96,7 +99,7 @@ where
             AvailabilityStorage<Types> + NodeStorage<Types> + PrunedHeightStorage,
         P: AvailabilityProvider<Types>,
     {
-        // Do not fetch if we are in light weight mode
+        // Do not fetch if we are in leaf only mode
         if fetcher.leaf_only {
             return Ok(());
         }
@@ -146,6 +149,12 @@ where
 
     async fn notify(&self, notifiers: &Notifiers<Types>) {
         notifiers.block.notify(self).await;
+        // The block also contains the header, so after notifying about the block,
+        // we take the header and notify the header subscribers as well.
+        notifiers
+            .header
+            .notify(&HeaderQueryData::new(self.header().clone()))
+            .await;
     }
 
     async fn store(
@@ -228,7 +237,7 @@ where
             AvailabilityStorage<Types> + NodeStorage<Types> + PrunedHeightStorage,
         P: AvailabilityProvider<Types>,
     {
-        // If we're in light-weight mode, we don't need to fetch the VID common data.
+        // Do not fetch if we are in leaf only mode
         if fetcher.leaf_only {
             return Ok(());
         }
@@ -346,7 +355,7 @@ where
             AvailabilityStorage<Types> + NodeStorage<Types> + PrunedHeightStorage,
         P: AvailabilityProvider<Types>,
     {
-        // If we're in light-weight mode, we don't need to fetch the VID common data.
+        // Do not fetch if we are in leaf only mode
         if fetcher.leaf_only {
             return Ok(());
         }

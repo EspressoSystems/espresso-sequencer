@@ -621,29 +621,26 @@ mod test {
         {
             self.hotshot_qs.get_leaf(id).await
         }
-        async fn get_block<ID>(&self, id: ID) -> QueryResult<Fetch<BlockQueryData<MockTypes>>>
+        async fn get_block<ID>(&self, id: ID) -> Fetch<BlockQueryData<MockTypes>>
         where
             ID: Into<BlockId<MockTypes>> + Send + Sync,
         {
             self.hotshot_qs.get_block(id).await
         }
 
-        async fn get_header<ID>(&self, id: ID) -> QueryResult<Fetch<Header<MockTypes>>>
+        async fn get_header<ID>(&self, id: ID) -> Fetch<Header<MockTypes>>
         where
             ID: Into<BlockId<MockTypes>> + Send + Sync,
         {
             self.hotshot_qs.get_header(id).await
         }
-        async fn get_payload<ID>(&self, id: ID) -> QueryResult<Fetch<PayloadQueryData<MockTypes>>>
+        async fn get_payload<ID>(&self, id: ID) -> Fetch<PayloadQueryData<MockTypes>>
         where
             ID: Into<BlockId<MockTypes>> + Send + Sync,
         {
             self.hotshot_qs.get_payload(id).await
         }
-        async fn get_payload_metadata<ID>(
-            &self,
-            id: ID,
-        ) -> QueryResult<Fetch<PayloadMetadata<MockTypes>>>
+        async fn get_payload_metadata<ID>(&self, id: ID) -> Fetch<PayloadMetadata<MockTypes>>
         where
             ID: Into<BlockId<MockTypes>> + Send + Sync,
         {
@@ -667,10 +664,7 @@ mod test {
         {
             self.hotshot_qs.get_leaf_range(range).await
         }
-        async fn get_block_range<R>(
-            &self,
-            range: R,
-        ) -> QueryResult<FetchStream<BlockQueryData<MockTypes>>>
+        async fn get_block_range<R>(&self, range: R) -> FetchStream<BlockQueryData<MockTypes>>
         where
             R: RangeBounds<usize> + Send + 'static,
         {
@@ -683,10 +677,7 @@ mod test {
         {
             self.hotshot_qs.get_header_range(range).await
         }
-        async fn get_payload_range<R>(
-            &self,
-            range: R,
-        ) -> QueryResult<FetchStream<PayloadQueryData<MockTypes>>>
+        async fn get_payload_range<R>(&self, range: R) -> FetchStream<PayloadQueryData<MockTypes>>
         where
             R: RangeBounds<usize> + Send + 'static,
         {
@@ -695,7 +686,7 @@ mod test {
         async fn get_payload_metadata_range<R>(
             &self,
             range: R,
-        ) -> QueryResult<FetchStream<PayloadMetadata<MockTypes>>>
+        ) -> FetchStream<PayloadMetadata<MockTypes>>
         where
             R: RangeBounds<usize> + Send + 'static,
         {
@@ -730,21 +721,21 @@ mod test {
             &self,
             start: Bound<usize>,
             end: usize,
-        ) -> QueryResult<FetchStream<BlockQueryData<MockTypes>>> {
+        ) -> FetchStream<BlockQueryData<MockTypes>> {
             self.hotshot_qs.get_block_range_rev(start, end).await
         }
         async fn get_payload_range_rev(
             &self,
             start: Bound<usize>,
             end: usize,
-        ) -> QueryResult<FetchStream<PayloadQueryData<MockTypes>>> {
+        ) -> FetchStream<PayloadQueryData<MockTypes>> {
             self.hotshot_qs.get_payload_range_rev(start, end).await
         }
         async fn get_payload_metadata_range_rev(
             &self,
             start: Bound<usize>,
             end: usize,
-        ) -> QueryResult<FetchStream<PayloadMetadata<MockTypes>>> {
+        ) -> FetchStream<PayloadMetadata<MockTypes>> {
             self.hotshot_qs
                 .get_payload_metadata_range_rev(start, end)
                 .await

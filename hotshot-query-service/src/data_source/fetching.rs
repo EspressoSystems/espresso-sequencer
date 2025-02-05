@@ -83,6 +83,7 @@ use super::{
     },
     Transaction, VersionedDataSource,
 };
+use crate::availability::HeaderQueryData;
 use crate::{
     availability::{
         AvailabilityDataSource, BlockId, BlockInfo, BlockQueryData, Fetch, FetchStream, LeafId,
@@ -424,13 +425,6 @@ where
     _types: PhantomData<(Types, S)>,
 }
 
-impl<Types, S, P> Fetcher<Types, S, P>
-where
-    Types: NodeType,
-    S: PruneStorage + Sync,
-{
-}
-
 impl<Types, S> Pruner<Types, S>
 where
     Types: NodeType,
@@ -622,57 +616,35 @@ where
         self.fetcher.get(id.into()).await
     }
 
-    async fn get_header<ID>(&self, id: ID) -> QueryResult<Fetch<Header<Types>>>
+    async fn get_header<ID>(&self, id: ID) -> Fetch<Header<Types>>
     where
         ID: Into<BlockId<Types>> + Send + Sync,
     {
-        if self.fetcher.leaf_only {
-            let mut tx = self.read().await.map_err(|err| QueryError::Error {
-                message: err.to_string(),
-            })?;
-            return tx.get_header(id.into()).await.map(Fetch::Ready);
-        }
-
-        let block: Fetch<BlockQueryData<Types>> = self.fetcher.get(id.into()).await;
-        Ok(block.map(|b| b.header().clone()))
+        self.fetcher
+            .get::<HeaderQueryData<_>>(id.into())
+            .await
+            .map(|h| h.header)
     }
 
-    async fn get_block<ID>(&self, id: ID) -> QueryResult<Fetch<BlockQueryData<Types>>>
+    async fn get_block<ID>(&self, id: ID) -> Fetch<BlockQueryData<Types>>
     where
         ID: Into<BlockId<Types>> + Send + Sync,
     {
-        if self.fetcher.leaf_only {
-            return Err(QueryError::Error {
-                message: "block is not supported for leaf only data source".to_string(),
-            });
-        }
-
-        Ok(self.fetcher.get(id.into()).await)
+        self.fetcher.get(id.into()).await
     }
 
-    async fn get_payload<ID>(&self, id: ID) -> QueryResult<Fetch<PayloadQueryData<Types>>>
+    async fn get_payload<ID>(&self, id: ID) -> Fetch<PayloadQueryData<Types>>
     where
         ID: Into<BlockId<Types>> + Send + Sync,
     {
-        if self.fetcher.leaf_only {
-            return Err(QueryError::Error {
-                message: "payload is not supported for leaf only data source".to_string(),
-            });
-        }
-
-        Ok(self.fetcher.get(id.into()).await)
+        self.fetcher.get(id.into()).await
     }
 
-    async fn get_payload_metadata<ID>(&self, id: ID) -> QueryResult<Fetch<PayloadMetadata<Types>>>
+    async fn get_payload_metadata<ID>(&self, id: ID) -> Fetch<PayloadMetadata<Types>>
     where
         ID: Into<BlockId<Types>> + Send + Sync,
     {
-        if self.fetcher.leaf_only {
-            return Err(QueryError::Error {
-                message: "payload metadata is not supported for leaf only data source".to_string(),
-            });
-        }
-        Ok(self.fetcher.get(id.into()).await)
+        self.fetcher.get(id.into()).await
     }
 
     async fn get_vid_common<ID>(&self, id: ID) -> Fetch<VidCommonQueryData<Types>>
@@ -696,16 +668,11 @@ where
         self.fetcher.clone().get_range(range)
     }
 
-    async fn get_block_range<R>(&self, range: R) -> QueryResult<FetchStream<BlockQueryData<Types>>>
+    async fn get_block_range<R>(&self, range: R) -> FetchStream<BlockQueryData<Types>>
     where
         R: RangeBounds<usize> + Send + 'static,
     {
-        if self.fetcher.leaf_only {
-            return Err(QueryError::Error {
-                message: "block range is not supported for leaf only data source".to_string(),
-            });
-        }
-        Ok(self.fetcher.clone().get_range(range))
+        self.fetcher.clone().get_range(range)
     }
 
     async fn get_header_range<R>(&self, range: R) -> FetchStream<Header<Types>>
@@ -719,36 +686,18 @@ where
             .boxed()
     }
 
-    async fn get_payload_range<R>(
-        &self,
-        range: R,
-    ) -> QueryResult<FetchStream<PayloadQueryData<Types>>>
+    async fn get_payload_range<R>(&self, range: R) -> FetchStream<PayloadQueryData<Types>>
     where
         R: RangeBounds<usize> + Send + 'static,
     {
-        if self.fetcher.leaf_only {
-            return Err(QueryError::Error {
-                message: "payload range is not supported for leaf only data source".to_string(),
-            });
-        }
-
-        Ok(self.fetcher.clone().get_range(range))
+        self.fetcher.clone().get_range(range)
     }
 
-    async fn get_payload_metadata_range<R>(
-        &self,
-        range: R,
-    ) -> QueryResult<FetchStream<PayloadMetadata<Types>>>
+    async fn get_payload_metadata_range<R>(&self, range: R) -> FetchStream<PayloadMetadata<Types>>
     where
         R: RangeBounds<usize> + Send + 'static,
     {
-        if self.fetcher.leaf_only {
-            return Err(QueryError::Error {
-                message: "payload metadata range is not supported for leaf only data source"
-                    .to_string(),
-            });
-        }
-        Ok(self.fetcher.clone().get_range(range))
+        self.fetcher.clone().get_range(range)
     }
 
     async fn get_vid_common_range<R>(&self, range: R) -> FetchStream<VidCommonQueryData<Types>>
@@ -780,43 +729,24 @@ where
         &self,
         start: Bound<usize>,
         end: usize,
-    ) -> QueryResult<FetchStream<BlockQueryData<Types>>> {
-        if self.fetcher.leaf_only {
-            return Err(QueryError::Error {
-                message: "block range is not supported for leaf only data source".to_string(),
-            });
-        }
-
-        Ok(self.fetcher.clone().get_range_rev(start, end))
+    ) -> FetchStream<BlockQueryData<Types>> {
+        self.fetcher.clone().get_range_rev(start, end)
     }
 
     async fn get_payload_range_rev(
         &self,
         start: Bound<usize>,
         end: usize,
-    ) -> QueryResult<FetchStream<PayloadQueryData<Types>>> {
-        if self.fetcher.leaf_only {
-            return Err(QueryError::Error {
-                message: "payload range is not supported for leaf only data source".to_string(),
-            });
-        }
-
-        Ok(self.fetcher.clone().get_range_rev(start, end))
+    ) -> FetchStream<PayloadQueryData<Types>> {
+        self.fetcher.clone().get_range_rev(start, end)
     }
 
     async fn get_payload_metadata_range_rev(
         &self,
         start: Bound<usize>,
         end: usize,
-    ) -> QueryResult<FetchStream<PayloadMetadata<Types>>> {
-        if self.fetcher.leaf_only {
-            return Err(QueryError::Error {
-                message: "payload metadata range is not supported for leaf only data source"
-                    .to_string(),
-            });
-        }
-
-        Ok(self.fetcher.clone().get_range_rev(start, end))
+    ) -> FetchStream<PayloadMetadata<Types>> {
+        self.fetcher.clone().get_range_rev(start, end)
     }
 
     async fn get_vid_common_range_rev(
@@ -917,9 +847,9 @@ where
     storage: Arc<S>,
     notifiers: Notifiers<Types>,
     provider: Arc<P>,
-    payload_fetcher: Option<Arc<PayloadFetcher<Types, S, P>>>,
     leaf_fetcher: Arc<LeafFetcher<Types, S, P>>,
-    vid_common_fetcher: Arc<VidCommonFetcher<Types, S, P>>,
+    payload_fetcher: Option<Arc<PayloadFetcher<Types, S, P>>>,
+    vid_common_fetcher: Option<Arc<VidCommonFetcher<Types, S, P>>>,
     range_chunk_size: usize,
     // Duration to sleep after each active fetch,
     active_fetch_delay: Duration,
@@ -967,16 +897,21 @@ where
         let retry_semaphore = Arc::new(Semaphore::new(builder.rate_limit));
         let backoff = builder.backoff.build();
 
-        let payload_fetcher = if builder.is_leaf_only() {
-            None
+        let (payload_fetcher, vid_fetcher) = if builder.is_leaf_only() {
+            (None, None)
         } else {
-            Some(Arc::new(fetching::Fetcher::new(
-                retry_semaphore.clone(),
-                backoff.clone(),
-            )))
+            (
+                Some(Arc::new(fetching::Fetcher::new(
+                    retry_semaphore.clone(),
+                    backoff.clone(),
+                ))),
+                Some(Arc::new(fetching::Fetcher::new(
+                    retry_semaphore.clone(),
+                    backoff.clone(),
+                ))),
+            )
         };
         let leaf_fetcher = fetching::Fetcher::new(retry_semaphore.clone(), backoff.clone());
-        let vid_common_fetcher = fetching::Fetcher::new(retry_semaphore.clone(), backoff.clone());
 
         let leaf_only = builder.leaf_only;
 
@@ -984,9 +919,9 @@ where
             storage: Arc::new(builder.storage),
             notifiers: Default::default(),
             provider: Arc::new(builder.provider),
-            payload_fetcher,
             leaf_fetcher: Arc::new(leaf_fetcher),
-            vid_common_fetcher: Arc::new(vid_common_fetcher),
+            payload_fetcher,
+            vid_common_fetcher: vid_fetcher,
             range_chunk_size: builder.range_chunk_size,
             active_fetch_delay: builder.active_fetch_delay,
             chunk_fetch_delay: builder.chunk_fetch_delay,
@@ -1712,6 +1647,11 @@ where
     where
         T: Storable<Types>,
     {
+        if !T::should_store(self.leaf_only) {
+            obj.notify(&self.notifiers).await;
+            return;
+        }
+
         let try_store = || async {
             let mut tx = self.storage.write().await?;
             obj.clone().store(&mut tx).await?;
@@ -1776,6 +1716,7 @@ where
 {
     block: Notifier<BlockQueryData<Types>>,
     leaf: Notifier<LeafQueryData<Types>>,
+    header: Notifier<HeaderQueryData<Types>>,
     vid_common: Notifier<VidCommonQueryData<Types>>,
 }
 
@@ -1787,6 +1728,7 @@ where
         Self {
             block: Notifier::new(),
             leaf: Notifier::new(),
+            header: Notifier::new(),
             vid_common: Notifier::new(),
         }
     }
@@ -2127,6 +2069,10 @@ trait Storable<Types: NodeType>: HeightIndexed + Clone {
     /// The name of this type of object, for debugging purposes.
     fn name() -> &'static str;
 
+    fn should_store(leaf_only: bool) -> bool {
+        leaf_only && Self::name() == "leaf"
+    }
+
     /// Notify anyone waiting for this object that it has become available.
     fn notify(&self, notifiers: &Notifiers<Types>) -> impl Send + Future<Output = ()>;
 
@@ -2159,11 +2105,12 @@ impl<Types: NodeType> Storable<Types> for BlockInfo<Types> {
     ) -> anyhow::Result<()> {
         self.leaf.store(storage).await?;
 
-        if let Some(block) = self.block {
-            block.store(storage).await?;
-        }
         if let Some(common) = self.vid_common {
             (common, self.vid_share).store(storage).await?;
+        }
+
+        if let Some(block) = self.block {
+            block.store(storage).await?;
         }
 
         Ok(())

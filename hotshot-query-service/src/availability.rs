@@ -235,7 +235,7 @@ where
                 } else {
                     BlockId::PayloadHash(req.blob_param("payload-hash")?)
                 };
-                let fetch = state.read(|state| state.get_header(id).boxed()).await?;
+                let fetch = state.read(|state| state.get_header(id).boxed()).await;
                 fetch.with_timeout(timeout).await.context(FetchHeaderSnafu {
                     resource: id.to_string(),
                 })
@@ -284,7 +284,7 @@ where
                 } else {
                     BlockId::PayloadHash(req.blob_param("payload-hash")?)
                 };
-                let fetch = state.read(|state| state.get_block(id).boxed()).await?;
+                let fetch = state.read(|state| state.get_block(id).boxed()).await;
                 fetch.with_timeout(timeout).await.context(FetchBlockSnafu {
                     resource: id.to_string(),
                 })
@@ -299,7 +299,7 @@ where
 
                 let blocks = state
                     .read(|state| state.get_block_range(from..until).boxed())
-                    .await?;
+                    .await;
                 blocks
                     .enumerate()
                     .then(|(index, fetch)| async move {
@@ -317,7 +317,7 @@ where
                 let height = req.integer_param("height")?;
                 state
                     .read(|state| {
-                        async move { Ok(state.subscribe_blocks(height).await?.map(Ok)) }.boxed()
+                        async move { Ok(state.subscribe_blocks(height).await.map(Ok)) }.boxed()
                     })
                     .await
             }
@@ -333,7 +333,7 @@ where
                 } else {
                     BlockId::Hash(req.blob_param("block-hash")?)
                 };
-                let fetch = state.read(|state| state.get_payload(id).boxed()).await?;
+                let fetch = state.read(|state| state.get_payload(id).boxed()).await;
                 fetch.with_timeout(timeout).await.context(FetchBlockSnafu {
                     resource: id.to_string(),
                 })
@@ -348,7 +348,7 @@ where
 
                 let payloads = state
                     .read(|state| state.get_payload_range(from..until).boxed())
-                    .await?;
+                    .await;
                 payloads
                     .enumerate()
                     .then(|(index, fetch)| async move {
@@ -366,7 +366,7 @@ where
                 let height = req.integer_param("height")?;
                 state
                     .read(|state| {
-                        async move { Ok(state.subscribe_payloads(height).await?.map(Ok)) }.boxed()
+                        async move { Ok(state.subscribe_payloads(height).await.map(Ok)) }.boxed()
                     })
                     .await
             }
@@ -419,7 +419,7 @@ where
                         let height: u64 = req.integer_param("height")?;
                         let fetch = state
                             .read(|state| state.get_block(height as usize).boxed())
-                            .await?;
+                            .await;
                         let block = fetch.with_timeout(timeout).await.context(FetchBlockSnafu {
                             resource: height.to_string(),
                         })?;
@@ -439,7 +439,7 @@ where
             async move {
                 let id: usize = req.integer_param("height")?;
 
-                let fetch = state.read(|state| state.get_block(id).boxed()).await?;
+                let fetch = state.read(|state| state.get_block(id).boxed()).await;
                 fetch
                     .with_timeout(timeout)
                     .await
@@ -458,7 +458,7 @@ where
 
                 let blocks = state
                     .read(|state| state.get_block_range(from..until).boxed())
-                    .await?;
+                    .await;
                 let result: Vec<BlockSummaryQueryData<Types>> = blocks
                     .enumerate()
                     .then(|(index, fetch)| async move {
@@ -899,7 +899,7 @@ mod test {
                 .unwrap(),
             1
         );
-        assert_eq!(block, data_source.get_block(0).await.unwrap().await);
+        assert_eq!(block, data_source.get_block(0).await.await);
 
         // Create the API extensions specification.
         let extensions = toml! {

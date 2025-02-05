@@ -281,7 +281,6 @@ mod test {
         let payload = data_source
             .get_payload(test_payload.height() as usize)
             .await
-            .unwrap()
             .await;
         assert_eq!(payload.height(), test_payload.height());
         assert_eq!(payload.block_hash(), test_payload.block_hash());

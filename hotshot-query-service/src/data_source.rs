@@ -83,7 +83,6 @@ mod test_helpers {
     {
         ds.get_block_range(bound_range(ds, range).await)
             .await
-            .expect("failed to get block range")
             .then(Fetch::resolve)
             .boxed()
     }
@@ -158,18 +157,15 @@ pub mod availability_tests {
             assert_eq!(leaf, ds.get_leaf(leaf.hash()).await.await);
 
             tracing::info!("looking up block {i} various ways");
-            let block = ds.get_block(i).await.unwrap().await;
+            let block = ds.get_block(i).await.await;
             assert_eq!(leaf.block_hash(), block.hash());
             assert_eq!(block.height(), i as u64);
             assert_eq!(block.hash(), block.header().commit());
             assert_eq!(block.size(), payload_size::<MockTypes>(block.payload()));
 
             // Check indices.
-            assert_eq!(block, ds.get_block(i).await.unwrap().await);
-            assert_eq!(
-                ds.get_block(block.hash()).await.unwrap().await.height(),
-                i as u64
-            );
+            assert_eq!(block, ds.get_block(i).await.await);
+            assert_eq!(ds.get_block(block.hash()).await.await.height(), i as u64);
             // We should be able to look up the block by payload hash unless its payload is a
             // duplicate. For duplicate payloads, this function returns the index of the first
             // duplicate.
@@ -185,7 +181,6 @@ pub mod availability_tests {
             if let Ok(block) = ds
                 .get_block(BlockId::PayloadHash(block.payload_hash()))
                 .await
-                .unwrap()
                 .try_resolve()
             {
                 assert_eq!(block.height(), *ix);
@@ -197,24 +192,19 @@ pub mod availability_tests {
                 // At least check that _some_ block can be fetched.
                 ds.get_block(BlockId::PayloadHash(block.payload_hash()))
                     .await
-                    .unwrap()
                     .await;
             }
 
             // Check payload lookup.
             tracing::info!("looking up payload {i} various ways");
             let expected_payload = block.clone().into();
-            assert_eq!(ds.get_payload(i).await.unwrap().await, expected_payload);
-            assert_eq!(
-                ds.get_payload(block.hash()).await.unwrap().await,
-                expected_payload
-            );
+            assert_eq!(ds.get_payload(i).await.await, expected_payload);
+            assert_eq!(ds.get_payload(block.hash()).await.await, expected_payload);
             // Similar to the above, we can't guarantee which index we will get when passively
             // fetching this payload, so only check the index if the payload is available locally.
             if let Ok(payload) = ds
                 .get_payload(BlockId::PayloadHash(block.payload_hash()))
                 .await
-                .unwrap()
                 .try_resolve()
             {
                 if *ix == i as u64 {
@@ -228,7 +218,6 @@ pub mod availability_tests {
                 // At least check that _some_ payload can be fetched.
                 ds.get_payload(BlockId::PayloadHash(block.payload_hash()))
                     .await
-                    .unwrap()
                     .await;
             }
 
@@ -302,7 +291,7 @@ pub mod availability_tests {
 
         // Submit a few blocks and make sure each one gets reflected in the query service and
         // preserves the consistency of the data and indices.
-        let mut blocks = ds.subscribe_blocks(0).await.unwrap().enumerate();
+        let mut blocks = ds.subscribe_blocks(0).await.enumerate();
         for nonce in 0..3 {
             let txn = mock_transaction(vec![nonce]);
             network.submit_transaction(txn).await;
@@ -318,7 +307,7 @@ pub mod availability_tests {
             };
 
             tracing::info!("got tx {nonce} in block {i}");
-            assert_eq!(ds.get_block(i).await.unwrap().await, block);
+            assert_eq!(ds.get_block(i).await.await, block);
             validate(&ds).await;
         }
 
@@ -336,14 +325,12 @@ pub mod availability_tests {
             assert_eq!(
                 ds.get_block_range(..block_height)
                     .await
-                    .unwrap()
                     .map(|fetch| fetch.try_resolve().ok())
                     .collect::<Vec<_>>()
                     .await,
                 storage
                     .get_block_range(..block_height)
                     .await
-                    .unwrap()
                     .map(|fetch| fetch.try_resolve().ok())
                     .collect::<Vec<_>>()
                     .await
@@ -406,9 +393,9 @@ pub mod availability_tests {
         tracing::info!("testing range {range:?}");
 
         let mut leaves = ds.get_leaf_range(range.clone()).await;
-        let mut blocks = ds.get_block_range(range.clone()).await.unwrap();
-        let mut payloads = ds.get_payload_range(range.clone()).await.unwrap();
-        let mut payloads_meta = ds.get_payload_metadata_range(range.clone()).await.unwrap();
+        let mut blocks = ds.get_block_range(range.clone()).await;
+        let mut payloads = ds.get_payload_range(range.clone()).await;
+        let mut payloads_meta = ds.get_payload_metadata_range(range.clone()).await;
         let mut vid_common = ds.get_vid_common_range(range.clone()).await;
         let mut vid_common_meta = ds.get_vid_common_metadata_range(range.clone()).await;
 
@@ -422,7 +409,7 @@ pub mod availability_tests {
             let common_meta = vid_common_meta.next().await.unwrap().await;
             assert_eq!(leaf.height(), i);
             assert_eq!(block.height(), i);
-            assert_eq!(payload, ds.get_payload(i as usize).await.unwrap().await);
+            assert_eq!(payload, ds.get_payload(i as usize).await.await);
             assert_eq!(payload_meta, block.into());
             assert_eq!(common, ds.get_vid_common(i as usize).await.await);
             assert_eq!(common_meta, common.into());
@@ -493,9 +480,9 @@ pub mod availability_tests {
         tracing::info!("testing range {start:?}-{end}");
 
         let mut leaves = ds.get_leaf_range_rev(start, end).await;
-        let mut blocks = ds.get_block_range_rev(start, end).await.unwrap();
-        let mut payloads = ds.get_payload_range_rev(start, end).await.unwrap();
-        let mut payloads_meta = ds.get_payload_metadata_range_rev(start, end).await.unwrap();
+        let mut blocks = ds.get_block_range_rev(start, end).await;
+        let mut payloads = ds.get_payload_range_rev(start, end).await;
+        let mut payloads_meta = ds.get_payload_metadata_range_rev(start, end).await;
         let mut vid_common = ds.get_vid_common_range_rev(start, end).await;
         let mut vid_common_meta = ds.get_vid_common_metadata_range_rev(start, end).await;
 
@@ -620,7 +607,7 @@ pub mod persistence_tests {
             0
         );
         ds.get_leaf(1).await.try_resolve().unwrap_err();
-        ds.get_block(1).await.unwrap().try_resolve().unwrap_err();
+        ds.get_block(1).await.try_resolve().unwrap_err();
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -667,7 +654,7 @@ pub mod persistence_tests {
             2
         );
         assert_eq!(leaf, ds.get_leaf(1).await.await);
-        assert_eq!(block, ds.get_block(1).await.unwrap().await);
+        assert_eq!(block, ds.get_block(1).await.await);
 
         drop(ds);
 
@@ -680,7 +667,7 @@ pub mod persistence_tests {
             0
         );
         ds.get_leaf(1).await.try_resolve().unwrap_err();
-        ds.get_block(1).await.unwrap().try_resolve().unwrap_err();
+        ds.get_block(1).await.try_resolve().unwrap_err();
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -759,13 +746,9 @@ pub mod persistence_tests {
             height + 1
         );
         assert_eq!(leaf, ds.get_leaf(height).await.await);
-        assert_eq!(block, ds.get_block(height).await.unwrap().await);
+        assert_eq!(block, ds.get_block(height).await.await);
         ds.get_leaf(height - 1).await.try_resolve().unwrap_err();
-        ds.get_block(height - 1)
-            .await
-            .unwrap()
-            .try_resolve()
-            .unwrap_err();
+        ds.get_block(height - 1).await.try_resolve().unwrap_err();
     }
 }
 
@@ -1136,7 +1119,7 @@ pub mod node_tests {
         network.start().await;
 
         // Submit a transaction so we can try to recover a non-empty block.
-        let mut blocks = ds.subscribe_blocks(0).await.unwrap();
+        let mut blocks = ds.subscribe_blocks(0).await;
         let txn = mock_transaction(vec![1, 2, 3]);
         network.submit_transaction(txn.clone()).await;
 
