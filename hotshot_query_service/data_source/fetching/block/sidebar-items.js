@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":["fetch_block_with_header"],"struct":["PayloadCallback"],"type":["PayloadFetcher"]};

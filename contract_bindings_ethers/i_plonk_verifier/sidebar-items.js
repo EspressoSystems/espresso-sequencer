@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"mod":["i_plonk_verifier"]};
