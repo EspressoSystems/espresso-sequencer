@@ -1,4 +1,4 @@
-use crate::parse_duration;
+use crate::{parse_duration, v0_3::StakeTables};
 use async_broadcast::{InactiveReceiver, Sender};
 use clap::Parser;
 use derive_more::Deref;
@@ -16,7 +16,7 @@ use std::{
 };
 use tokio::{
     sync::{Mutex, RwLock},
-    task::JoinHandle,
+    task::JoinSet,
 };
 use url::Url;
 
@@ -166,6 +166,7 @@ pub struct L1Client {
 pub(crate) struct L1State {
     pub(crate) snapshot: L1Snapshot,
     pub(crate) finalized: LruCache<u64, L1BlockInfo>,
+    pub(crate) stake: LruCache<u64, StakeTables>,
 }
 
 #[derive(Clone, Debug)]
@@ -175,7 +176,7 @@ pub(crate) enum L1Event {
 }
 
 #[derive(Debug, Default)]
-pub(crate) struct L1UpdateTask(pub(crate) Mutex<Option<JoinHandle<()>>>);
+pub(crate) struct L1UpdateTask(pub(crate) Mutex<Option<JoinSet<()>>>);
 
 #[derive(Clone, Debug)]
 pub(crate) struct L1ClientMetrics {
