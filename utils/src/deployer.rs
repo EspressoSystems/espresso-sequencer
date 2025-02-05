@@ -5,8 +5,6 @@ use contract_bindings_ethers::{
     fee_contract::FeeContract,
     light_client::{LightClient, LIGHTCLIENT_ABI},
     light_client_mock::LIGHTCLIENTMOCK_ABI,
-    light_client_state_update_vk::LightClientStateUpdateVK,
-    light_client_state_update_vk_mock::LightClientStateUpdateVKMock,
     permissioned_stake_table::{NodeInfo, PermissionedStakeTable},
     plonk_verifier::PlonkVerifier,
 };
@@ -28,10 +26,6 @@ pub struct DeployedContracts {
     /// Use an already-deployed PlonkVerifier.sol instead of deploying a new one.
     #[clap(long, env = Contract::PlonkVerifier)]
     plonk_verifier: Option<Address>,
-
-    /// Use an already-deployed LightClientStateUpdateVK.sol instead of deploying a new one.
-    #[clap(long, env = Contract::StateUpdateVK)]
-    light_client_state_update_vk: Option<Address>,
 
     /// Use an already-deployed LightClient.sol instead of deploying a new one.
     #[clap(long, env = Contract::LightClient)]
@@ -59,8 +53,6 @@ pub struct DeployedContracts {
 pub enum Contract {
     #[display("ESPRESSO_SEQUENCER_PLONK_VERIFIER_ADDRESS")]
     PlonkVerifier,
-    #[display("ESPRESSO_SEQUENCER_LIGHT_CLIENT_STATE_UPDATE_VK_ADDRESS")]
-    StateUpdateVK,
     #[display("ESPRESSO_SEQUENCER_LIGHT_CLIENT_ADDRESS")]
     LightClient,
     #[display("ESPRESSO_SEQUENCER_LIGHT_CLIENT_PROXY_ADDRESS")]
@@ -88,9 +80,6 @@ impl From<DeployedContracts> for Contracts {
         let mut m = HashMap::new();
         if let Some(addr) = deployed.plonk_verifier {
             m.insert(Contract::PlonkVerifier, addr);
-        }
-        if let Some(addr) = deployed.light_client_state_update_vk {
-            m.insert(Contract::StateUpdateVK, addr);
         }
         if let Some(addr) = deployed.light_client {
             m.insert(Contract::LightClient, addr);
@@ -193,12 +182,6 @@ pub async fn deploy_light_client_contract<M: Middleware + 'static>(
             PlonkVerifier::deploy(l1.clone(), ())?,
         )
         .await?;
-    let _vk = contracts
-        .deploy_tx(
-            Contract::StateUpdateVK,
-            LightClientStateUpdateVK::deploy(l1.clone(), ())?,
-        )
-        .await?;
 
     let bytecode = link_light_client_contract(plonk_verifier)?;
 
@@ -233,20 +216,13 @@ pub async fn deploy_mock_light_client_contract<M: Middleware + 'static>(
             PlonkVerifier::deploy(l1.clone(), ())?,
         )
         .await?;
-    // TODO: VK contract is currently not a standalone lib, don't deploy
-    let _vk = contracts
-        .deploy_tx(
-            Contract::StateUpdateVK,
-            LightClientStateUpdateVKMock::deploy(l1.clone(), ())?,
-        )
-        .await?;
 
     let mut bytecode: BytecodeObject = serde_json::from_str(include_str!(
         "../../contract-bindings/artifacts/LightClientMock_bytecode.json",
     ))?;
     ensure!(
         bytecode.is_unlinked(),
-        "LightClientMock contract bytecode is linked, but should have 2 external libraries"
+        "LightClientMock contract bytecode is linked, but should have an external library"
     );
     bytecode
         .link_fully_qualified(
@@ -255,18 +231,6 @@ pub async fn deploy_mock_light_client_contract<M: Middleware + 'static>(
         )
         .resolve()
         .context("error linking PlonkVerifier lib")?;
-    // TODO VK contract is currently not a standalone lib
-    // ensure!(
-    //     bytecode.is_unlinked(),
-    //     "LightClientMock contract bytecode is linked, but should still have 1 external library"
-    // );
-    // bytecode
-    //     .link_fully_qualified(
-    //         "contracts/tests/mocks/LightClientStateUpdateVKMock.sol:LightClientStateUpdateVKMock",
-    //         vk,
-    //     )
-    //     .resolve()
-    //     .context("error linking LightClientStateUpdateVKMock lib")?;
     ensure!(
         !bytecode.is_unlinked(),
         "failed to link LightClientMock.sol"
@@ -497,7 +461,7 @@ fn link_light_client_contract(
     ))?;
     ensure!(
         bytecode.is_unlinked(),
-        "LightClient contract bytecode is linked, but should have 2 external libraries"
+        "LightClient contract bytecode is linked, but should have an external library"
     );
     bytecode
         .link_fully_qualified(
@@ -506,18 +470,6 @@ fn link_light_client_contract(
         )
         .resolve()
         .context("error linking PlonkVerifier lib")?;
-    // TODO: VK contract is currently not a standalone lib
-    // ensure!(
-    //     bytecode.is_unlinked(),
-    //     "LightClient contract bytecode is linked, but should still have 1 external library"
-    // );
-    // bytecode
-    //     .link_fully_qualified(
-    //         "contracts/src/libraries/LightClientStateUpdateVK.sol:LightClientStateUpdateVK",
-    //         vk,
-    //     )
-    //     .resolve()
-    //     .context("error linking LightClientStateUpdateVK lib")?;
     ensure!(!bytecode.is_unlinked(), "failed to link LightClient.sol");
     Ok(bytecode)
 }
@@ -530,7 +482,6 @@ pub mod test_helpers {
         erc1967_proxy::ERC1967Proxy,
         fee_contract::{FeeContract, FEECONTRACT_ABI, FEECONTRACT_BYTECODE},
         light_client::{LightClient, LIGHTCLIENT_ABI},
-        light_client_state_update_vk::LightClientStateUpdateVK,
         plonk_verifier::PlonkVerifier,
     };
     use ethers::prelude::*;
@@ -552,13 +503,6 @@ pub mod test_helpers {
             .deploy_tx(
                 Contract::PlonkVerifier,
                 PlonkVerifier::deploy(l1.clone(), ())?,
-            )
-            .await?;
-        // TODO: VK contract is currently not a standalone lib, don't deploy
-        let _vk = contracts
-            .deploy_tx(
-                Contract::StateUpdateVK,
-                LightClientStateUpdateVK::deploy(l1.clone(), ())?,
             )
             .await?;
 
