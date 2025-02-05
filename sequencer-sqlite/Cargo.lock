@@ -1730,6 +1730,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
 
 [[package]]
+name = "base64-bytes"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7ce54e4e485fa0eed9c3aa5348162be09168f75bb5be7bc6587bcf2a65ee1386"
+dependencies = [
+ "base64 0.22.1",
+ "serde",
+]
+
+[[package]]
 name = "base64ct"
 version = "1.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3394,6 +3404,7 @@ dependencies = [
  "ark-serialize 0.4.2",
  "async-broadcast",
  "async-trait",
+ "base64-bytes",
  "bincode",
  "blake3",
  "bytesize",
@@ -4664,7 +4675,6 @@ dependencies = [
  "ark-std 0.4.0",
  "contract-bindings-alloy",
  "contract-bindings-ethers",
- "derive_more 1.0.0",
  "diff-test-bn254",
  "ethers",
  "ethers-conv",
@@ -4672,7 +4682,6 @@ dependencies = [
  "jf-pcs",
  "jf-plonk",
  "jf-utils",
- "libp2p 0.53.2",
  "num-bigint",
  "num-traits",
  "serde",
@@ -4686,15 +4695,12 @@ dependencies = [
  "async-lock 3.4.0",
  "async-trait",
  "clap",
- "derivative",
  "derive_more 1.0.0",
  "futures",
  "hotshot-types",
- "libp2p-identity",
  "rand 0.8.5",
  "serde",
  "snafu 0.8.5",
- "tagged-base64",
  "tide-disco",
  "tokio",
  "toml 0.8.19",
@@ -4827,7 +4833,6 @@ dependencies = [
  "tracing",
  "tracing-subscriber 0.3.19",
  "trait-variant",
- "typenum",
  "url",
  "vbs",
  "vec1",
@@ -6158,9 +6163,7 @@ dependencies = [
  "libp2p-allow-block-list 0.3.0",
  "libp2p-connection-limits 0.3.1",
  "libp2p-core 0.41.3",
- "libp2p-gossipsub 0.46.1",
  "libp2p-identity",
- "libp2p-kad 0.45.3",
  "libp2p-swarm 0.44.2",
  "multiaddr",
  "pin-project",
@@ -6184,10 +6187,10 @@ dependencies = [
  "libp2p-connection-limits 0.4.0",
  "libp2p-core 0.42.0",
  "libp2p-dns",
- "libp2p-gossipsub 0.47.0",
+ "libp2p-gossipsub",
  "libp2p-identify",
  "libp2p-identity",
- "libp2p-kad 0.46.2",
+ "libp2p-kad",
  "libp2p-mdns",
  "libp2p-metrics",
  "libp2p-quic",
@@ -6296,7 +6299,6 @@ dependencies = [
  "quick-protobuf",
  "rand 0.8.5",
  "rw-stream-sink",
- "serde",
  "smallvec",
  "thiserror 1.0.69",
  "tracing",
@@ -6348,38 +6350,6 @@ dependencies = [
  "parking_lot",
  "smallvec",
  "tracing",
-]
-
-[[package]]
-name = "libp2p-gossipsub"
-version = "0.46.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d665144a616dadebdc5fff186b1233488cdcd8bfb1223218ff084b6d052c94f7"
-dependencies = [
- "asynchronous-codec",
- "base64 0.21.7",
- "byteorder",
- "bytes 1.9.0",
- "either",
- "fnv",
- "futures",
- "futures-ticker",
- "getrandom 0.2.15",
- "hex_fmt",
- "instant",
- "libp2p-core 0.41.3",
- "libp2p-identity",
- "libp2p-swarm 0.44.2",
- "prometheus-client",
- "quick-protobuf",
- "quick-protobuf-codec",
- "rand 0.8.5",
- "regex",
- "serde",
- "sha2 0.10.8",
- "smallvec",
- "tracing",
- "void",
 ]
 
 [[package]]
@@ -6460,36 +6430,6 @@ dependencies = [
 
 [[package]]
 name = "libp2p-kad"
-version = "0.45.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5cc5767727d062c4eac74dd812c998f0e488008e82cce9c33b463d38423f9ad2"
-dependencies = [
- "arrayvec",
- "asynchronous-codec",
- "bytes 1.9.0",
- "either",
- "fnv",
- "futures",
- "futures-bounded",
- "futures-timer",
- "instant",
- "libp2p-core 0.41.3",
- "libp2p-identity",
- "libp2p-swarm 0.44.2",
- "quick-protobuf",
- "quick-protobuf-codec",
- "rand 0.8.5",
- "serde",
- "sha2 0.10.8",
- "smallvec",
- "thiserror 1.0.69",
- "tracing",
- "uint",
- "void",
-]
-
-[[package]]
-name = "libp2p-kad"
 version = "0.46.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ced237d0bd84bbebb7c2cad4c073160dacb4fe40534963c32ed6d4c6bb7702a3"
@@ -6547,10 +6487,10 @@ checksum = "77ebafa94a717c8442d8db8d3ae5d1c6a15e30f2d347e0cd31d057ca72e42566"
 dependencies = [
  "futures",
  "libp2p-core 0.42.0",
- "libp2p-gossipsub 0.47.0",
+ "libp2p-gossipsub",
  "libp2p-identify",
  "libp2p-identity",
- "libp2p-kad 0.46.2",
+ "libp2p-kad",
  "libp2p-swarm 0.45.1",
  "pin-project",
  "prometheus-client",
@@ -9322,7 +9262,6 @@ checksum = "cd0b0ec5f1c1ca621c432a25813d8d60c88abe6d3e08a3eb9cf37d97a0fe3d73"
 name = "sequencer"
 version = "0.1.0"
 dependencies = [
- "alloy",
  "anyhow",
  "ark-ff 0.4.2",
  "ark-serialize 0.4.2",
@@ -9406,7 +9345,6 @@ dependencies = [
 name = "sequencer-utils"
 version = "0.1.0"
 dependencies = [
- "alloy",
  "anyhow",
  "ark-serialize 0.4.2",
  "async-trait",
