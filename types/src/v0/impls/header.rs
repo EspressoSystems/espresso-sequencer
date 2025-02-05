@@ -329,7 +329,7 @@ impl Header {
                 builder_signature: builder_signature.first().copied(),
             }),
             3 => Self::V3(v0_3::Header {
-                chain_config: v0_1::ResolvableChainConfig::from(v0_1::ChainConfig::from(
+                chain_config: v0_3::ResolvableChainConfig::from(v0_3::ChainConfig::from(
                     chain_config,
                 )),
                 height,
@@ -550,7 +550,7 @@ impl Header {
                 builder_signature: builder_signature.first().copied(),
             }),
             3 => Self::V3(v0_3::Header {
-                chain_config: v0_1::ResolvableChainConfig::from(v0_1::ChainConfig::from(
+                chain_config: v0_3::ResolvableChainConfig::from(v0_3::ChainConfig::from(
                     chain_config,
                 )),
                 height,
