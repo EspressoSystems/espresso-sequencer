@@ -215,7 +215,7 @@ jobs:
         run: nix profile install nixpkgs#process-compose
 
       - name: Run Demo-Native ${{matrix.version}}
-        run: bash -x scripts/demo-native ${{matrix.compose}} --tui=false > ${{ env.PC_LOGS }} 2>&1 &
+        run: bash -x scripts/demo-native ${{matrix.compose}} --tui=false
 
       - name: Test Integration
         env:
