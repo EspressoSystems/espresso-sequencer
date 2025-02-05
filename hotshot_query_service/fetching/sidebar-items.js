@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"mod":["provider","request"],"struct":["Fetcher"],"trait":["Callback","LocalCallback"]};

@@ -1,0 +1,9 @@
+(function() {
+    var implementors = Object.fromEntries([["contract_bindings_alloy",[["impl SolEventInterface for <a class=\"enum\" href=\"contract_bindings_alloy/erc1967proxy/ERC1967Proxy/enum.ERC1967ProxyEvents.html\" title=\"enum contract_bindings_alloy::erc1967proxy::ERC1967Proxy::ERC1967ProxyEvents\">ERC1967ProxyEvents</a>"],["impl SolEventInterface for <a class=\"enum\" href=\"contract_bindings_alloy/feecontract/FeeContract/enum.FeeContractEvents.html\" title=\"enum contract_bindings_alloy::feecontract::FeeContract::FeeContractEvents\">FeeContractEvents</a>"],["impl SolEventInterface for <a class=\"enum\" href=\"contract_bindings_alloy/lightclient/LightClient/enum.LightClientEvents.html\" title=\"enum contract_bindings_alloy::lightclient::LightClient::LightClientEvents\">LightClientEvents</a>"],["impl SolEventInterface for <a class=\"enum\" href=\"contract_bindings_alloy/lightclientarbitrum/LightClientArbitrum/enum.LightClientArbitrumEvents.html\" title=\"enum contract_bindings_alloy::lightclientarbitrum::LightClientArbitrum::LightClientArbitrumEvents\">LightClientArbitrumEvents</a>"],["impl SolEventInterface for <a class=\"enum\" href=\"contract_bindings_alloy/lightclientmock/LightClientMock/enum.LightClientMockEvents.html\" title=\"enum contract_bindings_alloy::lightclientmock::LightClientMock::LightClientMockEvents\">LightClientMockEvents</a>"],["impl SolEventInterface for <a class=\"enum\" href=\"contract_bindings_alloy/permissionedstaketable/PermissionedStakeTable/enum.PermissionedStakeTableEvents.html\" title=\"enum contract_bindings_alloy::permissionedstaketable::PermissionedStakeTable::PermissionedStakeTableEvents\">PermissionedStakeTableEvents</a>"]]]]);
+    if (window.register_implementors) {
+        window.register_implementors(implementors);
+    } else {
+        window.pending_implementors = implementors;
+    }
+})()
+//{"start":57,"fragment_lengths":[1637]}
