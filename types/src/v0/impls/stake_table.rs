@@ -242,7 +242,7 @@ impl EpochCommittees {
 
         // TODO: remove this, workaround for hotshot asking for stake tables from epoch 1 and 2
         let mut map = HashMap::new();
-        for epoch in Epoch::genesis().u64()..=2 {
+        for epoch in Epoch::genesis().u64()..=10 {
             map.insert(Epoch::new(epoch), members.clone());
         }
 
