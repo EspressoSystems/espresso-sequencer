@@ -764,7 +764,7 @@ contract StakeTable_register_Test is Test {
         assertEq(currentBlockHeight, initialBlockHeight);
 
         // Calculate the expected epoch
-        uint64 expectedEpoch = initialBlockHeight / hotShotBlocksPerEpoch;
+        uint64 expectedEpoch = 0;
 
         // Call the currentEpoch function
         uint64 currentEpoch = stakeTable.currentEpoch();
@@ -785,7 +785,7 @@ contract StakeTable_register_Test is Test {
 
         // verify the expected epoch
         (, uint64 blockHeight,) = lcMock.finalizedState();
-        uint64 expectedEpoch = blockHeight / hotShotBlocksPerEpoch;
+        uint64 expectedEpoch = 10; //10/1 = 10
         assertEq(stakeTable.currentEpoch(), expectedEpoch);
     }
 
