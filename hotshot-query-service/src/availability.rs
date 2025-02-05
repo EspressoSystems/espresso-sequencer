@@ -501,7 +501,7 @@ mod test {
         status::StatusDataSource,
         task::BackgroundTask,
         testing::{
-            consensus::{MockDataSource, MockNetwork},
+            consensus::{MockDataSource, MockNetwork, MockSqlDataSource},
             mocks::{mock_transaction, MockBase, MockHeader, MockPayload, MockTypes},
             setup_test,
         },
@@ -1057,6 +1057,43 @@ mod test {
             large_object_range_limit,
         )
         .await;
+
+        network.shut_down().await;
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_header_endpoint() {
+        setup_test();
+
+        // Create the consensus network.
+        let mut network = MockNetwork::<MockSqlDataSource>::init().await;
+        network.start().await;
+
+        // Start the web server.
+        let port = pick_unused_port().unwrap();
+        let mut app = App::<_, Error>::with_state(ApiState::from(network.data_source()));
+        app.register_module(
+            "availability",
+            define_api(&Default::default(), MockBase::instance()).unwrap(),
+        )
+        .unwrap();
+        network.spawn(
+            "server",
+            app.serve(format!("0.0.0.0:{}", port), MockBase::instance()),
+        );
+
+        let ds = network.data_source();
+
+        // Get the current block height and fetch header for some later block height
+        // This fetch will only resolve when we receive a leaf or block for that block height
+        let block_height = ds.block_height().await.unwrap();
+        let fetch = ds
+            .get_header(BlockId::<MockTypes>::Number(block_height + 25))
+            .await;
+
+        assert!(fetch.is_pending());
+        let header = fetch.await;
+        assert_eq!(header.height() as usize, block_height + 25);
 
         network.shut_down().await;
     }
