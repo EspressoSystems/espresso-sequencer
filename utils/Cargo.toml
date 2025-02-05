@@ -9,12 +9,13 @@ edition = "2021"
 testing = []
 
 [dependencies]
+alloy = { workspace = true }
 anyhow = { workspace = true }
 ark-serialize = { workspace = true, features = ["derive"] }
 async-trait = { workspace = true }
 clap = { workspace = true }
 committable = "0.2"
-contract-bindings = { path = "../contract-bindings" }
+contract-bindings-ethers = { path = "../contract-bindings-ethers" }
 derive_more = { workspace = true }
 ethers = { workspace = true }
 futures = { workspace = true }

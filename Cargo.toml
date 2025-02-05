@@ -10,10 +10,12 @@ resolver = "2"
 members = [
     "builder",
     "client",
-    "contract-bindings",
+    "contract-bindings-alloy",
+    "contract-bindings-ethers",
     "contracts/rust/adapter",
     "contracts/rust/diff-test",
     "contracts/rust/gen-vk-contract",
+    "ethers-conv",
     "hotshot-events-service",
     "hotshot-state-prover",
     "marketplace-builder",
@@ -28,6 +30,21 @@ members = [
 exclude = ["sequencer-sqlite"]
 
 [workspace.dependencies]
+alloy = { version = "0.9", default-features = false, features = [
+    "rpc",
+    "transports",
+    "eips",
+    "providers",
+    "rpc-client",
+    "json-rpc",
+    "rpc-types",
+    "provider-ws",
+    "sol-types",
+    "contract",
+    "reqwest",
+    "signer-local",
+    "signers"
+] }
 anyhow = "^1.0"
 ark-std = "0.4"
 ark-bls12-381 = "0.4"

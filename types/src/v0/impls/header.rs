@@ -1,6 +1,7 @@
 use anyhow::{ensure, Context};
 use ark_serialize::CanonicalSerialize;
 use committable::{Commitment, Committable, RawCommitmentBuilder};
+use ethers_conv::ToAlloy;
 use hotshot_query_service::{availability::QueryableHeader, explorer::ExplorerHeader};
 use hotshot_types::{
     traits::{
@@ -861,7 +862,7 @@ impl BlockHeader<SeqTypes> for Header {
             instance_state
                 .l1_client
                 .get_finalized_deposits(
-                    addr,
+                    addr.to_alloy(),
                     parent_leaf
                         .block_header()
                         .l1_finalized()
@@ -996,7 +997,7 @@ impl BlockHeader<SeqTypes> for Header {
             instance_state
                 .l1_client
                 .get_finalized_deposits(
-                    addr,
+                    addr.to_alloy(),
                     parent_leaf
                         .block_header()
                         .l1_finalized()
@@ -1487,7 +1488,10 @@ mod test_headers {
 
         let anvil = Anvil::new().block_time(1u32).spawn();
         let mut genesis_state = NodeState::mock()
-            .with_l1(L1Client::new(anvil.endpoint().parse().unwrap()))
+            .with_l1(
+                L1Client::new(vec![anvil.endpoint().parse().unwrap()])
+                    .expect("Failed to create L1 client"),
+            )
             .with_current_version(StaticVersion::<0, 1>::version());
 
         let genesis = GenesisForTest::default().await;
@@ -1551,7 +1555,7 @@ mod test_headers {
         let mut proposal_state = parent_state.clone();
         for fee_info in genesis_state
             .l1_client
-            .get_finalized_deposits(Address::default(), None, 0)
+            .get_finalized_deposits(Address::default().to_alloy(), None, 0)
             .await
         {
             proposal_state.insert_fee_deposit(fee_info).unwrap();
