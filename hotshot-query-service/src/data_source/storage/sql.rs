@@ -1303,11 +1303,6 @@ mod test {
         let db = TmpDb::init().await;
         let config = db.config();
 
-        let pruner_cfg = PrunerCfg::new()
-            .with_interval(Duration::from_secs(5))
-            .with_target_retention(Duration::from_secs(60));
-
-        let config = config.pruner_cfg(pruner_cfg).unwrap();
         let storage = SqlStorage::connect(config).await.unwrap();
         let mut test_tree: UniversalMerkleTree<_, _, _, 8, _> =
             MockMerkleTree::new(MockMerkleTree::tree_height());
