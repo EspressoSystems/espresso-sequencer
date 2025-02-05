@@ -88,13 +88,16 @@ tracing-test = "0.1"
 num_cpus = "1"
 
 hotshot = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.84" }
-# Hotshot imports
-hotshot-builder-api = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.84" }
-hotshot-builder-core = { path = "hotshot-builder-core" }
-hotshot-task-impls = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.84" }
-hotshot-macros = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.84" }
+
+# Builder imports
 marketplace-builder-core = { path = "marketplace-builder-core" }
 marketplace-builder-shared = { path = "marketplace-builder-shared" }
+hotshot-builder-core = { path = "hotshot-builder-core" }
+
+# Hotshot imports
+hotshot-builder-api = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.84" }
+hotshot-task-impls = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.84" }
+hotshot-macros = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.84" }
 hotshot-events-service = { path = "hotshot-events-service" }
 hotshot-orchestrator = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.84" }
 hotshot-query-service = { path = "hotshot-query-service" }
