@@ -1647,6 +1647,9 @@ where
     where
         T: Storable<Types>,
     {
+        // If leaf only mode is activated, check that object received is also a leaf
+        // if it is we store and notify
+        //otherwise we just notify and return
         if !T::should_store(self.leaf_only) {
             obj.notify(&self.notifiers).await;
             return;
@@ -2070,7 +2073,7 @@ trait Storable<Types: NodeType>: HeightIndexed + Clone {
     fn name() -> &'static str;
 
     fn should_store(leaf_only: bool) -> bool {
-        leaf_only && Self::name() == "leaf"
+        !(leaf_only && Self::name() != "leaf")
     }
 
     /// Notify anyone waiting for this object that it has become available.
@@ -2105,12 +2108,12 @@ impl<Types: NodeType> Storable<Types> for BlockInfo<Types> {
     ) -> anyhow::Result<()> {
         self.leaf.store(storage).await?;
 
-        if let Some(common) = self.vid_common {
-            (common, self.vid_share).store(storage).await?;
-        }
-
         if let Some(block) = self.block {
             block.store(storage).await?;
+        }
+
+        if let Some(common) = self.vid_common {
+            (common, self.vid_share).store(storage).await?;
         }
 
         Ok(())

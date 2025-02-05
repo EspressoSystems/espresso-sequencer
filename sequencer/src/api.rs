@@ -1420,7 +1420,6 @@ mod api_tests {
             data_source
                 .get_block(leaf.height() as usize)
                 .await
-                .unwrap()
                 .try_resolve()
                 .ok()
                 .unwrap();
@@ -1541,7 +1540,7 @@ mod api_tests {
             data_source.get_leaf(1).await.await.leaf().clone().into()
         );
         assert!(data_source.get_vid_common(1).await.is_pending());
-        assert!(data_source.get_block(1).await.unwrap().is_pending());
+        assert!(data_source.get_block(1).await.is_pending());
     }
 
     fn leaf_info(leaf: Leaf2) -> LeafInfo<SeqTypes> {
@@ -1810,11 +1809,15 @@ mod test {
                 .unwrap();
         }
 
-        client
-            .get::<BlockQueryData<SeqTypes>>("availability/block/1")
-            .send()
-            .await
-            .unwrap_err();
+        // this should timeout as we don't store blocks in light weight node
+        tokio::time::timeout(
+            Duration::from_secs(5),
+            client
+                .get::<BlockQueryData<SeqTypes>>("availability/block/1")
+                .send(),
+        )
+        .await
+        .unwrap_err();
     }
 
     #[tokio::test(flavor = "multi_thread")]
