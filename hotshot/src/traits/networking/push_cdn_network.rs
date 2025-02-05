@@ -13,7 +13,7 @@ use std::{path::Path, time::Duration};
 use async_trait::async_trait;
 use bincode::config::Options;
 use cdn_broker::reexports::{
-    connection::protocols::{Tcp, TcpTls},
+    connection::protocols::{Quic, Tcp},
     def::{hook::NoMessageHook, ConnectionDef, RunDef, Topic as TopicTrait},
     discovery::{Embedded, Redis},
 };
@@ -149,7 +149,7 @@ impl<K: SignatureKey + 'static> RunDef for ProductionDef<K> {
 pub struct UserDef<K: SignatureKey + 'static>(PhantomData<K>);
 impl<K: SignatureKey + 'static> ConnectionDef for UserDef<K> {
     type Scheme = WrappedSignatureKey<K>;
-    type Protocol = TcpTls;
+    type Protocol = Quic;
     type MessageHook = NoMessageHook;
 }
 
@@ -169,7 +169,7 @@ impl<K: SignatureKey> ConnectionDef for BrokerDef<K> {
 pub struct ClientDef<K: SignatureKey + 'static>(PhantomData<K>);
 impl<K: SignatureKey> ConnectionDef for ClientDef<K> {
     type Scheme = WrappedSignatureKey<K>;
-    type Protocol = TcpTls;
+    type Protocol = Quic;
     type MessageHook = NoMessageHook;
 }
 
