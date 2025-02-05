@@ -75,11 +75,16 @@ pub const NUM_NODES: usize = 2;
 
 impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
     pub async fn init() -> Self {
-        Self::init_with_config(|_| {}).await
+        Self::init_with_config(|_| {}, false).await
+    }
+
+    pub async fn init_with_leaf_ds() -> Self {
+        Self::init_with_config(|_| {}, true).await
     }
 
     pub async fn init_with_config(
         update_config: impl FnOnce(&mut HotShotConfig<BLSPubKey>),
+        leaf_only: bool,
     ) -> Self {
         let (pub_keys, priv_keys): (Vec<_>, Vec<_>) = (0..NUM_NODES)
             .map(|i| BLSPubKey::generated_from_seed_indexed([0; 32], i as u64))
@@ -161,7 +166,11 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
                     let span = info_span!("initialize node", node_id);
                     async move {
                         let storage = D::create(node_id).await;
-                        let data_source = D::connect(&storage).await;
+                        let data_source = if leaf_only {
+                            D::leaf_only_ds(&storage).await
+                        } else {
+                            D::connect(&storage).await
+                        };
 
                         let network = Arc::new(MemoryNetwork::new(
                             &pub_keys[node_id],
@@ -316,6 +325,9 @@ pub trait DataSourceLifeCycle: Clone + Send + Sync + Sized + 'static {
     async fn connect(storage: &Self::Storage) -> Self;
     async fn reset(storage: &Self::Storage) -> Self;
     async fn handle_event(&self, event: &Event<MockTypes>);
+    async fn leaf_only_ds(_storage: &Self::Storage) -> Self {
+        panic!("not supported")
+    }
 
     /// Setup runs after setting up the network but before starting a test.
     async fn setup(_network: &mut MockNetwork<Self>) {}

@@ -351,6 +351,17 @@ pub mod testing {
                 .unwrap()
         }
 
+        async fn leaf_only_ds(tmp_db: &Self::Storage) -> Self {
+            let config = tmp_db.config();
+            let builder = config.builder(Default::default()).await.unwrap();
+
+            builder
+                .leaf_only()
+                .build()
+                .await
+                .expect("failed to build leaf only sql ds")
+        }
+
         async fn handle_event(&self, event: &Event<MockTypes>) {
             self.update(event).await.unwrap();
         }

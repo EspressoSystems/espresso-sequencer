@@ -496,6 +496,8 @@ fn enforce_range_limit(from: usize, until: usize, limit: usize) -> Result<(), Er
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::data_source::storage::AvailabilityStorage;
+    use crate::data_source::VersionedDataSource;
     use crate::{
         data_source::ExtensibleDataSource,
         status::StatusDataSource,
@@ -1094,6 +1096,81 @@ mod test {
         assert!(fetch.is_pending());
         let header = fetch.await;
         assert_eq!(header.height() as usize, block_height + 25);
+
+        network.shut_down().await;
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_leaf_only_ds() {
+        setup_test();
+
+        // Create the consensus network.
+        let mut network = MockNetwork::<MockSqlDataSource>::init_with_leaf_ds().await;
+        network.start().await;
+
+        // Start the web server.
+        let port = pick_unused_port().unwrap();
+        let mut app = App::<_, Error>::with_state(ApiState::from(network.data_source()));
+        app.register_module(
+            "availability",
+            define_api(&Default::default(), MockBase::instance()).unwrap(),
+        )
+        .unwrap();
+        network.spawn(
+            "server",
+            app.serve(format!("0.0.0.0:{}", port), MockBase::instance()),
+        );
+
+        // Start a client.
+        let client = Client::<Error, MockBase>::new(
+            format!("http://localhost:{}/availability", port)
+                .parse()
+                .unwrap(),
+        );
+        assert!(client.connect(Some(Duration::from_secs(60))).await);
+
+        // Wait for some headers to be produced.
+        client
+            .socket("stream/headers/0")
+            .subscribe::<Header<MockTypes>>()
+            .await
+            .unwrap()
+            .take(5)
+            .try_collect::<Vec<_>>()
+            .await
+            .unwrap();
+
+        // Wait for some leaves to be produced.
+        client
+            .socket("stream/leaves/5")
+            .subscribe::<LeafQueryData<MockTypes>>()
+            .await
+            .unwrap()
+            .take(5)
+            .try_collect::<Vec<_>>()
+            .await
+            .unwrap();
+
+        let ds = network.data_source();
+
+        // Get the current block height and fetch header for some later block height
+        // This fetch will only resolve if we get a block notification
+        // However, this block will never be stored
+        let block_height = ds.block_height().await.unwrap();
+        let target_block_height = block_height + 20;
+        let fetch = ds
+            .get_block(BlockId::<MockTypes>::Number(target_block_height))
+            .await;
+
+        assert!(fetch.is_pending());
+        let block = fetch.await;
+        assert_eq!(block.height() as usize, target_block_height);
+
+        let mut tx = ds.read().await.unwrap();
+        tx.get_block(BlockId::<MockTypes>::Number(target_block_height))
+            .await
+            .unwrap_err();
+        drop(tx);
 
         network.shut_down().await;
     }
