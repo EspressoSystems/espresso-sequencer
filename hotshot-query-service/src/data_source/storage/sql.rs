@@ -1366,9 +1366,9 @@ mod test {
         tracing::info!("Number of nodes with multiple snapshots : {count}");
         assert!(count > 0);
 
-        // This should delete all the nodes having height < 150 and is not the newest node with its position
+        // This should delete all the nodes having height < 250 and is not the newest node with its position
         let mut tx = storage.write().await.unwrap();
-        tx.delete_batch(vec!["test_tree".to_string()], 150)
+        tx.delete_batch(vec!["test_tree".to_string()], 250)
             .await
             .unwrap();
 
