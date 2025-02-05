@@ -17,6 +17,7 @@ import { EdOnBN254 } from "../src/libraries/EdOnBn254.sol";
 import { AbstractStakeTable } from "../src/interfaces/AbstractStakeTable.sol";
 import { LightClient } from "../src/LightClient.sol";
 import { LightClientMock } from "../test/mocks/LightClientMock.sol";
+import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 
 // Token contract
 import { ExampleToken } from "../src/ExampleToken.sol";
@@ -78,7 +79,8 @@ contract StakeTable_register_Test is Test {
 
         lcMock = new LightClientMock(genesis, genesisStakeTableState, 864000);
         address lightClientAddress = address(lcMock);
-        stakeTable = new S(address(token), lightClientAddress, 10, MIN_STAKE_AMOUNT);
+        stakeTable =
+            new S(address(token), lightClientAddress, 10, MIN_STAKE_AMOUNT, exampleTokenCreator);
     }
 
     function testFuzz_RevertWhen_InvalidBLSSig(uint256 scalar) external {
@@ -749,25 +751,32 @@ contract StakeTable_register_Test is Test {
 
     // test set admin succeeds
     function test_setAdmin_succeeds() public {
+        vm.prank(exampleTokenCreator);
         vm.expectEmit(false, false, false, true, address(stakeTable));
-        emit AbstractStakeTable.AdminUpdated(makeAddr("admin"));
-        stakeTable.updateAdmin(makeAddr("admin"));
-        assertEq(stakeTable.admin(), makeAddr("admin"));
+        emit Ownable.OwnershipTransferred(exampleTokenCreator, makeAddr("admin"));
+        stakeTable.transferOwnership(makeAddr("admin"));
+        assertEq(stakeTable.owner(), makeAddr("admin"));
     }
 
     // test set admin fails if not admin or invalid admin address
     function test_revertWhen_setAdmin_NotAdminOrInvalidAdminAddress() public {
         vm.startPrank(makeAddr("randomUser"));
-        vm.expectRevert(S.Unauthorized.selector);
-        stakeTable.updateAdmin(makeAddr("admin"));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                Ownable.OwnableUnauthorizedAccount.selector, makeAddr("randomUser")
+            )
+        );
+        stakeTable.transferOwnership(makeAddr("admin"));
         vm.stopPrank();
 
-        vm.expectRevert(S.InvalidAddress.selector);
-        stakeTable.updateAdmin(address(0));
+        vm.prank(exampleTokenCreator);
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableInvalidOwner.selector, address(0)));
+        stakeTable.transferOwnership(address(0));
     }
 
     // test update min stake amount succeeds
     function test_updateMinStakeAmount_succeeds() public {
+        vm.prank(exampleTokenCreator);
         vm.expectEmit(false, false, false, true, address(stakeTable));
         emit AbstractStakeTable.MinStakeAmountUpdated(10 ether);
         stakeTable.updateMinStakeAmount(10 ether);
@@ -777,16 +786,22 @@ contract StakeTable_register_Test is Test {
     // test update min stake amount fails if not admin or invalid stake amount
     function test_revertWhen_updateMinStakeAmount_NotAdminOrInvalidStakeAmount() public {
         vm.startPrank(makeAddr("randomUser"));
-        vm.expectRevert(S.Unauthorized.selector);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                Ownable.OwnableUnauthorizedAccount.selector, makeAddr("randomUser")
+            )
+        );
         stakeTable.updateMinStakeAmount(10 ether);
         vm.stopPrank();
 
+        vm.prank(exampleTokenCreator);
         vm.expectRevert(S.InvalidValue.selector);
         stakeTable.updateMinStakeAmount(0);
     }
 
     // test update max churn rate succeeds
     function test_updateMaxChurnRate_succeeds() public {
+        vm.prank(exampleTokenCreator);
         vm.expectEmit(false, false, false, true, address(stakeTable));
         emit AbstractStakeTable.MaxChurnRateUpdated(10);
         stakeTable.updateMaxChurnRate(10);
@@ -796,16 +811,22 @@ contract StakeTable_register_Test is Test {
     // test update max churn rate fails if not admin or invalid churn amount
     function test_revertWhen_updateMaxChurnRate_NotAdminOrInvalidChurnAmount() public {
         vm.startPrank(makeAddr("randomUser"));
-        vm.expectRevert(S.Unauthorized.selector);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                Ownable.OwnableUnauthorizedAccount.selector, makeAddr("randomUser")
+            )
+        );
         stakeTable.updateMaxChurnRate(10);
         vm.stopPrank();
 
+        vm.prank(exampleTokenCreator);
         vm.expectRevert(S.InvalidValue.selector);
         stakeTable.updateMaxChurnRate(0);
     }
 
     // test update light client address succeeds
     function test_updateLightClientAddress_succeeds() public {
+        vm.prank(exampleTokenCreator);
         vm.expectEmit(false, false, false, true, address(stakeTable));
         emit AbstractStakeTable.LightClientAddressUpdated(makeAddr("lightClient"));
         stakeTable.updateLightClientAddress(makeAddr("lightClient"));
@@ -815,10 +836,15 @@ contract StakeTable_register_Test is Test {
     // test update light client address fails if not admin or bad address
     function test_revertWhen_updateLightClientAddress_NotAdminOrBadAddress() public {
         vm.startPrank(makeAddr("randomUser"));
-        vm.expectRevert(S.Unauthorized.selector);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                Ownable.OwnableUnauthorizedAccount.selector, makeAddr("randomUser")
+            )
+        );
         stakeTable.updateLightClientAddress(makeAddr("lightClient"));
         vm.stopPrank();
 
+        vm.prank(exampleTokenCreator);
         vm.expectRevert(S.InvalidAddress.selector);
         stakeTable.updateLightClientAddress(address(0));
     }

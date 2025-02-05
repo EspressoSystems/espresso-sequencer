@@ -6,11 +6,12 @@ import { BLSSig } from "./libraries/BLSSig.sol";
 import { AbstractStakeTable } from "./interfaces/AbstractStakeTable.sol";
 import { LightClient } from "../src/LightClient.sol";
 import { EdOnBN254 } from "./libraries/EdOnBn254.sol";
+import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 
 using EdOnBN254 for EdOnBN254.EdOnBN254Point;
 
 /// @title Implementation of the Stake Table interface
-contract StakeTable is AbstractStakeTable {
+contract StakeTable is AbstractStakeTable, Ownable {
     /// Error to notify restaking is not implemented yet.
     error RestakingNotImplemented();
 
@@ -64,7 +65,7 @@ contract StakeTable is AbstractStakeTable {
     // Error raised when zero point keys are provided
     error NoKeyChange();
 
-    /// Error raised when the caller is not the admin
+    /// Error raised when the caller is not the owner
     error Unauthorized();
 
     /// Error raised when the light client address is invalid
@@ -103,15 +104,14 @@ contract StakeTable is AbstractStakeTable {
 
     uint256 public minStakeAmount;
 
-    address public admin;
-
     /// TODO change constructor to initialize function when we make the contract upgradeable
     constructor(
         address _tokenAddress,
         address _lightClientAddress,
         uint64 churnRate,
-        uint256 _minStakeAmount
-    ) {
+        uint256 _minStakeAmount,
+        address initialOwner
+    ) Ownable(initialOwner) {
         tokenAddress = _tokenAddress;
         lightClient = LightClient(_lightClientAddress);
 
@@ -126,8 +126,6 @@ contract StakeTable is AbstractStakeTable {
         _numPendingExits = 0;
 
         minStakeAmount = _minStakeAmount;
-
-        admin = msg.sender;
     }
 
     /// @dev Computes a hash value of some G2 point.
@@ -415,8 +413,6 @@ contract StakeTable is AbstractStakeTable {
     /// @notice Request to exit from the stake table, not immediately withdrawable!
     ///
     /// @dev TODO modify this according to the current spec
-    /// @dev TODO add a function to check if the node is eligible to exit
-    /// @dev TODO discuss if we want an admin administered emergency exit
     function requestExit() external override {
         Node memory node = nodes[msg.sender];
 
@@ -549,21 +545,10 @@ contract StakeTable is AbstractStakeTable {
         emit UpdatedConsensusKeys(msg.sender, node.blsVK, node.schnorrVK);
     }
 
-    /// @notice Update the admin
-    /// @dev The admin cannot be set to the zero address
-    /// @param _admin The new admin
-    function updateAdmin(address _admin) external {
-        if (msg.sender != admin) revert Unauthorized();
-        if (_admin == address(0)) revert InvalidAddress();
-        admin = _admin;
-        emit AdminUpdated(admin);
-    }
-
     /// @notice Update the min stake amount
     /// @dev The min stake amount cannot be set to zero
     /// @param _minStakeAmount The new min stake amount
-    function updateMinStakeAmount(uint256 _minStakeAmount) external {
-        if (msg.sender != admin) revert Unauthorized();
+    function updateMinStakeAmount(uint256 _minStakeAmount) external onlyOwner {
         if (_minStakeAmount == 0) revert InvalidValue();
         minStakeAmount = _minStakeAmount;
         emit MinStakeAmountUpdated(minStakeAmount);
@@ -572,8 +557,7 @@ contract StakeTable is AbstractStakeTable {
     /// @notice Update the max churn rate
     /// @dev The max churn rate cannot be set to zero
     /// @param _maxChurnRate The new max churn rate
-    function updateMaxChurnRate(uint64 _maxChurnRate) external {
-        if (msg.sender != admin) revert Unauthorized();
+    function updateMaxChurnRate(uint64 _maxChurnRate) external onlyOwner {
         if (_maxChurnRate == 0) revert InvalidValue();
         maxChurnRate = _maxChurnRate;
         emit MaxChurnRateUpdated(maxChurnRate);
@@ -582,8 +566,7 @@ contract StakeTable is AbstractStakeTable {
     /// @notice Update the light client address
     /// @dev The light client address cannot be set to the zero address
     /// @param _lightClientAddress The new light client address
-    function updateLightClientAddress(address _lightClientAddress) external {
-        if (msg.sender != admin) revert Unauthorized();
+    function updateLightClientAddress(address _lightClientAddress) external onlyOwner {
         if (_lightClientAddress == address(0)) revert InvalidAddress();
         lightClient = LightClient(_lightClientAddress);
         emit LightClientAddressUpdated(_lightClientAddress);
