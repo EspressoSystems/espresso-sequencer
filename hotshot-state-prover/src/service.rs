@@ -7,7 +7,7 @@ use std::{
 };
 
 use anyhow::{anyhow, Context, Result};
-use contract_bindings::light_client::{LightClient, LightClientErrors};
+use contract_bindings_ethers::light_client::{LightClient, LightClientErrors};
 use displaydoc::Display;
 use ethers::middleware::{
     gas_oracle::{GasCategory, GasOracle},
