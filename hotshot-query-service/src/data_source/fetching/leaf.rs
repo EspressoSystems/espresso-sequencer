@@ -17,7 +17,7 @@ use super::{
     Notifiers, RangedFetchable, Storable,
 };
 use crate::{
-    availability::{HeaderQueryData, LeafId, LeafQueryData, QueryablePayload},
+    availability::{LeafId, LeafQueryData, QueryablePayload},
     data_source::{
         storage::{
             pruning::PrunedHeightStorage, AvailabilityStorage, NodeStorage,
@@ -326,12 +326,6 @@ where
 
     async fn notify(&self, notifiers: &Notifiers<Types>) {
         notifiers.leaf.notify(self).await;
-        // The leaf contains the header, so after notifying about the leaf,
-        // we take the header and notify the header subscribers as well.
-        notifiers
-            .header
-            .notify(&HeaderQueryData::new(self.leaf.block_header().clone()))
-            .await;
     }
 
     async fn store(

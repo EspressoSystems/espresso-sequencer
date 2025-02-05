@@ -242,7 +242,7 @@ where
         // as it represents the latest state in storage.
         // If `pruned_height > last_height`, start from `pruned_height`
         // as data below this height is no longer needed and will be pruned again during the next pruner run.
-        let height = max(last_height, pruned_height);
+        let height = max(last_height, pruned_height + 1);
 
         let current_height = storage.block_height().await?;
         tracing::info!(

@@ -99,11 +99,6 @@ where
             AvailabilityStorage<Types> + NodeStorage<Types> + PrunedHeightStorage,
         P: AvailabilityProvider<Types>,
     {
-        // Do not fetch if we are in leaf only mode
-        if fetcher.leaf_only {
-            return Ok(());
-        }
-
         fetch_header_and_then(
             tx,
             req.0,

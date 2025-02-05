@@ -1711,7 +1711,6 @@ where
 {
     block: Notifier<BlockQueryData<Types>>,
     leaf: Notifier<LeafQueryData<Types>>,
-    header: Notifier<HeaderQueryData<Types>>,
     vid_common: Notifier<VidCommonQueryData<Types>>,
 }
 
@@ -1723,7 +1722,6 @@ where
         Self {
             block: Notifier::new(),
             leaf: Notifier::new(),
-            header: Notifier::new(),
             vid_common: Notifier::new(),
         }
     }
@@ -2100,12 +2098,6 @@ impl<Types: NodeType> Storable<Types> for BlockInfo<Types> {
 
         if let Some(common) = self.vid_common {
             (common, self.vid_share).store(storage, leaf_only).await?;
-        }
-
-        // return early if leaf only mode is enabled
-        // this would skip storing block payloads
-        if leaf_only {
-            return Ok(());
         }
 
         if let Some(block) = self.block {

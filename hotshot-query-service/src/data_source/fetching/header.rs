@@ -18,6 +18,7 @@ use super::{
 };
 use crate::data_source::fetching::Fetchable;
 use crate::data_source::fetching::HeaderQueryData;
+use crate::data_source::fetching::LeafQueryData;
 use crate::data_source::fetching::Notifiers;
 use crate::QueryResult;
 use crate::{
@@ -41,6 +42,23 @@ use hotshot_types::traits::{block_contents::BlockHeader, node_implementation::No
 use std::cmp::Ordering;
 use std::future::IntoFuture;
 use std::sync::Arc;
+
+impl<Types: NodeType> From<LeafQueryData<Types>> for HeaderQueryData<Types> {
+    fn from(leaf: LeafQueryData<Types>) -> Self {
+        let header = leaf.header().clone();
+
+        Self { header }
+    }
+}
+
+fn satisifes_header_req_from_leaf<Types>(leaf: &LeafQueryData<Types>, req: BlockId<Types>) -> bool
+where
+    Types: NodeType,
+    Payload<Types>: QueryablePayload<Types>,
+{
+    HeaderQueryData::satisfies(&HeaderQueryData::new(leaf.header().clone()), req)
+}
+
 #[async_trait]
 impl<Types> Fetchable<Types> for HeaderQueryData<Types>
 where
@@ -50,7 +68,7 @@ where
     type Request = BlockId<Types>;
 
     fn satisfies(&self, req: Self::Request) -> bool {
-        let header = self.header.clone();
+        let header = self.header();
         match req {
             BlockId::Number(n) => header.block_number() as usize == n,
             BlockId::Hash(h) => header.commit() == h,
@@ -63,10 +81,11 @@ where
         req: Self::Request,
     ) -> BoxFuture<'static, Option<Self>> {
         notifiers
-            .header
-            .wait_for(move |header| header.satisfies(req))
+            .leaf
+            .wait_for(move |leaf| satisifes_header_req_from_leaf(leaf, req))
             .await
             .into_future()
+            .map(|leaf| leaf.map(HeaderQueryData::from))
             .boxed()
     }
 
@@ -82,7 +101,17 @@ where
             AvailabilityStorage<Types> + NodeStorage<Types> + PrunedHeightStorage,
         P: AvailabilityProvider<Types>,
     {
-        fetch_header_and_leaf(tx, fetcher, req).await
+        // Note: if leaf only mode is enabled
+        // the payload callback will not do any active fetching and just return
+        // This is because we don't have payload fetcher for leaf only mode
+        fetch_header_and_then(
+            tx,
+            req,
+            HeaderCallback::Payload {
+                fetcher: fetcher.clone(),
+            },
+        )
+        .await
     }
 
     async fn load<S>(storage: &mut S, req: Self::Request) -> QueryResult<Self>
@@ -91,65 +120,6 @@ where
     {
         storage.get_header(req).await.map(|header| Self { header })
     }
-}
-
-async fn fetch_header_and_leaf<Types, S, P>(
-    tx: &mut impl AvailabilityStorage<Types>,
-    fetcher: Arc<Fetcher<Types, S, P>>,
-    req: BlockId<Types>,
-) -> anyhow::Result<()>
-where
-    Types: NodeType,
-    Payload<Types>: QueryablePayload<Types>,
-    S: VersionedDataSource + 'static,
-    for<'a> S::Transaction<'a>: UpdateAvailabilityStorage<Types>,
-    for<'a> S::ReadOnly<'a>: AvailabilityStorage<Types> + NodeStorage<Types> + PrunedHeightStorage,
-    P: AvailabilityProvider<Types>,
-{
-    // Check if header exists in the local storage
-    // if it does then we just notify and return
-
-    match tx.get_header(req).await {
-        Ok(header) => {
-            fetcher
-                .notifiers
-                .header
-                .notify(&HeaderQueryData::new(header))
-                .await;
-            return Ok(());
-        }
-        Err(QueryError::Missing | QueryError::NotFound) => {
-            // We successfully queried the database, but the header wasn't there. Fall through to
-            // fetching it.
-            tracing::debug!(?req, "header not available locally; trying fetch");
-        }
-        Err(QueryError::Error { message }) => {
-            // An error occurred while querying the database. We don't know if we need to fetch the
-            // header or not. Return an error so we can try again.
-            anyhow::bail!("failed to fetch header for block {req:?}: {message}");
-        }
-    }
-
-    // If the header is _not_ present, we may still be able to fetch the request, but we need to
-    // fetch the entire leaf. This is because we have an invariant that
-    // we should not store derived objects in the database unless we already have the corresponding
-    // header and leaf.
-    match req {
-        BlockId::Number(n) => {
-            fetch_leaf_with_callbacks(tx, fetcher, n.into(), []).await?;
-        }
-        BlockId::Hash(h) => {
-            // Given only the hash, we cannot tell if the corresponding leaf actually exists, since
-            // we don't have a corresponding header. Therefore, we will not spawn an active fetch.
-            tracing::debug!("not fetching unknown leaf {h}");
-        }
-        BlockId::PayloadHash(h) => {
-            // Same as above, we don't fetch a block with a payload that is not known to exist.
-            tracing::debug!("not fetching leaf with unknown payload {h}");
-        }
-    }
-
-    Ok(())
 }
 
 #[derive(Derivative)]

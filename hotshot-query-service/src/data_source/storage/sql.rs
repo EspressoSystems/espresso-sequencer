@@ -1315,8 +1315,8 @@ mod test {
         // insert some entries into the tree and the header table
         // Header table is used the get_path query to check if the header exists for the block height.
         let mut tx = storage.write().await.unwrap();
-        let mut block_height = 0;
-        loop {
+
+        for block_height in 0..250 {
             test_tree.update(block_height, block_height).unwrap();
 
             // data field of the header
@@ -1349,16 +1349,10 @@ mod test {
             )
             .await
             .expect("failed to insert nodes");
-
-            block_height += 1;
-
-            if block_height == 150 {
-                break;
-            }
         }
 
         // update saved state height
-        UpdateStateData::<_, MockMerkleTree, 8>::set_last_state_height(&mut tx, block_height)
+        UpdateStateData::<_, MockMerkleTree, 8>::set_last_state_height(&mut tx, 250)
             .await
             .unwrap();
         tx.commit().await.unwrap();

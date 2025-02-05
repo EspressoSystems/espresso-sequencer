@@ -18,10 +18,7 @@ use super::{
     Storable,
 };
 use crate::{
-    availability::{
-        BlockId, BlockQueryData, HeaderQueryData, PayloadMetadata, PayloadQueryData,
-        QueryablePayload,
-    },
+    availability::{BlockId, BlockQueryData, PayloadMetadata, PayloadQueryData, QueryablePayload},
     data_source::{
         storage::{
             pruning::PrunedHeightStorage, AvailabilityStorage, NodeStorage,
@@ -99,11 +96,6 @@ where
             AvailabilityStorage<Types> + NodeStorage<Types> + PrunedHeightStorage,
         P: AvailabilityProvider<Types>,
     {
-        // Do not fetch if we are in leaf only mode
-        if fetcher.leaf_only {
-            return Ok(());
-        }
-
         fetch_header_and_then(
             tx,
             req,
@@ -149,12 +141,6 @@ where
 
     async fn notify(&self, notifiers: &Notifiers<Types>) {
         notifiers.block.notify(self).await;
-        // The block also contains the header, so after notifying about the block,
-        // we take the header and notify the header subscribers as well.
-        notifiers
-            .header
-            .notify(&HeaderQueryData::new(self.header().clone()))
-            .await;
     }
 
     async fn store(
@@ -242,10 +228,6 @@ where
             AvailabilityStorage<Types> + NodeStorage<Types> + PrunedHeightStorage,
         P: AvailabilityProvider<Types>,
     {
-        // Do not fetch if we are in leaf only mode
-        if fetcher.leaf_only {
-            return Ok(());
-        }
         // We don't have storage for the payload alone, only the whole block. So if we need to fetch
         // the payload, we just fetch the whole block (which may end up fetching only the payload,
         // if that's all that's needed to complete the block).
@@ -360,10 +342,6 @@ where
             AvailabilityStorage<Types> + NodeStorage<Types> + PrunedHeightStorage,
         P: AvailabilityProvider<Types>,
     {
-        // Do not fetch if we are in leaf only mode
-        if fetcher.leaf_only {
-            return Ok(());
-        }
         // Trigger the full block to be fetched. This will be enough to satisfy this request for the
         // payload summary.
         BlockQueryData::active_fetch(tx, fetcher, req).await

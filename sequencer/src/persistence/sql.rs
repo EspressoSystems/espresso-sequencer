@@ -5,7 +5,7 @@ use committable::Committable;
 use derivative::Derivative;
 use derive_more::derive::{From, Into};
 use espresso_types::{
-    downgrade_commitment_map, downgrade_leaf, parse_duration, upgrade_commitment_map,
+    downgrade_commitment_map, downgrade_leaf, parse_duration, parse_size, upgrade_commitment_map,
     v0::traits::{EventConsumer, PersistenceOptions, SequencerPersistence, StateCatchup},
     BackoffParams, BlockMerkleTree, FeeMerkleTree, Leaf, Leaf2, NetworkConfig, Payload,
 };
@@ -412,7 +412,7 @@ pub struct PruningOptions {
     /// Threshold for pruning, specified in bytes.
     /// If the disk usage surpasses this threshold, pruning is initiated for data older than the specified minimum retention period.
     /// Pruning continues until the disk usage drops below the MAX USAGE.
-    #[clap(long, env = "ESPRESSO_SEQUENCER_PRUNER_PRUNING_THRESHOLD")]
+    #[clap(long, env = "ESPRESSO_SEQUENCER_PRUNER_PRUNING_THRESHOLD", value_parser = parse_size)]
     pruning_threshold: Option<u64>,
 
     /// Minimum retention period.

@@ -324,7 +324,7 @@ impl<Mode: TransactionMode> Transaction<Mode> {
                 message: format!("failed to load pruned height: {e}"),
             })?;
 
-        if pruned_height.is_some_and(|h| height < h as usize) {
+        if pruned_height.is_some_and(|h| height <= h as usize) {
             return Err(QueryError::NotFound);
         }
 

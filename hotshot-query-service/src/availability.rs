@@ -254,7 +254,7 @@ where
                 headers
                     .enumerate()
                     .then(|(index, fetch)| async move {
-                        fetch.with_timeout(timeout).await.context(FetchLeafSnafu {
+                        fetch.with_timeout(timeout).await.context(FetchHeaderSnafu {
                             resource: (index + from).to_string(),
                         })
                     })
