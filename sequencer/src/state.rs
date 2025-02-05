@@ -243,7 +243,7 @@ where
             // as it represents the latest state in storage.
             // If `pruned_height > last_height`, start from `pruned_height`
             // as data below this height is no longer needed and will be pruned again during the next pruner run.
-            Some(p) => max(last_height, p as usize),
+            Some(pruned_height) => max(last_height, pruned_height as usize + 1),
             // if we have not pruned any data then just start from last_height
             None => last_height,
         };
