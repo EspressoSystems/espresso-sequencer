@@ -1647,9 +1647,9 @@ where
     where
         T: Storable<Types>,
     {
-        // If leaf only mode is activated, check that object received is also a leaf
-        // if it is we store and notify
-        //otherwise we just notify and return
+        // If leaf only mode is enabled
+        // - If it is a leaf, store it and then notify subscribers.
+        // - Otherwise, notify subscribers without storing and return.
         if !T::should_store(self.leaf_only) {
             obj.notify(&self.notifiers).await;
             return;
