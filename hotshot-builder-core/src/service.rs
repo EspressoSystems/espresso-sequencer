@@ -71,7 +71,7 @@ pub struct ReceivedTransaction<Types: NodeType> {
     pub tx: Types::Transaction,
     // transaction's hash
     pub commit: Commitment<Types::Transaction>,
-    // transaction's esitmated length
+    // transaction's estimated length
     pub len: u64,
     // transaction's source
     pub source: TransactionSource,
@@ -440,7 +440,7 @@ impl<Types: NodeType> GlobalState<Types> {
 
     /// Helper function that attempts to retrieve the broadcast sender for the given
     /// [`BuilderStateId`]. If the sender does not exist, it will return the
-    /// broadcast sender for the for the hightest view number [`BuilderStateId`]
+    /// broadcast sender for the for the highest view number [`BuilderStateId`]
     /// instead.
     pub(crate) fn get_channel_for_matching_builder_or_highest_view_builder(
         &self,

@@ -1,10 +1,10 @@
 [package]
-name = "hotshot-builder-core-refactored"
+name = "hotshot-builder-core"
 version = { workspace = true }
 edition = { workspace = true }
 
 [dependencies]
-marketplace-builder-shared = { path = "../shared" }
+marketplace-builder-shared = { workspace = true }
 
 anyhow = { workspace = true }
 async-broadcast = { workspace = true }
@@ -21,7 +21,6 @@ hotshot = { workspace = true }
 hotshot-builder-api = { workspace = true }
 hotshot-types = { workspace = true }
 lru = { workspace = true }
-once_cell = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 sha2 = { workspace = true }
 tagged-base64 = { workspace = true }
@@ -40,6 +39,3 @@ num_cpus = { workspace = true }
 portpicker = { workspace = true }
 tracing-test = { workspace = true }
 url = { workspace = true }
-
-[lints]
-workspace = true

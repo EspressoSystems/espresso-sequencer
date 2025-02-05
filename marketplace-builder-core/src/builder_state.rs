@@ -1124,8 +1124,8 @@ mod test {
     use super::ParentBlockReferences;
     use crate::testing::{calc_proposal_msg, create_builder_state};
 
-    /// This test the function `process_da_propsal`.
-    /// It checkes da_proposal_payload_commit_to_da_proposal change appropriately
+    /// This test the function `process_da_proposal`.
+    /// It checks da_proposal_payload_commit_to_da_proposal change appropriately
     /// when receiving a da proposal message.
     /// This test also checks whether corresponding BuilderStateId is in global_state.
     #[tokio::test]
@@ -1182,7 +1182,7 @@ mod test {
             .spawned_builder_states
             .contains_key(&builder_state_id)
         {
-            panic!("global_state shouldn't have cooresponding builder_state_id without matching quorum proposal.");
+            panic!("global_state shouldn't have corresponding builder_state_id without matching quorum proposal.");
         }
 
         // sub-test two
@@ -1207,7 +1207,7 @@ mod test {
             .spawned_builder_states
             .contains_key(&builder_state_id_1)
         {
-            panic!("global_state shouldn't have cooresponding builder_state_id without matching quorum proposal.");
+            panic!("global_state shouldn't have corresponding builder_state_id without matching quorum proposal.");
         }
 
         // sub-test three
@@ -1243,12 +1243,12 @@ mod test {
         {
             tracing::debug!("global_state updated successfully");
         } else {
-            panic!("global_state should have cooresponding builder_state_id as now we have matching quorum proposal.");
+            panic!("global_state should have corresponding builder_state_id as now we have matching quorum proposal.");
         }
     }
 
-    /// This test the function `process_quorum_propsal`.
-    /// It checkes quorum_proposal_payload_commit_to_quorum_proposal change appropriately
+    /// This test the function `process_quorum_proposal`.
+    /// It checks quorum_proposal_payload_commit_to_quorum_proposal change appropriately
     /// when receiving a quorum proposal message.
     /// This test also checks whether corresponding BuilderStateId is in global_state.
     #[tokio::test]
@@ -1308,7 +1308,7 @@ mod test {
             .spawned_builder_states
             .contains_key(&builder_state_id)
         {
-            panic!("global_state shouldn't have cooresponding builder_state_id without matching quorum proposal.");
+            panic!("global_state shouldn't have corresponding builder_state_id without matching quorum proposal.");
         }
 
         // sub-test two
@@ -1344,12 +1344,12 @@ mod test {
         {
             tracing::debug!("global_state updated successfully");
         } else {
-            panic!("global_state should have cooresponding builder_state_id as now we have matching da proposal.");
+            panic!("global_state should have corresponding builder_state_id as now we have matching da proposal.");
         }
     }
 
     /// This test the function `process_decide_event`.
-    /// It checkes whether we exit out correct builder states when there's a decide event coming in.
+    /// It checks whether we exit out correct builder states when there's a decide event coming in.
     /// This test also checks whether corresponding BuilderStateId is removed in global_state.
     #[tokio::test]
     async fn test_process_decide_event() {

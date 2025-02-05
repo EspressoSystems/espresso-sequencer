@@ -725,6 +725,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "ansi_term"
+version = "0.12.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d52a9bb7ec0cf484c551830a7ce27bd20d67eac647e1befb56b0be4ee39a55d2"
+dependencies = [
+ "winapi",
+]
+
+[[package]]
 name = "anstream"
 version = "0.6.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1934,7 +1943,7 @@ dependencies = [
  "hotshot",
  "hotshot-builder-api",
  "hotshot-builder-core",
- "hotshot-events-service 0.1.57",
+ "hotshot-events-service",
  "hotshot-state-prover",
  "hotshot-types",
  "jf-signature 0.2.0",
@@ -4820,8 +4829,7 @@ dependencies = [
 
 [[package]]
 name = "hotshot-builder-core"
-version = "0.1.59"
-source = "git+https://github.com/EspressoSystems/marketplace-builder-core?tag=0.5.84#80fb768e8d0358f998c74509cec6a9a2bdb59d64"
+version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4836,10 +4844,15 @@ dependencies = [
  "futures",
  "hotshot",
  "hotshot-builder-api",
+ "hotshot-example-types",
+ "hotshot-macros",
+ "hotshot-task-impls",
+ "hotshot-testing",
  "hotshot-types",
  "lru 0.12.5",
  "marketplace-builder-shared",
- "once_cell",
+ "num_cpus",
+ "portpicker",
  "serde",
  "sha2 0.10.8",
  "tagged-base64",
@@ -4847,6 +4860,8 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber 0.3.19",
+ "tracing-test 0.1.0",
+ "url",
  "vbs",
 ]
 
@@ -4903,34 +4918,7 @@ dependencies = [
  "tokio",
  "toml 0.8.19",
  "tracing",
- "tracing-test",
- "vbs",
-]
-
-[[package]]
-name = "hotshot-events-service"
-version = "0.1.57"
-source = "git+https://github.com/EspressoSystems/hotshot-events-service.git?tag=0.1.58#f1aedb948344d7b03d8f34fa74b60896fff92966"
-dependencies = [
- "async-broadcast",
- "async-lock 2.8.0",
- "async-trait",
- "clap",
- "derivative",
- "derive_more 0.99.18",
- "either",
- "futures",
- "hotshot-types",
- "libp2p-identity",
- "rand 0.8.5",
- "serde",
- "snafu 0.8.5",
- "tagged-base64",
- "tide-disco",
- "tokio",
- "toml 0.8.19",
- "tracing",
- "tracing-test",
+ "tracing-test 0.2.5",
  "vbs",
 ]
 
@@ -7195,7 +7183,7 @@ dependencies = [
  "futures",
  "hotshot",
  "hotshot-builder-api",
- "hotshot-events-service 0.1.57",
+ "hotshot-events-service",
  "hotshot-orchestrator",
  "hotshot-query-service",
  "hotshot-stake-table",
@@ -7220,8 +7208,7 @@ dependencies = [
 
 [[package]]
 name = "marketplace-builder-core"
-version = "0.1.59"
-source = "git+https://github.com/EspressoSystems/marketplace-builder-core?tag=0.5.84#80fb768e8d0358f998c74509cec6a9a2bdb59d64"
+version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -7232,21 +7219,26 @@ dependencies = [
  "futures",
  "hotshot",
  "hotshot-builder-api",
+ "hotshot-example-types",
+ "hotshot-macros",
+ "hotshot-testing",
  "hotshot-types",
  "marketplace-builder-shared",
+ "num_cpus",
  "sha2 0.10.8",
  "tagged-base64",
  "tide-disco",
  "tokio",
  "tracing",
  "tracing-subscriber 0.3.19",
+ "tracing-test 0.1.0",
+ "url",
  "vbs",
 ]
 
 [[package]]
 name = "marketplace-builder-shared"
-version = "0.1.59"
-source = "git+https://github.com/EspressoSystems/marketplace-builder-core?tag=0.5.84#80fb768e8d0358f998c74509cec6a9a2bdb59d64"
+version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -7261,23 +7253,25 @@ dependencies = [
  "hex",
  "hotshot",
  "hotshot-builder-api",
- "hotshot-events-service 0.1.57 (git+https://github.com/EspressoSystems/hotshot-events-service.git?tag=0.1.58)",
+ "hotshot-events-service",
  "hotshot-example-types",
  "hotshot-task-impls",
  "hotshot-testing",
  "hotshot-types",
  "jf-vid",
  "nonempty-collections",
- "once_cell",
+ "portpicker",
  "quick_cache",
  "rand 0.8.5",
  "serde",
  "sha2 0.10.8",
  "surf-disco",
- "thiserror 2.0.10",
+ "thiserror 1.0.69",
+ "tide-disco",
  "tokio",
  "tracing",
  "tracing-subscriber 0.3.19",
+ "tracing-test 0.1.0",
  "url",
  "vbs",
  "vec1",
@@ -7296,7 +7290,7 @@ dependencies = [
  "espresso-types",
  "futures",
  "hotshot",
- "hotshot-events-service 0.1.57",
+ "hotshot-events-service",
  "hotshot-query-service",
  "hotshot-types",
  "marketplace-solver",
@@ -7318,6 +7312,15 @@ name = "match_cfg"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ffbee8634e0d45d258acb448e7eaab3fce7a0a467395d4d9f228e3c1f01fb2e4"
+
+[[package]]
+name = "matchers"
+version = "0.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f099785f7595cc4b4553a174ce30dd7589ef93391ff414dbb67f62392b9e0ce1"
+dependencies = [
+ "regex-automata 0.1.10",
+]
 
 [[package]]
 name = "matchers"
@@ -9793,7 +9796,7 @@ dependencies = [
  "futures",
  "hotshot",
  "hotshot-contract-adapter",
- "hotshot-events-service 0.1.57",
+ "hotshot-events-service",
  "hotshot-example-types",
  "hotshot-orchestrator",
  "hotshot-query-service",
@@ -11131,7 +11134,7 @@ dependencies = [
  "tracing",
  "tracing-distributed",
  "tracing-futures",
- "tracing-log",
+ "tracing-log 0.2.0",
  "tracing-subscriber 0.3.19",
  "url",
  "vbs",
@@ -11615,12 +11618,33 @@ dependencies = [
 
 [[package]]
 name = "tracing-log"
+version = "0.1.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f751112709b4e791d8ce53e32c4ed2d353565a795ce84da2285393f41557bdf2"
+dependencies = [
+ "log",
+ "once_cell",
+ "tracing-core",
+]
+
+[[package]]
+name = "tracing-log"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ee855f1f400bd0e5c02d150ae5de3840039a3f54b025156404e34c23c03f47c3"
 dependencies = [
  "log",
  "once_cell",
+ "tracing-core",
+]
+
+[[package]]
+name = "tracing-serde"
+version = "0.1.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bc6b213177105856957181934e4920de57730fc69bf42c37ee5bb664d406d9e1"
+dependencies = [
+ "serde",
  "tracing-core",
 ]
 
@@ -11640,7 +11664,20 @@ version = "0.2.25"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0e0d2eaa99c3c2e41547cfa109e910a68ea03823cccad4a0525dcbc9b01e8c71"
 dependencies = [
+ "ansi_term",
+ "chrono",
+ "lazy_static",
+ "matchers 0.0.1",
+ "regex",
+ "serde",
+ "serde_json",
+ "sharded-slab",
+ "smallvec",
+ "thread_local",
+ "tracing",
  "tracing-core",
+ "tracing-log 0.1.4",
+ "tracing-serde 0.1.3",
 ]
 
 [[package]]
@@ -11649,7 +11686,7 @@ version = "0.3.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e8189decb5ac0fa7bc8b96b7cb9b2701d60d48805aca84a238004d665fcc4008"
 dependencies = [
- "matchers",
+ "matchers 0.1.0",
  "nu-ansi-term",
  "once_cell",
  "regex",
@@ -11660,8 +11697,20 @@ dependencies = [
  "thread_local",
  "tracing",
  "tracing-core",
- "tracing-log",
- "tracing-serde",
+ "tracing-log 0.2.0",
+ "tracing-serde 0.2.0",
+]
+
+[[package]]
+name = "tracing-test"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a3b48778c2d401c6a7fcf38a0e3c55dc8e8e753cbd381044a8cdb6fd69a29f53"
+dependencies = [
+ "lazy_static",
+ "tracing-core",
+ "tracing-subscriber 0.2.25",
+ "tracing-test-macro 0.1.0",
 ]
 
 [[package]]
@@ -11672,7 +11721,18 @@ checksum = "557b891436fe0d5e0e363427fc7f217abf9ccd510d5136549847bdcbcd011d68"
 dependencies = [
  "tracing-core",
  "tracing-subscriber 0.3.19",
- "tracing-test-macro",
+ "tracing-test-macro 0.2.5",
+]
+
+[[package]]
+name = "tracing-test-macro"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c49adbab879d2e0dd7f75edace5f0ac2156939ecb7e6a1e8fa14e53728328c48"
+dependencies = [
+ "lazy_static",
+ "quote",
+ "syn 1.0.109",
 ]
 
 [[package]]
@@ -12650,7 +12710,7 @@ dependencies = [
  "toml_edit 0.22.22",
  "tracing",
  "tracing-core",
- "tracing-log",
+ "tracing-log 0.2.0",
  "tracing-subscriber 0.3.19",
  "tungstenite 0.13.0",
  "uint",

@@ -23,9 +23,8 @@ hotshot-task-impls = { workspace = true }
 hotshot-testing = { workspace = true }
 hotshot-types = { workspace = true }
 jf-vid = { workspace = true }
-nonempty-collections = { workspace = true }
-once_cell = { workspace = true }
-quick_cache = { workspace = true }
+nonempty-collections = "0.2"
+quick_cache = "0.6"
 rand = { workspace = true }
 serde = { workspace = true }
 sha2 = { workspace = true }
@@ -42,6 +41,3 @@ vec1 = { workspace = true }
 portpicker = { workspace = true }
 tide-disco = { workspace = true }
 tracing-test = { workspace = true }
-
-[lints]
-workspace = true

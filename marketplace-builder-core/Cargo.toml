@@ -4,7 +4,7 @@ version = { workspace = true }
 edition = { workspace = true }
 
 [dependencies]
-marketplace-builder-shared = { path = "../shared" }
+marketplace-builder-shared = { workspace = true }
 
 anyhow = { workspace = true }
 async-broadcast = { workspace = true }
@@ -31,6 +31,3 @@ hotshot-testing = { workspace = true }
 num_cpus = { workspace = true }
 tracing-test = { workspace = true }
 url = { workspace = true }
-
-[lints]
-workspace = true

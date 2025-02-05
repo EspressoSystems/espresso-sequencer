@@ -40,7 +40,7 @@ pub enum GenerationStrategy {
     Random {
         /// Minimum number of transactions to submit per view
         min_per_view: usize,
-        /// Maxium number of transactions to submit per view
+        /// Maximum number of transactions to submit per view
         max_per_view: usize,
         /// Minimum size of transaction to generate
         min_tx_size: usize,

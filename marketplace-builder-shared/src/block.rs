@@ -28,7 +28,7 @@ pub struct ReceivedTransaction<Types: NodeType> {
     pub transaction: Types::Transaction,
     /// transaction's hash
     pub commit: Commitment<Types::Transaction>,
-    /// transaction's esitmated length
+    /// transaction's estimated length
     pub min_block_size: u64,
     /// transaction's source
     pub source: TransactionSource,

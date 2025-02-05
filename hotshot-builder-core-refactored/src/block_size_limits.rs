@@ -25,7 +25,7 @@ pub(crate) struct MutableState {
 #[derive(Debug)]
 pub struct BlockSizeLimits {
     pub(crate) mutable_state: Atomic<MutableState>,
-    /// Maximum block size as defined by protocol. We'll never increment beyound that
+    /// Maximum block size as defined by protocol. We'll never increment beyond that
     pub protocol_max_block_size: u64,
     /// Period between optimistic increments of the block size
     pub increment_period: Duration,
