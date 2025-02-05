@@ -218,5 +218,6 @@ pub(crate) struct SingleTransportStatus {
     pub(crate) last_failure: Option<Instant>,
     pub(crate) consecutive_failures: usize,
     pub(crate) rate_limited_until: Option<Instant>,
-    pub(crate) switching: bool,
+    /// Whether or not this current transport is being shut down (switching to the next transport)
+    pub(crate) shutting_down: bool,
 }

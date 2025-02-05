@@ -206,7 +206,8 @@ impl SingleTransportStatus {
             last_failure: None,
             consecutive_failures: 0,
             rate_limited_until: None,
-            switching: false,
+            // Whether or not this transport is being shut down (switching to the next transport)
+            shutting_down: false,
         }
     }
 
@@ -233,13 +234,13 @@ impl SingleTransportStatus {
     /// Whether or not the transport should be switched to the next URL
     fn should_switch(&mut self, opt: &L1ClientOptions) -> bool {
         // If someone else already beat us to switching, return false
-        if self.switching {
+        if self.shutting_down {
             return false;
         }
 
         // If we've reached the max number of consecutive failures, switch to the next URL
         if self.consecutive_failures >= opt.l1_consecutive_failure_tolerance {
-            self.switching = true;
+            self.shutting_down = true;
             return true;
         }
 
@@ -247,7 +248,7 @@ impl SingleTransportStatus {
         let now = Instant::now();
         if let Some(prev) = self.last_failure {
             if now.saturating_duration_since(prev) < opt.l1_frequent_failure_tolerance {
-                self.switching = true;
+                self.shutting_down = true;
                 return true;
             }
         }
