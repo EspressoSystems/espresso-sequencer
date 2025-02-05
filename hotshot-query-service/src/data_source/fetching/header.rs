@@ -51,7 +51,7 @@ impl<Types: NodeType> From<LeafQueryData<Types>> for HeaderQueryData<Types> {
     }
 }
 
-fn satisifes_header_req_from_leaf<Types>(leaf: &LeafQueryData<Types>, req: BlockId<Types>) -> bool
+fn satisfies_header_req_from_leaf<Types>(leaf: &LeafQueryData<Types>, req: BlockId<Types>) -> bool
 where
     Types: NodeType,
     Payload<Types>: QueryablePayload<Types>,
@@ -82,7 +82,7 @@ where
     ) -> BoxFuture<'static, Option<Self>> {
         notifiers
             .leaf
-            .wait_for(move |leaf| satisifes_header_req_from_leaf(leaf, req))
+            .wait_for(move |leaf| satisfies_header_req_from_leaf(leaf, req))
             .await
             .into_future()
             .map(|leaf| leaf.map(HeaderQueryData::from))
