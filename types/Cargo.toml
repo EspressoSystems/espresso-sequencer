@@ -12,7 +12,6 @@ alloy = { workspace = true }
 anyhow = { workspace = true }
 ark-serialize = { workspace = true }
 async-broadcast = { workspace = true }
-async-lock = { workspace = true }
 async-trait = { workspace = true }
 base64-bytes = { workspace = true }
 bincode = { workspace = true }
@@ -24,7 +23,6 @@ committable = { workspace = true }
 contract-bindings-alloy = { path = "../contract-bindings-alloy" }
 contract-bindings-ethers = { path = "../contract-bindings-ethers" }
 derive_more = { workspace = true }
-diff-test-bn254 = { git = "https://github.com/EspressoSystems/solidity-bn254.git" }
 ethers = { workspace = true }
 ethers-conv = { path = "../ethers-conv" }
 fluent-asserter = "0.1.9"
@@ -35,8 +33,7 @@ hotshot-query-service = { workspace = true }
 hotshot-types = { workspace = true }
 itertools = { workspace = true }
 jf-merkle-tree = { workspace = true }
-jf-signature = { workspace = true }
-jf-utils = { workspace = true }                                                     # TODO temporary: used only for test_rng()
+jf-utils = { workspace = true }                                      # TODO temporary: used only for test_rng()
 jf-vid = { workspace = true }
 lru = { workspace = true }
 num-traits = { workspace = true }
@@ -44,7 +41,6 @@ parking_lot = "0.12"
 paste = { workspace = true }
 pretty_assertions = { workspace = true }
 rand = { workspace = true }
-reqwest = "0.11"                                                                    # Same version used by ethers
 sequencer-utils = { path = "../utils" }
 serde = { workspace = true }
 serde_json = { workspace = true }

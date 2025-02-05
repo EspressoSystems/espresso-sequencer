@@ -9,7 +9,6 @@ edition = "2021"
 testing = [
     "hotshot-testing",
     "marketplace-builder-core",
-    "marketplace-builder-shared",
     "espresso-types/testing",
     "sequencer-utils/testing",
     "hotshot-query-service/testing"
@@ -40,7 +39,6 @@ anyhow = { workspace = true }
 vergen = { workspace = true }
 
 [dependencies]
-alloy = { workspace = true }
 anyhow = { workspace = true }
 ark-ff = { workspace = true }
 ark-serialize = { workspace = true, features = ["derive"] }
@@ -90,7 +88,6 @@ jf-vid = { workspace = true }
 libp2p = { workspace = true }
 libp2p-networking = { workspace = true }
 marketplace-builder-core = { workspace = true, optional = true }
-marketplace-builder-shared = { workspace = true, optional = true }
 marketplace-solver = { path = "../marketplace-solver" }
 num_enum = "0.7"
 parking_lot = "0.12"
