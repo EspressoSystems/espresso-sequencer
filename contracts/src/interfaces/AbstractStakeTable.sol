@@ -47,10 +47,6 @@ abstract contract AbstractStakeTable {
         address account, BN254.G2Point newBlsVK, EdOnBN254.EdOnBN254Point newSchnorrVK
     );
 
-    /// @notice Signals the admin has been updated
-    /// @param admin the new admin
-    event AdminUpdated(address admin);
-
     /// @notice Signals the min stake amount has been updated
     /// @param minStakeAmount the new min stake amount
     event MinStakeAmountUpdated(uint256 minStakeAmount);
