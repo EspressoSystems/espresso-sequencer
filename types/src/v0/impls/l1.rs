@@ -229,6 +229,7 @@ impl JsonRpcClient for MultiRpcClient {
         };
         let provider = current % self.clients.len();
         let client = &self.clients[provider];
+
         match client.request(method, &params).await {
             Ok(res) => Ok(res),
             Err(err) => {
@@ -331,10 +332,10 @@ impl L1Client {
         let ws_urls = opt.l1_ws_provider.clone();
         let retry_delay = opt.l1_retry_delay;
         let subscription_timeout = opt.subscription_timeout;
+        let connect_timeout = opt.connect_timeout;
         let state = self.state.clone();
         let sender = self.sender.clone();
         let metrics = self.metrics().clone();
-
         let span = tracing::warn_span!("L1 client update");
         async move {
             for i in 0.. {
@@ -348,10 +349,15 @@ impl L1Client {
                             // problem with one of the hosts specifically.
                             let provider = i % urls.len();
                             let url = &urls[provider];
-                            ws = match Provider::<Ws>::connect(url.clone()).await {
-                                Ok(ws) => ws,
-                                Err(err) => {
+                            ws = match tokio::time::timeout(connect_timeout,  Provider::<Ws>::connect(url.clone())).await {
+                                Ok(Ok(ws)) => ws,
+                                Ok(Err(err))  => {
                                     tracing::warn!(provider, "failed to connect WebSockets provider: {err:#}");
+                                    sleep(retry_delay).await;
+                                    continue;
+                                },
+                                Err(_) => {
+                                    tracing::warn!(provider, "timed out connecting to WebSockets provider");
                                     sleep(retry_delay).await;
                                     continue;
                                 }
@@ -1253,6 +1259,7 @@ mod test {
             } else {
                 None
             },
+
             ..Default::default()
         }
         .connect([
