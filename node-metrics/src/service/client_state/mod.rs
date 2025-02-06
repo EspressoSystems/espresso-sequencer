@@ -1201,7 +1201,7 @@ pub mod tests {
         channel::mpsc::{self, Sender},
         SinkExt, StreamExt,
     };
-    use hotshot_query_service::testing::mocks::MockVersions;
+    use hotshot_example_types::node_types::TestVersions;
     use hotshot_types::{signature_key::BLSPubKey, traits::signature_key::SignatureKey};
     use std::{sync::Arc, time::Duration};
     use tokio::{
@@ -1370,13 +1370,15 @@ pub mod tests {
     #[tokio::test(flavor = "multi_thread")]
     #[cfg(feature = "testing")]
     async fn test_process_client_handling_stream_request_latest_blocks_snapshot() {
+        use hotshot_example_types::node_types::TestVersions;
+
         use super::clone_block_detail;
         use crate::service::data_state::create_block_detail_from_leaf;
 
         let (_, _, _, mut data_state) = create_test_data_state();
         let client_thread_state = Arc::new(RwLock::new(create_test_client_thread_state()));
         let leaf_1 =
-            Leaf2::genesis::<MockVersions>(&ValidatedState::default(), &NodeState::mock()).await;
+            Leaf2::genesis::<TestVersions>(&ValidatedState::default(), &NodeState::mock()).await;
         let block_1 = create_block_detail_from_leaf(&leaf_1);
         data_state.add_latest_block(clone_block_detail(&block_1));
 
@@ -1617,7 +1619,7 @@ pub mod tests {
 
         // send a new leaf
         let leaf =
-            Leaf2::genesis::<MockVersions>(&ValidatedState::default(), &NodeState::mock()).await;
+            Leaf2::genesis::<TestVersions>(&ValidatedState::default(), &NodeState::mock()).await;
         let expected_block = create_block_detail_from_leaf(&leaf);
         let arc_expected_block = Arc::new(expected_block);
 
