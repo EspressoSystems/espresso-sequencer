@@ -21,7 +21,7 @@ use hotshot_query_service::{
     Resolvable,
 };
 use hotshot_types::{
-    data::{QuorumProposal2, QuorumProposalWrapper, ViewNumber},
+    data::{QuorumProposalWrapper, ViewNumber},
     message::Proposal,
     traits::node_implementation::ConsensusTime,
 };

@@ -2042,7 +2042,7 @@ mod test {
     use futures::stream::TryStreamExt;
     use hotshot_example_types::node_types::TestVersions;
     use hotshot_types::{
-        data::EpochNumber,
+        data::{EpochNumber, QuorumProposal2},
         message::convert_proposal,
         simple_certificate::QuorumCertificate,
         simple_vote::QuorumData,
