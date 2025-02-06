@@ -21,7 +21,7 @@ use hotshot_query_service::{
     Resolvable,
 };
 use hotshot_types::{
-    data::{QuorumProposal2, ViewNumber},
+    data::{QuorumProposal2, QuorumProposalWrapper, ViewNumber},
     message::Proposal,
     traits::node_implementation::ConsensusTime,
 };
@@ -449,8 +449,9 @@ where
     .bind(param)
     .fetch_one(tx.as_mut())
     .await?;
-    let proposal: Proposal<SeqTypes, QuorumProposal2<SeqTypes>> = bincode::deserialize(&data)?;
-    Ok(Leaf2::from_quorum_proposal(&proposal.data.into()))
+    let proposal: Proposal<SeqTypes, QuorumProposalWrapper<SeqTypes>> =
+        bincode::deserialize(&data)?;
+    Ok(Leaf2::from_quorum_proposal(&proposal.data))
 }
 
 #[cfg(any(test, feature = "testing"))]

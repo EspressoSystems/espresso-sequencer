@@ -31,8 +31,8 @@ use hotshot_query_service::{
 use hotshot_types::{
     consensus::CommitmentMap,
     data::{
-        DaProposal, DaProposal2, QuorumProposal, QuorumProposal2, QuorumProposalWrapper,
-        VidDisperseShare, VidDisperseShare2,
+        DaProposal, DaProposal2, QuorumProposal, QuorumProposalWrapper, VidDisperseShare,
+        VidDisperseShare2,
     },
     event::{Event, EventType, HotShotAction, LeafInfo},
     message::{convert_proposal, Proposal},
@@ -1972,12 +1972,12 @@ async fn fetch_leaf_from_proposals<Mode: TransactionMode>(
         return Ok(None);
     };
 
-    let proposal: Proposal<SeqTypes, QuorumProposal2<SeqTypes>> =
+    let proposal: Proposal<SeqTypes, QuorumProposalWrapper<SeqTypes>> =
         bincode::deserialize(&proposal_bytes).context("deserializing quorum proposal")?;
     let qc: QuorumCertificate2<SeqTypes> =
         bincode::deserialize(&qc_bytes).context("deserializing quorum certificate")?;
 
-    let leaf = Leaf2::from_quorum_proposal(&proposal.data.into());
+    let leaf = Leaf2::from_quorum_proposal(&proposal.data);
     Ok(Some((leaf, qc)))
 }
 
