@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":["deploy","deploy_builder","new"],"static":["BYTECODE","DEPLOYED_BYTECODE"],"struct":["LightClientStateUpdateVKInstance"]};
