@@ -186,9 +186,7 @@ async fn test_pruning() {
     // everything else is boilerplate.
 
     let mock_qc =
-        QuorumCertificate::genesis::<TestVersions>(&Default::default(), &Default::default())
-            .await
-            .to_qc2();
+        QuorumCertificate2::genesis::<TestVersions>(&Default::default(), &Default::default()).await;
     let leaf = Leaf2::from_quorum_proposal(&QuorumProposalWrapper {
         proposal: QuorumProposal2 {
             block_header: <TestBlockHeader as BlockHeader<TestTypes>>::genesis(

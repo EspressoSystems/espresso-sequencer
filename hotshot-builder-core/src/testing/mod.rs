@@ -15,7 +15,7 @@ use hotshot::{
 use hotshot_types::{
     data::{DaProposal2, Leaf2, QuorumProposal2, QuorumProposalWrapper, ViewNumber},
     message::Proposal,
-    simple_certificate::{QuorumCertificate, SimpleCertificate, SuccessThreshold},
+    simple_certificate::{QuorumCertificate2, SimpleCertificate, SuccessThreshold},
     simple_vote::QuorumData2,
     traits::{block_contents::vid_commitment, node_implementation::ConsensusTime},
     utils::BuilderCommitment,
@@ -174,12 +174,13 @@ pub async fn calc_proposal_msg(
     };
 
     let justify_qc = match prev_quorum_proposal.as_ref() {
-        None => QuorumCertificate::<TestTypes>::genesis::<TestVersions>(
-            &TestValidatedState::default(),
-            &TestInstanceState::default(),
-        )
-        .await
-        .to_qc2(),
+        None => {
+            QuorumCertificate2::<TestTypes>::genesis::<TestVersions>(
+                &TestValidatedState::default(),
+                &TestInstanceState::default(),
+            )
+            .await
+        }
         Some(prev_proposal) => {
             let prev_justify_qc = prev_proposal.justify_qc();
             let quorum_data = QuorumData2::<TestTypes> {

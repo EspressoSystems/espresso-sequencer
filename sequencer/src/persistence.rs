@@ -194,12 +194,11 @@ mod persistence_tests {
                 proposal: QuorumProposal2::<SeqTypes> {
                     block_header: leaf.block_header().clone(),
                     view_number: ViewNumber::genesis(),
-                    justify_qc: QuorumCertificate::genesis::<TestVersions>(
+                    justify_qc: QuorumCertificate2::genesis::<TestVersions>(
                         &ValidatedState::default(),
                         &NodeState::mock(),
                     )
-                    .await
-                    .to_qc2(),
+                    .await,
                     upgrade_certificate: None,
                     view_change_evidence: None,
                     next_drb_result: None,
@@ -257,7 +256,7 @@ mod persistence_tests {
             encoded_transactions: leaf_payload_bytes_arc.clone(),
             metadata: leaf_payload.ns_table().clone(),
             view_number: ViewNumber::new(0),
-            epoch: Some(EpochNumber::new(0)),
+            epoch: None,
         };
 
         let da_proposal = Proposal {
@@ -324,6 +323,7 @@ mod persistence_tests {
         );
 
         let quorum_proposal1 = quorum_proposal.clone();
+
         storage
             .append_quorum_proposal2(&quorum_proposal1)
             .await

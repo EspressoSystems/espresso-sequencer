@@ -9,8 +9,8 @@ use espresso_types::{
 use hotshot_types::{
     consensus::CommitmentMap,
     data::{
-        DaProposal, DaProposal2, QuorumProposal, QuorumProposal2, QuorumProposalWrapper,
-        VidDisperseShare, VidDisperseShare2,
+        DaProposal, DaProposal2, QuorumProposal, QuorumProposalWrapper, VidDisperseShare,
+        VidDisperseShare2,
     },
     event::{Event, EventType, HotShotAction, LeafInfo},
     message::{convert_proposal, Proposal},
@@ -835,27 +835,25 @@ impl SequencerPersistence for Persistence {
             let proposal_bytes = fs::read(file)?;
 
             // Then, deserialize.
-            let proposal: Proposal<SeqTypes, QuorumProposal<SeqTypes>> =
-                match bincode::deserialize(&proposal_bytes) {
-                    Ok(proposal) => proposal,
-                    Err(err) => {
-                        // At this point, if the file contents are invalid, it is most likely an
-                        // error rather than a miscellaneous file somehow ending up in the
-                        // directory. However, we continue on, because it is better to collect as
-                        // many proposals as we can rather than letting one bad proposal cause the
-                        // entire operation to fail, and it is still possible that this was just
-                        // some unintended file whose name happened to match the naming convention.
-                        tracing::warn!(
-                            view_number,
-                            "ignoring malformed quorum proposal file: {err:#}"
-                        );
-                        continue;
-                    }
-                };
-            let proposal2 = convert_proposal(proposal);
+            let proposal = match bincode::deserialize(&proposal_bytes) {
+                Ok(proposal) => proposal,
+                Err(err) => {
+                    // At this point, if the file contents are invalid, it is most likely an
+                    // error rather than a miscellaneous file somehow ending up in the
+                    // directory. However, we continue on, because it is better to collect as
+                    // many proposals as we can rather than letting one bad proposal cause the
+                    // entire operation to fail, and it is still possible that this was just
+                    // some unintended file whose name happened to match the naming convention.
+                    tracing::warn!(
+                        view_number,
+                        "ignoring malformed quorum proposal file: {err:#}"
+                    );
+                    continue;
+                }
+            };
 
             // Push to the map and we're done.
-            map.insert(ViewNumber::new(view_number), proposal2);
+            map.insert(ViewNumber::new(view_number), proposal);
         }
 
         Ok(map)
@@ -869,10 +867,9 @@ impl SequencerPersistence for Persistence {
         let dir_path = inner.quorum_proposals2_dir_path();
         let file_path = dir_path.join(view.to_string()).with_extension("txt");
         let bytes = fs::read(file_path)?;
-        let proposal: Proposal<SeqTypes, QuorumProposal<SeqTypes>> = bincode::deserialize(&bytes)?;
-        // TODO: rather than converting, we should store the value of QuorumProposalWrapper::with_epoch
-        let proposal_wrapper = convert_proposal(proposal);
-        Ok(proposal_wrapper)
+        let proposal = bincode::deserialize(&bytes)?;
+
+        Ok(proposal)
     }
 
     async fn load_upgrade_certificate(
@@ -1247,7 +1244,7 @@ impl SequencerPersistence for Persistence {
 
             let file_path = qp2_path.join(view.to_string()).with_extension("txt");
 
-            let proposal2: Proposal<SeqTypes, QuorumProposal2<SeqTypes>> =
+            let proposal2: Proposal<SeqTypes, QuorumProposalWrapper<SeqTypes>> =
                 convert_proposal(proposal);
 
             inner.replace(
@@ -1367,6 +1364,7 @@ mod test {
     use espresso_types::{NodeState, PubKey};
     use hotshot::types::SignatureKey;
     use hotshot_example_types::node_types::TestVersions;
+    use hotshot_types::data::QuorumProposal2;
     use sequencer_utils::test_utils::setup_test;
     use serde_json::json;
     use std::marker::PhantomData;
@@ -1710,12 +1708,11 @@ mod test {
                 proposal: QuorumProposal2::<SeqTypes> {
                     block_header: leaf.block_header().clone(),
                     view_number: ViewNumber::genesis(),
-                    justify_qc: QuorumCertificate::genesis::<TestVersions>(
+                    justify_qc: QuorumCertificate2::genesis::<TestVersions>(
                         &Default::default(),
                         &NodeState::mock(),
                     )
-                    .await
-                    .to_qc2(),
+                    .await,
                     upgrade_certificate: None,
                     view_change_evidence: None,
                     next_drb_result: None,
@@ -1743,8 +1740,8 @@ mod test {
         // Change one of the file extensions. It can happen that we end up with files with the wrong
         // extension if, for example, the node is killed before cleaning up a swap file.
         fs::rename(
-            tmp.path().join("quorum_proposals/1.txt"),
-            tmp.path().join("quorum_proposals/1.swp"),
+            tmp.path().join("quorum_proposals2/1.txt"),
+            tmp.path().join("quorum_proposals2/1.swp"),
         )
         .unwrap();
 
@@ -1775,12 +1772,11 @@ mod test {
                 proposal: QuorumProposal2::<SeqTypes> {
                     block_header: leaf.block_header().clone(),
                     view_number: ViewNumber::new(1),
-                    justify_qc: QuorumCertificate::genesis::<TestVersions>(
+                    justify_qc: QuorumCertificate2::genesis::<TestVersions>(
                         &Default::default(),
                         &NodeState::mock(),
                     )
-                    .await
-                    .to_qc2(),
+                    .await,
                     upgrade_certificate: None,
                     view_change_evidence: None,
                     next_drb_result: None,
@@ -1793,9 +1789,9 @@ mod test {
         };
 
         // First store an invalid quorum proposal.
-        fs::create_dir_all(tmp.path().join("quorum_proposals")).unwrap();
+        fs::create_dir_all(tmp.path().join("quorum_proposals2")).unwrap();
         fs::write(
-            tmp.path().join("quorum_proposals/0.txt"),
+            tmp.path().join("quorum_proposals2/0.txt"),
             "invalid data".as_bytes(),
         )
         .unwrap();

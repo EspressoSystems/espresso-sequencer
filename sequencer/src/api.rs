@@ -1097,7 +1097,7 @@ mod api_tests {
     use espresso_types::MockSequencerVersions;
     use espresso_types::{
         traits::{EventConsumer, PersistenceOptions},
-        Header, Leaf, Leaf2, NamespaceId,
+        Header, Leaf2, NamespaceId,
     };
     use ethers::utils::Anvil;
     use futures::{future, stream::StreamExt};
@@ -1112,7 +1112,6 @@ mod api_tests {
         data::{QuorumProposal2, QuorumProposalWrapper},
         event::LeafInfo,
         message::Proposal,
-        simple_certificate::QuorumCertificate,
         traits::{node_implementation::ConsensusTime, signature_key::SignatureKey, EncodeBytes},
         vid::vid_scheme,
     };
@@ -1298,12 +1297,11 @@ mod api_tests {
             proposal: QuorumProposal2::<SeqTypes> {
                 block_header: genesis.block_header().clone(),
                 view_number: ViewNumber::genesis(),
-                justify_qc: QuorumCertificate::genesis::<MockSequencerVersions>(
+                justify_qc: QuorumCertificate2::genesis::<MockSequencerVersions>(
                     &ValidatedState::default(),
                     &NodeState::mock(),
                 )
-                .await
-                .to_qc2(),
+                .await,
                 upgrade_certificate: None,
                 view_change_evidence: None,
                 next_drb_result: None,
@@ -1488,13 +1486,13 @@ mod api_tests {
             ));
         let consumer = ApiEventConsumer::from(data_source.clone());
 
-        let mut qc = QuorumCertificate::genesis::<MockSequencerVersions>(
+        let mut qc = QuorumCertificate2::genesis::<MockSequencerVersions>(
             &ValidatedState::default(),
             &NodeState::mock(),
         )
-        .await
-        .to_qc2();
-        let leaf = Leaf::genesis(&ValidatedState::default(), &NodeState::mock()).await;
+        .await;
+        let leaf =
+            Leaf2::genesis::<TestVersions>(&ValidatedState::default(), &NodeState::mock()).await;
 
         // Append the genesis leaf. We don't use this for the test, because the update function will
         // automatically fill in the missing data for genesis. We just append this to get into a
@@ -1503,7 +1501,7 @@ mod api_tests {
         persistence
             .append_decided_leaves(
                 leaf.view_number(),
-                [(&leaf_info(leaf.clone().into()), qc.clone())],
+                [(&leaf_info(leaf.clone()), qc.clone())],
                 &consumer,
             )
             .await

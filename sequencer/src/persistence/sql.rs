@@ -1139,9 +1139,8 @@ impl SequencerPersistence for Persistence {
                     let view: i64 = row.get("view");
                     let view_number: ViewNumber = ViewNumber::new(view.try_into()?);
                     let bytes: Vec<u8> = row.get("data");
-                    let proposal: Proposal<SeqTypes, QuorumProposal2<SeqTypes>> =
-                        bincode::deserialize(&bytes)?;
-                    Ok((view_number, convert_proposal(proposal)))
+                    let proposal = bincode::deserialize(&bytes)?;
+                    Ok((view_number, proposal))
                 })
                 .collect::<anyhow::Result<Vec<_>>>()?,
         ))
@@ -1157,9 +1156,9 @@ impl SequencerPersistence for Persistence {
                 .bind(view.u64() as i64)
                 .fetch_one(tx.as_mut())
                 .await?;
-        let proposal: Proposal<SeqTypes, QuorumProposal2<SeqTypes>> = bincode::deserialize(&data)?;
+        let proposal = bincode::deserialize(&data)?;
 
-        Ok(convert_proposal(proposal))
+        Ok(proposal)
     }
 
     async fn append_vid(
@@ -1222,6 +1221,7 @@ impl SequencerPersistence for Persistence {
         proposal: &Proposal<SeqTypes, QuorumProposalWrapper<SeqTypes>>,
     ) -> anyhow::Result<()> {
         let view_number = proposal.data.view_number().u64();
+
         let proposal_bytes = bincode::serialize(&proposal).context("serializing proposal")?;
         let leaf_hash = Committable::commit(&Leaf2::from_quorum_proposal(&proposal.data));
         let mut tx = self.db.write().await?;
@@ -1616,10 +1616,12 @@ impl SequencerPersistence for Persistence {
                 let leaf_hash: String = row.try_get("leaf_hash")?;
                 let data: Vec<u8> = row.try_get("data")?;
 
-                let quorum_proposal: QuorumProposal<SeqTypes> = bincode::deserialize(&data)?;
-                let quorum_proposal2: QuorumProposal2<SeqTypes> = quorum_proposal.into();
+                let quorum_proposal: Proposal<SeqTypes, QuorumProposal<SeqTypes>> =
+                    bincode::deserialize(&data)?;
+                let quorum_proposal2: Proposal<SeqTypes, QuorumProposalWrapper<SeqTypes>> =
+                    convert_proposal(quorum_proposal);
 
-                let view = quorum_proposal2.view_number().u64() as i64;
+                let view = quorum_proposal2.data.view_number().u64() as i64;
                 let data = bincode::serialize(&quorum_proposal2)?;
 
                 values.push((view, leaf_hash, data));
@@ -2145,12 +2147,15 @@ mod test {
             .unwrap();
         let payload_commitment = disperse.commit;
         let (pubkey, privkey) = BLSPubKey::generated_from_seed_indexed([0; 32], 1);
-        let vid_share = VidDisperseShare::<SeqTypes> {
+        let vid_share = VidDisperseShare2::<SeqTypes> {
             view_number: ViewNumber::new(0),
             payload_commitment,
             share: disperse.shares[0].clone(),
             common: disperse.common,
             recipient_key: pubkey,
+            epoch: None,
+            target_epoch: None,
+            data_epoch_payload_commitment: None,
         }
         .to_proposal(&privkey)
         .unwrap()
@@ -2180,10 +2185,11 @@ mod test {
         let block_payload_signature = BLSPubKey::sign(&privkey, &leaf_payload_bytes_arc)
             .expect("Failed to sign block payload");
         let da_proposal = Proposal {
-            data: DaProposal::<SeqTypes> {
+            data: DaProposal2::<SeqTypes> {
                 encoded_transactions: leaf_payload_bytes_arc,
                 metadata: leaf_payload.ns_table().clone(),
                 view_number: ViewNumber::new(0),
+                epoch: None,
             },
             signature: block_payload_signature,
             _pd: Default::default(),
@@ -2202,10 +2208,10 @@ mod test {
 
         // Add to database.
         storage
-            .append_da(&da_proposal, payload_commitment)
+            .append_da2(&da_proposal, payload_commitment)
             .await
             .unwrap();
-        storage.append_vid(&vid_share).await.unwrap();
+        storage.append_vid2(&vid_share).await.unwrap();
         storage
             .append_quorum_proposal2(&quorum_proposal)
             .await
@@ -2290,12 +2296,11 @@ mod test {
             proposal: QuorumProposal2::<SeqTypes> {
                 block_header: leaf.block_header().clone(),
                 view_number: data_view,
-                justify_qc: QuorumCertificate::genesis::<TestVersions>(
+                justify_qc: QuorumCertificate2::genesis::<TestVersions>(
                     &ValidatedState::default(),
                     &NodeState::mock(),
                 )
-                .await
-                .to_qc2(),
+                .await,
                 upgrade_certificate: None,
                 view_change_evidence: None,
                 next_drb_result: None,
@@ -2453,15 +2458,15 @@ mod test {
                 BLSPubKey::sign(&privkey, &bincode::serialize(&quorum_proposal).unwrap())
                     .expect("Failed to sign quorum proposal");
 
-            let proposal_bytes = bincode::serialize(&quorum_proposal)
-                .context("serializing proposal")
-                .unwrap();
-
             let proposal = Proposal {
                 data: quorum_proposal.clone(),
                 signature: quorum_proposal_signature,
                 _pd: PhantomData,
             };
+
+            let proposal_bytes = bincode::serialize(&proposal)
+                .context("serializing proposal")
+                .unwrap();
 
             let mut leaf = Leaf::from_quorum_proposal(&quorum_proposal);
             leaf.fill_block_payload(payload, 4).unwrap();
