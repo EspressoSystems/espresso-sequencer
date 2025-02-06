@@ -55,7 +55,10 @@ mod persistence_tests {
     use hotshot::types::{BLSPubKey, SignatureKey};
     use hotshot_example_types::node_types::TestVersions;
     use hotshot_types::{
-        data::{DaProposal2, EpochNumber, QuorumProposal2, VidDisperseShare2, ViewNumber},
+        data::{
+            DaProposal, EpochNumber, QuorumProposal2, QuorumProposalWrapper, VidDisperseShare,
+            ViewNumber,
+        },
         event::{EventType, HotShotAction, LeafInfo},
         message::{Proposal, UpgradeLock},
         simple_certificate::{
@@ -186,18 +189,22 @@ mod persistence_tests {
             data_epoch_payload_commitment: None,
         };
         let mut quorum_proposal = Proposal {
-            data: QuorumProposal2::<SeqTypes> {
-                block_header: leaf.block_header().clone(),
-                view_number: ViewNumber::genesis(),
-                justify_qc: QuorumCertificate2::genesis::<TestVersions>(
-                    &ValidatedState::default(),
-                    &NodeState::mock(),
-                )
-                .await,
-                upgrade_certificate: None,
-                view_change_evidence: None,
-                next_drb_result: None,
-                next_epoch_justify_qc: None,
+            data: QuorumProposalWrapper::<SeqTypes> {
+                proposal: QuorumProposal2::<SeqTypes> {
+                    block_header: leaf.block_header().clone(),
+                    view_number: ViewNumber::genesis(),
+                    justify_qc: QuorumCertificate::genesis::<TestVersions>(
+                        &ValidatedState::default(),
+                        &NodeState::mock(),
+                    )
+                    .await
+                    .to_qc2(),
+                    upgrade_certificate: None,
+                    view_change_evidence: None,
+                    next_drb_result: None,
+                    next_epoch_justify_qc: None,
+                },
+                with_epoch: false,
             },
             signature,
             _pd: Default::default(),
@@ -326,7 +333,7 @@ mod persistence_tests {
             BTreeMap::from_iter([(ViewNumber::genesis(), quorum_proposal1.clone())])
         );
 
-        quorum_proposal.data.view_number = ViewNumber::new(1);
+        quorum_proposal.data.proposal.view_number = ViewNumber::new(1);
         let quorum_proposal2 = quorum_proposal.clone();
         storage
             .append_quorum_proposal2(&quorum_proposal2)
@@ -341,8 +348,8 @@ mod persistence_tests {
             ])
         );
 
-        quorum_proposal.data.view_number = ViewNumber::new(2);
-        quorum_proposal.data.justify_qc.view_number = ViewNumber::new(1);
+        quorum_proposal.data.proposal.view_number = ViewNumber::new(2);
+        quorum_proposal.data.proposal.justify_qc.view_number = ViewNumber::new(1);
         let quorum_proposal3 = quorum_proposal.clone();
         storage
             .append_quorum_proposal2(&quorum_proposal3)
@@ -358,8 +365,8 @@ mod persistence_tests {
             ])
         );
 
-        quorum_proposal.data.view_number = ViewNumber::new(3);
-        quorum_proposal.data.justify_qc.view_number = ViewNumber::new(2);
+        quorum_proposal.data.proposal.view_number = ViewNumber::new(3);
+        quorum_proposal.data.proposal.justify_qc.view_number = ViewNumber::new(2);
 
         // This one should stick around after GC runs.
         let quorum_proposal4 = quorum_proposal.clone();
@@ -578,10 +585,13 @@ mod persistence_tests {
         let genesis_view = ViewNumber::genesis();
 
         let data: NextEpochQuorumData2<SeqTypes> = QuorumData2 {
-            leaf_commit: Leaf2::genesis(&ValidatedState::default(), &NodeState::default())
-                .await
-                .commit(),
-            epoch: EpochNumber::new(1),
+            leaf_commit: Leaf2::genesis::<TestVersions>(
+                &ValidatedState::default(),
+                &NodeState::default(),
+            )
+            .await
+            .commit(),
+            epoch: Some(EpochNumber::new(1)),
         }
         .into();
 
@@ -663,18 +673,22 @@ mod persistence_tests {
         .to_proposal(&privkey)
         .unwrap()
         .clone();
-        let mut quorum_proposal = QuorumProposal2::<SeqTypes> {
-            block_header: leaf.block_header().clone(),
-            view_number: ViewNumber::genesis(),
-            justify_qc: QuorumCertificate2::genesis::<TestVersions>(
-                &ValidatedState::default(),
-                &NodeState::mock(),
-            )
-            .await,
-            upgrade_certificate: None,
-            view_change_evidence: None,
-            next_drb_result: None,
-            next_epoch_justify_qc: None,
+        let mut quorum_proposal = QuorumProposalWrapper::<SeqTypes> {
+            proposal: QuorumProposal2::<SeqTypes> {
+                block_header: leaf.block_header().clone(),
+                view_number: ViewNumber::genesis(),
+                justify_qc: QuorumCertificate::genesis::<TestVersions>(
+                    &ValidatedState::default(),
+                    &NodeState::mock(),
+                )
+                .await
+                .to_qc2(),
+                upgrade_certificate: None,
+                view_change_evidence: None,
+                next_drb_result: None,
+                next_epoch_justify_qc: None,
+            },
+            with_epoch: false,
         };
         let mut qc = QuorumCertificate2::genesis::<TestVersions>(
             &ValidatedState::default(),
@@ -698,7 +712,7 @@ mod persistence_tests {
         let vid_commitment = vid_commitment(&leaf_payload_bytes_arc, 2);
 
         for i in 0..4 {
-            quorum_proposal.view_number = ViewNumber::new(i);
+            quorum_proposal.proposal.view_number = ViewNumber::new(i);
             let leaf = Leaf2::from_quorum_proposal(&quorum_proposal);
             qc.view_number = leaf.view_number();
             qc.data.leaf_commit = Committable::commit(&leaf);
@@ -851,19 +865,22 @@ mod persistence_tests {
         .unwrap()
         .clone();
 
-        let quorum_proposal = QuorumProposal2::<SeqTypes> {
-            block_header: leaf.block_header().clone(),
-            view_number: ViewNumber::genesis(),
-            justify_qc: QuorumCertificate::genesis::<TestVersions>(
-                &ValidatedState::default(),
-                &NodeState::mock(),
-            )
-            .await
-            .to_qc2(),
-            upgrade_certificate: None,
-            view_change_evidence: None,
-            next_drb_result: None,
-            next_epoch_justify_qc: None,
+        let quorum_proposal = QuorumProposalWrapper::<SeqTypes> {
+            proposal: QuorumProposal2::<SeqTypes> {
+                block_header: leaf.block_header().clone(),
+                view_number: ViewNumber::genesis(),
+                justify_qc: QuorumCertificate::genesis::<TestVersions>(
+                    &ValidatedState::default(),
+                    &NodeState::mock(),
+                )
+                .await
+                .to_qc2(),
+                upgrade_certificate: None,
+                view_change_evidence: None,
+                next_drb_result: None,
+                next_epoch_justify_qc: None,
+            },
+            with_epoch: false,
         };
         let quorum_proposal_signature =
             BLSPubKey::sign(&privkey, &bincode::serialize(&quorum_proposal).unwrap())

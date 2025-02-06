@@ -163,30 +163,30 @@ impl<N: ConnectedNetwork<PubKey>, D: Send + Sync, V: Versions, P: SequencerPersi
 impl<N: ConnectedNetwork<PubKey>, D: Sync, V: Versions, P: SequencerPersistence>
     StakeTableDataSource<SeqTypes> for StorageState<N, P, D, V>
 {
-    /// Get the stake table for a given epoch or the current epoch if not provided
+    /// Get the stake table for a given epoch
     async fn get_stake_table(
         &self,
         epoch: Option<<SeqTypes as NodeType>::Epoch>,
     ) -> Vec<StakeTableEntry<<SeqTypes as NodeType>::SignatureKey>> {
         self.as_ref().get_stake_table(epoch).await
     }
+
+    /// Get the stake table for the current epoch if not provided
+    async fn get_stake_table_current(
+        &self,
+    ) -> Vec<StakeTableEntry<<SeqTypes as NodeType>::SignatureKey>> {
+        self.as_ref().get_stake_table_current().await
+    }
 }
 
 impl<N: ConnectedNetwork<PubKey>, V: Versions, P: SequencerPersistence>
     StakeTableDataSource<SeqTypes> for ApiState<N, P, V>
 {
-    /// Get the stake table for a given epoch or the current epoch if not provided
+    /// Get the stake table for a given epoch
     async fn get_stake_table(
         &self,
         epoch: Option<<SeqTypes as NodeType>::Epoch>,
     ) -> Vec<StakeTableEntry<<SeqTypes as NodeType>::SignatureKey>> {
-        // Get the epoch from the argument or the current epoch if not provided
-        let epoch = if let Some(epoch) = epoch {
-            epoch
-        } else {
-            self.consensus().await.read().await.cur_epoch().await
-        };
-
         self.consensus()
             .await
             .read()
@@ -195,6 +195,15 @@ impl<N: ConnectedNetwork<PubKey>, V: Versions, P: SequencerPersistence>
             .read()
             .await
             .stake_table(epoch)
+    }
+
+    /// Get the stake table for the current epoch if not provided
+    async fn get_stake_table_current(
+        &self,
+    ) -> Vec<StakeTableEntry<<SeqTypes as NodeType>::SignatureKey>> {
+        let epoch = self.consensus().await.read().await.cur_epoch().await;
+
+        self.get_stake_table(epoch).await
     }
 }
 
@@ -494,6 +503,7 @@ pub mod test_helpers {
     use committable::Committable;
     use hotshot_state_prover::service::light_client_genesis_from_stake_table;
     use std::time::Duration;
+    use tempfile::TempDir;
     use tokio::{spawn, time::sleep};
 
     use crate::network;
@@ -540,6 +550,8 @@ pub mod test_helpers {
         pub server: SequencerContext<network::Memory, P::Persistence, V>,
         pub peers: Vec<SequencerContext<network::Memory, P::Persistence, V>>,
         pub cfg: TestConfig<{ NUM_NODES }>,
+        // todo (abdul): remove this when fs storage is removed
+        pub temp_dir: Option<TempDir>,
     }
 
     pub struct TestNetworkConfig<const NUM_NODES: usize, P, C>
@@ -554,6 +566,7 @@ pub mod test_helpers {
         api_config: Options,
     }
 
+    #[derive(Clone)]
     pub struct TestNetworkConfigBuilder<const NUM_NODES: usize, P, C>
     where
         P: PersistenceOptions,
@@ -591,6 +604,19 @@ pub mod test_helpers {
                 network_config: None,
                 api_config: None,
             }
+        }
+
+        pub fn with_max_block_size(&self, max_block_size: u64) -> Self {
+            let cf = ChainConfig {
+                max_block_size: max_block_size.into(),
+                ..Default::default()
+            }
+            .into();
+
+            let mut cfg = self.clone();
+            cfg.state.iter_mut().for_each(|s| s.chain_config = cf);
+
+            cfg
         }
     }
 
@@ -680,11 +706,24 @@ pub mod test_helpers {
                 marketplace_builder_url = url;
             }
 
+            // add default storage if none is provided as query module is now required
+            let mut opt = cfg.api_config.clone();
+            let temp_dir = if opt.storage_fs.is_none() && opt.storage_sql.is_none() {
+                let temp_dir = tempfile::tempdir().unwrap();
+                opt = opt.query_fs(
+                    Default::default(),
+                    crate::persistence::fs::Options::new(temp_dir.path().to_path_buf()),
+                );
+                Some(temp_dir)
+            } else {
+                None
+            };
+
             let mut nodes = join_all(
                 izip!(cfg.state, cfg.persistence, cfg.catchup)
                     .enumerate()
                     .map(|(i, (state, persistence, catchup))| {
-                        let opt = cfg.api_config.clone();
+                        let opt = opt.clone();
                         let cfg = &cfg.network_config;
                         let upgrades_map = cfg.upgrades();
                         let marketplace_builder_url = marketplace_builder_url.clone();
@@ -750,6 +789,7 @@ pub mod test_helpers {
                 server,
                 peers,
                 cfg: cfg.network_config,
+                temp_dir,
             }
         }
 
@@ -781,7 +821,7 @@ pub mod test_helpers {
         let url = format!("http://localhost:{port}").parse().unwrap();
         let client: Client<ServerError, StaticVersion<0, 1>> = Client::new(url);
 
-        let options = opt(Options::with_port(port).status(Default::default()));
+        let options = opt(Options::with_port(port));
         let anvil = Anvil::new().spawn();
         let l1 = anvil.endpoint().parse().unwrap();
         let network_config = TestConfigBuilder::default().l1_url(l1).build();
@@ -911,7 +951,7 @@ pub mod test_helpers {
         let url = format!("http://localhost:{port}").parse().unwrap();
         let client: Client<ServerError, StaticVersion<0, 1>> = Client::new(url);
 
-        let options = opt(Options::with_port(port).catchup(Default::default()));
+        let options = opt(Options::with_port(port));
         let anvil = Anvil::new().spawn();
         let l1 = anvil.endpoint().parse().unwrap();
         let network_config = TestConfigBuilder::default().l1_url(l1).build();
@@ -1054,7 +1094,6 @@ mod api_tests {
     use committable::Committable;
     use data_source::testing::TestableSequencerDataSource;
     use endpoints::NamespaceProofQueryData;
-
     use espresso_types::MockSequencerVersions;
     use espresso_types::{
         traits::{EventConsumer, PersistenceOptions},
@@ -1065,10 +1104,9 @@ mod api_tests {
     use hotshot_query_service::availability::{
         AvailabilityDataSource, BlockQueryData, VidCommonQueryData,
     };
-    use hotshot_types::data::{DaProposal2, EpochNumber, VidDisperseShare2};
-    use hotshot_types::simple_certificate::QuorumCertificate2;
+
     use hotshot_types::{
-        data::QuorumProposal2,
+        data::{DaProposal, QuorumProposal2, QuorumProposalWrapper, VidDisperseShare},
         event::LeafInfo,
         message::Proposal,
         simple_certificate::QuorumCertificate,
@@ -1253,18 +1291,22 @@ mod api_tests {
         let payload_bytes_arc = payload.encode();
         let disperse = vid_scheme(2).disperse(payload_bytes_arc.clone()).unwrap();
         let payload_commitment = disperse.commit;
-        let mut quorum_proposal = QuorumProposal2::<SeqTypes> {
-            block_header: genesis.block_header().clone(),
-            view_number: ViewNumber::genesis(),
-            justify_qc: QuorumCertificate2::genesis::<MockSequencerVersions>(
-                &ValidatedState::default(),
-                &NodeState::mock(),
-            )
-            .await,
-            upgrade_certificate: None,
-            view_change_evidence: None,
-            next_drb_result: None,
-            next_epoch_justify_qc: None,
+        let mut quorum_proposal = QuorumProposalWrapper::<SeqTypes> {
+            proposal: QuorumProposal2::<SeqTypes> {
+                block_header: genesis.block_header().clone(),
+                view_number: ViewNumber::genesis(),
+                justify_qc: QuorumCertificate::genesis::<MockSequencerVersions>(
+                    &ValidatedState::default(),
+                    &NodeState::mock(),
+                )
+                .await
+                .to_qc2(),
+                upgrade_certificate: None,
+                view_change_evidence: None,
+                next_drb_result: None,
+                next_epoch_justify_qc: None,
+            },
+            with_epoch: false,
         };
         let mut qc = QuorumCertificate2::genesis::<MockSequencerVersions>(
             &ValidatedState::default(),
@@ -1274,9 +1316,9 @@ mod api_tests {
 
         let mut justify_qc = qc.clone();
         for i in 0..5 {
-            *quorum_proposal.block_header.height_mut() = i;
-            quorum_proposal.view_number = ViewNumber::new(i);
-            quorum_proposal.justify_qc = justify_qc;
+            *quorum_proposal.proposal.block_header.height_mut() = i;
+            quorum_proposal.proposal.view_number = ViewNumber::new(i);
+            quorum_proposal.proposal.justify_qc = justify_qc;
             let leaf = Leaf2::from_quorum_proposal(&quorum_proposal);
             qc.view_number = leaf.view_number();
             qc.data.leaf_commit = Committable::commit(&leaf);
@@ -1467,14 +1509,17 @@ mod api_tests {
         // Create another leaf, with missing data.
         let mut block_header = leaf.block_header().clone();
         *block_header.height_mut() += 1;
-        let qp = QuorumProposal2 {
-            block_header,
-            view_number: leaf.view_number() + 1,
-            justify_qc: qc.clone(),
-            upgrade_certificate: None,
-            view_change_evidence: None,
-            next_drb_result: None,
-            next_epoch_justify_qc: None,
+        let qp = QuorumProposalWrapper {
+            proposal: QuorumProposal2 {
+                block_header,
+                view_number: leaf.view_number() + 1,
+                justify_qc: qc.clone(),
+                upgrade_certificate: None,
+                view_change_evidence: None,
+                next_drb_result: None,
+                next_epoch_justify_qc: None,
+            },
+            with_epoch: false,
         };
 
         let leaf = Leaf2::from_quorum_proposal(&qp);
@@ -1528,7 +1573,7 @@ mod test {
     };
     use hotshot::types::EventType;
     use hotshot_query_service::{
-        availability::{BlockQueryData, LeafQueryData},
+        availability::{BlockQueryData, LeafQueryData, VidCommonQueryData},
         types::HeightIndexed,
     };
     use hotshot_types::{
@@ -1609,12 +1654,8 @@ mod test {
         let port = pick_unused_port().expect("No ports free");
 
         let storage = SqlDataSource::create_storage().await;
-        let options = SqlDataSource::options(
-            &storage,
-            Options::with_port(port)
-                .state(Default::default())
-                .status(Default::default()),
-        );
+
+        let options = SqlDataSource::options(&storage, Options::with_port(port));
 
         let anvil = Anvil::new().spawn();
         let l1 = anvil.endpoint().parse().unwrap();
@@ -1627,7 +1668,7 @@ mod test {
         let url = format!("http://localhost:{port}").parse().unwrap();
         let client: Client<ServerError, SequencerApiVersion> = Client::new(url);
 
-        client.connect(None).await;
+        client.connect(Some(Duration::from_secs(15))).await;
 
         // Wait until some blocks have been decided.
         tracing::info!("waiting for blocks");
@@ -1687,6 +1728,97 @@ mod test {
     }
 
     #[tokio::test(flavor = "multi_thread")]
+    async fn test_leaf_only_data_source() {
+        setup_test();
+
+        let port = pick_unused_port().expect("No ports free");
+
+        let storage = SqlDataSource::create_storage().await;
+        let options =
+            SqlDataSource::leaf_only_ds_options(&storage, Options::with_port(port)).unwrap();
+
+        let anvil = Anvil::new().spawn();
+        let l1 = anvil.endpoint().parse().unwrap();
+        let network_config = TestConfigBuilder::default().l1_url(l1).build();
+        let config = TestNetworkConfigBuilder::default()
+            .api_config(options)
+            .network_config(network_config)
+            .build();
+        let _network = TestNetwork::new(config, MockSequencerVersions::new()).await;
+        let url = format!("http://localhost:{port}").parse().unwrap();
+        let client: Client<ServerError, SequencerApiVersion> = Client::new(url);
+
+        tracing::info!("waiting for blocks");
+        client.connect(Some(Duration::from_secs(15))).await;
+        // Wait until some blocks have been decided.
+
+        let account = TestConfig::<5>::builder_key().fee_account();
+
+        let _headers = client
+            .socket("availability/stream/headers/0")
+            .subscribe::<Header>()
+            .await
+            .unwrap()
+            .take(10)
+            .try_collect::<Vec<_>>()
+            .await
+            .unwrap();
+
+        for i in 1..5 {
+            let leaf = client
+                .get::<LeafQueryData<SeqTypes>>(&format!("availability/leaf/{i}"))
+                .send()
+                .await
+                .unwrap();
+
+            assert_eq!(leaf.height(), i);
+
+            let header = client
+                .get::<Header>(&format!("availability/header/{i}"))
+                .send()
+                .await
+                .unwrap();
+
+            assert_eq!(header.height(), i);
+
+            let vid = client
+                .get::<VidCommonQueryData<SeqTypes>>(&format!("availability/vid/common/{i}"))
+                .send()
+                .await
+                .unwrap();
+
+            assert_eq!(vid.height(), i);
+
+            client
+                .get::<MerkleProof<Commitment<Header>, u64, Sha3Node, 3>>(&format!(
+                    "block-state/{i}/{}",
+                    i - 1
+                ))
+                .send()
+                .await
+                .unwrap();
+
+            client
+                .get::<MerkleProof<FeeAmount, FeeAccount, Sha3Node, 256>>(&format!(
+                    "fee-state/{}/{}",
+                    i + 1,
+                    account
+                ))
+                .send()
+                .await
+                .unwrap();
+        }
+
+        // This would fail even though we have processed atleast 10 leaves
+        // this is because light weight nodes only support leaves, headers and VID
+        client
+            .get::<BlockQueryData<SeqTypes>>("availability/block/1")
+            .send()
+            .await
+            .unwrap_err();
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_catchup() {
         setup_test();
 
@@ -1696,7 +1828,7 @@ mod test {
         let l1 = anvil.endpoint().parse().unwrap();
         const NUM_NODES: usize = 5;
         let config = TestNetworkConfigBuilder::<NUM_NODES, _, _>::with_num_nodes()
-            .api_config(Options::with_port(port).catchup(Default::default()))
+            .api_config(Options::with_port(port))
             .network_config(TestConfigBuilder::default().l1_url(l1).build())
             .catchups(std::array::from_fn(|_| {
                 StatePeers::<StaticVersion<0, 1>>::from_urls(
@@ -1807,7 +1939,7 @@ mod test {
         let states = std::array::from_fn(|_| state.clone());
 
         let config = TestNetworkConfigBuilder::default()
-            .api_config(Options::with_port(port).catchup(Default::default()))
+            .api_config(Options::with_port(port))
             .states(states)
             .catchups(std::array::from_fn(|_| {
                 StatePeers::<StaticVersion<0, 1>>::from_urls(
@@ -1879,13 +2011,10 @@ mod test {
 
         const NUM_NODES: usize = 5;
         let config = TestNetworkConfigBuilder::<NUM_NODES, _, _>::with_num_nodes()
-            .api_config(
-                Options::from(options::Http {
-                    port,
-                    max_connections: None,
-                })
-                .catchup(Default::default()),
-            )
+            .api_config(Options::from(options::Http {
+                port,
+                max_connections: None,
+            }))
             .states(states)
             .catchups(std::array::from_fn(|_| {
                 StatePeers::<StaticVersion<0, 1>>::from_urls(
@@ -1964,13 +2093,10 @@ mod test {
         );
 
         let config = TestNetworkConfigBuilder::<NUM_NODES, _, _>::with_num_nodes()
-            .api_config(
-                Options::from(options::Http {
-                    port,
-                    max_connections: None,
-                })
-                .catchup(Default::default()),
-            )
+            .api_config(Options::from(options::Http {
+                port,
+                max_connections: None,
+            }))
             .states(std::array::from_fn(|_| state.clone()))
             .catchups(peers)
             .network_config(TestConfigBuilder::default().l1_url(l1).build())
@@ -2136,14 +2262,10 @@ mod test {
 
         const NUM_NODES: usize = 5;
         let config = TestNetworkConfigBuilder::<NUM_NODES, _, _>::with_num_nodes()
-            .api_config(
-                Options::from(options::Http {
-                    port,
-                    max_connections: None,
-                })
-                .catchup(Default::default())
-                .status(Default::default()),
-            )
+            .api_config(Options::from(options::Http {
+                port,
+                max_connections: None,
+            }))
             .catchups(std::array::from_fn(|_| {
                 StatePeers::<SequencerApiVersion>::from_urls(
                     vec![format!("http://localhost:{port}").parse().unwrap()],
@@ -2246,11 +2368,10 @@ mod test {
         let l1 = anvil.endpoint().parse().unwrap();
 
         let config = TestNetworkConfigBuilder::default()
-            .api_config(
-                SqlDataSource::options(&storage[0], Options::with_port(port))
-                    .state(Default::default())
-                    .status(Default::default()),
-            )
+            .api_config(SqlDataSource::options(
+                &storage[0],
+                Options::with_port(port),
+            ))
             .persistences(persistence.clone())
             .network_config(TestConfigBuilder::default().l1_url(l1).build())
             .build();
@@ -2310,10 +2431,10 @@ mod test {
         let l1 = anvil.endpoint().parse().unwrap();
 
         let config = TestNetworkConfigBuilder::default()
-            .api_config(
-                SqlDataSource::options(&storage[0], Options::with_port(port))
-                    .catchup(Default::default()),
-            )
+            .api_config(SqlDataSource::options(
+                &storage[0],
+                Options::with_port(port),
+            ))
             .persistences(persistence)
             .catchups(std::array::from_fn(|_| {
                 // Catchup using node 0 as a peer. Node 0 was running the archival state service

@@ -8,10 +8,10 @@ edition = "2021"
 testing = []
 
 [dependencies]
+alloy = { workspace = true }
 anyhow = { workspace = true }
 ark-serialize = { workspace = true }
 async-broadcast = { workspace = true }
-async-lock = { workspace = true }
 async-trait = { workspace = true }
 base64-bytes = { workspace = true }
 bincode = { workspace = true }
@@ -20,10 +20,11 @@ bytesize = { workspace = true }
 clap = { workspace = true }
 cld = { workspace = true }
 committable = { workspace = true }
-contract-bindings = { path = "../contract-bindings" }
+contract-bindings-alloy = { path = "../contract-bindings-alloy" }
+contract-bindings-ethers = { path = "../contract-bindings-ethers" }
 derive_more = { workspace = true }
-diff-test-bn254 = { git = "https://github.com/EspressoSystems/solidity-bn254.git" }
 ethers = { workspace = true }
+ethers-conv = { path = "../ethers-conv" }
 fluent-asserter = "0.1.9"
 futures = { workspace = true }
 hotshot = { workspace = true }
@@ -32,19 +33,18 @@ hotshot-query-service = { workspace = true }
 hotshot-types = { workspace = true }
 itertools = { workspace = true }
 jf-merkle-tree = { workspace = true }
-jf-signature = { workspace = true }
 jf-utils = { workspace = true }                                      # TODO temporary: used only for test_rng()
 jf-vid = { workspace = true }
 lru = { workspace = true }
 num-traits = { workspace = true }
+parking_lot = "0.12"
 paste = { workspace = true }
 pretty_assertions = { workspace = true }
 rand = { workspace = true }
-reqwest = "0.11" # Same version used by ethers
 sequencer-utils = { path = "../utils" }
 serde = { workspace = true }
 serde_json = { workspace = true }
-sha2 = "0.10"                                                        # TODO temporary, used only for VID, should be set in hotshot
+sha2 = { workspace = true }                                                         # TODO temporary, used only for VID, should be set in hotshot
 static_assertions = { workspace = true }
 surf-disco = { workspace = true }
 tagged-base64 = { workspace = true }
@@ -52,6 +52,7 @@ thiserror = { workspace = true }
 tide-disco = { workspace = true }
 time = { workspace = true }
 tokio = { workspace = true }
+tower-service = { version = "0.3", default-features = false }
 tracing = { workspace = true }
 url = { workspace = true }
 vbs = { workspace = true }
