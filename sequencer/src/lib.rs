@@ -1064,6 +1064,7 @@ mod test {
     use espresso_types::{Header, MockSequencerVersions, NamespaceId, Payload, Transaction};
     use futures::StreamExt;
     use hotshot::types::EventType::Decide;
+    use hotshot_example_types::node_types::TestVersions;
     use hotshot_types::{
         event::LeafInfo,
         traits::block_contents::{
@@ -1153,7 +1154,7 @@ mod test {
             let genesis_commitment = {
                 // TODO we should not need to collect payload bytes just to compute vid_commitment
                 let payload_bytes = genesis_payload.encode();
-                vid_commitment(&payload_bytes, GENESIS_VID_NUM_STORAGE_NODES)
+                vid_commitment::<TestVersions>(&payload_bytes, GENESIS_VID_NUM_STORAGE_NODES, <TestVersions as Versions>::Base::VERSION)
             };
             let genesis_state = NodeState::mock();
             Header::genesis(

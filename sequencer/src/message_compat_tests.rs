@@ -20,7 +20,7 @@ use committable::Committable;
 use espresso_types::{NodeState, PubKey, ValidatedState};
 use hotshot_types::{
     data::{
-        DaProposal, EpochNumber, QuorumProposal, UpgradeProposal, VidDisperse, VidDisperseShare,
+        DaProposal, EpochNumber, QuorumProposal, UpgradeProposal,
         ViewChangeEvidence, ViewNumber,
     },
     message::{
@@ -32,7 +32,6 @@ use hotshot_types::{
     traits::{
         node_implementation::ConsensusTime, signature_key::SignatureKey, BlockPayload, EncodeBytes,
     },
-    vid::vid_scheme,
 };
 use jf_vid::VidScheme;
 use pretty_assertions::assert_eq;
@@ -50,15 +49,13 @@ async fn test_message_compat<Ver: StaticVersionType>(_ver: Ver) {
     use espresso_types::{EpochCommittees, Leaf, Payload, SeqTypes, Transaction};
     use hotshot_example_types::node_types::TestVersions;
     use hotshot_types::{
-        simple_certificate::{
+        data::vid_disperse::{ADVZDisperse, ADVZDisperseShare}, simple_certificate::{
             TimeoutCertificate, ViewSyncCommitCertificate, ViewSyncFinalizeCertificate,
             ViewSyncPreCommitCertificate,
-        },
-        simple_vote::{
+        }, simple_vote::{
             TimeoutData, TimeoutVote, ViewSyncCommitData, ViewSyncCommitVote, ViewSyncFinalizeData,
             ViewSyncFinalizeVote, ViewSyncPreCommitData, ViewSyncPreCommitVote,
-        },
-        PeerConfig,
+        }, vid::advz_scheme, PeerConfig
     };
 
     let (sender, priv_key) = PubKey::generated_from_seed_indexed(Default::default(), 0);
@@ -78,7 +75,7 @@ async fn test_message_compat<Ver: StaticVersionType>(_ver: Ver) {
         old_version_last_view: ViewNumber::genesis(),
         new_version_first_view: ViewNumber::genesis(),
     };
-    let leaf = Leaf::genesis(
+    let leaf = Leaf::genesis::<TestVersions>(
         &ValidatedState::default(),
         &NodeState::mock().with_current_version(Ver::VERSION),
     )
@@ -226,10 +223,10 @@ async fn test_message_compat<Ver: StaticVersionType>(_ver: Ver) {
             Default::default(),
         )),
         DaConsensusMessage::VidDisperseMsg(Proposal {
-            data: VidDisperseShare::from_vid_disperse(
-                VidDisperse::from_membership(
+            data: ADVZDisperseShare::from_advz_disperse(
+                ADVZDisperse::from_membership(
                     ViewNumber::genesis(),
-                    vid_scheme(1).disperse(payload.encode()).unwrap(),
+                    advz_scheme(1).disperse(payload.encode()).unwrap(),
                     &membership,
                     Some(EpochNumber::genesis()),
                     Some(EpochNumber::new(1)),

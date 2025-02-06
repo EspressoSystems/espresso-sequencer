@@ -22,7 +22,7 @@ use anyhow::{ensure, Context};
 use async_trait::async_trait;
 use futures::future::Future;
 use hotshot::types::{Event, EventType};
-use hotshot_types::event::LeafInfo;
+use hotshot_types::{data::VidDisperseShare, event::LeafInfo};
 use hotshot_types::{
     data::{Leaf, Leaf2, QuorumProposal},
     traits::{
@@ -128,7 +128,6 @@ where
                         return Err(leaf.block_header().block_number());
                     }
                 };
-
                 let block_data = leaf
                     .block_payload()
                     .map(|payload| BlockQueryData::new(leaf.block_header().clone(), payload));
@@ -136,29 +135,40 @@ where
                     tracing::info!(height, "block not available at decide");
                 }
 
-                let (vid_common, vid_share) = if let Some(vid_share) = vid_share {
-                    (
+                let (vid_common, vid_share) = match vid_share {
+                    Some(VidDisperseShare::V0(share)) => (
                         Some(VidCommonQueryData::new(
                             leaf.block_header().clone(),
-                            vid_share.common.clone(),
+                            share.common.clone(),
                         )),
-                        Some(vid_share.share.clone()),
-                    )
-                } else if leaf.view_number().u64() == 0 {
-                    // HotShot does not run VID in consensus for the genesis block. In this case,
-                    // the block payload is guaranteed to always be empty, so VID isn't really
-                    // necessary. But for consistency, we will still store the VID dispersal data,
-                    // computing it ourselves based on the well-known genesis VID commitment.
-                    match genesis_vid(&leaf) {
-                        Ok((common, share)) => (Some(common), Some(share)),
-                        Err(err) => {
-                            tracing::warn!("failed to compute genesis VID: {err:#}");
+                        Some(share.share.clone()),
+                    ),
+                    Some(VidDisperseShare::V1(share)) => (
+                        Some(VidCommonQueryData::new(
+                            leaf.block_header().clone(),
+                            share.common.clone(),
+                        )),
+                        Some(share.share.clone()),
+                    ),
+                    None => {
+                        if leaf.view_number().u64() == 0 {
+                            // HotShot does not run VID in consensus for the genesis block. In this case,
+                            // the block payload is guaranteed to always be empty, so VID isn't really
+                            // necessary. But for consistency, we will still store the VID dispersal data,
+                            // computing it ourselves based on the well-known genesis VID commitment.
+                            match genesis_vid(&leaf) {
+                                Ok((common, share)) => (Some(common), Some(share)),
+                                Err(err) => {
+                                    tracing::warn!("failed to compute genesis VID: {err:#}");
+                                    (None, None)
+                                }
+                            }
+                        } else {
                             (None, None)
                         }
                     }
-                } else {
-                    (None, None)
                 };
+
                 if vid_common.is_none() {
                     tracing::info!(height, "VID not available at decide");
                 }

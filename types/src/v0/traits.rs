@@ -462,7 +462,7 @@ pub trait SequencerPersistence: Sized + Send + Sync + Clone + 'static {
     async fn load_vid_share(
         &self,
         view: ViewNumber,
-    ) -> anyhow::Result<Option<Proposal<SeqTypes, VidDisperseShare<SeqTypes>>>>;
+    ) -> anyhow::Result<Option<Proposal<SeqTypes, ADVZDisperseShare<SeqTypes>>>>;
     async fn load_da_proposal(
         &self,
         view: ViewNumber,
