@@ -2161,7 +2161,7 @@ mod test {
         .unwrap()
         .clone();
 
-        let quorum_proposal: QuorumProposalWrapper<SeqTypes> = QuorumProposal2::<SeqTypes> {
+        let mut quorum_proposal: QuorumProposalWrapper<SeqTypes> = QuorumProposal2::<SeqTypes> {
             block_header: leaf.block_header().clone(),
             view_number: leaf.view_number(),
             justify_qc: leaf.justify_qc(),
@@ -2171,6 +2171,11 @@ mod test {
             next_epoch_justify_qc: None,
         }
         .into();
+
+        // Genesis leaf with_epoch returns false
+        // `QuorumProposal2` -> `QuorumProposalWrapper` returns true
+        //  so we overwrite it with false here
+        quorum_proposal.with_epoch = leaf.with_epoch;
         let quorum_proposal_signature =
             BLSPubKey::sign(&privkey, &bincode::serialize(&quorum_proposal).unwrap())
                 .expect("Failed to sign quorum proposal");
