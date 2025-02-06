@@ -29,7 +29,7 @@ use hotshot_types::{
         block_contents::{BlockHeader, BlockPayload, EncodeBytes, GENESIS_VID_NUM_STORAGE_NODES},
         node_implementation::{ConsensusTime, NodeType},
     },
-    vid::vid_scheme,
+    vid::advz_scheme,
 };
 use jf_vid::VidScheme;
 use std::iter::once;
@@ -181,7 +181,7 @@ fn genesis_vid<Types: NodeType>(
 ) -> anyhow::Result<(VidCommonQueryData<Types>, VidShare)> {
     let payload = Payload::<Types>::empty().0;
     let bytes = payload.encode();
-    let mut disperse = vid_scheme(GENESIS_VID_NUM_STORAGE_NODES)
+    let mut disperse = advz_scheme(GENESIS_VID_NUM_STORAGE_NODES)
         .disperse(bytes)
         .context("unable to compute VID dispersal for genesis block")?;
     ensure!(

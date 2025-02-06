@@ -3,7 +3,7 @@ use hotshot_types::{
     message::Proposal,
     traits::{
         block_contents::{BlockHeader, BlockPayload},
-        node_implementation::{ConsensusTime, NodeType},
+        node_implementation::{ConsensusTime, NodeType, Versions},
         EncodeBytes,
     },
     utils::BuilderCommitment,
@@ -17,6 +17,7 @@ use crate::service::{GlobalState, ReceivedTransaction};
 use async_broadcast::broadcast;
 use async_broadcast::Receiver as BroadcastReceiver;
 use async_broadcast::Sender as BroadcastSender;
+use vbs::version::StaticVersionType;
 use async_lock::RwLock;
 use core::panic;
 use futures::StreamExt;
@@ -31,7 +32,7 @@ use tokio::{
     time::sleep,
 };
 
-use std::cmp::PartialEq;
+use std::{cmp::PartialEq, marker::PhantomData};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt::Debug;
 use std::sync::Arc;
@@ -120,7 +121,7 @@ pub struct DAProposalInfo<Types: NodeType> {
 pub(crate) const ALLOW_EMPTY_BLOCK_PERIOD: u64 = 3;
 
 #[derive(Debug)]
-pub struct BuilderState<Types: NodeType> {
+pub struct BuilderState<Types: NodeType, V: Versions> {
     /// Recent included txs set while building blocks
     pub included_txns: HashSet<Commitment<Types::Transaction>>,
 
@@ -197,6 +198,8 @@ pub struct BuilderState<Types: NodeType> {
     /// to allow for faster finalization of previous blocks that have had
     /// transactions included in them.
     pub allow_empty_block_until: Option<Types::View>,
+
+    phantom: PhantomData<V>,
 }
 
 /// [`best_builder_states_to_extend`] is a utility function that is used to
@@ -364,7 +367,7 @@ async fn best_builder_states_to_extend<Types: NodeType>(
     HashSet::new()
 }
 
-impl<Types: NodeType> BuilderState<Types> {
+impl<Types: NodeType, V: Versions> BuilderState<Types, V> {
     /// Utility method that attempts to determine whether
     /// we are among the best [`BuilderState`]s to extend from.
     async fn am_i_the_best_builder_state_to_extend(
@@ -806,7 +809,7 @@ impl<Types: NodeType> BuilderState<Types> {
             };
 
             let join_handle = spawn_blocking(move || {
-                hotshot_types::traits::block_contents::vid_commitment(&encoded_txns, num_nodes)
+                hotshot_types::traits::block_contents::vid_commitment::<V>(&encoded_txns, num_nodes, <V as Versions>::Base::VERSION)
             });
 
             let vidc = join_handle.await.unwrap();
@@ -1020,7 +1023,7 @@ pub enum MessageType<Types: NodeType> {
 }
 
 #[allow(clippy::too_many_arguments)]
-impl<Types: NodeType> BuilderState<Types> {
+impl<Types: NodeType, V: Versions> BuilderState<Types, V> {
     pub fn new(
         parent_block_references: ParentBlockReferences<Types>,
         decide_receiver: BroadcastReceiver<MessageType<Types>>,
@@ -1060,6 +1063,7 @@ impl<Types: NodeType> BuilderState<Types> {
             next_txn_garbage_collect_time: Instant::now() + txn_garbage_collect_duration,
             validated_state,
             allow_empty_block_until: None,
+            phantom: PhantomData,
         }
     }
     pub fn clone_with_receiver(&self, req_receiver: BroadcastReceiver<MessageType<Types>>) -> Self {
@@ -1108,6 +1112,7 @@ impl<Types: NodeType> BuilderState<Types> {
             next_txn_garbage_collect_time,
             validated_state: self.validated_state.clone(),
             allow_empty_block_until: self.allow_empty_block_until,
+            phantom: PhantomData,
         }
     }
 
@@ -1147,6 +1152,7 @@ mod test {
     use committable::RawCommitmentBuilder;
     use hotshot_example_types::block_types::TestTransaction;
     use hotshot_example_types::node_types::TestTypes;
+    use hotshot_example_types::node_types::TestVersions;
     use hotshot_types::data::Leaf2;
     use hotshot_types::data::QuorumProposalWrapper;
     use hotshot_types::data::ViewNumber;
@@ -1181,12 +1187,12 @@ mod test {
 
         // create builder_state without entering event loop
         let (_senders, global_state, mut builder_state) =
-            create_builder_state(CHANNEL_CAPACITY, NUM_STORAGE_NODES).await;
+            create_builder_state::<TestVersions>(CHANNEL_CAPACITY, NUM_STORAGE_NODES).await;
 
         // randomly generate a transaction
         let transactions = vec![TestTransaction::new(vec![1, 2, 3]); 3];
         let (_quorum_proposal, _quorum_proposal_msg, da_proposal_msg, builder_state_id) =
-            calc_proposal_msg(NUM_STORAGE_NODES, 0, None, transactions.clone()).await;
+            calc_proposal_msg::<TestVersions>(NUM_STORAGE_NODES, 0, None, transactions.clone()).await;
 
         // sub-test one
         // call process_da_proposal without matching quorum proposal message
@@ -1228,7 +1234,7 @@ mod test {
         // we should skip the process and everything should be the same
         let transactions_1 = transactions.clone();
         let (_quorum_proposal_1, _quorum_proposal_msg_1, da_proposal_msg_1, builder_state_id_1) =
-            calc_proposal_msg(NUM_STORAGE_NODES, 0, None, transactions_1).await;
+            calc_proposal_msg::<TestVersions>(NUM_STORAGE_NODES, 0, None, transactions_1).await;
         builder_state
             .process_da_proposal(da_proposal_msg_1.clone())
             .await;
@@ -1253,7 +1259,7 @@ mod test {
         // and check whether global_state has correct BuilderStateId
         let transactions_2 = vec![TestTransaction::new(vec![1, 2, 3, 4]); 2];
         let (_quorum_proposal_2, quorum_proposal_msg_2, da_proposal_msg_2, builder_state_id_2) =
-            calc_proposal_msg(NUM_STORAGE_NODES, 0, None, transactions_2).await;
+            calc_proposal_msg::<TestVersions>(NUM_STORAGE_NODES, 0, None, transactions_2).await;
 
         // process quorum proposal first, so that later when process_da_proposal we can directly call `build_block` and skip storage
         builder_state
@@ -1303,12 +1309,12 @@ mod test {
 
         // create builder_state without entering event loop
         let (_senders, global_state, mut builder_state) =
-            create_builder_state(CHANNEL_CAPACITY, NUM_STORAGE_NODES).await;
+            create_builder_state::<TestVersions>(CHANNEL_CAPACITY, NUM_STORAGE_NODES).await;
 
         // randomly generate a transaction
         let transactions = vec![TestTransaction::new(vec![1, 2, 3]); 3];
         let (_quorum_proposal, quorum_proposal_msg, _da_proposal_msg, builder_state_id) =
-            calc_proposal_msg(NUM_STORAGE_NODES, 0, None, transactions.clone()).await;
+            calc_proposal_msg::<TestVersions>(NUM_STORAGE_NODES, 0, None, transactions.clone()).await;
 
         // sub-test one
         // call process_quorum_proposal without matching da proposal message
@@ -1352,7 +1358,7 @@ mod test {
         // and check whether global_state has correct BuilderStateId
         let transactions_2 = vec![TestTransaction::new(vec![2, 3, 4]); 2];
         let (_quorum_proposal_2, quorum_proposal_msg_2, da_proposal_msg_2, builder_state_id_2) =
-            calc_proposal_msg(NUM_STORAGE_NODES, 0, None, transactions_2).await;
+            calc_proposal_msg::<TestVersions>(NUM_STORAGE_NODES, 0, None, transactions_2).await;
 
         // process da proposal message first, so that later when process_da_proposal we can directly call `build_block` and skip storage
         builder_state
@@ -1406,7 +1412,7 @@ mod test {
 
         // create builder_state without entering event loop
         let (_senders, global_state, mut builder_state) =
-            create_builder_state(CHANNEL_CAPACITY, NUM_STORAGE_NODES).await;
+            create_builder_state::<TestVersions>(CHANNEL_CAPACITY, NUM_STORAGE_NODES).await;
 
         // Transactions to send
         let all_transactions = (0..NUM_ROUNDS)
@@ -1422,7 +1428,7 @@ mod test {
         for round in 0..NUM_ROUNDS {
             let transactions = all_transactions[round].clone();
             let (quorum_proposal, _quorum_proposal_msg, _da_proposal_msg, builder_state_id) =
-                calc_proposal_msg(NUM_STORAGE_NODES, round, prev_quorum_proposal, transactions)
+                calc_proposal_msg::<TestVersions>(NUM_STORAGE_NODES, round, prev_quorum_proposal, transactions)
                     .await;
             prev_quorum_proposal = Some(quorum_proposal.clone());
             let (req_sender, _req_receiver) = broadcast(CHANNEL_CAPACITY);

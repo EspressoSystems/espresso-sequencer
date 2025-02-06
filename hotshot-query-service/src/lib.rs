@@ -825,7 +825,7 @@ mod test {
             .unwrap();
 
         // Mock up some data and add a block to the store.
-        let leaf = Leaf::<MockTypes>::genesis(&Default::default(), &Default::default()).await;
+        let leaf = Leaf::<MockTypes>::genesis::<TestVersions>(&Default::default(), &Default::default()).await;
         let qc =
             QuorumCertificate::genesis::<TestVersions>(&Default::default(), &Default::default())
                 .await;

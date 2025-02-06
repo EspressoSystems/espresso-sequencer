@@ -883,7 +883,7 @@ mod test {
         );
 
         // mock up some consensus data.
-        let leaf = Leaf::<MockTypes>::genesis(&Default::default(), &Default::bdefault()).await;
+        let leaf = Leaf::<MockTypes>::genesis::<TestVersions>(&Default::default(), &Default::default()).await;
         let qc =
             QuorumCertificate::genesis::<TestVersions>(&Default::default(), &Default::default())
                 .await;
