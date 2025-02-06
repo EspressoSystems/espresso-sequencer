@@ -4653,7 +4653,7 @@ dependencies = [
 [[package]]
 name = "hotshot"
 version = "0.5.84"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.84#310553bfe3333cb16592941043191e3b7e1b5dbf"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=main#e4abb5c631d56814ae65316418cf9cb133c403c1"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4697,7 +4697,7 @@ dependencies = [
 [[package]]
 name = "hotshot-builder-api"
 version = "0.1.7"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.84#310553bfe3333cb16592941043191e3b7e1b5dbf"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=main#e4abb5c631d56814ae65316418cf9cb133c403c1"
 dependencies = [
  "async-trait",
  "clap",
@@ -4765,7 +4765,7 @@ dependencies = [
 [[package]]
 name = "hotshot-example-types"
 version = "0.5.84"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.84#310553bfe3333cb16592941043191e3b7e1b5dbf"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=main#e4abb5c631d56814ae65316418cf9cb133c403c1"
 dependencies = [
  "anyhow",
  "async-lock 3.4.0",
@@ -4791,7 +4791,7 @@ dependencies = [
 [[package]]
 name = "hotshot-fakeapi"
 version = "0.5.84"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.84#310553bfe3333cb16592941043191e3b7e1b5dbf"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=main#e4abb5c631d56814ae65316418cf9cb133c403c1"
 dependencies = [
  "anyhow",
  "async-lock 3.4.0",
@@ -4810,7 +4810,7 @@ dependencies = [
 [[package]]
 name = "hotshot-macros"
 version = "0.5.84"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.84#310553bfe3333cb16592941043191e3b7e1b5dbf"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=main#e4abb5c631d56814ae65316418cf9cb133c403c1"
 dependencies = [
  "derive_builder",
  "proc-macro2",
@@ -4822,7 +4822,7 @@ dependencies = [
 [[package]]
 name = "hotshot-orchestrator"
 version = "0.5.84"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.84#310553bfe3333cb16592941043191e3b7e1b5dbf"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=main#e4abb5c631d56814ae65316418cf9cb133c403c1"
 dependencies = [
  "anyhow",
  "async-lock 3.4.0",
@@ -4862,6 +4862,7 @@ dependencies = [
  "either",
  "futures",
  "hotshot",
+ "hotshot-example-types",
  "hotshot-testing",
  "hotshot-types",
  "include_dir",
@@ -4894,7 +4895,7 @@ dependencies = [
 [[package]]
 name = "hotshot-stake-table"
 version = "0.5.84"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.84#310553bfe3333cb16592941043191e3b7e1b5dbf"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=main#e4abb5c631d56814ae65316418cf9cb133c403c1"
 dependencies = [
  "ark-bn254",
  "ark-ed-on-bn254",
@@ -4957,7 +4958,7 @@ dependencies = [
 [[package]]
 name = "hotshot-task"
 version = "0.5.84"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.84#310553bfe3333cb16592941043191e3b7e1b5dbf"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=main#e4abb5c631d56814ae65316418cf9cb133c403c1"
 dependencies = [
  "async-broadcast",
  "async-trait",
@@ -4971,7 +4972,7 @@ dependencies = [
 [[package]]
 name = "hotshot-task-impls"
 version = "0.5.84"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.84#310553bfe3333cb16592941043191e3b7e1b5dbf"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=main#e4abb5c631d56814ae65316418cf9cb133c403c1"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -5006,7 +5007,7 @@ dependencies = [
 [[package]]
 name = "hotshot-testing"
 version = "0.5.84"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.84#310553bfe3333cb16592941043191e3b7e1b5dbf"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=main#e4abb5c631d56814ae65316418cf9cb133c403c1"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -5048,7 +5049,7 @@ dependencies = [
 [[package]]
 name = "hotshot-types"
 version = "0.1.11"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.84#310553bfe3333cb16592941043191e3b7e1b5dbf"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=main#e4abb5c631d56814ae65316418cf9cb133c403c1"
 dependencies = [
  "anyhow",
  "ark-bn254",
@@ -6553,7 +6554,7 @@ dependencies = [
 [[package]]
 name = "libp2p-networking"
 version = "0.5.84"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.84#310553bfe3333cb16592941043191e3b7e1b5dbf"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=main#e4abb5c631d56814ae65316418cf9cb133c403c1"
 dependencies = [
  "anyhow",
  "async-lock 3.4.0",
@@ -10947,6 +10948,8 @@ dependencies = [
  "bytes 1.9.0",
  "futures-core",
  "futures-sink",
+ "futures-util",
+ "hashbrown 0.14.5",
  "pin-project-lite 0.2.16",
  "tokio",
 ]
@@ -11465,7 +11468,7 @@ checksum = "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821"
 [[package]]
 name = "utils"
 version = "0.5.84"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.84#310553bfe3333cb16592941043191e3b7e1b5dbf"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=main#e4abb5c631d56814ae65316418cf9cb133c403c1"
 dependencies = [
  "tracing",
  "workspace-hack",
@@ -12091,7 +12094,7 @@ dependencies = [
 [[package]]
 name = "workspace-hack"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.84#310553bfe3333cb16592941043191e3b7e1b5dbf"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=main#e4abb5c631d56814ae65316418cf9cb133c403c1"
 dependencies = [
  "ark-bls12-377",
  "ark-bls12-381",
@@ -12149,6 +12152,7 @@ dependencies = [
  "num-bigint",
  "num-integer",
  "num-traits",
+ "parking_lot",
  "percent-encoding",
  "rand 0.8.5",
  "regex",
@@ -12163,6 +12167,7 @@ dependencies = [
  "syn 2.0.95",
  "time 0.3.37",
  "tokio",
+ "tokio-util",
  "toml_datetime",
  "toml_edit 0.22.22",
  "tracing",
