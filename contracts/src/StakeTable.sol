@@ -166,7 +166,11 @@ contract StakeTable is AbstractStakeTable {
 
     /// @notice Add a registration
     /// TODO handle overflow when max uint64 is reached
-    function pushToRegistrationQueue() internal override returns (uint64, uint64) {
+    function pushToRegistrationQueue() internal virtual override returns (uint64, uint64) {
+        // Either we have a need for a new registration epoch and registrations queue for the
+        // current epoch is zero or we have a free slot in the current registration epoch so we
+        // append to the registration queue, `numPendingRegistrationsInEpoch`.
+
         if (registrationEpoch < currentEpoch() + 1) {
             // The registration epoch is outdated.
             registrationEpoch = currentEpoch() + 1;
@@ -182,7 +186,11 @@ contract StakeTable is AbstractStakeTable {
     }
 
     /// @notice Add an exit
-    function pushToExitQueue() internal override returns (uint64, uint64) {
+    function pushToExitQueue() internal virtual override returns (uint64, uint64) {
+        // Either we have a need for a new exit epoch and exits queue for the
+        // current epoch is zero or we have a free slot in the current exit epoch so we
+        // append to the exit queue, `numPendingExitsInEpoch`.
+
         if (exitEpoch < currentEpoch() + 1) {
             // The exit epoch is outdated.
             exitEpoch = currentEpoch() + 1;
@@ -200,26 +208,26 @@ contract StakeTable is AbstractStakeTable {
     /// @notice Look up the balance of `account`
     /// @param account account controlled by the user.
     /// @return Current balance owned by the user.
-    function lookupStake(address account) external view override returns (uint256) {
+    function lookupStake(address account) external view virtual override returns (uint256) {
         Node memory node = this.lookupNode(account);
         return node.balance;
     }
 
     /// @notice Look up the full `Node` state associated with `account`
     /// @return Node indexed by account
-    function lookupNode(address account) external view override returns (Node memory) {
+    function lookupNode(address account) external view virtual override returns (Node memory) {
         return nodes[account];
     }
 
     /// @notice Get the number of pending registration requests in the waiting queue
     /// TODO modify this according to the current spec
-    function numPendingRegistrations() external view override returns (uint64) {
+    function numPendingRegistrations() external view virtual override returns (uint64) {
         return numPendingRegistrationsInEpoch;
     }
 
     /// @notice Get the number of pending exit requests in the waiting queue
     /// TODO modify this according to the current spec
-    function numPendingExits() external view override returns (uint64) {
+    function numPendingExits() external view virtual override returns (uint64) {
         return numPendingExitsInEpoch;
     }
 
@@ -272,7 +280,7 @@ contract StakeTable is AbstractStakeTable {
         uint256 amount,
         BN254.G1Point memory blsSig,
         uint64 validUntilEpoch
-    ) external override {
+    ) external virtual override {
         uint256 fixedStakeAmount = minStakeAmount();
 
         // Verify that the sender amount is the minStakeAmount
@@ -358,7 +366,7 @@ contract StakeTable is AbstractStakeTable {
     /// @dev TODO modify this according to the current spec
     /// @param amount The amount to deposit
     /// @return (newBalance, effectiveEpoch) the new balance effective at a future epoch
-    function deposit(uint256 amount) external override returns (uint256, uint64) {
+    function deposit(uint256 amount) external virtual override returns (uint256, uint64) {
         Node memory node = nodes[msg.sender];
 
         // if the node is not registered, revert
@@ -395,7 +403,7 @@ contract StakeTable is AbstractStakeTable {
     /// @notice Request to exit from the stake table, not immediately withdrawable!
     ///
     /// @dev TODO modify this according to the current spec
-    function requestExit() external override {
+    function requestExit() external virtual override {
         Node memory node = nodes[msg.sender];
 
         // if the node is not registered, revert
@@ -432,7 +440,7 @@ contract StakeTable is AbstractStakeTable {
     /// @return The total amount withdrawn, equal to `Node.balance` associated with `blsVK`
     /// TODO: add epoch logic so that we can ensure the node has first requested to exit and waiting
     /// for the exit escrow period to be over
-    function withdrawFunds() external override returns (uint256) {
+    function withdrawFunds() external virtual override returns (uint256) {
         Node memory node = nodes[msg.sender];
 
         // Verify that the node is already registered.
@@ -480,7 +488,7 @@ contract StakeTable is AbstractStakeTable {
         BN254.G2Point memory newBlsVK,
         EdOnBN254.EdOnBN254Point memory newSchnorrVK,
         BN254.G1Point memory newBlsSig
-    ) external override {
+    ) external virtual override {
         Node memory node = nodes[msg.sender];
 
         // Verify that the node is already registered.

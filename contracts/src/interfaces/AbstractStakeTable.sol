@@ -87,12 +87,13 @@ abstract contract AbstractStakeTable {
 
     /// @notice Get the number of pending registration requests in the waiting queue
     function numPendingRegistrations() external view virtual returns (uint64);
-    /// @notice Get the next available epoch for registration or exit, and queue size in that epoch
-    function nextAvailableEpoch(uint64 firstAvailableEpoch, uint64 numPending)
-        external
-        view
-        virtual
-        returns (uint64, uint64);
+
+    /// @notice push a registration request to the waiting queue
+    function pushToRegistrationQueue() internal virtual returns (uint64, uint64);
+
+    /// @notice push an exit request to the waiting queue
+    function pushToExitQueue() internal virtual returns (uint64, uint64);
+
     /// @notice Get the number of pending exit requests in the waiting queue
     function numPendingExits() external view virtual returns (uint64);
 

@@ -11,11 +11,20 @@ contract StakeTableMock is StakeTable {
         uint64 hotShotBlocksPerEpoch
     ) StakeTable(token, lightClientAddress, churnRate, hotShotBlocksPerEpoch) { }
 
-    function setFirstAvailableRegistrationEpoch(uint64 epoch) public {
+    function setRegistrationEpoch(uint64 epoch) public {
         registrationEpoch = epoch;
     }
 
-    function setFirstAvailableExitEpoch(uint64 epoch) public {
+    function setExitEpoch(uint64 epoch) public {
         exitEpoch = epoch;
+    }
+
+    // Expose the internal function for testing by calling the super implementation
+    function mockPushToRegistrationQueue() public returns (uint64, uint64) {
+        return super.pushToRegistrationQueue();
+    }
+
+    function mockPushToExitQueue() public returns (uint64, uint64) {
+        return super.pushToExitQueue();
     }
 }
