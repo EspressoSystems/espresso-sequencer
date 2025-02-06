@@ -30,20 +30,23 @@ members = [
 exclude = ["sequencer-sqlite"]
 
 [workspace.dependencies]
+contract-bindings-alloy = { path = "./contract-bindings-alloy" }
+ethers-conv = { path = "./ethers-conv" }
 alloy = { version = "0.9", default-features = false, features = [
-    "rpc",
-    "transports",
-    "eips",
-    "providers",
-    "rpc-client",
-    "json-rpc",
-    "rpc-types",
-    "provider-ws",
-    "sol-types",
     "contract",
+    "eips",
+    "json-rpc",
+    "provider-ws",
+    "providers",
     "reqwest",
+    "rpc",
+    "rpc-client",
+    "rpc-types",
     "signer-local",
-    "signers"
+    "signer-mnemonic",
+    "signers",
+    "sol-types",
+    "transports",
 ] }
 anyhow = "^1.0"
 ark-std = "0.4"
@@ -83,6 +86,7 @@ tokio = { version = "1", default-features = false, features = [
     "parking_lot",
     "sync",
 ] }
+tower-service = { version = "0.3", default-features = false }
 tracing-subscriber = "0.3"
 tracing-test = "0.1"
 num_cpus = "1"

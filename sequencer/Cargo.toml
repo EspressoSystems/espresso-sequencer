@@ -62,7 +62,7 @@ derive_more = { workspace = true }
 dotenvy = { workspace = true }
 espresso-types = { path = "../types" }
 ethers = { workspace = true }
-ethers-conv = { path = "../ethers-conv" }
+ethers-conv = { workspace =  true }
 futures = { workspace = true }
 
 hotshot = { workspace = true }
