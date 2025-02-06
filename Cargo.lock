@@ -562,6 +562,8 @@ dependencies = [
  "alloy-primitives",
  "alloy-signer",
  "async-trait",
+ "coins-bip32 0.12.0",
+ "coins-bip39 0.12.0",
  "k256",
  "rand 0.8.5",
  "thiserror 2.0.10",
@@ -2456,7 +2458,23 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3b6be4a5df2098cd811f3194f64ddb96c267606bffd9689ac7b0160097b01ad3"
 dependencies = [
  "bs58",
- "coins-core",
+ "coins-core 0.8.7",
+ "digest 0.10.7",
+ "hmac 0.12.1",
+ "k256",
+ "serde",
+ "sha2 0.10.8",
+ "thiserror 1.0.69",
+]
+
+[[package]]
+name = "coins-bip32"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2073678591747aed4000dd468b97b14d7007f7936851d3f2f01846899f5ebf08"
+dependencies = [
+ "bs58",
+ "coins-core 0.12.0",
  "digest 0.10.7",
  "hmac 0.12.1",
  "k256",
@@ -2472,7 +2490,23 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3db8fba409ce3dc04f7d804074039eb68b960b0829161f8e06c95fea3f122528"
 dependencies = [
  "bitvec",
- "coins-bip32",
+ "coins-bip32 0.8.7",
+ "hmac 0.12.1",
+ "once_cell",
+ "pbkdf2 0.12.2",
+ "rand 0.8.5",
+ "sha2 0.10.8",
+ "thiserror 1.0.69",
+]
+
+[[package]]
+name = "coins-bip39"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "74b169b26623ff17e9db37a539fe4f15342080df39f129ef7631df7683d6d9d4"
+dependencies = [
+ "bitvec",
+ "coins-bip32 0.12.0",
  "hmac 0.12.1",
  "once_cell",
  "pbkdf2 0.12.2",
@@ -2496,6 +2530,25 @@ dependencies = [
  "ripemd",
  "serde",
  "serde_derive",
+ "sha2 0.10.8",
+ "sha3",
+ "thiserror 1.0.69",
+]
+
+[[package]]
+name = "coins-core"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "62b962ad8545e43a28e14e87377812ba9ae748dd4fd963f4c10e9fcc6d13475b"
+dependencies = [
+ "base64 0.21.7",
+ "bech32",
+ "bs58",
+ "const-hex",
+ "digest 0.10.7",
+ "generic-array",
+ "ripemd",
+ "serde",
  "sha2 0.10.8",
  "sha3",
  "thiserror 1.0.69",
@@ -3904,8 +3957,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "228875491c782ad851773b652dd8ecac62cda8571d3bc32a5853644dd26766c2"
 dependencies = [
  "async-trait",
- "coins-bip32",
- "coins-bip39",
+ "coins-bip32 0.8.7",
+ "coins-bip39 0.8.7",
  "const-hex",
  "elliptic-curve",
  "eth-keystore",
@@ -9761,14 +9814,17 @@ dependencies = [
 name = "sequencer-utils"
 version = "0.1.0"
 dependencies = [
+ "alloy",
  "anyhow",
  "ark-serialize 0.4.2",
  "async-trait",
  "clap",
  "committable",
+ "contract-bindings-alloy",
  "contract-bindings-ethers",
  "derive_more 1.0.0",
  "ethers",
+ "ethers-conv",
  "futures",
  "hotshot",
  "hotshot-contract-adapter",
@@ -9782,6 +9838,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "toml 0.8.19",
+ "tower-service",
  "tracing",
  "url",
 ]
