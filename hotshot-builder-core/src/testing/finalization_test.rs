@@ -12,7 +12,6 @@ use hotshot::{
     traits::BlockPayload,
     types::{BLSPubKey, SignatureKey},
 };
-use vbs::version::StaticVersionType;
 use hotshot_builder_api::{
     v0_1::{block_info::AvailableBlockInfo, data_source::BuilderDataSource},
     v0_1::{builder::BuildError, data_source::AcceptsTxnSubmits},
@@ -43,6 +42,7 @@ use marketplace_builder_shared::{
     block::ParentBlockReferences, testing::constants::TEST_PROTOCOL_MAX_BLOCK_SIZE,
 };
 use sha2::{Digest, Sha256};
+use vbs::version::StaticVersionType;
 
 type TestSetup = (
     ProxyGlobalState<TestTypes>,
@@ -59,7 +59,11 @@ pub fn setup_builder_for_test() -> TestSetup {
     let (req_sender, req_receiver) = broadcast(TEST_CHANNEL_BUFFER_SIZE);
     let (tx_sender, tx_receiver) = broadcast(TEST_CHANNEL_BUFFER_SIZE);
 
-    let parent_commitment = vid_commitment::<TestVersions>(&[], TEST_NUM_NODES_IN_VID_COMPUTATION, <TestVersions as Versions>::Base::VERSION);
+    let parent_commitment = vid_commitment::<TestVersions>(
+        &[],
+        TEST_NUM_NODES_IN_VID_COMPUTATION,
+        <TestVersions as Versions>::Base::VERSION,
+    );
     let bootstrap_builder_state_id = BuilderStateId::<TestTypes> {
         parent_commitment,
         parent_view: ViewNumber::genesis(),
@@ -292,8 +296,11 @@ async fn progress_round_with_transactions(
             .await
             .expect("should broadcast DA Proposal successfully");
 
-        let payload_commitment =
-            vid_commitment::<TestVersions>(&encoded_transactions, TEST_NUM_NODES_IN_VID_COMPUTATION, <TestVersions as Versions>::Base::VERSION);
+        let payload_commitment = vid_commitment::<TestVersions>(
+            &encoded_transactions,
+            TEST_NUM_NODES_IN_VID_COMPUTATION,
+            <TestVersions as Versions>::Base::VERSION,
+        );
 
         let (block_payload, metadata) =
             <TestBlockPayload as BlockPayload<TestTypes>>::from_transactions(
@@ -381,7 +388,11 @@ async fn test_empty_block_rate() {
         setup_builder_for_test();
 
     let mut current_builder_state_id = BuilderStateId::<TestTypes> {
-        parent_commitment: vid_commitment::<TestVersions>(&[], TEST_NUM_NODES_IN_VID_COMPUTATION, <TestVersions as Versions>::Base::VERSION),
+        parent_commitment: vid_commitment::<TestVersions>(
+            &[],
+            TEST_NUM_NODES_IN_VID_COMPUTATION,
+            <TestVersions as Versions>::Base::VERSION,
+        ),
         parent_view: ViewNumber::genesis(),
     };
 
@@ -432,7 +443,11 @@ async fn test_eager_block_rate() {
         setup_builder_for_test();
 
     let mut current_builder_state_id = BuilderStateId::<TestTypes> {
-        parent_commitment: vid_commitment::<TestVersions>(&[], TEST_NUM_NODES_IN_VID_COMPUTATION, <TestVersions as Versions>::Base::VERSION),
+        parent_commitment: vid_commitment::<TestVersions>(
+            &[],
+            TEST_NUM_NODES_IN_VID_COMPUTATION,
+            <TestVersions as Versions>::Base::VERSION,
+        ),
         parent_view: ViewNumber::genesis(),
     };
 

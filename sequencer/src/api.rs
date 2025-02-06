@@ -1109,7 +1109,7 @@ mod api_tests {
     use hotshot_types::data::vid_disperse::ADVZDisperseShare;
     use hotshot_types::vid::advz_scheme;
     use hotshot_types::{
-        data::{DaProposal, QuorumProposal2, QuorumProposalWrapper, VidDisperseShare},
+        data::{DaProposal, QuorumProposal2, QuorumProposalWrapper},
         event::LeafInfo,
         message::Proposal,
         simple_certificate::QuorumCertificate,
@@ -1490,7 +1490,9 @@ mod api_tests {
         )
         .await
         .to_qc2();
-        let leaf = Leaf::genesis::<MockSequencerVersions>(&ValidatedState::default(), &NodeState::mock()).await;
+        let leaf =
+            Leaf::genesis::<MockSequencerVersions>(&ValidatedState::default(), &NodeState::mock())
+                .await;
 
         // Append the genesis leaf. We don't use this for the test, because the update function will
         // automatically fill in the missing data for genesis. We just append this to get into a

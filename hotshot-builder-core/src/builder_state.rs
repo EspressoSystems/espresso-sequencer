@@ -17,10 +17,10 @@ use crate::service::{GlobalState, ReceivedTransaction};
 use async_broadcast::broadcast;
 use async_broadcast::Receiver as BroadcastReceiver;
 use async_broadcast::Sender as BroadcastSender;
-use vbs::version::StaticVersionType;
 use async_lock::RwLock;
 use core::panic;
 use futures::StreamExt;
+use vbs::version::StaticVersionType;
 
 use tokio::{
     spawn,
@@ -32,11 +32,11 @@ use tokio::{
     time::sleep,
 };
 
-use std::{cmp::PartialEq, marker::PhantomData};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt::Debug;
 use std::sync::Arc;
 use std::time::Instant;
+use std::{cmp::PartialEq, marker::PhantomData};
 use std::{collections::hash_map::Entry, time::Duration};
 
 pub type TxTimeStamp = u128;
@@ -809,7 +809,11 @@ impl<Types: NodeType, V: Versions> BuilderState<Types, V> {
             };
 
             let join_handle = spawn_blocking(move || {
-                hotshot_types::traits::block_contents::vid_commitment::<V>(&encoded_txns, num_nodes, <V as Versions>::Base::VERSION)
+                hotshot_types::traits::block_contents::vid_commitment::<V>(
+                    &encoded_txns,
+                    num_nodes,
+                    <V as Versions>::Base::VERSION,
+                )
             });
 
             let vidc = join_handle.await.unwrap();
@@ -1192,7 +1196,8 @@ mod test {
         // randomly generate a transaction
         let transactions = vec![TestTransaction::new(vec![1, 2, 3]); 3];
         let (_quorum_proposal, _quorum_proposal_msg, da_proposal_msg, builder_state_id) =
-            calc_proposal_msg::<TestVersions>(NUM_STORAGE_NODES, 0, None, transactions.clone()).await;
+            calc_proposal_msg::<TestVersions>(NUM_STORAGE_NODES, 0, None, transactions.clone())
+                .await;
 
         // sub-test one
         // call process_da_proposal without matching quorum proposal message
@@ -1314,7 +1319,8 @@ mod test {
         // randomly generate a transaction
         let transactions = vec![TestTransaction::new(vec![1, 2, 3]); 3];
         let (_quorum_proposal, quorum_proposal_msg, _da_proposal_msg, builder_state_id) =
-            calc_proposal_msg::<TestVersions>(NUM_STORAGE_NODES, 0, None, transactions.clone()).await;
+            calc_proposal_msg::<TestVersions>(NUM_STORAGE_NODES, 0, None, transactions.clone())
+                .await;
 
         // sub-test one
         // call process_quorum_proposal without matching da proposal message
@@ -1428,8 +1434,13 @@ mod test {
         for round in 0..NUM_ROUNDS {
             let transactions = all_transactions[round].clone();
             let (quorum_proposal, _quorum_proposal_msg, _da_proposal_msg, builder_state_id) =
-                calc_proposal_msg::<TestVersions>(NUM_STORAGE_NODES, round, prev_quorum_proposal, transactions)
-                    .await;
+                calc_proposal_msg::<TestVersions>(
+                    NUM_STORAGE_NODES,
+                    round,
+                    prev_quorum_proposal,
+                    transactions,
+                )
+                .await;
             prev_quorum_proposal = Some(quorum_proposal.clone());
             let (req_sender, _req_receiver) = broadcast(CHANNEL_CAPACITY);
             let leaf: Leaf2<TestTypes> = Leaf2::from_quorum_proposal(&quorum_proposal);

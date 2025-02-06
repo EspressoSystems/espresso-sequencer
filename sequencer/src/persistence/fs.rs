@@ -8,7 +8,10 @@ use espresso_types::{
 };
 use hotshot_types::{
     consensus::CommitmentMap,
-    data::{vid_disperse::ADVZDisperseShare, DaProposal, EpochNumber, QuorumProposal, QuorumProposal2, QuorumProposalWrapper, VidDisperseShare},
+    data::{
+        vid_disperse::ADVZDisperseShare, DaProposal, EpochNumber, QuorumProposal, QuorumProposal2,
+        QuorumProposalWrapper,
+    },
     event::{Event, EventType, HotShotAction, LeafInfo},
     message::{convert_proposal, Proposal},
     simple_certificate::{
@@ -660,7 +663,12 @@ impl SequencerPersistence for Persistence {
             },
         )
     }
-    async fn record_action(&self, view: ViewNumber, _epoch: Option<EpochNumber>, action: HotShotAction) -> anyhow::Result<()> {
+    async fn record_action(
+        &self,
+        view: ViewNumber,
+        _epoch: Option<EpochNumber>,
+        action: HotShotAction,
+    ) -> anyhow::Result<()> {
         // Todo Remove this after https://github.com/EspressoSystems/espresso-sequencer/issues/1931
         if !matches!(action, HotShotAction::Propose | HotShotAction::Vote) {
             return Ok(());

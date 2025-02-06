@@ -12,15 +12,18 @@ use hotshot::{
     traits::BlockPayload,
     types::{BLSPubKey, SignatureKey},
 };
-use vbs::version::StaticVersionType;
 use hotshot_types::{
     data::{DaProposal2, Leaf2, QuorumProposal2, QuorumProposalWrapper, ViewNumber},
     message::Proposal,
     simple_certificate::{QuorumCertificate, SimpleCertificate, SuccessThreshold},
     simple_vote::QuorumData2,
-    traits::{block_contents::vid_commitment, node_implementation::{ConsensusTime, Versions}},
+    traits::{
+        block_contents::vid_commitment,
+        node_implementation::{ConsensusTime, Versions},
+    },
     utils::BuilderCommitment,
 };
+use vbs::version::StaticVersionType;
 
 use hotshot_example_types::{
     block_types::{TestBlockHeader, TestBlockPayload, TestMetadata, TestTransaction},
@@ -63,7 +66,8 @@ pub async fn create_builder_state<V: Versions>(
     let (tx_sender, tx_receiver) =
         broadcast::<Arc<ReceivedTransaction<TestTypes>>>(channel_capacity);
 
-    let genesis_vid_commitment = vid_commitment::<V>(&[], num_storage_nodes, <V as Versions>::Base::VERSION);
+    let genesis_vid_commitment =
+        vid_commitment::<V>(&[], num_storage_nodes, <V as Versions>::Base::VERSION);
     let genesis_builder_commitment = BuilderCommitment::from_bytes([]);
 
     // instantiate the global state
@@ -125,7 +129,11 @@ pub async fn calc_proposal_msg<V: Versions>(
     let num_transactions = transactions.len() as u64;
     let encoded_transactions = TestTransaction::encode(&transactions);
     let block_payload = TestBlockPayload { transactions };
-    let block_vid_commitment = vid_commitment::<V>(&encoded_transactions, num_storage_nodes, <V as Versions>::Base::VERSION);
+    let block_vid_commitment = vid_commitment::<V>(
+        &encoded_transactions,
+        num_storage_nodes,
+        <V as Versions>::Base::VERSION,
+    );
     let metadata = TestMetadata { num_transactions };
     let block_builder_commitment =
         <TestBlockPayload as BlockPayload<TestTypes>>::builder_commitment(

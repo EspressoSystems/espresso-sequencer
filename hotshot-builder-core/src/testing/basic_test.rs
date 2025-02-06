@@ -1,3 +1,5 @@
+pub use crate::builder_state::{BuilderState, MessageType};
+pub use async_broadcast::broadcast;
 pub use hotshot::traits::election::static_committee::StaticCommittee;
 pub use hotshot_types::{
     data::{EpochNumber, Leaf, ViewNumber},
@@ -10,8 +12,6 @@ pub use hotshot_types::{
     },
 };
 use vbs::version::StaticVersionType;
-pub use crate::builder_state::{BuilderState, MessageType};
-pub use async_broadcast::broadcast;
 /// The following tests are performed:
 #[cfg(test)]
 mod tests {
@@ -117,7 +117,11 @@ mod tests {
         let (builder_pub_key, builder_private_key) =
             BLSPubKey::generated_from_seed_indexed(seed, 2011_u64);
         // instantiate the global state also
-        let initial_commitment = vid_commitment::<TestVersions>(&[], TEST_NUM_NODES_IN_VID_COMPUTATION, <TestVersions as Versions>::Base::VERSION);
+        let initial_commitment = vid_commitment::<TestVersions>(
+            &[],
+            TEST_NUM_NODES_IN_VID_COMPUTATION,
+            <TestVersions as Versions>::Base::VERSION,
+        );
         let global_state = Arc::new(RwLock::new(GlobalState::<TestTypes>::new(
             bootstrap_sender,
             tx_sender.clone(),
@@ -334,8 +338,11 @@ mod tests {
                         NUM_NODES_IN_VID_COMPUTATION
                     );
 
-                    let block_payload_commitment =
-                        vid_commitment::<TestVersions>(&encoded_transactions, NUM_NODES_IN_VID_COMPUTATION, <TestVersions as Versions>::Base::VERSION);
+                    let block_payload_commitment = vid_commitment::<TestVersions>(
+                        &encoded_transactions,
+                        NUM_NODES_IN_VID_COMPUTATION,
+                        <TestVersions as Versions>::Base::VERSION,
+                    );
 
                     tracing::debug!(
                         "Block Payload vid commitment: {:?}",
@@ -447,7 +454,11 @@ mod tests {
                                 &quorum_certificate_message.proposal.data,
                             );
                             current_leaf
-                                .fill_block_payload::<TestVersions>(block_payload, NUM_NODES_IN_VID_COMPUTATION, <TestVersions as Versions>::Base::VERSION)
+                                .fill_block_payload::<TestVersions>(
+                                    block_payload,
+                                    NUM_NODES_IN_VID_COMPUTATION,
+                                    <TestVersions as Versions>::Base::VERSION,
+                                )
                                 .unwrap();
                             current_leaf
                         }
