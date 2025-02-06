@@ -43,6 +43,7 @@ pub async fn main() -> anyhow::Result<()> {
                 genesis,
                 modules,
                 opt,
+                // Specifying V0_0 disables upgrades
                 SequencerVersions::<EpochVersion, V0_0>::new(),
             )
             .await
