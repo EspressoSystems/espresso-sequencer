@@ -45,7 +45,6 @@ pub use metrics::MetricsDataSource;
 pub use sql::SqlDataSource;
 pub use update::{Transaction, UpdateDataSource, VersionedDataSource};
 
-
 #[cfg(any(test, feature = "testing"))]
 mod test_helpers {
     use crate::{
@@ -784,13 +783,16 @@ pub mod node_tests {
         block_types::{TestBlockHeader, TestMetadata},
         state_types::TestInstanceState,
     };
-    use vbs::version::StaticVersionType;
     use hotshot_types::{
-        traits::{block_contents::{vid_commitment, EncodeBytes}, node_implementation::Versions},
+        traits::{
+            block_contents::{vid_commitment, EncodeBytes},
+            node_implementation::Versions,
+        },
         vid::{advz_scheme, VidSchemeType},
     };
     use jf_vid::VidScheme;
     use std::time::Duration;
+    use vbs::version::StaticVersionType;
 
     #[tokio::test(flavor = "multi_thread")]
     pub async fn test_sync_status<D: TestableDataSource>()
@@ -971,7 +973,11 @@ pub mod node_tests {
                 .await
                 .unwrap();
             let encoded = payload.encode();
-            let payload_commitment = vid_commitment::<TestVersions>(&encoded, 1, <TestVersions as Versions>::Base::VERSION);
+            let payload_commitment = vid_commitment::<TestVersions>(
+                &encoded,
+                1,
+                <TestVersions as Versions>::Base::VERSION,
+            );
             let header = TestBlockHeader {
                 block_number: i,
                 payload_commitment,

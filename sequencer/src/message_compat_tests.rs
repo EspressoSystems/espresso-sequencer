@@ -20,8 +20,7 @@ use committable::Committable;
 use espresso_types::{NodeState, PubKey, ValidatedState};
 use hotshot_types::{
     data::{
-        DaProposal, EpochNumber, QuorumProposal, UpgradeProposal,
-        ViewChangeEvidence, ViewNumber,
+        DaProposal, EpochNumber, QuorumProposal, UpgradeProposal, ViewChangeEvidence, ViewNumber,
     },
     message::{
         DaConsensusMessage, DataMessage, GeneralConsensusMessage, Message, MessageKind, Proposal,
@@ -49,13 +48,17 @@ async fn test_message_compat<Ver: StaticVersionType>(_ver: Ver) {
     use espresso_types::{EpochCommittees, Leaf, Payload, SeqTypes, Transaction};
     use hotshot_example_types::node_types::TestVersions;
     use hotshot_types::{
-        data::vid_disperse::{ADVZDisperse, ADVZDisperseShare}, simple_certificate::{
+        data::vid_disperse::{ADVZDisperse, ADVZDisperseShare},
+        simple_certificate::{
             TimeoutCertificate, ViewSyncCommitCertificate, ViewSyncFinalizeCertificate,
             ViewSyncPreCommitCertificate,
-        }, simple_vote::{
+        },
+        simple_vote::{
             TimeoutData, TimeoutVote, ViewSyncCommitData, ViewSyncCommitVote, ViewSyncFinalizeData,
             ViewSyncFinalizeVote, ViewSyncPreCommitData, ViewSyncPreCommitVote,
-        }, vid::advz_scheme, PeerConfig
+        },
+        vid::advz_scheme,
+        PeerConfig,
     };
 
     let (sender, priv_key) = PubKey::generated_from_seed_indexed(Default::default(), 0);

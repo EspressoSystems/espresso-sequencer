@@ -1154,7 +1154,11 @@ mod test {
             let genesis_commitment = {
                 // TODO we should not need to collect payload bytes just to compute vid_commitment
                 let payload_bytes = genesis_payload.encode();
-                vid_commitment::<TestVersions>(&payload_bytes, GENESIS_VID_NUM_STORAGE_NODES, <TestVersions as Versions>::Base::VERSION)
+                vid_commitment::<TestVersions>(
+                    &payload_bytes,
+                    GENESIS_VID_NUM_STORAGE_NODES,
+                    <TestVersions as Versions>::Base::VERSION,
+                )
             };
             let genesis_state = NodeState::mock();
             Header::genesis(

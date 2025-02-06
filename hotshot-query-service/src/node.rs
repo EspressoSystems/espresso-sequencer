@@ -216,10 +216,12 @@ mod test {
     use committable::Committable;
     use futures::{FutureExt, StreamExt};
     use hotshot_types::{
-        data::VidDisperseShare, event::{EventType, LeafInfo}, traits::{
+        data::VidDisperseShare,
+        event::{EventType, LeafInfo},
+        traits::{
             block_contents::{BlockHeader, BlockPayload},
             EncodeBytes,
-        }
+        },
     };
     use portpicker::pick_unused_port;
     use std::time::Duration;
