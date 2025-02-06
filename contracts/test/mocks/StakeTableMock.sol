@@ -12,10 +12,10 @@ contract StakeTableMock is StakeTable {
     ) StakeTable(token, lightClientAddress, churnRate, hotShotBlocksPerEpoch) { }
 
     function setFirstAvailableRegistrationEpoch(uint64 epoch) public {
-        firstAvailableRegistrationEpoch = epoch;
+        registrationEpoch = epoch;
     }
 
     function setFirstAvailableExitEpoch(uint64 epoch) public {
-        firstAvailableExitEpoch = epoch;
+        exitEpoch = epoch;
     }
 }
