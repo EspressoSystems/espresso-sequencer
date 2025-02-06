@@ -5,7 +5,7 @@ use committable::Committable;
 use derivative::Derivative;
 use derive_more::derive::{From, Into};
 use espresso_types::{
-    downgrade_commitment_map, downgrade_leaf, parse_duration, parse_size, upgrade_commitment_map,
+    parse_duration, parse_size, upgrade_commitment_map,
     v0::traits::{EventConsumer, PersistenceOptions, SequencerPersistence, StateCatchup},
     BackoffParams, BlockMerkleTree, FeeMerkleTree, Leaf, Leaf2, NetworkConfig, Payload,
 };
@@ -30,9 +30,12 @@ use hotshot_query_service::{
 };
 use hotshot_types::{
     consensus::CommitmentMap,
-    data::{DaProposal, QuorumProposal, QuorumProposal2, QuorumProposalWrapper, VidDisperseShare},
+    data::{
+        DaProposal, DaProposal2, QuorumProposal, QuorumProposal2, QuorumProposalWrapper,
+        VidDisperseShare, VidDisperseShare2,
+    },
     event::{Event, EventType, HotShotAction, LeafInfo},
-    message::Proposal,
+    message::{convert_proposal, Proposal},
     simple_certificate::{
         NextEpochQuorumCertificate2, QuorumCertificate, QuorumCertificate2, UpgradeCertificate,
     },
@@ -1138,7 +1141,7 @@ impl SequencerPersistence for Persistence {
                     let bytes: Vec<u8> = row.get("data");
                     let proposal: Proposal<SeqTypes, QuorumProposal2<SeqTypes>> =
                         bincode::deserialize(&bytes)?;
-                    Ok((view_number, proposal))
+                    Ok((view_number, convert_proposal(proposal)))
                 })
                 .collect::<anyhow::Result<Vec<_>>>()?,
         ))
@@ -1156,7 +1159,7 @@ impl SequencerPersistence for Persistence {
                 .await?;
         let proposal: Proposal<SeqTypes, QuorumProposal2<SeqTypes>> = bincode::deserialize(&data)?;
 
-        Ok(proposal)
+        Ok(convert_proposal(proposal))
     }
 
     async fn append_vid(
@@ -1231,7 +1234,7 @@ impl SequencerPersistence for Persistence {
         .await?;
 
         // We also keep track of any QC we see in case we need it to recover our archival storage.
-        let justify_qc = &proposal.data.justify_qc;
+        let justify_qc = &proposal.data.justify_qc();
         let justify_qc_bytes = bincode::serialize(&justify_qc).context("serializing QC")?;
         tx.upsert(
             "quorum_certificate2",
@@ -1972,7 +1975,7 @@ async fn fetch_leaf_from_proposals<Mode: TransactionMode>(
     let qc: QuorumCertificate2<SeqTypes> =
         bincode::deserialize(&qc_bytes).context("deserializing quorum certificate")?;
 
-    let leaf = Leaf2::from_quorum_proposal(&proposal.data);
+    let leaf = Leaf2::from_quorum_proposal(&proposal.data.into());
     Ok(Some((leaf, qc)))
 }
 
@@ -2133,7 +2136,8 @@ mod test {
         let storage = Persistence::connect(&tmp).await;
 
         // Mock up some data.
-        let leaf = Leaf2::genesis(&ValidatedState::default(), &NodeState::mock()).await;
+        let leaf =
+            Leaf2::genesis::<TestVersions>(&ValidatedState::default(), &NodeState::mock()).await;
         let leaf_payload = leaf.block_payload().unwrap();
         let leaf_payload_bytes_arc = leaf_payload.encode();
         let disperse = vid_scheme(2)
@@ -2156,7 +2160,7 @@ mod test {
             proposal: QuorumProposal2::<SeqTypes> {
                 block_header: leaf.block_header().clone(),
                 view_number: leaf.view_number(),
-                justify_qc: leaf.justify_qc().to_qc2(),
+                justify_qc: leaf.justify_qc(),
                 upgrade_certificate: None,
                 view_change_evidence: None,
                 next_drb_result: None,
@@ -2193,7 +2197,7 @@ mod test {
             .proposal
             .justify_qc
             .data
-            .leaf_commit = Committable::commit(&leaf.clone().into());
+            .leaf_commit = Committable::commit(&leaf.clone());
         let qc = next_quorum_proposal.data.justify_qc();
 
         // Add to database.
@@ -2259,7 +2263,8 @@ mod test {
         let data_view = ViewNumber::new(1);
 
         // Populate some data.
-        let leaf = Leaf2::genesis(&ValidatedState::default(), &NodeState::mock()).await;
+        let leaf =
+            Leaf2::genesis::<TestVersions>(&ValidatedState::default(), &NodeState::mock()).await;
         let leaf_payload = leaf.block_payload().unwrap();
         let leaf_payload_bytes_arc = leaf_payload.encode();
 
@@ -2274,8 +2279,8 @@ mod test {
             share: disperse.shares[0].clone(),
             common: disperse.common,
             recipient_key: pubkey,
-            epoch: EpochNumber::new(0),
-            target_epoch: EpochNumber::new(0),
+            epoch: None,
+            target_epoch: None,
             data_epoch_payload_commitment: None,
         }
         .to_proposal(&privkey)
@@ -2314,7 +2319,7 @@ mod test {
                 encoded_transactions: leaf_payload_bytes_arc.clone(),
                 metadata: leaf_payload.ns_table().clone(),
                 view_number: data_view,
-                epoch: EpochNumber::new(0),
+                epoch: Some(EpochNumber::new(0)),
             },
             signature: block_payload_signature,
             _pd: Default::default(),

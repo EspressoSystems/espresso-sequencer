@@ -56,7 +56,7 @@ mod persistence_tests {
     use hotshot_example_types::node_types::TestVersions;
     use hotshot_types::{
         data::{
-            DaProposal, EpochNumber, QuorumProposal2, QuorumProposalWrapper, VidDisperseShare,
+            DaProposal2, EpochNumber, QuorumProposal2, QuorumProposalWrapper, VidDisperseShare2,
             ViewNumber,
         },
         event::{EventType, HotShotAction, LeafInfo},
@@ -170,7 +170,8 @@ mod persistence_tests {
             None
         );
 
-        let leaf: Leaf2 = Leaf2::genesis(&ValidatedState::default(), &NodeState::mock()).await;
+        let leaf: Leaf2 =
+            Leaf2::genesis::<TestVersions>(&ValidatedState::default(), &NodeState::mock()).await;
         let leaf_payload = leaf.block_payload().unwrap();
         let leaf_payload_bytes_arc = leaf_payload.encode();
         let disperse = vid_scheme(2)
@@ -184,8 +185,8 @@ mod persistence_tests {
             share: disperse.shares[0].clone(),
             common: disperse.common,
             recipient_key: pubkey,
-            epoch: EpochNumber::new(0),
-            target_epoch: EpochNumber::new(0),
+            epoch: Some(EpochNumber::new(0)),
+            target_epoch: Some(EpochNumber::new(0)),
             data_epoch_payload_commitment: None,
         };
         let mut quorum_proposal = Proposal {
@@ -256,7 +257,7 @@ mod persistence_tests {
             encoded_transactions: leaf_payload_bytes_arc.clone(),
             metadata: leaf_payload.ns_table().clone(),
             view_number: ViewNumber::new(0),
-            epoch: EpochNumber::new(0),
+            epoch: Some(EpochNumber::new(0)),
         };
 
         let da_proposal = Proposal {
@@ -666,8 +667,8 @@ mod persistence_tests {
             share: disperse.shares[0].clone(),
             common: disperse.common,
             recipient_key: pubkey,
-            epoch: EpochNumber::new(0),
-            target_epoch: EpochNumber::new(0),
+            epoch: Some(EpochNumber::new(0)),
+            target_epoch: Some(EpochNumber::new(0)),
             data_epoch_payload_commitment: None,
         }
         .to_proposal(&privkey)
@@ -703,7 +704,7 @@ mod persistence_tests {
                 encoded_transactions: leaf_payload_bytes_arc.clone(),
                 metadata: leaf_payload.ns_table().clone(),
                 view_number: ViewNumber::new(0),
-                epoch: EpochNumber::new(0),
+                epoch: Some(EpochNumber::new(0)),
             },
             signature: block_payload_signature,
             _pd: Default::default(),
@@ -857,8 +858,8 @@ mod persistence_tests {
             share: disperse.shares[0].clone(),
             common: disperse.common,
             recipient_key: pubkey,
-            epoch: EpochNumber::new(0),
-            target_epoch: EpochNumber::new(0),
+            epoch: None,
+            target_epoch: None,
             data_epoch_payload_commitment: None,
         }
         .to_proposal(&privkey)
@@ -898,7 +899,7 @@ mod persistence_tests {
                 encoded_transactions: leaf_payload_bytes_arc,
                 metadata: leaf_payload.ns_table().clone(),
                 view_number: ViewNumber::new(0),
-                epoch: EpochNumber::new(0),
+                epoch: None,
             },
             signature: block_payload_signature,
             _pd: Default::default(),

@@ -706,24 +706,12 @@ pub trait SequencerPersistence: Sized + Send + Sync + Clone + 'static {
         self.migrate_quorum_certificates().await
     }
 
-    async fn migrate_anchor_leaf(&self) -> anyhow::Result<()> {
-        Ok(())
-    }
-    async fn migrate_da_proposals(&self) -> anyhow::Result<()> {
-        Ok(())
-    }
-    async fn migrate_vid_shares(&self) -> anyhow::Result<()> {
-        Ok(())
-    }
-    async fn migrate_undecided_state(&self) -> anyhow::Result<()> {
-        Ok(())
-    }
-    async fn migrate_quorum_proposals(&self) -> anyhow::Result<()> {
-        Ok(())
-    }
-    async fn migrate_quorum_certificates(&self) -> anyhow::Result<()> {
-        Ok(())
-    }
+    async fn migrate_anchor_leaf(&self) -> anyhow::Result<()>;
+    async fn migrate_da_proposals(&self) -> anyhow::Result<()>;
+    async fn migrate_vid_shares(&self) -> anyhow::Result<()>;
+    async fn migrate_undecided_state(&self) -> anyhow::Result<()>;
+    async fn migrate_quorum_proposals(&self) -> anyhow::Result<()>;
+    async fn migrate_quorum_certificates(&self) -> anyhow::Result<()>;
 
     async fn load_anchor_view(&self) -> anyhow::Result<ViewNumber> {
         match self.load_anchor_leaf().await? {

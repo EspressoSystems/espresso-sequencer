@@ -1196,11 +1196,12 @@ pub mod tests {
     };
     use async_lock::RwLock;
     use bitvec::vec::BitVec;
-    use espresso_types::{Leaf, NodeState, ValidatedState};
+    use espresso_types::{Leaf2, NodeState, ValidatedState};
     use futures::{
         channel::mpsc::{self, Sender},
         SinkExt, StreamExt,
     };
+    use hotshot_query_service::testing::mocks::MockVersions;
     use hotshot_types::{signature_key::BLSPubKey, traits::signature_key::SignatureKey};
     use std::{sync::Arc, time::Duration};
     use tokio::{
@@ -1374,7 +1375,8 @@ pub mod tests {
 
         let (_, _, _, mut data_state) = create_test_data_state();
         let client_thread_state = Arc::new(RwLock::new(create_test_client_thread_state()));
-        let leaf_1 = Leaf::genesis(&ValidatedState::default(), &NodeState::mock()).await;
+        let leaf_1 =
+            Leaf2::genesis::<MockVersions>(&ValidatedState::default(), &NodeState::mock()).await;
         let block_1 = create_block_detail_from_leaf(&leaf_1);
         data_state.add_latest_block(clone_block_detail(&block_1));
 
@@ -1614,7 +1616,8 @@ pub mod tests {
         // No response expected from the client messages at the moment.
 
         // send a new leaf
-        let leaf = Leaf::genesis(&ValidatedState::default(), &NodeState::mock()).await;
+        let leaf =
+            Leaf2::genesis::<MockVersions>(&ValidatedState::default(), &NodeState::mock()).await;
         let expected_block = create_block_detail_from_leaf(&leaf);
         let arc_expected_block = Arc::new(expected_block);
 

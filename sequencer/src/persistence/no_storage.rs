@@ -9,7 +9,7 @@ use espresso_types::{
 };
 use hotshot_types::{
     consensus::CommitmentMap,
-    data::{DaProposal, QuorumProposal, QuorumProposal2, QuorumProposalWrapper, VidDisperseShare},
+    data::{DaProposal, DaProposal2, QuorumProposalWrapper, VidDisperseShare, VidDisperseShare2},
     event::{Event, EventType, HotShotAction, LeafInfo},
     message::Proposal,
     simple_certificate::{NextEpochQuorumCertificate2, QuorumCertificate2, UpgradeCertificate},
@@ -192,8 +192,27 @@ impl SequencerPersistence for NoStorage {
 
     async fn append_proposal2(
         &self,
-        _proposal: &Proposal<SeqTypes, QuorumProposal2<SeqTypes>>,
+        _proposal: &Proposal<SeqTypes, QuorumProposalWrapper<SeqTypes>>,
     ) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    async fn migrate_anchor_leaf(&self) -> anyhow::Result<()> {
+        Ok(())
+    }
+    async fn migrate_da_proposals(&self) -> anyhow::Result<()> {
+        Ok(())
+    }
+    async fn migrate_vid_shares(&self) -> anyhow::Result<()> {
+        Ok(())
+    }
+    async fn migrate_undecided_state(&self) -> anyhow::Result<()> {
+        Ok(())
+    }
+    async fn migrate_quorum_proposals(&self) -> anyhow::Result<()> {
+        Ok(())
+    }
+    async fn migrate_quorum_certificates(&self) -> anyhow::Result<()> {
         Ok(())
     }
 }

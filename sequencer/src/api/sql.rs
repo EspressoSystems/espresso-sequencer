@@ -450,7 +450,7 @@ where
     .fetch_one(tx.as_mut())
     .await?;
     let proposal: Proposal<SeqTypes, QuorumProposal2<SeqTypes>> = bincode::deserialize(&data)?;
-    Ok(Leaf2::from_quorum_proposal(&proposal.data))
+    Ok(Leaf2::from_quorum_proposal(&proposal.data.into()))
 }
 
 #[cfg(any(test, feature = "testing"))]

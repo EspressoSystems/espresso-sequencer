@@ -8,7 +8,10 @@ use espresso_types::{
 };
 use hotshot_types::{
     consensus::CommitmentMap,
-    data::{DaProposal, QuorumProposal, QuorumProposal2, QuorumProposalWrapper, VidDisperseShare},
+    data::{
+        DaProposal, DaProposal2, QuorumProposal, QuorumProposal2, QuorumProposalWrapper,
+        VidDisperseShare, VidDisperseShare2,
+    },
     event::{Event, EventType, HotShotAction, LeafInfo},
     message::{convert_proposal, Proposal},
     simple_certificate::{
@@ -1003,7 +1006,7 @@ impl SequencerPersistence for Persistence {
 
     async fn append_proposal2(
         &self,
-        proposal: &Proposal<SeqTypes, QuorumProposal2<SeqTypes>>,
+        proposal: &Proposal<SeqTypes, QuorumProposalWrapper<SeqTypes>>,
     ) -> anyhow::Result<()> {
         self.append_quorum_proposal2(proposal).await
     }
@@ -1371,15 +1374,15 @@ mod test {
     use super::*;
     use crate::persistence::testing::TestablePersistence;
 
-    use crate::{persistence::testing::TestablePersistence, BLSPubKey};
+    use crate::BLSPubKey;
     use committable::Committable;
     use committable::{Commitment, CommitmentBoundsArkless};
-    use espresso_types::{Header, Leaf, NodeState, ValidatedState};
+    use espresso_types::{Header, Leaf, ValidatedState};
 
     use hotshot_types::{
         simple_certificate::QuorumCertificate,
         simple_vote::QuorumData,
-        traits::{block_contents::vid_commitment, signature_key::SignatureKey, EncodeBytes},
+        traits::{block_contents::vid_commitment, EncodeBytes},
         vid::vid_scheme,
     };
     use jf_vid::VidScheme;
@@ -1688,6 +1691,8 @@ mod test {
             "quorum proposals count does not match",
         );
     }
+
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_load_quorum_proposals_invalid_extension() {
         setup_test();
 
@@ -1725,13 +1730,13 @@ mod test {
         // Store quorum proposals.
         let quorum_proposal1 = quorum_proposal.clone();
         storage
-            .append_quorum_proposal(&quorum_proposal1)
+            .append_quorum_proposal2(&quorum_proposal1)
             .await
             .unwrap();
         quorum_proposal.data.proposal.view_number = ViewNumber::new(1);
         let quorum_proposal2 = quorum_proposal.clone();
         storage
-            .append_quorum_proposal(&quorum_proposal2)
+            .append_quorum_proposal2(&quorum_proposal2)
             .await
             .unwrap();
 
@@ -1797,7 +1802,7 @@ mod test {
 
         // Store valid quorum proposal.
         storage
-            .append_quorum_proposal(&quorum_proposal)
+            .append_quorum_proposal2(&quorum_proposal)
             .await
             .unwrap();
 

@@ -1101,12 +1101,15 @@ mod api_tests {
     };
     use ethers::utils::Anvil;
     use futures::{future, stream::StreamExt};
+    use hotshot_example_types::node_types::TestVersions;
     use hotshot_query_service::availability::{
         AvailabilityDataSource, BlockQueryData, VidCommonQueryData,
     };
 
+    use hotshot_types::data::{DaProposal2, EpochNumber, VidDisperseShare2};
+    use hotshot_types::simple_certificate::QuorumCertificate2;
     use hotshot_types::{
-        data::{DaProposal, QuorumProposal2, QuorumProposalWrapper, VidDisperseShare},
+        data::{QuorumProposal2, QuorumProposalWrapper},
         event::LeafInfo,
         message::Proposal,
         simple_certificate::QuorumCertificate,
@@ -1286,7 +1289,7 @@ mod api_tests {
         // Create two non-consecutive leaf chains.
         let mut chain1 = vec![];
 
-        let genesis = Leaf2::genesis(&Default::default(), &NodeState::mock()).await;
+        let genesis = Leaf2::genesis::<TestVersions>(&Default::default(), &NodeState::mock()).await;
         let payload = genesis.block_payload().unwrap();
         let payload_bytes_arc = payload.encode();
         let disperse = vid_scheme(2).disperse(payload_bytes_arc.clone()).unwrap();
@@ -1345,8 +1348,8 @@ mod api_tests {
                 share: disperse.shares[0].clone(),
                 common: disperse.common.clone(),
                 recipient_key: pubkey,
-                epoch: EpochNumber::new(0),
-                target_epoch: EpochNumber::new(0),
+                epoch: Some(EpochNumber::new(0)),
+                target_epoch: Some(EpochNumber::new(0)),
                 data_epoch_payload_commitment: None,
             };
             persistence
@@ -1361,7 +1364,7 @@ mod api_tests {
                 encoded_transactions: payload_bytes_arc.clone(),
                 metadata: payload.ns_table().clone(),
                 view_number: leaf.view_number(),
-                epoch: EpochNumber::new(0),
+                epoch: Some(EpochNumber::new(0)),
             };
             let da_proposal = Proposal {
                 data: da_proposal_inner,
