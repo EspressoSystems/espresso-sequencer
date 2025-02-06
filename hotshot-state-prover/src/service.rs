@@ -88,7 +88,10 @@ impl StateProverConfig {
         let provider = Provider::<Http>::try_from(self.provider.to_string())?;
 
         if !is_proxy_contract(&provider, self.light_client_address).await? {
-            anyhow::bail!("Light Client contract's address is not a proxy");
+            anyhow::bail!(
+                "Light Client contract's address {:?} is not a proxy",
+                self.light_client_address
+            );
         }
 
         Ok(())
