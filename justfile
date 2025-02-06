@@ -1,3 +1,5 @@
+# export RUST_BACKTRACE := "1"
+
 default:
     just --list
 
