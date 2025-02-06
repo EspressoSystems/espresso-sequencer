@@ -290,10 +290,8 @@ contract StakeTable is AbstractStakeTable, Ownable {
         BN254.G1Point memory blsSig,
         uint64 validUntilEpoch
     ) external override {
-        uint256 fixedStakeAmount = minStakeAmount;
-
         // Verify that the sender amount is the minStakeAmount
-        if (amount < fixedStakeAmount) {
+        if (amount < minStakeAmount) {
             revert InsufficientStakeAmount(amount);
         }
 
@@ -306,13 +304,13 @@ contract StakeTable is AbstractStakeTable, Ownable {
 
         // Verify that this contract has permissions to access the validator's stake token.
         uint256 allowance = ERC20(tokenAddress).allowance(msg.sender, address(this));
-        if (allowance < fixedStakeAmount) {
-            revert InsufficientAllowance(allowance, fixedStakeAmount);
+        if (allowance < amount) {
+            revert InsufficientAllowance(allowance, amount);
         }
 
         // Verify that the validator has the balance for this stake token.
         uint256 balance = ERC20(tokenAddress).balanceOf(msg.sender);
-        if (balance < fixedStakeAmount) {
+        if (balance < amount) {
             revert InsufficientBalance(balance);
         }
 
@@ -351,23 +349,21 @@ contract StakeTable is AbstractStakeTable, Ownable {
         appendRegistrationQueue(registerEpoch, queueSize);
 
         // Transfer the stake amount of ERC20 tokens from the sender to this contract.
-        SafeTransferLib.safeTransferFrom(
-            ERC20(tokenAddress), msg.sender, address(this), fixedStakeAmount
-        );
+        SafeTransferLib.safeTransferFrom(ERC20(tokenAddress), msg.sender, address(this), amount);
 
         // Update the total staked amount
-        totalStake += fixedStakeAmount;
+        totalStake += amount;
 
         // Create an entry for the node.
         node.account = msg.sender;
-        node.balance = fixedStakeAmount;
+        node.balance = amount;
         node.blsVK = blsVK;
         node.schnorrVK = schnorrVK;
         node.registerEpoch = registerEpoch;
 
         nodes[msg.sender] = node;
 
-        emit Registered(msg.sender, registerEpoch, fixedStakeAmount);
+        emit Registered(msg.sender, registerEpoch, amount);
     }
 
     /// @notice Deposit more stakes to registered keys

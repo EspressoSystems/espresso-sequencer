@@ -207,7 +207,7 @@ contract StakeTable_register_Test is Test {
     }
 
     function test_RevertWhen_WrongStakeAmount() external {
-        uint64 depositAmount = 5 ether;
+        uint64 depositAmount = uint64(stakeTable.minStakeAmount()) - 1;
         uint64 validUntilEpoch = 10;
         string memory seed = "123";
 
