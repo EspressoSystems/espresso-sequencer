@@ -45,6 +45,7 @@ pub use metrics::MetricsDataSource;
 pub use sql::SqlDataSource;
 pub use update::{Transaction, UpdateDataSource, VersionedDataSource};
 
+
 #[cfg(any(test, feature = "testing"))]
 mod test_helpers {
     use crate::{
@@ -783,9 +784,10 @@ pub mod node_tests {
         block_types::{TestBlockHeader, TestMetadata},
         state_types::TestInstanceState,
     };
+    use vbs::version::StaticVersionType;
     use hotshot_types::{
-        traits::block_contents::{vid_commitment, EncodeBytes},
-        vid::{vid_scheme, VidSchemeType},
+        traits::{block_contents::{vid_commitment, EncodeBytes}, node_implementation::Versions},
+        vid::{advz_scheme, VidSchemeType},
     };
     use jf_vid::VidScheme;
     use std::time::Duration;
@@ -803,7 +805,7 @@ pub mod node_tests {
         let ds = D::connect(&storage).await;
 
         // Set up a mock VID scheme to use for generating test data.
-        let mut vid = vid_scheme(2);
+        let mut vid = advz_scheme(2);
 
         // Generate some mock leaves and blocks to insert.
         let mut leaves = vec![
@@ -969,7 +971,7 @@ pub mod node_tests {
                 .await
                 .unwrap();
             let encoded = payload.encode();
-            let payload_commitment = vid_commitment(&encoded, 1);
+            let payload_commitment = vid_commitment(&encoded, 1, <TestVersions as Versions>::Base::VERSION);
             let header = TestBlockHeader {
                 block_number: i,
                 payload_commitment,

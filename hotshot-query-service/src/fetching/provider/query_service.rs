@@ -23,7 +23,7 @@ use committable::Committable;
 use futures::try_join;
 use hotshot_types::{
     traits::{node_implementation::NodeType, EncodeBytes},
-    vid::{vid_scheme, VidSchemeType},
+    vid::{advz_scheme, VidSchemeType},
 };
 use jf_vid::VidScheme;
 use surf_disco::{Client, Url};
@@ -72,7 +72,7 @@ where
                 let num_storage_nodes =
                     VidSchemeType::get_num_storage_nodes(common.common()) as usize;
                 let bytes = payload.data().encode();
-                let commit = match vid_scheme(num_storage_nodes).commit_only(bytes) {
+                let commit = match advz_scheme(num_storage_nodes).commit_only(bytes) {
                     Ok(commit) => commit,
                     Err(err) => {
                         tracing::error!(%err, "unable to compute VID commitment");

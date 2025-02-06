@@ -32,8 +32,7 @@ use hotshot::{
     HotShotInitializer, MarketplaceConfig, SystemContext,
 };
 use hotshot_example_types::{
-    auction_results_provider_types::TestAuctionResultsProvider, state_types::TestInstanceState,
-    storage_types::TestStorage,
+    auction_results_provider_types::TestAuctionResultsProvider, node_types::TestVersions, state_types::TestInstanceState, storage_types::TestStorage
 };
 use hotshot_testing::block_builder::{SimpleBuilderImplementation, TestBuilderImplementation};
 use hotshot_types::{
@@ -335,8 +334,8 @@ pub trait DataSourceLifeCycle: Clone + Send + Sync + Sized + 'static {
 
 pub trait TestableDataSource:
     DataSourceLifeCycle
-    + AvailabilityDataSource<MockTypes>
-    + UpdateAvailabilityData<MockTypes>
+    + AvailabilityDataSource<MockTypes, TestVersions>
+    + UpdateAvailabilityData<MockTypes, TestVersions>
     + NodeDataSource<MockTypes>
     + StatusDataSource
     + VersionedDataSource
