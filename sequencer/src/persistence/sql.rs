@@ -1846,7 +1846,7 @@ impl Provider<SeqTypes, VidCommonRequest> for Persistence {
         };
 
         let bytes = match query_as::<(Vec<u8>,)>(
-            "SELECT data FROM vid_share WHERE payload_hash = $1 LIMIT 1",
+            "SELECT data FROM vid_share2 WHERE payload_hash = $1 LIMIT 1",
         )
         .bind(req.0.to_string())
         .fetch_optional(tx.as_mut())
@@ -1860,7 +1860,7 @@ impl Provider<SeqTypes, VidCommonRequest> for Persistence {
             }
         };
 
-        let share: Proposal<SeqTypes, VidDisperseShare<SeqTypes>> =
+        let share: Proposal<SeqTypes, VidDisperseShare2<SeqTypes>> =
             match bincode::deserialize(&bytes) {
                 Ok(share) => share,
                 Err(err) => {
@@ -1886,7 +1886,7 @@ impl Provider<SeqTypes, PayloadRequest> for Persistence {
         };
 
         let bytes = match query_as::<(Vec<u8>,)>(
-            "SELECT data FROM da_proposal WHERE payload_hash = $1 LIMIT 1",
+            "SELECT data FROM da_proposal2 WHERE payload_hash = $1 LIMIT 1",
         )
         .bind(req.0.to_string())
         .fetch_optional(tx.as_mut())
@@ -1900,7 +1900,7 @@ impl Provider<SeqTypes, PayloadRequest> for Persistence {
             }
         };
 
-        let proposal: Proposal<SeqTypes, DaProposal<SeqTypes>> = match bincode::deserialize(&bytes)
+        let proposal: Proposal<SeqTypes, DaProposal2<SeqTypes>> = match bincode::deserialize(&bytes)
         {
             Ok(proposal) => proposal,
             Err(err) => {
@@ -2161,18 +2161,16 @@ mod test {
         .unwrap()
         .clone();
 
-        let quorum_proposal = QuorumProposalWrapper::<SeqTypes> {
-            proposal: QuorumProposal2::<SeqTypes> {
-                block_header: leaf.block_header().clone(),
-                view_number: leaf.view_number(),
-                justify_qc: leaf.justify_qc(),
-                upgrade_certificate: None,
-                view_change_evidence: None,
-                next_drb_result: None,
-                next_epoch_justify_qc: None,
-            },
-            with_epoch: false,
-        };
+        let quorum_proposal: QuorumProposalWrapper<SeqTypes> = QuorumProposal2::<SeqTypes> {
+            block_header: leaf.block_header().clone(),
+            view_number: leaf.view_number(),
+            justify_qc: leaf.justify_qc(),
+            upgrade_certificate: None,
+            view_change_evidence: None,
+            next_drb_result: None,
+            next_epoch_justify_qc: None,
+        }
+        .into();
         let quorum_proposal_signature =
             BLSPubKey::sign(&privkey, &bincode::serialize(&quorum_proposal).unwrap())
                 .expect("Failed to sign quorum proposal");
