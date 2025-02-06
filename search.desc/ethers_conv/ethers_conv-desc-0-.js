@@ -1,1 +1,0 @@
-searchState.loadedDescShard("ethers_conv", 0, "The corresponding Alloy type.\nThe corresponding Ethers type.\nConverts the Ethers type to the corresponding Alloy type.\nConverts the Alloy type to the corresponding Ethers type.")
