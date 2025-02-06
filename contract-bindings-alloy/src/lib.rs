@@ -9,8 +9,6 @@ pub mod iplonkverifier;
 pub mod lightclient;
 pub mod lightclientarbitrum;
 pub mod lightclientmock;
-pub mod lightclientstateupdatevk;
-pub mod lightclientstateupdatevkmock;
 pub mod permissionedstaketable;
 pub mod plonkverifier;
 pub mod plonkverifier2;
