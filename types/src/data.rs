@@ -135,6 +135,14 @@ impl Committable for EpochNumber {
 
 impl_u64_wrapper!(EpochNumber);
 
+impl EpochNumber {
+    /// Create a genesis number (1)
+    #[allow(dead_code)]
+    fn genesis() -> Self {
+        Self(1)
+    }
+}
+
 /// A proposal to start providing data availability for a block.
 #[derive(derive_more::Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Hash)]
 #[serde(bound = "TYPES: NodeType")]

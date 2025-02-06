@@ -434,6 +434,6 @@ mod tests {
         assert_eq!(None, epoch);
 
         let epoch = genesis_epoch_from_version::<EpochsTestVersions, TestTypes>();
-        assert_eq!(Some(<TestTypes as NodeType>::Epoch::new(0)), epoch);
+        assert_eq!(Some(<TestTypes as NodeType>::Epoch::new(1)), epoch);
     }
 }

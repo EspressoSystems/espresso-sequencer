@@ -295,7 +295,7 @@ pub fn option_epoch_from_block_number<TYPES: NodeType>(
 /// Returns Some(0) if epochs are enabled by V::Base, otherwise returns None
 #[must_use]
 pub fn genesis_epoch_from_version<V: Versions, TYPES: NodeType>() -> Option<TYPES::Epoch> {
-    (V::Base::VERSION >= V::Epochs::VERSION).then(|| TYPES::Epoch::new(0))
+    (V::Base::VERSION >= V::Epochs::VERSION).then(|| TYPES::Epoch::new(1))
 }
 
 /// A function for generating a cute little user mnemonic from a hash

@@ -9,8 +9,9 @@ use std::{collections::HashMap, time::Duration};
 use hotshot_example_types::{
     node_types::{
         CombinedImpl, EpochUpgradeTestVersions, EpochsTestVersions, Libp2pImpl, MemoryImpl,
-        PushCdnImpl, TestConsecutiveLeaderTypes, TestTwoStakeTablesTypes, TestTypes,
-        TestTypesRandomizedLeader,
+        PushCdnImpl, RandomOverlapQuorumFilterConfig, StableQuorumFilterConfig,
+        TestConsecutiveLeaderTypes, TestTwoStakeTablesTypes, TestTypes,
+        TestTypesRandomizedCommitteeMembers, TestTypesRandomizedLeader,
     },
     testable_delay::{DelayConfig, DelayOptions, DelaySettings, SupportedTraitTypesForAsyncDelay},
 };
@@ -48,25 +49,33 @@ cross_tests!(
     },
 );
 
-// cross_tests!(
-//     TestName: test_epoch_success,
-//     Impls: [MemoryImpl, Libp2pImpl, PushCdnImpl],
-//     Types: [TestTypes, TestTypesRandomizedLeader, TestTypesRandomizedCommitteeMembers<StableQuorumFilterConfig<123, 2>>, TestTypesRandomizedCommitteeMembers<RandomOverlapQuorumFilterConfig<123, 4, 5, 0, 2>>],
-//     Versions: [EpochsTestVersions],
-//     Ignore: false,
-//     Metadata: {
-//         TestDescription {
-//             // allow more time to pass in CI
-//             completion_task_description: CompletionTaskDescription::TimeBasedCompletionTaskBuilder(
-//                                              TimeBasedCompletionTaskDescription {
-//                                                  duration: Duration::from_secs(60),
-//                                              },
-//                                          ),
-//             epoch_height: 10,
-//             ..TestDescription::default()
-//         }
-//     },
-// );
+cross_tests!(
+    TestName: test_epoch_success,
+    Impls: [MemoryImpl, Libp2pImpl, PushCdnImpl],
+    Types: [
+        TestTypes,
+        TestTypesRandomizedLeader,
+        TestTypesRandomizedCommitteeMembers<StableQuorumFilterConfig<123, 2>>,                 // Overlap =  F
+        TestTypesRandomizedCommitteeMembers<StableQuorumFilterConfig<123, 3>>,                 // Overlap =  F+1
+        TestTypesRandomizedCommitteeMembers<StableQuorumFilterConfig<123, 4>>,                 // Overlap = 2F
+        TestTypesRandomizedCommitteeMembers<StableQuorumFilterConfig<123, 5>>,                 // Overlap = 2F+1
+        TestTypesRandomizedCommitteeMembers<StableQuorumFilterConfig<123, 6>>,                 // Overlap = 3F
+        TestTypesRandomizedCommitteeMembers<RandomOverlapQuorumFilterConfig<123, 4, 7, 0, 2>>, // Overlap = Dynamic
+    ],
+    Versions: [EpochsTestVersions],
+    Ignore: false,
+    Metadata: {
+        TestDescription {
+            // allow more time to pass in CI
+            completion_task_description: CompletionTaskDescription::TimeBasedCompletionTaskBuilder(
+                                             TimeBasedCompletionTaskDescription {
+                                                 duration: Duration::from_secs(60),
+                                             },
+                                         ),
+            ..TestDescription::default().set_num_nodes(14, 14)
+        }
+    },
+);
 
 cross_tests!(
     TestName: test_success_with_async_delay_with_epochs,
