@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":["downgrade_leaf","genesis_vid"],"trait":["Transaction","UpdateDataSource","VersionedDataSource"]};
