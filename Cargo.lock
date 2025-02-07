@@ -1968,7 +1968,7 @@ dependencies = [
  "hotshot-events-service",
  "hotshot-state-prover",
  "hotshot-types",
- "jf-signature",
+ "jf-signature 0.2.0",
  "marketplace-builder-shared",
  "portpicker",
  "rand 0.8.5",
@@ -2193,14 +2193,37 @@ dependencies = [
 [[package]]
 name = "cdn-broker"
 version = "0.4.0"
-source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.5.6#9409763dbcb726e43218c3c4cfde91c7d5de6a52"
+source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.5.1-upgrade#849e7edb32788e42738541ba4d5c64d3e061d86d"
 dependencies = [
- "cdn-proto",
+ "cdn-proto 0.4.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.5.1-upgrade)",
  "clap",
  "console-subscriber",
  "dashmap",
  "derivative",
- "jf-signature",
+ "jf-signature 0.1.0",
+ "lazy_static",
+ "local-ip-address",
+ "parking_lot",
+ "portpicker",
+ "prometheus",
+ "rand 0.8.5",
+ "rkyv",
+ "tokio",
+ "tracing",
+ "tracing-subscriber 0.3.19",
+]
+
+[[package]]
+name = "cdn-broker"
+version = "0.4.0"
+source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.5.6#9409763dbcb726e43218c3c4cfde91c7d5de6a52"
+dependencies = [
+ "cdn-proto 0.4.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.5.6)",
+ "clap",
+ "console-subscriber",
+ "dashmap",
+ "derivative",
+ "jf-signature 0.2.0",
  "lazy_static",
  "local-ip-address",
  "parking_lot",
@@ -2218,10 +2241,10 @@ name = "cdn-client"
 version = "0.4.0"
 source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.5.6#9409763dbcb726e43218c3c4cfde91c7d5de6a52"
 dependencies = [
- "cdn-proto",
+ "cdn-proto 0.4.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.5.6)",
  "clap",
  "derive_more 1.0.0",
- "jf-signature",
+ "jf-signature 0.2.0",
  "parking_lot",
  "rand 0.8.5",
  "tokio",
@@ -2232,14 +2255,61 @@ dependencies = [
 [[package]]
 name = "cdn-marshal"
 version = "0.4.0"
-source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.5.6#9409763dbcb726e43218c3c4cfde91c7d5de6a52"
+source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.5.1-upgrade#849e7edb32788e42738541ba4d5c64d3e061d86d"
 dependencies = [
- "cdn-proto",
+ "cdn-proto 0.4.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.5.1-upgrade)",
  "clap",
- "jf-signature",
+ "jf-signature 0.1.0",
  "tokio",
  "tracing",
  "tracing-subscriber 0.3.19",
+]
+
+[[package]]
+name = "cdn-marshal"
+version = "0.4.0"
+source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.5.6#9409763dbcb726e43218c3c4cfde91c7d5de6a52"
+dependencies = [
+ "cdn-proto 0.4.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.5.6)",
+ "clap",
+ "jf-signature 0.2.0",
+ "tokio",
+ "tracing",
+ "tracing-subscriber 0.3.19",
+]
+
+[[package]]
+name = "cdn-proto"
+version = "0.4.0"
+source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.5.1-upgrade#849e7edb32788e42738541ba4d5c64d3e061d86d"
+dependencies = [
+ "anyhow",
+ "ark-serialize 0.4.2",
+ "async-trait",
+ "capnp",
+ "capnpc",
+ "derivative",
+ "jf-signature 0.1.0",
+ "kanal",
+ "lazy_static",
+ "mnemonic",
+ "num_enum",
+ "pem 3.0.4",
+ "prometheus",
+ "quinn",
+ "rand 0.8.5",
+ "rcgen 0.13.2",
+ "redis",
+ "rkyv",
+ "rustls 0.23.20",
+ "rustls-pki-types",
+ "sqlx",
+ "thiserror 1.0.69",
+ "tokio",
+ "tokio-rustls 0.26.1",
+ "tracing",
+ "url",
+ "warp",
 ]
 
 [[package]]
@@ -2254,7 +2324,7 @@ dependencies = [
  "capnpc",
  "derivative",
  "derive_more 1.0.0",
- "jf-signature",
+ "jf-signature 0.2.0",
  "kanal",
  "lazy_static",
  "mnemonic",
@@ -3267,7 +3337,7 @@ dependencies = [
  "hotshot-state-prover",
  "jf-pcs",
  "jf-plonk",
- "jf-signature",
+ "jf-signature 0.2.0",
  "jf-utils",
  "sha3",
 ]
@@ -4803,9 +4873,9 @@ dependencies = [
  "bimap",
  "bincode",
  "blake3",
- "cdn-broker",
+ "cdn-broker 0.4.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.5.6)",
  "cdn-client",
- "cdn-marshal",
+ "cdn-marshal 0.4.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.5.6)",
  "chrono",
  "committable",
  "dashmap",
@@ -5014,8 +5084,8 @@ dependencies = [
  "anyhow",
  "async-lock 3.4.0",
  "async-trait",
- "cdn-broker",
- "cdn-marshal",
+ "cdn-broker 0.4.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.5.6)",
+ "cdn-marshal 0.4.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.5.6)",
  "chrono",
  "clap",
  "futures",
@@ -5191,7 +5261,7 @@ dependencies = [
  "hotshot-types",
  "jf-crhf",
  "jf-rescue",
- "jf-signature",
+ "jf-signature 0.2.0",
  "jf-utils",
  "primitive-types",
  "rand_chacha 0.3.1",
@@ -5226,7 +5296,7 @@ dependencies = [
  "jf-plonk",
  "jf-relation",
  "jf-rescue",
- "jf-signature",
+ "jf-signature 0.2.0",
  "jf-utils",
  "reqwest 0.12.12",
  "sequencer-utils",
@@ -5355,7 +5425,7 @@ dependencies = [
  "futures",
  "hotshot-utils",
  "jf-pcs",
- "jf-signature",
+ "jf-signature 0.2.0",
  "jf-utils",
  "jf-vid",
  "lazy_static",
@@ -6272,6 +6342,35 @@ dependencies = [
 
 [[package]]
 name = "jf-signature"
+version = "0.1.0"
+source = "git+https://github.com/EspressoSystems/jellyfish?tag=0.4.5#7d71dbeff14f1a501b0b0dc391f1dffa1b8374fb"
+dependencies = [
+ "ark-bls12-381",
+ "ark-bn254",
+ "ark-ec",
+ "ark-ff 0.4.2",
+ "ark-serialize 0.4.2",
+ "ark-std 0.4.0",
+ "blst",
+ "derivative",
+ "digest 0.10.7",
+ "displaydoc",
+ "hashbrown 0.14.5",
+ "itertools 0.12.1",
+ "jf-crhf",
+ "jf-relation",
+ "jf-rescue",
+ "jf-utils",
+ "num-bigint",
+ "num-traits",
+ "serde",
+ "sha3",
+ "tagged-base64",
+ "zeroize",
+]
+
+[[package]]
+name = "jf-signature"
 version = "0.2.0"
 source = "git+https://github.com/EspressoSystems/jellyfish?tag=jf-signature-v0.2.0#ca160ce3452b560cad512b750a742a87c48c5881"
 dependencies = [
@@ -7124,7 +7223,7 @@ dependencies = [
  "hotshot-stake-table",
  "hotshot-types",
  "jf-merkle-tree",
- "jf-signature",
+ "jf-signature 0.2.0",
  "marketplace-builder-core",
  "marketplace-builder-shared",
  "marketplace-solver",
@@ -9731,8 +9830,8 @@ dependencies = [
  "async-once-cell",
  "async-trait",
  "bincode",
- "cdn-broker",
- "cdn-marshal",
+ "cdn-broker 0.4.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.5.1-upgrade)",
+ "cdn-marshal 0.4.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.5.1-upgrade)",
  "clap",
  "client",
  "committable",
@@ -9763,7 +9862,7 @@ dependencies = [
  "jf-crhf",
  "jf-merkle-tree",
  "jf-rescue",
- "jf-signature",
+ "jf-signature 0.2.0",
  "jf-vid",
  "libp2p",
  "marketplace-builder-core",
@@ -12620,7 +12719,7 @@ dependencies = [
  "itertools 0.12.1",
  "jf-relation",
  "jf-rescue",
- "jf-signature",
+ "jf-signature 0.2.0",
  "jf-utils",
  "libp2p-identity",
  "libsecp256k1-core",
