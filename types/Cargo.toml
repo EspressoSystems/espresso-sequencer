@@ -58,6 +58,7 @@ url = { workspace = true }
 vbs = { workspace = true }
 
 [dev-dependencies]
+hotshot-query-service = { workspace = true, features = ["testing"]}
 portpicker = { workspace = true }
 
 [package.metadata.cargo-machete]
