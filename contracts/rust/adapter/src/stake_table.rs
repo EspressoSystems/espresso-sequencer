@@ -8,13 +8,18 @@ use ark_ed_on_bn254::EdwardsConfig;
 use ark_ff::{BigInteger, PrimeField};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_std::rand::{Rng, RngCore};
-use contract_bindings::permissioned_stake_table::{self, EdOnBN254Point, NodeInfo};
+use contract_bindings_alloy::permissionedstaketable::{
+    EdOnBN254::EdOnBN254Point as EdOnBN254PointAlloy,
+    PermissionedStakeTable::NodeInfo as NodeInfoAlloy, BN254::G2Point as G2PointAlloy,
+};
+use contract_bindings_ethers::permissioned_stake_table::{self, EdOnBN254Point, NodeInfo};
 use diff_test_bn254::ParsedG2Point;
 use ethers::{
     abi::AbiDecode,
     prelude::{AbiError, EthAbiCodec, EthAbiType},
     types::U256,
 };
+use ethers_conv::{ToAlloy, ToEthers};
 use hotshot_types::{
     light_client::{StateKeyPair, StateVerKey},
     network::PeerConfigKeys,
@@ -62,10 +67,29 @@ impl From<ParsedEdOnBN254Point> for EdOnBN254Point {
     }
 }
 
+impl From<ParsedEdOnBN254Point> for EdOnBN254PointAlloy {
+    fn from(value: ParsedEdOnBN254Point) -> Self {
+        Self {
+            x: value.x.to_alloy(),
+            y: value.y.to_alloy(),
+        }
+    }
+}
+
 impl From<EdOnBN254Point> for ParsedEdOnBN254Point {
     fn from(value: EdOnBN254Point) -> Self {
         let EdOnBN254Point { x, y } = value;
         Self { x, y }
+    }
+}
+
+impl From<EdOnBN254PointAlloy> for ParsedEdOnBN254Point {
+    fn from(value: EdOnBN254PointAlloy) -> Self {
+        let EdOnBN254PointAlloy { x, y } = value;
+        Self {
+            x: x.to_ethers(),
+            y: y.to_ethers(),
+        }
     }
 }
 
@@ -134,8 +158,8 @@ impl NodeInfoJf {
         }
     }
 
-    pub fn stake_table_key_sol(&self) -> permissioned_stake_table::G2Point {
-        bls_jf_to_sol(self.stake_table_key)
+    pub fn stake_table_key_alloy(&self) -> G2PointAlloy {
+        bls_jf_to_alloy(self.stake_table_key)
     }
 }
 
@@ -157,6 +181,28 @@ impl From<NodeInfoJf> for NodeInfo {
             },
             schnorr_vk: schnorr.into(),
             is_da: da,
+        }
+    }
+}
+
+impl From<NodeInfoJf> for NodeInfoAlloy {
+    fn from(value: NodeInfoJf) -> Self {
+        let NodeInfoJf {
+            stake_table_key,
+            state_ver_key,
+            da,
+        } = value;
+        let ParsedG2Point { x0, x1, y0, y1 } = stake_table_key.to_affine().into();
+        let schnorr: ParsedEdOnBN254Point = state_ver_key.to_affine().into();
+        Self {
+            blsVK: G2PointAlloy {
+                x0: x0.to_alloy(),
+                x1: x1.to_alloy(),
+                y0: y0.to_alloy(),
+                y1: y1.to_alloy(),
+            },
+            schnorrVK: schnorr.into(),
+            isDA: da,
         }
     }
 }
@@ -191,6 +237,45 @@ impl From<NodeInfo> for NodeInfoJf {
     }
 }
 
+impl From<NodeInfoAlloy> for NodeInfoJf {
+    fn from(value: NodeInfoAlloy) -> Self {
+        let NodeInfoAlloy {
+            blsVK,
+            schnorrVK,
+            isDA,
+        } = value;
+        let stake_table_key = {
+            let g2 = diff_test_bn254::ParsedG2Point {
+                x0: blsVK.x0.to_ethers(),
+                x1: blsVK.x1.to_ethers(),
+                y0: blsVK.y0.to_ethers(),
+                y1: blsVK.y1.to_ethers(),
+            };
+            let g2_affine = short_weierstrass::Affine::<ark_bn254::g2::Config>::from(g2);
+            let mut bytes = vec![];
+            // TODO: remove serde round-trip once jellyfin provides a way to
+            // convert from Affine representation to VerKey.
+            //
+            // Serialization and de-serialization shouldn't fail.
+            g2_affine
+                .into_group()
+                .serialize_compressed(&mut bytes)
+                .unwrap();
+            BLSPubKey::deserialize_compressed(&bytes[..]).unwrap()
+        };
+        let state_ver_key = {
+            let g1_point: ParsedEdOnBN254Point = schnorrVK.into();
+            let state_sk_affine = twisted_edwards::Affine::<EdwardsConfig>::from(g1_point);
+            StateVerKey::from(state_sk_affine)
+        };
+        Self {
+            stake_table_key,
+            state_ver_key,
+            da: isDA,
+        }
+    }
+}
+
 impl From<PeerConfigKeys<BLSPubKey>> for NodeInfoJf {
     fn from(value: PeerConfigKeys<BLSPubKey>) -> Self {
         let PeerConfigKeys {
@@ -217,13 +302,7 @@ pub fn bls_jf_to_sol(bls_vk: BLSPubKey) -> permissioned_stake_table::G2Point {
     }
 }
 
-pub fn bls_sol_to_jf(bls_vk: permissioned_stake_table::G2Point) -> BLSPubKey {
-    let g2 = diff_test_bn254::ParsedG2Point {
-        x0: bls_vk.x_0,
-        x1: bls_vk.x_1,
-        y0: bls_vk.y_0,
-        y1: bls_vk.y_1,
-    };
+fn bls_conv_helper(g2: diff_test_bn254::ParsedG2Point) -> BLSPubKey {
     let g2_affine = short_weierstrass::Affine::<ark_bn254::g2::Config>::from(g2);
     let mut bytes = vec![];
     // TODO: remove serde round-trip once jellyfin provides a way to
@@ -235,6 +314,36 @@ pub fn bls_sol_to_jf(bls_vk: permissioned_stake_table::G2Point) -> BLSPubKey {
         .serialize_compressed(&mut bytes)
         .unwrap();
     BLSPubKey::deserialize_compressed(&bytes[..]).unwrap()
+}
+
+pub fn bls_sol_to_jf(bls_vk: permissioned_stake_table::G2Point) -> BLSPubKey {
+    let g2 = diff_test_bn254::ParsedG2Point {
+        x0: bls_vk.x_0,
+        x1: bls_vk.x_1,
+        y0: bls_vk.y_0,
+        y1: bls_vk.y_1,
+    };
+    bls_conv_helper(g2)
+}
+
+pub fn bls_alloy_to_jf(bls_vk: G2PointAlloy) -> BLSPubKey {
+    let g2 = diff_test_bn254::ParsedG2Point {
+        x0: bls_vk.x0.to_ethers(),
+        x1: bls_vk.x1.to_ethers(),
+        y0: bls_vk.y0.to_ethers(),
+        y1: bls_vk.y1.to_ethers(),
+    };
+    bls_conv_helper(g2)
+}
+
+pub fn bls_jf_to_alloy(bls_vk: BLSPubKey) -> G2PointAlloy {
+    let ParsedG2Point { x0, x1, y0, y1 } = bls_vk.to_affine().into();
+    G2PointAlloy {
+        x0: x0.to_alloy(),
+        x1: x1.to_alloy(),
+        y0: y0.to_alloy(),
+        y1: y1.to_alloy(),
+    }
 }
 
 #[cfg(test)]
