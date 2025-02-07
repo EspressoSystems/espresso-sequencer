@@ -3626,6 +3626,7 @@ dependencies = [
  "contract-bindings-alloy",
  "contract-bindings-ethers",
  "derive_more 1.0.0",
+ "espresso-types",
  "ethers",
  "ethers-conv",
  "fluent-asserter",

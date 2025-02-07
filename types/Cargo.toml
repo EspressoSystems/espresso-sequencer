@@ -5,7 +5,7 @@ authors = ["Espresso Systems <hello@espressosys.com>"]
 edition = "2021"
 
 [features]
-testing = []
+testing = ["hotshot-query-service/testing"]
 
 [dependencies]
 alloy = { workspace = true }
@@ -58,7 +58,7 @@ url = { workspace = true }
 vbs = { workspace = true }
 
 [dev-dependencies]
-hotshot-query-service = { workspace = true, features = ["testing"]}
+espresso-types = { path = ".", features = [ "testing" ] }
 portpicker = { workspace = true }
 
 [package.metadata.cargo-machete]
