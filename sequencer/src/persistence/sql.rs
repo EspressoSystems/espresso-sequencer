@@ -1293,22 +1293,21 @@ impl SequencerPersistence for Persistence {
     async fn migrate_anchor_leaf(&self) -> anyhow::Result<()> {
         let batch_size: i64 = 1000;
         let mut offset: i64 = 0;
+        let mut tx = self.db.read().await?;
 
+        let (is_completed,) = query_as::<(bool,)>(
+            "SELECT completed from epoch_migration WHERE table_name = 'anchor_leaf'",
+        )
+        .fetch_one(tx.as_mut())
+        .await?;
+
+        if is_completed {
+            tracing::info!("anchor leaf migration already done");
+
+            return Ok(());
+        }
         loop {
             let mut tx = self.db.read().await?;
-
-            let (is_completed,) = query_as::<(bool,)>(
-                "SELECT completed from epoch_migration WHERE table_name = 'anchor_leaf'",
-            )
-            .fetch_one(tx.as_mut())
-            .await?;
-
-            if is_completed {
-                tracing::info!("anchor leaf migration already done");
-
-                return Ok(());
-            }
-
             let rows =
                 query("SELECT view, leaf, qc FROM anchor_leaf ORDER BY view LIMIT $1 OFFSET $2")
                     .bind(batch_size)
@@ -1374,22 +1373,22 @@ impl SequencerPersistence for Persistence {
     async fn migrate_da_proposals(&self) -> anyhow::Result<()> {
         let batch_size: i64 = 1000;
         let mut offset: i64 = 0;
+        let mut tx = self.db.read().await?;
+
+        let (is_completed,) = query_as::<(bool,)>(
+            "SELECT completed from epoch_migration WHERE table_name = 'da_proposal'",
+        )
+        .fetch_one(tx.as_mut())
+        .await?;
+
+        if is_completed {
+            tracing::info!("da proposals migration already done");
+
+            return Ok(());
+        }
 
         loop {
             let mut tx = self.db.read().await?;
-
-            let (is_completed,) = query_as::<(bool,)>(
-                "SELECT completed from epoch_migration WHERE table_name = 'da_proposal'",
-            )
-            .fetch_one(tx.as_mut())
-            .await?;
-
-            if is_completed {
-                tracing::info!("da proposals migration already done");
-
-                return Ok(());
-            }
-
             let rows = query(
                 "SELECT payload_hash, data FROM da_proposal ORDER BY view LIMIT $1 OFFSET $2",
             )
@@ -1454,22 +1453,21 @@ impl SequencerPersistence for Persistence {
     async fn migrate_vid_shares(&self) -> anyhow::Result<()> {
         let batch_size: i64 = 1000;
         let mut offset: i64 = 0;
+        let mut tx = self.db.read().await?;
 
+        let (is_completed,) = query_as::<(bool,)>(
+            "SELECT completed from epoch_migration WHERE table_name = 'vid_share'",
+        )
+        .fetch_one(tx.as_mut())
+        .await?;
+
+        if is_completed {
+            tracing::info!("vid_share migration already done");
+
+            return Ok(());
+        }
         loop {
             let mut tx = self.db.read().await?;
-
-            let (is_completed,) = query_as::<(bool,)>(
-                "SELECT completed from epoch_migration WHERE table_name = 'vid_share'",
-            )
-            .fetch_one(tx.as_mut())
-            .await?;
-
-            if is_completed {
-                tracing::info!("vid_share migration already done");
-
-                return Ok(());
-            }
-
             let rows =
                 query("SELECT payload_hash, data FROM vid_share ORDER BY view LIMIT $1 OFFSET $2")
                     .bind(batch_size)
@@ -1581,22 +1579,21 @@ impl SequencerPersistence for Persistence {
     async fn migrate_quorum_proposals(&self) -> anyhow::Result<()> {
         let batch_size: i64 = 1000;
         let mut offset: i64 = 0;
+        let mut tx = self.db.read().await?;
 
+        let (is_completed,) = query_as::<(bool,)>(
+            "SELECT completed from epoch_migration WHERE table_name = 'quorum_proposals'",
+        )
+        .fetch_one(tx.as_mut())
+        .await?;
+
+        if is_completed {
+            tracing::info!("quorum proposals migration already done");
+
+            return Ok(());
+        }
         loop {
             let mut tx = self.db.read().await?;
-
-            let (is_completed,) = query_as::<(bool,)>(
-                "SELECT completed from epoch_migration WHERE table_name = 'quorum_proposals'",
-            )
-            .fetch_one(tx.as_mut())
-            .await?;
-
-            if is_completed {
-                tracing::info!("quorum proposals migration already done");
-
-                return Ok(());
-            }
-
             let rows =
                 query("SELECT view, leaf_hash, data FROM quorum_proposals ORDER BY view LIMIT $1 OFFSET $2")
                     .bind(batch_size)
@@ -1662,22 +1659,21 @@ impl SequencerPersistence for Persistence {
     async fn migrate_quorum_certificates(&self) -> anyhow::Result<()> {
         let batch_size: i64 = 1000;
         let mut offset: i64 = 0;
+        let mut tx = self.db.read().await?;
 
+        let (is_completed,) = query_as::<(bool,)>(
+            "SELECT completed from epoch_migration WHERE table_name = 'quorum_certificate'",
+        )
+        .fetch_one(tx.as_mut())
+        .await?;
+
+        if is_completed {
+            tracing::info!(" quorum certificates migration already done");
+
+            return Ok(());
+        }
         loop {
             let mut tx = self.db.read().await?;
-
-            let (is_completed,) = query_as::<(bool,)>(
-                "SELECT completed from epoch_migration WHERE table_name = 'quorum_certificate'",
-            )
-            .fetch_one(tx.as_mut())
-            .await?;
-
-            if is_completed {
-                tracing::info!(" quorum certificates migration already done");
-
-                return Ok(());
-            }
-
             let rows =
                 query("SELECT view, leaf_hash, data FROM quorum_certificate ORDER BY view LIMIT $1 OFFSET $2")
                     .bind(batch_size)
@@ -1855,7 +1851,7 @@ impl Provider<SeqTypes, VidCommonRequest> for Persistence {
             Ok(Some((bytes,))) => bytes,
             Ok(None) => return None,
             Err(err) => {
-                tracing::warn!("error loading VID share: {err:#}");
+                tracing::error!("error loading VID share: {err:#}");
                 return None;
             }
         };
@@ -1864,7 +1860,7 @@ impl Provider<SeqTypes, VidCommonRequest> for Persistence {
             match bincode::deserialize(&bytes) {
                 Ok(share) => share,
                 Err(err) => {
-                    tracing::warn!("error decoding VID share: {err:#}");
+                    tracing::error!("error decoding VID share: {err:#}");
                     return None;
                 }
             };
@@ -1904,7 +1900,7 @@ impl Provider<SeqTypes, PayloadRequest> for Persistence {
         {
             Ok(proposal) => proposal,
             Err(err) => {
-                tracing::warn!("error decoding DA proposal: {err:#}");
+                tracing::error!("error decoding DA proposal: {err:#}");
                 return None;
             }
         };

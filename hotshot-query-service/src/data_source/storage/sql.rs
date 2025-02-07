@@ -813,21 +813,23 @@ impl SqlStorage {
     pub async fn migrate_types<Types: NodeType>(&self) -> anyhow::Result<()> {
         let mut offset = 0;
         let limit = 10000;
+        let mut tx = self.read().await.map_err(|err| QueryError::Error {
+            message: err.to_string(),
+        })?;
 
+        let (is_migration_completed,) =
+            query_as::<(bool,)>("SELECT completed from leaf_migration LIMIT 1 ")
+                .fetch_one(tx.as_mut())
+                .await?;
+
+        if is_migration_completed {
+            tracing::info!("leaf1 to leaf2 migration already completed");
+            return Ok(());
+        }
         loop {
             let mut tx = self.read().await.map_err(|err| QueryError::Error {
                 message: err.to_string(),
             })?;
-
-            let (is_migration_completed,) =
-                query_as::<(bool,)>("SELECT completed from leaf_migration LIMIT 1 ")
-                    .fetch_one(tx.as_mut())
-                    .await?;
-
-            if is_migration_completed {
-                tracing::info!("leaf1 to leaf2 migration already completed");
-                return Ok(());
-            }
 
             let rows = QueryBuilder::default()
                 .query(&format!(
@@ -840,8 +842,7 @@ impl SqlStorage {
             drop(tx);
 
             if rows.is_empty() {
-                tracing::info!("no leaf1 rows found");
-                return Ok(());
+                break;
             }
 
             let mut leaf_rows = Vec::new();
