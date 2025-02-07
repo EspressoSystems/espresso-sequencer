@@ -9,6 +9,7 @@ edition = { workspace = true }
 async-broadcast = { workspace = true }
 async-trait = { workspace = true }
 futures = { workspace = true }
+hotshot-utils = { workspace = true }
 tokio = { workspace = true, features = [
     "time",
     "rt-multi-thread",
@@ -16,5 +17,4 @@ tokio = { workspace = true, features = [
     "sync",
 ] }
 tracing = { workspace = true }
-hotshot-utils = { workspace = true }
 workspace-hack = { version = "0.1", path = "../workspace-hack" }

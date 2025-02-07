@@ -86,10 +86,10 @@ clap = { workspace = true, optional = true }
 futures = { workspace = true }
 hotshot = { workspace = true }
 hotshot-example-types = { workspace = true }
+hotshot-libp2p-networking = { workspace = true }
 hotshot-orchestrator = { workspace = true }
 hotshot-testing = { workspace = true }
 hotshot-types = { workspace = true }
-hotshot-libp2p-networking = { workspace = true }
 local-ip-address = "0.6"
 portpicker = { workspace = true }
 rand = { workspace = true }

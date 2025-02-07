@@ -26,21 +26,22 @@ bincode = { workspace = true }
 blake3 = { workspace = true }
 cdn-broker = { workspace = true, features = ["global-permits"] }
 cdn-client = { workspace = true }
+cdn-marshal = { workspace = true }
 chrono = { workspace = true }
 committable = { workspace = true }
 dashmap = { workspace = true }
 derive_more = { workspace = true }
 either = { workspace = true }
 futures = { workspace = true }
+hotshot-libp2p-networking = { workspace = true }
 hotshot-task = { workspace = true }
 hotshot-task-impls = { workspace = true }
 hotshot-types = { workspace = true }
-cdn-marshal = { workspace = true }
+hotshot-utils = { workspace = true }
 libp2p-identity = { workspace = true }
-hotshot-libp2p-networking = { workspace = true }
 lru = { workspace = true }
 num_enum = "0.7"
-parking_lot.workspace = true
+parking_lot = { workspace = true }
 portpicker = "0.1"
 primitive-types = { workspace = true }
 rand = { workspace = true }
@@ -52,7 +53,6 @@ tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 url = { workspace = true }
-hotshot-utils = { workspace = true }
 vbs = { workspace = true }
 workspace-hack = { version = "0.1", path = "../workspace-hack" }
 
