@@ -35,8 +35,8 @@ jobs:
       # as each individual feature enabled.
       - name: Check compilation for feature combinations
         run: |
-          cargo hack check --feature-powerset --exclude hotshot-query-service
+          cargo hack check --feature-powerset --exclude hotshot-*
 
       - name: Check compilation for feature combinations (--tests)
         run: |
-          cargo hack check --feature-powerset --tests --exclude hotshot-query-service
+          cargo hack check --feature-powerset --tests --exclude hotshot-*
