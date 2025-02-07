@@ -22,7 +22,7 @@ bitvec = { workspace = true }
 committable = { workspace = true }
 either = { workspace = true }
 futures = { workspace = true }
-hotshot = { workspace = true }
+hotshot = { path = "../hotshot", features = ["hotshot-testing"] }
 hotshot-builder-api = { workspace = true }
 hotshot-example-types = { workspace = true }
 hotshot-fakeapi = { path = "../hotshot-fakeapi" }
