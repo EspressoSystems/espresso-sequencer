@@ -20,3 +20,4 @@ reqwest = { workspace = true, features = ["json"] }
 surf-disco = { workspace = true }
 tokio = { workspace = true }
 vbs = { workspace = true }
+sequencer-utils = { path = "../utils" }

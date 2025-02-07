@@ -30,6 +30,7 @@ async fn test_smoke() -> Result<()> {
     let mut state_retries = 0;
     let mut txn_retries = 0;
     while (sub.next().await).is_some() {
+        dbg!("next");
         let new = testing.test_state().await;
         println!("New State:{}", new);
 
