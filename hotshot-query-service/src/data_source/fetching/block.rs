@@ -36,10 +36,10 @@ use crate::{
 };
 use async_trait::async_trait;
 use derivative::Derivative;
+use derive_more::From;
 use futures::future::{BoxFuture, FutureExt};
 use hotshot_types::traits::{block_contents::BlockHeader, node_implementation::NodeType};
 use std::{cmp::Ordering, future::IntoFuture, iter::once, ops::RangeBounds, sync::Arc};
-
 pub(super) type PayloadFetcher<Types, S, P> =
     fetching::Fetcher<request::PayloadRequest, PayloadCallback<Types, S, P>>;
 
@@ -146,7 +146,12 @@ where
     async fn store(
         self,
         storage: &mut (impl UpdateAvailabilityStorage<Types> + Send),
+        leaf_only: bool,
     ) -> anyhow::Result<()> {
+        if leaf_only {
+            return Ok(());
+        }
+
         storage.insert_block(self).await
     }
 }
@@ -161,13 +166,18 @@ pub(super) fn fetch_block_with_header<Types, S, P>(
     for<'a> S::Transaction<'a>: UpdateAvailabilityStorage<Types>,
     P: AvailabilityProvider<Types>,
 {
+    let Some(payload_fetcher) = fetcher.payload_fetcher.as_ref() else {
+        // If we're in light-weight mode, we don't need to fetch the VID common data.
+        return;
+    };
+
     // Now that we have the header, we only need to retrieve the payload.
     tracing::info!(
         "spawned active fetch for payload {:?} (height {})",
         header.payload_commitment(),
         header.block_number()
     );
-    fetcher.payload_fetcher.spawn_fetch(
+    payload_fetcher.spawn_fetch(
         PayloadRequest(header.payload_commitment()),
         fetcher.provider.clone(),
         once(PayloadCallback {

@@ -2,7 +2,9 @@
 ///
 /// The initial stake table is passed to the permissioned stake table contract
 /// on deployment.
-use contract_bindings::permissioned_stake_table::{G2Point, NodeInfo, PermissionedStakeTable};
+use contract_bindings_ethers::permissioned_stake_table::{
+    G2Point, NodeInfo, PermissionedStakeTable,
+};
 use derive_more::derive::From;
 use ethers::{
     middleware::SignerMiddleware,

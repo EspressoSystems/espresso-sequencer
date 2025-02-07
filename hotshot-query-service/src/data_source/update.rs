@@ -24,7 +24,7 @@ use futures::future::Future;
 use hotshot::types::{Event, EventType};
 use hotshot_types::event::LeafInfo;
 use hotshot_types::{
-    data::{Leaf, Leaf2, QuorumProposal},
+    data::Leaf2,
     traits::{
         block_contents::{BlockHeader, BlockPayload, EncodeBytes, GENESIS_VID_NUM_STORAGE_NODES},
         node_implementation::{ConsensusTime, NodeType},
@@ -33,26 +33,6 @@ use hotshot_types::{
 };
 use jf_vid::VidScheme;
 use std::iter::once;
-
-fn downgrade_leaf<Types: NodeType>(leaf2: Leaf2<Types>) -> Leaf<Types> {
-    // TODO do we still need some check here?
-    // `drb_seed` no longer exists on `Leaf2`
-    // if leaf2.drb_seed != [0; 32] && leaf2.drb_result != [0; 32] {
-    //     panic!("Downgrade of Leaf2 to Leaf will lose DRB information!");
-    // }
-    let quorum_proposal = QuorumProposal {
-        block_header: leaf2.block_header().clone(),
-        view_number: leaf2.view_number(),
-        justify_qc: leaf2.justify_qc().to_qc(),
-        upgrade_certificate: leaf2.upgrade_certificate(),
-        proposal_certificate: None,
-    };
-    let mut leaf = Leaf::from_quorum_proposal(&quorum_proposal);
-    if let Some(payload) = leaf2.block_payload() {
-        leaf.fill_block_payload_unchecked(payload);
-    }
-    leaf
-}
 
 /// An extension trait for types which implement the update trait for each API module.
 ///
@@ -113,25 +93,24 @@ where
                 },
             ) in qcs.zip(leaf_chain.iter().rev())
             {
-                let leaf = downgrade_leaf(leaf2.clone());
-                let qc = qc2.to_qc();
-                let height = leaf.block_header().block_number();
-                let leaf_data = match LeafQueryData::new(leaf.clone(), qc.clone()) {
+                let height = leaf2.block_header().block_number();
+
+                let leaf_data = match LeafQueryData::new(leaf2.clone(), qc2.clone()) {
                     Ok(leaf) => leaf,
                     Err(err) => {
                         tracing::error!(
                             height,
-                            ?leaf,
+                            ?leaf2,
                             ?qc,
                             "inconsistent leaf; cannot append leaf information: {err:#}"
                         );
-                        return Err(leaf.block_header().block_number());
+                        return Err(leaf2.block_header().block_number());
                     }
                 };
 
-                let block_data = leaf
+                let block_data = leaf2
                     .block_payload()
-                    .map(|payload| BlockQueryData::new(leaf.block_header().clone(), payload));
+                    .map(|payload| BlockQueryData::new(leaf2.block_header().clone(), payload));
                 if block_data.is_none() {
                     tracing::info!(height, "block not available at decide");
                 }
@@ -139,17 +118,17 @@ where
                 let (vid_common, vid_share) = if let Some(vid_share) = vid_share {
                     (
                         Some(VidCommonQueryData::new(
-                            leaf.block_header().clone(),
+                            leaf2.block_header().clone(),
                             vid_share.common.clone(),
                         )),
                         Some(vid_share.share.clone()),
                     )
-                } else if leaf.view_number().u64() == 0 {
+                } else if leaf2.view_number().u64() == 0 {
                     // HotShot does not run VID in consensus for the genesis block. In this case,
                     // the block payload is guaranteed to always be empty, so VID isn't really
                     // necessary. But for consistency, we will still store the VID dispersal data,
                     // computing it ourselves based on the well-known genesis VID commitment.
-                    match genesis_vid(&leaf) {
+                    match genesis_vid(leaf2) {
                         Ok((common, share)) => (Some(common), Some(share)),
                         Err(err) => {
                             tracing::warn!("failed to compute genesis VID: {err:#}");
@@ -168,7 +147,7 @@ where
                     .await
                 {
                     tracing::error!(height, "failed to append leaf information: {err:#}");
-                    return Err(leaf.block_header().block_number());
+                    return Err(leaf2.block_header().block_number());
                 }
             }
         }
@@ -177,7 +156,7 @@ where
 }
 
 fn genesis_vid<Types: NodeType>(
-    leaf: &Leaf<Types>,
+    leaf: &Leaf2<Types>,
 ) -> anyhow::Result<(VidCommonQueryData<Types>, VidShare)> {
     let payload = Payload::<Types>::empty().0;
     let bytes = payload.encode();

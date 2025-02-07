@@ -14,22 +14,21 @@
 //! Immutable query functionality of a SQL database.
 
 use super::{Database, Db, Query, QueryAs, Transaction};
+use crate::Leaf2;
 use crate::{
     availability::{
         BlockId, BlockQueryData, LeafQueryData, PayloadQueryData, QueryablePayload,
         VidCommonQueryData,
     },
     data_source::storage::{PayloadMetadata, VidCommonMetadata},
-    Header, Leaf, Payload, QueryError, QueryResult,
+    Header, Payload, QueryError, QueryResult,
 };
 use anyhow::Context;
 use derivative::Derivative;
-use hotshot_types::{
-    simple_certificate::QuorumCertificate,
-    traits::{
-        block_contents::{BlockHeader, BlockPayload},
-        node_implementation::NodeType,
-    },
+use hotshot_types::simple_certificate::QuorumCertificate2;
+use hotshot_types::traits::{
+    block_contents::{BlockHeader, BlockPayload},
+    node_implementation::NodeType,
 };
 use sqlx::{Arguments, FromRow, Row};
 use std::{
@@ -171,10 +170,10 @@ where
 {
     fn from_row(row: &'r <Db as Database>::Row) -> sqlx::Result<Self> {
         let leaf = row.try_get("leaf")?;
-        let leaf: Leaf<Types> = serde_json::from_value(leaf).decode_error("malformed leaf")?;
+        let leaf: Leaf2<Types> = serde_json::from_value(leaf).decode_error("malformed leaf")?;
 
         let qc = row.try_get("qc")?;
-        let qc: QuorumCertificate<Types> =
+        let qc: QuorumCertificate2<Types> =
             serde_json::from_value(qc).decode_error("malformed QC")?;
 
         Ok(Self { leaf, qc })
@@ -361,8 +360,10 @@ impl<Mode> Transaction<Mode> {
               ORDER BY h.height
               LIMIT 1"
         );
+
         let row = query.query(&sql).fetch_one(self.as_mut()).await?;
         let header = parse_header::<Types>(row)?;
+
         Ok(header)
     }
 }

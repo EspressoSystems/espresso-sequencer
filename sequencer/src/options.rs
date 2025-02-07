@@ -546,9 +546,6 @@ impl ModuleArgs {
                 SequencerModule::Http(m) => curr = m.add(&mut modules.http, &mut provided)?,
                 SequencerModule::Query(m) => curr = m.add(&mut modules.query, &mut provided)?,
                 SequencerModule::Submit(m) => curr = m.add(&mut modules.submit, &mut provided)?,
-                SequencerModule::Status(m) => curr = m.add(&mut modules.status, &mut provided)?,
-                SequencerModule::State(m) => curr = m.add(&mut modules.state, &mut provided)?,
-                SequencerModule::Catchup(m) => curr = m.add(&mut modules.catchup, &mut provided)?,
                 SequencerModule::Config(m) => curr = m.add(&mut modules.config, &mut provided)?,
                 SequencerModule::HotshotEvents(m) => {
                     curr = m.add(&mut modules.hotshot_events, &mut provided)?
@@ -585,9 +582,6 @@ module!("storage-sql", persistence::sql::Options);
 module!("http", api::options::Http);
 module!("query", api::options::Query, requires: "http");
 module!("submit", api::options::Submit, requires: "http");
-module!("status", api::options::Status, requires: "http");
-module!("state", api::options::State, requires: "http", "storage-sql");
-module!("catchup", api::options::Catchup, requires: "http");
 module!("config", api::options::Config, requires: "http");
 module!("hotshot-events", api::options::HotshotEvents, requires: "http");
 module!("explorer", api::options::Explorer, requires: "http", "storage-sql");
@@ -652,19 +646,9 @@ enum SequencerModule {
     ///
     /// This module requires the http module to be started.
     Submit(Module<api::options::Submit>),
-    /// Run the status API module.
-    ///
-    /// This module requires the http module to be started.
-    Status(Module<api::options::Status>),
-    /// Run the state catchup API module.
-    ///
-    /// This module requires the http module to be started.
-    Catchup(Module<api::options::Catchup>),
+    /// Run the config API module.
     Config(Module<api::options::Config>),
-    /// Run the merklized state  API module.
-    ///
-    /// This module requires the http and storage-sql modules to be started.
-    State(Module<api::options::State>),
+
     /// Run the hotshot events API module.
     ///
     /// This module requires the http module to be started.
@@ -682,9 +666,6 @@ pub struct Modules {
     pub http: Option<api::options::Http>,
     pub query: Option<api::options::Query>,
     pub submit: Option<api::options::Submit>,
-    pub status: Option<api::options::Status>,
-    pub state: Option<api::options::State>,
-    pub catchup: Option<api::options::Catchup>,
     pub config: Option<api::options::Config>,
     pub hotshot_events: Option<api::options::HotshotEvents>,
     pub explorer: Option<api::options::Explorer>,

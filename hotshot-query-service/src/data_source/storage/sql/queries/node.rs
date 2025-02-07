@@ -155,7 +155,7 @@ where
         // need to select the total number of VID rows and the number of present VID rows with a
         // NULL share.
         let sql = "SELECT l.max_height, l.total_leaves, p.null_payloads, v.total_vid, vn.null_vid, pruned_height FROM
-                (SELECT max(leaf.height) AS max_height, count(*) AS total_leaves FROM leaf) AS l,
+                (SELECT max(leaf2.height) AS max_height, count(*) AS total_leaves FROM leaf2) AS l,
                 (SELECT count(*) AS null_payloads FROM payload WHERE data IS NULL) AS p,
                 (SELECT count(*) AS total_vid FROM vid) AS v,
                 (SELECT count(*) AS null_vid FROM vid WHERE share IS NULL) AS vn,

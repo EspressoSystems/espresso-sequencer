@@ -10,10 +10,13 @@ resolver = "2"
 members = [
     "builder",
     "client",
-    "contract-bindings",
+    "contract-bindings-alloy",
+    "contract-bindings-ethers",
     "contracts/rust/adapter",
     "contracts/rust/diff-test",
     "contracts/rust/gen-vk-contract",
+    "ethers-conv",
+    "hotshot-events-service",
     "hotshot-state-prover",
     "marketplace-builder",
     "marketplace-solver",
@@ -27,6 +30,24 @@ members = [
 exclude = ["sequencer-sqlite"]
 
 [workspace.dependencies]
+contract-bindings-alloy = { path = "./contract-bindings-alloy" }
+ethers-conv = { path = "./ethers-conv" }
+alloy = { version = "0.9", default-features = false, features = [
+    "contract",
+    "eips",
+    "json-rpc",
+    "provider-ws",
+    "providers",
+    "reqwest",
+    "rpc",
+    "rpc-client",
+    "rpc-types",
+    "signer-local",
+    "signer-mnemonic",
+    "signers",
+    "sol-types",
+    "transports",
+] }
 anyhow = "^1.0"
 ark-std = "0.4"
 ark-bls12-381 = "0.4"
@@ -50,6 +71,10 @@ blake3 = "1.5"
 circular-buffer = "0.1.9"
 clap = { version = "4.4", features = ["derive", "env", "string"] }
 cld = "0.5"
+chrono = { version = "0.4", features = ["serde"] }
+either = "1"
+hex = "0.4"
+sha2 = "0.10"
 derive_more = { version = "1.0", features = ["full"] }
 es-version = { git = "https://github.com/EspressoSystems/es-version.git", branch = "main" }
 dotenvy = "0.15"
@@ -61,14 +86,23 @@ tokio = { version = "1", default-features = false, features = [
     "parking_lot",
     "sync",
 ] }
+tower-service = { version = "0.3", default-features = false }
+tracing-subscriber = "0.3"
+tracing-test = "0.1"
+num_cpus = "1"
 
 hotshot = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.84" }
+
+# Builder imports
+marketplace-builder-core = { path = "marketplace-builder-core" }
+marketplace-builder-shared = { path = "marketplace-builder-shared" }
+hotshot-builder-core = { path = "hotshot-builder-core" }
+
 # Hotshot imports
 hotshot-builder-api = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.84" }
-hotshot-builder-core = { git = "https://github.com/EspressoSystems/marketplace-builder-core", tag = "0.5.84" }
-marketplace-builder-core = { git = "https://github.com/EspressoSystems/marketplace-builder-core", tag = "0.5.84" }
-marketplace-builder-shared = { git = "https://github.com/EspressoSystems/marketplace-builder-core", tag = "0.5.84" }
-hotshot-events-service = { git = "https://github.com/EspressoSystems/hotshot-events-service.git", tag = "0.1.58" }
+hotshot-task-impls = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.84" }
+hotshot-macros = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.84" }
+hotshot-events-service = { path = "hotshot-events-service" }
 hotshot-orchestrator = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.84" }
 hotshot-query-service = { path = "hotshot-query-service" }
 hotshot-stake-table = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.84" }

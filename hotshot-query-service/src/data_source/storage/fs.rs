@@ -313,7 +313,6 @@ impl<T: Revert> Drop for Transaction<T> {
         self.inner.revert();
     }
 }
-
 impl<Types> update::Transaction for Transaction<RwLockWriteGuard<'_, FileSystemStorageInner<Types>>>
 where
     Types: NodeType,
@@ -376,7 +375,6 @@ where
         })
     }
 }
-
 fn range_iter<T>(
     mut iter: Iter<'_, T>,
     range: impl RangeBounds<usize>,

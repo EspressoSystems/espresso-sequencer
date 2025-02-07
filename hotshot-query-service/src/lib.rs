@@ -447,7 +447,7 @@ use tide_disco::{method::ReadState, App, StatusCode};
 use vbs::version::StaticVersionType;
 
 pub use hotshot_types::{
-    data::Leaf,
+    data::Leaf2,
     simple_certificate::QuorumCertificate,
     vid::{VidCommitment, VidCommon, VidShare},
 };
@@ -597,7 +597,7 @@ mod test {
     use async_trait::async_trait;
     use atomic_store::{load_store::BincodeLoadStore, AtomicStore, AtomicStoreLoader, RollingLog};
     use futures::future::FutureExt;
-    use hotshot_types::simple_certificate::QuorumCertificate;
+    use hotshot_types::simple_certificate::QuorumCertificate2;
     use portpicker::pick_unused_port;
     use std::ops::{Bound, RangeBounds};
     use std::time::Duration;
@@ -626,6 +626,13 @@ mod test {
             ID: Into<BlockId<MockTypes>> + Send + Sync,
         {
             self.hotshot_qs.get_block(id).await
+        }
+
+        async fn get_header<ID>(&self, id: ID) -> Fetch<Header<MockTypes>>
+        where
+            ID: Into<BlockId<MockTypes>> + Send + Sync,
+        {
+            self.hotshot_qs.get_header(id).await
         }
         async fn get_payload<ID>(&self, id: ID) -> Fetch<PayloadQueryData<MockTypes>>
         where
@@ -662,6 +669,13 @@ mod test {
             R: RangeBounds<usize> + Send + 'static,
         {
             self.hotshot_qs.get_block_range(range).await
+        }
+
+        async fn get_header_range<R>(&self, range: R) -> FetchStream<Header<MockTypes>>
+        where
+            R: RangeBounds<usize> + Send + 'static,
+        {
+            self.hotshot_qs.get_header_range(range).await
         }
         async fn get_payload_range<R>(&self, range: R) -> FetchStream<PayloadQueryData<MockTypes>>
         where
@@ -811,9 +825,11 @@ mod test {
             .unwrap();
 
         // Mock up some data and add a block to the store.
-        let leaf = Leaf::<MockTypes>::genesis(&Default::default(), &Default::default()).await;
+        let leaf =
+            Leaf2::<MockTypes>::genesis::<TestVersions>(&Default::default(), &Default::default())
+                .await;
         let qc =
-            QuorumCertificate::genesis::<TestVersions>(&Default::default(), &Default::default())
+            QuorumCertificate2::genesis::<TestVersions>(&Default::default(), &Default::default())
                 .await;
         let leaf = LeafQueryData::new(leaf, qc).unwrap();
         let block = BlockQueryData::new(leaf.header().clone(), MockPayload::genesis());

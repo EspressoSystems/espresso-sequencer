@@ -20,6 +20,7 @@ use espresso_types::{
     traits::EventConsumer, BackoffParams, L1ClientOptions, NodeState, PubKey, SeqTypes,
     SolverAuctionResultsProvider, ValidatedState,
 };
+use ethers_conv::ToAlloy;
 use genesis::L1Finalized;
 use proposal_fetcher::ProposalFetcherConfig;
 use std::sync::Arc;
@@ -439,14 +440,18 @@ pub async fn init_node<P: SequencerPersistence, V: Versions>(
     let l1_client = l1_params
         .options
         .with_metrics(metrics)
-        .connect(l1_params.urls);
+        .connect(l1_params.urls)
+        .with_context(|| "failed to create L1 client")?;
+
     l1_client.spawn_tasks().await;
     let l1_genesis = match genesis.l1_finalized {
         L1Finalized::Block(b) => b,
         L1Finalized::Number { number } => l1_client.wait_for_finalized_block(number).await,
         L1Finalized::Timestamp { timestamp } => {
             l1_client
-                .wait_for_finalized_block_with_timestamp(timestamp.unix_timestamp().into())
+                .wait_for_finalized_block_with_timestamp(
+                    ethers::types::U256::from(timestamp.unix_timestamp()).to_alloy(),
+                )
                 .await
         }
     };
@@ -963,7 +968,7 @@ pub mod testing {
             let node_state = NodeState::new(
                 i as u64,
                 state.chain_config.resolve().unwrap_or_default(),
-                L1Client::new(self.l1_url.clone()),
+                L1Client::new(vec![self.l1_url.clone()]).expect("failed to create L1 client"),
                 catchup::local_and_remote(persistence.clone(), catchup).await,
                 V::Base::VERSION,
             )

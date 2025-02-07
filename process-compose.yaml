@@ -26,8 +26,9 @@ processes:
     # The contract addresses are implicitly inherited from .env. We need to unset these or else the
     # script will think they're already deployed.
     command:
-      unset ESPRESSO_SEQUENCER_HOTSHOT_ADDRESS ESPRESSO_SEQUENCER_LIGHT_CLIENT_PROXY_ADDRESS && deploy --only
-      fee-contract,permissioned-stake-table
+      unset ESPRESSO_SEQUENCER_PERMISSIONED_STAKE_TABLE_ADDRESS
+      ESPRESSO_SEQUENCER_FEE_CONTRACT_PROXY_ADDRESS
+      && deploy --only fee-contract,permissioned-stake-table
     namespace: setup
     depends_on:
       demo-l1-network:
@@ -37,8 +38,8 @@ processes:
     # The contract addresses are implicitly inherited from .env. We need to unset these or else the
     # script will think they're already deployed.
     command:
-      unset ESPRESSO_SEQUENCER_HOTSHOT_ADDRESS ESPRESSO_SEQUENCER_LIGHT_CLIENT_PROXY_ADDRESS && deploy
-      --use-mock-contract --only light-client
+      unset ESPRESSO_SEQUENCER_LIGHT_CLIENT_PROXY_ADDRESS
+      && deploy --use-mock-contract --only light-client
     namespace: setup
     depends_on:
       demo-l1-network:
@@ -112,7 +113,7 @@ processes:
         condition: process_completed
 
   sequencer0:
-    command: sequencer -- storage-sql -- http -- query -- catchup -- status -- submit -- hotshot-events -- config
+    command: sequencer -- storage-sql -- http -- query -- submit -- hotshot-events -- config
     environment:
       - ESPRESSO_SEQUENCER_API_PORT=$ESPRESSO_SEQUENCER_API_PORT
       - ESPRESSO_SEQUENCER_LIBP2P_BIND_ADDRESS=0.0.0.0:$ESPRESSO_DEMO_SEQUENCER_LIBP2P_PORT_0
@@ -168,12 +169,12 @@ processes:
       failure_threshold: 100
 
   sequencer1:
-    command: sequencer -- storage-sql -- http -- query -- catchup -- status -- state -- explorer
+    command: sequencer -- storage-sql -- http -- query -- explorer
     environment:
       - ESPRESSO_SEQUENCER_API_PORT=$ESPRESSO_SEQUENCER1_API_PORT
       - ESPRESSO_SEQUENCER_LIBP2P_BIND_ADDRESS=0.0.0.0:$ESPRESSO_DEMO_SEQUENCER_LIBP2P_PORT_1
       - ESPRESSO_SEQUENCER_LIBP2P_ADVERTISE_ADDRESS=localhost:$ESPRESSO_DEMO_SEQUENCER_LIBP2P_PORT_1
-      - ESPRESSO_SEQUENCER_API_PEERS=http://localhost:$ESPRESSO_SEQUENCER4_API_PORT
+      - ESPRESSO_SEQUENCER_API_PEERS=http://localhost:$ESPRESSO_SEQUENCER2_API_PORT
       - ESPRESSO_SEQUENCER_STATE_PEERS=http://localhost:$ESPRESSO_SEQUENCER2_API_PORT
       - ESPRESSO_SEQUENCER_POSTGRES_HOST=localhost
       - ESPRESSO_SEQUENCER_POSTGRES_PORT=$ESPRESSO_SEQUENCER1_DB_PORT
@@ -223,12 +224,13 @@ processes:
       restart: exit_on_failure
 
   sequencer2:
-    command: sequencer -- http -- catchup -- status
+    command: sequencer -- http -- query -- storage-fs
     environment:
       - ESPRESSO_SEQUENCER_API_PORT=$ESPRESSO_SEQUENCER2_API_PORT
       - ESPRESSO_SEQUENCER_LIBP2P_BIND_ADDRESS=0.0.0.0:$ESPRESSO_DEMO_SEQUENCER_LIBP2P_PORT_2
       - ESPRESSO_SEQUENCER_LIBP2P_ADVERTISE_ADDRESS=localhost:$ESPRESSO_DEMO_SEQUENCER_LIBP2P_PORT_2
       - ESPRESSO_SEQUENCER_STATE_PEERS=http://localhost:$ESPRESSO_SEQUENCER3_API_PORT
+      - ESPRESSO_SEQUENCER_API_PEERS=http://localhost:$ESPRESSO_SEQUENCER3_API_PORT
       - ESPRESSO_SEQUENCER_STORAGE_PATH=$ESPRESSO_BASE_STORAGE_PATH/seq2
       - ESPRESSO_SEQUENCER_PRIVATE_STAKING_KEY=$ESPRESSO_DEMO_SEQUENCER_STAKING_PRIVATE_KEY_2
       - ESPRESSO_SEQUENCER_PRIVATE_STATE_KEY=$ESPRESSO_DEMO_SEQUENCER_STATE_PRIVATE_KEY_2
@@ -271,12 +273,13 @@ processes:
       restart: exit_on_failure
 
   sequencer3:
-    command: sequencer -- http -- catchup -- status
+    command: sequencer -- http -- query -- storage-fs
     environment:
       - ESPRESSO_SEQUENCER_API_PORT=$ESPRESSO_SEQUENCER3_API_PORT
       - ESPRESSO_SEQUENCER_LIBP2P_BIND_ADDRESS=0.0.0.0:$ESPRESSO_DEMO_SEQUENCER_LIBP2P_PORT_3
       - ESPRESSO_SEQUENCER_LIBP2P_ADVERTISE_ADDRESS=localhost:$ESPRESSO_DEMO_SEQUENCER_LIBP2P_PORT_3
-      - ESPRESSO_SEQUENCER_STATE_PEERS=http://localhost:$ESPRESSO_SEQUENCER4_API_PORT
+      - ESPRESSO_SEQUENCER_STATE_PEERS=http://localhost:$ESPRESSO_SEQUENCER4_API_PORT,http://localhost:$ESPRESSO_SEQUENCER_API_PORT
+      - ESPRESSO_SEQUENCER_API_PEERS=http://localhost:$ESPRESSO_SEQUENCER4_API_PORT,http://localhost:$ESPRESSO_SEQUENCER_API_PORT
       - ESPRESSO_SEQUENCER_STORAGE_PATH=$ESPRESSO_BASE_STORAGE_PATH/seq3
       - ESPRESSO_SEQUENCER_PRIVATE_STAKING_KEY=$ESPRESSO_DEMO_SEQUENCER_STAKING_PRIVATE_KEY_3
       - ESPRESSO_SEQUENCER_PRIVATE_STATE_KEY=$ESPRESSO_DEMO_SEQUENCER_STATE_PRIVATE_KEY_3
@@ -320,8 +323,9 @@ processes:
       restart: exit_on_failure
 
   sequencer4:
-    command: sequencer-sqlite -- storage-sql -- http -- query -- catchup -- status
+    command: sequencer-sqlite -- storage-sql -- http -- query
     environment:
+      - ESPRESSO_SEQUENCER_LIGHTWEIGHT=true
       - ESPRESSO_SEQUENCER_API_PORT=$ESPRESSO_SEQUENCER4_API_PORT
       - ESPRESSO_SEQUENCER_STATE_PEERS=http://localhost:$ESPRESSO_SEQUENCER_API_PORT
       - ESPRESSO_SEQUENCER_API_PEERS=http://localhost:$ESPRESSO_SEQUENCER_API_PORT

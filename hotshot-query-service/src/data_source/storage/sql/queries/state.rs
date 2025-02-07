@@ -16,8 +16,8 @@ use super::{
     super::transaction::{query_as, Transaction, TransactionMode, Write},
     DecodeError, QueryBuilder,
 };
-use crate::data_source::storage::sql::build_where_in;
 use crate::data_source::storage::sql::sqlx::Row;
+use crate::data_source::storage::{pruning::PrunedHeightStorage, sql::build_where_in};
 use crate::{
     data_source::storage::{MerklizedStateHeightStorage, MerklizedStateStorage},
     merklized_state::{MerklizedState, Snapshot},
@@ -311,10 +311,20 @@ impl<Mode: TransactionMode> Transaction<Mode> {
         };
 
         // Make sure the requested snapshot is up to date.
-
         let height = self.get_last_state_height().await?;
 
         if height < (created as usize) {
+            return Err(QueryError::NotFound);
+        }
+
+        let pruned_height = self
+            .load_pruned_height()
+            .await
+            .map_err(|e| QueryError::Error {
+                message: format!("failed to load pruned height: {e}"),
+            })?;
+
+        if pruned_height.is_some_and(|h| height <= h as usize) {
             return Err(QueryError::NotFound);
         }
 

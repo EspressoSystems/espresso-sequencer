@@ -179,15 +179,6 @@ where
             if let Some(submit) = modules.submit {
                 http_opt = http_opt.submit(submit);
             }
-            if let Some(status) = modules.status {
-                http_opt = http_opt.status(status);
-            }
-            if let Some(state) = modules.state {
-                http_opt = http_opt.state(state);
-            }
-            if let Some(catchup) = modules.catchup {
-                http_opt = http_opt.catchup(catchup);
-            }
 
             if let Some(hotshot_events) = modules.hotshot_events {
                 http_opt = http_opt.hotshot_events(hotshot_events);
@@ -249,7 +240,7 @@ mod test {
     use tokio::spawn;
 
     use crate::{
-        api::options::{Http, Status},
+        api::options::Http,
         genesis::{L1Finalized, StakeTableConfig},
         persistence::fs,
         SequencerApiVersion,
@@ -289,7 +280,8 @@ mod test {
 
         let modules = Modules {
             http: Some(Http::with_port(port)),
-            status: Some(Status),
+            query: Some(Default::default()),
+            storage_fs: Some(fs::Options::new(tmp.path().into())),
             ..Default::default()
         };
         let opt = Options::parse_from([

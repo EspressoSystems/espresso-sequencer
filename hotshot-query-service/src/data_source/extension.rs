@@ -11,6 +11,7 @@
 // see <https://www.gnu.org/licenses/>.
 
 use super::VersionedDataSource;
+use crate::data_source::storage::pruning::PrunedHeightDataSource;
 use crate::{
     availability::{
         AvailabilityDataSource, BlockId, BlockInfo, BlockQueryData, Fetch, FetchStream, LeafId,
@@ -33,7 +34,6 @@ use hotshot_types::traits::node_implementation::NodeType;
 use jf_merkle_tree::prelude::MerkleProof;
 use std::ops::{Bound, RangeBounds};
 use tagged_base64::TaggedBase64;
-
 /// Wrapper to add extensibility to an existing data source.
 ///
 /// [`ExtensibleDataSource`] adds app-specific data to any existing data source. It implements all
@@ -140,6 +140,17 @@ where
 }
 
 #[async_trait]
+impl<D, U> PrunedHeightDataSource for ExtensibleDataSource<D, U>
+where
+    D: PrunedHeightDataSource + Send + Sync,
+    U: Send + Sync,
+{
+    async fn load_pruned_height(&self) -> anyhow::Result<Option<u64>> {
+        self.data_source.load_pruned_height().await
+    }
+}
+
+#[async_trait]
 impl<D, U, Types> AvailabilityDataSource<Types> for ExtensibleDataSource<D, U>
 where
     D: AvailabilityDataSource<Types> + Send + Sync,
@@ -153,6 +164,14 @@ where
     {
         self.data_source.get_leaf(id).await
     }
+
+    async fn get_header<ID>(&self, id: ID) -> Fetch<Header<Types>>
+    where
+        ID: Into<BlockId<Types>> + Send + Sync,
+    {
+        self.data_source.get_header(id).await
+    }
+
     async fn get_block<ID>(&self, id: ID) -> Fetch<BlockQueryData<Types>>
     where
         ID: Into<BlockId<Types>> + Send + Sync,
@@ -194,6 +213,13 @@ where
         R: RangeBounds<usize> + Send + 'static,
     {
         self.data_source.get_block_range(range).await
+    }
+
+    async fn get_header_range<R>(&self, range: R) -> FetchStream<Header<Types>>
+    where
+        R: RangeBounds<usize> + Send + 'static,
+    {
+        self.data_source.get_header_range(range).await
     }
     async fn get_payload_range<R>(&self, range: R) -> FetchStream<PayloadQueryData<Types>>
     where

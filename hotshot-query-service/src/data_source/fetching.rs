@@ -76,13 +76,14 @@
 use super::{
     notifier::Notifier,
     storage::{
-        pruning::{PruneStorage, PrunedHeightStorage},
+        pruning::{PruneStorage, PrunedHeightDataSource, PrunedHeightStorage},
         Aggregate, AggregatesStorage, AvailabilityStorage, ExplorerStorage,
         MerklizedStateHeightStorage, MerklizedStateStorage, NodeStorage, UpdateAggregatesStorage,
         UpdateAvailabilityStorage,
     },
     Transaction, VersionedDataSource,
 };
+use crate::availability::HeaderQueryData;
 use crate::{
     availability::{
         AvailabilityDataSource, BlockId, BlockInfo, BlockQueryData, Fetch, FetchStream, LeafId,
@@ -159,6 +160,7 @@ pub struct Builder<Types, S, P> {
     proactive_fetching: bool,
     aggregator: bool,
     aggregator_chunk_size: Option<usize>,
+    leaf_only: bool,
     _types: PhantomData<Types>,
 }
 
@@ -195,8 +197,14 @@ impl<Types, S, P> Builder<Types, S, P> {
             proactive_fetching: true,
             aggregator: true,
             aggregator_chunk_size: None,
+            leaf_only: false,
             _types: Default::default(),
         }
+    }
+
+    pub fn leaf_only(mut self) -> Self {
+        self.leaf_only = true;
+        self
     }
 
     /// Set the minimum delay between retries of failed operations.
@@ -350,6 +358,10 @@ impl<Types, S, P> Builder<Types, S, P> {
         self.aggregator_chunk_size = Some(chunk_size);
         self
     }
+
+    pub fn is_leaf_only(&self) -> bool {
+        self.leaf_only
+    }
 }
 
 impl<Types, S, P> Builder<Types, S, P>
@@ -400,28 +412,27 @@ where
     scanner: Option<BackgroundTask>,
     // The aggregator task, which derives aggregate statistics from a block stream.
     aggregator: Option<BackgroundTask>,
-    pruner: Pruner<Types, S, P>,
+    pruner: Pruner<Types, S>,
 }
 
 #[derive(Derivative)]
-#[derivative(Clone(bound = ""), Debug(bound = "S: Debug, P: Debug"))]
-pub struct Pruner<Types, S, P>
+#[derivative(Clone(bound = ""), Debug(bound = "S: Debug,   "))]
+pub struct Pruner<Types, S>
 where
     Types: NodeType,
 {
     handle: Option<BackgroundTask>,
-    _types: PhantomData<(Types, S, P)>,
+    _types: PhantomData<(Types, S)>,
 }
 
-impl<Types, S, P> Pruner<Types, S, P>
+impl<Types, S> Pruner<Types, S>
 where
     Types: NodeType,
     Payload<Types>: QueryablePayload<Types>,
     S: PruneStorage + Send + Sync + 'static,
-    P: AvailabilityProvider<Types>,
 {
-    async fn new(fetcher: Arc<Fetcher<Types, S, P>>) -> Self {
-        let cfg = fetcher.storage.get_pruning_config();
+    async fn new(storage: Arc<S>) -> Self {
+        let cfg = storage.get_pruning_config();
         let Some(cfg) = cfg else {
             return Self {
                 handle: None,
@@ -432,7 +443,7 @@ where
         let future = async move {
             for i in 1.. {
                 tracing::warn!("starting pruner run {i} ");
-                fetcher.prune().await;
+                Self::prune(storage.clone()).await;
                 sleep(cfg.interval()).await;
             }
         };
@@ -442,6 +453,26 @@ where
         Self {
             handle: Some(task),
             _types: Default::default(),
+        }
+    }
+
+    async fn prune(storage: Arc<S>) {
+        // We loop until the whole run pruner run is complete
+        let mut pruner = S::Pruner::default();
+        loop {
+            match storage.prune(&mut pruner).await {
+                Ok(Some(height)) => {
+                    tracing::warn!("Pruned to height {height}");
+                }
+                Ok(None) => {
+                    tracing::warn!("pruner run complete.");
+                    break;
+                }
+                Err(e) => {
+                    tracing::error!("pruner run failed: {e:?}");
+                    break;
+                }
+            }
         }
     }
 }
@@ -463,6 +494,7 @@ where
     }
 
     async fn new(builder: Builder<Types, S, P>) -> anyhow::Result<Self> {
+        let leaf_only = builder.is_leaf_only();
         let aggregator = builder.aggregator;
         let aggregator_chunk_size = builder
             .aggregator_chunk_size
@@ -478,7 +510,7 @@ where
         let aggregator_metrics = AggregatorMetrics::new(builder.storage.metrics());
 
         let fetcher = Arc::new(Fetcher::new(builder).await?);
-        let scanner = if proactive_fetching {
+        let scanner = if proactive_fetching && !leaf_only {
             Some(BackgroundTask::spawn(
                 "proactive scanner",
                 fetcher.clone().proactive_scan(
@@ -493,7 +525,7 @@ where
             None
         };
 
-        let aggregator = if aggregator {
+        let aggregator = if aggregator && !leaf_only {
             Some(BackgroundTask::spawn(
                 "aggregator",
                 fetcher
@@ -504,7 +536,9 @@ where
             None
         };
 
-        let pruner = Pruner::new(fetcher.clone()).await;
+        let storage = fetcher.storage.clone();
+
+        let pruner = Pruner::new(storage).await;
         let ds = Self {
             fetcher,
             scanner,
@@ -552,6 +586,20 @@ where
 }
 
 #[async_trait]
+impl<Types, S, P> PrunedHeightDataSource for FetchingDataSource<Types, S, P>
+where
+    Types: NodeType,
+    S: VersionedDataSource + HasMetrics + Send + Sync + 'static,
+    for<'a> S::ReadOnly<'a>: PrunedHeightStorage,
+    P: Send + Sync,
+{
+    async fn load_pruned_height(&self) -> anyhow::Result<Option<u64>> {
+        let mut tx = self.read().await?;
+        tx.load_pruned_height().await
+    }
+}
+
+#[async_trait]
 impl<Types, S, P> AvailabilityDataSource<Types> for FetchingDataSource<Types, S, P>
 where
     Types: NodeType,
@@ -566,6 +614,16 @@ where
         ID: Into<LeafId<Types>> + Send + Sync,
     {
         self.fetcher.get(id.into()).await
+    }
+
+    async fn get_header<ID>(&self, id: ID) -> Fetch<Header<Types>>
+    where
+        ID: Into<BlockId<Types>> + Send + Sync,
+    {
+        self.fetcher
+            .get::<HeaderQueryData<_>>(id.into())
+            .await
+            .map(|h| h.header)
     }
 
     async fn get_block<ID>(&self, id: ID) -> Fetch<BlockQueryData<Types>>
@@ -615,6 +673,17 @@ where
         R: RangeBounds<usize> + Send + 'static,
     {
         self.fetcher.clone().get_range(range)
+    }
+
+    async fn get_header_range<R>(&self, range: R) -> FetchStream<Header<Types>>
+    where
+        R: RangeBounds<usize> + Send + 'static,
+    {
+        let leaves: FetchStream<LeafQueryData<Types>> = self.fetcher.clone().get_range(range);
+
+        leaves
+            .map(|fetch| fetch.map(|leaf| leaf.leaf.block_header().clone()))
+            .boxed()
     }
 
     async fn get_payload_range<R>(&self, range: R) -> FetchStream<PayloadQueryData<Types>>
@@ -775,12 +844,12 @@ struct Fetcher<Types, S, P>
 where
     Types: NodeType,
 {
-    storage: S,
+    storage: Arc<S>,
     notifiers: Notifiers<Types>,
     provider: Arc<P>,
-    payload_fetcher: Arc<PayloadFetcher<Types, S, P>>,
     leaf_fetcher: Arc<LeafFetcher<Types, S, P>>,
-    vid_common_fetcher: Arc<VidCommonFetcher<Types, S, P>>,
+    payload_fetcher: Option<Arc<PayloadFetcher<Types, S, P>>>,
+    vid_common_fetcher: Option<Arc<VidCommonFetcher<Types, S, P>>>,
     range_chunk_size: usize,
     // Duration to sleep after each active fetch,
     active_fetch_delay: Duration,
@@ -791,6 +860,7 @@ where
     // Semaphore limiting the number of simultaneous DB accesses we can have from tasks spawned to
     // retry failed loads.
     retry_semaphore: Arc<Semaphore>,
+    leaf_only: bool,
 }
 
 impl<Types, S, P> VersionedDataSource for Fetcher<Types, S, P>
@@ -823,26 +893,41 @@ where
     S: VersionedDataSource + Sync,
     for<'a> S::ReadOnly<'a>: PrunedHeightStorage + NodeStorage<Types>,
 {
-    async fn new(builder: Builder<Types, S, P>) -> anyhow::Result<Self> {
+    pub async fn new(builder: Builder<Types, S, P>) -> anyhow::Result<Self> {
         let retry_semaphore = Arc::new(Semaphore::new(builder.rate_limit));
         let backoff = builder.backoff.build();
 
-        let payload_fetcher = fetching::Fetcher::new(retry_semaphore.clone(), backoff.clone());
+        let (payload_fetcher, vid_fetcher) = if builder.is_leaf_only() {
+            (None, None)
+        } else {
+            (
+                Some(Arc::new(fetching::Fetcher::new(
+                    retry_semaphore.clone(),
+                    backoff.clone(),
+                ))),
+                Some(Arc::new(fetching::Fetcher::new(
+                    retry_semaphore.clone(),
+                    backoff.clone(),
+                ))),
+            )
+        };
         let leaf_fetcher = fetching::Fetcher::new(retry_semaphore.clone(), backoff.clone());
-        let vid_common_fetcher = fetching::Fetcher::new(retry_semaphore.clone(), backoff.clone());
+
+        let leaf_only = builder.leaf_only;
 
         Ok(Self {
-            storage: builder.storage,
+            storage: Arc::new(builder.storage),
             notifiers: Default::default(),
             provider: Arc::new(builder.provider),
-            payload_fetcher: Arc::new(payload_fetcher),
             leaf_fetcher: Arc::new(leaf_fetcher),
-            vid_common_fetcher: Arc::new(vid_common_fetcher),
+            payload_fetcher,
+            vid_common_fetcher: vid_fetcher,
             range_chunk_size: builder.range_chunk_size,
             active_fetch_delay: builder.active_fetch_delay,
             chunk_fetch_delay: builder.chunk_fetch_delay,
             backoff,
             retry_semaphore,
+            leaf_only,
         })
     }
 }
@@ -1564,7 +1649,7 @@ where
     {
         let try_store = || async {
             let mut tx = self.storage.write().await?;
-            obj.clone().store(&mut tx).await?;
+            obj.clone().store(&mut tx, self.leaf_only).await?;
             tx.commit().await
         };
 
@@ -1616,32 +1701,6 @@ where
         // storage, and eventually some other task will come along, find the object missing from
         // storage, and re-fetch it.
         obj.notify(&self.notifiers).await;
-    }
-}
-
-impl<Types, S, P> Fetcher<Types, S, P>
-where
-    Types: NodeType,
-    S: PruneStorage + Sync,
-{
-    async fn prune(&self) {
-        // We loop until the whole run pruner run is complete
-        let mut pruner = S::Pruner::default();
-        loop {
-            match self.storage.prune(&mut pruner).await {
-                Ok(Some(height)) => {
-                    tracing::warn!("Pruned to height {height}");
-                }
-                Ok(None) => {
-                    tracing::warn!("pruner run complete.");
-                    break;
-                }
-                Err(e) => {
-                    tracing::error!("pruner run failed: {e:?}");
-                    break;
-                }
-            }
-        }
     }
 }
 
@@ -2010,6 +2069,7 @@ trait Storable<Types: NodeType>: HeightIndexed + Clone {
     fn store(
         self,
         storage: &mut (impl UpdateAvailabilityStorage<Types> + Send),
+        leaf_only: bool,
     ) -> impl Send + Future<Output = anyhow::Result<()>>;
 }
 
@@ -2032,14 +2092,16 @@ impl<Types: NodeType> Storable<Types> for BlockInfo<Types> {
     async fn store(
         self,
         storage: &mut (impl UpdateAvailabilityStorage<Types> + Send),
+        leaf_only: bool,
     ) -> anyhow::Result<()> {
-        self.leaf.store(storage).await?;
+        self.leaf.store(storage, leaf_only).await?;
+
+        if let Some(common) = self.vid_common {
+            (common, self.vid_share).store(storage, leaf_only).await?;
+        }
 
         if let Some(block) = self.block {
-            block.store(storage).await?;
-        }
-        if let Some(common) = self.vid_common {
-            (common, self.vid_share).store(storage).await?;
+            block.store(storage, leaf_only).await?;
         }
 
         Ok(())
