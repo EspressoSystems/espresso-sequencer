@@ -206,7 +206,7 @@ contract StakeTable_register_Test is Test {
         vm.stopPrank();
     }
 
-    function test_RevertWhen_WrongStakeAmount() external {
+    function test_RevertWhen_InsufficientStakeAmount() external {
         uint64 depositAmount = uint64(stakeTable.minStakeAmount()) - 1;
         uint64 validUntilEpoch = 10;
         string memory seed = "123";
