@@ -38,6 +38,7 @@ pub async fn main() -> anyhow::Result<()> {
     let upgrade = genesis.upgrade_version;
 
     match (base, upgrade) {
+        #[cfg(all(feature = "fee", feature = "marketplace"))]
         (FeeVersion::VERSION, MarketplaceVersion::VERSION) => {
             run(
                 genesis,
@@ -47,6 +48,7 @@ pub async fn main() -> anyhow::Result<()> {
             )
             .await
         }
+        #[cfg(feature = "fee")]
         (FeeVersion::VERSION, _) => {
             run(
                 genesis,
@@ -56,6 +58,7 @@ pub async fn main() -> anyhow::Result<()> {
             )
             .await
         }
+        #[cfg(feature = "marketplace")]
         (MarketplaceVersion::VERSION, _) => {
             run(
                 genesis,
