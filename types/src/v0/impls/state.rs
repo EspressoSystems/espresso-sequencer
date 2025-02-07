@@ -1,6 +1,7 @@
 use anyhow::bail;
 use committable::{Commitment, Committable};
 use ethers::types::Address;
+use ethers_conv::ToAlloy;
 use hotshot_query_service::merklized_state::MerklizedState;
 use hotshot_types::{
     data::{BlockError, ViewNumber},
@@ -868,7 +869,7 @@ pub async fn get_l1_deposits(
         instance
             .l1_client
             .get_finalized_deposits(
-                addr,
+                addr.to_alloy(),
                 parent_leaf
                     .block_header()
                     .l1_finalized()

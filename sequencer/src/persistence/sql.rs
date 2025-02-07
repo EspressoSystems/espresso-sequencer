@@ -5,9 +5,9 @@ use committable::Committable;
 use derivative::Derivative;
 use derive_more::derive::{From, Into};
 use espresso_types::{
-    downgrade_commitment_map, downgrade_leaf, parse_duration, upgrade_commitment_map,
+    downgrade_commitment_map, downgrade_leaf, parse_duration, parse_size, upgrade_commitment_map,
     v0::traits::{EventConsumer, PersistenceOptions, SequencerPersistence, StateCatchup},
-    BackoffParams, Leaf, Leaf2, NetworkConfig, Payload,
+    BackoffParams, BlockMerkleTree, FeeMerkleTree, Leaf, Leaf2, NetworkConfig, Payload,
 };
 use futures::stream::StreamExt;
 use hotshot_query_service::{
@@ -26,10 +26,11 @@ use hotshot_query_service::{
         request::{LeafRequest, PayloadRequest, VidCommonRequest},
         Provider,
     },
+    merklized_state::MerklizedState,
 };
 use hotshot_types::{
     consensus::CommitmentMap,
-    data::{DaProposal, QuorumProposal, QuorumProposal2, VidDisperseShare},
+    data::{DaProposal, QuorumProposal, QuorumProposal2, QuorumProposalWrapper, VidDisperseShare},
     event::{Event, EventType, HotShotAction, LeafInfo},
     message::{convert_proposal, Proposal},
     simple_certificate::{
@@ -147,7 +148,7 @@ pub struct Options {
     /// - batch_size: 1000
     /// - max_usage: 80%
     /// - interval: 1 hour
-    #[clap(long, env = "ESPRESSO_SEQUENCER_POSTGRES_PRUNE")]
+    #[clap(long, env = "ESPRESSO_SEQUENCER_DATABASE_PRUNE")]
     pub(crate) prune: bool,
 
     /// Pruning parameters.
@@ -181,6 +182,14 @@ pub struct Options {
     /// fetching from peers.
     #[clap(long, env = "ESPRESSO_SEQUENCER_ARCHIVE", conflicts_with = "prune")]
     pub(crate) archive: bool,
+
+    /// Turns on leaf only data storage
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_LIGHTWEIGHT",
+        conflicts_with = "archive"
+    )]
+    pub(crate) lightweight: bool,
 
     /// The maximum idle time of a database connection.
     ///
@@ -403,7 +412,7 @@ pub struct PruningOptions {
     /// Threshold for pruning, specified in bytes.
     /// If the disk usage surpasses this threshold, pruning is initiated for data older than the specified minimum retention period.
     /// Pruning continues until the disk usage drops below the MAX USAGE.
-    #[clap(long, env = "ESPRESSO_SEQUENCER_PRUNER_PRUNING_THRESHOLD")]
+    #[clap(long, env = "ESPRESSO_SEQUENCER_PRUNER_PRUNING_THRESHOLD", value_parser = parse_size)]
     pruning_threshold: Option<u64>,
 
     /// Minimum retention period.
@@ -467,6 +476,11 @@ impl From<PruningOptions> for PrunerCfg {
         if let Some(interval) = opt.interval {
             cfg = cfg.with_interval(interval);
         }
+
+        cfg = cfg.with_state_tables(vec![
+            BlockMerkleTree::state_type().to_string(),
+            FeeMerkleTree::state_type().to_string(),
+        ]);
 
         cfg
     }
@@ -1110,7 +1124,8 @@ impl SequencerPersistence for Persistence {
 
     async fn load_quorum_proposals(
         &self,
-    ) -> anyhow::Result<BTreeMap<ViewNumber, Proposal<SeqTypes, QuorumProposal2<SeqTypes>>>> {
+    ) -> anyhow::Result<BTreeMap<ViewNumber, Proposal<SeqTypes, QuorumProposalWrapper<SeqTypes>>>>
+    {
         let rows = self
             .db
             .read()
@@ -1135,7 +1150,7 @@ impl SequencerPersistence for Persistence {
     async fn load_quorum_proposal(
         &self,
         view: ViewNumber,
-    ) -> anyhow::Result<Proposal<SeqTypes, QuorumProposal2<SeqTypes>>> {
+    ) -> anyhow::Result<Proposal<SeqTypes, QuorumProposalWrapper<SeqTypes>>> {
         let mut tx = self.db.read().await?;
         let (data,) =
             query_as::<(Vec<u8>,)>("SELECT data FROM quorum_proposals WHERE view = $1 LIMIT 1")
@@ -1227,7 +1242,7 @@ impl SequencerPersistence for Persistence {
     }
     async fn append_quorum_proposal(
         &self,
-        proposal: &Proposal<SeqTypes, QuorumProposal2<SeqTypes>>,
+        proposal: &Proposal<SeqTypes, QuorumProposalWrapper<SeqTypes>>,
     ) -> anyhow::Result<()> {
         let proposal: Proposal<SeqTypes, QuorumProposal<SeqTypes>> =
             convert_proposal(proposal.clone());
@@ -1664,14 +1679,17 @@ mod test {
         .unwrap()
         .clone();
 
-        let quorum_proposal = QuorumProposal2::<SeqTypes> {
-            block_header: leaf.block_header().clone(),
-            view_number: leaf.view_number(),
-            justify_qc: leaf.justify_qc().to_qc2(),
-            upgrade_certificate: None,
-            view_change_evidence: None,
-            next_drb_result: None,
-            next_epoch_justify_qc: None,
+        let quorum_proposal = QuorumProposalWrapper::<SeqTypes> {
+            proposal: QuorumProposal2::<SeqTypes> {
+                block_header: leaf.block_header().clone(),
+                view_number: leaf.view_number(),
+                justify_qc: leaf.justify_qc().to_qc2(),
+                upgrade_certificate: None,
+                view_change_evidence: None,
+                next_drb_result: None,
+                next_epoch_justify_qc: None,
+            },
+            with_epoch: false,
         };
         let quorum_proposal_signature =
             BLSPubKey::sign(&privkey, &bincode::serialize(&quorum_proposal).unwrap())
@@ -1695,11 +1713,15 @@ mod test {
         };
 
         let mut next_quorum_proposal = quorum_proposal.clone();
-        next_quorum_proposal.data.view_number += 1;
-        next_quorum_proposal.data.justify_qc.view_number += 1;
-        next_quorum_proposal.data.justify_qc.data.leaf_commit =
-            Committable::commit(&leaf.clone().into());
-        let qc = &next_quorum_proposal.data.justify_qc;
+        next_quorum_proposal.data.proposal.view_number += 1;
+        next_quorum_proposal.data.proposal.justify_qc.view_number += 1;
+        next_quorum_proposal
+            .data
+            .proposal
+            .justify_qc
+            .data
+            .leaf_commit = Committable::commit(&leaf.clone().into());
+        let qc = next_quorum_proposal.data.justify_qc();
 
         // Add to database.
         storage
@@ -1783,19 +1805,22 @@ mod test {
         .to_proposal(&privkey)
         .unwrap()
         .clone();
-        let quorum_proposal = QuorumProposal2::<SeqTypes> {
-            block_header: leaf.block_header().clone(),
-            view_number: data_view,
-            justify_qc: QuorumCertificate::genesis::<TestVersions>(
-                &ValidatedState::default(),
-                &NodeState::mock(),
-            )
-            .await
-            .to_qc2(),
-            upgrade_certificate: None,
-            view_change_evidence: None,
-            next_drb_result: None,
-            next_epoch_justify_qc: None,
+        let quorum_proposal = QuorumProposalWrapper::<SeqTypes> {
+            proposal: QuorumProposal2::<SeqTypes> {
+                block_header: leaf.block_header().clone(),
+                view_number: data_view,
+                justify_qc: QuorumCertificate::genesis::<TestVersions>(
+                    &ValidatedState::default(),
+                    &NodeState::mock(),
+                )
+                .await
+                .to_qc2(),
+                upgrade_certificate: None,
+                view_change_evidence: None,
+                next_drb_result: None,
+                next_epoch_justify_qc: None,
+            },
+            with_epoch: false,
         };
         let quorum_proposal_signature =
             BLSPubKey::sign(&privkey, &bincode::serialize(&quorum_proposal).unwrap())

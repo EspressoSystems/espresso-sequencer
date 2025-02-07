@@ -193,15 +193,16 @@ where
         async move {
             // Try to get the epoch from the request. If this fails, error
             // as it was probably a mistake
-            let epoch = EpochNumber::new(req.integer_param("epoch_number").map_err(|_| {
-                hotshot_query_service::node::Error::Custom {
+            let epoch = req
+                .opt_integer_param("epoch_number")
+                .map_err(|_| hotshot_query_service::node::Error::Custom {
                     message: "Epoch number is required".to_string(),
                     status: StatusCode::BAD_REQUEST,
-                }
-            })?);
+                })?
+                .map(EpochNumber::new);
 
             Ok(state
-                .read(|state| state.get_stake_table(Some(epoch)).boxed())
+                .read(|state| state.get_stake_table(epoch).boxed())
                 .await)
         }
         .boxed()
@@ -209,7 +210,7 @@ where
     .at("stake_table_current", |_, state| {
         async move {
             Ok(state
-                .read(|state| state.get_stake_table(None).boxed())
+                .read(|state| state.get_stake_table_current().boxed())
                 .await)
         }
         .boxed()

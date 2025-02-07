@@ -434,7 +434,7 @@ pub mod testing {
             let event = subscribed_events.next().await.unwrap();
             tracing::warn!("Event: {:?}", event.event);
             if let EventType::QuorumProposal { proposal, .. } = event.event {
-                let parent_view_number = *proposal.data.view_number;
+                let parent_view_number = *proposal.data.view_number();
                 let parent_commitment =
                     Leaf2::from_quorum_proposal(&proposal.data).payload_commitment();
                 let encoded_signature = <SeqTypes as NodeType>::SignatureKey::sign(

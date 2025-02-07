@@ -168,7 +168,7 @@ mod tests {
     #[test]
     fn test_resolve_chain_config() {
         let chain_config = ChainConfig::default();
-        let resolveable: ResolvableChainConfig = chain_config.into();
-        assert_eq!(chain_config, resolveable.resolve().unwrap());
+        let resolvable: ResolvableChainConfig = chain_config.into();
+        assert_eq!(chain_config, resolvable.resolve().unwrap());
     }
 }

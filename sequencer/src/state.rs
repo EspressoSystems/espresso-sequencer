@@ -1,5 +1,5 @@
 use core::fmt::Debug;
-use std::{sync::Arc, time::Duration};
+use std::{cmp::max, sync::Arc, time::Duration};
 
 use anyhow::{bail, ensure, Context};
 use espresso_types::{
@@ -11,7 +11,7 @@ use futures::StreamExt;
 use hotshot::traits::ValidatedState as HotShotState;
 use hotshot_query_service::{
     availability::{AvailabilityDataSource, LeafQueryData},
-    data_source::{Transaction, VersionedDataSource},
+    data_source::{storage::pruning::PrunedHeightDataSource, Transaction, VersionedDataSource},
     merklized_state::{MerklizedStateHeightPersistence, UpdateStateData},
     status::StatusDataSource,
     types::HeightIndexed,
@@ -236,6 +236,18 @@ where
     // get last saved merklized state
     let (last_height, parent_leaf, mut leaves) = {
         let last_height = storage.get_last_state_height().await?;
+        let pruned_height = storage.load_pruned_height().await?;
+
+        let height = match pruned_height {
+            // If `last_height > pruned_height`, start from `last_height`
+            // as it represents the latest state in storage.
+            // If `pruned_height > last_height`, start from `pruned_height`
+            // as data below this height is no longer needed and will be pruned again during the next pruner run.
+            Some(pruned_height) => max(last_height, pruned_height as usize + 1),
+            // if we have not pruned any data then just start from last_height
+            None => last_height,
+        };
+
         let current_height = storage.block_height().await?;
         tracing::info!(
             node_id = instance.node_id,
@@ -244,8 +256,8 @@ where
             "updating state storage"
         );
 
-        let parent_leaf = storage.get_leaf(last_height).await;
-        let leaves = storage.subscribe_leaves(last_height + 1).await;
+        let parent_leaf = storage.get_leaf(height).await;
+        let leaves = storage.subscribe_leaves(height + 1).await;
         (last_height, parent_leaf, leaves)
     };
     // resolve the parent leaf future _after_ dropping our lock on the state, in case it is not
@@ -308,6 +320,7 @@ pub(crate) trait SequencerStateDataSource:
     + StatusDataSource
     + VersionedDataSource
     + CatchupStorage
+    + PrunedHeightDataSource
     + MerklizedStateHeightPersistence
 {
 }
@@ -319,6 +332,7 @@ impl<T> SequencerStateDataSource for T where
         + StatusDataSource
         + VersionedDataSource
         + CatchupStorage
+        + PrunedHeightDataSource
         + MerklizedStateHeightPersistence
 {
 }
