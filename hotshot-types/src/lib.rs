@@ -42,8 +42,6 @@ pub mod traits;
 /// Holds the upgrade configuration specification for HotShot nodes.
 pub mod upgrade_config;
 pub mod utils;
-/// Holds the validator configuration specification for HotShot nodes.
-pub mod validator_config;
 pub mod vid;
 pub mod vote;
 
