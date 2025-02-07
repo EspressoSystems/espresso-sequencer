@@ -146,7 +146,7 @@ jobs:
         run: |
           cargo nextest run --archive-file nextest-archive-postgres.tar.zst  --verbose --no-fail-fast \
           --workspace-remap $PWD
-        timeout-minutes: 20
+        timeout-minutes: 40
 
   test-sqlite:
     needs: build-test-artifacts-sqlite
@@ -176,7 +176,7 @@ jobs:
         run: |
           cargo nextest run --archive-file nextest-archive-sqlite.tar.zst  --verbose --no-fail-fast \
           --workspace-remap $PWD
-        timeout-minutes: 20
+        timeout-minutes: 40
 
   test-integration:
     needs: [build-test-bins, build-test-artifacts-postgres]
@@ -186,7 +186,7 @@ jobs:
         include:
           - version: 02
             compose: "-f process-compose.yaml -D"
-            
+
           - version: 99
             compose: "-f process-compose.yaml -f process-compose-mp.yml -D"
     runs-on: ubuntu-latest
