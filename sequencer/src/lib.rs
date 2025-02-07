@@ -26,8 +26,8 @@ use proposal_fetcher::ProposalFetcherConfig;
 use std::sync::Arc;
 use tokio::select;
 // Should move `STAKE_TABLE_CAPACITY` in the sequencer repo when we have variate stake table support
+use hotshot_libp2p_networking::network::behaviours::dht::store::persistent::DhtNoPersistence;
 use libp2p::Multiaddr;
-use libp2p_networking::network::behaviours::dht::store::persistent::DhtNoPersistence;
 use network::libp2p::split_off_peer_id;
 use options::Identity;
 use state_signature::static_stake_table_commitment;

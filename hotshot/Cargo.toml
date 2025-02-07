@@ -1,0 +1,61 @@
+[package]
+authors = { workspace = true }
+description = "HotShot consesus module"
+edition = { workspace = true }
+name = "hotshot"
+readme = "README.md"
+version = { workspace = true }
+
+[features]
+default = ["docs", "doc-images"]
+example-upgrade = ["hotshot-task-impls/example-upgrade"]
+rewind = ["hotshot-task-impls/rewind"]
+
+# Build the extended documentation
+docs = []
+doc-images = []
+hotshot-testing = []
+
+[dependencies]
+anyhow = { workspace = true }
+async-broadcast = { workspace = true }
+async-lock = { workspace = true }
+async-trait = { workspace = true }
+bimap = "0.6"
+bincode = { workspace = true }
+blake3 = { workspace = true }
+cdn-broker = { workspace = true, features = ["global-permits"] }
+cdn-client = { workspace = true }
+chrono = { workspace = true }
+committable = { workspace = true }
+dashmap = { workspace = true }
+derive_more = { workspace = true }
+either = { workspace = true }
+futures = { workspace = true }
+hotshot-task = { workspace = true }
+hotshot-task-impls = { workspace = true }
+hotshot-types = { workspace = true }
+cdn-marshal = { workspace = true }
+libp2p-identity = { workspace = true }
+hotshot-libp2p-networking = { workspace = true }
+lru = { workspace = true }
+num_enum = "0.7"
+parking_lot.workspace = true
+portpicker = "0.1"
+primitive-types = { workspace = true }
+rand = { workspace = true }
+serde = { workspace = true, features = ["rc"] }
+sha2 = { workspace = true }
+time = { workspace = true }
+
+tokio = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+url = { workspace = true }
+hotshot-utils = { workspace = true }
+vbs = { workspace = true }
+workspace-hack = { version = "0.1", path = "../workspace-hack" }
+
+[dev-dependencies]
+blake3 = { workspace = true }
+

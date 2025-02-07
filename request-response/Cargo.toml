@@ -1,0 +1,24 @@
+[package]
+name = "request-response"
+version = { workspace = true }
+edition = { workspace = true }
+
+[dev-dependencies]
+serde.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+async-trait.workspace = true
+hotshot-types = { workspace = true }
+byteorder = { version = "1", default-features = false }
+bincode.workspace = true
+blake3.workspace = true
+rand.workspace = true
+tokio.workspace = true
+parking_lot.workspace = true
+derive_more.workspace = true
+tracing.workspace = true
+async-broadcast.workspace = true
+derive_builder.workspace = true
+thiserror.workspace = true
+tokio-util = { version = "0.7", default-features = false, features = ["rt"] }

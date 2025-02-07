@@ -47,6 +47,18 @@ abstract contract AbstractStakeTable {
         address account, BN254.G2Point newBlsVK, EdOnBN254.EdOnBN254Point newSchnorrVK
     );
 
+    /// @notice Signals the min stake amount has been updated
+    /// @param minStakeAmount the new min stake amount
+    event MinStakeAmountUpdated(uint256 minStakeAmount);
+
+    /// @notice Signals the max churn rate has been updated
+    /// @param maxChurnRate the new max churn rate
+    event MaxChurnRateUpdated(uint256 maxChurnRate);
+
+    /// @notice Signals the light client address has been updated
+    /// @param lightClientAddress the new light client address
+    event LightClientAddressUpdated(address lightClientAddress);
+
     /// @dev (sadly, Solidity doesn't support type alias on non-primitive types)
     // We avoid declaring another struct even if the type info helps with readability,
     // extra layer of struct introduces overhead and more gas cost.
