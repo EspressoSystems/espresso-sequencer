@@ -117,10 +117,15 @@ pub(crate) trait NodeStateDataSource {
 }
 
 pub(crate) trait StakeTableDataSource<T: NodeType> {
-    /// Get the stake table for a given epoch or the current epoch if not provided
+    /// Get the stake table for a given epoch
     fn get_stake_table(
         &self,
         epoch: Option<<T as NodeType>::Epoch>,
+    ) -> impl Send + Future<Output = Vec<StakeTableEntry<T::SignatureKey>>>;
+
+    /// Get the stake table for  the current epoch if not provided
+    fn get_stake_table_current(
+        &self,
     ) -> impl Send + Future<Output = Vec<StakeTableEntry<T::SignatureKey>>>;
 }
 
@@ -431,6 +436,12 @@ pub mod testing {
 
         async fn create_storage() -> Self::Storage;
         fn persistence_options(storage: &Self::Storage) -> Self::Options;
+        fn leaf_only_ds_options(
+            _storage: &Self::Storage,
+            _opt: Options,
+        ) -> anyhow::Result<Options> {
+            anyhow::bail!("not supported")
+        }
         fn options(storage: &Self::Storage, opt: Options) -> Options;
     }
 }

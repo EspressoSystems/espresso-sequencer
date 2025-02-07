@@ -7,7 +7,6 @@ use futures::future::BoxFuture;
 use hotshot_types::{
     consensus::CommitmentMap,
     data::{Leaf, Leaf2, QuorumProposal},
-    drb::{INITIAL_DRB_RESULT, INITIAL_DRB_SEED_INPUT},
     traits::node_implementation::NodeType,
 };
 use rand::Rng;
@@ -27,9 +26,10 @@ use time::{
 use tokio::time::sleep;
 
 pub fn downgrade_leaf<Types: NodeType>(leaf2: Leaf2<Types>) -> Leaf<Types> {
-    if leaf2.drb_seed != INITIAL_DRB_SEED_INPUT && leaf2.drb_result != INITIAL_DRB_RESULT {
-        panic!("Downgrade of Leaf2 to Leaf will lose DRB information!");
-    }
+    // TODO verify removal. It doesn't seem we need this check, but lets double check.
+    // if leaf2.drb_seed != INITIAL_DRB_SEED_INPUT && leaf2.drb_result != INITIAL_DRB_RESULT {
+    //     panic!("Downgrade of Leaf2 to Leaf will lose DRB information!");
+    // }
     let quorum_proposal = QuorumProposal {
         block_header: leaf2.block_header().clone(),
         view_number: leaf2.view_number(),

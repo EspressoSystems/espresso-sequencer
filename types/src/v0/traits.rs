@@ -10,17 +10,20 @@ use hotshot::{types::EventType, HotShotInitializer};
 use hotshot_types::{
     consensus::CommitmentMap,
     data::{
-        DaProposal, EpochNumber, QuorumProposal, QuorumProposal2, VidDisperseShare, ViewNumber,
+        DaProposal, QuorumProposal, QuorumProposal2, QuorumProposalWrapper, VidDisperseShare,
+        ViewNumber,
     },
     event::{HotShotAction, LeafInfo},
     message::{convert_proposal, Proposal},
-    simple_certificate::{QuorumCertificate, QuorumCertificate2, UpgradeCertificate},
+    simple_certificate::{
+        NextEpochQuorumCertificate2, QuorumCertificate, QuorumCertificate2, UpgradeCertificate,
+    },
     traits::{
         node_implementation::{ConsensusTime, Versions},
         storage::Storage,
         ValidatedState as HotShotState,
     },
-    utils::View,
+    utils::{genesis_epoch_from_version, View},
     vid::VidSchemeType,
 };
 use itertools::Itertools;
@@ -449,12 +452,12 @@ pub trait SequencerPersistence: Sized + Send + Sync + Clone + 'static {
     /// Load the proposals saved by consensus
     async fn load_quorum_proposals(
         &self,
-    ) -> anyhow::Result<BTreeMap<ViewNumber, Proposal<SeqTypes, QuorumProposal2<SeqTypes>>>>;
+    ) -> anyhow::Result<BTreeMap<ViewNumber, Proposal<SeqTypes, QuorumProposalWrapper<SeqTypes>>>>;
 
     async fn load_quorum_proposal(
         &self,
         view: ViewNumber,
-    ) -> anyhow::Result<Proposal<SeqTypes, QuorumProposal2<SeqTypes>>>;
+    ) -> anyhow::Result<Proposal<SeqTypes, QuorumProposalWrapper<SeqTypes>>>;
 
     async fn load_vid_share(
         &self,
@@ -493,6 +496,11 @@ pub trait SequencerPersistence: Sized + Send + Sync + Clone + 'static {
                 ViewNumber::genesis()
             }
         };
+
+        let next_epoch_high_qc = self
+            .load_next_epoch_quorum_certificate()
+            .await
+            .context("loading next epoch qc")?;
         let (leaf, high_qc, anchor_view) = match self
             .load_anchor_leaf()
             .await
@@ -540,7 +548,7 @@ pub trait SequencerPersistence: Sized + Send + Sync + Clone + 'static {
         // unnecessary catchup from starting in a view earlier than the anchor leaf.
         let view = max(highest_voted_view, leaf.view_number());
         // TODO:
-        let epoch = EpochNumber::genesis();
+        let epoch = genesis_epoch_from_version::<V, SeqTypes>();
 
         let (undecided_leaves, undecided_state) = self
             .load_undecided_state()
@@ -572,19 +580,26 @@ pub trait SequencerPersistence: Sized + Send + Sync + Clone + 'static {
         );
 
         Ok((
-            HotShotInitializer::from_reload(
-                leaf,
-                state,
-                validated_state,
-                view,
-                epoch,
-                highest_voted_view,
+            HotShotInitializer {
+                instance_state: state,
+                epoch_height: 0,
+                anchor_leaf: leaf,
+                anchor_state: validated_state.unwrap_or_default(),
+                anchor_state_delta: None,
+                start_view: view,
+                start_epoch: epoch,
+                last_actioned_view: highest_voted_view,
                 saved_proposals,
                 high_qc,
-                upgrade_certificate,
-                undecided_leaves.into_values().collect(),
+                next_epoch_high_qc,
+                decided_upgrade_certificate: upgrade_certificate,
+                undecided_leaves: undecided_leaves
+                    .into_values()
+                    .map(|e| (e.view_number(), e))
+                    .collect(),
                 undecided_state,
-            ),
+                saved_vid_shares: Default::default(), // TODO: implement saved_vid_shares
+            },
             anchor_view,
         ))
     }
@@ -670,7 +685,7 @@ pub trait SequencerPersistence: Sized + Send + Sync + Clone + 'static {
     ) -> anyhow::Result<()>;
     async fn append_quorum_proposal(
         &self,
-        proposal: &Proposal<SeqTypes, QuorumProposal2<SeqTypes>>,
+        proposal: &Proposal<SeqTypes, QuorumProposalWrapper<SeqTypes>>,
     ) -> anyhow::Result<()>;
     async fn store_upgrade_certificate(
         &self,
@@ -690,6 +705,15 @@ pub trait SequencerPersistence: Sized + Send + Sync + Clone + 'static {
             None => Ok(ViewNumber::genesis()),
         }
     }
+
+    async fn store_next_epoch_quorum_certificate(
+        &self,
+        high_qc: NextEpochQuorumCertificate2<SeqTypes>,
+    ) -> anyhow::Result<()>;
+
+    async fn load_next_epoch_quorum_certificate(
+        &self,
+    ) -> anyhow::Result<Option<NextEpochQuorumCertificate2<SeqTypes>>>;
 }
 
 #[async_trait]
@@ -776,37 +800,6 @@ impl<P: SequencerPersistence> Storage<SeqTypes> for Arc<P> {
     ) -> anyhow::Result<()> {
         (**self)
             .store_upgrade_certificate(decided_upgrade_certificate)
-            .await
-    }
-
-    async fn append_proposal2(
-        &self,
-        proposal: &Proposal<SeqTypes, QuorumProposal2<SeqTypes>>,
-    ) -> anyhow::Result<()> {
-        (**self).append_quorum_proposal(proposal).await
-    }
-
-    async fn update_high_qc2(&self, _high_qc: QuorumCertificate2<SeqTypes>) -> anyhow::Result<()> {
-        Ok(())
-    }
-
-    async fn update_undecided_state2(
-        &self,
-        leaves: CommitmentMap<Leaf2>,
-        state: BTreeMap<ViewNumber, View<SeqTypes>>,
-    ) -> anyhow::Result<()> {
-        (**self).update_undecided_state(leaves, state).await
-    }
-
-    async fn migrate_consensus(
-        &self,
-        migrate_leaf: fn(Leaf) -> Leaf2,
-        migrate_proposal: fn(
-            Proposal<SeqTypes, QuorumProposal<SeqTypes>>,
-        ) -> Proposal<SeqTypes, QuorumProposal2<SeqTypes>>,
-    ) -> anyhow::Result<()> {
-        (**self)
-            .migrate_consensus(migrate_leaf, migrate_proposal)
             .await
     }
 }

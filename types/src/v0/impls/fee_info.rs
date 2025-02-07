@@ -3,11 +3,13 @@ use ark_serialize::{
     CanonicalDeserialize, CanonicalSerialize, Compress, Read, SerializationError, Valid, Validate,
 };
 use committable::{Commitment, Committable, RawCommitmentBuilder};
-use contract_bindings::fee_contract::DepositFilter;
+use contract_bindings_alloy::feecontract::FeeContract::Deposit;
+use contract_bindings_ethers::fee_contract::DepositFilter;
 use ethers::{
     prelude::{Address, U256},
     utils::{parse_units, ParseUnits},
 };
+use ethers_conv::ToEthers;
 use hotshot_query_service::explorer::MonetaryValue;
 use hotshot_types::traits::block_contents::BuilderFee;
 use itertools::Itertools;
@@ -130,6 +132,15 @@ impl From<DepositFilter> for FeeInfo {
         Self {
             amount: item.amount.into(),
             account: item.user.into(),
+        }
+    }
+}
+
+impl From<Deposit> for FeeInfo {
+    fn from(item: Deposit) -> Self {
+        Self {
+            amount: item.amount.to_ethers().into(),
+            account: item.user.to_ethers().into(),
         }
     }
 }

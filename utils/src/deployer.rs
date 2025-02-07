@@ -1,20 +1,25 @@
+use alloy::{
+    contract::RawCallBuilder,
+    network::{Ethereum, EthereumWallet},
+    providers::ProviderBuilder,
+    signers::Signer as _,
+    transports::Transport,
+};
 use anyhow::{ensure, Context};
 use clap::{builder::OsStr, Parser, ValueEnum};
-use contract_bindings::{
+use contract_bindings_alloy::feecontract::FeeContract;
+use contract_bindings_ethers::{
     erc1967_proxy::ERC1967Proxy,
-    fee_contract::FeeContract,
     light_client::{LightClient, LIGHTCLIENT_ABI},
     light_client_mock::LIGHTCLIENTMOCK_ABI,
-    light_client_state_update_vk::LightClientStateUpdateVK,
-    light_client_state_update_vk_mock::LightClientStateUpdateVKMock,
     permissioned_stake_table::{NodeInfo, PermissionedStakeTable},
     plonk_verifier::PlonkVerifier,
 };
 use derive_more::Display;
 use ethers::{
-    prelude::*, signers::coins_bip39::English, signers::Signer, solc::artifacts::BytecodeObject,
-    utils::hex,
+    prelude::*, signers::coins_bip39::English, solc::artifacts::BytecodeObject, utils::hex,
 };
+use ethers_conv::{ToAlloy as _, ToEthers};
 use futures::future::{BoxFuture, FutureExt};
 use hotshot_contract_adapter::light_client::{
     LightClientConstructorArgs, ParsedLightClientState, ParsedStakeTableState,
@@ -28,10 +33,6 @@ pub struct DeployedContracts {
     /// Use an already-deployed PlonkVerifier.sol instead of deploying a new one.
     #[clap(long, env = Contract::PlonkVerifier)]
     plonk_verifier: Option<Address>,
-
-    /// Use an already-deployed LightClientStateUpdateVK.sol instead of deploying a new one.
-    #[clap(long, env = Contract::StateUpdateVK)]
-    light_client_state_update_vk: Option<Address>,
 
     /// Use an already-deployed LightClient.sol instead of deploying a new one.
     #[clap(long, env = Contract::LightClient)]
@@ -59,8 +60,6 @@ pub struct DeployedContracts {
 pub enum Contract {
     #[display("ESPRESSO_SEQUENCER_PLONK_VERIFIER_ADDRESS")]
     PlonkVerifier,
-    #[display("ESPRESSO_SEQUENCER_LIGHT_CLIENT_STATE_UPDATE_VK_ADDRESS")]
-    StateUpdateVK,
     #[display("ESPRESSO_SEQUENCER_LIGHT_CLIENT_ADDRESS")]
     LightClient,
     #[display("ESPRESSO_SEQUENCER_LIGHT_CLIENT_PROXY_ADDRESS")]
@@ -88,9 +87,6 @@ impl From<DeployedContracts> for Contracts {
         let mut m = HashMap::new();
         if let Some(addr) = deployed.plonk_verifier {
             m.insert(Contract::PlonkVerifier, addr);
-        }
-        if let Some(addr) = deployed.light_client_state_update_vk {
-            m.insert(Contract::StateUpdateVK, addr);
         }
         if let Some(addr) = deployed.light_client {
             m.insert(Contract::LightClient, addr);
@@ -142,6 +138,29 @@ impl Contracts {
         Ok(addr)
     }
 
+    /// Deploy a contract by calling a function.
+    ///
+    /// The `deploy` function will be called only if contract `name` is not already deployed;
+    /// otherwise this function will just return the predeployed address. The `deploy` function may
+    /// access this [`Contracts`] object, so this can be used to deploy contracts recursively in
+    /// dependency order.
+    pub async fn deploy_fn_alloy(
+        &mut self,
+        name: Contract,
+        deploy: impl FnOnce(&mut Self) -> BoxFuture<'_, anyhow::Result<alloy::primitives::Address>>,
+    ) -> anyhow::Result<alloy::primitives::Address> {
+        if let Some(addr) = self.0.get(&name) {
+            tracing::info!("skipping deployment of {name}, already deployed at {addr:#x}");
+            return Ok((*addr).to_alloy());
+        }
+        tracing::info!("deploying {name}");
+        let addr = deploy(self).await?;
+        tracing::info!("deployed {name} at {addr:#x}");
+
+        self.0.insert(name, addr.to_ethers());
+        Ok(addr)
+    }
+
     /// Deploy a contract by executing its deploy transaction.
     ///
     /// The transaction will only be broadcast if contract `name` is not already deployed.
@@ -153,7 +172,7 @@ impl Contracts {
     where
         M: Middleware + 'static,
         C: Deref<Target = ethers::contract::Contract<M>>
-            + From<ContractInstance<Arc<M>, M>>
+            + From<ethers::contract::ContractInstance<Arc<M>, M>>
             + Send
             + 'static,
     {
@@ -161,6 +180,28 @@ impl Contracts {
             async {
                 let contract = tx.send().await?;
                 Ok(contract.address())
+            }
+            .boxed()
+        })
+        .await
+    }
+
+    /// Deploy a contract by executing its deploy transaction.
+    ///
+    /// The transaction will only be broadcast if contract `name` is not already deployed.
+    pub async fn deploy_tx_alloy<T, P>(
+        &mut self,
+        name: Contract,
+        tx: RawCallBuilder<T, P>,
+    ) -> anyhow::Result<alloy::primitives::Address>
+    where
+        T: Transport + Clone,
+        P: alloy::providers::Provider<T, Ethereum> + 'static,
+    {
+        self.deploy_fn_alloy(name, |_| {
+            async move {
+                let address = tx.deploy().await?;
+                Ok(address)
             }
             .boxed()
         })
@@ -193,37 +234,8 @@ pub async fn deploy_light_client_contract<M: Middleware + 'static>(
             PlonkVerifier::deploy(l1.clone(), ())?,
         )
         .await?;
-    let vk = contracts
-        .deploy_tx(
-            Contract::StateUpdateVK,
-            LightClientStateUpdateVK::deploy(l1.clone(), ())?,
-        )
-        .await?;
 
-    // Link with LightClient's bytecode artifacts. We include the unlinked bytecode for the contract
-    // in this binary so that the contract artifacts do not have to be distributed with the binary.
-    // This should be fine because if the bindings we are importing are up to date, so should be the
-    // contract artifacts: this is no different than foundry inlining bytecode objects in generated
-    // bindings, except that foundry doesn't provide the bytecode for contracts that link with
-    // libraries, so we have to do it ourselves.
-    let mut bytecode: BytecodeObject = serde_json::from_str(include_str!(
-        "../../contract-bindings/artifacts/LightClient_bytecode.json",
-    ))?;
-    bytecode
-        .link_fully_qualified(
-            "contracts/src/libraries/PlonkVerifier.sol:PlonkVerifier",
-            plonk_verifier,
-        )
-        .resolve()
-        .context("error linking PlonkVerifier lib")?;
-    bytecode
-        .link_fully_qualified(
-            "contracts/src/libraries/LightClientStateUpdateVK.sol:LightClientStateUpdateVK",
-            vk,
-        )
-        .resolve()
-        .context("error linking LightClientStateUpdateVK lib")?;
-    ensure!(!bytecode.is_unlinked(), "failed to link LightClient.sol");
+    let bytecode = link_light_client_contract(plonk_verifier)?;
 
     // Deploy light client.
     let light_client_factory = ContractFactory::new(
@@ -256,16 +268,14 @@ pub async fn deploy_mock_light_client_contract<M: Middleware + 'static>(
             PlonkVerifier::deploy(l1.clone(), ())?,
         )
         .await?;
-    let vk = contracts
-        .deploy_tx(
-            Contract::StateUpdateVK,
-            LightClientStateUpdateVKMock::deploy(l1.clone(), ())?,
-        )
-        .await?;
 
     let mut bytecode: BytecodeObject = serde_json::from_str(include_str!(
         "../../contract-bindings/artifacts/LightClientMock_bytecode.json",
     ))?;
+    ensure!(
+        bytecode.is_unlinked(),
+        "LightClientMock contract bytecode is linked, but should have an external library"
+    );
     bytecode
         .link_fully_qualified(
             "contracts/src/libraries/PlonkVerifier.sol:PlonkVerifier",
@@ -273,13 +283,6 @@ pub async fn deploy_mock_light_client_contract<M: Middleware + 'static>(
         )
         .resolve()
         .context("error linking PlonkVerifier lib")?;
-    bytecode
-        .link_fully_qualified(
-            "contracts/tests/mocks/LightClientStateUpdateVKMock.sol:LightClientStateUpdateVKMock",
-            vk,
-        )
-        .resolve()
-        .context("error linking LightClientStateUpdateVKMock lib")?;
     ensure!(
         !bytecode.is_unlinked(),
         "failed to link LightClientMock.sol"
@@ -329,6 +332,19 @@ pub async fn deploy(
         .with_chain_id(chain_id);
     let deployer = wallet.address();
     let l1 = Arc::new(SignerMiddleware::new(provider.clone(), wallet));
+
+    let signer_alloy = alloy::signers::local::MnemonicBuilder::<
+        alloy::signers::local::coins_bip39::English,
+    >::default()
+    .phrase(mnemonic.as_str())
+    .index(account_index)?
+    .build()?
+    .with_chain_id(Some(chain_id));
+    let wallet_alloy = EthereumWallet::from(signer_alloy);
+    let l1_alloy = ProviderBuilder::new()
+        .with_recommended_fillers()
+        .wallet(wallet_alloy)
+        .on_http(l1url);
 
     // As a sanity check, check that the deployer address has some balance of ETH it can use to pay
     // gas.
@@ -401,17 +417,23 @@ pub async fn deploy(
     // `FeeContract.sol`
     if should_deploy(ContractGroup::FeeContract, &only) {
         let fee_contract_address = contracts
-            .deploy_tx(Contract::FeeContract, FeeContract::deploy(l1.clone(), ())?)
+            .deploy_tx_alloy(
+                Contract::FeeContract,
+                FeeContract::deploy_builder(l1_alloy.clone()),
+            )
             .await?;
-        let fee_contract = FeeContract::new(fee_contract_address, l1.clone());
+        let fee_contract = FeeContract::new(fee_contract_address, l1_alloy.clone());
         let data = fee_contract
-            .initialize(deployer)
+            .initialize(deployer.to_alloy())
             .calldata()
-            .context("calldata for initialize transaction not available")?;
+            .clone();
         let fee_contract_proxy_address = contracts
             .deploy_tx(
                 Contract::FeeContractProxy,
-                ERC1967Proxy::deploy(l1.clone(), (fee_contract_address, data))?,
+                ERC1967Proxy::deploy(
+                    l1.clone(),
+                    (fee_contract.address().to_ethers(), data.to_ethers()),
+                )?,
             )
             .await?;
 
@@ -424,7 +446,7 @@ pub async fn deploy(
         }
 
         // Instantiate a wrapper with the proxy address and fee contract ABI.
-        let proxy = FeeContract::new(fee_contract_proxy_address, l1.clone());
+        let proxy = FeeContract::new(fee_contract_proxy_address.to_alloy(), l1_alloy.clone());
 
         // Transfer ownership to the multisig wallet if provided.
         if let Some(owner) = multisig_address {
@@ -433,7 +455,7 @@ pub async fn deploy(
                 ?owner,
                 "transferring fee contract proxy ownership to multisig",
             );
-            proxy.transfer_ownership(owner).send().await?.await?;
+            let _ = proxy.transferOwnership(owner.to_alloy()).send().await?;
         }
     }
 
@@ -495,20 +517,49 @@ pub enum ContractGroup {
     PermissionedStakeTable,
 }
 
+// Link with LightClient's bytecode artifacts. We include the unlinked bytecode for the contract
+// in this binary so that the contract artifacts do not have to be distributed with the binary.
+// This should be fine because if the bindings we are importing are up to date, so should be the
+// contract artifacts: this is no different than foundry inlining bytecode objects in generated
+// bindings, except that foundry doesn't provide the bytecode for contracts that link with
+// libraries, so we have to do it ourselves.
+fn link_light_client_contract(
+    plonk_verifier: Address,
+    // vk: Address,
+) -> anyhow::Result<BytecodeObject> {
+    let mut bytecode: BytecodeObject = serde_json::from_str(include_str!(
+        "../../contract-bindings/artifacts/LightClient_bytecode.json",
+    ))?;
+    ensure!(
+        bytecode.is_unlinked(),
+        "LightClient contract bytecode is linked, but should have an external library"
+    );
+    bytecode
+        .link_fully_qualified(
+            "contracts/src/libraries/PlonkVerifier.sol:PlonkVerifier",
+            plonk_verifier,
+        )
+        .resolve()
+        .context("error linking PlonkVerifier lib")?;
+    ensure!(!bytecode.is_unlinked(), "failed to link LightClient.sol");
+    Ok(bytecode)
+}
+
 #[cfg(any(test, feature = "testing"))]
 pub mod test_helpers {
 
-    use anyhow::{ensure, Context};
-    use contract_bindings::{
+    use anyhow::Context;
+    use contract_bindings_ethers::{
         erc1967_proxy::ERC1967Proxy,
         fee_contract::{FeeContract, FEECONTRACT_ABI, FEECONTRACT_BYTECODE},
         light_client::{LightClient, LIGHTCLIENT_ABI},
-        light_client_state_update_vk::LightClientStateUpdateVK,
         plonk_verifier::PlonkVerifier,
     };
-    use ethers::{prelude::*, solc::artifacts::BytecodeObject};
+    use ethers::prelude::*;
     use hotshot_contract_adapter::light_client::LightClientConstructorArgs;
     use std::sync::Arc;
+
+    use crate::deployer::link_light_client_contract;
 
     use super::{Contract, Contracts};
 
@@ -525,37 +576,8 @@ pub mod test_helpers {
                 PlonkVerifier::deploy(l1.clone(), ())?,
             )
             .await?;
-        let vk = contracts
-            .deploy_tx(
-                Contract::StateUpdateVK,
-                LightClientStateUpdateVK::deploy(l1.clone(), ())?,
-            )
-            .await?;
 
-        // Link with LightClient's bytecode artifacts. We include the unlinked bytecode for the contract
-        // in this binary so that the contract artifacts do not have to be distributed with the binary.
-        // This should be fine because if the bindings we are importing are up to date, so should be the
-        // contract artifacts: this is no different than foundry inlining bytecode objects in generated
-        // bindings, except that foundry doesn't provide the bytecode for contracts that link with
-        // libraries, so we have to do it ourselves.
-        let mut bytecode: BytecodeObject = serde_json::from_str(include_str!(
-            "../../contract-bindings/artifacts/LightClient_bytecode.json",
-        ))?;
-        bytecode
-            .link_fully_qualified(
-                "contracts/src/libraries/PlonkVerifier.sol:PlonkVerifier",
-                plonk_verifier,
-            )
-            .resolve()
-            .context("error linking PlonkVerifier lib")?;
-        bytecode
-            .link_fully_qualified(
-                "contracts/src/libraries/LightClientStateUpdateVK.sol:LightClientStateUpdateVK",
-                vk,
-            )
-            .resolve()
-            .context("error linking LightClientStateUpdateVK lib")?;
-        ensure!(!bytecode.is_unlinked(), "failed to link LightClient.sol");
+        let bytecode = link_light_client_contract(plonk_verifier)?;
 
         // Deploy light client.
         let light_client_factory = ContractFactory::new(

@@ -10,7 +10,7 @@ import { EdOnBN254 } from "./libraries/EdOnBn254.sol";
  * @dev An stake table mapping with owner-only access control.
  */
 contract PermissionedStakeTable is Ownable {
-    event StakersUpdated(NodeInfo[] removed, NodeInfo[] added);
+    event StakersUpdated(BN254.G2Point[] removed, NodeInfo[] added);
 
     error StakerAlreadyExists(BN254.G2Point);
     error StakerNotFound(BN254.G2Point);
@@ -33,7 +33,7 @@ contract PermissionedStakeTable is Ownable {
 
     // public methods
 
-    function update(NodeInfo[] memory stakersToRemove, NodeInfo[] memory newStakers)
+    function update(BN254.G2Point[] memory stakersToRemove, NodeInfo[] memory newStakers)
         public
         onlyOwner
     {
@@ -55,12 +55,12 @@ contract PermissionedStakeTable is Ownable {
         }
     }
 
-    function remove(NodeInfo[] memory stakersToRemove) internal {
+    function remove(BN254.G2Point[] memory stakersToRemove) internal {
         // TODO: revert if array empty
         for (uint256 i = 0; i < stakersToRemove.length; i++) {
-            bytes32 stakerID = _hashBlsKey(stakersToRemove[i].blsVK);
+            bytes32 stakerID = _hashBlsKey(stakersToRemove[i]);
             if (!stakers[stakerID]) {
-                revert StakerNotFound(stakersToRemove[i].blsVK);
+                revert StakerNotFound(stakersToRemove[i]);
             }
             stakers[stakerID] = false;
         }

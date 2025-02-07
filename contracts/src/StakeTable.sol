@@ -6,9 +6,12 @@ import { BLSSig } from "./libraries/BLSSig.sol";
 import { AbstractStakeTable } from "./interfaces/AbstractStakeTable.sol";
 import { LightClient } from "../src/LightClient.sol";
 import { EdOnBN254 } from "./libraries/EdOnBn254.sol";
+import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
+
+using EdOnBN254 for EdOnBN254.EdOnBN254Point;
 
 /// @title Implementation of the Stake Table interface
-contract StakeTable is AbstractStakeTable {
+contract StakeTable is AbstractStakeTable, Ownable {
     /// Error to notify restaking is not implemented yet.
     error RestakingNotImplemented();
 
@@ -53,8 +56,26 @@ contract StakeTable is AbstractStakeTable {
     // Error raised when the staker does not register with the correct stakeAmount
     error InsufficientStakeAmount(uint256);
 
+    // Error raised when the staker does not provide a new schnorrVK
+    error InvalidSchnorrVK();
+
+    // Error raised when the staker does not provide a new blsVK
+    error InvalidBlsVK();
+
+    // Error raised when zero point keys are provided
+    error NoKeyChange();
+
+    /// Error raised when the caller is not the owner
+    error Unauthorized();
+
+    /// Error raised when the light client address is invalid
+    error InvalidAddress();
+
+    /// Error raised when the value is invalid
+    error InvalidValue();
+
     /// Mapping from a hash of a BLS key to a node struct defined in the abstract contract.
-    mapping(bytes32 keyHash => Node node) public nodes;
+    mapping(address account => Node node) public nodes;
 
     /// Total stake locked;
     uint256 public totalStake;
@@ -81,7 +102,16 @@ contract StakeTable is AbstractStakeTable {
 
     uint64 public maxChurnRate;
 
-    constructor(address _tokenAddress, address _lightClientAddress, uint64 churnRate) {
+    uint256 public minStakeAmount;
+
+    /// TODO change constructor to initialize function when we make the contract upgradeable
+    constructor(
+        address _tokenAddress,
+        address _lightClientAddress,
+        uint64 churnRate,
+        uint256 _minStakeAmount,
+        address initialOwner
+    ) Ownable(initialOwner) {
         tokenAddress = _tokenAddress;
         lightClient = LightClient(_lightClientAddress);
 
@@ -94,6 +124,8 @@ contract StakeTable is AbstractStakeTable {
         // It is not possible to exit during the first epoch.
         firstAvailableExitEpoch = 1;
         _numPendingExits = 0;
+
+        minStakeAmount = _minStakeAmount;
     }
 
     /// @dev Computes a hash value of some G2 point.
@@ -103,6 +135,21 @@ contract StakeTable is AbstractStakeTable {
         return keccak256(abi.encode(blsVK.x0, blsVK.x1, blsVK.y0, blsVK.y1));
     }
 
+    /// @dev Compares two BLS keys for equality
+    /// @param a First BLS key
+    /// @param b Second BLS key
+    /// @return True if the keys are equal, false otherwise
+    function _isEqualBlsKey(BN254.G2Point memory a, BN254.G2Point memory b)
+        public
+        pure
+        returns (bool)
+    {
+        return BN254.BaseField.unwrap(a.x0) == BN254.BaseField.unwrap(b.x0)
+            && BN254.BaseField.unwrap(a.x1) == BN254.BaseField.unwrap(b.x1)
+            && BN254.BaseField.unwrap(a.y0) == BN254.BaseField.unwrap(b.y0)
+            && BN254.BaseField.unwrap(a.y1) == BN254.BaseField.unwrap(b.y1);
+    }
+
     /// TODO handle this logic more appropriately when epochs are re-introduced
     /// @dev Fetches the current epoch from the light client contract.
     /// @return current epoch (computed from the current block)
@@ -110,22 +157,18 @@ contract StakeTable is AbstractStakeTable {
         return 0;
     }
 
-    /// @notice Look up the balance of `blsVK`
-    /// @param blsVK BLS public key controlled by the user.
+    /// @notice Look up the balance of `account`
+    /// @param account account controlled by the user.
     /// @return Current balance owned by the user.
-    /// TODO modify this according to the current spec
-    function lookupStake(BN254.G2Point memory blsVK) external view override returns (uint256) {
-        Node memory node = this.lookupNode(blsVK);
+    function lookupStake(address account) external view override returns (uint256) {
+        Node memory node = this.lookupNode(account);
         return node.balance;
     }
 
-    /// @notice Look up the full `Node` state associated with `blsVK`
-    /// @dev The lookup is achieved by hashing first the four field elements of blsVK using
-    /// keccak256.
-    /// @return Node indexed by blsVK
-    /// TODO modify this according to the current spec
-    function lookupNode(BN254.G2Point memory blsVK) external view override returns (Node memory) {
-        return nodes[_hashBlsKey(blsVK)];
+    /// @notice Look up the full `Node` state associated with `account`
+    /// @return Node indexed by account
+    function lookupNode(address account) external view override returns (Node memory) {
+        return nodes[account];
     }
 
     /// @notice Get the next available epoch and queue size in that epoch
@@ -247,15 +290,12 @@ contract StakeTable is AbstractStakeTable {
         BN254.G1Point memory blsSig,
         uint64 validUntilEpoch
     ) external override {
-        uint256 fixedStakeAmount = minStakeAmount();
-
         // Verify that the sender amount is the minStakeAmount
-        if (amount < fixedStakeAmount) {
+        if (amount < minStakeAmount) {
             revert InsufficientStakeAmount(amount);
         }
 
-        bytes32 key = _hashBlsKey(blsVK);
-        Node memory node = nodes[key];
+        Node memory node = nodes[msg.sender];
 
         // Verify that the node is not already registered.
         if (node.account != address(0x0)) {
@@ -264,19 +304,39 @@ contract StakeTable is AbstractStakeTable {
 
         // Verify that this contract has permissions to access the validator's stake token.
         uint256 allowance = ERC20(tokenAddress).allowance(msg.sender, address(this));
-        if (allowance < fixedStakeAmount) {
-            revert InsufficientAllowance(allowance, fixedStakeAmount);
+        if (allowance < amount) {
+            revert InsufficientAllowance(allowance, amount);
         }
 
         // Verify that the validator has the balance for this stake token.
         uint256 balance = ERC20(tokenAddress).balanceOf(msg.sender);
-        if (balance < fixedStakeAmount) {
+        if (balance < amount) {
             revert InsufficientBalance(balance);
+        }
+
+        // Verify that blsVK is not the zero point
+        if (
+            _isEqualBlsKey(
+                blsVK,
+                BN254.G2Point(
+                    BN254.BaseField.wrap(0),
+                    BN254.BaseField.wrap(0),
+                    BN254.BaseField.wrap(0),
+                    BN254.BaseField.wrap(0)
+                )
+            )
+        ) {
+            revert InvalidBlsVK();
         }
 
         // Verify that the validator can sign for that blsVK
         bytes memory message = abi.encode(msg.sender);
         BLSSig.verifyBlsSig(message, blsSig, blsVK);
+
+        // Verify that the schnorrVK is non-zero
+        if (schnorrVK.isEqual(EdOnBN254.EdOnBN254Point(0, 0))) {
+            revert InvalidSchnorrVK();
+        }
 
         // Find the earliest epoch at which this node can register. Usually, this will be
         // currentEpoch() + 1 (the start of the next full epoch), but in periods of high churn the
@@ -289,38 +349,36 @@ contract StakeTable is AbstractStakeTable {
         appendRegistrationQueue(registerEpoch, queueSize);
 
         // Transfer the stake amount of ERC20 tokens from the sender to this contract.
-        SafeTransferLib.safeTransferFrom(
-            ERC20(tokenAddress), msg.sender, address(this), fixedStakeAmount
-        );
+        SafeTransferLib.safeTransferFrom(ERC20(tokenAddress), msg.sender, address(this), amount);
 
         // Update the total staked amount
-        totalStake += fixedStakeAmount;
+        totalStake += amount;
 
         // Create an entry for the node.
         node.account = msg.sender;
-        node.balance = fixedStakeAmount;
+        node.balance = amount;
+        node.blsVK = blsVK;
         node.schnorrVK = schnorrVK;
         node.registerEpoch = registerEpoch;
 
-        nodes[key] = node;
+        nodes[msg.sender] = node;
 
-        emit Registered(key, registerEpoch, fixedStakeAmount);
+        emit Registered(msg.sender, registerEpoch, amount);
     }
 
     /// @notice Deposit more stakes to registered keys
     /// @dev TODO this implementation will be revisited later. See
     /// https://github.com/EspressoSystems/espresso-sequencer/issues/806
     /// @dev TODO modify this according to the current spec
-    /// @param blsVK The BLS verification key
     /// @param amount The amount to deposit
     /// @return (newBalance, effectiveEpoch) the new balance effective at a future epoch
-    function deposit(BN254.G2Point memory blsVK, uint256 amount)
-        external
-        override
-        returns (uint256, uint64)
-    {
-        bytes32 key = _hashBlsKey(blsVK);
-        Node memory node = nodes[key];
+    function deposit(uint256 amount) external override returns (uint256, uint64) {
+        Node memory node = nodes[msg.sender];
+
+        // if the node is not registered, revert
+        if (node.account == address(0)) {
+            revert NodeNotRegistered();
+        }
 
         // The deposit must come from the node's registered account.
         if (node.account != msg.sender) {
@@ -338,23 +396,26 @@ contract StakeTable is AbstractStakeTable {
             revert ExitRequestInProgress();
         }
 
-        nodes[key].balance += amount;
+        nodes[msg.sender].balance += amount;
         SafeTransferLib.safeTransferFrom(ERC20(tokenAddress), msg.sender, address(this), amount);
 
-        emit Deposit(_hashBlsKey(blsVK), uint256(amount));
+        emit Deposit(msg.sender, uint256(amount));
 
         uint64 effectiveEpoch = _currentEpoch + 1;
 
-        return (nodes[key].balance, effectiveEpoch);
+        return (nodes[msg.sender].balance, effectiveEpoch);
     }
 
     /// @notice Request to exit from the stake table, not immediately withdrawable!
     ///
     /// @dev TODO modify this according to the current spec
-    /// @param blsVK The BLS verification key to exit
-    function requestExit(BN254.G2Point memory blsVK) external override {
-        bytes32 key = _hashBlsKey(blsVK);
-        Node memory node = nodes[key];
+    function requestExit() external override {
+        Node memory node = nodes[msg.sender];
+
+        // if the node is not registered, revert
+        if (node.account == address(0)) {
+            revert NodeNotRegistered();
+        }
 
         // The exit request must come from the node's withdrawal account.
         if (node.account != msg.sender) {
@@ -374,34 +435,30 @@ contract StakeTable is AbstractStakeTable {
 
         // Prepare the node to exit.
         (uint64 exitEpoch, uint64 queueSize) = this.nextExitEpoch();
-        nodes[key].exitEpoch = exitEpoch;
+        nodes[msg.sender].exitEpoch = exitEpoch;
 
         appendExitQueue(exitEpoch, queueSize);
 
-        emit Exit(key, exitEpoch);
+        emit Exit(msg.sender, exitEpoch);
     }
 
     /// @notice Withdraw from the staking pool. Transfers occur! Only successfully exited keys can
     /// withdraw past their `exitEpoch`.
     ///
-    /// @param blsVK The BLS verification key to withdraw
-    /// @param blsSig The BLS signature that authenticates the ethereum account this function is
-    /// called from the caller
     /// @return The total amount withdrawn, equal to `Node.balance` associated with `blsVK`
-    /// TODO: This function should be tested
-    /// TODO modify this according to the current spec
-
-    function withdrawFunds(BN254.G2Point memory blsVK, BN254.G1Point memory blsSig)
-        external
-        override
-        returns (uint256)
-    {
-        bytes32 key = _hashBlsKey(blsVK);
-        Node memory node = nodes[key];
+    /// TODO: add epoch logic so that we can ensure the node has first requested to exit and waiting
+    /// for the exit escrow period to be over
+    function withdrawFunds() external override returns (uint256) {
+        Node memory node = nodes[msg.sender];
 
         // Verify that the node is already registered.
         if (node.account == address(0)) {
             revert NodeNotRegistered();
+        }
+
+        // The exit request must come from the node's withdrawal account.
+        if (node.account != msg.sender) {
+            revert Unauthenticated();
         }
 
         // Verify that the balance is greater than zero
@@ -410,17 +467,14 @@ contract StakeTable is AbstractStakeTable {
             revert InsufficientStakeBalance(0);
         }
 
-        // Verify that the validator can sign for that blsVK
-        bytes memory message = abi.encode(msg.sender);
-        BLSSig.verifyBlsSig(message, blsSig, blsVK);
-
-        // Verify that the exit escrow period is over.
-        if (currentEpoch() < node.exitEpoch + exitEscrowPeriod(node)) {
-            revert PrematureWithdrawal();
-        }
+        // // Verify that the exit escrow period is over.
+        // if (currentEpoch() < node.exitEpoch + exitEscrowPeriod(node)) {
+        //     revert PrematureWithdrawal();
+        // }
+        totalStake -= balance;
 
         // Delete the node from the stake table.
-        delete nodes[key];
+        delete nodes[msg.sender];
 
         // Transfer the balance to the node's account.
         SafeTransferLib.safeTransfer(ERC20(tokenAddress), node.account, balance);
@@ -428,10 +482,89 @@ contract StakeTable is AbstractStakeTable {
         return balance;
     }
 
-    /// @notice Minimum stake amount
-    /// @return Minimum stake amount
-    /// TODO: This value should be a variable modifiable by admin
-    function minStakeAmount() public pure returns (uint256) {
-        return 10 ether;
+    /// @notice Update the consensus keys for a validator
+    /// @dev This function is used to update the consensus keys for a validator
+    /// @dev This function can only be called by the validator itself when it's not in the exit
+    /// queue
+    /// @dev The validator will need to give up either its old BLS key and/or old Schnorr key
+    /// @dev The validator will need to provide a BLS signature to prove that the account owns the
+    /// new BLS key
+    /// @param newBlsVK The new BLS verification key
+    /// @param newSchnorrVK The new Schnorr verification key
+    /// @param newBlsSig The BLS signature that the account owns the new BLS key
+    function updateConsensusKeys(
+        BN254.G2Point memory newBlsVK,
+        EdOnBN254.EdOnBN254Point memory newSchnorrVK,
+        BN254.G1Point memory newBlsSig
+    ) external override {
+        Node memory node = nodes[msg.sender];
+
+        // Verify that the node is already registered.
+        if (node.account == address(0)) revert NodeNotRegistered();
+
+        // Verify that the node is not in the exit queue
+        if (node.exitEpoch != 0) revert ExitRequestInProgress();
+
+        // Verify that the keys are not the same as the old ones
+        if (_isEqualBlsKey(newBlsVK, node.blsVK) && newSchnorrVK.isEqual(node.schnorrVK)) {
+            revert NoKeyChange();
+        }
+
+        // Zero-point constants for verification
+        BN254.G2Point memory zeroBlsKey = BN254.G2Point(
+            BN254.BaseField.wrap(0),
+            BN254.BaseField.wrap(0),
+            BN254.BaseField.wrap(0),
+            BN254.BaseField.wrap(0)
+        );
+        EdOnBN254.EdOnBN254Point memory zeroSchnorrKey = EdOnBN254.EdOnBN254Point(0, 0);
+
+        if (_isEqualBlsKey(newBlsVK, zeroBlsKey)) revert InvalidBlsVK();
+
+        if (newSchnorrVK.isEqual(zeroSchnorrKey)) revert InvalidSchnorrVK();
+
+        // Verify that the validator can sign for that newBlsVK, otherwise it inner reverts with
+        // BLSSigVerificationFailed
+        bytes memory message = abi.encode(msg.sender);
+        BLSSig.verifyBlsSig(message, newBlsSig, newBlsVK);
+
+        // Update the node's bls key
+        node.blsVK = newBlsVK;
+
+        // Update the node's schnorr key if the newSchnorrVK is not a zero point Schnorr key
+        node.schnorrVK = newSchnorrVK;
+
+        // Update the node in the stake table
+        nodes[msg.sender] = node;
+
+        // Emit the event
+        emit UpdatedConsensusKeys(msg.sender, node.blsVK, node.schnorrVK);
+    }
+
+    /// @notice Update the min stake amount
+    /// @dev The min stake amount cannot be set to zero
+    /// @param _minStakeAmount The new min stake amount
+    function updateMinStakeAmount(uint256 _minStakeAmount) external onlyOwner {
+        if (_minStakeAmount == 0) revert InvalidValue();
+        minStakeAmount = _minStakeAmount;
+        emit MinStakeAmountUpdated(minStakeAmount);
+    }
+
+    /// @notice Update the max churn rate
+    /// @dev The max churn rate cannot be set to zero
+    /// @param _maxChurnRate The new max churn rate
+    function updateMaxChurnRate(uint64 _maxChurnRate) external onlyOwner {
+        if (_maxChurnRate == 0) revert InvalidValue();
+        maxChurnRate = _maxChurnRate;
+        emit MaxChurnRateUpdated(maxChurnRate);
+    }
+
+    /// @notice Update the light client address
+    /// @dev The light client address cannot be set to the zero address
+    /// @param _lightClientAddress The new light client address
+    function updateLightClientAddress(address _lightClientAddress) external onlyOwner {
+        if (_lightClientAddress == address(0)) revert InvalidAddress();
+        lightClient = LightClient(_lightClientAddress);
+        emit LightClientAddressUpdated(_lightClientAddress);
     }
 }

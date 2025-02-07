@@ -363,9 +363,10 @@ where
     let pending = match call.send().await {
         Ok(pending) => pending,
         Err(err) => {
-            let e = err.decode_contract_revert::<E>().unwrap();
-            tracing::error!("contract revert: {:?}", e);
-            return Err(anyhow!("error sending transaction: {:?}", e));
+            if let Some(e) = err.decode_contract_revert::<E>() {
+                tracing::error!("contract revert: {:?}", e);
+            }
+            return Err(anyhow!("error sending transaction: {:?}", err));
         }
     };
 

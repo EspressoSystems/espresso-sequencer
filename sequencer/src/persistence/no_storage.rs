@@ -9,10 +9,10 @@ use espresso_types::{
 };
 use hotshot_types::{
     consensus::CommitmentMap,
-    data::{DaProposal, QuorumProposal, QuorumProposal2, VidDisperseShare},
+    data::{DaProposal, QuorumProposal, QuorumProposal2, QuorumProposalWrapper, VidDisperseShare},
     event::{Event, EventType, HotShotAction, LeafInfo},
     message::Proposal,
-    simple_certificate::{QuorumCertificate2, UpgradeCertificate},
+    simple_certificate::{NextEpochQuorumCertificate2, QuorumCertificate2, UpgradeCertificate},
     utils::View,
     vid::VidSchemeType,
 };
@@ -110,13 +110,14 @@ impl SequencerPersistence for NoStorage {
 
     async fn load_quorum_proposals(
         &self,
-    ) -> anyhow::Result<BTreeMap<ViewNumber, Proposal<SeqTypes, QuorumProposal2<SeqTypes>>>> {
+    ) -> anyhow::Result<BTreeMap<ViewNumber, Proposal<SeqTypes, QuorumProposalWrapper<SeqTypes>>>>
+    {
         Ok(Default::default())
     }
     async fn load_quorum_proposal(
         &self,
         view: ViewNumber,
-    ) -> anyhow::Result<Proposal<SeqTypes, QuorumProposal2<SeqTypes>>> {
+    ) -> anyhow::Result<Proposal<SeqTypes, QuorumProposalWrapper<SeqTypes>>> {
         bail!("proposal {view:?} not available");
     }
     async fn load_upgrade_certificate(
@@ -150,7 +151,7 @@ impl SequencerPersistence for NoStorage {
     }
     async fn append_quorum_proposal(
         &self,
-        _proposal: &Proposal<SeqTypes, QuorumProposal2<SeqTypes>>,
+        _proposal: &Proposal<SeqTypes, QuorumProposalWrapper<SeqTypes>>,
     ) -> anyhow::Result<()> {
         Ok(())
     }
@@ -169,5 +170,18 @@ impl SequencerPersistence for NoStorage {
         ) -> Proposal<SeqTypes, QuorumProposal2<SeqTypes>>,
     ) -> anyhow::Result<()> {
         Ok(())
+    }
+
+    async fn store_next_epoch_quorum_certificate(
+        &self,
+        _high_qc: NextEpochQuorumCertificate2<SeqTypes>,
+    ) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    async fn load_next_epoch_quorum_certificate(
+        &self,
+    ) -> anyhow::Result<Option<NextEpochQuorumCertificate2<SeqTypes>>> {
+        Ok(None)
     }
 }

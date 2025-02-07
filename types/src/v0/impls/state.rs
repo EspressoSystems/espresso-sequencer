@@ -1,6 +1,7 @@
 use anyhow::bail;
 use committable::{Commitment, Committable};
 use ethers::types::Address;
+use ethers_conv::ToAlloy;
 use hotshot_query_service::merklized_state::MerklizedState;
 use hotshot_types::{
     data::{BlockError, ViewNumber},
@@ -814,6 +815,7 @@ impl ValidatedState {
         let cf = match upgrade.upgrade_type {
             UpgradeType::Fee { chain_config } => chain_config,
             UpgradeType::Marketplace { chain_config } => chain_config,
+            UpgradeType::Epoch { chain_config } => chain_config,
         };
 
         self.chain_config = cf.into();
@@ -867,7 +869,7 @@ pub async fn get_l1_deposits(
         instance
             .l1_client
             .get_finalized_deposits(
-                addr,
+                addr.to_alloy(),
                 parent_leaf
                     .block_header()
                     .l1_finalized()
@@ -961,6 +963,7 @@ impl HotShotState<SeqTypes> for ValidatedState {
         } else {
             BlockMerkleTree::from_commitment(block_header.block_merkle_tree_root())
         };
+
         Self {
             fee_merkle_tree,
             block_merkle_tree,

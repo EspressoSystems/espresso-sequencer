@@ -226,7 +226,7 @@ services:
       - "$ESPRESSO_SEQUENCER_API_PORT:$ESPRESSO_SEQUENCER_API_PORT"
       - "$ESPRESSO_SEQUENCER_HOTSHOT_EVENT_STREAMING_API_PORT:$ESPRESSO_SEQUENCER_HOTSHOT_EVENT_STREAMING_API_PORT"
     # Run the full API server with all modules, Postgres storage
-    command: sequencer -- storage-sql -- http -- query -- catchup -- status -- submit -- hotshot-events -- config
+    command: sequencer -- storage-sql -- http -- query -- submit -- hotshot-events -- config
     environment:
       - ESPRESSO_SEQUENCER_EMBEDDED_DB=false
       - ESPRESSO_SEQUENCER_GENESIS_FILE
@@ -285,7 +285,7 @@ services:
     image: ghcr.io/espressosystems/espresso-sequencer/sequencer:main
     ports:
       - "$ESPRESSO_SEQUENCER1_API_PORT:$ESPRESSO_SEQUENCER_API_PORT"
-    command: sequencer -- storage-sql -- http -- query -- catchup -- status -- state -- explorer
+    command: sequencer -- storage-sql -- http -- query -- explorer
     environment:
       - ESPRESSO_SEQUENCER_EMBEDDED_DB=false
       - ESPRESSO_SEQUENCER_GENESIS_FILE
@@ -299,7 +299,8 @@ services:
       - ESPRESSO_SEQUENCER_POSTGRES_USER=root
       - ESPRESSO_SEQUENCER_POSTGRES_PASSWORD=password
       - ESPRESSO_SEQUENCER_POSTGRES_DATABASE=sequencer
-      - ESPRESSO_SEQUENCER_L1_PROVIDER=$ESPRESSO_SEQUENCER_L1_WS_PROVIDER
+      - ESPRESSO_SEQUENCER_L1_PROVIDER
+      - ESPRESSO_SEQUENCER_L1_WS_PROVIDER=ws://demo-l1-network:${ESPRESSO_SEQUENCER_L1_WS_PORT}
       - ESPRESSO_SEQUENCER_L1_POLLING_INTERVAL
       - ESPRESSO_SEQUENCER_L1_EVENTS_MAX_BLOCK_RANGE
       - ESPRESSO_STATE_RELAY_SERVER_URL
@@ -343,7 +344,7 @@ services:
     image: ghcr.io/espressosystems/espresso-sequencer/sequencer:main
     ports:
       - "$ESPRESSO_SEQUENCER2_API_PORT:$ESPRESSO_SEQUENCER_API_PORT"
-    command: sequencer -- http -- catchup -- status
+    command: sequencer -- http -- query -- storage-fs
     environment:
       - ESPRESSO_SEQUENCER_EMBEDDED_DB=false
       - ESPRESSO_SEQUENCER_GENESIS_FILE
@@ -394,7 +395,7 @@ services:
     image: ghcr.io/espressosystems/espresso-sequencer/sequencer:main
     ports:
       - "$ESPRESSO_SEQUENCER3_API_PORT:$ESPRESSO_SEQUENCER_API_PORT"
-    command: sequencer -- http -- catchup -- status
+    command: sequencer -- http -- query --storage-fs
     environment:
       - ESPRESSO_SEQUENCER_EMBEDDED_DB=false
       - ESPRESSO_SEQUENCER_GENESIS_FILE
@@ -403,7 +404,8 @@ services:
       - ESPRESSO_SEQUENCER_API_PORT
       - ESPRESSO_SEQUENCER_MAX_CONNECTIONS
       - ESPRESSO_SEQUENCER_STATE_PEERS=http://sequencer4:$ESPRESSO_SEQUENCER_API_PORT
-      - ESPRESSO_SEQUENCER_L1_PROVIDER=$ESPRESSO_SEQUENCER_L1_WS_PROVIDER
+      - ESPRESSO_SEQUENCER_L1_PROVIDER
+      - ESPRESSO_SEQUENCER_L1_WS_PROVIDER=ws://demo-l1-network:${ESPRESSO_SEQUENCER_L1_WS_PORT}
       - ESPRESSO_SEQUENCER_L1_POLLING_INTERVAL
       - ESPRESSO_SEQUENCER_L1_EVENTS_MAX_BLOCK_RANGE
       - ESPRESSO_STATE_RELAY_SERVER_URL
@@ -445,7 +447,7 @@ services:
     image: ghcr.io/espressosystems/espresso-sequencer/sequencer:main
     ports:
       - "$ESPRESSO_SEQUENCER4_API_PORT:$ESPRESSO_SEQUENCER_API_PORT"
-    command: sequencer -- http -- query -- catchup -- status
+    command: sequencer -- http -- query -- storage-fs
     environment:
       - ESPRESSO_SEQUENCER_EMBEDDED_DB=true
       - ESPRESSO_SEQUENCER_GENESIS_FILE

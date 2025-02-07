@@ -1,7 +1,7 @@
 use anyhow::{bail, ensure, Context};
 use clap::{Parser, Subcommand};
 use client::SequencerClient;
-use contract_bindings::fee_contract::FeeContract;
+use contract_bindings_ethers::fee_contract::FeeContract;
 use espresso_types::{eth_signature_key::EthKeyPair, parse_duration, Header};
 use ethers::{
     middleware::{Middleware, SignerMiddleware},

@@ -65,6 +65,10 @@ impl SequencerDataSource for DataSource {
             builder = builder.with_rate_limit(limit);
         }
 
+        if opt.lightweight {
+            builder = builder.leaf_only();
+        }
+
         if let Some(delay) = active_fetch_delay {
             builder = builder.with_active_fetch_delay(delay);
         }
@@ -208,7 +212,9 @@ async fn load_frontier<Mode: TransactionMode>(
 ) -> anyhow::Result<BlocksFrontier> {
     tx.get_path(
         Snapshot::<SeqTypes, BlockMerkleTree, { BlockMerkleTree::ARITY }>::Index(height),
-        height - 1,
+        height
+            .checked_sub(1)
+            .ok_or(anyhow::anyhow!("Subtract with overflow ({height})!"))?,
     )
     .await
     .context(format!("fetching frontier at height {height}"))
@@ -488,6 +494,15 @@ mod impl_testable_data_source {
 
         fn persistence_options(storage: &Self::Storage) -> Self::Options {
             tmp_options(storage)
+        }
+
+        fn leaf_only_ds_options(
+            storage: &Self::Storage,
+            opt: api::Options,
+        ) -> anyhow::Result<api::Options> {
+            let mut ds_opts = tmp_options(storage);
+            ds_opts.lightweight = true;
+            Ok(opt.query_sql(Default::default(), ds_opts))
         }
 
         fn options(storage: &Self::Storage, opt: api::Options) -> api::Options {

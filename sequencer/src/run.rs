@@ -28,7 +28,7 @@ pub async fn main() -> anyhow::Result<()> {
 
     // validate that the fee contract is a proxy and panic otherwise
     genesis
-        .validate_fee_contract(opt.l1_provider_url.to_string())
+        .validate_fee_contract(opt.l1_provider_url[0].clone())
         .await
         .unwrap();
 
@@ -130,7 +130,7 @@ where
 {
     let (private_staking_key, private_state_key) = opt.private_keys()?;
     let l1_params = L1Params {
-        url: opt.l1_provider_url,
+        urls: opt.l1_provider_url,
         options: opt.l1_options,
     };
 
@@ -195,15 +195,6 @@ where
             if let Some(submit) = modules.submit {
                 http_opt = http_opt.submit(submit);
             }
-            if let Some(status) = modules.status {
-                http_opt = http_opt.status(status);
-            }
-            if let Some(state) = modules.state {
-                http_opt = http_opt.state(state);
-            }
-            if let Some(catchup) = modules.catchup {
-                http_opt = http_opt.catchup(catchup);
-            }
 
             if let Some(hotshot_events) = modules.hotshot_events {
                 http_opt = http_opt.hotshot_events(hotshot_events);
@@ -265,7 +256,7 @@ mod test {
     use tokio::spawn;
 
     use crate::{
-        api::options::{Http, Status},
+        api::options::Http,
         genesis::{L1Finalized, StakeTableConfig},
         persistence::fs,
         SequencerApiVersion,
@@ -305,7 +296,8 @@ mod test {
 
         let modules = Modules {
             http: Some(Http::with_port(port)),
-            status: Some(Status),
+            query: Some(Default::default()),
+            storage_fs: Some(fs::Options::new(tmp.path().into())),
             ..Default::default()
         };
         let opt = Options::parse_from([

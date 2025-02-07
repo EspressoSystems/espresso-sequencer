@@ -20,10 +20,7 @@
 
   inputs.flake-utils.url = "github:numtide/flake-utils";
 
-  inputs.foundry.url =
-    "github:shazow/foundry.nix/monthly"; # Use monthly branch for permanent releases
   inputs.solc-bin.url = "github:EspressoSystems/nix-solc-bin";
-
   inputs.flake-compat.url = "github:edolstra/flake-compat";
   inputs.flake-compat.flake = false;
 
@@ -36,7 +33,6 @@
     , nixpkgs-cross-overlay
     , flake-utils
     , pre-commit-hooks
-    , foundry
     , solc-bin
     , ...
     }:
@@ -65,7 +61,6 @@
 
       overlays = [
         (import rust-overlay)
-        foundry.overlay
         solc-bin.overlays.default
         (final: prev: {
           solhint =
@@ -124,6 +119,20 @@
               types_or = [ "rust" "toml" ];
               pass_filenames = false;
             };
+            cargo-lock = {
+              enable = true;
+              description = "Ensure Cargo.lock is compatible with Cargo.toml";
+              entry = "cargo update --workspace --verbose";
+              types_or = [ "toml" ];
+              pass_filenames = false;
+            };
+            cargo-lock-sqlite = {
+              enable = true;
+              description = "Ensure Cargo.lock is compatible with Cargo.toml";
+              entry = "cargo update --manifest-path sequencer-sqlite/Cargo.toml --workspace --verbose";
+              types_or = [ "toml" ];
+              pass_filenames = false;
+            };
             forge-fmt = {
               enable = true;
               description = "Enforce forge fmt";
@@ -166,18 +175,11 @@
       };
       devShells.default =
         let
-          stableToolchain = pkgs.rust-bin.stable.latest.minimal.override {
-            extensions = [ "rustfmt" "clippy" "llvm-tools-preview" "rust-src" ];
-          };
+          stableToolchain = pkgs.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml;
           nightlyToolchain = pkgs.rust-bin.selectLatestNightlyWith (toolchain: toolchain.minimal.override {
             extensions = [ "rust-analyzer" ];
           });
-          # nixWithFlakes allows pre v2.4 nix installations to use
-          # flake commands (like `nix flake update`)
-          nixWithFlakes = pkgs.writeShellScriptBin "nix" ''
-            exec ${pkgs.nixFlakes}/bin/nix --experimental-features "nix-command flakes" "$@"
-          '';
-          solc = pkgs.solc-bin.latest;
+          solc = pkgs.solc-bin."0.8.23";
         in
         mkShell (rustEnvVars // {
           buildInputs = [
@@ -200,7 +202,6 @@
             nightlyToolchain.passthru.availableComponents.rust-analyzer
 
             # Tools
-            nixWithFlakes
             nixpkgs-fmt
             entr
             process-compose
@@ -214,7 +215,25 @@
             coreutils
 
             # Ethereum contracts, solidity, ...
-            foundry-bin
+            # TODO: remove alloy patch when forge includes this fix: https://github.com/alloy-rs/core/pull/864
+            # foundry
+            (foundry.overrideAttrs {
+              # Set the resolve limit to 128 by replacing the value in the vendored dependencies.
+              postPatch = ''
+                pushd $cargoDepsCopy/alloy-sol-macro-expander
+
+                oldHash=$(sha256sum src/expand/mod.rs | cut -d " " -f 1)
+
+                substituteInPlace src/expand/mod.rs \
+                  --replace-warn \
+                  'const RESOLVE_LIMIT: usize = 32;' 'const RESOLVE_LIMIT: usize = 128;'
+
+                substituteInPlace .cargo-checksum.json \
+                  --replace-warn $oldHash $(sha256sum src/expand/mod.rs | cut -d " " -f 1)
+
+                popd
+              '';
+            })
             solc
             nodePackages.prettier
             solhint

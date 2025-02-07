@@ -12,7 +12,7 @@ async fn test_upgrade() -> Result<()> {
 
     let testing = TestConfig::new().await.unwrap();
 
-    let versions = if testing.sequencer_version >= 3 {
+    let versions = if testing.sequencer_version as u16 >= MarketplaceVersion::version().minor {
         (FeeVersion::version(), MarketplaceVersion::version())
     } else {
         panic!("Invalid sequencer version provided for upgrade test.");

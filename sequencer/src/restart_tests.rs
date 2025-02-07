@@ -247,11 +247,15 @@ impl<S: TestableSequencerDataSource> TestNode<S> {
     async fn new(network: NetworkParams<'_>, node: &NodeParams) -> Self {
         tracing::info!(?network, ?node, "creating node",);
 
+        let opts = api::Options::from(api::options::Http::with_port(node.api_port));
         let storage = S::create_storage().await;
+        let opt = S::options(&storage, opts);
+
         let mut modules = Modules {
             http: Some(api::options::Http::with_port(node.api_port)),
-            status: Some(Default::default()),
-            catchup: Some(Default::default()),
+            query: Some(Default::default()),
+            storage_fs: opt.storage_fs,
+            storage_sql: opt.storage_sql,
             ..Default::default()
         };
         if node.is_da {
@@ -262,7 +266,6 @@ impl<S: TestableSequencerDataSource> TestNode<S> {
                     .map(|port| format!("http://127.0.0.1:{port}").parse().unwrap())
                     .collect(),
             });
-            modules.state = Some(Default::default());
         }
 
         let mut opt = Options::parse_from([
@@ -719,7 +722,7 @@ impl TestNetwork {
             && self.da_nodes.len() - da_nodes.len() >= da_threshold
         {
             // If we are shutting down less than f nodes, the remaining nodes should be able to make
-            // progress, and we will check that that is the case.
+            // progress, and we will check that is the case.
             //
             // Note that not every node will be able to commit leaves, because a node requires the
             // cooperation of the node after it to commit its proposal. But, as long as we have shut

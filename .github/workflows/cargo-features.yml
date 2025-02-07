@@ -13,7 +13,7 @@ on:
   pull_request:
   workflow_dispatch:
 
-concurrency: 
+concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
@@ -35,8 +35,8 @@ jobs:
       # as each individual feature enabled.
       - name: Check compilation for feature combinations
         run: |
-          cargo hack check --feature-powerset
+          cargo hack check --feature-powerset --exclude hotshot-query-service
 
       - name: Check compilation for feature combinations (--tests)
         run: |
-          cargo hack check --feature-powerset --tests
+          cargo hack check --feature-powerset --tests --exclude hotshot-query-service

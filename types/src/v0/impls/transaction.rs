@@ -119,4 +119,8 @@ impl ExplorerTransaction for Transaction {
     fn namespace_id(&self) -> Self::NamespaceId {
         self.namespace
     }
+
+    fn payload_size(&self) -> u64 {
+        self.payload.len() as u64
+    }
 }
