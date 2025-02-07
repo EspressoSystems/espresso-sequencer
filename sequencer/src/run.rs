@@ -8,6 +8,7 @@ use super::{
     persistence, Genesis, L1Params, NetworkParams,
 };
 use clap::Parser;
+#[allow(unused_imports)]
 use espresso_types::{
     traits::NullEventConsumer, FeeVersion, MarketplaceVersion, SequencerVersions,
     SolverAuctionResultsProvider, V0_0,
