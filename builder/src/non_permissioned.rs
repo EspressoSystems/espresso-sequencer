@@ -184,7 +184,7 @@ impl BuilderConfig {
         );
 
         // start the hotshot api service
-        run_builder_api_service(hotshot_builder_apis_url.clone(), proxy_global_state);
+        run_builder_api_service::<V>(hotshot_builder_apis_url.clone(), proxy_global_state);
 
         // spawn the builder service
         let events_url = hotshot_events_api_url.clone();
