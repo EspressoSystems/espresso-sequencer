@@ -82,23 +82,23 @@ contract StakeTable is AbstractStakeTable {
     /// Reference to the light client contract.
     LightClient public lightClient;
 
-    /// @notice the first available epoch for registration, please use
-    /// `nextAvailableEpoch(firstAvailableRegistrationEpoch, _numPendingRegistrations)` to
-    /// get the correct epoch
-    uint64 public firstAvailableRegistrationEpoch;
-    /// @notice number of pending registrations in the `firstAvailableRegistrationEpoch` (not the
+    /// @notice the first available epoch for registration
+    uint64 public registrationEpoch;
+    /// @notice number of pending registrations in the `registrationEpoch` (not the
     /// total pending queue size!)
-    uint64 private _numPendingRegistrations;
+    uint64 public override numPendingRegistrationsInEpoch;
 
-    /// @notice the first available epoch for exit, please use
-    /// `nextAvailableEpoch(firstAvailableExitEpoch, _numPendingExits)` to get the correct
-    /// epoch
-    uint64 public firstAvailableExitEpoch;
-    /// @notice number of pending exits in the `firstAvailableExitEpoch` (not the total pending
+    /// @notice the first available epoch for exit
+    uint64 public exitEpoch;
+    /// @notice number of pending exits in the `exitEpoch` (not the total pending
     /// queue size!)
-    uint64 private _numPendingExits;
+    uint64 public override numPendingExitsInEpoch;
 
-    uint64 public maxChurnRate;
+    /// @notice The number of validators that can register per epoch as well as
+    /// the number of validators that can exit per epoch.
+    uint64 public maxNumChurnPerEpoch;
+
+    /// @notice The number of hotshot blocks per epoch.
     uint64 public hotShotBlocksPerEpoch;
 
     address public admin;
@@ -106,21 +106,21 @@ contract StakeTable is AbstractStakeTable {
     constructor(
         address _tokenAddress,
         address _lightClientAddress,
-        uint64 churnRate,
+        uint64 _maxNumChurnPerEpoch,
         uint64 _hotShotBlocksPerEpoch
     ) {
         tokenAddress = _tokenAddress;
         lightClient = LightClient(_lightClientAddress);
 
-        maxChurnRate = churnRate;
+        maxNumChurnPerEpoch = _maxNumChurnPerEpoch;
 
         // A set of hardcoded stakers is defined for the first epoch.
-        firstAvailableRegistrationEpoch = 1;
-        _numPendingRegistrations = 0;
+        registrationEpoch = 1;
+        numPendingRegistrationsInEpoch = 0;
 
         // It is not possible to exit during the first epoch.
-        firstAvailableExitEpoch = 1;
-        _numPendingExits = 0;
+        exitEpoch = 1;
+        numPendingExitsInEpoch = 0;
 
         // Set the hotShotBlocksPerEpoch
         if (_hotShotBlocksPerEpoch == 0) {
@@ -166,77 +166,59 @@ contract StakeTable is AbstractStakeTable {
         return epoch;
     }
 
-    /// @notice get the next available epoch based and queue size
-    /// @param firstAvailableEpoch The first available epoch (for registration or exit)
-    /// @param numPending The number of pending exits or registrations
-    /// @return epoch The next available epoch
-    /// @return queueSize The size of the queue in that epoch
+    /// @notice Add a registration
     /// TODO handle overflow when max uint64 is reached
-    function nextAvailableEpoch(uint64 firstAvailableEpoch, uint64 numPending)
-        external
-        view
-        override
-        returns (uint64, uint64)
-    {
-        uint64 epoch;
-        uint64 queueSize;
+    function pushToRegistrationQueue() internal virtual override {
+        // Either we have a need for a new registration epoch and registrations queue for the
+        // current epoch is zero or we have a free slot in the current registration epoch so we
+        // append to the registration queue, `numPendingRegistrationsInEpoch`.
 
-        if (firstAvailableEpoch < currentEpoch() + 1) {
-            epoch = currentEpoch() + 1;
-            queueSize = 0;
-        } else if (numPending >= maxChurnRate) {
-            epoch = firstAvailableEpoch + 1;
-            queueSize = 0;
+        if (registrationEpoch < currentEpoch() + 1) {
+            // The registration epoch is outdated.
+            registrationEpoch = currentEpoch() + 1;
+            numPendingRegistrationsInEpoch = 0;
+        } else if (numPendingRegistrationsInEpoch >= maxNumChurnPerEpoch) {
+            // The queue for in the current registration epoch is full.
+            registrationEpoch += 1;
+            numPendingRegistrationsInEpoch = 0;
         } else {
-            epoch = firstAvailableEpoch;
-            queueSize = numPending;
+            // We got a free slot in the current registration epoch.
+            numPendingRegistrationsInEpoch += 1;
         }
-        return (epoch, queueSize);
+    }
+
+    /// @notice Add an exit
+    function pushToExitQueue() internal virtual override {
+        // Either we have a need for a new exit epoch and exits queue for the
+        // current epoch is zero or we have a free slot in the current exit epoch so we
+        // append to the exit queue, `numPendingExitsInEpoch`.
+
+        if (exitEpoch < currentEpoch() + 1) {
+            // The exit epoch is outdated.
+            exitEpoch = currentEpoch() + 1;
+            numPendingExitsInEpoch = 0;
+        } else if (numPendingExitsInEpoch >= maxNumChurnPerEpoch) {
+            // The queue for in the current exit epoch is full.
+            exitEpoch += 1;
+            numPendingExitsInEpoch = 0;
+        } else {
+            // We got a free slot in the current exit epoch.
+            numPendingExitsInEpoch += 1;
+        }
     }
 
     /// @notice Look up the balance of `account`
     /// @param account account controlled by the user.
     /// @return Current balance owned by the user.
-    function lookupStake(address account) external view override returns (uint256) {
+    function lookupStake(address account) external view virtual override returns (uint256) {
         Node memory node = this.lookupNode(account);
         return node.balance;
     }
 
     /// @notice Look up the full `Node` state associated with `account`
     /// @return Node indexed by account
-    function lookupNode(address account) external view override returns (Node memory) {
+    function lookupNode(address account) external view virtual override returns (Node memory) {
         return nodes[account];
-    }
-
-    // @notice Update the registration queue
-    // @param epoch next available registration epoch
-    // @param queueSize current size of the registration queue (after insertion of new element in
-    // the queue)
-    /// TODO modify this according to the current spec
-    function appendRegistrationQueue(uint64 epoch, uint64 queueSize) private {
-        firstAvailableRegistrationEpoch = epoch;
-        _numPendingRegistrations = queueSize + 1;
-    }
-
-    /// @notice Get the number of pending registration requests in the waiting queue
-    /// TODO modify this according to the current spec
-    function numPendingRegistrations() external view override returns (uint64) {
-        return _numPendingRegistrations;
-    }
-
-    // @notice Update the exit queue
-    // @param epoch next available exit epoch
-    // @param queueSize current size of the exit queue (after insertion of new element in the queue)
-    /// TODO modify this according to the current spec
-    function appendExitQueue(uint64 epoch, uint64 queueSize) private {
-        firstAvailableExitEpoch = epoch;
-        _numPendingExits = queueSize + 1;
-    }
-
-    /// @notice Get the number of pending exit requests in the waiting queue
-    /// TODO modify this according to the current spec
-    function numPendingExits() external view override returns (uint64) {
-        return _numPendingExits;
     }
 
     /// @notice Defines the exit escrow period for a node.
@@ -288,7 +270,7 @@ contract StakeTable is AbstractStakeTable {
         uint256 amount,
         BN254.G1Point memory blsSig,
         uint64 validUntilEpoch
-    ) external override {
+    ) external virtual override {
         uint256 fixedStakeAmount = minStakeAmount();
 
         // Verify that the sender amount is the minStakeAmount
@@ -343,12 +325,10 @@ contract StakeTable is AbstractStakeTable {
         // currentEpoch() + 1 (the start of the next full epoch), but in periods of high churn the
         // queue may fill up and it may be later. If the queue is so full that the wait time exceeds
         // the caller's desired maximum wait, abort.
-        (uint64 registerEpoch, uint64 queueSize) =
-            this.nextAvailableEpoch(firstAvailableRegistrationEpoch, _numPendingRegistrations);
-        if (registerEpoch > validUntilEpoch) {
-            revert InvalidNextRegistrationEpoch(registerEpoch, validUntilEpoch);
+        pushToRegistrationQueue();
+        if (registrationEpoch > validUntilEpoch) {
+            revert InvalidNextRegistrationEpoch(registrationEpoch, validUntilEpoch);
         }
-        appendRegistrationQueue(registerEpoch, queueSize);
 
         // Transfer the stake amount of ERC20 tokens from the sender to this contract.
         SafeTransferLib.safeTransferFrom(
@@ -363,11 +343,11 @@ contract StakeTable is AbstractStakeTable {
         node.balance = fixedStakeAmount;
         node.blsVK = blsVK;
         node.schnorrVK = schnorrVK;
-        node.registerEpoch = registerEpoch;
+        node.registerEpoch = registrationEpoch;
 
         nodes[msg.sender] = node;
 
-        emit Registered(msg.sender, registerEpoch, fixedStakeAmount);
+        emit Registered(msg.sender, registrationEpoch, fixedStakeAmount);
     }
 
     /// @notice Deposit more stakes to registered keys
@@ -376,7 +356,7 @@ contract StakeTable is AbstractStakeTable {
     /// @dev TODO modify this according to the current spec
     /// @param amount The amount to deposit
     /// @return (newBalance, effectiveEpoch) the new balance effective at a future epoch
-    function deposit(uint256 amount) external override returns (uint256, uint64) {
+    function deposit(uint256 amount) external virtual override returns (uint256, uint64) {
         Node memory node = nodes[msg.sender];
 
         // if the node is not registered, revert
@@ -413,7 +393,7 @@ contract StakeTable is AbstractStakeTable {
     /// @notice Request to exit from the stake table, not immediately withdrawable!
     ///
     /// @dev TODO modify this according to the current spec
-    function requestExit() external override {
+    function requestExit() external virtual override {
         Node memory node = nodes[msg.sender];
 
         // if the node is not registered, revert
@@ -438,11 +418,8 @@ contract StakeTable is AbstractStakeTable {
         }
 
         // Prepare the node to exit.
-        (uint64 exitEpoch, uint64 queueSize) =
-            this.nextAvailableEpoch(firstAvailableExitEpoch, _numPendingExits);
+        pushToExitQueue();
         nodes[msg.sender].exitEpoch = exitEpoch;
-
-        appendExitQueue(exitEpoch, queueSize);
 
         emit Exit(msg.sender, exitEpoch);
     }
@@ -453,7 +430,7 @@ contract StakeTable is AbstractStakeTable {
     /// @return The total amount withdrawn, equal to `Node.balance` associated with `blsVK`
     /// TODO: add epoch logic so that we can ensure the node has first requested to exit and waiting
     /// for the exit escrow period to be over
-    function withdrawFunds() external override returns (uint256) {
+    function withdrawFunds() external virtual override returns (uint256) {
         Node memory node = nodes[msg.sender];
 
         // Verify that the node is already registered.
@@ -501,7 +478,7 @@ contract StakeTable is AbstractStakeTable {
         BN254.G2Point memory newBlsVK,
         EdOnBN254.EdOnBN254Point memory newSchnorrVK,
         BN254.G1Point memory newBlsSig
-    ) external override {
+    ) external virtual override {
         Node memory node = nodes[msg.sender];
 
         // Verify that the node is already registered.
