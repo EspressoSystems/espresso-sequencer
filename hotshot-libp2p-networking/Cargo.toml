@@ -1,6 +1,6 @@
 [package]
 description = "Libp2p Networking Layer"
-name = "libp2p-networking"
+name = "hotshot-libp2p-networking"
 version = { workspace = true }
 edition = { workspace = true }
 authors = { workspace = true }

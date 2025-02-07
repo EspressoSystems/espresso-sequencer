@@ -1,5 +1,5 @@
 [package]
-name = "utils"
+name = "hotshot-utils"
 version = { workspace = true }
 edition = { workspace = true }
 description = "Utils"
