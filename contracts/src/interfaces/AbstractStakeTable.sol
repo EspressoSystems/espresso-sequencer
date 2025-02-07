@@ -86,16 +86,16 @@ abstract contract AbstractStakeTable {
     // === Queuing Stats ===
 
     /// @notice Get the number of pending registration requests in the waiting queue
-    function numPendingRegistrations() external view virtual returns (uint64);
-
-    /// @notice push a registration request to the waiting queue
-    function pushToRegistrationQueue() internal virtual returns (uint64, uint64);
-
-    /// @notice push an exit request to the waiting queue
-    function pushToExitQueue() internal virtual returns (uint64, uint64);
+    function numPendingRegistrationsInEpoch() external view virtual returns (uint64);
 
     /// @notice Get the number of pending exit requests in the waiting queue
-    function numPendingExits() external view virtual returns (uint64);
+    function numPendingExitsInEpoch() external view virtual returns (uint64);
+
+    /// @notice push a registration request to the waiting queue
+    function pushToRegistrationQueue() internal virtual;
+
+    /// @notice push an exit request to the waiting queue
+    function pushToExitQueue() internal virtual;
 
     // === Write APIs ===
 

@@ -9,7 +9,9 @@ contract StakeTableMock is StakeTable {
         address lightClientAddress,
         uint64 churnRate,
         uint64 hotShotBlocksPerEpoch
-    ) StakeTable(token, lightClientAddress, churnRate, hotShotBlocksPerEpoch) { }
+    ) StakeTable(token, lightClientAddress, churnRate, hotShotBlocksPerEpoch) 
+    // solhint-disable-next-line no-empty-blocks
+    { }
 
     function setRegistrationEpoch(uint64 epoch) public {
         registrationEpoch = epoch;
@@ -20,11 +22,11 @@ contract StakeTableMock is StakeTable {
     }
 
     // Expose the internal function for testing by calling the super implementation
-    function mockPushToRegistrationQueue() public returns (uint64, uint64) {
-        return super.pushToRegistrationQueue();
+    function mockPushToRegistrationQueue() public {
+        super.pushToRegistrationQueue();
     }
 
-    function mockPushToExitQueue() public returns (uint64, uint64) {
-        return super.pushToExitQueue();
+    function mockPushToExitQueue() public {
+        super.pushToExitQueue();
     }
 }

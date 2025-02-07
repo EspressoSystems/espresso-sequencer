@@ -61,7 +61,7 @@ contract StakeTable_register_Test is Test {
         );
     }
 
-    function setUp() public {
+    function setUpCustom(uint64 _churnRate, uint64 _blocksPerEpoch) public {
         exampleTokenCreator = makeAddr("tokenCreator");
         vm.prank(exampleTokenCreator);
         token = new ExampleToken(INITIAL_BALANCE);
@@ -80,9 +80,12 @@ contract StakeTable_register_Test is Test {
         LightClientMock.StakeTableState memory genesisStakeTableState = stakeState;
 
         lcMock = new LightClientMock(genesis, genesisStakeTableState, 864000);
-        address lightClientAddress = address(lcMock);
         stakeTable =
-            new StakeTableMock(address(token), lightClientAddress, churnRate, hotShotBlocksPerEpoch);
+            new StakeTableMock(address(token), address(lcMock), _churnRate, _blocksPerEpoch);
+    }
+
+    function setUp() public {
+        setUpCustom(churnRate, hotShotBlocksPerEpoch);
     }
 
     function test_RevertWhen_InvalidHotShotBlocksPerEpoch() external {
@@ -757,7 +760,7 @@ contract StakeTable_register_Test is Test {
     }
 
     // TESTS FOR CURRENT EPOCH
-    function test_initialEpoch_isZero() public {
+    function test_initialEpoch_isZero() public view {
         // assert the current block height is initialBlockHeight
         uint64 initialBlockHeight = 0;
         (, uint64 currentBlockHeight,) = lcMock.finalizedState();
@@ -785,8 +788,17 @@ contract StakeTable_register_Test is Test {
 
         // verify the expected epoch
         (, uint64 blockHeight,) = lcMock.finalizedState();
-        uint64 expectedEpoch = 10; //10/1 = 10
+        uint64 expectedEpoch = 10; // 10 / 1
         assertEq(stakeTable.currentEpoch(), expectedEpoch);
+    }
+
+    function test_currentEpoch_blocksPerEpochNotOne() public {
+        setUpCustom(10, /*churn*/ 3 /*blocksPerEpoch*/ );
+        test_initialEpoch_isZero();
+        lcMock.setFinalizedState(LightClient.LightClientState(0, 2, BN254.ScalarField.wrap(0)));
+        assertEq(stakeTable.currentEpoch(), 0);
+        lcMock.setFinalizedState(LightClient.LightClientState(0, 3, BN254.ScalarField.wrap(0)));
+        assertEq(stakeTable.currentEpoch(), 1);
     }
 
     // test various edge cases for the currentEpoch
@@ -835,16 +847,14 @@ contract StakeTable_register_Test is Test {
         // epoch
         stakeTable.mockPushToRegistrationQueue();
         assertEq(stakeTable.registrationEpoch(), 1);
-        assertEq(stakeTable.numPendingRegistrations(), 1); // the queue size is one as you just
-            // pushed one registration
+        assertEq(stakeTable.numPendingRegistrationsInEpoch(), 1);
 
         // test for exit
         // assert that the next exit epoch is equal to the  exit epoch
         assertEq(stakeTable.exitEpoch(), 1);
         stakeTable.mockPushToExitQueue();
         assertEq(stakeTable.exitEpoch(), 1); // the epoch is one as you just pushed one exit
-        assertEq(stakeTable.numPendingExits(), 1); // the queue size is one as you just pushed one
-            // exit
+        assertEq(stakeTable.numPendingExitsInEpoch(), 1);
     }
 
     /// @notice test the next available epoch (registration/exit) when the current epoch + 1
@@ -864,7 +874,7 @@ contract StakeTable_register_Test is Test {
         // assert that the next registration epoch is equal to stakeTable.currentEpoch() + 1
         stakeTable.mockPushToRegistrationQueue();
         assertEq(stakeTable.registrationEpoch(), stakeTable.currentEpoch() + 1);
-        assertEq(stakeTable.numPendingRegistrations(), 0);
+        assertEq(stakeTable.numPendingRegistrationsInEpoch(), 0);
 
         // test for exit
         assertEq(stakeTable.exitEpoch(), 1);
@@ -872,7 +882,7 @@ contract StakeTable_register_Test is Test {
         // assert that the next exit epoch is equal to 2
         stakeTable.mockPushToExitQueue();
         assertEq(stakeTable.exitEpoch(), stakeTable.currentEpoch() + 1);
-        assertEq(stakeTable.numPendingExits(), 0);
+        assertEq(stakeTable.numPendingExitsInEpoch(), 0);
     }
 
     /// @notice test nextAvailableEpoch when firstAvailableEpoch (registration/exit) is greater than
@@ -894,7 +904,7 @@ contract StakeTable_register_Test is Test {
         // assert that the next registration epoch is equal to 3
         stakeTable.mockPushToRegistrationQueue();
         assertEq(stakeTable.registrationEpoch(), registrationEpoch);
-        assertEq(stakeTable.numPendingRegistrations(), 1);
+        assertEq(stakeTable.numPendingRegistrationsInEpoch(), 1);
 
         // set the  registration epoch to max uint64
         registrationEpoch = type(uint64).max;
@@ -903,7 +913,7 @@ contract StakeTable_register_Test is Test {
         // assert that the next registration epoch is equal to max uint64
         stakeTable.mockPushToRegistrationQueue();
         assertEq(stakeTable.registrationEpoch(), registrationEpoch);
-        assertEq(stakeTable.numPendingRegistrations(), 2);
+        assertEq(stakeTable.numPendingRegistrationsInEpoch(), 2);
 
         // test for exit
         // set the  exit epoch to 3
@@ -913,7 +923,7 @@ contract StakeTable_register_Test is Test {
         // assert that the next exit epoch is equal to 3
         stakeTable.mockPushToExitQueue();
         assertEq(stakeTable.exitEpoch(), exitEpoch);
-        assertEq(stakeTable.numPendingExits(), 1);
+        assertEq(stakeTable.numPendingExitsInEpoch(), 1);
     }
 
     /// @notice test registrationEpoch when the current epoch + 1 is equal to the
@@ -931,7 +941,7 @@ contract StakeTable_register_Test is Test {
         // assert that the next registration epoch is equal to 2
         stakeTable.mockPushToRegistrationQueue();
         assertEq(stakeTable.registrationEpoch(), registrationEpoch);
-        assertEq(stakeTable.numPendingRegistrations(), 1);
+        assertEq(stakeTable.numPendingRegistrationsInEpoch(), 1);
 
         // test for exit
         // set the  exit epoch to 2
@@ -941,6 +951,6 @@ contract StakeTable_register_Test is Test {
         // assert that the next exit epoch is equal to 2
         stakeTable.mockPushToExitQueue();
         assertEq(stakeTable.exitEpoch(), exitEpoch);
-        assertEq(stakeTable.numPendingExits(), 1);
+        assertEq(stakeTable.numPendingExitsInEpoch(), 1);
     }
 }

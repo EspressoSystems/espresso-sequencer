@@ -86,17 +86,19 @@ contract StakeTable is AbstractStakeTable {
     uint64 public registrationEpoch;
     /// @notice number of pending registrations in the `registrationEpoch` (not the
     /// total pending queue size!)
-    uint64 private numPendingRegistrationsInEpoch;
+    uint64 public override numPendingRegistrationsInEpoch;
 
     /// @notice the first available epoch for exit
     uint64 public exitEpoch;
     /// @notice number of pending exits in the `exitEpoch` (not the total pending
     /// queue size!)
-    uint64 private numPendingExitsInEpoch;
+    uint64 public override numPendingExitsInEpoch;
 
     /// @notice The number of validators that can register per epoch as well as
     /// the number of validators that can exit per epoch.
     uint64 public maxNumChurnPerEpoch;
+
+    /// @notice The number of hotshot blocks per epoch.
     uint64 public hotShotBlocksPerEpoch;
 
     address public admin;
@@ -166,7 +168,7 @@ contract StakeTable is AbstractStakeTable {
 
     /// @notice Add a registration
     /// TODO handle overflow when max uint64 is reached
-    function pushToRegistrationQueue() internal virtual override returns (uint64, uint64) {
+    function pushToRegistrationQueue() internal virtual override {
         // Either we have a need for a new registration epoch and registrations queue for the
         // current epoch is zero or we have a free slot in the current registration epoch so we
         // append to the registration queue, `numPendingRegistrationsInEpoch`.
@@ -186,7 +188,7 @@ contract StakeTable is AbstractStakeTable {
     }
 
     /// @notice Add an exit
-    function pushToExitQueue() internal virtual override returns (uint64, uint64) {
+    function pushToExitQueue() internal virtual override {
         // Either we have a need for a new exit epoch and exits queue for the
         // current epoch is zero or we have a free slot in the current exit epoch so we
         // append to the exit queue, `numPendingExitsInEpoch`.
@@ -217,18 +219,6 @@ contract StakeTable is AbstractStakeTable {
     /// @return Node indexed by account
     function lookupNode(address account) external view virtual override returns (Node memory) {
         return nodes[account];
-    }
-
-    /// @notice Get the number of pending registration requests in the waiting queue
-    /// TODO modify this according to the current spec
-    function numPendingRegistrations() external view virtual override returns (uint64) {
-        return numPendingRegistrationsInEpoch;
-    }
-
-    /// @notice Get the number of pending exit requests in the waiting queue
-    /// TODO modify this according to the current spec
-    function numPendingExits() external view virtual override returns (uint64) {
-        return numPendingExitsInEpoch;
     }
 
     /// @notice Defines the exit escrow period for a node.
