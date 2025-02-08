@@ -205,8 +205,8 @@ async fn test_pruning() {
             view_change_evidence: None,
             next_epoch_justify_qc: None,
             next_drb_result: None,
+            epoch: None,
         },
-        with_epoch: false,
     });
     event_stream_sender
         .broadcast(hotshot::types::Event {
@@ -287,7 +287,7 @@ async fn test_signature_checks() {
     {
         // Verification  should fail if signature is over incorrect data
         let err = test_service
-            .available_blocks(
+            .available_blocks::<TestVersions>(
                 &vid_commitment,
                 0,
                 expected_signing_keys.0,
@@ -300,7 +300,7 @@ async fn test_signature_checks() {
 
         // Verification  should also fail if signature is over correct data but by incorrect key
         let err = test_service
-            .available_blocks(
+            .available_blocks::<TestVersions>(
                 &vid_commitment,
                 0,
                 expected_signing_keys.0,
