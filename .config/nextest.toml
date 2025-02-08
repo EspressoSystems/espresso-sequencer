@@ -3,6 +3,8 @@
 slow-timeout = { period = "2m", terminate-after = 3 }
 default-filter = 'not (test(slow_) | package(tests))'
 retries = 2
+# TODO: ensure tests can run in parallel
+threads-required = 'num-test-threads'
 
 [[profile.default.overrides]]
 # These tests are fast if they work (usually about 150ms) but sometimes they
