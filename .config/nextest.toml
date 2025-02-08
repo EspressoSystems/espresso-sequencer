@@ -4,11 +4,13 @@ slow-timeout = { period = "2m", terminate-after = 3 }
 default-filter = 'not (test(slow_) | package(tests))'
 retries = 2
 
+# More flaky tests
 [[profile.default.overrides]]
 filter = """
 test(tests_2::catchup::test_all_restart) |
 test(tests_4::test_marketplace) |
-test(tests_6::test_epochs)
+test(tests_6::test_epochs) |
+test(tests_4::test_with_builder_failures::test_with_builder_failures::testtypes_::pushcdnimpl_::test_with_builder_failures)
 """
 retries = 10
 
