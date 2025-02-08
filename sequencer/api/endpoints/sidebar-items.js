@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":["availability","catchup","config","explorer","get_balance","get_public_env_vars","merklized_state","node","state_signature","submit"],"struct":["NamespaceProofQueryData"],"type":["AvailState","AvailabilityApi","ExplorerApi","MerklizedStateApi"]};

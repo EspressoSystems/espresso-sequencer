@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["StakeTableChange"],"struct":["Committee","EpochCommittees","LeaderLookupError"],"type":["Epoch"]};
