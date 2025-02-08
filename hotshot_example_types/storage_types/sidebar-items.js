@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"struct":["TestStorage","TestStorageState"],"type":["VidShares","VidShares2"]};
