@@ -9,10 +9,16 @@ retries = 2
 filter = """
 test(tests_2::catchup::test_all_restart) |
 test(tests_4::test_marketplace) |
-test(tests_6::test_epochs) |
-test(tests_4::test_with_builder_failures::test_with_builder_failures)
+test(tests_6::test_epochs)
 """
 retries = 10
+
+# Sometimes fails persistently in CI
+[[profile.default.overrides]]
+filter = """
+test(tests_4::test_with_builder_failures::test_with_builder_failures)
+"""
+threads-required = 2
 
 [[profile.default.overrides]]
 # These tests are fast if they work (usually about 150ms) but sometimes they
