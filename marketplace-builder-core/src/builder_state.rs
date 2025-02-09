@@ -1182,7 +1182,11 @@ mod test {
             .spawned_builder_states
             .contains_key(&builder_state_id)
         {
-            panic!("global_state shouldn't have corresponding builder_state_id without matching quorum proposal.");
+            assert!(
+            false,
+            "global_state shouldn't contain builder_state_id {} without matching quorum proposal",
+            builder_state_id
+        );
         }
 
         // sub-test two
@@ -1207,7 +1211,11 @@ mod test {
             .spawned_builder_states
             .contains_key(&builder_state_id_1)
         {
-            panic!("global_state shouldn't have corresponding builder_state_id without matching quorum proposal.");
+            assert!(
+                false,
+                "global_state shouldn't contain builder_state_id {} without matching quorum proposal",
+                builder_state_id_1
+            );
         }
 
         // sub-test three
@@ -1243,7 +1251,11 @@ mod test {
         {
             tracing::debug!("global_state updated successfully");
         } else {
-            panic!("global_state should have corresponding builder_state_id as now we have matching quorum proposal.");
+            assert!(
+                false,
+                "global_state should contain builder_state_id {} as now we have matching quorum proposal",
+                builder_state_id_2
+            );
         }
     }
 
@@ -1308,7 +1320,11 @@ mod test {
             .spawned_builder_states
             .contains_key(&builder_state_id)
         {
-            panic!("global_state shouldn't have corresponding builder_state_id without matching quorum proposal.");
+            assert!(
+                false,
+                "global_state shouldn't contain builder_state_id {} without matching quorum proposal",
+                builder_state_id
+            );
         }
 
         // sub-test two
@@ -1344,7 +1360,11 @@ mod test {
         {
             tracing::debug!("global_state updated successfully");
         } else {
-            panic!("global_state should have corresponding builder_state_id as now we have matching da proposal.");
+            assert!(
+                false,
+                "global_state should contain builder_state_id {} as now we have matching da proposal",
+                builder_state_id_2
+            );
         }
     }
 
