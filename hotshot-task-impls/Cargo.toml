@@ -4,6 +4,7 @@ description = "Async task implementations for consensus"
 edition = { workspace = true }
 name = "hotshot-task-impls"
 version = { workspace = true }
+license = "MIT"
 
 [features]
 example-upgrade = []

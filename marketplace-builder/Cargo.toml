@@ -4,6 +4,7 @@ description = "A standalone builder service, marketplace version"
 version = { workspace = true }
 authors = { workspace = true }
 edition = { workspace = true }
+license = "MIT"
 
 [features]
 testing = ["hotshot-query-service", "sequencer-utils", "tempfile"]
