@@ -53,7 +53,7 @@ case $KERNEL in
     # espresso-dev-node requires embedded-db feature to build so we build it separately
     cargo build --bin espresso-dev-node --release --all-features
     # building sequencer-sqlite binary
-    cargo build --release --manifest-path ./sequencer-sqlite/Cargo.toml
+    cargo build --release --manifest-path ./crates/sequencer-sqlite/Cargo.toml
     ;;
   darwin)
   # Use a different target directory for docker builds to avoid conflicts with
@@ -81,7 +81,7 @@ case $KERNEL in
     -it ghcr.io/espressosystems/devops-rust:stable \
     bash -c "cd /work && cargo build --release \
     && cargo build --bin espresso-dev-node --release --all-features \
-    && cargo build --release --manifest-path ./sequencer-sqlite/Cargo.toml"
+    && cargo build --release --manifest-path ./crates/sequencer-sqlite/Cargo.toml"
     ;;
 esac
 

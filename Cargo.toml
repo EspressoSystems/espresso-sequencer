@@ -8,13 +8,13 @@ edition = "2021"
 resolver = "2"
 
 members = [
+    "contracts/rust/adapter",
+    "contracts/rust/diff-test",
+    "contracts/rust/gen-vk-contract",
     "crates/builder",
     "crates/client",
     "crates/contract-bindings-alloy",
     "crates/contract-bindings-ethers",
-    "contracts/rust/adapter",
-    "contracts/rust/diff-test",
-    "contracts/rust/gen-vk-contract",
     "crates/ethers-conv",
     "crates/hotshot",
     "crates/hotshot-builder-api",
@@ -46,7 +46,7 @@ members = [
     "crates/utils"
 ]
 
-exclude = ["sequencer-sqlite"]
+exclude = ["crates/sequencer-sqlite"]
 
 [workspace.dependencies]
 contract-bindings-alloy = { path = "./crates/contract-bindings-alloy" }
