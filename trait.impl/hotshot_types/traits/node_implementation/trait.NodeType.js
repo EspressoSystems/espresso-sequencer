@@ -1,0 +1,9 @@
+(function() {
+    var implementors = Object.fromEntries([["espresso_types",[["impl NodeType for <a class=\"struct\" href=\"espresso_types/v0/struct.SeqTypes.html\" title=\"struct espresso_types::v0::SeqTypes\">SeqTypes</a>"]]],["hotshot_example_types",[["impl NodeType for <a class=\"struct\" href=\"hotshot_example_types/node_types/struct.TestConsecutiveLeaderTypes.html\" title=\"struct hotshot_example_types::node_types::TestConsecutiveLeaderTypes\">TestConsecutiveLeaderTypes</a>"],["impl NodeType for <a class=\"struct\" href=\"hotshot_example_types/node_types/struct.TestTwoStakeTablesTypes.html\" title=\"struct hotshot_example_types::node_types::TestTwoStakeTablesTypes\">TestTwoStakeTablesTypes</a>"],["impl NodeType for <a class=\"struct\" href=\"hotshot_example_types/node_types/struct.TestTypes.html\" title=\"struct hotshot_example_types::node_types::TestTypes\">TestTypes</a>"],["impl NodeType for <a class=\"struct\" href=\"hotshot_example_types/node_types/struct.TestTypesRandomizedLeader.html\" title=\"struct hotshot_example_types::node_types::TestTypesRandomizedLeader\">TestTypesRandomizedLeader</a>"],["impl&lt;CONFIG: QuorumFilterConfig&gt; NodeType for <a class=\"struct\" href=\"hotshot_example_types/node_types/struct.TestTypesRandomizedCommitteeMembers.html\" title=\"struct hotshot_example_types::node_types::TestTypesRandomizedCommitteeMembers\">TestTypesRandomizedCommitteeMembers</a>&lt;CONFIG&gt;"]]],["hotshot_query_service",[["impl NodeType for <a class=\"struct\" href=\"hotshot_query_service/testing/mocks/struct.MockTypes.html\" title=\"struct hotshot_query_service::testing::mocks::MockTypes\">MockTypes</a>"]]]]);
+    if (window.register_implementors) {
+        window.register_implementors(implementors);
+    } else {
+        window.pending_implementors = implementors;
+    }
+})()
+//{"start":57,"fragment_lengths":[169,1205,217]}

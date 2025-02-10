@@ -1,0 +1,9 @@
+(function() {
+    var implementors = Object.fromEntries([["espresso_types",[["impl&lt;Base: StaticVersionType + 'static, Upgrade: StaticVersionType + 'static&gt; Versions for <a class=\"struct\" href=\"espresso_types/v0/struct.SequencerVersions.html\" title=\"struct espresso_types::v0::SequencerVersions\">SequencerVersions</a>&lt;Base, Upgrade&gt;"]]],["hotshot_example_types",[["impl Versions for <a class=\"struct\" href=\"hotshot_example_types/node_types/struct.EpochUpgradeTestVersions.html\" title=\"struct hotshot_example_types::node_types::EpochUpgradeTestVersions\">EpochUpgradeTestVersions</a>"],["impl Versions for <a class=\"struct\" href=\"hotshot_example_types/node_types/struct.EpochsTestVersions.html\" title=\"struct hotshot_example_types::node_types::EpochsTestVersions\">EpochsTestVersions</a>"],["impl Versions for <a class=\"struct\" href=\"hotshot_example_types/node_types/struct.MarketplaceTestVersions.html\" title=\"struct hotshot_example_types::node_types::MarketplaceTestVersions\">MarketplaceTestVersions</a>"],["impl Versions for <a class=\"struct\" href=\"hotshot_example_types/node_types/struct.MarketplaceUpgradeTestVersions.html\" title=\"struct hotshot_example_types::node_types::MarketplaceUpgradeTestVersions\">MarketplaceUpgradeTestVersions</a>"],["impl Versions for <a class=\"struct\" href=\"hotshot_example_types/node_types/struct.TestVersions.html\" title=\"struct hotshot_example_types::node_types::TestVersions\">TestVersions</a>"]]],["hotshot_query_service",[["impl Versions for <a class=\"struct\" href=\"hotshot_query_service/testing/mocks/struct.MockVersions.html\" title=\"struct hotshot_query_service::testing::mocks::MockVersions\">MockVersions</a>"]]]]);
+    if (window.register_implementors) {
+        window.register_implementors(implementors);
+    } else {
+        window.pending_implementors = implementors;
+    }
+})()
+//{"start":57,"fragment_lengths":[296,1124,226]}

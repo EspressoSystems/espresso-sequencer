@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["ERC1967ProxyErrors","ERC1967ProxyEvents"],"fn":["deploy","deploy_builder","new"],"static":["BYTECODE","DEPLOYED_BYTECODE"],"struct":["AddressEmptyCode","ERC1967InvalidImplementation","ERC1967NonPayable","ERC1967ProxyInstance","FailedInnerCall","Upgraded","constructorCall"]};

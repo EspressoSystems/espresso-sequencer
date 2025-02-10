@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"struct":["Notifier","ReceiveHandle","Subscriber","WaitFor"],"trait":["Predicate"]};
