@@ -2,6 +2,7 @@
 name = "hotshot-builder-core-refactored"
 version = { workspace = true }
 edition = { workspace = true }
+license = "MIT"
 
 [dependencies]
 marketplace-builder-shared = { workspace = true }
