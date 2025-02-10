@@ -7707,6 +7707,7 @@ dependencies = [
  "espresso-types",
  "futures",
  "hotshot",
+ "hotshot-example-types",
  "hotshot-query-service",
  "hotshot-stake-table",
  "hotshot-types",
