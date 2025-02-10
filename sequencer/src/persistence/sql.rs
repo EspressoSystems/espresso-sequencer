@@ -1239,7 +1239,7 @@ impl SequencerPersistence for Persistence {
         .await?;
 
         // We also keep track of any QC we see in case we need it to recover our archival storage.
-        let justify_qc = &proposal.data.justify_qc();
+        let justify_qc = proposal.data.justify_qc();
         let justify_qc_bytes = bincode::serialize(&justify_qc).context("serializing QC")?;
         tx.upsert(
             "quorum_certificate2",

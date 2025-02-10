@@ -863,8 +863,8 @@ impl<P: SequencerPersistence> Storage<SeqTypes> for Arc<P> {
         (**self).append_quorum_proposal2(&proposal_qp_wrapper).await
     }
 
-    async fn update_high_qc2(&self, high_qc: QuorumCertificate2<SeqTypes>) -> anyhow::Result<()> {
-        self.update_high_qc2(high_qc).await
+    async fn update_high_qc2(&self, _high_qc: QuorumCertificate2<SeqTypes>) -> anyhow::Result<()> {
+        Ok(())
     }
 
     async fn update_decided_upgrade_certificate(
