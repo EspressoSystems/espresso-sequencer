@@ -129,6 +129,9 @@ jobs:
   test-postgres:
     needs: build-test-artifacts-postgres
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        partition: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     steps:
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
@@ -145,12 +148,16 @@ jobs:
       - name: Test
         run: |
           cargo nextest run --archive-file nextest-archive-postgres.tar.zst  --verbose --no-fail-fast \
-          --workspace-remap $PWD
+          --workspace-remap $PWD \
+          --partition hash:${{ matrix.partition }}/10
         timeout-minutes: 20
 
   test-sqlite:
     needs: build-test-artifacts-sqlite
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        partition: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     steps:
       - name: Fix submodule permissions check
         run: |
@@ -175,7 +182,8 @@ jobs:
       - name: Test
         run: |
           cargo nextest run --archive-file nextest-archive-sqlite.tar.zst  --verbose --no-fail-fast \
-          --workspace-remap $PWD
+          --workspace-remap $PWD \
+          --partition hash:${{ matrix.partition }}/10
         timeout-minutes: 20
 
   test-integration:

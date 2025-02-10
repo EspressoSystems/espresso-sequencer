@@ -1,3 +1,5 @@
+pub use crate::builder_state::{BuilderState, MessageType};
+pub use async_broadcast::broadcast;
 pub use hotshot::traits::election::static_committee::StaticCommittee;
 pub use hotshot_types::{
     data::{EpochNumber, Leaf, ViewNumber},
@@ -9,9 +11,7 @@ pub use hotshot_types::{
         node_implementation::{ConsensusTime, NodeType},
     },
 };
-
-pub use crate::builder_state::{BuilderState, MessageType};
-pub use async_broadcast::broadcast;
+use vbs::version::StaticVersionType;
 /// The following tests are performed:
 #[cfg(test)]
 mod tests {
@@ -25,6 +25,7 @@ mod tests {
     use hotshot_example_types::node_types::TestVersions;
     use hotshot_types::data::{DaProposal2, Leaf2, QuorumProposal2, QuorumProposalWrapper};
     use hotshot_types::simple_vote::QuorumData2;
+    use hotshot_types::traits::node_implementation::Versions;
     use hotshot_types::{
         signature_key::BuilderKey,
         traits::block_contents::{vid_commitment, BlockHeader},
@@ -116,7 +117,11 @@ mod tests {
         let (builder_pub_key, builder_private_key) =
             BLSPubKey::generated_from_seed_indexed(seed, 2011_u64);
         // instantiate the global state also
-        let initial_commitment = vid_commitment(&[], TEST_NUM_NODES_IN_VID_COMPUTATION);
+        let initial_commitment = vid_commitment::<TestVersions>(
+            &[],
+            TEST_NUM_NODES_IN_VID_COMPUTATION,
+            <TestVersions as Versions>::Base::VERSION,
+        );
         let global_state = Arc::new(RwLock::new(GlobalState::<TestTypes>::new(
             bootstrap_sender,
             tx_sender.clone(),
@@ -129,7 +134,7 @@ mod tests {
             TEST_MAX_TX_NUM,
         )));
 
-        let bootstrap_builder_state = BuilderState::new(
+        let bootstrap_builder_state = BuilderState::<TestTypes, TestVersions>::new(
             ParentBlockReferences {
                 view_number: ViewNumber::new(0),
                 vid_commitment: initial_commitment,
@@ -191,8 +196,8 @@ mod tests {
                     view_change_evidence: None,
                     next_epoch_justify_qc: None,
                     next_drb_result: None,
+                    epoch: None,
                 },
-                with_epoch: false,
             }
         };
 
@@ -230,7 +235,7 @@ mod tests {
                         .unwrap();
 
                 let available_blocks = proxy_global_state
-                    .available_blocks(
+                    .available_blocks::<TestVersions>(
                         &previous_commitment,
                         previous_view.u64(),
                         leader_pub,
@@ -332,8 +337,11 @@ mod tests {
                         NUM_NODES_IN_VID_COMPUTATION
                     );
 
-                    let block_payload_commitment =
-                        vid_commitment(&encoded_transactions, NUM_NODES_IN_VID_COMPUTATION);
+                    let block_payload_commitment = vid_commitment::<TestVersions>(
+                        &encoded_transactions,
+                        NUM_NODES_IN_VID_COMPUTATION,
+                        <TestVersions as Versions>::Base::VERSION,
+                    );
 
                     tracing::debug!(
                         "Block Payload vid commitment: {:?}",
@@ -398,8 +406,8 @@ mod tests {
                             view_change_evidence: None,
                             next_epoch_justify_qc: None,
                             next_drb_result: None,
+                            epoch: None,
                         },
-                        with_epoch: false,
                     };
 
                     let payload_vid_commitment =
@@ -428,7 +436,7 @@ mod tests {
                 // This may not be necessary for this test
                 let decide_message = {
                     let leaf = match round {
-                        0 => Leaf::genesis(
+                        0 => Leaf::genesis::<TestVersions>(
                             &TestValidatedState::default(),
                             &TestInstanceState::default(),
                         )
@@ -445,7 +453,11 @@ mod tests {
                                 &quorum_certificate_message.proposal.data,
                             );
                             current_leaf
-                                .fill_block_payload(block_payload, NUM_NODES_IN_VID_COMPUTATION)
+                                .fill_block_payload::<TestVersions>(
+                                    block_payload,
+                                    NUM_NODES_IN_VID_COMPUTATION,
+                                    <TestVersions as Versions>::Base::VERSION,
+                                )
                                 .unwrap();
                             current_leaf
                         }

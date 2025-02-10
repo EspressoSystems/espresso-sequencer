@@ -9,8 +9,8 @@ use espresso_types::{
 use hotshot_types::{
     consensus::CommitmentMap,
     data::{
-        DaProposal, DaProposal2, QuorumProposal, QuorumProposalWrapper, VidDisperseShare,
-        VidDisperseShare2,
+        vid_disperse::ADVZDisperseShare, DaProposal, DaProposal2, EpochNumber, QuorumProposal,
+        QuorumProposalWrapper, VidDisperseShare,
     },
     event::{Event, EventType, HotShotAction, LeafInfo},
     message::{convert_proposal, Proposal},
@@ -452,7 +452,7 @@ impl Inner {
     fn load_vid_share(
         &self,
         view: ViewNumber,
-    ) -> anyhow::Result<Option<Proposal<SeqTypes, VidDisperseShare2<SeqTypes>>>> {
+    ) -> anyhow::Result<Option<Proposal<SeqTypes, VidDisperseShare<SeqTypes>>>> {
         let dir_path = self.vid2_dir_path();
 
         let file_path = dir_path.join(view.u64().to_string()).with_extension("txt");
@@ -462,7 +462,7 @@ impl Inner {
         }
 
         let vid_share_bytes = fs::read(file_path)?;
-        let vid_share: Proposal<SeqTypes, VidDisperseShare2<SeqTypes>> =
+        let vid_share: Proposal<SeqTypes, VidDisperseShare<SeqTypes>> =
             bincode::deserialize(&vid_share_bytes)?;
         Ok(Some(vid_share))
     }
@@ -649,13 +649,13 @@ impl SequencerPersistence for Persistence {
     async fn load_vid_share(
         &self,
         view: ViewNumber,
-    ) -> anyhow::Result<Option<Proposal<SeqTypes, VidDisperseShare2<SeqTypes>>>> {
+    ) -> anyhow::Result<Option<Proposal<SeqTypes, VidDisperseShare<SeqTypes>>>> {
         self.inner.read().await.load_vid_share(view)
     }
 
     async fn append_vid(
         &self,
-        proposal: &Proposal<SeqTypes, VidDisperseShare<SeqTypes>>,
+        proposal: &Proposal<SeqTypes, ADVZDisperseShare<SeqTypes>>,
     ) -> anyhow::Result<()> {
         let mut inner = self.inner.write().await;
         let view_number = proposal.data.view_number().u64();
@@ -706,7 +706,12 @@ impl SequencerPersistence for Persistence {
             },
         )
     }
-    async fn record_action(&self, view: ViewNumber, action: HotShotAction) -> anyhow::Result<()> {
+    async fn record_action(
+        &self,
+        view: ViewNumber,
+        _epoch: Option<EpochNumber>,
+        action: HotShotAction,
+    ) -> anyhow::Result<()> {
         // Todo Remove this after https://github.com/EspressoSystems/espresso-sequencer/issues/1931
         if !matches!(action, HotShotAction::Propose | HotShotAction::Vote) {
             return Ok(());
@@ -948,7 +953,7 @@ impl SequencerPersistence for Persistence {
 
     async fn append_vid2(
         &self,
-        proposal: &Proposal<SeqTypes, VidDisperseShare2<SeqTypes>>,
+        proposal: &Proposal<SeqTypes, VidDisperseShare<SeqTypes>>,
     ) -> anyhow::Result<()> {
         let mut inner = self.inner.write().await;
         let view_number = proposal.data.view_number().u64();
@@ -1149,12 +1154,12 @@ impl SequencerPersistence for Persistence {
 
             let bytes = fs::read(&path).context(format!("reading vid share {}", path.display()))?;
             let proposal =
-                bincode::deserialize::<Proposal<SeqTypes, VidDisperseShare<SeqTypes>>>(&bytes)
+                bincode::deserialize::<Proposal<SeqTypes, ADVZDisperseShare<SeqTypes>>>(&bytes)
                     .context(format!("parsing vid share {}", path.display()))?;
 
             let file_path = vid2_path.join(view.to_string()).with_extension("txt");
 
-            let proposal2: Proposal<SeqTypes, VidDisperseShare2<SeqTypes>> =
+            let proposal2: Proposal<SeqTypes, VidDisperseShare<SeqTypes>> =
                 convert_proposal(proposal);
 
             inner.replace(
@@ -1364,8 +1369,13 @@ mod test {
     use espresso_types::{NodeState, PubKey};
     use hotshot::types::SignatureKey;
     use hotshot_example_types::node_types::TestVersions;
+    use hotshot_query_service::testing::mocks::MockVersions;
     use hotshot_types::data::QuorumProposal2;
+    use hotshot_types::traits::node_implementation::Versions;
+    use hotshot_types::vid::advz_scheme;
     use sequencer_utils::test_utils::setup_test;
+    use vbs::version::StaticVersionType;
+
     use serde_json::json;
     use std::marker::PhantomData;
 
@@ -1381,7 +1391,6 @@ mod test {
         simple_certificate::QuorumCertificate,
         simple_vote::QuorumData,
         traits::{block_contents::vid_commitment, EncodeBytes},
-        vid::vid_scheme,
     };
     use jf_vid::VidScheme;
 
@@ -1513,7 +1522,11 @@ mod test {
             let builder_commitment = payload.builder_commitment(&metadata);
             let payload_bytes = payload.encode();
 
-            let payload_commitment = vid_commitment(&payload_bytes, 4);
+            let payload_commitment = vid_commitment::<TestVersions>(
+                &payload_bytes,
+                4,
+                <TestVersions as Versions>::Base::VERSION,
+            );
 
             let block_header = Header::genesis(
                 &instance_state,
@@ -1553,7 +1566,12 @@ mod test {
             };
 
             let mut leaf = Leaf::from_quorum_proposal(&quorum_proposal);
-            leaf.fill_block_payload(payload, 4).unwrap();
+            leaf.fill_block_payload::<TestVersions>(
+                payload,
+                4,
+                <TestVersions as Versions>::Base::VERSION,
+            )
+            .unwrap();
 
             let mut inner = storage.inner.write().await;
 
@@ -1595,9 +1613,9 @@ mod test {
                 .unwrap();
 
             drop(inner);
-            let disperse = vid_scheme(4).disperse(payload_bytes.clone()).unwrap();
+            let disperse = advz_scheme(4).disperse(payload_bytes.clone()).unwrap();
 
-            let vid = VidDisperseShare::<SeqTypes> {
+            let vid = ADVZDisperseShare::<SeqTypes> {
                 view_number: ViewNumber::new(i),
                 payload_commitment: Default::default(),
                 share: disperse.shares[0].clone(),
@@ -1698,14 +1716,13 @@ mod test {
         let storage = Persistence::connect(&tmp).await;
 
         // Generate a couple of valid quorum proposals.
-        let leaf: Leaf2 = Leaf::genesis(&Default::default(), &NodeState::mock())
-            .await
-            .into();
+        let leaf = Leaf2::genesis::<MockVersions>(&Default::default(), &NodeState::mock()).await;
         let privkey = PubKey::generated_from_seed_indexed([0; 32], 1).1;
         let signature = PubKey::sign(&privkey, &[]).unwrap();
         let mut quorum_proposal = Proposal {
             data: QuorumProposalWrapper::<SeqTypes> {
                 proposal: QuorumProposal2::<SeqTypes> {
+                    epoch: None,
                     block_header: leaf.block_header().clone(),
                     view_number: ViewNumber::genesis(),
                     justify_qc: QuorumCertificate2::genesis::<TestVersions>(
@@ -1718,7 +1735,6 @@ mod test {
                     next_drb_result: None,
                     next_epoch_justify_qc: None,
                 },
-                with_epoch: false,
             },
             signature,
             _pd: Default::default(),
@@ -1762,7 +1778,7 @@ mod test {
         let storage = Persistence::connect(&tmp).await;
 
         // Generate a valid quorum proposal.
-        let leaf: Leaf2 = Leaf::genesis(&Default::default(), &NodeState::mock())
+        let leaf: Leaf2 = Leaf::genesis::<MockVersions>(&Default::default(), &NodeState::mock())
             .await
             .into();
         let privkey = PubKey::generated_from_seed_indexed([0; 32], 1).1;
@@ -1770,6 +1786,7 @@ mod test {
         let quorum_proposal = Proposal {
             data: QuorumProposalWrapper::<SeqTypes> {
                 proposal: QuorumProposal2::<SeqTypes> {
+                    epoch: None,
                     block_header: leaf.block_header().clone(),
                     view_number: ViewNumber::new(1),
                     justify_qc: QuorumCertificate2::genesis::<TestVersions>(
@@ -1782,7 +1799,6 @@ mod test {
                     next_drb_result: None,
                     next_epoch_justify_qc: None,
                 },
-                with_epoch: false,
             },
             signature,
             _pd: Default::default(),

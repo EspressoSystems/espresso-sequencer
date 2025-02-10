@@ -541,15 +541,28 @@ where
     ApiVer: StaticVersionType + 'static,
 {
     // Create API modules.
-    let availability_api =
-        availability::define_api(&options.availability, bind_version).map_err(Error::internal)?;
+    let availability_api_v0 = availability::define_api(
+        &options.availability,
+        bind_version,
+        "0.0.1".parse().unwrap(),
+    )
+    .map_err(Error::internal)?;
+
+    let availability_api_v1 = availability::define_api(
+        &options.availability,
+        bind_version,
+        "1.0.0".parse().unwrap(),
+    )
+    .map_err(Error::internal)?;
     let node_api = node::define_api(&options.node, bind_version).map_err(Error::internal)?;
     let status_api = status::define_api(&options.status, bind_version).map_err(Error::internal)?;
 
     // Create app.
     let data_source = Arc::new(data_source);
     let mut app = App::<_, Error>::with_state(ApiState(data_source.clone()));
-    app.register_module("availability", availability_api)
+    app.register_module("availability", availability_api_v0)
+        .map_err(Error::internal)?
+        .register_module("availability", availability_api_v1)
         .map_err(Error::internal)?
         .register_module("node", node_api)
         .map_err(Error::internal)?
@@ -860,7 +873,12 @@ mod test {
         let mut app = App::<_, Error>::with_state(RwLock::new(state));
         app.register_module(
             "availability",
-            availability::define_api(&Default::default(), MockBase::instance()).unwrap(),
+            availability::define_api(
+                &Default::default(),
+                MockBase::instance(),
+                "1.0.0".parse().unwrap(),
+            )
+            .unwrap(),
         )
         .unwrap()
         .register_module(

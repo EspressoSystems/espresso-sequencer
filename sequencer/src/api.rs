@@ -1106,14 +1106,15 @@ mod api_tests {
         AvailabilityDataSource, BlockQueryData, VidCommonQueryData,
     };
 
-    use hotshot_types::data::{DaProposal2, EpochNumber, VidDisperseShare2};
+    use hotshot_types::data::vid_disperse::VidDisperseShare2;
+    use hotshot_types::data::{DaProposal2, EpochNumber, VidDisperseShare};
     use hotshot_types::simple_certificate::QuorumCertificate2;
+    use hotshot_types::vid::advz_scheme;
     use hotshot_types::{
         data::{QuorumProposal2, QuorumProposalWrapper},
         event::LeafInfo,
         message::Proposal,
         traits::{node_implementation::ConsensusTime, signature_key::SignatureKey, EncodeBytes},
-        vid::vid_scheme,
     };
 
     use jf_vid::VidScheme;
@@ -1291,7 +1292,7 @@ mod api_tests {
         let genesis = Leaf2::genesis::<TestVersions>(&Default::default(), &NodeState::mock()).await;
         let payload = genesis.block_payload().unwrap();
         let payload_bytes_arc = payload.encode();
-        let disperse = vid_scheme(2).disperse(payload_bytes_arc.clone()).unwrap();
+        let disperse = advz_scheme(2).disperse(payload_bytes_arc.clone()).unwrap();
         let payload_commitment = disperse.commit;
         let mut quorum_proposal = QuorumProposalWrapper::<SeqTypes> {
             proposal: QuorumProposal2::<SeqTypes> {
@@ -1306,8 +1307,8 @@ mod api_tests {
                 view_change_evidence: None,
                 next_drb_result: None,
                 next_epoch_justify_qc: None,
+                epoch: None,
             },
-            with_epoch: false,
         };
         let mut qc = QuorumCertificate2::genesis::<MockSequencerVersions>(
             &ValidatedState::default(),
@@ -1340,7 +1341,7 @@ mod api_tests {
                 .unwrap();
 
             // Include VID information for each leaf.
-            let share = VidDisperseShare2::<SeqTypes> {
+            let share = VidDisperseShare::V1(VidDisperseShare2::<SeqTypes> {
                 view_number: leaf.view_number(),
                 payload_commitment,
                 share: disperse.shares[0].clone(),
@@ -1349,7 +1350,7 @@ mod api_tests {
                 epoch: Some(EpochNumber::new(0)),
                 target_epoch: Some(EpochNumber::new(0)),
                 data_epoch_payload_commitment: None,
-            };
+            });
             persistence
                 .append_vid2(&share.to_proposal(&privkey).unwrap())
                 .await
@@ -1519,8 +1520,8 @@ mod api_tests {
                 view_change_evidence: None,
                 next_drb_result: None,
                 next_epoch_justify_qc: None,
+                epoch: None,
             },
-            with_epoch: false,
         };
 
         let leaf = Leaf2::from_quorum_proposal(&qp);

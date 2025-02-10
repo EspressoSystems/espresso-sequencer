@@ -6,7 +6,7 @@ authors = { workspace = true }
 edition = { workspace = true }
 
 [features]
-testing = ["serde_json", "espresso-types/testing"]
+testing = ["serde_json", "espresso-types/testing", "hotshot-query-service/testing"]
 
 [dev-dependencies]
 node-metrics = { path = ".", features = [ "testing" ] }
@@ -22,7 +22,7 @@ espresso-types = { path = "../types" }
 futures = { workspace = true }
 hotshot = { workspace = true }
 hotshot-example-types = { workspace = true }
-hotshot-query-service = { workspace = true}
+hotshot-query-service = { workspace = true }
 hotshot-stake-table = { workspace = true }
 tokio = { workspace = true }
 
