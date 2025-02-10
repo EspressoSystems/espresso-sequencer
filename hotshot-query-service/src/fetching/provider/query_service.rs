@@ -249,7 +249,12 @@ mod test {
         let mut app = App::<_, Error>::with_state(ApiState::from(network.data_source()));
         app.register_module(
             "availability",
-            define_api(&Default::default(), MockBase::instance()).unwrap(),
+            define_api(
+                &Default::default(),
+                MockBase::instance(),
+                "0.0.1".parse().unwrap(),
+            )
+            .unwrap(),
         )
         .unwrap();
         network.spawn(
@@ -472,7 +477,12 @@ mod test {
         let mut app = App::<_, Error>::with_state(ApiState::from(network.data_source()));
         app.register_module(
             "availability",
-            define_api(&Default::default(), MockBase::instance()).unwrap(),
+            define_api(
+                &Default::default(),
+                MockBase::instance(),
+                "0.0.1".parse().unwrap(),
+            )
+            .unwrap(),
         )
         .unwrap();
         network.spawn(
@@ -530,7 +540,12 @@ mod test {
         let mut app = App::<_, Error>::with_state(ApiState::from(network.data_source()));
         app.register_module(
             "availability",
-            define_api(&Default::default(), MockBase::instance()).unwrap(),
+            define_api(
+                &Default::default(),
+                MockBase::instance(),
+                "0.0.1".parse().unwrap(),
+            )
+            .unwrap(),
         )
         .unwrap();
         network.spawn(
@@ -592,7 +607,12 @@ mod test {
         let mut app = App::<_, Error>::with_state(ApiState::from(network.data_source()));
         app.register_module(
             "availability",
-            define_api(&Default::default(), MockBase::instance()).unwrap(),
+            define_api(
+                &Default::default(),
+                MockBase::instance(),
+                "0.0.1".parse().unwrap(),
+            )
+            .unwrap(),
         )
         .unwrap();
         network.spawn(
@@ -651,7 +671,12 @@ mod test {
         let mut app = App::<_, Error>::with_state(ApiState::from(network.data_source()));
         app.register_module(
             "availability",
-            define_api(&Default::default(), MockBase::instance()).unwrap(),
+            define_api(
+                &Default::default(),
+                MockBase::instance(),
+                "0.0.1".parse().unwrap(),
+            )
+            .unwrap(),
         )
         .unwrap();
         network.spawn(
@@ -707,7 +732,12 @@ mod test {
         let mut app = App::<_, Error>::with_state(ApiState::from(network.data_source()));
         app.register_module(
             "availability",
-            define_api(&Default::default(), MockBase::instance()).unwrap(),
+            define_api(
+                &Default::default(),
+                MockBase::instance(),
+                "0.0.1".parse().unwrap(),
+            )
+            .unwrap(),
         )
         .unwrap();
         network.spawn(
@@ -778,7 +808,12 @@ mod test {
         let mut app = App::<_, Error>::with_state(ApiState::from(network.data_source()));
         app.register_module(
             "availability",
-            define_api(&Default::default(), MockBase::instance()).unwrap(),
+            define_api(
+                &Default::default(),
+                MockBase::instance(),
+                "0.0.1".parse().unwrap(),
+            )
+            .unwrap(),
         )
         .unwrap();
         network.spawn(
@@ -923,7 +958,12 @@ mod test {
         let mut app = App::<_, Error>::with_state(ApiState::from(network.data_source()));
         app.register_module(
             "availability",
-            define_api(&Default::default(), MockBase::instance()).unwrap(),
+            define_api(
+                &Default::default(),
+                MockBase::instance(),
+                "0.0.1".parse().unwrap(),
+            )
+            .unwrap(),
         )
         .unwrap();
         network.spawn(
@@ -1091,7 +1131,12 @@ mod test {
         let mut app = App::<_, Error>::with_state(ApiState::from(network.data_source()));
         app.register_module(
             "availability",
-            define_api(&Default::default(), MockBase::instance()).unwrap(),
+            define_api(
+                &Default::default(),
+                MockBase::instance(),
+                "0.0.1".parse().unwrap(),
+            )
+            .unwrap(),
         )
         .unwrap();
         network.spawn(
@@ -1190,7 +1235,12 @@ mod test {
         let mut app = App::<_, Error>::with_state(ApiState::from(network.data_source()));
         app.register_module(
             "availability",
-            define_api(&Default::default(), MockBase::instance()).unwrap(),
+            define_api(
+                &Default::default(),
+                MockBase::instance(),
+                "0.0.1".parse().unwrap(),
+            )
+            .unwrap(),
         )
         .unwrap();
         network.spawn(
@@ -1282,7 +1332,12 @@ mod test {
         let mut app = App::<_, Error>::with_state(ApiState::from(network.data_source()));
         app.register_module(
             "availability",
-            define_api(&Default::default(), MockBase::instance()).unwrap(),
+            define_api(
+                &Default::default(),
+                MockBase::instance(),
+                "0.0.1".parse().unwrap(),
+            )
+            .unwrap(),
         )
         .unwrap();
         network.spawn(
@@ -1346,7 +1401,12 @@ mod test {
         let mut app = App::<_, Error>::with_state(ApiState::from(network.data_source()));
         app.register_module(
             "availability",
-            define_api(&Default::default(), MockBase::instance()).unwrap(),
+            define_api(
+                &Default::default(),
+                MockBase::instance(),
+                "0.0.1".parse().unwrap(),
+            )
+            .unwrap(),
         )
         .unwrap();
         network.spawn(
@@ -1404,7 +1464,12 @@ mod test {
         let mut app = App::<_, Error>::with_state(ApiState::from(network.data_source()));
         app.register_module(
             "availability",
-            define_api(&Default::default(), MockBase::instance()).unwrap(),
+            define_api(
+                &Default::default(),
+                MockBase::instance(),
+                "0.0.1".parse().unwrap(),
+            )
+            .unwrap(),
         )
         .unwrap();
         network.spawn(
@@ -1480,7 +1545,12 @@ mod test {
         let mut app = App::<_, Error>::with_state(ApiState::from(network.data_source()));
         app.register_module(
             "availability",
-            define_api(&Default::default(), MockBase::instance()).unwrap(),
+            define_api(
+                &Default::default(),
+                MockBase::instance(),
+                "0.0.1".parse().unwrap(),
+            )
+            .unwrap(),
         )
         .unwrap();
         network.spawn(
@@ -1570,7 +1640,12 @@ mod test {
         let mut app = App::<_, Error>::with_state(ApiState::from(network.data_source()));
         app.register_module(
             "availability",
-            define_api(&Default::default(), MockBase::instance()).unwrap(),
+            define_api(
+                &Default::default(),
+                MockBase::instance(),
+                "0.0.1".parse().unwrap(),
+            )
+            .unwrap(),
         )
         .unwrap();
         network.spawn(
@@ -1637,7 +1712,12 @@ mod test {
         let mut app = App::<_, Error>::with_state(ApiState::from(network.data_source()));
         app.register_module(
             "availability",
-            define_api(&Default::default(), MockBase::instance()).unwrap(),
+            define_api(
+                &Default::default(),
+                MockBase::instance(),
+                "0.0.1".parse().unwrap(),
+            )
+            .unwrap(),
         )
         .unwrap();
         network.spawn(
@@ -1709,7 +1789,12 @@ mod test {
         let mut app = App::<_, Error>::with_state(ApiState::from(network.data_source()));
         app.register_module(
             "availability",
-            define_api(&Default::default(), MockBase::instance()).unwrap(),
+            define_api(
+                &Default::default(),
+                MockBase::instance(),
+                "0.0.1".parse().unwrap(),
+            )
+            .unwrap(),
         )
         .unwrap();
         network.spawn(

@@ -29,7 +29,12 @@
 use crate::{api::load_api, Payload, QueryError};
 use derive_more::From;
 use futures::{FutureExt, StreamExt, TryFutureExt, TryStreamExt};
-use hotshot_types::traits::node_implementation::NodeType;
+
+use hotshot_types::{
+    data::{Leaf, Leaf2, QuorumProposal},
+    simple_certificate::QuorumCertificate,
+    traits::node_implementation::NodeType,
+};
 use serde::{Deserialize, Serialize};
 use snafu::{OptionExt, Snafu};
 use std::{fmt::Display, path::PathBuf, time::Duration};
@@ -161,9 +166,97 @@ impl Error {
     }
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(bound = "")]
+pub struct Leaf1QueryData<Types: NodeType> {
+    pub(crate) leaf: Leaf<Types>,
+    pub(crate) qc: QuorumCertificate<Types>,
+}
+
+fn downgrade_leaf<Types: NodeType>(leaf2: Leaf2<Types>) -> Leaf<Types> {
+    // TODO do we still need some check here?
+    // `drb_seed` no longer exists on `Leaf2`
+    // if leaf2.drb_seed != [0; 32] && leaf2.drb_result != [0; 32] {
+    //     panic!("Downgrade of Leaf2 to Leaf will lose DRB information!");
+    // }
+    let quorum_proposal = QuorumProposal {
+        block_header: leaf2.block_header().clone(),
+        view_number: leaf2.view_number(),
+        justify_qc: leaf2.justify_qc().to_qc(),
+        upgrade_certificate: leaf2.upgrade_certificate(),
+        proposal_certificate: None,
+    };
+    let mut leaf = Leaf::from_quorum_proposal(&quorum_proposal);
+    if let Some(payload) = leaf2.block_payload() {
+        leaf.fill_block_payload_unchecked(payload);
+    }
+    leaf
+}
+
+impl<Types: NodeType> From<LeafQueryData<Types>> for Leaf1QueryData<Types> {
+    fn from(value: LeafQueryData<Types>) -> Self {
+        Self {
+            leaf: downgrade_leaf(value.leaf),
+            qc: value.qc.to_qc(),
+        }
+    }
+}
+
+async fn get_leaf_handler<Types, State>(
+    req: tide_disco::RequestParams,
+    state: &State,
+    timeout: Duration,
+) -> Result<LeafQueryData<Types>, Error>
+where
+    State: 'static + Send + Sync + ReadState,
+    <State as ReadState>::State: Send + Sync + AvailabilityDataSource<Types>,
+    Types: NodeType,
+    Payload<Types>: QueryablePayload<Types>,
+{
+    let id = match req.opt_integer_param("height")? {
+        Some(height) => LeafId::Number(height),
+        None => LeafId::Hash(req.blob_param("hash")?),
+    };
+    let fetch = state.read(|state| state.get_leaf(id).boxed()).await;
+    fetch.with_timeout(timeout).await.context(FetchLeafSnafu {
+        resource: id.to_string(),
+    })
+}
+
+async fn get_leaf_range_handler<Types, State>(
+    req: tide_disco::RequestParams,
+    state: &State,
+    timeout: Duration,
+    small_object_range_limit: usize,
+) -> Result<Vec<LeafQueryData<Types>>, Error>
+where
+    State: 'static + Send + Sync + ReadState,
+    <State as ReadState>::State: Send + Sync + AvailabilityDataSource<Types>,
+    Types: NodeType,
+    Payload<Types>: QueryablePayload<Types>,
+{
+    let from = req.integer_param::<_, usize>("from")?;
+    let until = req.integer_param("until")?;
+    enforce_range_limit(from, until, small_object_range_limit)?;
+
+    let leaves = state
+        .read(|state| state.get_leaf_range(from..until).boxed())
+        .await;
+    leaves
+        .enumerate()
+        .then(|(index, fetch)| async move {
+            fetch.with_timeout(timeout).await.context(FetchLeafSnafu {
+                resource: (index + from).to_string(),
+            })
+        })
+        .try_collect::<Vec<_>>()
+        .await
+}
+
 pub fn define_api<State, Types: NodeType, Ver: StaticVersionType + 'static>(
     options: &Options,
     _: Ver,
+    api_ver: semver::Version,
 ) -> Result<Api<State, Error, Ver>, ApiError>
 where
     State: 'static + Send + Sync + ReadState,
@@ -179,42 +272,62 @@ where
     let small_object_range_limit = options.small_object_range_limit;
     let large_object_range_limit = options.large_object_range_limit;
 
-    api.with_version("0.0.1".parse().unwrap())
-        .at("get_leaf", move |req, state| {
-            async move {
-                let id = match req.opt_integer_param("height")? {
-                    Some(height) => LeafId::Number(height),
-                    None => LeafId::Hash(req.blob_param("hash")?),
-                };
-                let fetch = state.read(|state| state.get_leaf(id).boxed()).await;
-                fetch.with_timeout(timeout).await.context(FetchLeafSnafu {
-                    resource: id.to_string(),
-                })
-            }
-            .boxed()
-        })?
-        .at("get_leaf_range", move |req, state| {
-            async move {
-                let from = req.integer_param::<_, usize>("from")?;
-                let until = req.integer_param("until")?;
-                enforce_range_limit(from, until, small_object_range_limit)?;
+    api.with_version(api_ver.clone());
 
-                let leaves = state
-                    .read(|state| state.get_leaf_range(from..until).boxed())
-                    .await;
-                leaves
-                    .enumerate()
-                    .then(|(index, fetch)| async move {
-                        fetch.with_timeout(timeout).await.context(FetchLeafSnafu {
-                            resource: (index + from).to_string(),
-                        })
+    // `LeafQueryData` now contains `Leaf2` and `QC2``, which is a breaking change.
+    // On node startup, all leaves are migrated to `Leaf2`.
+    //
+    // To maintain compatibility with nodes running an older version
+    // (which expect `LeafQueryData` with `Leaf1` and `QC1`),
+    // we downgrade `Leaf2` to `Leaf1` and `QC2` to `QC1` if the API version is V0.
+    // Otherwise, we return the new types.
+    if api_ver.major == 0 {
+        api.at("get_leaf", move |req, state| {
+            get_leaf_handler(req, state, timeout)
+                .map(|res| res.map(Leaf1QueryData::from))
+                .boxed()
+        })?;
+
+        api.at("get_leaf_range", move |req, state| {
+            get_leaf_range_handler(req, state, timeout, small_object_range_limit)
+                .map(|res| {
+                    res.map(|r| {
+                        r.into_iter()
+                            .map(Into::into)
+                            .collect::<Vec<Leaf1QueryData<_>>>()
                     })
-                    .try_collect::<Vec<_>>()
+                })
+                .boxed()
+        })?;
+
+        api.stream("stream_leaves", move |req, state| {
+            async move {
+                let height = req.integer_param("height")?;
+                state
+                    .read(|state| {
+                        async move {
+                            Ok(state
+                                .subscribe_leaves(height)
+                                .await
+                                .map(|leaf| Ok(Leaf1QueryData::from(leaf))))
+                        }
+                        .boxed()
+                    })
                     .await
             }
+            .try_flatten_stream()
             .boxed()
-        })?
-        .stream("stream_leaves", move |req, state| {
+        })?;
+    } else {
+        api.at("get_leaf", move |req, state| {
+            get_leaf_handler(req, state, timeout).boxed()
+        })?;
+
+        api.at("get_leaf_range", move |req, state| {
+            get_leaf_range_handler(req, state, timeout, small_object_range_limit).boxed()
+        })?;
+
+        api.stream("stream_leaves", move |req, state| {
             async move {
                 let height = req.integer_param("height")?;
                 state
@@ -225,264 +338,265 @@ where
             }
             .try_flatten_stream()
             .boxed()
-        })?
-        .at("get_header", move |req, state| {
-            async move {
-                let id = if let Some(height) = req.opt_integer_param("height")? {
-                    BlockId::Number(height)
-                } else if let Some(hash) = req.opt_blob_param("hash")? {
-                    BlockId::Hash(hash)
-                } else {
-                    BlockId::PayloadHash(req.blob_param("payload-hash")?)
-                };
-                let fetch = state.read(|state| state.get_header(id).boxed()).await;
-                fetch.with_timeout(timeout).await.context(FetchHeaderSnafu {
-                    resource: id.to_string(),
-                })
-            }
-            .boxed()
-        })?
-        .at("get_header_range", move |req, state| {
-            async move {
-                let from = req.integer_param::<_, usize>("from")?;
-                let until = req.integer_param::<_, usize>("until")?;
-                enforce_range_limit(from, until, large_object_range_limit)?;
+        })?;
+    }
+    api.at("get_header", move |req, state| {
+        async move {
+            let id = if let Some(height) = req.opt_integer_param("height")? {
+                BlockId::Number(height)
+            } else if let Some(hash) = req.opt_blob_param("hash")? {
+                BlockId::Hash(hash)
+            } else {
+                BlockId::PayloadHash(req.blob_param("payload-hash")?)
+            };
+            let fetch = state.read(|state| state.get_header(id).boxed()).await;
+            fetch.with_timeout(timeout).await.context(FetchHeaderSnafu {
+                resource: id.to_string(),
+            })
+        }
+        .boxed()
+    })?
+    .at("get_header_range", move |req, state| {
+        async move {
+            let from = req.integer_param::<_, usize>("from")?;
+            let until = req.integer_param::<_, usize>("until")?;
+            enforce_range_limit(from, until, large_object_range_limit)?;
 
-                let headers = state
-                    .read(|state| state.get_header_range(from..until).boxed())
-                    .await;
-                headers
-                    .enumerate()
-                    .then(|(index, fetch)| async move {
-                        fetch.with_timeout(timeout).await.context(FetchHeaderSnafu {
-                            resource: (index + from).to_string(),
-                        })
+            let headers = state
+                .read(|state| state.get_header_range(from..until).boxed())
+                .await;
+            headers
+                .enumerate()
+                .then(|(index, fetch)| async move {
+                    fetch.with_timeout(timeout).await.context(FetchHeaderSnafu {
+                        resource: (index + from).to_string(),
                     })
-                    .try_collect::<Vec<_>>()
-                    .await
-            }
-            .boxed()
-        })?
-        .stream("stream_headers", move |req, state| {
-            async move {
-                let height = req.integer_param("height")?;
-                state
-                    .read(|state| {
-                        async move { Ok(state.subscribe_headers(height).await.map(Ok)) }.boxed()
-                    })
-                    .await
-            }
-            .try_flatten_stream()
-            .boxed()
-        })?
-        .at("get_block", move |req, state| {
-            async move {
-                let id = if let Some(height) = req.opt_integer_param("height")? {
-                    BlockId::Number(height)
-                } else if let Some(hash) = req.opt_blob_param("hash")? {
-                    BlockId::Hash(hash)
-                } else {
-                    BlockId::PayloadHash(req.blob_param("payload-hash")?)
-                };
-                let fetch = state.read(|state| state.get_block(id).boxed()).await;
-                fetch.with_timeout(timeout).await.context(FetchBlockSnafu {
-                    resource: id.to_string(),
                 })
-            }
-            .boxed()
-        })?
-        .at("get_block_range", move |req, state| {
-            async move {
-                let from = req.integer_param::<_, usize>("from")?;
-                let until = req.integer_param("until")?;
-                enforce_range_limit(from, until, large_object_range_limit)?;
+                .try_collect::<Vec<_>>()
+                .await
+        }
+        .boxed()
+    })?
+    .stream("stream_headers", move |req, state| {
+        async move {
+            let height = req.integer_param("height")?;
+            state
+                .read(|state| {
+                    async move { Ok(state.subscribe_headers(height).await.map(Ok)) }.boxed()
+                })
+                .await
+        }
+        .try_flatten_stream()
+        .boxed()
+    })?
+    .at("get_block", move |req, state| {
+        async move {
+            let id = if let Some(height) = req.opt_integer_param("height")? {
+                BlockId::Number(height)
+            } else if let Some(hash) = req.opt_blob_param("hash")? {
+                BlockId::Hash(hash)
+            } else {
+                BlockId::PayloadHash(req.blob_param("payload-hash")?)
+            };
+            let fetch = state.read(|state| state.get_block(id).boxed()).await;
+            fetch.with_timeout(timeout).await.context(FetchBlockSnafu {
+                resource: id.to_string(),
+            })
+        }
+        .boxed()
+    })?
+    .at("get_block_range", move |req, state| {
+        async move {
+            let from = req.integer_param::<_, usize>("from")?;
+            let until = req.integer_param("until")?;
+            enforce_range_limit(from, until, large_object_range_limit)?;
 
-                let blocks = state
-                    .read(|state| state.get_block_range(from..until).boxed())
-                    .await;
-                blocks
-                    .enumerate()
-                    .then(|(index, fetch)| async move {
-                        fetch.with_timeout(timeout).await.context(FetchBlockSnafu {
-                            resource: (index + from).to_string(),
-                        })
+            let blocks = state
+                .read(|state| state.get_block_range(from..until).boxed())
+                .await;
+            blocks
+                .enumerate()
+                .then(|(index, fetch)| async move {
+                    fetch.with_timeout(timeout).await.context(FetchBlockSnafu {
+                        resource: (index + from).to_string(),
                     })
-                    .try_collect::<Vec<_>>()
-                    .await
-            }
-            .boxed()
-        })?
-        .stream("stream_blocks", move |req, state| {
-            async move {
-                let height = req.integer_param("height")?;
-                state
-                    .read(|state| {
-                        async move { Ok(state.subscribe_blocks(height).await.map(Ok)) }.boxed()
-                    })
-                    .await
-            }
-            .try_flatten_stream()
-            .boxed()
-        })?
-        .at("get_payload", move |req, state| {
-            async move {
-                let id = if let Some(height) = req.opt_integer_param("height")? {
-                    BlockId::Number(height)
-                } else if let Some(hash) = req.opt_blob_param("hash")? {
-                    BlockId::PayloadHash(hash)
-                } else {
-                    BlockId::Hash(req.blob_param("block-hash")?)
-                };
-                let fetch = state.read(|state| state.get_payload(id).boxed()).await;
-                fetch.with_timeout(timeout).await.context(FetchBlockSnafu {
-                    resource: id.to_string(),
                 })
-            }
-            .boxed()
-        })?
-        .at("get_payload_range", move |req, state| {
-            async move {
-                let from = req.integer_param::<_, usize>("from")?;
-                let until = req.integer_param("until")?;
-                enforce_range_limit(from, until, large_object_range_limit)?;
+                .try_collect::<Vec<_>>()
+                .await
+        }
+        .boxed()
+    })?
+    .stream("stream_blocks", move |req, state| {
+        async move {
+            let height = req.integer_param("height")?;
+            state
+                .read(|state| {
+                    async move { Ok(state.subscribe_blocks(height).await.map(Ok)) }.boxed()
+                })
+                .await
+        }
+        .try_flatten_stream()
+        .boxed()
+    })?
+    .at("get_payload", move |req, state| {
+        async move {
+            let id = if let Some(height) = req.opt_integer_param("height")? {
+                BlockId::Number(height)
+            } else if let Some(hash) = req.opt_blob_param("hash")? {
+                BlockId::PayloadHash(hash)
+            } else {
+                BlockId::Hash(req.blob_param("block-hash")?)
+            };
+            let fetch = state.read(|state| state.get_payload(id).boxed()).await;
+            fetch.with_timeout(timeout).await.context(FetchBlockSnafu {
+                resource: id.to_string(),
+            })
+        }
+        .boxed()
+    })?
+    .at("get_payload_range", move |req, state| {
+        async move {
+            let from = req.integer_param::<_, usize>("from")?;
+            let until = req.integer_param("until")?;
+            enforce_range_limit(from, until, large_object_range_limit)?;
 
-                let payloads = state
-                    .read(|state| state.get_payload_range(from..until).boxed())
-                    .await;
-                payloads
-                    .enumerate()
-                    .then(|(index, fetch)| async move {
-                        fetch.with_timeout(timeout).await.context(FetchBlockSnafu {
-                            resource: (index + from).to_string(),
-                        })
+            let payloads = state
+                .read(|state| state.get_payload_range(from..until).boxed())
+                .await;
+            payloads
+                .enumerate()
+                .then(|(index, fetch)| async move {
+                    fetch.with_timeout(timeout).await.context(FetchBlockSnafu {
+                        resource: (index + from).to_string(),
                     })
-                    .try_collect::<Vec<_>>()
-                    .await
-            }
-            .boxed()
-        })?
-        .stream("stream_payloads", move |req, state| {
-            async move {
-                let height = req.integer_param("height")?;
-                state
-                    .read(|state| {
-                        async move { Ok(state.subscribe_payloads(height).await.map(Ok)) }.boxed()
-                    })
-                    .await
-            }
-            .try_flatten_stream()
-            .boxed()
-        })?
-        .at("get_vid_common", move |req, state| {
-            async move {
-                let id = if let Some(height) = req.opt_integer_param("height")? {
-                    BlockId::Number(height)
-                } else if let Some(hash) = req.opt_blob_param("hash")? {
-                    BlockId::Hash(hash)
-                } else {
-                    BlockId::PayloadHash(req.blob_param("payload-hash")?)
-                };
-                let fetch = state.read(|state| state.get_vid_common(id).boxed()).await;
-                fetch.with_timeout(timeout).await.context(FetchBlockSnafu {
-                    resource: id.to_string(),
                 })
-            }
-            .boxed()
-        })?
-        .stream("stream_vid_common", move |req, state| {
-            async move {
-                let height = req.integer_param("height")?;
-                state
-                    .read(|state| {
-                        async move { Ok(state.subscribe_vid_common(height).await.map(Ok)) }.boxed()
-                    })
-                    .await
-            }
-            .try_flatten_stream()
-            .boxed()
-        })?
-        .at("get_transaction", move |req, state| {
-            async move {
-                match req.opt_blob_param("hash")? {
-                    Some(hash) => {
-                        let fetch = state
-                            .read(|state| state.get_transaction(hash).boxed())
-                            .await;
-                        fetch
-                            .with_timeout(timeout)
-                            .await
-                            .context(FetchTransactionSnafu {
-                                resource: hash.to_string(),
-                            })
-                    }
-                    None => {
-                        let height: u64 = req.integer_param("height")?;
-                        let fetch = state
-                            .read(|state| state.get_block(height as usize).boxed())
-                            .await;
-                        let block = fetch.with_timeout(timeout).await.context(FetchBlockSnafu {
-                            resource: height.to_string(),
-                        })?;
-                        let i: u64 = req.integer_param("index")?;
-                        let index = block
-                            .payload()
-                            .nth(block.metadata(), i as usize)
-                            .context(InvalidTransactionIndexSnafu { height, index: i })?;
-                        TransactionQueryData::new(&block, index, i)
-                            .context(InvalidTransactionIndexSnafu { height, index: i })
-                    }
+                .try_collect::<Vec<_>>()
+                .await
+        }
+        .boxed()
+    })?
+    .stream("stream_payloads", move |req, state| {
+        async move {
+            let height = req.integer_param("height")?;
+            state
+                .read(|state| {
+                    async move { Ok(state.subscribe_payloads(height).await.map(Ok)) }.boxed()
+                })
+                .await
+        }
+        .try_flatten_stream()
+        .boxed()
+    })?
+    .at("get_vid_common", move |req, state| {
+        async move {
+            let id = if let Some(height) = req.opt_integer_param("height")? {
+                BlockId::Number(height)
+            } else if let Some(hash) = req.opt_blob_param("hash")? {
+                BlockId::Hash(hash)
+            } else {
+                BlockId::PayloadHash(req.blob_param("payload-hash")?)
+            };
+            let fetch = state.read(|state| state.get_vid_common(id).boxed()).await;
+            fetch.with_timeout(timeout).await.context(FetchBlockSnafu {
+                resource: id.to_string(),
+            })
+        }
+        .boxed()
+    })?
+    .stream("stream_vid_common", move |req, state| {
+        async move {
+            let height = req.integer_param("height")?;
+            state
+                .read(|state| {
+                    async move { Ok(state.subscribe_vid_common(height).await.map(Ok)) }.boxed()
+                })
+                .await
+        }
+        .try_flatten_stream()
+        .boxed()
+    })?
+    .at("get_transaction", move |req, state| {
+        async move {
+            match req.opt_blob_param("hash")? {
+                Some(hash) => {
+                    let fetch = state
+                        .read(|state| state.get_transaction(hash).boxed())
+                        .await;
+                    fetch
+                        .with_timeout(timeout)
+                        .await
+                        .context(FetchTransactionSnafu {
+                            resource: hash.to_string(),
+                        })
+                }
+                None => {
+                    let height: u64 = req.integer_param("height")?;
+                    let fetch = state
+                        .read(|state| state.get_block(height as usize).boxed())
+                        .await;
+                    let block = fetch.with_timeout(timeout).await.context(FetchBlockSnafu {
+                        resource: height.to_string(),
+                    })?;
+                    let i: u64 = req.integer_param("index")?;
+                    let index = block
+                        .payload()
+                        .nth(block.metadata(), i as usize)
+                        .context(InvalidTransactionIndexSnafu { height, index: i })?;
+                    TransactionQueryData::new(&block, index, i)
+                        .context(InvalidTransactionIndexSnafu { height, index: i })
                 }
             }
-            .boxed()
-        })?
-        .at("get_block_summary", move |req, state| {
-            async move {
-                let id: usize = req.integer_param("height")?;
+        }
+        .boxed()
+    })?
+    .at("get_block_summary", move |req, state| {
+        async move {
+            let id: usize = req.integer_param("height")?;
 
-                let fetch = state.read(|state| state.get_block(id).boxed()).await;
-                fetch
-                    .with_timeout(timeout)
-                    .await
-                    .context(FetchBlockSnafu {
-                        resource: id.to_string(),
-                    })
-                    .map(BlockSummaryQueryData::from)
-            }
-            .boxed()
-        })?
-        .at("get_block_summary_range", move |req, state| {
-            async move {
-                let from: usize = req.integer_param("from")?;
-                let until: usize = req.integer_param("until")?;
-                enforce_range_limit(from, until, large_object_range_limit)?;
-
-                let blocks = state
-                    .read(|state| state.get_block_range(from..until).boxed())
-                    .await;
-                let result: Vec<BlockSummaryQueryData<Types>> = blocks
-                    .enumerate()
-                    .then(|(index, fetch)| async move {
-                        fetch.with_timeout(timeout).await.context(FetchBlockSnafu {
-                            resource: (index + from).to_string(),
-                        })
-                    })
-                    .map(|result| result.map(BlockSummaryQueryData::from))
-                    .try_collect()
-                    .await?;
-
-                Ok(result)
-            }
-            .boxed()
-        })?
-        .at("get_limits", move |_req, _state| {
-            async move {
-                Ok(Limits {
-                    small_object_range_limit,
-                    large_object_range_limit,
+            let fetch = state.read(|state| state.get_block(id).boxed()).await;
+            fetch
+                .with_timeout(timeout)
+                .await
+                .context(FetchBlockSnafu {
+                    resource: id.to_string(),
                 })
-            }
-            .boxed()
-        })?;
+                .map(BlockSummaryQueryData::from)
+        }
+        .boxed()
+    })?
+    .at("get_block_summary_range", move |req, state| {
+        async move {
+            let from: usize = req.integer_param("from")?;
+            let until: usize = req.integer_param("until")?;
+            enforce_range_limit(from, until, large_object_range_limit)?;
+
+            let blocks = state
+                .read(|state| state.get_block_range(from..until).boxed())
+                .await;
+            let result: Vec<BlockSummaryQueryData<Types>> = blocks
+                .enumerate()
+                .then(|(index, fetch)| async move {
+                    fetch.with_timeout(timeout).await.context(FetchBlockSnafu {
+                        resource: (index + from).to_string(),
+                    })
+                })
+                .map(|result| result.map(BlockSummaryQueryData::from))
+                .try_collect()
+                .await?;
+
+            Ok(result)
+        }
+        .boxed()
+    })?
+    .at("get_limits", move |_req, _state| {
+        async move {
+            Ok(Limits {
+                small_object_range_limit,
+                large_object_range_limit,
+            })
+        }
+        .boxed()
+    })?;
     Ok(api)
 }
 
@@ -790,7 +904,12 @@ mod test {
         let mut app = App::<_, Error>::with_state(ApiState::from(network.data_source()));
         app.register_module(
             "availability",
-            define_api(&Default::default(), MockBase::instance()).unwrap(),
+            define_api(
+                &Default::default(),
+                MockBase::instance(),
+                "0.0.1".parse().unwrap(),
+            )
+            .unwrap(),
         )
         .unwrap();
         network.spawn(
@@ -926,6 +1045,7 @@ mod test {
                     ..Default::default()
                 },
                 MockBase::instance(),
+                "0.0.1".parse().unwrap(),
             )
             .unwrap();
         api.get("get_ext", |_, state| {
@@ -996,6 +1116,7 @@ mod test {
                     ..Default::default()
                 },
                 MockBase::instance(),
+                "0.0.1".parse().unwrap(),
             )
             .unwrap(),
         )
@@ -1080,7 +1201,12 @@ mod test {
         let mut app = App::<_, Error>::with_state(ApiState::from(network.data_source()));
         app.register_module(
             "availability",
-            define_api(&Default::default(), MockBase::instance()).unwrap(),
+            define_api(
+                &Default::default(),
+                MockBase::instance(),
+                "0.0.1".parse().unwrap(),
+            )
+            .unwrap(),
         )
         .unwrap();
         network.spawn(
@@ -1117,7 +1243,12 @@ mod test {
         let mut app = App::<_, Error>::with_state(ApiState::from(network.data_source()));
         app.register_module(
             "availability",
-            define_api(&Default::default(), MockBase::instance()).unwrap(),
+            define_api(
+                &Default::default(),
+                MockBase::instance(),
+                "0.0.1".parse().unwrap(),
+            )
+            .unwrap(),
         )
         .unwrap();
         network.spawn(

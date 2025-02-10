@@ -96,6 +96,7 @@ priority-queue = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
 rand_distr = { workspace = true }
+semver = { workspace = true }
 sequencer-utils = { path = "../utils" }
 serde = { workspace = true }
 serde_json = { workspace = true }

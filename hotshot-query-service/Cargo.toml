@@ -77,6 +77,7 @@ lazy_static = "1"
 prometheus = "0.13"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+semver = { workspace = true }
 snafu = "0.8"
 surf-disco = "0.9"
 tagged-base64 = "0.4"

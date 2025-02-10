@@ -878,6 +878,7 @@ mod test {
                     ..Default::default()
                 },
                 MockBase::instance(),
+                "0.0.1".parse().unwrap(),
             )
             .unwrap(),
         )
