@@ -44,6 +44,7 @@ use tokio::{
 use tower_service::Service;
 use tracing::Instrument;
 use url::Url;
+use contract_bindings_ethers::fee_contract::FeeContract;
 
 use super::{
     v0_1::{SingleTransport, SingleTransportStatus, SwitchingTransport},
@@ -757,6 +758,40 @@ impl L1Client {
         (state, block)
     }
 
+    /// Divide the range `start..=end` into chunks of size
+    /// `events_max_block_range`.
+    fn chunky(&self, start: u64, end: u64) -> std::fmt::FromFn<impl FnMut() -> Option<(u64, u64)>> {
+        let mut start = start;
+        let chunk_size = self.options().l1_events_max_block_range;
+        std::iter::from_fn(move || {
+            let chunk_end = min(start + chunk_size - 1, end);
+            if chunk_end < start {
+                return None;
+            }
+
+            let chunk = (start, chunk_end);
+            start = chunk_end + 1;
+            Some(chunk)
+        })
+    }
+
+    /// Divide the range `start..=end` into chunks of size
+    /// `events_max_block_range`.
+    fn chunky2(start: u64, end: u64, chunk_size: usize) -> Vec<(u64, u64)> {
+        // let opt = self.options();
+        // let chunk_size = opt.l1_events_max_block_range as usize;
+        let chunks: Vec<u64> = (start..=end).collect();
+        let tups: Vec<(u64, u64)> = chunks
+            .chunks(chunk_size)
+            .map(|s| {
+                // should never be empty
+                s.first().cloned().zip(s.last().cloned()).unwrap()
+            })
+            .collect();
+
+        tups
+    }
+
     /// Get fee info for each `Deposit` occurring between `prev`
     /// and `new`. Returns `Vec<FeeInfo>`
     pub async fn get_finalized_deposits(
@@ -779,33 +814,20 @@ impl L1Client {
 
         // Divide the range `prev_finalized..=new_finalized` into chunks of size
         // `events_max_block_range`.
-        let mut start = prev;
-        let end = new_finalized;
-        let chunk_size = opt.l1_events_max_block_range;
-        let chunks = std::iter::from_fn(move || {
-            let chunk_end = min(start + chunk_size - 1, end);
-            if chunk_end < start {
-                return None;
-            }
-
-            let chunk = (start, chunk_end);
-            start = chunk_end + 1;
-            Some(chunk)
-        });
+        let chunks = self.chunky(prev, new_finalized);
 
         // Fetch events for each chunk.
         let events = stream::iter(chunks).then(|(from, to)| {
             let retry_delay = opt.l1_retry_delay;
-            let fee_contract =
-                FeeContractInstance::new(fee_contract_address, self.provider.clone());
+            let fee_contract = FeeContract::new(fee_contract_address, self.provider.clone());
             async move {
                 tracing::debug!(from, to, "fetch events in range");
 
                 // query for deposit events, loop until successful.
                 loop {
                     match fee_contract
-                        .Deposit_filter()
-                        .address(*fee_contract.address())
+                        .deposit_filter()
+                        .address(fee_contract.address().into())
                         .from_block(from)
                         .to_block(to)
                         .query()
@@ -1319,6 +1341,24 @@ mod test {
             retry += 1;
         };
         tracing::info!(?final_state, "state updated");
+    }
+
+    #[tokio::test]
+    async fn test_chunky() {
+        let anvil = Anvil::new().spawn();
+        let opt = L1ClientOptions {
+            l1_events_max_block_range: 3,
+            ..Default::default()
+        };
+        let l1_client = opt.connect(vec![anvil.endpoint().parse().unwrap()]);
+
+        let chunks = l1_client.chunky(3, 10);
+        let tups = stream::iter(chunks).collect::<Vec<_>>().await;
+
+        assert_eq![vec![(3, 5), (6, 8), (9, 10)], tups];
+
+        let tups = L1Client::chunky2(3, 10, 3);
+        assert_eq![vec![(3, 5), (6, 8), (9, 10)], tups];
     }
 
     #[tokio::test]
