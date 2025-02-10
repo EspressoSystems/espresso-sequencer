@@ -655,7 +655,7 @@ impl SequencerPersistence for Persistence {
 
     async fn append_vid(
         &self,
-        proposal: &Proposal<SeqTypes, VidDisperseShare<SeqTypes>>,
+        proposal: &Proposal<SeqTypes, ADVZDisperseShare<SeqTypes>>,
     ) -> anyhow::Result<()> {
         let mut inner = self.inner.write().await;
         let view_number = proposal.data.view_number().u64();
@@ -706,7 +706,12 @@ impl SequencerPersistence for Persistence {
             },
         )
     }
-    async fn record_action(&self, view: ViewNumber, action: HotShotAction) -> anyhow::Result<()> {
+    async fn record_action(
+        &self,
+        view: ViewNumber,
+        _epoch: Option<EpochNumber>,
+        action: HotShotAction,
+    ) -> anyhow::Result<()> {
         // Todo Remove this after https://github.com/EspressoSystems/espresso-sequencer/issues/1931
         if !matches!(action, HotShotAction::Propose | HotShotAction::Vote) {
             return Ok(());
@@ -1698,7 +1703,7 @@ mod test {
         let storage = Persistence::connect(&tmp).await;
 
         // Generate a couple of valid quorum proposals.
-        let leaf: Leaf2 = Leaf::genesis(&Default::default(), &NodeState::mock())
+        let leaf: Leaf2 = Leaf::genesis::<MockVersions>(&Default::default(), &NodeState::mock())
             .await
             .into();
         let privkey = PubKey::generated_from_seed_indexed([0; 32], 1).1;
@@ -1706,6 +1711,7 @@ mod test {
         let mut quorum_proposal = Proposal {
             data: QuorumProposalWrapper::<SeqTypes> {
                 proposal: QuorumProposal2::<SeqTypes> {
+                    epoch: None,
                     block_header: leaf.block_header().clone(),
                     view_number: ViewNumber::genesis(),
                     justify_qc: QuorumCertificate2::genesis::<TestVersions>(
@@ -1718,7 +1724,6 @@ mod test {
                     next_drb_result: None,
                     next_epoch_justify_qc: None,
                 },
-                with_epoch: false,
             },
             signature,
             _pd: Default::default(),
@@ -1762,7 +1767,7 @@ mod test {
         let storage = Persistence::connect(&tmp).await;
 
         // Generate a valid quorum proposal.
-        let leaf: Leaf2 = Leaf::genesis(&Default::default(), &NodeState::mock())
+        let leaf: Leaf2 = Leaf::genesis::<MockVersions>(&Default::default(), &NodeState::mock())
             .await
             .into();
         let privkey = PubKey::generated_from_seed_indexed([0; 32], 1).1;
@@ -1770,6 +1775,7 @@ mod test {
         let quorum_proposal = Proposal {
             data: QuorumProposalWrapper::<SeqTypes> {
                 proposal: QuorumProposal2::<SeqTypes> {
+                    epoch: None,
                     block_header: leaf.block_header().clone(),
                     view_number: ViewNumber::new(1),
                     justify_qc: QuorumCertificate2::genesis::<TestVersions>(
@@ -1782,7 +1788,6 @@ mod test {
                     next_drb_result: None,
                     next_epoch_justify_qc: None,
                 },
-                with_epoch: false,
             },
             signature,
             _pd: Default::default(),

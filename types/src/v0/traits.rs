@@ -31,12 +31,11 @@ use jf_vid::VidScheme;
 use serde::{de::DeserializeOwned, Serialize};
 
 use crate::{
-    v0::impls::ValidatedState, v0_99::ChainConfig, BackoffParams, BlockMerkleTree, Event,
-    FeeAccount, FeeAccountProof, FeeMerkleCommitment, FeeMerkleTree, Leaf2, NetworkConfig,
-    SeqTypes,
+    v0::impls::ValidatedState, v0_99::ChainConfig, BlockMerkleTree, Event, FeeAccount,
+    FeeAccountProof, FeeMerkleCommitment, FeeMerkleTree, Leaf2, NetworkConfig, SeqTypes,
 };
 
-use super::{impls::NodeState, Leaf};
+use super::{impls::NodeState, utils::BackoffParams, Leaf};
 
 #[async_trait]
 pub trait StateCatchup: Send + Sync {
@@ -667,7 +666,7 @@ pub trait SequencerPersistence: Sized + Send + Sync + Clone + 'static {
     ) -> anyhow::Result<Option<(Leaf2, QuorumCertificate2<SeqTypes>)>>;
     async fn append_vid(
         &self,
-        proposal: &Proposal<SeqTypes, VidDisperseShare<SeqTypes>>,
+        proposal: &Proposal<SeqTypes, ADVZDisperseShare<SeqTypes>>,
     ) -> anyhow::Result<()>;
     async fn append_da(
         &self,
@@ -677,19 +676,9 @@ pub trait SequencerPersistence: Sized + Send + Sync + Clone + 'static {
     async fn record_action(&self, view: ViewNumber, action: HotShotAction) -> anyhow::Result<()>;
 
     async fn update_undecided_state2(
-        &self,
         leaves: CommitmentMap<Leaf2>,
         state: BTreeMap<ViewNumber, View<SeqTypes>>,
     ) -> anyhow::Result<()>;
-    async fn append_quorum_proposal2(
-        &self,
-        proposal: &Proposal<SeqTypes, QuorumProposalWrapper<SeqTypes>>,
-    ) -> anyhow::Result<()>;
-    async fn store_upgrade_certificate(
-        &self,
-        decided_upgrade_certificate: Option<UpgradeCertificate<SeqTypes>>,
-    ) -> anyhow::Result<()>;
-    async fn migrate_consensus(
         &self,
         _migrate_leaf: fn(Leaf) -> Leaf2,
         _migrate_proposal: fn(
@@ -777,7 +766,7 @@ impl EventConsumer for NullEventConsumer {
 impl<P: SequencerPersistence> Storage<SeqTypes> for Arc<P> {
     async fn append_vid(
         &self,
-        proposal: &Proposal<SeqTypes, VidDisperseShare<SeqTypes>>,
+        proposal: &Proposal<SeqTypes, ADVZDisperseShare<SeqTypes>>,
     ) -> anyhow::Result<()> {
         (**self).append_vid(proposal).await
     }

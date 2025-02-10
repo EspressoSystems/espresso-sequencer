@@ -21,7 +21,7 @@ use hotshot_types::{
         node_implementation::{NodeType, Versions},
         EncodeBytes,
     },
-    vid::{vid_scheme, VidCommitment},
+    vid::{advz_scheme, VidCommitment},
 };
 use jf_vid::VidScheme;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
@@ -318,16 +318,14 @@ impl<Types: NodeType> BlockQueryData<Types> {
         }
     }
 
-    pub async fn genesis(
+    pub async fn genesis<HsVer: Versions>(
         validated_state: &Types::ValidatedState,
         instance_state: &Types::InstanceState,
     ) -> Self
     where
         Payload<Types>: QueryablePayload<Types>,
     {
-        let leaf: Leaf2<_> = Leaf::<Types>::genesis(validated_state, instance_state)
-            .await
-            .into();
+        let leaf = Leaf::<Types>::genesis(validated_state, instance_state).await;
         Self::new(leaf.block_header().clone(), leaf.block_payload().unwrap())
     }
 
@@ -419,14 +417,14 @@ impl<Types: NodeType> From<BlockQueryData<Types>> for PayloadQueryData<Types> {
 }
 
 impl<Types: NodeType> PayloadQueryData<Types> {
-    pub async fn genesis(
+    pub async fn genesis<HsVer: Versions>(
         validated_state: &Types::ValidatedState,
         instance_state: &Types::InstanceState,
     ) -> Self
     where
         Payload<Types>: QueryablePayload<Types>,
     {
-        BlockQueryData::genesis(validated_state, instance_state)
+        BlockQueryData::genesis::<HsVer>(validated_state, instance_state)
             .await
             .into()
     }
@@ -473,14 +471,14 @@ impl<Types: NodeType> VidCommonQueryData<Types> {
         }
     }
 
-    pub async fn genesis(
+    pub async fn genesis<HsVer: Versions>(
         validated_state: &Types::ValidatedState,
         instance_state: &Types::InstanceState,
     ) -> Self {
-        let leaf = Leaf::<Types>::genesis(validated_state, instance_state).await;
+        let leaf = Leaf::<Types>::genesis::<HsVer>(validated_state, instance_state).await;
         let payload = leaf.block_payload().unwrap();
         let bytes = payload.encode();
-        let disperse = vid_scheme(GENESIS_VID_NUM_STORAGE_NODES)
+        let disperse = advz_scheme(GENESIS_VID_NUM_STORAGE_NODES)
             .disperse(bytes)
             .unwrap();
 

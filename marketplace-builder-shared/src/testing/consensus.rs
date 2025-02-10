@@ -21,9 +21,13 @@ use hotshot_types::{
     message::Proposal,
     simple_certificate::{QuorumCertificate2, SimpleCertificate, SuccessThreshold},
     simple_vote::QuorumData2,
-    traits::{block_contents::vid_commitment, node_implementation::ConsensusTime},
+    traits::{
+        block_contents::vid_commitment,
+        node_implementation::{ConsensusTime, Versions},
+    },
 };
 use sha2::{Digest, Sha256};
+use vbs::version::StaticVersionType;
 
 pub struct SimulatedChainState {
     epoch: Option<EpochNumber>,
@@ -50,8 +54,11 @@ impl SimulatedChainState {
         let num_transactions = transactions.len() as u64;
         let encoded_transactions = TestTransaction::encode(&transactions);
         let block_payload = TestBlockPayload { transactions };
-        let block_vid_commitment =
-            vid_commitment(&encoded_transactions, TEST_NUM_NODES_IN_VID_COMPUTATION);
+        let block_vid_commitment = vid_commitment::<TestVersions>(
+            &encoded_transactions,
+            TEST_NUM_NODES_IN_VID_COMPUTATION,
+            <TestVersions as Versions>::Base::VERSION,
+        );
         let metadata = TestMetadata { num_transactions };
         let block_builder_commitment =
             <TestBlockPayload as BlockPayload<TestTypes>>::builder_commitment(
@@ -127,11 +134,10 @@ impl SimulatedChainState {
                 justify_qc: justify_qc.clone(),
                 upgrade_certificate: None,
                 view_change_evidence: None,
-
                 next_drb_result: None,
                 next_epoch_justify_qc: None,
+                epoch: self.epoch,
             },
-            with_epoch: false,
         };
 
         let quorum_proposal_event = EventType::QuorumProposal {
