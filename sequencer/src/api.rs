@@ -2623,8 +2623,6 @@ mod test {
     async fn test_hotshot_event_streaming_epoch_progression() {
         setup_test();
 
-        // TODO currently getting `hotshot_task_impls::helpers: : Failed epoch safety check`
-        // at epoch_height + 1
         let epoch_height = 5;
         type PosVersion = SequencerVersions<StaticVersion<0, 3>, StaticVersion<0, 0>>;
 
