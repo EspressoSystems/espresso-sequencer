@@ -782,12 +782,27 @@ impl<P: SequencerPersistence> Storage<SeqTypes> for Arc<P> {
         (**self).append_vid(proposal).await
     }
 
+    async fn append_vid2(
+        &self,
+        proposal: &Proposal<SeqTypes, VidDisperseShare2<SeqTypes>>,
+    ) -> anyhow::Result<()> {
+        (**self).append_vid2(proposal).await
+    }
+
     async fn append_da(
         &self,
         proposal: &Proposal<SeqTypes, DaProposal<SeqTypes>>,
         vid_commit: <VidSchemeType as VidScheme>::Commit,
     ) -> anyhow::Result<()> {
         (**self).append_da(proposal, vid_commit).await
+    }
+
+    async fn append_da2(
+        &self,
+        proposal: &Proposal<SeqTypes, DaProposal2<SeqTypes>>,
+        vid_commit: <VidSchemeType as VidScheme>::Commit,
+    ) -> anyhow::Result<()> {
+        (**self).append_da2(proposal, vid_commit).await
     }
 
     async fn record_action(&self, view: ViewNumber, action: HotShotAction) -> anyhow::Result<()> {
@@ -825,6 +840,22 @@ impl<P: SequencerPersistence> Storage<SeqTypes> for Arc<P> {
             .await
     }
 
+    async fn append_proposal2(
+        &self,
+        proposal: &Proposal<SeqTypes, QuorumProposal2<SeqTypes>>,
+    ) -> anyhow::Result<()> {
+        // TODO: this is a bug in hotshot with makes with_epoch = true
+        // when converting from qp2 to qp wrapper
+        let mut proposal_qp_wrapper: Proposal<SeqTypes, QuorumProposalWrapper<SeqTypes>> =
+            convert_proposal(proposal.clone());
+        proposal_qp_wrapper.data.with_epoch = false;
+        (**self).append_quorum_proposal2(&proposal_qp_wrapper).await
+    }
+
+    async fn update_high_qc2(&self, high_qc: QuorumCertificate2<SeqTypes>) -> anyhow::Result<()> {
+        self.update_high_qc2(high_qc).await
+    }
+
     async fn update_decided_upgrade_certificate(
         &self,
         decided_upgrade_certificate: Option<UpgradeCertificate<SeqTypes>>,
@@ -832,6 +863,14 @@ impl<P: SequencerPersistence> Storage<SeqTypes> for Arc<P> {
         (**self)
             .store_upgrade_certificate(decided_upgrade_certificate)
             .await
+    }
+
+    async fn update_undecided_state2(
+        &self,
+        leaves: CommitmentMap<Leaf2>,
+        state: BTreeMap<ViewNumber, View<SeqTypes>>,
+    ) -> anyhow::Result<()> {
+        (**self).update_undecided_state2(leaves, state).await
     }
 }
 
