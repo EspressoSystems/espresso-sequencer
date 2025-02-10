@@ -22,6 +22,7 @@ use hotshot_types::{
 use hotshot_utils::anytrace::Result;
 use primitive_types::U256;
 use rand::{rngs::StdRng, Rng};
+use tracing::error;
 
 use crate::traits::election::helpers::QuorumFilterConfig;
 
@@ -60,6 +61,36 @@ impl<TYPES: NodeType, CONFIG: QuorumFilterConfig> RandomizedCommitteeMembers<TYP
     /// Creates a set of indices into the da_stake_table which reference the nodes selected for this epoch's da committee
     fn make_da_quorum_filter(&self, epoch: <TYPES as NodeType>::Epoch) -> BTreeSet<usize> {
         CONFIG::execute(epoch.u64(), self.da_stake_table.len())
+    }
+
+    /// Writes the offsets used for the quorum filter and da_quorum filter to stdout
+    fn debug_display_offsets(&self) {
+        /// Ensures that the quorum filters are only displayed once
+        static START: std::sync::Once = std::sync::Once::new();
+
+        START.call_once(|| {
+            error!(
+                "{} offsets for Quorum filter:",
+                std::any::type_name::<CONFIG>()
+            );
+            for epoch in 1..=10 {
+                error!(
+                    "  epoch {epoch}: {:?}",
+                    self.make_quorum_filter(<TYPES as NodeType>::Epoch::new(epoch))
+                );
+            }
+
+            error!(
+                "{} offsets for DA Quorum filter:",
+                std::any::type_name::<CONFIG>()
+            );
+            for epoch in 1..=10 {
+                error!(
+                    "  epoch {epoch}: {:?}",
+                    self.make_da_quorum_filter(<TYPES as NodeType>::Epoch::new(epoch))
+                );
+            }
+        });
     }
 }
 
@@ -114,14 +145,18 @@ impl<TYPES: NodeType, CONFIG: QuorumFilterConfig> Membership<TYPES>
             .map(|entry| (TYPES::SignatureKey::public_key(entry), entry.clone()))
             .collect();
 
-        Self {
+        let s = Self {
             eligible_leaders,
             stake_table: members,
             da_stake_table: da_members,
             indexed_stake_table,
             indexed_da_stake_table,
             _pd: PhantomData,
-        }
+        };
+
+        s.debug_display_offsets();
+
+        s
     }
 
     /// Get the stake table for the current view

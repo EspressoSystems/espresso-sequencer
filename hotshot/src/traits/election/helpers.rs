@@ -226,6 +226,10 @@ impl RandomOverlapQuorumIterator {
             count / 2 > overlap_max,
             "Overlap cannot be greater than the entire set size"
         );
+        assert!(
+            count / 2 >= members_max - overlap_min,
+            "members_max must be greater or equal to half of the count plus overlap_min"
+        );
 
         let (mut prev_rng, mut this_rng) = make_rngs(seed, round);
 
