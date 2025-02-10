@@ -18,12 +18,13 @@ use url::Url;
 /// This script deploys contracts needed to run the sequencer to an L1. It outputs a .env file
 /// containing the addresses of the deployed contracts.
 ///
-/// This script can also be used to do incremental deployments. The only contract addresses needed
-/// to configure the sequencer network are ESPRESSO_SEQUENCER_HOTSHOT_ADDRESS and
-/// ESPRESSO_SEQUENCER_LIGHT_CLIENT_PROXY_ADDRESS. These contracts, however, have dependencies, and
-/// a full deployment may involve up to 5 total contracts. Some of these contracts, especially
-/// libraries may already have been deployed, or perhaps one of the top-level contracts has been
-/// deployed and we only need to deploy the other one.
+/// This script can also be used to do incremental deployments. The only contract addresses
+/// needed to configure the sequencer network are ESPRESSO_SEQUENCER_FEE_CONTRACT_PROXY_ADDRESS,
+/// ESPRESSO_SEQUENCER_LIGHT_CLIENT_PROXY_ADDRESS and (soon) PERMISSIONED_STAKE_TABLE_ADDRESS.
+/// These contracts, however, have dependencies, and a full deployment involves several
+/// contracts. Some of these contracts, especially libraries may already have been deployed, or
+/// perhaps one of the top-level contracts has been deployed and we only need to deploy the other
+/// one.
 ///
 /// It is possible to pass in the addresses of already deployed contracts, in which case those
 /// addresses will be used in place of deploying a new contract wherever that contract is required
