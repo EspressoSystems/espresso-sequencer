@@ -252,7 +252,7 @@ mod test {
             define_api(
                 &Default::default(),
                 MockBase::instance(),
-                "0.0.1".parse().unwrap(),
+                "1.0.0".parse().unwrap(),
             )
             .unwrap(),
         )
@@ -480,7 +480,7 @@ mod test {
             define_api(
                 &Default::default(),
                 MockBase::instance(),
-                "0.0.1".parse().unwrap(),
+                "1.0.0".parse().unwrap(),
             )
             .unwrap(),
         )
@@ -543,7 +543,7 @@ mod test {
             define_api(
                 &Default::default(),
                 MockBase::instance(),
-                "0.0.1".parse().unwrap(),
+                "1.0.0".parse().unwrap(),
             )
             .unwrap(),
         )
@@ -610,7 +610,7 @@ mod test {
             define_api(
                 &Default::default(),
                 MockBase::instance(),
-                "0.0.1".parse().unwrap(),
+                "1.0.0".parse().unwrap(),
             )
             .unwrap(),
         )
@@ -674,7 +674,7 @@ mod test {
             define_api(
                 &Default::default(),
                 MockBase::instance(),
-                "0.0.1".parse().unwrap(),
+                "1.0.0".parse().unwrap(),
             )
             .unwrap(),
         )
@@ -735,7 +735,7 @@ mod test {
             define_api(
                 &Default::default(),
                 MockBase::instance(),
-                "0.0.1".parse().unwrap(),
+                "1.0.0".parse().unwrap(),
             )
             .unwrap(),
         )
@@ -811,7 +811,7 @@ mod test {
             define_api(
                 &Default::default(),
                 MockBase::instance(),
-                "0.0.1".parse().unwrap(),
+                "1.0.0".parse().unwrap(),
             )
             .unwrap(),
         )
@@ -961,7 +961,7 @@ mod test {
             define_api(
                 &Default::default(),
                 MockBase::instance(),
-                "0.0.1".parse().unwrap(),
+                "1.0.0".parse().unwrap(),
             )
             .unwrap(),
         )
@@ -1134,7 +1134,7 @@ mod test {
             define_api(
                 &Default::default(),
                 MockBase::instance(),
-                "0.0.1".parse().unwrap(),
+                "1.0.0".parse().unwrap(),
             )
             .unwrap(),
         )
@@ -1238,7 +1238,7 @@ mod test {
             define_api(
                 &Default::default(),
                 MockBase::instance(),
-                "0.0.1".parse().unwrap(),
+                "1.0.0".parse().unwrap(),
             )
             .unwrap(),
         )
@@ -1335,7 +1335,7 @@ mod test {
             define_api(
                 &Default::default(),
                 MockBase::instance(),
-                "0.0.1".parse().unwrap(),
+                "1.0.0".parse().unwrap(),
             )
             .unwrap(),
         )
@@ -1404,7 +1404,7 @@ mod test {
             define_api(
                 &Default::default(),
                 MockBase::instance(),
-                "0.0.1".parse().unwrap(),
+                "1.0.0".parse().unwrap(),
             )
             .unwrap(),
         )
@@ -1467,7 +1467,7 @@ mod test {
             define_api(
                 &Default::default(),
                 MockBase::instance(),
-                "0.0.1".parse().unwrap(),
+                "1.0.0".parse().unwrap(),
             )
             .unwrap(),
         )
@@ -1548,7 +1548,7 @@ mod test {
             define_api(
                 &Default::default(),
                 MockBase::instance(),
-                "0.0.1".parse().unwrap(),
+                "1.0.0".parse().unwrap(),
             )
             .unwrap(),
         )
@@ -1643,7 +1643,7 @@ mod test {
             define_api(
                 &Default::default(),
                 MockBase::instance(),
-                "0.0.1".parse().unwrap(),
+                "1.0.0".parse().unwrap(),
             )
             .unwrap(),
         )
@@ -1715,7 +1715,7 @@ mod test {
             define_api(
                 &Default::default(),
                 MockBase::instance(),
-                "0.0.1".parse().unwrap(),
+                "1.0.0".parse().unwrap(),
             )
             .unwrap(),
         )
@@ -1792,7 +1792,7 @@ mod test {
             define_api(
                 &Default::default(),
                 MockBase::instance(),
-                "0.0.1".parse().unwrap(),
+                "1.0.0".parse().unwrap(),
             )
             .unwrap(),
         )

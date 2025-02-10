@@ -907,7 +907,7 @@ mod test {
             define_api(
                 &Default::default(),
                 MockBase::instance(),
-                "0.0.1".parse().unwrap(),
+                "1.0.0".parse().unwrap(),
             )
             .unwrap(),
         )
@@ -1045,7 +1045,7 @@ mod test {
                     ..Default::default()
                 },
                 MockBase::instance(),
-                "0.0.1".parse().unwrap(),
+                "1.0.0".parse().unwrap(),
             )
             .unwrap();
         api.get("get_ext", |_, state| {
@@ -1116,7 +1116,7 @@ mod test {
                     ..Default::default()
                 },
                 MockBase::instance(),
-                "0.0.1".parse().unwrap(),
+                "1.0.0".parse().unwrap(),
             )
             .unwrap(),
         )
@@ -1204,7 +1204,7 @@ mod test {
             define_api(
                 &Default::default(),
                 MockBase::instance(),
-                "0.0.1".parse().unwrap(),
+                "1.0.0".parse().unwrap(),
             )
             .unwrap(),
         )
@@ -1246,7 +1246,7 @@ mod test {
             define_api(
                 &Default::default(),
                 MockBase::instance(),
-                "0.0.1".parse().unwrap(),
+                "1.0.0".parse().unwrap(),
             )
             .unwrap(),
         )
