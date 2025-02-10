@@ -1557,7 +1557,10 @@ mod api_tests {
 #[cfg(test)]
 mod test {
     use committable::{Commitment, Committable};
-    use std::{collections::BTreeMap, time::Duration};
+    use std::{
+        collections::{BTreeMap, HashSet},
+        time::Duration,
+    };
     use tokio::time::sleep;
 
     use espresso_types::{
@@ -2614,11 +2617,15 @@ mod test {
         }
         assert_eq!(receive_count, total_count + 1);
     }
-    // TODO instead of as above, listen to events until we get at least to view 3
-    // maybe put in the slow category
+    // TODO unfinished test. the idea is to observe epochs and views
+    // are progressing in a sane way
     #[tokio::test(flavor = "multi_thread")]
     async fn test_hotshot_event_streaming_epoch_progression() {
         setup_test();
+
+        // TODO currently getting `hotshot_task_impls::helpers: : Failed epoch safety check`
+        // at epoch_height + 1
+        let epoch_height = 5;
 
         let hotshot_event_streaming_port =
             pick_unused_port().expect("No ports free for hotshot event streaming");
@@ -2638,7 +2645,10 @@ mod test {
 
         let anvil = Anvil::new().spawn();
         let l1 = anvil.endpoint().parse().unwrap();
-        let network_config = TestConfigBuilder::default().l1_url(l1).build();
+        let network_config = TestConfigBuilder::default()
+            .l1_url(l1)
+            .with_epoch_height(epoch_height)
+            .build();
         let config = TestNetworkConfigBuilder::default()
             .api_config(options)
             .network_config(network_config)
@@ -2651,22 +2661,40 @@ mod test {
             .await
             .unwrap();
 
-        let total_count = 5;
+        // wanted views
+        let total_count = epoch_height * 2;
         // wait for these events to receive on client 1
         let mut receive_count = 0;
+        let mut views = HashSet::new();
+        let mut i = 0;
         loop {
             let event = subscribed_events.next().await.unwrap();
-            dbg!(&event);
-            tracing::info!(
-                "Received event in hotshot event streaming Client 1: {:?}",
-                event
-            );
-            receive_count += 1;
-            if receive_count > total_count {
-                tracing::info!("Client Received at least desired events, exiting loop");
+            let event = event.unwrap();
+            let view_number = event.view_number;
+            views.insert(view_number);
+            dbg!(view_number);
+
+            if let hotshot::types::EventType::Decide { .. } = event.event {
+                dbg!("got decide");
+
+                receive_count += 1;
+            }
+            // dbg!(event.clone().unwrap().view_number);
+            // tracing::info!(
+            //     "Received event in hotshot event streaming Client 1: {:?}",
+            //     event
+            // );
+            if views.contains(&ViewNumber::new(total_count)) {
+                tracing::info!("Client Received at least desired views, exiting loop");
                 break;
             }
+            if i > 100 {
+                // Timeout
+                panic!("Views are not progressing");
+            }
+            i += 1;
         }
+        // TODO this is still just a place holder
         assert_eq!(receive_count, total_count + 1);
     }
 }
