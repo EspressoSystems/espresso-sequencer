@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":["handle_quorum_proposal_recv","spawn_fetch_proposal","validate_proposal_liveness"]};

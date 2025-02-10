@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"constant":["AUTH_HANDSHAKE_TIMEOUT","MAX_AUTH_MESSAGE_SIZE"],"fn":["construct_auth_message","read_length_delimited","write_length_delimited"],"struct":["AuthMessage","StakeTableAuthentication"],"trait":["AsOutput"],"type":["UpgradeFuture"]};
