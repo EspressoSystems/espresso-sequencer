@@ -2626,6 +2626,7 @@ mod test {
         // TODO currently getting `hotshot_task_impls::helpers: : Failed epoch safety check`
         // at epoch_height + 1
         let epoch_height = 5;
+        type PosVersion = SequencerVersions<StaticVersion<0, 3>, StaticVersion<0, 0>>;
 
         let hotshot_event_streaming_port =
             pick_unused_port().expect("No ports free for hotshot event streaming");
@@ -2653,7 +2654,7 @@ mod test {
             .api_config(options)
             .network_config(network_config)
             .build();
-        let _network = TestNetwork::new(config, MockSequencerVersions::new()).await;
+        let _network = TestNetwork::new(config, PosVersion::new()).await;
 
         let mut subscribed_events = client
             .socket("hotshot-events/events")
@@ -2664,27 +2665,18 @@ mod test {
         // wanted views
         let total_count = epoch_height * 2;
         // wait for these events to receive on client 1
-        let mut receive_count = 0;
         let mut views = HashSet::new();
         let mut i = 0;
         loop {
             let event = subscribed_events.next().await.unwrap();
             let event = event.unwrap();
             let view_number = event.view_number;
-            views.insert(view_number);
-            dbg!(view_number);
+            views.insert(view_number.u64());
 
             if let hotshot::types::EventType::Decide { .. } = event.event {
                 dbg!("got decide");
-
-                receive_count += 1;
             }
-            // dbg!(event.clone().unwrap().view_number);
-            // tracing::info!(
-            //     "Received event in hotshot event streaming Client 1: {:?}",
-            //     event
-            // );
-            if views.contains(&ViewNumber::new(total_count)) {
+            if views.contains(&total_count) {
                 tracing::info!("Client Received at least desired views, exiting loop");
                 break;
             }
@@ -2694,7 +2686,6 @@ mod test {
             }
             i += 1;
         }
-        // TODO this is still just a place holder
-        assert_eq!(receive_count, total_count + 1);
+        assert!(views.contains(&total_count));
     }
 }
