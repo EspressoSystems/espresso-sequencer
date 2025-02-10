@@ -24,7 +24,7 @@
 use std::{fmt::Debug, path::Path, str::FromStr};
 
 use committable::Committable;
-use hotshot_query_service::availability::QueryablePayload;
+use hotshot_query_service::{availability::QueryablePayload, testing::mocks::MockVersions};
 use hotshot_types::traits::{
     block_contents::vid_commitment, signature_key::BuilderSignatureKey, BlockPayload, EncodeBytes,
 };
@@ -125,7 +125,7 @@ async fn reference_header(version: Version) -> Header {
     let fee_info = reference_fee_info();
     let payload = reference_payload().await;
     let ns_table = payload.ns_table().clone();
-    let payload_commitment = vid_commitment(&payload.encode(), 1);
+    let payload_commitment = vid_commitment::<MockVersions>(&payload.encode(), 1, version);
     let builder_commitment = payload.builder_commitment(&ns_table);
     let builder_signature = FeeAccount::sign_fee(
         &builder_key,

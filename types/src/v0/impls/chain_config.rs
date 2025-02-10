@@ -1,10 +1,11 @@
-use super::parse_size;
 use crate::{BlockSize, ChainId};
 use ethers::types::U256;
 use sequencer_utils::{
     impl_serde_from_string_or_integer, impl_to_fixed_bytes, ser::FromStringOrInteger,
 };
 use std::str::FromStr;
+
+use super::parse_size;
 
 impl_serde_from_string_or_integer!(ChainId);
 impl_to_fixed_bytes!(ChainId, U256);

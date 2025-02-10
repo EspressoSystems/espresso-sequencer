@@ -1,4 +1,3 @@
-use crate::parse_duration;
 use alloy::{
     providers::RootProvider,
     transports::http::{Client, Http},
@@ -20,6 +19,8 @@ use tokio::{
     task::JoinHandle,
 };
 use url::Url;
+
+use crate::v0::utils::parse_duration;
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, Hash, PartialEq, Eq)]
 pub struct L1BlockInfo {

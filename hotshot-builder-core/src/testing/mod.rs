@@ -17,9 +17,13 @@ use hotshot_types::{
     message::Proposal,
     simple_certificate::{QuorumCertificate, SimpleCertificate, SuccessThreshold},
     simple_vote::QuorumData2,
-    traits::{block_contents::vid_commitment, node_implementation::ConsensusTime},
+    traits::{
+        block_contents::vid_commitment,
+        node_implementation::{ConsensusTime, Versions},
+    },
     utils::BuilderCommitment,
 };
+use vbs::version::StaticVersionType;
 
 use hotshot_example_types::{
     block_types::{TestBlockHeader, TestBlockPayload, TestMetadata, TestTransaction},
@@ -43,13 +47,13 @@ use std::time::Duration;
 mod basic_test;
 pub mod finalization_test;
 
-pub async fn create_builder_state(
+pub async fn create_builder_state<V: Versions>(
     channel_capacity: usize,
     num_storage_nodes: usize,
 ) -> (
     BroadcastSender<MessageType<TestTypes>>,
     Arc<RwLock<GlobalState<TestTypes>>>,
-    BuilderState<TestTypes>,
+    BuilderState<TestTypes, V>,
 ) {
     // set up the broadcast channels
     let (bootstrap_sender, bootstrap_receiver) =
@@ -62,7 +66,8 @@ pub async fn create_builder_state(
     let (tx_sender, tx_receiver) =
         broadcast::<Arc<ReceivedTransaction<TestTypes>>>(channel_capacity);
 
-    let genesis_vid_commitment = vid_commitment(&[], num_storage_nodes);
+    let genesis_vid_commitment =
+        vid_commitment::<V>(&[], num_storage_nodes, <V as Versions>::Base::VERSION);
     let genesis_builder_commitment = BuilderCommitment::from_bytes([]);
 
     // instantiate the global state
@@ -108,7 +113,7 @@ pub async fn create_builder_state(
 
 /// get transactions submitted in previous rounds, [] for genesis
 /// and simulate the block built from those
-pub async fn calc_proposal_msg(
+pub async fn calc_proposal_msg<V: Versions>(
     num_storage_nodes: usize,
     round: usize,
     prev_quorum_proposal: Option<QuorumProposalWrapper<TestTypes>>,
@@ -124,7 +129,11 @@ pub async fn calc_proposal_msg(
     let num_transactions = transactions.len() as u64;
     let encoded_transactions = TestTransaction::encode(&transactions);
     let block_payload = TestBlockPayload { transactions };
-    let block_vid_commitment = vid_commitment(&encoded_transactions, num_storage_nodes);
+    let block_vid_commitment = vid_commitment::<V>(
+        &encoded_transactions,
+        num_storage_nodes,
+        <V as Versions>::Base::VERSION,
+    );
     let metadata = TestMetadata { num_transactions };
     let block_builder_commitment =
         <TestBlockPayload as BlockPayload<TestTypes>>::builder_commitment(
@@ -209,8 +218,8 @@ pub async fn calc_proposal_msg(
             view_change_evidence: None,
             next_epoch_justify_qc: None,
             next_drb_result: None,
+            epoch: None,
         },
-        with_epoch: false,
     };
 
     let quorum_signature =

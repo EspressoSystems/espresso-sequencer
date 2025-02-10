@@ -23,7 +23,7 @@ use committable::Committable;
 use futures::try_join;
 use hotshot_types::{
     traits::{node_implementation::NodeType, EncodeBytes},
-    vid::{vid_scheme, VidSchemeType},
+    vid::{advz_scheme, VidSchemeType},
 };
 use jf_vid::VidScheme;
 use surf_disco::{Client, Url};
@@ -72,7 +72,7 @@ where
                 let num_storage_nodes =
                     VidSchemeType::get_num_storage_nodes(common.common()) as usize;
                 let bytes = payload.data().encode();
-                let commit = match vid_scheme(num_storage_nodes).commit_only(bytes) {
+                let commit = match advz_scheme(num_storage_nodes).commit_only(bytes) {
                     Ok(commit) => commit,
                     Err(err) => {
                         tracing::error!(%err, "unable to compute VID commitment");
@@ -205,6 +205,7 @@ mod test {
         stream::StreamExt,
     };
     use generic_array::GenericArray;
+    use hotshot_example_types::node_types::TestVersions;
     use portpicker::pick_unused_port;
     use rand::RngCore;
     use std::{future::IntoFuture, time::Duration};
@@ -853,13 +854,11 @@ mod test {
         api.get("get_payload", move |_, _| {
             async move {
                 // No matter what data we are asked for, always respond with dummy data.
-                Ok(
-                    PayloadQueryData::<MockTypes>::genesis(
-                        &Default::default(),
-                        &Default::default(),
-                    )
-                    .await,
+                Ok(PayloadQueryData::<MockTypes>::genesis::<TestVersions>(
+                    &Default::default(),
+                    &Default::default(),
                 )
+                .await)
             }
             .boxed()
         })
@@ -867,7 +866,7 @@ mod test {
         .get("get_vid_common", move |_, _| {
             async move {
                 // No matter what data we are asked for, always respond with dummy data.
-                Ok(VidCommonQueryData::<MockTypes>::genesis(
+                Ok(VidCommonQueryData::<MockTypes>::genesis::<TestVersions>(
                     &Default::default(),
                     &Default::default(),
                 )

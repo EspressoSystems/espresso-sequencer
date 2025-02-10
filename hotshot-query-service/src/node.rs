@@ -216,6 +216,7 @@ mod test {
     use committable::Committable;
     use futures::{FutureExt, StreamExt};
     use hotshot_types::{
+        data::VidDisperseShare,
         event::{EventType, LeafInfo},
         traits::{
             block_contents::{BlockHeader, BlockPayload},
@@ -325,7 +326,10 @@ mod test {
                     .await
                     .unwrap();
                 if let Some(vid_share) = vid_share.as_ref() {
-                    assert_eq!(share, vid_share.share);
+                    let VidDisperseShare::V0(new_share) = vid_share else {
+                        panic!("VID share is not V0");
+                    };
+                    assert_eq!(share, new_share.share);
                 }
 
                 // Query various other ways.

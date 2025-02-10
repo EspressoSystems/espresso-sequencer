@@ -1064,14 +1064,14 @@ impl MerklizedState<SeqTypes, { Self::ARITY }> for FeeMerkleTree {
 mod test {
     use ethers::types::U256;
     use hotshot::{helpers::initialize_logging, traits::BlockPayload};
-    use hotshot_query_service::Resolvable;
+    use hotshot_query_service::{testing::mocks::MockVersions, Resolvable};
     use hotshot_types::traits::{
-        block_contents::{vid_commitment, GENESIS_VID_NUM_STORAGE_NODES},
-        signature_key::BuilderSignatureKey,
-        EncodeBytes,
+        block_contents::vid_commitment, node_implementation::Versions,
+        signature_key::BuilderSignatureKey, EncodeBytes,
     };
     use sequencer_utils::ser::FromStringOrInteger;
     use tracing::debug;
+    use vbs::version::StaticVersionType;
 
     use super::*;
     use crate::{
@@ -1092,7 +1092,11 @@ mod test {
             let builder_commitment = payload.builder_commitment(&metadata);
             let payload_bytes = payload.encode();
 
-            let payload_commitment = vid_commitment(&payload_bytes, GENESIS_VID_NUM_STORAGE_NODES);
+            let payload_commitment = vid_commitment::<MockVersions>(
+                &payload_bytes,
+                1,
+                <MockVersions as Versions>::Base::VERSION,
+            );
 
             let header =
                 Header::genesis(&instance, payload_commitment, builder_commitment, metadata);
@@ -1754,9 +1758,10 @@ mod test {
             ..validated_state.chain_config.resolve().unwrap()
         });
 
-        let parent: Leaf2 = Leaf::genesis(&instance_state.genesis_state, &instance_state)
-            .await
-            .into();
+        let parent: Leaf2 =
+            Leaf::genesis::<MockVersions>(&instance_state.genesis_state, &instance_state)
+                .await
+                .into();
         let header = parent.block_header().clone();
         let metadata = parent.block_header().metadata();
         let vid_commitment = parent.payload_commitment();
@@ -1816,9 +1821,10 @@ mod test {
             ..validated_state.chain_config.resolve().unwrap()
         });
 
-        let parent: Leaf2 = Leaf::genesis(&instance_state.genesis_state, &instance_state)
-            .await
-            .into();
+        let parent: Leaf2 =
+            Leaf::genesis::<MockVersions>(&instance_state.genesis_state, &instance_state)
+                .await
+                .into();
         let header = parent.block_header().clone();
 
         debug!("{:?}", header.version());

@@ -1,7 +1,7 @@
 use hotshot_query_service::{VidCommitment, VidCommon};
 use hotshot_types::{
     traits::EncodeBytes,
-    vid::{vid_scheme, VidSchemeType},
+    vid::{advz_scheme, VidSchemeType},
 };
 use jf_vid::{
     payload_prover::{PayloadProver, Statement},
@@ -41,7 +41,7 @@ impl TxProof {
         let ns_range = payload.ns_table().ns_range(index.ns(), &payload_byte_len);
         let ns_byte_len = ns_range.byte_len();
         let ns_payload = payload.read_ns_payload(&ns_range);
-        let vid = vid_scheme(
+        let vid = advz_scheme(
             VidSchemeType::get_num_storage_nodes(common)
                 .try_into()
                 .unwrap(),
@@ -129,7 +129,7 @@ impl TxProof {
             return None; // error: tx index out of bounds
         }
 
-        let vid = vid_scheme(
+        let vid = advz_scheme(
             VidSchemeType::get_num_storage_nodes(common)
                 .try_into()
                 .unwrap(),

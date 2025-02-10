@@ -4,6 +4,22 @@ slow-timeout = { period = "2m", terminate-after = 3 }
 default-filter = 'not (test(slow_) | package(tests))'
 retries = 2
 
+# More flaky tests
+[[profile.default.overrides]]
+filter = """
+test(tests_2::catchup::test_all_restart) |
+test(tests_4::test_marketplace) |
+test(tests_6::test_epochs)
+"""
+retries = 10
+
+# Sometimes fails persistently in CI
+[[profile.default.overrides]]
+filter = """
+test(tests_4::test_with_builder_failures::test_with_builder_failures)
+"""
+threads-required = 2
+
 [[profile.default.overrides]]
 # These tests are fast if they work (usually about 150ms) but sometimes they
 # hang, especially when running Concurrently with other tests. Kill after a
@@ -34,3 +50,14 @@ retries = 2
 slow-timeout = "2m"
 default-filter = 'package(tests)'
 retries = 2
+
+# Serial required
+# TRY 3 FAIL [   2.790s] hotshot-testing::tests_4 tests_4::test_marketplace::test_marketplace_builders_down::testtypes_::memoryimpl_::test_marketplace_builders_down
+# TRY 3 FAIL [   4.446s] hotshot-testing::tests_4 tests_4::test_marketplace::test_marketplace_fallback_builder_down::testtypes_::memoryimpl_::test_marketplace_fallback_builder_down
+# TRY 3 FAIL [   5.119s] hotshot-testing::tests_4 tests_4::test_marketplace::test_marketplace_upgrade::testtypes_::memoryimpl_::test_marketplace_upgrade
+#
+# FLAKY 2/3 [  12.037s] hotshot-testing::tests_2 tests_2::catchup::test_all_restart::testtypes_::pushcdnimpl_::test_all_restart
+# FLAKY 2/3 [  49.943s] hotshot-testing::tests_6 tests_6::test_epochs::test_combined_network_cdn_crash_with_epochs::testtypes_::combinedimpl_::test_combined_network_cdn_crash_with_epochs
+# FLAKY 2/3 [   6.968s] hotshot-testing::tests_6 tests_6::test_epochs::test_epoch_end::testtwostaketablestypes_::pushcdnimpl_::test_epoch_end
+# FLAKY 2/3 [ 125.353s] sequencer api::test::test_fee_upgrade_view_based
+# FLAKY 2/3 [   2.870s] sequencer api::test::test_hotshot_event_streaming

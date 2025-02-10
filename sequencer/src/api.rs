@@ -1101,17 +1101,19 @@ mod api_tests {
     };
     use ethers::utils::Anvil;
     use futures::{future, stream::StreamExt};
+    use hotshot_example_types::node_types::TestVersions;
     use hotshot_query_service::availability::{
         AvailabilityDataSource, BlockQueryData, VidCommonQueryData,
     };
 
+    use hotshot_types::data::vid_disperse::ADVZDisperseShare;
+    use hotshot_types::vid::advz_scheme;
     use hotshot_types::{
-        data::{DaProposal, QuorumProposal2, QuorumProposalWrapper, VidDisperseShare},
+        data::{DaProposal, QuorumProposal2, QuorumProposalWrapper},
         event::LeafInfo,
         message::Proposal,
         simple_certificate::QuorumCertificate,
         traits::{node_implementation::ConsensusTime, signature_key::SignatureKey, EncodeBytes},
-        vid::vid_scheme,
     };
 
     use jf_vid::VidScheme;
@@ -1286,10 +1288,10 @@ mod api_tests {
         // Create two non-consecutive leaf chains.
         let mut chain1 = vec![];
 
-        let genesis = Leaf::genesis(&Default::default(), &NodeState::mock()).await;
+        let genesis = Leaf::genesis::<TestVersions>(&Default::default(), &NodeState::mock()).await;
         let payload = genesis.block_payload().unwrap();
         let payload_bytes_arc = payload.encode();
-        let disperse = vid_scheme(2).disperse(payload_bytes_arc.clone()).unwrap();
+        let disperse = advz_scheme(2).disperse(payload_bytes_arc.clone()).unwrap();
         let payload_commitment = disperse.commit;
         let mut quorum_proposal = QuorumProposalWrapper::<SeqTypes> {
             proposal: QuorumProposal2::<SeqTypes> {
@@ -1305,8 +1307,8 @@ mod api_tests {
                 view_change_evidence: None,
                 next_drb_result: None,
                 next_epoch_justify_qc: None,
+                epoch: None,
             },
-            with_epoch: false,
         };
         let mut qc = QuorumCertificate::genesis::<MockSequencerVersions>(
             &ValidatedState::default(),
@@ -1340,7 +1342,7 @@ mod api_tests {
                 .unwrap();
 
             // Include VID information for each leaf.
-            let share = VidDisperseShare::<SeqTypes> {
+            let share = ADVZDisperseShare::<SeqTypes> {
                 view_number: leaf.view_number(),
                 payload_commitment,
                 share: disperse.shares[0].clone(),
@@ -1488,7 +1490,9 @@ mod api_tests {
         )
         .await
         .to_qc2();
-        let leaf = Leaf::genesis(&ValidatedState::default(), &NodeState::mock()).await;
+        let leaf =
+            Leaf::genesis::<MockSequencerVersions>(&ValidatedState::default(), &NodeState::mock())
+                .await;
 
         // Append the genesis leaf. We don't use this for the test, because the update function will
         // automatically fill in the missing data for genesis. We just append this to get into a
@@ -1515,8 +1519,8 @@ mod api_tests {
                 view_change_evidence: None,
                 next_drb_result: None,
                 next_epoch_justify_qc: None,
+                epoch: None,
             },
-            with_epoch: false,
         };
 
         let leaf = Leaf2::from_quorum_proposal(&qp);

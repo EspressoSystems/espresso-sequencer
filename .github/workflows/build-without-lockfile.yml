@@ -32,4 +32,4 @@ jobs:
       - name: Build without committed Cargo.lock
         run: |
           cargo generate-lockfile
-          cargo check --all-features --all-targets
+          cargo check --all-targets

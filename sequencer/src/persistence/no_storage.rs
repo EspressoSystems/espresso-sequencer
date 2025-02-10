@@ -9,7 +9,10 @@ use espresso_types::{
 };
 use hotshot_types::{
     consensus::CommitmentMap,
-    data::{DaProposal, QuorumProposal, QuorumProposal2, QuorumProposalWrapper, VidDisperseShare},
+    data::{
+        vid_disperse::ADVZDisperseShare, DaProposal, EpochNumber, QuorumProposal, QuorumProposal2,
+        QuorumProposalWrapper,
+    },
     event::{Event, EventType, HotShotAction, LeafInfo},
     message::Proposal,
     simple_certificate::{NextEpochQuorumCertificate2, QuorumCertificate2, UpgradeCertificate},
@@ -104,7 +107,7 @@ impl SequencerPersistence for NoStorage {
     async fn load_vid_share(
         &self,
         _view: ViewNumber,
-    ) -> anyhow::Result<Option<Proposal<SeqTypes, VidDisperseShare<SeqTypes>>>> {
+    ) -> anyhow::Result<Option<Proposal<SeqTypes, ADVZDisperseShare<SeqTypes>>>> {
         Ok(None)
     }
 
@@ -128,7 +131,7 @@ impl SequencerPersistence for NoStorage {
 
     async fn append_vid(
         &self,
-        _proposal: &Proposal<SeqTypes, VidDisperseShare<SeqTypes>>,
+        _proposal: &Proposal<SeqTypes, ADVZDisperseShare<SeqTypes>>,
     ) -> anyhow::Result<()> {
         Ok(())
     }
@@ -139,7 +142,12 @@ impl SequencerPersistence for NoStorage {
     ) -> anyhow::Result<()> {
         Ok(())
     }
-    async fn record_action(&self, _view: ViewNumber, _action: HotShotAction) -> anyhow::Result<()> {
+    async fn record_action(
+        &self,
+        _view: ViewNumber,
+        _epoch: Option<EpochNumber>,
+        _action: HotShotAction,
+    ) -> anyhow::Result<()> {
         Ok(())
     }
     async fn update_undecided_state(
