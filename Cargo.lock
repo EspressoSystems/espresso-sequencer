@@ -1762,16 +1762,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
 
 [[package]]
-name = "base64-bytes"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7ce54e4e485fa0eed9c3aa5348162be09168f75bb5be7bc6587bcf2a65ee1386"
-dependencies = [
- "base64 0.22.1",
- "serde",
-]
-
-[[package]]
 name = "base64ct"
 version = "1.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3686,7 +3676,6 @@ dependencies = [
  "ark-serialize 0.4.2",
  "async-broadcast",
  "async-trait",
- "base64-bytes",
  "bincode",
  "blake3",
  "bytesize",
@@ -4965,10 +4954,7 @@ dependencies = [
  "async-broadcast",
  "async-lock 3.4.0",
  "async-trait",
- "atomic",
  "bincode",
- "bytemuck",
- "coarsetime",
  "committable",
  "derive_more 1.0.0",
  "futures",
@@ -5374,7 +5360,6 @@ dependencies = [
  "hotshot-task",
  "hotshot-types",
  "hotshot-utils",
- "jf-vid",
  "lru 0.12.5",
  "rand 0.8.5",
  "serde",
@@ -5478,7 +5463,6 @@ dependencies = [
  "thiserror 1.0.69",
  "time 0.3.37",
  "tokio",
- "toml 0.8.20",
  "tracing",
  "typenum",
  "url",
