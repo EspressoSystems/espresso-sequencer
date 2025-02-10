@@ -22,7 +22,6 @@ use anyhow::{ensure, Context};
 use async_trait::async_trait;
 use futures::future::Future;
 use hotshot::types::{Event, EventType};
-use hotshot_types::{data::VidDisperseShare, event::LeafInfo};
 use hotshot_types::{
     data::Leaf2,
     traits::{
@@ -31,6 +30,7 @@ use hotshot_types::{
     },
     vid::advz_scheme,
 };
+use hotshot_types::{data::VidDisperseShare, event::LeafInfo};
 use jf_vid::VidScheme;
 use std::iter::once;
 
@@ -107,7 +107,7 @@ where
                         return Err(leaf2.block_header().block_number());
                     }
                 };
-                let block_data = leaf
+                let block_data = leaf2
                     .block_payload()
                     .map(|payload| BlockQueryData::new(leaf2.block_header().clone(), payload));
                 if block_data.is_none() {
@@ -117,25 +117,25 @@ where
                 let (vid_common, vid_share) = match vid_share {
                     Some(VidDisperseShare::V0(share)) => (
                         Some(VidCommonQueryData::new(
-                            leaf.block_header().clone(),
+                            leaf2.block_header().clone(),
                             share.common.clone(),
                         )),
                         Some(share.share.clone()),
                     ),
                     Some(VidDisperseShare::V1(share)) => (
                         Some(VidCommonQueryData::new(
-                            leaf.block_header().clone(),
+                            leaf2.block_header().clone(),
                             share.common.clone(),
                         )),
                         Some(share.share.clone()),
                     ),
                     None => {
-                        if leaf.view_number().u64() == 0 {
+                        if leaf2.view_number().u64() == 0 {
                             // HotShot does not run VID in consensus for the genesis block. In this case,
                             // the block payload is guaranteed to always be empty, so VID isn't really
                             // necessary. But for consistency, we will still store the VID dispersal data,
                             // computing it ourselves based on the well-known genesis VID commitment.
-                            match genesis_vid(&leaf) {
+                            match genesis_vid(&leaf2) {
                                 Ok((common, share)) => (Some(common), Some(share)),
                                 Err(err) => {
                                     tracing::warn!("failed to compute genesis VID: {err:#}");

@@ -58,8 +58,8 @@ mod persistence_tests {
     use hotshot_query_service::testing::mocks::MockVersions;
     use hotshot_types::{
         data::{
-            DaProposal2, EpochNumber, QuorumProposal2, QuorumProposalWrapper, VidDisperseShare2,
-            ViewNumber,
+            vid_disperse::VidDisperseShare2, DaProposal2, EpochNumber, QuorumProposal2,
+            QuorumProposalWrapper, VidDisperseShare, ViewNumber,
         },
         event::{EventType, HotShotAction, LeafInfo},
         message::{Proposal, UpgradeLock},
@@ -73,6 +73,7 @@ mod persistence_tests {
             EncodeBytes,
         },
         vid::advz_scheme,
+        vote::HasViewNumber,
     };
     use jf_vid::VidScheme;
     use sequencer_utils::test_utils::setup_test;
@@ -185,7 +186,7 @@ mod persistence_tests {
             .unwrap();
         let (pubkey, privkey) = BLSPubKey::generated_from_seed_indexed([0; 32], 1);
         let signature = PubKey::sign(&privkey, &[]).unwrap();
-        let mut vid = VidDisperseShare2::<SeqTypes> {
+        let mut vid: VidDisperseShare<_> = VidDisperseShare2::<SeqTypes> {
             view_number: ViewNumber::new(0),
             payload_commitment: Default::default(),
             share: disperse.shares[0].clone(),
@@ -194,7 +195,8 @@ mod persistence_tests {
             epoch: Some(EpochNumber::new(0)),
             target_epoch: Some(EpochNumber::new(0)),
             data_epoch_payload_commitment: None,
-        };
+        }
+        .into();
         let mut quorum_proposal = Proposal {
             data: QuorumProposalWrapper::<SeqTypes> {
                 proposal: QuorumProposal2::<SeqTypes> {
@@ -225,33 +227,33 @@ mod persistence_tests {
             Some(vid_share0.clone())
         );
 
-        vid.view_number = ViewNumber::new(1);
+        vid.set_view_number(ViewNumber::new(1));
 
         let vid_share1 = vid.clone().to_proposal(&privkey).unwrap().clone();
         storage.append_vid2(&vid_share1).await.unwrap();
 
         assert_eq!(
-            storage.load_vid_share(vid.view_number).await.unwrap(),
+            storage.load_vid_share(vid.view_number()).await.unwrap(),
             Some(vid_share1.clone())
         );
 
-        vid.view_number = ViewNumber::new(2);
+        vid.set_view_number(ViewNumber::new(2));
 
         let vid_share2 = vid.clone().to_proposal(&privkey).unwrap().clone();
         storage.append_vid2(&vid_share2).await.unwrap();
 
         assert_eq!(
-            storage.load_vid_share(vid.view_number).await.unwrap(),
+            storage.load_vid_share(vid.view_number()).await.unwrap(),
             Some(vid_share2.clone())
         );
 
-        vid.view_number = ViewNumber::new(3);
+        vid.set_view_number(ViewNumber::new(3));
 
         let vid_share3 = vid.clone().to_proposal(&privkey).unwrap().clone();
         storage.append_vid2(&vid_share3).await.unwrap();
 
         assert_eq!(
-            storage.load_vid_share(vid.view_number).await.unwrap(),
+            storage.load_vid_share(vid.view_number()).await.unwrap(),
             Some(vid_share3.clone())
         );
 
@@ -676,7 +678,7 @@ mod persistence_tests {
             .disperse(leaf_payload_bytes_arc.clone())
             .unwrap();
         let (pubkey, privkey) = BLSPubKey::generated_from_seed_indexed([0; 32], 1);
-        let mut vid = VidDisperseShare2::<SeqTypes> {
+        let mut vid = VidDisperseShare::V1(VidDisperseShare2::<SeqTypes> {
             view_number: ViewNumber::new(0),
             payload_commitment: Default::default(),
             share: disperse.shares[0].clone(),
@@ -685,7 +687,7 @@ mod persistence_tests {
             epoch: Some(EpochNumber::new(0)),
             target_epoch: Some(EpochNumber::new(0)),
             data_epoch_payload_commitment: None,
-        }
+        })
         .to_proposal(&privkey)
         .unwrap()
         .clone();
@@ -736,7 +738,7 @@ mod persistence_tests {
             let leaf = Leaf2::from_quorum_proposal(&quorum_proposal);
             qc.view_number = leaf.view_number();
             qc.data.leaf_commit = Committable::commit(&leaf);
-            vid.data.view_number = leaf.view_number();
+            vid.data.set_view_number(leaf.view_number());
             da_proposal.data.view_number = leaf.view_number();
             chain.push((leaf.clone(), qc.clone(), vid.clone(), da_proposal.clone()));
         }
@@ -876,7 +878,7 @@ mod persistence_tests {
             .unwrap();
         let payload_commitment = disperse.commit;
         let (pubkey, privkey) = BLSPubKey::generated_from_seed_indexed([0; 32], 1);
-        let vid_share = VidDisperseShare2::<SeqTypes> {
+        let vid_share = VidDisperseShare::V1(VidDisperseShare2::<SeqTypes> {
             view_number: ViewNumber::new(0),
             payload_commitment,
             share: disperse.shares[0].clone(),
@@ -885,7 +887,7 @@ mod persistence_tests {
             epoch: None,
             target_epoch: None,
             data_epoch_payload_commitment: None,
-        }
+        })
         .to_proposal(&privkey)
         .unwrap()
         .clone();

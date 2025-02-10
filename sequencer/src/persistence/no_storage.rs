@@ -9,7 +9,10 @@ use espresso_types::{
 };
 use hotshot_types::{
     consensus::CommitmentMap,
-    data::{DaProposal, DaProposal2, QuorumProposalWrapper, VidDisperseShare, VidDisperseShare2},
+    data::{
+        vid_disperse::ADVZDisperseShare, DaProposal, DaProposal2, EpochNumber,
+        QuorumProposalWrapper, VidDisperseShare,
+    },
     event::{Event, EventType, HotShotAction, LeafInfo},
     message::Proposal,
     simple_certificate::{NextEpochQuorumCertificate2, QuorumCertificate2, UpgradeCertificate},
@@ -104,7 +107,7 @@ impl SequencerPersistence for NoStorage {
     async fn load_vid_share(
         &self,
         _view: ViewNumber,
-    ) -> anyhow::Result<Option<Proposal<SeqTypes, VidDisperseShare2<SeqTypes>>>> {
+    ) -> anyhow::Result<Option<Proposal<SeqTypes, VidDisperseShare<SeqTypes>>>> {
         Ok(None)
     }
 
@@ -182,7 +185,7 @@ impl SequencerPersistence for NoStorage {
 
     async fn append_vid2(
         &self,
-        _proposal: &Proposal<SeqTypes, VidDisperseShare2<SeqTypes>>,
+        _proposal: &Proposal<SeqTypes, VidDisperseShare<SeqTypes>>,
     ) -> anyhow::Result<()> {
         Ok(())
     }

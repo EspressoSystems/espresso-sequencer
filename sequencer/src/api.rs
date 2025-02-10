@@ -1106,8 +1106,10 @@ mod api_tests {
         AvailabilityDataSource, BlockQueryData, VidCommonQueryData,
     };
 
-    use hotshot_types::data::{DaProposal2, EpochNumber, VidDisperseShare2};
+    use hotshot_types::data::vid_disperse::VidDisperseShare2;
+    use hotshot_types::data::{DaProposal2, EpochNumber, VidDisperseShare};
     use hotshot_types::simple_certificate::QuorumCertificate2;
+    use hotshot_types::vid::advz_scheme;
     use hotshot_types::{
         data::{QuorumProposal2, QuorumProposalWrapper},
         event::LeafInfo,
@@ -1339,7 +1341,7 @@ mod api_tests {
                 .unwrap();
 
             // Include VID information for each leaf.
-            let share = VidDisperseShare2::<SeqTypes> {
+            let share = VidDisperseShare::V1(VidDisperseShare2::<SeqTypes> {
                 view_number: leaf.view_number(),
                 payload_commitment,
                 share: disperse.shares[0].clone(),
@@ -1348,7 +1350,7 @@ mod api_tests {
                 epoch: Some(EpochNumber::new(0)),
                 target_epoch: Some(EpochNumber::new(0)),
                 data_epoch_payload_commitment: None,
-            };
+            });
             persistence
                 .append_vid2(&share.to_proposal(&privkey).unwrap())
                 .await

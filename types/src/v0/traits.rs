@@ -10,8 +10,9 @@ use hotshot::{types::EventType, HotShotInitializer};
 use hotshot_types::{
     consensus::CommitmentMap,
     data::{
-        DaProposal, DaProposal2, QuorumProposal, QuorumProposal2, QuorumProposalWrapper,
-        VidDisperseShare, VidDisperseShare2, ViewNumber,
+        vid_disperse::{ADVZDisperseShare, VidDisperseShare2},
+        DaProposal, DaProposal2, EpochNumber, QuorumProposal, QuorumProposal2,
+        QuorumProposalWrapper, VidDisperseShare, ViewNumber,
     },
     event::{HotShotAction, LeafInfo},
     message::{convert_proposal, Proposal},
@@ -461,7 +462,7 @@ pub trait SequencerPersistence: Sized + Send + Sync + Clone + 'static {
     async fn load_vid_share(
         &self,
         view: ViewNumber,
-    ) -> anyhow::Result<Option<Proposal<SeqTypes, VidDisperseShare2<SeqTypes>>>>;
+    ) -> anyhow::Result<Option<Proposal<SeqTypes, VidDisperseShare<SeqTypes>>>>;
     async fn load_da_proposal(
         &self,
         view: ViewNumber,
@@ -673,12 +674,27 @@ pub trait SequencerPersistence: Sized + Send + Sync + Clone + 'static {
         proposal: &Proposal<SeqTypes, DaProposal<SeqTypes>>,
         vid_commit: <VidSchemeType as VidScheme>::Commit,
     ) -> anyhow::Result<()>;
-    async fn record_action(&self, view: ViewNumber, action: HotShotAction) -> anyhow::Result<()>;
+    async fn record_action(
+        &self,
+        view: ViewNumber,
+        epoch: Option<EpochNumber>,
+        action: HotShotAction,
+    ) -> anyhow::Result<()>;
 
     async fn update_undecided_state2(
+        &self,
         leaves: CommitmentMap<Leaf2>,
         state: BTreeMap<ViewNumber, View<SeqTypes>>,
     ) -> anyhow::Result<()>;
+    async fn append_quorum_proposal2(
+        &self,
+        proposal: &Proposal<SeqTypes, QuorumProposalWrapper<SeqTypes>>,
+    ) -> anyhow::Result<()>;
+    async fn store_upgrade_certificate(
+        &self,
+        decided_upgrade_certificate: Option<UpgradeCertificate<SeqTypes>>,
+    ) -> anyhow::Result<()>;
+    async fn migrate_consensus(
         &self,
         _migrate_leaf: fn(Leaf) -> Leaf2,
         _migrate_proposal: fn(
@@ -720,7 +736,7 @@ pub trait SequencerPersistence: Sized + Send + Sync + Clone + 'static {
 
     async fn append_vid2(
         &self,
-        proposal: &Proposal<SeqTypes, VidDisperseShare2<SeqTypes>>,
+        proposal: &Proposal<SeqTypes, VidDisperseShare<SeqTypes>>,
     ) -> anyhow::Result<()>;
 
     async fn append_da2(
@@ -775,7 +791,9 @@ impl<P: SequencerPersistence> Storage<SeqTypes> for Arc<P> {
         &self,
         proposal: &Proposal<SeqTypes, VidDisperseShare2<SeqTypes>>,
     ) -> anyhow::Result<()> {
-        (**self).append_vid2(proposal).await
+        (**self)
+            .append_vid2(&convert_proposal(proposal.clone()))
+            .await
     }
 
     async fn append_da(
@@ -794,8 +812,13 @@ impl<P: SequencerPersistence> Storage<SeqTypes> for Arc<P> {
         (**self).append_da2(proposal, vid_commit).await
     }
 
-    async fn record_action(&self, view: ViewNumber, action: HotShotAction) -> anyhow::Result<()> {
-        (**self).record_action(view, action).await
+    async fn record_action(
+        &self,
+        view: ViewNumber,
+        epoch: Option<EpochNumber>,
+        action: HotShotAction,
+    ) -> anyhow::Result<()> {
+        (**self).record_action(view, epoch, action).await
     }
 
     async fn update_high_qc(&self, _high_qc: QuorumCertificate<SeqTypes>) -> anyhow::Result<()> {
@@ -835,9 +858,8 @@ impl<P: SequencerPersistence> Storage<SeqTypes> for Arc<P> {
     ) -> anyhow::Result<()> {
         // TODO: this is a bug in hotshot with makes with_epoch = true
         // when converting from qp2 to qp wrapper
-        let mut proposal_qp_wrapper: Proposal<SeqTypes, QuorumProposalWrapper<SeqTypes>> =
+        let proposal_qp_wrapper: Proposal<SeqTypes, QuorumProposalWrapper<SeqTypes>> =
             convert_proposal(proposal.clone());
-        proposal_qp_wrapper.data.with_epoch = false;
         (**self).append_quorum_proposal2(&proposal_qp_wrapper).await
     }
 

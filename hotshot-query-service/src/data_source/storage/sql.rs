@@ -1223,7 +1223,7 @@ mod test {
         node_types::TestVersions,
         state_types::{TestInstanceState, TestValidatedState},
     };
-    use hotshot_types::traits::EncodeBytes;
+    use hotshot_types::traits::{node_implementation::Versions, EncodeBytes};
     use hotshot_types::{
         data::{QuorumProposal, ViewNumber},
         simple_vote::QuorumData,
@@ -1237,6 +1237,7 @@ mod test {
     };
     use std::time::Duration;
     use tokio::time::sleep;
+    use vbs::version::StaticVersionType;
 
     use super::{testing::TmpDb, *};
     use crate::{
@@ -1244,7 +1245,7 @@ mod test {
         data_source::storage::{pruning::PrunedHeightStorage, UpdateAvailabilityStorage},
         merklized_state::{MerklizedState, UpdateStateData},
         testing::{
-            mocks::{MockHeader, MockMerkleTree, MockPayload, MockTypes},
+            mocks::{MockHeader, MockMerkleTree, MockPayload, MockTypes, MockVersions},
             setup_test,
         },
     };
@@ -1647,7 +1648,11 @@ mod test {
                 <MockPayload as BlockPayload<MockTypes>>::builder_commitment(&payload, &metadata);
             let payload_bytes = payload.encode();
 
-            let payload_commitment = vid_commitment(&payload_bytes, 4);
+            let payload_commitment = vid_commitment::<MockVersions>(
+                &payload_bytes,
+                4,
+                <MockVersions as Versions>::Base::VERSION,
+            );
 
             let mut block_header = <MockHeader as BlockHeader<MockTypes>>::genesis(
                 &instance_state,
@@ -1679,7 +1684,12 @@ mod test {
             };
 
             let mut leaf = Leaf::from_quorum_proposal(&quorum_proposal);
-            leaf.fill_block_payload(payload, 4).unwrap();
+            leaf.fill_block_payload::<MockVersions>(
+                payload,
+                4,
+                <MockVersions as Versions>::Base::VERSION,
+            )
+            .unwrap();
             qc.data.leaf_commit = <Leaf<MockTypes> as Committable>::commit(&leaf);
 
             let height = leaf.height() as i64;

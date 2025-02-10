@@ -325,7 +325,7 @@ impl<Types: NodeType> BlockQueryData<Types> {
     where
         Payload<Types>: QueryablePayload<Types>,
     {
-        let leaf = Leaf::<Types>::genesis(validated_state, instance_state).await;
+        let leaf = Leaf2::<Types>::genesis::<HsVer>(validated_state, instance_state).await;
         Self::new(leaf.block_header().clone(), leaf.block_payload().unwrap())
     }
 
