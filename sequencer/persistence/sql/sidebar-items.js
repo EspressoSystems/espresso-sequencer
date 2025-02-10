@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"constant":["PRUNE_TABLES"],"fn":["build_sqlite_path","deserialize_vid_proposal_with_fallback","fetch_leaf_from_proposals","prune_to_view"],"struct":["ConsensusPruningOptions","Options","Persistence","PostgresOptions","PruningOptions","SqliteOptions"]};

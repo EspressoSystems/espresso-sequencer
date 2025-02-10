@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":["broadcast_event","decide_epoch_root","decide_from_proposal","decide_from_proposal_2","fetch_proposal","parent_leaf_and_state","validate_proposal_safety_and_liveness","validate_proposal_view_and_certs"],"struct":["LeafChainTraversalOutcome"]};

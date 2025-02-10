@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"mod":["builder","data_source"],"type":["Version"]};
