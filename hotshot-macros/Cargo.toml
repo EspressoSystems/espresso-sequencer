@@ -3,6 +3,7 @@ name = "hotshot-macros"
 version = { workspace = true }
 edition = { workspace = true }
 description = "Macros for hotshot tests"
+license = "MIT"
 
 [dependencies]
 derive_builder = { workspace = true }

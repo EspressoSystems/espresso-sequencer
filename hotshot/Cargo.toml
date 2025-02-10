@@ -5,6 +5,7 @@ edition = { workspace = true }
 name = "hotshot"
 readme = "README.md"
 version = { workspace = true }
+license = "MIT"
 
 [features]
 default = ["docs", "doc-images"]

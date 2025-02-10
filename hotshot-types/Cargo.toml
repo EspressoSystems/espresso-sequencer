@@ -4,6 +4,7 @@ description = "Types and traits for the HotShot consesus module"
 edition = "2021"
 name = "hotshot-types"
 version = "0.1.11"
+license = "MIT"
 
 [dependencies]
 anyhow = { workspace = true }
