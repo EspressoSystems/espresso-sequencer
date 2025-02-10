@@ -325,7 +325,7 @@ opening an issue to discuss the APIs you need.</p>
 <li><a href="contracts/src/interfaces/IPlonkVerifier.sol/interface.IPlonkVerifier.html">IPlonkVerifier</a></li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="abstractstaketable"><a class="header" href="#abstractstaketable">AbstractStakeTable</a></h1>
-<p><a href="https://github.com/EspressoSystems/espresso-sequencer/blob/1c74e88835bd884b9acd3ccd1b5f34a04f055f11/contracts/src/interfaces/AbstractStakeTable.sol">Git Source</a></p>
+<p><a href="https://github.com/EspressoSystems/espresso-sequencer/blob/4e0aa4bf9e1328d4aa8d9cd71e43285a99693297/contracts/src/interfaces/AbstractStakeTable.sol">Git Source</a></p>
 <p><em>Stake delegation happens in a separate DelegationPool contract, and specific to
 instantiation thus not part of this interface</em></p>
 <p><em>Stake table contract should store a reference to the <code>LightClient.sol</code> to query
@@ -545,7 +545,7 @@ In the dual-staking model, a HotShot validator could have multiple <code>Node</c
 }
 </code></pre>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="iplonkverifier"><a class="header" href="#iplonkverifier">IPlonkVerifier</a></h1>
-<p><a href="https://github.com/EspressoSystems/espresso-sequencer/blob/1c74e88835bd884b9acd3ccd1b5f34a04f055f11/contracts/src/interfaces/IPlonkVerifier.sol">Git Source</a></p>
+<p><a href="https://github.com/EspressoSystems/espresso-sequencer/blob/4e0aa4bf9e1328d4aa8d9cd71e43285a99693297/contracts/src/interfaces/IPlonkVerifier.sol">Git Source</a></p>
 <h2 id="functions-1"><a class="header" href="#functions-1">Functions</a></h2>
 <h3 id="verify"><a class="header" href="#verify">verify</a></h3>
 <p><em>Verify a single TurboPlonk proofs.</em></p>
@@ -626,7 +626,7 @@ In the dual-staking model, a HotShot validator could have multiple <code>Node</c
 <li><a href="contracts/src/legacy/Transcript.sol/library.Transcript.html">Transcript</a></li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="transcript"><a class="header" href="#transcript">Transcript</a></h1>
-<p><a href="https://github.com/EspressoSystems/espresso-sequencer/blob/1c74e88835bd884b9acd3ccd1b5f34a04f055f11/contracts/src/legacy/Transcript.sol">Git Source</a></p>
+<p><a href="https://github.com/EspressoSystems/espresso-sequencer/blob/4e0aa4bf9e1328d4aa8d9cd71e43285a99693297/contracts/src/legacy/Transcript.sol">Git Source</a></p>
 <h2 id="functions-2"><a class="header" href="#functions-2">Functions</a></h2>
 <h3 id="appendmessage"><a class="header" href="#appendmessage">appendMessage</a></h3>
 <pre><code class="language-solidity">function appendMessage(TranscriptData memory self, bytes memory message) internal pure;
@@ -684,7 +684,7 @@ In the dual-staking model, a HotShot validator could have multiple <code>Node</c
 <li><a href="contracts/src/libraries/PolynomialEval.sol/library.PolynomialEval.html">PolynomialEval</a></li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="blssig"><a class="header" href="#blssig">BLSSig</a></h1>
-<p><a href="https://github.com/EspressoSystems/espresso-sequencer/blob/1c74e88835bd884b9acd3ccd1b5f34a04f055f11/contracts/src/libraries/BLSSig.sol">Git Source</a></p>
+<p><a href="https://github.com/EspressoSystems/espresso-sequencer/blob/4e0aa4bf9e1328d4aa8d9cd71e43285a99693297/contracts/src/libraries/BLSSig.sol">Git Source</a></p>
 <p><em>test top
 This library implements the verification of the BLS signature scheme over the BN254 curve
 following
@@ -760,7 +760,7 @@ https://github.com/EspressoSystems/jellyfish/blob/e1e683c287f20160738e6e737295dd
 <pre><code class="language-solidity">error BLSSigVerificationFailed();
 </code></pre>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="erc1967proxy"><a class="header" href="#erc1967proxy">ERC1967Proxy</a></h1>
-<p><a href="https://github.com/EspressoSystems/espresso-sequencer/blob/1c74e88835bd884b9acd3ccd1b5f34a04f055f11/contracts/src/libraries/ERC1967Proxy.sol">Git Source</a></p>
+<p><a href="https://github.com/EspressoSystems/espresso-sequencer/blob/4e0aa4bf9e1328d4aa8d9cd71e43285a99693297/contracts/src/libraries/ERC1967Proxy.sol">Git Source</a></p>
 <p><strong>Inherits:</strong>
 Proxy</p>
 <p><em>This contract implements an upgradeable proxy. It is upgradeable because calls are delegated
@@ -793,7 +793,7 @@ the https://eth.wiki/json-rpc/API#eth_getstorageat[<code>eth_getStorageAt</code>
 <pre><code class="language-solidity">function _implementation() internal view virtual override returns (address);
 </code></pre>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="edonbn254"><a class="header" href="#edonbn254">EdOnBN254</a></h1>
-<p><a href="https://github.com/EspressoSystems/espresso-sequencer/blob/1c74e88835bd884b9acd3ccd1b5f34a04f055f11/contracts/src/libraries/EdOnBn254.sol">Git Source</a></p>
+<p><a href="https://github.com/EspressoSystems/espresso-sequencer/blob/4e0aa4bf9e1328d4aa8d9cd71e43285a99693297/contracts/src/libraries/EdOnBn254.sol">Git Source</a></p>
 <p>Edward curve on BN254.
 This library only implements a serialization function that is consistent with
 Arkworks' format. It does not support any group operations.</p>
@@ -823,13 +823,13 @@ Arkworks' format. It does not support any group operations.</p>
 }
 </code></pre>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="lightclientstateupdatevk"><a class="header" href="#lightclientstateupdatevk">LightClientStateUpdateVK</a></h1>
-<p><a href="https://github.com/EspressoSystems/espresso-sequencer/blob/1c74e88835bd884b9acd3ccd1b5f34a04f055f11/contracts/src/libraries/LightClientStateUpdateVK.sol">Git Source</a></p>
+<p><a href="https://github.com/EspressoSystems/espresso-sequencer/blob/4e0aa4bf9e1328d4aa8d9cd71e43285a99693297/contracts/src/libraries/LightClientStateUpdateVK.sol">Git Source</a></p>
 <h2 id="functions-6"><a class="header" href="#functions-6">Functions</a></h2>
 <h3 id="getvk"><a class="header" href="#getvk">getVk</a></h3>
 <pre><code class="language-solidity">function getVk() internal pure returns (IPlonkVerifier.VerifyingKey memory vk);
 </code></pre>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="plonkverifier"><a class="header" href="#plonkverifier">PlonkVerifier</a></h1>
-<p><a href="https://github.com/EspressoSystems/espresso-sequencer/blob/1c74e88835bd884b9acd3ccd1b5f34a04f055f11/contracts/src/libraries/PlonkVerifier.sol">Git Source</a></p>
+<p><a href="https://github.com/EspressoSystems/espresso-sequencer/blob/4e0aa4bf9e1328d4aa8d9cd71e43285a99693297/contracts/src/libraries/PlonkVerifier.sol">Git Source</a></p>
 <p><em>The TurboPlonk formula is:
 qo * wo = pub_input + q_c +
 q_mul0 * w0 * w1 + q_mul1 * w2 * w3 +
@@ -991,7 +991,7 @@ or empty input.</p>
 }
 </code></pre>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="plonkverifier2"><a class="header" href="#plonkverifier2">PlonkVerifier2</a></h1>
-<p><a href="https://github.com/EspressoSystems/espresso-sequencer/blob/1c74e88835bd884b9acd3ccd1b5f34a04f055f11/contracts/src/libraries/PlonkVerifier2.sol">Git Source</a></p>
+<p><a href="https://github.com/EspressoSystems/espresso-sequencer/blob/4e0aa4bf9e1328d4aa8d9cd71e43285a99693297/contracts/src/libraries/PlonkVerifier2.sol">Git Source</a></p>
 <h2 id="state-variables-3"><a class="header" href="#state-variables-3">State Variables</a></h2>
 <h3 id="p_mod-1"><a class="header" href="#p_mod-1">P_MOD</a></h3>
 <pre><code class="language-solidity">uint256 public constant P_MOD =
@@ -1105,7 +1105,7 @@ any are invalid.</em></p>
 }
 </code></pre>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="polynomialeval"><a class="header" href="#polynomialeval">PolynomialEval</a></h1>
-<p><a href="https://github.com/EspressoSystems/espresso-sequencer/blob/1c74e88835bd884b9acd3ccd1b5f34a04f055f11/contracts/src/libraries/PolynomialEval.sol">Git Source</a></p>
+<p><a href="https://github.com/EspressoSystems/espresso-sequencer/blob/4e0aa4bf9e1328d4aa8d9cd71e43285a99693297/contracts/src/libraries/PolynomialEval.sol">Git Source</a></p>
 <h2 id="functions-9"><a class="header" href="#functions-9">Functions</a></h2>
 <h3 id="newevaldomain"><a class="header" href="#newevaldomain">newEvalDomain</a></h3>
 <p><em>Create a new Radix2EvalDomain with <code>domainSize</code> which should be power of 2.</em></p>
@@ -1167,7 +1167,7 @@ evaluation <code>vanish_eval</code>.</em></p>
 }
 </code></pre>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="exampletoken"><a class="header" href="#exampletoken">ExampleToken</a></h1>
-<p><a href="https://github.com/EspressoSystems/espresso-sequencer/blob/1c74e88835bd884b9acd3ccd1b5f34a04f055f11/contracts/src/ExampleToken.sol">Git Source</a></p>
+<p><a href="https://github.com/EspressoSystems/espresso-sequencer/blob/4e0aa4bf9e1328d4aa8d9cd71e43285a99693297/contracts/src/ExampleToken.sol">Git Source</a></p>
 <p><strong>Inherits:</strong>
 ERC20</p>
 <h2 id="functions-10"><a class="header" href="#functions-10">Functions</a></h2>
@@ -1175,7 +1175,7 @@ ERC20</p>
 <pre><code class="language-solidity">constructor(uint256 initialSupply) ERC20("Example", "EX", 18);
 </code></pre>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="feecontract"><a class="header" href="#feecontract">FeeContract</a></h1>
-<p><a href="https://github.com/EspressoSystems/espresso-sequencer/blob/1c74e88835bd884b9acd3ccd1b5f34a04f055f11/contracts/src/FeeContract.sol">Git Source</a></p>
+<p><a href="https://github.com/EspressoSystems/espresso-sequencer/blob/4e0aa4bf9e1328d4aa8d9cd71e43285a99693297/contracts/src/FeeContract.sol">Git Source</a></p>
 <p><strong>Inherits:</strong>
 Initializable, OwnableUpgradeable, UUPSUpgradeable</p>
 <h2 id="state-variables-4"><a class="header" href="#state-variables-4">State Variables</a></h2>
@@ -1256,7 +1256,7 @@ oz-upgrades-unsafe-allow: constructor</p>
 <pre><code class="language-solidity">error NoFunctionCalled();
 </code></pre>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="lightclient"><a class="header" href="#lightclient">LightClient</a></h1>
-<p><a href="https://github.com/EspressoSystems/espresso-sequencer/blob/1c74e88835bd884b9acd3ccd1b5f34a04f055f11/contracts/src/LightClient.sol">Git Source</a></p>
+<p><a href="https://github.com/EspressoSystems/espresso-sequencer/blob/4e0aa4bf9e1328d4aa8d9cd71e43285a99693297/contracts/src/LightClient.sol">Git Source</a></p>
 <p><strong>Inherits:</strong>
 Initializable, OwnableUpgradeable, UUPSUpgradeable</p>
 <p>This contract serves as an always-on client
@@ -1622,13 +1622,13 @@ more than 365 days or less than or equal to the current state history retention 
 <tr><td><code>hotShotBlockCommRoot</code></td><td><code>BN254.ScalarField</code></td><td>The merkle root of historical block commitments (BN254::ScalarField)</td></tr>
 </tbody></table>
 </div><div style="break-before: page; page-break-before: always;"></div><h1 id="arbsys"><a class="header" href="#arbsys">ArbSys</a></h1>
-<p><a href="https://github.com/EspressoSystems/espresso-sequencer/blob/1c74e88835bd884b9acd3ccd1b5f34a04f055f11/contracts/src/LightClientArbitrum.sol">Git Source</a></p>
+<p><a href="https://github.com/EspressoSystems/espresso-sequencer/blob/4e0aa4bf9e1328d4aa8d9cd71e43285a99693297/contracts/src/LightClientArbitrum.sol">Git Source</a></p>
 <h2 id="functions-13"><a class="header" href="#functions-13">Functions</a></h2>
 <h3 id="arbblocknumber"><a class="header" href="#arbblocknumber">arbBlockNumber</a></h3>
 <pre><code class="language-solidity">function arbBlockNumber() external view returns (uint256);
 </code></pre>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="lightclientarbitrum"><a class="header" href="#lightclientarbitrum">LightClientArbitrum</a></h1>
-<p><a href="https://github.com/EspressoSystems/espresso-sequencer/blob/1c74e88835bd884b9acd3ccd1b5f34a04f055f11/contracts/src/LightClientArbitrum.sol">Git Source</a></p>
+<p><a href="https://github.com/EspressoSystems/espresso-sequencer/blob/4e0aa4bf9e1328d4aa8d9cd71e43285a99693297/contracts/src/LightClientArbitrum.sol">Git Source</a></p>
 <p><strong>Inherits:</strong>
 <a href="contracts/src/LightClientArbitrum.sol//contracts/src/LightClient.sol/contract.LightClient.html">LightClient</a></p>
 <h2 id="functions-14"><a class="header" href="#functions-14">Functions</a></h2>
@@ -1636,7 +1636,7 @@ more than 365 days or less than or equal to the current state history retention 
 <pre><code class="language-solidity">function currentBlockNumber() public view virtual override returns (uint256);
 </code></pre>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="permissionedstaketable"><a class="header" href="#permissionedstaketable">PermissionedStakeTable</a></h1>
-<p><a href="https://github.com/EspressoSystems/espresso-sequencer/blob/1c74e88835bd884b9acd3ccd1b5f34a04f055f11/contracts/src/PermissionedStakeTable.sol">Git Source</a></p>
+<p><a href="https://github.com/EspressoSystems/espresso-sequencer/blob/4e0aa4bf9e1328d4aa8d9cd71e43285a99693297/contracts/src/PermissionedStakeTable.sol">Git Source</a></p>
 <p><strong>Inherits:</strong>
 Ownable</p>
 <p><em>An stake table mapping with owner-only access control.</em></p>
@@ -1685,7 +1685,7 @@ Ownable</p>
 }
 </code></pre>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="staketable"><a class="header" href="#staketable">StakeTable</a></h1>
-<p><a href="https://github.com/EspressoSystems/espresso-sequencer/blob/1c74e88835bd884b9acd3ccd1b5f34a04f055f11/contracts/src/StakeTable.sol">Git Source</a></p>
+<p><a href="https://github.com/EspressoSystems/espresso-sequencer/blob/4e0aa4bf9e1328d4aa8d9cd71e43285a99693297/contracts/src/StakeTable.sol">Git Source</a></p>
 <p><strong>Inherits:</strong>
 <a href="contracts/src/StakeTable.sol//contracts/src/interfaces/AbstractStakeTable.sol/abstract.AbstractStakeTable.html">AbstractStakeTable</a>, Ownable</p>
 <h2 id="state-variables-7"><a class="header" href="#state-variables-7">State Variables</a></h2>
