@@ -183,7 +183,7 @@ fn reference_test_without_committable<T: Serialize + DeserializeOwned + Eq + Deb
 
     // Load the expected serialization from the repo.
     let data_dir = Path::new(&std::env::var("CARGO_MANIFEST_DIR").unwrap())
-        .join("../data")
+        .join("../../data")
         .join(version);
 
     let file_path = data_dir.join(format!("{name}.json"));

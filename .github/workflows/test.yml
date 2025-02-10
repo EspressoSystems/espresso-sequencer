@@ -94,7 +94,7 @@ jobs:
       - name: Build Bins
         run: |
           cargo build --locked --profile test --bins
-          cargo build --manifest-path ./sequencer-sqlite/Cargo.toml --target-dir ./target
+          cargo build --manifest-path ./crates/sequencer-sqlite/Cargo.toml --target-dir ./target
         timeout-minutes: 60
 
       - name: Upload archive to workflow

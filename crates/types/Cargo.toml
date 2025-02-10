@@ -21,7 +21,7 @@ clap = { workspace = true }
 cld = { workspace = true }
 committable = { workspace = true }
 contract-bindings-alloy = { workspace = true }
-contract-bindings-ethers = { path = "../contract-bindings-ethers" }
+contract-bindings-ethers = { workspace = true }
 derive_more = { workspace = true }
 ethers = { workspace = true }
 ethers-conv = { workspace = true }

@@ -270,7 +270,7 @@ pub async fn deploy_mock_light_client_contract<M: Middleware + 'static>(
         .await?;
 
     let mut bytecode: BytecodeObject = serde_json::from_str(include_str!(
-        "../../contract-bindings/artifacts/LightClientMock_bytecode.json",
+        "../../../contract-bindings/artifacts/LightClientMock_bytecode.json",
     ))?;
     ensure!(
         bytecode.is_unlinked(),
@@ -528,7 +528,7 @@ fn link_light_client_contract(
     // vk: Address,
 ) -> anyhow::Result<BytecodeObject> {
     let mut bytecode: BytecodeObject = serde_json::from_str(include_str!(
-        "../../contract-bindings/artifacts/LightClient_bytecode.json",
+        "../../../contract-bindings/artifacts/LightClient_bytecode.json",
     ))?;
     ensure!(
         bytecode.is_unlinked(),

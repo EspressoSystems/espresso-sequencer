@@ -16,7 +16,7 @@ async-trait = { workspace = true }
 clap = { workspace = true }
 committable = "0.2"
 contract-bindings-alloy = { workspace = true }
-contract-bindings-ethers = { path = "../contract-bindings-ethers" }
+contract-bindings-ethers = { workspace = true }
 derive_more = { workspace = true }
 ethers = { workspace = true }
 ethers-conv = { workspace = true }
