@@ -8,49 +8,50 @@ edition = "2021"
 resolver = "2"
 
 members = [
-    "builder",
-    "client",
-    "contract-bindings-alloy",
-    "contract-bindings-ethers",
+    "crates/builder",
+    "crates/client",
+    "crates/contract-bindings-alloy",
+    "crates/contract-bindings-ethers",
     "contracts/rust/adapter",
     "contracts/rust/diff-test",
     "contracts/rust/gen-vk-contract",
-    "ethers-conv",
-    "hotshot",
-    "hotshot-builder-api",
-    "hotshot-builder-core",
-    "hotshot-builder-core-refactored",
-    "hotshot-events-service",
-    "hotshot-example-types",
-    "hotshot-examples",
-    "hotshot-fakeapi",
-    "hotshot-libp2p-networking",
-    "hotshot-macros",
-    "hotshot-orchestrator",
-    "hotshot-query-service",
-    "hotshot-stake-table",
-    "hotshot-state-prover",
-    "hotshot-state-prover",
-    "hotshot-task",
-    "hotshot-task-impls",
-    "hotshot-testing",
-    "hotshot-types",
-    "hotshot-utils",
-    "marketplace-builder",
-    "marketplace-solver",
-    "node-metrics",
-    "request-response",
-    "sequencer",
-    "tests",
-    "types",
-    "utils"
+    "crates/ethers-conv",
+    "crates/hotshot",
+    "crates/hotshot-builder-api",
+    "crates/hotshot-builder-core",
+    "crates/hotshot-builder-core-refactored",
+    "crates/hotshot-events-service",
+    "crates/hotshot-example-types",
+    "crates/hotshot-examples",
+    "crates/hotshot-fakeapi",
+    "crates/hotshot-libp2p-networking",
+    "crates/hotshot-macros",
+    "crates/hotshot-orchestrator",
+    "crates/hotshot-query-service",
+    "crates/hotshot-stake-table",
+    "crates/hotshot-state-prover",
+    "crates/hotshot-state-prover",
+    "crates/hotshot-task",
+    "crates/hotshot-task-impls",
+    "crates/hotshot-testing",
+    "crates/hotshot-types",
+    "crates/hotshot-utils",
+    "crates/marketplace-builder",
+    "crates/marketplace-solver",
+    "crates/node-metrics",
+    "crates/request-response",
+    "crates/sequencer",
+    "crates/tests",
+    "crates/types",
+    "crates/utils"
 ]
 
 exclude = ["sequencer-sqlite"]
 
 [workspace.dependencies]
-contract-bindings-alloy = { path = "./contract-bindings-alloy" }
-ethers-conv = { path = "./ethers-conv" }
+contract-bindings-alloy = { path = "./crates/contract-bindings-alloy" }
+contract-bindings-ethers = { path = "./crates/contract-bindings-ethers" }
+ethers-conv = { path = "./crates/ethers-conv" }
 alloy = { version = "0.9", default-features = false, features = [
     "contract",
     "eips",
@@ -127,28 +128,28 @@ primitive-types = { version = "0.12.2", default-features = false, features = [
 ] }
 
 # Builder imports
-marketplace-builder-core = { path = "marketplace-builder-core" }
-marketplace-builder-shared = { path = "marketplace-builder-shared" }
-hotshot-builder-core = { path = "hotshot-builder-core" }
+marketplace-builder-core = { path = "./crates/marketplace-builder-core" }
+marketplace-builder-shared = { path = "./crates/marketplace-builder-shared" }
+hotshot-builder-core = { path = "./crates/hotshot-builder-core" }
 
 # Hotshot imports
-hotshot = { path = "hotshot" }
-hotshot-builder-api = { path = "hotshot-builder-api" }
-hotshot-task-impls = { path = "hotshot-task-impls" }
-hotshot-macros = { path = "hotshot-macros" }
-hotshot-events-service = { path = "hotshot-events-service" }
-hotshot-utils = { path = "hotshot-utils" }
-hotshot-orchestrator = { path = "hotshot-orchestrator" }
-hotshot-query-service = { path = "hotshot-query-service" }
-hotshot-stake-table = { path = "hotshot-stake-table" }
-hotshot-state-prover = { version = "0.1.0", path = "hotshot-state-prover" }
-hotshot-task = { path = "hotshot-task" }
-hotshot-testing = { path = "hotshot-testing" }
-hotshot-types = { path = "hotshot-types" }
-hotshot-libp2p-networking = { path = "hotshot-libp2p-networking" }
-hotshot-contract-adapter = { path = "contracts/rust/adapter" }
+hotshot = { path = "./crates/hotshot" }
+hotshot-builder-api = { path = "./crates/hotshot-builder-api" }
+hotshot-task-impls = { path = "./crates/hotshot-task-impls" }
+hotshot-macros = { path = "./crates/hotshot-macros" }
+hotshot-events-service = { path = "./crates/hotshot-events-service" }
+hotshot-utils = { path = "./crates/hotshot-utils" }
+hotshot-orchestrator = { path = "./crates/hotshot-orchestrator" }
+hotshot-query-service = { path = "./crates/hotshot-query-service" }
+hotshot-stake-table = { path = "./crates/hotshot-stake-table" }
+hotshot-state-prover = { version = "0.1.0", path = "./crates/hotshot-state-prover" }
+hotshot-task = { path = "./crates/hotshot-task" }
+hotshot-testing = { path = "./crates/hotshot-testing" }
+hotshot-types = { path = "./crates/hotshot-types" }
+hotshot-libp2p-networking = { path = "./crates/hotshot-libp2p-networking" }
+hotshot-contract-adapter = { path = "./contracts/rust/adapter" }
 # Temporary, used to pull in the mock auction results provider
-hotshot-example-types = { path = "hotshot-example-types" }
+hotshot-example-types = { path = "./crates/hotshot-example-types" }
 
 jf-plonk = { git = "https://github.com/EspressoSystems/jellyfish", tag = "jf-plonk-v0.5.1", features = [
     "test-apis",
