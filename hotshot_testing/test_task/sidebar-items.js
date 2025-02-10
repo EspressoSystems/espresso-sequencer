@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["TestEvent","TestResult"],"fn":["add_network_message_test_task"],"struct":["TestTask"],"trait":["TestTaskState","TestTaskStateSeed"],"type":["AnyTestTaskState"]};
