@@ -973,7 +973,7 @@ mod test {
     use ethers_conv::ToAlloy;
     use hotshot_contract_adapter::stake_table::NodeInfoJf;
     use portpicker::pick_unused_port;
-    use sequencer_utils::test_utils::setup_test;
+    use sequencer_utils::{syncronous_generator::ChunkGenerator, test_utils::setup_test};
     use std::time::Duration;
     use time::OffsetDateTime;
 
@@ -1354,14 +1354,18 @@ mod test {
             l1_events_max_block_range: 3,
             ..Default::default()
         };
-        let l1_client = opt.connect(vec![anvil.endpoint().parse().unwrap()]);
+        let l1_client = opt
+            .connect(vec![anvil.endpoint().parse().unwrap()])
+            .unwrap();
 
         let chunks = l1_client.chunky(3, 10);
         let tups = stream::iter(chunks).collect::<Vec<_>>().await;
 
         assert_eq![vec![(3, 5), (6, 8), (9, 10)], tups];
 
-        let tups = L1Client::chunky2(3, 10, 3);
+        let chunks = ChunkGenerator::new(3, 10, 3);
+        let tups: Vec<(u64, u64)> = chunks.map(|range| (range.start, range.end)).collect();
+
         assert_eq![vec![(3, 5), (6, 8), (9, 10)], tups];
     }
 

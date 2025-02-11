@@ -13,7 +13,8 @@ impl ChunkGenerator {
     /// Given a `start`, `end` and `chunk_size`, create a `ChunkGenerator`.
     /// As with `Range`, inclusive `start`, exclusive `end`.
     /// Panics if `chunk_size > end`.
-    fn new(start: u64, end: u64, chunk_size: u64) -> Self {
+    // TODO if we make type generic we would take `Range` types here too.
+    pub fn new(start: u64, end: u64, chunk_size: u64) -> Self {
         // TODO maybe instead of panic, behave as an iterator with a
         // single item of start..end
         if end < chunk_size {
