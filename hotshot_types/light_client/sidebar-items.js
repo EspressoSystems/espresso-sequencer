@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"struct":["GenericLightClientState","GenericPublicInput","GenericStakeTableState","StateKeyPair","StateSignatureRequestBody","StateSignaturesBundle"],"type":["CircuitField","LightClientState","PublicInput","StakeTableState","StateSignKey","StateSignature","StateSignatureScheme","StateVerKey"]};

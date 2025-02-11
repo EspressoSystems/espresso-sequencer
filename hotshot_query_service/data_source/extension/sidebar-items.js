@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"mod":["impl_testable_data_source"],"struct":["ExtensibleDataSource"]};
