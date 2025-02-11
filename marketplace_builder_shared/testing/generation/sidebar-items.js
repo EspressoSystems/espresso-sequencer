@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["FLOOD_INCREMENT"],"enum":["GenerationStrategy","SubmissionEndpoint"],"struct":["TransactionGenerationConfig","TransactionGenerationTask"]};
