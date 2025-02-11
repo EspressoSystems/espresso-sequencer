@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"mod":["cdn","libp2p"],"type":["Memory","Production"]};

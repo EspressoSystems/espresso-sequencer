@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"constant":["VERSION"],"mod":["chain_config","stake_table"],"struct":["ChainConfig","CombinedStakeTable","DAMembers","PermissionedStakeTableEntry","ResolvableChainConfig","StakeTable","StakeTables"]};

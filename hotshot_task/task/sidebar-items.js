@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"struct":["ConsensusTaskRegistry","NetworkTaskRegistry","Task"],"trait":["TaskEvent","TaskState"]};

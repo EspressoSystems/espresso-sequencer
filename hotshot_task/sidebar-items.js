@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"mod":["dependency","dependency_task","task"]};
