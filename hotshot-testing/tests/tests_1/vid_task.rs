@@ -89,15 +89,17 @@ async fn test_vid_task() {
         _pd: PhantomData,
     };
 
-    let vid_disperse = VidDisperse::from_membership(
-        message.data.view_number,
-        vid_disperse,
-        &membership,
-        None,
-        None,
-        None,
-    )
-    .await;
+    let vid_disperse = VidDisperse::V0(
+        ADVZDisperse::from_membership(
+            message.data.view_number,
+            vid_disperse,
+            &membership,
+            None,
+            None,
+            None,
+        )
+        .await,
+    );
 
     let vid_proposal = Proposal {
         data: vid_disperse.clone(),

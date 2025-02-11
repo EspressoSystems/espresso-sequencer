@@ -29,7 +29,7 @@ use hotshot_types::{
         BlockPayload,
     },
     utils::ViewInner,
-    vid::VidCommitment,
+    vid::advz::ADVZCommitment,
 };
 use hotshot_utils::anytrace::*;
 use tokio::time::{sleep, timeout};
@@ -506,7 +506,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
         &self,
         block_view: TYPES::View,
         task_start_time: Instant,
-    ) -> Result<(TYPES::View, VidCommitment)> {
+    ) -> Result<(TYPES::View, ADVZCommitment)> {
         loop {
             match self.last_vid_commitment(block_view).await {
                 Ok((view, comm)) => break Ok((view, comm)),
@@ -526,7 +526,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
     async fn last_vid_commitment(
         &self,
         block_view: TYPES::View,
-    ) -> Result<(TYPES::View, VidCommitment)> {
+    ) -> Result<(TYPES::View, ADVZCommitment)> {
         let consensus_reader = self.consensus.read().await;
         let mut target_view = TYPES::View::new(block_view.saturating_sub(1));
 
@@ -624,7 +624,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
     /// based on the response time.
     async fn get_available_blocks(
         &self,
-        parent_comm: VidCommitment,
+        parent_comm: ADVZCommitment,
         view_number: TYPES::View,
         parent_comm_sig: &<<TYPES as NodeType>::SignatureKey as SignatureKey>::PureAssembledSignatureType,
     ) -> Vec<(AvailableBlockInfo<TYPES>, usize)> {
@@ -693,7 +693,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
     #[instrument(skip_all, fields(id = self.id, view = *self.cur_view), name = "block_from_builder", level = "error")]
     async fn block_from_builder(
         &self,
-        parent_comm: VidCommitment,
+        parent_comm: ADVZCommitment,
         view_number: TYPES::View,
         parent_comm_sig: &<<TYPES as NodeType>::SignatureKey as SignatureKey>::PureAssembledSignatureType,
     ) -> Result<BuilderResponse<TYPES>> {

@@ -22,7 +22,10 @@ use crate::{
         block_contents::EncodeBytes, election::Membership, node_implementation::NodeType,
         signature_key::SignatureKey,
     },
-    vid::{advz_scheme, VidCommitment, VidCommon, VidSchemeType, VidShare},
+    vid::{
+        advz::{advz_scheme, ADVZCommitment, ADVZCommon, ADVZScheme, ADVZShare},
+        avidm::{init_avidm_param, AvidMCommitment, AvidMShare},
+    },
     vote::HasViewNumber,
 };
 
@@ -38,13 +41,13 @@ pub struct ADVZDisperse<TYPES: NodeType> {
     /// Epoch to which the recipients of this VID belong to
     pub target_epoch: Option<TYPES::Epoch>,
     /// VidCommitment calculated based on the number of nodes in `target_epoch`.
-    pub payload_commitment: VidCommitment,
+    pub payload_commitment: ADVZCommitment,
     /// VidCommitment calculated based on the number of nodes in `epoch`. Needed during epoch transition.
-    pub data_epoch_payload_commitment: Option<VidCommitment>,
+    pub data_epoch_payload_commitment: Option<ADVZCommitment>,
     /// A storage node's key and its corresponding VID share
-    pub shares: BTreeMap<TYPES::SignatureKey, VidShare>,
+    pub shares: BTreeMap<TYPES::SignatureKey, ADVZShare>,
     /// VID common data sent to all storage nodes
-    pub common: VidCommon,
+    pub common: ADVZCommon,
 }
 
 impl<TYPES: NodeType> HasViewNumber<TYPES> for ADVZDisperse<TYPES> {
@@ -59,11 +62,11 @@ impl<TYPES: NodeType> ADVZDisperse<TYPES> {
     /// Allows for more complex stake table functionality
     pub async fn from_membership(
         view_number: TYPES::View,
-        mut vid_disperse: JfVidDisperse<VidSchemeType>,
+        mut vid_disperse: JfVidDisperse<ADVZScheme>,
         membership: &Arc<RwLock<TYPES::Membership>>,
         target_epoch: Option<TYPES::Epoch>,
         data_epoch: Option<TYPES::Epoch>,
-        data_epoch_payload_commitment: Option<VidCommitment>,
+        data_epoch_payload_commitment: Option<ADVZCommitment>,
     ) -> Self {
         let shares = membership
             .read()
@@ -143,11 +146,11 @@ pub struct ADVZDisperseShare<TYPES: NodeType> {
     /// The view number for which this VID data is intended
     pub view_number: TYPES::View,
     /// Block payload commitment
-    pub payload_commitment: VidCommitment,
+    pub payload_commitment: ADVZCommitment,
     /// A storage node's key and its corresponding VID share
-    pub share: VidShare,
+    pub share: ADVZShare,
     /// VID common data sent to all storage nodes
-    pub common: VidCommon,
+    pub common: ADVZCommon,
     /// a public key of the share recipient
     pub recipient_key: TYPES::SignatureKey,
 }
@@ -255,6 +258,132 @@ impl<TYPES: NodeType> ADVZDisperseShare<TYPES> {
     }
 }
 
+/// ADVZ dispersal data
+#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Hash)]
+pub struct AvidMDisperse<TYPES: NodeType> {
+    /// The view number for which this VID data is intended
+    pub view_number: TYPES::View,
+    /// Epoch the data of this proposal belongs to
+    pub epoch: Option<TYPES::Epoch>,
+    /// Epoch to which the recipients of this VID belong to
+    pub target_epoch: Option<TYPES::Epoch>,
+    /// VidCommitment calculated based on the number of nodes in `target_epoch`.
+    pub payload_commitment: AvidMCommitment,
+    /// VidCommitment calculated based on the number of nodes in `epoch`. Needed during epoch transition.
+    pub data_epoch_payload_commitment: Option<AvidMCommitment>,
+    /// A storage node's key and its corresponding VID share
+    pub shares: BTreeMap<TYPES::SignatureKey, AvidMShare>,
+    /// VID common data sent to all storage nodes
+    pub common: ADVZCommon,
+}
+
+impl<TYPES: NodeType> HasViewNumber<TYPES> for AvidMDisperse<TYPES> {
+    fn view_number(&self) -> TYPES::View {
+        self.view_number
+    }
+}
+
+impl<TYPES: NodeType> AvidMDisperse<TYPES> {
+    /// Create VID dispersal from a specified membership for the target epoch.
+    /// Uses the specified function to calculate share dispersal
+    /// Allows for more complex stake table functionality
+    pub async fn from_membership(
+        view_number: TYPES::View,
+        commit: AvidMCommitment,
+        shares: &[AvidMShare],
+        membership: &Arc<RwLock<TYPES::Membership>>,
+        target_epoch: Option<TYPES::Epoch>,
+        data_epoch: Option<TYPES::Epoch>,
+        data_epoch_payload_commitment: Option<AvidMCommitment>,
+    ) -> Self {
+        todo!()
+        // let shares = membership
+        //     .read()
+        //     .await
+        //     .committee_members(view_number, target_epoch)
+        //     .iter()
+        //     .map(|node| (node.clone(), vid_disperse.shares.remove(0)))
+        //     .collect();
+
+        // Self {
+        //     view_number,
+        //     shares,
+        //     common: vid_disperse.common,
+        //     payload_commitment: vid_disperse.commit,
+        //     data_epoch_payload_commitment,
+        //     epoch: data_epoch,
+        //     target_epoch,
+        // }
+    }
+
+    /// Calculate the vid disperse information from the payload given a view, epoch and membership,
+    /// If the sender epoch is missing, it means it's the same as the target epoch.
+    ///
+    /// # Errors
+    /// Returns an error if the disperse or commitment calculation fails
+    #[allow(clippy::panic)]
+    pub async fn calculate_vid_disperse(
+        payload: &TYPES::BlockPayload,
+        membership: &Arc<RwLock<TYPES::Membership>>,
+        view: TYPES::View,
+        target_epoch: Option<TYPES::Epoch>,
+        data_epoch: Option<TYPES::Epoch>,
+    ) -> Result<Self> {
+        let num_nodes = membership.read().await.total_nodes(target_epoch);
+
+        let txns = payload.encode();
+        let txns_clone = Arc::clone(&txns);
+        let num_txns = txns.len();
+
+        let avidm_param = init_avidm_param(num_nodes)?;
+        let avidm_param_clone = avidm_param.clone();
+        // TODO: get weight distribution
+        let weights = vec![1u32; num_nodes];
+        let (commit, shares) = spawn_blocking(move || {
+            <vid::avid_m::AvidMScheme as vid::VidScheme>::disperse(
+                &avidm_param,
+                &weights,
+                &txns_clone,
+            )
+        })
+        .await
+        .wrap()
+        .context(error!("Join error"))?
+        .wrap()
+        .context(|err| error!("Failed to calculate VID disperse. Error: {}", err))?;
+
+        let payload_commitment = if target_epoch == data_epoch {
+            None
+        } else {
+            let num_nodes = membership.read().await.total_nodes(data_epoch);
+
+            Some(
+              spawn_blocking(move || 
+                <vid::avid_m::AvidMScheme as vid::VidScheme>::commit(
+                    &avidm_param_clone,
+                    &txns,
+                ))
+                .await
+                .wrap()
+                .context(error!("Join error"))?
+                .wrap()
+                .context(|err| error!("Failed to calculate VID commitment with (num_storage_nodes, payload_byte_len) = ({}, {}). Error: {}", num_nodes, num_txns, err))?
+            )
+        };
+
+        Ok(Self::from_membership(
+            view,
+            commit,
+            &shares,
+            membership,
+            target_epoch,
+            data_epoch,
+            payload_commitment,
+        )
+        .await)
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Hash)]
 /// VID share and associated metadata for a single node
 pub struct VidDisperseShare2<TYPES: NodeType> {
@@ -265,13 +394,13 @@ pub struct VidDisperseShare2<TYPES: NodeType> {
     /// The epoch number to which the recipient of this VID belongs to
     pub target_epoch: Option<TYPES::Epoch>,
     /// Block payload commitment
-    pub payload_commitment: VidCommitment,
+    pub payload_commitment: ADVZCommitment,
     /// VidCommitment calculated based on the number of nodes in `epoch`. Needed during epoch transition.
-    pub data_epoch_payload_commitment: Option<VidCommitment>,
+    pub data_epoch_payload_commitment: Option<ADVZCommitment>,
     /// A storage node's key and its corresponding VID share
-    pub share: VidShare,
+    pub share: ADVZShare,
     /// VID common data sent to all storage nodes
-    pub common: VidCommon,
+    pub common: ADVZCommon,
     /// a public key of the share recipient
     pub recipient_key: TYPES::SignatureKey,
 }

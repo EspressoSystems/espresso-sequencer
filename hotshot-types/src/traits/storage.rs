@@ -29,7 +29,7 @@ use crate::{
     simple_certificate::{
         NextEpochQuorumCertificate2, QuorumCertificate, QuorumCertificate2, UpgradeCertificate,
     },
-    vid::VidSchemeType,
+    vid::advz::ADVZScheme,
 };
 
 /// Abstraction for storing a variety of consensus payload datum.
@@ -49,13 +49,13 @@ pub trait Storage<TYPES: NodeType>: Send + Sync + Clone {
     async fn append_da(
         &self,
         proposal: &Proposal<TYPES, DaProposal<TYPES>>,
-        vid_commit: <VidSchemeType as VidScheme>::Commit,
+        vid_commit: <ADVZScheme as VidScheme>::Commit,
     ) -> Result<()>;
     /// Add a proposal to the stored DA proposals.
     async fn append_da2(
         &self,
         proposal: &Proposal<TYPES, DaProposal2<TYPES>>,
-        vid_commit: <VidSchemeType as VidScheme>::Commit,
+        vid_commit: <ADVZScheme as VidScheme>::Commit,
     ) -> Result<()> {
         self.append_da(&convert_proposal(proposal.clone()), vid_commit)
             .await

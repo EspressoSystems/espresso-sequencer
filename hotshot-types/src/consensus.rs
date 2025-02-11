@@ -38,7 +38,7 @@ use crate::{
         epoch_from_block_number, is_last_block_in_epoch, option_epoch_from_block_number,
         BuilderCommitment, LeafCommitment, StateAndDelta, Terminator,
     },
-    vid::VidCommitment,
+    vid::advz::ADVZCommitment,
     vote::{Certificate, HasViewNumber},
 };
 
@@ -653,7 +653,7 @@ impl<TYPES: NodeType> Consensus<TYPES> {
         &mut self,
         view_number: TYPES::View,
         epoch: Option<TYPES::Epoch>,
-        payload_commitment: VidCommitment,
+        payload_commitment: ADVZCommitment,
     ) -> Result<()> {
         let view = View {
             view_inner: ViewInner::Da {
@@ -1104,7 +1104,7 @@ impl<TYPES: NodeType> Consensus<TYPES> {
 #[derive(Eq, Hash, PartialEq, Debug, Clone)]
 pub struct CommitmentAndMetadata<TYPES: NodeType> {
     /// Vid Commitment
-    pub commitment: VidCommitment,
+    pub commitment: ADVZCommitment,
     /// Builder Commitment
     pub builder_commitment: BuilderCommitment,
     /// Metadata for the block payload

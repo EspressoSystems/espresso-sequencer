@@ -25,7 +25,7 @@ use hotshot_types::{
         node_implementation::{ConsensusTime, NodeType, Versions},
         BlockPayload,
     },
-    vid::VidCommitment,
+    vid::advz::ADVZCommitment,
 };
 use thiserror::Error;
 use tracing::error;
@@ -410,8 +410,9 @@ impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>, V: Versions> TestTas
 /// Result of running a round of consensus
 #[derive(Debug)]
 pub struct RoundResult<TYPES: NodeType> {
-    // Transactions that were submitted
+    /// Transactions that were submitted
     // pub txns: Vec<TYPES::Transaction>,
+
     /// Nodes that committed this round
     /// id -> (leaf, qc)
     success_nodes: HashMap<u64, (LeafChain<TYPES>, QuorumCertificate2<TYPES>)>,
@@ -428,7 +429,7 @@ pub struct RoundResult<TYPES: NodeType> {
     pub leaf_map: HashMap<Leaf2<TYPES>, usize>,
 
     /// block -> # entries decided on that block
-    pub block_map: HashMap<VidCommitment, usize>,
+    pub block_map: HashMap<ADVZCommitment, usize>,
 
     /// number of transactions -> number of nodes reporting that number
     pub num_txns_map: HashMap<u64, usize>,

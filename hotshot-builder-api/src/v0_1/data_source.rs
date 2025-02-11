@@ -12,7 +12,7 @@ use hotshot_types::{
         signature_key::SignatureKey,
     },
     utils::BuilderCommitment,
-    vid::VidCommitment,
+    vid::advz::ADVZCommitment,
 };
 
 use super::{
@@ -25,7 +25,7 @@ pub trait BuilderDataSource<TYPES: NodeType> {
     /// To get the list of available blocks
     async fn available_blocks<V: Versions>(
         &self,
-        for_parent: &VidCommitment,
+        for_parent: &ADVZCommitment,
         view_number: u64,
         sender: TYPES::SignatureKey,
         signature: &<TYPES::SignatureKey as SignatureKey>::PureAssembledSignatureType,

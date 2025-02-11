@@ -212,6 +212,7 @@ url = "2.3"
 vbs = "0.1"
 vec1 = { version = "1", features = ["serde"] }
 vergen = { version = "8.3", features = ["git", "gitcl"] }
+vid = { git = "https://github.com/EspressoSystems/vid" }
 zeroize = "1.7"
 committable = "0.2"
 portpicker = "0.1.1"

@@ -34,7 +34,7 @@ use crate::{
         node_implementation::{ConsensusTime, NodeType, Versions},
         ValidatedState,
     },
-    vid::VidCommitment,
+    vid::advz::ADVZCommitment,
 };
 
 /// A view's state
@@ -48,7 +48,7 @@ pub enum ViewInner<TYPES: NodeType> {
     /// leaders repeatedly request availability for blocks that they never propose.
     Da {
         /// Payload commitment to the available block.
-        payload_commitment: VidCommitment,
+        payload_commitment: ADVZCommitment,
         /// An epoch to which the data belongs to. Relevant for validating against the correct stake table
         epoch: Option<TYPES::Epoch>,
     },
@@ -143,7 +143,7 @@ impl<TYPES: NodeType> ViewInner<TYPES> {
 
     /// return the underlying block payload commitment if it exists
     #[must_use]
-    pub fn payload_commitment(&self) -> Option<VidCommitment> {
+    pub fn payload_commitment(&self) -> Option<ADVZCommitment> {
         if let Self::Da {
             payload_commitment, ..
         } = self
