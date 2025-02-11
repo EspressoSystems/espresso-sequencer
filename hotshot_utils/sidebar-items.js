@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"macro":["bail","debug","ensure","error","info","line_info","log","trace","warn"],"mod":["anytrace"]};

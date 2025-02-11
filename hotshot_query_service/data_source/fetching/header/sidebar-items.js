@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["HeaderCallback"],"fn":["fetch_header_and_then","satisfies_header_req_from_leaf"]};

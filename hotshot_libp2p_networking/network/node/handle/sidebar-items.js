@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":["spawn_network_node"],"struct":["NetworkNodeHandle","NetworkNodeReceiver"]};
