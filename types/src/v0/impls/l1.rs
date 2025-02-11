@@ -29,7 +29,7 @@ use futures::{
 use hotshot_types::traits::metrics::Metrics;
 use lru::LruCache;
 use parking_lot::RwLock;
-use std::result::Result as StdResult;
+use sequencer_utils::syncronous_generator::ChunkGenerator;
 use std::{
     cmp::{min, Ordering},
     num::NonZeroUsize,
@@ -37,6 +37,7 @@ use std::{
     sync::Arc,
     time::Instant,
 };
+use std::{ops::Range, result::Result as StdResult};
 use tokio::{
     spawn,
     sync::{Mutex, MutexGuard, Notify},
@@ -779,23 +780,6 @@ impl L1Client {
         })
     }
 
-    /// Divide the range `start..=end` into chunks of size
-    /// `events_max_block_range`.
-    fn chunky2(start: u64, end: u64, chunk_size: usize) -> Vec<(u64, u64)> {
-        // let opt = self.options();
-        // let chunk_size = opt.l1_events_max_block_range as usize;
-        let chunks: Vec<u64> = (start..=end).collect();
-        let tups: Vec<(u64, u64)> = chunks
-            .chunks(chunk_size)
-            .map(|s| {
-                // should never be empty
-                s.first().cloned().zip(s.last().cloned()).unwrap()
-            })
-            .collect();
-
-        tups
-    }
-
     /// Get fee info for each `Deposit` occurring between `prev`
     /// and `new`. Returns `Vec<FeeInfo>`
     pub async fn get_finalized_deposits(
@@ -816,41 +800,45 @@ impl L1Client {
         // haven't processed *any* blocks yet.
         let prev = prev_finalized.map(|prev| prev + 1).unwrap_or(0);
 
+        let fee_contract = FeeContractInstance::new(fee_contract_address, self.provider.clone());
+
         // Divide the range `prev_finalized..=new_finalized` into chunks of size
         // `events_max_block_range`.
-        let chunks = self.chunky(prev, new_finalized);
+        let chunks = ChunkGenerator::new(prev, new_finalized, opt.l1_events_max_block_range);
 
         // Fetch events for each chunk.
-        let events = stream::iter(chunks).then(|(from, to)| {
+        let mut events = Vec::new();
+        for Range { start, end } in chunks {
             let retry_delay = opt.l1_retry_delay;
-            let fee_contract =
-                FeeContractInstance::new(fee_contract_address, self.provider.clone());
-            async move {
-                tracing::debug!(from, to, "fetch events in range");
+            tracing::debug!(start, end, "fetch events in range");
 
-                // query for deposit events, loop until successful.
-                loop {
-                    match fee_contract
-                        .Deposit_filter()
-                        .from_block(from)
-                        .to_block(to)
-                        .query()
-                        .await
-                    {
-                        Ok(events) => break stream::iter(events),
-                        Err(err) => {
-                            tracing::warn!(from, to, %err, "Fee L1Event Error");
-                            sleep(retry_delay).await;
+            // query for deposit events, loop until successful.
+            loop {
+                match fee_contract
+                    .Deposit_filter()
+                    .from_block(start)
+                    .to_block(end)
+                    .query()
+                    .await
+                {
+                    Ok(e) => {
+                        for event in e {
+                            events.push(event)
                         }
+                        break;
+                    }
+                    Err(err) => {
+                        tracing::warn!(start, end, %err, "Fee L1Event Error");
+                        sleep(retry_delay).await;
                     }
                 }
             }
-        });
+        }
+
         events
-            .flatten()
+            .into_iter()
             .map(|(deposit, _)| FeeInfo::from(deposit))
             .collect()
-            .await
     }
 
     /// Get `StakeTable` at block height.

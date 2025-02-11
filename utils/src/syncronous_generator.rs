@@ -24,7 +24,7 @@ impl ChunkGenerator {
         Self {
             range,
             chunk_size,
-            next: Some(start..chunk_size),
+            next: Some(start..(start + chunk_size - 1)),
         }
     }
 }
@@ -37,13 +37,13 @@ impl Iterator for ChunkGenerator {
         let next_end = current.end + self.chunk_size;
 
         if next_end < self.range.end {
-            self.next = Some(current.end..next_end);
+            self.next = Some((current.end + 1)..next_end);
         } else if current.end < self.range.end {
-            self.next = Some(current.end..self.range.end);
+            self.next = Some((current.end + 1)..self.range.end);
         } else {
             self.next = None
         }
-        Some(current.clone())
+        Some(current)
     }
 }
 
@@ -53,12 +53,12 @@ mod test {
 
     #[test]
     fn test_generator() {
-        let mut g = ChunkGenerator::new(1, 11, 3);
+        let mut g = ChunkGenerator::new(0, 10, 3);
 
-        assert_eq![Some(1..3), g.next()];
-        assert_eq![Some(3..6), g.next()];
-        assert_eq![Some(6..9), g.next()];
-        assert_eq![Some(9..11), g.next()];
+        assert_eq![Some(0..2), g.next()];
+        assert_eq![Some(3..5), g.next()];
+        assert_eq![Some(6..8), g.next()];
+        assert_eq![Some(9..10), g.next()];
         assert_eq![None, g.next()];
     }
     #[test]
