@@ -20,7 +20,6 @@ use contract_bindings_alloy::{
         PermissionedStakeTableInstance, StakersUpdated,
     },
 };
-use contract_bindings_ethers::fee_contract::FeeContract;
 use ethers_conv::ToEthers;
 use futures::{
     future::Future,
@@ -29,7 +28,7 @@ use futures::{
 use hotshot_types::traits::metrics::Metrics;
 use lru::LruCache;
 use parking_lot::RwLock;
-use sequencer_utils::syncronous_generator::ChunkGenerator;
+use sequencer_utils::synchronous_generator::ChunkGenerator;
 use std::{
     cmp::{min, Ordering},
     num::NonZeroUsize,
@@ -761,7 +760,7 @@ impl L1Client {
 
     /// Divide the range `start..=end` into chunks of size
     /// `events_max_block_range` .
-    fn chunky(
+    fn _chunks(
         &self,
         start: u64,
         end: u64,
@@ -961,7 +960,7 @@ mod test {
     use ethers_conv::ToAlloy;
     use hotshot_contract_adapter::stake_table::NodeInfoJf;
     use portpicker::pick_unused_port;
-    use sequencer_utils::{syncronous_generator::ChunkGenerator, test_utils::setup_test};
+    use sequencer_utils::test_utils::setup_test;
     use std::time::Duration;
     use time::OffsetDateTime;
 
@@ -1346,7 +1345,7 @@ mod test {
             .connect(vec![anvil.endpoint().parse().unwrap()])
             .unwrap();
 
-        let chunks = l1_client.chunky(3, 10);
+        let chunks = l1_client._chunks(3, 10);
         let tups = stream::iter(chunks).collect::<Vec<_>>().await;
 
         assert_eq![vec![(3, 5), (6, 8), (9, 10)], tups];

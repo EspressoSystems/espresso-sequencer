@@ -25,7 +25,7 @@ pub mod deployer;
 pub mod logging;
 pub mod ser;
 pub mod stake_table;
-pub mod syncronous_generator;
+pub mod synchronous_generator;
 pub mod test_utils;
 
 pub type Signer = SignerMiddleware<Provider<Http>, LocalWallet>;
