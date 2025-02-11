@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":["advz_scheme","memoized_flush_advz_scheme","memoized_original_advz_scheme","stmt_conversion","vid_disperse_conversion"],"struct":["KZG_SRS","LargeRangeProofType","MEMOIZED_MAPPING_ADVZ_SCHEME","SmallRangeProofType","VidSchemeType"],"type":["Advz","E","H","VidCommitment","VidCommon","VidProposal","VidShare"]};

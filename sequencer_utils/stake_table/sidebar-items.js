@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":["update_stake_table"],"struct":["PermissionedStakeTableConfig","PermissionedStakeTableUpdate","StakerIdentity"]};
