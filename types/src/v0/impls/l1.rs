@@ -20,6 +20,7 @@ use contract_bindings_alloy::{
         PermissionedStakeTableInstance, StakersUpdated,
     },
 };
+use contract_bindings_ethers::fee_contract::FeeContract;
 use ethers_conv::ToEthers;
 use futures::{
     future::Future,
@@ -44,7 +45,6 @@ use tokio::{
 use tower_service::Service;
 use tracing::Instrument;
 use url::Url;
-use contract_bindings_ethers::fee_contract::FeeContract;
 
 use super::{
     v0_1::{SingleTransport, SingleTransportStatus, SwitchingTransport},
@@ -759,8 +759,12 @@ impl L1Client {
     }
 
     /// Divide the range `start..=end` into chunks of size
-    /// `events_max_block_range`.
-    fn chunky(&self, start: u64, end: u64) -> std::fmt::FromFn<impl FnMut() -> Option<(u64, u64)>> {
+    /// `events_max_block_range` .
+    fn chunky(
+        &self,
+        start: u64,
+        end: u64,
+    ) -> std::iter::FromFn<impl FnMut() -> Option<(u64, u64)>> {
         let mut start = start;
         let chunk_size = self.options().l1_events_max_block_range;
         std::iter::from_fn(move || {
@@ -819,15 +823,15 @@ impl L1Client {
         // Fetch events for each chunk.
         let events = stream::iter(chunks).then(|(from, to)| {
             let retry_delay = opt.l1_retry_delay;
-            let fee_contract = FeeContract::new(fee_contract_address, self.provider.clone());
+            let fee_contract =
+                FeeContractInstance::new(fee_contract_address, self.provider.clone());
             async move {
                 tracing::debug!(from, to, "fetch events in range");
 
                 // query for deposit events, loop until successful.
                 loop {
                     match fee_contract
-                        .deposit_filter()
-                        .address(fee_contract.address().into())
+                        .Deposit_filter()
                         .from_block(from)
                         .to_block(to)
                         .query()
