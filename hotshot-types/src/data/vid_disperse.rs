@@ -273,8 +273,6 @@ pub struct AvidMDisperse<TYPES: NodeType> {
     pub data_epoch_payload_commitment: Option<AvidMCommitment>,
     /// A storage node's key and its corresponding VID share
     pub shares: BTreeMap<TYPES::SignatureKey, AvidMShare>,
-    /// VID common data sent to all storage nodes
-    pub common: ADVZCommon,
 }
 
 impl<TYPES: NodeType> HasViewNumber<TYPES> for AvidMDisperse<TYPES> {
@@ -296,24 +294,22 @@ impl<TYPES: NodeType> AvidMDisperse<TYPES> {
         data_epoch: Option<TYPES::Epoch>,
         data_epoch_payload_commitment: Option<AvidMCommitment>,
     ) -> Self {
-        todo!()
-        // let shares = membership
-        //     .read()
-        //     .await
-        //     .committee_members(view_number, target_epoch)
-        //     .iter()
-        //     .map(|node| (node.clone(), vid_disperse.shares.remove(0)))
-        //     .collect();
+        let shares = membership
+            .read()
+            .await
+            .committee_members(view_number, target_epoch)
+            .iter().zip(shares)
+            .map(|(node, share)| (node.clone(), share.clone()))
+            .collect();
 
-        // Self {
-        //     view_number,
-        //     shares,
-        //     common: vid_disperse.common,
-        //     payload_commitment: vid_disperse.commit,
-        //     data_epoch_payload_commitment,
-        //     epoch: data_epoch,
-        //     target_epoch,
-        // }
+        Self {
+            view_number,
+            shares,
+            payload_commitment: commit,
+            data_epoch_payload_commitment,
+            epoch: data_epoch,
+            target_epoch,
+        }
     }
 
     /// Calculate the vid disperse information from the payload given a view, epoch and membership,

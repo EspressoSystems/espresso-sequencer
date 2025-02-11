@@ -21,7 +21,9 @@ use hotshot_testing::{
     serial,
 };
 use hotshot_types::{
-    data::{null_block, DaProposal, PackedBundle, VidDisperse, ViewNumber},
+    data::{
+        null_block, vid_disperse::ADVZDisperse, DaProposal, PackedBundle, VidDisperse, ViewNumber,
+    },
     traits::{
         consensus_api::ConsensusApi,
         election::Membership,
