@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["DaConsensusMessage","DataMessage","GeneralConsensusMessage","MessageKind","MessagePurpose","RecipientList","SequencingMessage"],"fn":["convert_proposal"],"struct":["Message","Messages","Proposal","UpgradeLock"]};
