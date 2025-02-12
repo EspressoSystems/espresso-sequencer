@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["decided_upgrade_certificate","no_decided_upgrade_certificate"],"struct":["UpgradeCertPredicate"],"type":["QuorumVoteTaskTestState","UpgradeCertCallback"]};

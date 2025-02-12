@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Message"],"fn":["read_length_prefixed","read_to_end","write_length_prefixed"],"struct":["RequestMessage","ResponseMessage"]};

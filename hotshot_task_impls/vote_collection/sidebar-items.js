@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["create_vote_accumulator","handle_vote"],"struct":["AccumulatorInfo","VoteCollectionTaskState"],"trait":["AggregatableVote","HandleVoteEvent"],"type":["DaVoteState","NextEpochQuorumVoteState","QuorumVoteState","TimeoutVoteState","UpgradeVoteState","ViewSyncCommitVoteState","ViewSyncFinalizeVoteState","ViewSyncPreCommitState","VoteCollectorsMap"]};
