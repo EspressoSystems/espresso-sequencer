@@ -7,3 +7,4 @@ edition = { workspace = true }
 [dependencies]
 alloy = { workspace = true }
 ethers = { workspace = true }
+workspace-hack = { version = "0.1", path = "../workspace-hack" }

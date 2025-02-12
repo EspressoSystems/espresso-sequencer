@@ -20,6 +20,21 @@ env:
   RUST_LOG: info,libp2p=off
 
 jobs:
+  verify-workspace-hack:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        name: Checkout Repository
+      
+      - name: Install cargo-hakari from crates.io
+        uses: baptiste0928/cargo-install@v3
+        with:
+          crate: cargo-hakari
+      
+      - name: Run cargo-hakari
+        run: |
+          cargo hakari generate --diff
+
   lint:
     runs-on: ubuntu-latest
     steps:

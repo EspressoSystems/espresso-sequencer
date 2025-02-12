@@ -118,6 +118,7 @@ hotshot-example-types = { workspace = true }
 portpicker = { version = "0.1", optional = true }
 rand = { version = "0.8", optional = true }
 tempfile = { version = "3.10", optional = true }
+workspace-hack = { version = "0.1", path = "../workspace-hack" }
 
 # Dependencies enabled by feature "backtrace-on-stack-overflow".
 #

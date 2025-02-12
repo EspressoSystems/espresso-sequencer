@@ -195,6 +195,7 @@
             cargo-audit
             cargo-edit
             cargo-hack
+            cargo-hakari
             cargo-nextest
             cargo-sort
             typos

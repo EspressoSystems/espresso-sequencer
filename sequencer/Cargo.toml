@@ -123,6 +123,7 @@ tracing-subscriber = { workspace = true }
 url = { workspace = true }
 vbs = { workspace = true }
 vec1 = { workspace = true }
+workspace-hack = { version = "0.1", path = "../workspace-hack" }
 
 [package.metadata.cargo-udeps.ignore]
 normal = ["hotshot-testing"]

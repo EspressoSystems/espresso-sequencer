@@ -21,6 +21,7 @@ toml = { workspace = true }
 tracing = { workspace = true }
 tracing-test = "0.2"
 vbs = { workspace = true }
+workspace-hack = { version = "0.1", path = "../workspace-hack" }
 
 [dev-dependencies]
 hotshot-example-types = { workspace = true }

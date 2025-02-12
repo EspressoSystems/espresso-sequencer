@@ -26,6 +26,7 @@ jf-utils = { workspace = true }
 num-bigint = { version = "0.4", default-features = false }
 num-traits = { version = "0.2", default-features = false }
 serde = { workspace = true }
+workspace-hack = { version = "0.1", path = "../../../workspace-hack" }
 
 [dev-dependencies]
 rand = { workspace = true }
