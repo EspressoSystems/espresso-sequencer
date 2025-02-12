@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"mod":["config","mt_based","utils","vec_based"]};

@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["DelayOptions","SupportedTraitTypesForAsyncDelay"],"struct":["DelayConfig","DelaySettings","SupportedTraitTypesForAsyncDelayIterator"],"trait":["TestableDelay"]};

@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":["any_fetch"],"struct":["AnyProvider"],"trait":["DebugProvider"],"type":["LeafProvider","PayloadProvider","VidCommonProvider"]};
