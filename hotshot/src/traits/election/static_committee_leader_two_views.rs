@@ -14,8 +14,8 @@ use hotshot_types::{
     },
     PeerConfig,
 };
-use primitive_types::U256;
 use hotshot_utils::anytrace::Result;
+use primitive_types::U256;
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 

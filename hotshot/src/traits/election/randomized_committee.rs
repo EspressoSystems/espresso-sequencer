@@ -14,14 +14,13 @@ use hotshot_types::{
     },
     PeerConfig,
 };
+use hotshot_utils::anytrace::Result;
 use primitive_types::U256;
 use rand::{rngs::StdRng, Rng};
-use hotshot_utils::anytrace::Result;
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 
 /// The static committee election
-
 pub struct RandomizedCommittee<T: NodeType> {
     /// The nodes eligible for leadership.
     /// NOTE: This is currently a hack because the DA leader needs to be the quorum

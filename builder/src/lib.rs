@@ -13,11 +13,11 @@ pub mod non_permissioned;
 // It runs the api service for the builder
 pub fn run_builder_api_service(url: Url, source: ProxyGlobalState<SeqTypes>) {
     // it is to serve hotshot
-    let builder_api =
-        hotshot_builder_api::v0_1::builder::define_api::<ProxyGlobalState<SeqTypes>, SeqTypes>(
-            &HotshotBuilderApiOptions::default(),
-        )
-        .expect("Failed to construct the builder APIs");
+    let builder_api = hotshot_builder_api::v0_1::builder::define_api::<
+        ProxyGlobalState<SeqTypes>,
+        SeqTypes,
+    >(&HotshotBuilderApiOptions::default())
+    .expect("Failed to construct the builder APIs");
 
     // it enables external clients to submit txn to the builder's private mempool
     let private_mempool_api = hotshot_builder_api::v0_1::builder::submit_api::<

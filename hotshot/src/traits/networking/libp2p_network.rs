@@ -27,6 +27,21 @@ use async_lock::RwLock;
 use async_trait::async_trait;
 use bimap::BiHashMap;
 use futures::future::join_all;
+pub use hotshot_libp2p_networking::network::{GossipConfig, RequestResponseConfig};
+use hotshot_libp2p_networking::{
+    network::{
+        behaviours::dht::{
+            record::{Namespace, RecordKey, RecordValue},
+            store::persistent::{DhtNoPersistence, DhtPersistentStorage},
+        },
+        spawn_network_node,
+        transport::construct_auth_message,
+        NetworkEvent::{self, DirectRequest, DirectResponse, GossipMsg},
+        NetworkNodeConfig, NetworkNodeConfigBuilder, NetworkNodeHandle, NetworkNodeReceiver,
+        DEFAULT_REPLICATION_FACTOR,
+    },
+    reexport::Multiaddr,
+};
 #[cfg(feature = "hotshot-testing")]
 use hotshot_types::traits::network::{
     AsyncGenerator, NetworkReliability, TestableNetworkingImplementation,
@@ -48,21 +63,6 @@ use hotshot_types::{
 use libp2p_identity::{
     ed25519::{self, SecretKey},
     Keypair, PeerId,
-};
-pub use hotshot_libp2p_networking::network::{GossipConfig, RequestResponseConfig};
-use hotshot_libp2p_networking::{
-    network::{
-        behaviours::dht::{
-            record::{Namespace, RecordKey, RecordValue},
-            store::persistent::{DhtNoPersistence, DhtPersistentStorage},
-        },
-        spawn_network_node,
-        transport::construct_auth_message,
-        NetworkEvent::{self, DirectRequest, DirectResponse, GossipMsg},
-        NetworkNodeConfig, NetworkNodeConfigBuilder, NetworkNodeHandle, NetworkNodeReceiver,
-        DEFAULT_REPLICATION_FACTOR,
-    },
-    reexport::Multiaddr,
 };
 use rand::{rngs::StdRng, seq::IteratorRandom, SeedableRng};
 use serde::Serialize;

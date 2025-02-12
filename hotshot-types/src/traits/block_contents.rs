@@ -155,7 +155,7 @@ pub fn vid_commitment<V: Versions>(
     num_storage_nodes: usize,
     _version: Version,
 ) -> <VidSchemeType as VidScheme>::Commit {
-  advz_commitment(encoded_transactions, num_storage_nodes)
+    advz_commitment(encoded_transactions, num_storage_nodes)
 }
 
 /// Compute the VID payload commitment using the (old) ADVZ VID scheme

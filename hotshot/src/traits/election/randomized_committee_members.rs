@@ -19,10 +19,10 @@ use hotshot_types::{
     },
     PeerConfig,
 };
+use hotshot_utils::anytrace::Result;
 use primitive_types::U256;
 use rand::{rngs::StdRng, Rng};
 use tracing::error;
-use hotshot_utils::anytrace::Result;
 
 use crate::traits::election::helpers::QuorumFilterConfig;
 

@@ -14,8 +14,8 @@ use hotshot_types::{
     },
     PeerConfig,
 };
-use primitive_types::U256;
 use hotshot_utils::anytrace::Result;
+use primitive_types::U256;
 
 /// Tuple type for eligible leaders
 type EligibleLeaders<T> = (

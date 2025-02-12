@@ -80,8 +80,7 @@ pub fn all_predicates<TYPES: NodeType>(
         if !unsatisfied
             .clone()
             .into_iter()
-            .map(|pred| (pred.check)(e.clone()))
-            .any(|val| val)
+            .any(|pred| (pred.check)(e.clone()))
         {
             return PredicateResult::Fail;
         }

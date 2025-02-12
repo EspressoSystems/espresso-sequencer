@@ -12,10 +12,7 @@ use hotshot_builder_api::v0_1::{
 };
 use hotshot_types::{
     constants::LEGACY_BUILDER_MODULE,
-    traits::{
-        node_implementation::{NodeType},
-        signature_key::SignatureKey,
-    },
+    traits::{node_implementation::NodeType, signature_key::SignatureKey},
     vid::VidCommitment,
 };
 use serde::{Deserialize, Serialize};

@@ -55,10 +55,11 @@ pub trait TestTaskState: Send {
     /// Type of error produced by the task
     type Error: std::fmt::Display;
 
-    /// Type of error emitted by the task
-
     /// Handles an event from one of multiple receivers.
-    async fn handle_event(&mut self, (event, id): (Self::Event, usize)) -> std::result::Result<(), Self::Error>;
+    async fn handle_event(
+        &mut self,
+        (event, id): (Self::Event, usize),
+    ) -> std::result::Result<(), Self::Error>;
 
     /// Check the result of the test.
     async fn check(&self) -> TestResult;
@@ -66,15 +67,21 @@ pub trait TestTaskState: Send {
 
 /// Type alias for type-erased [`TestTaskState`] to be used for
 /// dynamic dispatch
-pub type AnyTestTaskState<TYPES> =
-    Box<dyn TestTaskState<Event = hotshot_types::event::Event<TYPES>, Error = anyhow::Error> + Send + Sync>;
+pub type AnyTestTaskState<TYPES> = Box<
+    dyn TestTaskState<Event = hotshot_types::event::Event<TYPES>, Error = anyhow::Error>
+        + Send
+        + Sync,
+>;
 
 #[async_trait]
 impl<TYPES: NodeType> TestTaskState for AnyTestTaskState<TYPES> {
     type Event = Event<TYPES>;
     type Error = anyhow::Error;
 
-    async fn handle_event(&mut self, event: (Self::Event, usize)) -> std::result::Result<(), anyhow::Error> {
+    async fn handle_event(
+        &mut self,
+        event: (Self::Event, usize),
+    ) -> std::result::Result<(), anyhow::Error> {
         (**self).handle_event(event).await
     }
 

@@ -22,8 +22,8 @@ use hotshot_types::{
     traits::node_implementation::{NodeType, Versions},
     HotShotConfig, PeerConfig, ValidatorConfig,
 };
-use tide_disco::Url;
 use hotshot_utils::anytrace::*;
+use tide_disco::Url;
 use vec1::Vec1;
 
 use super::{

@@ -17,8 +17,8 @@ use hotshot_types::{
     message::UpgradeLock,
     traits::node_implementation::{ConsensusTime, NodeType, Versions},
 };
-use tokio::task::JoinHandle;
 use hotshot_utils::anytrace::*;
+use tokio::task::JoinHandle;
 
 use crate::{
     overall_safety_task::OverallSafetyPropertiesDescription,

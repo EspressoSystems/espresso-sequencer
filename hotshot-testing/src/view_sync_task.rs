@@ -9,8 +9,8 @@ use std::{collections::HashSet, marker::PhantomData, sync::Arc};
 use async_trait::async_trait;
 use hotshot_task_impls::events::HotShotEvent;
 use hotshot_types::traits::node_implementation::{NodeType, TestableNodeImplementation};
-use thiserror::Error;
 use hotshot_utils::anytrace::*;
+use thiserror::Error;
 
 use crate::test_task::{TestResult, TestTaskState};
 
