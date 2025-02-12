@@ -3,7 +3,6 @@ use hotshot_builder_api::v0_1::builder::{
     Error as BuilderApiError, Options as HotshotBuilderApiOptions,
 };
 use hotshot_builder_core::service::ProxyGlobalState;
-use hotshot_types::traits::node_implementation::Versions;
 use sequencer::SequencerApiVersion;
 use tide_disco::{App, Url};
 use tokio::spawn;
@@ -12,10 +11,10 @@ use vbs::version::{StaticVersion, StaticVersionType};
 pub mod non_permissioned;
 
 // It runs the api service for the builder
-pub fn run_builder_api_service<V: Versions>(url: Url, source: ProxyGlobalState<SeqTypes>) {
+pub fn run_builder_api_service(url: Url, source: ProxyGlobalState<SeqTypes>) {
     // it is to serve hotshot
     let builder_api =
-        hotshot_builder_api::v0_1::builder::define_api::<ProxyGlobalState<SeqTypes>, SeqTypes, V>(
+        hotshot_builder_api::v0_1::builder::define_api::<ProxyGlobalState<SeqTypes>, SeqTypes>(
             &HotshotBuilderApiOptions::default(),
         )
         .expect("Failed to construct the builder APIs");

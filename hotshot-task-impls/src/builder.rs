@@ -13,7 +13,7 @@ use hotshot_builder_api::v0_1::{
 use hotshot_types::{
     constants::LEGACY_BUILDER_MODULE,
     traits::{
-        node_implementation::{NodeType, Versions},
+        node_implementation::{NodeType},
         signature_key::SignatureKey,
     },
     vid::VidCommitment,
@@ -111,7 +111,7 @@ impl<TYPES: NodeType, Ver: StaticVersionType> BuilderClient<TYPES, Ver> {
     /// # Errors
     /// - [`BuilderClientError::BlockNotFound`] if blocks aren't available for this parent
     /// - [`BuilderClientError::Api`] if API isn't responding or responds incorrectly
-    pub async fn available_blocks<V: Versions>(
+    pub async fn available_blocks(
         &self,
         parent: VidCommitment,
         view_number: u64,

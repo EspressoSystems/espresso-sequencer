@@ -6,11 +6,11 @@
 
 use std::{collections::HashSet, marker::PhantomData, sync::Arc};
 
-use anyhow::Result;
 use async_trait::async_trait;
 use hotshot_task_impls::events::HotShotEvent;
 use hotshot_types::traits::node_implementation::{NodeType, TestableNodeImplementation};
 use thiserror::Error;
+use hotshot_utils::anytrace::*;
 
 use crate::test_task::{TestResult, TestTaskState};
 
@@ -36,6 +36,7 @@ impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> TestTaskState
     for ViewSyncTask<TYPES, I>
 {
     type Event = Arc<HotShotEvent<TYPES>>;
+    type Error = Error;
 
     /// Handles an event from one of multiple receivers.
     async fn handle_event(&mut self, (event, id): (Self::Event, usize)) -> Result<()> {

@@ -62,7 +62,6 @@ cross_tests!(
         };
         metadata.test_config.epoch_height = 0;
 
-        metadata.overall_safety_properties.num_failed_views = 0;
         metadata.overall_safety_properties.num_successful_views = 0;
         let mut config = DelayConfig::default();
         let delay_settings = DelaySettings {
@@ -95,7 +94,6 @@ cross_tests!(
         };
         metadata.test_config.epoch_height = 0;
 
-        metadata.overall_safety_properties.num_failed_views = 0;
         metadata.overall_safety_properties.num_successful_views = 10;
         let mut config = DelayConfig::default();
         let mut delay_settings = DelaySettings {
@@ -128,8 +126,6 @@ cross_tests!(
         let mut metadata = TestDescription::default_more_nodes().set_num_nodes(12,12);
         metadata.test_config.epoch_height = 0;
         metadata.test_config.num_bootstrap = 10;
-
-        metadata.overall_safety_properties.num_failed_views = 0;
 
         metadata.view_sync_properties = ViewSyncTaskDescription::Threshold(0, 0);
 

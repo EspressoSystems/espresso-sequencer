@@ -14,8 +14,8 @@ use hotshot_types::{
     },
     PeerConfig,
 };
-use hotshot_utils::anytrace::Result;
 use primitive_types::U256;
+use hotshot_utils::anytrace::Result;
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 /// The static committee election

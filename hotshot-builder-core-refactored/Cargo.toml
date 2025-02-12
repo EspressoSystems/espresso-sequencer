@@ -30,6 +30,7 @@ tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 vbs = { workspace = true }
+jf-vid = { workspace = true }
 
 [dev-dependencies]
 hotshot-example-types = { workspace = true }

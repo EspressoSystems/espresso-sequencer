@@ -7,7 +7,7 @@
 #![allow(clippy::unwrap_or_default)]
 use std::{collections::BTreeMap, marker::PhantomData};
 
-use anyhow::{bail, ensure, Context, Result};
+use async_broadcast::Sender;
 use async_trait::async_trait;
 use committable::Committable;
 use hotshot_example_types::block_types::TestBlockHeader;
@@ -17,11 +17,13 @@ use hotshot_types::{
     message::UpgradeLock,
     traits::node_implementation::{ConsensusTime, NodeType, Versions},
 };
+use tokio::task::JoinHandle;
+use hotshot_utils::anytrace::*;
 
 use crate::{
     overall_safety_task::OverallSafetyPropertiesDescription,
     test_builder::TransactionValidator,
-    test_task::{TestResult, TestTaskState},
+    test_task::{spawn_timeout_task, TestEvent, TestResult, TestTaskState},
 };
 
 /// Map from views to leaves for a single node, allowing multiple leaves for each view (because the node may a priori send us multiple leaves for a given view).
@@ -100,7 +102,12 @@ async fn validate_node_map<TYPES: NodeType, V: Versions>(
         child
             .extends_upgrade(parent, &upgrade_lock.decided_upgrade_certificate)
             .await
-            .context("Leaf {child} does not extend its parent {parent}")?;
+            .context(|e| {
+                error!(
+                    "Leaf {child:?} does not extend its parent {parent:?}: {}",
+                    e
+                )
+            })?;
 
         // We want to make sure the commitment matches,
         // but allow for the possibility that we may have skipped views in between.
@@ -138,7 +145,7 @@ fn sanitize_network_map<TYPES: NodeType>(
         result.insert(
             *node,
             sanitize_node_map(node_map)
-                .context(format!("Node {node} produced inconsistent leaves."))?,
+                .context(|e| error!("Node {node} produced inconsistent leaves: {}", e))?,
         );
     }
 
@@ -159,7 +166,7 @@ async fn invert_network_map<TYPES: NodeType, V: Versions>(
     for (node_id, node_map) in network_map.iter() {
         validate_node_map::<TYPES, V>(node_map)
             .await
-            .context(format!("Node {node_id} has an invalid leaf history"))?;
+            .context(|e| error!("Node {node_id} has an invalid leaf history: {}", e))?;
 
         // validate each node's leaf map
         for (view, leaf) in node_map.iter() {
@@ -186,9 +193,13 @@ fn sanitize_view_map<TYPES: NodeType>(
 
         ensure!(
             node_leaves.len() <= 1,
-            leaf_map.iter().fold(
-                format!("The network does not agree on view {view:?}."),
-                |acc, (node, leaf)| { format!("{acc}\n\nNode {node} sent us leaf:\n\n{leaf:?}") }
+            error!(
+                "The network does not agree on the following views: {}",
+                leaf_map
+                    .iter()
+                    .fold(format!("\n\nView {view:?}:"), |acc, (node, leaf)| {
+                        format!("{acc}\n\nNode {node} sent us leaf:\n\n{leaf:?}")
+                    })
             )
         );
 
@@ -207,18 +218,29 @@ fn sanitize_view_map<TYPES: NodeType>(
     Ok(result)
 }
 
+enum TestProgress {
+    Incomplete,
+    Finished,
+}
+
 /// Data availability task state
 pub struct ConsistencyTask<TYPES: NodeType, V: Versions> {
     /// A map from node ids to (leaves keyed on view number)
     pub consensus_leaves: NetworkMap<TYPES>,
     /// safety task requirements
-    pub safety_properties: OverallSafetyPropertiesDescription<TYPES>,
+    pub safety_properties: OverallSafetyPropertiesDescription,
     /// whether we should have seen an upgrade certificate or not
     pub ensure_upgrade: bool,
+    /// a list of errors accumulated by the task
+    pub errors: Vec<Error>,
+    /// channel used to shutdown the test
+    pub test_sender: Sender<TestEvent>,
     /// phantom marker
     pub _pd: PhantomData<V>,
     /// function used to validate the number of transactions committed in each block
     pub validate_transactions: TransactionValidator,
+    /// running timeout task
+    pub timeout_task: JoinHandle<()>,
 }
 
 impl<TYPES: NodeType<BlockHeader = TestBlockHeader>, V: Versions> ConsistencyTask<TYPES, V> {
@@ -228,6 +250,15 @@ impl<TYPES: NodeType<BlockHeader = TestBlockHeader>, V: Versions> ConsistencyTas
         let inverted_map = invert_network_map::<TYPES, V>(&sanitized_network_map).await?;
 
         let sanitized_view_map = sanitize_view_map(&inverted_map)?;
+        let num_successful_views = sanitized_view_map.iter().len();
+
+        // check that we've succeeded in enough views
+        ensure!(
+            num_successful_views >= self.safety_properties.num_successful_views,
+            "Not enough successful views: expected {:?} but got {:?}",
+            self.safety_properties.num_successful_views,
+            num_successful_views,
+        );
 
         let expected_upgrade = self.ensure_upgrade;
         let actual_upgrade = sanitized_view_map.iter().fold(false, |acc, (_view, leaf)| {
@@ -253,6 +284,90 @@ impl<TYPES: NodeType<BlockHeader = TestBlockHeader>, V: Versions> ConsistencyTas
 
         Ok(())
     }
+
+    async fn partial_validate(&self) -> Result<TestProgress> {
+        self.check_view_success().await?;
+        self.check_view_failure().await?;
+
+        self.check_total_successes().await
+    }
+
+    fn add_error(&mut self, error: Error) {
+        self.errors.push(error);
+    }
+
+    async fn handle_result(&mut self, result: Result<TestProgress>) {
+        match result {
+            Ok(TestProgress::Finished) => {
+                let _ = self.test_sender.broadcast(TestEvent::Shutdown).await;
+            }
+            Err(e) => {
+                self.add_error(e);
+                let _ = self.test_sender.broadcast(TestEvent::Shutdown).await;
+            }
+            Ok(TestProgress::Incomplete) => {}
+        }
+    }
+
+    async fn check_total_successes(&self) -> Result<TestProgress> {
+        let sanitized_network_map = sanitize_network_map(&self.consensus_leaves)?;
+
+        let inverted_map = invert_network_map::<TYPES, V>(&sanitized_network_map).await?;
+
+        if inverted_map.len() >= self.safety_properties.num_successful_views {
+            Ok(TestProgress::Finished)
+        } else {
+            Ok(TestProgress::Incomplete)
+        }
+    }
+    pub async fn check_view_success(&self) -> Result<()> {
+        for (node_id, node_map) in self.consensus_leaves.iter() {
+            for (view, leaf) in node_map {
+                ensure!(
+                    !self
+                        .safety_properties
+                        .expected_view_failures
+                        .contains(view),
+                    "Expected a view failure, but got a decided leaf for view {:?} from node {:?}.\n\nLeaf:\n\n{:?}",
+                    view,
+                    node_id,
+                    leaf
+                );
+            }
+        }
+
+        Ok(())
+    }
+
+    pub async fn check_view_failure(&self) -> Result<()> {
+        let sanitized_network_map = sanitize_network_map(&self.consensus_leaves)?;
+
+        let mut inverted_map = invert_network_map::<TYPES, V>(&sanitized_network_map).await?;
+
+        let (current_view, _) = inverted_map
+            .pop_last()
+            .context(error!("Leaf map is empty, which should be impossible"))?;
+        let Some((last_view, _)) = inverted_map.pop_last() else {
+            // the view cannot fail if there wasn't a prior view in the map.
+            return Ok(());
+        };
+
+        // filter out views we expected to (possibly) fail
+        let unexpected_failed_views: Vec<_> = (*(last_view + 1)..*current_view)
+            .filter(|view| {
+                !self.safety_properties.expected_view_failures.contains(view)
+                    && !self.safety_properties.possible_view_failures.contains(view)
+            })
+            .collect();
+
+        ensure!(
+            unexpected_failed_views.is_empty(),
+            "Unexpected failed views: {:?}",
+            unexpected_failed_views
+        );
+
+        Ok(())
+    }
 }
 
 #[async_trait]
@@ -260,6 +375,7 @@ impl<TYPES: NodeType<BlockHeader = TestBlockHeader>, V: Versions> TestTaskState
     for ConsistencyTask<TYPES, V>
 {
     type Event = Event<TYPES>;
+    type Error = Error;
 
     /// Handles an event from one of multiple receivers.
     async fn handle_event(&mut self, (message, id): (Self::Event, usize)) -> Result<()> {
@@ -268,23 +384,46 @@ impl<TYPES: NodeType<BlockHeader = TestBlockHeader>, V: Versions> TestTaskState
             ..
         } = message
         {
-            let map = &mut self.consensus_leaves.entry(id).or_insert(BTreeMap::new());
+            {
+                let mut timeout_task = spawn_timeout_task(
+                    self.test_sender.clone(),
+                    self.safety_properties.decide_timeout,
+                );
 
-            leaf_chain.iter().for_each(|leaf_info| {
+                std::mem::swap(&mut self.timeout_task, &mut timeout_task);
+
+                timeout_task.abort();
+            }
+
+            for leaf_info in leaf_chain.iter().rev() {
+                let map = &mut self.consensus_leaves.entry(id).or_insert(BTreeMap::new());
+
                 map.entry(leaf_info.leaf.view_number())
                     .and_modify(|vec| vec.push(leaf_info.leaf.clone()))
                     .or_insert(vec![leaf_info.leaf.clone()]);
-            });
+
+                let result = self.partial_validate().await;
+
+                self.handle_result(result).await;
+            }
         }
 
         Ok(())
     }
 
     async fn check(&self) -> TestResult {
+        self.timeout_task.abort();
+
+        let mut errors: Vec<_> = self.errors.iter().map(|e| e.to_string()).collect();
+
         if let Err(e) = self.validate().await {
-            return TestResult::Fail(Box::new(e));
+            errors.push(e.to_string());
         }
 
-        TestResult::Pass
+        if !errors.is_empty() {
+            TestResult::Fail(Box::new(errors))
+        } else {
+            TestResult::Pass
+        }
     }
 }

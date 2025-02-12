@@ -155,6 +155,18 @@ pub fn vid_commitment<V: Versions>(
     num_storage_nodes: usize,
     _version: Version,
 ) -> <VidSchemeType as VidScheme>::Commit {
+  advz_commitment(encoded_transactions, num_storage_nodes)
+}
+
+/// Compute the VID payload commitment using the (old) ADVZ VID scheme
+/// # Panics
+/// If the VID computation fails.
+#[must_use]
+#[allow(clippy::panic)]
+pub fn advz_commitment(
+    encoded_transactions: &[u8],
+    num_storage_nodes: usize,
+) -> <VidSchemeType as VidScheme>::Commit {
     let encoded_tx_len = encoded_transactions.len();
     advz_scheme(num_storage_nodes).commit_only(encoded_transactions).unwrap_or_else(|err| panic!("VidScheme::commit_only failure:(num_storage_nodes,payload_byte_len)=({num_storage_nodes},{encoded_tx_len}) error: {err}"))
 }

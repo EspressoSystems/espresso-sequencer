@@ -15,7 +15,7 @@ use hotshot_builder_api::v0_1::builder::BuildError;
 use hotshot_builder_api::v0_1::data_source::AcceptsTxnSubmits;
 use hotshot_builder_api::v0_1::{block_info::AvailableBlockInfo, data_source::BuilderDataSource};
 use hotshot_example_types::block_types::TestTransaction;
-use hotshot_example_types::node_types::{TestTypes, TestVersions};
+use hotshot_example_types::node_types::{TestTypes};
 use hotshot_task_impls::builder::v0_1::BuilderClient;
 use hotshot_types::data::ViewNumber;
 use hotshot_types::traits::node_implementation::{ConsensusTime, NodeType};
@@ -72,7 +72,7 @@ impl TestServiceWrapper {
         let port = portpicker::pick_unused_port().unwrap();
         let url: Url = format!("http://localhost:{port}").parse().unwrap();
         let app = Arc::clone(&global_state)
-            .into_app::<TestVersions>()
+            .into_app()
             .unwrap();
         spawn(app.serve(url.clone(), StaticVersion::<0, 1> {}));
         let client = BuilderClient::new(url);
@@ -93,7 +93,7 @@ impl TestServiceWrapper {
         state_id: &BuilderStateId<TestTypes>,
     ) -> Result<Vec<AvailableBlockInfo<TestTypes>>, BuildError> {
         self.proxy_global_state
-            .available_blocks::<TestVersions>(
+            .available_blocks(
                 &state_id.parent_commitment,
                 *state_id.parent_view,
                 MOCK_LEADER_KEYS.0,
@@ -131,7 +131,7 @@ impl TestServiceWrapper {
     ) -> Vec<TestTransaction> {
         let mut available_states = self
             .client
-            .available_blocks::<TestVersions>(
+            .available_blocks(
                 state_id.parent_commitment,
                 *state_id.parent_view,
                 MOCK_LEADER_KEYS.0,
