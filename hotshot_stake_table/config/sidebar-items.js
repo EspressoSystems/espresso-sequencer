@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["STAKE_TABLE_CAPACITY"]};
