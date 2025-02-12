@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"constant":["BINARY_TYPE","MAX_FN"]};

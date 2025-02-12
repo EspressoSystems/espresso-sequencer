@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["ExecutionError"],"mod":["test"],"struct":["SolverAuctionResultsProvider"],"type":["SurfClient"]};

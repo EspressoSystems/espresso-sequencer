@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":["setup_test","sleep"],"mod":["consensus","mocks"]};
