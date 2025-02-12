@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":["test_drop_tx","test_reset","test_revert"]};

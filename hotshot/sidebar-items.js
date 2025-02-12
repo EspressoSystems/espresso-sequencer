@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"constant":["H_256","H_512"],"enum":["HotShotError"],"mod":["documentation","helpers","tasks","traits","types"],"struct":["DoubleTwinsHandler","HotShotInitializer","MarketplaceConfig","RandomTwinsHandler","SystemContext"],"trait":["TwinsHandlerState"],"type":["Channel"]};

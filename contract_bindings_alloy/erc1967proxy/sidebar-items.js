@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"mod":["ERC1967Proxy"]};
