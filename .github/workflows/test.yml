@@ -19,7 +19,6 @@ concurrency:
 
 env:
   RUST_LOG: info,libp2p=off,node=error
-  RUSTFLAGS: "--cfg feature=\"fee\" --cfg feature=\"marketplace\""
   CARGO_TERM_COLOR: always
   # Save the process compose logs
   PC_LOGS: /tmp/pc.log

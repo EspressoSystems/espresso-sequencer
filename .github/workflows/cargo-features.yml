@@ -19,7 +19,7 @@ concurrency:
 
 jobs:
   cargo-features:
-    runs-on: buildjet-8vcpu-ubuntu-2204
+    runs-on: ubuntu-latest
     steps:
       - uses: taiki-e/install-action@cargo-hack
 
