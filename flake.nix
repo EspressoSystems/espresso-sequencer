@@ -190,7 +190,6 @@
             protobuf # to compile libp2p-autonat
             stableToolchain
             jq
-            sqlite
 
             # Rust tools
             cargo-audit
