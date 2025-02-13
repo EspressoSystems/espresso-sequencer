@@ -98,6 +98,20 @@ impl NodeState {
     }
 
     #[cfg(any(test, feature = "testing"))]
+    pub fn mock_v3() -> Self {
+        use vbs::version::StaticVersion;
+
+        Self::new(
+            0,
+            ChainConfig::default(),
+            L1Client::new(vec!["http://localhost:3331".parse().unwrap()])
+                .expect("Failed to create L1 client"),
+            mock::MockStateCatchup::default(),
+            StaticVersion::<0, 3>::version(),
+        )
+    }
+
+    #[cfg(any(test, feature = "testing"))]
     pub fn mock_v99() -> Self {
         use vbs::version::StaticVersion;
 
