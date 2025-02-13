@@ -287,7 +287,7 @@ async fn test_signature_checks() {
     {
         // Verification  should fail if signature is over incorrect data
         let err = test_service
-            .available_blocks::<TestVersions>(
+            .available_blocks(
                 &vid_commitment,
                 0,
                 expected_signing_keys.0,
@@ -300,7 +300,7 @@ async fn test_signature_checks() {
 
         // Verification  should also fail if signature is over correct data but by incorrect key
         let err = test_service
-            .available_blocks::<TestVersions>(
+            .available_blocks(
                 &vid_commitment,
                 0,
                 expected_signing_keys.0,

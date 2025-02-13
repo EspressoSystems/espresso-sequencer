@@ -4,7 +4,7 @@ use hotshot_builder_api::v0_1::{
     builder::{define_api, submit_api, BuildError, Error as BuilderApiError, TransactionStatus},
     data_source::{AcceptsTxnSubmits, BuilderDataSource},
 };
-use hotshot_types::traits::EncodeBytes;
+use hotshot_types::traits::{block_contents::advz_commitment, EncodeBytes};
 use hotshot_types::traits::{block_contents::Transaction, node_implementation::Versions};
 use hotshot_types::{
     event::EventType,
@@ -16,21 +16,20 @@ use hotshot_types::{
     utils::BuilderCommitment,
     vid::VidCommitment,
 };
+
 use marketplace_builder_shared::coordinator::BuilderStateLookup;
 use marketplace_builder_shared::error::Error;
 use marketplace_builder_shared::state::BuilderState;
 use marketplace_builder_shared::utils::{BuilderKeys, WaitAndKeep};
+use marketplace_builder_shared::{
+    block::{BlockId, BuilderStateId, ReceivedTransaction, TransactionSource},
+    coordinator::BuilderStateCoordinator,
+};
 use tide_disco::app::AppError;
 use tokio::spawn;
 use tokio::time::{sleep, timeout};
 use tracing::{error, info, instrument, trace, warn};
 use vbs::version::StaticVersion;
-use vbs::version::StaticVersionType;
-
-use marketplace_builder_shared::{
-    block::{BlockId, BuilderStateId, ReceivedTransaction, TransactionSource},
-    coordinator::BuilderStateCoordinator,
-};
 
 use crate::block_size_limits::BlockSizeLimits;
 use crate::block_store::{BlockInfo, BlockStore};
@@ -242,7 +241,7 @@ where
         self: Arc<Self>,
     ) -> Result<App<ProxyGlobalState<Types>, BuilderApiError>, AppError> {
         let proxy = ProxyGlobalState(self);
-        let builder_api = define_api::<ProxyGlobalState<Types>, Types, V>(&Default::default())?;
+        let builder_api = define_api::<ProxyGlobalState<Types>, Types>(&Default::default())?;
 
         // TODO: Replace StaticVersion with proper constant when added in HotShot
         let private_mempool_api =
@@ -296,7 +295,7 @@ where
     ///
     /// Returns None if there are no transactions to include
     /// and we aren't prioritizing finalization for this builder state
-    pub(crate) async fn build_block<V: Versions>(
+    pub(crate) async fn build_block(
         &self,
         builder_state: Arc<BuilderState<Types>>,
     ) -> Result<Option<BlockInfo<Types>>, Error<Types>> {
@@ -404,13 +403,9 @@ where
         let num_nodes = self.num_nodes.load(Ordering::Relaxed);
 
         let fut = async move {
-            let join_handle = tokio::task::spawn_blocking(move || {
-                hotshot_types::traits::block_contents::vid_commitment::<V>(
-                    &encoded_txns,
-                    num_nodes,
-                    <V as Versions>::Base::VERSION,
-                )
-            });
+            let join_handle =
+                tokio::task::spawn_blocking(move || advz_commitment(&encoded_txns, num_nodes));
+
             join_handle.await.unwrap()
         };
 
@@ -434,7 +429,7 @@ where
     #[instrument(skip_all,
         fields(state_id = %state_id)
     )]
-    pub(crate) async fn available_blocks_implementation<V: Versions>(
+    pub(crate) async fn available_blocks_implementation(
         &self,
         state_id: BuilderStateId<Types>,
     ) -> Result<Vec<AvailableBlockInfo<Types>>, Error<Types>> {
@@ -479,7 +474,7 @@ where
             .max_api_waiting_time
             .saturating_sub(start.elapsed())
             .div_f32(1.1);
-        match timeout(build_block_timeout, self.build_block::<V>(builder))
+        match timeout(build_block_timeout, self.build_block(builder))
             .await
             .map_err(|_| Error::ApiTimeout)
         {
@@ -639,7 +634,7 @@ where
     for<'a> <Types::SignatureKey as TryFrom<&'a TaggedBase64>>::Error: Display,
 {
     #[tracing::instrument(skip_all)]
-    async fn available_blocks<V: Versions>(
+    async fn available_blocks(
         &self,
         parent_block: &VidCommitment,
         parent_view: u64,
@@ -661,7 +656,7 @@ where
 
         let available_blocks = timeout(
             self.max_api_waiting_time,
-            self.available_blocks_implementation::<V>(state_id),
+            self.available_blocks_implementation(state_id),
         )
         .await
         .map_err(|_| Error::<Types>::ApiTimeout)??;

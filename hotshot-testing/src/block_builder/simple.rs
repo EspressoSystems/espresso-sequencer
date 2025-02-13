@@ -211,7 +211,7 @@ impl<TYPES: NodeType> v0_1::data_source::BuilderDataSource<TYPES> for SimpleBuil
 where
     <TYPES as NodeType>::InstanceState: Default,
 {
-    async fn available_blocks<V: Versions>(
+    async fn available_blocks(
         &self,
         _for_parent: &VidCommitment,
         _view_number: u64,
@@ -343,7 +343,6 @@ impl<TYPES: NodeType> SimpleBuilderSource<TYPES> {
         let builder_api_0_1 = hotshot_builder_api::v0_1::builder::define_api::<
             SimpleBuilderSource<TYPES>,
             TYPES,
-            TestVersions,
         >(&Options::default())
         .expect("Failed to construct the builder API");
 

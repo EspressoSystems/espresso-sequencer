@@ -93,7 +93,7 @@ impl TestServiceWrapper {
         state_id: &BuilderStateId<TestTypes>,
     ) -> Result<Vec<AvailableBlockInfo<TestTypes>>, BuildError> {
         self.proxy_global_state
-            .available_blocks::<TestVersions>(
+            .available_blocks(
                 &state_id.parent_commitment,
                 *state_id.parent_view,
                 MOCK_LEADER_KEYS.0,

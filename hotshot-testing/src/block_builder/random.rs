@@ -274,7 +274,7 @@ impl<TYPES: NodeType> ReadState for RandomBuilderSource<TYPES> {
 
 #[async_trait]
 impl<TYPES: NodeType> BuilderDataSource<TYPES> for RandomBuilderSource<TYPES> {
-    async fn available_blocks<V: Versions>(
+    async fn available_blocks(
         &self,
         _for_parent: &VidCommitment,
         _view_number: u64,
