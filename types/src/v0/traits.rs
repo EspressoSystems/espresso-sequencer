@@ -10,8 +10,8 @@ use hotshot::{types::EventType, HotShotInitializer};
 use hotshot_types::{
     consensus::CommitmentMap,
     data::{
-        DaProposal, QuorumProposal, QuorumProposal2, QuorumProposalWrapper, VidDisperseShare,
-        ViewNumber,
+        vid_disperse::ADVZDisperseShare, DaProposal, EpochNumber, QuorumProposal, QuorumProposal2,
+        QuorumProposalWrapper, ViewNumber,
     },
     event::{HotShotAction, LeafInfo},
     message::{convert_proposal, Proposal},
@@ -31,12 +31,11 @@ use jf_vid::VidScheme;
 use serde::{de::DeserializeOwned, Serialize};
 
 use crate::{
-    v0::impls::ValidatedState, v0_99::ChainConfig, BackoffParams, BlockMerkleTree, Event,
-    FeeAccount, FeeAccountProof, FeeMerkleCommitment, FeeMerkleTree, Leaf2, NetworkConfig,
-    SeqTypes,
+    v0::impls::ValidatedState, v0_99::ChainConfig, BlockMerkleTree, Event, FeeAccount,
+    FeeAccountProof, FeeMerkleCommitment, FeeMerkleTree, Leaf2, NetworkConfig, SeqTypes,
 };
 
-use super::{impls::NodeState, Leaf};
+use super::{impls::NodeState, utils::BackoffParams, Leaf};
 
 #[async_trait]
 pub trait StateCatchup: Send + Sync {
@@ -462,7 +461,7 @@ pub trait SequencerPersistence: Sized + Send + Sync + Clone + 'static {
     async fn load_vid_share(
         &self,
         view: ViewNumber,
-    ) -> anyhow::Result<Option<Proposal<SeqTypes, VidDisperseShare<SeqTypes>>>>;
+    ) -> anyhow::Result<Option<Proposal<SeqTypes, ADVZDisperseShare<SeqTypes>>>>;
     async fn load_da_proposal(
         &self,
         view: ViewNumber,
@@ -523,7 +522,7 @@ pub trait SequencerPersistence: Sized + Send + Sync + Clone + 'static {
             None => {
                 tracing::info!("no saved leaf, starting from genesis leaf");
                 (
-                    hotshot_types::data::Leaf::genesis(&genesis_validated_state, &state)
+                    hotshot_types::data::Leaf::genesis::<V>(&genesis_validated_state, &state)
                         .await
                         .into(),
                     QuorumCertificate::genesis::<V>(&genesis_validated_state, &state)
@@ -670,14 +669,19 @@ pub trait SequencerPersistence: Sized + Send + Sync + Clone + 'static {
     ) -> anyhow::Result<Option<(Leaf2, QuorumCertificate2<SeqTypes>)>>;
     async fn append_vid(
         &self,
-        proposal: &Proposal<SeqTypes, VidDisperseShare<SeqTypes>>,
+        proposal: &Proposal<SeqTypes, ADVZDisperseShare<SeqTypes>>,
     ) -> anyhow::Result<()>;
     async fn append_da(
         &self,
         proposal: &Proposal<SeqTypes, DaProposal<SeqTypes>>,
         vid_commit: <VidSchemeType as VidScheme>::Commit,
     ) -> anyhow::Result<()>;
-    async fn record_action(&self, view: ViewNumber, action: HotShotAction) -> anyhow::Result<()>;
+    async fn record_action(
+        &self,
+        view: ViewNumber,
+        epoch: Option<EpochNumber>,
+        action: HotShotAction,
+    ) -> anyhow::Result<()>;
     async fn update_undecided_state(
         &self,
         leaves: CommitmentMap<Leaf2>,
@@ -745,7 +749,7 @@ impl EventConsumer for NullEventConsumer {
 impl<P: SequencerPersistence> Storage<SeqTypes> for Arc<P> {
     async fn append_vid(
         &self,
-        proposal: &Proposal<SeqTypes, VidDisperseShare<SeqTypes>>,
+        proposal: &Proposal<SeqTypes, ADVZDisperseShare<SeqTypes>>,
     ) -> anyhow::Result<()> {
         (**self).append_vid(proposal).await
     }
@@ -758,8 +762,13 @@ impl<P: SequencerPersistence> Storage<SeqTypes> for Arc<P> {
         (**self).append_da(proposal, vid_commit).await
     }
 
-    async fn record_action(&self, view: ViewNumber, action: HotShotAction) -> anyhow::Result<()> {
-        (**self).record_action(view, action).await
+    async fn record_action(
+        &self,
+        view: ViewNumber,
+        epoch: Option<EpochNumber>,
+        action: HotShotAction,
+    ) -> anyhow::Result<()> {
+        (**self).record_action(view, epoch, action).await
     }
 
     async fn update_high_qc(&self, _high_qc: QuorumCertificate<SeqTypes>) -> anyhow::Result<()> {

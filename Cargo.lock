@@ -1798,6 +1798,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "bindgen"
+version = "0.71.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5f58bf3d7db68cfbac37cfc485a8d711e87e064c3d0fe0435b92f7a407f9d6b3"
+dependencies = [
+ "bitflags 2.6.0",
+ "cexpr",
+ "clang-sys",
+ "itertools 0.11.0",
+ "log",
+ "prettyplease",
+ "proc-macro2",
+ "quote",
+ "regex",
+ "rustc-hash",
+ "shlex",
+ "syn 2.0.95",
+]
+
+[[package]]
 name = "bit-set"
 version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2328,6 +2348,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "cexpr"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6fac387a98bb7c37292057cffc56d62ecb629900026402633ae9160df93a8766"
+dependencies = [
+ "nom",
+]
+
+[[package]]
 name = "cfg-if"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2378,6 +2407,17 @@ name = "circular-buffer"
 version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b67261db007b5f4cf8cba393c1a5c511a5cc072339ce16e12aeba1d7b9b77946"
+
+[[package]]
+name = "clang-sys"
+version = "1.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0b023947811758c97c59bf9d1c188fd619ad4718dcaa767947df1cadb14f39f4"
+dependencies = [
+ "glob",
+ "libc",
+ "libloading",
+]
 
 [[package]]
 name = "clap"
@@ -2438,6 +2478,15 @@ dependencies = [
  "tokio",
  "tracing",
  "vbs",
+]
+
+[[package]]
+name = "cmake"
+version = "0.1.53"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e24a03c8b52922d68a1589ad61032f2c1aa5a8158d2aa0d93c6e9534944bbad6"
+dependencies = [
+ "cc",
 ]
 
 [[package]]
@@ -3626,6 +3675,7 @@ dependencies = [
  "contract-bindings-alloy",
  "contract-bindings-ethers",
  "derive_more 1.0.0",
+ "espresso-types",
  "ethers",
  "ethers-conv",
  "fluent-asserter",
@@ -4689,9 +4739,9 @@ checksum = "b07f60793ff0a4d9cef0f18e63b5357e06209987153a64648c972c1e5aff336f"
 
 [[package]]
 name = "hickory-proto"
-version = "0.24.2"
+version = "0.24.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "447afdcdb8afb9d0a852af6dc65d9b285ce720ed7a59e42a8bf2e931c67bc1b5"
+checksum = "2ad3d6d98c648ed628df039541a5577bee1a7c83e9e16fe3dbedeea4cdfeb971"
 dependencies = [
  "async-trait",
  "cfg-if",
@@ -4814,8 +4864,7 @@ dependencies = [
 
 [[package]]
 name = "hotshot"
-version = "0.5.84"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.84#310553bfe3333cb16592941043191e3b7e1b5dbf"
+version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4833,11 +4882,12 @@ dependencies = [
  "derive_more 1.0.0",
  "either",
  "futures",
+ "hotshot-libp2p-networking",
  "hotshot-task",
  "hotshot-task-impls",
  "hotshot-types",
+ "hotshot-utils",
  "libp2p-identity",
- "libp2p-networking",
  "lru 0.12.5",
  "num_enum",
  "parking_lot",
@@ -4851,7 +4901,6 @@ dependencies = [
  "tracing",
  "tracing-subscriber 0.3.19",
  "url",
- "utils",
  "vbs",
  "workspace-hack",
 ]
@@ -4859,7 +4908,6 @@ dependencies = [
 [[package]]
 name = "hotshot-builder-api"
 version = "0.1.7"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.84#310553bfe3333cb16592941043191e3b7e1b5dbf"
 dependencies = [
  "async-trait",
  "clap",
@@ -4869,7 +4917,7 @@ dependencies = [
  "hotshot-types",
  "serde",
  "tagged-base64",
- "thiserror 2.0.10",
+ "thiserror 1.0.69",
  "tide-disco",
  "toml 0.8.19",
  "vbs",
@@ -4878,6 +4926,44 @@ dependencies = [
 
 [[package]]
 name = "hotshot-builder-core"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-broadcast",
+ "async-lock 3.4.0",
+ "async-trait",
+ "atomic",
+ "bincode",
+ "bytemuck",
+ "coarsetime",
+ "committable",
+ "derive_more 1.0.0",
+ "futures",
+ "hotshot",
+ "hotshot-builder-api",
+ "hotshot-example-types",
+ "hotshot-macros",
+ "hotshot-task-impls",
+ "hotshot-testing",
+ "hotshot-types",
+ "lru 0.12.5",
+ "marketplace-builder-shared",
+ "num_cpus",
+ "portpicker",
+ "serde",
+ "sha2 0.10.8",
+ "tagged-base64",
+ "tide-disco",
+ "tokio",
+ "tracing",
+ "tracing-subscriber 0.3.19",
+ "tracing-test 0.1.0",
+ "url",
+ "vbs",
+]
+
+[[package]]
+name = "hotshot-builder-core-refactored"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -4968,8 +5054,7 @@ dependencies = [
 
 [[package]]
 name = "hotshot-example-types"
-version = "0.5.84"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.84#310553bfe3333cb16592941043191e3b7e1b5dbf"
+version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-lock 3.4.0",
@@ -4984,7 +5069,7 @@ dependencies = [
  "serde",
  "sha2 0.10.8",
  "sha3",
- "thiserror 2.0.10",
+ "thiserror 1.0.69",
  "time 0.3.37",
  "tokio",
  "url",
@@ -4993,9 +5078,41 @@ dependencies = [
 ]
 
 [[package]]
+name = "hotshot-examples"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-lock 3.4.0",
+ "async-trait",
+ "cdn-broker 0.4.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.5.6)",
+ "cdn-marshal 0.4.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.5.6)",
+ "chrono",
+ "clap",
+ "futures",
+ "hotshot",
+ "hotshot-example-types",
+ "hotshot-libp2p-networking",
+ "hotshot-orchestrator",
+ "hotshot-testing",
+ "hotshot-types",
+ "local-ip-address",
+ "portpicker",
+ "rand 0.8.5",
+ "serde",
+ "sha2 0.10.8",
+ "surf-disco",
+ "time 0.3.37",
+ "tokio",
+ "toml 0.8.19",
+ "tracing",
+ "tracing-subscriber 0.3.19",
+ "url",
+ "workspace-hack",
+]
+
+[[package]]
 name = "hotshot-fakeapi"
-version = "0.5.84"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.84#310553bfe3333cb16592941043191e3b7e1b5dbf"
+version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-lock 3.4.0",
@@ -5012,9 +5129,37 @@ dependencies = [
 ]
 
 [[package]]
+name = "hotshot-libp2p-networking"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-lock 3.4.0",
+ "async-trait",
+ "bincode",
+ "blake3",
+ "cbor4ii 1.0.0",
+ "delegate",
+ "derive_builder",
+ "derive_more 1.0.0",
+ "futures",
+ "hotshot-example-types",
+ "hotshot-types",
+ "lazy_static",
+ "libp2p",
+ "libp2p-identity",
+ "libp2p-swarm-derive",
+ "pin-project",
+ "rand 0.8.5",
+ "serde",
+ "tokio",
+ "tracing",
+ "tracing-subscriber 0.3.19",
+ "workspace-hack",
+]
+
+[[package]]
 name = "hotshot-macros"
-version = "0.5.84"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.84#310553bfe3333cb16592941043191e3b7e1b5dbf"
+version = "0.1.0"
 dependencies = [
  "derive_builder",
  "proc-macro2",
@@ -5025,8 +5170,7 @@ dependencies = [
 
 [[package]]
 name = "hotshot-orchestrator"
-version = "0.5.84"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.84#310553bfe3333cb16592941043191e3b7e1b5dbf"
+version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-lock 3.4.0",
@@ -5106,8 +5250,7 @@ dependencies = [
 
 [[package]]
 name = "hotshot-stake-table"
-version = "0.5.84"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.84#310553bfe3333cb16592941043191e3b7e1b5dbf"
+version = "0.1.0"
 dependencies = [
  "ark-bn254",
  "ark-ed-on-bn254",
@@ -5121,6 +5264,7 @@ dependencies = [
  "jf-signature 0.2.0",
  "jf-utils",
  "primitive-types",
+ "rand_chacha 0.3.1",
  "serde",
  "tagged-base64",
  "workspace-hack",
@@ -5169,22 +5313,20 @@ dependencies = [
 
 [[package]]
 name = "hotshot-task"
-version = "0.5.84"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.84#310553bfe3333cb16592941043191e3b7e1b5dbf"
+version = "0.1.0"
 dependencies = [
  "async-broadcast",
  "async-trait",
  "futures",
+ "hotshot-utils",
  "tokio",
  "tracing",
- "utils",
  "workspace-hack",
 ]
 
 [[package]]
 name = "hotshot-task-impls"
-version = "0.5.84"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.84#310553bfe3333cb16592941043191e3b7e1b5dbf"
+version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -5198,6 +5340,7 @@ dependencies = [
  "hotshot-builder-api",
  "hotshot-task",
  "hotshot-types",
+ "hotshot-utils",
  "jf-vid",
  "lru 0.12.5",
  "rand 0.8.5",
@@ -5205,12 +5348,11 @@ dependencies = [
  "sha2 0.10.8",
  "surf-disco",
  "tagged-base64",
- "thiserror 2.0.10",
+ "thiserror 1.0.69",
  "time 0.3.37",
  "tokio",
  "tracing",
  "url",
- "utils",
  "vbs",
  "vec1",
  "workspace-hack",
@@ -5218,8 +5360,7 @@ dependencies = [
 
 [[package]]
 name = "hotshot-testing"
-version = "0.5.84"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.84#310553bfe3333cb16592941043191e3b7e1b5dbf"
+version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -5248,7 +5389,7 @@ dependencies = [
  "serde",
  "sha2 0.10.8",
  "tagged-base64",
- "thiserror 2.0.10",
+ "thiserror 1.0.69",
  "tide-disco",
  "tokio",
  "tracing",
@@ -5261,7 +5402,6 @@ dependencies = [
 [[package]]
 name = "hotshot-types"
 version = "0.1.11"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.84#310553bfe3333cb16592941043191e3b7e1b5dbf"
 dependencies = [
  "anyhow",
  "ark-bn254",
@@ -5283,6 +5423,7 @@ dependencies = [
  "dyn-clone",
  "either",
  "futures",
+ "hotshot-utils",
  "jf-pcs",
  "jf-signature 0.2.0",
  "jf-utils",
@@ -5301,16 +5442,23 @@ dependencies = [
  "serde_json",
  "sha2 0.10.8",
  "tagged-base64",
- "thiserror 2.0.10",
+ "thiserror 1.0.69",
  "time 0.3.37",
  "tokio",
  "toml 0.8.19",
  "tracing",
  "typenum",
  "url",
- "utils",
  "vbs",
  "vec1",
+ "workspace-hack",
+]
+
+[[package]]
+name = "hotshot-utils"
+version = "0.1.0"
+dependencies = [
+ "tracing",
  "workspace-hack",
 ]
 
@@ -5441,7 +5589,7 @@ dependencies = [
  "httpdate",
  "itoa",
  "pin-project-lite 0.2.16",
- "socket2 0.5.8",
+ "socket2 0.4.10",
  "tokio",
  "tower-service",
  "tracing",
@@ -5567,6 +5715,39 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f31827a206f56af32e590ba56d5d2d085f558508192593743f16b2306495269f"
 dependencies = [
  "cc",
+]
+
+[[package]]
+name = "icicle-bn254"
+version = "1.5.1"
+source = "git+https://github.com/ingonyama-zk/icicle.git?tag=v1.5.1#3d1e43365c8508fed6dfc6ddc7cc0abeb0fc7b9a"
+dependencies = [
+ "ark-bn254",
+ "cmake",
+ "icicle-core",
+ "icicle-cuda-runtime",
+]
+
+[[package]]
+name = "icicle-core"
+version = "1.5.1"
+source = "git+https://github.com/ingonyama-zk/icicle.git?tag=v1.5.1#3d1e43365c8508fed6dfc6ddc7cc0abeb0fc7b9a"
+dependencies = [
+ "ark-ec",
+ "ark-ff 0.4.2",
+ "ark-poly",
+ "ark-std 0.4.0",
+ "icicle-cuda-runtime",
+ "rayon",
+]
+
+[[package]]
+name = "icicle-cuda-runtime"
+version = "1.5.1"
+source = "git+https://github.com/ingonyama-zk/icicle.git?tag=v1.5.1#3d1e43365c8508fed6dfc6ddc7cc0abeb0fc7b9a"
+dependencies = [
+ "bindgen",
+ "bitflags 1.3.2",
 ]
 
 [[package]]
@@ -6051,6 +6232,8 @@ name = "jf-pcs"
 version = "0.1.0"
 source = "git+https://github.com/EspressoSystems/jellyfish?tag=0.4.5#7d71dbeff14f1a501b0b0dc391f1dffa1b8374fb"
 dependencies = [
+ "anyhow",
+ "ark-bn254",
  "ark-ec",
  "ark-ff 0.4.2",
  "ark-poly",
@@ -6058,6 +6241,9 @@ dependencies = [
  "ark-std 0.4.0",
  "derivative",
  "displaydoc",
+ "icicle-bn254",
+ "icicle-core",
+ "icicle-cuda-runtime",
  "itertools 0.12.1",
  "jf-utils",
  "merlin",
@@ -6399,6 +6585,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b5aba8db14291edd000dfcc4d620c7ebfb122c613afb886ca8803fa4e128a20a"
 
 [[package]]
+name = "libloading"
+version = "0.8.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fc2f4eb4bc735547cfed7c0a4922cbd04a4655978c09b54f1f7b228750664c34"
+dependencies = [
+ "cfg-if",
+ "windows-targets 0.48.5",
+]
+
+[[package]]
 name = "libm"
 version = "0.2.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6416,29 +6612,6 @@ dependencies = [
 
 [[package]]
 name = "libp2p"
-version = "0.53.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "681fb3f183edfbedd7a57d32ebe5dcdc0b9f94061185acf3c30249349cc6fc99"
-dependencies = [
- "bytes 1.9.0",
- "either",
- "futures",
- "futures-timer",
- "getrandom 0.2.15",
- "instant",
- "libp2p-allow-block-list 0.3.0",
- "libp2p-connection-limits 0.3.1",
- "libp2p-core 0.41.3",
- "libp2p-identity",
- "libp2p-swarm 0.44.2",
- "multiaddr",
- "pin-project",
- "rw-stream-sink",
- "thiserror 1.0.69",
-]
-
-[[package]]
-name = "libp2p"
 version = "0.54.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bbbe80f9c7e00526cd6b838075b9c171919404a4732cb2fa8ece0a093223bfc4"
@@ -6448,10 +6621,10 @@ dependencies = [
  "futures",
  "futures-timer",
  "getrandom 0.2.15",
- "libp2p-allow-block-list 0.4.0",
+ "libp2p-allow-block-list",
  "libp2p-autonat",
- "libp2p-connection-limits 0.4.0",
- "libp2p-core 0.42.0",
+ "libp2p-connection-limits",
+ "libp2p-core",
  "libp2p-dns",
  "libp2p-gossipsub",
  "libp2p-identify",
@@ -6461,7 +6634,7 @@ dependencies = [
  "libp2p-metrics",
  "libp2p-quic",
  "libp2p-request-response",
- "libp2p-swarm 0.45.1",
+ "libp2p-swarm",
  "libp2p-tcp",
  "libp2p-upnp",
  "multiaddr",
@@ -6472,25 +6645,13 @@ dependencies = [
 
 [[package]]
 name = "libp2p-allow-block-list"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "107b238b794cb83ab53b74ad5dcf7cca3200899b72fe662840cfb52f5b0a32e6"
-dependencies = [
- "libp2p-core 0.41.3",
- "libp2p-identity",
- "libp2p-swarm 0.44.2",
- "void",
-]
-
-[[package]]
-name = "libp2p-allow-block-list"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d1027ccf8d70320ed77e984f273bc8ce952f623762cb9bf2d126df73caef8041"
 dependencies = [
- "libp2p-core 0.42.0",
+ "libp2p-core",
  "libp2p-identity",
- "libp2p-swarm 0.45.1",
+ "libp2p-swarm",
  "void",
 ]
 
@@ -6507,10 +6668,10 @@ dependencies = [
  "futures",
  "futures-bounded",
  "futures-timer",
- "libp2p-core 0.42.0",
+ "libp2p-core",
  "libp2p-identity",
  "libp2p-request-response",
- "libp2p-swarm 0.45.1",
+ "libp2p-swarm",
  "quick-protobuf",
  "quick-protobuf-codec",
  "rand 0.8.5",
@@ -6523,54 +6684,14 @@ dependencies = [
 
 [[package]]
 name = "libp2p-connection-limits"
-version = "0.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c7cd50a78ccfada14de94cbacd3ce4b0138157f376870f13d3a8422cd075b4fd"
-dependencies = [
- "libp2p-core 0.41.3",
- "libp2p-identity",
- "libp2p-swarm 0.44.2",
- "void",
-]
-
-[[package]]
-name = "libp2p-connection-limits"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8d003540ee8baef0d254f7b6bfd79bac3ddf774662ca0abf69186d517ef82ad8"
 dependencies = [
- "libp2p-core 0.42.0",
+ "libp2p-core",
  "libp2p-identity",
- "libp2p-swarm 0.45.1",
+ "libp2p-swarm",
  "void",
-]
-
-[[package]]
-name = "libp2p-core"
-version = "0.41.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a5a8920cbd8540059a01950c1e5c96ea8d89eb50c51cd366fc18bdf540a6e48f"
-dependencies = [
- "either",
- "fnv",
- "futures",
- "futures-timer",
- "libp2p-identity",
- "multiaddr",
- "multihash",
- "multistream-select",
- "once_cell",
- "parking_lot",
- "pin-project",
- "quick-protobuf",
- "rand 0.8.5",
- "rw-stream-sink",
- "smallvec",
- "thiserror 1.0.69",
- "tracing",
- "unsigned-varint 0.8.0",
- "void",
- "web-time",
 ]
 
 [[package]]
@@ -6611,7 +6732,7 @@ dependencies = [
  "async-trait",
  "futures",
  "hickory-resolver",
- "libp2p-core 0.42.0",
+ "libp2p-core",
  "libp2p-identity",
  "parking_lot",
  "smallvec",
@@ -6634,9 +6755,9 @@ dependencies = [
  "futures-ticker",
  "getrandom 0.2.15",
  "hex_fmt",
- "libp2p-core 0.42.0",
+ "libp2p-core",
  "libp2p-identity",
- "libp2p-swarm 0.45.1",
+ "libp2p-swarm",
  "prometheus-client",
  "quick-protobuf",
  "quick-protobuf-codec",
@@ -6661,9 +6782,9 @@ dependencies = [
  "futures",
  "futures-bounded",
  "futures-timer",
- "libp2p-core 0.42.0",
+ "libp2p-core",
  "libp2p-identity",
- "libp2p-swarm 0.45.1",
+ "libp2p-swarm",
  "lru 0.12.5",
  "quick-protobuf",
  "quick-protobuf-codec",
@@ -6708,9 +6829,9 @@ dependencies = [
  "futures",
  "futures-bounded",
  "futures-timer",
- "libp2p-core 0.42.0",
+ "libp2p-core",
  "libp2p-identity",
- "libp2p-swarm 0.45.1",
+ "libp2p-swarm",
  "quick-protobuf",
  "quick-protobuf-codec",
  "rand 0.8.5",
@@ -6734,9 +6855,9 @@ dependencies = [
  "futures",
  "hickory-proto",
  "if-watch",
- "libp2p-core 0.42.0",
+ "libp2p-core",
  "libp2p-identity",
- "libp2p-swarm 0.45.1",
+ "libp2p-swarm",
  "rand 0.8.5",
  "smallvec",
  "socket2 0.5.8",
@@ -6752,44 +6873,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "77ebafa94a717c8442d8db8d3ae5d1c6a15e30f2d347e0cd31d057ca72e42566"
 dependencies = [
  "futures",
- "libp2p-core 0.42.0",
+ "libp2p-core",
  "libp2p-gossipsub",
  "libp2p-identify",
  "libp2p-identity",
  "libp2p-kad",
- "libp2p-swarm 0.45.1",
+ "libp2p-swarm",
  "pin-project",
  "prometheus-client",
  "web-time",
-]
-
-[[package]]
-name = "libp2p-networking"
-version = "0.5.84"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.84#310553bfe3333cb16592941043191e3b7e1b5dbf"
-dependencies = [
- "anyhow",
- "async-lock 3.4.0",
- "async-trait",
- "bincode",
- "blake3",
- "cbor4ii 1.0.0",
- "delegate",
- "derive_builder",
- "derive_more 1.0.0",
- "futures",
- "hotshot-types",
- "lazy_static",
- "libp2p 0.54.1",
- "libp2p-identity",
- "libp2p-swarm-derive",
- "pin-project",
- "rand 0.8.5",
- "serde",
- "tokio",
- "tracing",
- "tracing-subscriber 0.3.19",
- "workspace-hack",
 ]
 
 [[package]]
@@ -6802,7 +6894,7 @@ dependencies = [
  "futures",
  "futures-timer",
  "if-watch",
- "libp2p-core 0.42.0",
+ "libp2p-core",
  "libp2p-identity",
  "libp2p-tls",
  "parking_lot",
@@ -6827,37 +6919,15 @@ dependencies = [
  "futures",
  "futures-bounded",
  "futures-timer",
- "libp2p-core 0.42.0",
+ "libp2p-core",
  "libp2p-identity",
- "libp2p-swarm 0.45.1",
+ "libp2p-swarm",
  "rand 0.8.5",
  "serde",
  "smallvec",
  "tracing",
  "void",
  "web-time",
-]
-
-[[package]]
-name = "libp2p-swarm"
-version = "0.44.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "80cae6cb75f89dbca53862f9ebe0b9f463aa7b302762fcfaafb9e51dcc9b0f7e"
-dependencies = [
- "either",
- "fnv",
- "futures",
- "futures-timer",
- "instant",
- "libp2p-core 0.41.3",
- "libp2p-identity",
- "lru 0.12.5",
- "multistream-select",
- "once_cell",
- "rand 0.8.5",
- "smallvec",
- "tracing",
- "void",
 ]
 
 [[package]]
@@ -6870,7 +6940,7 @@ dependencies = [
  "fnv",
  "futures",
  "futures-timer",
- "libp2p-core 0.42.0",
+ "libp2p-core",
  "libp2p-identity",
  "libp2p-swarm-derive",
  "lru 0.12.5",
@@ -6906,7 +6976,7 @@ dependencies = [
  "futures-timer",
  "if-watch",
  "libc",
- "libp2p-core 0.42.0",
+ "libp2p-core",
  "libp2p-identity",
  "socket2 0.5.8",
  "tokio",
@@ -6921,7 +6991,7 @@ checksum = "47b23dddc2b9c355f73c1e36eb0c3ae86f7dc964a3715f0731cfad352db4d847"
 dependencies = [
  "futures",
  "futures-rustls",
- "libp2p-core 0.42.0",
+ "libp2p-core",
  "libp2p-identity",
  "rcgen 0.11.3",
  "ring 0.17.8",
@@ -6941,8 +7011,8 @@ dependencies = [
  "futures",
  "futures-timer",
  "igd-next",
- "libp2p-core 0.42.0",
- "libp2p-swarm 0.45.1",
+ "libp2p-core",
+ "libp2p-swarm",
  "tokio",
  "tracing",
  "void",
@@ -8590,7 +8660,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "81bddcdb20abf9501610992b6759a4c888aef7d1a7247ef75e2404275ac24af1"
 dependencies = [
  "anyhow",
- "itertools 0.12.1",
+ "itertools 0.11.0",
  "proc-macro2",
  "quote",
  "syn 2.0.95",
@@ -9016,6 +9086,28 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "71fe3824f5629716b1589be05dacd749f6aa084c87e00e016714a8cdfccc997c"
 dependencies = [
  "bytecheck",
+]
+
+[[package]]
+name = "request-response"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-broadcast",
+ "async-trait",
+ "bincode",
+ "blake3",
+ "byteorder",
+ "derive_builder",
+ "derive_more 1.0.0",
+ "hotshot-types",
+ "parking_lot",
+ "rand 0.8.5",
+ "serde",
+ "thiserror 1.0.69",
+ "tokio",
+ "tokio-util",
+ "tracing",
 ]
 
 [[package]]
@@ -9758,6 +9850,7 @@ dependencies = [
  "hotshot-contract-adapter",
  "hotshot-events-service",
  "hotshot-example-types",
+ "hotshot-libp2p-networking",
  "hotshot-orchestrator",
  "hotshot-query-service",
  "hotshot-stake-table",
@@ -9771,8 +9864,7 @@ dependencies = [
  "jf-rescue",
  "jf-signature 0.2.0",
  "jf-vid",
- "libp2p 0.53.2",
- "libp2p-networking",
+ "libp2p",
  "marketplace-builder-core",
  "marketplace-solver",
  "num_enum",
@@ -10230,7 +10322,7 @@ version = "0.8.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "03c3c6b7927ffe7ecaa769ee0e3994da3b8cafc8f444578982c83ecb161af917"
 dependencies = [
- "heck 0.5.0",
+ "heck 0.4.1",
  "proc-macro2",
  "quote",
  "syn 2.0.95",
@@ -11377,6 +11469,8 @@ dependencies = [
  "bytes 1.9.0",
  "futures-core",
  "futures-sink",
+ "futures-util",
+ "hashbrown 0.14.5",
  "pin-project-lite 0.2.16",
  "tokio",
 ]
@@ -11948,15 +12042,6 @@ name = "utf8parse"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821"
-
-[[package]]
-name = "utils"
-version = "0.5.84"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.84#310553bfe3333cb16592941043191e3b7e1b5dbf"
-dependencies = [
- "tracing",
- "workspace-hack",
-]
 
 [[package]]
 name = "uuid"
@@ -12587,7 +12672,6 @@ dependencies = [
 [[package]]
 name = "workspace-hack"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.84#310553bfe3333cb16592941043191e3b7e1b5dbf"
 dependencies = [
  "ark-bls12-377",
  "ark-bls12-381",
@@ -12645,6 +12729,7 @@ dependencies = [
  "num-bigint",
  "num-integer",
  "num-traits",
+ "parking_lot",
  "percent-encoding",
  "rand 0.8.5",
  "regex",
@@ -12659,6 +12744,7 @@ dependencies = [
  "syn 2.0.95",
  "time 0.3.37",
  "tokio",
+ "tokio-util",
  "toml_datetime",
  "toml_edit 0.22.22",
  "tracing",

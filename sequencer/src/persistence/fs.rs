@@ -8,7 +8,10 @@ use espresso_types::{
 };
 use hotshot_types::{
     consensus::CommitmentMap,
-    data::{DaProposal, QuorumProposal, QuorumProposal2, QuorumProposalWrapper, VidDisperseShare},
+    data::{
+        vid_disperse::ADVZDisperseShare, DaProposal, EpochNumber, QuorumProposal, QuorumProposal2,
+        QuorumProposalWrapper,
+    },
     event::{Event, EventType, HotShotAction, LeafInfo},
     message::{convert_proposal, Proposal},
     simple_certificate::{
@@ -400,7 +403,7 @@ impl Inner {
     fn load_vid_share(
         &self,
         view: ViewNumber,
-    ) -> anyhow::Result<Option<Proposal<SeqTypes, VidDisperseShare<SeqTypes>>>> {
+    ) -> anyhow::Result<Option<Proposal<SeqTypes, ADVZDisperseShare<SeqTypes>>>> {
         let dir_path = self.vid_dir_path();
 
         let file_path = dir_path.join(view.u64().to_string()).with_extension("txt");
@@ -410,7 +413,7 @@ impl Inner {
         }
 
         let vid_share_bytes = fs::read(file_path)?;
-        let vid_share: Proposal<SeqTypes, VidDisperseShare<SeqTypes>> =
+        let vid_share: Proposal<SeqTypes, ADVZDisperseShare<SeqTypes>> =
             bincode::deserialize(&vid_share_bytes)?;
         Ok(Some(vid_share))
     }
@@ -603,13 +606,13 @@ impl SequencerPersistence for Persistence {
     async fn load_vid_share(
         &self,
         view: ViewNumber,
-    ) -> anyhow::Result<Option<Proposal<SeqTypes, VidDisperseShare<SeqTypes>>>> {
+    ) -> anyhow::Result<Option<Proposal<SeqTypes, ADVZDisperseShare<SeqTypes>>>> {
         self.inner.read().await.load_vid_share(view)
     }
 
     async fn append_vid(
         &self,
-        proposal: &Proposal<SeqTypes, VidDisperseShare<SeqTypes>>,
+        proposal: &Proposal<SeqTypes, ADVZDisperseShare<SeqTypes>>,
     ) -> anyhow::Result<()> {
         let mut inner = self.inner.write().await;
         let view_number = proposal.data.view_number().u64();
@@ -660,7 +663,12 @@ impl SequencerPersistence for Persistence {
             },
         )
     }
-    async fn record_action(&self, view: ViewNumber, action: HotShotAction) -> anyhow::Result<()> {
+    async fn record_action(
+        &self,
+        view: ViewNumber,
+        _epoch: Option<EpochNumber>,
+        action: HotShotAction,
+    ) -> anyhow::Result<()> {
         // Todo Remove this after https://github.com/EspressoSystems/espresso-sequencer/issues/1931
         if !matches!(action, HotShotAction::Propose | HotShotAction::Vote) {
             return Ok(());
@@ -1014,6 +1022,7 @@ mod test {
     use espresso_types::{NodeState, PubKey};
     use hotshot::types::SignatureKey;
     use hotshot_example_types::node_types::TestVersions;
+    use hotshot_query_service::testing::mocks::MockVersions;
     use sequencer_utils::test_utils::setup_test;
     use serde_json::json;
 
@@ -1126,7 +1135,7 @@ mod test {
         let storage = Persistence::connect(&tmp).await;
 
         // Generate a couple of valid quorum proposals.
-        let leaf: Leaf2 = Leaf::genesis(&Default::default(), &NodeState::mock())
+        let leaf: Leaf2 = Leaf::genesis::<MockVersions>(&Default::default(), &NodeState::mock())
             .await
             .into();
         let privkey = PubKey::generated_from_seed_indexed([0; 32], 1).1;
@@ -1134,6 +1143,7 @@ mod test {
         let mut quorum_proposal = Proposal {
             data: QuorumProposalWrapper::<SeqTypes> {
                 proposal: QuorumProposal2::<SeqTypes> {
+                    epoch: None,
                     block_header: leaf.block_header().clone(),
                     view_number: ViewNumber::genesis(),
                     justify_qc: QuorumCertificate::genesis::<TestVersions>(
@@ -1147,7 +1157,6 @@ mod test {
                     next_drb_result: None,
                     next_epoch_justify_qc: None,
                 },
-                with_epoch: false,
             },
             signature,
             _pd: Default::default(),
@@ -1191,7 +1200,7 @@ mod test {
         let storage = Persistence::connect(&tmp).await;
 
         // Generate a valid quorum proposal.
-        let leaf: Leaf2 = Leaf::genesis(&Default::default(), &NodeState::mock())
+        let leaf: Leaf2 = Leaf::genesis::<MockVersions>(&Default::default(), &NodeState::mock())
             .await
             .into();
         let privkey = PubKey::generated_from_seed_indexed([0; 32], 1).1;
@@ -1199,6 +1208,7 @@ mod test {
         let quorum_proposal = Proposal {
             data: QuorumProposalWrapper::<SeqTypes> {
                 proposal: QuorumProposal2::<SeqTypes> {
+                    epoch: None,
                     block_header: leaf.block_header().clone(),
                     view_number: ViewNumber::new(1),
                     justify_qc: QuorumCertificate::genesis::<TestVersions>(
@@ -1212,7 +1222,6 @@ mod test {
                     next_drb_result: None,
                     next_epoch_justify_qc: None,
                 },
-                with_epoch: false,
             },
             signature,
             _pd: Default::default(),
