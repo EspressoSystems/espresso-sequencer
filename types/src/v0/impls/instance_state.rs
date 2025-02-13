@@ -135,13 +135,6 @@ impl NodeState {
         self.current_version = ver;
         self
     }
-
-    // TODO remove following `Memberships` trait update:
-    // https://github.com/EspressoSystems/HotShot/issues/3966
-    pub fn with_epoch_height(mut self, epoch_height: u64) -> Self {
-        self.epoch_height = Some(epoch_height);
-        self
-    }
 }
 
 // This allows us to turn on `Default` on InstanceState trait
