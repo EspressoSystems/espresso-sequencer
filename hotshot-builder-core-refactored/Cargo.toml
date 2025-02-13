@@ -21,6 +21,7 @@ futures = { workspace = true }
 hotshot = { workspace = true }
 hotshot-builder-api = { workspace = true }
 hotshot-types = { workspace = true }
+jf-vid = { workspace = true }
 lru = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 sha2 = { workspace = true }
@@ -30,7 +31,6 @@ tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 vbs = { workspace = true }
-jf-vid = { workspace = true }
 
 [dev-dependencies]
 hotshot-example-types = { workspace = true }
