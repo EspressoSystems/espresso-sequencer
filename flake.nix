@@ -190,6 +190,7 @@
             protobuf # to compile libp2p-autonat
             stableToolchain
             jq
+            sqlite
 
             # Rust tools
             cargo-audit
@@ -217,23 +218,23 @@
             # Ethereum contracts, solidity, ...
             # TODO: remove alloy patch when forge includes this fix: https://github.com/alloy-rs/core/pull/864
             # foundry
-            (foundry.overrideAttrs {
-              # Set the resolve limit to 128 by replacing the value in the vendored dependencies.
-              postPatch = ''
-                pushd $cargoDepsCopy/alloy-sol-macro-expander
+            #(foundry.overrideAttrs {
+            #  # Set the resolve limit to 128 by replacing the value in the vendored dependencies.
+            #  postPatch = ''
+            #    pushd $cargoDepsCopy/alloy-sol-macro-expander
 
-                oldHash=$(sha256sum src/expand/mod.rs | cut -d " " -f 1)
+            #    oldHash=$(sha256sum src/expand/mod.rs | cut -d " " -f 1)
 
-                substituteInPlace src/expand/mod.rs \
-                  --replace-warn \
-                  'const RESOLVE_LIMIT: usize = 32;' 'const RESOLVE_LIMIT: usize = 128;'
+            #    substituteInPlace src/expand/mod.rs \
+            #      --replace-warn \
+            #      'const RESOLVE_LIMIT: usize = 32;' 'const RESOLVE_LIMIT: usize = 128;'
 
-                substituteInPlace .cargo-checksum.json \
-                  --replace-warn $oldHash $(sha256sum src/expand/mod.rs | cut -d " " -f 1)
+            #    substituteInPlace .cargo-checksum.json \
+            #      --replace-warn $oldHash $(sha256sum src/expand/mod.rs | cut -d " " -f 1)
 
-                popd
-              '';
-            })
+            #    popd
+            #  '';
+            #})
             solc
             nodePackages.prettier
             solhint
