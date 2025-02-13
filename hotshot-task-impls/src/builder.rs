@@ -63,6 +63,7 @@ impl From<BuilderApiError> for BuilderClientError {
 pub struct BuilderClient<TYPES: NodeType, Ver: StaticVersionType> {
     /// Underlying surf_disco::Client for the legacy builder api
     client: Client<BuilderApiError, Ver>,
+    base_url: Url,
     /// Marker for [`NodeType`] used here
     _marker: std::marker::PhantomData<TYPES>,
 }
@@ -80,6 +81,7 @@ impl<TYPES: NodeType, Ver: StaticVersionType> BuilderClient<TYPES, Ver> {
             client: Client::builder(url.clone())
                 .set_timeout(Some(Duration::from_secs(2)))
                 .build(),
+            base_url: url,
             _marker: std::marker::PhantomData,
         }
     }
@@ -160,8 +162,9 @@ pub mod v0_1 {
                 "{LEGACY_BUILDER_MODULE}/claimheaderinput/{block_hash}/{view_number}/{sender}/{encoded_signature}"
             );
 
-            let response = reqwest::get(endpoint).await;
-            println!("reqwest response: {:?}", response);
+            let ep = format!("{}/{}", self.base_url, endpoint);
+            let response = reqwest::get(ep.clone()).await;
+            println!("requested from {}: {:?}", ep, response);
 
             println!("querying {}", endpoint);
             self.client.get(endpoint).send().await.map_err(|err| {
