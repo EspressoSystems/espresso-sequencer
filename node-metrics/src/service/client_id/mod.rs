@@ -52,7 +52,7 @@ impl Add<u64> for ClientId {
     }
 }
 
-/// [AddAssign] implements basic addition for [ClientId], which allows [u64]s to
+/// [AddAssign] implements basic addition assignment for [ClientId], which allows [u64]s to
 /// be added to the mutable [ClientId] for convenience.
 ///
 /// Example:
