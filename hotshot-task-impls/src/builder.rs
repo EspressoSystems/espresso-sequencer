@@ -163,14 +163,28 @@ pub mod v0_1 {
             );
 
             let ep = format!("{}{}", self.base_url, endpoint);
-            let response = reqwest::get(ep.clone()).await;
-            println!("requested from {}: {:?}", ep, response);
+            let response = reqwest::get(ep.clone()).await.map_err(|err| {
+                BuilderClientError::Api(format!("Failed to make request: {:#}", err))
+            })?;
 
-            println!("querying {}", endpoint);
-            self.client.get(endpoint).send().await.map_err(|err| {
-                println!("error: {:#}", err);
-                err.into()
-            })
+            // Try to deserialize the response
+            let response_text = response.text().await.map_err(|err| {
+                BuilderClientError::Api(format!("Failed to get response text: {:#}", err))
+            })?;
+            
+            let response_json: AvailableBlockHeaderInput<TYPES> =
+                serde_json::from_str(&response_text).map_err(|err| {
+                    BuilderClientError::Api(format!("Failed to deserialize response: {:#}", err))
+                })?;
+            Ok(response_json)
+            /*             println!("requested from {}: {:?}", ep, response);
+
+                       println!("querying {}", endpoint);
+                       self.client.get(endpoint).send().await.map_err(|err| {
+                           println!("error: {:#}", err);
+                           err.into()
+                       })
+            */
         }
 
         /// Claim block
