@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Namespace","RecordValue"],"fn":["requires_authentication"],"struct":["RecordKey"]};

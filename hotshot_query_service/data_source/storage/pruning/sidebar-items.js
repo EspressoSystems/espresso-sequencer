@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"struct":["PrunerCfg"],"trait":["PruneStorage","PrunedHeightDataSource","PrunedHeightStorage","PrunerConfig"]};
