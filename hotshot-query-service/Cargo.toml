@@ -108,7 +108,7 @@ sqlx = { version = "0.8", features = [
     "bit-vec",
     "postgres",
     "runtime-tokio",
-    "sqlite-unbundled",
+    "sqlite",
     "tls-native-tls",
 ], optional = true }
 

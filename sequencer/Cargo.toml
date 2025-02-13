@@ -109,7 +109,7 @@ sqlx = { workspace = true, features = [
 	"bit-vec",
 	"postgres",
 	"runtime-tokio",
-	"sqlite-unbundled",
+	"sqlite",
 	"tls-native-tls",
 ] }
 static_assertions = "1"
