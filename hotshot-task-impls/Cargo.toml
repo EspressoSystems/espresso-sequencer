@@ -22,6 +22,7 @@ either = { workspace = true }
 futures = { workspace = true }
 hotshot-builder-api = { workspace = true }
 hotshot-task = { workspace = true }
+reqwest = "0.12"
 hotshot-types = { workspace = true }
 hotshot-utils = { workspace = true }
 jf-vid = { workspace = true }

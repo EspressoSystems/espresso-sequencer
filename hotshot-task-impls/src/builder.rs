@@ -12,10 +12,7 @@ use hotshot_builder_api::v0_1::{
 };
 use hotshot_types::{
     constants::LEGACY_BUILDER_MODULE,
-    traits::{
-        node_implementation::{NodeType, Versions},
-        signature_key::SignatureKey,
-    },
+    traits::{node_implementation::NodeType, signature_key::SignatureKey},
     vid::VidCommitment,
 };
 use serde::{Deserialize, Serialize};
@@ -111,7 +108,7 @@ impl<TYPES: NodeType, Ver: StaticVersionType> BuilderClient<TYPES, Ver> {
     /// # Errors
     /// - [`BuilderClientError::BlockNotFound`] if blocks aren't available for this parent
     /// - [`BuilderClientError::Api`] if API isn't responding or responds incorrectly
-    pub async fn available_blocks<V: Versions>(
+    pub async fn available_blocks(
         &self,
         parent: VidCommitment,
         view_number: u64,
@@ -159,13 +156,18 @@ pub mod v0_1 {
             signature: &<<TYPES as NodeType>::SignatureKey as SignatureKey>::PureAssembledSignatureType,
         ) -> Result<AvailableBlockHeaderInput<TYPES>, BuilderClientError> {
             let encoded_signature: TaggedBase64 = signature.clone().into();
-            self.client
-                .get(&format!(
-                    "{LEGACY_BUILDER_MODULE}/claimheaderinput/{block_hash}/{view_number}/{sender}/{encoded_signature}"
-                ))
-                .send()
-                .await
-                .map_err(Into::into)
+            let endpoint = &format!(
+                "{LEGACY_BUILDER_MODULE}/claimheaderinput/{block_hash}/{view_number}/{sender}/{encoded_signature}"
+            );
+
+            let response = reqwest::get(endpoint).await;
+            println!("reqwest response: {:?}", response);
+
+            println!("querying {}", endpoint);
+            self.client.get(endpoint).send().await.map_err(|err| {
+                println!("error: {:#}", err);
+                err.into()
+            })
         }
 
         /// Claim block
