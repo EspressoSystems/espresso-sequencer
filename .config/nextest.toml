@@ -3,6 +3,7 @@
 slow-timeout = { period = "2m", terminate-after = 3 }
 default-filter = 'not (test(slow_) | package(tests))'
 retries = 2
+threads-required = "num-test-threads"
 
 # More flaky tests
 [[profile.default.overrides]]
