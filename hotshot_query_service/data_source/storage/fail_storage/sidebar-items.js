@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["FailableAction","FailureMode"],"struct":["FailStorage","Failure","Transaction"]};

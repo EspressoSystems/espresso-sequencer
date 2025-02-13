@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":["decode_into_io_error","encode_into_io_error"],"struct":["Cbor"],"type":["Behaviour"]};
