@@ -163,10 +163,15 @@ where
     ///
     /// The [FileSystemStorage] will manage its own persistence synchronization.
     pub async fn open(path: &Path) -> Result<Self, PersistenceError> {
+        info!("atomicstoreloader opening");
         let mut loader = AtomicStoreLoader::load(path, "hotshot_data_source")?;
+        info!("atomicstoreloader opened");
         loader.retain_archives(1);
+        info!("opening data source with store");
         let data_source = Self::open_with_store(&mut loader).await?;
+        info!("opening top storage");
         data_source.inner.write().await.top_storage = Some(AtomicStore::open(loader)?);
+        info!("top storage opened");
         Ok(data_source)
     }
 
@@ -211,15 +216,19 @@ where
     /// caller is responsible for creating an [AtomicStore] from `loader` and managing
     /// synchronization of the store.
     pub async fn open_with_store(loader: &mut AtomicStoreLoader) -> Result<Self, PersistenceError> {
+        info!("opening leaf storage");
         let leaf_storage =
             LedgerLog::<LeafQueryData<Types>>::open(loader, "leaves", CACHED_LEAVES_COUNT)?;
+        info!("leaf storage opened");
         let block_storage =
             LedgerLog::<BlockQueryData<Types>>::open(loader, "blocks", CACHED_BLOCKS_COUNT)?;
+        info!("opening vid storage");
         let vid_storage = LedgerLog::<(VidCommonQueryData<Types>, Option<VidShare>)>::open(
             loader,
             "vid_common",
             CACHED_VID_COMMON_COUNT,
         )?;
+        info!("vid storage opened");
 
         let mut index_by_block_hash = HashMap::new();
         let mut index_by_payload_hash = HashMap::new();
