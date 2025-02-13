@@ -21,7 +21,7 @@ use hotshot_types::{
         node_implementation::{NodeType, Versions},
         EncodeBytes,
     },
-    vid::{advz_scheme, VidCommitment},
+    vid::advz::{advz_scheme, ADVZCommitment},
 };
 use jf_vid::VidScheme;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
@@ -267,7 +267,7 @@ impl<Types: NodeType> LeafQueryData<Types> {
         self.header().commit()
     }
 
-    pub fn payload_hash(&self) -> VidCommitment {
+    pub fn payload_hash(&self) -> ADVZCommitment {
         self.header().payload_commitment()
     }
 }
@@ -337,7 +337,7 @@ impl<Types: NodeType> BlockQueryData<Types> {
         self.header.metadata()
     }
 
-    pub fn payload_hash(&self) -> VidCommitment {
+    pub fn payload_hash(&self) -> ADVZCommitment {
         self.header.payload_commitment()
     }
 
@@ -399,7 +399,7 @@ impl<Types: NodeType> HeightIndexed for BlockQueryData<Types> {
 pub struct PayloadQueryData<Types: NodeType> {
     pub(crate) height: u64,
     pub(crate) block_hash: BlockHash<Types>,
-    pub(crate) hash: VidCommitment,
+    pub(crate) hash: ADVZCommitment,
     pub(crate) size: u64,
     pub(crate) data: Payload<Types>,
 }
@@ -429,7 +429,7 @@ impl<Types: NodeType> PayloadQueryData<Types> {
             .into()
     }
 
-    pub fn hash(&self) -> VidCommitment {
+    pub fn hash(&self) -> ADVZCommitment {
         self.hash
     }
 
@@ -457,7 +457,7 @@ impl<Types: NodeType> HeightIndexed for PayloadQueryData<Types> {
 pub struct VidCommonQueryData<Types: NodeType> {
     pub(crate) height: u64,
     pub(crate) block_hash: BlockHash<Types>,
-    pub(crate) payload_hash: VidCommitment,
+    pub(crate) payload_hash: ADVZCommitment,
     pub(crate) common: VidCommon,
 }
 
@@ -489,7 +489,7 @@ impl<Types: NodeType> VidCommonQueryData<Types> {
         self.block_hash
     }
 
-    pub fn payload_hash(&self) -> VidCommitment {
+    pub fn payload_hash(&self) -> ADVZCommitment {
         self.payload_hash
     }
 
@@ -671,7 +671,7 @@ where
 {
     pub height: u64,
     pub block_hash: BlockHash<Types>,
-    pub hash: VidCommitment,
+    pub hash: ADVZCommitment,
     pub size: u64,
     pub num_transactions: u64,
 }
@@ -711,7 +711,7 @@ where
 {
     pub height: u64,
     pub block_hash: BlockHash<Types>,
-    pub payload_hash: VidCommitment,
+    pub payload_hash: ADVZCommitment,
 }
 
 impl<Types> HeightIndexed for VidCommonMetadata<Types>

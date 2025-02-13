@@ -33,7 +33,7 @@ use hotshot_types::{
         signature_key::BuilderSignatureKey,
     },
     utils::BuilderCommitment,
-    vid::VidCommitment,
+    vid::advz::ADVZCommitment,
 };
 use lru::LruCache;
 use rand::{rngs::SmallRng, Rng, RngCore, SeedableRng};
@@ -276,7 +276,7 @@ impl<TYPES: NodeType> ReadState for RandomBuilderSource<TYPES> {
 impl<TYPES: NodeType> BuilderDataSource<TYPES> for RandomBuilderSource<TYPES> {
     async fn available_blocks<V: Versions>(
         &self,
-        _for_parent: &VidCommitment,
+        _for_parent: &ADVZCommitment,
         _view_number: u64,
         _sender: TYPES::SignatureKey,
         _signature: &<TYPES::SignatureKey as SignatureKey>::PureAssembledSignatureType,

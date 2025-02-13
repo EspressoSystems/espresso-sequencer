@@ -9,7 +9,7 @@ use std::marker::PhantomData;
 use hotshot_types::{
     traits::{node_implementation::NodeType, signature_key::BuilderSignatureKey, BlockPayload},
     utils::BuilderCommitment,
-    vid::VidCommitment,
+    vid::advz::ADVZCommitment,
 };
 use serde::{Deserialize, Serialize};
 
@@ -47,7 +47,7 @@ impl<TYPES: NodeType> AvailableBlockData<TYPES> {
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq, Hash)]
 #[serde(bound = "")]
 pub struct AvailableBlockHeaderInput<TYPES: NodeType> {
-    pub vid_commitment: VidCommitment,
+    pub vid_commitment: ADVZCommitment,
     // signature over vid_commitment, BlockPayload::Metadata, and offered_fee
     pub fee_signature:
         <<TYPES as NodeType>::BuilderSignatureKey as BuilderSignatureKey>::BuilderSignature,

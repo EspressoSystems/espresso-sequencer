@@ -26,7 +26,7 @@ use hotshot_example_types::{
 use hotshot_task_impls::events::HotShotEvent;
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
-    data::{Leaf2, VidDisperse, VidDisperseShare},
+    data::{vid_disperse::ADVZDisperse, Leaf2, VidDisperse, VidDisperseShare},
     message::{Proposal, UpgradeLock},
     simple_certificate::DaCertificate2,
     simple_vote::{DaData2, DaVote2, SimpleVote, VersionedVoteData},
@@ -36,7 +36,7 @@ use hotshot_types::{
         node_implementation::{NodeType, Versions},
     },
     utils::{option_epoch_from_block_number, View, ViewInner},
-    vid::{advz_scheme, VidCommitment, VidProposal, VidSchemeType},
+    vid::advz::{advz_scheme, ADVZCommitment, ADVZScheme},
     vote::{Certificate, HasViewNumber, Vote},
     ValidatorConfig,
 };
@@ -278,7 +278,7 @@ pub async fn vid_scheme_from_view_number<TYPES: NodeType, V: Versions>(
     view_number: TYPES::View,
     epoch_number: Option<TYPES::Epoch>,
     _version: Version,
-) -> VidSchemeType {
+) -> ADVZScheme {
     let num_storage_nodes = membership
         .read()
         .await
@@ -293,7 +293,7 @@ pub async fn vid_payload_commitment<TYPES: NodeType, V: Versions>(
     epoch_number: Option<TYPES::Epoch>,
     transactions: Vec<TestTransaction>,
     version: Version,
-) -> VidCommitment {
+) -> ADVZCommitment {
     let mut vid =
         vid_scheme_from_view_number::<TYPES, V>(membership, view_number, epoch_number, version)
             .await;
@@ -308,7 +308,7 @@ pub async fn da_payload_commitment<TYPES: NodeType, V: Versions>(
     transactions: Vec<TestTransaction>,
     epoch_number: Option<TYPES::Epoch>,
     version: Version,
-) -> VidCommitment {
+) -> ADVZCommitment {
     let encoded_transactions = TestTransaction::encode(&transactions);
 
     vid_commitment::<V>(
@@ -323,7 +323,7 @@ pub async fn build_payload_commitment<TYPES: NodeType, V: Versions>(
     view: TYPES::View,
     epoch: Option<TYPES::Epoch>,
     version: Version,
-) -> <VidSchemeType as VidScheme>::Commit {
+) -> <ADVZScheme as VidScheme>::Commit {
     // Make some empty encoded transactions, we just care about having a commitment handy for the
     // later calls. We need the VID commitment to be able to propose later.
     let mut vid = vid_scheme_from_view_number::<TYPES, V>(membership, view, epoch, version).await;
@@ -339,21 +339,27 @@ pub async fn build_vid_proposal<TYPES: NodeType, V: Versions>(
     transactions: Vec<TestTransaction>,
     private_key: &<TYPES::SignatureKey as SignatureKey>::PrivateKey,
     version: Version,
-) -> VidProposal<TYPES> {
+) -> (
+    Proposal<TYPES, VidDisperse<TYPES>>,
+    Vec<Proposal<TYPES, VidDisperseShare<TYPES>>>,
+) {
     let mut vid =
         vid_scheme_from_view_number::<TYPES, V>(membership, view_number, epoch_number, version)
             .await;
     let encoded_transactions = TestTransaction::encode(&transactions);
 
-    let vid_disperse = VidDisperse::from_membership(
-        view_number,
-        vid.disperse(&encoded_transactions).unwrap(),
-        membership,
-        epoch_number,
-        epoch_number,
-        None,
-    )
-    .await;
+    // TODO(Chengyu): think about it
+    let vid_disperse = VidDisperse::V0(
+        ADVZDisperse::from_membership(
+            view_number,
+            vid.disperse(&encoded_transactions).unwrap(),
+            membership,
+            epoch_number,
+            epoch_number,
+            None,
+        )
+        .await,
+    );
 
     let signature =
         TYPES::SignatureKey::sign(private_key, vid_disperse.payload_commitment().as_ref())

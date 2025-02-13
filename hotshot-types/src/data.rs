@@ -49,7 +49,7 @@ use crate::{
         BlockPayload,
     },
     utils::{bincode_opts, genesis_epoch_from_version, option_epoch_from_block_number},
-    vid::{VidCommitment, VidCommon, VidSchemeType},
+    vid::advz::{ADVZCommitment, ADVZCommon, ADVZScheme},
     vote::{Certificate, HasViewNumber},
 };
 
@@ -247,11 +247,11 @@ impl<TYPES: NodeType> VidDisperse<TYPES> {
     /// Allows for more complex stake table functionality
     pub async fn from_membership(
         view_number: TYPES::View,
-        vid_disperse: JfVidDisperse<VidSchemeType>,
+        vid_disperse: JfVidDisperse<ADVZScheme>,
         membership: &Arc<RwLock<TYPES::Membership>>,
         target_epoch: Option<TYPES::Epoch>,
         data_epoch: Option<TYPES::Epoch>,
-        data_epoch_payload_commitment: Option<VidCommitment>,
+        data_epoch_payload_commitment: Option<ADVZCommitment>,
     ) -> Self {
         Self::V0(
             ADVZDisperse::from_membership(
@@ -288,9 +288,9 @@ impl<TYPES: NodeType> VidDisperse<TYPES> {
             })
     }
 
-    /// Return a reference to the internal VidCommon field.
+    /// Return a reference to the internal ADVZCommon field.
     /// TODO(Chengyu): rewrite this after VID upgrade
-    pub fn vid_common_ref(&self) -> &VidCommon {
+    pub fn vid_common_ref(&self) -> &ADVZCommon {
         match self {
             Self::V0(disperse) | Self::V1(disperse) => &disperse.common,
         }
@@ -298,7 +298,7 @@ impl<TYPES: NodeType> VidDisperse<TYPES> {
 
     /// Return the internal payload commitment
     /// TODO(Chengyu): rewrite this after VID upgrade
-    pub fn payload_commitment(&self) -> VidCommitment {
+    pub fn payload_commitment(&self) -> ADVZCommitment {
         match self {
             Self::V0(disperse) | Self::V1(disperse) => disperse.payload_commitment,
         }
@@ -409,7 +409,7 @@ impl<TYPES: NodeType> VidDisperseShare<TYPES> {
 
     /// Return the internal payload VID commitment
     /// TODO(Chengyu): restructure this, since payload commitment will have different types given different version.
-    pub fn payload_commitment(&self) -> VidCommitment {
+    pub fn payload_commitment(&self) -> ADVZCommitment {
         match self {
             Self::V0(share) => share.payload_commitment,
             Self::V1(share) => share.payload_commitment,
@@ -417,16 +417,16 @@ impl<TYPES: NodeType> VidDisperseShare<TYPES> {
     }
     /// Return the internal data epoch payload VID commitment
     /// TODO(Chengyu): restructure this, since payload commitment will have different types given different version.
-    pub fn data_epoch_payload_commitment(&self) -> Option<VidCommitment> {
+    pub fn data_epoch_payload_commitment(&self) -> Option<ADVZCommitment> {
         match self {
             Self::V0(_) => None,
             Self::V1(share) => share.data_epoch_payload_commitment,
         }
     }
 
-    /// Return a reference to the internal VidCommon field.
+    /// Return a reference to the internal ADVZCommon field.
     /// TODO(Chengyu): remove this after VID upgrade
-    pub fn vid_common_ref(&self) -> &VidCommon {
+    pub fn vid_common_ref(&self) -> &ADVZCommon {
         match self {
             Self::V0(share) => &share.common,
             Self::V1(share) => &share.common,
@@ -1071,7 +1071,7 @@ impl<TYPES: NodeType> Leaf2<TYPES> {
     }
 
     /// A commitment to the block payload contained in this leaf.
-    pub fn payload_commitment(&self) -> VidCommitment {
+    pub fn payload_commitment(&self) -> ADVZCommitment {
         self.block_header().payload_commitment()
     }
 
@@ -1444,7 +1444,7 @@ impl<TYPES: NodeType> Leaf<TYPES> {
     }
 
     /// A commitment to the block payload contained in this leaf.
-    pub fn payload_commitment(&self) -> VidCommitment {
+    pub fn payload_commitment(&self) -> ADVZCommitment {
         self.block_header().payload_commitment()
     }
 
@@ -1644,7 +1644,7 @@ pub mod null_block {
             signature_key::BuilderSignatureKey,
             BlockPayload,
         },
-        vid::{advz_scheme, VidCommitment},
+        vid::advz::{advz_scheme, ADVZCommitment},
     };
 
     /// The commitment for a null block payload.
@@ -1656,7 +1656,7 @@ pub mod null_block {
     // TODO(Chengyu): fix it. Empty commitment must be computed at every upgrade.
     // #[memoize(SharedCache, Capacity: 10)]
     #[must_use]
-    pub fn commitment<V: Versions>(num_storage_nodes: usize) -> Option<VidCommitment> {
+    pub fn commitment<V: Versions>(num_storage_nodes: usize) -> Option<ADVZCommitment> {
         let vid_result = advz_scheme(num_storage_nodes).commit_only(Vec::new());
 
         match vid_result {

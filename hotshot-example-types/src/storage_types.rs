@@ -27,7 +27,7 @@ use hotshot_types::{
         storage::Storage,
     },
     utils::View,
-    vid::VidSchemeType,
+    vid::advz::ADVZScheme,
     vote::HasViewNumber,
 };
 use jf_vid::VidScheme;
@@ -176,7 +176,7 @@ impl<TYPES: NodeType> Storage<TYPES> for TestStorage<TYPES> {
     async fn append_da(
         &self,
         proposal: &Proposal<TYPES, DaProposal<TYPES>>,
-        _vid_commit: <VidSchemeType as VidScheme>::Commit,
+        _vid_commit: <ADVZScheme as VidScheme>::Commit,
     ) -> Result<()> {
         if self.should_return_err {
             bail!("Failed to append DA proposal to storage");
@@ -192,7 +192,7 @@ impl<TYPES: NodeType> Storage<TYPES> for TestStorage<TYPES> {
     async fn append_da2(
         &self,
         proposal: &Proposal<TYPES, DaProposal2<TYPES>>,
-        _vid_commit: <VidSchemeType as VidScheme>::Commit,
+        _vid_commit: <ADVZScheme as VidScheme>::Commit,
     ) -> Result<()> {
         if self.should_return_err {
             bail!("Failed to append DA proposal (2) to storage");

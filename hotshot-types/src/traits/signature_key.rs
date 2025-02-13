@@ -26,7 +26,7 @@ use tagged_base64::{TaggedBase64, Tb64Error};
 use super::EncodeBytes;
 use crate::{
     bundle::Bundle, traits::node_implementation::NodeType, utils::BuilderCommitment,
-    vid::VidSchemeType,
+    vid::advz::ADVZScheme,
 };
 
 /// Type representing stake table entries in a `StakeTable`
@@ -223,7 +223,7 @@ pub trait BuilderSignatureKey:
         signature: &Self::BuilderSignature,
         fee_amount: u64,
         metadata: &Metadata,
-        vid_commitment: &<VidSchemeType as VidScheme>::Commit,
+        vid_commitment: &<ADVZScheme as VidScheme>::Commit,
     ) -> bool {
         self.validate_builder_signature(
             signature,
@@ -288,7 +288,7 @@ pub trait BuilderSignatureKey:
         private_key: &Self::BuilderPrivateKey,
         fee_amount: u64,
         metadata: &Metadata,
-        vid_commitment: &<VidSchemeType as VidScheme>::Commit,
+        vid_commitment: &<ADVZScheme as VidScheme>::Commit,
     ) -> Result<Self::BuilderSignature, Self::SignError> {
         Self::sign_builder_message(
             private_key,
@@ -348,7 +348,7 @@ pub trait BuilderSignatureKey:
 fn aggregate_fee_data<Metadata: EncodeBytes>(
     fee_amount: u64,
     metadata: &Metadata,
-    vid_commitment: &<VidSchemeType as VidScheme>::Commit,
+    vid_commitment: &<ADVZScheme as VidScheme>::Commit,
 ) -> Vec<u8> {
     let mut fee_info = Vec::new();
     fee_info.extend_from_slice(fee_amount.to_be_bytes().as_ref());

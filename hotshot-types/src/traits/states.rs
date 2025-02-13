@@ -22,7 +22,7 @@ use crate::{
         node_implementation::{ConsensusTime, NodeType},
         BlockPayload,
     },
-    vid::VidCommon,
+    vid::advz::ADVZCommon,
 };
 
 /// Instance-level state, which allows us to fetch missing validated state.
@@ -71,7 +71,7 @@ pub trait ValidatedState<TYPES: NodeType>:
         instance: &Self::Instance,
         parent_leaf: &Leaf2<TYPES>,
         proposed_header: &TYPES::BlockHeader,
-        vid_common: VidCommon,
+        vid_common: ADVZCommon,
         version: Version,
         view_number: u64,
     ) -> impl Future<Output = Result<(Self, Self::Delta), Self::Error>> + Send;

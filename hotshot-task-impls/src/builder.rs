@@ -16,7 +16,7 @@ use hotshot_types::{
         node_implementation::{NodeType, Versions},
         signature_key::SignatureKey,
     },
-    vid::VidCommitment,
+    vid::advz::ADVZCommitment,
 };
 use serde::{Deserialize, Serialize};
 use surf_disco::{client::HealthStatus, Client, Url};
@@ -113,7 +113,7 @@ impl<TYPES: NodeType, Ver: StaticVersionType> BuilderClient<TYPES, Ver> {
     /// - [`BuilderClientError::Api`] if API isn't responding or responds incorrectly
     pub async fn available_blocks<V: Versions>(
         &self,
-        parent: VidCommitment,
+        parent: ADVZCommitment,
         view_number: u64,
         sender: TYPES::SignatureKey,
         signature: &<<TYPES as NodeType>::SignatureKey as SignatureKey>::PureAssembledSignatureType,
@@ -231,7 +231,7 @@ pub mod v0_99 {
     pub use hotshot_builder_api::v0_99::Version;
     use hotshot_types::{
         bundle::Bundle, constants::MARKETPLACE_BUILDER_MODULE,
-        traits::node_implementation::NodeType, vid::VidCommitment,
+        traits::node_implementation::NodeType, vid::advz::ADVZCommitment,
     };
     use vbs::version::StaticVersion;
 
@@ -249,7 +249,7 @@ pub mod v0_99 {
         pub async fn bundle(
             &self,
             parent_view: u64,
-            parent_hash: VidCommitment,
+            parent_hash: ADVZCommitment,
             view_number: u64,
         ) -> Result<Bundle<TYPES>, BuilderClientError> {
             self.client
