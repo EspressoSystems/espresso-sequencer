@@ -41,6 +41,7 @@ use atomic_store::{AtomicStore, AtomicStoreLoader, PersistenceError};
 use committable::Committable;
 use futures::future::Future;
 use hotshot_types::traits::{block_contents::BlockHeader, node_implementation::NodeType};
+use log::info;
 use serde::{de::DeserializeOwned, Serialize};
 use snafu::OptionExt;
 use std::collections::{
@@ -144,10 +145,15 @@ where
     ///
     /// The [FileSystemStorage] will manage its own persistence synchronization.
     pub async fn create(path: &Path) -> Result<Self, PersistenceError> {
+        info!("27 creating file system storage");
         let mut loader = AtomicStoreLoader::create(path, "hotshot_data_source")?;
+        info!("created loader");
         loader.retain_archives(1);
+        info!("retained archives");
         let data_source = Self::create_with_store(&mut loader).await?;
+        info!("created data source, opening store");
         data_source.inner.write().await.top_storage = Some(AtomicStore::open(loader)?);
+        info!("opened store");
         Ok(data_source)
     }
 
@@ -175,7 +181,8 @@ where
     pub async fn create_with_store(
         loader: &mut AtomicStoreLoader,
     ) -> Result<Self, PersistenceError> {
-        Ok(Self {
+        info!("creating with store");
+        let f = Ok(Self {
             inner: RwLock::new(FileSystemStorageInner {
                 index_by_leaf_hash: Default::default(),
                 index_by_block_hash: Default::default(),
@@ -190,7 +197,9 @@ where
                 vid_storage: LedgerLog::create(loader, "vid_common", CACHED_VID_COMMON_COUNT)?,
             }),
             metrics: Default::default(),
-        })
+        });
+        info!("created with store");
+        f
     }
 
     /// Open an existing [FileSystemStorage] using a persistent storage loader.

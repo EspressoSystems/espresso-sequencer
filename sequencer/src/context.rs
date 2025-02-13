@@ -30,7 +30,7 @@ use parking_lot::Mutex;
 use std::fmt::Debug;
 use std::{fmt::Display, sync::Arc};
 use tokio::{spawn, task::JoinHandle};
-use tracing::{Instrument, Level};
+use tracing::{info, Instrument, Level};
 use url::Url;
 
 use crate::{
@@ -292,6 +292,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> Sequence
 
     /// Start participating in consensus.
     pub async fn start_consensus(&self) {
+        info!("starting consensus");
         if let Some(orchestrator_client) = &self.wait_for_orchestrator {
             tracing::warn!("waiting for orchestrated start");
             let peer_config = PeerConfig::to_bytes(&self.validator_config.public_config()).clone();

@@ -25,13 +25,17 @@ pub async fn main() -> anyhow::Result<()> {
     let modules = opt.modules();
     tracing::warn!(?modules, "sequencer starting up");
 
+    tracing::info!("loading genesis from file");
     let genesis = Genesis::from_file(&opt.genesis_file)?;
+    tracing::info!("loaded genesis from file");
 
+    tracing::info!("validating fee contract");
     // validate that the fee contract is a proxy and panic otherwise
     genesis
         .validate_fee_contract(opt.l1_provider_url[0].clone())
         .await
         .unwrap();
+    tracing::info!("validated fee contract");
 
     tracing::info!(?genesis, "genesis");
 
@@ -41,6 +45,7 @@ pub async fn main() -> anyhow::Result<()> {
     match (base, upgrade) {
         #[cfg(all(feature = "fee", feature = "marketplace"))]
         (FeeVersion::VERSION, MarketplaceVersion::VERSION) => {
+            tracing::info!("running fee and marketplace sequencer");
             run(
                 genesis,
                 modules,
@@ -51,6 +56,7 @@ pub async fn main() -> anyhow::Result<()> {
         }
         #[cfg(feature = "fee")]
         (FeeVersion::VERSION, _) => {
+            tracing::info!("running fee only sequencer");
             run(
                 genesis,
                 modules,
@@ -61,6 +67,7 @@ pub async fn main() -> anyhow::Result<()> {
         }
         #[cfg(feature = "marketplace")]
         (MarketplaceVersion::VERSION, _) => {
+            tracing::info!("running marketplace only sequencer");
             run(
                 genesis,
                 modules,
@@ -85,11 +92,14 @@ where
     V: Versions,
 {
     if let Some(storage) = modules.storage_fs.take() {
+        tracing::info!("running with local file system storage");
         run_with_storage(genesis, modules, opt, storage, versions).await
     } else if let Some(storage) = modules.storage_sql.take() {
+        tracing::info!("running with sql storage");
         run_with_storage(genesis, modules, opt, storage, versions).await
     } else {
         // Persistence is required. If none is provided, just use the local file system.
+        tracing::info!("running with local file system storage 2");
         run_with_storage(
             genesis,
             modules,
@@ -112,11 +122,18 @@ where
     S: DataSourceOptions,
     V: Versions,
 {
+    tracing::info!("initializing with storage");
     let ctx = init_with_storage(genesis, modules, opt, storage_opt, versions).await?;
+    tracing::info!("initialized with storage");
 
     // Start doing consensus.
+    tracing::info!("starting consensus");
     ctx.start_consensus().await;
+    tracing::info!("consensus started");
+
+    tracing::info!("joining consensus");
     ctx.join().await;
+    tracing::info!("consensus joined");
 
     Ok(())
 }
@@ -184,7 +201,9 @@ where
     };
     let proposal_fetcher_config = opt.proposal_fetcher_config;
 
+    tracing::info!("creating persistence storage");
     let persistence = storage_opt.create().await?;
+    tracing::info!("created persistence storage");
 
     // Initialize HotShot. If the user requested the HTTP module, we must initialize the handle in
     // a special way, in order to populate the API with consensus metrics. Otherwise, we initialize
@@ -213,7 +232,8 @@ where
             http_opt
                 .serve(move |metrics, consumer| {
                     async move {
-                        init_node(
+                        tracing::info!("initializing node");
+                        let f = init_node(
                             genesis,
                             network_params,
                             &*metrics,
@@ -226,14 +246,17 @@ where
                             marketplace_config,
                             proposal_fetcher_config,
                         )
-                        .await
+                        .await;
+                        tracing::info!("initialized node");
+                        f
                     }
                     .boxed()
                 })
                 .await?
         }
         None => {
-            init_node(
+            tracing::info!("initializing node 2");
+            let f = init_node(
                 genesis,
                 network_params,
                 &NoMetrics,
@@ -246,7 +269,9 @@ where
                 marketplace_config,
                 proposal_fetcher_config,
             )
-            .await?
+            .await?;
+            tracing::info!("initialized node 2");
+            f
         }
     };
 

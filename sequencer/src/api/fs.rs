@@ -2,6 +2,7 @@ use std::path::Path;
 
 use async_trait::async_trait;
 use hotshot_query_service::data_source::FileSystemDataSource;
+use tracing::info;
 
 use super::data_source::{Provider, SequencerDataSource};
 use crate::{catchup::CatchupStorage, persistence::fs::Options, SeqTypes};
@@ -13,12 +14,19 @@ impl SequencerDataSource for DataSource {
     type Options = Options;
 
     async fn create(opt: Self::Options, provider: Provider, reset: bool) -> anyhow::Result<Self> {
+        info!("creating file system data source");
         let path = Path::new(opt.path());
         let data_source = {
             if reset {
-                FileSystemDataSource::create(path, provider).await?
+                info!("resetting file system data source");
+                let f = FileSystemDataSource::create(path, provider).await?;
+                info!("reset file system data source");
+                f
             } else {
-                FileSystemDataSource::open(path, provider).await?
+                info!("opening file system data source");
+                let f = FileSystemDataSource::open(path, provider).await?;
+                info!("opened file system data source");
+                f
             }
         };
 

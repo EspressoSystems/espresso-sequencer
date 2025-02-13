@@ -84,6 +84,7 @@ impl Genesis {
 
 impl Genesis {
     pub async fn validate_fee_contract(&self, l1_rpc_url: Url) -> anyhow::Result<()> {
+        tracing::info!("validating fee contract");
         let l1 = L1Client::new(vec![l1_rpc_url]).with_context(|| "failed to create L1 client")?;
 
         if let Some(fee_contract_address) = self.chain_config.fee_contract {
@@ -126,6 +127,8 @@ impl Genesis {
             }
         }
         // TODO: it's optional for the fee contract to be included in a proxy in v1 so no need to panic but revisit this after v1 https://github.com/EspressoSystems/espresso-sequencer/pull/2000#discussion_r1765174702
+
+        tracing::info!("validated fee contract");
         Ok(())
     }
 }

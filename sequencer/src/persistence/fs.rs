@@ -97,17 +97,20 @@ impl PersistenceOptions for Options {
     }
 
     async fn create(&mut self) -> anyhow::Result<Self::Persistence> {
+        tracing::info!("creating file system persistence");
         let path = self.path.clone();
         let store_undecided_state = self.store_undecided_state;
         let view_retention = self.consensus_view_retention;
 
-        Ok(Persistence {
+        let f = Persistence {
             store_undecided_state,
             inner: Arc::new(RwLock::new(Inner {
                 path,
                 view_retention,
             })),
-        })
+        };
+        tracing::info!("created file system persistence");
+        Ok(f)
     }
 
     async fn reset(self) -> anyhow::Result<()> {
