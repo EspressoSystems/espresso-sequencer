@@ -18,7 +18,7 @@ use atomic_store::{
 use serde::{de::DeserializeOwned, Serialize};
 use std::collections::VecDeque;
 use std::fmt::Debug;
-use tracing::warn;
+use tracing::{debug, warn};
 
 /// A caching append log for ledger objects.
 #[derive(Debug)]
@@ -138,7 +138,7 @@ impl<T: Serialize + DeserializeOwned + Clone> LedgerLog<T> {
         let len = self.iter().len();
         let target_len = std::cmp::max(index, len);
         for i in len..target_len {
-            warn!("storing placeholders for position {i}/{target_len}");
+            debug!("storing placeholders for position {i}/{target_len}");
             if let Err(err) = self.store_resource(None) {
                 warn!("Failed to store placeholder: {}", err);
                 return Err(err);

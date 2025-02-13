@@ -31,9 +31,8 @@ use hotshot_query_service::{
 use hotshot_types::{
     consensus::CommitmentMap,
     data::{
-        vid_disperse::{ADVZDisperseShare, VidDisperseShare2},
-        DaProposal, EpochNumber, QuorumProposal, QuorumProposal2, QuorumProposalWrapper,
-        VidDisperseShare,
+        vid_disperse::ADVZDisperseShare, DaProposal, EpochNumber, QuorumProposal, QuorumProposal2,
+        QuorumProposalWrapper,
     },
     event::{Event, EventType, HotShotAction, LeafInfo},
     message::{convert_proposal, Proposal},
@@ -583,24 +582,6 @@ pub struct Persistence {
     gc_opt: ConsensusPruningOptions,
 }
 
-// TODO: clean up as part of VID migration
-fn deserialize_vid_proposal_with_fallback(
-    bytes: &[u8],
-) -> anyhow::Result<Proposal<SeqTypes, VidDisperseShare<SeqTypes>>> {
-    bincode::deserialize(bytes).or_else(|err| {
-        tracing::warn!("error decoding VID share: {err:#}");
-        match bincode::deserialize::<Proposal<SeqTypes, ADVZDisperseShare<SeqTypes>>>(bytes) {
-            Ok(proposal) => Ok(convert_proposal(proposal)),
-            Err(err2) => {
-                tracing::warn!("error decoding VID share fallback: {err2:#}");
-                Err(anyhow::anyhow!(
-                    "Both primary and fallback deserialization failed: {err:#}, {err2:#}"
-                ))
-            }
-        }
-    })
-}
-
 impl Persistence {
     /// Ensure the `leaf_hash` column is populated for all existing quorum proposals.
     ///
@@ -728,7 +709,9 @@ impl Persistence {
                 .map(|row| {
                     let view: i64 = row.get("view");
                     let data: Vec<u8> = row.get("data");
-                    let vid_proposal = deserialize_vid_proposal_with_fallback(&data)?;
+                    let vid_proposal = bincode::deserialize::<
+                        Proposal<SeqTypes, ADVZDisperseShare<SeqTypes>>,
+                    >(&data)?;
                     Ok((view as u64, vid_proposal.data))
                 })
                 .collect::<anyhow::Result<BTreeMap<_, _>>>()?;
@@ -1413,15 +1396,16 @@ impl Provider<SeqTypes, VidCommonRequest> for Persistence {
             }
         };
 
-        let proposal = match deserialize_vid_proposal_with_fallback(&bytes) {
-            Ok(proposal) => proposal,
-            Err(_) => return None,
-        };
+        let share: Proposal<SeqTypes, ADVZDisperseShare<SeqTypes>> =
+            match bincode::deserialize(&bytes) {
+                Ok(share) => share,
+                Err(err) => {
+                    tracing::warn!("error decoding VID share: {err:#}");
+                    return None;
+                }
+            };
 
-        Some(match proposal.data {
-            VidDisperseShare::V0(ADVZDisperseShare::<SeqTypes> { common, .. }) => common,
-            VidDisperseShare::V1(VidDisperseShare2::<SeqTypes> { common, .. }) => common,
-        })
+        Some(share.data.common)
     }
 }
 
