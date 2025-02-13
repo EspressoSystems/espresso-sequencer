@@ -162,7 +162,7 @@ pub mod v0_1 {
                 "{LEGACY_BUILDER_MODULE}/claimheaderinput/{block_hash}/{view_number}/{sender}/{encoded_signature}"
             );
 
-            let ep = format!("{}/{}", self.base_url, endpoint);
+            let ep = format!("{}{}", self.base_url, endpoint);
             let response = reqwest::get(ep.clone()).await;
             println!("requested from {}: {:?}", ep, response);
 
