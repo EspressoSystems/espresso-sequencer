@@ -981,7 +981,7 @@ impl BlockHeader<SeqTypes> for Header {
                     UpgradeType::Epoch { chain_config } => chain_config,
                     _ => {
                         tracing::error!("Header::new() ChainConfig Upgrade: Unknown UpgradeType");
-                        Header::get_chain_config(&validated_state, instance_state).await?;
+                        Header::get_chain_config(&validated_state, instance_state).await?
                     }
                 },
                 None => Header::get_chain_config(&validated_state, instance_state).await?,
