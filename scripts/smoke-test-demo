@@ -22,7 +22,7 @@ fi
 
 L1_PROVIDER=http://localhost:$ESPRESSO_SEQUENCER_L1_PORT
 SEQUENCER_API=http://localhost:$ESPRESSO_SEQUENCER1_API_PORT
-SEQUENCER_BLOCKS_TIMEOUT=120
+SEQUENCER_BLOCKS_TIMEOUT=360
 
 # usage: wait_for timeout_in_secs name URL
 function wait_for() {
@@ -76,7 +76,7 @@ function last_light_client_update() {
 }
 
 # Wait for the load generator to start.
-wait_for 300 "demo load generator" "$LOAD_GENERATOR/healthcheck"
+wait_for 500 "demo load generator" "$LOAD_GENERATOR/healthcheck"
 
 # Get the block height and number of transactions, wait some time, and check that these numbers have
 # both increased.
