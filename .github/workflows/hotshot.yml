@@ -52,7 +52,7 @@ jobs:
 
       - name: Unit and integration tests for all crates in workspace
         run: |
-          just ${{ matrix.test_suites }}
+          just hotshot::${{ matrix.test_suites }}
         timeout-minutes: 60
         env:
           RUST_BACKTRACE: full
