@@ -233,6 +233,7 @@ where
         let mut index_by_block_hash = HashMap::new();
         let mut index_by_payload_hash = HashMap::new();
         let mut index_by_time = BTreeMap::<u64, Vec<u64>>::new();
+        info!("opening leaf storage");
         let index_by_leaf_hash = leaf_storage
             .iter()
             .flatten()
@@ -243,6 +244,7 @@ where
                     leaf.payload_hash(),
                     leaf.height(),
                 );
+                info!("leaf storage iteration");
                 index_by_time
                     .entry(leaf.header().timestamp())
                     .or_default()
@@ -251,6 +253,8 @@ where
             })
             .collect();
 
+        info!("finished updating leaf storage, opening block storage");
+
         let mut index_by_txn_hash = HashMap::new();
         let mut num_transactions = 0;
         let mut payload_size = 0;
@@ -258,12 +262,15 @@ where
             num_transactions += block.len();
             payload_size += block.size() as usize;
 
+            info!("block storage iteration");
+
             let height = block.height();
             for (_, txn) in block.enumerate() {
                 update_index_by_hash(&mut index_by_txn_hash, txn.commit(), height);
             }
         }
 
+        info!("finished updating block storage");
         Ok(Self {
             inner: RwLock::new(FileSystemStorageInner {
                 index_by_leaf_hash,
