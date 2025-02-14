@@ -171,7 +171,7 @@ pub mod v0_1 {
             let response_text = response.text().await.map_err(|err| {
                 BuilderClientError::Api(format!("Failed to get response text: {:#}", err))
             })?;
-            
+
             let response_json: AvailableBlockHeaderInput<TYPES> =
                 serde_json::from_str(&response_text).map_err(|err| {
                     BuilderClientError::Api(format!("Failed to deserialize response: {:#}", err))
