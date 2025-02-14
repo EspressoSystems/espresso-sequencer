@@ -228,6 +228,7 @@ where
     };
     let header_input = AvailableBlockHeaderInput {
         vid_commitment,
+        vid_precompute_data: None,
         message_signature: signature_over_vid_commitment.clone(),
         fee_signature: signature_over_fee_info,
         sender: pub_key,
