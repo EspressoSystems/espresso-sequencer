@@ -79,5 +79,5 @@ jobs:
 
       - name: Test examples
         run: |
-          just example all-push-cdn -- --config_file ./crates/orchestrator/run-config.toml
+          just hotshot::example all-push-cdn -- --config_file ./crates/orchestrator/run-config.toml
         timeout-minutes: 20
