@@ -30,7 +30,7 @@ use hotshot_types::{
     },
     utils::{View, ViewInner},
 };
-use hotshot_types::{stake_table::StakeTableEntry, traits::election::Membership};
+use hotshot_types::stake_table::StakeTableEntry;
 use jf_merkle_tree::MerkleTreeScheme;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -191,10 +191,11 @@ impl<N: ConnectedNetwork<PubKey>, V: Versions, P: SequencerPersistence>
             .await
             .read()
             .await
-            .memberships
-            .read()
+            .membership_coordinator
+            .membership_for_epoch(epoch)
             .await
-            .stake_table(epoch)
+            .stake_table()
+            .await
     }
 
     /// Get the stake table for the current epoch if not provided

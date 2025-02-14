@@ -17,10 +17,10 @@ use hotshot_task::{
 };
 use hotshot_types::{
     consensus::OuterConsensus,
+    epoch_membership::EpochMembershipCoordinator,
     message::UpgradeLock,
     simple_certificate::{QuorumCertificate2, UpgradeCertificate},
     traits::{
-        election::Membership,
         node_implementation::{ConsensusTime, NodeImplementation, NodeType, Versions},
         signature_key::SignatureKey,
         storage::Storage,
@@ -52,7 +52,7 @@ pub struct QuorumProposalTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>
     pub instance_state: Arc<TYPES::InstanceState>,
 
     /// Membership for Quorum Certs/votes
-    pub membership: Arc<RwLock<TYPES::Membership>>,
+    pub membership_coordinator: EpochMembershipCoordinator<TYPES>,
 
     /// Our public key
     pub public_key: TYPES::SignatureKey,
@@ -280,9 +280,11 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
         event: Arc<HotShotEvent<TYPES>>,
         epoch_transition_indicator: EpochTransitionIndicator,
     ) -> Result<()> {
-        let membership_reader = self.membership.read().await;
-        let leader_in_current_epoch =
-            membership_reader.leader(view_number, epoch_number)? == self.public_key;
+        let mem = self
+            .membership_coordinator
+            .membership_for_epoch(epoch_number)
+            .await;
+        let leader_in_current_epoch = mem.leader(view_number).await? == self.public_key;
         // If we are in the epoch transition and we are the leader in the next epoch,
         // we might want to start collecting dependencies for our next epoch proposal.
 
@@ -291,9 +293,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                 epoch_transition_indicator,
                 EpochTransitionIndicator::InTransition
             )
-            && membership_reader.leader(view_number, epoch_number.map(|x| x + 1))?
-                == self.public_key;
-        drop(membership_reader);
+            && mem.next_epoch().await.leader(view_number).await? == self.public_key;
 
         // Don't even bother making the task if we are not entitled to propose anyway.
         ensure!(
@@ -326,7 +326,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                 view_number,
                 sender: event_sender,
                 receiver: event_receiver,
-                membership: Arc::clone(&self.membership),
+                membership: mem,
                 public_key: self.public_key.clone(),
                 private_key: self.private_key.clone(),
                 instance_state: Arc::clone(&self.instance_state),
@@ -470,12 +470,13 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
             }
             HotShotEvent::ViewSyncFinalizeCertificateRecv(certificate) => {
                 let epoch_number = certificate.data.epoch;
+                let mem = self
+                    .membership_coordinator
+                    .membership_for_epoch(epoch_number)
+                    .await;
 
-                let membership_reader = self.membership.read().await;
-                let membership_stake_table = membership_reader.stake_table(epoch_number);
-                let membership_success_threshold =
-                    membership_reader.success_threshold(epoch_number);
-                drop(membership_reader);
+                let membership_stake_table = mem.stake_table().await;
+                let membership_success_threshold = mem.success_threshold().await;
 
                 certificate
                     .is_valid_cert(
@@ -556,11 +557,12 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                 ensure!(qc.view_number() > self.highest_qc.view_number());
                 let cert_epoch_number = qc.data.epoch;
 
-                let membership_reader = self.membership.read().await;
-                let membership_stake_table = membership_reader.stake_table(cert_epoch_number);
-                let membership_success_threshold =
-                    membership_reader.success_threshold(cert_epoch_number);
-                drop(membership_reader);
+                let mem = self
+                    .membership_coordinator
+                    .membership_for_epoch(cert_epoch_number)
+                    .await;
+                let membership_stake_table = mem.stake_table().await;
+                let membership_success_threshold = mem.success_threshold().await;
 
                 qc.is_valid_cert(
                     membership_stake_table,

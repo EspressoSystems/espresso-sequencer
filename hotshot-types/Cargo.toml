@@ -8,6 +8,7 @@ license = "MIT"
 
 [dependencies]
 anyhow = { workspace = true }
+async-broadcast = { workspace = true }
 ark-bn254 = { workspace = true }
 ark-ed-on-bn254 = { workspace = true }
 ark-ff = { workspace = true }

@@ -16,12 +16,12 @@ use async_trait::async_trait;
 use hotshot::{traits::TestableNodeImplementation, HotShotError};
 use hotshot_types::{
     data::Leaf2,
+    epoch_membership::EpochMembershipCoordinator,
     error::RoundTimedoutState,
     event::{Event, EventType, LeafChain},
     simple_certificate::QuorumCertificate2,
     traits::{
         block_contents::BlockHeader,
-        election::Membership,
         node_implementation::{ConsensusTime, NodeType, Versions},
         BlockPayload,
     },
@@ -141,16 +141,15 @@ impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>, V: Versions> TestTas
 
     /// Handles an event from one of multiple receivers.
     async fn handle_event(&mut self, (message, id): (Self::Event, usize)) -> Result<()> {
-        let memberships_arc = Arc::clone(
-            &self
-                .handles
-                .read()
-                .await
-                .first()
-                .unwrap()
-                .handle
-                .memberships,
-        );
+        let memberships_arc = &self
+            .handles
+            .read()
+            .await
+            .first()
+            .unwrap()
+            .handle
+            .membership_coordinator
+            .clone();
         let public_key = self.handles.read().await[id].handle.public_key();
         let OverallSafetyPropertiesDescription::<TYPES> {
             check_leaf,
@@ -170,9 +169,10 @@ impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>, V: Versions> TestTas
                     .await
                     .cur_epoch();
                 if !memberships_arc
-                    .read()
+                    .membership_for_epoch(cur_epoch)
                     .await
-                    .has_stake(&public_key, cur_epoch)
+                    .has_stake(&public_key)
+                    .await
                 {
                     // Return early, this event comes from a node not belonging to the current epoch
                     return Ok(());
@@ -217,7 +217,7 @@ impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>, V: Versions> TestTas
                                     id,
                                     paired_up,
                                     maybe_block_size,
-                                    &memberships_arc,
+                                    memberships_arc,
                                     &public_key,
                                     self.epoch_height,
                                 )
@@ -231,7 +231,7 @@ impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>, V: Versions> TestTas
                                     id,
                                     paired_up,
                                     maybe_block_size,
-                                    &memberships_arc,
+                                    memberships_arc,
                                     &public_key,
                                     self.epoch_height,
                                 )
@@ -255,9 +255,10 @@ impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>, V: Versions> TestTas
                     .await
                     .cur_epoch();
                 if !memberships_arc
-                    .read()
+                    .membership_for_epoch(cur_epoch)
                     .await
-                    .has_stake(&public_key, cur_epoch)
+                    .has_stake(&public_key)
+                    .await
                 {
                     // Return early, this event comes from a node not belonging to the current epoch
                     return Ok(());
@@ -275,10 +276,9 @@ impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>, V: Versions> TestTas
         if let Some(keys) = keys {
             for key in keys {
                 let key_epoch = key.epoch(self.epoch_height);
-                let memberships_reader = memberships_arc.read().await;
-                let key_len = memberships_reader.total_nodes(key_epoch);
-                let key_threshold = memberships_reader.success_threshold(key_epoch).get() as usize;
-                drop(memberships_reader);
+                let epoch_membership = memberships_arc.membership_for_epoch(key_epoch).await;
+                let key_len = epoch_membership.total_nodes().await;
+                let key_threshold = epoch_membership.success_threshold().await.get() as usize;
 
                 let key_view_number = key.view_number();
                 let key_view = self.ctx.round_results.get_mut(&key_view_number).unwrap();
@@ -322,10 +322,9 @@ impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>, V: Versions> TestTas
                 .await
                 .cur_epoch();
 
-            let memberships_reader = memberships_arc.read().await;
-            let len = memberships_reader.total_nodes(cur_epoch);
-            let threshold = memberships_reader.success_threshold(cur_epoch).get() as usize;
-            drop(memberships_reader);
+            let epoch_membership = memberships_arc.membership_for_epoch(cur_epoch).await;
+            let len = epoch_membership.total_nodes().await;
+            let threshold = epoch_membership.success_threshold().await.get() as usize;
 
             if view.check_if_failed(threshold, len) {
                 view.status = ViewStatus::Failed;
@@ -412,6 +411,7 @@ impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>, V: Versions> TestTas
 pub struct RoundResult<TYPES: NodeType> {
     // Transactions that were submitted
     // pub txns: Vec<TYPES::Transaction>,
+    
     /// Nodes that committed this round
     /// id -> (leaf, qc)
     success_nodes: HashMap<u64, (LeafChain<TYPES>, QuorumCertificate2<TYPES>)>,
@@ -508,7 +508,7 @@ impl<TYPES: NodeType> RoundResult<TYPES> {
         idx: usize,
         result: (LeafChain<TYPES>, QuorumCertificate2<TYPES>),
         maybe_block_size: Option<u64>,
-        membership: &Arc<RwLock<TYPES::Membership>>,
+        membership: &EpochMembershipCoordinator<TYPES>,
         public_key: &TYPES::SignatureKey,
         epoch_height: u64,
     ) -> Option<Leaf2<TYPES>> {
@@ -516,7 +516,12 @@ impl<TYPES: NodeType> RoundResult<TYPES> {
         if let Some(leaf_info) = maybe_leaf {
             let leaf = &leaf_info.leaf;
             let epoch = leaf.epoch(epoch_height);
-            if !membership.read().await.has_stake(public_key, epoch) {
+            if !membership
+                .membership_for_epoch(epoch)
+                .await
+                .has_stake(public_key)
+                .await
+            {
                 // The node doesn't belong to the epoch, don't count towards total successes count
                 return None;
             }

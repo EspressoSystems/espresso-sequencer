@@ -24,7 +24,6 @@ use hotshot_types::{
     data::{null_block, DaProposal, PackedBundle, VidDisperse, ViewNumber},
     traits::{
         consensus_api::ConsensusApi,
-        election::Membership,
         node_implementation::{ConsensusTime, NodeType, Versions},
         BlockPayload,
     },
@@ -45,14 +44,13 @@ async fn test_vid_task() {
         .0;
     let pub_key = handle.public_key();
 
-    let membership = Arc::clone(&handle.hotshot.memberships);
+    let membership = handle.hotshot.membership_coordinator.clone();
 
     let default_version = Version { major: 0, minor: 0 };
 
     let mut vid = vid_scheme_from_view_number::<TestTypes, TestVersions>(
-        &membership,
+        &membership.membership_for_epoch(None).await,
         ViewNumber::new(0),
-        None,
         default_version,
     )
     .await;
@@ -104,6 +102,7 @@ async fn test_vid_task() {
         signature: message.signature.clone(),
         _pd: PhantomData,
     };
+    let mem = membership.membership_for_epoch(None).await;
     let inputs = vec![
         serial![ViewChange(ViewNumber::new(1), None)],
         serial![
@@ -116,7 +115,7 @@ async fn test_vid_task() {
                 ViewNumber::new(2),
                 None,
                 vec1::vec1![null_block::builder_fee::<TestTypes, TestVersions>(
-                    membership.read().await.total_nodes(None),
+                    mem.total_nodes().await,
                     <TestVersions as Versions>::Base::VERSION,
                     *ViewNumber::new(2),
                 )
@@ -137,7 +136,7 @@ async fn test_vid_task() {
                 },
                 ViewNumber::new(2),
                 vec1![null_block::builder_fee::<TestTypes, TestVersions>(
-                    membership.read().await.total_nodes(None),
+                    mem.total_nodes().await,
                     <TestVersions as Versions>::Base::VERSION,
                     *ViewNumber::new(2),
                 )

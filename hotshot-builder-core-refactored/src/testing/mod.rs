@@ -131,7 +131,7 @@ impl TestServiceWrapper {
     ) -> Vec<TestTransaction> {
         let mut available_states = self
             .client
-            .available_blocks::<TestVersions>(
+            .available_blocks(
                 state_id.parent_commitment,
                 *state_id.parent_view,
                 MOCK_LEADER_KEYS.0,

@@ -17,9 +17,11 @@ use hotshot_task::task::{Task, TaskState};
 use hotshot_types::{
     consensus::{Consensus, OuterConsensus},
     data::{EpochNumber, Leaf, ViewChangeEvidence2},
+    epoch_membership::{EpochMembership, EpochMembershipCoordinator},
     event::Event,
     message::UpgradeLock,
     simple_certificate::UpgradeCertificate,
+    simple_vote::HasEpoch,
     traits::{
         node_implementation::{ConsensusTime, NodeImplementation, NodeType, Versions},
         signature_key::SignatureKey,
@@ -58,7 +60,7 @@ pub struct QuorumProposalRecvTaskState<TYPES: NodeType, I: NodeImplementation<TY
     pub cur_epoch: Option<TYPES::Epoch>,
 
     /// Membership for Quorum Certs/votes
-    pub membership: Arc<RwLock<TYPES::Membership>>,
+    pub membership: EpochMembershipCoordinator<TYPES>,
 
     /// View timeout from config.
     pub timeout: u64,
@@ -99,7 +101,7 @@ pub(crate) struct ValidationInfo<TYPES: NodeType, I: NodeImplementation<TYPES>, 
     pub(crate) consensus: OuterConsensus<TYPES>,
 
     /// Membership for Quorum Certs/votes
-    pub membership: Arc<RwLock<TYPES::Membership>>,
+    pub membership: EpochMembership<TYPES>,
 
     /// Output events to application
     pub output_event_stream: async_broadcast::Sender<Event<TYPES>>,
@@ -150,7 +152,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                     public_key: self.public_key.clone(),
                     private_key: self.private_key.clone(),
                     consensus: self.consensus.clone(),
-                    membership: Arc::clone(&self.membership),
+                    membership: self
+                        .membership
+                        .membership_for_epoch(proposal.data.epoch())
+                        .await,
                     output_event_stream: self.output_event_stream.clone(),
                     storage: Arc::clone(&self.storage),
                     upgrade_lock: self.upgrade_lock.clone(),

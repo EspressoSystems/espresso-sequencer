@@ -14,7 +14,7 @@ use hotshot_types::{
     },
     PeerConfig,
 };
-use hotshot_utils::anytrace::Result;
+use hotshot_utils::anytrace::{Result};
 use primitive_types::U256;
 
 /// Tuple type for eligible leaders
@@ -423,5 +423,15 @@ impl<TYPES: NodeType> Membership<TYPES> for TwoStaticCommittees<TYPES> {
             ))
             .unwrap()
         }
+    }
+    fn has_epoch(&self, _epoch: TYPES::Epoch) -> bool {
+        true
+    }
+
+    async fn get_epoch_root(
+        &self,
+        _block_height: u64,
+    ) -> Option<(TYPES::Epoch, TYPES::BlockHeader)> {
+        None
     }
 }

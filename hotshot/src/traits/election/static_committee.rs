@@ -234,4 +234,14 @@ impl<TYPES: NodeType> Membership<TYPES> for StaticCommittee<TYPES> {
         let len = self.stake_table.len();
         NonZeroU64::new(max((len as u64 * 9) / 10, ((len as u64 * 2) / 3) + 1)).unwrap()
     }
+    fn has_epoch(&self, _epoch: TYPES::Epoch) -> bool {
+        true
+    }
+
+    async fn get_epoch_root(
+        &self,
+        _block_height: u64,
+    ) -> Option<(TYPES::Epoch, TYPES::BlockHeader)> {
+        None
+    }
 }
