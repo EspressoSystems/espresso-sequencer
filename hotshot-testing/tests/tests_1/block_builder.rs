@@ -21,8 +21,8 @@ use hotshot_testing::block_builder::{
 use hotshot_types::{
     network::RandomBuilderConfig,
     traits::{
-        block_contents::advz_commitment, node_implementation::NodeType, signature_key::SignatureKey,
-        BlockPayload,
+        block_contents::advz_commitment, node_implementation::NodeType,
+        signature_key::SignatureKey, BlockPayload,
     },
 };
 use tide_disco::Url;
