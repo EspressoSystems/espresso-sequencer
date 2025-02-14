@@ -58,4 +58,4 @@ test *ARGS:
   cargo nextest run --profile hotshot {{ARGS}}
 
 example *ARGS:
-  cargo run --profile=release-lto --package hotshot-examples --no-default-features --example {{ARGS}}
+  cargo run --package hotshot-examples --example {{ARGS}}
