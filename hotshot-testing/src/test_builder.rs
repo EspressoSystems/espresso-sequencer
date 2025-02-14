@@ -15,8 +15,8 @@ use hotshot::{
     HotShotInitializer, MarketplaceConfig, SystemContext, TwinsHandlerState,
 };
 use hotshot_example_types::{
-    auction_results_provider_types::TestAuctionResultsProvider, state_types::TestInstanceState,
-    storage_types::TestStorage, testable_delay::DelayConfig,
+    auction_results_provider_types::TestAuctionResultsProvider, node_types::TestTypes,
+    state_types::TestInstanceState, storage_types::TestStorage, testable_delay::DelayConfig,
 };
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
@@ -32,6 +32,7 @@ use super::{
     txn_task::TxnTaskDescription,
 };
 use crate::{
+    helpers::{key_pair_for_id, TestNodeKeyMap},
     spinning_task::SpinningTaskDescription,
     test_launcher::{Network, ResourceGenerators, TestLauncher},
     test_task::TestTaskStateSeed,
@@ -450,6 +451,16 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TestDescription
             ),
             ..self
         }
+    }
+
+    pub fn build_node_key_map(&self) -> Arc<TestNodeKeyMap> {
+        let mut node_key_map = TestNodeKeyMap::new();
+        for i in 0..self.test_config.num_nodes_with_stake.into() {
+            let (private_key, public_key) = key_pair_for_id::<TestTypes>(i as u64);
+            node_key_map.insert(public_key, private_key);
+        }
+
+        Arc::new(node_key_map)
     }
 }
 
