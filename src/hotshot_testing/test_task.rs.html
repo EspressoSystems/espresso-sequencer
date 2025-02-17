@@ -201,7 +201,26 @@
 <a href="#200" id="200">200</a>
 <a href="#201" id="201">201</a>
 <a href="#202" id="202">202</a>
-<a href="#203" id="203">203</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
+<a href="#203" id="203">203</a>
+<a href="#204" id="204">204</a>
+<a href="#205" id="205">205</a>
+<a href="#206" id="206">206</a>
+<a href="#207" id="207">207</a>
+<a href="#208" id="208">208</a>
+<a href="#209" id="209">209</a>
+<a href="#210" id="210">210</a>
+<a href="#211" id="211">211</a>
+<a href="#212" id="212">212</a>
+<a href="#213" id="213">213</a>
+<a href="#214" id="214">214</a>
+<a href="#215" id="215">215</a>
+<a href="#216" id="216">216</a>
+<a href="#217" id="217">217</a>
+<a href="#218" id="218">218</a>
+<a href="#219" id="219">219</a>
+<a href="#220" id="220">220</a>
+<a href="#221" id="221">221</a>
+<a href="#222" id="222">222</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
 // This file is part of the HotShot repository.
 
 // You should have received a copy of the MIT License
@@ -209,7 +228,6 @@
 
 </span><span class="kw">use </span>std::{num::NonZeroUsize, sync::Arc, time::Duration};
 
-<span class="kw">use </span>anyhow::Result;
 <span class="kw">use </span>async_broadcast::{Receiver, Sender};
 <span class="kw">use </span>async_lock::RwLock;
 <span class="kw">use </span>async_trait::async_trait;
@@ -243,14 +261,27 @@
     </span>Fail(Box&lt;<span class="kw">dyn </span>std::fmt::Debug + Send + Sync&gt;),
 }
 
+<span class="kw">pub fn </span>spawn_timeout_task(test_sender: Sender&lt;TestEvent&gt;, timeout: Duration) -&gt; JoinHandle&lt;()&gt; {
+    tokio::spawn(<span class="kw">async move </span>{
+        sleep(timeout).<span class="kw">await</span>;
+
+        <span class="kw">let _ </span>= test_sender.broadcast(TestEvent::Shutdown).<span class="kw">await</span>;
+    })
+}
+
 <span class="attr">#[async_trait]
 </span><span class="doccomment">/// Type for mutable task state that can be used as the state for a `Task`
 </span><span class="kw">pub trait </span>TestTaskState: Send {
     <span class="doccomment">/// Type of event sent and received by the task
     </span><span class="kw">type </span>Event: Clone + Send + Sync;
+    <span class="doccomment">/// Type of error produced by the task
+    </span><span class="kw">type </span>Error: std::fmt::Display;
 
     <span class="doccomment">/// Handles an event from one of multiple receivers.
-    </span><span class="kw">async fn </span>handle_event(<span class="kw-2">&amp;mut </span><span class="self">self</span>, (event, id): (<span class="self">Self</span>::Event, usize)) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt;;
+    </span><span class="kw">async fn </span>handle_event(
+        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+        (event, id): (<span class="self">Self</span>::Event, usize),
+    ) -&gt; std::result::Result&lt;(), <span class="self">Self</span>::Error&gt;;
 
     <span class="doccomment">/// Check the result of the test.
     </span><span class="kw">async fn </span>check(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; TestResult;
@@ -258,14 +289,21 @@
 
 <span class="doccomment">/// Type alias for type-erased [`TestTaskState`] to be used for
 /// dynamic dispatch
-</span><span class="kw">pub type </span>AnyTestTaskState&lt;TYPES&gt; =
-    Box&lt;<span class="kw">dyn </span>TestTaskState&lt;Event = hotshot_types::event::Event&lt;TYPES&gt;&gt; + Send + Sync&gt;;
+</span><span class="kw">pub type </span>AnyTestTaskState&lt;TYPES&gt; = Box&lt;
+    <span class="kw">dyn </span>TestTaskState&lt;Event = hotshot_types::event::Event&lt;TYPES&gt;, Error = anyhow::Error&gt;
+        + Send
+        + Sync,
+&gt;;
 
 <span class="attr">#[async_trait]
 </span><span class="kw">impl</span>&lt;TYPES: NodeType&gt; TestTaskState <span class="kw">for </span>AnyTestTaskState&lt;TYPES&gt; {
     <span class="kw">type </span>Event = Event&lt;TYPES&gt;;
+    <span class="kw">type </span>Error = anyhow::Error;
 
-    <span class="kw">async fn </span>handle_event(<span class="kw-2">&amp;mut </span><span class="self">self</span>, event: (<span class="self">Self</span>::Event, usize)) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+    <span class="kw">async fn </span>handle_event(
+        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+        event: (<span class="self">Self</span>::Event, usize),
+    ) -&gt; std::result::Result&lt;(), anyhow::Error&gt; {
         (<span class="kw-2">**</span><span class="self">self</span>).handle_event(event).<span class="kw">await
     </span>}
 

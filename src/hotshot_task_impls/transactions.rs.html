@@ -1454,7 +1454,7 @@
             .enumerate()
             .map(|(builder_idx, client)| <span class="kw">async move </span>{
                 client
-                    .available_blocks::&lt;V&gt;(
+                    .available_blocks(
                         parent_comm,
                         view_number.u64(),
                         <span class="self">self</span>.public_key.clone(),

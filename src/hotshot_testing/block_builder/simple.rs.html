@@ -459,8 +459,7 @@
 <a href="#458" id="458">458</a>
 <a href="#459" id="459">459</a>
 <a href="#460" id="460">460</a>
-<a href="#461" id="461">461</a>
-<a href="#462" id="462">462</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
+<a href="#461" id="461">461</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
 // This file is part of the HotShot repository.
 
 // You should have received a copy of the MIT License
@@ -565,7 +564,7 @@
     ) -&gt; Box&lt;<span class="kw">dyn </span>BuilderTask&lt;TYPES&gt;&gt; {
         <span class="kw">let </span>(change_sender, change_receiver) = broadcast(<span class="number">128</span>);
         <span class="kw">let </span>(source, task) = <span class="self">Self</span>::create(num_nodes, changes, change_sender).<span class="kw">await</span>;
-        run_builder_source::&lt;<span class="kw">_</span>, <span class="kw">_</span>, TestVersions&gt;(url, change_receiver, source);
+        run_builder_source(url, change_receiver, source);
 
         Box::new(task)
     }
@@ -673,7 +672,7 @@
 <span class="kw">where
     </span>&lt;TYPES <span class="kw">as </span>NodeType&gt;::InstanceState: Default,
 {
-    <span class="kw">async fn </span>available_blocks&lt;V: Versions&gt;(
+    <span class="kw">async fn </span>available_blocks(
         <span class="kw-2">&amp;</span><span class="self">self</span>,
         _for_parent: <span class="kw-2">&amp;</span>VidCommitment,
         _view_number: u64,
@@ -805,7 +804,6 @@
         <span class="kw">let </span>builder_api_0_1 = hotshot_builder_api::v0_1::builder::define_api::&lt;
             SimpleBuilderSource&lt;TYPES&gt;,
             TYPES,
-            TestVersions,
         &gt;(<span class="kw-2">&amp;</span>Options::default())
         .expect(<span class="string">"Failed to construct the builder API"</span>);
 

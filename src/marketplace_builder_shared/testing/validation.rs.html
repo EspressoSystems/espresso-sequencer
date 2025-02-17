@@ -128,7 +128,8 @@
 <a href="#127" id="127">127</a>
 <a href="#128" id="128">128</a>
 <a href="#129" id="129">129</a>
-<a href="#130" id="130">130</a></pre></div><pre class="rust"><code><span class="kw">use </span>std::sync::Arc;
+<a href="#130" id="130">130</a>
+<a href="#131" id="131">131</a></pre></div><pre class="rust"><code><span class="kw">use </span>std::sync::Arc;
 
 <span class="kw">use </span><span class="kw">super</span>::TransactionPayload;
 
@@ -147,7 +148,7 @@
     node_implementation::{NodeType, Versions},
 };
 
-<span class="kw">use </span>anyhow::bail;
+<span class="kw">use </span>anyhow::{bail, Error};
 <span class="kw">use </span>async_trait::async_trait;
 <span class="kw">use </span>chrono::{DateTime, Local};
 
@@ -203,6 +204,7 @@
     V: Versions,
 {
     <span class="kw">type </span>Event = Event&lt;Types&gt;;
+    <span class="kw">type </span>Error = Error;
 
     <span class="kw">async fn </span>handle_event(<span class="kw-2">&amp;mut </span><span class="self">self</span>, (event, node_id): (<span class="self">Self</span>::Event, usize)) -&gt; anyhow::Result&lt;()&gt; {
         <span class="comment">// We only need to handle events from one node

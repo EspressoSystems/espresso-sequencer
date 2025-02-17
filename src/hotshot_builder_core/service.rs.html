@@ -5153,7 +5153,7 @@
     message::Proposal,
     traits::{
         block_contents::{BlockPayload, Transaction},
-        node_implementation::{ConsensusTime, NodeType, Versions},
+        node_implementation::{ConsensusTime, NodeType},
         signature_key::{BuilderSignatureKey, SignatureKey},
     },
     utils::BuilderCommitment,
@@ -6168,7 +6168,7 @@ Handling Builder API responses
     &gt;&gt;::Error: Display,
     <span class="kw">for</span>&lt;<span class="lifetime">'a</span>&gt; &lt;Types::SignatureKey <span class="kw">as </span>TryFrom&lt;<span class="kw-2">&amp;</span><span class="lifetime">'a </span>TaggedBase64&gt;&gt;::Error: Display,
 {
-    <span class="kw">async fn </span>available_blocks&lt;V: Versions&gt;(
+    <span class="kw">async fn </span>available_blocks(
         <span class="kw-2">&amp;</span><span class="self">self</span>,
         for_parent: <span class="kw-2">&amp;</span>VidCommitment,
         view_number: u64,

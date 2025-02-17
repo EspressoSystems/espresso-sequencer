@@ -494,7 +494,7 @@
         );
 
         <span class="comment">// start the hotshot api service
-        </span>run_builder_api_service::&lt;V&gt;(hotshot_builder_apis_url.clone(), proxy_global_state);
+        </span>run_builder_api_service(hotshot_builder_apis_url.clone(), proxy_global_state);
 
         <span class="comment">// spawn the builder service
         </span><span class="kw">let </span>events_url = hotshot_events_api_url.clone();

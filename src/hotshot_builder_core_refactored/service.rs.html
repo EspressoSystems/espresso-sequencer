@@ -810,21 +810,14 @@
 <a href="#809" id="809">809</a>
 <a href="#810" id="810">810</a>
 <a href="#811" id="811">811</a>
-<a href="#812" id="812">812</a>
-<a href="#813" id="813">813</a>
-<a href="#814" id="814">814</a>
-<a href="#815" id="815">815</a>
-<a href="#816" id="816">816</a>
-<a href="#817" id="817">817</a>
-<a href="#818" id="818">818</a>
-<a href="#819" id="819">819</a></pre></div><pre class="rust"><code><span class="kw">use </span>hotshot::types::Event;
+<a href="#812" id="812">812</a></pre></div><pre class="rust"><code><span class="kw">use </span>hotshot::types::Event;
 <span class="kw">use </span>hotshot_builder_api::v0_1::{
     block_info::{AvailableBlockData, AvailableBlockHeaderInput, AvailableBlockInfo},
     builder::{define_api, submit_api, BuildError, Error <span class="kw">as </span>BuilderApiError, TransactionStatus},
     data_source::{AcceptsTxnSubmits, BuilderDataSource},
 };
+<span class="kw">use </span>hotshot_types::traits::block_contents::{advz_commitment, Transaction};
 <span class="kw">use </span>hotshot_types::traits::EncodeBytes;
-<span class="kw">use </span>hotshot_types::traits::{block_contents::Transaction, node_implementation::Versions};
 <span class="kw">use </span>hotshot_types::{
     event::EventType,
     traits::{
@@ -839,17 +832,15 @@
 <span class="kw">use </span>marketplace_builder_shared::error::Error;
 <span class="kw">use </span>marketplace_builder_shared::state::BuilderState;
 <span class="kw">use </span>marketplace_builder_shared::utils::{BuilderKeys, WaitAndKeep};
+<span class="kw">use </span>marketplace_builder_shared::{
+    block::{BlockId, BuilderStateId, ReceivedTransaction, TransactionSource},
+    coordinator::BuilderStateCoordinator,
+};
 <span class="kw">use </span>tide_disco::app::AppError;
 <span class="kw">use </span>tokio::spawn;
 <span class="kw">use </span>tokio::time::{sleep, timeout};
 <span class="kw">use </span>tracing::{error, info, instrument, trace, warn};
 <span class="kw">use </span>vbs::version::StaticVersion;
-<span class="kw">use </span>vbs::version::StaticVersionType;
-
-<span class="kw">use </span>marketplace_builder_shared::{
-    block::{BlockId, BuilderStateId, ReceivedTransaction, TransactionSource},
-    coordinator::BuilderStateCoordinator,
-};
 
 <span class="kw">use </span><span class="kw">crate</span>::block_size_limits::BlockSizeLimits;
 <span class="kw">use </span><span class="kw">crate</span>::block_store::{BlockInfo, BlockStore};
@@ -1057,11 +1048,11 @@
     }
 
     <span class="doccomment">/// Consumes `self` and returns a `tide_disco` [`App`] with builder and private mempool APIs registered
-    </span><span class="kw">pub fn </span>into_app&lt;V: Versions&gt;(
+    </span><span class="kw">pub fn </span>into_app(
         <span class="self">self</span>: Arc&lt;<span class="self">Self</span>&gt;,
     ) -&gt; <span class="prelude-ty">Result</span>&lt;App&lt;ProxyGlobalState&lt;Types&gt;, BuilderApiError&gt;, AppError&gt; {
         <span class="kw">let </span>proxy = ProxyGlobalState(<span class="self">self</span>);
-        <span class="kw">let </span>builder_api = define_api::&lt;ProxyGlobalState&lt;Types&gt;, Types, V&gt;(<span class="kw-2">&amp;</span>Default::default())<span class="question-mark">?</span>;
+        <span class="kw">let </span>builder_api = define_api::&lt;ProxyGlobalState&lt;Types&gt;, Types&gt;(<span class="kw-2">&amp;</span>Default::default())<span class="question-mark">?</span>;
 
         <span class="comment">// TODO: Replace StaticVersion with proper constant when added in HotShot
         </span><span class="kw">let </span>private_mempool_api =
@@ -1115,7 +1106,7 @@
     ///
     /// Returns None if there are no transactions to include
     /// and we aren't prioritizing finalization for this builder state
-    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">async fn </span>build_block&lt;V: Versions&gt;(
+    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">async fn </span>build_block(
         <span class="kw-2">&amp;</span><span class="self">self</span>,
         builder_state: Arc&lt;BuilderState&lt;Types&gt;&gt;,
     ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Option</span>&lt;BlockInfo&lt;Types&gt;&gt;, Error&lt;Types&gt;&gt; {
@@ -1223,13 +1214,8 @@
         </span><span class="kw">let </span>num_nodes = <span class="self">self</span>.num_nodes.load(Ordering::Relaxed);
 
         <span class="kw">let </span>fut = <span class="kw">async move </span>{
-            <span class="kw">let </span>join_handle = tokio::task::spawn_blocking(<span class="kw">move </span>|| {
-                hotshot_types::traits::block_contents::vid_commitment::&lt;V&gt;(
-                    <span class="kw-2">&amp;</span>encoded_txns,
-                    num_nodes,
-                    &lt;V <span class="kw">as </span>Versions&gt;::Base::VERSION,
-                )
-            });
+            <span class="kw">let </span>join_handle =
+                tokio::task::spawn_blocking(<span class="kw">move </span>|| advz_commitment(<span class="kw-2">&amp;</span>encoded_txns, num_nodes));
             join_handle.<span class="kw">await</span>.unwrap()
         };
 
@@ -1253,7 +1239,7 @@
     <span class="attr">#[instrument(skip_all,
         fields(state_id = %state_id)
     )]
-    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">async fn </span>available_blocks_implementation&lt;V: Versions&gt;(
+    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">async fn </span>available_blocks_implementation(
         <span class="kw-2">&amp;</span><span class="self">self</span>,
         state_id: BuilderStateId&lt;Types&gt;,
     ) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;AvailableBlockInfo&lt;Types&gt;&gt;, Error&lt;Types&gt;&gt; {
@@ -1298,7 +1284,7 @@
             </span>.max_api_waiting_time
             .saturating_sub(start.elapsed())
             .div_f32(<span class="number">1.1</span>);
-        <span class="kw">match </span>timeout(build_block_timeout, <span class="self">self</span>.build_block::&lt;V&gt;(builder))
+        <span class="kw">match </span>timeout(build_block_timeout, <span class="self">self</span>.build_block(builder))
             .<span class="kw">await
             </span>.map_err(|<span class="kw">_</span>| Error::ApiTimeout)
         {
@@ -1458,7 +1444,7 @@ Handling Builder API responses
     <span class="kw">for</span>&lt;<span class="lifetime">'a</span>&gt; &lt;Types::SignatureKey <span class="kw">as </span>TryFrom&lt;<span class="kw-2">&amp;</span><span class="lifetime">'a </span>TaggedBase64&gt;&gt;::Error: Display,
 {
     <span class="attr">#[tracing::instrument(skip_all)]
-    </span><span class="kw">async fn </span>available_blocks&lt;V: Versions&gt;(
+    </span><span class="kw">async fn </span>available_blocks(
         <span class="kw-2">&amp;</span><span class="self">self</span>,
         parent_block: <span class="kw-2">&amp;</span>VidCommitment,
         parent_view: u64,
@@ -1480,7 +1466,7 @@ Handling Builder API responses
 
         <span class="kw">let </span>available_blocks = timeout(
             <span class="self">self</span>.max_api_waiting_time,
-            <span class="self">self</span>.available_blocks_implementation::&lt;V&gt;(state_id),
+            <span class="self">self</span>.available_blocks_implementation(state_id),
         )
         .<span class="kw">await
         </span>.map_err(|<span class="kw">_</span>| Error::&lt;Types&gt;::ApiTimeout)<span class="question-mark">??</span>;

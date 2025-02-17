@@ -520,13 +520,11 @@
 <a href="#519" id="519">519</a>
 <a href="#520" id="520">520</a>
 <a href="#521" id="521">521</a>
-<a href="#522" id="522">522</a>
-<a href="#523" id="523">523</a></pre></div><pre class="rust"><code><span class="kw">use </span>espresso_types::SeqTypes;
+<a href="#522" id="522">522</a></pre></div><pre class="rust"><code><span class="kw">use </span>espresso_types::SeqTypes;
 <span class="kw">use </span>hotshot_builder_api::v0_1::builder::{
     Error <span class="kw">as </span>BuilderApiError, Options <span class="kw">as </span>HotshotBuilderApiOptions,
 };
 <span class="kw">use </span>hotshot_builder_core::service::ProxyGlobalState;
-<span class="kw">use </span>hotshot_types::traits::node_implementation::Versions;
 <span class="kw">use </span>sequencer::SequencerApiVersion;
 <span class="kw">use </span>tide_disco::{App, Url};
 <span class="kw">use </span>tokio::spawn;
@@ -535,13 +533,13 @@
 <span class="kw">pub mod </span>non_permissioned;
 
 <span class="comment">// It runs the api service for the builder
-</span><span class="kw">pub fn </span>run_builder_api_service&lt;V: Versions&gt;(url: Url, source: ProxyGlobalState&lt;SeqTypes&gt;) {
+</span><span class="kw">pub fn </span>run_builder_api_service(url: Url, source: ProxyGlobalState&lt;SeqTypes&gt;) {
     <span class="comment">// it is to serve hotshot
-    </span><span class="kw">let </span>builder_api =
-        hotshot_builder_api::v0_1::builder::define_api::&lt;ProxyGlobalState&lt;SeqTypes&gt;, SeqTypes, V&gt;(
-            <span class="kw-2">&amp;</span>HotshotBuilderApiOptions::default(),
-        )
-        .expect(<span class="string">"Failed to construct the builder APIs"</span>);
+    </span><span class="kw">let </span>builder_api = hotshot_builder_api::v0_1::builder::define_api::&lt;
+        ProxyGlobalState&lt;SeqTypes&gt;,
+        SeqTypes,
+    &gt;(<span class="kw-2">&amp;</span>HotshotBuilderApiOptions::default())
+    .expect(<span class="string">"Failed to construct the builder APIs"</span>);
 
     <span class="comment">// it enables external clients to submit txn to the builder's private mempool
     </span><span class="kw">let </span>private_mempool_api = hotshot_builder_api::v0_1::builder::submit_api::&lt;

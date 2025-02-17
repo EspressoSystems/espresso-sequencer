@@ -239,8 +239,7 @@
 <a href="#238" id="238">238</a>
 <a href="#239" id="239">239</a>
 <a href="#240" id="240">240</a>
-<a href="#241" id="241">241</a>
-<a href="#242" id="242">242</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
+<a href="#241" id="241">241</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
 // This file is part of the HotShot repository.
 
 // You should have received a copy of the MIT License
@@ -315,7 +314,7 @@
 ///
 /// # Panics
 /// If constructing and launching the builder fails for any reason
-</span><span class="kw">pub fn </span>run_builder_source&lt;TYPES, Source, V: Versions&gt;(
+</span><span class="kw">pub fn </span>run_builder_source&lt;TYPES, Source&gt;(
     url: Url,
     <span class="kw-2">mut </span>change_receiver: Receiver&lt;BuilderChange&gt;,
     source: Source,
@@ -330,11 +329,10 @@
 {
     spawn(<span class="kw">async move </span>{
         <span class="kw">let </span>start_builder = |url: Url, source: Source| -&gt; <span class="kw">_ </span>{
-            <span class="kw">let </span>builder_api_0_1 =
-                hotshot_builder_api::v0_1::builder::define_api::&lt;Source, TYPES, V&gt;(
-                    <span class="kw-2">&amp;</span>Options::default(),
-                )
-                .expect(<span class="string">"Failed to construct the builder API"</span>);
+            <span class="kw">let </span>builder_api_0_1 = hotshot_builder_api::v0_1::builder::define_api::&lt;Source, TYPES&gt;(
+                <span class="kw-2">&amp;</span>Options::default(),
+            )
+            .expect(<span class="string">"Failed to construct the builder API"</span>);
             <span class="kw">let </span>builder_api_0_3 = hotshot_builder_api::v0_99::builder::define_api::&lt;Source, TYPES&gt;(
                 <span class="kw-2">&amp;</span>Options::default(),
             )
@@ -369,7 +367,7 @@
 ///
 /// # Panics
 /// If constructing and launching the builder fails for any reason
-</span><span class="kw">pub fn </span>run_builder_source_0_1&lt;TYPES, Source, V: Versions&gt;(
+</span><span class="kw">pub fn </span>run_builder_source_0_1&lt;TYPES, Source&gt;(
     url: Url,
     <span class="kw-2">mut </span>change_receiver: Receiver&lt;BuilderChange&gt;,
     source: Source,
@@ -381,7 +379,7 @@
 {
     spawn(<span class="kw">async move </span>{
         <span class="kw">let </span>start_builder = |url: Url, source: Source| -&gt; <span class="kw">_ </span>{
-            <span class="kw">let </span>builder_api = hotshot_builder_api::v0_1::builder::define_api::&lt;Source, TYPES, V&gt;(
+            <span class="kw">let </span>builder_api = hotshot_builder_api::v0_1::builder::define_api::&lt;Source, TYPES&gt;(
                 <span class="kw-2">&amp;</span>Options::default(),
             )
             .expect(<span class="string">"Failed to construct the builder API"</span>);

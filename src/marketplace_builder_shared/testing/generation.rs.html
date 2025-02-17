@@ -268,11 +268,14 @@
 <a href="#267" id="267">267</a>
 <a href="#268" id="268">268</a>
 <a href="#269" id="269">269</a>
-<a href="#270" id="270">270</a></pre></div><pre class="rust"><code><span class="kw">use </span>std::{
+<a href="#270" id="270">270</a>
+<a href="#271" id="271">271</a>
+<a href="#272" id="272">272</a></pre></div><pre class="rust"><code><span class="kw">use </span>std::{
     collections::{HashMap, VecDeque},
     sync::Arc,
 };
 
+<span class="kw">use </span>anyhow::{Error, <span class="prelude-ty">Result</span>};
 <span class="kw">use </span>async_lock::RwLock;
 <span class="kw">use </span>async_trait::async_trait;
 <span class="kw">use </span>chrono::Local;
@@ -470,8 +473,9 @@
     V: Versions,
 {
     <span class="kw">type </span>Event = Event&lt;Types&gt;;
+    <span class="kw">type </span>Error = Error;
 
-    <span class="kw">async fn </span>handle_event(<span class="kw-2">&amp;mut </span><span class="self">self</span>, (event, node_id): (<span class="self">Self</span>::Event, usize)) -&gt; anyhow::Result&lt;()&gt; {
+    <span class="kw">async fn </span>handle_event(<span class="kw-2">&amp;mut </span><span class="self">self</span>, (event, node_id): (<span class="self">Self</span>::Event, usize)) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
         <span class="comment">// We only need to handle events from one node
         </span><span class="kw">if </span>node_id != <span class="number">0 </span>{
             <span class="kw">return </span><span class="prelude-val">Ok</span>(());

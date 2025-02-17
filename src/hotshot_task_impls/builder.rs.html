@@ -259,10 +259,7 @@
 <a href="#258" id="258">258</a>
 <a href="#259" id="259">259</a>
 <a href="#260" id="260">260</a>
-<a href="#261" id="261">261</a>
-<a href="#262" id="262">262</a>
-<a href="#263" id="263">263</a>
-<a href="#264" id="264">264</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
+<a href="#261" id="261">261</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
 // This file is part of the HotShot repository.
 
 // You should have received a copy of the MIT License
@@ -276,10 +273,7 @@
 };
 <span class="kw">use </span>hotshot_types::{
     constants::LEGACY_BUILDER_MODULE,
-    traits::{
-        node_implementation::{NodeType, Versions},
-        signature_key::SignatureKey,
-    },
+    traits::{node_implementation::NodeType, signature_key::SignatureKey},
     vid::VidCommitment,
 };
 <span class="kw">use </span>serde::{Deserialize, Serialize};
@@ -375,7 +369,7 @@
     /// # Errors
     /// - [`BuilderClientError::BlockNotFound`] if blocks aren't available for this parent
     /// - [`BuilderClientError::Api`] if API isn't responding or responds incorrectly
-    </span><span class="kw">pub async fn </span>available_blocks&lt;V: Versions&gt;(
+    </span><span class="kw">pub async fn </span>available_blocks(
         <span class="kw-2">&amp;</span><span class="self">self</span>,
         parent: VidCommitment,
         view_number: u64,

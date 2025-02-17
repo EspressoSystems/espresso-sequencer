@@ -719,7 +719,7 @@
             .iter()
         {
             <span class="kw">if </span>!recipients.contains(<span class="kw-2">&amp;</span>node.<span class="number">0</span>) {
-                <span class="macro">tracing::error!</span>(<span class="string">"Skipping node because not in recipient list: {:?}"</span>, <span class="kw-2">&amp;</span>node.<span class="number">0</span>);
+                <span class="macro">tracing::trace!</span>(<span class="string">"Skipping node because not in recipient list: {:?}"</span>, <span class="kw-2">&amp;</span>node.<span class="number">0</span>);
                 <span class="kw">continue</span>;
             }
             <span class="comment">// TODO delay/drop etc here

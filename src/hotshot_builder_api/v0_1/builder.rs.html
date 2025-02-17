@@ -268,10 +268,7 @@
 <a href="#267" id="267">267</a>
 <a href="#268" id="268">268</a>
 <a href="#269" id="269">269</a>
-<a href="#270" id="270">270</a>
-<a href="#271" id="271">271</a>
-<a href="#272" id="272">272</a>
-<a href="#273" id="273">273</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
+<a href="#270" id="270">270</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
 // This file is part of the HotShot repository.
 
 // You should have received a copy of the MIT License
@@ -283,10 +280,7 @@
 <span class="kw">use </span>committable::Committable;
 <span class="kw">use </span>derive_more::From;
 <span class="kw">use </span>futures::FutureExt;
-<span class="kw">use </span>hotshot_types::{
-    traits::node_implementation::{NodeType, Versions},
-    utils::BuilderCommitment,
-};
+<span class="kw">use </span>hotshot_types::{traits::node_implementation::NodeType, utils::BuilderCommitment};
 <span class="kw">use </span>serde::{Deserialize, Serialize};
 <span class="kw">use </span>tagged_base64::TaggedBase64;
 <span class="kw">use </span>thiserror::Error;
@@ -401,7 +395,7 @@
         })
 }
 
-<span class="kw">pub fn </span>define_api&lt;State, Types: NodeType, V: Versions&gt;(
+<span class="kw">pub fn </span>define_api&lt;State, Types: NodeType&gt;(
     options: <span class="kw-2">&amp;</span>Options,
 ) -&gt; <span class="prelude-ty">Result</span>&lt;Api&lt;State, Error, Version&gt;, ApiError&gt;
 <span class="kw">where
@@ -421,7 +415,7 @@
                 <span class="kw">let </span>signature = try_extract_param(<span class="kw-2">&amp;</span>req, <span class="string">"signature"</span>)<span class="question-mark">?</span>;
                 <span class="kw">let </span>sender = try_extract_param(<span class="kw-2">&amp;</span>req, <span class="string">"sender"</span>)<span class="question-mark">?</span>;
                 state
-                    .available_blocks::&lt;V&gt;(<span class="kw-2">&amp;</span>hash, view_number, sender, <span class="kw-2">&amp;</span>signature)
+                    .available_blocks(<span class="kw-2">&amp;</span>hash, view_number, sender, <span class="kw-2">&amp;</span>signature)
                     .<span class="kw">await
                     </span>.map_err(|source| Error::BlockAvailable {
                         source,

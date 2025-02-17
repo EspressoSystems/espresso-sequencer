@@ -76,10 +76,7 @@
 <a href="#75" id="75">75</a>
 <a href="#76" id="76">76</a>
 <a href="#77" id="77">77</a>
-<a href="#78" id="78">78</a>
-<a href="#79" id="79">79</a>
-<a href="#80" id="80">80</a>
-<a href="#81" id="81">81</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
+<a href="#78" id="78">78</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
 // This file is part of the HotShot repository.
 
 // You should have received a copy of the MIT License
@@ -88,10 +85,7 @@
 </span><span class="kw">use </span>async_trait::async_trait;
 <span class="kw">use </span>committable::Commitment;
 <span class="kw">use </span>hotshot_types::{
-    traits::{
-        node_implementation::{NodeType, Versions},
-        signature_key::SignatureKey,
-    },
+    traits::{node_implementation::NodeType, signature_key::SignatureKey},
     utils::BuilderCommitment,
     vid::VidCommitment,
 };
@@ -104,7 +98,7 @@
 <span class="attr">#[async_trait]
 </span><span class="kw">pub trait </span>BuilderDataSource&lt;TYPES: NodeType&gt; {
     <span class="doccomment">/// To get the list of available blocks
-    </span><span class="kw">async fn </span>available_blocks&lt;V: Versions&gt;(
+    </span><span class="kw">async fn </span>available_blocks(
         <span class="kw-2">&amp;</span><span class="self">self</span>,
         for_parent: <span class="kw-2">&amp;</span>VidCommitment,
         view_number: u64,

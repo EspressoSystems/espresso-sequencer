@@ -726,20 +726,7 @@
 <a href="#725" id="725">725</a>
 <a href="#726" id="726">726</a>
 <a href="#727" id="727">727</a>
-<a href="#728" id="728">728</a>
-<a href="#729" id="729">729</a>
-<a href="#730" id="730">730</a>
-<a href="#731" id="731">731</a>
-<a href="#732" id="732">732</a>
-<a href="#733" id="733">733</a>
-<a href="#734" id="734">734</a>
-<a href="#735" id="735">735</a>
-<a href="#736" id="736">736</a>
-<a href="#737" id="737">737</a>
-<a href="#738" id="738">738</a>
-<a href="#739" id="739">739</a>
-<a href="#740" id="740">740</a>
-<a href="#741" id="741">741</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
+<a href="#728" id="728">728</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
 // This file is part of the HotShot repository.
 
 // You should have received a copy of the MIT License
@@ -787,10 +774,7 @@
 </span><span class="kw">use </span>tracing::info;
 
 <span class="kw">use super</span>::{
-    completion_task::CompletionTask,
-    consistency_task::ConsistencyTask,
-    overall_safety_task::{OverallSafetyTask, RoundCtx},
-    txn_task::TxnTask,
+    completion_task::CompletionTask, consistency_task::ConsistencyTask, txn_task::TxnTask,
 };
 <span class="kw">use crate</span>::{
     block_builder::{BuilderTask, TestBuilderImplementation},
@@ -798,7 +782,7 @@
     spinning_task::{ChangeNode, NodeAction, SpinningTask},
     test_builder::create_test_handle,
     test_launcher::{Network, TestLauncher},
-    test_task::{TestResult, TestTask},
+    test_task::{spawn_timeout_task, TestResult, TestTask},
     txn_task::TxnTaskDescription,
     view_sync_task::ViewSyncTask,
 };
@@ -946,32 +930,23 @@
             event_rxs.clone(),
             test_receiver.clone(),
         );
-        <span class="comment">// add safety task
-        </span><span class="kw">let </span>overall_safety_task_state = OverallSafetyTask {
-            handles: Arc::clone(<span class="kw-2">&amp;</span>handles),
-            epoch_height: launcher.metadata.test_config.epoch_height,
-            ctx: RoundCtx::default(),
-            properties: launcher.metadata.overall_safety_properties.clone(),
-            error: <span class="prelude-val">None</span>,
-            test_sender,
-        };
 
         <span class="kw">let </span>consistency_task_state = ConsistencyTask {
             consensus_leaves: BTreeMap::new(),
-            safety_properties: launcher.metadata.overall_safety_properties,
+            safety_properties: launcher.metadata.overall_safety_properties.clone(),
+            test_sender: test_sender.clone(),
+            errors: <span class="macro">vec!</span>[],
             ensure_upgrade: launcher.metadata.upgrade_view.is_some(),
             validate_transactions: launcher.metadata.validate_transactions,
+            timeout_task: spawn_timeout_task(
+                test_sender.clone(),
+                launcher.metadata.overall_safety_properties.decide_timeout,
+            ),
             _pd: PhantomData,
         };
 
         <span class="kw">let </span>consistency_task = TestTask::&lt;ConsistencyTask&lt;TYPES, V&gt;&gt;::new(
             consistency_task_state,
-            event_rxs.clone(),
-            test_receiver.clone(),
-        );
-
-        <span class="kw">let </span>overall_safety_task = TestTask::&lt;OverallSafetyTask&lt;TYPES, I, V&gt;&gt;::new(
-            overall_safety_task_state,
             event_rxs.clone(),
             test_receiver.clone(),
         );
@@ -1014,7 +989,6 @@
             task_futs.push(task.run());
         }
 
-        task_futs.push(overall_safety_task.run());
         task_futs.push(consistency_task.run());
         task_futs.push(view_sync_task.run());
         task_futs.push(spinning_task.run());
