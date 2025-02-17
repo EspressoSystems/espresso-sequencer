@@ -223,6 +223,17 @@ impl<TYPES: NodeType, V: Versions> ViewSyncTaskState<TYPES, V> {
             return;
         }
 
+        let membership = match self
+        .membership_coordinator
+        .membership_for_epoch(self.cur_epoch)
+        .await {
+            Ok(m) => m,
+            Err(e) => {
+                tracing::warn!(e.message);
+                return;
+            }
+        };
+
         // We do not have a replica task already running, so start one
         let mut replica_state: ViewSyncReplicaTaskState<TYPES, V> = ViewSyncReplicaTaskState {
             cur_view: view,
@@ -231,10 +242,7 @@ impl<TYPES: NodeType, V: Versions> ViewSyncTaskState<TYPES, V> {
             finalized: false,
             sent_view_change_event: false,
             timeout_task: None,
-            membership: self
-                .membership_coordinator
-                .membership_for_epoch(self.cur_epoch)
-                .await?,
+            membership,
             public_key: self.public_key.clone(),
             private_key: self.private_key.clone(),
             view_sync_timeout: self.view_sync_timeout,

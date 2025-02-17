@@ -293,7 +293,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                 epoch_transition_indicator,
                 EpochTransitionIndicator::InTransition
             )
-            && mem.next_epoch().await.leader(view_number).await? == self.public_key;
+            && mem.next_epoch().await.context(warn!("No Stake Table for Epoch = {:?}", epoch_number.unwrap() + 1))?.leader(view_number).await? == self.public_key;
 
         // Don't even bother making the task if we are not entitled to propose anyway.
         ensure!(
@@ -473,7 +473,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                 let mem = self
                     .membership_coordinator
                     .membership_for_epoch(epoch_number)
-                    .await?;
+                    .await.context(warn!("No Stake Table for Epoch = {:?}", epoch_number))?;
 
                 let membership_stake_table = mem.stake_table().await;
                 let membership_success_threshold = mem.success_threshold().await;

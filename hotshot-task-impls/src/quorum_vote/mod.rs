@@ -231,12 +231,24 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static, V: Versions> Handl
             tracing::error!("Failed to update shared consensus state; error = {e:#}");
             return;
         }
-
         let cur_epoch = option_epoch_from_block_number::<TYPES>(
             leaf.with_epoch,
             leaf.height(),
             self.epoch_height,
         );
+
+        let mem = match self
+        .membership_coordinator
+        .membership_for_epoch(cur_epoch)
+        .await {
+            Ok(mem) => mem,
+            Err(e) => {
+                tracing::warn!("{:?}", e);
+                return;
+            },
+        };
+
+
         tracing::trace!(
             "Sending ViewChange for view {} and epoch {:?}",
             self.view_number + 1,
@@ -248,10 +260,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static, V: Versions> Handl
         )
         .await;
 
-        let mem = self
-            .membership_coordinator
-            .membership_for_epoch(cur_epoch)
-            .await?;
+
         if let Err(e) = submit_vote::<TYPES, I, V>(
             self.sender.clone(),
             mem,

@@ -507,10 +507,17 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> SystemContext<T
             HotShotError::FailedToSerialize(format!("failed to serialize transaction: {err}"))
         })?;
 
+        let membership = match api
+        .membership_coordinator
+        .membership_for_epoch(epoch).await {
+            Ok(m) => m,
+            Err(e) => {
+                return Err(HotShotError::InvalidState(e.message))
+            }
+        };
+
         spawn(async move {
-            let memberships_da_committee_members = api
-                .membership_coordinator
-                .membership_for_epoch(epoch).await?
+            let memberships_da_committee_members = membership
                 .da_committee_members(view_number)
                 .await
                 .iter()

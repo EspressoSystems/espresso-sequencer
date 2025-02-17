@@ -524,11 +524,12 @@ pub trait RunDa<
                 }
             }
         }
+        // Panic if we don't have the genesis epoch, there is no recovery from that
         let num_eligible_leaders = context
             .hotshot
             .membership_coordinator
             .membership_for_epoch(genesis_epoch_from_version::<V, TYPES>())
-            .await?
+            .await.unwrap()
             .committee_leaders(TYPES::View::genesis())
             .await
             .len();

@@ -170,7 +170,7 @@ impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>, V: Versions> TestTas
                     .cur_epoch();
                 if !memberships_arc
                     .membership_for_epoch(cur_epoch)
-                    .await?s
+                    .await?
                     .has_stake(&public_key)
                     .await
                 {
@@ -518,7 +518,7 @@ impl<TYPES: NodeType> RoundResult<TYPES> {
             let epoch = leaf.epoch(epoch_height);
             if !membership
                 .membership_for_epoch(epoch)
-                .await?
+                .await.ok()?
                 .has_stake(public_key)
                 .await
             {

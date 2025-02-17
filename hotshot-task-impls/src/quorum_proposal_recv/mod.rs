@@ -17,7 +17,7 @@ use hotshot_task::task::{Task, TaskState};
 use hotshot_types::{
     consensus::{Consensus, OuterConsensus},
     data::{EpochNumber, Leaf, ViewChangeEvidence2},
-    epoch_membership::{EpochMembership, EpochMembershipCoordinator},
+    epoch_membership::{self, EpochMembership, EpochMembershipCoordinator},
     event::Event,
     message::UpgradeLock,
     simple_certificate::UpgradeCertificate,
@@ -147,15 +147,19 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                     tracing::error!("Throwing away old proposal");
                     return;
                 }
+                let Ok(epoch_membership) = self
+                .membership
+                .membership_for_epoch(proposal.data.epoch())
+                .await else {
+                    tracing::warn!("No Stake table for epoch = {:?}", proposal.data.epoch());
+                    return;
+                };
                 let validation_info = ValidationInfo::<TYPES, I, V> {
                     id: self.id,
                     public_key: self.public_key.clone(),
                     private_key: self.private_key.clone(),
                     consensus: self.consensus.clone(),
-                    membership: self
-                        .membership
-                        .membership_for_epoch(proposal.data.epoch())
-                        .await?,
+                    membership: epoch_membership,
                     output_event_stream: self.output_event_stream.clone(),
                     storage: Arc::clone(&self.storage),
                     upgrade_lock: self.upgrade_lock.clone(),

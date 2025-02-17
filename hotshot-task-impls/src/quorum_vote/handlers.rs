@@ -138,7 +138,7 @@ async fn verify_drb_result<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Ver
         let has_stake_current_epoch = task_state
             .membership
             .membership_for_epoch(epoch)
-            .await?
+            .await.context(warn!("No stake table for epoch"))?
             .has_stake(&task_state.public_key)
             .await;
 
@@ -172,11 +172,13 @@ async fn start_drb_task<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versio
         task_state.epoch_height,
     ));
 
+    let Ok(epoch_membership) = task_state.membership.membership_for_epoch(Some(current_epoch_number)).await else {
+        tracing::warn!("No Stake Table for Epoch = {:?}", current_epoch_number);
+        return;
+    };
+
     // Start the new task if we're in the committee for this epoch
-    if task_state
-        .membership
-        .membership_for_epoch(Some(current_epoch_number))
-        .await?
+    if epoch_membership
         .has_stake(&task_state.public_key)
         .await
     {
@@ -599,7 +601,7 @@ pub(crate) async fn submit_vote<TYPES: NodeType, I: NodeImplementation<TYPES>, V
     // in the next epoch, the node should vote to achieve the double quorum.
     let committee_member_in_next_epoch = leaf.with_epoch
         && is_last_block_in_epoch(leaf.height(), epoch_height)
-        && membership.next_epoch().await.has_stake(&public_key).await;
+        && membership.next_epoch().await?.has_stake(&public_key).await;
 
     ensure!(
         committee_member_in_current_epoch || committee_member_in_next_epoch,

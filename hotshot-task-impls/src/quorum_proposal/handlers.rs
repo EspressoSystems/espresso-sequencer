@@ -132,7 +132,7 @@ impl<TYPES: NodeType, V: Versions> ProposalDependencyHandle<TYPES, V> {
             if let HotShotEvent::HighQcRecv(qc, _sender) = event.as_ref() {
                 let prev_epoch = qc.data.epoch;
                 let mem = if prev_epoch < self.membership.epoch() {
-                    &self.membership.prev_epoch().await
+                    &self.membership.prev_epoch().await.ok()?
                 } else {
                     &self.membership
                 };

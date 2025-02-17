@@ -124,7 +124,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TaskState for NetworkRequest
                 if !membership_reader.has_stake(&self.public_key).await
                     && (!membership_reader
                         .next_epoch()
-                        .await
+                        .await?
                         .has_stake(&self.public_key)
                         .await
                         || !is_last_block_in_epoch(
@@ -217,10 +217,16 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> NetworkRequestState<TYPES, I
         let public_key = self.public_key.clone();
 
         // Get the committee members for the view and the leader, if applicable
-        let membership_reader = self
+        let membership_reader = match self
             .membership_coordinator
             .membership_for_epoch(epoch)
-            .await?;
+            .await {
+                Ok(m) => m,
+                Err(e) => {
+                    tracing::warn!(e.message);
+                    return;
+                }
+            };
         let mut da_committee_for_view = membership_reader.da_committee_members(view).await;
         if let Ok(leader) = membership_reader.leader(view).await {
             da_committee_for_view.insert(leader);

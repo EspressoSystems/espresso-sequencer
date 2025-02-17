@@ -99,7 +99,7 @@ impl<TYPES: NodeType> ADVZDisperse<TYPES> {
     ) -> Result<Self> {
         let num_nodes = membership
             .membership_for_epoch(target_epoch)
-            .await.context(warn!("Failed to get membership for the epoch"))?
+            .await?
             .total_nodes()
             .await;
 
@@ -119,7 +119,7 @@ impl<TYPES: NodeType> ADVZDisperse<TYPES> {
         } else {
             let num_nodes = membership
                 .membership_for_epoch(data_epoch)
-                .await.context(warn!("Failed to get membership for the epoch"))?
+                .await?
                 .total_nodes()
                 .await;
 

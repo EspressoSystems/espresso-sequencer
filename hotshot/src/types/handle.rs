@@ -7,7 +7,6 @@
 //! Provides an event-streaming handle for a [`SystemContext`] running in the background
 
 use std::sync::Arc;
-
 use anyhow::{anyhow, Context, Ok, Result};
 use async_broadcast::{InactiveReceiver, Receiver, Sender};
 use async_lock::RwLock;
@@ -192,9 +191,11 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static, V: Versions>
                         quorum_proposal.data.block_header().block_number(),
                         epoch_height,
                     );
-                    let Some(membership) = mem.membership_for_epoch(maybe_epoch).await else{
-                        tracing::warn!("Cannot validate proposal because we don't have stake table for epoch {:?}", maybe_epoch);
+                    let membership = match mem.membership_for_epoch(maybe_epoch).await {
+                        Result::Ok(m) => m,
+                        Err(e) => {tracing::warn!(e.message);
                         continue;
+                        }
                     };
                     // Make sure that the quorum_proposal is valid
                     if let Err(err) = quorum_proposal.validate_signature(&membership).await {
@@ -337,7 +338,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static, V: Versions>
         self.hotshot
             .membership_coordinator
             .membership_for_epoch(epoch_number)
-            .await.context("fail te get membership for epoch")
+            .await?
             .leader(view_number)
             .await
             .context("Failed to lookup leader")
