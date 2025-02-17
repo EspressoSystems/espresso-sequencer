@@ -4,6 +4,8 @@
 // You should have received a copy of the MIT License
 // along with the HotShot repository. If not, see <https://mit-license.org/>.
 
+use std::time::Duration;
+
 use hotshot_example_types::{
     node_types::{Libp2pImpl, MemoryImpl, PushCdnImpl, TestVersions},
     state_types::TestTypes,
@@ -37,7 +39,8 @@ cross_tests!(
         metadata.spinning_properties = SpinningTaskDescription {
             node_changes: vec![(5, dead_nodes)]
         };
-        metadata.overall_safety_properties.num_failed_views = 1;
+        metadata.overall_safety_properties.expected_view_failures = vec![18,19];
+        metadata.overall_safety_properties.decide_timeout = Duration::from_secs(16);
         metadata.overall_safety_properties.num_successful_views = 25;
         metadata
     }

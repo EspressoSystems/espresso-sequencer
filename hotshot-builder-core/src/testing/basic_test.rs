@@ -236,7 +236,7 @@ mod tests {
                         .unwrap();
 
                 let available_blocks = proxy_global_state
-                    .available_blocks::<TestVersions>(
+                    .available_blocks(
                         &previous_commitment,
                         previous_view.u64(),
                         leader_pub,
