@@ -6,7 +6,6 @@
 
 use std::{num::NonZeroUsize, sync::Arc, time::Duration};
 
-use anyhow::Result;
 use async_broadcast::{Receiver, Sender};
 use async_lock::RwLock;
 use async_trait::async_trait;
@@ -40,14 +39,27 @@ pub enum TestResult {
     Fail(Box<dyn std::fmt::Debug + Send + Sync>),
 }
 
+pub fn spawn_timeout_task(test_sender: Sender<TestEvent>, timeout: Duration) -> JoinHandle<()> {
+    tokio::spawn(async move {
+        sleep(timeout).await;
+
+        let _ = test_sender.broadcast(TestEvent::Shutdown).await;
+    })
+}
+
 #[async_trait]
 /// Type for mutable task state that can be used as the state for a `Task`
 pub trait TestTaskState: Send {
     /// Type of event sent and received by the task
     type Event: Clone + Send + Sync;
+    /// Type of error produced by the task
+    type Error: std::fmt::Display;
 
     /// Handles an event from one of multiple receivers.
-    async fn handle_event(&mut self, (event, id): (Self::Event, usize)) -> Result<()>;
+    async fn handle_event(
+        &mut self,
+        (event, id): (Self::Event, usize),
+    ) -> std::result::Result<(), Self::Error>;
 
     /// Check the result of the test.
     async fn check(&self) -> TestResult;
@@ -55,14 +67,21 @@ pub trait TestTaskState: Send {
 
 /// Type alias for type-erased [`TestTaskState`] to be used for
 /// dynamic dispatch
-pub type AnyTestTaskState<TYPES> =
-    Box<dyn TestTaskState<Event = hotshot_types::event::Event<TYPES>> + Send + Sync>;
+pub type AnyTestTaskState<TYPES> = Box<
+    dyn TestTaskState<Event = hotshot_types::event::Event<TYPES>, Error = anyhow::Error>
+        + Send
+        + Sync,
+>;
 
 #[async_trait]
 impl<TYPES: NodeType> TestTaskState for AnyTestTaskState<TYPES> {
     type Event = Event<TYPES>;
+    type Error = anyhow::Error;
 
-    async fn handle_event(&mut self, event: (Self::Event, usize)) -> Result<()> {
+    async fn handle_event(
+        &mut self,
+        event: (Self::Event, usize),
+    ) -> std::result::Result<(), anyhow::Error> {
         (**self).handle_event(event).await
     }
 

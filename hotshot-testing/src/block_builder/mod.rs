@@ -73,7 +73,7 @@ struct BlockEntry<TYPES: NodeType> {
 ///
 /// # Panics
 /// If constructing and launching the builder fails for any reason
-pub fn run_builder_source<TYPES, Source, V: Versions>(
+pub fn run_builder_source<TYPES, Source>(
     url: Url,
     mut change_receiver: Receiver<BuilderChange>,
     source: Source,
@@ -88,11 +88,10 @@ pub fn run_builder_source<TYPES, Source, V: Versions>(
 {
     spawn(async move {
         let start_builder = |url: Url, source: Source| -> _ {
-            let builder_api_0_1 =
-                hotshot_builder_api::v0_1::builder::define_api::<Source, TYPES, V>(
-                    &Options::default(),
-                )
-                .expect("Failed to construct the builder API");
+            let builder_api_0_1 = hotshot_builder_api::v0_1::builder::define_api::<Source, TYPES>(
+                &Options::default(),
+            )
+            .expect("Failed to construct the builder API");
             let builder_api_0_3 = hotshot_builder_api::v0_99::builder::define_api::<Source, TYPES>(
                 &Options::default(),
             )
@@ -127,7 +126,7 @@ pub fn run_builder_source<TYPES, Source, V: Versions>(
 ///
 /// # Panics
 /// If constructing and launching the builder fails for any reason
-pub fn run_builder_source_0_1<TYPES, Source, V: Versions>(
+pub fn run_builder_source_0_1<TYPES, Source>(
     url: Url,
     mut change_receiver: Receiver<BuilderChange>,
     source: Source,
@@ -139,7 +138,7 @@ pub fn run_builder_source_0_1<TYPES, Source, V: Versions>(
 {
     spawn(async move {
         let start_builder = |url: Url, source: Source| -> _ {
-            let builder_api = hotshot_builder_api::v0_1::builder::define_api::<Source, TYPES, V>(
+            let builder_api = hotshot_builder_api::v0_1::builder::define_api::<Source, TYPES>(
                 &Options::default(),
             )
             .expect("Failed to construct the builder API");

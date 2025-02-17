@@ -13,7 +13,7 @@ use hotshot_types::{
     message::Proposal,
     traits::{
         block_contents::{BlockPayload, Transaction},
-        node_implementation::{ConsensusTime, NodeType, Versions},
+        node_implementation::{ConsensusTime, NodeType},
         signature_key::{BuilderSignatureKey, SignatureKey},
     },
     utils::BuilderCommitment,
@@ -1028,7 +1028,7 @@ where
     >>::Error: Display,
     for<'a> <Types::SignatureKey as TryFrom<&'a TaggedBase64>>::Error: Display,
 {
-    async fn available_blocks<V: Versions>(
+    async fn available_blocks(
         &self,
         for_parent: &VidCommitment,
         view_number: u64,

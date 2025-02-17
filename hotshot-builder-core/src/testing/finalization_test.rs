@@ -156,7 +156,7 @@ pub async fn process_available_blocks_round(
         attempt += 1;
 
         let available_blocks_result = proxy_global_state
-            .available_blocks::<TestVersions>(
+            .available_blocks(
                 &builder_state_id.parent_commitment,
                 builder_state_id.parent_view.u64(),
                 leader_pub,

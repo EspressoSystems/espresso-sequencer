@@ -94,7 +94,6 @@ async fn libp2p_network_async() {
     let mut metadata: TestDescription<TestTypes, Libp2pImpl, TestVersions> = TestDescription {
         overall_safety_properties: OverallSafetyPropertiesDescription {
             check_leaf: true,
-            num_failed_views: 50,
             ..Default::default()
         },
         completion_task_description: CompletionTaskDescription::TimeBasedCompletionTaskBuilder(
@@ -142,7 +141,6 @@ async fn test_memory_network_async() {
     let mut metadata: TestDescription<TestTypes, MemoryImpl, TestVersions> = TestDescription {
         overall_safety_properties: OverallSafetyPropertiesDescription {
             check_leaf: true,
-            num_failed_views: 5000,
             ..Default::default()
         },
         // allow more time to pass in CI
@@ -189,7 +187,6 @@ async fn test_memory_network_partially_sync() {
 
     let mut metadata: TestDescription<TestTypes, MemoryImpl, TestVersions> = TestDescription {
         overall_safety_properties: OverallSafetyPropertiesDescription {
-            num_failed_views: 0,
             ..Default::default()
         },
         // allow more time to pass in CI
@@ -235,7 +232,6 @@ async fn libp2p_network_partially_sync() {
 
     let mut metadata: TestDescription<TestTypes, Libp2pImpl, TestVersions> = TestDescription {
         overall_safety_properties: OverallSafetyPropertiesDescription {
-            num_failed_views: 0,
             ..Default::default()
         },
         completion_task_description: CompletionTaskDescription::TimeBasedCompletionTaskBuilder(
