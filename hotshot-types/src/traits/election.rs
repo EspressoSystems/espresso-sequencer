@@ -11,7 +11,7 @@ use async_trait::async_trait;
 use hotshot_utils::anytrace::Result;
 
 use super::node_implementation::NodeType;
-use crate::{traits::signature_key::SignatureKey, PeerConfig};
+use crate::{drb::DrbResult, traits::signature_key::SignatureKey, PeerConfig};
 
 #[async_trait]
 /// A protocol for determining membership in and participating in a committee.
@@ -150,6 +150,17 @@ pub trait Membership<TYPES: NodeType>: Debug + Send + Sync {
     /// Called after add_epoch_root runs and any callback has been invoked.
     /// Causes a read lock to be reacquired for this functionality.
     async fn sync_l1(&self) -> Option<Box<dyn FnOnce(&mut Self) + Send>> {
+        None
+    }
+
+    #[allow(clippy::type_complexity)]
+    /// Called to notify the Membership when a new DRB result has been calculated.
+    /// Observes the same semantics as add_epoch_root
+    async fn add_drb_result(
+        &self,
+        _epoch: TYPES::Epoch,
+        _drb_result: DrbResult,
+    ) -> Option<Box<dyn FnOnce(&mut Self) + Send>> {
         None
     }
 }

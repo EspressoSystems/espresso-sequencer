@@ -81,18 +81,22 @@ pub fn compute_drb_result<TYPES: NodeType>(drb_seed_input: DrbSeedInput) -> DrbR
 /// The DRB result is the output of a spawned `compute_drb_result` call.
 #[must_use]
 pub fn leader<TYPES: NodeType>(
-    view_number: usize,
+    view_number: TYPES::View,
     stake_table: &[<TYPES::SignatureKey as SignatureKey>::StakeTableEntry],
     drb_result: DrbResult,
 ) -> TYPES::SignatureKey {
     let mut hasher = DefaultHasher::new();
+
     drb_result.hash(&mut hasher);
     view_number.hash(&mut hasher);
+
     #[allow(clippy::cast_possible_truncation)]
+    let hash = hasher.finish() as usize;
+
     // TODO: Use the total stake rather than `len()` and update the indexing after switching to
     // a weighted stake table.
     // <https://github.com/EspressoSystems/HotShot/issues/3898>
-    let index = (hasher.finish() as usize) % stake_table.len();
+    let index = hash % stake_table.len();
     let entry = stake_table[index].clone();
     TYPES::SignatureKey::public_key(&entry)
 }
