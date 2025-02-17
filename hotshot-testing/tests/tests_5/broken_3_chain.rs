@@ -56,9 +56,9 @@ async fn broken_3_chain() {
     metadata.num_nodes_with_stake = 10;
     metadata.da_staked_committee_size = 10;
     metadata.start_nodes = 10;
-    metadata.overall_safety_properties.num_failed_views = 100;
     // Check whether we see at least 10 decides
     metadata.overall_safety_properties.num_successful_views = 10;
+    metadata.overall_safety_properties.expected_view_failures = vec![2, 3, 5, 6, 8, 9];
 
     metadata
         .gen_launcher(0)

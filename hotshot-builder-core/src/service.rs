@@ -13,7 +13,7 @@ use hotshot_types::{
     message::Proposal,
     traits::{
         block_contents::{BlockPayload, Transaction},
-        node_implementation::{ConsensusTime, NodeType, Versions},
+        node_implementation::{ConsensusTime, NodeType},
         signature_key::{BuilderSignatureKey, SignatureKey},
     },
     utils::BuilderCommitment,
@@ -998,6 +998,7 @@ impl<Types: NodeType> ProxyGlobalState<Types> {
 
                     let response = AvailableBlockHeaderInput::<Types> {
                         vid_commitment,
+                        vid_precompute_data: None,
                         fee_signature: signature_over_fee_info,
                         message_signature: signature_over_vid_commitment,
                         sender: pub_key.clone(),
@@ -1028,7 +1029,7 @@ where
     >>::Error: Display,
     for<'a> <Types::SignatureKey as TryFrom<&'a TaggedBase64>>::Error: Display,
 {
-    async fn available_blocks<V: Versions>(
+    async fn available_blocks(
         &self,
         for_parent: &VidCommitment,
         view_number: u64,

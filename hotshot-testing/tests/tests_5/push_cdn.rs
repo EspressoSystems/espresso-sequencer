@@ -28,7 +28,6 @@ async fn push_cdn_network() {
             ..Default::default()
         },
         overall_safety_properties: OverallSafetyPropertiesDescription {
-            num_failed_views: 0,
             num_successful_views: 35,
             ..Default::default()
         },

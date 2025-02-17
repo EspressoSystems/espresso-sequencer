@@ -3,6 +3,7 @@ use std::{
     sync::Arc,
 };
 
+use anyhow::{Error, Result};
 use async_lock::RwLock;
 use async_trait::async_trait;
 use chrono::Local;
@@ -200,8 +201,9 @@ where
     V: Versions,
 {
     type Event = Event<Types>;
+    type Error = Error;
 
-    async fn handle_event(&mut self, (event, node_id): (Self::Event, usize)) -> anyhow::Result<()> {
+    async fn handle_event(&mut self, (event, node_id): (Self::Event, usize)) -> Result<()> {
         // We only need to handle events from one node
         if node_id != 0 {
             return Ok(());
