@@ -363,7 +363,7 @@ pub async fn init_node<P: SequencerPersistence, V: Versions>(
     }
 
     //todo(abdul): get from genesis file
-    network_config.config.epoch_height = 150;
+    network_config.config.epoch_height = 10;
 
     // If the `Libp2p` bootstrap nodes were supplied via the command line, override those
     // present in the config file.

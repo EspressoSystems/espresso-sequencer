@@ -137,11 +137,16 @@ pub async fn update_stake_table(
         .index(account_index)?
         .build()?
         .with_chain_id(chain_id);
+
     let l1 = Arc::new(SignerMiddleware::new(provider.clone(), wallet));
 
     let contract = PermissionedStakeTable::new(contract_address, l1);
 
     tracing::info!("sending stake table update transaction");
+
+    if update.stakers_to_remove().is_empty() && update.new_stakers().is_empty() {
+        anyhow::bail!("No changes to update in the stake table");
+    }
 
     let tx_receipt = contract
         .update(update.stakers_to_remove(), update.new_stakers())

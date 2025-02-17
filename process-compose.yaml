@@ -28,7 +28,9 @@ processes:
     command:
       unset ESPRESSO_SEQUENCER_PERMISSIONED_STAKE_TABLE_ADDRESS
       ESPRESSO_SEQUENCER_FEE_CONTRACT_PROXY_ADDRESS
-      && deploy --only fee-contract,permissioned-stake-table
+      && deploy --only fee-contract
+      && unset ESPRESSO_SEQUENCER_ETH_MULTISIG_ADDRESS
+      && deploy --only permissioned-stake-table
     namespace: setup
     depends_on:
       demo-l1-network:
@@ -111,6 +113,19 @@ processes:
         condition: process_healthy
       deploy-prover-contracts:
         condition: process_completed
+  
+  update-permissioned-stake-table:
+    command: update-permissioned-stake-table
+    environment:
+      - ESPRESSO_SEQUENCER_PERMISSIONED_STAKE_TABLE_ADDRESS
+      - ESPRESSO_SEQUENCER_PERMISSIONED_STAKE_TABLE_UPDATE_TOML_PATH=data/initial_stake_table.toml 
+    depends_on:
+      deploy-prover-contracts:
+        condition: process_completed
+      sequencer0:
+        condition: process_healthy
+
+
 
   sequencer0:
     command: sequencer -- storage-sql -- http -- query -- submit -- hotshot-events -- config
@@ -534,7 +549,7 @@ processes:
         host: localhost
         port: $ESPRESSO_BUILDER_SERVER_PORT
         path: /healthcheck
-      failure_threshold: 5
+      failure_threshold: 100
       period_seconds: 1
     availability:
       restart: "exit_on_failure"
