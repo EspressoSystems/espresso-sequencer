@@ -179,7 +179,7 @@ impl<TYPES: NodeType, V: Versions> UpgradeTaskState<TYPES, V> {
                 let view_leader_key = self
                     .membership_coordinator
                     .membership_for_epoch(self.cur_epoch)
-                    .await
+                    .await?
                     .leader(view)
                     .await?;
                 ensure!(
@@ -226,7 +226,7 @@ impl<TYPES: NodeType, V: Versions> UpgradeTaskState<TYPES, V> {
                 let mem = self
                     .membership_coordinator
                     .membership_for_epoch(self.cur_epoch)
-                    .await;
+                    .await?;
                 ensure!(
                     mem.leader(view).await? == self.public_key,
                     debug!(
@@ -269,7 +269,7 @@ impl<TYPES: NodeType, V: Versions> UpgradeTaskState<TYPES, V> {
                 let leader = self
                     .membership_coordinator
                     .membership_for_epoch(self.cur_epoch)
-                    .await
+                    .await?
                     .leader(TYPES::View::new(
                         view + TYPES::UPGRADE_CONSTANTS.propose_offset,
                     ))

@@ -45,7 +45,7 @@ pub(crate) async fn handle_quorum_vote_recv<
     let mem = task_state
         .membership_coordinator
         .membership_for_epoch(vote.data.epoch)
-        .await;
+        .await?;
 
     let we_are_leader = mem.leader(vote.view_number() + 1).await? == task_state.public_key;
     ensure!(
@@ -110,7 +110,7 @@ pub(crate) async fn handle_timeout_vote_recv<
     let mem = task_state
         .membership_coordinator
         .membership_for_epoch(task_state.cur_epoch)
-        .await;
+        .await?;
     // Are we the leader for this view?
     ensure!(
         mem.leader(vote.view_number() + 1).await? == task_state.public_key,
@@ -156,7 +156,7 @@ pub async fn send_high_qc<TYPES: NodeType, V: Versions, I: NodeImplementation<TY
     let leader = task_state
         .membership_coordinator
         .membership_for_epoch(task_state.cur_epoch)
-        .await
+        .await?
         .leader(new_view_number)
         .await?;
     broadcast_event(
@@ -259,7 +259,7 @@ pub(crate) async fn handle_view_change<
     let old_view_leader_key = task_state
         .membership_coordinator
         .membership_for_epoch(task_state.cur_epoch)
-        .await
+        .await?
         .leader(old_view_number)
         .await?;
 
@@ -322,7 +322,7 @@ pub(crate) async fn handle_timeout<TYPES: NodeType, I: NodeImplementation<TYPES>
         task_state
             .membership_coordinator
             .membership_for_epoch(epoch)
-            .await
+            .await?
             .has_stake(&task_state.public_key)
             .await,
         debug!(
@@ -372,7 +372,7 @@ pub(crate) async fn handle_timeout<TYPES: NodeType, I: NodeImplementation<TYPES>
     let leader = task_state
         .membership_coordinator
         .membership_for_epoch(task_state.cur_epoch)
-        .await
+        .await?
         .leader(view_number)
         .await;
 

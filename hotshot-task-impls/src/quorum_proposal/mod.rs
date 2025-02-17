@@ -283,7 +283,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
         let mem = self
             .membership_coordinator
             .membership_for_epoch(epoch_number)
-            .await;
+            .await?;
         let leader_in_current_epoch = mem.leader(view_number).await? == self.public_key;
         // If we are in the epoch transition and we are the leader in the next epoch,
         // we might want to start collecting dependencies for our next epoch proposal.
@@ -473,7 +473,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                 let mem = self
                     .membership_coordinator
                     .membership_for_epoch(epoch_number)
-                    .await;
+                    .await?;
 
                 let membership_stake_table = mem.stake_table().await;
                 let membership_success_threshold = mem.success_threshold().await;
@@ -560,7 +560,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                 let mem = self
                     .membership_coordinator
                     .membership_for_epoch(cert_epoch_number)
-                    .await;
+                    .await?;
                 let membership_stake_table = mem.stake_table().await;
                 let membership_success_threshold = mem.success_threshold().await;
 

@@ -1000,7 +1000,7 @@ impl<T: NodeType> ConnectedNetwork<T::SignatureKey> for Libp2pNetwork<T> {
 
         let future_leader = match membership_coordinator
             .membership_for_epoch(epoch)
-            .await
+            .await?
             .leader(future_view)
             .await
         {

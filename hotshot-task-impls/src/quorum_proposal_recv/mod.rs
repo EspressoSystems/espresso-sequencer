@@ -155,7 +155,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                     membership: self
                         .membership
                         .membership_for_epoch(proposal.data.epoch())
-                        .await,
+                        .await?,
                     output_event_stream: self.output_event_stream.clone(),
                     storage: Arc::clone(&self.storage),
                     upgrade_lock: self.upgrade_lock.clone(),

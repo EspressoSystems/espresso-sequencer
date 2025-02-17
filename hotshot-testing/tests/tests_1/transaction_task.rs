@@ -53,7 +53,7 @@ async fn test_transaction_task_leader_two_views_in_a_row() {
                     .hotshot
                     .membership_coordinator
                     .membership_for_epoch(Some(EpochNumber::new(1)))
-                    .await
+                    .await.unwrap()
                     .total_nodes()
                     .await,
                 <TestVersions as Versions>::Base::VERSION,

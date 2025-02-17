@@ -528,7 +528,7 @@ pub trait RunDa<
             .hotshot
             .membership_coordinator
             .membership_for_epoch(genesis_epoch_from_version::<V, TYPES>())
-            .await
+            .await?
             .committee_leaders(TYPES::View::genesis())
             .await
             .len();

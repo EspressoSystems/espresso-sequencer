@@ -214,7 +214,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
             let membership_total_nodes = self
                 .membership_coordinator
                 .membership_for_epoch(self.cur_epoch)
-                .await
+                .await?
                 .total_nodes()
                 .await;
             let Some(null_fee) =
@@ -362,7 +362,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
         let membership_total_nodes = self
             .membership_coordinator
             .membership_for_epoch(self.cur_epoch)
-            .await
+            .await?
             .total_nodes()
             .await;
         let Some(null_fee) =
@@ -500,7 +500,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
                 let leader = self
                     .membership_coordinator
                     .membership_for_epoch(epoch)
-                    .await
+                    .await?
                     .leader(view)
                     .await?;
                 if leader == self.public_key {

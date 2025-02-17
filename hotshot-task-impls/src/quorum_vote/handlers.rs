@@ -138,7 +138,7 @@ async fn verify_drb_result<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Ver
         let has_stake_current_epoch = task_state
             .membership
             .membership_for_epoch(epoch)
-            .await
+            .await?
             .has_stake(&task_state.public_key)
             .await;
 
@@ -176,7 +176,7 @@ async fn start_drb_task<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versio
     if task_state
         .membership
         .membership_for_epoch(Some(current_epoch_number))
-        .await
+        .await?
         .has_stake(&task_state.public_key)
         .await
     {

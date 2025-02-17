@@ -251,7 +251,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static, V: Versions> Handl
         let mem = self
             .membership_coordinator
             .membership_for_epoch(cur_epoch)
-            .await;
+            .await?;
         if let Err(e) = submit_vote::<TYPES, I, V>(
             self.sender.clone(),
             mem,
@@ -528,7 +528,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> QuorumVoteTaskS
 
                 let cert_epoch = cert.data.epoch;
 
-                let mem = self.membership.membership_for_epoch(cert_epoch).await;
+                let mem = self.membership.membership_for_epoch(cert_epoch).await?;
                 let membership_da_stake_table = mem.da_stake_table().await;
                 let membership_da_success_threshold = mem.da_success_threshold().await;
 
@@ -579,7 +579,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> QuorumVoteTaskS
 
                 let vid_epoch = share.data.epoch();
                 let target_epoch = share.data.target_epoch();
-                let membership_reader = self.membership.membership_for_epoch(vid_epoch).await;
+                let membership_reader = self.membership.membership_for_epoch(vid_epoch).await?;
                 // ensure that the VID share was sent by a DA member OR the view leader
                 ensure!(
                     membership_reader
@@ -593,7 +593,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> QuorumVoteTaskS
                 let membership_total_nodes = self
                     .membership
                     .membership_for_epoch(target_epoch)
-                    .await
+                    .await?
                     .total_nodes()
                     .await;
 
@@ -761,7 +761,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> QuorumVoteTaskS
             event_sender.clone(),
             self.membership
                 .membership_for_epoch(Some(current_epoch))
-                .await,
+                .await?,
             self.public_key.clone(),
             self.private_key.clone(),
             self.upgrade_lock.clone(),

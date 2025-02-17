@@ -170,7 +170,7 @@ impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>, V: Versions> TestTas
                     .cur_epoch();
                 if !memberships_arc
                     .membership_for_epoch(cur_epoch)
-                    .await
+                    .await?s
                     .has_stake(&public_key)
                     .await
                 {
@@ -256,7 +256,7 @@ impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>, V: Versions> TestTas
                     .cur_epoch();
                 if !memberships_arc
                     .membership_for_epoch(cur_epoch)
-                    .await
+                    .await?
                     .has_stake(&public_key)
                     .await
                 {
@@ -276,7 +276,7 @@ impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>, V: Versions> TestTas
         if let Some(keys) = keys {
             for key in keys {
                 let key_epoch = key.epoch(self.epoch_height);
-                let epoch_membership = memberships_arc.membership_for_epoch(key_epoch).await;
+                let epoch_membership = memberships_arc.membership_for_epoch(key_epoch).await?;
                 let key_len = epoch_membership.total_nodes().await;
                 let key_threshold = epoch_membership.success_threshold().await.get() as usize;
 
@@ -322,7 +322,7 @@ impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>, V: Versions> TestTas
                 .await
                 .cur_epoch();
 
-            let epoch_membership = memberships_arc.membership_for_epoch(cur_epoch).await;
+            let epoch_membership = memberships_arc.membership_for_epoch(cur_epoch).await?;
             let len = epoch_membership.total_nodes().await;
             let threshold = epoch_membership.success_threshold().await.get() as usize;
 
@@ -518,7 +518,7 @@ impl<TYPES: NodeType> RoundResult<TYPES> {
             let epoch = leaf.epoch(epoch_height);
             if !membership
                 .membership_for_epoch(epoch)
-                .await
+                .await?
                 .has_stake(public_key)
                 .await
             {

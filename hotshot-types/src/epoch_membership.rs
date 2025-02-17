@@ -11,11 +11,6 @@ use crate::traits::node_implementation::{ConsensusTime, NodeType};
 use crate::traits::signature_key::SignatureKey;
 use crate::utils::root_block_in_epoch;
 
-#[derive(Clone, Debug)]
-/// Struct to signal a catchup of a membership is complete
-/// Used internally in `EpochMembershipCoordinator` only
-struct CatchupSignal {}
-
 /// Struct to Coordinate membership catchup
 pub struct EpochMembershipCoordinator<TYPES: NodeType> {
     /// The underlying membhersip
@@ -25,7 +20,7 @@ pub struct EpochMembershipCoordinator<TYPES: NodeType> {
     /// Any new callers wantin an `EpochMembership` will await on the signal
     /// alerting them the membership is ready.  The first caller for an epoch will
     /// wait for the actual catchup and allert future callers when it's done
-    catchup_map: Arc<Mutex<HashMap<TYPES::Epoch, InactiveReceiver<CatchupSignal>>>>,
+    catchup_map: Arc<Mutex<HashMap<TYPES::Epoch, InactiveReceiver<Option<EpochMembership<TYPES>>>>>>,
 
     /// Number of blocks in an epoch
     pub epoch_height: u64,
@@ -68,32 +63,34 @@ where
     pub async fn membership_for_epoch(
         &self,
         maybe_epoch: Option<TYPES::Epoch>,
-    ) -> EpochMembership<TYPES> {
+    ) -> Option<EpochMembership<TYPES>> {
         let ret_val = EpochMembership {
             epoch: maybe_epoch,
             coordinator: self.clone(),
         };
         let Some(epoch) = maybe_epoch else {
-            return ret_val;
+            return Some(ret_val);
         };
         if self.membership.read().await.has_epoch(epoch) {
-            return ret_val;
+            return Some(ret_val);
         }
-        let tx = {
-            let mut map = self.catchup_map.lock().await;
-            if let Some(inactive_rx) = map.get(&epoch) {
-                let mut rx = inactive_rx.activate_cloned();
-                let _ = rx.recv().await;
-                return ret_val;
-            }
-            let (tx, rx) = broadcast(1);
-            map.insert(epoch, rx.deactivate());
-            tx
-        };
-        // do catchup
-        self.catchup(epoch).await;
-        let _ = tx.broadcast_direct(CatchupSignal {}).await;
-        ret_val
+        if self.catchup_map.lock().await.contains_key(&epoch) {
+            return None;
+        }
+        let coordinator = self.clone();
+        tokio::spawn(async move {
+                let tx = {
+                    let mut map = coordinator.catchup_map.lock().await;
+                    let (tx, rx) = broadcast(1);
+                    map.insert(epoch, rx.deactivate());
+                    tx
+                };
+                // do catchup
+                let ret = coordinator.catchup(epoch).await;
+                let _ = tx.broadcast_direct(ret).await;
+            });
+
+        None
     }
 
     /// Catches the membership up to the epoch passed as an argument.  
@@ -104,7 +101,7 @@ where
     /// e.g. if we start with only epoch 0 stake table and call catchup for epoch 10, then call catchup for epoch 20
     /// the first caller will actually do the work for to catchup to epoch 10 then the second caller will continue
     /// catching up to epoch 20
-    async fn catchup(&self, epoch: TYPES::Epoch) {
+    async fn catchup(self, epoch: TYPES::Epoch) -> Option<EpochMembership<TYPES>> {
         // recursively catchup until we have a stake table for the epoch containing our root
         assert!(
             *epoch != 0,
@@ -115,7 +112,12 @@ where
         } else {
             TYPES::Epoch::new(*epoch - 2)
         };
-        let root_membership = Box::pin(self.membership_for_epoch(Some(root_epoch))).await;
+        let maybe_mem = self.membership_for_epoch(Some(root_epoch)).await;
+        let root_membership = if maybe_mem.is_some() {
+            maybe_mem.unwrap()
+        } else {
+            self.wait_for_catchup(root_epoch).await?
+        };
 
         // Get the epoch root headers and update our membership with them, finally sync them
         // Verification of the root is handled in get_epoch_root
@@ -123,7 +125,7 @@ where
             .get_epoch_root(root_block_in_epoch(*root_epoch, self.epoch_height))
             .await
         else {
-            return;
+            return None;
         };
         let Some(updater) = self
             .membership
@@ -132,14 +134,28 @@ where
             .add_epoch_root(next_epoch, header)
             .await
         else {
-            return;
+            return None;
         };
         updater(&mut *(self.membership.write().await));
 
         let Some(sync) = self.membership.read().await.sync_l1().await else {
-            return;
+            return None;
         };
         sync(&mut *(self.membership.write().await));
+        Some(EpochMembership {
+            epoch: Some(epoch),
+            coordinator: self.clone()
+        })
+    }
+
+    pub async fn wait_for_catchup(&self, epoch: TYPES::Epoch) -> Option<EpochMembership<TYPES>> {
+        let Some(mut rx) = self.catchup_map.lock().await.get(&epoch).map(InactiveReceiver::activate_cloned) else {
+            return self.clone().catchup(epoch).await;
+        };
+        let Ok(Some(mem)) = rx.recv_direct().await else {
+            return self.clone().catchup(epoch).await
+        };
+        Some(mem)
     }
 }
 
@@ -168,9 +184,9 @@ impl<TYPES: NodeType> EpochMembership<TYPES> {
     }
 
     /// Get a membership for the next epoch
-    pub async fn next_epoch(&self) -> Self {
+    pub async fn next_epoch(&self) -> Option<Self> {
         if self.epoch.is_none() {
-            self.clone()
+            Some(self.clone())
         } else {
             self.coordinator
                 .membership_for_epoch(self.epoch.map(|e| e + 1))
@@ -179,12 +195,12 @@ impl<TYPES: NodeType> EpochMembership<TYPES> {
     }
 
     /// Get the prior epoch
-    pub async fn prev_epoch(&self) -> Self {
+    pub async fn prev_epoch(&self) -> Option<Self> {
         let Some(epoch) = self.epoch else {
-            return self.clone();
+            return Some(self.clone());
         };
         if *epoch == 0 {
-            return self.clone();
+            return Some(self.clone());
         }
         self.coordinator.membership_for_epoch(Some(epoch - 1)).await
     }

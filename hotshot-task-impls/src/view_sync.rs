@@ -234,7 +234,7 @@ impl<TYPES: NodeType, V: Versions> ViewSyncTaskState<TYPES, V> {
             membership: self
                 .membership_coordinator
                 .membership_for_epoch(self.cur_epoch)
-                .await,
+                .await?,
             public_key: self.public_key.clone(),
             private_key: self.private_key.clone(),
             view_sync_timeout: self.view_sync_timeout,
@@ -311,7 +311,7 @@ impl<TYPES: NodeType, V: Versions> ViewSyncTaskState<TYPES, V> {
                 let epoch_mem = self
                     .membership_coordinator
                     .membership_for_epoch(self.cur_epoch)
-                    .await;
+                    .await?;
                 // We do not have a relay task already running, so start one
                 ensure!(
                     epoch_mem.leader(vote_view + relay).await? == self.public_key,
@@ -360,7 +360,7 @@ impl<TYPES: NodeType, V: Versions> ViewSyncTaskState<TYPES, V> {
                 let epoch_mem = self
                     .membership_coordinator
                     .membership_for_epoch(self.cur_epoch)
-                    .await;
+                    .await?;
                 ensure!(
                     epoch_mem.leader(vote_view + relay).await? == self.public_key,
                     debug!("View sync vote sent to wrong leader")
@@ -407,7 +407,7 @@ impl<TYPES: NodeType, V: Versions> ViewSyncTaskState<TYPES, V> {
                 let epoch_mem = self
                     .membership_coordinator
                     .membership_for_epoch(self.cur_epoch)
-                    .await;
+                    .await?;
                 // We do not have a relay task already running, so start one
                 ensure!(
                     epoch_mem.leader(vote_view + relay).await? == self.public_key,
@@ -485,7 +485,7 @@ impl<TYPES: NodeType, V: Versions> ViewSyncTaskState<TYPES, V> {
                 let leader = self
                     .membership_coordinator
                     .membership_for_epoch(self.cur_epoch)
-                    .await
+                    .await?
                     .leader(view_number)
                     .await?;
                 tracing::warn!(

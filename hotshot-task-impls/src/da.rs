@@ -119,7 +119,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> DaTaskState<TYP
                 let view_leader_key = self
                     .membership_coordinator
                     .membership_for_epoch(proposal.data.epoch)
-                    .await
+                    .await?
                     .leader(view)
                     .await?;
                 ensure!(
@@ -149,7 +149,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> DaTaskState<TYP
                 let membership = self
                     .membership_coordinator
                     .membership_for_epoch(epoch_number)
-                    .await;
+                    .await?;
 
                 ensure!(
                   cur_view <= view_number + 1,
@@ -286,7 +286,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> DaTaskState<TYP
                 let membership = self
                     .membership_coordinator
                     .membership_for_epoch(epoch)
-                    .await;
+                    .await?;
 
                 ensure!(
                     membership.leader(view).await? == self.public_key,
@@ -347,7 +347,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> DaTaskState<TYP
                 let leader = self
                     .membership_coordinator
                     .membership_for_epoch(epoch)
-                    .await
+                    .await?
                     .leader(view_number)
                     .await?;
                 if leader != self.public_key {

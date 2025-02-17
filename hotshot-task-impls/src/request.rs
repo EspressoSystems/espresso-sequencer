@@ -120,7 +120,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TaskState for NetworkRequest
                 let membership_reader = self
                     .membership_coordinator
                     .membership_for_epoch(prop_epoch)
-                    .await;
+                    .await?;
                 if !membership_reader.has_stake(&self.public_key).await
                     && (!membership_reader
                         .next_epoch()
@@ -220,7 +220,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> NetworkRequestState<TYPES, I
         let membership_reader = self
             .membership_coordinator
             .membership_for_epoch(epoch)
-            .await;
+            .await?;
         let mut da_committee_for_view = membership_reader.da_committee_members(view).await;
         if let Ok(leader) = membership_reader.leader(view).await {
             da_committee_for_view.insert(leader);

@@ -510,8 +510,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> SystemContext<T
         spawn(async move {
             let memberships_da_committee_members = api
                 .membership_coordinator
-                .membership_for_epoch(epoch)
-                .await
+                .membership_for_epoch(epoch).await?
                 .da_committee_members(view_number)
                 .await
                 .iter()

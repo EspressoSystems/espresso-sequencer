@@ -49,7 +49,7 @@ async fn test_vid_task() {
     let default_version = Version { major: 0, minor: 0 };
 
     let mut vid = vid_scheme_from_view_number::<TestTypes, TestVersions>(
-        &membership.membership_for_epoch(None).await,
+        &membership.membership_for_epoch(None).await.unwrap(),
         ViewNumber::new(0),
         default_version,
     )
@@ -102,7 +102,7 @@ async fn test_vid_task() {
         signature: message.signature.clone(),
         _pd: PhantomData,
     };
-    let mem = membership.membership_for_epoch(None).await;
+    let mem = membership.membership_for_epoch(None).await.unwrap();
     let inputs = vec![
         serial![ViewChange(ViewNumber::new(1), None)],
         serial![

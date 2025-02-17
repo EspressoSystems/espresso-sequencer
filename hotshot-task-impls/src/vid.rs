@@ -89,7 +89,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> VidTaskState<TY
                 if self
                     .membership_coordinator
                     .membership_for_epoch(epoch)
-                    .await
+                    .await?
                     .leader(*view_number)
                     .await
                     .ok()?

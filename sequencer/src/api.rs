@@ -187,13 +187,15 @@ impl<N: ConnectedNetwork<PubKey>, V: Versions, P: SequencerPersistence>
         &self,
         epoch: Option<<SeqTypes as NodeType>::Epoch>,
     ) -> Vec<StakeTableEntry<<SeqTypes as NodeType>::SignatureKey>> {
-        self.consensus()
+        let Some(mem) = self.consensus()
             .await
             .read()
             .await
             .membership_coordinator
-            .membership_for_epoch(epoch)
-            .await
+            .wait_for_catchup(epoc)
+            .await else {
+                reutnr vec[]!
+            }
             .stake_table()
             .await
     }

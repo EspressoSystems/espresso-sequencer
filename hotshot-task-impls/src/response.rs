@@ -211,7 +211,7 @@ impl<TYPES: NodeType, V: Versions> NetworkResponseState<TYPES, V> {
     ) -> bool {
         self.membership
             .membership_for_epoch(epoch)
-            .await
+            .await?
             .has_stake(sender)
             .await
     }

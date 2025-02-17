@@ -51,7 +51,7 @@ async fn test_quorum_proposal_task_quorum_proposal_view_1() {
     let membership = handle.hotshot.membership_coordinator.clone();
     let epoch_1_mem = membership
         .membership_for_epoch(Some(EpochNumber::new(1)))
-        .await;
+        .await.unwrap();
     let version = handle
         .hotshot
         .upgrade_lock
@@ -154,7 +154,7 @@ async fn test_quorum_proposal_task_quorum_proposal_view_gt_1() {
     let membership = handle.hotshot.membership_coordinator.clone();
     let epoch_1_mem = membership
         .membership_for_epoch(Some(EpochNumber::new(1)))
-        .await;
+        .await.unwrap();
 
     let mut generator = TestViewGenerator::<TestVersions>::generate(membership.clone());
 
@@ -332,7 +332,7 @@ async fn test_quorum_proposal_task_qc_timeout() {
     let membership = handle.hotshot.membership_coordinator.clone();
     let epoch_1_mem = membership
         .membership_for_epoch(Some(EpochNumber::new(1)))
-        .await;
+        .await.unwrap();
     let version = handle
         .hotshot
         .upgrade_lock
@@ -430,7 +430,7 @@ async fn test_quorum_proposal_task_view_sync() {
     let membership = handle.hotshot.membership_coordinator.clone();
     let epoch_1_mem = membership
         .membership_for_epoch(Some(EpochNumber::new(1)))
-        .await;
+        .await.unwrap();
     let version = handle
         .hotshot
         .upgrade_lock
@@ -528,7 +528,7 @@ async fn test_quorum_proposal_task_liveness_check() {
     let membership = handle.hotshot.membership_coordinator.clone();
     let epoch_1_mem = membership
         .membership_for_epoch(Some(EpochNumber::new(1)))
-        .await;
+        .await.unwrap();
 
     let mut generator = TestViewGenerator::<TestVersions>::generate(membership.clone());
 

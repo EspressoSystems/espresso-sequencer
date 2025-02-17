@@ -724,7 +724,7 @@ impl<
                 let leader = match self
                     .membership_coordinator
                     .membership_for_epoch(vote.epoch())
-                    .await
+                    .await?
                     .leader(view_number)
                     .await
                 {
@@ -822,7 +822,7 @@ impl<
                 let leader = match self
                     .membership_coordinator
                     .membership_for_epoch(vote.epoch())
-                    .await
+                    .await?
                     .leader(view_number)
                     .await
                 {
@@ -872,7 +872,7 @@ impl<
                 let leader = match self
                     .membership_coordinator
                     .membership_for_epoch(self.epoch)
-                    .await
+                    .await?
                     .leader(view_number)
                     .await
                 {
@@ -904,7 +904,7 @@ impl<
                 let leader = match self
                     .membership_coordinator
                     .membership_for_epoch(self.epoch)
-                    .await
+                    .await?
                     .leader(view_number)
                     .await
                 {
@@ -936,7 +936,7 @@ impl<
                 let leader = match self
                     .membership_coordinator
                     .membership_for_epoch(self.epoch)
-                    .await
+                    .await?
                     .leader(view_number)
                     .await
                 {
@@ -1010,7 +1010,7 @@ impl<
                 let leader = match self
                     .membership_coordinator
                     .membership_for_epoch(self.epoch)
-                    .await
+                    .await?
                     .leader(view_number)
                     .await
                 {
@@ -1049,7 +1049,7 @@ impl<
                 let leader = match self
                     .membership_coordinator
                     .membership_for_epoch(self.epoch)
-                    .await
+                    .await?
                     .leader(view_number)
                     .await
                 {
@@ -1174,7 +1174,7 @@ impl<
         let da_committee = self
             .membership_coordinator
             .membership_for_epoch(self.epoch)
-            .await
+            .await?
             .da_committee_members(view_number)
             .await;
         let network = Arc::clone(&self.network);

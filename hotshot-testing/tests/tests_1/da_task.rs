@@ -47,7 +47,7 @@ async fn test_da_task() {
         &encoded_transactions,
         membership
             .membership_for_epoch(None)
-            .await
+            .await.unwrap()
             .total_nodes()
             .await,
         default_version,
@@ -111,7 +111,7 @@ async fn test_da_task() {
                 vec1::vec1![null_block::builder_fee::<TestTypes, TestVersions>(
                     membership
                         .membership_for_epoch(None)
-                        .await
+                        .await.unwrap()
                         .total_nodes()
                         .await,
                     <TestVersions as Versions>::Base::VERSION,
@@ -164,7 +164,7 @@ async fn test_da_task_storage_failure() {
         &encoded_transactions,
         membership
             .membership_for_epoch(None)
-            .await
+            .await.unwrap()
             .total_nodes()
             .await,
         default_version,
@@ -228,7 +228,7 @@ async fn test_da_task_storage_failure() {
                 vec1::vec1![null_block::builder_fee::<TestTypes, TestVersions>(
                     membership
                         .membership_for_epoch(None)
-                        .await
+                        .await.unwrap()
                         .total_nodes()
                         .await,
                     <TestVersions as Versions>::Base::VERSION,

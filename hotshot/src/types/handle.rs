@@ -192,7 +192,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static, V: Versions>
                         quorum_proposal.data.block_header().block_number(),
                         epoch_height,
                     );
-                    let membership = mem.membership_for_epoch(maybe_epoch).await;
+                    let Some(membership) = mem.membership_for_epoch(maybe_epoch).await else{
+                        tracing::warn!("Cannot validate proposal because we don't have stake table for epoch {:?}", maybe_epoch);
+                        continue;
+                    };
                     // Make sure that the quorum_proposal is valid
                     if let Err(err) = quorum_proposal.validate_signature(&membership).await {
                         tracing::warn!("Invalid Proposal Received after Request.  Err {:?}", err);
@@ -334,7 +337,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static, V: Versions>
         self.hotshot
             .membership_coordinator
             .membership_for_epoch(epoch_number)
-            .await
+            .await.context("fail te get membership for epoch")
             .leader(view_number)
             .await
             .context("Failed to lookup leader")
