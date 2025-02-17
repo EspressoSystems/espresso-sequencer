@@ -71,7 +71,7 @@
         # This overlays a mkShell that is configured to use mold on Linux.
         (final: prev: prev.lib.optionalAttrs prev.stdenv.isLinux {
           mkShell = prev.mkShell.override {
-            stdenv = pkgs.stdenvAdapters.useMoldLinker pkgs.clangStdenv;
+            stdenv = prev.stdenvAdapters.useMoldLinker prev.clangStdenv;
           };
         })
       ];
