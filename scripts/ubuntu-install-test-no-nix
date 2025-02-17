@@ -11,7 +11,7 @@ set -e
 SCRIPT="$(grep '^    ' doc/ubuntu.md | sed 's/^    //' | sed 's/^cd .*//' | sed 's/^git clone .*//')"
 
 # Remove sudo if we're already root
-if [ "$(whoami)" == root ]; then
+if [ "$(whoami)" == "root" ]; then
     SCRIPT="$(echo "$SCRIPT" | sed 's/^sudo //' | sed 's/| sudo /| /')"
 fi
 
