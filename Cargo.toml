@@ -194,7 +194,7 @@ log-panics = { version = "2.0", features = ["with-backtrace"] }
 lru = "0.12"
 strum = { version = "0.26", features = ["derive"] }
 surf-disco = "0.9"
-sqlx = "=0.8.2"
+sqlx = "=0.8.3"
 tagged-base64 = "0.4"
 tide-disco = "0.9.3"
 thiserror = "1.0.69"
@@ -224,3 +224,11 @@ paste = "1.0"
 rand = "0.8.5"
 time = "0.3"
 trait-set = "0.3.0"
+[profile.test]
+opt-level = 1
+[profile.test.package.tests]
+opt-level = 0
+[profile.test.package.client]
+opt-level = 0
+[profile.test.package.hotshot-state-prover]
+opt-level = 3

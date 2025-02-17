@@ -59,6 +59,7 @@ pub async fn main() -> anyhow::Result<()> {
             )
             .await
         }
+        // TODO change `fee` to `pos`
         #[cfg(all(feature = "fee", feature = "marketplace"))]
         (FeeVersion::VERSION, MarketplaceVersion::VERSION) => {
             run(
