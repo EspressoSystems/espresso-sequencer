@@ -5084,6 +5084,7 @@ dependencies = [
  "hotshot-task",
  "hotshot-task-impls",
  "hotshot-types",
+ "hotshot-utils",
  "itertools 0.14.0",
  "jf-vid",
  "lru 0.12.5",
