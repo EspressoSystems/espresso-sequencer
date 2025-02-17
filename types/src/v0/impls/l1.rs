@@ -30,7 +30,6 @@ use lru::LruCache;
 use parking_lot::RwLock;
 use std::{
     cmp::{min, Ordering},
-    fmt::Debug,
     iter::FromFn,
     num::NonZeroUsize,
     sync::Arc,
@@ -38,7 +37,6 @@ use std::{
 };
 use std::{pin::Pin, result::Result as StdResult};
 use tokio::{
-    spawn,
     sync::{Mutex, MutexGuard, Notify},
     task::JoinSet,
     time::{sleep, Duration},
