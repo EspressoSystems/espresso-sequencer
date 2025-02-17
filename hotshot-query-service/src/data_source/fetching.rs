@@ -510,40 +510,40 @@ where
         let aggregator_metrics = AggregatorMetrics::new(builder.storage.metrics());
 
         let fetcher = Arc::new(Fetcher::new(builder).await?);
-        let scanner = if proactive_fetching && !leaf_only {
-            Some(BackgroundTask::spawn(
-                "proactive scanner",
-                fetcher.clone().proactive_scan(
-                    minor_interval,
-                    major_interval,
-                    major_offset,
-                    proactive_range_chunk_size,
-                    scanner_metrics,
-                ),
-            ))
-        } else {
-            None
-        };
+        // let scanner = if proactive_fetching && !leaf_only {
+        //     Some(BackgroundTask::spawn(
+        //         "proactive scanner",
+        //         fetcher.clone().proactive_scan(
+        //             minor_interval,
+        //             major_interval,
+        //             major_offset,
+        //             proactive_range_chunk_size,
+        //             scanner_metrics,
+        //         ),
+        //     ))
+        // } else {
+        //     None
+        // };
 
-        let aggregator = if aggregator && !leaf_only {
-            Some(BackgroundTask::spawn(
-                "aggregator",
-                fetcher
-                    .clone()
-                    .aggregate(aggregator_chunk_size, aggregator_metrics),
-            ))
-        } else {
-            None
-        };
+        // let aggregator = if aggregator && !leaf_only {
+        //     Some(BackgroundTask::spawn(
+        //         "aggregator",
+        //         fetcher
+        //             .clone()
+        //             .aggregate(aggregator_chunk_size, aggregator_metrics),
+        //     ))
+        // } else {
+        //     None
+        // };
 
         let storage = fetcher.storage.clone();
 
         let pruner = Pruner::new(storage).await;
         let ds = Self {
             fetcher,
-            scanner,
+            scanner: None,
             pruner,
-            aggregator,
+            aggregator: None,
         };
 
         Ok(ds)
