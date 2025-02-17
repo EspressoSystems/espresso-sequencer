@@ -3,7 +3,6 @@
 slow-timeout = { period = "2m", terminate-after = 3 }
 default-filter = 'not (test(slow_) | package(tests))'
 retries = 2
-threads-required = "num-test-threads"
 
 # More flaky tests
 [[profile.default.overrides]]
@@ -19,7 +18,7 @@ retries = 10
 filter = """
 test(tests_4::test_with_builder_failures::test_with_builder_failures)
 """
-# threads-required = 2
+threads-required = 2
 
 [[profile.default.overrides]]
 # These tests are fast if they work (usually about 150ms) but sometimes they
@@ -35,7 +34,7 @@ retries  = 10
 # The restart tests run an entire sequencing network, and so are quite resource intensive.
 [[profile.default.overrides]]
 filter = 'test(slow_test_restart)'
-# threads-required = 'num-cpus'
+threads-required = 'num-cpus'
 
 [profile.slow]
 slow-timeout = "2m"
