@@ -1,4 +1,4 @@
-# export RUST_BACKTRACE := "1"
+mod hotshot
 
 default:
     just --list
