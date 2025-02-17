@@ -59,8 +59,8 @@ impl From<PermissionedStakeTableConfig> for Vec<NodeInfo> {
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug, From, PartialEq)]
-struct StakerIdentity {
-    stake_table_key: BLSPubKey,
+pub struct StakerIdentity {
+    pub stake_table_key: BLSPubKey,
 }
 
 impl From<StakerIdentity> for BLSPubKey {
@@ -74,12 +74,22 @@ impl From<StakerIdentity> for BLSPubKey {
 #[serde(bound(deserialize = ""))]
 pub struct PermissionedStakeTableUpdate {
     #[serde(default)]
-    stakers_to_remove: Vec<StakerIdentity>,
+    pub stakers_to_remove: Vec<StakerIdentity>,
     #[serde(default)]
-    new_stakers: Vec<PeerConfigKeys<BLSPubKey>>,
+    pub new_stakers: Vec<PeerConfigKeys<BLSPubKey>>,
 }
 
 impl PermissionedStakeTableUpdate {
+    pub fn new(
+        new_stakers: Vec<PeerConfigKeys<BLSPubKey>>,
+        stakers_to_remove: Vec<StakerIdentity>,
+    ) -> Self {
+        Self {
+            stakers_to_remove,
+            new_stakers,
+        }
+    }
+
     pub fn from_toml_file(path: &Path) -> anyhow::Result<Self> {
         let config_file_as_string: String = fs::read_to_string(path)
             .unwrap_or_else(|_| panic!("Could not read config file located at {}", path.display()));
@@ -127,11 +137,16 @@ pub async fn update_stake_table(
         .index(account_index)?
         .build()?
         .with_chain_id(chain_id);
+
     let l1 = Arc::new(SignerMiddleware::new(provider.clone(), wallet));
 
     let contract = PermissionedStakeTable::new(contract_address, l1);
 
     tracing::info!("sending stake table update transaction");
+
+    if update.stakers_to_remove().is_empty() && update.new_stakers().is_empty() {
+        anyhow::bail!("No changes to update in the stake table");
+    }
 
     let tx_receipt = contract
         .update(update.stakers_to_remove(), update.new_stakers())

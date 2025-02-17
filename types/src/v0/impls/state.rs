@@ -24,11 +24,11 @@ use serde::{Deserialize, Serialize};
 use std::ops::Add;
 use thiserror::Error;
 use time::OffsetDateTime;
-use vbs::version::Version;
+use vbs::version::{StaticVersionType, Version};
 
 use super::{
     auction::ExecutionError, fee_info::FeeError, instance_state::NodeState, BlockMerkleCommitment,
-    BlockSize, FeeMerkleCommitment, L1Client,
+    BlockSize, FeeMerkleCommitment, L1Client, MarketplaceVersion,
 };
 use crate::{
     traits::StateCatchup,
@@ -668,7 +668,7 @@ fn validate_builder_fee(
         // TODO Marketplace signatures are placeholders for now. In
         // finished Marketplace signatures will cover the full
         // transaction.
-        if version.minor >= 3 {
+        if version.minor >= MarketplaceVersion::MINOR {
             fee_info
                 .account()
                 .validate_sequencing_fee_signature_marketplace(
@@ -909,6 +909,29 @@ impl HotShotState<SeqTypes> for ValidatedState {
         version: Version,
         view_number: u64,
     ) -> Result<(Self, Self::Delta), Self::Error> {
+        // During epoch transition, hotshot propagates the same block again
+        // we should totally skip this block, and return the same validated state
+        // This block will have the same parent block height
+
+        tracing::info!(
+            "parent_height={} proposed_height={}",
+            parent_leaf.height(),
+            proposed_header.height(),
+        );
+
+        if proposed_header.height() % instance.epoch_height == 0
+            && parent_leaf.height() == proposed_header.height()
+        {
+            tracing::info!(
+                "skipping block.. parent_height={} proposed_height={} epoch_height={}",
+                parent_leaf.height(),
+                proposed_header.height(),
+                instance.epoch_height,
+            );
+
+            return Ok((self.clone(), Delta::default()));
+        }
+
         // Unwrapping here is okay as we retry in a loop
         //so we should either get a validated state or until hotshot cancels the task
         let (validated_state, delta) = self
