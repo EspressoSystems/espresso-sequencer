@@ -1,3 +1,5 @@
+mod hotshot
+
 default:
     just --list
 

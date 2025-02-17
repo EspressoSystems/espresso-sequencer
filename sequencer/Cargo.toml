@@ -6,6 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
+default = ["fee"]
 testing = [
     "hotshot-testing",
     "marketplace-builder-core",
@@ -15,6 +16,9 @@ testing = [
 ]
 benchmarking = []
 embedded-db = ["hotshot-query-service/embedded-db"]
+fee = []
+pos = []
+marketplace = []
 
 [[bin]]
 name = "espresso-dev-node"
