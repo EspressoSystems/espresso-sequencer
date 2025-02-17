@@ -33,7 +33,7 @@ use crate::{
     v0_1, v0_2, v0_3,
     v0_99::{self, ChainConfig, IterableFeeInfo, SolverAuctionResults},
     BlockMerkleCommitment, BuilderSignature, FeeAccount, FeeAmount, FeeInfo, FeeMerkleCommitment,
-    Header, L1BlockInfo, L1Snapshot, Leaf2, NamespaceId, NsTable, SeqTypes, UpgradeType,
+    Header, L1BlockInfo, L1Snapshot, Leaf2, NamespaceId, NsTable, SeqTypes,
 };
 
 use super::{instance_state::NodeState, state::ValidatedState};
@@ -974,8 +974,9 @@ impl BlockHeader<SeqTypes> for Header {
 
         let mut validated_state = parent_state.clone();
 
-        let chain_config = instance_state.upgrade_chain_config(version) else {
-            Header::get_chain_config(&validated_state, instance_state).await?
+        let chain_config = match instance_state.upgrade_chain_config(version) {
+            Some(chain_config) => chain_config,
+            None => Header::get_chain_config(&validated_state, instance_state).await?,
         };
 
         validated_state.chain_config = chain_config.into();

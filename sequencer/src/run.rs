@@ -8,10 +8,7 @@ use super::{
     persistence, Genesis, L1Params, NetworkParams,
 };
 use clap::Parser;
-use espresso_types::{
-    traits::NullEventConsumer, EpochVersion, FeeVersion, MarketplaceVersion, SequencerVersions,
-    SolverAuctionResultsProvider, V0_0,
-};
+use espresso_types::{traits::NullEventConsumer, SequencerVersions, SolverAuctionResultsProvider};
 use futures::future::FutureExt;
 use hotshot::MarketplaceConfig;
 use hotshot_types::traits::{metrics::NoMetrics, node_implementation::Versions};
@@ -39,34 +36,34 @@ pub async fn main() -> anyhow::Result<()> {
 
     match (base, upgrade) {
         #[cfg(all(feature = "fee", feature = "pos"))]
-        (FeeVersion::VERSION, EpochVersion::VERSION) => {
+        (espresso_types::FeeVersion::VERSION, espresso_types::EpochVersion::VERSION) => {
             run(
                 genesis,
                 modules,
                 opt,
-                SequencerVersions::<FeeVersion, EpochVersion>::new(),
+                SequencerVersions::<espresso_types::FeeVersion, espresso_types::EpochVersion>::new(),
             )
             .await
         }
         #[cfg(feature = "pos")]
-        (EpochVersion::VERSION, _) => {
+        (espresso_types::EpochVersion::VERSION, _) => {
             run(
                 genesis,
                 modules,
                 opt,
                 // Specifying V0_0 disables upgrades
-                SequencerVersions::<EpochVersion, V0_0>::new(),
+                SequencerVersions::<espresso_types::EpochVersion, espresso_types::V0_0>::new(),
             )
             .await
         }
         // TODO change `fee` to `pos`
         #[cfg(all(feature = "fee", feature = "marketplace"))]
-        (FeeVersion::VERSION, MarketplaceVersion::VERSION) => {
+        (espresso_types::FeeVersion::VERSION, espresso_types::MarketplaceVersion::VERSION) => {
             run(
                 genesis,
                 modules,
                 opt,
-                SequencerVersions::<FeeVersion, MarketplaceVersion>::new(),
+                SequencerVersions::<espresso_types::FeeVersion, espresso_types::MarketplaceVersion>::new(),
             )
             .await
         }
