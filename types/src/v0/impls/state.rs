@@ -913,7 +913,7 @@ impl HotShotState<SeqTypes> for ValidatedState {
         // we should totally skip this block, and return the same validated state
         // This block will have the same parent block height
 
-        tracing::info!(
+        tracing::error!(
             "parent_height={} proposed_height={}",
             parent_leaf.height(),
             proposed_header.height(),
@@ -922,7 +922,7 @@ impl HotShotState<SeqTypes> for ValidatedState {
         if proposed_header.height() % instance.epoch_height == 0
             && parent_leaf.height() == proposed_header.height()
         {
-            tracing::info!(
+            tracing::error!(
                 "skipping block.. parent_height={} proposed_height={} epoch_height={}",
                 parent_leaf.height(),
                 proposed_header.height(),

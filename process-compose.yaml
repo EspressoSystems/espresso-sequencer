@@ -128,6 +128,7 @@ processes:
 
 
   sequencer0:
+    log_location: seq0.log
     command: sequencer -- storage-sql -- http -- query -- submit -- hotshot-events -- config
     environment:
       - ESPRESSO_SEQUENCER_API_PORT=$ESPRESSO_SEQUENCER_API_PORT

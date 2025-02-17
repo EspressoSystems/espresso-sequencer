@@ -244,9 +244,7 @@ impl EpochCommittees {
 
         // TODO: remove this, workaround for hotshot asking for stake tables from epoch 1 and 2
         let mut map = HashMap::new();
-        for epoch in Epoch::genesis().u64()..=10 {
-            map.insert(Epoch::new(epoch), members.clone());
-        }
+        map.insert(Epoch::genesis(), members.clone());
 
         let address = instance_state.chain_config.stake_table_contract;
 
@@ -491,16 +489,32 @@ impl Membership<SeqTypes> for EpochCommittees {
         block_header: Header,
     ) -> Option<Box<dyn FnOnce(&mut Self) + Send>> {
         let address = self.contract_address?;
+        let genesis_st = self.state(&Some(Epoch::genesis())).unwrap().clone();
 
-        self.l1_client
+        let st = self
+            .l1_client
             .get_stake_table(address.to_alloy(), block_header.l1_head())
             .await
-            .ok()
-            .map(|stake_table| -> Box<dyn FnOnce(&mut Self) + Send> {
-                Box::new(move |committee: &mut Self| {
-                    let _ = committee.update_stake_table(epoch, stake_table);
-                })
+            .ok();
+
+        let epoch_0_st = genesis_st.stake_table;
+        let epoch0_da = genesis_st.da_members;
+
+        let sss = st.clone().unwrap();
+        let contract_st = sss.stake_table;
+        let contract_da = sss.da_members;
+
+        tracing::warn!("epoch0 st= {epoch_0_st:?}");
+        tracing::warn!("contract st= {contract_st:?}");
+
+        tracing::warn!("epoch0 da= {contract_da:?}");
+        tracing::warn!("contact da= {epoch0_da:?}");
+
+        st.map(|stake_table| -> Box<dyn FnOnce(&mut Self) + Send> {
+            Box::new(move |committee: &mut Self| {
+                let _ = committee.update_stake_table(epoch, stake_table);
             })
+        })
     }
 }
 
