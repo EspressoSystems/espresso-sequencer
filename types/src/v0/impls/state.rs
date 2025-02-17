@@ -912,9 +912,23 @@ impl HotShotState<SeqTypes> for ValidatedState {
         // During epoch transition, hotshot propagates the same block again
         // we should totally skip this block, and return the same validated state
         // This block will have the same parent block height
+
+        tracing::info!(
+            "parent_height={} proposed_height={}",
+            parent_leaf.height(),
+            proposed_header.height(),
+        );
+
         if proposed_header.height() % instance.epoch_height == 0
             && parent_leaf.height() == proposed_header.height()
         {
+            tracing::info!(
+                "skipping block.. parent_height={} proposed_height={} epoch_height={}",
+                parent_leaf.height(),
+                proposed_header.height(),
+                instance.epoch_height,
+            );
+
             return Ok((self.clone(), Delta::default()));
         }
 
