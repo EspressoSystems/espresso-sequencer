@@ -483,7 +483,7 @@ pub async fn init_node<P: SequencerPersistence, V: Versions>(
         node_id: node_index,
         upgrades: genesis.upgrades,
         current_version: V::Base::VERSION,
-        epoch_height: None,
+        epoch_height: network_config.config.epoch_height,
     };
 
     // Create the HotShot membership

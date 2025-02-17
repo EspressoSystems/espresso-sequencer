@@ -24,7 +24,7 @@ pub struct NodeState {
     pub genesis_header: GenesisHeader,
     pub genesis_state: ValidatedState,
     pub l1_genesis: Option<L1BlockInfo>,
-    pub epoch_height: Option<u64>,
+    pub epoch_height: u64,
 
     /// Map containing all planned and executed upgrades.
     ///
@@ -65,7 +65,7 @@ impl NodeState {
             l1_genesis: None,
             upgrades: Default::default(),
             current_version,
-            epoch_height: None,
+            epoch_height: 0,
         }
     }
 

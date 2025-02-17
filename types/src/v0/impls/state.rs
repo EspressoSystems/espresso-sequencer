@@ -909,6 +909,12 @@ impl HotShotState<SeqTypes> for ValidatedState {
         version: Version,
         view_number: u64,
     ) -> Result<(Self, Self::Delta), Self::Error> {
+        if proposed_header.height() % instance.epoch_height == 0
+            && parent_leaf.height() == proposed_header.height()
+        {
+            return Ok((self.clone(), Delta::default()));
+        }
+
         // Unwrapping here is okay as we retry in a loop
         //so we should either get a validated state or until hotshot cancels the task
         let (validated_state, delta) = self
