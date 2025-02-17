@@ -73,7 +73,9 @@
 <a href="#72" id="72">72</a>
 <a href="#73" id="73">73</a>
 <a href="#74" id="74">74</a>
-<a href="#75" id="75">75</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
+<a href="#75" id="75">75</a>
+<a href="#76" id="76">76</a>
+<a href="#77" id="77">77</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
 // This file is part of the HotShot repository.
 
 // You should have received a copy of the MIT License
@@ -123,6 +125,8 @@
 #[serde(bound = <span class="string">""</span>)]
 </span><span class="kw">pub struct </span>AvailableBlockHeaderInput&lt;TYPES: NodeType&gt; {
     <span class="kw">pub </span>vid_commitment: VidCommitment,
+    <span class="attr">#[serde(default)]
+    </span><span class="kw">pub </span>vid_precompute_data: <span class="prelude-ty">Option</span>&lt;serde_json::Value&gt;,
     <span class="comment">// signature over vid_commitment, BlockPayload::Metadata, and offered_fee
     </span><span class="kw">pub </span>fee_signature:
         &lt;&lt;TYPES <span class="kw">as </span>NodeType&gt;::BuilderSignatureKey <span class="kw">as </span>BuilderSignatureKey&gt;::BuilderSignature,

@@ -5138,7 +5138,8 @@
 <a href="#5137" id="5137">5137</a>
 <a href="#5138" id="5138">5138</a>
 <a href="#5139" id="5139">5139</a>
-<a href="#5140" id="5140">5140</a></pre></div><pre class="rust"><code><span class="kw">use </span>hotshot::types::Event;
+<a href="#5140" id="5140">5140</a>
+<a href="#5141" id="5141">5141</a></pre></div><pre class="rust"><code><span class="kw">use </span>hotshot::types::Event;
 <span class="kw">use </span>hotshot_builder_api::{
     v0_1::{
         block_info::{AvailableBlockData, AvailableBlockHeaderInput, AvailableBlockInfo},
@@ -6138,6 +6139,7 @@
 
                     <span class="kw">let </span>response = AvailableBlockHeaderInput::&lt;Types&gt; {
                         vid_commitment,
+                        vid_precompute_data: <span class="prelude-val">None</span>,
                         fee_signature: signature_over_fee_info,
                         message_signature: signature_over_vid_commitment,
                         sender: pub_key.clone(),
