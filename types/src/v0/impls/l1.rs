@@ -465,6 +465,14 @@ impl L1Client {
                             }
                         }
                     }
+
+                    // TODO consider what to do with result
+                    let _ = {
+                        let mut state = state.lock().await;
+                        state
+                            .stake
+                            .push(finalized.number, StakeTables::from_l1_events(events))
+                    };
                     sleep(retry_delay).await;
                 }
                 sleep(retry_delay).await;

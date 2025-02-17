@@ -169,6 +169,7 @@ pub struct L1Client {
 pub(crate) struct L1State {
     pub(crate) snapshot: L1Snapshot,
     pub(crate) finalized: LruCache<u64, L1BlockInfo>,
+    /// StakeTables indexed by finalized block
     pub(crate) stake: LruCache<u64, StakeTables>,
 }
 
