@@ -998,6 +998,7 @@ impl<Types: NodeType> ProxyGlobalState<Types> {
 
                     let response = AvailableBlockHeaderInput::<Types> {
                         vid_commitment,
+                        vid_precompute_data: None,
                         fee_signature: signature_over_fee_info,
                         message_signature: signature_over_vid_commitment,
                         sender: pub_key.clone(),
