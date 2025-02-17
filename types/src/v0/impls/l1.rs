@@ -431,16 +431,20 @@ impl L1Client {
 
         async move {
             loop {
-                let last_head = {
+                let last_finalized = {
                     let state = state.lock().await;
-                    state.snapshot.head
+                    state
+                        .snapshot
+                        .finalized
+                        .map(|block_info| block_info.number)
+                        .unwrap_or(0)
                 };
                 while let Some(event) = events.next().await {
-                    let L1Event::NewHead { head } = event else {
+                    let L1Event::NewFinalized { finalized } = event else {
                         continue;
                     };
 
-                    let chunks = L1Client::chunky2(last_head, head, chunk_size);
+                    let chunks = L1Client::chunky2(last_finalized, finalized.number, chunk_size);
                     let mut events: Vec<StakersUpdated> = Vec::new();
                     for (from, to) in chunks {
                         tracing::debug!(from, to, "fetch stake table events in range");
