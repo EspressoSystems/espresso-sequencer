@@ -634,7 +634,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
             .enumerate()
             .map(|(builder_idx, client)| async move {
                 client
-                    .available_blocks::<V>(
+                    .available_blocks(
                         parent_comm,
                         view_number.u64(),
                         self.public_key.clone(),

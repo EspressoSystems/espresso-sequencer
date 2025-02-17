@@ -48,6 +48,8 @@ impl<TYPES: NodeType> AvailableBlockData<TYPES> {
 #[serde(bound = "")]
 pub struct AvailableBlockHeaderInput<TYPES: NodeType> {
     pub vid_commitment: VidCommitment,
+    #[serde(default)]
+    pub vid_precompute_data: Option<serde_json::Value>,
     // signature over vid_commitment, BlockPayload::Metadata, and offered_fee
     pub fee_signature:
         <<TYPES as NodeType>::BuilderSignatureKey as BuilderSignatureKey>::BuilderSignature,

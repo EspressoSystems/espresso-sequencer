@@ -15,7 +15,8 @@ testing = [
     "hotshot-query-service/testing"
 ]
 benchmarking = []
-embedded-db = ["hotshot-query-service/embedded-db"]
+embedded-db = ["hotshot-query-service/embedded-db", "sqlx/sqlite"]
+sqlite-unbundled = ["hotshot-query-service/sqlite-unbundled", "sqlx/sqlite-unbundled"]
 fee = []
 pos = []
 marketplace = []
@@ -110,7 +111,6 @@ sqlx = { workspace = true, features = [
 	"bit-vec",
 	"postgres",
 	"runtime-tokio",
-	"sqlite",
 	"tls-native-tls",
 ] }
 static_assertions = "1"

@@ -149,7 +149,6 @@ mod tests {
             ),
             overall_safety_properties: OverallSafetyPropertiesDescription {
                 num_successful_views,
-                num_failed_views: 5,
                 ..Default::default()
             },
             ..TestDescription::default()
@@ -193,7 +192,6 @@ mod tests {
                 ),
                 overall_safety_properties: OverallSafetyPropertiesDescription {
                     num_successful_views: 50,
-                    num_failed_views: 5,
                     ..Default::default()
                 },
                 ..Default::default()

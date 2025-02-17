@@ -23,7 +23,11 @@ default = ["file-system-data-source", "metrics-data-source", "sql-data-source"]
 # Enables support for an embedded SQLite database instead of PostgreSQL.
 # Ideal for lightweight nodes that benefit from pruning and merklized state storage,
 # offering advantages over file system storage.
-embedded-db = []
+embedded-db = ["sqlx/sqlite"]
+
+# As above, enables support for an embedded SQLite database instead of PostgreSQL.
+# But uses system SQlite instead of compiling the bundled version
+sqlite-unbundled = ["sqlx/sqlite-unbundled"]
 
 # Enable the availability data source backed by the local file system.
 file-system-data-source = ["atomic_store"]
@@ -109,7 +113,6 @@ sqlx = { version = "0.8", features = [
     "bit-vec",
     "postgres",
     "runtime-tokio",
-    "sqlite",
     "tls-native-tls",
 ], optional = true }
 
