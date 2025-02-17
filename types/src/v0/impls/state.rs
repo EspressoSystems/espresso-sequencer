@@ -909,6 +909,9 @@ impl HotShotState<SeqTypes> for ValidatedState {
         version: Version,
         view_number: u64,
     ) -> Result<(Self, Self::Delta), Self::Error> {
+        // During epoch transition, hotshot propagates the same block again
+        // we should totally skip this block, and return the same validated state
+        // This block will have the same parent block height
         if proposed_header.height() % instance.epoch_height == 0
             && parent_leaf.height() == proposed_header.height()
         {
