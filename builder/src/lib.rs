@@ -3,6 +3,7 @@ use hotshot_builder_api::v0_1::builder::{
     Error as BuilderApiError, Options as HotshotBuilderApiOptions,
 };
 use hotshot_builder_core::service::ProxyGlobalState;
+use hotshot_types::traits::node_implementation::Versions;
 use sequencer::SequencerApiVersion;
 use tide_disco::{App, Url};
 use tokio::spawn;
@@ -11,13 +12,13 @@ use vbs::version::{StaticVersion, StaticVersionType};
 pub mod non_permissioned;
 
 // It runs the api service for the builder
-pub fn run_builder_api_service(url: Url, source: ProxyGlobalState<SeqTypes>) {
+pub fn run_builder_api_service<V: Versions>(url: Url, source: ProxyGlobalState<SeqTypes>) {
     // it is to serve hotshot
-    let builder_api = hotshot_builder_api::v0_1::builder::define_api::<
-        ProxyGlobalState<SeqTypes>,
-        SeqTypes,
-    >(&HotshotBuilderApiOptions::default())
-    .expect("Failed to construct the builder APIs");
+    let builder_api =
+        hotshot_builder_api::v0_1::builder::define_api::<ProxyGlobalState<SeqTypes>, SeqTypes, V>(
+            &HotshotBuilderApiOptions::default(),
+        )
+        .expect("Failed to construct the builder APIs");
 
     // it enables external clients to submit txn to the builder's private mempool
     let private_mempool_api = hotshot_builder_api::v0_1::builder::submit_api::<
@@ -434,7 +435,7 @@ pub mod testing {
             let event = subscribed_events.next().await.unwrap();
             tracing::warn!("Event: {:?}", event.event);
             if let EventType::QuorumProposal { proposal, .. } = event.event {
-                let parent_view_number = *proposal.data.view_number;
+                let parent_view_number = *proposal.data.view_number();
                 let parent_commitment =
                     Leaf2::from_quorum_proposal(&proposal.data).payload_commitment();
                 let encoded_signature = <SeqTypes as NodeType>::SignatureKey::sign(

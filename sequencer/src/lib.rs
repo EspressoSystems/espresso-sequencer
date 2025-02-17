@@ -20,13 +20,14 @@ use espresso_types::{
     traits::EventConsumer, BackoffParams, L1ClientOptions, NodeState, PubKey, SeqTypes,
     SolverAuctionResultsProvider, ValidatedState,
 };
+use ethers_conv::ToAlloy;
 use genesis::L1Finalized;
 use proposal_fetcher::ProposalFetcherConfig;
 use std::sync::Arc;
 use tokio::select;
 // Should move `STAKE_TABLE_CAPACITY` in the sequencer repo when we have variate stake table support
+use hotshot_libp2p_networking::network::behaviours::dht::store::persistent::DhtNoPersistence;
 use libp2p::Multiaddr;
-use libp2p_networking::network::behaviours::dht::store::persistent::DhtNoPersistence;
 use network::libp2p::split_off_peer_id;
 use options::Identity;
 use state_signature::static_stake_table_commitment;
@@ -436,14 +437,18 @@ pub async fn init_node<P: SequencerPersistence, V: Versions>(
     let l1_client = l1_params
         .options
         .with_metrics(metrics)
-        .connect(l1_params.urls);
+        .connect(l1_params.urls)
+        .with_context(|| "failed to create L1 client")?;
+
     l1_client.spawn_tasks().await;
     let l1_genesis = match genesis.l1_finalized {
         L1Finalized::Block(b) => b,
         L1Finalized::Number { number } => l1_client.wait_for_finalized_block(number).await,
         L1Finalized::Timestamp { timestamp } => {
             l1_client
-                .wait_for_finalized_block_with_timestamp(timestamp.unix_timestamp().into())
+                .wait_for_finalized_block_with_timestamp(
+                    ethers::types::U256::from(timestamp.unix_timestamp()).to_alloy(),
+                )
                 .await
         }
     };
@@ -960,7 +965,7 @@ pub mod testing {
             let node_state = NodeState::new(
                 i as u64,
                 state.chain_config.resolve().unwrap_or_default(),
-                L1Client::new(self.l1_url.clone()),
+                L1Client::new(vec![self.l1_url.clone()]).expect("failed to create L1 client"),
                 catchup::local_and_remote(persistence.clone(), catchup).await,
                 V::Base::VERSION,
             )
@@ -1059,6 +1064,7 @@ mod test {
     use espresso_types::{Header, MockSequencerVersions, NamespaceId, Payload, Transaction};
     use futures::StreamExt;
     use hotshot::types::EventType::Decide;
+    use hotshot_example_types::node_types::TestVersions;
     use hotshot_types::{
         event::LeafInfo,
         traits::block_contents::{
@@ -1148,7 +1154,11 @@ mod test {
             let genesis_commitment = {
                 // TODO we should not need to collect payload bytes just to compute vid_commitment
                 let payload_bytes = genesis_payload.encode();
-                vid_commitment(&payload_bytes, GENESIS_VID_NUM_STORAGE_NODES)
+                vid_commitment::<TestVersions>(
+                    &payload_bytes,
+                    GENESIS_VID_NUM_STORAGE_NODES,
+                    <TestVersions as Versions>::Base::VERSION,
+                )
             };
             let genesis_state = NodeState::mock();
             Header::genesis(

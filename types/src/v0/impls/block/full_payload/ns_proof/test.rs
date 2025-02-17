@@ -3,7 +3,7 @@ use hotshot::helpers::initialize_logging;
 use hotshot::traits::BlockPayload;
 use hotshot_types::{
     traits::EncodeBytes,
-    vid::{vid_scheme, VidSchemeType},
+    vid::{advz_scheme, VidSchemeType},
 };
 use jf_vid::{VidDisperse, VidScheme};
 
@@ -46,7 +46,7 @@ async fn ns_proof() {
         }))
         .await;
 
-        let mut vid = vid_scheme(10);
+        let mut vid = advz_scheme(10);
         blocks_only
             .into_iter()
             .map(|block| {

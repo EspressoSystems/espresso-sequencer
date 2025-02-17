@@ -2,7 +2,7 @@ use std::{collections::BTreeMap, io, iter::once, sync::Arc, time::Duration};
 
 use async_trait::async_trait;
 use clap::Parser;
-use contract_bindings::light_client_mock::LightClientMock;
+use contract_bindings_ethers::light_client_mock::LightClientMock;
 use espresso_types::{parse_duration, MarketplaceVersion, SequencerVersions, V0_1};
 use ethers::{
     middleware::{MiddlewareBuilder, SignerMiddleware},
@@ -195,8 +195,6 @@ async fn main() -> anyhow::Result<()> {
         port: sequencer_api_port,
         max_connections: sequencer_api_max_connections,
     })
-    .status(Default::default())
-    .state(Default::default())
     .submit(Default::default())
     .query_sql(Default::default(), sql);
 
@@ -563,7 +561,7 @@ mod tests {
 
     use crate::AltChainInfo;
     use committable::{Commitment, Committable};
-    use contract_bindings::light_client::LightClient;
+    use contract_bindings_ethers::light_client::LightClient;
     use escargot::CargoBuild;
     use espresso_types::{BlockMerkleTree, Header, SeqTypes, Transaction};
     use ethers::{providers::Middleware, types::U256};

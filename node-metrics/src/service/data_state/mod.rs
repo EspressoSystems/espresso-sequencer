@@ -572,6 +572,7 @@ mod tests {
         v0_99::ChainConfig, BlockMerkleTree, FeeMerkleTree, Leaf, NodeState, ValidatedState,
     };
     use futures::{channel::mpsc, SinkExt, StreamExt};
+    use hotshot_query_service::testing::mocks::MockVersions;
     use hotshot_types::{signature_key::BLSPubKey, traits::signature_key::SignatureKey};
     use std::{sync::Arc, time::Duration};
     use tokio::time::timeout;
@@ -627,7 +628,7 @@ mod tests {
         };
         let instance_state = NodeState::mock();
 
-        let sample_leaf = Leaf::genesis(&validated_state, &instance_state).await;
+        let sample_leaf = Leaf::genesis::<MockVersions>(&validated_state, &instance_state).await;
 
         let mut leaf_sender = leaf_sender;
         // We should be able to send a leaf without issue

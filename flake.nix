@@ -20,10 +20,7 @@
 
   inputs.flake-utils.url = "github:numtide/flake-utils";
 
-  inputs.foundry.url =
-    "github:shazow/foundry.nix/monthly"; # Use monthly branch for permanent releases
   inputs.solc-bin.url = "github:EspressoSystems/nix-solc-bin";
-
   inputs.flake-compat.url = "github:edolstra/flake-compat";
   inputs.flake-compat.flake = false;
 
@@ -36,7 +33,6 @@
     , nixpkgs-cross-overlay
     , flake-utils
     , pre-commit-hooks
-    , foundry
     , solc-bin
     , ...
     }:
@@ -65,11 +61,18 @@
 
       overlays = [
         (import rust-overlay)
-        foundry.overlay
         solc-bin.overlays.default
         (final: prev: {
           solhint =
             solhintPkg { inherit (prev) buildNpmPackage fetchFromGitHub; };
+        })
+
+        # The mold linker is around 50% faster on Linux than the default linker.
+        # This overlays a mkShell that is configured to use mold on Linux.
+        (final: prev: prev.lib.optionalAttrs prev.stdenv.isLinux {
+          mkShell = prev.mkShell.override {
+            stdenv = prev.stdenvAdapters.useMoldLinker prev.clangStdenv;
+          };
         })
       ];
       pkgs = import nixpkgs { inherit system overlays; };
@@ -184,7 +187,7 @@
           nightlyToolchain = pkgs.rust-bin.selectLatestNightlyWith (toolchain: toolchain.minimal.override {
             extensions = [ "rust-analyzer" ];
           });
-          solc = pkgs.solc-bin.latest;
+          solc = pkgs.solc-bin."0.8.23";
         in
         mkShell (rustEnvVars // {
           buildInputs = [
@@ -220,7 +223,25 @@
             coreutils
 
             # Ethereum contracts, solidity, ...
-            foundry-bin
+            # TODO: remove alloy patch when forge includes this fix: https://github.com/alloy-rs/core/pull/864
+            # foundry
+            (foundry.overrideAttrs {
+              # Set the resolve limit to 128 by replacing the value in the vendored dependencies.
+              postPatch = ''
+                pushd $cargoDepsCopy/alloy-sol-macro-expander
+
+                oldHash=$(sha256sum src/expand/mod.rs | cut -d " " -f 1)
+
+                substituteInPlace src/expand/mod.rs \
+                  --replace-warn \
+                  'const RESOLVE_LIMIT: usize = 32;' 'const RESOLVE_LIMIT: usize = 128;'
+
+                substituteInPlace .cargo-checksum.json \
+                  --replace-warn $oldHash $(sha256sum src/expand/mod.rs | cut -d " " -f 1)
+
+                popd
+              '';
+            })
             solc
             nodePackages.prettier
             solhint
