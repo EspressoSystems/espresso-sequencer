@@ -28,18 +28,19 @@ use futures::{
 use hotshot_types::traits::metrics::Metrics;
 use lru::LruCache;
 use parking_lot::RwLock;
-use std::result::Result as StdResult;
 use std::{
     cmp::{min, Ordering},
+    fmt::Debug,
+    iter::FromFn,
     num::NonZeroUsize,
-    pin::Pin,
     sync::Arc,
     time::Instant,
 };
+use std::{pin::Pin, result::Result as StdResult};
 use tokio::{
     spawn,
-    task::JoinSet,
     sync::{Mutex, MutexGuard, Notify},
+    task::JoinSet,
     time::{sleep, Duration},
 };
 use tower_service::Service;
@@ -424,7 +425,7 @@ impl L1Client {
         let state = self.state.clone();
         let stake_table_contract =
             // TODO attach address to L1Client
-            PermissionedStakeTable::new(Address::default(), self.provider.clone());
+            PermissionedStakeTableInstance::new(Address::default(), self.provider.clone());
 
         let mut events = self.receiver.activate_cloned();
 
@@ -440,11 +441,11 @@ impl L1Client {
                     };
 
                     let chunks = L1Client::chunky2(last_head, head, chunk_size);
-                    let mut events: Vec<StakersUpdatedFilter> = Vec::new();
+                    let mut events: Vec<StakersUpdated> = Vec::new();
                     for (from, to) in chunks {
                         tracing::debug!(from, to, "fetch stake table events in range");
                         match stake_table_contract
-                            .stakers_updated_filter()
+                            .StakersUpdated_filter()
                             .from_block(from)
                             .to_block(to)
                             .query()
@@ -452,7 +453,7 @@ impl L1Client {
                         {
                             Ok(e) => {
                                 for event in e {
-                                    events.push(event)
+                                    events.push(event.0)
                                 }
                                 break;
                             }
@@ -930,9 +931,9 @@ impl L1Client {
         };
 
         let chunks = L1Client::chunky2(last_head, block, chunk_size);
-        let contract = PermissionedStakeTable::new(contract_address, self.provider.clone());
+        let contract = PermissionedStakeTableInstance::new(contract_address, self.provider.clone());
 
-        let mut events: Vec<StakersUpdatedFilter> = Vec::new();
+        let mut events: Vec<StakersUpdated> = Vec::new();
         for (from, to) in chunks {
             tracing::debug!(from, to, "fetch stake table events in range");
             loop {
@@ -945,7 +946,7 @@ impl L1Client {
                 {
                     Ok(e) => {
                         for event in e {
-                            events.push(event)
+                            events.push(event.0)
                         }
                         break;
                     }
@@ -1437,7 +1438,9 @@ mod test {
             l1_events_max_block_range: 3,
             ..Default::default()
         };
-        let l1_client = opt.connect(vec![anvil.endpoint().parse().unwrap()]);
+        let l1_client = opt
+            .connect(vec![anvil.endpoint().parse().unwrap()])
+            .unwrap();
 
         let chunks = l1_client.chunky(3, 10);
         let tups = stream::iter(chunks).collect::<Vec<_>>().await;

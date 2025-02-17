@@ -20,7 +20,7 @@ use tokio::{
 };
 use url::Url;
 
-use crate::v0::utils::parse_duration;
+use crate::{v0::utils::parse_duration, v0_3::StakeTables};
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, Hash, PartialEq, Eq)]
 pub struct L1BlockInfo {
