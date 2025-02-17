@@ -52,7 +52,7 @@ jobs:
         run: nix develop --accept-flake-config -c echo Ok
 
       - name: Build rust crates
-        run: nix develop --accept-flake-config -c cargo build --all-targets
+        run: nix develop --accept-flake-config -c just build
 
       - name: Build contracts
         run: nix develop --accept-flake-config -c forge build
