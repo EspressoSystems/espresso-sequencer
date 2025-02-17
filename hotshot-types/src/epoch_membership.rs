@@ -113,11 +113,10 @@ where
             }
         } else {
             spawn_catchup(self.clone(), root_epoch);
-            self.wait_for_catchup(root_epoch).await?
+            Box::pin(self.wait_for_catchup(root_epoch)).await?
         };
         
 
-        self.wait_for_catchup(root_epoch).await?;
 
         // Get the epoch root headers and update our membership with them, finally sync them
         // Verification of the root is handled in get_epoch_root
