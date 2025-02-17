@@ -46,10 +46,7 @@ use tokio::{spawn, task::JoinHandle};
 use tracing::info;
 
 use super::{
-    completion_task::CompletionTask,
-    consistency_task::ConsistencyTask,
-    overall_safety_task::{OverallSafetyTask, RoundCtx},
-    txn_task::TxnTask,
+    completion_task::CompletionTask, consistency_task::ConsistencyTask, txn_task::TxnTask,
 };
 use crate::{
     block_builder::{BuilderTask, TestBuilderImplementation},
@@ -57,7 +54,7 @@ use crate::{
     spinning_task::{ChangeNode, NodeAction, SpinningTask},
     test_builder::create_test_handle,
     test_launcher::{Network, TestLauncher},
-    test_task::{TestResult, TestTask},
+    test_task::{spawn_timeout_task, TestResult, TestTask},
     txn_task::TxnTaskDescription,
     view_sync_task::ViewSyncTask,
 };
@@ -205,32 +202,23 @@ where
             event_rxs.clone(),
             test_receiver.clone(),
         );
-        // add safety task
-        let overall_safety_task_state = OverallSafetyTask {
-            handles: Arc::clone(&handles),
-            epoch_height: launcher.metadata.test_config.epoch_height,
-            ctx: RoundCtx::default(),
-            properties: launcher.metadata.overall_safety_properties.clone(),
-            error: None,
-            test_sender,
-        };
 
         let consistency_task_state = ConsistencyTask {
             consensus_leaves: BTreeMap::new(),
-            safety_properties: launcher.metadata.overall_safety_properties,
+            safety_properties: launcher.metadata.overall_safety_properties.clone(),
+            test_sender: test_sender.clone(),
+            errors: vec![],
             ensure_upgrade: launcher.metadata.upgrade_view.is_some(),
             validate_transactions: launcher.metadata.validate_transactions,
+            timeout_task: spawn_timeout_task(
+                test_sender.clone(),
+                launcher.metadata.overall_safety_properties.decide_timeout,
+            ),
             _pd: PhantomData,
         };
 
         let consistency_task = TestTask::<ConsistencyTask<TYPES, V>>::new(
             consistency_task_state,
-            event_rxs.clone(),
-            test_receiver.clone(),
-        );
-
-        let overall_safety_task = TestTask::<OverallSafetyTask<TYPES, I, V>>::new(
-            overall_safety_task_state,
             event_rxs.clone(),
             test_receiver.clone(),
         );
@@ -273,7 +261,6 @@ where
             task_futs.push(task.run());
         }
 
-        task_futs.push(overall_safety_task.run());
         task_futs.push(consistency_task.run());
         task_futs.push(view_sync_task.run());
         task_futs.push(spinning_task.run());

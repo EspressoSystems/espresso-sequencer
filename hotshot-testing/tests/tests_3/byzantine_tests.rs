@@ -1,9 +1,4 @@
-use std::{
-    collections::{HashMap, HashSet},
-    rc::Rc,
-    sync::Arc,
-    time::Duration,
-};
+use std::{collections::HashSet, rc::Rc, sync::Arc, time::Duration};
 
 use async_lock::RwLock;
 use hotshot_example_types::{
@@ -21,13 +16,8 @@ use hotshot_testing::{
     test_builder::{Behaviour, TestDescription},
 };
 use hotshot_types::{
-    data::ViewNumber,
     message::{GeneralConsensusMessage, MessageKind, SequencingMessage},
-    traits::{
-        election::Membership,
-        network::TransmitType,
-        node_implementation::{ConsensusTime, NodeType},
-    },
+    traits::{election::Membership, network::TransmitType, node_implementation::NodeType},
     vote::HasViewNumber,
 };
 
@@ -84,7 +74,9 @@ cross_tests!(
         }.set_num_nodes(12,12);
 
         metadata.test_config.epoch_height = 0;
-        metadata.overall_safety_properties.num_failed_views = 15;
+        metadata.overall_safety_properties.num_successful_views = 10;
+        metadata.overall_safety_properties.expected_view_failures = vec![3, 4];
+        metadata.overall_safety_properties.decide_timeout = Duration::from_secs(12);
         metadata
     },
 );
@@ -122,11 +114,9 @@ cross_tests!(
         }.set_num_nodes(5,5);
 
         metadata.test_config.epoch_height = 0;
-        metadata.overall_safety_properties.num_failed_views = 2;
-        metadata.overall_safety_properties.expected_views_to_fail = HashMap::from([
-            (ViewNumber::new(7), false),
-            (ViewNumber::new(12), false)
-        ]);
+        metadata.overall_safety_properties.expected_view_failures = vec![6, 7, 11, 12];
+        metadata.overall_safety_properties.decide_timeout = Duration::from_secs(20);
+
         metadata
     },
 );
@@ -245,10 +235,8 @@ cross_tests!(
         }.set_num_nodes(10,10);
 
         metadata.test_config.epoch_height = 0;
-        metadata.overall_safety_properties.num_failed_views = 1;
-        metadata.overall_safety_properties.expected_views_to_fail = HashMap::from([
-            (ViewNumber::new(14), false),
-        ]);
+        metadata.overall_safety_properties.expected_view_failures = vec![13, 14];
+        metadata.overall_safety_properties.decide_timeout = Duration::from_secs(12);
         metadata
     },
 );
