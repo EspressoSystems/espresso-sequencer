@@ -189,6 +189,8 @@ impl EpochCommittees {
         };
 
         self.state.insert(epoch, committee.clone());
+        self.state.insert(epoch + 1, committee.clone());
+        self.state.insert(epoch + 2, committee.clone());
         committee
     }
 
@@ -341,19 +343,25 @@ impl Membership<SeqTypes> for EpochCommittees {
 
     /// Get the stake table for the current view
     fn stake_table(&self, epoch: Option<Epoch>) -> Vec<StakeTableEntry<PubKey>> {
-        if let Some(st) = self.state(&epoch) {
+        let st = if let Some(st) = self.state(&epoch) {
             st.stake_table.clone()
         } else {
             vec![]
-        }
+        };
+
+        tracing::debug!("stake table = {st:?}");
+        st
     }
     /// Get the stake table for the current view
     fn da_stake_table(&self, epoch: Option<Epoch>) -> Vec<StakeTableEntry<PubKey>> {
-        if let Some(sc) = self.state(&epoch) {
+        let da = if let Some(sc) = self.state(&epoch) {
             sc.da_members.clone()
         } else {
             vec![]
-        }
+        };
+
+        tracing::debug!("da members = {da:?}");
+        da
     }
 
     /// Get all members of the committee for the current view
@@ -362,11 +370,15 @@ impl Membership<SeqTypes> for EpochCommittees {
         _view_number: <SeqTypes as NodeType>::View,
         epoch: Option<Epoch>,
     ) -> BTreeSet<PubKey> {
-        if let Some(sc) = self.state(&epoch) {
+        let committee = if let Some(sc) = self.state(&epoch) {
             sc.indexed_stake_table.clone().into_keys().collect()
         } else {
             BTreeSet::new()
-        }
+        };
+
+        tracing::debug!("committee={committee:?}");
+
+        committee
     }
 
     /// Get all members of the committee for the current view
@@ -375,11 +387,14 @@ impl Membership<SeqTypes> for EpochCommittees {
         _view_number: <SeqTypes as NodeType>::View,
         epoch: Option<Epoch>,
     ) -> BTreeSet<PubKey> {
-        if let Some(sc) = self.state(&epoch) {
+        let da = if let Some(sc) = self.state(&epoch) {
             sc.indexed_da_members.clone().into_keys().collect()
         } else {
             BTreeSet::new()
-        }
+        };
+        tracing::debug!("da committee={da:?}");
+
+        da
     }
 
     /// Get all eligible leaders of the committee for the current view
@@ -388,12 +403,16 @@ impl Membership<SeqTypes> for EpochCommittees {
         _view_number: <SeqTypes as NodeType>::View,
         epoch: Option<Epoch>,
     ) -> BTreeSet<PubKey> {
-        self.state(&epoch)
+        let committee_leaders = self
+            .state(&epoch)
             .unwrap()
             .eligible_leaders
             .iter()
             .map(PubKey::public_key)
-            .collect()
+            .collect();
+
+        tracing::debug!("committee_leaders={committee_leaders:?}");
+        committee_leaders
     }
 
     /// Get the stake table entry for a public key
@@ -435,6 +454,8 @@ impl Membership<SeqTypes> for EpochCommittees {
             .ok_or(LeaderLookupError)?
             .eligible_leaders
             .clone();
+
+        tracing::debug!("lookup_leader() leaders={leaders:?}");
 
         let index = *view_number as usize % leaders.len();
         let res = leaders[index].clone();
@@ -490,17 +511,39 @@ impl Membership<SeqTypes> for EpochCommittees {
         epoch: Epoch,
         block_header: Header,
     ) -> Option<Box<dyn FnOnce(&mut Self) + Send>> {
-        let address = self.contract_address?;
 
-        self.l1_client
+        // TODO: (abdul) fix fetching from contracts
+        // so that order of l1 events match with the update
+        let address = self.contract_address?;
+        let genesis_st = self.state(&Some(Epoch::genesis())).unwrap().clone();
+
+        let st = self
+            .l1_client
             .get_stake_table(address.to_alloy(), block_header.l1_head())
             .await
-            .ok()
-            .map(|stake_table| -> Box<dyn FnOnce(&mut Self) + Send> {
-                Box::new(move |committee: &mut Self| {
-                    let _ = committee.update_stake_table(epoch, stake_table);
-                })
-            })
+            .ok();
+
+        let epoch_0_st = genesis_st.stake_table;
+        let epoch0_da = genesis_st.da_members;
+
+        let sss = st.clone().unwrap();
+        let contract_st = sss.stake_table;
+        let contract_da = sss.da_members;
+
+        tracing::warn!("epoch0 st= {epoch_0_st:?}");
+        tracing::warn!("contract st= {contract_st:?}");
+
+        tracing::warn!("epoch0 da= {contract_da:?}");
+        tracing::warn!("contact da= {epoch0_da:?}");
+
+        let stake_tables = StakeTables {
+            stake_table: epoch_0_st.into(),
+            da_members: epoch0_da.into(),
+        };
+
+        Some(Box::new(move |committee: &mut Self| {
+            let _ = committee.update_stake_table(epoch, stake_tables);
+        }))
     }
 }
 
