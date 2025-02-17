@@ -66,7 +66,7 @@ async fn test_random_block_builder() {
     let mut blocks = loop {
         // Test getting blocks
         let blocks = client
-            .available_blocks::<TestVersions>(
+            .available_blocks(
                 vid_commitment::<TestVersions>(&[], 1, version),
                 dummy_view_number,
                 pub_key,

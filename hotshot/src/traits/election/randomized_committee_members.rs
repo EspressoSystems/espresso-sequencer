@@ -3,7 +3,6 @@
 
 // You should have received a copy of the MIT License
 // along with the HotShot repository. If not, see <https://mit-license.org/>.
-
 use std::{
     cmp::max,
     collections::{BTreeMap, BTreeSet},
@@ -20,9 +19,9 @@ use hotshot_types::{
     PeerConfig,
 };
 use hotshot_utils::anytrace::Result;
+use tracing::error;
 use primitive_types::U256;
 use rand::{rngs::StdRng, Rng};
-use tracing::error;
 
 use crate::traits::election::helpers::QuorumFilterConfig;
 
@@ -446,5 +445,15 @@ impl<TYPES: NodeType, CONFIG: QuorumFilterConfig> Membership<TYPES>
     fn upgrade_threshold(&self, epoch: Option<<TYPES as NodeType>::Epoch>) -> NonZeroU64 {
         let len = self.total_nodes(epoch);
         NonZeroU64::new(max((len as u64 * 9) / 10, ((len as u64 * 2) / 3) + 1)).unwrap()
+    }
+    fn has_epoch(&self, _epoch: TYPES::Epoch) -> bool {
+        true
+    }
+
+    async fn get_epoch_root(
+        &self,
+        _block_height: u64,
+    ) -> Option<(TYPES::Epoch, TYPES::BlockHeader)> {
+        None
     }
 }

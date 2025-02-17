@@ -8,19 +8,18 @@
 
 use std::{collections::BTreeMap, fmt::Debug, hash::Hash, marker::PhantomData, sync::Arc};
 
-use async_lock::RwLock;
 use hotshot_utils::anytrace::*;
 use jf_vid::{VidDisperse as JfVidDisperse, VidScheme};
 use serde::{Deserialize, Serialize};
 use tokio::task::spawn_blocking;
 
 use crate::{
+    epoch_membership::EpochMembershipCoordinator,
     impl_has_epoch,
     message::Proposal,
     simple_vote::HasEpoch,
     traits::{
-        block_contents::EncodeBytes, election::Membership, node_implementation::NodeType,
-        signature_key::SignatureKey,
+        block_contents::EncodeBytes, node_implementation::NodeType, signature_key::SignatureKey,
     },
     vid::{advz_scheme, VidCommitment, VidCommon, VidSchemeType, VidShare},
     vote::HasViewNumber,
@@ -60,15 +59,16 @@ impl<TYPES: NodeType> ADVZDisperse<TYPES> {
     pub async fn from_membership(
         view_number: TYPES::View,
         mut vid_disperse: JfVidDisperse<VidSchemeType>,
-        membership: &Arc<RwLock<TYPES::Membership>>,
+        membership: &EpochMembershipCoordinator<TYPES>,
         target_epoch: Option<TYPES::Epoch>,
         data_epoch: Option<TYPES::Epoch>,
         data_epoch_payload_commitment: Option<VidCommitment>,
     ) -> Self {
         let shares = membership
-            .read()
+            .membership_for_epoch(target_epoch)
             .await
-            .committee_members(view_number, target_epoch)
+            .committee_members(view_number)
+            .await
             .iter()
             .map(|node| (node.clone(), vid_disperse.shares.remove(0)))
             .collect();
@@ -92,12 +92,16 @@ impl<TYPES: NodeType> ADVZDisperse<TYPES> {
     #[allow(clippy::panic)]
     pub async fn calculate_vid_disperse(
         payload: &TYPES::BlockPayload,
-        membership: &Arc<RwLock<TYPES::Membership>>,
+        membership: &EpochMembershipCoordinator<TYPES>,
         view: TYPES::View,
         target_epoch: Option<TYPES::Epoch>,
         data_epoch: Option<TYPES::Epoch>,
     ) -> Result<Self> {
-        let num_nodes = membership.read().await.total_nodes(target_epoch);
+        let num_nodes = membership
+            .membership_for_epoch(target_epoch)
+            .await
+            .total_nodes()
+            .await;
 
         let txns = payload.encode();
         let txns_clone = Arc::clone(&txns);
@@ -113,7 +117,11 @@ impl<TYPES: NodeType> ADVZDisperse<TYPES> {
         let payload_commitment = if target_epoch == data_epoch {
             None
         } else {
-            let num_nodes = membership.read().await.total_nodes(data_epoch);
+            let num_nodes = membership
+                .membership_for_epoch(data_epoch)
+                .await
+                .total_nodes()
+                .await;
 
             Some(
               spawn_blocking(move || advz_scheme(num_nodes).commit_only(&txns))

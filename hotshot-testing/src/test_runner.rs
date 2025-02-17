@@ -31,6 +31,7 @@ use hotshot_types::{
     consensus::ConsensusMetricsValue,
     constants::EVENT_CHANNEL_SIZE,
     data::Leaf2,
+    epoch_membership::EpochMembershipCoordinator,
     simple_certificate::QuorumCertificate2,
     traits::{
         election::Membership,
@@ -612,13 +613,14 @@ where
         // Get key pair for certificate aggregation
         let private_key = validator_config.private_key.clone();
         let public_key = validator_config.public_key.clone();
+        let epoch_height = config.epoch_height;
 
         SystemContext::new(
             public_key,
             private_key,
             node_id,
             config,
-            Arc::new(RwLock::new(memberships)),
+            EpochMembershipCoordinator::new(Arc::new(RwLock::new(memberships)), epoch_height),
             network,
             initializer,
             ConsensusMetricsValue::default(),
@@ -650,13 +652,14 @@ where
         // Get key pair for certificate aggregation
         let private_key = validator_config.private_key.clone();
         let public_key = validator_config.public_key.clone();
+        let epoch_height = config.epoch_height;
 
         SystemContext::new_from_channels(
             public_key,
             private_key,
             node_id,
             config,
-            memberships,
+            EpochMembershipCoordinator::new(memberships, epoch_height),
             network,
             initializer,
             ConsensusMetricsValue::default(),

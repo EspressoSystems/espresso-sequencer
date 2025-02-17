@@ -45,7 +45,7 @@ async fn test_quorum_vote_task_success() {
         .await
         .0;
 
-    let membership = Arc::clone(&handle.hotshot.memberships);
+    let membership = handle.hotshot.membership_coordinator.clone();
 
     let mut generator = TestViewGenerator::<TestVersions>::generate(membership);
 
@@ -112,7 +112,7 @@ async fn test_quorum_vote_task_miss_dependency() {
         .await
         .0;
 
-    let membership = Arc::clone(&handle.hotshot.memberships);
+    let membership = handle.hotshot.membership_coordinator.clone();
 
     let mut generator = TestViewGenerator::<TestVersions>::generate(membership);
 
@@ -196,7 +196,7 @@ async fn test_quorum_vote_task_incorrect_dependency() {
         .await
         .0;
 
-    let membership = Arc::clone(&handle.hotshot.memberships);
+    let membership = handle.hotshot.membership_coordinator.clone();
 
     let mut generator = TestViewGenerator::<TestVersions>::generate(membership);
 

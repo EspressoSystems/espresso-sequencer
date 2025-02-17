@@ -235,7 +235,7 @@ where
                                 };
 
                                 let storage = node.handle.storage().clone();
-                                let memberships = Arc::clone(&node.handle.memberships);
+                                let memberships = node.handle.membership_coordinator.clone();
                                 let config = node.handle.hotshot.config.clone();
                                 let marketplace_config =
                                     node.handle.hotshot.marketplace_config.clone();
@@ -287,7 +287,7 @@ where
                                     TestRunner::<TYPES, I, V, N>::add_node_with_config_and_channels(
                                         node_id,
                                         generated_network.clone(),
-                                        memberships,
+                                        Arc::clone(memberships.membership()),
                                         initializer,
                                         config,
                                         validator_config,

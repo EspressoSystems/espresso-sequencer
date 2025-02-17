@@ -17,7 +17,6 @@ use hotshot_types::{
 use hotshot_utils::anytrace::Result;
 use primitive_types::U256;
 use rand::{rngs::StdRng, Rng};
-
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 
 /// The static committee election
@@ -194,11 +193,6 @@ impl<TYPES: NodeType> Membership<TYPES> for RandomizedCommittee<TYPES> {
             .is_some_and(|x| x.stake() > U256::zero())
     }
 
-    // /// Get the network topic for the committee
-    // fn committee_topic(&self) -> Topic {
-    //     self.committee_topic.clone()
-    // }
-
     /// Index the vector of public keys with the current view number
     fn lookup_leader(
         &self,
@@ -246,5 +240,16 @@ impl<TYPES: NodeType> Membership<TYPES> for RandomizedCommittee<TYPES> {
             ((self.stake_table.len() as u64 * 2) / 3) + 1,
         ))
         .unwrap()
+    }
+
+    fn has_epoch(&self, _epoch: TYPES::Epoch) -> bool {
+        true
+    }
+
+    async fn get_epoch_root(
+        &self,
+        _block_height: u64,
+    ) -> Option<(TYPES::Epoch, TYPES::BlockHeader)> {
+        None
     }
 }

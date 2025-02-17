@@ -22,6 +22,8 @@ pub mod constants;
 pub mod data;
 /// Holds the types and functions for DRB computation.
 pub mod drb;
+/// Epoch Membership wrappers
+pub mod epoch_membership;
 pub mod error;
 pub mod event;
 /// Holds the configuration file specification for a HotShot node.
@@ -42,6 +44,8 @@ pub mod traits;
 /// Holds the upgrade configuration specification for HotShot nodes.
 pub mod upgrade_config;
 pub mod utils;
+/// Holds the validator configuration specification for HotShot nodes.
+pub mod validator_config;
 pub mod vid;
 pub mod vote;
 

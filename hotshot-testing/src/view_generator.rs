@@ -12,7 +12,6 @@ use std::{
     task::{Context, Poll},
 };
 
-use async_lock::RwLock;
 use committable::Committable;
 use futures::{FutureExt, Stream};
 use hotshot::types::{BLSPubKey, SignatureKey, SystemContextHandle};
@@ -26,6 +25,7 @@ use hotshot_types::{
         DaProposal2, EpochNumber, Leaf2, QuorumProposal2, QuorumProposalWrapper, VidDisperse,
         VidDisperseShare, ViewChangeEvidence2, ViewNumber,
     },
+    epoch_membership::EpochMembershipCoordinator,
     message::{Proposal, UpgradeLock},
     simple_certificate::{
         DaCertificate2, QuorumCertificate2, TimeoutCertificate2, UpgradeCertificate,
@@ -56,7 +56,7 @@ pub struct TestView {
     pub leaf: Leaf2<TestTypes>,
     pub view_number: ViewNumber,
     pub epoch_number: Option<EpochNumber>,
-    pub membership: Arc<RwLock<<TestTypes as NodeType>::Membership>>,
+    pub membership: EpochMembershipCoordinator<TestTypes>,
     pub vid_disperse: Proposal<TestTypes, VidDisperse<TestTypes>>,
     pub vid_proposal: (
         Vec<Proposal<TestTypes, VidDisperseShare<TestTypes>>>,
@@ -73,9 +73,7 @@ pub struct TestView {
 }
 
 impl TestView {
-    pub async fn genesis<V: Versions>(
-        membership: &Arc<RwLock<<TestTypes as NodeType>::Membership>>,
-    ) -> Self {
+    pub async fn genesis<V: Versions>(membership: &EpochMembershipCoordinator<TestTypes>) -> Self {
         let genesis_view = ViewNumber::new(1);
         let genesis_epoch = genesis_epoch_from_version::<V, TestTypes>();
         let upgrade_lock = UpgradeLock::new();
@@ -101,17 +99,17 @@ impl TestView {
         let leader_public_key = public_key;
 
         let genesis_version = upgrade_lock.version_infallible(genesis_view).await;
+        let epoch_membership = membership.membership_for_epoch(genesis_epoch).await;
 
         let payload_commitment = da_payload_commitment::<TestTypes, TestVersions>(
-            membership,
+            &epoch_membership,
             transactions.clone(),
-            genesis_epoch,
             genesis_version,
         )
         .await;
 
         let (vid_disperse, vid_proposal) = build_vid_proposal::<TestTypes, TestVersions>(
-            membership,
+            &epoch_membership,
             genesis_view,
             genesis_epoch,
             transactions.clone(),
@@ -121,7 +119,7 @@ impl TestView {
         .await;
 
         let da_certificate = build_da_certificate(
-            membership,
+            &epoch_membership,
             genesis_view,
             genesis_epoch,
             transactions.clone(),
@@ -226,8 +224,6 @@ impl TestView {
         // test view here.
         let next_view = max(old_view, self.view_number) + 1;
 
-        let membership = &self.membership;
-
         let transactions = &self.transactions;
 
         let quorum_data = QuorumData2 {
@@ -255,16 +251,19 @@ impl TestView {
         );
 
         let version = self.upgrade_lock.version_infallible(next_view).await;
+        let membership = self
+            .membership
+            .membership_for_epoch(self.epoch_number)
+            .await;
         let payload_commitment = da_payload_commitment::<TestTypes, TestVersions>(
-            membership,
+            &membership,
             transactions.clone(),
-            self.epoch_number,
             version,
         )
         .await;
 
         let (vid_disperse, vid_proposal) = build_vid_proposal::<TestTypes, TestVersions>(
-            membership,
+            &membership,
             next_view,
             self.epoch_number,
             transactions.clone(),
@@ -274,7 +273,7 @@ impl TestView {
         .await;
 
         let da_certificate = build_da_certificate::<TestTypes, TestVersions>(
-            membership,
+            &membership,
             next_view,
             self.epoch_number,
             transactions.clone(),
@@ -292,9 +291,8 @@ impl TestView {
             QuorumCertificate2<TestTypes>,
         >(
             quorum_data,
-            membership,
+            &membership,
             old_view,
-            self.epoch_number,
             &old_public_key,
             &old_private_key,
             &self.upgrade_lock,
@@ -310,9 +308,8 @@ impl TestView {
                 UpgradeCertificate<TestTypes>,
             >(
                 data.clone(),
-                membership,
+                &membership,
                 next_view,
-                self.epoch_number,
                 &public_key,
                 &private_key,
                 &self.upgrade_lock,
@@ -333,9 +330,8 @@ impl TestView {
                 ViewSyncFinalizeCertificate2<TestTypes>,
             >(
                 data.clone(),
-                membership,
+                &membership,
                 next_view,
-                self.epoch_number,
                 &public_key,
                 &private_key,
                 &self.upgrade_lock,
@@ -356,9 +352,8 @@ impl TestView {
                 TimeoutCertificate2<TestTypes>,
             >(
                 data.clone(),
-                membership,
+                &membership,
                 next_view,
-                self.epoch_number,
                 &public_key,
                 &private_key,
                 &self.upgrade_lock,
@@ -516,12 +511,12 @@ impl TestView {
 
 pub struct TestViewGenerator<V: Versions> {
     pub current_view: Option<TestView>,
-    pub membership: Arc<RwLock<<TestTypes as NodeType>::Membership>>,
+    pub membership: EpochMembershipCoordinator<TestTypes>,
     pub _pd: PhantomData<fn(V)>,
 }
 
 impl<V: Versions> TestViewGenerator<V> {
-    pub fn generate(membership: Arc<RwLock<<TestTypes as NodeType>::Membership>>) -> Self {
+    pub fn generate(membership: EpochMembershipCoordinator<TestTypes>) -> Self {
         TestViewGenerator {
             current_view: None,
             membership,
@@ -602,7 +597,7 @@ impl<V: Versions> Stream for TestViewGenerator<V> {
     type Item = TestView;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        let mem = Arc::clone(&self.membership);
+        let mem = self.membership.clone();
         let curr_view = &self.current_view.clone();
 
         let mut fut = if let Some(ref view) = curr_view {
