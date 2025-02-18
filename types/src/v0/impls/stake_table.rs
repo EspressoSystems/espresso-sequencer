@@ -511,7 +511,6 @@ impl Membership<SeqTypes> for EpochCommittees {
         epoch: Epoch,
         block_header: Header,
     ) -> Option<Box<dyn FnOnce(&mut Self) + Send>> {
-
         // TODO: (abdul) fix fetching from contracts
         // so that order of l1 events match with the update
         let address = self.contract_address?;

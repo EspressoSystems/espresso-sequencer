@@ -14,7 +14,9 @@ use ethers::{
 };
 use hotshot::types::BLSPubKey;
 use hotshot_contract_adapter::stake_table::{bls_jf_to_sol, NodeInfoJf};
-use hotshot_types::{network::PeerConfigKeys, traits::signature_key::StakeTableEntryType, HotShotConfig};
+use hotshot_types::{
+    network::PeerConfigKeys, traits::signature_key::StakeTableEntryType, HotShotConfig,
+};
 use url::Url;
 
 use std::{fs, path::Path, sync::Arc, time::Duration};
