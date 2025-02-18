@@ -591,8 +591,14 @@ pub async fn validate_proposal_safety_and_liveness<
         proposed_leaf.parent_commitment() == parent_leaf.commit(),
         "Proposed leaf does not extend the parent leaf."
     );
-    let proposal_epoch =
-        epoch_from_block_number(proposed_leaf.height(), validation_info.epoch_height);
+    let proposal_epoch = option_epoch_from_block_number::<TYPES>(
+        validation_info
+            .upgrade_lock
+            .epochs_enabled(proposed_leaf.view_number())
+            .await,
+        proposed_leaf.height(),
+        validation_info.epoch_height,
+    );
 
     let state = Arc::new(
         <TYPES::ValidatedState as ValidatedState<TYPES>>::from_header(proposal.data.block_header()),
@@ -614,9 +620,7 @@ pub async fn validate_proposal_safety_and_liveness<
     UpgradeCertificate::validate(
         proposal.data.upgrade_certificate(),
         &validation_info.membership,
-        proposed_leaf
-            .with_epoch
-            .then(|| TYPES::Epoch::new(proposal_epoch)), // #3967 how do we know if proposal_epoch should be Some() or None?
+        proposal_epoch,
         &validation_info.upgrade_lock,
     )
     .await?;
@@ -639,8 +643,14 @@ pub async fn validate_proposal_safety_and_liveness<
         // The proposal is safe if
         // 1. the proposed block and the justify QC block belong to the same epoch or
         // 2. the justify QC is the eQC for the previous block
-        let justify_qc_epoch =
-            epoch_from_block_number(parent_leaf.height(), validation_info.epoch_height);
+        let justify_qc_epoch = option_epoch_from_block_number::<TYPES>(
+            validation_info
+                .upgrade_lock
+                .epochs_enabled(justify_qc.view_number())
+                .await,
+            parent_leaf.height(),
+            validation_info.epoch_height,
+        );
         ensure!(
             proposal_epoch == justify_qc_epoch
                 || consensus_reader.check_eqc(&proposed_leaf, &parent_leaf),
