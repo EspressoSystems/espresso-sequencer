@@ -21,7 +21,7 @@ use vec1::Vec1;
 
 pub use crate::utils::{View, ViewInner};
 use crate::{
-    data::{Leaf2, QuorumProposalWrapper, VidDisperse, VidDisperseShare},
+    data::{Leaf2, QuorumProposalWrapper, VidCommitment, VidDisperse, VidDisperseShare},
     drb::DrbSeedsAndResults,
     error::HotShotError,
     event::{HotShotAction, LeafInfo},
@@ -38,7 +38,6 @@ use crate::{
         epoch_from_block_number, is_last_block_in_epoch, option_epoch_from_block_number,
         BuilderCommitment, LeafCommitment, StateAndDelta, Terminator,
     },
-    vid::advz::ADVZCommitment,
     vote::{Certificate, HasViewNumber},
 };
 
@@ -314,7 +313,7 @@ pub struct Consensus<TYPES: NodeType> {
     /// Saved payloads.
     ///
     /// Encoded transactions for every view if we got a payload for that view.
-    saved_payloads: BTreeMap<TYPES::View, Arc<TYPES::BlockPayload>>,
+    saved_payloads: BTreeMap<TYPES::View, Arc<PayloadWithMetadata<TYPES>>>,
 
     /// the highqc per spec
     high_qc: QuorumCertificate2<TYPES>,
@@ -331,6 +330,12 @@ pub struct Consensus<TYPES: NodeType> {
     /// Tables for the DRB seeds and results.
     pub drb_seeds_and_results: DrbSeedsAndResults<TYPES>,
 }
+
+/// Type alias to avoid complexity
+pub type PayloadWithMetadata<TYPES> = (
+    <TYPES as NodeType>::BlockPayload,
+    <<TYPES as NodeType>::BlockPayload as BlockPayload<TYPES>>::Metadata,
+);
 
 /// Contains several `ConsensusMetrics` that we're interested in from the consensus interfaces
 #[derive(Clone, Debug)]
@@ -419,7 +424,7 @@ impl<TYPES: NodeType> Consensus<TYPES> {
         last_actioned_view: TYPES::View,
         last_proposals: BTreeMap<TYPES::View, Proposal<TYPES, QuorumProposalWrapper<TYPES>>>,
         saved_leaves: CommitmentMap<Leaf2<TYPES>>,
-        saved_payloads: BTreeMap<TYPES::View, Arc<TYPES::BlockPayload>>,
+        saved_payloads: BTreeMap<TYPES::View, Arc<PayloadWithMetadata<TYPES>>>,
         high_qc: QuorumCertificate2<TYPES>,
         next_epoch_high_qc: Option<NextEpochQuorumCertificate2<TYPES>>,
         metrics: Arc<ConsensusMetricsValue>,
@@ -486,7 +491,7 @@ impl<TYPES: NodeType> Consensus<TYPES> {
     }
 
     /// Get the saved payloads.
-    pub fn saved_payloads(&self) -> &BTreeMap<TYPES::View, Arc<TYPES::BlockPayload>> {
+    pub fn saved_payloads(&self) -> &BTreeMap<TYPES::View, Arc<PayloadWithMetadata<TYPES>>> {
         &self.saved_payloads
     }
 
@@ -653,7 +658,7 @@ impl<TYPES: NodeType> Consensus<TYPES> {
         &mut self,
         view_number: TYPES::View,
         epoch: Option<TYPES::Epoch>,
-        payload_commitment: ADVZCommitment,
+        payload_commitment: VidCommitment,
     ) -> Result<()> {
         let view = View {
             view_inner: ViewInner::Da {
@@ -740,7 +745,7 @@ impl<TYPES: NodeType> Consensus<TYPES> {
     pub fn update_saved_payloads(
         &mut self,
         view_number: TYPES::View,
-        payload: Arc<TYPES::BlockPayload>,
+        payload: Arc<PayloadWithMetadata<TYPES>>,
     ) -> Result<()> {
         ensure!(
             !self.saved_payloads.contains_key(&view_number),
@@ -960,7 +965,7 @@ impl<TYPES: NodeType> Consensus<TYPES> {
         private_key: &<TYPES::SignatureKey as SignatureKey>::PrivateKey,
         upgrade_lock: &UpgradeLock<TYPES, V>,
     ) -> Option<()> {
-        let payload = Arc::clone(consensus.read().await.saved_payloads().get(&view)?);
+        let payload_with_metadata = Arc::clone(consensus.read().await.saved_payloads().get(&view)?);
         let epoch = consensus
             .read()
             .await
@@ -970,11 +975,12 @@ impl<TYPES: NodeType> Consensus<TYPES> {
             .epoch()?;
 
         let vid = VidDisperse::calculate_vid_disperse::<V>(
-            payload.as_ref(),
+            &payload_with_metadata.0,
             &membership,
             view,
             target_epoch,
             epoch,
+            &payload_with_metadata.1,
             upgrade_lock,
         )
         .await
@@ -1101,10 +1107,10 @@ impl<TYPES: NodeType> Consensus<TYPES> {
 
 /// Alias for the block payload commitment and the associated metadata. The primary data
 /// needed in order to submit a proposal.
-#[derive(Eq, Hash, PartialEq, Debug, Clone)]
+#[derive(Eq, PartialEq, Debug, Clone)]
 pub struct CommitmentAndMetadata<TYPES: NodeType> {
     /// Vid Commitment
-    pub commitment: ADVZCommitment,
+    pub commitment: VidCommitment,
     /// Builder Commitment
     pub builder_commitment: BuilderCommitment,
     /// Metadata for the block payload

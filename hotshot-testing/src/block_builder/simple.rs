@@ -35,13 +35,13 @@ use hotshot_example_types::node_types::TestVersions;
 use hotshot_types::{
     bundle::Bundle,
     constants::{LEGACY_BUILDER_MODULE, MARKETPLACE_BUILDER_MODULE},
+    data::VidCommitment,
     traits::{
         block_contents::{BlockHeader, BuilderFee},
         node_implementation::{NodeType, Versions},
         signature_key::BuilderSignatureKey,
     },
     utils::BuilderCommitment,
-    vid::advz::ADVZCommitment,
 };
 use lru::LruCache;
 use tide_disco::{method::ReadState, App, Url};
@@ -141,7 +141,7 @@ where
     async fn bundle(
         &self,
         _parent_view: u64,
-        _parent_hash: &ADVZCommitment,
+        _parent_hash: &VidCommitment,
         view_number: u64,
     ) -> Result<Bundle<TYPES>, BuildError> {
         let transactions = self
@@ -213,7 +213,7 @@ where
 {
     async fn available_blocks<V: Versions>(
         &self,
-        _for_parent: &ADVZCommitment,
+        _for_parent: &VidCommitment,
         _view_number: u64,
         _sender: TYPES::SignatureKey,
         _signature: &<TYPES::SignatureKey as SignatureKey>::PureAssembledSignatureType,

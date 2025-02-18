@@ -2,8 +2,8 @@ use std::marker::PhantomData;
 
 use hotshot::traits::BlockPayload;
 use hotshot_builder_api::v0_1::block_info::AvailableBlockInfo;
+use hotshot_types::data::VidCommitment;
 use hotshot_types::traits::signature_key::BuilderSignatureKey;
-use hotshot_types::vid::VidCommitment;
 use marketplace_builder_shared::error::Error;
 use marketplace_builder_shared::utils::{BuilderKeys, WaitAndKeep};
 use marketplace_builder_shared::{

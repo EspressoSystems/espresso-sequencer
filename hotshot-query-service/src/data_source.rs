@@ -771,7 +771,7 @@ pub mod node_tests {
             setup_test, sleep,
         },
         types::HeightIndexed,
-        Header, VidShare,
+        Header, VidCommitment, VidShare,
     };
     use committable::Committable;
     use futures::{future::join_all, stream::StreamExt};
@@ -788,7 +788,7 @@ pub mod node_tests {
             block_contents::{vid_commitment, EncodeBytes},
             node_implementation::Versions,
         },
-        vid::{advz_scheme, VidSchemeType},
+        vid::advz::{advz_scheme, ADVZScheme},
     };
     use jf_vid::VidScheme;
     use std::time::Duration;
@@ -840,7 +840,7 @@ pub mod node_tests {
             .iter()
             .map(|leaf| {
                 (
-                    VidCommonQueryData::new(leaf.header().clone(), disperse.common.clone()),
+                    VidCommonQueryData::new(leaf.header().clone(), Some(disperse.common.clone())),
                     disperse.shares[0].clone(),
                 )
             })
@@ -898,16 +898,16 @@ pub mod node_tests {
         {
             let mut tx = ds.write().await.unwrap();
             tx.insert_block(blocks[0].clone()).await.unwrap();
-            tx.insert_vid(vid[0].0.clone(), Some(vid[0].1.clone()))
+            tx.insert_vid(vid[0].0.clone(), Some(VidShare::V0(vid[0].1.clone())))
                 .await
                 .unwrap();
             tx.insert_leaf(leaves[1].clone()).await.unwrap();
             tx.insert_block(blocks[1].clone()).await.unwrap();
-            tx.insert_vid(vid[1].0.clone(), Some(vid[1].1.clone()))
+            tx.insert_vid(vid[1].0.clone(), Some(VidShare::V0(vid[1].1.clone())))
                 .await
                 .unwrap();
             tx.insert_block(blocks[2].clone()).await.unwrap();
-            tx.insert_vid(vid[2].0.clone(), Some(vid[2].1.clone()))
+            tx.insert_vid(vid[2].0.clone(), Some(VidShare::V0(vid[2].1.clone())))
                 .await
                 .unwrap();
             tx.commit().await.unwrap();
@@ -1086,19 +1086,22 @@ pub mod node_tests {
             &TestInstanceState::default(),
         )
         .await;
-        let common = VidCommonQueryData::new(leaf.header().clone(), disperse.common);
+        let common = VidCommonQueryData::new(leaf.header().clone(), Some(disperse.common));
         ds.append(BlockInfo::new(
             leaf,
             None,
             Some(common.clone()),
-            Some(disperse.shares[0].clone()),
+            Some(VidShare::V0(disperse.shares[0].clone())),
         ))
         .await
         .unwrap();
 
         {
             assert_eq!(ds.get_vid_common(0).await.await, common);
-            assert_eq!(ds.vid_share(0).await.unwrap(), disperse.shares[0]);
+            assert_eq!(
+                ds.vid_share(0).await.unwrap(),
+                VidShare::V0(disperse.shares[0].clone())
+            );
         }
 
         // Re-insert the common data, without a share. This should not overwrite the share we
@@ -1110,7 +1113,10 @@ pub mod node_tests {
         }
         {
             assert_eq!(ds.get_vid_common(0).await.await, common);
-            assert_eq!(ds.vid_share(0).await.unwrap(), disperse.shares[0]);
+            assert_eq!(
+                ds.vid_share(0).await.unwrap(),
+                VidShare::V0(disperse.shares[0].clone())
+            );
         }
     }
 
@@ -1142,7 +1148,11 @@ pub mod node_tests {
             tracing::info!(height = block.height(), "empty block");
         };
         let height = block.height() as usize;
-        let commit = block.payload_hash();
+        let commit = if let VidCommitment::V0(commit) = block.payload_hash() {
+            commit
+        } else {
+            panic!("expect ADVZ commitment")
+        };
 
         // Set up a test VID scheme.
         let vid = advz_scheme(network.num_nodes());
@@ -1150,14 +1160,14 @@ pub mod node_tests {
         // Get VID common data and verify it.
         tracing::info!("fetching common data");
         let common = ds.get_vid_common(height).await.await;
-        let common = common.common();
-        VidSchemeType::is_consistent(&commit, common).unwrap();
+        let common = &common.common().clone().unwrap();
+        ADVZScheme::is_consistent(&commit, common).unwrap();
 
         // Collect shares from each node.
         tracing::info!("fetching shares");
         let network = &network;
         let vid = &vid;
-        let shares: Vec<VidShare> = join_all((0..network.num_nodes()).map(|i| async move {
+        let shares: Vec<_> = join_all((0..network.num_nodes()).map(|i| async move {
             let ds = network.data_source_index(i);
 
             // Wait until the node has processed up to the desired block; since we have thus far
@@ -1165,9 +1175,13 @@ pub mod node_tests {
             let mut leaves = ds.subscribe_leaves(height).await;
             let leaf = leaves.next().await.unwrap();
             assert_eq!(leaf.height(), height as u64);
-            assert_eq!(leaf.payload_hash(), commit);
+            assert_eq!(leaf.payload_hash(), VidCommitment::V0(commit));
 
-            let share = ds.vid_share(height).await.unwrap();
+            let share = if let VidShare::V0(share) = ds.vid_share(height).await.unwrap() {
+                share
+            } else {
+                panic!("expect ADVZ share")
+            };
             vid.verify_share(&share, common, &commit).unwrap().unwrap();
             share
         }))

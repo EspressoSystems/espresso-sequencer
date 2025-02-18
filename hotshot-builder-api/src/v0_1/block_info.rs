@@ -4,12 +4,12 @@
 // You should have received a copy of the MIT License
 // along with the HotShot repository. If not, see <https://mit-license.org/>.
 
-use std::marker::PhantomData;
+use std::{hash::Hash, marker::PhantomData};
 
 use hotshot_types::{
+    data::VidCommitment,
     traits::{node_implementation::NodeType, signature_key::BuilderSignatureKey, BlockPayload},
     utils::BuilderCommitment,
-    vid::advz::ADVZCommitment,
 };
 use serde::{Deserialize, Serialize};
 
@@ -47,7 +47,7 @@ impl<TYPES: NodeType> AvailableBlockData<TYPES> {
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq, Hash)]
 #[serde(bound = "")]
 pub struct AvailableBlockHeaderInput<TYPES: NodeType> {
-    pub vid_commitment: ADVZCommitment,
+    pub vid_commitment: VidCommitment,
     // signature over vid_commitment, BlockPayload::Metadata, and offered_fee
     pub fee_signature:
         <<TYPES as NodeType>::BuilderSignatureKey as BuilderSignatureKey>::BuilderSignature,

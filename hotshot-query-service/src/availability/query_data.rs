@@ -14,6 +14,7 @@ use crate::{types::HeightIndexed, Header, Metadata, Payload, Transaction, VidCom
 use committable::{Commitment, Committable};
 use hotshot_types::{
     data::Leaf,
+    data::VidCommitment,
     simple_certificate::QuorumCertificate,
     traits::{
         self,
@@ -21,7 +22,7 @@ use hotshot_types::{
         node_implementation::{NodeType, Versions},
         EncodeBytes,
     },
-    vid::advz::{advz_scheme, ADVZCommitment},
+    vid::advz::advz_scheme,
 };
 use jf_vid::VidScheme;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
@@ -267,7 +268,7 @@ impl<Types: NodeType> LeafQueryData<Types> {
         self.header().commit()
     }
 
-    pub fn payload_hash(&self) -> ADVZCommitment {
+    pub fn payload_hash(&self) -> VidCommitment {
         self.header().payload_commitment()
     }
 }
@@ -337,7 +338,7 @@ impl<Types: NodeType> BlockQueryData<Types> {
         self.header.metadata()
     }
 
-    pub fn payload_hash(&self) -> ADVZCommitment {
+    pub fn payload_hash(&self) -> VidCommitment {
         self.header.payload_commitment()
     }
 
@@ -399,7 +400,7 @@ impl<Types: NodeType> HeightIndexed for BlockQueryData<Types> {
 pub struct PayloadQueryData<Types: NodeType> {
     pub(crate) height: u64,
     pub(crate) block_hash: BlockHash<Types>,
-    pub(crate) hash: ADVZCommitment,
+    pub(crate) hash: VidCommitment,
     pub(crate) size: u64,
     pub(crate) data: Payload<Types>,
 }
@@ -429,7 +430,7 @@ impl<Types: NodeType> PayloadQueryData<Types> {
             .into()
     }
 
-    pub fn hash(&self) -> ADVZCommitment {
+    pub fn hash(&self) -> VidCommitment {
         self.hash
     }
 
@@ -457,7 +458,7 @@ impl<Types: NodeType> HeightIndexed for PayloadQueryData<Types> {
 pub struct VidCommonQueryData<Types: NodeType> {
     pub(crate) height: u64,
     pub(crate) block_hash: BlockHash<Types>,
-    pub(crate) payload_hash: ADVZCommitment,
+    pub(crate) payload_hash: VidCommitment,
     pub(crate) common: VidCommon,
 }
 
@@ -482,14 +483,14 @@ impl<Types: NodeType> VidCommonQueryData<Types> {
             .disperse(bytes)
             .unwrap();
 
-        Self::new(leaf.block_header().clone(), disperse.common)
+        Self::new(leaf.block_header().clone(), Some(disperse.common))
     }
 
     pub fn block_hash(&self) -> BlockHash<Types> {
         self.block_hash
     }
 
-    pub fn payload_hash(&self) -> ADVZCommitment {
+    pub fn payload_hash(&self) -> VidCommitment {
         self.payload_hash
     }
 
@@ -671,7 +672,7 @@ where
 {
     pub height: u64,
     pub block_hash: BlockHash<Types>,
-    pub hash: ADVZCommitment,
+    pub hash: VidCommitment,
     pub size: u64,
     pub num_transactions: u64,
 }
@@ -711,7 +712,7 @@ where
 {
     pub height: u64,
     pub block_hash: BlockHash<Types>,
-    pub payload_hash: ADVZCommitment,
+    pub payload_hash: VidCommitment,
 }
 
 impl<Types> HeightIndexed for VidCommonMetadata<Types>

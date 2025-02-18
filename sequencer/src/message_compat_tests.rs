@@ -57,7 +57,7 @@ async fn test_message_compat<Ver: StaticVersionType>(_ver: Ver) {
             TimeoutData, TimeoutVote, ViewSyncCommitData, ViewSyncCommitVote, ViewSyncFinalizeData,
             ViewSyncFinalizeVote, ViewSyncPreCommitData, ViewSyncPreCommitVote,
         },
-        vid::advz_scheme,
+        vid::advz::advz_scheme,
         PeerConfig,
     };
 
@@ -233,7 +233,7 @@ async fn test_message_compat<Ver: StaticVersionType>(_ver: Ver) {
                     &membership,
                     Some(EpochNumber::genesis()),
                     Some(EpochNumber::new(1)),
-                    Some(block_header.payload_commitment()),
+                    Some(block_header.payload_commitment().unwrap_v0()),
                 )
                 .await,
             )

@@ -6,6 +6,7 @@ use espresso_types::{
     v0::traits::{EventConsumer, PersistenceOptions, SequencerPersistence},
     Leaf, Leaf2, NetworkConfig, Payload, SeqTypes,
 };
+use hotshot_query_service::VidCommitment;
 use hotshot_types::{
     consensus::CommitmentMap,
     data::{
@@ -22,10 +23,8 @@ use hotshot_types::{
         node_implementation::ConsensusTime,
     },
     utils::View,
-    vid::VidSchemeType,
     vote::HasViewNumber,
 };
-use jf_vid::VidScheme;
 use std::sync::Arc;
 use std::{
     collections::BTreeMap,
@@ -639,7 +638,7 @@ impl SequencerPersistence for Persistence {
     async fn append_da(
         &self,
         proposal: &Proposal<SeqTypes, DaProposal<SeqTypes>>,
-        _vid_commit: <VidSchemeType as VidScheme>::Commit,
+        _vid_commit: VidCommitment,
     ) -> anyhow::Result<()> {
         let mut inner = self.inner.write().await;
         let view_number = proposal.data.view_number().u64();

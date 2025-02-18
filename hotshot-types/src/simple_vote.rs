@@ -19,13 +19,13 @@ use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use vbs::version::Version;
 
 use crate::{
+    data::VidCommitment,
     data::{Leaf, Leaf2},
     message::UpgradeLock,
     traits::{
         node_implementation::{NodeType, Versions},
         signature_key::SignatureKey,
     },
-    vid::advz::ADVZCommitment,
     vote::{HasViewNumber, Vote},
 };
 
@@ -56,13 +56,13 @@ pub struct NextEpochQuorumData2<TYPES: NodeType>(QuorumData2<TYPES>);
 /// Data used for a DA vote.
 pub struct DaData {
     /// Commitment to a block payload
-    pub payload_commit: ADVZCommitment,
+    pub payload_commit: VidCommitment,
 }
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Hash, Eq)]
 /// Data used for a DA vote.
 pub struct DaData2<TYPES: NodeType> {
     /// Commitment to a block payload
-    pub payload_commit: ADVZCommitment,
+    pub payload_commit: VidCommitment,
     /// Epoch number
     pub epoch: Option<TYPES::Epoch>,
 }

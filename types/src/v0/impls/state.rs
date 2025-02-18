@@ -9,7 +9,6 @@ use hotshot_types::{
         block_contents::BlockHeader, node_implementation::ConsensusTime,
         signature_key::BuilderSignatureKey, states::StateDelta, ValidatedState as HotShotState,
     },
-    vid::{VidCommon, VidSchemeType},
 };
 use itertools::Itertools;
 use jf_merkle_tree::{
@@ -18,7 +17,6 @@ use jf_merkle_tree::{
     LookupResult, MerkleCommitment, MerkleTreeError, MerkleTreeScheme,
     PersistentUniversalMerkleTreeScheme, UniversalMerkleTreeScheme,
 };
-use jf_vid::VidScheme;
 use num_traits::CheckedSub;
 use serde::{Deserialize, Serialize};
 use std::ops::Add;
@@ -905,7 +903,7 @@ impl HotShotState<SeqTypes> for ValidatedState {
         instance: &Self::Instance,
         parent_leaf: &Leaf2,
         proposed_header: &Header,
-        vid_common: VidCommon,
+        payload_byte_len: u32,
         version: Version,
         view_number: u64,
     ) -> Result<(Self, Self::Delta), Self::Error> {
@@ -927,10 +925,7 @@ impl HotShotState<SeqTypes> for ValidatedState {
         let validated_state = ValidatedTransition::new(
             validated_state,
             parent_leaf.block_header(),
-            Proposal::new(
-                proposed_header,
-                VidSchemeType::get_payload_byte_len(&vid_common),
-            ),
+            Proposal::new(proposed_header, payload_byte_len),
             view_number,
         )
         .validate()?

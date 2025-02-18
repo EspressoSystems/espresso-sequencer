@@ -8,12 +8,10 @@
 
 use hotshot_utils::anytrace::*;
 
-pub use vid::avid_m::AvidMScheme;
-pub use vid::VidScheme;
-
-pub type AvidMParam = vid::avid_m::AVIDMParam;
-pub type AvidMCommitment = vid::avid_m::AVIDMCommit;
-pub type AvidMShare = vid::avid_m::AVIDMShare;
+pub type AvidMScheme = vid::avid_m::namespaced::NsAvidMScheme;
+pub type AvidMParam = vid::avid_m::namespaced::NsAvidMParam;
+pub type AvidMCommitment = vid::avid_m::namespaced::NsAvidMCommit;
+pub type AvidMShare = vid::avid_m::namespaced::NsAvidMShare;
 
 pub fn init_avidm_param(num_storage_nodes: usize) -> Result<AvidMParam> {
     let recovery_threshold = 1 << num_storage_nodes.ilog2();

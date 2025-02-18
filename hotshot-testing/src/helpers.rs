@@ -26,7 +26,7 @@ use hotshot_example_types::{
 use hotshot_task_impls::events::HotShotEvent;
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
-    data::{vid_disperse::ADVZDisperse, Leaf2, VidDisperse, VidDisperseShare},
+    data::{vid_disperse::ADVZDisperse, Leaf2, VidCommitment, VidDisperse, VidDisperseShare},
     message::{Proposal, UpgradeLock},
     simple_certificate::DaCertificate2,
     simple_vote::{DaData2, DaVote2, SimpleVote, VersionedVoteData},
@@ -36,7 +36,7 @@ use hotshot_types::{
         node_implementation::{NodeType, Versions},
     },
     utils::{option_epoch_from_block_number, View, ViewInner},
-    vid::advz::{advz_scheme, ADVZCommitment, ADVZScheme},
+    vid::advz::{advz_scheme, ADVZScheme},
     vote::{Certificate, HasViewNumber, Vote},
     ValidatorConfig,
 };
@@ -271,7 +271,7 @@ pub fn key_pair_for_id<TYPES: NodeType>(
 /// initialize VID
 /// # Panics
 /// if unable to create a [`VidSchemeType`]
-/// TODO(Chengyu): use this version information
+// TODO(Chengyu): use this version information
 #[must_use]
 pub async fn vid_scheme_from_view_number<TYPES: NodeType, V: Versions>(
     membership: &Arc<RwLock<TYPES::Membership>>,
@@ -287,28 +287,30 @@ pub async fn vid_scheme_from_view_number<TYPES: NodeType, V: Versions>(
     advz_scheme(num_storage_nodes)
 }
 
+// TODO(Chengyu): fix this
 pub async fn vid_payload_commitment<TYPES: NodeType, V: Versions>(
     membership: &Arc<RwLock<<TYPES as NodeType>::Membership>>,
     view_number: TYPES::View,
     epoch_number: Option<TYPES::Epoch>,
     transactions: Vec<TestTransaction>,
     version: Version,
-) -> ADVZCommitment {
+) -> VidCommitment {
     let mut vid =
         vid_scheme_from_view_number::<TYPES, V>(membership, view_number, epoch_number, version)
             .await;
     let encoded_transactions = TestTransaction::encode(&transactions);
     let vid_disperse = vid.disperse(&encoded_transactions).unwrap();
 
-    vid_disperse.commit
+    VidCommitment::V0(vid_disperse.commit)
 }
 
+// TODO(Chengyu): fix this
 pub async fn da_payload_commitment<TYPES: NodeType, V: Versions>(
     membership: &Arc<RwLock<<TYPES as NodeType>::Membership>>,
     transactions: Vec<TestTransaction>,
     epoch_number: Option<TYPES::Epoch>,
     version: Version,
-) -> ADVZCommitment {
+) -> VidCommitment {
     let encoded_transactions = TestTransaction::encode(&transactions);
 
     vid_commitment::<V>(
@@ -318,17 +320,20 @@ pub async fn da_payload_commitment<TYPES: NodeType, V: Versions>(
     )
 }
 
+// TODO(Chengyu): fix this
 pub async fn build_payload_commitment<TYPES: NodeType, V: Versions>(
     membership: &Arc<RwLock<<TYPES as NodeType>::Membership>>,
     view: TYPES::View,
     epoch: Option<TYPES::Epoch>,
     version: Version,
-) -> <ADVZScheme as VidScheme>::Commit {
+) -> VidCommitment {
     // Make some empty encoded transactions, we just care about having a commitment handy for the
     // later calls. We need the VID commitment to be able to propose later.
     let mut vid = vid_scheme_from_view_number::<TYPES, V>(membership, view, epoch, version).await;
     let encoded_transactions = Vec::new();
-    vid.commit_only(&encoded_transactions).unwrap()
+    vid.commit_only(&encoded_transactions)
+        .map(VidCommitment::V0)
+        .unwrap()
 }
 
 /// TODO: <https://github.com/EspressoSystems/HotShot/issues/2821>

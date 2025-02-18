@@ -19,6 +19,9 @@ use hotshot_events_service::events_source::{
 };
 use hotshot_query_service::data_source::ExtensibleDataSource;
 use hotshot_types::{
+    data::VidCommitment, stake_table::StakeTableEntry, traits::election::Membership,
+};
+use hotshot_types::{
     data::ViewNumber,
     event::Event,
     light_client::StateSignatureRequestBody,
@@ -30,7 +33,6 @@ use hotshot_types::{
     },
     utils::{View, ViewInner},
 };
-use hotshot_types::{stake_table::StakeTableEntry, traits::election::Membership};
 use jf_merkle_tree::MerkleTreeScheme;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -1107,7 +1109,7 @@ mod api_tests {
     };
 
     use hotshot_types::data::vid_disperse::ADVZDisperseShare;
-    use hotshot_types::vid::advz_scheme;
+    use hotshot_types::vid::advz::advz_scheme;
     use hotshot_types::{
         data::{DaProposal, QuorumProposal2, QuorumProposalWrapper},
         event::LeafInfo,
@@ -1229,7 +1231,7 @@ mod api_tests {
                     .verify(
                         header.ns_table(),
                         &header.payload_commitment(),
-                        vid_common.common(),
+                        &vid_common.common().clone().unwrap(),
                     )
                     .unwrap();
             } else {
@@ -1368,7 +1370,7 @@ mod api_tests {
                 _pd: Default::default(),
             };
             persistence
-                .append_da(&da_proposal, payload_commitment)
+                .append_da(&da_proposal, VidCommitment::V0(payload_commitment))
                 .await
                 .unwrap();
         }

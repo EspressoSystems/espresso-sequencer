@@ -70,7 +70,7 @@ mod persistence_tests {
             node_implementation::{ConsensusTime, Versions},
             EncodeBytes,
         },
-        vid::advz_scheme,
+        vid::advz::advz_scheme,
     };
     use jf_vid::VidScheme;
     use sequencer_utils::test_utils::setup_test;
@@ -919,7 +919,10 @@ mod persistence_tests {
         };
 
         storage
-            .append_da(&da_proposal, payload_commitment)
+            .append_da(
+                &da_proposal,
+                hotshot_query_service::VidCommitment::V0(payload_commitment),
+            )
             .await
             .unwrap();
         storage.append_vid(&vid_share).await.unwrap();

@@ -7,6 +7,7 @@ use hotshot_builder_api::v0_1::{
 use hotshot_types::traits::EncodeBytes;
 use hotshot_types::traits::{block_contents::Transaction, node_implementation::Versions};
 use hotshot_types::{
+    data::VidCommitment,
     event::EventType,
     traits::{
         block_contents::BlockPayload,
@@ -14,7 +15,6 @@ use hotshot_types::{
         signature_key::{BuilderSignatureKey, SignatureKey},
     },
     utils::BuilderCommitment,
-    vid::VidCommitment,
 };
 use marketplace_builder_shared::coordinator::BuilderStateLookup;
 use marketplace_builder_shared::error::Error;

@@ -13,6 +13,7 @@ use std::{
 use async_trait::async_trait;
 use committable::{Commitment, Committable, RawCommitmentBuilder};
 use hotshot_types::{
+    data::VidCommitment,
     data::{BlockError, Leaf2},
     traits::{
         block_contents::{BlockHeader, BuilderFee, EncodeBytes, TestableBlock, Transaction},
@@ -20,7 +21,6 @@ use hotshot_types::{
         BlockPayload, ValidatedState,
     },
     utils::BuilderCommitment,
-    vid::advz::{ADVZCommitment, ADVZCommon},
 };
 use rand::{thread_rng, Rng};
 use serde::{Deserialize, Serialize};
@@ -259,7 +259,7 @@ pub struct TestBlockHeader {
     /// Block number.
     pub block_number: u64,
     /// VID commitment to the payload.
-    pub payload_commitment: ADVZCommitment,
+    pub payload_commitment: VidCommitment,
     /// Fast commitment for builder verification
     pub builder_commitment: BuilderCommitment,
     /// block metadata
@@ -273,7 +273,7 @@ pub struct TestBlockHeader {
 impl TestBlockHeader {
     pub fn new<TYPES: NodeType<BlockHeader = Self>>(
         parent_leaf: &Leaf2<TYPES>,
-        payload_commitment: ADVZCommitment,
+        payload_commitment: VidCommitment,
         builder_commitment: BuilderCommitment,
         metadata: TestMetadata,
     ) -> Self {
@@ -313,11 +313,10 @@ impl<
         _parent_state: &TYPES::ValidatedState,
         instance_state: &<TYPES::ValidatedState as ValidatedState<TYPES>>::Instance,
         parent_leaf: &Leaf2<TYPES>,
-        payload_commitment: ADVZCommitment,
+        payload_commitment: VidCommitment,
         builder_commitment: BuilderCommitment,
         metadata: <TYPES::BlockPayload as BlockPayload<TYPES>>::Metadata,
         _builder_fee: BuilderFee<TYPES>,
-        _vid_common: ADVZCommon,
         _version: Version,
     ) -> Result<Self, Self::Error> {
         Self::run_delay_settings_from_config(&instance_state.delay_config).await;
@@ -333,12 +332,11 @@ impl<
         _parent_state: &TYPES::ValidatedState,
         instance_state: &<TYPES::ValidatedState as ValidatedState<TYPES>>::Instance,
         parent_leaf: &Leaf2<TYPES>,
-        payload_commitment: ADVZCommitment,
+        payload_commitment: VidCommitment,
         builder_commitment: BuilderCommitment,
         metadata: <TYPES::BlockPayload as BlockPayload<TYPES>>::Metadata,
         _builder_fee: Vec<BuilderFee<TYPES>>,
         _view_number: u64,
-        _vid_common: ADVZCommon,
         _auction_results: Option<TYPES::AuctionResult>,
         _version: Version,
     ) -> Result<Self, Self::Error> {
@@ -353,7 +351,7 @@ impl<
 
     fn genesis(
         _instance_state: &<TYPES::ValidatedState as ValidatedState<TYPES>>::Instance,
-        payload_commitment: ADVZCommitment,
+        payload_commitment: VidCommitment,
         builder_commitment: BuilderCommitment,
         _metadata: <TYPES::BlockPayload as BlockPayload<TYPES>>::Metadata,
     ) -> Self {
@@ -375,7 +373,7 @@ impl<
         self.block_number
     }
 
-    fn payload_commitment(&self) -> ADVZCommitment {
+    fn payload_commitment(&self) -> VidCommitment {
         self.payload_commitment
     }
 
@@ -400,10 +398,8 @@ impl Committable for TestBlockHeader {
                 <TestBlockHeader as BlockHeader<TestTypes>>::block_number(self),
             )
             .constant_str("payload commitment")
-            .fixed_size_bytes(
-                <TestBlockHeader as BlockHeader<TestTypes>>::payload_commitment(self)
-                    .as_ref()
-                    .as_ref(),
+            .var_size_bytes(
+                <TestBlockHeader as BlockHeader<TestTypes>>::payload_commitment(self).as_ref(),
             )
             .finalize()
     }

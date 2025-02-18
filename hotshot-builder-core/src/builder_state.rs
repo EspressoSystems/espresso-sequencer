@@ -1,4 +1,5 @@
 use hotshot_types::{
+    data::VidCommitment,
     data::{DaProposal2, Leaf2, QuorumProposalWrapper},
     message::Proposal,
     traits::{
@@ -7,7 +8,6 @@ use hotshot_types::{
         EncodeBytes,
     },
     utils::BuilderCommitment,
-    vid::VidCommitment,
 };
 use marketplace_builder_shared::block::{BlockId, BuilderStateId, ParentBlockReferences};
 

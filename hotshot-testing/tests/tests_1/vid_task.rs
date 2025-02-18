@@ -22,7 +22,8 @@ use hotshot_testing::{
 };
 use hotshot_types::{
     data::{
-        null_block, vid_disperse::ADVZDisperse, DaProposal, PackedBundle, VidDisperse, ViewNumber,
+        null_block, vid_disperse::ADVZDisperse, DaProposal, PackedBundle, VidCommitment,
+        VidDisperse, ViewNumber,
     },
     traits::{
         consensus_api::ConsensusApi,
@@ -134,7 +135,7 @@ async fn test_vid_task() {
         Expectations::from_outputs(vec![]),
         Expectations::from_outputs(vec![
             exact(SendPayloadCommitmentAndMetadata(
-                payload_commitment,
+                VidCommitment::V0(payload_commitment),
                 builder_commitment,
                 TestMetadata {
                     num_transactions: transactions.len() as u64,

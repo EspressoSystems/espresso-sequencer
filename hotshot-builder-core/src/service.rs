@@ -8,6 +8,7 @@ use hotshot_builder_api::{
     v0_2::builder::TransactionStatus,
 };
 use hotshot_types::{
+    data::VidCommitment,
     data::{DaProposal2, Leaf2, QuorumProposalWrapper},
     event::EventType,
     message::Proposal,
@@ -17,7 +18,6 @@ use hotshot_types::{
         signature_key::{BuilderSignatureKey, SignatureKey},
     },
     utils::BuilderCommitment,
-    vid::VidCommitment,
 };
 use lru::LruCache;
 use vbs::version::StaticVersionType;

@@ -16,6 +16,7 @@ use async_trait::async_trait;
 use hotshot::{traits::TestableNodeImplementation, HotShotError};
 use hotshot_types::{
     data::Leaf2,
+    data::VidCommitment,
     error::RoundTimedoutState,
     event::{Event, EventType, LeafChain},
     simple_certificate::QuorumCertificate2,
@@ -25,7 +26,6 @@ use hotshot_types::{
         node_implementation::{ConsensusTime, NodeType, Versions},
         BlockPayload,
     },
-    vid::advz::ADVZCommitment,
 };
 use thiserror::Error;
 use tracing::error;
@@ -429,7 +429,7 @@ pub struct RoundResult<TYPES: NodeType> {
     pub leaf_map: HashMap<Leaf2<TYPES>, usize>,
 
     /// block -> # entries decided on that block
-    pub block_map: HashMap<ADVZCommitment, usize>,
+    pub block_map: HashMap<VidCommitment, usize>,
 
     /// number of transactions -> number of nodes reporting that number
     pub num_txns_map: HashMap<u64, usize>,

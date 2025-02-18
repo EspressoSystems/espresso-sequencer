@@ -17,6 +17,7 @@ use hotshot_builder_api::v0_1::block_info::AvailableBlockInfo;
 use hotshot_task::task::TaskState;
 use hotshot_types::{
     consensus::OuterConsensus,
+    data::VidCommitment,
     data::{null_block, PackedBundle},
     event::{Event, EventType},
     message::UpgradeLock,
@@ -29,7 +30,6 @@ use hotshot_types::{
         BlockPayload,
     },
     utils::ViewInner,
-    vid::advz::ADVZCommitment,
 };
 use hotshot_utils::anytrace::*;
 use tokio::time::{sleep, timeout};
@@ -506,7 +506,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
         &self,
         block_view: TYPES::View,
         task_start_time: Instant,
-    ) -> Result<(TYPES::View, ADVZCommitment)> {
+    ) -> Result<(TYPES::View, VidCommitment)> {
         loop {
             match self.last_vid_commitment(block_view).await {
                 Ok((view, comm)) => break Ok((view, comm)),
@@ -526,7 +526,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
     async fn last_vid_commitment(
         &self,
         block_view: TYPES::View,
-    ) -> Result<(TYPES::View, ADVZCommitment)> {
+    ) -> Result<(TYPES::View, VidCommitment)> {
         let consensus_reader = self.consensus.read().await;
         let mut target_view = TYPES::View::new(block_view.saturating_sub(1));
 
@@ -624,7 +624,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
     /// based on the response time.
     async fn get_available_blocks(
         &self,
-        parent_comm: ADVZCommitment,
+        parent_comm: VidCommitment,
         view_number: TYPES::View,
         parent_comm_sig: &<<TYPES as NodeType>::SignatureKey as SignatureKey>::PureAssembledSignatureType,
     ) -> Vec<(AvailableBlockInfo<TYPES>, usize)> {
@@ -693,7 +693,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
     #[instrument(skip_all, fields(id = self.id, view = *self.cur_view), name = "block_from_builder", level = "error")]
     async fn block_from_builder(
         &self,
-        parent_comm: ADVZCommitment,
+        parent_comm: VidCommitment,
         view_number: TYPES::View,
         parent_comm_sig: &<<TYPES as NodeType>::SignatureKey as SignatureKey>::PureAssembledSignatureType,
     ) -> Result<BuilderResponse<TYPES>> {

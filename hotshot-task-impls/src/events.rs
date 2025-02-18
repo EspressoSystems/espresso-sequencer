@@ -10,6 +10,7 @@ use async_broadcast::Sender;
 use either::Either;
 use hotshot_task::task::TaskEvent;
 use hotshot_types::{
+    data::VidCommitment,
     data::{
         DaProposal2, Leaf2, PackedBundle, QuorumProposal2, QuorumProposalWrapper, UpgradeProposal,
         VidDisperse, VidDisperseShare,
@@ -30,7 +31,6 @@ use hotshot_types::{
         signature_key::SignatureKey, BlockPayload,
     },
     utils::BuilderCommitment,
-    vid::advz::ADVZCommitment,
     vote::HasViewNumber,
 };
 use vec1::Vec1;
@@ -180,7 +180,7 @@ pub enum HotShotEvent<TYPES: NodeType> {
     TransactionSend(TYPES::Transaction, TYPES::SignatureKey),
     /// Event to send block payload commitment and metadata from DA leader to the quorum; internal event only
     SendPayloadCommitmentAndMetadata(
-        ADVZCommitment,
+        VidCommitment,
         BuilderCommitment,
         <TYPES::BlockPayload as BlockPayload<TYPES>>::Metadata,
         TYPES::View,

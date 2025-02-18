@@ -26,13 +26,14 @@ use vbs::version::Version;
 use super::signature_key::BuilderSignatureKey;
 use crate::{
     data::Leaf2,
+    data::VidCommitment,
     traits::{
         node_implementation::{NodeType, Versions},
         states::InstanceState,
         ValidatedState,
     },
     utils::BuilderCommitment,
-    vid::advz::{advz_scheme, ADVZCommitment, ADVZCommon, ADVZScheme},
+    vid::advz::advz_scheme,
 };
 
 /// Trait for structures that need to be unambiguously encoded as bytes.
@@ -154,9 +155,9 @@ pub fn vid_commitment<V: Versions>(
     encoded_transactions: &[u8],
     num_storage_nodes: usize,
     _version: Version,
-) -> <ADVZScheme as VidScheme>::Commit {
+) -> VidCommitment {
     let encoded_tx_len = encoded_transactions.len();
-    advz_scheme(num_storage_nodes).commit_only(encoded_transactions).unwrap_or_else(|err| panic!("VidScheme::commit_only failure:(num_storage_nodes,payload_byte_len)=({num_storage_nodes},{encoded_tx_len}) error: {err}"))
+    advz_scheme(num_storage_nodes).commit_only(encoded_transactions).map(VidCommitment::V0).unwrap_or_else(|err| panic!("VidScheme::commit_only failure:(num_storage_nodes,payload_byte_len)=({num_storage_nodes},{encoded_tx_len}) error: {err}"))
 }
 
 /// The number of storage nodes to use when computing the genesis VID commitment.
@@ -190,11 +191,10 @@ pub trait BlockHeader<TYPES: NodeType>:
         parent_state: &TYPES::ValidatedState,
         instance_state: &<TYPES::ValidatedState as ValidatedState<TYPES>>::Instance,
         parent_leaf: &Leaf2<TYPES>,
-        payload_commitment: ADVZCommitment,
+        payload_commitment: VidCommitment,
         builder_commitment: BuilderCommitment,
         metadata: <TYPES::BlockPayload as BlockPayload<TYPES>>::Metadata,
         builder_fee: BuilderFee<TYPES>,
-        vid_common: ADVZCommon,
         version: Version,
     ) -> impl Future<Output = Result<Self, Self::Error>> + Send;
 
@@ -206,12 +206,11 @@ pub trait BlockHeader<TYPES: NodeType>:
         parent_state: &TYPES::ValidatedState,
         instance_state: &<TYPES::ValidatedState as ValidatedState<TYPES>>::Instance,
         parent_leaf: &Leaf2<TYPES>,
-        payload_commitment: ADVZCommitment,
+        payload_commitment: VidCommitment,
         builder_commitment: BuilderCommitment,
         metadata: <TYPES::BlockPayload as BlockPayload<TYPES>>::Metadata,
         builder_fee: Vec<BuilderFee<TYPES>>,
         view_number: u64,
-        vid_common: ADVZCommon,
         auction_results: Option<TYPES::AuctionResult>,
         version: Version,
     ) -> impl Future<Output = Result<Self, Self::Error>> + Send;
@@ -219,7 +218,7 @@ pub trait BlockHeader<TYPES: NodeType>:
     /// Build the genesis header, payload, and metadata.
     fn genesis(
         instance_state: &<TYPES::ValidatedState as ValidatedState<TYPES>>::Instance,
-        payload_commitment: ADVZCommitment,
+        payload_commitment: VidCommitment,
         builder_commitment: BuilderCommitment,
         metadata: <TYPES::BlockPayload as BlockPayload<TYPES>>::Metadata,
     ) -> Self;
@@ -228,7 +227,7 @@ pub trait BlockHeader<TYPES: NodeType>:
     fn block_number(&self) -> u64;
 
     /// Get the payload commitment.
-    fn payload_commitment(&self) -> ADVZCommitment;
+    fn payload_commitment(&self) -> VidCommitment;
 
     /// Get the metadata.
     fn metadata(&self) -> &<TYPES::BlockPayload as BlockPayload<TYPES>>::Metadata;

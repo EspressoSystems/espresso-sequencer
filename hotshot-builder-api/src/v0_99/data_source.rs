@@ -1,7 +1,5 @@
 use async_trait::async_trait;
-use hotshot_types::{
-    bundle::Bundle, traits::node_implementation::NodeType, vid::advz::ADVZCommitment,
-};
+use hotshot_types::{bundle::Bundle, data::VidCommitment, traits::node_implementation::NodeType};
 
 use super::builder::BuildError;
 /// No changes to these types
@@ -13,7 +11,7 @@ pub trait BuilderDataSource<TYPES: NodeType> {
     async fn bundle(
         &self,
         parent_view: u64,
-        parent_hash: &ADVZCommitment,
+        parent_hash: &VidCommitment,
         view_number: u64,
     ) -> Result<Bundle<TYPES>, BuildError>;
 
