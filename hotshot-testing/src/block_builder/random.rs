@@ -98,7 +98,7 @@ where
         let (change_sender, change_receiver) = broadcast(128);
 
         let (task, source) = Self::create(num_nodes, config, changes, change_sender).await;
-        run_builder_source_0_1::<_, _, TestVersions>(url, change_receiver, source);
+        run_builder_source_0_1(url, change_receiver, source);
         Box::new(task)
     }
 }
@@ -274,7 +274,7 @@ impl<TYPES: NodeType> ReadState for RandomBuilderSource<TYPES> {
 
 #[async_trait]
 impl<TYPES: NodeType> BuilderDataSource<TYPES> for RandomBuilderSource<TYPES> {
-    async fn available_blocks<V: Versions>(
+    async fn available_blocks(
         &self,
         _for_parent: &VidCommitment,
         _view_number: u64,

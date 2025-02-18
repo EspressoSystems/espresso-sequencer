@@ -6,7 +6,7 @@
 
 // TODO: Remove this after integration
 #![allow(unused_imports)]
-use std::collections::HashMap;
+use std::{collections::HashMap, time::Duration};
 
 use hotshot_example_types::{
     node_types::{
@@ -62,10 +62,10 @@ cross_tests!(
             node_changes: vec![(5, dead_nodes)]
         };
 
-        // 2 nodes fail triggering view sync, expect no other timeouts
-        metadata.overall_safety_properties.num_failed_views = 2;
+        metadata.overall_safety_properties.expected_view_failures = vec![9,10,11];
         // Make sure we keep committing rounds after the bad leaders, but not the full 50 because of the numerous timeouts
         metadata.overall_safety_properties.num_successful_views = 13;
+        metadata.overall_safety_properties.decide_timeout = Duration::from_secs(20);
 
         metadata
     }
@@ -97,13 +97,13 @@ cross_tests!(
             node_changes: vec![(view_spin_node_down, dead_nodes)]
         };
 
-        // node 3 is leader twice when we shut down
-        metadata.overall_safety_properties.num_failed_views = 2;
-        metadata.overall_safety_properties.expected_views_to_fail = HashMap::from([
+        metadata.overall_safety_properties.expected_view_failures = vec![
             // next views after turning node off
-            (ViewNumber::new(view_spin_node_down + 1), false),
-            (ViewNumber::new(view_spin_node_down + 2), false)
-        ]);
+            view_spin_node_down,
+            view_spin_node_down + 1,
+            view_spin_node_down + 2
+        ];
+        metadata.overall_safety_properties.decide_timeout = Duration::from_secs(24);
         // Make sure we keep committing rounds after the bad leaders, but not the full 50 because of the numerous timeouts
         metadata.overall_safety_properties.num_successful_views = 13;
 
