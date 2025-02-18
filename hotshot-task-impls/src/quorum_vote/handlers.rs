@@ -138,7 +138,8 @@ async fn verify_drb_result<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Ver
         let has_stake_current_epoch = task_state
             .membership
             .membership_for_epoch(epoch)
-            .await.context(warn!("No stake table for epoch"))?
+            .await
+            .context(warn!("No stake table for epoch"))?
             .has_stake(&task_state.public_key)
             .await;
 
@@ -172,16 +173,17 @@ async fn start_drb_task<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versio
         task_state.epoch_height,
     ));
 
-    let Ok(epoch_membership) = task_state.membership.membership_for_epoch(Some(current_epoch_number)).await else {
+    let Ok(epoch_membership) = task_state
+        .membership
+        .membership_for_epoch(Some(current_epoch_number))
+        .await
+    else {
         tracing::warn!("No Stake Table for Epoch = {:?}", current_epoch_number);
         return;
     };
 
     // Start the new task if we're in the committee for this epoch
-    if epoch_membership
-        .has_stake(&task_state.public_key)
-        .await
-    {
+    if epoch_membership.has_stake(&task_state.public_key).await {
         let new_epoch_number = current_epoch_number + 1;
 
         // If a task is currently live AND has finished, join it and save the result.

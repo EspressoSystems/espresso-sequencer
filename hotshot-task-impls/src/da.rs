@@ -119,7 +119,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> DaTaskState<TYP
                 let view_leader_key = self
                     .membership_coordinator
                     .membership_for_epoch(proposal.data.epoch)
-                    .await.context(warn!("No stake table for epoch"))?
+                    .await
+                    .context(warn!("No stake table for epoch"))?
                     .leader(view)
                     .await?;
                 ensure!(
@@ -149,7 +150,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> DaTaskState<TYP
                 let membership = self
                     .membership_coordinator
                     .membership_for_epoch(epoch_number)
-                    .await.context(warn!("No stake table for epoch"))?;
+                    .await
+                    .context(warn!("No stake table for epoch"))?;
 
                 ensure!(
                   cur_view <= view_number + 1,
@@ -242,7 +244,13 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> DaTaskState<TYP
 
                     let target_epoch = if membership.has_stake(&public_key).await {
                         epoch_number
-                    } else if membership.next_epoch().await.context(warn!("No stake table for epoch"))?.has_stake(&public_key).await {
+                    } else if membership
+                        .next_epoch()
+                        .await
+                        .context(warn!("No stake table for epoch"))?
+                        .has_stake(&public_key)
+                        .await
+                    {
                         next_epoch
                     } else {
                         bail!("Not calculating VID, the node doesn't belong to the current epoch or the next epoch.");
@@ -286,7 +294,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> DaTaskState<TYP
                 let membership = self
                     .membership_coordinator
                     .membership_for_epoch(epoch)
-                    .await.context(warn!("No stake table for epoch"))?;
+                    .await
+                    .context(warn!("No stake table for epoch"))?;
 
                 ensure!(
                     membership.leader(view).await? == self.public_key,
@@ -347,7 +356,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> DaTaskState<TYP
                 let leader = self
                     .membership_coordinator
                     .membership_for_epoch(epoch)
-                    .await.context(warn!("No stake table for epoch"))?
+                    .await
+                    .context(warn!("No stake table for epoch"))?
                     .leader(view_number)
                     .await?;
                 if leader != self.public_key {

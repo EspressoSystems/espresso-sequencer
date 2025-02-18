@@ -14,7 +14,7 @@ use hotshot_types::{
     },
     PeerConfig,
 };
-use hotshot_utils::anytrace::{Result};
+use hotshot_utils::anytrace::Result;
 use primitive_types::U256;
 
 /// Tuple type for eligible leaders

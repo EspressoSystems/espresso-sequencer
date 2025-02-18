@@ -148,9 +148,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                     return;
                 }
                 let Ok(epoch_membership) = self
-                .membership
-                .membership_for_epoch(proposal.data.epoch())
-                .await else {
+                    .membership
+                    .membership_for_epoch(proposal.data.epoch())
+                    .await
+                else {
                     tracing::warn!("No Stake table for epoch = {:?}", proposal.data.epoch());
                     return;
                 };

@@ -18,6 +18,7 @@ use hotshot_events_service::events_source::{
     EventFilterSet, EventsSource, EventsStreamer, StartupInfo,
 };
 use hotshot_query_service::data_source::ExtensibleDataSource;
+use hotshot_types::stake_table::StakeTableEntry;
 use hotshot_types::{
     data::ViewNumber,
     event::Event,
@@ -30,7 +31,6 @@ use hotshot_types::{
     },
     utils::{View, ViewInner},
 };
-use hotshot_types::stake_table::StakeTableEntry;
 use jf_merkle_tree::MerkleTreeScheme;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -187,17 +187,18 @@ impl<N: ConnectedNetwork<PubKey>, V: Versions, P: SequencerPersistence>
         &self,
         epoch: Option<<SeqTypes as NodeType>::Epoch>,
     ) -> Vec<StakeTableEntry<<SeqTypes as NodeType>::SignatureKey>> {
-        let Ok(mem) = self.consensus()
+        let Ok(mem) = self
+            .consensus()
             .await
             .read()
             .await
             .membership_coordinator
             .membership_for_epoch(epoch)
-            .await else {
-                return vec![];
-            };
-            mem.stake_table()
             .await
+        else {
+            return vec![];
+        };
+        mem.stake_table().await
     }
 
     /// Get the stake table for the current epoch if not provided

@@ -724,7 +724,8 @@ impl<
                 let leader = match self
                     .membership_coordinator
                     .membership_for_epoch(vote.epoch())
-                    .await.ok()?
+                    .await
+                    .ok()?
                     .leader(view_number)
                     .await
                 {
@@ -822,7 +823,8 @@ impl<
                 let leader = match self
                     .membership_coordinator
                     .membership_for_epoch(vote.epoch())
-                    .await.ok()?
+                    .await
+                    .ok()?
                     .leader(view_number)
                     .await
                 {
@@ -872,7 +874,8 @@ impl<
                 let leader = match self
                     .membership_coordinator
                     .membership_for_epoch(self.epoch)
-                    .await.ok()?
+                    .await
+                    .ok()?
                     .leader(view_number)
                     .await
                 {
@@ -904,7 +907,8 @@ impl<
                 let leader = match self
                     .membership_coordinator
                     .membership_for_epoch(self.epoch)
-                    .await.ok()?
+                    .await
+                    .ok()?
                     .leader(view_number)
                     .await
                 {
@@ -936,7 +940,8 @@ impl<
                 let leader = match self
                     .membership_coordinator
                     .membership_for_epoch(self.epoch)
-                    .await.ok()?
+                    .await
+                    .ok()?
                     .leader(view_number)
                     .await
                 {
@@ -1010,7 +1015,8 @@ impl<
                 let leader = match self
                     .membership_coordinator
                     .membership_for_epoch(self.epoch)
-                    .await.ok()?
+                    .await
+                    .ok()?
                     .leader(view_number)
                     .await
                 {
@@ -1049,7 +1055,8 @@ impl<
                 let leader = match self
                     .membership_coordinator
                     .membership_for_epoch(self.epoch)
-                    .await.ok()?
+                    .await
+                    .ok()?
                     .leader(view_number)
                     .await
                 {
@@ -1174,11 +1181,11 @@ impl<
         let Ok(mem) = self
             .membership_coordinator
             .membership_for_epoch(self.epoch)
-            .await else {
-                return;
-            };
-        let da_committee = mem.da_committee_members(view_number)
-            .await;
+            .await
+        else {
+            return;
+        };
+        let da_committee = mem.da_committee_members(view_number).await;
         let network = Arc::clone(&self.network);
         let storage = Arc::clone(&self.storage);
         let consensus = OuterConsensus::new(Arc::clone(&self.consensus.inner_consensus));

@@ -220,13 +220,14 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> NetworkRequestState<TYPES, I
         let membership_reader = match self
             .membership_coordinator
             .membership_for_epoch(epoch)
-            .await {
-                Ok(m) => m,
-                Err(e) => {
-                    tracing::warn!(e.message);
-                    return;
-                }
-            };
+            .await
+        {
+            Ok(m) => m,
+            Err(e) => {
+                tracing::warn!(e.message);
+                return;
+            }
+        };
         let mut da_committee_for_view = membership_reader.da_committee_members(view).await;
         if let Ok(leader) = membership_reader.leader(view).await {
             da_committee_for_view.insert(leader);

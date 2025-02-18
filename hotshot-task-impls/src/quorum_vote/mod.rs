@@ -238,16 +238,16 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static, V: Versions> Handl
         );
 
         let mem = match self
-        .membership_coordinator
-        .membership_for_epoch(cur_epoch)
-        .await {
+            .membership_coordinator
+            .membership_for_epoch(cur_epoch)
+            .await
+        {
             Ok(mem) => mem,
             Err(e) => {
                 tracing::warn!("{:?}", e);
                 return;
-            },
+            }
         };
-
 
         tracing::trace!(
             "Sending ViewChange for view {} and epoch {:?}",
@@ -259,7 +259,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static, V: Versions> Handl
             &self.sender,
         )
         .await;
-
 
         if let Err(e) = submit_vote::<TYPES, I, V>(
             self.sender.clone(),

@@ -224,9 +224,10 @@ impl<TYPES: NodeType, V: Versions> ViewSyncTaskState<TYPES, V> {
         }
 
         let membership = match self
-        .membership_coordinator
-        .membership_for_epoch(self.cur_epoch)
-        .await {
+            .membership_coordinator
+            .membership_for_epoch(self.cur_epoch)
+            .await
+        {
             Ok(m) => m,
             Err(e) => {
                 tracing::warn!(e.message);

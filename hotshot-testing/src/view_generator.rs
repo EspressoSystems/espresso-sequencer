@@ -99,7 +99,10 @@ impl TestView {
         let leader_public_key = public_key;
 
         let genesis_version = upgrade_lock.version_infallible(genesis_view).await;
-        let epoch_membership = membership.membership_for_epoch(genesis_epoch).await.unwrap();
+        let epoch_membership = membership
+            .membership_for_epoch(genesis_epoch)
+            .await
+            .unwrap();
 
         let payload_commitment = da_payload_commitment::<TestTypes, TestVersions>(
             &epoch_membership,
@@ -254,7 +257,8 @@ impl TestView {
         let membership = self
             .membership
             .membership_for_epoch(self.epoch_number)
-            .await.unwrap();
+            .await
+            .unwrap();
         let payload_commitment = da_payload_commitment::<TestTypes, TestVersions>(
             &membership,
             transactions.clone(),

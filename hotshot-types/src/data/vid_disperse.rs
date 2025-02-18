@@ -66,7 +66,8 @@ impl<TYPES: NodeType> ADVZDisperse<TYPES> {
     ) -> Self {
         let shares = membership
             .membership_for_epoch(target_epoch)
-            .await.unwrap()
+            .await
+            .unwrap()
             .committee_members(view_number)
             .await
             .iter()

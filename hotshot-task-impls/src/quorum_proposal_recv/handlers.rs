@@ -171,7 +171,10 @@ pub(crate) async fn handle_quorum_proposal_recv<
 
     let mut qc_mem = validation_info.membership.clone();
     if qc_mem.epoch > justify_qc.data.epoch {
-        qc_mem = qc_mem.prev_epoch().await.context(warn!("No stake table for epoch"))?;
+        qc_mem = qc_mem
+            .prev_epoch()
+            .await
+            .context(warn!("No stake table for epoch"))?;
     }
 
     let membership_stake_table = qc_mem.stake_table().await;
@@ -202,7 +205,10 @@ pub(crate) async fn handle_quorum_proposal_recv<
             bail!("Next epoch justify qc exists but it's not equal with justify qc.");
         }
 
-        let qc_mem = qc_mem.next_epoch().await.context(warn!("No stake table for epoch"))?;
+        let qc_mem = qc_mem
+            .next_epoch()
+            .await
+            .context(warn!("No stake table for epoch"))?;
         let membership_next_stake_table = qc_mem.stake_table().await;
         let membership_next_success_threshold = qc_mem.success_threshold().await;
 

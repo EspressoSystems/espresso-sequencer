@@ -4,15 +4,16 @@ use std::{collections::HashMap, sync::Arc};
 
 use async_broadcast::{broadcast, InactiveReceiver};
 use async_lock::{Mutex, RwLock};
-use hotshot_utils::anytrace::{Level, Result, Error};
-use hotshot_utils::{warn, line_info};
+use hotshot_utils::anytrace::{Error, Level, Result};
+use hotshot_utils::{line_info, warn};
 
 use crate::traits::election::Membership;
 use crate::traits::node_implementation::{ConsensusTime, NodeType};
 use crate::traits::signature_key::SignatureKey;
 use crate::utils::root_block_in_epoch;
 
-type EpochMap<TYPES> = HashMap<<TYPES as NodeType>::Epoch, InactiveReceiver<Option<EpochMembership<TYPES>>>>;
+type EpochMap<TYPES> =
+    HashMap<<TYPES as NodeType>::Epoch, InactiveReceiver<Option<EpochMembership<TYPES>>>>;
 
 /// Struct to Coordinate membership catchup
 pub struct EpochMembershipCoordinator<TYPES: NodeType> {
@@ -78,12 +79,18 @@ where
             return Ok(ret_val);
         }
         if self.catchup_map.lock().await.contains_key(&epoch) {
-            return Err(warn!("Stake table for Epoch {:?} Unavailable. Catching already in Progress", epoch));
+            return Err(warn!(
+                "Stake table for Epoch {:?} Unavailable. Catching already in Progress",
+                epoch
+            ));
         }
         let coordinator = self.clone();
         spawn_catchup(coordinator, epoch);
 
-        Err(warn!("Stake table for Epoch {:?} Unavailable. Starting catchpu", epoch))
+        Err(warn!(
+            "Stake table for Epoch {:?} Unavailable. Starting catchpu",
+            epoch
+        ))
     }
 
     /// Catches the membership up to the epoch passed as an argument.  
@@ -115,8 +122,6 @@ where
             spawn_catchup(self.clone(), root_epoch);
             Box::pin(self.wait_for_catchup(root_epoch)).await?
         };
-        
-
 
         // Get the epoch root headers and update our membership with them, finally sync them
         // Verification of the root is handled in get_epoch_root
@@ -135,16 +140,22 @@ where
         sync(&mut *(self.membership.write().await));
         Some(EpochMembership {
             epoch: Some(epoch),
-            coordinator: self.clone()
+            coordinator: self.clone(),
         })
     }
 
     pub async fn wait_for_catchup(&self, epoch: TYPES::Epoch) -> Option<EpochMembership<TYPES>> {
-        let Some(mut rx) = self.catchup_map.lock().await.get(&epoch).map(InactiveReceiver::activate_cloned) else {
+        let Some(mut rx) = self
+            .catchup_map
+            .lock()
+            .await
+            .get(&epoch)
+            .map(InactiveReceiver::activate_cloned)
+        else {
             return self.clone().catchup(epoch).await;
         };
         let Ok(Some(mem)) = rx.recv_direct().await else {
-            return self.clone().catchup(epoch).await
+            return self.clone().catchup(epoch).await;
         };
         Some(mem)
     }

@@ -209,14 +209,10 @@ impl<TYPES: NodeType, V: Versions> NetworkResponseState<TYPES, V> {
         sender: &TYPES::SignatureKey,
         epoch: Option<TYPES::Epoch>,
     ) -> bool {
-        let Ok(memb) = 
-        self.membership
-            .membership_for_epoch(epoch)
-            .await else {
-                return false;
-            };
-            memb.has_stake(sender)
-            .await
+        let Ok(memb) = self.membership.membership_for_epoch(epoch).await else {
+            return false;
+        };
+        memb.has_stake(sender).await
     }
 }
 

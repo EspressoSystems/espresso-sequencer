@@ -214,7 +214,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
             let membership_total_nodes = self
                 .membership_coordinator
                 .membership_for_epoch(self.cur_epoch)
-                .await.ok()?
+                .await
+                .ok()?
                 .total_nodes()
                 .await;
             let Some(null_fee) =
@@ -362,7 +363,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
         let membership_total_nodes = self
             .membership_coordinator
             .membership_for_epoch(self.cur_epoch)
-            .await.ok()?
+            .await
+            .ok()?
             .total_nodes()
             .await;
         let Some(null_fee) =
