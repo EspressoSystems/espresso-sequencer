@@ -61,13 +61,11 @@ async fn test_random_block_builder() {
         .expect("Failed to create dummy signature");
     let dummy_view_number = 0u64;
 
-    let version = Version { major: 0, minor: 0 };
-
     let mut blocks = loop {
         // Test getting blocks
         let blocks = client
-            .available_blocks::<TestVersions>(
-                vid_commitment::<TestVersions>(&[], 1, version),
+            .available_blocks(
+                vid_commitment::<TestVersions>(&[], 1, Version { major: 0, minor: 0 }),
                 dummy_view_number,
                 pub_key,
                 &signature,

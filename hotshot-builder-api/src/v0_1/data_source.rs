@@ -8,10 +8,7 @@ use async_trait::async_trait;
 use committable::Commitment;
 use hotshot_types::{
     data::VidCommitment,
-    traits::{
-        node_implementation::{NodeType, Versions},
-        signature_key::SignatureKey,
-    },
+    traits::{node_implementation::NodeType, signature_key::SignatureKey},
     utils::BuilderCommitment,
 };
 
@@ -23,7 +20,7 @@ use super::{
 #[async_trait]
 pub trait BuilderDataSource<TYPES: NodeType> {
     /// To get the list of available blocks
-    async fn available_blocks<V: Versions>(
+    async fn available_blocks(
         &self,
         for_parent: &VidCommitment,
         view_number: u64,

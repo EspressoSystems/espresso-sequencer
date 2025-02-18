@@ -53,7 +53,7 @@ async fn test_catchup() {
 
     metadata.spinning_properties = SpinningTaskDescription {
         // Start the nodes before their leadership.
-        node_changes: vec![(13, catchup_node)],
+        node_changes: vec![(10, catchup_node)],
     };
 
     metadata.completion_task_description =
@@ -65,7 +65,7 @@ async fn test_catchup() {
     metadata.overall_safety_properties = OverallSafetyPropertiesDescription {
         // Make sure we keep committing rounds after the catchup, but not the full 50.
         num_successful_views: 22,
-        num_failed_views: 0,
+        expected_view_failures: vec![],
         ..Default::default()
     };
 
@@ -117,7 +117,6 @@ async fn test_catchup_cdn() {
             },
         );
     metadata.overall_safety_properties = OverallSafetyPropertiesDescription {
-        num_failed_views: 0,
         ..Default::default()
     };
 
@@ -171,7 +170,6 @@ async fn test_catchup_one_node() {
     metadata.overall_safety_properties = OverallSafetyPropertiesDescription {
         // Make sure we keep committing rounds after the catchup, but not the full 50.
         num_successful_views: 22,
-        num_failed_views: 0,
         ..Default::default()
     };
 
@@ -231,7 +229,6 @@ async fn test_catchup_in_view_sync() {
             },
         );
     metadata.overall_safety_properties = OverallSafetyPropertiesDescription {
-        num_failed_views: 0,
         ..Default::default()
     };
 
@@ -280,7 +277,7 @@ async fn test_catchup_reload() {
 
     metadata.spinning_properties = SpinningTaskDescription {
         // Start the nodes before their leadership.
-        node_changes: vec![(13, catchup_node)],
+        node_changes: vec![(10, catchup_node)],
     };
 
     metadata.completion_task_description =
@@ -292,6 +289,7 @@ async fn test_catchup_reload() {
     metadata.overall_safety_properties = OverallSafetyPropertiesDescription {
         // Make sure we keep committing rounds after the catchup, but not the full 50.
         num_successful_views: 22,
+        expected_view_failures: vec![],
         ..Default::default()
     };
 
@@ -342,7 +340,9 @@ cross_tests!(
       metadata.overall_safety_properties = OverallSafetyPropertiesDescription {
           // Make sure we keep committing rounds after the catchup, but not the full 50.
           num_successful_views: 22,
-          num_failed_views: 15,
+          expected_view_failures: vec![13],
+          possible_view_failures: vec![12, 14],
+          decide_timeout: Duration::from_secs(20),
           ..Default::default()
       };
 
@@ -395,7 +395,9 @@ cross_tests!(
       metadata.overall_safety_properties = OverallSafetyPropertiesDescription {
           // Make sure we keep committing rounds after the catchup, but not the full 50.
           num_successful_views: 22,
-          num_failed_views: 15,
+          expected_view_failures: vec![13],
+          possible_view_failures: vec![12, 14],
+          decide_timeout: Duration::from_secs(20),
           ..Default::default()
       };
 
@@ -454,7 +456,9 @@ cross_tests!(
       metadata.overall_safety_properties = OverallSafetyPropertiesDescription {
           // Make sure we keep committing rounds after the catchup, but not the full 50.
           num_successful_views: 22,
-          num_failed_views: 30,
+          expected_view_failures: vec![12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34],
+          possible_view_failures: vec![35],
+          decide_timeout: Duration::from_secs(120),
           ..Default::default()
       };
 
