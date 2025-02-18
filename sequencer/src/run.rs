@@ -16,6 +16,8 @@ use espresso_types::{
 use futures::future::FutureExt;
 use hotshot::MarketplaceConfig;
 use hotshot_types::traits::{metrics::NoMetrics, node_implementation::Versions};
+#[allow(unused_imports)]
+use vbs::version::StaticVersionType;
 
 pub async fn main() -> anyhow::Result<()> {
     let opt = Options::parse();
