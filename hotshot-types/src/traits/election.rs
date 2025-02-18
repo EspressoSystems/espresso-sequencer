@@ -199,7 +199,10 @@ pub fn generate_stake_cdf<Key: SignatureKey, Entry: StakeTableEntryType<Key>>(
 /// select the leader for a view
 ///
 /// # Panics
-/// Panics if the cdf is empty
+/// Panics if `cdf` is empty. Results in undefined behaviour if `cdf` is not ordered.
+///
+/// Note that we try to downcast a U512 to a U256,
+/// but this should never panic because the U512 should be strictly smaller than U256::MAX by construction.
 pub fn select_randomized_leader<SignatureKey, Entry: StakeTableEntryType<SignatureKey> + Clone>(
     cdf: Vec<(Entry, U256)>,
     stake_table_hash: [u8; 32],
@@ -218,13 +221,7 @@ pub fn select_randomized_leader<SignatureKey, Entry: StakeTableEntryType<Signatu
         U512::from_little_endian(&raw_breakpoint) % U512::from(cdf.last().unwrap().1);
 
     // and drop the top 32 bytes, downcasting to a U256
-    let breakpoint: U256 = {
-        let mut result = [0u8; 64];
-
-        remainder.to_little_endian(&mut result);
-
-        U256::from_little_endian(&result[32..64])
-    };
+    let breakpoint: U256 = U256::try_from(remainder).unwrap();
 
     // now find the first index where the breakpoint is strictly smaller than the cdf
     let index = cdf.partition_point(|(_, cumulative_stake)| breakpoint < *cumulative_stake);
