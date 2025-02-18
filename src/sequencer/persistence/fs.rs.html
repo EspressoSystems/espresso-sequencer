@@ -1228,29 +1228,7 @@
 <a href="#1227" id="1227">1227</a>
 <a href="#1228" id="1228">1228</a>
 <a href="#1229" id="1229">1229</a>
-<a href="#1230" id="1230">1230</a>
-<a href="#1231" id="1231">1231</a>
-<a href="#1232" id="1232">1232</a>
-<a href="#1233" id="1233">1233</a>
-<a href="#1234" id="1234">1234</a>
-<a href="#1235" id="1235">1235</a>
-<a href="#1236" id="1236">1236</a>
-<a href="#1237" id="1237">1237</a>
-<a href="#1238" id="1238">1238</a>
-<a href="#1239" id="1239">1239</a>
-<a href="#1240" id="1240">1240</a>
-<a href="#1241" id="1241">1241</a>
-<a href="#1242" id="1242">1242</a>
-<a href="#1243" id="1243">1243</a>
-<a href="#1244" id="1244">1244</a>
-<a href="#1245" id="1245">1245</a>
-<a href="#1246" id="1246">1246</a>
-<a href="#1247" id="1247">1247</a>
-<a href="#1248" id="1248">1248</a>
-<a href="#1249" id="1249">1249</a>
-<a href="#1250" id="1250">1250</a>
-<a href="#1251" id="1251">1251</a>
-<a href="#1252" id="1252">1252</a></pre></div><pre class="rust"><code><span class="kw">use </span>anyhow::{anyhow, Context};
+<a href="#1230" id="1230">1230</a></pre></div><pre class="rust"><code><span class="kw">use </span>anyhow::{anyhow, Context};
 <span class="kw">use </span>async_lock::RwLock;
 <span class="kw">use </span>async_trait::async_trait;
 <span class="kw">use </span>clap::Parser;
@@ -1473,49 +1451,56 @@
 
     <span class="kw">fn </span>collect_garbage(
         <span class="kw-2">&amp;mut </span><span class="self">self</span>,
-        view: ViewNumber,
-        intervals: <span class="kw-2">&amp;</span>[RangeInclusive&lt;u64&gt;],
+        decided_view: ViewNumber,
+        prune_intervals: <span class="kw-2">&amp;</span>[RangeInclusive&lt;ViewNumber&gt;],
     ) -&gt; anyhow::Result&lt;()&gt; {
-        <span class="kw">let </span>view_number = view.u64();
-        <span class="kw">let </span>prune_view = view.saturating_sub(<span class="self">self</span>.view_retention);
+        <span class="kw">let </span>prune_view = ViewNumber::new(decided_view.saturating_sub(<span class="self">self</span>.view_retention));
 
-        <span class="kw">let </span>delete_files =
-            |intervals: <span class="kw-2">&amp;</span>[RangeInclusive&lt;u64&gt;], keep, dir_path: PathBuf| -&gt; anyhow::Result&lt;()&gt; {
-                <span class="kw">if </span>!dir_path.is_dir() {
-                    <span class="kw">return </span><span class="prelude-val">Ok</span>(());
-                }
-
-                <span class="kw">for </span>entry <span class="kw">in </span>fs::read_dir(dir_path)<span class="question-mark">? </span>{
-                    <span class="kw">let </span>entry = entry<span class="question-mark">?</span>;
-                    <span class="kw">let </span>path = entry.path();
-
-                    <span class="kw">if let </span><span class="prelude-val">Some</span>(file) = path.file_stem().and_then(|n| n.to_str()) {
-                        <span class="kw">if let </span><span class="prelude-val">Ok</span>(v) = file.parse::&lt;u64&gt;() {
-                            <span class="comment">// If the view is the anchor view, keep it no matter what.
-                            </span><span class="kw">if let </span><span class="prelude-val">Some</span>(keep) = keep {
-                                <span class="kw">if </span>keep == v {
-                                    <span class="kw">continue</span>;
-                                }
-                            }
-                            <span class="comment">// Otherwise, delete it if it is time to prune this view _or_ if the
-                            // given intervals, which we've already successfully processed, contain
-                            // the view; in this case we simply don't need it anymore.
-                            </span><span class="kw">if </span>v &lt; prune_view || intervals.iter().any(|i| i.contains(<span class="kw-2">&amp;</span>v)) {
-                                fs::remove_file(<span class="kw-2">&amp;</span>path)<span class="question-mark">?</span>;
-                            }
-                        }
-                    }
-                }
-
-                <span class="prelude-val">Ok</span>(())
-            };
-
-        delete_files(intervals, <span class="prelude-val">None</span>, <span class="self">self</span>.da_dir_path())<span class="question-mark">?</span>;
-        delete_files(intervals, <span class="prelude-val">None</span>, <span class="self">self</span>.vid_dir_path())<span class="question-mark">?</span>;
-        delete_files(intervals, <span class="prelude-val">None</span>, <span class="self">self</span>.quorum_proposals_dir_path())<span class="question-mark">?</span>;
+        <span class="self">self</span>.prune_files(<span class="self">self</span>.da_dir_path(), prune_view, <span class="prelude-val">None</span>, prune_intervals)<span class="question-mark">?</span>;
+        <span class="self">self</span>.prune_files(<span class="self">self</span>.vid_dir_path(), prune_view, <span class="prelude-val">None</span>, prune_intervals)<span class="question-mark">?</span>;
+        <span class="self">self</span>.prune_files(
+            <span class="self">self</span>.quorum_proposals_dir_path(),
+            prune_view,
+            <span class="prelude-val">None</span>,
+            prune_intervals,
+        )<span class="question-mark">?</span>;
 
         <span class="comment">// Save the most recent leaf as it will be our anchor point if the node restarts.
-        </span>delete_files(intervals, <span class="prelude-val">Some</span>(view_number), <span class="self">self</span>.decided_leaf_path())<span class="question-mark">?</span>;
+        </span><span class="self">self</span>.prune_files(
+            <span class="self">self</span>.decided_leaf_path(),
+            prune_view,
+            <span class="prelude-val">Some</span>(decided_view),
+            prune_intervals,
+        )<span class="question-mark">?</span>;
+
+        <span class="prelude-val">Ok</span>(())
+    }
+
+    <span class="kw">fn </span>prune_files(
+        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+        dir_path: PathBuf,
+        prune_view: ViewNumber,
+        keep_decided_view: <span class="prelude-ty">Option</span>&lt;ViewNumber&gt;,
+        prune_intervals: <span class="kw-2">&amp;</span>[RangeInclusive&lt;ViewNumber&gt;],
+    ) -&gt; anyhow::Result&lt;()&gt; {
+        <span class="kw">if </span>!dir_path.is_dir() {
+            <span class="kw">return </span><span class="prelude-val">Ok</span>(());
+        }
+
+        <span class="kw">for </span>(file_view, path) <span class="kw">in </span>view_files(dir_path)<span class="question-mark">? </span>{
+            <span class="comment">// If the view is the anchor view, keep it no matter what.
+            </span><span class="kw">if let </span><span class="prelude-val">Some</span>(decided_view) = keep_decided_view {
+                <span class="kw">if </span>decided_view == file_view {
+                    <span class="kw">continue</span>;
+                }
+            }
+            <span class="comment">// Otherwise, delete it if it is time to prune this view _or_ if the given intervals,
+            // which we've already successfully processed, contain the view; in this case we simply
+            // don't need it anymore.
+            </span><span class="kw">if </span>file_view &lt; prune_view || prune_intervals.iter().any(|i| i.contains(<span class="kw-2">&amp;</span>file_view)) {
+                fs::remove_file(<span class="kw-2">&amp;</span>path)<span class="question-mark">?</span>;
+            }
+        }
 
         <span class="prelude-val">Ok</span>(())
     }
@@ -1528,22 +1513,13 @@
         <span class="kw-2">&amp;</span><span class="self">self</span>,
         view: ViewNumber,
         consumer: <span class="kw-2">&amp;</span><span class="kw">impl </span>EventConsumer,
-    ) -&gt; anyhow::Result&lt;Vec&lt;RangeInclusive&lt;u64&gt;&gt;&gt; {
+    ) -&gt; anyhow::Result&lt;Vec&lt;RangeInclusive&lt;ViewNumber&gt;&gt;&gt; {
         <span class="comment">// Generate a decide event for each leaf, to be processed by the event consumer. We make a
         // separate event for each leaf because it is possible we have non-consecutive leaves in our
         // storage, which would not be valid as a single decide with a single leaf chain.
         </span><span class="kw">let </span><span class="kw-2">mut </span>leaves = BTreeMap::new();
-        <span class="kw">for </span>entry <span class="kw">in </span>fs::read_dir(<span class="self">self</span>.decided_leaf_path())<span class="question-mark">? </span>{
-            <span class="kw">let </span>entry = entry<span class="question-mark">?</span>;
-            <span class="kw">let </span>path = entry.path();
-
-            <span class="kw">let </span><span class="prelude-val">Some</span>(file) = path.file_stem().and_then(|n| n.to_str()) <span class="kw">else </span>{
-                <span class="kw">continue</span>;
-            };
-            <span class="kw">let </span><span class="prelude-val">Ok</span>(v) = file.parse::&lt;u64&gt;() <span class="kw">else </span>{
-                <span class="kw">continue</span>;
-            };
-            <span class="kw">if </span>v &gt; view.u64() {
+        <span class="kw">for </span>(v, path) <span class="kw">in </span>view_files(<span class="self">self</span>.decided_leaf_path())<span class="question-mark">? </span>{
+            <span class="kw">if </span>v &gt; view {
                 <span class="kw">continue</span>;
             }
 
@@ -1554,22 +1530,20 @@
                     .context(<span class="macro">format!</span>(<span class="string">"parsing decided leaf {}"</span>, path.display()))<span class="question-mark">?</span>;
 
             <span class="comment">// Include the VID share if available.
-            </span><span class="kw">let </span>vid_share = <span class="self">self
-                </span>.load_vid_share(ViewNumber::new(v))<span class="question-mark">?
-                </span>.map(|proposal| proposal.data);
+            </span><span class="kw">let </span>vid_share = <span class="self">self</span>.load_vid_share(v)<span class="question-mark">?</span>.map(|proposal| proposal.data);
             <span class="kw">if </span>vid_share.is_none() {
-                <span class="macro">tracing::debug!</span>(view = v, <span class="string">"VID share not available at decide"</span>);
+                <span class="macro">tracing::debug!</span>(<span class="question-mark">?</span>v, <span class="string">"VID share not available at decide"</span>);
             }
 
             <span class="comment">// Fill in the full block payload using the DA proposals we had persisted.
-            </span><span class="kw">if let </span><span class="prelude-val">Some</span>(proposal) = <span class="self">self</span>.load_da_proposal(ViewNumber::new(v))<span class="question-mark">? </span>{
+            </span><span class="kw">if let </span><span class="prelude-val">Some</span>(proposal) = <span class="self">self</span>.load_da_proposal(v)<span class="question-mark">? </span>{
                 <span class="kw">let </span>payload = Payload::from_bytes(
                     <span class="kw-2">&amp;</span>proposal.data.encoded_transactions,
                     <span class="kw-2">&amp;</span>proposal.data.metadata,
                 );
                 leaf.fill_block_payload_unchecked(payload);
             } <span class="kw">else </span>{
-                <span class="macro">tracing::debug!</span>(view = v, <span class="string">"DA proposal not available at decide"</span>);
+                <span class="macro">tracing::debug!</span>(<span class="question-mark">?</span>v, <span class="string">"DA proposal not available at decide"</span>);
             }
 
             <span class="kw">let </span>info = LeafInfo {
@@ -1591,7 +1565,7 @@
         </span><span class="kw">if let </span><span class="prelude-val">Some</span>((oldest_view, <span class="kw">_</span>)) = leaves.first_key_value() {
             <span class="comment">// The only exception is when the oldest leaf is the genesis leaf; then there was no
             // previous decide event.
-            </span><span class="kw">if </span><span class="kw-2">*</span>oldest_view &gt; <span class="number">0 </span>{
+            </span><span class="kw">if </span><span class="kw-2">*</span>oldest_view &gt; ViewNumber::genesis() {
                 leaves.pop_first();
             }
         }
@@ -1602,7 +1576,7 @@
             <span class="kw">let </span>height = leaf.leaf.block_header().block_number();
             consumer
                 .handle_event(<span class="kw-2">&amp;</span>Event {
-                    view_number: ViewNumber::new(view),
+                    view_number: view,
                     event: EventType::Decide {
                         qc: Arc::new(qc.to_qc2()),
                         leaf_chain: Arc::new(<span class="macro">vec!</span>[leaf]),
@@ -1675,15 +1649,12 @@
             <span class="kw">let </span><span class="kw-2">mut </span>anchor: <span class="prelude-ty">Option</span>&lt;(Leaf2, QuorumCertificate2&lt;SeqTypes&gt;)&gt; = <span class="prelude-val">None</span>;
 
             <span class="comment">// Return the latest decided leaf.
-            </span><span class="kw">for </span>entry <span class="kw">in
-                </span>fs::read_dir(<span class="self">self</span>.decided_leaf_path()).context(<span class="string">"opening decided leaf directory"</span>)<span class="question-mark">?
-            </span>{
-                <span class="kw">let </span>file = entry.context(<span class="string">"reading decided leaf directory"</span>)<span class="question-mark">?</span>.path();
+            </span><span class="kw">for </span>(<span class="kw">_</span>, path) <span class="kw">in </span>view_files(<span class="self">self</span>.decided_leaf_path())<span class="question-mark">? </span>{
                 <span class="kw">let </span>bytes =
-                    fs::read(<span class="kw-2">&amp;</span>file).context(<span class="macro">format!</span>(<span class="string">"reading decided leaf {}"</span>, file.display()))<span class="question-mark">?</span>;
+                    fs::read(<span class="kw-2">&amp;</span>path).context(<span class="macro">format!</span>(<span class="string">"reading decided leaf {}"</span>, path.display()))<span class="question-mark">?</span>;
                 <span class="kw">let </span>(leaf, qc) =
                     bincode::deserialize::&lt;(Leaf, QuorumCertificate&lt;SeqTypes&gt;)&gt;(<span class="kw-2">&amp;</span>bytes)
-                        .context(<span class="macro">format!</span>(<span class="string">"parsing decided leaf {}"</span>, file.display()))<span class="question-mark">?</span>;
+                        .context(<span class="macro">format!</span>(<span class="string">"parsing decided leaf {}"</span>, path.display()))<span class="question-mark">?</span>;
                 <span class="kw">if let </span><span class="prelude-val">Some</span>((anchor_leaf, <span class="kw">_</span>)) = <span class="kw-2">&amp;</span>anchor {
                     <span class="kw">if </span>leaf.view_number() &gt; anchor_leaf.view_number() {
                         <span class="kw">let </span>leaf2 = leaf.into();
@@ -2012,48 +1983,11 @@
             <span class="kw">return </span><span class="prelude-val">Ok</span>(Default::default());
         }
 
-        <span class="comment">// Then, we want to get the entries in this directory since they'll be the
-        // key/value pairs for our map.
-        </span><span class="kw">let </span>files = fs::read_dir(dir_path.clone())<span class="question-mark">?</span>.filter_map(|entry| {
-            <span class="kw">let </span>entry = entry.ok()<span class="question-mark">?</span>;
-            <span class="kw">if </span>entry.file_type().ok()<span class="question-mark">?</span>.is_file() &amp;&amp; entry.path().extension()<span class="question-mark">? </span>== <span class="string">"txt" </span>{
-                <span class="prelude-val">Some</span>(entry.path())
-            } <span class="kw">else </span>{
-                <span class="prelude-val">None
-            </span>}
-        });
-
-        <span class="kw">let </span><span class="kw-2">mut </span>map = BTreeMap::new();
-        <span class="kw">for </span>file <span class="kw">in </span>files {
-            <span class="comment">// Parse each file into a proposal if possible. We ignore files we don't recognize or
-            // can't parse, as sometimes we can end up with random extra files (e.g. swap files) in
-            // the directory.
-            //
-            // Get the stem to remove the ".txt" from the end.
-            </span><span class="kw">let </span><span class="prelude-val">Some</span>(file_name) = file.file_stem() <span class="kw">else </span>{
-                <span class="kw">continue</span>;
-            };
-
-            <span class="comment">// Parse the filename (which corresponds to the view)
-            </span><span class="kw">let </span>file_name = file_name.to_string_lossy();
-            <span class="kw">let </span><span class="prelude-val">Ok</span>(view_number) = file_name.parse::&lt;u64&gt;() <span class="kw">else </span>{
-                <span class="macro">tracing::info!</span>(
-                    %file_name,
-                    <span class="string">"ignoring extraneous file in quorum proposals directory"
-                </span>);
-                <span class="kw">continue</span>;
-            };
-
-            <span class="comment">// Now, we'll try and load the proposal associated with this function. In this case we
-            // do propagate errors: errors from the file system are more likely to be some transient
-            // issue (e.g. failure to connect to a network-mounted file system) than an issue with
-            // the file itself (like a swap file being left over in the directory). Thus, this file
-            // likely does have good data even if we can't read it, so we do want to propagate the
-            // error and eventually retry.
-            </span><span class="kw">let </span>proposal_bytes = fs::read(file)<span class="question-mark">?</span>;
-
-            <span class="comment">// Then, deserialize.
-            </span><span class="kw">let </span>proposal: Proposal&lt;SeqTypes, QuorumProposal&lt;SeqTypes&gt;&gt; =
+        <span class="comment">// Read quorum proposals from every data file in this directory.
+        </span><span class="kw">let </span><span class="kw-2">mut </span>map = BTreeMap::new();
+        <span class="kw">for </span>(view, path) <span class="kw">in </span>view_files(<span class="kw-2">&amp;</span>dir_path)<span class="question-mark">? </span>{
+            <span class="kw">let </span>proposal_bytes = fs::read(path)<span class="question-mark">?</span>;
+            <span class="kw">let </span>proposal: Proposal&lt;SeqTypes, QuorumProposal&lt;SeqTypes&gt;&gt; =
                 <span class="kw">match </span>bincode::deserialize(<span class="kw-2">&amp;</span>proposal_bytes) {
                     <span class="prelude-val">Ok</span>(proposal) =&gt; proposal,
                     <span class="prelude-val">Err</span>(err) =&gt; {
@@ -2063,17 +1997,14 @@
                         // many proposals as we can rather than letting one bad proposal cause the
                         // entire operation to fail, and it is still possible that this was just
                         // some unintended file whose name happened to match the naming convention.
-                        </span><span class="macro">tracing::warn!</span>(
-                            view_number,
-                            <span class="string">"ignoring malformed quorum proposal file: {err:#}"
-                        </span>);
+                        </span><span class="macro">tracing::warn!</span>(<span class="question-mark">?</span>view, <span class="string">"ignoring malformed quorum proposal file: {err:#}"</span>);
                         <span class="kw">continue</span>;
                     }
                 };
             <span class="kw">let </span>proposal2 = convert_proposal(proposal);
 
             <span class="comment">// Push to the map and we're done.
-            </span>map.insert(ViewNumber::new(view_number), proposal2);
+            </span>map.insert(view, proposal2);
         }
 
         <span class="prelude-val">Ok</span>(map)
@@ -2237,6 +2168,31 @@
     }
 
     <span class="prelude-val">Ok</span>(network_config)
+}
+
+<span class="doccomment">/// Get all paths under `dir` whose name is of the form &lt;view number&gt;.txt.
+</span><span class="kw">fn </span>view_files(
+    dir: <span class="kw">impl </span>AsRef&lt;Path&gt;,
+) -&gt; anyhow::Result&lt;<span class="kw">impl </span>Iterator&lt;Item = (ViewNumber, PathBuf)&gt;&gt; {
+    <span class="prelude-val">Ok</span>(fs::read_dir(dir.as_ref())<span class="question-mark">?</span>.filter_map(<span class="kw">move </span>|entry| {
+        <span class="kw">let </span>dir = dir.as_ref().display();
+        <span class="kw">let </span>entry = entry.ok()<span class="question-mark">?</span>;
+        <span class="kw">if </span>!entry.file_type().ok()<span class="question-mark">?</span>.is_file() {
+            <span class="macro">tracing::debug!</span>(%dir, <span class="question-mark">?</span>entry, <span class="string">"ignoring non-file in data directory"</span>);
+            <span class="kw">return </span><span class="prelude-val">None</span>;
+        }
+        <span class="kw">let </span>path = entry.path();
+        <span class="kw">if </span>path.extension()<span class="question-mark">? </span>!= <span class="string">"txt" </span>{
+            <span class="macro">tracing::debug!</span>(%dir, <span class="question-mark">?</span>entry, <span class="string">"ignoring non-text file in data directory"</span>);
+            <span class="kw">return </span><span class="prelude-val">None</span>;
+        }
+        <span class="kw">let </span>file_name = path.file_stem()<span class="question-mark">?</span>;
+        <span class="kw">let </span><span class="prelude-val">Ok</span>(view_number) = file_name.to_string_lossy().parse::&lt;u64&gt;() <span class="kw">else </span>{
+            <span class="macro">tracing::debug!</span>(%dir, <span class="question-mark">?</span>file_name, <span class="string">"ignoring extraneous file in data directory"</span>);
+            <span class="kw">return </span><span class="prelude-val">None</span>;
+        };
+        <span class="prelude-val">Some</span>((ViewNumber::new(view_number), entry.path().to_owned()))
+    }))
 }
 
 <span class="attr">#[cfg(test)]
