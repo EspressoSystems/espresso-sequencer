@@ -646,7 +646,7 @@ pub async fn validate_proposal_safety_and_liveness<
         let justify_qc_epoch = option_epoch_from_block_number::<TYPES>(
             validation_info
                 .upgrade_lock
-                .epochs_enabled(justify_qc.view_number())
+                .epochs_enabled(proposed_leaf.view_number())
                 .await,
             parent_leaf.height(),
             validation_info.epoch_height,
