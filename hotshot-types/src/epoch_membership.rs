@@ -61,7 +61,7 @@ where
         &self.membership
     }
 
-    /// Get a Membership for a given Epoch, which is guarenteed to have a stake
+    /// Get a Membership for a given Epoch, which is guaranteed to have a stake
     /// table for the given Epoch
     pub async fn membership_for_epoch(
         &self,
@@ -78,17 +78,17 @@ where
             return Ok(ret_val);
         }
         if self.catchup_map.lock().await.contains_key(&epoch) {
-            return Err(warn!("Stake table for Epoch {:?} Unavaliable. Catching already in Progress", epoch));
+            return Err(warn!("Stake table for Epoch {:?} Unavailable. Catching already in Progress", epoch));
         }
         let coordinator = self.clone();
         spawn_catchup(coordinator, epoch);
 
-        Err(warn!("Stake table for Epoch {:?} Unavaliable. Starting catchpu", epoch))
+        Err(warn!("Stake table for Epoch {:?} Unavailable. Starting catchpu", epoch))
     }
 
     /// Catches the membership up to the epoch passed as an argument.  
     /// To do this try to get the stake table for the epoch containing this epoch's root
-    /// if the root does not exist recusively catchup until you've found it
+    /// if the root does not exist recursively catchup until you've found it
     ///
     /// If there is another catchup in progress this will not duplicate efforts
     /// e.g. if we start with only epoch 0 stake table and call catchup for epoch 10, then call catchup for epoch 20
@@ -166,10 +166,10 @@ fn spawn_catchup<T: NodeType>(coordinator: EpochMembershipCoordinator<T>, epoch:
         let _ = tx.broadcast_direct(ret).await;
     });
 }
-/// Wrapper around a membership that guarentees that the epoch
+/// Wrapper around a membership that guarantees that the epoch
 /// has a stake table
 pub struct EpochMembership<TYPES: NodeType> {
-    /// Epoch the `membership` is guarenteed to have a stake table for
+    /// Epoch the `membership` is guaranteed to have a stake table for
     pub epoch: Option<TYPES::Epoch>,
     /// Underlying membership
     pub coordinator: EpochMembershipCoordinator<TYPES>,
