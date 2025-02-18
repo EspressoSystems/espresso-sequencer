@@ -20,18 +20,18 @@ lint:
     cargo clippy --workspace --features testing --all-targets -- -D warnings
     cargo clippy --workspace --all-targets --manifest-path sequencer-sqlite/Cargo.toml -- -D warnings
 
-build profile="test":
+build profile="test" features="":
     #!/usr/bin/env bash
     set -euxo pipefail
     # Use the same target dir for both `build` invocations
     export CARGO_TARGET_DIR=${CARGO_TARGET_DIR:-target}
-    cargo build --profile {{profile}}
-    cargo build --profile {{profile}} --manifest-path ./sequencer-sqlite/Cargo.toml
+    cargo build --profile {{profile}} {{features}}
+    cargo build --profile {{profile}} --manifest-path ./sequencer-sqlite/Cargo.toml {{features}}
 
 demo-native-mp *args: build
     scripts/demo-native -f process-compose.yaml -f process-compose-mp.yml {{args}}
 
-demo-native-pos *args: build
+demo-native-pos *args: (build "test" "--features fee,pos")
     ESPRESSO_SEQUENCER_GENESIS_FILE=data/genesis/demo-pos.toml scripts/demo-native -f process-compose.yaml {{args}}
 
 demo-native-pos-base *args: build
