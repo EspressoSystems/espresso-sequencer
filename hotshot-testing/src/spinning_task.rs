@@ -9,7 +9,6 @@ use std::{
     sync::Arc,
 };
 
-use anyhow::Result;
 use async_broadcast::broadcast;
 use async_lock::RwLock;
 use async_trait::async_trait;
@@ -38,6 +37,7 @@ use hotshot_types::{
     vote::HasViewNumber,
     ValidatorConfig,
 };
+use hotshot_utils::anytrace::*;
 
 use crate::{
     test_launcher::Network,
@@ -100,6 +100,7 @@ where
     >,
 {
     type Event = Event<TYPES>;
+    type Error = Error;
 
     async fn handle_event(&mut self, (message, _id): (Self::Event, usize)) -> Result<()> {
         let Event { view_number, event } = message;

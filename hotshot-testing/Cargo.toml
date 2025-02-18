@@ -31,6 +31,7 @@ hotshot-macros = { workspace = true }
 hotshot-task = { workspace = true }
 hotshot-task-impls = { workspace = true }
 hotshot-types = { workspace = true }
+hotshot-utils = { workspace = true }
 itertools = "0.14.0"
 jf-vid = { workspace = true }
 lru = { workspace = true }

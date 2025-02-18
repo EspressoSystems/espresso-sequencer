@@ -48,9 +48,8 @@
 //         let num_nodes_with_stake = 15;
 //         metadata.num_nodes_with_stake = num_nodes_with_stake;
 //         metadata.da_staked_committee_size = num_nodes_with_stake;
-//         metadata.overall_safety_properties.num_failed_views = 20;
 //         metadata.overall_safety_properties.num_successful_views = 20;
-//         metadata.overall_safety_properties.expected_views_to_fail = HashMap::from([
+//         metadata.overall_safety_properties.expected_view_failures = HashMap::from([
 //             (ViewNumber::new(6), false),
 //             (ViewNumber::new(10), false),
 //             (ViewNumber::new(14), false),

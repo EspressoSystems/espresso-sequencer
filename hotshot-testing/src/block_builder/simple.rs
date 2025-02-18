@@ -103,7 +103,7 @@ where
     ) -> Box<dyn BuilderTask<TYPES>> {
         let (change_sender, change_receiver) = broadcast(128);
         let (source, task) = Self::create(num_nodes, changes, change_sender).await;
-        run_builder_source::<_, _, TestVersions>(url, change_receiver, source);
+        run_builder_source(url, change_receiver, source);
 
         Box::new(task)
     }
@@ -211,7 +211,7 @@ impl<TYPES: NodeType> v0_1::data_source::BuilderDataSource<TYPES> for SimpleBuil
 where
     <TYPES as NodeType>::InstanceState: Default,
 {
-    async fn available_blocks<V: Versions>(
+    async fn available_blocks(
         &self,
         _for_parent: &VidCommitment,
         _view_number: u64,
@@ -343,7 +343,6 @@ impl<TYPES: NodeType> SimpleBuilderSource<TYPES> {
         let builder_api_0_1 = hotshot_builder_api::v0_1::builder::define_api::<
             SimpleBuilderSource<TYPES>,
             TYPES,
-            TestVersions,
         >(&Options::default())
         .expect("Failed to construct the builder API");
 
