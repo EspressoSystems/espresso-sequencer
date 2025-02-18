@@ -511,38 +511,17 @@ impl Membership<SeqTypes> for EpochCommittees {
         epoch: Epoch,
         block_header: Header,
     ) -> Option<Box<dyn FnOnce(&mut Self) + Send>> {
-        // TODO: (abdul) fix fetching from contracts
-        // so that order of l1 events match with the update
         let address = self.contract_address?;
-        let genesis_st = self.state(&Some(Epoch::genesis())).unwrap().clone();
 
-        let st = self
-            .l1_client
+        self.l1_client
             .get_stake_table(address.to_alloy(), block_header.l1_head())
             .await
-            .ok();
-
-        let epoch_0_st = genesis_st.stake_table;
-        let epoch0_da = genesis_st.da_members;
-
-        let sss = st.clone().unwrap();
-        let contract_st = sss.stake_table;
-        let contract_da = sss.da_members;
-
-        tracing::warn!("epoch0 st= {epoch_0_st:?}");
-        tracing::warn!("contract st= {contract_st:?}");
-
-        tracing::warn!("epoch0 da= {contract_da:?}");
-        tracing::warn!("contact da= {epoch0_da:?}");
-
-        let stake_tables = StakeTables {
-            stake_table: epoch_0_st.into(),
-            da_members: epoch0_da.into(),
-        };
-
-        Some(Box::new(move |committee: &mut Self| {
-            let _ = committee.update_stake_table(epoch, stake_tables);
-        }))
+            .ok()
+            .map(|stake_table| -> Box<dyn FnOnce(&mut Self) + Send> {
+                Box::new(move |committee: &mut Self| {
+                    let _ = committee.update_stake_table(epoch, stake_table);
+                })
+            })
     }
 }
 #[cfg(test)]
