@@ -221,44 +221,56 @@ impl Inner {
 
     fn collect_garbage(
         &mut self,
-        view: ViewNumber,
-        intervals: &[RangeInclusive<ViewNumber>],
+        decided_view: ViewNumber,
+        prune_intervals: &[RangeInclusive<ViewNumber>],
     ) -> anyhow::Result<()> {
-        let view_number = view;
-        let prune_view = ViewNumber::new(view.saturating_sub(self.view_retention));
+        let prune_view = ViewNumber::new(decided_view.saturating_sub(self.view_retention));
 
-        let delete_files = |intervals: &[RangeInclusive<ViewNumber>],
-                            keep,
-                            dir_path: PathBuf|
-         -> anyhow::Result<()> {
-            if !dir_path.is_dir() {
-                return Ok(());
-            }
-
-            for (v, path) in view_files(dir_path)? {
-                // If the view is the anchor view, keep it no matter what.
-                if let Some(keep) = keep {
-                    if keep == v {
-                        continue;
-                    }
-                }
-                // Otherwise, delete it if it is time to prune this view _or_ if the given
-                // intervals, which we've already successfully processed, contain the view; in
-                // this case we simply don't need it anymore.
-                if v < prune_view || intervals.iter().any(|i| i.contains(&v)) {
-                    fs::remove_file(&path)?;
-                }
-            }
-
-            Ok(())
-        };
-
-        delete_files(intervals, None, self.da_dir_path())?;
-        delete_files(intervals, None, self.vid_dir_path())?;
-        delete_files(intervals, None, self.quorum_proposals_dir_path())?;
+        self.prune_files(self.da_dir_path(), prune_view, None, prune_intervals)?;
+        self.prune_files(self.vid_dir_path(), prune_view, None, prune_intervals)?;
+        self.prune_files(
+            self.quorum_proposals_dir_path(),
+            prune_view,
+            None,
+            prune_intervals,
+        )?;
 
         // Save the most recent leaf as it will be our anchor point if the node restarts.
-        delete_files(intervals, Some(view_number), self.decided_leaf_path())?;
+        self.prune_files(
+            self.decided_leaf_path(),
+            prune_view,
+            Some(decided_view),
+            prune_intervals,
+        )?;
+
+        Ok(())
+    }
+
+    fn prune_files(
+        &mut self,
+        dir_path: PathBuf,
+        prune_view: ViewNumber,
+        keep_decided_view: Option<ViewNumber>,
+        prune_intervals: &[RangeInclusive<ViewNumber>],
+    ) -> anyhow::Result<()> {
+        if !dir_path.is_dir() {
+            return Ok(());
+        }
+
+        for (file_view, path) in view_files(dir_path)? {
+            // If the view is the anchor view, keep it no matter what.
+            if let Some(decided_view) = keep_decided_view {
+                if decided_view == file_view {
+                    continue;
+                }
+            }
+            // Otherwise, delete it if it is time to prune this view _or_ if the given intervals,
+            // which we've already successfully processed, contain the view; in this case we simply
+            // don't need it anymore.
+            if file_view < prune_view || prune_intervals.iter().any(|i| i.contains(&file_view)) {
+                fs::remove_file(&path)?;
+            }
+        }
 
         Ok(())
     }
