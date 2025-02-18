@@ -526,27 +526,36 @@ pub(crate) async fn update_shared_state<
         );
     };
 
-    let (Some(parent_state), _) = validated_view.state_and_delta() else {
+    let (Some(parent_state), maybe_parent_delta) = validated_view.state_and_delta() else {
         bail!("Parent state not found! Consensus internally inconsistent");
     };
 
-    let version = upgrade_lock.version(view_number).await?;
+    let (state, delta) = if is_last_block_in_epoch(proposed_leaf.height(), epoch_height)
+        && proposed_leaf.height() == parent.height()
+        && maybe_parent_delta.is_some()
+    {
+        // This is an epoch transition. We do not want to call `validate_and_apply_header` second
+        // time for the same block. Just grab the state and delta from the parent and update the shared
+        // state with those.
+        (parent_state, maybe_parent_delta.unwrap())
+    } else {
+        let version = upgrade_lock.version(view_number).await?;
 
-    let (validated_state, state_delta) = parent_state
-        .validate_and_apply_header(
-            &instance_state,
-            &parent,
-            &proposed_leaf.block_header().clone(),
-            vid_share.data.vid_common_ref().clone(),
-            version,
-            *view_number,
-        )
-        .await
-        .wrap()
-        .context(warn!("Block header doesn't extend the proposal!"))?;
+        let (validated_state, state_delta) = parent_state
+            .validate_and_apply_header(
+                &instance_state,
+                &parent,
+                &proposed_leaf.block_header().clone(),
+                vid_share.data.vid_common_ref().clone(),
+                version,
+                *view_number,
+            )
+            .await
+            .wrap()
+            .context(warn!("Block header doesn't extend the proposal!"))?;
 
-    let state = Arc::new(validated_state);
-    let delta = Arc::new(state_delta);
+        (Arc::new(validated_state), Arc::new(state_delta))
+    };
 
     // Now that we've rounded everyone up, we need to update the shared state
     let mut consensus_writer = consensus.write().await;
