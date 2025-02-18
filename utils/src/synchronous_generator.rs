@@ -12,7 +12,6 @@ pub struct ChunkGenerator {
 impl ChunkGenerator {
     /// Given a `start`, `end` and `chunk_size`, create a `ChunkGenerator`.
     /// As with `Range`, inclusive `start`, exclusive `end`.
-    /// Panics if `chunk_size > end`.
     // TODO if we make type generic we would take `Range` types here too.
     pub fn new(start: u64, end: u64, chunk_size: u64) -> Self {
         let next = if end < chunk_size {
@@ -60,7 +59,7 @@ mod test {
         assert_eq![Some(9..10), g.next()];
         assert_eq![None, g.next()];
 
-        // Test chunk_size > that range.end
+        // Test chunk_size > than range.end
         let mut g = ChunkGenerator::new(0, 0, 3);
         assert_eq![Some(0..0), g.next()];
         assert_eq![None, g.next()];
