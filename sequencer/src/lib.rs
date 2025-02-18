@@ -23,6 +23,7 @@ use espresso_types::{
 use ethers_conv::ToAlloy;
 use genesis::L1Finalized;
 use proposal_fetcher::ProposalFetcherConfig;
+use sequencer_utils::stake_table::PermissionedStakeTableUpdate;
 use std::sync::Arc;
 use tokio::select;
 // Should move `STAKE_TABLE_CAPACITY` in the sequencer repo when we have variate stake table support
@@ -493,6 +494,12 @@ pub async fn init_node<P: SequencerPersistence, V: Versions>(
         &instance_state,
         network_config.config.epoch_height,
     );
+
+    // save initial stake table into toml file
+    // this will be helpful to load it into contract
+    PermissionedStakeTableUpdate::save_initial_stake_table_from_hotshot_config(
+        network_config.config.clone(),
+    )?;
 
     // Initialize the Libp2p network
     let network = {

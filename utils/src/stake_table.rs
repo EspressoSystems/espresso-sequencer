@@ -14,7 +14,7 @@ use ethers::{
 };
 use hotshot::types::BLSPubKey;
 use hotshot_contract_adapter::stake_table::{bls_jf_to_sol, NodeInfoJf};
-use hotshot_types::network::PeerConfigKeys;
+use hotshot_types::{network::PeerConfigKeys, traits::signature_key::StakeTableEntryType, HotShotConfig};
 use url::Url;
 
 use std::{fs, path::Path, sync::Arc, time::Duration};
@@ -104,6 +104,16 @@ impl PermissionedStakeTableUpdate {
         )
     }
 
+    pub fn to_toml_file(&self, path: &Path) -> anyhow::Result<()> {
+        let toml_string = toml::to_string_pretty(self)
+            .unwrap_or_else(|err| panic!("Failed to serialize config to TOML: {err}"));
+
+        fs::write(path, toml_string)
+            .unwrap_or_else(|_| panic!("Could not write config file to {}", path.display()));
+
+        Ok(())
+    }
+
     fn stakers_to_remove(&self) -> Vec<G2Point> {
         self.stakers_to_remove
             .iter()
@@ -119,6 +129,26 @@ impl PermissionedStakeTableUpdate {
                 node_info.into()
             })
             .collect()
+    }
+
+    pub fn save_initial_stake_table_from_hotshot_config(
+        config: HotShotConfig<BLSPubKey>,
+    ) -> anyhow::Result<()> {
+        let committee_members = config.known_nodes_with_stake.clone();
+        let known_da_nodes = config.known_da_nodes.clone().clone();
+        let members = committee_members
+            .into_iter()
+            .map(|m| PeerConfigKeys {
+                stake_table_key: m.stake_table_entry.public_key(),
+                state_ver_key: m.state_ver_key.clone(),
+                stake: m.stake_table_entry.stake().as_u64(),
+                da: known_da_nodes.contains(&m),
+            })
+            .collect();
+
+        Self::new(members, vec![]).to_toml_file(Path::new("data/initial_stake_table.toml"))?;
+
+        Ok(())
     }
 }
 

@@ -546,7 +546,6 @@ impl Membership<SeqTypes> for EpochCommittees {
         }))
     }
 }
-
 #[cfg(test)]
 mod tests {
     use contract_bindings_alloy::permissionedstaketable::PermissionedStakeTable::NodeInfo;
