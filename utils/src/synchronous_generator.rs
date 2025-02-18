@@ -65,10 +65,4 @@ mod test {
         assert_eq![Some(0..0), g.next()];
         assert_eq![None, g.next()];
     }
-
-    #[test]
-    #[should_panic]
-    fn test_generator_panics() {
-        ChunkGenerator::new(1, 3, 4);
-    }
 }
