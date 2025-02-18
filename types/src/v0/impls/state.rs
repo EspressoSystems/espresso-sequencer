@@ -909,29 +909,6 @@ impl HotShotState<SeqTypes> for ValidatedState {
         version: Version,
         view_number: u64,
     ) -> Result<(Self, Self::Delta), Self::Error> {
-        // During epoch transition, hotshot propagates the same block again
-        // we should totally skip this block, and return the same validated state
-        // This block will have the same parent block height
-
-        tracing::debug!(
-            "parent_height={} proposed_height={}",
-            parent_leaf.height(),
-            proposed_header.height(),
-        );
-
-        if proposed_header.height() % instance.epoch_height == 0
-            && parent_leaf.height() == proposed_header.height()
-        {
-            tracing::error!(
-                "skipping block.. parent_height={} proposed_height={} epoch_height={}",
-                parent_leaf.height(),
-                proposed_header.height(),
-                instance.epoch_height,
-            );
-
-            return Ok((self.clone(), Delta::default()));
-        }
-
         // Unwrapping here is okay as we retry in a loop
         //so we should either get a validated state or until hotshot cancels the task
         let (validated_state, delta) = self
