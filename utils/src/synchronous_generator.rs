@@ -15,16 +15,15 @@ impl ChunkGenerator {
     /// Panics if `chunk_size > end`.
     // TODO if we make type generic we would take `Range` types here too.
     pub fn new(start: u64, end: u64, chunk_size: u64) -> Self {
-        // TODO maybe instead of panic, behave as an iterator with a
-        // single item of start..end
-        if end < chunk_size {
-            panic!("End bound must be greater than chunk_size");
-        }
-        let range = start..end;
+        let next = if end < chunk_size {
+            Some(start..end)
+        } else {
+            Some(start..(start + chunk_size - 1))
+        };
         Self {
-            range,
+            range: start..end,
             chunk_size,
-            next: Some(start..(start + chunk_size - 1)),
+            next,
         }
     }
 }
@@ -60,7 +59,13 @@ mod test {
         assert_eq![Some(6..8), g.next()];
         assert_eq![Some(9..10), g.next()];
         assert_eq![None, g.next()];
+
+        // Test chunk_size > that range.end
+        let mut g = ChunkGenerator::new(0, 0, 3);
+        assert_eq![Some(0..0), g.next()];
+        assert_eq![None, g.next()];
     }
+
     #[test]
     #[should_panic]
     fn test_generator_panics() {
