@@ -934,28 +934,33 @@ impl L1Client {
     ) -> Option<StakeTables> {
         let opt = self.options();
         let retry_delay = opt.l1_retry_delay;
-        let chunk_size = opt.l1_events_max_block_range as usize;
+        let chunk_size = opt.l1_events_max_block_range;
+        let state = self.state.clone();
 
-        let last_head = {
-            let mut state = self.state.lock().await;
+        let last_finalized = {
+            let mut state = state.lock().await;
             if let Some(st) = state.stake.get(&block) {
                 return Some(st.clone());
             } else {
-                state.snapshot.head
+                state
+                    .snapshot
+                    .finalized
+                    .map(|block_info| block_info.number)
+                    .unwrap_or(0)
             }
         };
 
-        let chunks = L1Client::chunky2(last_head, block, chunk_size);
+        let chunks = ChunkGenerator::new(last_finalized, block, chunk_size);
         let contract = PermissionedStakeTableInstance::new(contract_address, self.provider.clone());
 
         let mut events: Vec<StakersUpdated> = Vec::new();
-        for (from, to) in chunks {
-            tracing::debug!(from, to, "fetch stake table events in range");
+        for Range { start, end } in chunks {
+            tracing::debug!(start, end, "fetch stake table events in range");
             loop {
                 match contract
                     .StakersUpdated_filter()
-                    .from_block(from)
-                    .to_block(to)
+                    .from_block(start)
+                    .to_block(start)
                     .query()
                     .await
                 {
@@ -966,7 +971,7 @@ impl L1Client {
                         break;
                     }
                     Err(err) => {
-                        tracing::warn!(from, to, %err, "Stake Table L1Event Error");
+                        tracing::warn!(start, end, %err, "Stake Table L1Event Error");
                         sleep(retry_delay).await;
                     }
                 }
