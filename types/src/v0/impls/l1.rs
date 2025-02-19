@@ -947,7 +947,7 @@ impl L1Client {
                     .finalized
                     .map(|block_info| block_info.number)
                     // TODO what could be a reasonable default?
-                    // l1_head - x?
+                    // set l1 block at contract deployment
                     .unwrap_or(0)
             }
         };
