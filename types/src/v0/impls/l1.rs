@@ -946,6 +946,8 @@ impl L1Client {
                     .snapshot
                     .finalized
                     .map(|block_info| block_info.number)
+                    // TODO what could be a reasonable default?
+                    // l1_head - x?
                     .unwrap_or(0)
             }
         };
