@@ -1576,9 +1576,10 @@ mod test {
     use futures::stream::TryStreamExt;
     use hotshot_example_types::node_types::TestVersions;
     use hotshot_types::{
+        data::vid_commitment,
         simple_certificate::QuorumCertificate,
         traits::{
-            block_contents::vid_commitment, node_implementation::Versions,
+            block_contents::BlockHeader, node_implementation::Versions,
             signature_key::SignatureKey, EncodeBytes,
         },
         vid::advz::advz_scheme,
@@ -1817,6 +1818,7 @@ mod test {
             .unwrap();
         let payload_commitment = vid_commitment::<TestVersions>(
             &leaf_payload_bytes_arc,
+            &leaf.block_header().metadata().encode(),
             2,
             <TestVersions as Versions>::Base::VERSION,
         )

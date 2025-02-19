@@ -1185,8 +1185,7 @@ mod test_headers {
 
     use ethers::{types::Address, utils::Anvil};
     use hotshot_query_service::testing::mocks::MockVersions;
-    use hotshot_types::{traits::signature_key::BuilderSignatureKey, vid::advz::advz_scheme};
-    use jf_vid::VidScheme;
+    use hotshot_types::traits::signature_key::BuilderSignatureKey;
 
     use sequencer_utils::test_utils::setup_test;
     use v0_1::{BlockMerkleTree, FeeMerkleTree, L1Client};
@@ -1497,7 +1496,6 @@ mod test_headers {
             .with_current_version(StaticVersion::<0, 1>::version());
 
         let genesis = GenesisForTest::default().await;
-        let vid_common = advz_scheme(1).disperse([]).unwrap().common;
 
         let mut parent_state = genesis.validated_state.clone();
 

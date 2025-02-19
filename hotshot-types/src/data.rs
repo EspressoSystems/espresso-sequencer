@@ -20,6 +20,7 @@ use async_lock::RwLock;
 use bincode::Options;
 use committable::{Commitment, CommitmentBoundsArkless, Committable, RawCommitmentBuilder};
 use hotshot_utils::anytrace::*;
+use jf_vid::VidScheme;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use tagged_base64::TaggedBase64;
@@ -40,8 +41,7 @@ use crate::{
     simple_vote::{HasEpoch, QuorumData, QuorumData2, UpgradeProposalData, VersionedVoteData},
     traits::{
         block_contents::{
-            vid_commitment, BlockHeader, BuilderFee, EncodeBytes, TestableBlock,
-            GENESIS_VID_NUM_STORAGE_NODES,
+            BlockHeader, BuilderFee, EncodeBytes, TestableBlock, GENESIS_VID_NUM_STORAGE_NODES,
         },
         node_implementation::{ConsensusTime, NodeType, Versions},
         signature_key::SignatureKey,
@@ -49,7 +49,10 @@ use crate::{
         BlockPayload,
     },
     utils::{bincode_opts, genesis_epoch_from_version, option_epoch_from_block_number},
-    vid::{advz::ADVZCommitment, advz::ADVZShare, avidm::AvidMCommitment, avidm::AvidMShare},
+    vid::{
+        advz::{advz_scheme, ADVZCommitment, ADVZShare},
+        avidm::{init_avidm_param, AvidMCommitment, AvidMScheme, AvidMShare},
+    },
     vote::{Certificate, HasViewNumber},
 };
 
@@ -312,6 +315,34 @@ impl VidCommitment {
     }
 }
 
+/// Compute the VID payload commitment.
+/// TODO(Gus) delete this function?
+/// # Panics
+/// If the VID computation fails.
+#[must_use]
+#[allow(clippy::panic)]
+pub fn vid_commitment<V: Versions>(
+    encoded_transactions: &[u8],
+    metadata: &[u8],
+    num_storage_nodes: usize,
+    version: Version,
+) -> VidCommitment {
+    if version < V::Epochs::VERSION {
+        let encoded_tx_len = encoded_transactions.len();
+        advz_scheme(num_storage_nodes).commit_only(encoded_transactions).map(VidCommitment::V0).unwrap_or_else(|err| panic!("VidScheme::commit_only failure:(num_storage_nodes,payload_byte_len)=({num_storage_nodes},{encoded_tx_len}) error: {err}"))
+    } else {
+        let param = init_avidm_param(num_storage_nodes).unwrap();
+        let encoded_tx_len = encoded_transactions.len();
+        AvidMScheme::commit(
+            &param,
+            encoded_transactions,
+            ns_table::parse_ns_table(encoded_tx_len, metadata),
+        )
+        .map(VidCommitment::V1)
+        .unwrap()
+    }
+}
+
 /// VID share type
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub enum VidShare {
@@ -332,6 +363,7 @@ impl From<AvidMShare> for VidShare {
     }
 }
 
+mod ns_table;
 pub mod vid_disperse;
 
 /// VID dispersal data
@@ -547,7 +579,6 @@ impl<TYPES: NodeType> VidDisperseShare<TYPES> {
         }
     }
     /// Return the internal data epoch payload VID commitment
-    /// TODO(Chengyu): restructure this, since payload commitment will have different types given different version.
     pub fn data_epoch_payload_commitment(&self) -> Option<AvidMCommitment> {
         match self {
             Self::V0(_) => None,
@@ -556,7 +587,6 @@ impl<TYPES: NodeType> VidDisperseShare<TYPES> {
     }
 
     /// Return the target epoch
-    /// TODO(Chengyu): remove this?
     pub fn target_epoch(&self) -> Option<<TYPES as NodeType>::Epoch> {
         match self {
             Self::V0(_) => None,
@@ -1069,6 +1099,7 @@ impl<TYPES: NodeType> Leaf2<TYPES> {
         let genesis_version = upgrade_lock.version_infallible(genesis_view).await;
         let payload_commitment = vid_commitment::<V>(
             &payload_bytes,
+            &metadata.encode(),
             GENESIS_VID_NUM_STORAGE_NODES,
             genesis_version,
         );
@@ -1158,7 +1189,12 @@ impl<TYPES: NodeType> Leaf2<TYPES> {
         version: Version,
     ) -> std::result::Result<(), BlockError> {
         let encoded_txns = block_payload.encode();
-        let commitment = vid_commitment::<V>(&encoded_txns, num_storage_nodes, version);
+        let commitment = vid_commitment::<V>(
+            &encoded_txns,
+            &self.block_header.metadata().encode(),
+            num_storage_nodes,
+            version,
+        );
         if commitment != self.block_header.payload_commitment() {
             return Err(BlockError::InconsistentPayloadCommitment);
         }
@@ -1454,6 +1490,7 @@ impl<TYPES: NodeType> Leaf<TYPES> {
         let genesis_version = upgrade_lock.version_infallible(genesis_view).await;
         let payload_commitment = vid_commitment::<V>(
             &payload_bytes,
+            &metadata.encode(),
             GENESIS_VID_NUM_STORAGE_NODES,
             genesis_version,
         );
@@ -1531,7 +1568,12 @@ impl<TYPES: NodeType> Leaf<TYPES> {
         version: Version,
     ) -> std::result::Result<(), BlockError> {
         let encoded_txns = block_payload.encode();
-        let commitment = vid_commitment::<V>(&encoded_txns, num_storage_nodes, version);
+        let commitment = vid_commitment::<V>(
+            &encoded_txns,
+            &self.block_header.metadata().encode(),
+            num_storage_nodes,
+            version,
+        );
         if commitment != self.block_header.payload_commitment() {
             return Err(BlockError::InconsistentPayloadCommitment);
         }

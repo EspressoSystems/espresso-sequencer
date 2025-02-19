@@ -784,10 +784,8 @@ pub mod node_tests {
         state_types::TestInstanceState,
     };
     use hotshot_types::{
-        traits::{
-            block_contents::{vid_commitment, EncodeBytes},
-            node_implementation::Versions,
-        },
+        data::vid_commitment,
+        traits::{block_contents::EncodeBytes, node_implementation::Versions},
         vid::advz::{advz_scheme, ADVZScheme},
     };
     use jf_vid::VidScheme;
@@ -975,6 +973,7 @@ pub mod node_tests {
             let encoded = payload.encode();
             let payload_commitment = vid_commitment::<TestVersions>(
                 &encoded,
+                &metadata.encode(),
                 1,
                 <TestVersions as Versions>::Base::VERSION,
             );

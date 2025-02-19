@@ -19,21 +19,14 @@ use std::{
 
 use async_trait::async_trait;
 use committable::{Commitment, Committable};
-use jf_vid::VidScheme;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use vbs::version::Version;
 
 use super::signature_key::BuilderSignatureKey;
 use crate::{
-    data::Leaf2,
-    data::VidCommitment,
-    traits::{
-        node_implementation::{NodeType, Versions},
-        states::InstanceState,
-        ValidatedState,
-    },
+    data::{Leaf2, VidCommitment},
+    traits::{node_implementation::NodeType, states::InstanceState, ValidatedState},
     utils::BuilderCommitment,
-    vid::advz::advz_scheme,
 };
 
 /// Trait for structures that need to be unambiguously encoded as bytes.
@@ -142,22 +135,6 @@ pub trait TestableBlock<TYPES: NodeType>: BlockPayload<TYPES> + Debug {
 
     /// the number of transactions in this block
     fn txn_count(&self) -> u64;
-}
-
-/// Compute the VID payload commitment.
-/// TODO(Gus) delete this function?
-/// TODO(Chengyu): use the version information
-/// # Panics
-/// If the VID computation fails.
-#[must_use]
-#[allow(clippy::panic)]
-pub fn vid_commitment<V: Versions>(
-    encoded_transactions: &[u8],
-    num_storage_nodes: usize,
-    _version: Version,
-) -> VidCommitment {
-    let encoded_tx_len = encoded_transactions.len();
-    advz_scheme(num_storage_nodes).commit_only(encoded_transactions).map(VidCommitment::V0).unwrap_or_else(|err| panic!("VidScheme::commit_only failure:(num_storage_nodes,payload_byte_len)=({num_storage_nodes},{encoded_tx_len}) error: {err}"))
 }
 
 /// The number of storage nodes to use when computing the genesis VID commitment.

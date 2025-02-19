@@ -45,7 +45,6 @@ use crate::constants::SRS_DEGREE;
 ///
 /// # Panics
 /// When the construction fails for the underlying VID scheme.
-// TODO(Chengyu): move all things below to advz submodule.
 #[must_use]
 #[memoize::memoize(SharedCache, Capacity: 10)]
 pub fn advz_scheme(num_storage_nodes: usize) -> ADVZScheme {

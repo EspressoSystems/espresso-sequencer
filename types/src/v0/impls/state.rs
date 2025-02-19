@@ -1060,9 +1060,9 @@ mod test {
     use ethers::types::U256;
     use hotshot::{helpers::initialize_logging, traits::BlockPayload};
     use hotshot_query_service::{testing::mocks::MockVersions, Resolvable};
-    use hotshot_types::traits::{
-        block_contents::vid_commitment, node_implementation::Versions,
-        signature_key::BuilderSignatureKey, EncodeBytes,
+    use hotshot_types::{
+        data::vid_commitment,
+        traits::{node_implementation::Versions, signature_key::BuilderSignatureKey, EncodeBytes},
     };
     use sequencer_utils::ser::FromStringOrInteger;
     use tracing::debug;
@@ -1089,6 +1089,7 @@ mod test {
 
             let payload_commitment = vid_commitment::<MockVersions>(
                 &payload_bytes,
+                &metadata.encode(),
                 1,
                 <MockVersions as Versions>::Base::VERSION,
             );

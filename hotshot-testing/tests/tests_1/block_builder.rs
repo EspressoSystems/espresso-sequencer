@@ -19,11 +19,9 @@ use hotshot_testing::block_builder::{
     BuilderTask, RandomBuilderImplementation, TestBuilderImplementation,
 };
 use hotshot_types::{
+    data::vid_commitment,
     network::RandomBuilderConfig,
-    traits::{
-        block_contents::vid_commitment, node_implementation::NodeType, signature_key::SignatureKey,
-        BlockPayload,
-    },
+    traits::{node_implementation::NodeType, signature_key::SignatureKey, BlockPayload},
 };
 use tide_disco::Url;
 use tokio::time::sleep;
@@ -65,7 +63,7 @@ async fn test_random_block_builder() {
         // Test getting blocks
         let blocks = client
             .available_blocks(
-                vid_commitment::<TestVersions>(&[], 1, Version { major: 0, minor: 0 }),
+                vid_commitment::<TestVersions>(&[], &[], 1, Version { major: 0, minor: 0 }),
                 dummy_view_number,
                 pub_key,
                 &signature,

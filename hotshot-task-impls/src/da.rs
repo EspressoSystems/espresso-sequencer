@@ -12,13 +12,12 @@ use async_trait::async_trait;
 use hotshot_task::task::TaskState;
 use hotshot_types::{
     consensus::{Consensus, OuterConsensus},
-    data::{DaProposal2, PackedBundle},
+    data::{vid_commitment, DaProposal2, PackedBundle},
     event::{Event, EventType},
     message::{Proposal, UpgradeLock},
     simple_certificate::DaCertificate2,
     simple_vote::{DaData2, DaVote2, HasEpoch},
     traits::{
-        block_contents::vid_commitment,
         election::Membership,
         network::ConnectedNetwork,
         node_implementation::{NodeImplementation, NodeType, Versions},
@@ -182,9 +181,12 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> DaTaskState<TYP
                 let version = self.upgrade_lock.version_infallible(view_number).await;
 
                 let txns = Arc::clone(&proposal.data.encoded_transactions);
-                let payload_commitment =
-                    spawn_blocking(move || vid_commitment::<V>(&txns, num_nodes, version)).await;
-                let payload_commitment = payload_commitment.unwrap();
+                let metadata = proposal.data.metadata.encode();
+                let payload_commitment = spawn_blocking(move || {
+                    vid_commitment::<V>(&txns, &metadata, num_nodes, version)
+                })
+                .await
+                .unwrap();
 
                 self.storage
                     .write()

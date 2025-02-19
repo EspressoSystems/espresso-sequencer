@@ -1,7 +1,7 @@
 use hotshot_query_service::VidCommitment;
 use hotshot_types::{
     traits::EncodeBytes,
-    vid::advz::{advz_scheme, ADVZCommitment, ADVZCommon, ADVZScheme},
+    vid::advz::{advz_scheme, ADVZCommon, ADVZScheme},
 };
 use jf_vid::{
     payload_prover::{PayloadProver, Statement},

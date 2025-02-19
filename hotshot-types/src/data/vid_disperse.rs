@@ -29,6 +29,8 @@ use crate::{
     vote::HasViewNumber,
 };
 
+use super::ns_table::parse_ns_table;
+
 impl_has_epoch!(ADVZDisperse<TYPES>, AvidMDisperse<TYPES>, VidDisperseShare2<TYPES>);
 
 /// ADVZ dispersal data
@@ -351,13 +353,14 @@ impl<TYPES: NodeType> AvidMDisperse<TYPES> {
         let avidm_param_clone = avidm_param.clone();
         // TODO: get weight distribution
         let weights = vec![1u32; num_nodes];
-        let ns_table = [(0..num_txns)]; // TODO(Chengyu): use actual namespace table
+        let ns_table = parse_ns_table(num_txns, &metadata.encode());
+        let ns_table_clone = ns_table.clone();
         let (commit, shares) = spawn_blocking(move || {
             AvidMScheme::ns_disperse(
                 &avidm_param,
                 &weights,
                 &txns_clone,
-                ns_table,
+                ns_table_clone,
             )
         })
         .await
@@ -371,7 +374,6 @@ impl<TYPES: NodeType> AvidMDisperse<TYPES> {
         } else {
             let num_nodes = membership.read().await.total_nodes(data_epoch);
 
-            let ns_table = [(0..num_txns)]; // TODO(Chengyu): use actual namespace table
             Some(
               spawn_blocking(move || 
                 AvidMScheme::commit(

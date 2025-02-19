@@ -802,6 +802,7 @@ impl<Types: NodeType, V: Versions> BuilderState<Types, V> {
         // spawn a task to calculate the VID commitment, and pass the handle to the global state
         // later global state can await on it before replying to the proposer
         let (unbounded_sender, unbounded_receiver) = unbounded_channel();
+        let metadata_bytes = metadata.encode();
         #[allow(unused_must_use)]
         spawn(async move {
             let Ok(TriggerStatus::Start) = trigger_recv.await else {
@@ -809,8 +810,9 @@ impl<Types: NodeType, V: Versions> BuilderState<Types, V> {
             };
 
             let join_handle = spawn_blocking(move || {
-                hotshot_types::traits::block_contents::vid_commitment::<V>(
+                hotshot_types::data::vid_commitment::<V>(
                     &encoded_txns,
+                    &metadata_bytes,
                     num_nodes,
                     <V as Versions>::Base::VERSION,
                 )

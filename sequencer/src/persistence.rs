@@ -58,15 +58,15 @@ mod persistence_tests {
     use hotshot_query_service::testing::mocks::MockVersions;
     use hotshot_types::{
         data::{
-            vid_disperse::ADVZDisperseShare, DaProposal, EpochNumber, QuorumProposal2,
-            QuorumProposalWrapper, VidDisperseShare, ViewNumber,
+            vid_commitment, vid_disperse::ADVZDisperseShare, DaProposal, EpochNumber,
+            QuorumProposal2, QuorumProposalWrapper, VidDisperseShare, ViewNumber,
         },
         event::{EventType, HotShotAction, LeafInfo},
         message::{Proposal, UpgradeLock},
         simple_certificate::{NextEpochQuorumCertificate2, QuorumCertificate, UpgradeCertificate},
         simple_vote::{NextEpochQuorumData2, QuorumData2, UpgradeProposalData, VersionedVoteData},
         traits::{
-            block_contents::vid_commitment,
+            block_contents::BlockHeader,
             node_implementation::{ConsensusTime, Versions},
             EncodeBytes,
         },
@@ -270,6 +270,7 @@ mod persistence_tests {
 
         let vid_commitment = vid_commitment::<TestVersions>(
             &leaf_payload_bytes_arc,
+            &leaf.block_header().metadata().encode(),
             2,
             <TestVersions as Versions>::Base::VERSION,
         );
@@ -720,6 +721,7 @@ mod persistence_tests {
 
         let vid_commitment = vid_commitment::<TestVersions>(
             &leaf_payload_bytes_arc,
+            &leaf.block_header().metadata().encode(),
             2,
             <TestVersions as Versions>::Base::VERSION,
         );

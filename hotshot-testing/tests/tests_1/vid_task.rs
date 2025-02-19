@@ -15,16 +15,14 @@ use hotshot_example_types::{
 use hotshot_macros::{run_test, test_scripts};
 use hotshot_task_impls::{events::HotShotEvent::*, vid::VidTaskState};
 use hotshot_testing::{
-    helpers::{build_system_handle, vid_scheme_from_view_number},
+    helpers::build_system_handle,
     predicates::event::exact,
     script::{Expectations, InputOrder, TaskScript},
     serial,
 };
 use hotshot_types::{
-    data::{
-        null_block, vid_disperse::ADVZDisperse, DaProposal, PackedBundle, VidCommitment,
-        VidDisperse, ViewNumber,
-    },
+    data::{null_block, DaProposal, PackedBundle, VidDisperse, ViewNumber},
+    message::UpgradeLock,
     traits::{
         consensus_api::ConsensusApi,
         election::Membership,
@@ -32,8 +30,7 @@ use hotshot_types::{
         BlockPayload,
     },
 };
-use jf_vid::VidScheme;
-use vbs::version::{StaticVersionType, Version};
+use vbs::version::StaticVersionType;
 use vec1::vec1;
 
 #[tokio::test(flavor = "multi_thread")]
@@ -50,15 +47,7 @@ async fn test_vid_task() {
 
     let membership = Arc::clone(&handle.hotshot.memberships);
 
-    let default_version = Version { major: 0, minor: 0 };
-
-    let mut vid = vid_scheme_from_view_number::<TestTypes, TestVersions>(
-        &membership,
-        ViewNumber::new(0),
-        None,
-        default_version,
-    )
-    .await;
+    let upgrade_lock = UpgradeLock::<TestTypes, TestVersions>::new();
     let transactions = vec![TestTransaction::new(vec![0])];
 
     let (payload, metadata) = <TestBlockPayload as BlockPayload<TestTypes>>::from_transactions(
@@ -68,11 +57,23 @@ async fn test_vid_task() {
     )
     .await
     .unwrap();
+
+    let vid_disperse = VidDisperse::calculate_vid_disperse(
+        &payload,
+        &membership,
+        ViewNumber::new(0),
+        None,
+        None,
+        &metadata,
+        &upgrade_lock,
+    )
+    .await
+    .expect("Failed to calculate the vid disperse");
+
     let builder_commitment =
         <TestBlockPayload as BlockPayload<TestTypes>>::builder_commitment(&payload, &metadata);
-    let encoded_transactions = Arc::from(TestTransaction::encode(&transactions));
-    let vid_disperse = vid.disperse(&encoded_transactions).unwrap();
-    let payload_commitment = vid_disperse.commit;
+    let encoded_transactions: Arc<[u8]> = Arc::from(TestTransaction::encode(&transactions));
+    let payload_commitment = vid_disperse.payload_commitment();
 
     let signature = <TestTypes as NodeType>::SignatureKey::sign(
         handle.private_key(),
@@ -91,18 +92,6 @@ async fn test_vid_task() {
         signature,
         _pd: PhantomData,
     };
-
-    let vid_disperse = VidDisperse::V0(
-        ADVZDisperse::from_membership(
-            message.data.view_number,
-            vid_disperse,
-            &membership,
-            None,
-            None,
-            None,
-        )
-        .await,
-    );
 
     let vid_proposal = Proposal {
         data: vid_disperse.clone(),
@@ -135,7 +124,7 @@ async fn test_vid_task() {
         Expectations::from_outputs(vec![]),
         Expectations::from_outputs(vec![
             exact(SendPayloadCommitmentAndMetadata(
-                VidCommitment::V0(payload_commitment),
+                payload_commitment,
                 builder_commitment,
                 TestMetadata {
                     num_transactions: transactions.len() as u64,
