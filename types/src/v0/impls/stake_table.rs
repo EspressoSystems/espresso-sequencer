@@ -19,7 +19,7 @@ use hotshot_types::{
     },
     PeerConfig,
 };
-use itertools::Itertools;
+use indexmap::IndexMap;
 use std::{
     cmp::max,
     collections::{BTreeSet, HashMap},
@@ -49,43 +49,36 @@ impl StakeTables {
     /// should not significantly affect performance to fetch all events and
     /// perform the computation in this functions once per epoch.
     pub fn from_l1_events(updates: Vec<StakersUpdated>) -> Self {
-        let changes_per_node = updates
-            .into_iter()
-            .flat_map(|event| {
-                event
-                    .removed
-                    .into_iter()
-                    .map(|key| StakeTableChange::Remove(bls_alloy_to_jf(key)))
-                    .chain(
-                        event
-                            .added
-                            .into_iter()
-                            .map(|node_info| StakeTableChange::Add(node_info.into())),
-                    )
-            })
-            .group_by(|change| change.key());
+        let mut index_map = IndexMap::new();
 
-        // If the last event for a stakers is `Added` the staker is currently
-        // staking, if the last event is removed or (or the staker is not present)
-        // they are not staking.
-        let currently_staking = changes_per_node
-            .into_iter()
-            .map(|(_pub_key, deltas)| deltas.last().expect("deltas non-empty").clone())
-            .filter_map(|change| match change {
-                StakeTableChange::Add(node_info) => Some(node_info),
-                StakeTableChange::Remove(_) => None,
-            });
-
-        let mut consensus_stake_table: Vec<StakeTableEntry<PubKey>> = vec![];
-        let mut da_members: Vec<StakeTableEntry<PubKey>> = vec![];
-        for node in currently_staking {
-            consensus_stake_table.push(node.clone().into());
-            if node.da {
-                da_members.push(node.into());
+        for event in updates {
+            for key in event.removed {
+                let change = StakeTableChange::Remove(bls_alloy_to_jf(key));
+                index_map.insert(change.key(), change);
+            }
+            for node_info in event.added {
+                let change = StakeTableChange::Add(node_info.into());
+                index_map.insert(change.key(), change);
             }
         }
 
-        Self::new(consensus_stake_table.into(), da_members.into())
+        let mut da_members = Vec::new();
+        let mut stake_table = Vec::new();
+
+        for change in index_map.values() {
+            if let StakeTableChange::Add(node_info_jf) = change {
+                let entry: StakeTableEntry<PubKey> = node_info_jf.clone().into();
+                stake_table.push(entry.clone());
+                if change.is_da() {
+                    da_members.push(entry);
+                }
+            }
+        }
+
+        tracing::error!("DA={da_members:?}");
+        tracing::error!("ST={stake_table:?}");
+
+        Self::new(stake_table.into(), da_members.into())
     }
 }
 
@@ -119,6 +112,13 @@ impl StakeTableChange {
         match self {
             StakeTableChange::Add(node_info) => node_info.stake_table_key,
             StakeTableChange::Remove(key) => *key,
+        }
+    }
+
+    pub(crate) fn is_da(&self) -> bool {
+        match self {
+            StakeTableChange::Add(node_info) => node_info.da,
+            StakeTableChange::Remove(_) => false,
         }
     }
 }

@@ -3705,6 +3705,7 @@ dependencies = [
  "hotshot-contract-adapter",
  "hotshot-query-service",
  "hotshot-types",
+ "indexmap 2.7.0",
  "itertools 0.12.1",
  "jf-merkle-tree",
  "jf-utils",
@@ -11071,6 +11072,7 @@ dependencies = [
  "sequencer-utils",
  "surf-disco",
  "tokio",
+ "tracing",
  "vbs",
 ]
 

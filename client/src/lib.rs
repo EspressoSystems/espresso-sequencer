@@ -121,9 +121,9 @@ impl SequencerClient {
         Ok(balance)
     }
 
-    pub async fn current_epoch(&self) -> anyhow::Result<u64> {
+    pub async fn current_epoch(&self) -> anyhow::Result<Option<u64>> {
         self.0
-            .get::<u64>("node/current_epoch")
+            .get::<Option<u64>>("node/current_epoch")
             .send()
             .await
             .context("getting epoch value")
