@@ -858,7 +858,12 @@
 <a href="#857" id="857">857</a>
 <a href="#858" id="858">858</a>
 <a href="#859" id="859">859</a>
-<a href="#860" id="860">860</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
+<a href="#860" id="860">860</a>
+<a href="#861" id="861">861</a>
+<a href="#862" id="862">862</a>
+<a href="#863" id="863">863</a>
+<a href="#864" id="864">864</a>
+<a href="#865" id="865">865</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
 // This file is part of the HotShot repository.
 
 // You should have received a copy of the MIT License
@@ -1454,7 +1459,7 @@
     <span class="kw">let </span>proposal_epoch = option_epoch_from_block_number::&lt;TYPES&gt;(
         validation_info
             .upgrade_lock
-            .epochs_enabled(proposed_leaf.view_number())
+            .epochs_enabled(view_number)
             .<span class="kw">await</span>,
         proposed_leaf.height(),
         validation_info.epoch_height,
@@ -1506,7 +1511,7 @@
         </span><span class="kw">let </span>justify_qc_epoch = option_epoch_from_block_number::&lt;TYPES&gt;(
             validation_info
                 .upgrade_lock
-                .epochs_enabled(proposed_leaf.view_number())
+                .epochs_enabled(view_number)
                 .<span class="kw">await</span>,
             parent_leaf.height(),
             validation_info.epoch_height,
@@ -1524,7 +1529,12 @@
         );
 
         <span class="comment">// Make sure that the epoch transition proposal includes the next epoch QC
-        </span><span class="kw">if </span>is_last_block_in_epoch(parent_leaf.height(), validation_info.epoch_height) {
+        </span><span class="kw">if </span>is_last_block_in_epoch(parent_leaf.height(), validation_info.epoch_height)
+            &amp;&amp; validation_info
+                .upgrade_lock
+                .epochs_enabled(view_number)
+                .<span class="kw">await
+        </span>{
             <span class="macro">ensure!</span>(proposal.data.next_epoch_justify_qc().is_some(),
             <span class="string">"Epoch transition proposal does not include the next epoch justify QC. Do not vote!"</span>);
         }
