@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# If we aren't in a nix shell (where this handled in flake.nix) add the target
+# If we aren't in a nix shell (where this is handled in flake.nix) add the target
 # directory to the path so that the binaries are found by process-compose.
 if [ -z "${IN_NIX_SHELL-}" ]; then
     echo "ALERT: The expected profile for demo-native binaries has been updated"
