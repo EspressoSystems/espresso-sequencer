@@ -246,8 +246,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> DaTaskState<TYP
                         epoch_number
                     } else if membership
                         .next_epoch()
-                        .await
-                        .context(warn!("No stake table for epoch"))?
+                        .await?
                         .has_stake(&public_key)
                         .await
                     {

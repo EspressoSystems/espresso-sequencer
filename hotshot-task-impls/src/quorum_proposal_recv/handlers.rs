@@ -205,12 +205,8 @@ pub(crate) async fn handle_quorum_proposal_recv<
             bail!("Next epoch justify qc exists but it's not equal with justify qc.");
         }
 
-        let qc_mem = qc_mem
-            .next_epoch()
-            .await
-            .context(warn!("No stake table for epoch"))?;
-        let membership_next_stake_table = qc_mem.stake_table().await;
-        let membership_next_success_threshold = qc_mem.success_threshold().await;
+        let membership_next_stake_table = validation_info.membership.stake_table().await;
+        let membership_next_success_threshold = validation_info.membership.success_threshold().await;
 
         // Validate the next epoch justify qc as well
         next_epoch_justify_qc
