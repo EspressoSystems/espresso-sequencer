@@ -509,9 +509,6 @@ impl<TYPES: NodeType, V: Versions>
         match event.as_ref() {
             HotShotEvent::QuorumVoteRecv(vote) => {
                 // #3967 REVIEW NOTE: Should we error if self.epoch is None?
-                if(vote.data.epoch == self.membership.epoch) {
-                    self.membership = self.membership.next_epoch().await?;
-                }
                 self.accumulate_vote(&vote.clone().into(), sender).await
             }
             _ => Ok(None),
