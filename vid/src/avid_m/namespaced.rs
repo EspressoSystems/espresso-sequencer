@@ -72,8 +72,8 @@ impl NsAvidMScheme {
 
     /// Disperse a payload according to a distribution table and a namespace
     /// table.
-    /// WARN: it assumes that the namespace table is well formed, i.e. ranges are
-    /// non-overlapping and cover the whole payload.
+    /// WARN: it assumes that the namespace table is well formed, i.e. ranges
+    /// are non-overlapping and cover the whole payload.
     pub fn ns_disperse(
         param: &NsAvidMParam,
         distribution: &[u32],
@@ -210,6 +210,11 @@ pub mod tests {
                 .unwrap();
 
         assert_eq!(shares.len(), num_storage_nodes);
+
+        assert_eq!(
+            commit,
+            NsAvidMScheme::commit(&params, &payload, ns_table.iter().cloned()).unwrap()
+        );
 
         // verify shares
         shares.iter().for_each(|share| {

@@ -152,7 +152,7 @@ hotshot-contract-adapter = { path = "contracts/rust/adapter" }
 hotshot-example-types = { path = "hotshot-example-types" }
 
 # VID import
-vid = { path = "vid" }
+vid = { path = "vid", features = [ "parallel", "keccak256" ] }
 
 jf-plonk = { git = "https://github.com/EspressoSystems/jellyfish", tag = "jf-plonk-v0.5.1", features = [
     "test-apis",

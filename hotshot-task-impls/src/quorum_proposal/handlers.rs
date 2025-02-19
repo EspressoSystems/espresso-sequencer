@@ -263,7 +263,7 @@ impl<TYPES: NodeType, V: Versions> ProposalDependencyHandle<TYPES, V> {
     async fn publish_proposal(
         &self,
         commitment_and_metadata: CommitmentAndMetadata<TYPES>,
-        vid_share: Proposal<TYPES, VidDisperse<TYPES>>,
+        _vid_share: Proposal<TYPES, VidDisperse<TYPES>>,
         view_change_evidence: Option<ViewChangeEvidence2<TYPES>>,
         formed_upgrade_certificate: Option<UpgradeCertificate<TYPES>>,
         decided_upgrade_certificate: Arc<RwLock<Option<UpgradeCertificate<TYPES>>>>,

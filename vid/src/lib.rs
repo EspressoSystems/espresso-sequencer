@@ -7,16 +7,6 @@
 //! Verifiable Information Retrieval (VID).
 #![deny(missing_docs)]
 
-#[cfg(any(
-    all(feature = "poseidon2", any(feature = "sha256", feature = "keccak256")),
-    all(feature = "sha256", any(feature = "poseidon2", feature = "keccak256")),
-    all(feature = "keccak256", any(feature = "poseidon2", feature = "sha256")),
-    not(any(feature = "keccak256", feature = "poseidon2", feature = "sha256")),
-))]
-compile_error!(
-    "Exactly one feature of \"poseidon2\", \"sha256\" and \"keccak256\" should be enabled."
-);
-
 use displaydoc::Display;
 use jf_poseidon2::Poseidon2Error;
 use serde::{Deserialize, Serialize};

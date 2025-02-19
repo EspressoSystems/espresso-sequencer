@@ -31,7 +31,11 @@ use crate::{
 
 use super::ns_table::parse_ns_table;
 
-impl_has_epoch!(ADVZDisperse<TYPES>, AvidMDisperse<TYPES>, VidDisperseShare2<TYPES>);
+impl_has_epoch!(
+    ADVZDisperse<TYPES>,
+    AvidMDisperse<TYPES>,
+    VidDisperseShare2<TYPES>
+);
 
 /// ADVZ dispersal data
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Hash)]
@@ -263,7 +267,7 @@ impl<TYPES: NodeType> ADVZDisperseShare<TYPES> {
             .verify_share(&self.share, &self.common, &self.payload_commitment)
             .unwrap_or(Err(()))
     }
-    
+
     /// Returns the payload length in bytes.
     pub fn payload_byte_len(&self) -> u32 {
         ADVZScheme::get_payload_byte_len(&self.common)
@@ -313,7 +317,8 @@ impl<TYPES: NodeType> AvidMDisperse<TYPES> {
             .read()
             .await
             .committee_members(view_number, target_epoch)
-            .iter().zip(shares)
+            .iter()
+            .zip(shares)
             .map(|(node, share)| (node.clone(), share.clone()))
             .collect();
 
@@ -356,12 +361,7 @@ impl<TYPES: NodeType> AvidMDisperse<TYPES> {
         let ns_table = parse_ns_table(num_txns, &metadata.encode());
         let ns_table_clone = ns_table.clone();
         let (commit, shares) = spawn_blocking(move || {
-            AvidMScheme::ns_disperse(
-                &avidm_param,
-                &weights,
-                &txns_clone,
-                ns_table_clone,
-            )
+            AvidMScheme::ns_disperse(&avidm_param, &weights, &txns_clone, ns_table_clone)
         })
         .await
         .wrap()
@@ -375,11 +375,11 @@ impl<TYPES: NodeType> AvidMDisperse<TYPES> {
             let num_nodes = membership.read().await.total_nodes(data_epoch);
 
             Some(
-              spawn_blocking(move || 
+              spawn_blocking(move ||
                 AvidMScheme::commit(
                     &avidm_param_clone,
                     &txns,
-                    ns_table,      
+                    ns_table,
                 ))
                 .await
                 .wrap()
@@ -533,6 +533,7 @@ impl<TYPES: NodeType> VidDisperseShare2<TYPES> {
     #[allow(clippy::result_unit_err)]
     pub fn verify_share(&self, total_nodes: usize) -> std::result::Result<(), ()> {
         let avidm_param = init_avidm_param(total_nodes).map_err(|_| ())?;
-        AvidMScheme::verify_share(&avidm_param, &self.payload_commitment, &self.share).unwrap_or(Err(()))
+        AvidMScheme::verify_share(&avidm_param, &self.payload_commitment, &self.share)
+            .unwrap_or(Err(()))
     }
 }

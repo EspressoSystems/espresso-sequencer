@@ -33,7 +33,7 @@ mod config;
 
 pub mod namespaced;
 
-#[cfg(feature = "poseidon2")]
+#[cfg(all(not(feature = "sha256"), not(feature = "keccak256")))]
 type Config = config::Poseidon2Config;
 #[cfg(feature = "sha256")]
 type Config = config::Sha256Config;
