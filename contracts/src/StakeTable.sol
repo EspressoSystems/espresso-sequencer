@@ -133,7 +133,6 @@ contract StakeTable is AbstractStakeTable, Ownable {
         exitEpoch = 1;
         numPendingExitsInEpoch = 0;
 
-        // Set the hotShotBlocksPerEpoch
         if (_hotShotBlocksPerEpoch == 0) {
             revert InvalidHotShotBlocksPerEpoch();
         }
@@ -168,10 +167,10 @@ contract StakeTable is AbstractStakeTable, Ownable {
     /// epoch.
     /// @return current epoch (computed from the last known hotshot block number)
     function currentEpoch() public view returns (uint64) {
-        // get the last hotshot block number from the light client contract
+        // get the last hotshot block number from the light client contract since this contract
+        // gets the latest info from HotShot periodically
         (, uint64 lastHotshotBlockNumber,) = lightClient.finalizedState();
 
-        // calculate the epoch from the last hotshot block number
         uint64 epoch = lastHotshotBlockNumber / hotShotBlocksPerEpoch;
 
         return epoch;
@@ -285,31 +284,26 @@ contract StakeTable is AbstractStakeTable, Ownable {
         BN254.G1Point memory blsSig,
         uint64 validUntilEpoch
     ) external virtual override {
-        // Verify that the sender amount is the minStakeAmount
         if (amount < minStakeAmount) {
             revert InsufficientStakeAmount(amount);
         }
 
         Node memory node = nodes[msg.sender];
 
-        // Verify that the node is not already registered.
         if (node.account != address(0x0)) {
             revert NodeAlreadyRegistered();
         }
 
-        // Verify that this contract has permissions to access the validator's stake token.
         uint256 allowance = ERC20(tokenAddress).allowance(msg.sender, address(this));
         if (allowance < amount) {
             revert InsufficientAllowance(allowance, amount);
         }
 
-        // Verify that the validator has the balance for this stake token.
         uint256 balance = ERC20(tokenAddress).balanceOf(msg.sender);
         if (balance < amount) {
             revert InsufficientBalance(balance);
         }
 
-        // Verify that blsVK is not the zero point
         if (
             _isEqualBlsKey(
                 blsVK,
@@ -324,11 +318,12 @@ contract StakeTable is AbstractStakeTable, Ownable {
             revert InvalidBlsVK();
         }
 
-        // Verify that the validator can sign for that blsVK
+        // Verify that the validator can sign for that blsVK by ensuring that the message that has
+        // been signed is the sender's address
+        // This is to prevent "rogue public-key attack"
         bytes memory message = abi.encode(msg.sender);
         BLSSig.verifyBlsSig(message, blsSig, blsVK);
 
-        // Verify that the schnorrVK is non-zero
         if (schnorrVK.isEqual(EdOnBN254.EdOnBN254Point(0, 0))) {
             revert InvalidSchnorrVK();
         }
@@ -342,13 +337,10 @@ contract StakeTable is AbstractStakeTable, Ownable {
             revert InvalidNextRegistrationEpoch(registrationEpoch, validUntilEpoch);
         }
 
-        // Transfer the stake amount of ERC20 tokens from the sender to this contract.
         SafeTransferLib.safeTransferFrom(ERC20(tokenAddress), msg.sender, address(this), amount);
 
-        // Update the total staked amount
         totalStake += amount;
 
-        // Create an entry for the node.
         node.account = msg.sender;
         node.balance = amount;
         node.blsVK = blsVK;
@@ -369,12 +361,10 @@ contract StakeTable is AbstractStakeTable, Ownable {
     function deposit(uint256 amount) external virtual override returns (uint256, uint64) {
         Node memory node = nodes[msg.sender];
 
-        // if the node is not registered, revert
         if (node.account == address(0)) {
             revert NodeNotRegistered();
         }
 
-        // The deposit must come from the node's registered account.
         if (node.account != msg.sender) {
             revert Unauthenticated();
         }
@@ -406,12 +396,10 @@ contract StakeTable is AbstractStakeTable, Ownable {
     function requestExit() external virtual override {
         Node memory node = nodes[msg.sender];
 
-        // if the node is not registered, revert
         if (node.account == address(0)) {
             revert NodeNotRegistered();
         }
 
-        // The exit request must come from the node's withdrawal account.
         if (node.account != msg.sender) {
             revert Unauthenticated();
         }
@@ -491,13 +479,11 @@ contract StakeTable is AbstractStakeTable, Ownable {
     ) external virtual override {
         Node memory node = nodes[msg.sender];
 
-        // Verify that the node is already registered.
         if (node.account == address(0)) revert NodeNotRegistered();
 
         // Verify that the node is not in the exit queue
         if (node.exitEpoch != 0) revert ExitRequestInProgress();
 
-        // Verify that the keys are not the same as the old ones
         if (_isEqualBlsKey(newBlsVK, node.blsVK) && newSchnorrVK.isEqual(node.schnorrVK)) {
             revert NoKeyChange();
         }
@@ -520,16 +506,12 @@ contract StakeTable is AbstractStakeTable, Ownable {
         bytes memory message = abi.encode(msg.sender);
         BLSSig.verifyBlsSig(message, newBlsSig, newBlsVK);
 
-        // Update the node's bls key
         node.blsVK = newBlsVK;
 
-        // Update the node's schnorr key if the newSchnorrVK is not a zero point Schnorr key
         node.schnorrVK = newSchnorrVK;
 
-        // Update the node in the stake table
         nodes[msg.sender] = node;
 
-        // Emit the event
         emit UpdatedConsensusKeys(msg.sender, node.blsVK, node.schnorrVK);
     }
 
