@@ -10,7 +10,7 @@ use hotshot_example_types::{
     node_types::{
         CombinedImpl, EpochUpgradeTestVersions, EpochsTestVersions, Libp2pImpl, MemoryImpl,
         PushCdnImpl, RandomOverlapQuorumFilterConfig, StableQuorumFilterConfig,
-        TestConsecutiveLeaderTypes, TestTwoStakeTablesTypes, TestTypes,
+        TestConsecutiveLeaderTypes, TestTwoStakeTablesTypes, TestTypes,TestTypesWithDrb,
         TestTypesRandomizedCommitteeMembers, TestTypesRandomizedLeader,
     },
     testable_delay::{DelayConfig, DelayOptions, DelaySettings, SupportedTraitTypesForAsyncDelay},
@@ -60,6 +60,7 @@ cross_tests!(
         TestTypesRandomizedCommitteeMembers<StableQuorumFilterConfig<123, 5>>,                 // Overlap = 2F+1
         TestTypesRandomizedCommitteeMembers<StableQuorumFilterConfig<123, 6>>,                 // Overlap = 3F
         TestTypesRandomizedCommitteeMembers<RandomOverlapQuorumFilterConfig<123, 4, 7, 0, 2>>, // Overlap = Dynamic
+        TestTypesWithDrb,
     ],
     Versions: [EpochsTestVersions],
     Ignore: false,
@@ -79,7 +80,7 @@ cross_tests!(
 cross_tests!(
     TestName: test_success_with_async_delay_with_epochs,
     Impls: [Libp2pImpl, PushCdnImpl, CombinedImpl],
-    Types: [TestTypes, TestTwoStakeTablesTypes],
+    Types: [TestTypes, TestTwoStakeTablesTypes, TestTypesWithDrb],
     Versions: [EpochsTestVersions],
     Ignore: false,
     Metadata: {
@@ -111,7 +112,7 @@ cross_tests!(
 cross_tests!(
     TestName: test_success_with_async_delay_2_with_epochs,
     Impls: [Libp2pImpl, PushCdnImpl, CombinedImpl],
-    Types: [TestTypes, TestTwoStakeTablesTypes],
+    Types: [TestTypes, TestTwoStakeTablesTypes, TestTypesWithDrb],
     Versions: [EpochsTestVersions],
     Ignore: false,
     Metadata: {
@@ -168,7 +169,7 @@ cross_tests!(
 cross_tests!(
     TestName: test_epoch_end,
     Impls: [CombinedImpl, Libp2pImpl, PushCdnImpl],
-    Types: [TestTypes, TestTwoStakeTablesTypes],
+    Types: [TestTypes, TestTwoStakeTablesTypes, TestTypesWithDrb],
     Versions: [EpochsTestVersions],
     Ignore: false,
     Metadata: {
@@ -192,7 +193,7 @@ cross_tests!(
 cross_tests!(
     TestName: test_shorter_decide,
     Impls: [Libp2pImpl, PushCdnImpl, CombinedImpl],
-    Types: [TestTypes, TestTwoStakeTablesTypes],
+    Types: [TestTypes, TestTwoStakeTablesTypes, TestTypesWithDrb],
     Versions: [EpochsTestVersions],
     Ignore: false,
     Metadata: {
@@ -495,7 +496,7 @@ cross_tests!(
 cross_tests!(
     TestName: test_all_restart_epochs,
     Impls: [CombinedImpl, PushCdnImpl],
-    Types: [TestTypes, TestTypesRandomizedLeader, TestTwoStakeTablesTypes],
+    Types: [TestTypes, TestTypesRandomizedLeader, TestTwoStakeTablesTypes, TestTypesWithDrb],
     Versions: [EpochsTestVersions],
     Ignore: false,
     Metadata: {
@@ -544,7 +545,7 @@ cross_tests!(
 cross_tests!(
     TestName: test_all_restart_one_da_with_epochs,
     Impls: [CombinedImpl],
-    Types: [TestTypes, TestTwoStakeTablesTypes],
+    Types: [TestTypes, TestTwoStakeTablesTypes, TestTypesWithDrb],
     Versions: [EpochsTestVersions],
     Ignore: false,
     Metadata: {
