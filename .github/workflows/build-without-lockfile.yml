@@ -43,42 +43,45 @@ jobs:
         if: failure() && github.event_name == 'pull_request'
         with:
           github-token: ${{secrets.GITHUB_TOKEN}}
-        script: |
-          const issue_number = context.issue.number;
-          const owner = context.repo.owner;
-          const repo = context.repo.repo;
+          script: |
+            const issue_number = context.issue.number;
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const runUrl = `https://github.com/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
 
-          const commentBody = `Unable to build without Cargo.lock file.
+            const commentBody = `Unable to build without Cargo.lock file.
 
-          This means that after this change 3rd party projects may have
-          difficulties using crates in this repo as a dependency. If this
-          isn't easy to fix please open an issue so we can fix it later.
+            This means that after this change 3rd party projects may have
+            difficulties using crates in this repo as a dependency. If this
+            isn't easy to fix please open an issue so we can fix it later.
 
-          To reproduce locally run
+            For the failing build see: ${runUrl}
 
-          \`\`\`
-          cargo generate-lockfile
-          cargo check --all-targets
-          \`\`\`
+            To reproduce locally run
 
-          This PR can still be merged.`;
+            \`\`\`
+            cargo generate-lockfile
+            cargo check --all-targets
+            \`\`\`
 
-          // Fetch existing comments
-          const { data: comments } = await github.rest.issues.listComments({
-            owner,
-            repo,
-            issue_number,
-          });
+            This PR can still be merged.`;
 
-          // Find existing comment
-          const existingComment = comments.find(c => c.body == commentBody);
-          if (!existingComment) {
-            await github.rest.issues.createComment({
+            // Fetch existing comments
+            const { data: comments } = await github.rest.issues.listComments({
               owner,
               repo,
               issue_number,
-              body: commentBody
             });
-          } else {
-             console.log("Already commentted.")
-          }
+
+            // Find existing comment
+            const existingComment = comments.find(c => c.body == commentBody);
+            if (!existingComment) {
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number,
+                body: commentBody
+              });
+            } else {
+              console.log("Already commentted.")
+            }
