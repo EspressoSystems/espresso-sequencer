@@ -159,14 +159,8 @@ pub fn add_network_message_task<
                 // Wait for a message from the network
                 message = network.recv_message().fuse() => {
                     // Make sure the message did not fail
-                    let message = match message {
-                        Ok(message) => {
-                            message
-                        }
-                        Err(e) => {
-                            tracing::trace!("Failed to receive message: {:?}", e);
-                            continue;
-                        }
+                    let Ok(message) = message else {
+                        continue;
                     };
 
                     // Deserialize the message

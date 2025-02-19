@@ -1,24 +1,8 @@
 [profile.default]
 # Kill tests after 3 periods of 2m, because they are probably hanging
 slow-timeout = { period = "2m", terminate-after = 3 }
-default-filter = 'not (test(slow_) | package(tests))'
+default-filter = 'not (deps(hotshot-testing) | test(slow_) | package(tests))'
 retries = 2
-
-# More flaky tests
-[[profile.default.overrides]]
-filter = """
-test(tests_2::catchup::test_all_restart) |
-test(tests_4::test_marketplace) |
-test(tests_6::test_epochs)
-"""
-retries = 10
-
-# Sometimes fails persistently in CI
-[[profile.default.overrides]]
-filter = """
-test(tests_4::test_with_builder_failures::test_with_builder_failures)
-"""
-threads-required = 2
 
 [[profile.default.overrides]]
 # These tests are fast if they work (usually about 150ms) but sometimes they
@@ -35,6 +19,14 @@ retries  = 10
 [[profile.default.overrides]]
 filter = 'test(slow_test_restart)'
 threads-required = 'num-cpus'
+
+# HotShot integration tests
+[profile.hotshot]
+retries = 2
+slow-timeout = { period = "1m", terminate-after = 3 }
+default-filter = 'deps(hotshot-testing)'
+final-status-level = "flaky"
+threads-required = "num-test-threads"
 
 [profile.slow]
 slow-timeout = "2m"
