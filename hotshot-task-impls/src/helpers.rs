@@ -602,7 +602,7 @@ pub async fn validate_proposal_safety_and_liveness<
     let proposal_epoch = option_epoch_from_block_number::<TYPES>(
         validation_info
             .upgrade_lock
-            .epochs_enabled(proposed_leaf.view_number())
+            .epochs_enabled(view_number)
             .await,
         proposed_leaf.height(),
         validation_info.epoch_height,
@@ -654,7 +654,7 @@ pub async fn validate_proposal_safety_and_liveness<
         let justify_qc_epoch = option_epoch_from_block_number::<TYPES>(
             validation_info
                 .upgrade_lock
-                .epochs_enabled(proposed_leaf.view_number())
+                .epochs_enabled(view_number)
                 .await,
             parent_leaf.height(),
             validation_info.epoch_height,
@@ -672,7 +672,12 @@ pub async fn validate_proposal_safety_and_liveness<
         );
 
         // Make sure that the epoch transition proposal includes the next epoch QC
-        if is_last_block_in_epoch(parent_leaf.height(), validation_info.epoch_height) {
+        if is_last_block_in_epoch(parent_leaf.height(), validation_info.epoch_height)
+            && validation_info
+                .upgrade_lock
+                .epochs_enabled(view_number)
+                .await
+        {
             ensure!(proposal.data.next_epoch_justify_qc().is_some(),
             "Epoch transition proposal does not include the next epoch justify QC. Do not vote!");
         }
