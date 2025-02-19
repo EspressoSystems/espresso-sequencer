@@ -298,6 +298,15 @@ impl AsRef<[u8]> for VidCommitment {
     }
 }
 
+impl AsRef<[u8; 32]> for VidCommitment {
+    fn as_ref(&self) -> &[u8; 32] {
+        match self {
+            Self::V0(comm) => comm.as_ref().as_ref(),
+            Self::V1(comm) => comm.as_ref(),
+        }
+    }
+}
+
 impl VidCommitment {
     /// Unwrap an ADVZCommitment. Panic if incorrect version.
     pub fn unwrap_v0(self) -> ADVZCommitment {

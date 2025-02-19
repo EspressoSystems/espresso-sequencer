@@ -77,6 +77,14 @@ impl AsRef<[u8]> for AvidMCommit {
     }
 }
 
+impl AsRef<[u8; 32]> for AvidMCommit {
+    fn as_ref(&self) -> &[u8; 32] {
+        unsafe { ::core::slice::from_raw_parts((self as *const Self) as *const u8, 32) }
+            .try_into()
+            .unwrap()
+    }
+}
+
 /// Share type to be distributed among the parties.
 #[derive(Clone, Debug, Hash, Serialize, Deserialize, Eq, PartialEq)]
 pub struct RawAvidMShare {

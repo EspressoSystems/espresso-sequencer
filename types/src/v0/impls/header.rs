@@ -58,7 +58,7 @@ impl v0_1::Header {
             .u64_field("l1_head", self.l1_head)
             .optional("l1_finalized", &self.l1_finalized)
             .constant_str("payload_commitment")
-            .var_size_bytes(self.payload_commitment.as_ref())
+            .fixed_size_bytes(self.payload_commitment.as_ref())
             .constant_str("builder_commitment")
             .fixed_size_bytes(self.builder_commitment.as_ref())
             .field("ns_table", self.ns_table.commit())
