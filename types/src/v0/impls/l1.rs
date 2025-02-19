@@ -977,7 +977,14 @@ impl L1Client {
                 }
             }
         }
-        Some(StakeTables::from_l1_events(events))
+        let stake_tables = StakeTables::from_l1_events(events);
+        tracing::error!(?block);
+        let _ = {
+            let mut state = state.lock().await;
+            state.stake.push(block, stake_tables.clone())
+        };
+
+        Some(stake_tables)
     }
 
     /// Check if the given address is a proxy contract.
@@ -1528,6 +1535,15 @@ mod test {
 
         let result = nodes.stake_table.0[0].clone();
         assert_eq!(result.stake_amount.as_u64(), 1);
+
+        tracing::error!(?block.header.inner.number);
+
+        // ensure state is updated
+        let mut lock = l1_client.state.lock().await;
+        let nodes = lock.stake.get(&block.header.inner.number).unwrap();
+        let result = nodes.stake_table.0[0].clone();
+        assert_eq!(result.stake_amount.as_u64(), 1);
+
         Ok(())
     }
 
