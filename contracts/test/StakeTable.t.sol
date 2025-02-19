@@ -897,7 +897,6 @@ contract StakeTable_register_Test is Test {
         assertNotEq(stakeTable.currentEpoch(), 0);
 
         // verify the expected epoch
-        (, uint64 blockHeight,) = lcMock.finalizedState();
         uint64 expectedEpoch = 10; // 10 / 1
         assertEq(stakeTable.currentEpoch(), expectedEpoch);
     }
@@ -1079,8 +1078,8 @@ contract StakeTable_register_Test is Test {
         stakeTable.mockUpdateHotShotBlocksPerEpoch(1);
         assertEq(stakeTable.hotShotBlocksPerEpoch(), 1);
 
-        // push to registration queue
-        vm.expectRevert(S.CurrentEpochAtMaximumValue.selector);
+        // push to registration queue and expect a panic due to arithmetic overflow
+        vm.expectRevert(stdError.arithmeticError);
         stakeTable.mockPushToRegistrationQueue();
     }
 }
