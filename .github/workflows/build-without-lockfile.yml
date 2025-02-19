@@ -11,10 +11,10 @@ on:
   schedule:
     - cron: "0 0 * * 1"
   pull_request:
-    # Only run on PRs if dependencies were modified.
-    paths:
-      - "Cargo.lock"
-      - "**/Cargo.toml"
+    # # Only run on PRs if dependencies were modified.
+    # paths:
+    #   - "Cargo.lock"
+    #   - "**/Cargo.toml"
   workflow_dispatch:
 
 concurrency:
