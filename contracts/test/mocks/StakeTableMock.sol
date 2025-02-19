@@ -39,4 +39,8 @@ contract StakeTableMock is StakeTable {
     function mockPushToExitQueue() public {
         super.pushToExitQueue();
     }
+
+    function mockUpdateHotShotBlocksPerEpoch(uint64 newHotShotBlocksPerEpoch) public {
+        hotShotBlocksPerEpoch = newHotShotBlocksPerEpoch;
+    }
 }

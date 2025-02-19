@@ -1063,4 +1063,24 @@ contract StakeTable_register_Test is Test {
         assertEq(stakeTable.exitEpoch(), exitEpoch);
         assertEq(stakeTable.numPendingExitsInEpoch(), 1);
     }
+
+    // test pushToRegistrationQueue reverts when the current epoch is max uint64
+    // note, the current epoch is max uint64 only when the hotshot blocks per epoch is 1
+    // and the hotshot block number is max uint64
+    function test_revertWhen_pushToRegistrationQueue_whenCurrentEpochIsMaxUint64() public {
+        // set the current hotshot block number to max uint64
+        lcMock.setFinalizedState(
+            LightClient.LightClientState(0, type(uint64).max, BN254.ScalarField.wrap(0))
+        );
+        assertEq(stakeTable.currentEpoch(), type(uint64).max);
+
+        // set the hotshot blocks per epoch to 1
+        vm.prank(exampleTokenCreator);
+        stakeTable.mockUpdateHotShotBlocksPerEpoch(1);
+        assertEq(stakeTable.hotShotBlocksPerEpoch(), 1);
+
+        // push to registration queue
+        vm.expectRevert(S.CurrentEpochAtMaximumValue.selector);
+        stakeTable.mockPushToRegistrationQueue();
+    }
 }

@@ -77,6 +77,9 @@ contract StakeTable is AbstractStakeTable, Ownable {
     // Error raised when the hotShotBlocksPerEpoch is zero
     error InvalidHotShotBlocksPerEpoch();
 
+    // Error raised when the current epoch is at the maximum value
+    error CurrentEpochAtMaximumValue();
+
     /// Mapping from a hash of a BLS key to a node struct defined in the abstract contract.
     mapping(address account => Node node) public nodes;
 
@@ -180,6 +183,9 @@ contract StakeTable is AbstractStakeTable, Ownable {
     /// @notice Add a registration
     /// TODO handle overflow when max uint64 is reached
     function pushToRegistrationQueue() internal virtual override {
+        if (currentEpoch() == type(uint64).max) {
+            revert CurrentEpochAtMaximumValue();
+        }
         // Either we have a need for a new registration epoch and registrations queue for the
         // current epoch is zero or we have a free slot in the current registration epoch so we
         // append to the registration queue, `numPendingRegistrationsInEpoch`.
@@ -200,10 +206,12 @@ contract StakeTable is AbstractStakeTable, Ownable {
 
     /// @notice Add an exit
     function pushToExitQueue() internal virtual override {
+        if (currentEpoch() == type(uint64).max) {
+            revert CurrentEpochAtMaximumValue();
+        }
         // Either we have a need for a new exit epoch and exits queue for the
         // current epoch is zero or we have a free slot in the current exit epoch so we
         // append to the exit queue, `numPendingExitsInEpoch`.
-
         if (exitEpoch < currentEpoch() + 1) {
             // The exit epoch is outdated.
             exitEpoch = currentEpoch() + 1;
