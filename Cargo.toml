@@ -43,7 +43,8 @@ members = [
     "sequencer",
     "tests",
     "types",
-    "utils"
+    "utils",
+    "vid"
 ]
 
 exclude = ["sequencer-sqlite"]
@@ -150,6 +151,9 @@ hotshot-contract-adapter = { path = "contracts/rust/adapter" }
 # Temporary, used to pull in the mock auction results provider
 hotshot-example-types = { path = "hotshot-example-types" }
 
+# VID import
+vid = { path = "vid" }
+
 jf-plonk = { git = "https://github.com/EspressoSystems/jellyfish", tag = "jf-plonk-v0.5.1", features = [
     "test-apis",
 ] }
@@ -212,7 +216,6 @@ url = "2.3"
 vbs = "0.1"
 vec1 = { version = "1", features = ["serde"] }
 vergen = { version = "8.3", features = ["git", "gitcl"] }
-vid = { git = "https://github.com/EspressoSystems/vid" }
 zeroize = "1.7"
 committable = "0.2"
 portpicker = "0.1.1"

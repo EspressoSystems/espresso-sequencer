@@ -9,9 +9,9 @@
     "builder_commitment": "BUILDER_COMMITMENT~jlEvJoHPETCSwXF6UKcD22zOjfoHGuyVFTVkP_BNc-no",
     "builder_signature": [
       {
-        "r": "0xa1c3795850b7b490e616b60fead89753841fbc9fffe1a939d483f1d959ad1c45",
-        "s": "0x20228f5b63b14792d371dce479978e45020f19602189ef6d325b73029a2848ac",
-        "v": 27
+        "r": "0xdb0a14f48c39b9ea33e46ea19b7e141f7b5160dc566088964f867159246fb3e2",
+        "s": "0x63c0cef97af8a30ef0dfd10ae055a13515bd81eaedbf40ddb4b23f7d63dc12a7",
+        "v": 28
       }
     ],
     "chain_config": {
@@ -44,7 +44,7 @@
     "ns_table": {
       "bytes": "AwAAAO7/wAAcBgAAobC5EkAOAABksAWiXBQAAA=="
     },
-    "payload_commitment": "HASH~u-mEo1mwByROUhnvO7pBFitcD0UEvruK-b8WONkKoCLQ",
+    "payload_commitment": "AvidMCommit~oM8akSUd-4GP3UtzkpDkqGJn4i58e96s68NMb6dZOhd6",
     "timestamp": 789
   },
   "version": {

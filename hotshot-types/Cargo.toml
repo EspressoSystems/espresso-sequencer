@@ -54,8 +54,8 @@ tracing = { workspace = true }
 typenum = { workspace = true }
 url = { workspace = true }
 vbs = { workspace = true }
-vid = { workspace = true }
 vec1 = { workspace = true }
+vid = { workspace = true }
 workspace-hack = { version = "0.1", path = "../workspace-hack" }
 
 [features]
