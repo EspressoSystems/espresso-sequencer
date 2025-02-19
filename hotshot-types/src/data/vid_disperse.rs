@@ -355,7 +355,6 @@ impl<TYPES: NodeType> AvidMDisperse<TYPES> {
         let num_txns = txns.len();
 
         let avidm_param = init_avidm_param(num_nodes)?;
-        let avidm_param_clone = avidm_param.clone();
         // TODO: get weight distribution
         let weights = vec![1u32; num_nodes];
         let ns_table = parse_ns_table(num_txns, &metadata.encode());
@@ -373,11 +372,12 @@ impl<TYPES: NodeType> AvidMDisperse<TYPES> {
             None
         } else {
             let num_nodes = membership.read().await.total_nodes(data_epoch);
+            let avidm_param = init_avidm_param(num_nodes)?;
 
             Some(
               spawn_blocking(move ||
                 AvidMScheme::commit(
-                    &avidm_param_clone,
+                    &avidm_param,
                     &txns,
                     ns_table,
                 ))

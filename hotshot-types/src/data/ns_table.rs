@@ -32,7 +32,7 @@ pub(crate) fn parse_ns_table(payload_byte_len: usize, bytes: &[u8]) -> Vec<Range
         tracing::warn!("Failed to parse the metadata as namespace table. Use a single namespace table instead.");
         return vec![(0..payload_byte_len)];
     }
-    let l = 0;
+    let mut l = 0;
     for i in 0..num_entries {
         let offset = NUM_NSS_BYTE_LEN + i * (NS_ID_BYTE_LEN + NS_OFFSET_BYTE_LEN) + NS_ID_BYTE_LEN;
         let r = u32::from_le_bytes(
@@ -45,6 +45,11 @@ pub(crate) fn parse_ns_table(payload_byte_len: usize, bytes: &[u8]) -> Vec<Range
             return vec![(0..payload_byte_len)];
         }
         result.push(l..r);
+        l = r;
+    }
+    if l != payload_byte_len {
+        tracing::warn!("Failed to parse the metadata as namespace table. Use a single namespace table instead.");
+        return vec![(0..payload_byte_len)];
     }
     result
 }
