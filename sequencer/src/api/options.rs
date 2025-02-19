@@ -413,7 +413,7 @@ impl Options {
 #[derive(Parser, Clone, Copy, Debug)]
 pub struct Http {
     /// Port that the HTTP API will use.
-    #[clap(long, env = "ESPRESSO_SEQUENCER_API_PORT")]
+    #[clap(long, env = "ESPRESSO_SEQUENCER_API_PORT", default_value = "8080")]
     pub port: u16,
 
     /// Maximum number of concurrent HTTP connections the server will allow.
