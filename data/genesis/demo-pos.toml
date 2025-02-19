@@ -6,7 +6,7 @@ capacity = 10
 
 [chain_config]
 chain_id = 999999999
-base_fee = '0 wei'
+base_fee = '1 wei'
 max_block_size = '1mb'
 fee_recipient = '0x0000000000000000000000000000000000000000'
 fee_contract = '0xa15bb66138824a1c7167f5e85b957d04dd34e468'
@@ -19,8 +19,8 @@ number = 0
 
 [[upgrade]]
 version = "0.3"
-start_proposing_view = 10
-stop_proposing_view = 60
+start_proposing_view = 65
+stop_proposing_view = 120
 
 [upgrade.epoch]
 [upgrade.epoch.chain_config]
