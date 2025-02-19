@@ -189,8 +189,10 @@ impl EpochCommittees {
         };
 
         self.state.insert(epoch, committee.clone());
-        self.state.insert(epoch + 1, committee.clone());
-        self.state.insert(epoch + 2, committee.clone());
+        for i in epoch.u64()..=epoch.u64() + 15 {
+            self.state.insert(EpochNumber::new(i + 1), committee.clone());
+        }
+
         committee
     }
 
@@ -246,7 +248,7 @@ impl EpochCommittees {
 
         // TODO: remove this, workaround for hotshot asking for stake tables from epoch 1 and 2
         let mut map = HashMap::new();
-        for epoch in Epoch::genesis().u64()..=10 {
+        for epoch in Epoch::genesis().u64()..=50 {
             map.insert(Epoch::new(epoch), members.clone());
         }
 
