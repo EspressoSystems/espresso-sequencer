@@ -8,8 +8,18 @@ contract StakeTableMock is StakeTable {
         address token,
         address lightClientAddress,
         uint64 churnRate,
-        uint64 hotShotBlocksPerEpoch
-    ) StakeTable(token, lightClientAddress, churnRate, hotShotBlocksPerEpoch) 
+        uint64 hotShotBlocksPerEpoch,
+        uint256 minStakeAmount,
+        address initialOwner
+    )
+        StakeTable(
+            token,
+            lightClientAddress,
+            churnRate,
+            hotShotBlocksPerEpoch,
+            minStakeAmount,
+            initialOwner
+        )
     // solhint-disable-next-line no-empty-blocks
     { }
 

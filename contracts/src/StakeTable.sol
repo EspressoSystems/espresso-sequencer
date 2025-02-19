@@ -6,11 +6,12 @@ import { BLSSig } from "./libraries/BLSSig.sol";
 import { AbstractStakeTable } from "./interfaces/AbstractStakeTable.sol";
 import { LightClient } from "../src/LightClient.sol";
 import { EdOnBN254 } from "./libraries/EdOnBn254.sol";
+import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 
 using EdOnBN254 for EdOnBN254.EdOnBN254Point;
 
 /// @title Implementation of the Stake Table interface
-contract StakeTable is AbstractStakeTable {
+contract StakeTable is AbstractStakeTable, Ownable {
     /// Error to notify restaking is not implemented yet.
     error RestakingNotImplemented();
 
@@ -64,8 +65,14 @@ contract StakeTable is AbstractStakeTable {
     // Error raised when zero point keys are provided
     error NoKeyChange();
 
-    // Error raised when the caller is not the admin
+    /// Error raised when the caller is not the owner
     error Unauthorized();
+
+    /// Error raised when the light client address is invalid
+    error InvalidAddress();
+
+    /// Error raised when the value is invalid
+    error InvalidValue();
 
     // Error raised when the hotShotBlocksPerEpoch is zero
     error InvalidHotShotBlocksPerEpoch();
@@ -103,15 +110,19 @@ contract StakeTable is AbstractStakeTable {
 
     address public admin;
 
+    uint256 public minStakeAmount;
+
+    /// TODO change constructor to initialize function when we make the contract upgradeable
     constructor(
         address _tokenAddress,
         address _lightClientAddress,
         uint64 _maxNumChurnPerEpoch,
-        uint64 _hotShotBlocksPerEpoch
-    ) {
+        uint64 _hotShotBlocksPerEpoch,
+        uint256 _minStakeAmount,
+        address _initialOwner
+    ) Ownable(_initialOwner) {
         tokenAddress = _tokenAddress;
         lightClient = LightClient(_lightClientAddress);
-
         maxNumChurnPerEpoch = _maxNumChurnPerEpoch;
 
         // A set of hardcoded stakers is defined for the first epoch.
@@ -127,7 +138,7 @@ contract StakeTable is AbstractStakeTable {
             revert InvalidHotShotBlocksPerEpoch();
         }
         hotShotBlocksPerEpoch = _hotShotBlocksPerEpoch;
-
+        minStakeAmount = _minStakeAmount;
         admin = msg.sender;
     }
 
@@ -271,10 +282,8 @@ contract StakeTable is AbstractStakeTable {
         BN254.G1Point memory blsSig,
         uint64 validUntilEpoch
     ) external virtual override {
-        uint256 fixedStakeAmount = minStakeAmount();
-
         // Verify that the sender amount is the minStakeAmount
-        if (amount < fixedStakeAmount) {
+        if (amount < minStakeAmount) {
             revert InsufficientStakeAmount(amount);
         }
 
@@ -287,13 +296,13 @@ contract StakeTable is AbstractStakeTable {
 
         // Verify that this contract has permissions to access the validator's stake token.
         uint256 allowance = ERC20(tokenAddress).allowance(msg.sender, address(this));
-        if (allowance < fixedStakeAmount) {
-            revert InsufficientAllowance(allowance, fixedStakeAmount);
+        if (allowance < amount) {
+            revert InsufficientAllowance(allowance, amount);
         }
 
         // Verify that the validator has the balance for this stake token.
         uint256 balance = ERC20(tokenAddress).balanceOf(msg.sender);
-        if (balance < fixedStakeAmount) {
+        if (balance < amount) {
             revert InsufficientBalance(balance);
         }
 
@@ -331,23 +340,21 @@ contract StakeTable is AbstractStakeTable {
         }
 
         // Transfer the stake amount of ERC20 tokens from the sender to this contract.
-        SafeTransferLib.safeTransferFrom(
-            ERC20(tokenAddress), msg.sender, address(this), fixedStakeAmount
-        );
+        SafeTransferLib.safeTransferFrom(ERC20(tokenAddress), msg.sender, address(this), amount);
 
         // Update the total staked amount
-        totalStake += fixedStakeAmount;
+        totalStake += amount;
 
         // Create an entry for the node.
         node.account = msg.sender;
-        node.balance = fixedStakeAmount;
+        node.balance = amount;
         node.blsVK = blsVK;
         node.schnorrVK = schnorrVK;
         node.registerEpoch = registrationEpoch;
 
         nodes[msg.sender] = node;
 
-        emit Registered(msg.sender, registrationEpoch, fixedStakeAmount);
+        emit Registered(msg.sender, registrationEpoch, amount);
     }
 
     /// @notice Deposit more stakes to registered keys
@@ -523,10 +530,30 @@ contract StakeTable is AbstractStakeTable {
         emit UpdatedConsensusKeys(msg.sender, node.blsVK, node.schnorrVK);
     }
 
-    /// @notice Minimum stake amount
-    /// @return Minimum stake amount
-    /// TODO: This value should be a variable modifiable by admin
-    function minStakeAmount() public pure returns (uint256) {
-        return 10 ether;
+    /// @notice Update the min stake amount
+    /// @dev The min stake amount cannot be set to zero
+    /// @param _minStakeAmount The new min stake amount
+    function updateMinStakeAmount(uint256 _minStakeAmount) external onlyOwner {
+        if (_minStakeAmount == 0) revert InvalidValue();
+        minStakeAmount = _minStakeAmount;
+        emit MinStakeAmountUpdated(minStakeAmount);
+    }
+
+    /// @notice Update the max churn rate
+    /// @dev The max churn rate cannot be set to zero
+    /// @param _maxChurnRate The new max churn rate
+    function updateMaxChurnRate(uint64 _maxChurnRate) external onlyOwner {
+        if (_maxChurnRate == 0) revert InvalidValue();
+        maxNumChurnPerEpoch = _maxChurnRate;
+        emit MaxChurnRateUpdated(maxNumChurnPerEpoch);
+    }
+
+    /// @notice Update the light client address
+    /// @dev The light client address cannot be set to the zero address
+    /// @param _lightClientAddress The new light client address
+    function updateLightClientAddress(address _lightClientAddress) external onlyOwner {
+        if (_lightClientAddress == address(0)) revert InvalidAddress();
+        lightClient = LightClient(_lightClientAddress);
+        emit LightClientAddressUpdated(_lightClientAddress);
     }
 }

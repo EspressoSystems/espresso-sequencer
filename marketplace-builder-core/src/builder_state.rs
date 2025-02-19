@@ -163,7 +163,7 @@ pub struct BuilderState<Types: NodeType> {
     /// purposes of building a valid block payload within the sequencer.
     pub validated_state: Arc<Types::ValidatedState>,
 
-    /// instance state to enfoce `max_block_size`
+    /// instance state to enforce `max_block_size`
     pub instance_state: Arc<Types::InstanceState>,
 }
 
