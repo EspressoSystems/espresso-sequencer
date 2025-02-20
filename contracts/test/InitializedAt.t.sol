@@ -9,4 +9,10 @@ contract InitializedAtTest is Test {
         InitializedAt init = new InitializedAt();
         assertEq(init.initializedAtBlock(), block.number);
     }
+
+    function testCallingInitializerTwiceReverts() public {
+        InitializedAt init = new InitializedAt();
+        vm.expectRevert();
+        init.initialize();
+    }
 }
