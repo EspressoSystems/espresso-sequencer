@@ -10,14 +10,11 @@ use ethers_conv::ToAlloy;
 use hotshot::types::{BLSPubKey, SignatureKey as _};
 use hotshot_contract_adapter::stake_table::{bls_alloy_to_jf, NodeInfoJf};
 use hotshot_types::{
-    data::EpochNumber,
-    stake_table::StakeTableEntry,
-    traits::{
+    data::EpochNumber, epoch_membership::EpochMembership, stake_table::StakeTableEntry, traits::{
         election::Membership,
         node_implementation::{ConsensusTime, NodeType},
         signature_key::StakeTableEntryType,
-    },
-    PeerConfig,
+    }, utils::verify_epoch_root_chaing, PeerConfig
 };
 
 use itertools::Itertools;
@@ -504,8 +501,10 @@ impl Membership<SeqTypes> for EpochCommittees {
         self.state.contains_key(&epoch)
     }
 
-    async fn get_epoch_root(&self, _block_height: u64) -> Option<(Epoch, Header)> {
-        None
+    async fn get_epoch_root(&self, _block_height: u64, epoch_height: u64) -> Option<(Epoch, Header)> {
+        // Fetch leaves from peers
+        let leaf_chain = vec![];
+        verify_epoch_root_chaing(leaf_chain, self, epoch_height, upgrade_lock)
     }
 }
 

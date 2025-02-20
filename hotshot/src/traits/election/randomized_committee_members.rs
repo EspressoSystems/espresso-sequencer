@@ -453,6 +453,7 @@ impl<TYPES: NodeType, CONFIG: QuorumFilterConfig> Membership<TYPES>
     async fn get_epoch_root(
         &self,
         _block_height: u64,
+        _epoch_height: u64,
     ) -> Option<(TYPES::Epoch, TYPES::BlockHeader)> {
         None
     }
