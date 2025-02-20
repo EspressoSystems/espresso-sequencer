@@ -242,6 +242,7 @@ impl<TYPES: NodeType> Membership<TYPES> for StaticCommitteeLeaderForTwoViews<TYP
     async fn get_epoch_root(
         &self,
         _block_height: u64,
+        _epoch_height: u64,
     ) -> Option<(TYPES::Epoch, TYPES::BlockHeader)> {
         None
     }
