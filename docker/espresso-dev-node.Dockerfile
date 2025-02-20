@@ -25,6 +25,10 @@ RUN chmod +x /bin/launch-dev-node-with-postgres
 ENV ESPRESSO_SEQUENCER_API_PORT=8770
 HEALTHCHECK --interval=1s --timeout=1s --retries=100 CMD curl --fail http://localhost:${ESPRESSO_SEQUENCER_API_PORT}/status/block-height || exit 1
 
+# A storage directory is required to run the node. Set one inside the container by default. For
+# persistence between runs, the user can optionally set up a volume mounted at this path.
+ENV ESPRESSO_SEQUENCER_STORAGE_PATH=/data/espresso
+
 EXPOSE 8770
 EXPOSE 8771
 EXPOSE 8772

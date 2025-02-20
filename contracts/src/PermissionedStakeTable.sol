@@ -4,12 +4,13 @@ pragma solidity ^0.8.0;
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { BN254 } from "bn254/BN254.sol";
 import { EdOnBN254 } from "./libraries/EdOnBn254.sol";
+import { InitializedAt } from "./InitializedAt.sol";
 
 /**
  * @title SimpleStakeTable
  * @dev An stake table mapping with owner-only access control.
  */
-contract PermissionedStakeTable is Ownable {
+contract PermissionedStakeTable is Ownable, InitializedAt {
     event StakersUpdated(BN254.G2Point[] removed, NodeInfo[] added);
 
     error StakerAlreadyExists(BN254.G2Point);
@@ -27,7 +28,7 @@ contract PermissionedStakeTable is Ownable {
     // State mapping from staker IDs to their staking status
     mapping(bytes32 nodeID => bool isStaker) private stakers;
 
-    constructor(NodeInfo[] memory initialStakers) Ownable(msg.sender) {
+    constructor(NodeInfo[] memory initialStakers) Ownable(msg.sender) InitializedAt() {
         insert(initialStakers);
     }
 

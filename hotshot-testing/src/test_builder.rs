@@ -6,7 +6,6 @@
 
 use std::{collections::HashMap, num::NonZeroUsize, rc::Rc, sync::Arc, time::Duration};
 
-use anyhow::{ensure, Result};
 use async_lock::RwLock;
 use hotshot::{
     tasks::EventTransformerState,
@@ -15,14 +14,15 @@ use hotshot::{
     HotShotInitializer, MarketplaceConfig, SystemContext, TwinsHandlerState,
 };
 use hotshot_example_types::{
-    auction_results_provider_types::TestAuctionResultsProvider, state_types::TestInstanceState,
-    storage_types::TestStorage, testable_delay::DelayConfig,
+    auction_results_provider_types::TestAuctionResultsProvider, node_types::TestTypes,
+    state_types::TestInstanceState, storage_types::TestStorage, testable_delay::DelayConfig,
 };
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
     traits::node_implementation::{NodeType, Versions},
     HotShotConfig, PeerConfig, ValidatorConfig,
 };
+use hotshot_utils::anytrace::*;
 use tide_disco::Url;
 use vec1::Vec1;
 
@@ -32,6 +32,7 @@ use super::{
     txn_task::TxnTaskDescription,
 };
 use crate::{
+    helpers::{key_pair_for_id, TestNodeKeyMap},
     spinning_task::SpinningTaskDescription,
     test_launcher::{Network, ResourceGenerators, TestLauncher},
     test_task::TestTaskStateSeed,
@@ -125,7 +126,7 @@ pub struct TestDescription<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Ver
     /// `HotShotInitializer::from_reload` in the spinning task.
     pub skip_late: bool,
     /// overall safety property description
-    pub overall_safety_properties: OverallSafetyPropertiesDescription<TYPES>,
+    pub overall_safety_properties: OverallSafetyPropertiesDescription,
     /// spinning properties
     pub spinning_properties: SpinningTaskDescription,
     /// txns timing
@@ -354,14 +355,9 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TestDescription
         let num_nodes_with_stake = 100;
 
         Self {
-            overall_safety_properties: OverallSafetyPropertiesDescription::<TYPES> {
+            overall_safety_properties: OverallSafetyPropertiesDescription {
                 num_successful_views: 50,
-                check_leaf: true,
-                check_block: true,
-                num_failed_views: 15,
-                transaction_threshold: 0,
-                threshold_calculator: Arc::new(|_active, total| (2 * total / 3 + 1)),
-                expected_views_to_fail: HashMap::new(),
+                ..OverallSafetyPropertiesDescription::default()
             },
             timing_data: TimingData {
                 next_view_timeout: 2000,
@@ -378,14 +374,9 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TestDescription
     pub fn default_multiple_rounds() -> Self {
         let num_nodes_with_stake = 10;
         TestDescription::<TYPES, I, V> {
-            overall_safety_properties: OverallSafetyPropertiesDescription::<TYPES> {
+            overall_safety_properties: OverallSafetyPropertiesDescription {
                 num_successful_views: 20,
-                check_leaf: true,
-                check_block: true,
-                num_failed_views: 8,
-                transaction_threshold: 0,
-                threshold_calculator: Arc::new(|_active, total| (2 * total / 3 + 1)),
-                expected_views_to_fail: HashMap::new(),
+                ..OverallSafetyPropertiesDescription::default()
             },
             timing_data: TimingData {
                 ..TimingData::default()
@@ -450,6 +441,16 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TestDescription
             ),
             ..self
         }
+    }
+
+    pub fn build_node_key_map(&self) -> Arc<TestNodeKeyMap> {
+        let mut node_key_map = TestNodeKeyMap::new();
+        for i in 0..self.test_config.num_nodes_with_stake.into() {
+            let (private_key, public_key) = key_pair_for_id::<TestTypes>(i as u64);
+            node_key_map.insert(public_key, private_key);
+        }
+
+        Arc::new(node_key_map)
     }
 }
 

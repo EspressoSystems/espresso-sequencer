@@ -5,7 +5,6 @@ use std::{collections::HashMap, fmt::Display, marker::PhantomData, sync::Arc};
 
 use async_trait::async_trait;
 use hotshot::types::SignatureKey;
-use hotshot_example_types::node_types::TestVersions;
 use hotshot_testing::{
     block_builder::{BuilderTask, TestBuilderImplementation},
     test_builder::BuilderChange,
@@ -73,7 +72,7 @@ where
 
         // Create tide-disco app based on global state
         let app = Arc::clone(&service)
-            .into_app::<TestVersions>()
+            .into_app()
             .expect("Failed to create builder tide-disco app");
 
         let url_clone = url.clone();
@@ -153,7 +152,6 @@ mod tests {
             ),
             overall_safety_properties: OverallSafetyPropertiesDescription {
                 num_successful_views,
-                num_failed_views: 5,
                 ..Default::default()
             },
             ..TestDescription::default()
@@ -197,7 +195,6 @@ mod tests {
                 ),
                 overall_safety_properties: OverallSafetyPropertiesDescription {
                     num_successful_views: 50,
-                    num_failed_views: 5,
                     ..Default::default()
                 },
                 ..Default::default()
