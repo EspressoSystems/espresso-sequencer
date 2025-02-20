@@ -1,11 +1,14 @@
 use super::{
+    traits::StateCatchup,
     v0_3::{DAMembers, StakeTable, StakeTables},
+    v0_99::ChainConfig,
     Header, L1Client, NodeState, PubKey, SeqTypes,
 };
 
 use async_trait::async_trait;
+use committable::Committable;
 use contract_bindings_alloy::permissionedstaketable::PermissionedStakeTable::StakersUpdated;
-use ethers::types::{Address, U256};
+use ethers::types::U256;
 use ethers_conv::ToAlloy;
 use hotshot::types::{BLSPubKey, SignatureKey as _};
 use hotshot_contract_adapter::stake_table::{bls_alloy_to_jf, NodeInfoJf};
@@ -24,11 +27,9 @@ use std::{
     cmp::max,
     collections::{BTreeSet, HashMap},
     num::NonZeroU64,
-    str::FromStr,
+    sync::Arc,
 };
 use thiserror::Error;
-
-use url::Url;
 
 type Epoch = <SeqTypes as NodeType>::Epoch;
 
@@ -82,7 +83,7 @@ impl StakeTables {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(derive_more::Debug, Clone)]
 /// Type to describe DA and Stake memberships
 pub struct EpochCommittees {
     /// Committee used when we're in pre-epoch state
@@ -97,8 +98,9 @@ pub struct EpochCommittees {
     /// L1 provider
     l1_client: L1Client,
 
-    /// Address of Stake Table Contract
-    contract_address: Option<Address>,
+    chain_config: ChainConfig,
+    #[debug("{}", peers.name())]
+    pub peers: Arc<dyn StateCatchup>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -189,9 +191,8 @@ impl EpochCommittees {
         };
 
         self.state.insert(epoch, committee.clone());
-        for i in epoch.u64()..=epoch.u64() + 15 {
-            self.state.insert(EpochNumber::new(i + 1), committee.clone());
-        }
+        self.state.insert(epoch + 1, committee.clone());
+        self.state.insert(epoch + 2, committee.clone());
 
         committee
     }
@@ -252,14 +253,13 @@ impl EpochCommittees {
             map.insert(Epoch::new(epoch), members.clone());
         }
 
-        let address = instance_state.chain_config.stake_table_contract;
-
         Self {
             non_epoch_committee: members,
             state: map,
             _epoch_size: epoch_size,
             l1_client: instance_state.l1_client.clone(),
-            contract_address: address,
+            chain_config: instance_state.chain_config,
+            peers: instance_state.peers.clone(),
         }
     }
 
@@ -284,65 +284,11 @@ impl Membership<SeqTypes> for EpochCommittees {
     fn new(
         // TODO remove `new` from trait and remove this fn as well.
         // https://github.com/EspressoSystems/HotShot/commit/fcb7d54a4443e29d643b3bbc53761856aef4de8b
-        committee_members: Vec<PeerConfig<PubKey>>,
-        da_members: Vec<PeerConfig<PubKey>>,
+        _committee_members: Vec<PeerConfig<PubKey>>,
+        _da_members: Vec<PeerConfig<PubKey>>,
     ) -> Self {
-        // For each eligible leader, get the stake table entry
-        let eligible_leaders: Vec<_> = committee_members
-            .iter()
-            .map(|member| member.stake_table_entry.clone())
-            .filter(|entry| entry.stake() > U256::zero())
-            .collect();
-
-        // For each member, get the stake table entry
-        let stake_table: Vec<_> = committee_members
-            .iter()
-            .map(|member| member.stake_table_entry.clone())
-            .filter(|entry| entry.stake() > U256::zero())
-            .collect();
-
-        // For each member, get the stake table entry
-        let da_members: Vec<_> = da_members
-            .iter()
-            .map(|member| member.stake_table_entry.clone())
-            .filter(|entry| entry.stake() > U256::zero())
-            .collect();
-
-        // Index the stake table by public key
-        let indexed_stake_table: HashMap<PubKey, _> = stake_table
-            .iter()
-            .map(|entry| (PubKey::public_key(entry), entry.clone()))
-            .collect();
-
-        // Index the stake table by public key
-        let indexed_da_members: HashMap<PubKey, _> = da_members
-            .iter()
-            .map(|entry| (PubKey::public_key(entry), entry.clone()))
-            .collect();
-
-        let members = Committee {
-            eligible_leaders,
-            stake_table,
-            da_members,
-            indexed_stake_table,
-            indexed_da_members,
-        };
-
-        let mut map = HashMap::new();
-        map.insert(Epoch::genesis(), members.clone());
-        // TODO: remove this, workaround for hotshot asking for stake tables from epoch 1
-        map.insert(Epoch::genesis() + 1u64, members.clone());
-
-        Self {
-            non_epoch_committee: members,
-            state: map,
-            _epoch_size: 12,
-            l1_client: L1Client::new(vec![Url::from_str("http:://ab.b").unwrap()])
-                .expect("Failed to create L1 client"),
-            contract_address: None,
-        }
+        panic!("EpochCommittees::new() called. This function has been replaced with new_stake()");
     }
-
     /// Get the stake table for the current view
     fn stake_table(&self, epoch: Option<Epoch>) -> Vec<StakeTableEntry<PubKey>> {
         let st = if let Some(st) = self.state(&epoch) {
@@ -513,7 +459,17 @@ impl Membership<SeqTypes> for EpochCommittees {
         epoch: Epoch,
         block_header: Header,
     ) -> Option<Box<dyn FnOnce(&mut Self) + Send>> {
-        let address = self.contract_address?;
+        let chain_config = get_chain_config(self.chain_config, &self.peers, &block_header)
+            .await
+            .ok()?;
+
+        let contract_address = chain_config.stake_table_contract;
+
+        if contract_address.is_none() {
+            tracing::error!("No stake table contract address found in Chain config");
+        }
+
+        let address = contract_address?;
 
         self.l1_client
             .get_stake_table(address.to_alloy(), block_header.l1_head())
@@ -526,6 +482,31 @@ impl Membership<SeqTypes> for EpochCommittees {
             })
     }
 }
+
+pub(crate) async fn get_chain_config(
+    chain_config: ChainConfig,
+    peers: &impl StateCatchup,
+    header: &Header,
+) -> anyhow::Result<ChainConfig> {
+    let header_cf = header.chain_config();
+    if chain_config.commit() == header_cf.commit() {
+        return Ok(chain_config);
+    }
+
+    let cf = match header_cf.resolve() {
+        Some(cf) => cf,
+        None => peers
+            .fetch_chain_config(header_cf.commit())
+            .await
+            .map_err(|err| {
+                tracing::error!("failed to get chain_config from peers. err: {err:?}");
+                err
+            })?,
+    };
+
+    Ok(cf)
+}
+
 #[cfg(test)]
 mod tests {
     use contract_bindings_alloy::permissionedstaketable::PermissionedStakeTable::NodeInfo;

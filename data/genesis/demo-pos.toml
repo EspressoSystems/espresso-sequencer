@@ -19,8 +19,8 @@ number = 0
 
 [[upgrade]]
 version = "0.3"
-start_proposing_view = 65
-stop_proposing_view = 120
+start_proposing_view = 10
+stop_proposing_view = 50
 
 [upgrade.epoch]
 [upgrade.epoch.chain_config]
