@@ -5,7 +5,7 @@ use vid::{avid_m::AvidMScheme, VidScheme};
 
 fn verify_benchmark(c: &mut Criterion) {
     let param_list = [(6, 10), (50, 100)];
-    let payload_bytes_len_list = [32 * 1024 * 1024];
+    let payload_bytes_len_list = [1024 * 1024];
     let mut payload = vec![0u8; 32 * 1024 * 1024];
     let distribution = [1u32; 1000];
     jf_utils::test_rng().fill_bytes(&mut payload);

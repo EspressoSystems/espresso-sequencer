@@ -255,6 +255,7 @@ impl VidScheme for AvidMScheme {
         distribution: &[u32],
         payload: &[u8],
     ) -> VidResult<(Self::Commit, Vec<Self::Share>)> {
+        let payload_byte_len = payload.len();
         let total_weights = distribution.iter().sum::<u32>() as usize;
         if total_weights != param.total_weights {
             return Err(VidError::Argument(
@@ -265,7 +266,7 @@ impl VidScheme for AvidMScheme {
             return Err(VidError::Argument("Weight cannot be zero".to_string()));
         }
 
-        let disperse_timer = start_timer!(|| format!("Disperse {} bytes", payload.len()));
+        let disperse_timer = start_timer!(|| format!("Disperse {} bytes", payload_byte_len));
 
         let (mt, raw_shares) = Self::raw_encode(param.recovery_threshold, total_weights, payload)?;
 
@@ -298,7 +299,7 @@ impl VidScheme for AvidMScheme {
             .enumerate()
             .map(|(i, payload)| AvidMShare {
                 index: i as u32,
-                payload_byte_len: payload.len(),
+                payload_byte_len,
                 content: RawAvidMShare {
                     range: ranges[i].clone(),
                     payload,
