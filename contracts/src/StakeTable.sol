@@ -166,7 +166,7 @@ contract StakeTable is AbstractStakeTable, Ownable {
     /// @dev Fetches the last hotshot block number from the light client contract to calculate the
     /// epoch.
     /// @return current epoch (computed from the last known hotshot block number)
-    function currentEpoch() public view returns (uint64) {
+    function currentEpoch() public view virtual returns (uint64) {
         // get the last hotshot block number from the light client contract since this contract
         // gets the latest info from HotShot periodically
         (, uint64 lastHotshotBlockNumber,) = lightClient.finalizedState();
@@ -423,34 +423,33 @@ contract StakeTable is AbstractStakeTable, Ownable {
     }
 
     /// @notice Withdraw from the staking pool. Transfers occur! Only successfully exited keys can
-    /// withdraw past their `exitEpoch`.
-    ///
+    /// withdraw past their `exitEpoch`. Validators have to first call requestExit to be assigned an
+    /// exit epoch
     /// @return The total amount withdrawn, equal to `Node.balance` associated with `blsVK`
     /// TODO: add epoch logic so that we can ensure the node has first requested to exit and waiting
     /// for the exit escrow period to be over
     function withdrawFunds() external virtual override returns (uint256) {
         Node memory node = nodes[msg.sender];
 
-        // Verify that the node is already registered.
         if (node.account == address(0)) {
             revert NodeNotRegistered();
         }
 
-        // The exit request must come from the node's withdrawal account.
         if (node.account != msg.sender) {
             revert Unauthenticated();
         }
 
-        // Verify that the balance is greater than zero
         uint256 balance = node.balance;
         if (balance == 0) {
+            // then there's nothing to withdraw but revert so that they're aware that the withdrawal
+            // failed
             revert InsufficientStakeBalance(0);
         }
 
-        // // Verify that the exit escrow period is over.
-        // if (currentEpoch() < node.exitEpoch + exitEscrowPeriod(node)) {
-        //     revert PrematureWithdrawal();
-        // }
+        // Verify that the exit escrow period is over.
+        if (currentEpoch() < node.exitEpoch + exitEscrowPeriod(node)) {
+            revert PrematureWithdrawal();
+        }
         totalStake -= balance;
 
         // Delete the node from the stake table.

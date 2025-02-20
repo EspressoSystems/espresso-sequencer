@@ -698,6 +698,7 @@ contract StakeTable_register_Test is Test {
     }
 
     function test_WithdrawFunds_succeeds() public {
+        // register -> updateEpoch -> requestExit -> updateEpoch -> withdraw
         // Register the node and set exit epoch
         uint64 depositAmount = 10 ether;
         uint64 validUntilEpoch = 5;
@@ -717,12 +718,36 @@ contract StakeTable_register_Test is Test {
         assertEq(token.balanceOf(exampleTokenCreator), INITIAL_BALANCE);
 
         // register the node
+        vm.startPrank(exampleTokenCreator);
         vm.expectEmit(false, false, false, true, address(stakeTable));
         emit AbstractStakeTable.Registered(exampleTokenCreator, 1, depositAmount);
         stakeTable.register(blsVK, schnorrVK, depositAmount, sig, validUntilEpoch);
 
+        // the node must be registered before you can exit so update the hotshot block number on the
+        // light client contract
+        S.Node memory node = stakeTable.lookupNode(exampleTokenCreator);
+        lcMock.setFinalizedState(
+            LightClient.LightClientState(0, node.registerEpoch + 1, BN254.ScalarField.wrap(0))
+        );
+        assertGe(stakeTable.currentEpoch(), node.registerEpoch + 1);
+
+        stakeTable.requestExit();
+
+        // update the hotshot block number on the light client contract to be greater than the
+        // exitEpoch
+        // and the exitEscrowPeriod is over
+        node = stakeTable.lookupNode(exampleTokenCreator);
+        uint64 exitEscrowPeriod = stakeTable.mockExitEscrowPeriod(node);
+        uint64 validWithdrawalEpoch = node.exitEpoch + exitEscrowPeriod + 1;
+        lcMock.setFinalizedState(
+            LightClient.LightClientState(0, validWithdrawalEpoch, BN254.ScalarField.wrap(0))
+        );
+        assertGe(stakeTable.currentEpoch(), validWithdrawalEpoch);
+
         // Withdraw the funds
+        vm.startPrank(exampleTokenCreator);
         uint256 balance = stakeTable.withdrawFunds();
+        vm.stopPrank();
 
         // verify the withdraw
         assertEq(balance, depositAmount);

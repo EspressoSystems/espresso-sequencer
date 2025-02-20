@@ -40,6 +40,11 @@ contract StakeTableMock is StakeTable {
         super.pushToExitQueue();
     }
 
+    // expose the internal function for testing by calling the super implementation
+    function mockExitEscrowPeriod(Node memory node) public returns (uint64) {
+        return super.exitEscrowPeriod(node);
+    }
+
     function mockUpdateHotShotBlocksPerEpoch(uint64 newHotShotBlocksPerEpoch) public {
         hotShotBlocksPerEpoch = newHotShotBlocksPerEpoch;
     }
