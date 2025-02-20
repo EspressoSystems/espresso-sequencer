@@ -48,11 +48,10 @@ use crate::{
 };
 
 async fn notify_membership_of_drb_result<TYPES: NodeType>(
-    membership: &Arc<RwLock<TYPES::Membership>>,
-    epoch: <TYPES as NodeType>::Epoch,
+    membership: &EpochMembership<TYPES>,
     drb_result: DrbResult,
 ) {
-    membership.write().await.add_drb_result(epoch, drb_result);
+    membership.add_drb_result(drb_result).await;
 }
 
 /// Store the DRB result from the computation task to the shared `results` table.
@@ -100,7 +99,7 @@ async fn store_and_get_computed_drb_result<
                 .insert(epoch_number, result);
             drop(consensus_writer);
 
-            notify_membership_of_drb_result::<TYPES>(&task_state.membership, epoch_number, result)
+            notify_membership_of_drb_result::<TYPES>(&task_state.membership.membership_for_epoch(Some(epoch_number)).await?, result)
                 .await;
             task_state.drb_computation = None;
             Ok(result)
@@ -215,8 +214,7 @@ async fn start_drb_task<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versio
                             .results
                             .insert(*task_epoch, result);
                         notify_membership_of_drb_result::<TYPES>(
-                            &task_state.membership,
-                            *task_epoch,
+                            &epoch_membership,
                             result,
                         )
                         .await;
@@ -334,8 +332,7 @@ async fn store_drb_seed_and_result<TYPES: NodeType, I: NodeImplementation<TYPES>
                 .results
                 .insert(current_epoch_number + 1, result);
             notify_membership_of_drb_result::<TYPES>(
-                &task_state.membership,
-                current_epoch_number + 1,
+                &task_state.membership.membership_for_epoch(Some(current_epoch_number + 1)).await?,
                 result,
             )
             .await;

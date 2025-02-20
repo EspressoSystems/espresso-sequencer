@@ -7,6 +7,7 @@ use async_lock::{Mutex, RwLock};
 use hotshot_utils::anytrace::{Error, Level, Result};
 use hotshot_utils::{line_info, warn};
 
+use crate::drb::DrbResult;
 use crate::traits::election::Membership;
 use crate::traits::node_implementation::{ConsensusTime, NodeType};
 use crate::traits::signature_key::SignatureKey;
@@ -424,5 +425,16 @@ impl<TYPES: NodeType> EpochMembership<TYPES> {
             .read()
             .await
             .upgrade_threshold(self.epoch)
+    }
+
+    /// Add the epoch result to the memebership
+    pub async fn add_drb_result(&self, drb_result: DrbResult) {
+        if let Some(epoch) = self.epoch() {
+            self.coordinator
+                .membership
+                .write()
+                .await
+                .add_drb_result(epoch, drb_result)
+        }
     }
 }
