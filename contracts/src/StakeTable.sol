@@ -7,8 +7,6 @@ import { AbstractStakeTable } from "./interfaces/AbstractStakeTable.sol";
 import { LightClient } from "../src/LightClient.sol";
 import { EdOnBN254 } from "./libraries/EdOnBn254.sol";
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
-
-// TODO: remove this when contract is made upgradable
 import { InitializedAt } from "./InitializedAt.sol";
 
 using EdOnBN254 for EdOnBN254.EdOnBN254Point;
