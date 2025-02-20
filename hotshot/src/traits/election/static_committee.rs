@@ -7,6 +7,7 @@
 use std::{cmp::max, collections::BTreeMap, num::NonZeroU64};
 
 use hotshot_types::{
+    drb::DrbResult,
     traits::{
         election::Membership,
         node_implementation::NodeType,
@@ -14,7 +15,7 @@ use hotshot_types::{
     },
     PeerConfig,
 };
-use hotshot_utils::anytrace::Result;
+use hotshot_utils::anytrace::*;
 use primitive_types::U256;
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
@@ -234,4 +235,6 @@ impl<TYPES: NodeType> Membership<TYPES> for StaticCommittee<TYPES> {
         let len = self.stake_table.len();
         NonZeroU64::new(max((len as u64 * 9) / 10, ((len as u64 * 2) / 3) + 1)).unwrap()
     }
+
+    fn add_drb_result(&mut self, _epoch: <TYPES as NodeType>::Epoch, _drb_result: DrbResult) {}
 }

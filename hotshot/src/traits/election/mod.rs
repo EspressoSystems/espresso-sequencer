@@ -15,6 +15,9 @@ pub mod randomized_committee_members;
 /// static (round robin) committee election
 pub mod static_committee;
 
+/// static (round robin) committee election with DRB
+pub mod static_committee_with_drb;
+
 /// static (round robin leader for 2 consecutive views) committee election
 pub mod static_committee_leader_two_views;
 /// two static (round robin) committees for even and odd epochs

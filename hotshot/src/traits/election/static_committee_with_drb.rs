@@ -4,8 +4,10 @@
 // You should have received a copy of the MIT License
 // along with the HotShot repository. If not, see <https://mit-license.org/>.
 
+use std::{cmp::max, collections::BTreeMap, num::NonZeroU64};
+
 use hotshot_types::{
-    drb::DrbResult,
+    drb::{self, DrbResult, INITIAL_DRB_RESULT},
     traits::{
         election::Membership,
         node_implementation::NodeType,
@@ -13,14 +15,12 @@ use hotshot_types::{
     },
     PeerConfig,
 };
-use hotshot_utils::anytrace::Result;
+use hotshot_utils::anytrace::*;
 use primitive_types::U256;
-use std::{collections::BTreeMap, num::NonZeroU64};
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
-
 /// The static committee election
-pub struct StaticCommitteeLeaderForTwoViews<T: NodeType> {
+pub struct StaticCommitteeWithDrb<T: NodeType> {
     /// The nodes eligible for leadership.
     /// NOTE: This is currently a hack because the DA leader needs to be the quorum
     /// leader but without voting rights.
@@ -39,9 +39,12 @@ pub struct StaticCommitteeLeaderForTwoViews<T: NodeType> {
     /// The nodes on the committee and their stake, indexed by public key
     indexed_da_stake_table:
         BTreeMap<T::SignatureKey, <T::SignatureKey as SignatureKey>::StakeTableEntry>,
+
+    /// The results of DRB calculations
+    drb_result_table: BTreeMap<T::Epoch, DrbResult>,
 }
 
-impl<TYPES: NodeType> Membership<TYPES> for StaticCommitteeLeaderForTwoViews<TYPES> {
+impl<TYPES: NodeType> Membership<TYPES> for StaticCommitteeWithDrb<TYPES> {
     type Error = hotshot_utils::anytrace::Error;
 
     /// Create a new election
@@ -96,6 +99,7 @@ impl<TYPES: NodeType> Membership<TYPES> for StaticCommitteeLeaderForTwoViews<TYP
             da_stake_table: da_members,
             indexed_stake_table,
             indexed_da_stake_table,
+            drb_result_table: BTreeMap::new(),
         }
     }
 
@@ -161,7 +165,7 @@ impl<TYPES: NodeType> Membership<TYPES> for StaticCommitteeLeaderForTwoViews<TYP
         self.indexed_stake_table.get(pub_key).cloned()
     }
 
-    /// Get DA the stake table entry for a public key
+    /// Get the DA stake table entry for a public key
     fn da_stake(
         &self,
         pub_key: &<TYPES as NodeType>::SignatureKey,
@@ -197,13 +201,29 @@ impl<TYPES: NodeType> Membership<TYPES> for StaticCommitteeLeaderForTwoViews<TYP
     fn lookup_leader(
         &self,
         view_number: <TYPES as NodeType>::View,
-        _epoch: Option<<TYPES as NodeType>::Epoch>,
+        epoch: Option<<TYPES as NodeType>::Epoch>,
     ) -> Result<TYPES::SignatureKey> {
-        let index =
-            usize::try_from((*view_number / 2) % self.eligible_leaders.len() as u64).unwrap();
-        let res = self.eligible_leaders[index].clone();
+        if let Some(_epoch) = epoch {
+            /*let drb_result = if *epoch <= 2 {
+                &INITIAL_DRB_RESULT
+            } else {
+                self.drb_result_table
+                    .get(&epoch)
+                    .ok_or_else(|| panic!("DRB result not available for epoch {:?}", epoch))?
+            };*/
+            let drb_result = &INITIAL_DRB_RESULT;
 
-        Ok(TYPES::SignatureKey::public_key(&res))
+            Ok(drb::leader::<TYPES>(
+                view_number,
+                &self.eligible_leaders,
+                *drb_result,
+            ))
+        } else {
+            #[allow(clippy::cast_possible_truncation)]
+            let index = *view_number as usize % self.eligible_leaders.len();
+            let res = self.eligible_leaders[index].clone();
+            Ok(TYPES::SignatureKey::public_key(&res))
+        }
     }
 
     /// Get the total number of nodes in the committee
@@ -233,8 +253,11 @@ impl<TYPES: NodeType> Membership<TYPES> for StaticCommitteeLeaderForTwoViews<TYP
 
     /// Get the voting upgrade threshold for the committee
     fn upgrade_threshold(&self, _epoch: Option<<TYPES as NodeType>::Epoch>) -> NonZeroU64 {
-        NonZeroU64::new(((self.stake_table.len() as u64 * 9) / 10) + 1).unwrap()
+        let len = self.stake_table.len();
+        NonZeroU64::new(max((len as u64 * 9) / 10, ((len as u64 * 2) / 3) + 1)).unwrap()
     }
 
-    fn add_drb_result(&mut self, _epoch: <TYPES as NodeType>::Epoch, _drb_result: DrbResult) {}
+    fn add_drb_result(&mut self, epoch: <TYPES as NodeType>::Epoch, drb_result: DrbResult) {
+        self.drb_result_table.insert(epoch, drb_result);
+    }
 }
