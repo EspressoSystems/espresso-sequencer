@@ -504,7 +504,8 @@ impl Membership<SeqTypes> for EpochCommittees {
     async fn get_epoch_root(&self, _block_height: u64, epoch_height: u64) -> Option<(Epoch, Header)> {
         // Fetch leaves from peers
         let leaf_chain = vec![];
-        verify_epoch_root_chaing(leaf_chain, self, epoch_height, upgrade_lock)
+        // verify_epoch_root_chaing(leaf_chain, self, epoch_height, upgrade_lock)
+        None
     }
 }
 

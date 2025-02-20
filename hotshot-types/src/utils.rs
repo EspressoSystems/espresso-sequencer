@@ -6,6 +6,7 @@
 
 //! Utility functions, type aliases, helper structs and enum definitions.
 
+use anyhow::{anyhow, ensure};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use bincode::{
     config::{
@@ -14,7 +15,7 @@ use bincode::{
     },
     DefaultOptions, Options,
 };
-use committable::Commitment;
+use committable::{Commitment, Committable};
 use digest::OutputSizeUser;
 use serde::{Deserialize, Serialize};
 use sha2::Digest;
@@ -28,12 +29,10 @@ use typenum::Unsigned;
 use vbs::version::StaticVersionType;
 
 use crate::{
-    data::Leaf2,
-    traits::{
+    data::Leaf2, epoch_membership::EpochMembership, traits::{
         node_implementation::{ConsensusTime, NodeType, Versions},
         ValidatedState,
-    },
-    vid::VidCommitment,
+    }, vid::VidCommitment, vote::{Certificate, HasViewNumber}
 };
 
 /// A view's state
