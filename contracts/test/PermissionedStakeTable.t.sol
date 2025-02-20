@@ -60,7 +60,7 @@ contract PermissionedStakeTableTest is Test {
     // solhint-disable-next-line no-empty-blocks
     function emptyKeys() private pure returns (BN254.G2Point[] memory keys) { }
 
-    function test_Deployment_StoresBlockNumber() public {
+    function testDeploymentStoresBlockNumber() public {
         setUp();
         assertEq(stakeTable.initializedAtBlock(), block.number);
     }
