@@ -59,6 +59,10 @@ mod test {
         assert_eq![Some(9..10), g.next()];
         assert_eq![None, g.next()];
 
+        let g = ChunkGenerator::new(0, 5, 1);
+        let tups: Vec<(u64, u64)> = g.map(|range| (range.start, range.end)).collect();
+        assert_eq![vec![(0, 0), (1, 1), (2, 2), (3, 3), (4, 4), (5, 5)], tups];
+
         // Test chunk_size > than range.end
         let mut g = ChunkGenerator::new(0, 0, 3);
         assert_eq![Some(0..0), g.next()];
