@@ -169,10 +169,11 @@ pub(crate) async fn handle_quorum_proposal_recv<
         validation_info.epoch_height,
     );
 
-    let mut qc_mem = validation_info.membership.clone();
-    if qc_mem.epoch > justify_qc.data.epoch {
-        qc_mem = qc_mem.prev_epoch().await?;
-    }
+    let qc_mem = validation_info
+        .membership
+        .coordinator
+        .membership_for_epoch(justify_qc.data.epoch)
+        .await?;
 
     let membership_stake_table = qc_mem.stake_table().await;
     let membership_success_threshold = qc_mem.success_threshold().await;

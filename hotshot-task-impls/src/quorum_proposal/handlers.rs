@@ -378,10 +378,15 @@ impl<TYPES: NodeType, V: Versions> ProposalDependencyHandle<TYPES, V> {
             self.epoch_height,
         );
 
+        let mem = if self.membership.epoch() != epoch {
+            self.membership.next_epoch().await?
+        } else {
+            self.membership.clone()
+        };
         // Make sure we are the leader for the view and epoch.
         // We might have ended up here because we were in the epoch transition.
-        if self.membership.leader(self.view_number).await? != self.public_key {
-            tracing::debug!(
+        if mem.leader(self.view_number).await? != self.public_key {
+            tracing::warn!(
                 "We are not the leader in the epoch for which we are about to propose. Do not send the quorum proposal."
             );
             return Ok(());
