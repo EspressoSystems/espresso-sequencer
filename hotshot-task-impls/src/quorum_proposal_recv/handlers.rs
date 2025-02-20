@@ -171,9 +171,7 @@ pub(crate) async fn handle_quorum_proposal_recv<
 
     let mut qc_mem = validation_info.membership.clone();
     if qc_mem.epoch > justify_qc.data.epoch {
-        qc_mem = qc_mem
-            .prev_epoch()
-            .await?;
+        qc_mem = qc_mem.prev_epoch().await?;
     }
 
     let membership_stake_table = qc_mem.stake_table().await;
@@ -217,7 +215,12 @@ pub(crate) async fn handle_quorum_proposal_recv<
                 &validation_info.upgrade_lock,
             )
             .await
-            .context(|e| warn!("Invalid next epoch certificate for view {}: {}", *view_number, e))?;
+            .context(|e| {
+                warn!(
+                    "Invalid next epoch certificate for view {}: {}",
+                    *view_number, e
+                )
+            })?;
     }
     broadcast_event(
         Arc::new(HotShotEvent::QuorumProposalPreliminarilyValidated(

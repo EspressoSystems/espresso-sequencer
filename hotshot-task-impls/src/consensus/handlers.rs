@@ -77,11 +77,7 @@ pub(crate) async fn handle_quorum_vote_recv<
 
     if vote.epoch().is_some() {
         // If the vote sender belongs to the next epoch, collect it separately to form the second QC
-        let has_stake = mem
-            .next_epoch()
-            .await?
-            .has_stake(&vote.signing_key())
-            .await;
+        let has_stake = mem.next_epoch().await?.has_stake(&vote.signing_key()).await;
         if has_stake {
             handle_vote(
                 &mut task_state.next_epoch_vote_collectors,
@@ -130,7 +126,10 @@ pub(crate) async fn handle_timeout_vote_recv<
         &mut task_state.timeout_vote_collectors,
         vote,
         task_state.public_key.clone(),
-        &task_state.membership_coordinator.membership_for_epoch(vote.data.epoch).await?,
+        &task_state
+            .membership_coordinator
+            .membership_for_epoch(vote.data.epoch)
+            .await?,
         task_state.id,
         &event,
         sender,

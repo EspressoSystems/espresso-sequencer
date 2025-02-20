@@ -15,11 +15,20 @@ use either::Either;
 use futures::future::{err, join_all};
 use hotshot_task::task::{Task, TaskState};
 use hotshot_types::{
-    consensus::{Consensus, OuterConsensus}, data::{EpochNumber, Leaf, ViewChangeEvidence2}, epoch_membership::{self, EpochMembership, EpochMembershipCoordinator}, event::Event, message::UpgradeLock, simple_certificate::UpgradeCertificate, simple_vote::HasEpoch, traits::{
+    consensus::{Consensus, OuterConsensus},
+    data::{EpochNumber, Leaf, ViewChangeEvidence2},
+    epoch_membership::{self, EpochMembership, EpochMembershipCoordinator},
+    event::Event,
+    message::UpgradeLock,
+    simple_certificate::UpgradeCertificate,
+    simple_vote::HasEpoch,
+    traits::block_contents::BlockHeader,
+    traits::{
         node_implementation::{ConsensusTime, NodeImplementation, NodeType, Versions},
         signature_key::SignatureKey,
-    }, utils::option_epoch_from_block_number, vote::{Certificate, HasViewNumber},
-    traits::block_contents::BlockHeader,
+    },
+    utils::option_epoch_from_block_number,
+    vote::{Certificate, HasViewNumber},
 };
 use hotshot_utils::anytrace::{bail, Result};
 use tokio::task::JoinHandle;
@@ -146,10 +155,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                     proposal.data.block_header().block_number(),
                     self.epoch_height,
                 );
-                let Ok(epoch_membership) = self
-                    .membership
-                    .membership_for_epoch(proposal_epoch)
-                    .await
+                let Ok(epoch_membership) =
+                    self.membership.membership_for_epoch(proposal_epoch).await
                 else {
                     tracing::warn!("No Stake table for epoch = {:?}", proposal_epoch);
                     return;

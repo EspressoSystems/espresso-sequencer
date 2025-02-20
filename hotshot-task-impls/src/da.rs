@@ -244,12 +244,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> DaTaskState<TYP
 
                     let target_epoch = if membership.has_stake(&public_key).await {
                         epoch_number
-                    } else if membership
-                        .next_epoch()
-                        .await?
-                        .has_stake(&public_key)
-                        .await
-                    {
+                    } else if membership.next_epoch().await?.has_stake(&public_key).await {
                         next_epoch
                     } else {
                         bail!("Not calculating VID, the node doesn't belong to the current epoch or the next epoch.");
