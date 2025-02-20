@@ -99,6 +99,71 @@ pub type StateAndDelta<TYPES> = (
     Option<Arc<<<TYPES as NodeType>::ValidatedState as ValidatedState<TYPES>>::Delta>>,
 );
 
+pub async fn verify_epoch_root_chaing<T: NodeType, V: Versions>(
+    leaf_chain: Vec<Leaf2<T>>,
+    membership: EpochMembership<T>,
+    epoch_height: u64,
+    upgrade_lock: &crate::message::UpgradeLock<T, V>,
+) -> anyhow::Result<Leaf2<T>> {
+    // Chek we actually have a chain long enough for deciding
+    if leaf_chain.len() < 3 {
+        return Err(anyhow!("Leaf chain is not long enough for a decide"));
+    }
+
+    let newest_leaf = leaf_chain.first().unwrap();
+    let parent = &leaf_chain[1];
+    let grand_parent = &leaf_chain[2];
+
+    // Check if the leaves form a decide
+    if newest_leaf.justify_qc().view_number() != parent.view_number()
+        || parent.justify_qc().view_number() != grand_parent.view_number()
+    {
+        return Err(anyhow!("Leaf views do not chain"));
+    }
+    if newest_leaf.justify_qc().data.leaf_commit != parent.commit()
+        || parent.justify_qc().data().leaf_commit != grand_parent.commit()
+    {
+        return Err(anyhow!("Leaf commits do not chain"));
+    }
+    if parent.view_number() != grand_parent.view_number() + 1 {
+        return Err(anyhow::anyhow!(
+            "Decide rule failed, parent does not directly extend grandparent"
+        ));
+    }
+
+    // verify all QCs are valid
+    let stake_table = membership.stake_table().await;
+    let threshold = membership.success_threshold().await;
+    newest_leaf
+        .justify_qc()
+        .is_valid_cert(stake_table.clone(), threshold, upgrade_lock)
+        .await?;
+    parent
+        .justify_qc()
+        .is_valid_cert(stake_table.clone(), threshold, upgrade_lock)
+        .await?;
+    grand_parent
+        .justify_qc()
+        .is_valid_cert(stake_table.clone(), threshold, upgrade_lock)
+        .await?;
+
+    // Verify the
+    let root_height_interval = epoch_height - 3;
+    let mut last_leaf = parent;
+    for leaf in leaf_chain.iter().skip(2) {
+        ensure!(last_leaf.justify_qc().view_number() == leaf.view_number());
+        ensure!(last_leaf.justify_qc().data().leaf_commit == leaf.commit());
+        leaf.justify_qc()
+            .is_valid_cert(stake_table.clone(), threshold, upgrade_lock)
+            .await?;
+        if leaf.height() % root_height_interval == 0 {
+            return Ok(leaf.clone());
+        }
+        last_leaf = leaf;
+    }
+    Err(anyhow!("Epoch Root was not found in the decided chain"))
+}
+
 impl<TYPES: NodeType> ViewInner<TYPES> {
     /// Return the underlying undecide leaf commitment and validated state if they exist.
     #[must_use]
