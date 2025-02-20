@@ -69,7 +69,10 @@
 <a href="#68" id="68">68</a>
 <a href="#69" id="69">69</a>
 <a href="#70" id="70">70</a>
-<a href="#71" id="71">71</a></pre></div><pre class="rust"><code><span class="kw">use super</span>::{queries::DecodeError, Db};
+<a href="#71" id="71">71</a>
+<a href="#72" id="72">72</a>
+<a href="#73" id="73">73</a>
+<a href="#74" id="74">74</a></pre></div><pre class="rust"><code><span class="kw">use super</span>::{queries::DecodeError, Db};
 <span class="kw">use </span>async_trait::async_trait;
 <span class="kw">use </span>derive_more::From;
 <span class="kw">use </span>futures::stream::StreamExt;
@@ -96,11 +99,14 @@
 </span><span class="kw">impl </span>AsyncTransaction <span class="kw">for </span>Migrator&lt;<span class="lifetime">'_</span>&gt; {
     <span class="kw">type </span>Error = sqlx::Error;
 
-    <span class="kw">async fn </span>execute(<span class="kw-2">&amp;mut </span><span class="self">self</span>, queries: <span class="kw-2">&amp;</span>[<span class="kw-2">&amp;</span>str]) -&gt; sqlx::Result&lt;usize&gt; {
+    <span class="kw">async fn </span>execute&lt;<span class="lifetime">'a</span>, T: Iterator&lt;Item = <span class="kw-2">&amp;</span><span class="lifetime">'a </span>str&gt; + Send&gt;(
+        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+        queries: T,
+    ) -&gt; sqlx::Result&lt;usize&gt; {
         <span class="kw">let </span><span class="kw-2">mut </span>tx = <span class="self">self</span>.conn.begin().<span class="kw">await</span><span class="question-mark">?</span>;
         <span class="kw">let </span><span class="kw-2">mut </span>count = <span class="number">0</span>;
         <span class="kw">for </span>query <span class="kw">in </span>queries {
-            <span class="kw">let </span>res = tx.execute(<span class="kw-2">*</span>query).<span class="kw">await</span><span class="question-mark">?</span>;
+            <span class="kw">let </span>res = tx.execute(query).<span class="kw">await</span><span class="question-mark">?</span>;
             count += res.rows_affected();
         }
         tx.commit().<span class="kw">await</span><span class="question-mark">?</span>;
