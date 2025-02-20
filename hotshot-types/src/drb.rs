@@ -6,10 +6,17 @@
 
 use std::collections::BTreeMap;
 
-use sha2::{Digest, Sha256};
+use primitive_types::{U256, U512};
+use sha2::{Digest, Sha256, Sha512};
 use tokio::task::JoinHandle;
 
-use crate::traits::node_implementation::{ConsensusTime, NodeType};
+use crate::{
+    traits::{
+        node_implementation::{ConsensusTime, NodeType},
+        signature_key::StakeTableEntryType,
+    },
+    SignatureKey,
+};
 
 // TODO: Add the following consts once we bench the hash time.
 // <https://github.com/EspressoSystems/HotShot/issues/3880>
@@ -125,4 +132,105 @@ impl<TYPES: NodeType> Default for DrbSeedsAndResults<TYPES> {
     fn default() -> Self {
         Self::new()
     }
+}
+
+/// Functions for leader selection based on the DRB.
+///
+/// The algorithm we use is:
+///
+/// Initialization:
+/// - obtain `drb: [u8; 32]` from the DRB calculation
+/// - sort the stake table for a given epoch by `xor(drb, public_key)`
+/// - generate a cdf of the cumulative stake using this newly-sorted table,
+///   along with a hash of the stake table entries
+///
+/// Selecting a leader:
+/// - calculate the SHA512 hash of the `drb_result`, `view_number` and `stake_table_hash`
+/// - find the first index in the cdf for which the remainder of this hash modulo the `total_stake`
+///   is strictly smaller than the cdf entry
+/// - return the corresponding node as the leader for that view
+
+/// Calculate `xor(drb.cycle(), public_key)`, returning the result as a vector of bytes
+fn cyclic_xor(drb: [u8; 32], public_key: Vec<u8>) -> Vec<u8> {
+    let drb: Vec<u8> = drb.to_vec();
+
+    let mut result: Vec<u8> = vec![];
+
+    for (drb_byte, public_key_byte) in public_key.iter().zip(drb.iter().cycle()) {
+        result.push(drb_byte ^ public_key_byte);
+    }
+
+    result
+}
+
+/// Generate the stake table CDF, as well as a hash of the resulting stake table
+pub fn generate_stake_cdf<Key: SignatureKey, Entry: StakeTableEntryType<Key>>(
+    mut stake_table: Vec<Entry>,
+    drb: [u8; 32],
+) -> RandomizedCommittee<Entry> {
+    // sort by xor(public_key, drb_result)
+    stake_table.sort_by(|a, b| {
+        cyclic_xor(drb, a.public_key().to_bytes()).cmp(&cyclic_xor(drb, b.public_key().to_bytes()))
+    });
+
+    let mut hasher = Sha256::new();
+
+    let mut cumulative_stake = U256::from(0);
+    let mut cdf = vec![];
+
+    for entry in stake_table {
+        cumulative_stake += entry.stake();
+        hasher.update(entry.public_key().to_bytes());
+
+        cdf.push((entry, cumulative_stake));
+    }
+
+    RandomizedCommittee {
+      cdf,
+      stake_table_hash: hasher.finalize().into(),
+      drb, 
+    }
+}
+
+/// select the leader for a view
+///
+/// # Panics
+/// Panics if `cdf` is empty. Results in undefined behaviour if `cdf` is not ordered.
+///
+/// Note that we try to downcast a U512 to a U256,
+/// but this should never panic because the U512 should be strictly smaller than U256::MAX by construction.
+pub fn select_randomized_leader<SignatureKey, Entry: StakeTableEntryType<SignatureKey> + Clone>(
+    randomized_committee: &RandomizedCommittee<Entry>,
+    view: u64,
+) -> Entry {
+    let RandomizedCommittee { cdf, stake_table_hash, drb } = randomized_committee;
+    // We hash the concatenated drb, view and stake table hash.
+    let mut hasher = Sha512::new();
+    hasher.update(drb);
+    hasher.update(view.to_le_bytes());
+    hasher.update(stake_table_hash);
+    let raw_breakpoint: [u8; 64] = hasher.finalize().into();
+
+    // then calculate the remainder modulo the total stake as a U512
+    let remainder: U512 =
+        U512::from_little_endian(&raw_breakpoint) % U512::from(cdf.last().unwrap().1);
+
+    // and drop the top 32 bytes, downcasting to a U256
+    let breakpoint: U256 = U256::try_from(remainder).unwrap();
+
+    // now find the first index where the breakpoint is strictly smaller than the cdf
+    let index = cdf.partition_point(|(_, cumulative_stake)| breakpoint < *cumulative_stake);
+
+    // and return the corresponding entry
+    cdf[index].0.clone()
+}
+
+#[derive(Clone, Debug)]
+pub struct RandomizedCommittee<Entry> {
+  /// cdf of nodes by cumulative stake
+  cdf: Vec<(Entry, U256)>,
+  /// Hash of the stake table
+  stake_table_hash: [u8; 32],
+  /// DRB result
+  drb: [u8; 32],
 }
