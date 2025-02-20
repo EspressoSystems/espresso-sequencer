@@ -32,8 +32,8 @@ use hotshot_query_service::{
 use hotshot_types::{
     consensus::CommitmentMap,
     data::{
-        vid_disperse::ADVZDisperseShare, DaProposal, EpochNumber, QuorumProposal, QuorumProposal2,
-        QuorumProposalWrapper,
+        vid_disperse::{ADVZDisperseShare, VidDisperseShare2},
+        DaProposal, EpochNumber, QuorumProposal, QuorumProposal2, QuorumProposalWrapper,
     },
     event::{Event, EventType, HotShotAction, LeafInfo},
     message::{convert_proposal, Proposal},
@@ -1168,6 +1168,25 @@ impl SequencerPersistence for Persistence {
     async fn append_vid(
         &self,
         proposal: &Proposal<SeqTypes, ADVZDisperseShare<SeqTypes>>,
+    ) -> anyhow::Result<()> {
+        let view = proposal.data.view_number.u64();
+        let payload_hash = proposal.data.payload_commitment;
+        let data_bytes = bincode::serialize(proposal).unwrap();
+
+        let mut tx = self.db.write().await?;
+        tx.upsert(
+            "vid_share",
+            ["view", "data", "payload_hash"],
+            ["view"],
+            [(view as i64, data_bytes, payload_hash.to_string())],
+        )
+        .await?;
+        tx.commit().await
+    }
+
+    async fn append_vid2(
+        &self,
+        proposal: &Proposal<SeqTypes, VidDisperseShare2<SeqTypes>>,
     ) -> anyhow::Result<()> {
         let view = proposal.data.view_number.u64();
         let payload_hash = proposal.data.payload_commitment;

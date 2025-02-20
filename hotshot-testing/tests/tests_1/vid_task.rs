@@ -61,7 +61,7 @@ async fn test_vid_task() {
     let vid_disperse = VidDisperse::calculate_vid_disperse(
         &payload,
         &membership,
-        ViewNumber::new(0),
+        ViewNumber::new(2), // this view number should be the same as the one in DA proposal
         None,
         None,
         &metadata,

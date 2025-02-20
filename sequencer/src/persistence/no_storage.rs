@@ -11,8 +11,8 @@ use hotshot_query_service::VidCommitment;
 use hotshot_types::{
     consensus::CommitmentMap,
     data::{
-        vid_disperse::ADVZDisperseShare, DaProposal, EpochNumber, QuorumProposal, QuorumProposal2,
-        QuorumProposalWrapper,
+        vid_disperse::{ADVZDisperseShare, VidDisperseShare2},
+        DaProposal, EpochNumber, QuorumProposal, QuorumProposal2, QuorumProposalWrapper,
     },
     event::{Event, EventType, HotShotAction, LeafInfo},
     message::Proposal,
@@ -131,6 +131,12 @@ impl SequencerPersistence for NoStorage {
     async fn append_vid(
         &self,
         _proposal: &Proposal<SeqTypes, ADVZDisperseShare<SeqTypes>>,
+    ) -> anyhow::Result<()> {
+        Ok(())
+    }
+    async fn append_vid2(
+        &self,
+        _proposal: &Proposal<SeqTypes, VidDisperseShare2<SeqTypes>>,
     ) -> anyhow::Result<()> {
         Ok(())
     }

@@ -9,8 +9,8 @@
     "builder_commitment": "BUILDER_COMMITMENT~jlEvJoHPETCSwXF6UKcD22zOjfoHGuyVFTVkP_BNc-no",
     "builder_signature": [
       {
-        "r": "0xdb0a14f48c39b9ea33e46ea19b7e141f7b5160dc566088964f867159246fb3e2",
-        "s": "0x63c0cef97af8a30ef0dfd10ae055a13515bd81eaedbf40ddb4b23f7d63dc12a7",
+        "r": "0xf3c4e11501986214611725f3c2fae13403623ec6445a0091a2483e7b454d901b",
+        "s": "0x41c33866e8eb2e315a88abf52d7acbea1052cc67305ca32906c20b2537753ad7",
         "v": 28
       }
     ],
@@ -44,7 +44,7 @@
     "ns_table": {
       "bytes": "AwAAAO7/wAAcBgAAobC5EkAOAABksAWiXBQAAA=="
     },
-    "payload_commitment": "AvidMCommit~oM8akSUd-4GP3UtzkpDkqGJn4i58e96s68NMb6dZOhd6",
+    "payload_commitment": "AvidMCommit~8ab_pKIiv9Ah34yYtazxFvrdpxtpmBXQEo8q_IqLyg4L",
     "timestamp": 789
   },
   "version": {

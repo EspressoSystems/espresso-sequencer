@@ -296,19 +296,15 @@ pub async fn da_payload_commitment<TYPES: NodeType, V: Versions>(
 
 pub async fn build_payload_commitment<TYPES: NodeType, V: Versions>(
     membership: &Arc<RwLock<<TYPES as NodeType>::Membership>>,
-    _view: TYPES::View,
+    view: TYPES::View,
     epoch: Option<TYPES::Epoch>,
     version: Version,
 ) -> VidCommitment {
     // Make some empty encoded transactions, we just care about having a commitment handy for the
     // later calls. We need the VID commitment to be able to propose later.
     let encoded_transactions = Vec::new();
-    vid_commitment::<V>(
-        &encoded_transactions,
-        &[],
-        membership.read().await.total_nodes(epoch),
-        version,
-    )
+    let num_storage_nodes = membership.read().await.committee_members(view, epoch).len();
+    vid_commitment::<V>(&encoded_transactions, &[], num_storage_nodes, version)
 }
 
 pub async fn build_vid_proposal<TYPES: NodeType, V: Versions>(

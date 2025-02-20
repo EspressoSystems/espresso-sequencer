@@ -670,6 +670,11 @@ pub trait SequencerPersistence: Sized + Send + Sync + Clone + 'static {
         &self,
         proposal: &Proposal<SeqTypes, ADVZDisperseShare<SeqTypes>>,
     ) -> anyhow::Result<()>;
+    // TODO: merge these two `append_vid`s
+    async fn append_vid2(
+        &self,
+        proposal: &Proposal<SeqTypes, VidDisperseShare2<SeqTypes>>,
+    ) -> anyhow::Result<()>;
     async fn append_da(
         &self,
         proposal: &Proposal<SeqTypes, DaProposal<SeqTypes>>,
@@ -755,10 +760,9 @@ impl<P: SequencerPersistence> Storage<SeqTypes> for Arc<P> {
 
     async fn append_vid2(
         &self,
-        _proposal: &Proposal<SeqTypes, VidDisperseShare2<SeqTypes>>,
+        proposal: &Proposal<SeqTypes, VidDisperseShare2<SeqTypes>>,
     ) -> anyhow::Result<()> {
-        // (**self).append_vid(proposal).await
-        todo!()
+        (**self).append_vid2(proposal).await
     }
 
     async fn append_da(
