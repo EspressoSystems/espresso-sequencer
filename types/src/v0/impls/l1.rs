@@ -1698,4 +1698,87 @@ mod test {
         provider.get_block_number().await.unwrap();
         assert!(get_failover_index(&provider) == 1);
     }
+    #[tokio::test]
+    async fn test_stake_table_update_loop() -> anyhow::Result<()> {
+        // Cache should get populated as blocks get finalized
+        use ethers::signers::Signer;
+        setup_test();
+
+        let anvil = Anvil::new()
+            .args(vec!["--block-time", "1", "--slots-in-an-epoch", "1"])
+            .spawn();
+        // let anvil = Anvil::new().spawn();
+        let l1_client = new_l1_client(&anvil, false).await;
+        let wallet: LocalWallet = anvil.keys()[0].clone().into();
+
+        // In order to deposit we need a provider that can sign.
+        let deployer_provider =
+            ethers::providers::Provider::<ethers::providers::Http>::try_from(anvil.endpoint())?
+                .interval(Duration::from_millis(10u64));
+        let deployer_client = SignerMiddleware::new(
+            deployer_provider.clone(),
+            wallet.with_chain_id(anvil.chain_id()),
+        );
+        let deployer_client = Arc::new(deployer_client);
+
+        // deploy the stake_table contract
+        let stake_table_contract =
+            contract_bindings_ethers::permissioned_stake_table::PermissionedStakeTable::deploy(
+                deployer_client.clone(),
+                Vec::<contract_bindings_ethers::permissioned_stake_table::NodeInfo>::new(),
+            )
+            .unwrap()
+            .send()
+            .await?;
+
+        let address = stake_table_contract.address();
+
+        let mut rng = rand::thread_rng();
+        // let node = NodeInfoJf::random(&mut rng);
+
+        for i in 0..5 {
+            let node = NodeInfoJf::random(&mut rng);
+            let new_nodes: Vec<contract_bindings_ethers::permissioned_stake_table::NodeInfo> =
+                vec![node.into()];
+            let updater = stake_table_contract.update(vec![], new_nodes.clone());
+            updater.send().await?.await?;
+            sleep(Duration::from_secs(1)).await;
+        }
+
+        let block = l1_client
+            .get_block(BlockId::finalized(), BlockTransactionsKind::Hashes)
+            .await?
+            .unwrap();
+
+        tracing::error!(?block.header.inner.number);
+        // ensure state is updated
+        let mut lock = l1_client.state.lock().await;
+        let mut success = false;
+
+        // TODO wait here until we get finalized block == block.header.inner.number
+        // let mut events = l1_client.receiver.activate_cloned();
+        // while let Some(event) = events.next().await {
+        //     let L1Event::NewFinalized { finalized } = event else {
+        //         continue;
+        //     };
+
+        //     tracing::error!(?finalized, "test");
+        // }
+
+        for _ in 0..30 {
+            if let Some(nodes) = lock.stake.get(&(block.header.inner.number - 1)) {
+                tracing::error!(?nodes);
+                let result = nodes.stake_table.0[0].clone();
+                assert_eq!(result.stake_amount.as_u64(), 1);
+                success = true;
+            } else {
+                continue;
+            };
+            sleep(Duration::from_secs(1)).await;
+        }
+        if !success {
+            panic!("Update Loop did not update Cache within timeout");
+        }
+        Ok(())
+    }
 }
