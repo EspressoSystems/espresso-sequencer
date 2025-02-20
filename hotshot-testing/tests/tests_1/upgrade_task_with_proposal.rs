@@ -55,9 +55,8 @@ async fn test_upgrade_task_with_proposal() {
 
     hotshot::helpers::initialize_logging();
 
-    let handle = build_system_handle::<TestTypes, MemoryImpl, TestVersions>(3)
-        .await
-        .0;
+    let (handle, _, _, node_key_map) =
+        build_system_handle::<TestTypes, MemoryImpl, TestVersions>(3).await;
 
     let other_handles = futures::future::join_all((0..=9).map(build_system_handle)).await;
 
@@ -85,7 +84,8 @@ async fn test_upgrade_task_with_proposal() {
 
     let membership = Arc::clone(&handle.hotshot.memberships);
 
-    let mut generator = TestViewGenerator::<TestVersions>::generate(Arc::clone(&membership));
+    let mut generator =
+        TestViewGenerator::<TestVersions>::generate(Arc::clone(&membership), node_key_map);
 
     for view in (&mut generator).take(1).collect::<Vec<_>>().await {
         proposals.push(view.quorum_proposal.clone());

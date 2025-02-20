@@ -202,7 +202,7 @@ impl<TYPES: NodeType, V: Versions> ProposalDependencyHandle<TYPES, V> {
     ) -> Option<NextEpochQuorumCertificate2<TYPES>> {
         tracing::debug!("getting the next epoch QC");
         // If we haven't upgraded to Epochs just return None right away
-        if self.upgrade_lock.version_infallible(self.view_number).await < V::Epochs::VERSION {
+        if !self.upgrade_lock.epochs_enabled(self.view_number).await {
             return None;
         }
         if let Some(next_epoch_qc) = self.consensus.read().await.next_epoch_high_qc() {

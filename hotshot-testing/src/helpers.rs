@@ -5,7 +5,7 @@
 // along with the HotShot repository. If not, see <https://mit-license.org/>.
 
 #![allow(clippy::panic)]
-use std::{fmt::Debug, hash::Hash, marker::PhantomData, sync::Arc};
+use std::{collections::BTreeMap, fmt::Debug, hash::Hash, marker::PhantomData, sync::Arc};
 
 use async_broadcast::{Receiver, Sender};
 use async_lock::RwLock;
@@ -45,6 +45,11 @@ use vbs::version::Version;
 
 use crate::{test_builder::TestDescription, test_launcher::TestLauncher};
 
+pub type TestNodeKeyMap = BTreeMap<
+    <TestTypes as NodeType>::SignatureKey,
+    <<TestTypes as NodeType>::SignatureKey as SignatureKey>::PrivateKey,
+>;
+
 /// create the [`SystemContextHandle`] from a node id, with no epochs
 /// # Panics
 /// if cannot create a [`HotShotInitializer`]
@@ -62,6 +67,7 @@ pub async fn build_system_handle<
     SystemContextHandle<TYPES, I, V>,
     Sender<Arc<HotShotEvent<TYPES>>>,
     Receiver<Arc<HotShotEvent<TYPES>>>,
+    Arc<TestNodeKeyMap>,
 ) {
     let builder: TestDescription<TYPES, I, V> = TestDescription::default_multiple_rounds();
 
@@ -89,6 +95,7 @@ pub async fn build_system_handle_from_launcher<
     SystemContextHandle<TYPES, I, V>,
     Sender<Arc<HotShotEvent<TYPES>>>,
     Receiver<Arc<HotShotEvent<TYPES>>>,
+    Arc<TestNodeKeyMap>,
 ) {
     let network = (launcher.resource_generators.channel_generator)(node_id).await;
     let storage = (launcher.resource_generators.storage)(node_id);
@@ -116,7 +123,9 @@ pub async fn build_system_handle_from_launcher<
         hotshot_config.known_da_nodes.clone(),
     )));
 
-    SystemContext::init(
+    let node_key_map = launcher.metadata.build_node_key_map();
+
+    let (c, s, r) = SystemContext::init(
         public_key,
         private_key,
         node_id,
@@ -129,7 +138,9 @@ pub async fn build_system_handle_from_launcher<
         marketplace_config,
     )
     .await
-    .expect("Could not init hotshot")
+    .expect("Could not init hotshot");
+
+    (c, s, r, node_key_map)
 }
 
 /// create certificate
