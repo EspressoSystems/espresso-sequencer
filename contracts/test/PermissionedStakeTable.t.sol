@@ -60,7 +60,6 @@ contract PermissionedStakeTableTest is Test {
     // solhint-disable-next-line no-empty-blocks
     function emptyKeys() private pure returns (BN254.G2Point[] memory keys) { }
 
-
     function test_Deployment_EmitsEvent() public {
         vm.expectEmit();
         emit InitializedAt.Initialized(1);
