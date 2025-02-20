@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["handle_quorum_proposal_validated","start_drb_task","store_and_get_computed_drb_result","store_drb_seed_and_result","submit_vote","update_shared_state","verify_drb_result"]};
+window.SIDEBAR_ITEMS = {"fn":["handle_quorum_proposal_validated","notify_membership_of_drb_result","start_drb_task","store_and_get_computed_drb_result","store_drb_seed_and_result","submit_vote","update_shared_state","verify_drb_result"]};

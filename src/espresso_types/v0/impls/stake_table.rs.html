@@ -576,7 +576,17 @@
 <a href="#575" id="575">575</a>
 <a href="#576" id="576">576</a>
 <a href="#577" id="577">577</a>
-<a href="#578" id="578">578</a></pre></div><pre class="rust"><code><span class="kw">use super</span>::{
+<a href="#578" id="578">578</a>
+<a href="#579" id="579">579</a>
+<a href="#580" id="580">580</a>
+<a href="#581" id="581">581</a>
+<a href="#582" id="582">582</a>
+<a href="#583" id="583">583</a>
+<a href="#584" id="584">584</a>
+<a href="#585" id="585">585</a>
+<a href="#586" id="586">586</a>
+<a href="#587" id="587">587</a>
+<a href="#588" id="588">588</a></pre></div><pre class="rust"><code><span class="kw">use super</span>::{
     v0_3::{DAMembers, StakeTable, StakeTables},
     Header, L1Client, NodeState, PubKey, SeqTypes,
 };
@@ -589,6 +599,7 @@
 <span class="kw">use </span>hotshot_contract_adapter::stake_table::{bls_alloy_to_jf, NodeInfoJf};
 <span class="kw">use </span>hotshot_types::{
     data::EpochNumber,
+    drb::DrbResult,
     stake_table::StakeTableEntry,
     traits::{
         election::Membership,
@@ -600,7 +611,7 @@
 <span class="kw">use </span>itertools::Itertools;
 <span class="kw">use </span>std::{
     cmp::max,
-    collections::{BTreeSet, HashMap},
+    collections::{BTreeMap, BTreeSet, HashMap},
     num::NonZeroU64,
     str::FromStr,
 };
@@ -683,6 +694,9 @@
 
     <span class="doccomment">/// Address of Stake Table Contract
     </span>contract_address: <span class="prelude-ty">Option</span>&lt;Address&gt;,
+
+    <span class="doccomment">/// The results of DRB calculations
+    </span>drb_result_table: BTreeMap&lt;Epoch, DrbResult&gt;,
 }
 
 <span class="attr">#[derive(Debug, Clone, PartialEq)]
@@ -830,6 +844,7 @@
             _epoch_size: epoch_size,
             l1_client: instance_state.l1_client.clone(),
             contract_address: instance_state.chain_config.stake_table_contract,
+            drb_result_table: BTreeMap::new(),
         }
     }
 
@@ -910,6 +925,7 @@
             l1_client: L1Client::new(<span class="macro">vec!</span>[Url::from_str(<span class="string">"http:://ab.b"</span>).unwrap()])
                 .expect(<span class="string">"Failed to create L1 client"</span>),
             contract_address: <span class="prelude-val">None</span>,
+            drb_result_table: BTreeMap::new(),
         }
     }
 
@@ -1074,6 +1090,10 @@
                     <span class="kw">let _ </span>= committee.update_stake_table(epoch, stake_table);
                 })
             })
+    }
+
+    <span class="kw">fn </span>add_drb_result(<span class="kw-2">&amp;mut </span><span class="self">self</span>, epoch: Epoch, drb_result: DrbResult) {
+        <span class="self">self</span>.drb_result_table.insert(epoch, drb_result);
     }
 }
 

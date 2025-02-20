@@ -762,7 +762,7 @@
     ) -&gt; <span class="prelude-ty">Option</span>&lt;NextEpochQuorumCertificate2&lt;TYPES&gt;&gt; {
         <span class="macro">tracing::debug!</span>(<span class="string">"getting the next epoch QC"</span>);
         <span class="comment">// If we haven't upgraded to Epochs just return None right away
-        </span><span class="kw">if </span><span class="self">self</span>.upgrade_lock.version_infallible(<span class="self">self</span>.view_number).<span class="kw">await </span>&lt; V::Epochs::VERSION {
+        </span><span class="kw">if </span>!<span class="self">self</span>.upgrade_lock.epochs_enabled(<span class="self">self</span>.view_number).<span class="kw">await </span>{
             <span class="kw">return </span><span class="prelude-val">None</span>;
         }
         <span class="kw">if let </span><span class="prelude-val">Some</span>(next_epoch_qc) = <span class="self">self</span>.consensus.read().<span class="kw">await</span>.next_epoch_high_qc() {

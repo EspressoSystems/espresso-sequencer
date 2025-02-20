@@ -588,7 +588,18 @@
 <a href="#587" id="587">587</a>
 <a href="#588" id="588">588</a>
 <a href="#589" id="589">589</a>
-<a href="#590" id="590">590</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
+<a href="#590" id="590">590</a>
+<a href="#591" id="591">591</a>
+<a href="#592" id="592">592</a>
+<a href="#593" id="593">593</a>
+<a href="#594" id="594">594</a>
+<a href="#595" id="595">595</a>
+<a href="#596" id="596">596</a>
+<a href="#597" id="597">597</a>
+<a href="#598" id="598">598</a>
+<a href="#599" id="599">599</a>
+<a href="#600" id="600">600</a>
+<a href="#601" id="601">601</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
 // This file is part of the HotShot repository.
 
 // You should have received a copy of the MIT License
@@ -604,8 +615,8 @@
     HotShotInitializer, MarketplaceConfig, SystemContext, TwinsHandlerState,
 };
 <span class="kw">use </span>hotshot_example_types::{
-    auction_results_provider_types::TestAuctionResultsProvider, state_types::TestInstanceState,
-    storage_types::TestStorage, testable_delay::DelayConfig,
+    auction_results_provider_types::TestAuctionResultsProvider, node_types::TestTypes,
+    state_types::TestInstanceState, storage_types::TestStorage, testable_delay::DelayConfig,
 };
 <span class="kw">use </span>hotshot_types::{
     consensus::ConsensusMetricsValue,
@@ -622,6 +633,7 @@
     txn_task::TxnTaskDescription,
 };
 <span class="kw">use crate</span>::{
+    helpers::{key_pair_for_id, TestNodeKeyMap},
     spinning_task::SpinningTaskDescription,
     test_launcher::{Network, ResourceGenerators, TestLauncher},
     test_task::TestTaskStateSeed,
@@ -1030,6 +1042,16 @@
             ),
             ..<span class="self">self
         </span>}
+    }
+
+    <span class="kw">pub fn </span>build_node_key_map(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Arc&lt;TestNodeKeyMap&gt; {
+        <span class="kw">let </span><span class="kw-2">mut </span>node_key_map = TestNodeKeyMap::new();
+        <span class="kw">for </span>i <span class="kw">in </span><span class="number">0</span>..<span class="self">self</span>.test_config.num_nodes_with_stake.into() {
+            <span class="kw">let </span>(private_key, public_key) = key_pair_for_id::&lt;TestTypes&gt;(i <span class="kw">as </span>u64);
+            node_key_map.insert(public_key, private_key);
+        }
+
+        Arc::new(node_key_map)
     }
 }
 

@@ -153,7 +153,11 @@
 <a href="#152" id="152">152</a>
 <a href="#153" id="153">153</a>
 <a href="#154" id="154">154</a>
-<a href="#155" id="155">155</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
+<a href="#155" id="155">155</a>
+<a href="#156" id="156">156</a>
+<a href="#157" id="157">157</a>
+<a href="#158" id="158">158</a>
+<a href="#159" id="159">159</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
 // This file is part of the HotShot repository.
 
 // You should have received a copy of the MIT License
@@ -166,7 +170,7 @@
 <span class="kw">use </span>hotshot_utils::anytrace::Result;
 
 <span class="kw">use </span><span class="kw">super</span>::node_implementation::NodeType;
-<span class="kw">use crate</span>::{traits::signature_key::SignatureKey, PeerConfig};
+<span class="kw">use crate</span>::{drb::DrbResult, traits::signature_key::SignatureKey, PeerConfig};
 
 <span class="attr">#[async_trait]
 </span><span class="doccomment">/// A protocol for determining membership in and participating in a committee.
@@ -307,5 +311,9 @@
     </span><span class="kw">async fn </span>sync_l1(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;Box&lt;<span class="kw">dyn </span>FnOnce(<span class="kw-2">&amp;mut </span><span class="self">Self</span>) + Send&gt;&gt; {
         <span class="prelude-val">None
     </span>}
+
+    <span class="doccomment">/// Called to notify the Membership when a new DRB result has been calculated.
+    /// Observes the same semantics as add_epoch_root
+    </span><span class="kw">fn </span>add_drb_result(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _epoch: TYPES::Epoch, _drb_result: DrbResult);
 }
 </code></pre></div></section></main></body></html>

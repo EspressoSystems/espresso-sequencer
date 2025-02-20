@@ -248,15 +248,16 @@
 <a href="#247" id="247">247</a>
 <a href="#248" id="248">248</a>
 <a href="#249" id="249">249</a>
-<a href="#250" id="250">250</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
+<a href="#250" id="250">250</a>
+<a href="#251" id="251">251</a>
+<a href="#252" id="252">252</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
 // This file is part of the HotShot repository.
 
 // You should have received a copy of the MIT License
 // along with the HotShot repository. If not, see &lt;https://mit-license.org/&gt;.
 
-</span><span class="kw">use </span>std::{cmp::max, collections::BTreeMap, num::NonZeroU64};
-
-<span class="kw">use </span>hotshot_types::{
+</span><span class="kw">use </span>hotshot_types::{
+    drb::DrbResult,
     traits::{
         election::Membership,
         node_implementation::NodeType,
@@ -267,6 +268,7 @@
 <span class="kw">use </span>hotshot_utils::anytrace::Result;
 <span class="kw">use </span>primitive_types::U256;
 <span class="kw">use </span>rand::{rngs::StdRng, Rng};
+<span class="kw">use </span>std::{cmp::max, collections::BTreeMap, num::NonZeroU64};
 
 <span class="attr">#[derive(Clone, Debug, Eq, PartialEq, Hash)]
 
@@ -497,5 +499,7 @@
         ))
         .unwrap()
     }
+
+    <span class="kw">fn </span>add_drb_result(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _epoch: &lt;TYPES <span class="kw">as </span>NodeType&gt;::Epoch, _drb_result: DrbResult) {}
 }
 </code></pre></div></section></main></body></html>

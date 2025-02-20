@@ -448,12 +448,13 @@
 <a href="#447" id="447">447</a>
 <a href="#448" id="448">448</a>
 <a href="#449" id="449">449</a>
-<a href="#450" id="450">450</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
+<a href="#450" id="450">450</a>
+<a href="#451" id="451">451</a>
+<a href="#452" id="452">452</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
 // This file is part of the HotShot repository.
 
 // You should have received a copy of the MIT License
 // along with the HotShot repository. If not, see &lt;https://mit-license.org/&gt;.
-
 </span><span class="kw">use </span>std::{
     cmp::max,
     collections::{BTreeMap, BTreeSet},
@@ -462,6 +463,7 @@
 };
 
 <span class="kw">use </span>hotshot_types::{
+    drb::DrbResult,
     traits::{
         election::Membership,
         node_implementation::{ConsensusTime, NodeType},
@@ -897,5 +899,7 @@
         <span class="kw">let </span>len = <span class="self">self</span>.total_nodes(epoch);
         NonZeroU64::new(max((len <span class="kw">as </span>u64 * <span class="number">9</span>) / <span class="number">10</span>, ((len <span class="kw">as </span>u64 * <span class="number">2</span>) / <span class="number">3</span>) + <span class="number">1</span>)).unwrap()
     }
+
+    <span class="kw">fn </span>add_drb_result(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _epoch: &lt;TYPES <span class="kw">as </span>NodeType&gt;::Epoch, _drb_result: DrbResult) {}
 }
 </code></pre></div></section></main></body></html>

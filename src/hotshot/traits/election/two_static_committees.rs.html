@@ -425,15 +425,16 @@
 <a href="#424" id="424">424</a>
 <a href="#425" id="425">425</a>
 <a href="#426" id="426">426</a>
-<a href="#427" id="427">427</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
+<a href="#427" id="427">427</a>
+<a href="#428" id="428">428</a>
+<a href="#429" id="429">429</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
 // This file is part of the HotShot repository.
 
 // You should have received a copy of the MIT License
 // along with the HotShot repository. If not, see &lt;https://mit-license.org/&gt;.
 
-</span><span class="kw">use </span>std::{cmp::max, collections::BTreeMap, num::NonZeroU64};
-
-<span class="kw">use </span>hotshot_types::{
+</span><span class="kw">use </span>hotshot_types::{
+    drb::DrbResult,
     traits::{
         election::Membership,
         node_implementation::NodeType,
@@ -443,6 +444,7 @@
 };
 <span class="kw">use </span>hotshot_utils::anytrace::Result;
 <span class="kw">use </span>primitive_types::U256;
+<span class="kw">use </span>std::{cmp::max, collections::BTreeMap, num::NonZeroU64};
 
 <span class="doccomment">/// Tuple type for eligible leaders
 </span><span class="kw">type </span>EligibleLeaders&lt;T&gt; = (
@@ -851,5 +853,7 @@
             .unwrap()
         }
     }
+
+    <span class="kw">fn </span>add_drb_result(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _epoch: &lt;TYPES <span class="kw">as </span>NodeType&gt;::Epoch, _drb_result: DrbResult) {}
 }
 </code></pre></div></section></main></body></html>
