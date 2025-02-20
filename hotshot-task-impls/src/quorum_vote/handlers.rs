@@ -99,8 +99,14 @@ async fn store_and_get_computed_drb_result<
                 .insert(epoch_number, result);
             drop(consensus_writer);
 
-            notify_membership_of_drb_result::<TYPES>(&task_state.membership.membership_for_epoch(Some(epoch_number)).await?, result)
-                .await;
+            notify_membership_of_drb_result::<TYPES>(
+                &task_state
+                    .membership
+                    .membership_for_epoch(Some(epoch_number))
+                    .await?,
+                result,
+            )
+            .await;
             task_state.drb_computation = None;
             Ok(result)
         }
@@ -213,11 +219,7 @@ async fn start_drb_task<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versio
                             .drb_seeds_and_results
                             .results
                             .insert(*task_epoch, result);
-                        notify_membership_of_drb_result::<TYPES>(
-                            &epoch_membership,
-                            result,
-                        )
-                        .await;
+                        notify_membership_of_drb_result::<TYPES>(&epoch_membership, result).await;
                         task_state.drb_computation = None;
                     }
                     Err(e) => {
@@ -332,7 +334,10 @@ async fn store_drb_seed_and_result<TYPES: NodeType, I: NodeImplementation<TYPES>
                 .results
                 .insert(current_epoch_number + 1, result);
             notify_membership_of_drb_result::<TYPES>(
-                &task_state.membership.membership_for_epoch(Some(current_epoch_number + 1)).await?,
+                &task_state
+                    .membership
+                    .membership_for_epoch(Some(current_epoch_number + 1))
+                    .await?,
                 result,
             )
             .await;
