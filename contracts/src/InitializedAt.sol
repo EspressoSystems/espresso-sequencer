@@ -1,19 +1,28 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity >=0.8.7 <0.9.0;
+pragma solidity ^0.8.0;
 
-// Upgradable contracts using Initializable emit an Initialized event:
-// https://github.com/OpenZeppelin/openzeppelin-contracts/blob/930598edfb6241a179ade6ad44ba59ed8b68f7d8/contracts/proxy/utils/Initializable.sol#L92C11-L92C22
+// Store the block number when a contract was deployed, or initialized (for upgradable contracts).
 //
-// This contract does the equivalent inside the constructor for contracts that
-// aren't Upgrabable. We do this so that clients can query for this event and
-// obtain the block number when the event was emitted. The clients then know
-// what block they need to query other contract events from.
+// Clients can read the member variable `initializedAtBlock` to know at what L1 block they need to
+// start processing events.
 
-contract InitializedAt {
-    event Initialized(uint64);
+import { Initializable } from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 
+contract InitializedAt is Initializable {
+    // @notice The block number the contract was initialized at.
+    uint256 public initializedAtBlock;
+
+    // @dev If this contract is used as part of a non-upgradable contract the constructor is
+    // expected to be called.
     constructor() {
-        // The value 1 is emitted to match the Initializable implementation from openzeppelin
-        emit Initialized(1);
+        initialize();
+    }
+
+    // @dev If this contract is used as part of an upgradable contract the `initialize` function
+    // must be called during initialization.
+    // @dev The initializer modifier assures that this function can only be called (once except for
+    //      in the constructor, for testing).
+    function initialize() public initializer {
+        initializedAtBlock = block.number;
     }
 }

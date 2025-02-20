@@ -84,12 +84,9 @@ contract StakeTable_register_Test is Test {
             new S(address(token), lightClientAddress, 10, MIN_STAKE_AMOUNT, exampleTokenCreator);
     }
 
-    function test_Deployment_EmitsEvent() public {
-        vm.expectEmit();
-        // When the ST contract is made upgradable the event needs to be changed to
-        // emit Initializable.Initialized(1)
-        emit InitializedAt.Initialized(1);
+    function test_Deployment_StoresBlockNumber() public {
         setUp();
+        assertEq(stakeTable.initializedAtBlock(), block.number);
     }
 
     function testFuzz_RevertWhen_InvalidBLSSig(uint256 scalar) external {
