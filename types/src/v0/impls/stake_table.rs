@@ -11,6 +11,7 @@ use hotshot::types::{BLSPubKey, SignatureKey as _};
 use hotshot_contract_adapter::stake_table::{bls_alloy_to_jf, NodeInfoJf};
 use hotshot_types::{
     data::EpochNumber,
+    drb::DrbResult,
     stake_table::StakeTableEntry,
     traits::{
         election::Membership,
@@ -23,7 +24,7 @@ use hotshot_types::{
 use itertools::Itertools;
 use std::{
     cmp::max,
-    collections::{BTreeSet, HashMap},
+    collections::{BTreeMap, BTreeSet, HashMap},
     num::NonZeroU64,
     str::FromStr,
 };
@@ -106,6 +107,9 @@ pub struct EpochCommittees {
 
     /// Address of Stake Table Contract
     contract_address: Option<Address>,
+
+    /// The results of DRB calculations
+    drb_result_table: BTreeMap<Epoch, DrbResult>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -253,6 +257,7 @@ impl EpochCommittees {
             _epoch_size: epoch_size,
             l1_client: instance_state.l1_client.clone(),
             contract_address: instance_state.chain_config.stake_table_contract,
+            drb_result_table: BTreeMap::new(),
         }
     }
 
@@ -333,6 +338,7 @@ impl Membership<SeqTypes> for EpochCommittees {
             l1_client: L1Client::new(vec![Url::from_str("http:://ab.b").unwrap()])
                 .expect("Failed to create L1 client"),
             contract_address: None,
+            drb_result_table: BTreeMap::new(),
         }
     }
 
@@ -506,6 +512,10 @@ impl Membership<SeqTypes> for EpochCommittees {
 
     async fn get_epoch_root(&self, _block_height: u64) -> Option<(Epoch, Header)> {
         None
+    }
+
+    fn add_drb_result(&mut self, epoch: Epoch, drb_result: DrbResult) {
+        self.drb_result_table.insert(epoch, drb_result);
     }
 }
 

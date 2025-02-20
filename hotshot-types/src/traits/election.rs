@@ -10,7 +10,7 @@ use std::{collections::BTreeSet, fmt::Debug, num::NonZeroU64};
 use hotshot_utils::anytrace::Result;
 
 use super::node_implementation::NodeType;
-use crate::{traits::signature_key::SignatureKey, PeerConfig};
+use crate::{drb::DrbResult, traits::signature_key::SignatureKey, PeerConfig};
 
 /// A protocol for determining membership in and participating in a committee.
 pub trait Membership<TYPES: NodeType>: Debug + Send + Sync {
@@ -162,4 +162,8 @@ pub trait Membership<TYPES: NodeType>: Debug + Send + Sync {
     ) -> impl std::future::Future<Output = Option<Box<dyn FnOnce(&mut Self) + Send>>> + Send {
         async { None }
     }
+
+    /// Called to notify the Membership when a new DRB result has been calculated.
+    /// Observes the same semantics as add_epoch_root
+    fn add_drb_result(&mut self, _epoch: TYPES::Epoch, _drb_result: DrbResult);
 }

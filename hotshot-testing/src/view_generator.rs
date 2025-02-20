@@ -25,7 +25,7 @@ use hotshot_types::{
         DaProposal2, EpochNumber, Leaf2, QuorumProposal2, QuorumProposalWrapper, VidDisperse,
         VidDisperseShare, ViewChangeEvidence2, ViewNumber,
     },
-    epoch_membership::EpochMembershipCoordinator,
+    epoch_membership::{EpochMembership, EpochMembershipCoordinator},
     message::{Proposal, UpgradeLock},
     simple_certificate::{
         DaCertificate2, QuorumCertificate2, TimeoutCertificate2, UpgradeCertificate,
@@ -46,7 +46,7 @@ use rand::{thread_rng, Rng};
 use sha2::{Digest, Sha256};
 
 use crate::helpers::{
-    build_cert, build_da_certificate, build_vid_proposal, da_payload_commitment, key_pair_for_id,
+    build_cert, build_da_certificate, build_vid_proposal, da_payload_commitment, TestNodeKeyMap,
 };
 
 #[derive(Clone)]
@@ -57,6 +57,7 @@ pub struct TestView {
     pub view_number: ViewNumber,
     pub epoch_number: Option<EpochNumber>,
     pub membership: EpochMembershipCoordinator<TestTypes>,
+    pub node_key_map: Arc<TestNodeKeyMap>,
     pub vid_disperse: Proposal<TestTypes, VidDisperse<TestTypes>>,
     pub vid_proposal: (
         Vec<Proposal<TestTypes, VidDisperseShare<TestTypes>>>,
@@ -73,7 +74,30 @@ pub struct TestView {
 }
 
 impl TestView {
-    pub async fn genesis<V: Versions>(membership: &EpochMembershipCoordinator<TestTypes>) -> Self {
+    async fn find_leader_key_pair(
+        membership: &EpochMembership<TestTypes>,
+        node_key_map: &Arc<TestNodeKeyMap>,
+        view_number: <TestTypes as NodeType>::View,
+    ) -> (
+        <<TestTypes as NodeType>::SignatureKey as SignatureKey>::PrivateKey,
+        <TestTypes as NodeType>::SignatureKey,
+    ) {
+        let leader = membership
+            .leader(view_number)
+            .await
+            .expect("expected Membership::leader to succeed");
+
+        let sk = node_key_map
+            .get(&leader)
+            .expect("expected Membership::leader public key to be in node_key_map");
+
+        (sk.clone(), leader)
+    }
+
+    pub async fn genesis<V: Versions>(
+        membership: &EpochMembershipCoordinator<TestTypes>,
+        node_key_map: Arc<TestNodeKeyMap>,
+    ) -> Self {
         let genesis_view = ViewNumber::new(1);
         let genesis_epoch = genesis_epoch_from_version::<V, TestTypes>();
         let upgrade_lock = UpgradeLock::new();
@@ -93,16 +117,17 @@ impl TestView {
             &block_payload,
             &metadata,
         );
-
-        let (private_key, public_key) = key_pair_for_id::<TestTypes>(*genesis_view);
-
-        let leader_public_key = public_key;
-
-        let genesis_version = upgrade_lock.version_infallible(genesis_view).await;
         let epoch_membership = membership
             .membership_for_epoch(genesis_epoch)
             .await
             .unwrap();
+        //let (private_key, public_key) = key_pair_for_id::<TestTypes>(*genesis_view);
+        let (private_key, public_key) =
+            Self::find_leader_key_pair(&epoch_membership, &node_key_map, genesis_view).await;
+
+        let leader_public_key = public_key;
+
+        let genesis_version = upgrade_lock.version_infallible(genesis_view).await;
 
         let payload_commitment = da_payload_commitment::<TestTypes, TestVersions>(
             &epoch_membership,
@@ -199,6 +224,7 @@ impl TestView {
             view_number: genesis_view,
             epoch_number: genesis_epoch,
             membership: membership.clone(),
+            node_key_map,
             vid_disperse,
             vid_proposal: (vid_proposal, public_key),
             da_certificate,
@@ -234,9 +260,29 @@ impl TestView {
             epoch: old_epoch,
         };
 
-        let (old_private_key, old_public_key) = key_pair_for_id::<TestTypes>(*old_view);
+        //let (old_private_key, old_public_key) = key_pair_for_id::<TestTypes>(*old_view);
+        let (old_private_key, old_public_key) = Self::find_leader_key_pair(
+            &self
+                .membership
+                .membership_for_epoch(old_epoch)
+                .await
+                .unwrap(),
+            &self.node_key_map,
+            old_view,
+        )
+        .await;
 
-        let (private_key, public_key) = key_pair_for_id::<TestTypes>(*next_view);
+        //let (private_key, public_key) = key_pair_for_id::<TestTypes>(*next_view);
+        let (private_key, public_key) = Self::find_leader_key_pair(
+            &self
+                .membership
+                .membership_for_epoch(self.epoch_number)
+                .await
+                .unwrap(),
+            &self.node_key_map,
+            next_view,
+        )
+        .await;
 
         let leader_public_key = public_key;
 
@@ -440,6 +486,7 @@ impl TestView {
             view_number: next_view,
             epoch_number: self.epoch_number,
             membership: self.membership.clone(),
+            node_key_map: self.node_key_map.clone(),
             vid_disperse,
             vid_proposal: (vid_proposal, public_key),
             da_certificate,
@@ -516,14 +563,19 @@ impl TestView {
 pub struct TestViewGenerator<V: Versions> {
     pub current_view: Option<TestView>,
     pub membership: EpochMembershipCoordinator<TestTypes>,
+    pub node_key_map: Arc<TestNodeKeyMap>,
     pub _pd: PhantomData<fn(V)>,
 }
 
 impl<V: Versions> TestViewGenerator<V> {
-    pub fn generate(membership: EpochMembershipCoordinator<TestTypes>) -> Self {
+    pub fn generate(
+        membership: EpochMembershipCoordinator<TestTypes>,
+        node_key_map: Arc<TestNodeKeyMap>,
+    ) -> Self {
         TestViewGenerator {
             current_view: None,
             membership,
+            node_key_map,
             _pd: PhantomData,
         }
     }
@@ -602,12 +654,13 @@ impl<V: Versions> Stream for TestViewGenerator<V> {
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let mem = self.membership.clone();
+        let nkm = Arc::clone(&self.node_key_map);
         let curr_view = &self.current_view.clone();
 
         let mut fut = if let Some(ref view) = curr_view {
             async move { TestView::next_view(view).await }.boxed()
         } else {
-            async move { TestView::genesis::<V>(&mem).await }.boxed()
+            async move { TestView::genesis::<V>(&mem, nkm).await }.boxed()
         };
 
         match fut.as_mut().poll(cx) {

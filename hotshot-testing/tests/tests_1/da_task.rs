@@ -32,9 +32,8 @@ use vbs::version::{StaticVersionType, Version};
 async fn test_da_task() {
     hotshot::helpers::initialize_logging();
 
-    let handle = build_system_handle::<TestTypes, MemoryImpl, TestVersions>(2)
-        .await
-        .0;
+    let (handle, _, _, node_key_map) =
+        build_system_handle::<TestTypes, MemoryImpl, TestVersions>(2).await;
 
     let membership = handle.hotshot.membership_coordinator.clone();
     let default_version = Version { major: 0, minor: 0 };
@@ -53,7 +52,8 @@ async fn test_da_task() {
         default_version,
     );
 
-    let mut generator = TestViewGenerator::<TestVersions>::generate(membership.clone());
+    let mut generator =
+        TestViewGenerator::<TestVersions>::generate(membership.clone(), node_key_map);
 
     let mut proposals = Vec::new();
     let mut leaders = Vec::new();
@@ -147,9 +147,8 @@ async fn test_da_task() {
 async fn test_da_task_storage_failure() {
     hotshot::helpers::initialize_logging();
 
-    let handle = build_system_handle::<TestTypes, MemoryImpl, TestVersions>(2)
-        .await
-        .0;
+    let (handle, _, _, node_key_map) =
+        build_system_handle::<TestTypes, MemoryImpl, TestVersions>(2).await;
 
     // Set the error flag here for the system handle. This causes it to emit an error on append.
     handle.storage().write().await.should_return_err = true;
@@ -170,7 +169,7 @@ async fn test_da_task_storage_failure() {
         default_version,
     );
 
-    let mut generator = TestViewGenerator::<TestVersions>::generate(membership.clone());
+    let mut generator = TestViewGenerator::<TestVersions>::generate(membership.clone(), node_key_map);
 
     let mut proposals = Vec::new();
     let mut leaders = Vec::new();

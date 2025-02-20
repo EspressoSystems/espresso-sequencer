@@ -4,18 +4,12 @@
 // You should have received a copy of the MIT License
 // along with the HotShot repository. If not, see <https://mit-license.org/>.
 
-use std::{
-    collections::BTreeMap,
-    hash::{DefaultHasher, Hash, Hasher},
-};
+use std::collections::BTreeMap;
 
 use sha2::{Digest, Sha256};
 use tokio::task::JoinHandle;
 
-use crate::traits::{
-    node_implementation::{ConsensusTime, NodeType},
-    signature_key::SignatureKey,
-};
+use crate::traits::node_implementation::{ConsensusTime, NodeType};
 
 // TODO: Add the following consts once we bench the hash time.
 // <https://github.com/EspressoSystems/HotShot/issues/3880>
@@ -74,27 +68,6 @@ pub fn compute_drb_result<TYPES: NodeType>(drb_seed_input: DrbSeedInput) -> DrbR
     let mut drb_result = [0u8; 32];
     drb_result.copy_from_slice(&hash);
     drb_result
-}
-
-/// Use the DRB result to get the leader.
-///
-/// The DRB result is the output of a spawned `compute_drb_result` call.
-#[must_use]
-pub fn leader<TYPES: NodeType>(
-    view_number: usize,
-    stake_table: &[<TYPES::SignatureKey as SignatureKey>::StakeTableEntry],
-    drb_result: DrbResult,
-) -> TYPES::SignatureKey {
-    let mut hasher = DefaultHasher::new();
-    drb_result.hash(&mut hasher);
-    view_number.hash(&mut hasher);
-    #[allow(clippy::cast_possible_truncation)]
-    // TODO: Use the total stake rather than `len()` and update the indexing after switching to
-    // a weighted stake table.
-    // <https://github.com/EspressoSystems/HotShot/issues/3898>
-    let index = (hasher.finish() as usize) % stake_table.len();
-    let entry = stake_table[index].clone();
-    TYPES::SignatureKey::public_key(&entry)
 }
 
 /// Alias for in-progress DRB computation task, if there's any.
