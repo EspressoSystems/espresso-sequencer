@@ -139,8 +139,7 @@ pub(crate) async fn fetch_proposal<TYPES: NodeType, V: Versions>(
 
     let mem = membership_coordinator
         .membership_for_epoch(justify_qc_epoch)
-        .await
-        .context(warn!("No stake table for epoch"))?;
+        .await?;
     let membership_stake_table = mem.stake_table().await;
     let membership_success_threshold = mem.success_threshold().await;
 

@@ -173,8 +173,7 @@ pub(crate) async fn handle_quorum_proposal_recv<
     if qc_mem.epoch > justify_qc.data.epoch {
         qc_mem = qc_mem
             .prev_epoch()
-            .await
-            .context(warn!("No stake table for epoch"))?;
+            .await?;
     }
 
     let membership_stake_table = qc_mem.stake_table().await;
@@ -205,8 +204,10 @@ pub(crate) async fn handle_quorum_proposal_recv<
             bail!("Next epoch justify qc exists but it's not equal with justify qc.");
         }
 
-        let membership_next_stake_table = validation_info.membership.stake_table().await;
-        let membership_next_success_threshold = validation_info.membership.success_threshold().await;
+        let next_mem = qc_mem.next_epoch().await?;
+
+        let membership_next_stake_table = next_mem.stake_table().await;
+        let membership_next_success_threshold = next_mem.success_threshold().await;
 
         // Validate the next epoch justify qc as well
         next_epoch_justify_qc
@@ -216,9 +217,8 @@ pub(crate) async fn handle_quorum_proposal_recv<
                 &validation_info.upgrade_lock,
             )
             .await
-            .context(|e| warn!("Invalid certificate for view {}: {}", *view_number, e))?;
+            .context(|e| warn!("Invalid next epoch certificate for view {}: {}", *view_number, e))?;
     }
-
     broadcast_event(
         Arc::new(HotShotEvent::QuorumProposalPreliminarilyValidated(
             proposal.clone(),

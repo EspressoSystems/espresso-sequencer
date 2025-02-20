@@ -15,18 +15,11 @@ use either::Either;
 use futures::future::{err, join_all};
 use hotshot_task::task::{Task, TaskState};
 use hotshot_types::{
-    consensus::{Consensus, OuterConsensus},
-    data::{EpochNumber, Leaf, ViewChangeEvidence2},
-    epoch_membership::{self, EpochMembership, EpochMembershipCoordinator},
-    event::Event,
-    message::UpgradeLock,
-    simple_certificate::UpgradeCertificate,
-    simple_vote::HasEpoch,
-    traits::{
+    consensus::{Consensus, OuterConsensus}, data::{EpochNumber, Leaf, ViewChangeEvidence2}, epoch_membership::{self, EpochMembership, EpochMembershipCoordinator}, event::Event, message::UpgradeLock, simple_certificate::UpgradeCertificate, simple_vote::HasEpoch, traits::{
         node_implementation::{ConsensusTime, NodeImplementation, NodeType, Versions},
         signature_key::SignatureKey,
-    },
-    vote::{Certificate, HasViewNumber},
+    }, utils::option_epoch_from_block_number, vote::{Certificate, HasViewNumber},
+    traits::block_contents::BlockHeader,
 };
 use hotshot_utils::anytrace::{bail, Result};
 use tokio::task::JoinHandle;
@@ -141,18 +134,24 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
     ) {
         match event.as_ref() {
             HotShotEvent::QuorumProposalRecv(proposal, sender) => {
+                // tracing::error!("proposal recv {:?}", proposal.data);
                 if self.consensus.read().await.cur_view() > proposal.data.view_number()
                     || self.cur_view > proposal.data.view_number()
                 {
                     tracing::error!("Throwing away old proposal");
                     return;
                 }
+                let proposal_epoch = option_epoch_from_block_number::<TYPES>(
+                    proposal.data.proposal.epoch().is_some(),
+                    proposal.data.block_header().block_number(),
+                    self.epoch_height,
+                );
                 let Ok(epoch_membership) = self
                     .membership
-                    .membership_for_epoch(proposal.data.epoch())
+                    .membership_for_epoch(proposal_epoch)
                     .await
                 else {
-                    tracing::warn!("No Stake table for epoch = {:?}", proposal.data.epoch());
+                    tracing::warn!("No Stake table for epoch = {:?}", proposal_epoch);
                     return;
                 };
                 let validation_info = ValidationInfo::<TYPES, I, V> {

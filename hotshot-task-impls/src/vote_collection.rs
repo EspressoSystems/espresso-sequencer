@@ -371,7 +371,7 @@ impl<TYPES: NodeType>
     for NextEpochQuorumVote2<TYPES>
 {
     async fn leader(&self, membership: &EpochMembership<TYPES>) -> Result<TYPES::SignatureKey> {
-        membership.leader(self.view_number() + 1).await
+        membership.prev_epoch().await?.leader(self.view_number() + 1).await
     }
     fn make_cert_event(
         certificate: NextEpochQuorumCertificate2<TYPES>,
