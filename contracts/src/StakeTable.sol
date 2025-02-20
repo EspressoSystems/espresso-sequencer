@@ -8,10 +8,13 @@ import { LightClient } from "../src/LightClient.sol";
 import { EdOnBN254 } from "./libraries/EdOnBn254.sol";
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 
+// TODO: remove this when contract is made upgradable
+import { InitializedAt } from "./InitializedAt.sol";
+
 using EdOnBN254 for EdOnBN254.EdOnBN254Point;
 
 /// @title Implementation of the Stake Table interface
-contract StakeTable is AbstractStakeTable, Ownable {
+contract StakeTable is AbstractStakeTable, Ownable, InitializedAt {
     /// Error to notify restaking is not implemented yet.
     error RestakingNotImplemented();
 
@@ -111,7 +114,7 @@ contract StakeTable is AbstractStakeTable, Ownable {
         uint64 churnRate,
         uint256 _minStakeAmount,
         address initialOwner
-    ) Ownable(initialOwner) {
+    ) Ownable(initialOwner) InitializedAt() {
         tokenAddress = _tokenAddress;
         lightClient = LightClient(_lightClientAddress);
 

@@ -17,6 +17,7 @@ import { EdOnBN254 } from "../src/libraries/EdOnBn254.sol";
 import { AbstractStakeTable } from "../src/interfaces/AbstractStakeTable.sol";
 import { LightClient } from "../src/LightClient.sol";
 import { LightClientMock } from "../test/mocks/LightClientMock.sol";
+import { InitializedAt } from "../src/InitializedAt.sol";
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 
 // Token contract
@@ -81,6 +82,14 @@ contract StakeTable_register_Test is Test {
         address lightClientAddress = address(lcMock);
         stakeTable =
             new S(address(token), lightClientAddress, 10, MIN_STAKE_AMOUNT, exampleTokenCreator);
+    }
+
+    function test_Deployment_EmitsEvent() public {
+        vm.expectEmit();
+        // When the ST contract is made upgradable the event needs to be changed to
+        // emit Initializable.Initialized(1)
+        emit InitializedAt.Initialized(1);
+        setUp();
     }
 
     function testFuzz_RevertWhen_InvalidBLSSig(uint256 scalar) external {
