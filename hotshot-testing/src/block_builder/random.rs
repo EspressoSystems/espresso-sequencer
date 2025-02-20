@@ -20,10 +20,13 @@ use async_lock::RwLock;
 use async_trait::async_trait;
 use futures::{future::BoxFuture, Stream, StreamExt};
 use hotshot::types::{Event, EventType, SignatureKey};
-use hotshot_builder_api::v0_1::{
-    block_info::{AvailableBlockData, AvailableBlockHeaderInput, AvailableBlockInfo},
-    builder::BuildError,
-    data_source::BuilderDataSource,
+use hotshot_builder_api::{
+    v0_1::{
+        block_info::{AvailableBlockData, AvailableBlockInfo},
+        builder::BuildError,
+        data_source::BuilderDataSource,
+    },
+    v0_2::block_info::AvailableBlockHeaderInputV1,
 };
 use hotshot_example_types::{block_types::TestTransaction, node_types::TestVersions};
 use hotshot_types::{
@@ -142,7 +145,7 @@ impl<TYPES: NodeType<Transaction = TestTransaction>> RandomBuilderTask<TYPES> {
 
             // Let new VID scheme ship with Epochs upgrade.
             let version = <V as Versions>::Epochs::VERSION;
-            let block = build_block::<TYPES, V>(
+            let block = build_block::<TYPES>(
                 transactions,
                 num_nodes.clone(),
                 pub_key.clone(),
@@ -331,7 +334,7 @@ impl<TYPES: NodeType> BuilderDataSource<TYPES> for RandomBuilderSource<TYPES> {
         _view_number: u64,
         _sender: TYPES::SignatureKey,
         _signature: &<TYPES::SignatureKey as SignatureKey>::PureAssembledSignatureType,
-    ) -> Result<AvailableBlockHeaderInput<TYPES>, BuildError> {
+    ) -> Result<AvailableBlockHeaderInputV1<TYPES>, BuildError> {
         if self.should_fail_claims.load(Ordering::Relaxed) {
             return Err(BuildError::Missing);
         }

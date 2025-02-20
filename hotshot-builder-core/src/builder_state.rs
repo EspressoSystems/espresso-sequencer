@@ -2,12 +2,12 @@ use hotshot_types::{
     data::{DaProposal2, Leaf2, QuorumProposalWrapper},
     message::Proposal,
     traits::{
-        block_contents::{BlockHeader, BlockPayload},
+        block_contents::{precompute_vid_commitment, BlockHeader, BlockPayload},
         node_implementation::{ConsensusTime, NodeType, Versions},
         EncodeBytes,
     },
     utils::BuilderCommitment,
-    vid::VidCommitment,
+    vid::{VidCommitment, VidPrecomputeData},
 };
 use marketplace_builder_shared::block::{BlockId, BuilderStateId, ParentBlockReferences};
 
@@ -20,7 +20,6 @@ use async_broadcast::Sender as BroadcastSender;
 use async_lock::RwLock;
 use core::panic;
 use futures::StreamExt;
-use vbs::version::StaticVersionType;
 
 use tokio::{
     spawn,
@@ -87,7 +86,7 @@ pub struct BuildBlockInfo<Types: NodeType> {
     pub block_payload: Types::BlockPayload,
     pub metadata: <<Types as NodeType>::BlockPayload as BlockPayload<Types>>::Metadata,
     pub vid_trigger: oneshot::Sender<TriggerStatus>,
-    pub vid_receiver: UnboundedReceiver<VidCommitment>,
+    pub vid_receiver: UnboundedReceiver<(VidCommitment, VidPrecomputeData)>,
     // Could we have included more transactions, but chose not to?
     pub truncated: bool,
 }
@@ -808,13 +807,8 @@ impl<Types: NodeType, V: Versions> BuilderState<Types, V> {
                 return;
             };
 
-            let join_handle = spawn_blocking(move || {
-                hotshot_types::traits::block_contents::vid_commitment::<V>(
-                    &encoded_txns,
-                    num_nodes,
-                    <V as Versions>::Base::VERSION,
-                )
-            });
+            let join_handle =
+                spawn_blocking(move || precompute_vid_commitment(&encoded_txns, num_nodes));
 
             let vidc = join_handle.await.unwrap();
 

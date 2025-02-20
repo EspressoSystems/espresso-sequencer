@@ -28,6 +28,7 @@ use jf_vid::{
         payload_prover::{LargeRangeProof, SmallRangeProof},
     },
     payload_prover::{PayloadProver, Statement},
+    precomputable::Precomputable,
     VidDisperse, VidResult, VidScheme,
 };
 use lazy_static::lazy_static;
@@ -109,6 +110,8 @@ pub type VidCommitment = <VidSchemeType as VidScheme>::Commit;
 pub type VidCommon = <VidSchemeType as VidScheme>::Common;
 /// VID share type
 pub type VidShare = <VidSchemeType as VidScheme>::Share;
+/// VID PrecomputeData type
+pub type VidPrecomputeData = <VidSchemeType as Precomputable>::PrecomputeData;
 /// VID proposal type
 pub type VidProposal<TYPES> = (
     Proposal<TYPES, HotShotVidDisperse<TYPES>>,
@@ -311,5 +314,32 @@ fn stmt_conversion(stmt: Statement<'_, VidSchemeType>) -> Statement<'_, Advz> {
         range: stmt.range,
         commit: stmt.commit,
         common: stmt.common,
+    }
+}
+
+impl Precomputable for VidSchemeType {
+    type PrecomputeData = <Advz as Precomputable>::PrecomputeData;
+
+    fn commit_only_precompute<B>(
+        &self,
+        payload: B,
+    ) -> VidResult<(Self::Commit, Self::PrecomputeData)>
+    where
+        B: AsRef<[u8]>,
+    {
+        self.0.commit_only_precompute(payload)
+    }
+
+    fn disperse_precompute<B>(
+        &self,
+        payload: B,
+        data: &Self::PrecomputeData,
+    ) -> VidResult<VidDisperse<Self>>
+    where
+        B: AsRef<[u8]>,
+    {
+        self.0
+            .disperse_precompute(payload, data)
+            .map(vid_disperse_conversion)
     }
 }
