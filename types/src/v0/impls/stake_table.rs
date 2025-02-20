@@ -14,6 +14,7 @@ use hotshot::types::{BLSPubKey, SignatureKey as _};
 use hotshot_contract_adapter::stake_table::{bls_alloy_to_jf, NodeInfoJf};
 use hotshot_types::{
     data::EpochNumber,
+    drb::DrbResult,
     stake_table::StakeTableEntry,
     traits::{
         election::Membership,
@@ -25,7 +26,7 @@ use hotshot_types::{
 use indexmap::IndexMap;
 use std::{
     cmp::max,
-    collections::{BTreeSet, HashMap},
+    collections::{BTreeMap, BTreeSet, HashMap},
     num::NonZeroU64,
     sync::Arc,
 };
@@ -101,6 +102,9 @@ pub struct EpochCommittees {
     chain_config: ChainConfig,
     #[debug("{}", peers.name())]
     pub peers: Arc<dyn StateCatchup>,
+
+    /// The results of DRB calculations
+    drb_result_table: BTreeMap<Epoch, DrbResult>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -260,6 +264,7 @@ impl EpochCommittees {
             l1_client: instance_state.l1_client.clone(),
             chain_config: instance_state.chain_config,
             peers: instance_state.peers.clone(),
+            drb_result_table: BTreeMap::new(),
         }
     }
 
@@ -480,6 +485,10 @@ impl Membership<SeqTypes> for EpochCommittees {
                     let _ = committee.update_stake_table(epoch, stake_table);
                 })
             })
+    }
+
+    fn add_drb_result(&mut self, epoch: Epoch, drb_result: DrbResult) {
+        self.drb_result_table.insert(epoch, drb_result);
     }
 }
 
