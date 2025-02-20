@@ -399,7 +399,6 @@ impl L1Client {
         if update_task.is_none() {
             let mut tasks = JoinSet::new();
             tasks.spawn(self.update_loop());
-            tasks.spawn(self.stake_update_loop());
             *update_task = Some(tasks);
         }
     }
@@ -410,47 +409,47 @@ impl L1Client {
     /// called again.
     pub async fn shut_down_tasks(&self) {
         if let Some(mut update_task) = self.update_task.0.lock().await.take() {
-            // TODO review order
             update_task.abort_all();
         }
     }
 
     /// Update stake-table cache on `L1Event::NewHead`.
-    fn stake_update_loop(&self) -> impl Future<Output = ()> {
+    fn stake_update_loop(&self, address: Address) -> impl Future<Output = ()> {
+        tracing::error!("spawned stake table update loop");
         let opt = self.options();
         let retry_delay = opt.l1_retry_delay;
-        let chunk_size = opt.l1_events_max_block_range as usize;
+        let chunk_size = opt.l1_events_max_block_range;
         let span = tracing::warn_span!("L1 client update");
         let state = self.state.clone();
+
         let stake_table_contract =
-            // TODO attach address to L1Client
-            PermissionedStakeTableInstance::new(Address::default(), self.provider.clone());
+            PermissionedStakeTableInstance::new(address, self.provider.clone());
 
         let mut events = self.receiver.activate_cloned();
 
         async move {
             loop {
-                let last_finalized = {
-                    let state = state.lock().await;
-                    state
-                        .snapshot
-                        .finalized
-                        .map(|block_info| block_info.number)
-                        .unwrap_or(0)
-                };
                 while let Some(event) = events.next().await {
                     let L1Event::NewFinalized { finalized } = event else {
                         continue;
                     };
 
-                    let chunks = L1Client::chunky2(last_finalized, finalized.number, chunk_size);
+                    let last_finalized = {
+                        let state = state.lock().await;
+                        state
+                            .snapshot
+                            .finalized
+                            .map(|block_info| block_info.number)
+                            .unwrap_or(0)
+                    };
+
+                    let chunks = ChunkGenerator::new(last_finalized, finalized.number, chunk_size);
                     let mut events: Vec<StakersUpdated> = Vec::new();
-                    for (from, to) in chunks {
-                        tracing::debug!(from, to, "fetch stake table events in range");
+                    for Range { start, end } in chunks {
                         match stake_table_contract
                             .StakersUpdated_filter()
-                            .from_block(from)
-                            .to_block(to)
+                            .from_block(start)
+                            .to_block(end)
                             .query()
                             .await
                         {
@@ -461,7 +460,7 @@ impl L1Client {
                                 break;
                             }
                             Err(err) => {
-                                tracing::warn!(from, to, %err, "Stake Table L1Event Error");
+                                tracing::warn!(start, end, %err, "Stake Table L1Event Error");
                                 sleep(retry_delay).await;
                             }
                         }
@@ -469,10 +468,9 @@ impl L1Client {
 
                     // TODO consider what to do with result
                     let _ = {
+                        let st = StakeTables::from_l1_events(events);
                         let mut state = state.lock().await;
-                        state
-                            .stake
-                            .push(finalized.number, StakeTables::from_l1_events(events))
+                        state.stake.push(finalized.number, st)
                     };
                     sleep(retry_delay).await;
                 }
@@ -937,8 +935,26 @@ impl L1Client {
         let chunk_size = opt.l1_events_max_block_range;
         let state = self.state.clone();
 
+        {
+            if let Some(mut tasks) = self.update_task.0.lock().await.take() {
+                tasks.abort_all();
+            }
+
+            let mut update_task = self.update_task.0.lock().await;
+            // Protocol upgraded to POS version. If stake_update_loop is not running,
+            // we need to spawn
+            let mut tasks = JoinSet::new();
+            tasks.spawn(self.update_loop());
+            tasks.spawn(self.stake_update_loop(contract_address));
+            *update_task = Some(tasks);
+            // update_task.spawn(self.stake_update_loop(contract_address));
+
+            // tracing::error!("update task length: {}", update_task.len());
+        }
+
         let last_finalized = {
             let mut state = state.lock().await;
+
             if let Some(st) = state.stake.get(&block) {
                 return Some(st.clone());
             } else {
@@ -980,7 +996,6 @@ impl L1Client {
             }
         }
         let stake_tables = StakeTables::from_l1_events(events);
-        tracing::error!(?block);
         let _ = {
             let mut state = state.lock().await;
             state.stake.push(block, stake_tables.clone())
@@ -1698,7 +1713,7 @@ mod test {
         provider.get_block_number().await.unwrap();
         assert!(get_failover_index(&provider) == 1);
     }
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_stake_table_update_loop() -> anyhow::Result<()> {
         // Cache should get populated as blocks get finalized
         use ethers::signers::Signer;
@@ -1707,7 +1722,6 @@ mod test {
         let anvil = Anvil::new()
             .args(vec!["--block-time", "1", "--slots-in-an-epoch", "1"])
             .spawn();
-        // let anvil = Anvil::new().spawn();
         let l1_client = new_l1_client(&anvil, false).await;
         let wallet: LocalWallet = anvil.keys()[0].clone().into();
 
@@ -1733,48 +1747,44 @@ mod test {
 
         let address = stake_table_contract.address();
 
-        let mut rng = rand::thread_rng();
-        // let node = NodeInfoJf::random(&mut rng);
+        // spawn stake_table_update_loop
+        let nodes = l1_client
+            .get_stake_table(address.to_alloy(), 0)
+            .await
+            .unwrap();
 
-        for i in 0..5 {
+        let mut rng = rand::thread_rng();
+
+        let mut receipts = Vec::new();
+        // generate some events.
+        for _ in 0..5 {
             let node = NodeInfoJf::random(&mut rng);
             let new_nodes: Vec<contract_bindings_ethers::permissioned_stake_table::NodeInfo> =
                 vec![node.into()];
             let updater = stake_table_contract.update(vec![], new_nodes.clone());
-            updater.send().await?.await?;
+            let receipt = updater.send().await?.await?;
+            if let Some(receipt) = receipt {
+                receipts.push(receipt);
+            }
             sleep(Duration::from_secs(1)).await;
         }
+        // Take block_number from the first receipt. Later
+        // blocks don't appear to become finalized. Need to wait longer?
+        let block = receipts.first().unwrap().block_number.unwrap().as_u64();
 
-        let block = l1_client
-            .get_block(BlockId::finalized(), BlockTransactionsKind::Hashes)
-            .await?
-            .unwrap();
-
-        tracing::error!(?block.header.inner.number);
         // ensure state is updated
         let mut lock = l1_client.state.lock().await;
         let mut success = false;
-
-        // TODO wait here until we get finalized block == block.header.inner.number
-        // let mut events = l1_client.receiver.activate_cloned();
-        // while let Some(event) = events.next().await {
-        //     let L1Event::NewFinalized { finalized } = event else {
-        //         continue;
-        //     };
-
-        //     tracing::error!(?finalized, "test");
-        // }
-
-        for _ in 0..30 {
-            if let Some(nodes) = lock.stake.get(&(block.header.inner.number - 1)) {
-                tracing::error!(?nodes);
+        for _ in 0..10 {
+            if let Some(nodes) = lock.stake.get(&block) {
                 let result = nodes.stake_table.0[0].clone();
                 assert_eq!(result.stake_amount.as_u64(), 1);
                 success = true;
+                break;
             } else {
+                sleep(Duration::from_secs(1)).await;
                 continue;
             };
-            sleep(Duration::from_secs(1)).await;
         }
         if !success {
             panic!("Update Loop did not update Cache within timeout");
