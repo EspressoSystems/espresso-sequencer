@@ -3,7 +3,7 @@ use super::{
     Header, L1Client, NodeState, PubKey, SeqTypes,
 };
 
-use async_trait::async_trait;
+// use async_trait::async_trait;
 use contract_bindings_alloy::permissionedstaketable::PermissionedStakeTable::StakersUpdated;
 use ethers::types::{Address, U256};
 use ethers_conv::ToAlloy;
@@ -20,6 +20,7 @@ use hotshot_types::{
     },
     PeerConfig,
 };
+
 use itertools::Itertools;
 use std::{
     cmp::max,
@@ -273,7 +274,7 @@ impl EpochCommittees {
 #[error("Could not lookup leader")] // TODO error variants? message?
 pub struct LeaderLookupError;
 
-#[async_trait]
+// #[async_trait]
 impl Membership<SeqTypes> for EpochCommittees {
     type Error = LeaderLookupError;
 
@@ -487,6 +488,7 @@ impl Membership<SeqTypes> for EpochCommittees {
         .unwrap()
     }
 
+    #[allow(refining_impl_trait)]
     async fn add_epoch_root(
         &self,
         epoch: Epoch,
@@ -502,6 +504,14 @@ impl Membership<SeqTypes> for EpochCommittees {
                     let _ = committee.update_stake_table(epoch, stake_table);
                 })
             })
+    }
+
+    fn has_epoch(&self, epoch: Epoch) -> bool {
+        self.state.contains_key(&epoch)
+    }
+
+    async fn get_epoch_root(&self, _block_height: u64) -> Option<(Epoch, Header)> {
+        None
     }
 
     fn add_drb_result(&mut self, epoch: Epoch, drb_result: DrbResult) {

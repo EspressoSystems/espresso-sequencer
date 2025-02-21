@@ -7,12 +7,12 @@
 use std::sync::Arc;
 
 use async_broadcast::{Receiver, Sender};
-use async_lock::RwLock;
 use async_trait::async_trait;
 use either::Either;
 use hotshot_task::task::TaskState;
 use hotshot_types::{
     consensus::OuterConsensus,
+    epoch_membership::EpochMembershipCoordinator,
     event::Event,
     message::UpgradeLock,
     simple_certificate::{NextEpochQuorumCertificate2, QuorumCertificate2, TimeoutCertificate2},
@@ -51,7 +51,7 @@ pub struct ConsensusTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>, V: 
     pub network: Arc<I::Network>,
 
     /// Membership for Quorum Certs/votes
-    pub membership: Arc<RwLock<TYPES::Membership>>,
+    pub membership_coordinator: EpochMembershipCoordinator<TYPES>,
 
     /// A map of `QuorumVote` collector tasks.
     pub vote_collectors: VoteCollectorsMap<TYPES, QuorumVote2<TYPES>, QuorumCertificate2<TYPES>, V>,
