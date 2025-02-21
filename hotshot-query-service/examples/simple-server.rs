@@ -216,7 +216,7 @@ async fn init_consensus(
         stop_proposing_time: 0,
         start_voting_time: 0,
         stop_voting_time: 0,
-        epoch_height: 0,
+        epoch_height: 150,
     };
 
     let nodes = join_all(priv_keys.into_iter().zip(data_sources).enumerate().map(

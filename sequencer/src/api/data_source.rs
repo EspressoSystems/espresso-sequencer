@@ -127,6 +127,8 @@ pub(crate) trait StakeTableDataSource<T: NodeType> {
     fn get_stake_table_current(
         &self,
     ) -> impl Send + Future<Output = Vec<StakeTableEntry<T::SignatureKey>>>;
+
+    fn get_current_epoch(&self) -> impl Send + Future<Output = Option<T::Epoch>>;
 }
 
 pub(crate) trait CatchupDataSource: Sync {
