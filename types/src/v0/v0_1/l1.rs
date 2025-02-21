@@ -16,11 +16,11 @@ use std::{
 };
 use tokio::{
     sync::{Mutex, Notify},
-    task::JoinHandle,
+    task::JoinSet,
 };
 use url::Url;
 
-use crate::v0::utils::parse_duration;
+use crate::{v0::utils::parse_duration, v0_3::StakeTables};
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, Hash, PartialEq, Eq)]
 pub struct L1BlockInfo {
@@ -169,6 +169,8 @@ pub struct L1Client {
 pub(crate) struct L1State {
     pub(crate) snapshot: L1Snapshot,
     pub(crate) finalized: LruCache<u64, L1BlockInfo>,
+    /// StakeTables indexed by finalized block
+    pub(crate) stake: LruCache<u64, StakeTables>,
 }
 
 #[derive(Clone, Debug)]
@@ -178,7 +180,7 @@ pub(crate) enum L1Event {
 }
 
 #[derive(Debug, Default)]
-pub(crate) struct L1UpdateTask(pub(crate) Mutex<Option<JoinHandle<()>>>);
+pub(crate) struct L1UpdateTask(pub(crate) Mutex<Option<JoinSet<()>>>);
 
 #[derive(Clone, Debug)]
 pub(crate) struct L1ClientMetrics {

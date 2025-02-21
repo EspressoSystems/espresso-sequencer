@@ -28,17 +28,18 @@ use futures::{
 use hotshot_types::traits::metrics::Metrics;
 use lru::LruCache;
 use parking_lot::RwLock;
-use std::result::Result as StdResult;
+use sequencer_utils::synchronous_generator::ChunkGenerator;
 use std::{
     cmp::{min, Ordering},
+    iter::FromFn,
     num::NonZeroUsize,
-    pin::Pin,
     sync::Arc,
     time::Instant,
 };
+use std::{ops::Range, pin::Pin, result::Result as StdResult};
 use tokio::{
-    spawn,
     sync::{Mutex, MutexGuard, Notify},
+    task::JoinSet,
     time::{sleep, Duration},
 };
 use tower_service::Service;
@@ -100,8 +101,8 @@ impl L1BlockInfo {
 
 impl Drop for L1UpdateTask {
     fn drop(&mut self) {
-        if let Some(task) = self.0.get_mut().take() {
-            task.abort();
+        if let Some(mut tasks) = self.0.get_mut().take() {
+            tasks.abort_all()
         }
     }
 }
@@ -396,7 +397,9 @@ impl L1Client {
     pub async fn spawn_tasks(&self) {
         let mut update_task = self.update_task.0.lock().await;
         if update_task.is_none() {
-            *update_task = Some(spawn(self.update_loop()));
+            let mut tasks = JoinSet::new();
+            tasks.spawn(self.update_loop());
+            *update_task = Some(tasks);
         }
     }
 
@@ -405,12 +408,78 @@ impl L1Client {
     /// The L1 client will still be usable, but will stop updating until [`start`](Self::start) is
     /// called again.
     pub async fn shut_down_tasks(&self) {
-        if let Some(update_task) = self.update_task.0.lock().await.take() {
-            update_task.abort();
+        if let Some(mut update_task) = self.update_task.0.lock().await.take() {
+            update_task.abort_all();
         }
     }
 
+    /// Update stake-table cache on `L1Event::NewFinalized`.
+    fn stake_update_loop(&self, address: Address) -> impl Future<Output = ()> {
+        tracing::debug!("spawn stake table update loop");
+        let opt = self.options();
+        let retry_delay = opt.l1_retry_delay;
+        let chunk_size = opt.l1_events_max_block_range;
+        let state = self.state.clone();
+
+        let stake_table_contract =
+            PermissionedStakeTableInstance::new(address, self.provider.clone());
+
+        let mut events = self.receiver.activate_cloned();
+
+        let span = tracing::warn_span!("L1 client stake_tables update");
+        async move {
+            loop {
+                while let Some(event) = events.next().await {
+                    let L1Event::NewFinalized { finalized } = event else {
+                        continue;
+                    };
+
+                    let last_finalized = {
+                        let state = state.lock().await;
+                        state
+                            .snapshot
+                            .finalized
+                            .map(|block_info| block_info.number)
+                            .unwrap_or(0)
+                    };
+
+                    let chunks = ChunkGenerator::new(last_finalized, finalized.number, chunk_size);
+                    let mut events: Vec<StakersUpdated> = Vec::new();
+                    for Range { start, end } in chunks {
+                        match stake_table_contract
+                            .StakersUpdated_filter()
+                            .from_block(start)
+                            .to_block(end)
+                            .query()
+                            .await
+                        {
+                            Ok(e) => {
+                                for event in e {
+                                    events.push(event.0)
+                                }
+                                break;
+                            }
+                            Err(err) => {
+                                tracing::warn!(start, end, %err, "Stake Table L1Event Error");
+                                sleep(retry_delay).await;
+                            }
+                        }
+                    }
+                    {
+                        let st = StakeTables::from_l1_events(events);
+                        let mut state = state.lock().await;
+                        state.put_stake_tables(finalized.number, st)
+                    };
+                    sleep(retry_delay).await;
+                }
+                sleep(retry_delay).await;
+            }
+        }
+        .instrument(span)
+    }
+
     fn update_loop(&self) -> impl Future<Output = ()> {
+        tracing::debug!("spawn blocks update loop");
         let opt = self.options();
         let rpc = self.provider.clone();
         let ws_urls = opt.l1_ws_provider.clone();
@@ -514,7 +583,8 @@ impl L1Client {
 
                             // Update the state snapshot;
                             let mut state = state.lock().await;
-                            if head > state.snapshot.head {
+                            let snapshot_head = state.snapshot.head;
+                            if head > snapshot_head {
                                 tracing::debug!(head, old_head = state.snapshot.head, "L1 head updated");
                                 metrics.head.set(head as usize);
                                 state.snapshot.head = head;
@@ -757,6 +827,23 @@ impl L1Client {
         (state, block)
     }
 
+    /// Divide the range `start..=end` into chunks of size
+    /// `events_max_block_range`.
+    fn _chunky(&self, start: u64, end: u64) -> FromFn<impl FnMut() -> Option<(u64, u64)>> {
+        let mut start = start;
+        let chunk_size = self.options().l1_events_max_block_range;
+        std::iter::from_fn(move || {
+            let chunk_end = min(start + chunk_size - 1, end);
+            if chunk_end < start {
+                return None;
+            }
+
+            let chunk = (start, chunk_end);
+            start = chunk_end + 1;
+            Some(chunk)
+        })
+    }
+
     /// Get fee info for each `Deposit` occurring between `prev`
     /// and `new`. Returns `Vec<FeeInfo>`
     pub async fn get_finalized_deposits(
@@ -777,78 +864,142 @@ impl L1Client {
         // haven't processed *any* blocks yet.
         let prev = prev_finalized.map(|prev| prev + 1).unwrap_or(0);
 
+        let fee_contract = FeeContractInstance::new(fee_contract_address, self.provider.clone());
+
         // Divide the range `prev_finalized..=new_finalized` into chunks of size
         // `events_max_block_range`.
-        let mut start = prev;
-        let end = new_finalized;
-        let chunk_size = opt.l1_events_max_block_range;
-        let chunks = std::iter::from_fn(move || {
-            let chunk_end = min(start + chunk_size - 1, end);
-            if chunk_end < start {
-                return None;
-            }
-
-            let chunk = (start, chunk_end);
-            start = chunk_end + 1;
-            Some(chunk)
-        });
+        // let chunks = self.chunky(prev, new_finalized);
+        let chunks = ChunkGenerator::new(prev, new_finalized, opt.l1_events_max_block_range);
 
         // Fetch events for each chunk.
-        let events = stream::iter(chunks).then(|(from, to)| {
+        let mut events = Vec::new();
+        for Range { start, end } in chunks {
             let retry_delay = opt.l1_retry_delay;
-            let fee_contract =
-                FeeContractInstance::new(fee_contract_address, self.provider.clone());
-            async move {
-                tracing::debug!(from, to, "fetch events in range");
+            tracing::debug!(start, end, "fetch events in range");
 
-                // query for deposit events, loop until successful.
-                loop {
-                    match fee_contract
-                        .Deposit_filter()
-                        .address(*fee_contract.address())
-                        .from_block(from)
-                        .to_block(to)
-                        .query()
-                        .await
-                    {
-                        Ok(events) => break stream::iter(events),
-                        Err(err) => {
-                            tracing::warn!(from, to, %err, "Fee L1Event Error");
-                            sleep(retry_delay).await;
+            // query for deposit events, loop until successful.
+            loop {
+                match fee_contract
+                    .Deposit_filter()
+                    .from_block(start)
+                    .to_block(end)
+                    .query()
+                    .await
+                {
+                    Ok(e) => {
+                        for event in e {
+                            events.push(event)
                         }
+                        break;
+                    }
+                    Err(err) => {
+                        tracing::warn!(start, end, %err, "Fee L1Event Error");
+                        sleep(retry_delay).await;
                     }
                 }
             }
-        });
+        }
+
         events
-            .flatten()
+            .into_iter()
             .map(|(deposit, _)| FeeInfo::from(deposit))
             .collect()
-            .await
     }
 
-    /// Get `StakeTable` at block height.
+    /// Upgrade background tasks for Proof Of Stake. No-op if upgrade already occurred.
+    async fn maybe_upgrade_background_tasks(&self, address: Address) {
+        {
+            if let Some(mut tasks) = self.update_task.0.lock().await.take() {
+                if tasks.len() > 1 {
+                    tracing::debug!("Greater than 1 tasks are running, no need to upgrade.");
+                    return;
+                } else {
+                    // Protocol upgraded to POS version. If stake_update_loop is not running,
+                    // we need to spawn.
+
+                    tracing::warn!(
+                        "Upgrading `L1Client` background tasks for v3 (Proof of Stake)!",
+                    );
+                    tasks.abort_all();
+                }
+            }
+
+            let mut update_task = self.update_task.0.lock().await;
+            let mut tasks = JoinSet::new();
+            tasks.spawn(self.update_loop());
+            tasks.spawn(self.stake_update_loop(address));
+            *update_task = Some(tasks);
+
+            tracing::warn!("`Successfully upgrade L1Client background tasks!`");
+        }
+    }
+
+    /// Get `StakeTable` at block height. If unavailable in local cache, poll the l1.
     pub async fn get_stake_table(
         &self,
-        contract: Address,
+        contract_address: Address,
         block: u64,
-    ) -> anyhow::Result<StakeTables> {
-        // TODO stake_table_address needs to be passed in to L1Client
-        // before update loop starts.
-        let stake_table_contract =
-            PermissionedStakeTableInstance::new(contract, self.provider.clone());
+    ) -> Option<StakeTables> {
+        tracing::error!("Get stake tables");
+        let opt = self.options();
+        let retry_delay = opt.l1_retry_delay;
+        let chunk_size = opt.l1_events_max_block_range;
+        let state = self.state.clone();
 
-        let events: Vec<StakersUpdated> = stake_table_contract
-            .StakersUpdated_filter()
-            .from_block(0)
-            .to_block(block)
-            .query()
-            .await?
-            .into_iter()
-            .map(|(event, _)| event)
-            .collect();
+        // `get_stake_table` is only called in v3. So we check here if
+        // stake table update loop is running. If not, start it.
+        self.maybe_upgrade_background_tasks(contract_address).await;
 
-        Ok(StakeTables::from_l1_events(events.clone()))
+        let last_finalized = {
+            let mut state = state.lock().await;
+
+            if let Some(st) = state.stake.get(&block) {
+                return Some(st.clone());
+            } else {
+                state
+                    .snapshot
+                    .finalized
+                    .map(|block_info| block_info.number)
+                    // TODO what could be a reasonable default?
+                    // set l1 block at contract deployment
+                    .unwrap_or(0)
+            }
+        };
+
+        let chunks = ChunkGenerator::new(last_finalized, block, chunk_size);
+        let contract = PermissionedStakeTableInstance::new(contract_address, self.provider.clone());
+
+        let mut events: Vec<StakersUpdated> = Vec::new();
+        for Range { start, end } in chunks {
+            tracing::debug!(start, end, "fetch stake table events in range");
+            loop {
+                match contract
+                    .StakersUpdated_filter()
+                    .from_block(start)
+                    .to_block(start)
+                    .query()
+                    .await
+                {
+                    Ok(e) => {
+                        for event in e {
+                            events.push(event.0)
+                        }
+                        break;
+                    }
+                    Err(err) => {
+                        tracing::warn!(start, end, %err, "Stake Table L1Event Error");
+                        sleep(retry_delay).await;
+                    }
+                }
+            }
+        }
+        let stake_tables = StakeTables::from_l1_events(events);
+        let _ = {
+            let mut state = state.lock().await;
+            state.stake.push(block, stake_tables.clone())
+        };
+
+        Some(stake_tables)
     }
 
     /// Check if the given address is a proxy contract.
@@ -888,6 +1039,7 @@ impl L1State {
         Self {
             snapshot: Default::default(),
             finalized: LruCache::new(cache_size),
+            stake: LruCache::new(cache_size),
         }
     }
 
@@ -905,6 +1057,18 @@ impl L1State {
                     ?old_info,
                     ?info,
                     "got different info for the same finalized height; something has gone very wrong with the L1",
+                );
+            }
+        }
+    }
+
+    fn put_stake_tables(&mut self, block_number: u64, st: StakeTables) {
+        if let Some((old_block_number, old_stake)) = self.stake.push(block_number, st.clone()) {
+            if old_block_number == block_number {
+                tracing::error!(
+                    ?old_stake,
+                    ?st,
+                    "got different stake_tables for the same finalized height; something has gone very wrong with the L1",
                 );
             }
         }
@@ -1322,13 +1486,36 @@ mod test {
     }
 
     #[tokio::test]
+    async fn test_chunky() {
+        let anvil = Anvil::new().spawn();
+        let opt = L1ClientOptions {
+            l1_events_max_block_range: 3,
+            ..Default::default()
+        };
+        let l1_client = opt
+            .connect(vec![anvil.endpoint().parse().unwrap()])
+            .unwrap();
+
+        let chunks = l1_client._chunky(3, 10);
+        let tups = stream::iter(chunks).collect::<Vec<_>>().await;
+
+        assert_eq![vec![(3, 5), (6, 8), (9, 10)], tups];
+
+        let chunks = ChunkGenerator::new(3, 10, 3);
+        let tups: Vec<(u64, u64)> = chunks.map(|range| (range.start, range.end)).collect();
+
+        assert_eq![vec![(3, 5), (6, 8), (9, 10)], tups];
+    }
+
+    #[tokio::test]
     async fn test_fetch_stake_table() -> anyhow::Result<()> {
         use ethers::signers::Signer;
         setup_test();
 
         let anvil = Anvil::new().spawn();
-        let l1_client = L1Client::new(vec![anvil.endpoint().parse().unwrap()])
-            .expect("Failed to create L1 client");
+        let l1_client = new_l1_client(&anvil, false).await;
+        // let l1_client = L1Client::new(vec![anvil.endpoint().parse().unwrap()])
+        //    .expect("Failed to create L1 client");
         let wallet: LocalWallet = anvil.keys()[0].clone().into();
 
         // In order to deposit we need a provider that can sign.
@@ -1390,6 +1577,15 @@ mod test {
 
         let result = nodes.stake_table.0[0].clone();
         assert_eq!(result.stake_amount.as_u64(), 1);
+
+        tracing::error!(?block.header.inner.number);
+
+        // ensure state is updated
+        let mut lock = l1_client.state.lock().await;
+        let nodes = lock.stake.get(&block.header.inner.number).unwrap();
+        let result = nodes.stake_table.0[0].clone();
+        assert_eq!(result.stake_amount.as_u64(), 1);
+
         Ok(())
     }
 
@@ -1541,5 +1737,91 @@ mod test {
         provider.get_block_number().await.unwrap_err();
         provider.get_block_number().await.unwrap();
         assert!(get_failover_index(&provider) == 1);
+    }
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_stake_table_update_loop() -> anyhow::Result<()> {
+        // Cache should get populated as blocks get finalized
+        use ethers::signers::Signer;
+        setup_test();
+
+        let anvil = Anvil::new()
+            .args(vec!["--block-time", "1", "--slots-in-an-epoch", "1"])
+            .spawn();
+        let l1_client = new_l1_client(&anvil, false).await;
+        let wallet: LocalWallet = anvil.keys()[0].clone().into();
+
+        // In order to deposit we need a provider that can sign.
+        let deployer_provider =
+            ethers::providers::Provider::<ethers::providers::Http>::try_from(anvil.endpoint())?
+                .interval(Duration::from_millis(10u64));
+        let deployer_client = SignerMiddleware::new(
+            deployer_provider.clone(),
+            wallet.with_chain_id(anvil.chain_id()),
+        );
+        let deployer_client = Arc::new(deployer_client);
+
+        // See comment in `test_fetch_stake_table`
+        deployer_client
+            .send_transaction(
+                ethers::types::TransactionRequest::new()
+                    .to(deployer_client.address())
+                    .value(0),
+                None,
+            )
+            .await?
+            .await?;
+
+        // deploy the stake_table contract
+        let stake_table_contract =
+            contract_bindings_ethers::permissioned_stake_table::PermissionedStakeTable::deploy(
+                deployer_client.clone(),
+                Vec::<contract_bindings_ethers::permissioned_stake_table::NodeInfo>::new(),
+            )
+            .unwrap()
+            .send()
+            .await?;
+
+        // spawn stake_table_update_loop
+        let _ = l1_client
+            .get_stake_table(stake_table_contract.address().to_alloy(), 0)
+            .await
+            .unwrap();
+
+        let mut rng = rand::thread_rng();
+        let mut receipts = Vec::new();
+        // generate some events.
+        for _ in 0..5 {
+            let node = NodeInfoJf::random(&mut rng);
+            let new_nodes: Vec<contract_bindings_ethers::permissioned_stake_table::NodeInfo> =
+                vec![node.into()];
+            let updater = stake_table_contract.update(vec![], new_nodes.clone());
+            let receipt = updater.send().await?.await?;
+            if let Some(receipt) = receipt {
+                receipts.push(receipt);
+            }
+            sleep(Duration::from_secs(1)).await;
+        }
+        // Take block_number from the first receipt. Later
+        // blocks don't appear to become finalized. Need to wait longer?
+        let block = receipts.first().unwrap().block_number.unwrap().as_u64();
+
+        // ensure state is updated
+        let mut lock = l1_client.state.lock().await;
+        let mut success = false;
+        for _ in 0..10 {
+            if let Some(nodes) = lock.stake.get(&block) {
+                let result = nodes.stake_table.0[0].clone();
+                assert_eq!(result.stake_amount.as_u64(), 1);
+                success = true;
+                break;
+            } else {
+                sleep(Duration::from_secs(1)).await;
+                continue;
+            };
+        }
+        if !success {
+            panic!("Update Loop did not update Cache within timeout");
+        }
+        Ok(())
     }
 }
