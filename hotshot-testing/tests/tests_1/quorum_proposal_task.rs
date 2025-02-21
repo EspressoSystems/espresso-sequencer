@@ -47,9 +47,8 @@ async fn test_quorum_proposal_task_quorum_proposal_view_1() {
     hotshot::helpers::initialize_logging();
 
     let node_id = 1;
-    let handle = build_system_handle::<TestTypes, MemoryImpl, TestVersions>(node_id)
-        .await
-        .0;
+    let (handle, _, _, node_key_map) =
+        build_system_handle::<TestTypes, MemoryImpl, TestVersions>(node_id).await;
 
     let membership = Arc::clone(&handle.hotshot.memberships);
     let version = handle
@@ -66,7 +65,8 @@ async fn test_quorum_proposal_task_quorum_proposal_view_1() {
     )
     .await;
 
-    let mut generator = TestViewGenerator::<TestVersions>::generate(Arc::clone(&membership));
+    let mut generator =
+        TestViewGenerator::<TestVersions>::generate(Arc::clone(&membership), node_key_map);
 
     let mut proposals = Vec::new();
     let mut leaders = Vec::new();
@@ -151,13 +151,13 @@ async fn test_quorum_proposal_task_quorum_proposal_view_gt_1() {
     hotshot::helpers::initialize_logging();
 
     let node_id = 3;
-    let handle = build_system_handle::<TestTypes, MemoryImpl, TestVersions>(node_id)
-        .await
-        .0;
+    let (handle, _, _, node_key_map) =
+        build_system_handle::<TestTypes, MemoryImpl, TestVersions>(node_id).await;
 
     let membership = Arc::clone(&handle.hotshot.memberships);
 
-    let mut generator = TestViewGenerator::<TestVersions>::generate(membership.clone());
+    let mut generator =
+        TestViewGenerator::<TestVersions>::generate(membership.clone(), node_key_map);
 
     let mut proposals = Vec::new();
     let mut leaders = Vec::new();
@@ -335,9 +335,8 @@ async fn test_quorum_proposal_task_qc_timeout() {
     hotshot::helpers::initialize_logging();
 
     let node_id = 3;
-    let handle = build_system_handle::<TestTypes, MemoryImpl, TestVersions>(node_id)
-        .await
-        .0;
+    let (handle, _, _, node_key_map) =
+        build_system_handle::<TestTypes, MemoryImpl, TestVersions>(node_id).await;
     let membership = Arc::clone(&handle.hotshot.memberships);
     let version = handle
         .hotshot
@@ -354,7 +353,8 @@ async fn test_quorum_proposal_task_qc_timeout() {
     .await;
     let builder_commitment = BuilderCommitment::from_raw_digest(sha2::Sha256::new().finalize());
 
-    let mut generator = TestViewGenerator::<TestVersions>::generate(Arc::clone(&membership));
+    let mut generator =
+        TestViewGenerator::<TestVersions>::generate(Arc::clone(&membership), node_key_map);
 
     let mut proposals = Vec::new();
     let mut leaders = Vec::new();
@@ -433,9 +433,8 @@ async fn test_quorum_proposal_task_view_sync() {
     hotshot::helpers::initialize_logging();
 
     let node_id = 2;
-    let handle = build_system_handle::<TestTypes, MemoryImpl, TestVersions>(node_id)
-        .await
-        .0;
+    let (handle, _, _, node_key_map) =
+        build_system_handle::<TestTypes, MemoryImpl, TestVersions>(node_id).await;
 
     let membership = Arc::clone(&handle.hotshot.memberships);
     let version = handle
@@ -453,7 +452,8 @@ async fn test_quorum_proposal_task_view_sync() {
     .await;
     let builder_commitment = BuilderCommitment::from_raw_digest(sha2::Sha256::new().finalize());
 
-    let mut generator = TestViewGenerator::<TestVersions>::generate(Arc::clone(&membership));
+    let mut generator =
+        TestViewGenerator::<TestVersions>::generate(Arc::clone(&membership), node_key_map);
 
     let mut proposals = Vec::new();
     let mut leaders = Vec::new();
@@ -532,13 +532,13 @@ async fn test_quorum_proposal_task_liveness_check() {
     hotshot::helpers::initialize_logging();
 
     let node_id = 3;
-    let handle = build_system_handle::<TestTypes, MemoryImpl, TestVersions>(node_id)
-        .await
-        .0;
+    let (handle, _, _, node_key_map) =
+        build_system_handle::<TestTypes, MemoryImpl, TestVersions>(node_id).await;
 
     let membership = Arc::clone(&handle.hotshot.memberships);
 
-    let mut generator = TestViewGenerator::<TestVersions>::generate(Arc::clone(&membership));
+    let mut generator =
+        TestViewGenerator::<TestVersions>::generate(Arc::clone(&membership), node_key_map);
 
     let mut proposals = Vec::new();
     let mut leaders = Vec::new();
@@ -711,12 +711,11 @@ async fn test_quorum_proposal_task_liveness_check() {
 async fn test_quorum_proposal_task_with_incomplete_events() {
     hotshot::helpers::initialize_logging();
 
-    let handle = build_system_handle::<TestTypes, MemoryImpl, TestVersions>(2)
-        .await
-        .0;
+    let (handle, _, _, node_key_map) =
+        build_system_handle::<TestTypes, MemoryImpl, TestVersions>(2).await;
     let membership = Arc::clone(&handle.hotshot.memberships);
 
-    let mut generator = TestViewGenerator::<TestVersions>::generate(membership);
+    let mut generator = TestViewGenerator::<TestVersions>::generate(membership, node_key_map);
 
     let mut proposals = Vec::new();
     let mut leaders = Vec::new();

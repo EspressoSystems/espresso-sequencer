@@ -11,7 +11,7 @@ use async_trait::async_trait;
 use hotshot_utils::anytrace::Result;
 
 use super::node_implementation::NodeType;
-use crate::{traits::signature_key::SignatureKey, PeerConfig};
+use crate::{drb::DrbResult, traits::signature_key::SignatureKey, PeerConfig};
 
 #[async_trait]
 /// A protocol for determining membership in and participating in a committee.
@@ -152,4 +152,8 @@ pub trait Membership<TYPES: NodeType>: Debug + Send + Sync {
     async fn sync_l1(&self) -> Option<Box<dyn FnOnce(&mut Self) + Send>> {
         None
     }
+
+    /// Called to notify the Membership when a new DRB result has been calculated.
+    /// Observes the same semantics as add_epoch_root
+    fn add_drb_result(&mut self, _epoch: TYPES::Epoch, _drb_result: DrbResult);
 }

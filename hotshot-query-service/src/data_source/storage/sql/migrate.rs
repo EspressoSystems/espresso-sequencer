@@ -25,11 +25,14 @@ pub(super) struct Migrator<'a> {
 impl AsyncTransaction for Migrator<'_> {
     type Error = sqlx::Error;
 
-    async fn execute(&mut self, queries: &[&str]) -> sqlx::Result<usize> {
+    async fn execute<'a, T: Iterator<Item = &'a str> + Send>(
+        &mut self,
+        queries: T,
+    ) -> sqlx::Result<usize> {
         let mut tx = self.conn.begin().await?;
         let mut count = 0;
         for query in queries {
-            let res = tx.execute(*query).await?;
+            let res = tx.execute(query).await?;
             count += res.rows_affected();
         }
         tx.commit().await?;

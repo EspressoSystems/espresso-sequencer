@@ -7,11 +7,12 @@ import { AbstractStakeTable } from "./interfaces/AbstractStakeTable.sol";
 import { LightClient } from "../src/LightClient.sol";
 import { EdOnBN254 } from "./libraries/EdOnBn254.sol";
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
+import { InitializedAt } from "./InitializedAt.sol";
 
 using EdOnBN254 for EdOnBN254.EdOnBN254Point;
 
 /// @title Implementation of the Stake Table interface
-contract StakeTable is AbstractStakeTable, Ownable {
+contract StakeTable is AbstractStakeTable, Ownable, InitializedAt {
     /// Error to notify restaking is not implemented yet.
     error RestakingNotImplemented();
 
@@ -120,7 +121,7 @@ contract StakeTable is AbstractStakeTable, Ownable {
         uint64 _hotShotBlocksPerEpoch,
         uint256 _minStakeAmount,
         address _initialOwner
-    ) Ownable(_initialOwner) {
+    ) Ownable(_initialOwner) InitializedAt() {
         tokenAddress = _tokenAddress;
         lightClient = LightClient(_lightClientAddress);
         maxNumChurnPerEpoch = _maxNumChurnPerEpoch;
