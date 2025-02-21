@@ -24,7 +24,6 @@ use hotshot_types::{
     data::{null_block, DaProposal, PackedBundle, VidDisperse, ViewNumber},
     traits::{
         consensus_api::ConsensusApi,
-        election::Membership,
         node_implementation::{ConsensusTime, NodeType, Versions},
         BlockPayload,
     },
@@ -116,7 +115,6 @@ async fn test_vid_task() {
                 ViewNumber::new(2),
                 None,
                 vec1::vec1![null_block::builder_fee::<TestTypes, TestVersions>(
-                    membership.read().await.total_nodes(None),
                     <TestVersions as Versions>::Base::VERSION,
                     *ViewNumber::new(2),
                 )
@@ -137,7 +135,6 @@ async fn test_vid_task() {
                 },
                 ViewNumber::new(2),
                 vec1![null_block::builder_fee::<TestTypes, TestVersions>(
-                    membership.read().await.total_nodes(None),
                     <TestVersions as Versions>::Base::VERSION,
                     *ViewNumber::new(2),
                 )

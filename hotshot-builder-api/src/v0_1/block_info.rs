@@ -9,7 +9,6 @@ use std::marker::PhantomData;
 use hotshot_types::{
     traits::{node_implementation::NodeType, signature_key::BuilderSignatureKey, BlockPayload},
     utils::BuilderCommitment,
-    vid::VidCommitment,
 };
 use serde::{Deserialize, Serialize};
 
@@ -47,14 +46,10 @@ impl<TYPES: NodeType> AvailableBlockData<TYPES> {
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq, Hash)]
 #[serde(bound = "")]
 pub struct AvailableBlockHeaderInput<TYPES: NodeType> {
-    pub vid_commitment: VidCommitment,
     #[serde(default)]
     pub vid_precompute_data: Option<serde_json::Value>,
     // signature over vid_commitment, BlockPayload::Metadata, and offered_fee
     pub fee_signature:
-        <<TYPES as NodeType>::BuilderSignatureKey as BuilderSignatureKey>::BuilderSignature,
-    // signature over the current response
-    pub message_signature:
         <<TYPES as NodeType>::BuilderSignatureKey as BuilderSignatureKey>::BuilderSignature,
     pub sender: <TYPES as NodeType>::BuilderSignatureKey,
 }
@@ -66,12 +61,6 @@ impl<TYPES: NodeType> AvailableBlockHeaderInput<TYPES> {
         metadata: &<TYPES::BlockPayload as BlockPayload<TYPES>>::Metadata,
     ) -> bool {
         self.sender
-            .validate_builder_signature(&self.message_signature, self.vid_commitment.as_ref())
-            && self.sender.validate_fee_signature(
-                &self.fee_signature,
-                offered_fee,
-                metadata,
-                &self.vid_commitment,
-            )
+            .validate_fee_signature(&self.fee_signature, offered_fee, metadata)
     }
 }
