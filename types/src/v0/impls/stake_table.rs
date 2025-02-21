@@ -13,7 +13,10 @@ use hotshot::types::{BLSPubKey, SignatureKey as _};
 use hotshot_contract_adapter::stake_table::{bls_alloy_to_jf, NodeInfoJf};
 use hotshot_types::{
     data::EpochNumber,
-    drb::{generate_stake_cdf, select_randomized_leader, DrbResult, RandomizedCommittee},
+    drb::{
+        election::{generate_stake_cdf, select_randomized_leader, RandomizedCommittee},
+        DrbResult,
+    },
     stake_table::StakeTableEntry,
     traits::{
         election::Membership,
