@@ -459,7 +459,8 @@
 <a href="#458" id="458">458</a>
 <a href="#459" id="459">459</a>
 <a href="#460" id="460">460</a>
-<a href="#461" id="461">461</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
+<a href="#461" id="461">461</a>
+<a href="#462" id="462">462</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
 // This file is part of the HotShot repository.
 
 // You should have received a copy of the MIT License
@@ -487,9 +488,10 @@
 <span class="kw">use </span>hotshot_builder_api::{
     v0_1::{
         <span class="self">self</span>,
-        block_info::{AvailableBlockData, AvailableBlockHeaderInput, AvailableBlockInfo},
+        block_info::{AvailableBlockData, AvailableBlockInfo},
         builder::{BuildError, Error, Options},
     },
+    v0_2::block_info::AvailableBlockHeaderInputV1,
     v0_99,
 };
 <span class="kw">use </span>hotshot_example_types::node_types::TestVersions;
@@ -710,7 +712,7 @@
 
         <span class="comment">// Let new VID scheme ships with Epochs upgrade
         </span><span class="kw">let </span>version = &lt;TestVersions <span class="kw">as </span>Versions&gt;::Epochs::VERSION;
-        <span class="kw">let </span>block_entry = build_block::&lt;TYPES, TestVersions&gt;(
+        <span class="kw">let </span>block_entry = build_block::&lt;TYPES&gt;(
             transactions,
             <span class="self">self</span>.num_nodes.clone(),
             <span class="self">self</span>.pub_key.clone(),
@@ -781,7 +783,7 @@
         _view_number: u64,
         _sender: TYPES::SignatureKey,
         _signature: <span class="kw-2">&amp;</span>&lt;TYPES::SignatureKey <span class="kw">as </span>SignatureKey&gt;::PureAssembledSignatureType,
-    ) -&gt; <span class="prelude-ty">Result</span>&lt;AvailableBlockHeaderInput&lt;TYPES&gt;, BuildError&gt; {
+    ) -&gt; <span class="prelude-ty">Result</span>&lt;AvailableBlockHeaderInputV1&lt;TYPES&gt;, BuildError&gt; {
         <span class="kw">if </span><span class="self">self</span>.should_fail_claims.load(Ordering::Relaxed) {
             <span class="kw">return </span><span class="prelude-val">Err</span>(BuildError::Missing);
         }

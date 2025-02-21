@@ -5138,11 +5138,10 @@
 <a href="#5137" id="5137">5137</a>
 <a href="#5138" id="5138">5138</a>
 <a href="#5139" id="5139">5139</a>
-<a href="#5140" id="5140">5140</a>
-<a href="#5141" id="5141">5141</a></pre></div><pre class="rust"><code><span class="kw">use </span>hotshot::types::Event;
+<a href="#5140" id="5140">5140</a></pre></div><pre class="rust"><code><span class="kw">use </span>hotshot::types::Event;
 <span class="kw">use </span>hotshot_builder_api::{
     v0_1::{
-        block_info::{AvailableBlockData, AvailableBlockHeaderInput, AvailableBlockInfo},
+        block_info::{AvailableBlockData, AvailableBlockHeaderInputV1, AvailableBlockInfo},
         builder::BuildError,
         data_source::{AcceptsTxnSubmits, BuilderDataSource},
     },
@@ -5158,7 +5157,7 @@
         signature_key::{BuilderSignatureKey, SignatureKey},
     },
     utils::BuilderCommitment,
-    vid::VidCommitment,
+    vid::{VidCommitment, VidPrecomputeData},
 };
 <span class="kw">use </span>lru::LruCache;
 <span class="kw">use </span>vbs::version::StaticVersionType;
@@ -5198,7 +5197,7 @@
     <span class="kw">pub </span>block_payload: Types::BlockPayload,
     <span class="kw">pub </span>metadata: &lt;&lt;Types <span class="kw">as </span>NodeType&gt;::BlockPayload <span class="kw">as </span>BlockPayload&lt;Types&gt;&gt;::Metadata,
     <span class="kw">pub </span>vid_trigger: Arc&lt;RwLock&lt;<span class="prelude-ty">Option</span>&lt;oneshot::Sender&lt;TriggerStatus&gt;&gt;&gt;&gt;,
-    <span class="kw">pub </span>vid_receiver: Arc&lt;RwLock&lt;WaitAndKeep&lt;VidCommitment&gt;&gt;&gt;,
+    <span class="kw">pub </span>vid_receiver: Arc&lt;RwLock&lt;WaitAndKeep&lt;(VidCommitment, VidPrecomputeData)&gt;&gt;&gt;,
     <span class="kw">pub </span>offered_fee: u64,
     <span class="comment">// Could we have included more transactions with this block, but chose not to?
     </span><span class="kw">pub </span>truncated: bool,
@@ -6032,7 +6031,7 @@
         view_number: u64,
         sender: Types::SignatureKey,
         signature: <span class="kw-2">&amp;</span>&lt;&lt;Types <span class="kw">as </span>NodeType&gt;::SignatureKey <span class="kw">as </span>SignatureKey&gt;::PureAssembledSignatureType,
-    ) -&gt; <span class="prelude-ty">Result</span>&lt;AvailableBlockHeaderInput&lt;Types&gt;, ClaimBlockHeaderInputError&lt;Types&gt;&gt; {
+    ) -&gt; <span class="prelude-ty">Result</span>&lt;AvailableBlockHeaderInputV1&lt;Types&gt;, ClaimBlockHeaderInputError&lt;Types&gt;&gt; {
         <span class="kw">let </span>id = BlockId {
             hash: block_hash.clone(),
             view: Types::View::new(view_number),
@@ -6120,7 +6119,7 @@
             }
 
             <span class="kw">match </span>response_received {
-                <span class="prelude-val">Ok</span>(vid_commitment) =&gt; {
+                <span class="prelude-val">Ok</span>((vid_commitment, vid_precompute_data)) =&gt; {
                     <span class="comment">// sign over the vid commitment
                     </span><span class="kw">let </span>signature_over_vid_commitment =
                         &lt;Types <span class="kw">as </span>NodeType&gt;::BuilderSignatureKey::sign_builder_message(
@@ -6137,9 +6136,9 @@
                     )
                     .map_err(ClaimBlockHeaderInputError::FailedToSignFeeInfo)<span class="question-mark">?</span>;
 
-                    <span class="kw">let </span>response = AvailableBlockHeaderInput::&lt;Types&gt; {
+                    <span class="kw">let </span>response = AvailableBlockHeaderInputV1 {
                         vid_commitment,
-                        vid_precompute_data: <span class="prelude-val">None</span>,
+                        vid_precompute_data,
                         fee_signature: signature_over_fee_info,
                         message_signature: signature_over_vid_commitment,
                         sender: pub_key.clone(),
@@ -6215,7 +6214,7 @@ Handling Builder API responses
         view_number: u64,
         sender: Types::SignatureKey,
         signature: <span class="kw-2">&amp;</span>&lt;&lt;Types <span class="kw">as </span>NodeType&gt;::SignatureKey <span class="kw">as </span>SignatureKey&gt;::PureAssembledSignatureType,
-    ) -&gt; <span class="prelude-ty">Result</span>&lt;AvailableBlockHeaderInput&lt;Types&gt;, BuildError&gt; {
+    ) -&gt; <span class="prelude-ty">Result</span>&lt;AvailableBlockHeaderInputV1&lt;Types&gt;, BuildError&gt; {
         <span class="prelude-val">Ok</span>(<span class="self">self
             </span>.claim_block_header_input_implementation(block_hash, view_number, sender, signature)
             .<span class="kw">await</span><span class="question-mark">?</span>)
@@ -6783,6 +6782,7 @@ Running Non-Permissioned Builder Service
     <span class="kw">use </span>hotshot_types::data::EpochNumber;
     <span class="kw">use </span>hotshot_types::data::Leaf2;
     <span class="kw">use </span>hotshot_types::data::{QuorumProposal2, QuorumProposalWrapper};
+    <span class="kw">use </span>hotshot_types::traits::block_contents::precompute_vid_commitment;
     <span class="kw">use </span>hotshot_types::traits::block_contents::Transaction;
     <span class="kw">use </span>hotshot_types::traits::node_implementation::Versions;
     <span class="kw">use </span>hotshot_types::{
@@ -7382,15 +7382,11 @@ Running Non-Permissioned Builder Service
         {
             <span class="comment">// This ensures that the vid_sender that is stored is still the
             // same, or links to the vid_receiver that we submitted.
-            </span><span class="kw">let </span>vid_commitment =
-                hotshot_types::traits::block_contents::vid_commitment::&lt;TestVersions&gt;(
-                    <span class="kw-2">&amp;</span>[<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>, <span class="number">4</span>, <span class="number">5</span>],
-                    TEST_NUM_NODES_IN_VID_COMPUTATION,
-                    &lt;TestVersions <span class="kw">as </span>Versions&gt;::Base::VERSION,
-                );
+            </span><span class="kw">let </span>(vid_commitment, vid_precompute_data) =
+                precompute_vid_commitment(<span class="kw-2">&amp;</span>[<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>, <span class="number">4</span>, <span class="number">5</span>], TEST_NUM_NODES_IN_VID_COMPUTATION);
 
             <span class="macro">assert_eq!</span>(
-                vid_sender.send(vid_commitment),
+                vid_sender.send((vid_commitment, vid_precompute_data.clone())),
                 <span class="prelude-val">Ok</span>(()),
                 <span class="string">"The vid_sender should be able to send the vid commitment"
             </span>);
@@ -7401,10 +7397,14 @@ Running Non-Permissioned Builder Service
             <span class="comment">// Get and Keep object
 
             </span><span class="kw">match </span>vid_receiver_write_lock_guard.get().<span class="kw">await </span>{
-                <span class="prelude-val">Ok</span>(received_vid_commitment) =&gt; {
+                <span class="prelude-val">Ok</span>((received_vid_commitment, received_vid_precompute_data)) =&gt; {
                     <span class="macro">assert_eq!</span>(
                         received_vid_commitment, vid_commitment,
                         <span class="string">"The received vid commitment should match the expected vid commitment"
+                    </span>);
+                    <span class="macro">assert_eq!</span>(
+                        received_vid_precompute_data, vid_precompute_data,
+                        <span class="string">"The received vid precompute data should match the expected vid precompute data"
                     </span>);
                 }
                 <span class="kw">_ </span>=&gt; {
@@ -7647,21 +7647,19 @@ Running Non-Permissioned Builder Service
         {
             <span class="comment">// This ensures that the vid_sender that is stored is still the
             // same, or links to the vid_receiver that we submitted.
-            </span><span class="kw">let </span>vid_commitment =
-                hotshot_types::traits::block_contents::vid_commitment::&lt;TestVersions&gt;(
-                    <span class="kw-2">&amp;</span>[<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>, <span class="number">4</span>, <span class="number">5</span>],
-                    TEST_NUM_NODES_IN_VID_COMPUTATION,
-                    &lt;TestVersions <span class="kw">as </span>Versions&gt;::Base::VERSION,
-                );
+            </span><span class="kw">let </span>(vid_commitment, vid_precompute_data) =
+                precompute_vid_commitment(<span class="kw-2">&amp;</span>[<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>, <span class="number">4</span>, <span class="number">5</span>], TEST_NUM_NODES_IN_VID_COMPUTATION);
 
             <span class="macro">assert_eq!</span>(
-                vid_sender_2.send(vid_commitment),
+                vid_sender_2.send((vid_commitment, vid_precompute_data.clone())),
                 <span class="prelude-val">Ok</span>(()),
                 <span class="string">"The vid_sender should be able to send the vid commitment"
             </span>);
 
             <span class="macro">assert!</span>(
-                vid_sender_1.send(vid_commitment).is_err(),
+                vid_sender_1
+                    .send((vid_commitment, vid_precompute_data.clone()))
+                    .is_err(),
                 <span class="string">"The vid_sender should not be able to send the vid commitment"
             </span>);
 
@@ -7671,10 +7669,14 @@ Running Non-Permissioned Builder Service
             <span class="comment">// Get and Keep object
 
             </span><span class="kw">match </span>vid_receiver_write_lock_guard.get().<span class="kw">await </span>{
-                <span class="prelude-val">Ok</span>(received_vid_commitment) =&gt; {
+                <span class="prelude-val">Ok</span>((received_vid_commitment, received_vid_precompute_data)) =&gt; {
                     <span class="macro">assert_eq!</span>(
                         received_vid_commitment, vid_commitment,
                         <span class="string">"The received vid commitment should match the expected vid commitment"
+                    </span>);
+                    <span class="macro">assert_eq!</span>(
+                        received_vid_precompute_data, vid_precompute_data,
+                        <span class="string">"The received vid precompute data should match the expected vid precompute data"
                     </span>);
                 }
                 <span class="kw">_ </span>=&gt; {
@@ -9402,13 +9404,9 @@ Running Non-Permissioned Builder Service
         </span>});
 
         vid_sender
-            .send(hotshot_types::traits::block_contents::vid_commitment::&lt;
-                TestVersions,
-            &gt;(
-                <span class="kw-2">&amp;</span>[<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>, <span class="number">4</span>],
-                <span class="number">2</span>,
-                &lt;TestVersions <span class="kw">as </span>Versions&gt;::Base::VERSION,
-            ))
+            .send(
+                hotshot_types::traits::block_contents::precompute_vid_commitment(<span class="kw-2">&amp;</span>[<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>, <span class="number">4</span>], <span class="number">2</span>),
+            )
             .unwrap();
 
         <span class="kw">let </span>result = claim_block_header_input_join_handle.<span class="kw">await</span>;

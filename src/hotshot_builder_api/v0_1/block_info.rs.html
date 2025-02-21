@@ -75,7 +75,36 @@
 <a href="#74" id="74">74</a>
 <a href="#75" id="75">75</a>
 <a href="#76" id="76">76</a>
-<a href="#77" id="77">77</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
+<a href="#77" id="77">77</a>
+<a href="#78" id="78">78</a>
+<a href="#79" id="79">79</a>
+<a href="#80" id="80">80</a>
+<a href="#81" id="81">81</a>
+<a href="#82" id="82">82</a>
+<a href="#83" id="83">83</a>
+<a href="#84" id="84">84</a>
+<a href="#85" id="85">85</a>
+<a href="#86" id="86">86</a>
+<a href="#87" id="87">87</a>
+<a href="#88" id="88">88</a>
+<a href="#89" id="89">89</a>
+<a href="#90" id="90">90</a>
+<a href="#91" id="91">91</a>
+<a href="#92" id="92">92</a>
+<a href="#93" id="93">93</a>
+<a href="#94" id="94">94</a>
+<a href="#95" id="95">95</a>
+<a href="#96" id="96">96</a>
+<a href="#97" id="97">97</a>
+<a href="#98" id="98">98</a>
+<a href="#99" id="99">99</a>
+<a href="#100" id="100">100</a>
+<a href="#101" id="101">101</a>
+<a href="#102" id="102">102</a>
+<a href="#103" id="103">103</a>
+<a href="#104" id="104">104</a>
+<a href="#105" id="105">105</a>
+<a href="#106" id="106">106</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
 // This file is part of the HotShot repository.
 
 // You should have received a copy of the MIT License
@@ -86,7 +115,7 @@
 <span class="kw">use </span>hotshot_types::{
     traits::{node_implementation::NodeType, signature_key::BuilderSignatureKey, BlockPayload},
     utils::BuilderCommitment,
-    vid::VidCommitment,
+    vid::{VidCommitment, VidPrecomputeData},
 };
 <span class="kw">use </span>serde::{Deserialize, Serialize};
 
@@ -123,10 +152,9 @@
 
 <span class="attr">#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq, Hash)]
 #[serde(bound = <span class="string">""</span>)]
-</span><span class="kw">pub struct </span>AvailableBlockHeaderInput&lt;TYPES: NodeType&gt; {
+</span><span class="kw">pub struct </span>AvailableBlockHeaderInputV1&lt;TYPES: NodeType&gt; {
     <span class="kw">pub </span>vid_commitment: VidCommitment,
-    <span class="attr">#[serde(default)]
-    </span><span class="kw">pub </span>vid_precompute_data: <span class="prelude-ty">Option</span>&lt;serde_json::Value&gt;,
+    <span class="kw">pub </span>vid_precompute_data: VidPrecomputeData,
     <span class="comment">// signature over vid_commitment, BlockPayload::Metadata, and offered_fee
     </span><span class="kw">pub </span>fee_signature:
         &lt;&lt;TYPES <span class="kw">as </span>NodeType&gt;::BuilderSignatureKey <span class="kw">as </span>BuilderSignatureKey&gt;::BuilderSignature,
@@ -136,7 +164,37 @@
     <span class="kw">pub </span>sender: &lt;TYPES <span class="kw">as </span>NodeType&gt;::BuilderSignatureKey,
 }
 
-<span class="kw">impl</span>&lt;TYPES: NodeType&gt; AvailableBlockHeaderInput&lt;TYPES&gt; {
+<span class="kw">impl</span>&lt;TYPES: NodeType&gt; AvailableBlockHeaderInputV1&lt;TYPES&gt; {
+    <span class="kw">pub fn </span>validate_signature(
+        <span class="kw-2">&amp;</span><span class="self">self</span>,
+        offered_fee: u64,
+        metadata: <span class="kw-2">&amp;</span>&lt;TYPES::BlockPayload <span class="kw">as </span>BlockPayload&lt;TYPES&gt;&gt;::Metadata,
+    ) -&gt; bool {
+        <span class="self">self</span>.sender
+            .validate_builder_signature(<span class="kw-2">&amp;</span><span class="self">self</span>.message_signature, <span class="self">self</span>.vid_commitment.as_ref())
+            &amp;&amp; <span class="self">self</span>.sender.validate_fee_signature(
+                <span class="kw-2">&amp;</span><span class="self">self</span>.fee_signature,
+                offered_fee,
+                metadata,
+                <span class="kw-2">&amp;</span><span class="self">self</span>.vid_commitment,
+            )
+    }
+}
+
+<span class="attr">#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq, Hash)]
+#[serde(bound = <span class="string">""</span>)]
+</span><span class="kw">pub struct </span>AvailableBlockHeaderInputV2&lt;TYPES: NodeType&gt; {
+    <span class="kw">pub </span>vid_commitment: VidCommitment,
+    <span class="comment">// signature over vid_commitment, BlockPayload::Metadata, and offered_fee
+    </span><span class="kw">pub </span>fee_signature:
+        &lt;&lt;TYPES <span class="kw">as </span>NodeType&gt;::BuilderSignatureKey <span class="kw">as </span>BuilderSignatureKey&gt;::BuilderSignature,
+    <span class="comment">// signature over the current response
+    </span><span class="kw">pub </span>message_signature:
+        &lt;&lt;TYPES <span class="kw">as </span>NodeType&gt;::BuilderSignatureKey <span class="kw">as </span>BuilderSignatureKey&gt;::BuilderSignature,
+    <span class="kw">pub </span>sender: &lt;TYPES <span class="kw">as </span>NodeType&gt;::BuilderSignatureKey,
+}
+
+<span class="kw">impl</span>&lt;TYPES: NodeType&gt; AvailableBlockHeaderInputV2&lt;TYPES&gt; {
     <span class="kw">pub fn </span>validate_signature(
         <span class="kw-2">&amp;</span><span class="self">self</span>,
         offered_fee: u64,

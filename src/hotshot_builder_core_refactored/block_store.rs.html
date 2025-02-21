@@ -90,7 +90,7 @@
 <span class="kw">use </span>hotshot::traits::BlockPayload;
 <span class="kw">use </span>hotshot_builder_api::v0_1::block_info::AvailableBlockInfo;
 <span class="kw">use </span>hotshot_types::traits::signature_key::BuilderSignatureKey;
-<span class="kw">use </span>hotshot_types::vid::VidCommitment;
+<span class="kw">use </span>hotshot_types::vid::{VidCommitment, VidPrecomputeData};
 <span class="kw">use </span>marketplace_builder_shared::error::Error;
 <span class="kw">use </span>marketplace_builder_shared::utils::{BuilderKeys, WaitAndKeep};
 <span class="kw">use </span>marketplace_builder_shared::{
@@ -106,7 +106,7 @@
 </span><span class="kw">pub struct </span>BlockInfo&lt;Types: NodeType&gt; {
     <span class="kw">pub </span>block_payload: Types::BlockPayload,
     <span class="kw">pub </span>metadata: &lt;&lt;Types <span class="kw">as </span>NodeType&gt;::BlockPayload <span class="kw">as </span>BlockPayload&lt;Types&gt;&gt;::Metadata,
-    <span class="kw">pub </span>vid_data: WaitAndKeep&lt;VidCommitment&gt;,
+    <span class="kw">pub </span>vid_data: WaitAndKeep&lt;(VidCommitment, VidPrecomputeData)&gt;,
     <span class="kw">pub </span>block_size: u64,
     <span class="kw">pub </span>offered_fee: u64,
     <span class="comment">// Could we have included more transactions with this block, but chose not to?

@@ -1485,22 +1485,16 @@
 <a href="#1484" id="1484">1484</a>
 <a href="#1485" id="1485">1485</a>
 <a href="#1486" id="1486">1486</a>
-<a href="#1487" id="1487">1487</a>
-<a href="#1488" id="1488">1488</a>
-<a href="#1489" id="1489">1489</a>
-<a href="#1490" id="1490">1490</a>
-<a href="#1491" id="1491">1491</a>
-<a href="#1492" id="1492">1492</a>
-<a href="#1493" id="1493">1493</a></pre></div><pre class="rust"><code><span class="kw">use </span>hotshot_types::{
+<a href="#1487" id="1487">1487</a></pre></div><pre class="rust"><code><span class="kw">use </span>hotshot_types::{
     data::{DaProposal2, Leaf2, QuorumProposalWrapper},
     message::Proposal,
     traits::{
-        block_contents::{BlockHeader, BlockPayload},
+        block_contents::{precompute_vid_commitment, BlockHeader, BlockPayload},
         node_implementation::{ConsensusTime, NodeType, Versions},
         EncodeBytes,
     },
     utils::BuilderCommitment,
-    vid::VidCommitment,
+    vid::{VidCommitment, VidPrecomputeData},
 };
 <span class="kw">use </span>marketplace_builder_shared::block::{BlockId, BuilderStateId, ParentBlockReferences};
 
@@ -1513,7 +1507,6 @@
 <span class="kw">use </span>async_lock::RwLock;
 <span class="kw">use </span>core::panic;
 <span class="kw">use </span>futures::StreamExt;
-<span class="kw">use </span>vbs::version::StaticVersionType;
 
 <span class="kw">use </span>tokio::{
     spawn,
@@ -1580,7 +1573,7 @@
     <span class="kw">pub </span>block_payload: Types::BlockPayload,
     <span class="kw">pub </span>metadata: &lt;&lt;Types <span class="kw">as </span>NodeType&gt;::BlockPayload <span class="kw">as </span>BlockPayload&lt;Types&gt;&gt;::Metadata,
     <span class="kw">pub </span>vid_trigger: oneshot::Sender&lt;TriggerStatus&gt;,
-    <span class="kw">pub </span>vid_receiver: UnboundedReceiver&lt;VidCommitment&gt;,
+    <span class="kw">pub </span>vid_receiver: UnboundedReceiver&lt;(VidCommitment, VidPrecomputeData)&gt;,
     <span class="comment">// Could we have included more transactions, but chose not to?
     </span><span class="kw">pub </span>truncated: bool,
 }
@@ -2301,13 +2294,8 @@
                 <span class="kw">return</span>;
             };
 
-            <span class="kw">let </span>join_handle = spawn_blocking(<span class="kw">move </span>|| {
-                hotshot_types::traits::block_contents::vid_commitment::&lt;V&gt;(
-                    <span class="kw-2">&amp;</span>encoded_txns,
-                    num_nodes,
-                    &lt;V <span class="kw">as </span>Versions&gt;::Base::VERSION,
-                )
-            });
+            <span class="kw">let </span>join_handle =
+                spawn_blocking(<span class="kw">move </span>|| precompute_vid_commitment(<span class="kw-2">&amp;</span>encoded_txns, num_nodes));
 
             <span class="kw">let </span>vidc = join_handle.<span class="kw">await</span>.unwrap();
 

@@ -350,7 +350,10 @@
 <a href="#349" id="349">349</a>
 <a href="#350" id="350">350</a>
 <a href="#351" id="351">351</a>
-<a href="#352" id="352">352</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
+<a href="#352" id="352">352</a>
+<a href="#353" id="353">353</a>
+<a href="#354" id="354">354</a>
+<a href="#355" id="355">355</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
 // This file is part of the HotShot repository.
 
 // You should have received a copy of the MIT License
@@ -372,10 +375,13 @@
 <span class="kw">use </span>async_trait::async_trait;
 <span class="kw">use </span>futures::{future::BoxFuture, Stream, StreamExt};
 <span class="kw">use </span>hotshot::types::{Event, EventType, SignatureKey};
-<span class="kw">use </span>hotshot_builder_api::v0_1::{
-    block_info::{AvailableBlockData, AvailableBlockHeaderInput, AvailableBlockInfo},
-    builder::BuildError,
-    data_source::BuilderDataSource,
+<span class="kw">use </span>hotshot_builder_api::{
+    v0_1::{
+        block_info::{AvailableBlockData, AvailableBlockInfo},
+        builder::BuildError,
+        data_source::BuilderDataSource,
+    },
+    v0_2::block_info::AvailableBlockHeaderInputV1,
 };
 <span class="kw">use </span>hotshot_example_types::{block_types::TestTransaction, node_types::TestVersions};
 <span class="kw">use </span>hotshot_types::{
@@ -494,7 +500,7 @@
 
             <span class="comment">// Let new VID scheme ship with Epochs upgrade.
             </span><span class="kw">let </span>version = &lt;V <span class="kw">as </span>Versions&gt;::Epochs::VERSION;
-            <span class="kw">let </span>block = build_block::&lt;TYPES, V&gt;(
+            <span class="kw">let </span>block = build_block::&lt;TYPES&gt;(
                 transactions,
                 num_nodes.clone(),
                 pub_key.clone(),
@@ -683,7 +689,7 @@
         _view_number: u64,
         _sender: TYPES::SignatureKey,
         _signature: <span class="kw-2">&amp;</span>&lt;TYPES::SignatureKey <span class="kw">as </span>SignatureKey&gt;::PureAssembledSignatureType,
-    ) -&gt; <span class="prelude-ty">Result</span>&lt;AvailableBlockHeaderInput&lt;TYPES&gt;, BuildError&gt; {
+    ) -&gt; <span class="prelude-ty">Result</span>&lt;AvailableBlockHeaderInputV1&lt;TYPES&gt;, BuildError&gt; {
         <span class="kw">if </span><span class="self">self</span>.should_fail_claims.load(Ordering::Relaxed) {
             <span class="kw">return </span><span class="prelude-val">Err</span>(BuildError::Missing);
         }

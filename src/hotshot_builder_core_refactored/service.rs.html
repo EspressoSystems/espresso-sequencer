@@ -811,13 +811,24 @@
 <a href="#810" id="810">810</a>
 <a href="#811" id="811">811</a>
 <a href="#812" id="812">812</a>
-<a href="#813" id="813">813</a></pre></div><pre class="rust"><code><span class="kw">use </span>hotshot::types::Event;
-<span class="kw">use </span>hotshot_builder_api::v0_1::{
-    block_info::{AvailableBlockData, AvailableBlockHeaderInput, AvailableBlockInfo},
-    builder::{define_api, submit_api, BuildError, Error <span class="kw">as </span>BuilderApiError, TransactionStatus},
-    data_source::{AcceptsTxnSubmits, BuilderDataSource},
+<a href="#813" id="813">813</a>
+<a href="#814" id="814">814</a>
+<a href="#815" id="815">815</a>
+<a href="#816" id="816">816</a>
+<a href="#817" id="817">817</a>
+<a href="#818" id="818">818</a>
+<a href="#819" id="819">819</a></pre></div><pre class="rust"><code><span class="kw">use </span>hotshot::types::Event;
+<span class="kw">use </span>hotshot_builder_api::{
+    v0_1::{
+        block_info::{AvailableBlockData, AvailableBlockInfo},
+        builder::{
+            define_api, submit_api, BuildError, Error <span class="kw">as </span>BuilderApiError, TransactionStatus,
+        },
+        data_source::{AcceptsTxnSubmits, BuilderDataSource},
+    },
+    v0_2::block_info::AvailableBlockHeaderInputV1,
 };
-<span class="kw">use </span>hotshot_types::traits::block_contents::{advz_commitment, Transaction};
+<span class="kw">use </span>hotshot_types::traits::block_contents::{precompute_vid_commitment, Transaction};
 <span class="kw">use </span>hotshot_types::traits::EncodeBytes;
 <span class="kw">use </span>hotshot_types::{
     event::EventType,
@@ -1215,8 +1226,9 @@
         </span><span class="kw">let </span>num_nodes = <span class="self">self</span>.num_nodes.load(Ordering::Relaxed);
 
         <span class="kw">let </span>fut = <span class="kw">async move </span>{
-            <span class="kw">let </span>join_handle =
-                tokio::task::spawn_blocking(<span class="kw">move </span>|| advz_commitment(<span class="kw-2">&amp;</span>encoded_txns, num_nodes));
+            <span class="kw">let </span>join_handle = tokio::task::spawn_blocking(<span class="kw">move </span>|| {
+                precompute_vid_commitment(<span class="kw-2">&amp;</span>encoded_txns, num_nodes)
+            });
             join_handle.<span class="kw">await</span>.unwrap()
         };
 
@@ -1374,7 +1386,7 @@
     </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">async fn </span>claim_block_header_input_implementation(
         <span class="kw-2">&amp;</span><span class="self">self</span>,
         block_id: BlockId&lt;Types&gt;,
-    ) -&gt; <span class="prelude-ty">Result</span>&lt;(bool, AvailableBlockHeaderInput&lt;Types&gt;), Error&lt;Types&gt;&gt; {
+    ) -&gt; <span class="prelude-ty">Result</span>&lt;(bool, AvailableBlockHeaderInputV1&lt;Types&gt;), Error&lt;Types&gt;&gt; {
         <span class="kw">let </span>metadata;
         <span class="kw">let </span>offered_fee;
         <span class="kw">let </span>truncated;
@@ -1399,7 +1411,7 @@
             vid_data = block_info.vid_data.clone();
         };
 
-        <span class="kw">let </span>vid_commitment = vid_data.resolve().<span class="kw">await</span>;
+        <span class="kw">let </span>(vid_commitment, vid_precompute_data) = vid_data.resolve().<span class="kw">await</span>;
 
         <span class="comment">// sign over the vid commitment
         </span><span class="kw">let </span>signature_over_vid_commitment =
@@ -1417,9 +1429,9 @@
         )
         .map_err(Error::Signing)<span class="question-mark">?</span>;
 
-        <span class="kw">let </span>response = AvailableBlockHeaderInput::&lt;Types&gt; {
+        <span class="kw">let </span>response = AvailableBlockHeaderInputV1 {
             vid_commitment,
-            vid_precompute_data: <span class="prelude-val">None</span>,
+            vid_precompute_data,
             fee_signature: signature_over_fee_info,
             message_signature: signature_over_vid_commitment,
             sender: <span class="self">self</span>.builder_keys.<span class="number">0</span>.clone(),
@@ -1536,7 +1548,7 @@ Handling Builder API responses
         view_number: u64,
         sender: Types::SignatureKey,
         signature: <span class="kw-2">&amp;</span>&lt;&lt;Types <span class="kw">as </span>NodeType&gt;::SignatureKey <span class="kw">as </span>SignatureKey&gt;::PureAssembledSignatureType,
-    ) -&gt; <span class="prelude-ty">Result</span>&lt;AvailableBlockHeaderInput&lt;Types&gt;, BuildError&gt; {
+    ) -&gt; <span class="prelude-ty">Result</span>&lt;AvailableBlockHeaderInputV1&lt;Types&gt;, BuildError&gt; {
         <span class="kw">let </span>start = Instant::now();
         <span class="comment">// verify the signature
         </span><span class="kw">if </span>!sender.validate(signature, block_hash.as_ref()) {
