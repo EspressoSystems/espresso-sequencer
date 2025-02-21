@@ -1,7 +1,7 @@
 use hotshot::types::Event;
 use hotshot_builder_api::{
     v0_1::{
-        block_info::{AvailableBlockData, AvailableBlockHeaderInput, AvailableBlockInfo},
+        block_info::{AvailableBlockData, AvailableBlockHeaderInputV1, AvailableBlockInfo},
         builder::BuildError,
         data_source::{AcceptsTxnSubmits, BuilderDataSource},
     },
@@ -17,7 +17,7 @@ use hotshot_types::{
         signature_key::{BuilderSignatureKey, SignatureKey},
     },
     utils::BuilderCommitment,
-    vid::VidCommitment,
+    vid::{VidCommitment, VidPrecomputeData},
 };
 use lru::LruCache;
 use vbs::version::StaticVersionType;
@@ -57,7 +57,7 @@ pub struct BlockInfo<Types: NodeType> {
     pub block_payload: Types::BlockPayload,
     pub metadata: <<Types as NodeType>::BlockPayload as BlockPayload<Types>>::Metadata,
     pub vid_trigger: Arc<RwLock<Option<oneshot::Sender<TriggerStatus>>>>,
-    pub vid_receiver: Arc<RwLock<WaitAndKeep<VidCommitment>>>,
+    pub vid_receiver: Arc<RwLock<WaitAndKeep<(VidCommitment, VidPrecomputeData)>>>,
     pub offered_fee: u64,
     // Could we have included more transactions with this block, but chose not to?
     pub truncated: bool,
@@ -891,7 +891,7 @@ impl<Types: NodeType> ProxyGlobalState<Types> {
         view_number: u64,
         sender: Types::SignatureKey,
         signature: &<<Types as NodeType>::SignatureKey as SignatureKey>::PureAssembledSignatureType,
-    ) -> Result<AvailableBlockHeaderInput<Types>, ClaimBlockHeaderInputError<Types>> {
+    ) -> Result<AvailableBlockHeaderInputV1<Types>, ClaimBlockHeaderInputError<Types>> {
         let id = BlockId {
             hash: block_hash.clone(),
             view: Types::View::new(view_number),
@@ -979,7 +979,7 @@ impl<Types: NodeType> ProxyGlobalState<Types> {
             }
 
             match response_received {
-                Ok(vid_commitment) => {
+                Ok((vid_commitment, vid_precompute_data)) => {
                     // sign over the vid commitment
                     let signature_over_vid_commitment =
                         <Types as NodeType>::BuilderSignatureKey::sign_builder_message(
@@ -996,9 +996,9 @@ impl<Types: NodeType> ProxyGlobalState<Types> {
                     )
                     .map_err(ClaimBlockHeaderInputError::FailedToSignFeeInfo)?;
 
-                    let response = AvailableBlockHeaderInput::<Types> {
+                    let response = AvailableBlockHeaderInputV1 {
                         vid_commitment,
-                        vid_precompute_data: None,
+                        vid_precompute_data,
                         fee_signature: signature_over_fee_info,
                         message_signature: signature_over_vid_commitment,
                         sender: pub_key.clone(),
@@ -1074,7 +1074,7 @@ where
         view_number: u64,
         sender: Types::SignatureKey,
         signature: &<<Types as NodeType>::SignatureKey as SignatureKey>::PureAssembledSignatureType,
-    ) -> Result<AvailableBlockHeaderInput<Types>, BuildError> {
+    ) -> Result<AvailableBlockHeaderInputV1<Types>, BuildError> {
         Ok(self
             .claim_block_header_input_implementation(block_hash, view_number, sender, signature)
             .await?)
@@ -1642,6 +1642,7 @@ mod test {
     use hotshot_types::data::EpochNumber;
     use hotshot_types::data::Leaf2;
     use hotshot_types::data::{QuorumProposal2, QuorumProposalWrapper};
+    use hotshot_types::traits::block_contents::precompute_vid_commitment;
     use hotshot_types::traits::block_contents::Transaction;
     use hotshot_types::traits::node_implementation::Versions;
     use hotshot_types::{
@@ -2241,15 +2242,11 @@ mod test {
         {
             // This ensures that the vid_sender that is stored is still the
             // same, or links to the vid_receiver that we submitted.
-            let vid_commitment =
-                hotshot_types::traits::block_contents::vid_commitment::<TestVersions>(
-                    &[1, 2, 3, 4, 5],
-                    TEST_NUM_NODES_IN_VID_COMPUTATION,
-                    <TestVersions as Versions>::Base::VERSION,
-                );
+            let (vid_commitment, vid_precompute_data) =
+                precompute_vid_commitment(&[1, 2, 3, 4, 5], TEST_NUM_NODES_IN_VID_COMPUTATION);
 
             assert_eq!(
-                vid_sender.send(vid_commitment),
+                vid_sender.send((vid_commitment, vid_precompute_data.clone())),
                 Ok(()),
                 "The vid_sender should be able to send the vid commitment"
             );
@@ -2260,10 +2257,14 @@ mod test {
             // Get and Keep object
 
             match vid_receiver_write_lock_guard.get().await {
-                Ok(received_vid_commitment) => {
+                Ok((received_vid_commitment, received_vid_precompute_data)) => {
                     assert_eq!(
                         received_vid_commitment, vid_commitment,
                         "The received vid commitment should match the expected vid commitment"
+                    );
+                    assert_eq!(
+                        received_vid_precompute_data, vid_precompute_data,
+                        "The received vid precompute data should match the expected vid precompute data"
                     );
                 }
                 _ => {
@@ -2506,21 +2507,19 @@ mod test {
         {
             // This ensures that the vid_sender that is stored is still the
             // same, or links to the vid_receiver that we submitted.
-            let vid_commitment =
-                hotshot_types::traits::block_contents::vid_commitment::<TestVersions>(
-                    &[1, 2, 3, 4, 5],
-                    TEST_NUM_NODES_IN_VID_COMPUTATION,
-                    <TestVersions as Versions>::Base::VERSION,
-                );
+            let (vid_commitment, vid_precompute_data) =
+                precompute_vid_commitment(&[1, 2, 3, 4, 5], TEST_NUM_NODES_IN_VID_COMPUTATION);
 
             assert_eq!(
-                vid_sender_2.send(vid_commitment),
+                vid_sender_2.send((vid_commitment, vid_precompute_data.clone())),
                 Ok(()),
                 "The vid_sender should be able to send the vid commitment"
             );
 
             assert!(
-                vid_sender_1.send(vid_commitment).is_err(),
+                vid_sender_1
+                    .send((vid_commitment, vid_precompute_data.clone()))
+                    .is_err(),
                 "The vid_sender should not be able to send the vid commitment"
             );
 
@@ -2530,10 +2529,14 @@ mod test {
             // Get and Keep object
 
             match vid_receiver_write_lock_guard.get().await {
-                Ok(received_vid_commitment) => {
+                Ok((received_vid_commitment, received_vid_precompute_data)) => {
                     assert_eq!(
                         received_vid_commitment, vid_commitment,
                         "The received vid commitment should match the expected vid commitment"
+                    );
+                    assert_eq!(
+                        received_vid_precompute_data, vid_precompute_data,
+                        "The received vid precompute data should match the expected vid precompute data"
                     );
                 }
                 _ => {
@@ -4261,13 +4264,9 @@ mod test {
         });
 
         vid_sender
-            .send(hotshot_types::traits::block_contents::vid_commitment::<
-                TestVersions,
-            >(
-                &[1, 2, 3, 4],
-                2,
-                <TestVersions as Versions>::Base::VERSION,
-            ))
+            .send(
+                hotshot_types::traits::block_contents::precompute_vid_commitment(&[1, 2, 3, 4], 2),
+            )
             .unwrap();
 
         let result = claim_block_header_input_join_handle.await;
