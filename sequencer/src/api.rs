@@ -1813,7 +1813,7 @@ mod test {
                 .unwrap();
         }
 
-        // This would fail even though we have processed atleast 10 leaves
+        // This would fail even though we have processed at least 10 leaves
         // this is because light weight nodes only support leaves, headers and VID
         client
             .get::<BlockQueryData<SeqTypes>>("availability/block/1")
