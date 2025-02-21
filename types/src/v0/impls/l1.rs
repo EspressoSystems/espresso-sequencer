@@ -905,33 +905,47 @@ impl L1Client {
             .collect()
     }
 
-    // /// Get `StakeTable` at block height. If unavailable in local cache, poll the l1.
+    /// Upgrade background tasks for Proof Of Stake. No-op if upgrade already occurred.
+    async fn maybe_upgrade_background_tasks(&self, address: Address) {
+        {
+            if let Some(mut tasks) = self.update_task.0.lock().await.take() {
+                if tasks.len() > 1 {
+                    tracing::debug!("Greater than 1 tasks are running, no need to upgrade");
+                    return;
+                } else {
+                    // Protocol upgraded to POS version. If stake_update_loop is not running,
+                    // we need to spawn.
+
+                    tracing::warn!("Upgrading `L1Client` background tasks for v3 (Proof of Stake)",);
+                    tasks.abort_all();
+                }
+            }
+
+            let mut update_task = self.update_task.0.lock().await;
+            let mut tasks = JoinSet::new();
+            tasks.spawn(self.update_loop());
+            tasks.spawn(self.stake_update_loop(address));
+            *update_task = Some(tasks);
+
+            tracing::warn!("`Successfully upgrade L1Client background tasks!`");
+        }
+    }
+
+    /// Get `StakeTable` at block height. If unavailable in local cache, poll the l1.
     pub async fn get_stake_table(
         &self,
         contract_address: Address,
         block: u64,
     ) -> Option<StakeTables> {
+        tracing::error!("Get stake tables");
         let opt = self.options();
         let retry_delay = opt.l1_retry_delay;
         let chunk_size = opt.l1_events_max_block_range;
         let state = self.state.clone();
 
-        {
-            if let Some(mut tasks) = self.update_task.0.lock().await.take() {
-                tasks.abort_all();
-            }
-
-            let mut update_task = self.update_task.0.lock().await;
-            // Protocol upgraded to POS version. If stake_update_loop is not running,
-            // we need to spawn
-            let mut tasks = JoinSet::new();
-            tasks.spawn(self.update_loop());
-            tasks.spawn(self.stake_update_loop(contract_address));
-            *update_task = Some(tasks);
-            // update_task.spawn(self.stake_update_loop(contract_address));
-
-            // tracing::error!("update task length: {}", update_task.len());
-        }
+        // `get_stake_table` is only called in v3. So we check here if
+        // stake table update loop is running. If not, start it.
+        self.maybe_upgrade_background_tasks(contract_address).await;
 
         let last_finalized = {
             let mut state = state.lock().await;
