@@ -4981,7 +4981,6 @@ dependencies = [
  "futures",
  "hotshot-types",
  "serde",
- "serde_json",
  "tagged-base64",
  "thiserror 1.0.69",
  "tide-disco",
