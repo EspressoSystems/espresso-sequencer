@@ -4,9 +4,9 @@ use hotshot_builder_api::v0_1::{
     builder::{define_api, submit_api, BuildError, Error as BuilderApiError, TransactionStatus},
     data_source::{AcceptsTxnSubmits, BuilderDataSource},
 };
-use hotshot_types::traits::block_contents::{advz_commitment, Transaction};
 use hotshot_types::traits::EncodeBytes;
 use hotshot_types::{
+    data::VidCommitment,
     event::EventType,
     traits::{
         block_contents::BlockPayload,
@@ -14,8 +14,9 @@ use hotshot_types::{
         signature_key::{BuilderSignatureKey, SignatureKey},
     },
     utils::BuilderCommitment,
-    vid::VidCommitment,
 };
+use hotshot_types::{traits::block_contents::Transaction, vid::advz::advz_scheme};
+use jf_vid::VidScheme;
 use marketplace_builder_shared::coordinator::BuilderStateLookup;
 use marketplace_builder_shared::error::Error;
 use marketplace_builder_shared::state::BuilderState;
@@ -402,8 +403,10 @@ where
         let num_nodes = self.num_nodes.load(Ordering::Relaxed);
 
         let fut = async move {
-            let join_handle =
-                tokio::task::spawn_blocking(move || advz_commitment(&encoded_txns, num_nodes));
+            let join_handle = tokio::task::spawn_blocking(move || {
+                let encoded_tx_len = encoded_txns.len();
+                advz_scheme(num_nodes).commit_only(encoded_txns).map(VidCommitment::V0).unwrap_or_else(|err| panic!("VidScheme::commit_only failure:(num_storage_nodes,payload_byte_len)=({num_nodes},{encoded_tx_len}) error: {err}"))
+            });
             join_handle.await.unwrap()
         };
 

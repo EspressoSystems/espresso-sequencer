@@ -178,6 +178,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static, V: Versions> Handl
                     let vid_payload_commitment = &share
                         .data
                         .data_epoch_payload_commitment()
+                        .map(|comm| comm.into())
                         .unwrap_or(share.data.payload_commitment());
                     vid_share = Some(share.clone());
                     if let Some(ref comm) = payload_commitment {

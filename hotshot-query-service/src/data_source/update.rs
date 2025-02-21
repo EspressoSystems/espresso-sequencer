@@ -22,14 +22,17 @@ use anyhow::{ensure, Context};
 use async_trait::async_trait;
 use futures::future::Future;
 use hotshot::types::{Event, EventType};
-use hotshot_types::{data::VidDisperseShare, event::LeafInfo};
 use hotshot_types::{
     data::{Leaf, Leaf2, QuorumProposal},
     traits::{
         block_contents::{BlockHeader, BlockPayload, EncodeBytes, GENESIS_VID_NUM_STORAGE_NODES},
         node_implementation::{ConsensusTime, NodeType},
     },
-    vid::advz_scheme,
+    vid::advz::advz_scheme,
+};
+use hotshot_types::{
+    data::{VidCommitment, VidDisperseShare},
+    event::LeafInfo,
 };
 use jf_vid::VidScheme;
 use std::iter::once;
@@ -139,16 +142,13 @@ where
                     Some(VidDisperseShare::V0(share)) => (
                         Some(VidCommonQueryData::new(
                             leaf.block_header().clone(),
-                            share.common.clone(),
+                            Some(share.common.clone()),
                         )),
-                        Some(share.share.clone()),
+                        Some(VidShare::V0(share.share.clone())),
                     ),
                     Some(VidDisperseShare::V1(share)) => (
-                        Some(VidCommonQueryData::new(
-                            leaf.block_header().clone(),
-                            share.common.clone(),
-                        )),
-                        Some(share.share.clone()),
+                        Some(VidCommonQueryData::new(leaf.block_header().clone(), None)),
+                        Some(VidShare::V1(share.share.clone())),
                     ),
                     None => {
                         if leaf.view_number().u64() == 0 {
@@ -195,14 +195,14 @@ fn genesis_vid<Types: NodeType>(
         .disperse(bytes)
         .context("unable to compute VID dispersal for genesis block")?;
     ensure!(
-        disperse.commit == leaf.block_header().payload_commitment(),
+        VidCommitment::V0(disperse.commit) == leaf.block_header().payload_commitment(),
         "computed VID commit {} for genesis block does not match header commit {}",
         disperse.commit,
         leaf.block_header().payload_commitment()
     );
     Ok((
-        VidCommonQueryData::new(leaf.block_header().clone(), disperse.common),
-        disperse.shares.remove(0),
+        VidCommonQueryData::new(leaf.block_header().clone(), Some(disperse.common)),
+        VidShare::V0(disperse.shares.remove(0)),
     ))
 }
 

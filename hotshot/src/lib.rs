@@ -15,7 +15,7 @@ use committable::Committable;
 use futures::future::{select, Either};
 use hotshot_types::{
     message::UpgradeLock,
-    traits::{network::BroadcastDelay, node_implementation::Versions},
+    traits::{block_contents::BlockHeader, network::BroadcastDelay, node_implementation::Versions},
 };
 use rand::Rng;
 use url::Url;
@@ -322,7 +322,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> SystemContext<T
             saved_leaves.insert(leaf.commit(), leaf.clone());
         }
         if let Some(payload) = anchored_leaf.block_payload() {
-            saved_payloads.insert(anchored_leaf.view_number(), Arc::new(payload));
+            let metadata = anchored_leaf.block_header().metadata().clone();
+            saved_payloads.insert(anchored_leaf.view_number(), Arc::new((payload, metadata)));
         }
 
         let consensus = Consensus::new(

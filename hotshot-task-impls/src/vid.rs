@@ -106,6 +106,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> VidTaskState<TY
                     *view_number,
                     epoch,
                     epoch,
+                    metadata,
                     &self.upgrade_lock,
                 )
                 .await
@@ -135,9 +136,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> VidTaskState<TY
                 .await;
 
                 let view_number = *view_number;
-                let Ok(signature) =
-                    TYPES::SignatureKey::sign(&self.private_key, payload_commitment.as_ref())
-                else {
+                let Ok(signature) = TYPES::SignatureKey::sign(
+                    &self.private_key,
+                    vid_disperse.payload_commitment_ref(),
+                ) else {
                     error!("VID: failed to sign dispersal payload");
                     return None;
                 };
@@ -207,11 +209,12 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> VidTaskState<TY
                 drop(consensus_reader);
 
                 let next_epoch_vid_disperse = VidDisperse::calculate_vid_disperse::<V>(
-                    payload.as_ref(),
+                    &payload.0,
                     &Arc::clone(&self.membership),
                     proposal_view_number,
                     target_epoch,
                     sender_epoch,
+                    &payload.1,
                     &self.upgrade_lock,
                 )
                 .await

@@ -187,8 +187,9 @@ where
 
     let commitment = block_payload.builder_commitment(&metadata);
 
-    let vid_commitment = hotshot_types::traits::block_contents::vid_commitment::<V>(
+    let vid_commitment = hotshot_types::data::vid_commitment::<V>(
         &block_payload.encode(),
+        &metadata.encode(),
         *num_storage_nodes.read_arc().await,
         version,
     );

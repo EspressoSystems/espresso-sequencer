@@ -27,13 +27,13 @@ use hotshot_builder_api::v0_1::{
 };
 use hotshot_example_types::{block_types::TestTransaction, node_types::TestVersions};
 use hotshot_types::{
+    data::VidCommitment,
     network::RandomBuilderConfig,
     traits::{
         node_implementation::{NodeType, Versions},
         signature_key::BuilderSignatureKey,
     },
     utils::BuilderCommitment,
-    vid::VidCommitment,
 };
 use lru::LruCache;
 use rand::{rngs::SmallRng, Rng, RngCore, SeedableRng};
