@@ -112,14 +112,12 @@ impl<TYPES: NodeType> ADVZDisperse<TYPES> {
         let txns_clone = Arc::clone(&txns);
         let num_txns = txns.len();
 
-        let vid_disperse = advz_scheme(num_nodes).disperse(&txns_clone).unwrap();
-        // Test hang here indefinitely. Move things out of spawn_blocking
-        // let vid_disperse = spawn_blocking(move || advz_scheme(num_nodes).disperse(&txns_clone))
-        //     .await
-        //     .wrap()
-        //     .context(error!("Join error"))?
-        //     .wrap()
-        //     .context(|err| error!("Failed to calculate VID disperse. Error: {}", err))?;
+        let vid_disperse = spawn_blocking(move || advz_scheme(num_nodes).disperse(&txns_clone))
+            .await
+            .wrap()
+            .context(error!("Join error"))?
+            .wrap()
+            .context(|err| error!("Failed to calculate VID disperse. Error: {}", err))?;
 
         let payload_commitment = if target_epoch == data_epoch {
             None
