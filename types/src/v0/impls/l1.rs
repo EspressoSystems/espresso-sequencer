@@ -933,6 +933,22 @@ impl L1Client {
             tracing::warn!("`Successfully upgrade L1Client background tasks!`");
         }
     }
+    /// First block we should listen to stake table events for.
+    async fn first_relevant_block_st(&self, address: Address) -> u64 {
+        let state = self.state.clone();
+        let state = state.lock().await;
+        let finalized = state.snapshot.finalized.map(|block_info| block_info.number);
+
+        let contract = PermissionedStakeTableInstance::new(address, self.provider.clone());
+        let init_block = contract
+            .initializedAtBlock()
+            .call()
+            .await
+            .map(|result| result._0.to::<u64>())
+            .ok();
+
+        finalized.min(init_block).unwrap_or(0)
+    }
 
     /// Get `StakeTable` at block height. If unavailable in local cache, poll the l1.
     pub async fn get_stake_table(
@@ -956,13 +972,7 @@ impl L1Client {
             if let Some(st) = state.stake.get(&block) {
                 return Some(st.clone());
             } else {
-                state
-                    .snapshot
-                    .finalized
-                    .map(|block_info| block_info.number)
-                    // TODO what could be a reasonable default?
-                    // set l1 block at contract deployment
-                    .unwrap_or(0)
+                self.first_relevant_block_st(contract_address).await
             }
         };
 
