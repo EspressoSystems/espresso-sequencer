@@ -26,9 +26,10 @@ use hotshot::{
 use hotshot_builder_api::{
     v0_1::{
         self,
-        block_info::{AvailableBlockData, AvailableBlockHeaderInput, AvailableBlockInfo},
+        block_info::{AvailableBlockData, AvailableBlockInfo},
         builder::{BuildError, Error, Options},
     },
+    v0_2::block_info::AvailableBlockHeaderInputV1,
     v0_99,
 };
 use hotshot_example_types::node_types::TestVersions;
@@ -103,7 +104,7 @@ where
     ) -> Box<dyn BuilderTask<TYPES>> {
         let (change_sender, change_receiver) = broadcast(128);
         let (source, task) = Self::create(num_nodes, changes, change_sender).await;
-        run_builder_source::<_, _, TestVersions>(url, change_receiver, source);
+        run_builder_source::<_, _>(url, change_receiver, source);
 
         Box::new(task)
     }
@@ -249,7 +250,7 @@ where
 
         // Let new VID scheme ships with Epochs upgrade
         let version = <TestVersions as Versions>::Epochs::VERSION;
-        let block_entry = build_block::<TYPES, TestVersions>(
+        let block_entry = build_block::<TYPES>(
             transactions,
             self.num_nodes.clone(),
             self.pub_key.clone(),
@@ -320,7 +321,7 @@ where
         _view_number: u64,
         _sender: TYPES::SignatureKey,
         _signature: &<TYPES::SignatureKey as SignatureKey>::PureAssembledSignatureType,
-    ) -> Result<AvailableBlockHeaderInput<TYPES>, BuildError> {
+    ) -> Result<AvailableBlockHeaderInputV1<TYPES>, BuildError> {
         if self.should_fail_claims.load(Ordering::Relaxed) {
             return Err(BuildError::Missing);
         }

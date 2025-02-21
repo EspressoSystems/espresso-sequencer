@@ -10,7 +10,7 @@ use async_broadcast::Sender;
 use committable::Commitment;
 use hotshot::rand::{thread_rng, Rng};
 use hotshot::types::{BLSPubKey, Event, EventType, SignatureKey};
-use hotshot_builder_api::v0_1::block_info::AvailableBlockHeaderInput;
+use hotshot_builder_api::v0_1::block_info::AvailableBlockHeaderInputV1;
 use hotshot_builder_api::v0_1::builder::BuildError;
 use hotshot_builder_api::v0_1::data_source::AcceptsTxnSubmits;
 use hotshot_builder_api::v0_1::{block_info::AvailableBlockInfo, data_source::BuilderDataSource};
@@ -71,9 +71,7 @@ impl TestServiceWrapper {
     ) -> Self {
         let port = portpicker::pick_unused_port().unwrap();
         let url: Url = format!("http://localhost:{port}").parse().unwrap();
-        let app = Arc::clone(&global_state)
-            .into_app::<TestVersions>()
-            .unwrap();
+        let app = Arc::clone(&global_state).into_app().unwrap();
         spawn(app.serve(url.clone(), StaticVersion::<0, 1> {}));
         let client = BuilderClient::new(url);
         assert!(client.connect(Duration::from_secs(1)).await);
@@ -107,7 +105,7 @@ impl TestServiceWrapper {
     pub(crate) async fn claim_block_header_input(
         &self,
         block_id: &BlockId<TestTypes>,
-    ) -> Result<AvailableBlockHeaderInput<TestTypes>, BuildError> {
+    ) -> Result<AvailableBlockHeaderInputV1<TestTypes>, BuildError> {
         self.proxy_global_state
             .claim_block_header_input(
                 &block_id.hash,

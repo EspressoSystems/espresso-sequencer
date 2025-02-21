@@ -131,7 +131,7 @@ impl<TYPES: NodeType, Ver: StaticVersionType> BuilderClient<TYPES, Ver> {
 
 /// Version 0.1
 pub mod v0_1 {
-    use hotshot_builder_api::v0_1::block_info::{AvailableBlockData, AvailableBlockHeaderInput};
+    use hotshot_builder_api::v0_1::block_info::{AvailableBlockData, AvailableBlockHeaderInputV2};
     pub use hotshot_builder_api::v0_1::Version;
     use hotshot_types::{
         constants::LEGACY_BUILDER_MODULE,
@@ -157,11 +157,11 @@ pub mod v0_1 {
             view_number: u64,
             sender: TYPES::SignatureKey,
             signature: &<<TYPES as NodeType>::SignatureKey as SignatureKey>::PureAssembledSignatureType,
-        ) -> Result<AvailableBlockHeaderInput<TYPES>, BuilderClientError> {
+        ) -> Result<AvailableBlockHeaderInputV2<TYPES>, BuilderClientError> {
             let encoded_signature: TaggedBase64 = signature.clone().into();
             self.client
                 .get(&format!(
-                    "{LEGACY_BUILDER_MODULE}/claimheaderinput/{block_hash}/{view_number}/{sender}/{encoded_signature}"
+                    "{LEGACY_BUILDER_MODULE}/claimheaderinput/v2/{block_hash}/{view_number}/{sender}/{encoded_signature}"
                 ))
                 .send()
                 .await
