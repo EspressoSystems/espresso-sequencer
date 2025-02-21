@@ -1733,6 +1733,17 @@ mod test {
         );
         let deployer_client = Arc::new(deployer_client);
 
+        // See comment in `test_fetch_stake_table`
+        deployer_client
+            .send_transaction(
+                ethers::types::TransactionRequest::new()
+                    .to(deployer_client.address())
+                    .value(0),
+                None,
+            )
+            .await?
+            .await?;
+
         // deploy the stake_table contract
         let stake_table_contract =
             contract_bindings_ethers::permissioned_stake_table::PermissionedStakeTable::deploy(
