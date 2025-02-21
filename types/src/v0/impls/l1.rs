@@ -845,23 +845,6 @@ impl L1Client {
         })
     }
 
-    /// Divide the range `start..=end` into chunks of size
-    /// `events_max_block_range`.
-    fn chunky2(start: u64, end: u64, chunk_size: usize) -> Vec<(u64, u64)> {
-        // let opt = self.options();
-        // let chunk_size = opt.l1_events_max_block_range as usize;
-        let chunks: Vec<u64> = (start..=end).collect();
-        let tups: Vec<(u64, u64)> = chunks
-            .chunks(chunk_size)
-            .map(|s| {
-                // should never be empty
-                s.first().cloned().zip(s.last().cloned()).unwrap()
-            })
-            .collect();
-
-        tups
-    }
-
     /// Get fee info for each `Deposit` occurring between `prev`
     /// and `new`. Returns `Vec<FeeInfo>`
     pub async fn get_finalized_deposits(
@@ -1489,9 +1472,6 @@ mod test {
         let chunks = l1_client._chunky(3, 10);
         let tups = stream::iter(chunks).collect::<Vec<_>>().await;
 
-        assert_eq![vec![(3, 5), (6, 8), (9, 10)], tups];
-
-        let tups = L1Client::chunky2(3, 10, 3);
         assert_eq![vec![(3, 5), (6, 8), (9, 10)], tups];
 
         let chunks = ChunkGenerator::new(3, 10, 3);
