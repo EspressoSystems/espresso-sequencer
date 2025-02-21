@@ -1,10 +1,15 @@
 use hotshot::types::Event;
-use hotshot_builder_api::v0_1::{
-    block_info::{AvailableBlockData, AvailableBlockHeaderInput, AvailableBlockInfo},
-    builder::{define_api, submit_api, BuildError, Error as BuilderApiError, TransactionStatus},
-    data_source::{AcceptsTxnSubmits, BuilderDataSource},
+use hotshot_builder_api::{
+    v0_1::{
+        block_info::{AvailableBlockData, AvailableBlockInfo},
+        builder::{
+            define_api, submit_api, BuildError, Error as BuilderApiError, TransactionStatus,
+        },
+        data_source::{AcceptsTxnSubmits, BuilderDataSource},
+    },
+    v0_2::block_info::AvailableBlockHeaderInputV1,
 };
-use hotshot_types::traits::block_contents::{advz_commitment, Transaction};
+use hotshot_types::traits::block_contents::{precompute_vid_commitment, Transaction};
 use hotshot_types::traits::EncodeBytes;
 use hotshot_types::{
     event::EventType,
@@ -402,8 +407,9 @@ where
         let num_nodes = self.num_nodes.load(Ordering::Relaxed);
 
         let fut = async move {
-            let join_handle =
-                tokio::task::spawn_blocking(move || advz_commitment(&encoded_txns, num_nodes));
+            let join_handle = tokio::task::spawn_blocking(move || {
+                precompute_vid_commitment(&encoded_txns, num_nodes)
+            });
             join_handle.await.unwrap()
         };
 
@@ -561,7 +567,7 @@ where
     pub(crate) async fn claim_block_header_input_implementation(
         &self,
         block_id: BlockId<Types>,
-    ) -> Result<(bool, AvailableBlockHeaderInput<Types>), Error<Types>> {
+    ) -> Result<(bool, AvailableBlockHeaderInputV1<Types>), Error<Types>> {
         let metadata;
         let offered_fee;
         let truncated;
@@ -586,7 +592,7 @@ where
             vid_data = block_info.vid_data.clone();
         };
 
-        let vid_commitment = vid_data.resolve().await;
+        let (vid_commitment, vid_precompute_data) = vid_data.resolve().await;
 
         // sign over the vid commitment
         let signature_over_vid_commitment =
@@ -604,9 +610,9 @@ where
         )
         .map_err(Error::Signing)?;
 
-        let response = AvailableBlockHeaderInput::<Types> {
+        let response = AvailableBlockHeaderInputV1 {
             vid_commitment,
-            vid_precompute_data: None,
+            vid_precompute_data,
             fee_signature: signature_over_fee_info,
             message_signature: signature_over_vid_commitment,
             sender: self.builder_keys.0.clone(),
@@ -723,7 +729,7 @@ where
         view_number: u64,
         sender: Types::SignatureKey,
         signature: &<<Types as NodeType>::SignatureKey as SignatureKey>::PureAssembledSignatureType,
-    ) -> Result<AvailableBlockHeaderInput<Types>, BuildError> {
+    ) -> Result<AvailableBlockHeaderInputV1<Types>, BuildError> {
         let start = Instant::now();
         // verify the signature
         if !sender.validate(signature, block_hash.as_ref()) {
