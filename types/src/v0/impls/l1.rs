@@ -415,11 +415,10 @@ impl L1Client {
 
     /// Update stake-table cache on `L1Event::NewFinalized`.
     fn stake_update_loop(&self, address: Address) -> impl Future<Output = ()> {
-        tracing::error!("spawned stake table update loop");
+        tracing::debug!("spawn stake table update loop");
         let opt = self.options();
         let retry_delay = opt.l1_retry_delay;
         let chunk_size = opt.l1_events_max_block_range;
-        let span = tracing::warn_span!("L1 client update");
         let state = self.state.clone();
 
         let stake_table_contract =
@@ -427,6 +426,7 @@ impl L1Client {
 
         let mut events = self.receiver.activate_cloned();
 
+        let span = tracing::warn_span!("L1 client stake_tables update");
         async move {
             loop {
                 while let Some(event) = events.next().await {
@@ -479,6 +479,7 @@ impl L1Client {
     }
 
     fn update_loop(&self) -> impl Future<Output = ()> {
+        tracing::debug!("spawn blocks update loop");
         let opt = self.options();
         let rpc = self.provider.clone();
         let ws_urls = opt.l1_ws_provider.clone();
@@ -910,13 +911,15 @@ impl L1Client {
         {
             if let Some(mut tasks) = self.update_task.0.lock().await.take() {
                 if tasks.len() > 1 {
-                    tracing::debug!("Greater than 1 tasks are running, no need to upgrade");
+                    tracing::debug!("Greater than 1 tasks are running, no need to upgrade.");
                     return;
                 } else {
                     // Protocol upgraded to POS version. If stake_update_loop is not running,
                     // we need to spawn.
 
-                    tracing::warn!("Upgrading `L1Client` background tasks for v3 (Proof of Stake)",);
+                    tracing::warn!(
+                        "Upgrading `L1Client` background tasks for v3 (Proof of Stake)!",
+                    );
                     tasks.abort_all();
                 }
             }
