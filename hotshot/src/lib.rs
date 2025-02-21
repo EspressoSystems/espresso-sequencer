@@ -14,6 +14,7 @@ pub mod documentation;
 use committable::Committable;
 use futures::future::{select, Either};
 use hotshot_types::{
+    drb::{DrbResult, INITIAL_DRB_RESULT},
     message::UpgradeLock,
     traits::{network::BroadcastDelay, node_implementation::Versions},
 };
@@ -240,6 +241,63 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> SystemContext<T
         .await
     }
 
+    async fn load_start_epoch_info(
+        membership: &Arc<RwLock<TYPES::Membership>>,
+        start_epoch_info: &Vec<InitializerEpochInfo<TYPES>>,
+    ) {
+        /*        if let Some(epoch) = epoch {
+            // #2652 REVIEW NOTE: This epoch can't be right; what if a node starts up between when we upgrade to epochs
+            // and when we're at epoch+2? This would cause the current node to propagate the non-epochs stake table
+            // up.
+            memberships
+                .write()
+                .await
+                .set_first_epoch(epoch, INITIAL_DRB_RESULT);
+        }*/
+
+        // Iterate through start_epoch_info, find the first block header
+        for epoch_info in start_epoch_info {
+            if epoch_info.block_header.is_some() {
+                membership
+                    .write()
+                    .await
+                    .set_first_epoch(epoch_info.epoch, INITIAL_DRB_RESULT);
+                break;
+            }
+        }
+
+        for epoch_info in start_epoch_info {
+            membership
+                .write()
+                .await
+                .add_drb_result(epoch_info.epoch, epoch_info.drb_result);
+
+            if let Some(block_header) = &epoch_info.block_header {
+                let write_callback = {
+                    let membership_reader = membership.read().await;
+                    membership_reader
+                        .add_epoch_root(epoch_info.epoch, block_header.clone())
+                        .await
+                };
+
+                if let Some(write_callback) = write_callback {
+                    let mut membership_writer = membership.write().await;
+                    write_callback(&mut *membership_writer);
+                }
+            }
+        }
+
+        let write_callback = {
+            let membership_reader = membership.read().await;
+            membership_reader.sync_l1().await
+        };
+
+        if let Some(write_callback) = write_callback {
+            let mut membership_writer = membership.write().await;
+            write_callback(&mut *membership_writer);
+        }
+    }
+
     /// Creates a new [`Arc<SystemContext>`] with the given configuration options.
     ///
     /// To do a full initialization, use `fn init` instead, which will set up background tasks as
@@ -253,7 +311,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> SystemContext<T
         private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
         nonce: u64,
         config: HotShotConfig<TYPES::SignatureKey>,
-        memberships: Arc<RwLock<TYPES::Membership>>,
+        membership: Arc<RwLock<TYPES::Membership>>,
         network: Arc<I::Network>,
         initializer: HotShotInitializer<TYPES>,
         metrics: ConsensusMetricsValue,
@@ -296,6 +354,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> SystemContext<T
             anchored_leaf.height(),
             config.epoch_height,
         );
+
+        Self::load_start_epoch_info(&membership, &initializer.start_epoch_info).await;
+
+        // Populate
 
         // Insert the validated state to state map.
         let mut validated_state_map = BTreeMap::default();
@@ -358,7 +420,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> SystemContext<T
             start_view: initializer.start_view,
             start_epoch: initializer.start_epoch,
             network,
-            memberships,
+            memberships: membership,
             metrics: Arc::clone(&consensus_metrics),
             internal_event_stream: (internal_tx, internal_rx.deactivate()),
             output_event_stream: (external_tx.clone(), external_rx.clone().deactivate()),
@@ -980,6 +1042,14 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> ConsensusApi<TY
 }
 
 #[derive(Clone)]
+pub struct InitializerEpochInfo<TYPES: NodeType> {
+    epoch: TYPES::Epoch,
+    drb_result: DrbResult,
+    // stake_table: Option<StakeTable>, // TODO: Figure out how to connect this up
+    block_header: Option<TYPES::BlockHeader>,
+}
+
+#[derive(Clone)]
 /// initializer struct for creating starting block
 pub struct HotShotInitializer<TYPES: NodeType> {
     /// Instance-level state.
@@ -987,6 +1057,9 @@ pub struct HotShotInitializer<TYPES: NodeType> {
 
     /// Epoch height
     pub epoch_height: u64,
+
+    /// Epoch start block
+    pub epoch_start_block: u64,
 
     /// the anchor leaf for the hotshot initializer
     pub anchor_leaf: Leaf2<TYPES>,
@@ -1030,6 +1103,9 @@ pub struct HotShotInitializer<TYPES: NodeType> {
 
     /// Saved VID shares
     pub saved_vid_shares: VidShares<TYPES>,
+
+    /// Saved epoch information. This must be sorted ascending by epoch.
+    pub start_epoch_info: Vec<InitializerEpochInfo<TYPES>>,
 }
 
 impl<TYPES: NodeType> HotShotInitializer<TYPES> {
@@ -1039,6 +1115,7 @@ impl<TYPES: NodeType> HotShotInitializer<TYPES> {
     pub async fn from_genesis<V: Versions>(
         instance_state: TYPES::InstanceState,
         epoch_height: u64,
+        epoch_start_block: u64,
     ) -> Result<Self, HotShotError<TYPES>> {
         let (validated_state, state_delta) = TYPES::ValidatedState::genesis(&instance_state);
         let high_qc = QuorumCertificate2::genesis::<V>(&validated_state, &instance_state).await;
@@ -1059,6 +1136,8 @@ impl<TYPES: NodeType> HotShotInitializer<TYPES> {
             instance_state,
             saved_vid_shares: BTreeMap::new(),
             epoch_height,
+            epoch_start_block,
+            start_epoch_info: Vec::new(),
         })
     }
 
@@ -1110,6 +1189,8 @@ impl<TYPES: NodeType> HotShotInitializer<TYPES> {
     pub fn load(
         instance_state: TYPES::InstanceState,
         epoch_height: u64,
+        epoch_start_block: u64,
+        start_epoch_info: Vec<InitializerEpochInfo<TYPES>>,
         anchor_leaf: Leaf2<TYPES>,
         (start_view, start_epoch): (TYPES::View, Option<TYPES::Epoch>),
         (high_qc, next_epoch_high_qc): (
@@ -1128,6 +1209,7 @@ impl<TYPES: NodeType> HotShotInitializer<TYPES> {
         let initializer = Self {
             instance_state,
             epoch_height,
+            epoch_start_block,
             anchor_leaf,
             anchor_state,
             anchor_state_delta,
@@ -1141,6 +1223,7 @@ impl<TYPES: NodeType> HotShotInitializer<TYPES> {
             decided_upgrade_certificate,
             undecided_leaves: BTreeMap::new(),
             undecided_state: BTreeMap::new(),
+            start_epoch_info,
         };
 
         initializer.update_undecided()

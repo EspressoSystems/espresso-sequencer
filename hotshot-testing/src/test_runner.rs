@@ -27,6 +27,7 @@ use hotshot_example_types::{
 };
 use hotshot_fakeapi::fake_solver::FakeSolverState;
 use hotshot_task_impls::events::HotShotEvent;
+use hotshot_types::drb::INITIAL_DRB_RESULT;
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
     constants::EVENT_CHANNEL_SIZE,
@@ -44,6 +45,7 @@ use tide_disco::Url;
 use tokio::{spawn, task::JoinHandle};
 #[allow(deprecated)]
 use tracing::info;
+use vbs::version::StaticVersionType;
 
 use super::{
     completion_task::CompletionTask, consistency_task::ConsistencyTask, txn_task::TxnTask,
@@ -178,6 +180,8 @@ where
 
         let spinning_task_state = SpinningTask {
             epoch_height: launcher.metadata.test_config.epoch_height,
+            epoch_start_block: launcher.metadata.test_config.epoch_start_block,
+            start_epoch_info: Vec::new(), // #2652 REVIEW NOTE: Same as other instances of start_epoch_info
             handles: Arc::clone(&handles),
             late_start,
             latest_view: None,
@@ -394,10 +398,17 @@ where
         let config = self.launcher.metadata.test_config.clone();
 
         // TODO This is only a workaround. Number of nodes changes from epoch to epoch. Builder should be made epoch-aware.
-        let temp_memberships = <TYPES as NodeType>::Membership::new(
+        let mut temp_memberships = <TYPES as NodeType>::Membership::new(
             config.known_nodes_with_stake.clone(),
             config.known_da_nodes.clone(),
         );
+
+        // if we're doing epochs, then tell the membership
+        if V::Base::VERSION >= V::Epochs::VERSION {
+            temp_memberships
+                .set_first_epoch(<TYPES as NodeType>::Epoch::new(1), INITIAL_DRB_RESULT);
+        }
+
         // #3967 is it enough to check versions now? Or should we also be checking epoch_height?
         let num_nodes = temp_memberships.total_nodes(genesis_epoch_from_version::<V, TYPES>());
         let (mut builder_tasks, builder_urls, fallback_builder_url) =
@@ -475,6 +486,7 @@ where
                     let initializer = HotShotInitializer::<TYPES>::from_genesis::<V>(
                         TestInstanceState::new(self.launcher.metadata.async_delay_config.clone()),
                         config.epoch_height,
+                        config.epoch_start_block,
                     )
                     .await
                     .unwrap();

@@ -107,6 +107,7 @@ pub async fn build_system_handle_from_launcher<
     let initializer = HotShotInitializer::<TYPES>::from_genesis::<V>(
         TestInstanceState::new(launcher.metadata.async_delay_config.clone()),
         launcher.metadata.test_config.epoch_height,
+        launcher.metadata.test_config.epoch_start_block,
     )
     .await
     .unwrap();
