@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use super::{get_stake_table_from_sequencer, ProcessNodeIdentityUrlStreamTask};
+use super::{ProcessNodeIdentityUrlStreamTask, get_stake_table_from_sequencer};
 use crate::service::{
     client_id::ClientId,
     client_message::InternalClientMessage,
@@ -13,10 +13,10 @@ use crate::service::{
     server_message::ServerMessage,
 };
 use async_lock::RwLock;
-use espresso_types::{downgrade_leaf, PubKey, SeqTypes};
+use espresso_types::{PubKey, SeqTypes, downgrade_leaf};
 use futures::{
-    channel::mpsc::{self, Receiver, SendError, Sender},
     Sink, SinkExt, Stream, StreamExt,
+    channel::mpsc::{self, Receiver, SendError, Sender},
 };
 use hotshot_query_service::Leaf;
 use hotshot_types::event::{Event, EventType};
@@ -133,7 +133,9 @@ impl HotShotEventProcessingTask {
                         let send_result = leaf_sender.send(leaf).await;
                         if let Err(err) = send_result {
                             tracing::error!("leaf sender closed: {}", err);
-                            panic!("HotShotEventProcessingTask leaf sender is closed, unrecoverable, the block state will stagnate.");
+                            panic!(
+                                "HotShotEventProcessingTask leaf sender is closed, unrecoverable, the block state will stagnate."
+                            );
                         }
                     }
                 }
@@ -162,7 +164,9 @@ impl HotShotEventProcessingTask {
                     let send_result = url_sender.send(public_api_url).await;
                     if let Err(err) = send_result {
                         tracing::error!("url sender closed: {}", err);
-                        panic!("HotShotEventProcessingTask url sender is closed, unrecoverable, the node state will stagnate.");
+                        panic!(
+                            "HotShotEventProcessingTask url sender is closed, unrecoverable, the node state will stagnate."
+                        );
                     }
                 }
                 _ => {
@@ -371,8 +375,8 @@ pub async fn create_node_validator_processing(
 mod test {
     use crate::{
         api::node_validator::v0::{
-            HotshotQueryServiceLeafStreamRetriever, ProcessProduceLeafStreamTask,
-            StateClientMessageSender, STATIC_VER_0_1,
+            HotshotQueryServiceLeafStreamRetriever, ProcessProduceLeafStreamTask, STATIC_VER_0_1,
+            StateClientMessageSender,
         },
         service::{client_message::InternalClientMessage, server_message::ServerMessage},
     };

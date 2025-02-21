@@ -6,8 +6,8 @@ use crate::{
     },
     service::ReceivedTransaction,
 };
-use async_broadcast::broadcast;
 use async_broadcast::Sender as BroadcastSender;
+use async_broadcast::broadcast;
 use hotshot::{
     traits::BlockPayload,
     types::{BLSPubKey, SignatureKey},

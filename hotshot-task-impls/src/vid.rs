@@ -16,11 +16,11 @@ use hotshot_types::{
     message::{Proposal, UpgradeLock},
     simple_vote::HasEpoch,
     traits::{
+        BlockPayload,
         block_contents::BlockHeader,
         election::Membership,
         node_implementation::{NodeImplementation, NodeType, Versions},
         signature_key::SignatureKey,
-        BlockPayload,
     },
     utils::option_epoch_from_block_number,
 };

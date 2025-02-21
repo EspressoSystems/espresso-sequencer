@@ -28,13 +28,13 @@ use crate::builder_state::{
 };
 use crate::builder_state::{MessageType, RequestMessage, ResponseMessage};
 use crate::{WaitAndKeep, WaitAndKeepGetError};
-pub use async_broadcast::{broadcast, RecvError, TryRecvError};
+pub use async_broadcast::{RecvError, TryRecvError, broadcast};
 use async_broadcast::{Sender as BroadcastSender, TrySendError};
 use async_lock::RwLock;
 use async_trait::async_trait;
 use committable::{Commitment, Committable};
 use futures::stream::StreamExt;
-use futures::{future::BoxFuture, Stream};
+use futures::{Stream, future::BoxFuture};
 use marketplace_builder_shared::block::{BlockId, BuilderStateId, ParentBlockReferences};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
@@ -413,10 +413,17 @@ impl<Types: NodeType> GlobalState<Types> {
             let old_status = write_guard.get(&txn_hash);
             match old_status {
                 Some(TransactionStatus::Rejected { reason }) => {
-                    tracing::debug!("Changing the status of a rejected transaction to status {:?}! The reason it is previously rejected is {:?}", txn_status, reason);
+                    tracing::debug!(
+                        "Changing the status of a rejected transaction to status {:?}! The reason it is previously rejected is {:?}",
+                        txn_status,
+                        reason
+                    );
                 }
                 Some(TransactionStatus::Sequenced { leaf }) => {
-                    let e = format!("Changing the status of a sequenced transaction to status {:?} is not allowed! The transaction is sequenced in leaf {:?}", txn_status, leaf);
+                    let e = format!(
+                        "Changing the status of a sequenced transaction to status {:?} is not allowed! The transaction is sequenced in leaf {:?}",
+                        txn_status, leaf
+                    );
                     tracing::error!(e);
                     return Err(BuildError::Error(e));
                 }
@@ -1475,9 +1482,16 @@ impl<Types: NodeType> From<HandleReceivedTxnsError<Types>> for BuildError {
             HandleReceivedTxnsError::TransactionTooBig {
                 estimated_length,
                 max_txn_len,
-            } => BuildError::Error(format!("Transaction too big (estimated length {estimated_length}, currently accepting <= {max_txn_len})")),
-            HandleReceivedTxnsError::TooManyTransactions => BuildError::Error("Too many transactions".to_owned()),
-            HandleReceivedTxnsError::Internal(err) => BuildError::Error(format!("Internal error when submitting transaction: {}", err)),
+            } => BuildError::Error(format!(
+                "Transaction too big (estimated length {estimated_length}, currently accepting <= {max_txn_len})"
+            )),
+            HandleReceivedTxnsError::TooManyTransactions => {
+                BuildError::Error("Too many transactions".to_owned())
+            }
+            HandleReceivedTxnsError::Internal(err) => BuildError::Error(format!(
+                "Internal error when submitting transaction: {}",
+                err
+            )),
         }
     }
 }
@@ -1681,9 +1695,9 @@ mod test {
     };
 
     use super::{
-        handle_da_event_implementation, handle_quorum_event_implementation, AvailableBlocksError,
-        BlockInfo, ClaimBlockError, ClaimBlockHeaderInputError, GlobalState, HandleDaEventError,
-        HandleQuorumEventError, HandleReceivedTxns, ProxyGlobalState,
+        AvailableBlocksError, BlockInfo, ClaimBlockError, ClaimBlockHeaderInputError, GlobalState,
+        HandleDaEventError, HandleQuorumEventError, HandleReceivedTxns, ProxyGlobalState,
+        handle_da_event_implementation, handle_quorum_event_implementation,
     };
 
     /// A const number on `max_tx_len` to be used consistently spanning all the tests
@@ -1732,9 +1746,18 @@ mod test {
             "There should be a single entry in the spawned builder states hashmap"
         );
 
-        assert!(state.spawned_builder_states.contains_key(&builder_state_id), "The spawned builder states should contain an entry with the bootstrapped parameters passed into new");
+        assert!(
+            state.spawned_builder_states.contains_key(&builder_state_id),
+            "The spawned builder states should contain an entry with the bootstrapped parameters passed into new"
+        );
 
-        assert!(!state.spawned_builder_states.contains_key(&BuilderStateId { parent_commitment: parent_commit, parent_view: ViewNumber::new(0) }), "The spawned builder states should not contain any other entry, as such it should not contain any entry with a higher view number, but the same parent commit");
+        assert!(
+            !state.spawned_builder_states.contains_key(&BuilderStateId {
+                parent_commitment: parent_commit,
+                parent_view: ViewNumber::new(0)
+            }),
+            "The spawned builder states should not contain any other entry, as such it should not contain any entry with a higher view number, but the same parent commit"
+        );
 
         // We can't compare the Senders directly
 
@@ -1957,7 +1980,10 @@ mod test {
                 2,
                 "The spawned_builder_states should still have 2 elements in it"
             );
-            assert_eq!(state.highest_view_num_builder_id, builder_state_id, "The highest view number builder id should still be the one that was just registered");
+            assert_eq!(
+                state.highest_view_num_builder_id, builder_state_id,
+                "The highest view number builder id should still be the one that was just registered"
+            );
 
             req_receiver
         };
@@ -2233,7 +2259,9 @@ mod test {
                     // This is expected
                 }
                 _ => {
-                    panic!("did not receive TriggerStatus::Start from vid_trigger_receiver as expected");
+                    panic!(
+                        "did not receive TriggerStatus::Start from vid_trigger_receiver as expected"
+                    );
                 }
             }
         }
@@ -2267,7 +2295,9 @@ mod test {
                     );
                 }
                 _ => {
-                    panic!("did not receive the expected vid commitment from vid_receiver_write_lock_guard");
+                    panic!(
+                        "did not receive the expected vid commitment from vid_receiver_write_lock_guard"
+                    );
                 }
             }
         }
@@ -2493,7 +2523,9 @@ mod test {
                     // This is expected
                 }
                 _ => {
-                    panic!("did not receive TriggerStatus::Start from vid_trigger_receiver as expected");
+                    panic!(
+                        "did not receive TriggerStatus::Start from vid_trigger_receiver as expected"
+                    );
                 }
             }
 
@@ -2537,7 +2569,9 @@ mod test {
                     );
                 }
                 _ => {
-                    panic!("did not receive the expected vid commitment from vid_receiver_write_lock_guard");
+                    panic!(
+                        "did not receive the expected vid commitment from vid_receiver_write_lock_guard"
+                    );
                 }
             }
         }

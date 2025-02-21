@@ -28,7 +28,7 @@ mod tests {
     use hotshot_types::traits::node_implementation::Versions;
     use hotshot_types::{
         signature_key::BuilderKey,
-        traits::block_contents::{vid_commitment, BlockHeader},
+        traits::block_contents::{BlockHeader, vid_commitment},
         utils::BuilderCommitment,
     };
 
@@ -49,7 +49,7 @@ mod tests {
         DaProposalMessage, DecideMessage, QuorumProposalMessage, TransactionSource,
     };
     use crate::service::{
-        handle_received_txns, GlobalState, ProxyGlobalState, ReceivedTransaction,
+        GlobalState, ProxyGlobalState, ReceivedTransaction, handle_received_txns,
     };
     use async_lock::RwLock;
     use committable::{Commitment, CommitmentBoundsArkless, Committable};

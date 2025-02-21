@@ -7,7 +7,7 @@
 use std::{collections::HashSet, fmt::Debug, time::Duration};
 
 use hotshot_types::traits::{network::NetworkError, node_implementation::NodeType};
-use libp2p::{request_response::ResponseChannel, Multiaddr};
+use libp2p::{Multiaddr, request_response::ResponseChannel};
 use libp2p_identity::PeerId;
 use tokio::{
     sync::mpsc::{Receiver, UnboundedReceiver, UnboundedSender},
@@ -16,11 +16,12 @@ use tokio::{
 use tracing::{debug, info, instrument};
 
 use crate::network::{
+    ClientRequest, NetworkEvent, NetworkNode, NetworkNodeConfig,
     behaviours::dht::{
         record::{Namespace, RecordKey, RecordValue},
         store::persistent::DhtPersistentStorage,
     },
-    gen_multiaddr, ClientRequest, NetworkEvent, NetworkNode, NetworkNodeConfig,
+    gen_multiaddr,
 };
 
 /// A handle containing:

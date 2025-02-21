@@ -133,11 +133,15 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static, V: Versions> Handl
                             .await
                             .is_leaf_forming_eqc(proposal.data.justify_qc().data.leaf_commit)
                     {
-                        tracing::debug!("Do not vote here. Voting for this case is handled in QuorumVoteTaskState");
+                        tracing::debug!(
+                            "Do not vote here. Voting for this case is handled in QuorumVoteTaskState"
+                        );
                         return;
                     } else if let Some(ref comm) = payload_commitment {
                         if proposal_payload_comm != *comm {
-                            tracing::error!("Quorum proposal has inconsistent payload commitment with DAC or VID.");
+                            tracing::error!(
+                                "Quorum proposal has inconsistent payload commitment with DAC or VID."
+                            );
                             return;
                         }
                     } else {
@@ -145,7 +149,9 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static, V: Versions> Handl
                     }
 
                     if proposed_leaf.parent_commitment() != parent_commitment {
-                        tracing::warn!("Proposed leaf parent commitment does not match parent leaf payload commitment. Aborting vote.");
+                        tracing::warn!(
+                            "Proposed leaf parent commitment does not match parent leaf payload commitment. Aborting vote."
+                        );
                         return;
                     }
                     // Update our persistent storage of the proposal. If we cannot store the proposal return
@@ -167,7 +173,9 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static, V: Versions> Handl
                     let cert_payload_comm = &cert.data().payload_commit;
                     if let Some(ref comm) = payload_commitment {
                         if cert_payload_comm != comm {
-                            tracing::error!("DAC has inconsistent payload commitment with quorum proposal or VID.");
+                            tracing::error!(
+                                "DAC has inconsistent payload commitment with quorum proposal or VID."
+                            );
                             return;
                         }
                     } else {
@@ -182,7 +190,9 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static, V: Versions> Handl
                     vid_share = Some(share.clone());
                     if let Some(ref comm) = payload_commitment {
                         if vid_payload_commitment != comm {
-                            tracing::error!("VID has inconsistent payload commitment with quorum proposal or DAC.");
+                            tracing::error!(
+                                "VID has inconsistent payload commitment with quorum proposal or DAC."
+                            );
                             return;
                         }
                     } else {
@@ -656,8 +666,11 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> QuorumVoteTaskS
         let parent_commitment = parent_leaf.commit();
 
         ensure!(
-            proposed_leaf.height() == parent_leaf.height() && proposed_leaf.payload_commitment() == parent_leaf.payload_commitment(),
-            error!("Justify QC is for the last block but it's not extended and a new block is proposed. Not voting!")
+            proposed_leaf.height() == parent_leaf.height()
+                && proposed_leaf.payload_commitment() == parent_leaf.payload_commitment(),
+            error!(
+                "Justify QC is for the last block but it's not extended and a new block is proposed. Not voting!"
+            )
         );
 
         tracing::info!(
@@ -687,7 +700,9 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> QuorumVoteTaskS
 
         ensure!(
             proposed_leaf.parent_commitment() == parent_commitment,
-            warn!("Proposed leaf parent commitment does not match parent leaf payload commitment. Aborting vote.")
+            warn!(
+                "Proposed leaf parent commitment does not match parent leaf payload commitment. Aborting vote."
+            )
         );
 
         // Update our persistent storage of the proposal. If we cannot store the proposal return

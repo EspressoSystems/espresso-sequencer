@@ -26,8 +26,8 @@ use espresso_types::NamespaceId;
 
 use hotshot_types::traits::node_implementation::NodeType;
 
-use marketplace_solver::SolverError;
 use marketplace_solver::SOLVER_API_PATH;
+use marketplace_solver::SolverError;
 use sequencer::SequencerApiVersion;
 use surf_disco::Client;
 

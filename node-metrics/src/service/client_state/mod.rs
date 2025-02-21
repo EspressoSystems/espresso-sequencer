@@ -6,7 +6,7 @@ use super::{
 };
 use bitvec::vec::BitVec;
 use espresso_types::SeqTypes;
-use futures::{channel::mpsc::SendError, Sink, SinkExt, Stream, StreamExt};
+use futures::{Sink, SinkExt, Stream, StreamExt, channel::mpsc::SendError};
 use hotshot_query_service::explorer::{BlockDetail, ExplorerHistograms};
 use std::{
     collections::{HashMap, HashSet},
@@ -942,7 +942,9 @@ impl InternalClientMessageProcessingTask {
                 message
             } else {
                 tracing::error!("internal client message handler closed.");
-                panic!("InternalClientMessageProcessingTask stream closed, unable to process new requests from clients.");
+                panic!(
+                    "InternalClientMessageProcessingTask stream closed, unable to process new requests from clients."
+                );
             };
 
             if let Err(err) =
@@ -1189,8 +1191,8 @@ pub mod tests {
             ProcessDistributeVotersHandlingTask,
         },
         data_state::{
-            create_block_detail_from_leaf, DataState, LocationDetails, NodeIdentity,
-            ProcessLeafStreamTask,
+            DataState, LocationDetails, NodeIdentity, ProcessLeafStreamTask,
+            create_block_detail_from_leaf,
         },
         server_message::ServerMessage,
     };
@@ -1198,8 +1200,8 @@ pub mod tests {
     use bitvec::vec::BitVec;
     use espresso_types::{Leaf, NodeState, ValidatedState};
     use futures::{
-        channel::mpsc::{self, Sender},
         SinkExt, StreamExt,
+        channel::mpsc::{self, Sender},
     };
     use hotshot_query_service::testing::mocks::MockVersions;
     use hotshot_types::{signature_key::BLSPubKey, traits::signature_key::SignatureKey};

@@ -7,19 +7,19 @@ use marketplace_builder_shared::{
     utils::BuilderKeys,
 };
 
-pub use async_broadcast::{broadcast, RecvError, TryRecvError};
+pub use async_broadcast::{RecvError, TryRecvError, broadcast};
 use async_trait::async_trait;
 use committable::{Commitment, Committable};
-use futures::{future::BoxFuture, stream::FuturesUnordered, Stream};
+use futures::{Stream, future::BoxFuture, stream::FuturesUnordered};
 use futures::{
-    stream::{FuturesOrdered, StreamExt},
     TryStreamExt,
+    stream::{FuturesOrdered, StreamExt},
 };
 use hotshot::types::Event;
 use hotshot_builder_api::{
     v0_2::builder::TransactionStatus,
     v0_99::{
-        builder::{define_api, submit_api, BuildError, Error as BuilderApiError},
+        builder::{BuildError, Error as BuilderApiError, define_api, submit_api},
         data_source::{AcceptsTxnSubmits, BuilderDataSource},
     },
 };
@@ -36,7 +36,7 @@ use hotshot_types::{
 use std::sync::Arc;
 use std::{fmt::Display, time::Instant};
 use tagged_base64::TaggedBase64;
-use tide_disco::{app::AppError, method::ReadState, App};
+use tide_disco::{App, app::AppError, method::ReadState};
 use tokio::{spawn, task::JoinHandle, time::sleep};
 use tracing::Level;
 use vbs::version::StaticVersion;

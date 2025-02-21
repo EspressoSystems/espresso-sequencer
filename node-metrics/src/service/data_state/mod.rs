@@ -5,20 +5,20 @@ use async_lock::RwLock;
 use bitvec::vec::BitVec;
 use circular_buffer::CircularBuffer;
 use espresso_types::{Header, Payload, SeqTypes};
-use futures::{channel::mpsc::SendError, Sink, SinkExt, Stream, StreamExt};
+use futures::{Sink, SinkExt, Stream, StreamExt, channel::mpsc::SendError};
 use hotshot_query_service::{
+    Leaf, Resolvable,
     availability::{QueryableHeader, QueryablePayload},
     explorer::{BlockDetail, ExplorerHeader, Timestamp},
-    Leaf, Resolvable,
 };
 use hotshot_stake_table::vec_based::StakeTable;
 use hotshot_types::{
     light_client::{CircuitField, StateVerKey},
     signature_key::BLSPubKey,
     traits::{
+        BlockPayload,
         block_contents::BlockHeader,
         stake_table::{SnapshotVersion, StakeTableScheme},
-        BlockPayload,
     },
 };
 pub use location_details::LocationDetails;
@@ -395,10 +395,16 @@ impl ProcessLeafStreamTask {
                 // will fail, and be fruitless.
                 match err {
                     ProcessLeafError::BlockSendError(_) => {
-                        panic!("ProcessLeafStreamTask: process_incoming_leaf failed, underlying sink is closed, blocks will stagnate: {}", err)
+                        panic!(
+                            "ProcessLeafStreamTask: process_incoming_leaf failed, underlying sink is closed, blocks will stagnate: {}",
+                            err
+                        )
                     }
                     ProcessLeafError::VotersSendError(_) => {
-                        panic!("ProcessLeafStreamTask: process_incoming_leaf failed, underlying sink is closed, voters will stagnate: {}", err)
+                        panic!(
+                            "ProcessLeafStreamTask: process_incoming_leaf failed, underlying sink is closed, voters will stagnate: {}",
+                            err
+                        )
                     }
                 }
             }
@@ -544,7 +550,10 @@ impl ProcessNodeIdentityStreamTask {
                 // `process_incoming_node_identity` are due to `SendError` which
                 // will ultimately mean that further processing attempts will fail
                 // and be fruitless.
-                panic!("ProcessNodeIdentityStreamTask: process_incoming_node_identity failed, underlying sink is closed, node identities will stagnate: {}", err);
+                panic!(
+                    "ProcessNodeIdentityStreamTask: process_incoming_node_identity failed, underlying sink is closed, node identities will stagnate: {}",
+                    err
+                );
             }
         }
     }
@@ -569,9 +578,9 @@ mod tests {
     };
     use async_lock::RwLock;
     use espresso_types::{
-        v0_99::ChainConfig, BlockMerkleTree, FeeMerkleTree, Leaf, NodeState, ValidatedState,
+        BlockMerkleTree, FeeMerkleTree, Leaf, NodeState, ValidatedState, v0_99::ChainConfig,
     };
-    use futures::{channel::mpsc, SinkExt, StreamExt};
+    use futures::{SinkExt, StreamExt, channel::mpsc};
     use hotshot_query_service::testing::mocks::MockVersions;
     use hotshot_types::{signature_key::BLSPubKey, traits::signature_key::SignatureKey};
     use std::{sync::Arc, time::Duration};
@@ -657,12 +666,14 @@ mod tests {
         drop(block_receiver);
         drop(leaf_sender);
 
-        assert!(timeout(
-            Duration::from_millis(200),
-            process_leaf_stream_task_handle.task_handle.take().unwrap()
-        )
-        .await
-        .is_ok());
+        assert!(
+            timeout(
+                Duration::from_millis(200),
+                process_leaf_stream_task_handle.task_handle.take().unwrap()
+            )
+            .await
+            .is_ok()
+        );
     }
 
     #[tokio::test(flavor = "multi_thread")]

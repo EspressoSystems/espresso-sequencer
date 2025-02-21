@@ -2,10 +2,10 @@ use std::{sync::Arc, time::Duration};
 
 use super::basic_test::{BuilderState, MessageType};
 use crate::{
-    builder_state::{DaProposalMessage, QuorumProposalMessage, ALLOW_EMPTY_BLOCK_PERIOD},
+    builder_state::{ALLOW_EMPTY_BLOCK_PERIOD, DaProposalMessage, QuorumProposalMessage},
     service::{GlobalState, ProxyGlobalState, ReceivedTransaction},
 };
-use async_broadcast::{broadcast, Sender};
+use async_broadcast::{Sender, broadcast};
 use async_lock::RwLock;
 use committable::Commitment;
 use hotshot::{
@@ -26,7 +26,7 @@ use hotshot_types::{
     message::Proposal,
     simple_certificate::QuorumCertificate,
     traits::{
-        block_contents::{vid_commitment, BlockHeader},
+        block_contents::{BlockHeader, vid_commitment},
         node_implementation::{ConsensusTime, Versions},
     },
     utils::BuilderCommitment,

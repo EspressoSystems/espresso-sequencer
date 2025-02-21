@@ -4,29 +4,29 @@ use anyhow::Context;
 use async_broadcast::broadcast;
 use async_lock::RwLock;
 use espresso_types::{
-    eth_signature_key::EthKeyPair, v0_99::ChainConfig, FeeAmount, NodeState, Payload, SeqTypes,
-    ValidatedState,
+    FeeAmount, NodeState, Payload, SeqTypes, ValidatedState, eth_signature_key::EthKeyPair,
+    v0_99::ChainConfig,
 };
 use hotshot::traits::BlockPayload;
 use hotshot_builder_core::{
     builder_state::{BuilderState, MessageType},
     service::{
-        run_non_permissioned_standalone_builder_service, GlobalState, ProxyGlobalState,
-        ReceivedTransaction,
+        GlobalState, ProxyGlobalState, ReceivedTransaction,
+        run_non_permissioned_standalone_builder_service,
     },
 };
 use hotshot_types::{
-    data::{fake_commitment, ViewNumber},
+    data::{ViewNumber, fake_commitment},
     traits::{
-        block_contents::{vid_commitment, GENESIS_VID_NUM_STORAGE_NODES},
+        EncodeBytes,
+        block_contents::{GENESIS_VID_NUM_STORAGE_NODES, vid_commitment},
         metrics::NoMetrics,
         node_implementation::Versions,
-        EncodeBytes,
     },
 };
 use marketplace_builder_shared::block::ParentBlockReferences;
 use marketplace_builder_shared::utils::EventServiceStream;
-use sequencer::{catchup::StatePeers, L1Params, SequencerApiVersion};
+use sequencer::{L1Params, SequencerApiVersion, catchup::StatePeers};
 use std::sync::Arc;
 use tide_disco::Url;
 use tokio::spawn;
@@ -226,9 +226,9 @@ mod test {
     use portpicker::pick_unused_port;
     use sequencer::{
         api::{
+            Options,
             options::HotshotEvents,
             test_helpers::{TestNetwork, TestNetworkConfigBuilder},
-            Options,
         },
         persistence::{self},
         testing::TestConfigBuilder,
@@ -238,7 +238,7 @@ mod test {
     use tempfile::TempDir;
 
     use super::*;
-    use crate::testing::{test_builder_impl, NonPermissionedBuilderTestConfig};
+    use crate::testing::{NonPermissionedBuilderTestConfig, test_builder_impl};
 
     /// Test the non-permissioned builder core
     /// It creates a memory hotshot network and launches the hotshot event streaming api

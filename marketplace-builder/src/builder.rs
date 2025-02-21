@@ -2,19 +2,19 @@ use std::{arch::global_asm, collections::HashSet, num::NonZeroUsize, time::Durat
 
 use anyhow::Context;
 use async_broadcast::{
-    broadcast, Receiver as BroadcastReceiver, RecvError, Sender as BroadcastSender, TryRecvError,
+    Receiver as BroadcastReceiver, RecvError, Sender as BroadcastSender, TryRecvError, broadcast,
 };
 
 use async_lock::RwLock;
 use espresso_types::{
+    FeeAmount, L1Client, MarketplaceVersion, MockSequencerVersions, NamespaceId, NodeState,
+    Payload, SeqTypes, SequencerVersions, V0_1, ValidatedState,
     eth_signature_key::EthKeyPair,
     v0_99::{ChainConfig, RollupRegistration},
-    FeeAmount, L1Client, MarketplaceVersion, MockSequencerVersions, NamespaceId, NodeState,
-    Payload, SeqTypes, SequencerVersions, ValidatedState, V0_1,
 };
 use ethers::{
     core::k256::ecdsa::SigningKey,
-    signers::{coins_bip39::English, MnemonicBuilder, Signer as _, Wallet},
+    signers::{MnemonicBuilder, Signer as _, Wallet, coins_bip39::English},
     types::{Address, U256},
 };
 use futures::FutureExt;
@@ -27,12 +27,12 @@ use hotshot_events_service::{
     events_source::{EventConsumer, EventsStreamer},
 };
 use hotshot_types::{
-    data::{fake_commitment, Leaf, ViewNumber},
+    data::{Leaf, ViewNumber, fake_commitment},
     traits::{
-        block_contents::{vid_commitment, Transaction as _, GENESIS_VID_NUM_STORAGE_NODES},
+        EncodeBytes,
+        block_contents::{GENESIS_VID_NUM_STORAGE_NODES, Transaction as _, vid_commitment},
         metrics::NoMetrics,
         node_implementation::{ConsensusTime, NodeType, Versions},
-        EncodeBytes,
     },
     utils::BuilderCommitment,
 };
@@ -42,16 +42,16 @@ use marketplace_builder_core::{
 };
 use marketplace_builder_shared::block::ParentBlockReferences;
 use marketplace_solver::SolverError;
-use sequencer::{catchup::StatePeers, L1Params, NetworkParams, SequencerApiVersion};
+use sequencer::{L1Params, NetworkParams, SequencerApiVersion, catchup::StatePeers};
 use std::sync::Arc;
 use surf::http::headers::ACCEPT;
 use surf_disco::Client;
-use tide_disco::{app, method::ReadState, App, Url};
+use tide_disco::{App, Url, app, method::ReadState};
 use tokio::{spawn, time::sleep};
 use vbs::version::{StaticVersion, StaticVersionType};
 
 use crate::hooks::{
-    self, fetch_namespaces_to_skip, BidConfig, EspressoFallbackHooks, EspressoReserveHooks,
+    self, BidConfig, EspressoFallbackHooks, EspressoReserveHooks, fetch_namespaces_to_skip,
 };
 
 type DynamicHooks = Box<dyn BuilderHooks<SeqTypes>>;
@@ -212,10 +212,10 @@ mod test {
     use committable::Commitment;
     use committable::Committable;
     use espresso_types::{
-        mock::MockStateCatchup,
-        v0_99::{RollupRegistration, RollupRegistrationBody},
         Event, FeeAccount, Leaf2, MarketplaceVersion, NamespaceId, PubKey, SeqTypes,
         SequencerVersions, Transaction,
+        mock::MockStateCatchup,
+        v0_99::{RollupRegistration, RollupRegistrationBody},
     };
     use ethers::{core::k256::elliptic_curve::rand_core::block, utils::Anvil};
     use futures::{Stream, StreamExt};
@@ -231,7 +231,7 @@ mod test {
         events::{Error as EventStreamApiError, Options as EventStreamingApiOptions},
         events_source::{EventConsumer, EventsStreamer},
     };
-    use hotshot_query_service::{availability::LeafQueryData, VidCommitment};
+    use hotshot_query_service::{VidCommitment, availability::LeafQueryData};
     use hotshot_types::{
         bundle::Bundle,
         event::LeafInfo,
@@ -244,22 +244,22 @@ mod test {
         },
     };
     use marketplace_builder_shared::block::BuilderStateId;
-    use marketplace_solver::{testing::MockSolver, SolverError};
+    use marketplace_solver::{SolverError, testing::MockSolver};
     use portpicker::pick_unused_port;
     use sequencer::{
+        SequencerApiVersion,
         api::test_helpers::TestNetworkConfigBuilder,
         persistence::no_storage::{self, NoStorage},
         testing::TestConfigBuilder,
-        SequencerApiVersion,
     };
     use sequencer::{
-        api::{fs::DataSource, options::HotshotEvents, test_helpers::TestNetwork, Options},
+        api::{Options, fs::DataSource, options::HotshotEvents, test_helpers::TestNetwork},
         persistence,
     };
     use sequencer_utils::test_utils::setup_test;
     use surf_disco::{
-        socket::{Connection, Unsupported},
         Client,
+        socket::{Connection, Unsupported},
     };
     use tempfile::TempDir;
     use tide_disco::error::ServerError;

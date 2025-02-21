@@ -22,7 +22,7 @@ use async_lock::RwLock;
 use futures::channel::oneshot::Sender;
 use hotshot_types::traits::{network::NetworkError, node_implementation::NodeType};
 use libp2p::{
-    build_multiaddr,
+    Multiaddr, Transport, build_multiaddr,
     core::{muxing::StreamMuxerBox, transport::Boxed},
     dns::tokio::Transport as DnsTransport,
     gossipsub::Event as GossipEvent,
@@ -30,7 +30,6 @@ use libp2p::{
     identity::Keypair,
     quic,
     request_response::ResponseChannel,
-    Multiaddr, Transport,
 };
 use libp2p_identity::PeerId;
 use quic::tokio::Transport as QuicTransport;
@@ -40,9 +39,9 @@ use transport::StakeTableAuthentication;
 pub use self::{
     def::NetworkDef,
     node::{
-        spawn_network_node, GossipConfig, NetworkNode, NetworkNodeConfig, NetworkNodeConfigBuilder,
-        NetworkNodeConfigBuilderError, NetworkNodeHandle, NetworkNodeReceiver,
-        RequestResponseConfig, DEFAULT_REPLICATION_FACTOR,
+        DEFAULT_REPLICATION_FACTOR, GossipConfig, NetworkNode, NetworkNodeConfig,
+        NetworkNodeConfigBuilder, NetworkNodeConfigBuilderError, NetworkNodeHandle,
+        NetworkNodeReceiver, RequestResponseConfig, spawn_network_node,
     },
 };
 
@@ -175,12 +174,8 @@ pub async fn gen_transport<T: NodeType>(
         StakeTableAuthentication::new(transport, stake_table, auth_message);
 
     // Support DNS resolution
-    let transport = {
-        {
-            DnsTransport::system(transport)
-        }
-    }
-    .map_err(|e| NetworkError::ConfigError(format!("failed to build DNS transport: {e}")))?;
+    let transport = { { DnsTransport::system(transport) } }
+        .map_err(|e| NetworkError::ConfigError(format!("failed to build DNS transport: {e}")))?;
 
     Ok(transport
         .map(|(peer_id, connection), _| (peer_id, StreamMuxerBox::new(connection)))

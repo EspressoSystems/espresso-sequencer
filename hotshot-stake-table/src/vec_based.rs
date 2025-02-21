@@ -10,13 +10,13 @@ use ark_std::{collections::HashMap, hash::Hash, rand::SeedableRng};
 use digest::crypto_common::rand_core::CryptoRngCore;
 use hotshot_types::traits::stake_table::{SnapshotVersion, StakeTableError, StakeTableScheme};
 use jf_crhf::CRHF;
-use jf_rescue::{crhf::VariableLengthRescueCRHF, RescueParameter};
+use jf_rescue::{RescueParameter, crhf::VariableLengthRescueCRHF};
 use primitive_types::{U256, U512};
 use serde::{Deserialize, Serialize};
 
 use crate::{
     config::STAKE_TABLE_CAPACITY,
-    utils::{u256_to_field, ToFields},
+    utils::{ToFields, u256_to_field},
 };
 
 pub mod config;
@@ -389,14 +389,14 @@ mod tests {
     use ark_std::{rand::SeedableRng, vec::Vec};
     use hotshot_types::traits::stake_table::{SnapshotVersion, StakeTableError, StakeTableScheme};
     use jf_signature::{
-        bls_over_bn254::BLSOverBN254CurveSignatureScheme, schnorr::SchnorrSignatureScheme,
-        SignatureScheme,
+        SignatureScheme, bls_over_bn254::BLSOverBN254CurveSignatureScheme,
+        schnorr::SchnorrSignatureScheme,
     };
     use primitive_types::U256;
 
     use super::{
-        config::{FieldType as F, QCVerKey, StateVerKey},
         StakeTable,
+        config::{FieldType as F, QCVerKey, StateVerKey},
     };
 
     #[test]
@@ -461,19 +461,22 @@ mod tests {
         );
 
         // No duplicate register
-        assert!(st
-            .register(keys[0].0, U256::from(100), keys[0].1.clone())
-            .is_err());
+        assert!(
+            st.register(keys[0].0, U256::from(100), keys[0].1.clone())
+                .is_err()
+        );
         // The 9-th key is still in head stake table
         assert!(st.lookup(SnapshotVersion::EpochStart, &keys[9].0).is_err());
         assert!(st.lookup(SnapshotVersion::EpochStart, &keys[5].0).is_ok());
         // The 6-th key is still frozen
-        assert!(st
-            .lookup(SnapshotVersion::LastEpochStart, &keys[6].0)
-            .is_err());
-        assert!(st
-            .lookup(SnapshotVersion::LastEpochStart, &keys[2].0)
-            .is_ok());
+        assert!(
+            st.lookup(SnapshotVersion::LastEpochStart, &keys[6].0)
+                .is_err()
+        );
+        assert!(
+            st.lookup(SnapshotVersion::LastEpochStart, &keys[2].0)
+                .is_ok()
+        );
 
         // Set value shall return the old value
         assert_eq!(

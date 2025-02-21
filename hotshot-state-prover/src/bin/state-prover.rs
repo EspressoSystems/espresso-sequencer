@@ -4,11 +4,11 @@ use clap::Parser;
 use espresso_types::parse_duration;
 use ethers::{
     providers::{Http, Middleware, Provider},
-    signers::{coins_bip39::English, MnemonicBuilder, Signer},
+    signers::{MnemonicBuilder, Signer, coins_bip39::English},
     types::Address,
 };
 use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
-use hotshot_state_prover::service::{run_prover_once, run_prover_service, StateProverConfig};
+use hotshot_state_prover::service::{StateProverConfig, run_prover_once, run_prover_service};
 use sequencer_utils::logging;
 use url::Url;
 use vbs::version::StaticVersion;
