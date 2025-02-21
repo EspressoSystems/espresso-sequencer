@@ -1348,24 +1348,26 @@ mod test {
         // is off, maybe because block.number is incorrect when doing the gas
         // estimation but this would be quite surprising.
         //
-        // Until we figure out why, we can retry the deployment once. Notably
-        // the deployment for the native demo does not seem to be affected, only
-        // this test.
-        let deploy = || {
+        // This only happens on block 0, so we can first send a TX to increment
+        // the block number and then do the deployment.
+        deployer_client
+            .send_transaction(
+                ethers::types::TransactionRequest::new()
+                    .to(deployer_client.address())
+                    .value(0),
+                None,
+            )
+            .await?
+            .await?;
+
+        let stake_table_contract =
             contract_bindings_ethers::permissioned_stake_table::PermissionedStakeTable::deploy(
                 deployer_client.clone(),
                 Vec::<contract_bindings_ethers::permissioned_stake_table::NodeInfo>::new(),
             )
             .unwrap()
             .send()
-        };
-        let stake_table_contract = match deploy().await {
-            Ok(contract) => contract,
-            Err(e) => {
-                tracing::warn!("Deploy failed: {:?}, retrying...", e);
-                deploy().await?
-            }
-        };
+            .await?;
 
         let address = stake_table_contract.address();
 
