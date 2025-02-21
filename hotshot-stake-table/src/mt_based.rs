@@ -15,7 +15,7 @@ use hotshot_types::traits::stake_table::{SnapshotVersion, StakeTableError, Stake
 use primitive_types::{U256, U512};
 use serde::{Deserialize, Serialize};
 
-use self::internal::{to_merkle_path, Key, MerkleCommitment, MerkleProof, PersistentMerkleNode};
+use self::internal::{Key, MerkleCommitment, MerkleProof, PersistentMerkleNode, to_merkle_path};
 
 /// Locally maintained stake table, generic over public key type `K`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -293,9 +293,10 @@ mod tests {
         assert!(st.lookup(SnapshotVersion::EpochStart, &keys[9]).is_err());
         assert!(st.lookup(SnapshotVersion::EpochStart, &keys[5]).is_ok());
         // The 6-th key is still frozen
-        assert!(st
-            .lookup(SnapshotVersion::LastEpochStart, &keys[6])
-            .is_err());
+        assert!(
+            st.lookup(SnapshotVersion::LastEpochStart, &keys[6])
+                .is_err()
+        );
         assert!(st.lookup(SnapshotVersion::LastEpochStart, &keys[2]).is_ok());
 
         // Set value shall return the old value
@@ -325,16 +326,22 @@ mod tests {
         let proof = st
             .lookup_with_proof(SnapshotVersion::EpochStart, &keys[5])?
             .1;
-        assert!(proof
-            .verify(&st.commitment(SnapshotVersion::EpochStart)?)
-            .is_ok());
+        assert!(
+            proof
+                .verify(&st.commitment(SnapshotVersion::EpochStart)?)
+                .is_ok()
+        );
         // Membership proofs are tied with a specific version
-        assert!(proof
-            .verify(&st.commitment(SnapshotVersion::Head)?)
-            .is_err());
-        assert!(proof
-            .verify(&st.commitment(SnapshotVersion::LastEpochStart)?)
-            .is_err());
+        assert!(
+            proof
+                .verify(&st.commitment(SnapshotVersion::Head)?)
+                .is_err()
+        );
+        assert!(
+            proof
+                .verify(&st.commitment(SnapshotVersion::LastEpochStart)?)
+                .is_err()
+        );
 
         // Random test for sampling keys
         let mut rng = rand_chacha::ChaCha20Rng::seed_from_u64(41u64);

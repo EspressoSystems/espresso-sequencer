@@ -8,19 +8,19 @@ use std::{collections::HashMap, num::NonZeroUsize, rc::Rc, sync::Arc, time::Dura
 
 use async_lock::RwLock;
 use hotshot::{
+    HotShotInitializer, MarketplaceConfig, SystemContext, TwinsHandlerState,
     tasks::EventTransformerState,
     traits::{NetworkReliability, NodeImplementation, TestableNodeImplementation},
     types::SystemContextHandle,
-    HotShotInitializer, MarketplaceConfig, SystemContext, TwinsHandlerState,
 };
 use hotshot_example_types::{
     auction_results_provider_types::TestAuctionResultsProvider, node_types::TestTypes,
     state_types::TestInstanceState, storage_types::TestStorage, testable_delay::DelayConfig,
 };
 use hotshot_types::{
+    HotShotConfig, PeerConfig, ValidatorConfig,
     consensus::ConsensusMetricsValue,
     traits::node_implementation::{NodeType, Versions},
-    HotShotConfig, PeerConfig, ValidatorConfig,
 };
 use hotshot_utils::anytrace::*;
 use tide_disco::Url;
@@ -32,7 +32,7 @@ use super::{
     txn_task::TxnTaskDescription,
 };
 use crate::{
-    helpers::{key_pair_for_id, TestNodeKeyMap},
+    helpers::{TestNodeKeyMap, key_pair_for_id},
     spinning_task::SpinningTaskDescription,
     test_launcher::{Network, ResourceGenerators, TestLauncher},
     test_task::TestTaskStateSeed,
@@ -177,9 +177,11 @@ pub fn nonempty_block_threshold(threshold: (u64, u64)) -> TransactionValidator {
         }
 
         ensure!(
-          // i.e. num_nonempty_blocks / num_blocks >= threshold.0 / threshold.1
-          num_nonempty_blocks * threshold.1 >= threshold.0 * num_blocks,
-          "Failed to meet nonempty block threshold of {}/{}; got {num_nonempty_blocks} nonempty blocks out of a total of {num_blocks}", threshold.0, threshold.1
+            // i.e. num_nonempty_blocks / num_blocks >= threshold.0 / threshold.1
+            num_nonempty_blocks * threshold.1 >= threshold.0 * num_blocks,
+            "Failed to meet nonempty block threshold of {}/{}; got {num_nonempty_blocks} nonempty blocks out of a total of {num_blocks}",
+            threshold.0,
+            threshold.1
         );
 
         Ok(())
@@ -206,9 +208,11 @@ pub fn nonempty_block_limit(limit: (u64, u64)) -> TransactionValidator {
         }
 
         ensure!(
-          // i.e. num_nonempty_blocks / num_blocks <= limit.0 / limit.1
-          num_nonempty_blocks * limit.1 <= limit.0 * num_blocks,
-          "Exceeded nonempty block limit of {}/{}; got {num_nonempty_blocks} nonempty blocks out of a total of {num_blocks}", limit.0, limit.1
+            // i.e. num_nonempty_blocks / num_blocks <= limit.0 / limit.1
+            num_nonempty_blocks * limit.1 <= limit.0 * num_blocks,
+            "Exceeded nonempty block limit of {}/{}; got {num_nonempty_blocks} nonempty blocks out of a total of {num_blocks}",
+            limit.0,
+            limit.1
         );
 
         Ok(())
@@ -428,7 +432,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TestDescription
     }
 
     pub fn set_num_nodes(self, num_nodes: u64, num_da_nodes: u64) -> Self {
-        assert!(num_da_nodes <= num_nodes, "Cannot build test with fewer DA than total nodes. You may have mixed up the arguments to the function");
+        assert!(
+            num_da_nodes <= num_nodes,
+            "Cannot build test with fewer DA than total nodes. You may have mixed up the arguments to the function"
+        );
 
         let (staked_nodes, da_nodes) = gen_node_lists::<TYPES>(num_nodes, num_da_nodes);
 
@@ -508,10 +515,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> Default
 }
 
 impl<
-        TYPES: NodeType<InstanceState = TestInstanceState>,
-        I: TestableNodeImplementation<TYPES>,
-        V: Versions,
-    > TestDescription<TYPES, I, V>
+    TYPES: NodeType<InstanceState = TestInstanceState>,
+    I: TestableNodeImplementation<TYPES>,
+    V: Versions,
+> TestDescription<TYPES, I, V>
 where
     I: NodeImplementation<TYPES, AuctionResultsProvider = TestAuctionResultsProvider<TYPES>>,
 {

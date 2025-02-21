@@ -20,27 +20,27 @@ use std::{
 use async_lock::RwLock;
 use client::{BenchResults, BenchResultsDownloadConfig};
 use csv::Writer;
-use futures::{stream::FuturesUnordered, FutureExt, StreamExt};
+use futures::{FutureExt, StreamExt, stream::FuturesUnordered};
 use hotshot_types::{
+    PeerConfig,
     network::{BuilderType, NetworkConfig, PublicKeysFile},
     traits::signature_key::{SignatureKey, StakeTableEntryType},
-    PeerConfig,
 };
 use libp2p_identity::{
-    ed25519::{Keypair as EdKeypair, SecretKey},
     Keypair, PeerId,
+    ed25519::{Keypair as EdKeypair, SecretKey},
 };
 use multiaddr::Multiaddr;
 use surf_disco::Url;
 use tide_disco::{
+    Api, App, RequestError,
     api::ApiError,
     error::ServerError,
     method::{ReadState, WriteState},
-    Api, App, RequestError,
 };
 use vbs::{
-    version::{StaticVersion, StaticVersionType},
     BinarySerializer,
+    version::{StaticVersion, StaticVersionType},
 };
 
 /// Orchestrator is not, strictly speaking, bound to the network; it can have its own versioning.
@@ -107,7 +107,9 @@ impl<KEY: SignatureKey + 'static> OrchestratorState<KEY> {
         let mut fixed_stake_table = false;
 
         if network_config.config.known_nodes_with_stake.is_empty() {
-            println!("No nodes were loaded from the config file. Nodes will be allowed to register dynamically.");
+            println!(
+                "No nodes were loaded from the config file. Nodes will be allowed to register dynamically."
+            );
         } else {
             println!("Initializing orchestrator with fixed stake table.");
             peer_pub_ready = true;
@@ -351,8 +353,11 @@ where
         if node_config.da != da_requested {
             return Err(ServerError {
                 status: tide_disco::StatusCode::BAD_REQUEST,
-                message: format!("Mismatch in DA status in registration for node {}. DA requested: {}, expected: {}", node_index, da_requested, node_config.da),
-          });
+                message: format!(
+                    "Mismatch in DA status in registration for node {}. DA requested: {}, expected: {}",
+                    node_index, da_requested, node_config.da
+                ),
+            });
         }
 
         let added_to_da = node_config.da;
@@ -560,7 +565,9 @@ where
         } else {
             return Err(ServerError {
                 status: tide_disco::StatusCode::FORBIDDEN,
-                message: format!("We cannot manually start the network, because we only have {registered_nodes_with_stake} nodes with stake registered, with {registered_da_nodes} DA nodes.")
+                message: format!(
+                    "We cannot manually start the network, because we only have {registered_nodes_with_stake} nodes with stake registered, with {registered_da_nodes} DA nodes."
+                ),
             });
         }
 
@@ -827,7 +834,10 @@ where
     let env_password = std::env::var("ORCHESTRATOR_MANUAL_START_PASSWORD");
 
     if env_password.is_ok() {
-        tracing::warn!("Took orchestrator manual start password from the environment variable: ORCHESTRATOR_MANUAL_START_PASSWORD={:?}", env_password);
+        tracing::warn!(
+            "Took orchestrator manual start password from the environment variable: ORCHESTRATOR_MANUAL_START_PASSWORD={:?}",
+            env_password
+        );
         network_config.manual_start_password = env_password.ok();
     }
 

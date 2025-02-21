@@ -22,15 +22,15 @@ use hotshot_types::{
     simple_certificate::{QuorumCertificate2, UpgradeCertificate},
     simple_vote::HasEpoch,
     traits::{
+        BlockPayload, ValidatedState,
         block_contents::BlockHeader,
         election::Membership,
         node_implementation::{ConsensusTime, NodeImplementation, NodeType, Versions},
         signature_key::SignatureKey,
-        BlockPayload, ValidatedState,
     },
     utils::{
-        epoch_from_block_number, is_epoch_root, is_last_block_in_epoch,
-        option_epoch_from_block_number, Terminator, View, ViewInner,
+        Terminator, View, ViewInner, epoch_from_block_number, is_epoch_root,
+        is_last_block_in_epoch, option_epoch_from_block_number,
     },
     vote::{Certificate, HasViewNumber},
 };
@@ -670,8 +670,10 @@ pub async fn validate_proposal_safety_and_liveness<
                 .epochs_enabled(view_number)
                 .await
         {
-            ensure!(proposal.data.next_epoch_justify_qc().is_some(),
-            "Epoch transition proposal does not include the next epoch justify QC. Do not vote!");
+            ensure!(
+                proposal.data.next_epoch_justify_qc().is_some(),
+                "Epoch transition proposal does not include the next epoch justify QC. Do not vote!"
+            );
         }
 
         // Liveness check.
@@ -703,7 +705,12 @@ pub async fn validate_proposal_safety_and_liveness<
                 .await;
             }
 
-            error!("Failed safety and liveness check \n High QC is {:?}  Proposal QC is {:?}  Locked view is {:?}", consensus_reader.high_qc(), proposal.data.clone(), consensus_reader.locked_view())
+            error!(
+                "Failed safety and liveness check \n High QC is {:?}  Proposal QC is {:?}  Locked view is {:?}",
+                consensus_reader.high_qc(),
+                proposal.data.clone(),
+                consensus_reader.locked_view()
+            )
         });
     }
 

@@ -12,21 +12,21 @@ use std::{
 use async_broadcast::{Receiver, Sender};
 use async_lock::RwLock;
 use async_trait::async_trait;
-use futures::{future::join_all, stream::FuturesUnordered, StreamExt};
+use futures::{StreamExt, future::join_all, stream::FuturesUnordered};
 use hotshot_builder_api::v0_1::block_info::AvailableBlockInfo;
 use hotshot_task::task::TaskState;
 use hotshot_types::{
     consensus::OuterConsensus,
-    data::{null_block, PackedBundle},
+    data::{PackedBundle, null_block},
     event::{Event, EventType},
     message::UpgradeLock,
     traits::{
+        BlockPayload,
         auction_results_provider::AuctionResultsProvider,
         block_contents::{BuilderFee, EncodeBytes},
         election::Membership,
         node_implementation::{ConsensusTime, HasUrls, NodeImplementation, NodeType, Versions},
         signature_key::{BuilderSignatureKey, SignatureKey},
-        BlockPayload,
     },
     utils::ViewInner,
     vid::VidCommitment,
@@ -158,7 +158,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
         let version = match self.upgrade_lock.version(block_view).await {
             Ok(v) => v,
             Err(err) => {
-                tracing::error!("Upgrade certificate requires unsupported version, refusing to request blocks: {}", err);
+                tracing::error!(
+                    "Upgrade certificate requires unsupported version, refusing to request blocks: {}",
+                    err
+                );
                 return None;
             }
         };
@@ -389,7 +392,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
         let version = match self.upgrade_lock.version(block_view).await {
             Ok(v) => v,
             Err(err) => {
-                tracing::error!("Upgrade certificate requires unsupported version, refusing to request blocks: {}", err);
+                tracing::error!(
+                    "Upgrade certificate requires unsupported version, refusing to request blocks: {}",
+                    err
+                );
                 return None;
             }
         };
@@ -480,7 +486,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
                 ensure!(
                     *view > *self.cur_view && epoch >= self.cur_epoch,
                     debug!(
-                      "Received a view change to an older view and epoch: tried to change view to {:?}\
+                        "Received a view change to an older view and epoch: tried to change view to {:?}\
                       and epoch {:?} though we are at view {:?} and epoch {:?}",
                         view, epoch, self.cur_view, self.cur_epoch
                     )
@@ -775,8 +781,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
                 // verify the message signature and the fee_signature
                 if !header_input.validate_signature(block_info.offered_fee, &block_data.metadata) {
                     tracing::warn!(
-                    "Failed to verify available block header input data response message signature"
-                );
+                        "Failed to verify available block header input data response message signature"
+                    );
                     continue;
                 }
 

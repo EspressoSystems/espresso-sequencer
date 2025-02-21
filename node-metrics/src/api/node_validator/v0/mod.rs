@@ -8,15 +8,15 @@ use espresso_types::{BackoffParams, SeqTypes};
 use futures::channel::mpsc::SendError;
 use futures::future::Either;
 use futures::{
-    channel::mpsc::{self, Sender},
     FutureExt, Sink, SinkExt, Stream, StreamExt,
+    channel::mpsc::{self, Sender},
 };
 use hotshot_query_service::Leaf;
 use hotshot_stake_table::vec_based::StakeTable;
+use hotshot_types::PeerConfig;
 use hotshot_types::light_client::{CircuitField, StateVerKey};
 use hotshot_types::signature_key::BLSPubKey;
 use hotshot_types::traits::{signature_key::StakeTableEntryType, stake_table::StakeTableScheme};
-use hotshot_types::PeerConfig;
 use prometheus_parse::{Sample, Scrape};
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -26,7 +26,7 @@ use std::pin::Pin;
 use std::str::FromStr;
 use std::time::Duration;
 use tide_disco::socket::Connection;
-use tide_disco::{api::ApiError, Api};
+use tide_disco::{Api, api::ApiError};
 use tokio::spawn;
 use tokio::task::JoinHandle;
 use tokio::time::sleep;
@@ -768,7 +768,9 @@ pub fn populate_node_identity_from_scrape(node_identity: &mut NodeIdentity, scra
         } else {
             // We were unable to find the key for the public key on the metrics
             // scrape result.
-            tracing::warn!("scrape result doesn't seem to contain 'node' key, preventing us from verifying the public key");
+            tracing::warn!(
+                "scrape result doesn't seem to contain 'node' key, preventing us from verifying the public key"
+            );
             return;
         };
 
@@ -782,7 +784,9 @@ pub fn populate_node_identity_from_scrape(node_identity: &mut NodeIdentity, scra
         } else {
             // We were unable to find the sample for the public key on the metrics
             // scrape result.
-            tracing::warn!("scrape result doesn't seem to contain 'node' sample, preventing us from verifying the public key. This is especially odd considering that we found the 'node' key already.");
+            tracing::warn!(
+                "scrape result doesn't seem to contain 'node' sample, preventing us from verifying the public key. This is especially odd considering that we found the 'node' key already."
+            );
             return;
         };
 
@@ -799,7 +803,9 @@ pub fn populate_node_identity_from_scrape(node_identity: &mut NodeIdentity, scra
             }
         } else {
             // We were unable to find the public key in the scrape result.
-            tracing::warn!("scrape result doesn't seem to contain 'key' label in the 'node' sample, preventing us from verifying the public key. This is especially odd considering that we found the 'node' key and sample already.");
+            tracing::warn!(
+                "scrape result doesn't seem to contain 'key' label in the 'node' sample, preventing us from verifying the public key. This is especially odd considering that we found the 'node' key and sample already."
+            );
             return;
         };
 
@@ -807,7 +813,9 @@ pub fn populate_node_identity_from_scrape(node_identity: &mut NodeIdentity, scra
         let node_identity_public_key_string = node_identity.public_key().to_string();
 
         if public_key_from_scrape_string != node_identity_public_key_string {
-            tracing::warn!("node identity public key doesn't match public key in scrape, are we hitting the wrong URL, or is it behind a load balancer between multiple nodes?");
+            tracing::warn!(
+                "node identity public key doesn't match public key in scrape, are we hitting the wrong URL, or is it behind a load balancer between multiple nodes?"
+            );
             return;
         }
 
@@ -958,7 +966,10 @@ impl ProcessNodeIdentityUrlStreamTask {
 
                 // We will be unable to provide any additional node identity
                 // updates. This is considered a critical error.
-                panic!("ProcessNodeIdentityUrlStreamTask node_identity_sender closed, future node identity information will stagnate: {}", err);
+                panic!(
+                    "ProcessNodeIdentityUrlStreamTask node_identity_sender closed, future node identity information will stagnate: {}",
+                    err
+                );
             }
         }
     }

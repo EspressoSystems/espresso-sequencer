@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use client::SequencerClient;
 use espresso_types::{FeeAmount, FeeVersion, MarketplaceVersion};
 use ethers::prelude::*;

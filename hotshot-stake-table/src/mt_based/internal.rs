@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 use tagged_base64::tagged;
 
 use super::config::{Digest, FieldType, TREE_BRANCH};
-use crate::utils::{u256_to_field, ToFields};
+use crate::utils::{ToFields, u256_to_field};
 
 /// Common trait bounds for generic key type `K` for [`PersistentMerkleNode`]
 pub trait Key:
@@ -634,7 +634,7 @@ mod tests {
     use jf_utils::test_rng;
     use primitive_types::U256;
 
-    use super::{super::config, to_merkle_path, PersistentMerkleNode};
+    use super::{super::config, PersistentMerkleNode, to_merkle_path};
 
     type Key = ark_bn254::Fq;
 
@@ -696,11 +696,13 @@ mod tests {
 
         // test for `set_value`
         // `set_value` with wrong key should fail
-        assert!(roots
-            .last()
-            .unwrap()
-            .set_value(height, &path[2], &keys[1], U256::from(100))
-            .is_err());
+        assert!(
+            roots
+                .last()
+                .unwrap()
+                .set_value(height, &path[2], &keys[1], U256::from(100))
+                .is_err()
+        );
         // A successful `set_value`
         let (new_root, value) = roots
             .last()
@@ -721,17 +723,21 @@ mod tests {
 
         // test for `update`
         // `update` with a wrong key should fail
-        assert!(roots
-            .last()
-            .unwrap()
-            .update(height, &path[3], &keys[0], U256::from(10), false)
-            .is_err());
+        assert!(
+            roots
+                .last()
+                .unwrap()
+                .update(height, &path[3], &keys[0], U256::from(10), false)
+                .is_err()
+        );
         // `update` that results in a negative stake should fail
-        assert!(roots
-            .last()
-            .unwrap()
-            .update(height, &path[3], &keys[3], U256::from(200), true)
-            .is_err());
+        assert!(
+            roots
+                .last()
+                .unwrap()
+                .update(height, &path[3], &keys[3], U256::from(200), true)
+                .is_err()
+        );
         // A successful `update`
         let (new_root, value) = roots
             .last()

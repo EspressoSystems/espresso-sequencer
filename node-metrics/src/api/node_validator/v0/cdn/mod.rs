@@ -1,6 +1,6 @@
 use crate::api::node_validator::v0::create_node_validator_api::ExternalMessage;
 use espresso_types::{PubKey, SeqTypes};
-use futures::{channel::mpsc::SendError, Sink, SinkExt};
+use futures::{Sink, SinkExt, channel::mpsc::SendError};
 use hotshot::{
     traits::NetworkError,
     types::{Message, SignatureKey},
@@ -285,11 +285,11 @@ mod test {
     };
     use core::panic;
     use espresso_types::SeqTypes;
-    use futures::channel::mpsc::Sender;
     use futures::SinkExt;
+    use futures::channel::mpsc::Sender;
     use futures::{
-        channel::mpsc::{self},
         StreamExt,
+        channel::mpsc::{self},
     };
     use hotshot::types::SignatureKey;
     use hotshot::{

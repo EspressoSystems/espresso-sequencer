@@ -6,7 +6,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use contract_bindings_ethers::light_client::{LightClient, LightClientErrors};
 use displaydoc::Display;
 use ethers::middleware::{
@@ -18,15 +18,16 @@ use ethers::{
     middleware::SignerMiddleware,
     providers::{Http, Middleware, Provider, ProviderError},
     signers::{LocalWallet, Signer, Wallet},
-    types::{transaction::eip2718::TypedTransaction, Address, U256},
+    types::{Address, U256, transaction::eip2718::TypedTransaction},
 };
 use futures::FutureExt;
 use hotshot_contract_adapter::{
-    jellyfish::{field_to_u256, ParsedPlonkProof},
+    jellyfish::{ParsedPlonkProof, field_to_u256},
     light_client::{ParsedLightClientState, ParsedStakeTableState},
 };
-use hotshot_stake_table::vec_based::{config::FieldType, StakeTable};
+use hotshot_stake_table::vec_based::{StakeTable, config::FieldType};
 use hotshot_types::{
+    PeerConfig,
     light_client::{
         CircuitField, LightClientState, PublicInput, StakeTableState, StateSignaturesBundle,
         StateVerKey,
@@ -36,7 +37,6 @@ use hotshot_types::{
         signature_key::StakeTableEntryType,
         stake_table::{SnapshotVersion, StakeTableError, StakeTableScheme as _},
     },
-    PeerConfig,
 };
 use jf_pcs::prelude::UnivariateUniversalParams;
 use jf_plonk::errors::PlonkError;
@@ -46,13 +46,13 @@ use sequencer_utils::blocknative::BlockNative;
 use sequencer_utils::deployer::is_proxy_contract;
 use serde::Deserialize;
 use surf_disco::Client;
-use tide_disco::{error::ServerError, Api};
+use tide_disco::{Api, error::ServerError};
 use time::ext::InstantExt;
 use tokio::{io, spawn, task::spawn_blocking, time::sleep};
 use url::Url;
 use vbs::version::StaticVersionType;
 
-use crate::snark::{generate_state_update_proof, Proof, ProvingKey};
+use crate::snark::{Proof, ProvingKey, generate_state_update_proof};
 
 /// A wallet with local signer and connected to network via http
 pub type SignerWallet = SignerMiddleware<Provider<Http>, LocalWallet>;
@@ -589,7 +589,7 @@ mod test {
     };
     use hotshot_stake_table::vec_based::StakeTable;
     use hotshot_types::light_client::StateSignKey;
-    use jf_signature::{schnorr::SchnorrSignatureScheme, SignatureScheme};
+    use jf_signature::{SignatureScheme, schnorr::SchnorrSignatureScheme};
     use jf_utils::test_rng;
     use sequencer_utils::{
         deployer::{self, test_helpers::deploy_light_client_contract_as_proxy_for_test},
@@ -832,13 +832,15 @@ mod test {
             ..Default::default()
         };
 
-        assert!(config
-            .validate_light_client_contract()
-            .await
-            .err()
-            .unwrap()
-            .to_string()
-            .contains("not a proxy"));
+        assert!(
+            config
+                .validate_light_client_contract()
+                .await
+                .err()
+                .unwrap()
+                .to_string()
+                .contains("not a proxy")
+        );
         Ok(())
     }
 

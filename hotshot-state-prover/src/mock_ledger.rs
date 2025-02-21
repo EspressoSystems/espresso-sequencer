@@ -5,8 +5,8 @@ use ark_bn254::Bn254;
 use ark_ed_on_bn254::EdwardsConfig;
 use ark_ff::PrimeField;
 use ark_std::{
-    rand::{rngs::StdRng, CryptoRng, Rng, RngCore},
     UniformRand,
+    rand::{CryptoRng, Rng, RngCore, rngs::StdRng},
 };
 use ethers::types::U256;
 use hotshot_contract_adapter::{
@@ -29,14 +29,14 @@ use jf_plonk::{
 };
 use jf_relation::{Arithmetization, Circuit, PlonkCircuit};
 use jf_signature::{
+    SignatureScheme,
     bls_over_bn254::{BLSOverBN254CurveSignatureScheme, VerKey as BLSVerKey},
     schnorr::{SchnorrSignatureScheme, Signature},
-    SignatureScheme,
 };
 use jf_utils::test_rng;
 
 use crate::{
-    generate_state_update_proof, preprocess, service::one_honest_threshold, Proof, VerifyingKey,
+    Proof, VerifyingKey, generate_state_update_proof, preprocess, service::one_honest_threshold,
 };
 
 type F = ark_ed_on_bn254::Fq;

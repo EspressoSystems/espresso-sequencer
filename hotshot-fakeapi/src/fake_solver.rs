@@ -9,10 +9,10 @@ use futures::FutureExt;
 use hotshot_example_types::auction_results_provider_types::TestAuctionResult;
 use hotshot_types::traits::{node_implementation::NodeType, signature_key::SignatureKey};
 use tide_disco::{
+    Api, App, Url,
     api::ApiError,
     error::ServerError,
     method::{ReadState, WriteState},
-    Api, App, Url,
 };
 use vbs::version::{StaticVersion, StaticVersionType};
 

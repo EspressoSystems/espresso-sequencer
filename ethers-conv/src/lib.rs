@@ -1,10 +1,10 @@
 use alloy::{
     eips::BlockNumberOrTag,
-    primitives::{Address, Bloom, Bytes, B256, B64, I256, U256, U64},
+    primitives::{Address, B64, B256, Bloom, Bytes, I256, U64, U256},
 };
 use ethers::core::types::{
-    BlockNumber, Bloom as EthersBloom, Bytes as EthersBytes, H160, H256, H64, I256 as EthersI256,
-    U256 as EthersU256, U64 as EthersU64,
+    BlockNumber, Bloom as EthersBloom, Bytes as EthersBytes, H64, H160, H256, I256 as EthersI256,
+    U64 as EthersU64, U256 as EthersU256,
 };
 
 pub trait ToAlloy {
@@ -109,7 +109,7 @@ impl ToEthers for Address {
 
     #[inline(always)]
     fn to_ethers(self) -> Self::To {
-        H160(self.0 .0)
+        H160(self.0.0)
     }
 }
 

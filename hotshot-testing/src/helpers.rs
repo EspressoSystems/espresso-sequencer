@@ -12,9 +12,9 @@ use async_lock::RwLock;
 use bitvec::bitvec;
 use committable::Committable;
 use hotshot::{
+    HotShotInitializer, SystemContext,
     traits::{NodeImplementation, TestableNodeImplementation},
     types::{SignatureKey, SystemContextHandle},
-    HotShotInitializer, SystemContext,
 };
 use hotshot_example_types::{
     auction_results_provider_types::TestAuctionResultsProvider,
@@ -25,6 +25,7 @@ use hotshot_example_types::{
 };
 use hotshot_task_impls::events::HotShotEvent;
 use hotshot_types::{
+    ValidatorConfig,
     consensus::ConsensusMetricsValue,
     data::{Leaf2, VidDisperse, VidDisperseShare},
     message::{Proposal, UpgradeLock},
@@ -35,10 +36,9 @@ use hotshot_types::{
         election::Membership,
         node_implementation::{NodeType, Versions},
     },
-    utils::{option_epoch_from_block_number, View, ViewInner},
-    vid::{advz_scheme, VidCommitment, VidProposal, VidSchemeType},
+    utils::{View, ViewInner, option_epoch_from_block_number},
+    vid::{VidCommitment, VidProposal, VidSchemeType, advz_scheme},
     vote::{Certificate, HasViewNumber, Vote},
-    ValidatorConfig,
 };
 use jf_vid::VidScheme;
 use primitive_types::U256;

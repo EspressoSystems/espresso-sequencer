@@ -101,10 +101,10 @@ pub mod service;
 
 use crate::{
     api::node_validator::v0::{
+        HotshotQueryServiceLeafStreamRetriever, ProcessProduceLeafStreamTask, STATIC_VER_0_1,
+        StateClientMessageSender,
         cdn::{BroadcastRollCallTask, CdnReceiveMessagesTask},
-        create_node_validator_api::{create_node_validator_processing, NodeValidatorConfig},
-        HotshotQueryServiceLeafStreamRetriever, ProcessProduceLeafStreamTask,
-        StateClientMessageSender, STATIC_VER_0_1,
+        create_node_validator_api::{NodeValidatorConfig, create_node_validator_processing},
     },
     service::{client_message::InternalClientMessage, server_message::ServerMessage},
 };

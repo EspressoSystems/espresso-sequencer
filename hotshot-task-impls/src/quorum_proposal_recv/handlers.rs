@@ -8,7 +8,7 @@
 
 use std::sync::Arc;
 
-use async_broadcast::{broadcast, Receiver, Sender};
+use async_broadcast::{Receiver, Sender, broadcast};
 use async_lock::{RwLock, RwLockUpgradableReadGuard};
 use committable::Committable;
 use hotshot_types::{
@@ -18,14 +18,14 @@ use hotshot_types::{
     simple_certificate::QuorumCertificate,
     simple_vote::HasEpoch,
     traits::{
+        ValidatedState,
         block_contents::BlockHeader,
         election::Membership,
         node_implementation::{ConsensusTime, NodeImplementation, NodeType},
         signature_key::SignatureKey,
         storage::Storage,
-        ValidatedState,
     },
-    utils::{option_epoch_from_block_number, View, ViewInner},
+    utils::{View, ViewInner, option_epoch_from_block_number},
     vote::{Certificate, HasViewNumber},
 };
 use hotshot_utils::anytrace::*;

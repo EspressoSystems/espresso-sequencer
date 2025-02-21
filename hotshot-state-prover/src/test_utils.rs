@@ -7,9 +7,9 @@ use hotshot_types::{
     traits::stake_table::{SnapshotVersion, StakeTableScheme},
 };
 use jf_signature::{
+    SignatureScheme,
     bls_over_bn254::{BLSOverBN254CurveSignatureScheme, VerKey as BLSVerKey},
     schnorr::SchnorrSignatureScheme,
-    SignatureScheme,
 };
 
 use crate::{circuit::u256_to_field, service::one_honest_threshold};

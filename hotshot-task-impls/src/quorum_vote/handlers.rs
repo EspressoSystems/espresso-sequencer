@@ -13,17 +13,17 @@ use committable::Committable;
 use hotshot_types::{
     consensus::OuterConsensus,
     data::{Leaf2, QuorumProposalWrapper, VidDisperseShare},
-    drb::{compute_drb_result, DrbResult},
+    drb::{DrbResult, compute_drb_result},
     event::{Event, EventType},
-    message::{convert_proposal, Proposal, UpgradeLock},
+    message::{Proposal, UpgradeLock, convert_proposal},
     simple_vote::{HasEpoch, QuorumData2, QuorumVote2},
     traits::{
+        ValidatedState,
         block_contents::BlockHeader,
         election::Membership,
         node_implementation::{ConsensusTime, NodeImplementation, NodeType},
         signature_key::SignatureKey,
         storage::Storage,
-        ValidatedState,
     },
     utils::{
         epoch_from_block_number, is_epoch_root, is_last_block_in_epoch,
@@ -40,8 +40,8 @@ use super::QuorumVoteTaskState;
 use crate::{
     events::HotShotEvent,
     helpers::{
-        broadcast_event, decide_from_proposal, decide_from_proposal_2, fetch_proposal,
-        LeafChainTraversalOutcome,
+        LeafChainTraversalOutcome, broadcast_event, decide_from_proposal, decide_from_proposal_2,
+        fetch_proposal,
     },
     quorum_vote::Versions,
 };
@@ -157,7 +157,13 @@ async fn verify_drb_result<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Ver
             let computed_result =
                 store_and_get_computed_drb_result(epoch_val + 1, task_state).await?;
 
-            ensure!(proposal_result == computed_result, warn!("Our calculated DRB result is {:?}, which does not match the proposed DRB result of {:?}", computed_result, proposal_result));
+            ensure!(
+                proposal_result == computed_result,
+                warn!(
+                    "Our calculated DRB result is {:?}, which does not match the proposed DRB result of {:?}",
+                    computed_result, proposal_result
+                )
+            );
         }
 
         Ok(())

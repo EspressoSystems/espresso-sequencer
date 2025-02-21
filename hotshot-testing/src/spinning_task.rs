@@ -14,7 +14,7 @@ use async_lock::RwLock;
 use async_trait::async_trait;
 use futures::future::join_all;
 use hotshot::{
-    traits::TestableNodeImplementation, types::EventType, HotShotInitializer, SystemContext,
+    HotShotInitializer, SystemContext, traits::TestableNodeImplementation, types::EventType,
 };
 use hotshot_example_types::{
     auction_results_provider_types::TestAuctionResultsProvider,
@@ -24,6 +24,7 @@ use hotshot_example_types::{
     testable_delay::DelayConfig,
 };
 use hotshot_types::{
+    ValidatorConfig,
     constants::EVENT_CHANNEL_SIZE,
     data::Leaf2,
     event::Event,
@@ -35,7 +36,6 @@ use hotshot_types::{
     },
     utils::genesis_epoch_from_version,
     vote::HasViewNumber,
-    ValidatorConfig,
 };
 use hotshot_utils::anytrace::*;
 
@@ -81,23 +81,23 @@ pub struct SpinningTask<
 
 #[async_trait]
 impl<
-        TYPES: NodeType<
+    TYPES: NodeType<
             InstanceState = TestInstanceState,
             ValidatedState = TestValidatedState,
             BlockHeader = TestBlockHeader,
         >,
-        I: TestableNodeImplementation<TYPES>,
-        N: ConnectedNetwork<TYPES::SignatureKey>,
-        V: Versions,
-    > TestTaskState for SpinningTask<TYPES, N, I, V>
+    I: TestableNodeImplementation<TYPES>,
+    N: ConnectedNetwork<TYPES::SignatureKey>,
+    V: Versions,
+> TestTaskState for SpinningTask<TYPES, N, I, V>
 where
     I: TestableNodeImplementation<TYPES>,
     I: NodeImplementation<
-        TYPES,
-        Network = N,
-        Storage = TestStorage<TYPES>,
-        AuctionResultsProvider = TestAuctionResultsProvider<TYPES>,
-    >,
+            TYPES,
+            Network = N,
+            Storage = TestStorage<TYPES>,
+            AuctionResultsProvider = TestAuctionResultsProvider<TYPES>,
+        >,
 {
     type Event = Event<TYPES>;
     type Error = Error;

@@ -13,7 +13,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use anyhow::{ensure, Context, Result};
+use anyhow::{Context, Result, ensure};
 use async_broadcast::{Receiver, Sender};
 use async_lock::RwLock;
 use committable::Committable;

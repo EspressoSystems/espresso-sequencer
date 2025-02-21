@@ -2,8 +2,8 @@ use std::{num::NonZeroUsize, path::PathBuf, time::Duration};
 
 use clap::Parser;
 use espresso_types::{
-    eth_signature_key::EthKeyPair, parse_duration, FeeAmount, FeeVersion, MarketplaceVersion,
-    NamespaceId, SequencerVersions, V0_0,
+    FeeAmount, FeeVersion, MarketplaceVersion, NamespaceId, SequencerVersions, V0_0,
+    eth_signature_key::EthKeyPair, parse_duration,
 };
 use futures::future::pending;
 use hotshot::helpers::initialize_logging;
@@ -12,7 +12,7 @@ use hotshot_types::{
     traits::node_implementation::{ConsensusTime, Versions},
 };
 use marketplace_builder::{
-    builder::{build_instance_state, BuilderConfig},
+    builder::{BuilderConfig, build_instance_state},
     hooks::BidConfig,
 };
 use sequencer::{Genesis, L1Params};

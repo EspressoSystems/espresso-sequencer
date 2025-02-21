@@ -36,18 +36,18 @@ use hotshot_types::{
         UpgradeProposalData, UpgradeVote, ViewSyncFinalizeData2, ViewSyncFinalizeVote2,
     },
     traits::{
+        BlockPayload,
         consensus_api::ConsensusApi,
         election::Membership,
         node_implementation::{ConsensusTime, NodeType, Versions},
-        BlockPayload,
     },
     utils::genesis_epoch_from_version,
 };
-use rand::{thread_rng, Rng};
+use rand::{Rng, thread_rng};
 use sha2::{Digest, Sha256};
 
 use crate::helpers::{
-    build_cert, build_da_certificate, build_vid_proposal, da_payload_commitment, TestNodeKeyMap,
+    TestNodeKeyMap, build_cert, build_da_certificate, build_vid_proposal, da_payload_commitment,
 };
 
 #[derive(Clone)]

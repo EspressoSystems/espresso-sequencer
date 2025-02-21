@@ -12,24 +12,24 @@ use std::{
 use async_lock::RwLock;
 use async_trait::async_trait;
 use espresso_types::{
+    FeeVersion, MarketplaceVersion, SeqTypes, SequencerVersions,
     eth_signature_key::EthKeyPair,
     v0::traits::{PersistenceOptions, SequencerPersistence, StateCatchup},
     v0_99::BidTxBody,
-    FeeVersion, MarketplaceVersion, SeqTypes, SequencerVersions,
 };
 use ethers::{
     core::k256::ecdsa::SigningKey,
-    signers::{coins_bip39::English, MnemonicBuilder, Signer as _, Wallet},
+    signers::{MnemonicBuilder, Signer as _, Wallet, coins_bip39::English},
     types::{Address, U256},
 };
 use futures::{
-    future::{join_all, Future},
+    future::{Future, join_all},
     stream::{Stream, StreamExt},
 };
 use hotshot::{
+    HotShotInitializer, SystemContext,
     traits::election::static_committee::StaticCommittee,
     types::{SignatureKey, SystemContextHandle},
-    HotShotInitializer, SystemContext,
 };
 use hotshot_builder_api::v0_99::builder::{
     BuildError, Error as BuilderApiError, Options as HotshotBuilderApiOptions,
@@ -42,32 +42,32 @@ use tokio::{spawn, task::JoinHandle};
 // Should move `STAKE_TABLE_CAPACITY` in the sequencer repo when we have variate stake table support
 use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
 use hotshot_types::{
+    HotShotConfig, PeerConfig, ValidatorConfig,
     consensus::ConsensusMetricsValue,
     event::LeafInfo,
     light_client::StateKeyPair,
     signature_key::{BLSPrivKey, BLSPubKey},
     traits::{
         block_contents::{
-            vid_commitment, BlockHeader, BlockPayload, EncodeBytes, GENESIS_VID_NUM_STORAGE_NODES,
+            BlockHeader, BlockPayload, EncodeBytes, GENESIS_VID_NUM_STORAGE_NODES, vid_commitment,
         },
         election::Membership,
         metrics::Metrics,
         node_implementation::{ConsensusTime, NodeType, Versions},
     },
     utils::BuilderCommitment,
-    HotShotConfig, PeerConfig, ValidatorConfig,
 };
-use jf_merkle_tree::{namespaced_merkle_tree::NamespacedMerkleTreeScheme, MerkleTreeScheme};
+use jf_merkle_tree::{MerkleTreeScheme, namespaced_merkle_tree::NamespacedMerkleTreeScheme};
 use jf_signature::bls_over_bn254::VerKey;
 use sequencer::{
+    L1Params, NetworkParams, Node, SequencerApiVersion,
     catchup::StatePeers,
     context::{Consensus, SequencerContext},
     network,
-    state_signature::{static_stake_table_commitment, StakeTableCommitmentType, StateSigner},
-    L1Params, NetworkParams, Node, SequencerApiVersion,
+    state_signature::{StakeTableCommitmentType, StateSigner, static_stake_table_commitment},
 };
 use surf_disco::Client;
-use tide_disco::{app, method::ReadState, App, Url};
+use tide_disco::{App, Url, app, method::ReadState};
 use tracing::error;
 use vbs::version::{StaticVersion, StaticVersionType};
 

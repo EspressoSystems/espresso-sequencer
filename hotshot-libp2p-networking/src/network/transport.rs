@@ -6,18 +6,18 @@ use std::{
     task::Poll,
 };
 
-use anyhow::{ensure, Context, Result as AnyhowResult};
+use anyhow::{Context, Result as AnyhowResult, ensure};
 use async_lock::RwLock;
-use futures::{future::poll_fn, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+use futures::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, future::poll_fn};
 use hotshot_types::traits::{node_implementation::NodeType, signature_key::SignatureKey};
 use libp2p::{
+    Transport,
     core::{
+        StreamMuxer,
         muxing::StreamMuxerExt,
         transport::{DialOpts, TransportEvent},
-        StreamMuxer,
     },
     identity::PeerId,
-    Transport,
 };
 use pin_project::pin_project;
 use serde::{Deserialize, Serialize};
@@ -149,7 +149,6 @@ impl<T: Transport, Types: NodeType, C: StreamMuxer + Unpin> StakeTableAuthentica
     where
         T::Error: From<<C as StreamMuxer>::Error> + From<IoError>,
         T::Output: AsOutput<C> + Send,
-
         C::Substream: Unpin + Send,
     {
         // Create a new upgrade that performs the authentication handshake on top
@@ -294,7 +293,6 @@ where
     T::ListenerUpgrade: Send + 'static,
     T::Output: AsOutput<C> + Send,
     T::Error: From<<C as StreamMuxer>::Error> + From<IoError>,
-
     C::Substream: Unpin + Send,
 {
     // `Dial` is for connecting out, `ListenerUpgrade` is for accepting incoming connections
@@ -491,10 +489,10 @@ mod test {
 
     use hotshot_example_types::node_types::TestTypes;
     use hotshot_types::{
+        PeerConfig,
         light_client::StateVerKey,
         signature_key::BLSPubKey,
         traits::{election::Membership, signature_key::SignatureKey},
-        PeerConfig,
     };
     use libp2p::{core::transport::dummy::DummyTransport, quic::Connection};
     use rand::Rng;
