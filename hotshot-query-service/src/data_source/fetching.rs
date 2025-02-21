@@ -1751,7 +1751,7 @@ impl Heights {
     }
 
     fn might_exist(self, h: u64) -> bool {
-        h < self.height && self.pruned_height.map_or(true, |ph| h > ph)
+        h < self.height && self.pruned_height.is_none_or(|ph| h > ph)
     }
 }
 
