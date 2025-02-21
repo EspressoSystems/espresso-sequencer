@@ -1,6 +1,8 @@
-use super::{
-    v0_3::{DAMembers, StakeTable, StakeTables},
-    Header, L1Client, NodeState, PubKey, SeqTypes,
+use std::{
+    cmp::max,
+    collections::{BTreeMap, BTreeSet, HashMap},
+    num::NonZeroU64,
+    str::FromStr,
 };
 
 use async_trait::async_trait;
@@ -11,7 +13,10 @@ use hotshot::types::{BLSPubKey, SignatureKey as _};
 use hotshot_contract_adapter::stake_table::{bls_alloy_to_jf, NodeInfoJf};
 use hotshot_types::{
     data::EpochNumber,
-    drb::DrbResult,
+    drb::{
+        election::{generate_stake_cdf, select_randomized_leader, RandomizedCommittee},
+        DrbResult,
+    },
     stake_table::StakeTableEntry,
     traits::{
         election::Membership,
@@ -21,15 +26,13 @@ use hotshot_types::{
     PeerConfig,
 };
 use itertools::Itertools;
-use std::{
-    cmp::max,
-    collections::{BTreeMap, BTreeSet, HashMap},
-    num::NonZeroU64,
-    str::FromStr,
-};
 use thiserror::Error;
-
 use url::Url;
+
+use super::{
+    v0_3::{DAMembers, StakeTable, StakeTables},
+    Header, L1Client, NodeState, PubKey, SeqTypes,
+};
 
 type Epoch = <SeqTypes as NodeType>::Epoch;
 
@@ -107,8 +110,8 @@ pub struct EpochCommittees {
     /// Address of Stake Table Contract
     contract_address: Option<Address>,
 
-    /// The results of DRB calculations
-    drb_result_table: BTreeMap<Epoch, DrbResult>,
+    /// Randomized committees, filled when we receive the DrbResult
+    randomized_committees: BTreeMap<Epoch, RandomizedCommittee<StakeTableEntry<PubKey>>>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -256,7 +259,7 @@ impl EpochCommittees {
             _epoch_size: epoch_size,
             l1_client: instance_state.l1_client.clone(),
             contract_address: instance_state.chain_config.stake_table_contract,
-            drb_result_table: BTreeMap::new(),
+            randomized_committees: BTreeMap::new(),
         }
     }
 
@@ -337,7 +340,7 @@ impl Membership<SeqTypes> for EpochCommittees {
             l1_client: L1Client::new(vec![Url::from_str("http:://ab.b").unwrap()])
                 .expect("Failed to create L1 client"),
             contract_address: None,
-            drb_result_table: BTreeMap::new(),
+            randomized_committees: BTreeMap::new(),
         }
     }
 
@@ -432,15 +435,26 @@ impl Membership<SeqTypes> for EpochCommittees {
         view_number: <SeqTypes as NodeType>::View,
         epoch: Option<Epoch>,
     ) -> Result<PubKey, Self::Error> {
-        let leaders = self
-            .state(&epoch)
-            .ok_or(LeaderLookupError)?
-            .eligible_leaders
-            .clone();
+        if let Some(epoch) = epoch {
+            let Some(randomized_committee) = self.randomized_committees.get(&epoch) else {
+                tracing::error!(
+                    "We are missing the randomized committee for epoch {}",
+                    epoch
+                );
+                return Err(LeaderLookupError);
+            };
 
-        let index = *view_number as usize % leaders.len();
-        let res = leaders[index].clone();
-        Ok(PubKey::public_key(&res))
+            Ok(PubKey::public_key(&select_randomized_leader(
+                randomized_committee,
+                *view_number,
+            )))
+        } else {
+            let leaders = &self.non_epoch_committee.eligible_leaders;
+
+            let index = *view_number as usize % leaders.len();
+            let res = leaders[index].clone();
+            Ok(PubKey::public_key(&res))
+        }
     }
 
     /// Get the total number of nodes in the committee
@@ -504,8 +518,17 @@ impl Membership<SeqTypes> for EpochCommittees {
             })
     }
 
-    fn add_drb_result(&mut self, epoch: Epoch, drb_result: DrbResult) {
-        self.drb_result_table.insert(epoch, drb_result);
+    fn add_drb_result(&mut self, epoch: Epoch, drb: DrbResult) {
+        let Some(raw_stake_table) = self.state.get(&epoch) else {
+            tracing::error!("add_drb_result({}, {:?}) was called, but we do not yet have the stake table for epoch {}", epoch, drb, epoch);
+            return;
+        };
+
+        let randomized_committee =
+            generate_stake_cdf(raw_stake_table.eligible_leaders.clone(), drb);
+
+        self.randomized_committees
+            .insert(epoch, randomized_committee);
     }
 }
 
