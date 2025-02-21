@@ -465,12 +465,10 @@ impl L1Client {
                             }
                         }
                     }
-
-                    // TODO consider what to do with result
-                    let _ = {
+                    {
                         let st = StakeTables::from_l1_events(events);
                         let mut state = state.lock().await;
-                        state.stake.push(finalized.number, st)
+                        state.put_stake_tables(finalized.number, st)
                     };
                     sleep(retry_delay).await;
                 }
@@ -1042,6 +1040,18 @@ impl L1State {
                     ?old_info,
                     ?info,
                     "got different info for the same finalized height; something has gone very wrong with the L1",
+                );
+            }
+        }
+    }
+
+    fn put_stake_tables(&mut self, block_number: u64, st: StakeTables) {
+        if let Some((old_block_number, old_stake)) = self.stake.push(block_number, st.clone()) {
+            if old_block_number == block_number {
+                tracing::error!(
+                    ?old_stake,
+                    ?st,
+                    "got different stake_tables for the same finalized height; something has gone very wrong with the L1",
                 );
             }
         }
