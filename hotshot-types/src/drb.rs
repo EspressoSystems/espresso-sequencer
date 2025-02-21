@@ -186,9 +186,9 @@ pub fn generate_stake_cdf<Key: SignatureKey, Entry: StakeTableEntryType<Key>>(
     }
 
     RandomizedCommittee {
-      cdf,
-      stake_table_hash: hasher.finalize().into(),
-      drb, 
+        cdf,
+        stake_table_hash: hasher.finalize().into(),
+        drb,
     }
 }
 
@@ -203,7 +203,11 @@ pub fn select_randomized_leader<SignatureKey, Entry: StakeTableEntryType<Signatu
     randomized_committee: &RandomizedCommittee<Entry>,
     view: u64,
 ) -> Entry {
-    let RandomizedCommittee { cdf, stake_table_hash, drb } = randomized_committee;
+    let RandomizedCommittee {
+        cdf,
+        stake_table_hash,
+        drb,
+    } = randomized_committee;
     // We hash the concatenated drb, view and stake table hash.
     let mut hasher = Sha512::new();
     hasher.update(drb);
@@ -219,7 +223,11 @@ pub fn select_randomized_leader<SignatureKey, Entry: StakeTableEntryType<Signatu
     let breakpoint: U256 = U256::try_from(remainder).unwrap();
 
     // now find the first index where the breakpoint is strictly smaller than the cdf
-    let index = cdf.partition_point(|(_, cumulative_stake)| breakpoint < *cumulative_stake);
+    //
+    // in principle, this may result in an index larger than `cdf.len()`.
+    // however, we have ensured by construction that `breakpoint < total_stake`
+    // and so the largest index we can actually return is `cdf.len() - 1`
+    let index = cdf.partition_point(|(_, cumulative_stake)| breakpoint >= *cumulative_stake);
 
     // and return the corresponding entry
     cdf[index].0.clone()
@@ -227,10 +235,10 @@ pub fn select_randomized_leader<SignatureKey, Entry: StakeTableEntryType<Signatu
 
 #[derive(Clone, Debug)]
 pub struct RandomizedCommittee<Entry> {
-  /// cdf of nodes by cumulative stake
-  cdf: Vec<(Entry, U256)>,
-  /// Hash of the stake table
-  stake_table_hash: [u8; 32],
-  /// DRB result
-  drb: [u8; 32],
+    /// cdf of nodes by cumulative stake
+    cdf: Vec<(Entry, U256)>,
+    /// Hash of the stake table
+    stake_table_hash: [u8; 32],
+    /// DRB result
+    drb: [u8; 32],
 }
