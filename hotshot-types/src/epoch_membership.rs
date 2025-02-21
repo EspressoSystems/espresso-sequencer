@@ -427,7 +427,7 @@ impl<TYPES: NodeType> EpochMembership<TYPES> {
             .upgrade_threshold(self.epoch)
     }
 
-    /// Add the epoch result to the memebership
+    /// Add the epoch result to the membership
     pub async fn add_drb_result(&self, drb_result: DrbResult) {
         if let Some(epoch) = self.epoch() {
             self.coordinator
