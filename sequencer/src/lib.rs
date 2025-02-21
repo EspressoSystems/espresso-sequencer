@@ -204,6 +204,7 @@ pub async fn init_node<P: SequencerPersistence, V: Versions>(
     identity: Identity,
     marketplace_config: MarketplaceConfig<SeqTypes, Node<network::Production, P>>,
     proposal_fetcher_config: ProposalFetcherConfig,
+    initial_stake_table_path: Option<String>,
 ) -> anyhow::Result<SequencerContext<network::Production, P, V>> {
     // Expose git information via status API.
     metrics
@@ -499,6 +500,7 @@ pub async fn init_node<P: SequencerPersistence, V: Versions>(
     // this will be helpful to load it into contract
     PermissionedStakeTableUpdate::save_initial_stake_table_from_hotshot_config(
         network_config.config.clone(),
+        initial_stake_table_path.unwrap_or_else(|| String::from("data/initial_stake_table.toml")),
     )?;
 
     // Initialize the Libp2p network

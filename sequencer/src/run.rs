@@ -223,6 +223,7 @@ where
                             opt.identity,
                             marketplace_config,
                             proposal_fetcher_config,
+                            opt.initial_stake_table_path,
                         )
                         .await
                     }
@@ -243,6 +244,7 @@ where
                 opt.identity,
                 marketplace_config,
                 proposal_fetcher_config,
+                opt.initial_stake_table_path,
             )
             .await?
         }

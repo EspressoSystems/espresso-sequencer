@@ -144,6 +144,7 @@ impl PermissionedStakeTableUpdate {
 
     pub fn save_initial_stake_table_from_hotshot_config(
         config: HotShotConfig<BLSPubKey>,
+        initial_stake_table_path: String,
     ) -> anyhow::Result<()> {
         let committee_members = config.known_nodes_with_stake.clone();
         let known_da_nodes = config.known_da_nodes.clone().clone();
@@ -157,7 +158,7 @@ impl PermissionedStakeTableUpdate {
             })
             .collect();
 
-        Self::new(members, vec![]).to_toml_file(Path::new("data/initial_stake_table.toml"))?;
+        Self::new(members, vec![]).to_toml_file(Path::new(&initial_stake_table_path))?;
 
         Ok(())
     }

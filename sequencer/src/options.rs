@@ -370,6 +370,10 @@ pub struct Options {
     #[derivative(Debug(format_with = "fmt_opt_urls"))]
     pub config_peers: Option<Vec<Url>>,
 
+    /// Path to the initial permissioned stake table
+    #[clap(long, env = "ESPRESSO_SEQUENCER_INITIAL_PERMISSIONED_STAKE_TABLE_PATH")]
+    pub initial_stake_table_path: Option<String>,
+
     /// Exponential backoff for fetching missing state from peers.
     #[clap(flatten)]
     pub catchup_backoff: BackoffParams,
