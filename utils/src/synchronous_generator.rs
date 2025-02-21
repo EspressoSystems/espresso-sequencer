@@ -1,7 +1,8 @@
 use std::ops::Range;
 
-// TODO we can take an <impl RangeBound> generic param in order to support
-// this w/ `RangeInclusive` and friends.
+// TODO consider accepting single generic `Range` or `RangeBound`
+// param instead of `u64`s.
+//
 /// Type to generate chunks of `chunk_size` from a given range.
 pub struct ChunkGenerator {
     range: Range<u64>,
@@ -12,7 +13,6 @@ pub struct ChunkGenerator {
 impl ChunkGenerator {
     /// Given a `start`, `end` and `chunk_size`, create a `ChunkGenerator`.
     /// As with `Range`, inclusive `start`, exclusive `end`.
-    // TODO if we make type generic we would take `Range` types here too.
     pub fn new(start: u64, end: u64, chunk_size: u64) -> Self {
         let next = if end < chunk_size {
             Some(start..end)

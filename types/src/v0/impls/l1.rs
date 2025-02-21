@@ -413,7 +413,7 @@ impl L1Client {
         }
     }
 
-    /// Update stake-table cache on `L1Event::NewHead`.
+    /// Update stake-table cache on `L1Event::NewFinalized`.
     fn stake_update_loop(&self, address: Address) -> impl Future<Output = ()> {
         tracing::error!("spawned stake table update loop");
         let opt = self.options();
@@ -1764,16 +1764,7 @@ mod test {
             .send()
             .await?;
 
-        let address = stake_table_contract.address();
-
-        // spawn stake_table_update_loop
-        let nodes = l1_client
-            .get_stake_table(address.to_alloy(), 0)
-            .await
-            .unwrap();
-
         let mut rng = rand::thread_rng();
-
         let mut receipts = Vec::new();
         // generate some events.
         for _ in 0..5 {
