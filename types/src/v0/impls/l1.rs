@@ -1764,6 +1764,12 @@ mod test {
             .send()
             .await?;
 
+        // spawn stake_table_update_loop
+        let _ = l1_client
+            .get_stake_table(stake_table_contract.address().to_alloy(), 0)
+            .await
+            .unwrap();
+
         let mut rng = rand::thread_rng();
         let mut receipts = Vec::new();
         // generate some events.
