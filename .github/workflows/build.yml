@@ -185,7 +185,7 @@ jobs:
         uses: docker/setup-qemu-action@v3
         with:
           # Temporary fix (See https://github.com/docker/setup-qemu-action/issues/198)
-          image: tonistiigi/binfmt:qemu-v7.0.0-28
+          image: tonistiigi/binfmt:qemu-v8.1.5
 
       - name: Setup Docker BuildKit (buildx)
         uses: docker/setup-buildx-action@v3
