@@ -63,6 +63,9 @@ contract StakeTable is AbstractStakeTable, Ownable, InitializedAt {
     // Error raised when the staker does not provide a new blsVK
     error InvalidBlsVK();
 
+    // Pool fee is invalid
+    error InvalidFee();
+
     // Error raised when zero point keys are provided
     error NoKeyChange();
 
@@ -80,6 +83,12 @@ contract StakeTable is AbstractStakeTable, Ownable, InitializedAt {
 
     /// Mapping from a hash of a BLS key to a node struct defined in the abstract contract.
     mapping(address account => Node node) public nodes;
+
+    // TODO book-keeping for pools
+    // Need to keep track of total amount deposited.
+    // Need to keep track of amounts marked for withdrawal.
+    mapping(address validator => mapping (address delegator => uint256 amount)) public poolBalances;
+    mapping(address delegator => RequestedWithdrawal) public poolWithdrawals;
 
     /// Total stake locked;
     uint256 public totalStake;
@@ -350,7 +359,7 @@ contract StakeTable is AbstractStakeTable, Ownable, InitializedAt {
 
         nodes[msg.sender] = node;
 
-        emit Registered(msg.sender, registrationEpoch, amount);
+        emit Registered(node);
     }
 
     /// @notice Deposit more stakes to registered keys
@@ -514,6 +523,82 @@ contract StakeTable is AbstractStakeTable, Ownable, InitializedAt {
 
         emit UpdatedConsensusKeys(msg.sender, node.blsVK, node.schnorrVK);
     }
+
+    // Delegation functions
+
+    // @notice creates a pool and configure the initial fee
+    // TODO: docs
+    function createPool(
+        BN254.G2Point memory blsVK,
+        EdOnBN254.EdOnBN254Point memory schnorrVK,
+        BN254.G1Point memory blsSig,
+        uint8 fee
+    ) public {
+        if (fee > 100) {
+            revert InvalidFee();
+        }
+
+        Node memory node = nodes[msg.sender];
+
+        if (node.account != address(0x0)) {
+            revert NodeAlreadyRegistered();
+        }
+
+        if (
+            _isEqualBlsKey(
+                blsVK,
+                BN254.G2Point(
+                    BN254.BaseField.wrap(0),
+                    BN254.BaseField.wrap(0),
+                    BN254.BaseField.wrap(0),
+                    BN254.BaseField.wrap(0)
+                )
+            )
+        ) {
+            revert InvalidBlsVK();
+        }
+
+        // Verify that the validator can sign for that blsVK by ensuring that the message that has
+        // been signed is the sender's address
+        // This is to prevent "rogue public-key attack"
+        bytes memory message = abi.encode(msg.sender);
+        BLSSig.verifyBlsSig(message, blsSig, blsVK);
+
+        if (schnorrVK.isEqual(EdOnBN254.EdOnBN254Point(0, 0))) {
+            revert InvalidSchnorrVK();
+        }
+
+        node.account = msg.sender;
+        node.blsVK = blsVK;
+        node.schnorrVK = schnorrVK;
+        node.registerEpoch = registrationEpoch;
+
+        nodes[msg.sender] = node;
+
+        // TODO: what events to emit?
+        // TODO: figure out bookkeeping for pools vs normal validators
+        // emit Registered(node);
+        emit PoolRegistered(node, fee);
+    }
+
+    // TODO, this is a skeleton
+    function depositPool(address validatorAddress, uint256 amount) external {
+        // TODO check that pool exists and is live
+        SafeTransferLib.safeTransferFrom(ERC20(tokenAddress), msg.sender, address(this), amount);
+        emit PoolDeposit(validatorAddress, msg.sender, amount);
+    }
+
+    // TODO, this is a skeleton
+    function requestPoolWithdrawal(address validatorAddress, uint256 amount) external {
+        // TODO check exit queue (if we decide to keep that)
+        // TODO check balance
+        // TODO mark funds withdrawable at the right epoch
+        emit PoolWithdrawalRequested(validatorAddress, msg.sender, amount, exitEpoch);
+    }
+
+    // TODO handle pool withdrawal, ideally the same way we handle other withdrwals
+
+    /// Admin functions
 
     /// @notice Update the min stake amount
     /// @dev The min stake amount cannot be set to zero
