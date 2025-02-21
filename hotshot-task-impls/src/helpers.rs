@@ -12,6 +12,7 @@ use hotshot_task::dependency::{Dependency, EventDependency};
 use hotshot_types::{
     consensus::OuterConsensus,
     data::{Leaf2, QuorumProposalWrapper, ViewChangeEvidence2},
+    drb::INITIAL_DRB_RESULT,
     event::{Event, EventType, LeafInfo},
     message::{Proposal, UpgradeLock},
     request_response::ProposalRequestPayload,
@@ -39,6 +40,7 @@ use std::{
 };
 use tokio::time::timeout;
 use tracing::instrument;
+use vbs::version::StaticVersionType;
 
 use crate::{events::HotShotEvent, quorum_proposal_recv::ValidationInfo, request::REQUEST_TIMEOUT};
 
@@ -243,7 +245,7 @@ impl<TYPES: NodeType + Default> Default for LeafChainTraversalOutcome<TYPES> {
 /// # Panics
 /// If the leaf chain contains no decided leaf while reaching a decided view, which should be
 /// impossible.
-pub async fn decide_from_proposal_2<TYPES: NodeType>(
+pub async fn decide_from_proposal_2<TYPES: NodeType, V: Versions>(
     proposal: &QuorumProposalWrapper<TYPES>,
     consensus: OuterConsensus<TYPES>,
     existing_upgrade_cert: Arc<RwLock<Option<UpgradeCertificate<TYPES>>>>,
@@ -364,7 +366,7 @@ pub async fn decide_from_proposal_2<TYPES: NodeType>(
 /// # Panics
 /// If the leaf chain contains no decided leaf while reaching a decided view, which should be
 /// impossible.
-pub async fn decide_from_proposal<TYPES: NodeType>(
+pub async fn decide_from_proposal<TYPES: NodeType, V: Versions>(
     proposal: &QuorumProposalWrapper<TYPES>,
     consensus: OuterConsensus<TYPES>,
     existing_upgrade_cert: Arc<RwLock<Option<UpgradeCertificate<TYPES>>>>,
@@ -477,14 +479,28 @@ pub async fn decide_from_proposal<TYPES: NodeType>(
         tracing::debug!("Leaf ascension failed; error={e}");
     }
 
-    if with_epochs && res.new_decided_view_number.is_some() {
-        let epoch_height = consensus_reader.epoch_height;
-        drop(consensus_reader);
+    let epoch_height = consensus_reader.epoch_height;
+    drop(consensus_reader);
 
+    if with_epochs && res.new_decided_view_number.is_some() {
         if let Some(decided_leaf_info) = res.leaf_views.last() {
             decide_epoch_root(&decided_leaf_info.leaf, epoch_height, membership).await;
         } else {
             tracing::info!("No decided leaf while a view has been decided.");
+        }
+    }
+
+    if let Some(ref decided_upgrade_cert) = res.decided_upgrade_cert {
+        if decided_upgrade_cert.data.new_version == V::Epochs::VERSION {
+            if let Some(decided_leaf_info) = res.leaf_views.last() {
+                let decided_block_number = decided_leaf_info.leaf.block_header().block_number();
+                let first_epoch_number =
+                    TYPES::Epoch::new(epoch_from_block_number(decided_block_number, epoch_height));
+                membership
+                    .write()
+                    .await
+                    .set_first_epoch(first_epoch_number, INITIAL_DRB_RESULT);
+            }
         }
     }
 

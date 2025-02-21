@@ -221,6 +221,8 @@ pub struct HotShotConfig<KEY: SignatureKey> {
     pub stop_voting_time: u64,
     /// Number of blocks in an epoch, zero means there are no epochs
     pub epoch_height: u64,
+    /// Epoch start block
+    pub epoch_start_block: u64,
 }
 
 impl<KEY: SignatureKey> HotShotConfig<KEY> {

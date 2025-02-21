@@ -248,6 +248,7 @@ pub struct PublicHotShotConfig {
     start_voting_time: u64,
     stop_voting_time: u64,
     epoch_height: u64,
+    epoch_start_block: u64,
 }
 
 impl From<HotShotConfig<PubKey>> for PublicHotShotConfig {
@@ -277,6 +278,7 @@ impl From<HotShotConfig<PubKey>> for PublicHotShotConfig {
             start_voting_time,
             stop_voting_time,
             epoch_height,
+            epoch_start_block,
         } = v;
 
         Self {
@@ -301,6 +303,7 @@ impl From<HotShotConfig<PubKey>> for PublicHotShotConfig {
             start_voting_time,
             stop_voting_time,
             epoch_height,
+            epoch_start_block,
         }
     }
 }
@@ -329,6 +332,7 @@ impl PublicHotShotConfig {
             start_voting_time: self.start_voting_time,
             stop_voting_time: self.stop_voting_time,
             epoch_height: self.epoch_height,
+            epoch_start_block: self.epoch_start_block,
         }
     }
 }
