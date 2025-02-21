@@ -1342,14 +1342,30 @@ mod test {
         let deployer_client = Arc::new(deployer_client);
 
         // deploy the stake_table contract
-        let stake_table_contract =
+
+        // MA: The first deployment may run out of gas, it's not currently clear
+        // to me why. Likely the gas estimation for the deployment transaction
+        // is off, maybe because block.number is incorrect when doing the gas
+        // estimation but this would be quite surprising.
+        //
+        // Until we figure out why, we can retry the deployment once. Notably
+        // the deployment for the native demo does not seem to be affected, only
+        // this test.
+        let deploy = || {
             contract_bindings_ethers::permissioned_stake_table::PermissionedStakeTable::deploy(
                 deployer_client.clone(),
                 Vec::<contract_bindings_ethers::permissioned_stake_table::NodeInfo>::new(),
             )
             .unwrap()
             .send()
-            .await?;
+        };
+        let stake_table_contract = match deploy().await {
+            Ok(contract) => contract,
+            Err(e) => {
+                tracing::warn!("Deploy failed: {:?}, retrying...", e);
+                deploy().await?
+            }
+        };
 
         let address = stake_table_contract.address();
 
