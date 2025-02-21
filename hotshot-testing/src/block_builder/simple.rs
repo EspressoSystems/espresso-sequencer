@@ -247,8 +247,7 @@ where
             return Ok(vec![]);
         }
 
-        // Let new VID scheme ships with Epochs upgrade
-        let version = <TestVersions as Versions>::Epochs::VERSION;
+        let version = <TestVersions as Versions>::Base::VERSION;
         let block_entry = build_block::<TYPES, TestVersions>(
             transactions,
             self.num_nodes.clone(),
