@@ -171,6 +171,8 @@ pub(crate) struct L1State {
     pub(crate) finalized: LruCache<u64, L1BlockInfo>,
     /// StakeTables indexed by finalized block
     pub(crate) stake: LruCache<u64, StakeTables>,
+    /// Block number stake table contract was deployed at.
+    pub(crate) stake_table_initial_block: Option<u64>,
 }
 
 #[derive(Clone, Debug)]

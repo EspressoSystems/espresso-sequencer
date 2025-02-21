@@ -936,18 +936,41 @@ impl L1Client {
     /// First block we should listen to stake table events for.
     async fn first_relevant_block_st(&self, address: Address) -> u64 {
         let state = self.state.clone();
-        let state = state.lock().await;
-        let finalized = state.snapshot.finalized.map(|block_info| block_info.number);
+        let (init_block, finalized) = {
+            let state = state.lock().await;
+            let init_block = state.stake_table_initial_block;
+            let finalized = state.snapshot.finalized.map(|block_info| block_info.number);
+            (init_block, finalized)
+        };
 
+        // if both finalized and init_block are `Some` take the
+        // minimum. We do this first to avoid unnecessary call to contract.
+        if let Some(n) = finalized.zip(init_block).map(|(f, i)| f.min(i)) {
+            return n;
+        };
+
+        // These steps require contract
         let contract = PermissionedStakeTableInstance::new(address, self.provider.clone());
-        let init_block = contract
-            .initializedAtBlock()
-            .call()
-            .await
-            .map(|result| result._0.to::<u64>())
-            .ok();
+        let init_block = if let Ok(init_block) = contract.initializedAtBlock().call().await {
+            Some(init_block._0.to::<u64>())
+        } else {
+            tracing::error!("Failed to retrieve initial block from stake-table contract");
+            None
+        };
 
-        finalized.min(init_block).unwrap_or(0)
+        let init_block = {
+            let mut state = state.lock().await;
+            state.stake_table_initial_block = init_block;
+            init_block.unwrap()
+        };
+
+        // If we have a finalized, get the initial block from contract and return minimum.
+        if let Some(finalized) = finalized {
+            return finalized.min(init_block);
+        }
+
+        // If we have no `finalized` return init_block
+        init_block
     }
 
     /// Get `StakeTable` at block height. If unavailable in local cache, poll the l1.
@@ -956,7 +979,6 @@ impl L1Client {
         contract_address: Address,
         block: u64,
     ) -> Option<StakeTables> {
-        tracing::error!("Get stake tables");
         let opt = self.options();
         let retry_delay = opt.l1_retry_delay;
         let chunk_size = opt.l1_events_max_block_range;
@@ -1050,6 +1072,7 @@ impl L1State {
             snapshot: Default::default(),
             finalized: LruCache::new(cache_size),
             stake: LruCache::new(cache_size),
+            stake_table_initial_block: None,
         }
     }
 
