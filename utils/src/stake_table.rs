@@ -19,7 +19,12 @@ use hotshot_types::{
 };
 use url::Url;
 
-use std::{fs, path::Path, sync::Arc, time::Duration};
+use std::{
+    fs::{self, create_dir_all},
+    path::Path,
+    sync::Arc,
+    time::Duration,
+};
 
 /// A stake table config stored in a file
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
@@ -110,8 +115,12 @@ impl PermissionedStakeTableUpdate {
         let toml_string = toml::to_string_pretty(self)
             .unwrap_or_else(|err| panic!("Failed to serialize config to TOML: {err}"));
 
-        fs::write(path, toml_string)
-            .unwrap_or_else(|_| panic!("Could not write config file to {}", path.display()));
+        create_dir_all(path.parent().expect("Failed to get parent directory"))
+            .unwrap_or_else(|err| panic!("Failed to create directory: {err}"));
+
+        fs::write(path, toml_string).unwrap_or_else(|err| {
+            panic!("Could not write config file to {}: {err}", path.display())
+        });
 
         Ok(())
     }
