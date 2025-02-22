@@ -1,7 +1,7 @@
 use hotshot::types::Event;
 use hotshot_builder_api::{
     v0_1::{
-        block_info::{AvailableBlockData, AvailableBlockHeaderInput, AvailableBlockInfo},
+        block_info::{AvailableBlockData, AvailableBlockHeaderInputV1, AvailableBlockInfo},
         builder::BuildError,
         data_source::{AcceptsTxnSubmits, BuilderDataSource},
     },
@@ -17,7 +17,7 @@ use hotshot_types::{
         signature_key::{BuilderSignatureKey, SignatureKey},
     },
     utils::BuilderCommitment,
-    vid::VidCommitment,
+    vid::{VidCommitment, VidPrecomputeData},
 };
 use lru::LruCache;
 use vbs::version::StaticVersionType;
@@ -54,6 +54,7 @@ pub struct BlockInfo<Types: NodeType> {
     pub block_payload: Types::BlockPayload,
     pub metadata: <<Types as NodeType>::BlockPayload as BlockPayload<Types>>::Metadata,
     pub vid_trigger: Arc<RwLock<Option<oneshot::Sender<TriggerStatus>>>>,
+    // TODO Add precompute back.
     pub offered_fee: u64,
     // Could we have included more transactions with this block, but chose not to?
     pub truncated: bool,
@@ -873,7 +874,7 @@ impl<Types: NodeType> ProxyGlobalState<Types> {
         view_number: u64,
         sender: Types::SignatureKey,
         signature: &<<Types as NodeType>::SignatureKey as SignatureKey>::PureAssembledSignatureType,
-    ) -> Result<AvailableBlockHeaderInput<Types>, ClaimBlockHeaderInputError<Types>> {
+    ) -> Result<AvailableBlockHeaderInputV1<Types>, ClaimBlockHeaderInputError<Types>> {
         let id = BlockId {
             hash: block_hash.clone(),
             view: Types::View::new(view_number),
@@ -908,6 +909,7 @@ impl<Types: NodeType> ProxyGlobalState<Types> {
             })
         };
 
+        // TODO Add precompute back.
         if let Some((metadata, offered_fee, _)) = extracted_block_info_option {
             let signature_over_fee_info =
                 Types::BuilderSignatureKey::sign_fee(&sign_key, offered_fee, &metadata)
@@ -983,7 +985,7 @@ where
         view_number: u64,
         sender: Types::SignatureKey,
         signature: &<<Types as NodeType>::SignatureKey as SignatureKey>::PureAssembledSignatureType,
-    ) -> Result<AvailableBlockHeaderInput<Types>, BuildError> {
+    ) -> Result<AvailableBlockHeaderInputV1<Types>, BuildError> {
         Ok(self
             .claim_block_header_input_implementation(block_hash, view_number, sender, signature)
             .await?)
@@ -1551,6 +1553,7 @@ mod test {
     use hotshot_types::data::EpochNumber;
     use hotshot_types::data::Leaf2;
     use hotshot_types::data::{QuorumProposal2, QuorumProposalWrapper};
+    use hotshot_types::traits::block_contents::precompute_vid_commitment;
     use hotshot_types::traits::block_contents::Transaction;
     use hotshot_types::traits::node_implementation::Versions;
     use hotshot_types::{
@@ -2145,6 +2148,8 @@ mod test {
             }
         }
 
+        // TODO Add precompute back.
+
         // finish with builder_state_to_last_built_block
 
         assert_eq!(
@@ -2371,6 +2376,8 @@ mod test {
                 "This should not receive anything from vid_trigger_receiver_1"
             );
         }
+
+        // TODO Add precompute back.
 
         // finish with builder_state_to_last_built_block
 
@@ -3840,6 +3847,8 @@ mod test {
                 )
                 .await
         });
+
+        // TODO Add precompute back.
 
         let result = claim_block_header_input_join_handle.await;
 

@@ -2,11 +2,15 @@ use hotshot_types::{
     data::{DaProposal2, Leaf2, QuorumProposalWrapper},
     message::Proposal,
     traits::{
-        block_contents::{BlockHeader, BlockPayload},
+        block_contents::{precompute_vid_commitment, BlockHeader, BlockPayload},
         node_implementation::{ConsensusTime, NodeType, Versions},
         EncodeBytes,
     },
     utils::BuilderCommitment,
+<<<<<<< HEAD
+=======
+    vid::{VidCommitment, VidPrecomputeData},
+>>>>>>> main
 };
 use marketplace_builder_shared::block::{BlockId, BuilderStateId, ParentBlockReferences};
 
@@ -81,6 +85,10 @@ pub struct BuildBlockInfo<Types: NodeType> {
     pub block_payload: Types::BlockPayload,
     pub metadata: <<Types as NodeType>::BlockPayload as BlockPayload<Types>>::Metadata,
     pub vid_trigger: oneshot::Sender<TriggerStatus>,
+<<<<<<< HEAD
+=======
+    pub vid_receiver: UnboundedReceiver<(VidCommitment, VidPrecomputeData)>,
+>>>>>>> main
     // Could we have included more transactions, but chose not to?
     pub truncated: bool,
 }
@@ -786,6 +794,7 @@ impl<Types: NodeType, V: Versions> BuilderState<Types, V> {
         let block_size: u64 = encoded_txns.len() as u64;
         let offered_fee: u64 = self.base_fee * block_size;
 
+        // TODO Add precompute back.
         let (trigger_send, _) = oneshot::channel();
 
         tracing::info!(

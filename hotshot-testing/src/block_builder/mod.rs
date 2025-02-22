@@ -11,17 +11,19 @@ use async_trait::async_trait;
 use futures::Stream;
 use hotshot::{traits::BlockPayload, types::Event};
 use hotshot_builder_api::{
-    v0_1,
     v0_1::{
-        block_info::{AvailableBlockData, AvailableBlockHeaderInput, AvailableBlockInfo},
+        self,
+        block_info::{AvailableBlockData, AvailableBlockInfo},
         builder::{Error, Options},
     },
+    v0_2::block_info::AvailableBlockHeaderInputV1,
     v0_99,
 };
 use hotshot_types::{
     constants::{LEGACY_BUILDER_MODULE, MARKETPLACE_BUILDER_MODULE},
     traits::{
-        block_contents::EncodeBytes, node_implementation::NodeType,
+        block_contents::{precompute_vid_commitment, EncodeBytes},
+        node_implementation::NodeType,
         signature_key::BuilderSignatureKey,
     },
 };
@@ -64,7 +66,7 @@ pub trait BuilderTask<TYPES: NodeType>: Send + Sync {
 struct BlockEntry<TYPES: NodeType> {
     metadata: AvailableBlockInfo<TYPES>,
     payload: Option<AvailableBlockData<TYPES>>,
-    header_input: Option<AvailableBlockHeaderInput<TYPES>>,
+    header_input: Option<AvailableBlockHeaderInputV1<TYPES>>,
 }
 
 /// Construct a tide disco app that mocks the builder API 0.1 + 0.3.
@@ -183,6 +185,9 @@ where
 
     let commitment = block_payload.builder_commitment(&metadata);
 
+    let (_, vid_precompute_data) =
+        precompute_vid_commitment(&block_payload.encode(), *num_storage_nodes.read_arc().await);
+
     // Get block size from the encoded payload
     let block_size = block_payload.encode().len() as u64;
 
@@ -212,8 +217,8 @@ where
         offered_fee: 123,
         _phantom: std::marker::PhantomData,
     };
-    let header_input = AvailableBlockHeaderInput {
-        vid_precompute_data: None,
+    let header_input = AvailableBlockHeaderInputV1 {
+        vid_precompute_data,
         fee_signature: signature_over_fee_info,
         sender: pub_key,
     };

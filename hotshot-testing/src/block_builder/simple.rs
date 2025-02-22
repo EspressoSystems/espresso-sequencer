@@ -26,9 +26,10 @@ use hotshot::{
 use hotshot_builder_api::{
     v0_1::{
         self,
-        block_info::{AvailableBlockData, AvailableBlockHeaderInput, AvailableBlockInfo},
+        block_info::{AvailableBlockData, AvailableBlockInfo},
         builder::{BuildError, Error, Options},
     },
+    v0_2::block_info::AvailableBlockHeaderInputV1,
     v0_99,
 };
 use hotshot_types::{
@@ -247,8 +248,12 @@ where
         }
 
         // Let new VID scheme ships with Epochs upgrade
-        let block_entry =
-            build_block::<TYPES>(transactions, self.pub_key.clone(), self.priv_key.clone()).await;
+        let block_entry = build_block::<TYPES>(
+            transactions,
+            self.pub_key.clone(),
+            self.priv_key.clone(),
+        )
+        .await;
 
         let metadata = block_entry.metadata.clone();
 
@@ -312,7 +317,7 @@ where
         _view_number: u64,
         _sender: TYPES::SignatureKey,
         _signature: &<TYPES::SignatureKey as SignatureKey>::PureAssembledSignatureType,
-    ) -> Result<AvailableBlockHeaderInput<TYPES>, BuildError> {
+    ) -> Result<AvailableBlockHeaderInputV1<TYPES>, BuildError> {
         if self.should_fail_claims.load(Ordering::Relaxed) {
             return Err(BuildError::Missing);
         }
