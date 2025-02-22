@@ -2,15 +2,11 @@ use hotshot_types::{
     data::{DaProposal2, Leaf2, QuorumProposalWrapper},
     message::Proposal,
     traits::{
-        block_contents::{precompute_vid_commitment, BlockHeader, BlockPayload},
+        block_contents::{BlockHeader, BlockPayload},
         node_implementation::{ConsensusTime, NodeType, Versions},
         EncodeBytes,
     },
     utils::BuilderCommitment,
-<<<<<<< HEAD
-=======
-    vid::{VidCommitment, VidPrecomputeData},
->>>>>>> main
 };
 use marketplace_builder_shared::block::{BlockId, BuilderStateId, ParentBlockReferences};
 
@@ -85,10 +81,7 @@ pub struct BuildBlockInfo<Types: NodeType> {
     pub block_payload: Types::BlockPayload,
     pub metadata: <<Types as NodeType>::BlockPayload as BlockPayload<Types>>::Metadata,
     pub vid_trigger: oneshot::Sender<TriggerStatus>,
-<<<<<<< HEAD
-=======
-    pub vid_receiver: UnboundedReceiver<(VidCommitment, VidPrecomputeData)>,
->>>>>>> main
+    // TODO Add precompute back.
     // Could we have included more transactions, but chose not to?
     pub truncated: bool,
 }

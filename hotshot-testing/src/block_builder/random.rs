@@ -137,15 +137,10 @@ impl<TYPES: NodeType<Transaction = TestTransaction>> RandomBuilderTask<TYPES> {
                 .collect();
 
             // Let new VID scheme ship with Epochs upgrade.
-            let block = build_block::<TYPES>(
-                transactions,
-                pub_key.clone(),
-                priv_key.clone(),
-            )
-            .await;
->>>>>>> main
+            let block = build_block::<TYPES>(transactions, pub_key.clone(), priv_key.clone()).await;
 
             if let Some((hash, _)) = blocks
+                .write()
                 .await
                 .push(block.metadata.block_hash.clone(), block)
             {

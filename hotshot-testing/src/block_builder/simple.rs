@@ -248,12 +248,8 @@ where
         }
 
         // Let new VID scheme ships with Epochs upgrade
-        let block_entry = build_block::<TYPES>(
-            transactions,
-            self.pub_key.clone(),
-            self.priv_key.clone(),
-        )
-        .await;
+        let block_entry =
+            build_block::<TYPES>(transactions, self.pub_key.clone(), self.priv_key.clone()).await;
 
         let metadata = block_entry.metadata.clone();
 

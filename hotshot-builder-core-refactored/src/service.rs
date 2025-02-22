@@ -596,8 +596,7 @@ where
             Types::BuilderSignatureKey::sign_fee(&self.builder_keys.1, offered_fee, &metadata)
                 .map_err(Error::Signing)?;
 
-        let response = AvailableBlockHeaderInput::<Types> {
-            vid_precompute_data: None,
+        let response = AvailableBlockHeaderInputV1::<Types> {
             fee_signature: signature_over_fee_info,
             sender: self.builder_keys.0.clone(),
         };

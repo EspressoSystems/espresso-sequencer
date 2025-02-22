@@ -17,7 +17,7 @@ use hotshot_types::{
         signature_key::{BuilderSignatureKey, SignatureKey},
     },
     utils::BuilderCommitment,
-    vid::{VidCommitment, VidPrecomputeData},
+    vid::VidCommitment,
 };
 use lru::LruCache;
 use vbs::version::StaticVersionType;
@@ -915,8 +915,7 @@ impl<Types: NodeType> ProxyGlobalState<Types> {
                 Types::BuilderSignatureKey::sign_fee(&sign_key, offered_fee, &metadata)
                     .map_err(ClaimBlockHeaderInputError::FailedToSignFeeInfo)?;
 
-            let response = AvailableBlockHeaderInput::<Types> {
-                vid_precompute_data: None,
+            let response = AvailableBlockHeaderInputV1::<Types> {
                 fee_signature: signature_over_fee_info,
                 sender: pub_key.clone(),
             };
@@ -1553,7 +1552,6 @@ mod test {
     use hotshot_types::data::EpochNumber;
     use hotshot_types::data::Leaf2;
     use hotshot_types::data::{QuorumProposal2, QuorumProposalWrapper};
-    use hotshot_types::traits::block_contents::precompute_vid_commitment;
     use hotshot_types::traits::block_contents::Transaction;
     use hotshot_types::traits::node_implementation::Versions;
     use hotshot_types::{
