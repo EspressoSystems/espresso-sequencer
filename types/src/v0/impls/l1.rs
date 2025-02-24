@@ -1140,7 +1140,7 @@ mod test {
     use ethers::{
         middleware::SignerMiddleware,
         providers::Middleware,
-        signers::LocalWallet,
+        signers::{LocalWallet, Signer},
         types::{H160, U64},
         utils::{parse_ether, Anvil, AnvilInstance},
     };
@@ -1544,6 +1544,52 @@ mod test {
     }
 
     #[tokio::test]
+    async fn test_stake_table_initial_block() -> anyhow::Result<()> {
+        let anvil = Anvil::new().spawn();
+        let l1_client = new_l1_client(&anvil, false).await;
+        let wallet: LocalWallet = anvil.keys()[0].clone().into();
+
+        // We need a provider that can sign.
+        let deployer_provider =
+            ethers::providers::Provider::<ethers::providers::Http>::try_from(anvil.endpoint())?
+                .interval(Duration::from_millis(10u64));
+        let deployer_client = SignerMiddleware::new(
+            deployer_provider.clone(),
+            wallet.with_chain_id(anvil.chain_id()),
+        );
+        let deployer_client = Arc::new(deployer_client);
+
+        // initial transaction workaround.
+        deployer_client
+            .send_transaction(
+                ethers::types::TransactionRequest::new()
+                    .to(deployer_client.address())
+                    .value(0),
+                None,
+            )
+            .await?
+            .await?;
+
+        // deploy the stake_table contract
+        let stake_table_contract =
+            contract_bindings_ethers::permissioned_stake_table::PermissionedStakeTable::deploy(
+                deployer_client.clone(),
+                Vec::<contract_bindings_ethers::permissioned_stake_table::NodeInfo>::new(),
+            )
+            .unwrap()
+            .send()
+            .await?;
+
+        let address = stake_table_contract.address();
+        let contract =
+            PermissionedStakeTableInstance::new(address.to_alloy(), l1_client.provider.clone());
+        let init_block = contract.initializedAtBlock().call().await;
+        assert_eq!(2, init_block?._0.to::<u64>());
+
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn test_fetch_stake_table() -> anyhow::Result<()> {
         use ethers::signers::Signer;
         setup_test();
@@ -1552,7 +1598,7 @@ mod test {
         let l1_client = new_l1_client(&anvil, false).await;
         let wallet: LocalWallet = anvil.keys()[0].clone().into();
 
-        // In order to deposit we need a provider that can sign.
+        // We need a provider that can sign.
         let deployer_provider =
             ethers::providers::Provider::<ethers::providers::Http>::try_from(anvil.endpoint())?
                 .interval(Duration::from_millis(10u64));
@@ -1591,7 +1637,6 @@ mod test {
             .await?;
 
         let address = stake_table_contract.address();
-
         let mut rng = rand::thread_rng();
         let node = NodeInfoJf::random(&mut rng);
 
