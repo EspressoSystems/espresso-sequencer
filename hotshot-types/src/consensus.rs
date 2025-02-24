@@ -16,7 +16,6 @@ use std::{
 use async_lock::{RwLock, RwLockReadGuard, RwLockUpgradableReadGuard, RwLockWriteGuard};
 use committable::{Commitment, Committable};
 use hotshot_utils::anytrace::*;
-use serde::{Deserialize, Serialize};
 use tracing::instrument;
 use vec1::Vec1;
 

@@ -126,10 +126,6 @@ async fn test_upgrade_task_with_proposal() {
     let genesis_cert = proposals[0].data.justify_qc().clone();
     let builder_commitment = BuilderCommitment::from_raw_digest(sha2::Sha256::new().finalize());
     let builder_fee = null_block::builder_fee::<TestTypes, TestVersions>(
-        membership
-            .read()
-            .await
-            .total_nodes(Some(EpochNumber::new(1))),
         <TestVersions as Versions>::Base::VERSION,
         *ViewNumber::new(1),
     )

@@ -683,7 +683,6 @@ fn validate_builder_fee(
                     &signature,
                     fee_info.amount().as_u64().unwrap(),
                     proposed_header.metadata(),
-                    &proposed_header.payload_commitment(),
                 )
                 .then_some(())
                 .ok_or(BuilderValidationError::InvalidBuilderSignature)?;
@@ -1131,7 +1130,6 @@ mod test {
                 &key_pair,
                 fee_info.amount().as_u64().unwrap(),
                 self.metadata(),
-                &self.payload_commitment(),
             )
             .unwrap();
 
@@ -1163,7 +1161,6 @@ mod test {
                 &key_pair2,
                 fee_info.amount().as_u64().unwrap(),
                 self.metadata(),
-                &self.payload_commitment(),
             )
             .unwrap();
 
@@ -1760,7 +1757,6 @@ mod test {
                 .into();
         let header = parent.block_header().clone();
         let metadata = parent.block_header().metadata();
-        let vid_commitment = parent.payload_commitment();
 
         debug!("{:?}", header.version());
 
@@ -1777,7 +1773,7 @@ mod test {
             .unwrap();
 
         // test v1 sig
-        let sig = FeeAccount::sign_fee(&key_pair, data, metadata, &vid_commitment).unwrap();
+        let sig = FeeAccount::sign_fee(&key_pair, data, metadata).unwrap();
 
         let header = match header {
             Header::V1(header) => Header::V1(v0_1::Header {

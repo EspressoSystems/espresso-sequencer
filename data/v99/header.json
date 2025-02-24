@@ -9,9 +9,9 @@
     "builder_commitment": "BUILDER_COMMITMENT~jlEvJoHPETCSwXF6UKcD22zOjfoHGuyVFTVkP_BNc-no",
     "builder_signature": [
       {
-        "r": "0xf3c4e11501986214611725f3c2fae13403623ec6445a0091a2483e7b454d901b",
-        "s": "0x41c33866e8eb2e315a88abf52d7acbea1052cc67305ca32906c20b2537753ad7",
-        "v": 28
+        "r": "0xa66e49fb371b83d36a6f326b95eb6146c397f3b037fd04b5f3c973d0e5624105",
+        "s": "0x43c6d12317c58dd8f831d34e2fa64bba04f51374ef7fce826121ba5dc5df64cf",
+        "v": 27
       }
     ],
     "chain_config": {

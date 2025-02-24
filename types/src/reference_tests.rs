@@ -129,13 +129,8 @@ async fn reference_header(version: Version) -> Header {
     let payload_commitment =
         vid_commitment::<MockVersions>(&payload.encode(), &ns_table.encode(), 1, version);
     let builder_commitment = payload.builder_commitment(&ns_table);
-    let builder_signature = FeeAccount::sign_fee(
-        &builder_key,
-        fee_info.amount().as_u64().unwrap(),
-        &ns_table,
-        &payload_commitment,
-    )
-    .unwrap();
+    let builder_signature =
+        FeeAccount::sign_fee(&builder_key, fee_info.amount().as_u64().unwrap(), &ns_table).unwrap();
 
     let state = ValidatedState::default();
 
