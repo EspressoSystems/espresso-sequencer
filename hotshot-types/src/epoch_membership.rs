@@ -233,7 +233,7 @@ impl<TYPES: NodeType> EpochMembership<TYPES> {
             .membership
             .read()
             .await
-            .get_epoch_root(block_height, self.coordinator.epoch_height)
+            .get_epoch_root(block_height, self.coordinator.epoch_height, self.epoch?)
             .await
     }
 

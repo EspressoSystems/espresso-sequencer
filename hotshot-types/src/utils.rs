@@ -29,9 +29,8 @@ use typenum::Unsigned;
 use vbs::version::StaticVersionType;
 
 use crate::{
-    data::Leaf2, epoch_membership::EpochMembership, traits::{
-        node_implementation::{ConsensusTime, NodeType, Versions},
-        ValidatedState,
+    data::Leaf2, traits::{
+        election::Membership, node_implementation::{ConsensusTime, NodeType, Versions}, ValidatedState
     }, vid::VidCommitment, vote::{Certificate, HasViewNumber}
 };
 
@@ -100,7 +99,8 @@ pub type StateAndDelta<TYPES> = (
 
 pub async fn verify_epoch_root_chaing<T: NodeType, V: Versions>(
     leaf_chain: Vec<Leaf2<T>>,
-    membership: EpochMembership<T>,
+    membership: &T::Membership,
+    epoch: T::Epoch,
     epoch_height: u64,
     upgrade_lock: &crate::message::UpgradeLock<T, V>,
 ) -> anyhow::Result<Leaf2<T>> {
@@ -131,8 +131,8 @@ pub async fn verify_epoch_root_chaing<T: NodeType, V: Versions>(
     }
 
     // verify all QCs are valid
-    let stake_table = membership.stake_table().await;
-    let threshold = membership.success_threshold().await;
+    let stake_table = membership.stake_table(Some(epoch));
+    let threshold = membership.success_threshold(Some(epoch));
     newest_leaf
         .justify_qc()
         .is_valid_cert(stake_table.clone(), threshold, upgrade_lock)

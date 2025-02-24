@@ -243,6 +243,7 @@ impl<TYPES: NodeType> Membership<TYPES> for StaticCommittee<TYPES> {
         &self,
         _block_height: u64,
         _epoch_height: u64,
+        _epoch: TYPES::Epoch,
     ) -> Option<(TYPES::Epoch, TYPES::BlockHeader)> {
         None
     }
