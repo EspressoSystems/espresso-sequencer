@@ -77,6 +77,7 @@ jobs:
             target/release/nasty-client
             target/release/espresso-dev-node
             target/release/pub-key
+            target/release/update-permissioned-stake-table
             target/release/espresso-bridge
             target/release/marketplace-solver
             target/release/marketplace-builder
