@@ -1,6 +1,5 @@
 use super::{
-    v0_3::{DAMembers, StakeTable, StakeTables},
-    Header, L1Client, NodeState, PubKey, SeqTypes,
+    v0_3::{DAMembers, StakeTable, StakeTables}, EpochVersion, Header, L1Client, NodeState, PubKey, SeqTypes, SequencerVersions
 };
 
 // use async_trait::async_trait;
@@ -10,15 +9,11 @@ use ethers_conv::ToAlloy;
 use hotshot::types::{BLSPubKey, SignatureKey as _};
 use hotshot_contract_adapter::stake_table::{bls_alloy_to_jf, NodeInfoJf};
 use hotshot_types::{
-    data::EpochNumber,
-    drb::DrbResult,
-    stake_table::StakeTableEntry,
-    traits::{
+    data::{EpochNumber, Leaf2}, drb::DrbResult, message::UpgradeLock, stake_table::StakeTableEntry, traits::{
         election::Membership,
         node_implementation::{ConsensusTime, NodeType},
         signature_key::StakeTableEntryType,
-    },
-    PeerConfig,
+    }, utils::verify_epoch_root_chaing, PeerConfig
 };
 
 use itertools::Itertools;
@@ -510,7 +505,10 @@ impl Membership<SeqTypes> for EpochCommittees {
         self.state.contains_key(&epoch)
     }
 
-    async fn get_epoch_root(&self, _block_height: u64) -> Option<(Epoch, Header)> {
+    async fn get_epoch_root(&self, _block_height: u64, epoch_height: u64, epoch: Epoch) -> Option<(Epoch, Header)> {
+        // Fetch leaves from peers
+        let leaf_chain: Vec<Leaf2<SeqTypes>> = vec![];
+        verify_epoch_root_chaing(leaf_chain, self, epoch, epoch_height, &UpgradeLock::<SeqTypes, SequencerVersions<EpochVersion, EpochVersion>>::new()).await.ok()?;
         None
     }
 
