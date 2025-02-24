@@ -435,6 +435,10 @@ impl PublicNetworkConfig {
             public_keys: Vec::new(),
         })
     }
+
+    pub fn hotshot_config(&self) -> PublicHotShotConfig {
+        self.config.clone()
+    }
 }
 
 #[cfg(any(test, feature = "testing"))]

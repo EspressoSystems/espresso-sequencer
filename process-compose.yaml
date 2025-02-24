@@ -117,7 +117,7 @@ processes:
     command: update-permissioned-stake-table
     environment:
       - ESPRESSO_SEQUENCER_PERMISSIONED_STAKE_TABLE_ADDRESS
-      - ESPRESSO_SEQUENCER_PERMISSIONED_STAKE_TABLE_UPDATE_TOML_PATH=data/initial_stake_table.toml 
+      - ESPRESSO_SEQUENCER_STATE_PEERS=http://localhost:$ESPRESSO_SEQUENCER_API_PORT
     depends_on:
       deploy-prover-contracts:
         condition: process_completed
