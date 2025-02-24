@@ -800,24 +800,7 @@
 <a href="#799" id="799">799</a>
 <a href="#800" id="800">800</a>
 <a href="#801" id="801">801</a>
-<a href="#802" id="802">802</a>
-<a href="#803" id="803">803</a>
-<a href="#804" id="804">804</a>
-<a href="#805" id="805">805</a>
-<a href="#806" id="806">806</a>
-<a href="#807" id="807">807</a>
-<a href="#808" id="808">808</a>
-<a href="#809" id="809">809</a>
-<a href="#810" id="810">810</a>
-<a href="#811" id="811">811</a>
-<a href="#812" id="812">812</a>
-<a href="#813" id="813">813</a>
-<a href="#814" id="814">814</a>
-<a href="#815" id="815">815</a>
-<a href="#816" id="816">816</a>
-<a href="#817" id="817">817</a>
-<a href="#818" id="818">818</a>
-<a href="#819" id="819">819</a></pre></div><pre class="rust"><code><span class="kw">use </span>hotshot::types::Event;
+<a href="#802" id="802">802</a></pre></div><pre class="rust"><code><span class="kw">use </span>hotshot::types::Event;
 <span class="kw">use </span>hotshot_builder_api::{
     v0_1::{
         block_info::{AvailableBlockData, AvailableBlockInfo},
@@ -1390,7 +1373,6 @@
         <span class="kw">let </span>metadata;
         <span class="kw">let </span>offered_fee;
         <span class="kw">let </span>truncated;
-        <span class="kw">let </span>vid_data;
         {
             <span class="comment">// We store this read lock guard separately to make it explicit
             // that this will end up holding a lock for the duration of this
@@ -1408,32 +1390,16 @@
             metadata = block_info.metadata.clone();
             offered_fee = block_info.offered_fee;
             truncated = block_info.truncated;
-            vid_data = block_info.vid_data.clone();
         };
 
-        <span class="kw">let </span>(vid_commitment, vid_precompute_data) = vid_data.resolve().<span class="kw">await</span>;
+        <span class="comment">// TODO Add precompute back.
 
-        <span class="comment">// sign over the vid commitment
-        </span><span class="kw">let </span>signature_over_vid_commitment =
-            &lt;Types <span class="kw">as </span>NodeType&gt;::BuilderSignatureKey::sign_builder_message(
-                <span class="kw-2">&amp;</span><span class="self">self</span>.builder_keys.<span class="number">1</span>,
-                vid_commitment.as_ref(),
-            )
-            .map_err(Error::Signing)<span class="question-mark">?</span>;
+        </span><span class="kw">let </span>signature_over_fee_info =
+            Types::BuilderSignatureKey::sign_fee(<span class="kw-2">&amp;</span><span class="self">self</span>.builder_keys.<span class="number">1</span>, offered_fee, <span class="kw-2">&amp;</span>metadata)
+                .map_err(Error::Signing)<span class="question-mark">?</span>;
 
-        <span class="kw">let </span>signature_over_fee_info = Types::BuilderSignatureKey::sign_fee(
-            <span class="kw-2">&amp;</span><span class="self">self</span>.builder_keys.<span class="number">1</span>,
-            offered_fee,
-            <span class="kw-2">&amp;</span>metadata,
-            <span class="kw-2">&amp;</span>vid_commitment,
-        )
-        .map_err(Error::Signing)<span class="question-mark">?</span>;
-
-        <span class="kw">let </span>response = AvailableBlockHeaderInputV1 {
-            vid_commitment,
-            vid_precompute_data,
+        <span class="kw">let </span>response = AvailableBlockHeaderInputV1::&lt;Types&gt; {
             fee_signature: signature_over_fee_info,
-            message_signature: signature_over_vid_commitment,
             sender: <span class="self">self</span>.builder_keys.<span class="number">0</span>.clone(),
         };
         <span class="macro">info!</span>(<span class="string">"Sending Claim Block Header Input response"</span>);

@@ -1751,12 +1751,7 @@
 <a href="#1750" id="1750">1750</a>
 <a href="#1751" id="1751">1751</a>
 <a href="#1752" id="1752">1752</a>
-<a href="#1753" id="1753">1753</a>
-<a href="#1754" id="1754">1754</a>
-<a href="#1755" id="1755">1755</a>
-<a href="#1756" id="1756">1756</a>
-<a href="#1757" id="1757">1757</a>
-<a href="#1758" id="1758">1758</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
+<a href="#1753" id="1753">1753</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
 // This file is part of the HotShot repository.
 
 // You should have received a copy of the MIT License
@@ -3426,7 +3421,6 @@
     <span class="doccomment">/// Builder fee data for a null block payload
     </span><span class="attr">#[must_use]
     </span><span class="kw">pub fn </span>builder_fee&lt;TYPES: NodeType, V: Versions&gt;(
-        num_storage_nodes: usize,
         version: vbs::version::Version,
         view_number: u64,
     ) -&gt; <span class="prelude-ty">Option</span>&lt;BuilderFee&lt;TYPES&gt;&gt; {
@@ -3455,12 +3449,8 @@
             <span class="kw">let </span>(_null_block, null_block_metadata) =
                 &lt;TYPES::BlockPayload <span class="kw">as </span>BlockPayload&lt;TYPES&gt;&gt;::empty();
 
-            <span class="kw">match </span>TYPES::BuilderSignatureKey::sign_fee(
-                <span class="kw-2">&amp;</span>priv_key,
-                FEE_AMOUNT,
-                <span class="kw-2">&amp;</span>null_block_metadata,
-                <span class="kw-2">&amp;</span>commitment::&lt;V&gt;(num_storage_nodes)<span class="question-mark">?</span>,
-            ) {
+            <span class="kw">match </span>TYPES::BuilderSignatureKey::sign_fee(<span class="kw-2">&amp;</span>priv_key, FEE_AMOUNT, <span class="kw-2">&amp;</span>null_block_metadata)
+            {
                 <span class="prelude-val">Ok</span>(sig) =&gt; <span class="prelude-val">Some</span>(BuilderFee {
                     fee_amount: FEE_AMOUNT,
                     fee_account: pub_key,

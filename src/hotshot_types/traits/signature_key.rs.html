@@ -360,24 +360,7 @@
 <a href="#359" id="359">359</a>
 <a href="#360" id="360">360</a>
 <a href="#361" id="361">361</a>
-<a href="#362" id="362">362</a>
-<a href="#363" id="363">363</a>
-<a href="#364" id="364">364</a>
-<a href="#365" id="365">365</a>
-<a href="#366" id="366">366</a>
-<a href="#367" id="367">367</a>
-<a href="#368" id="368">368</a>
-<a href="#369" id="369">369</a>
-<a href="#370" id="370">370</a>
-<a href="#371" id="371">371</a>
-<a href="#372" id="372">372</a>
-<a href="#373" id="373">373</a>
-<a href="#374" id="374">374</a>
-<a href="#375" id="375">375</a>
-<a href="#376" id="376">376</a>
-<a href="#377" id="377">377</a>
-<a href="#378" id="378">378</a>
-<a href="#379" id="379">379</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
+<a href="#362" id="362">362</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
 // This file is part of the HotShot repository.
 
 // You should have received a copy of the MIT License
@@ -397,16 +380,12 @@
 <span class="kw">use </span>bitvec::prelude::<span class="kw-2">*</span>;
 <span class="kw">use </span>committable::Committable;
 <span class="kw">use </span>jf_signature::SignatureError;
-<span class="kw">use </span>jf_vid::VidScheme;
 <span class="kw">use </span>primitive_types::U256;
 <span class="kw">use </span>serde::{de::DeserializeOwned, Deserialize, Serialize};
 <span class="kw">use </span>tagged_base64::{TaggedBase64, Tb64Error};
 
 <span class="kw">use </span><span class="kw">super</span>::EncodeBytes;
-<span class="kw">use crate</span>::{
-    bundle::Bundle, traits::node_implementation::NodeType, utils::BuilderCommitment,
-    vid::VidSchemeType,
-};
+<span class="kw">use crate</span>::{bundle::Bundle, traits::node_implementation::NodeType, utils::BuilderCommitment};
 
 <span class="doccomment">/// Type representing stake table entries in a `StakeTable`
 </span><span class="kw">pub trait </span>StakeTableEntryType&lt;K&gt; {
@@ -602,12 +581,8 @@
         signature: <span class="kw-2">&amp;</span><span class="self">Self</span>::BuilderSignature,
         fee_amount: u64,
         metadata: <span class="kw-2">&amp;</span>Metadata,
-        vid_commitment: <span class="kw-2">&amp;</span>&lt;VidSchemeType <span class="kw">as </span>VidScheme&gt;::Commit,
     ) -&gt; bool {
-        <span class="self">self</span>.validate_builder_signature(
-            signature,
-            <span class="kw-2">&amp;</span>aggregate_fee_data(fee_amount, metadata, vid_commitment),
-        )
+        <span class="self">self</span>.validate_builder_signature(signature, <span class="kw-2">&amp;</span>aggregate_fee_data(fee_amount, metadata))
     }
 
     <span class="doccomment">/// validate signature over sequencing fee information
@@ -660,22 +635,18 @@
         data: <span class="kw-2">&amp;</span>[u8],
     ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>::BuilderSignature, <span class="self">Self</span>::SignError&gt;;
 
-    <span class="doccomment">/// sign sequencing fee offer for proposed payload
+    <span class="doccomment">/// sign sequencing fee offer
     /// # Errors
     /// If unable to sign the data with the key
     </span><span class="kw">fn </span>sign_fee&lt;Metadata: EncodeBytes&gt;(
         private_key: <span class="kw-2">&amp;</span><span class="self">Self</span>::BuilderPrivateKey,
         fee_amount: u64,
         metadata: <span class="kw-2">&amp;</span>Metadata,
-        vid_commitment: <span class="kw-2">&amp;</span>&lt;VidSchemeType <span class="kw">as </span>VidScheme&gt;::Commit,
     ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>::BuilderSignature, <span class="self">Self</span>::SignError&gt; {
-        <span class="self">Self</span>::sign_builder_message(
-            private_key,
-            <span class="kw-2">&amp;</span>aggregate_fee_data(fee_amount, metadata, vid_commitment),
-        )
+        <span class="self">Self</span>::sign_builder_message(private_key, <span class="kw-2">&amp;</span>aggregate_fee_data(fee_amount, metadata))
     }
 
-    <span class="doccomment">/// sign fee offer for proposed payload (marketplace version)
+    <span class="doccomment">/// sign fee offer (marketplace version)
     /// # Errors
     /// If unable to sign the data with the key
     </span><span class="kw">fn </span>sign_sequencing_fee_marketplace(
@@ -724,15 +695,10 @@
 }
 
 <span class="doccomment">/// Aggregate all inputs used for signature over fee data
-</span><span class="kw">fn </span>aggregate_fee_data&lt;Metadata: EncodeBytes&gt;(
-    fee_amount: u64,
-    metadata: <span class="kw-2">&amp;</span>Metadata,
-    vid_commitment: <span class="kw-2">&amp;</span>&lt;VidSchemeType <span class="kw">as </span>VidScheme&gt;::Commit,
-) -&gt; Vec&lt;u8&gt; {
+</span><span class="kw">fn </span>aggregate_fee_data&lt;Metadata: EncodeBytes&gt;(fee_amount: u64, metadata: <span class="kw-2">&amp;</span>Metadata) -&gt; Vec&lt;u8&gt; {
     <span class="kw">let </span><span class="kw-2">mut </span>fee_info = Vec::new();
     fee_info.extend_from_slice(fee_amount.to_be_bytes().as_ref());
     fee_info.extend_from_slice(metadata.encode().as_ref());
-    fee_info.extend_from_slice(vid_commitment.as_ref());
     fee_info
 }
 

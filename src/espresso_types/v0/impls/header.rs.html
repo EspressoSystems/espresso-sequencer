@@ -1692,18 +1692,7 @@
 <a href="#1691" id="1691">1691</a>
 <a href="#1692" id="1692">1692</a>
 <a href="#1693" id="1693">1693</a>
-<a href="#1694" id="1694">1694</a>
-<a href="#1695" id="1695">1695</a>
-<a href="#1696" id="1696">1696</a>
-<a href="#1697" id="1697">1697</a>
-<a href="#1698" id="1698">1698</a>
-<a href="#1699" id="1699">1699</a>
-<a href="#1700" id="1700">1700</a>
-<a href="#1701" id="1701">1701</a>
-<a href="#1702" id="1702">1702</a>
-<a href="#1703" id="1703">1703</a>
-<a href="#1704" id="1704">1704</a>
-<a href="#1705" id="1705">1705</a></pre></div><pre class="rust"><code><span class="kw">use </span>anyhow::{ensure, Context};
+<a href="#1694" id="1694">1694</a></pre></div><pre class="rust"><code><span class="kw">use </span>anyhow::{ensure, Context};
 <span class="kw">use </span>ark_serialize::CanonicalSerialize;
 <span class="kw">use </span>committable::{Commitment, Committable, RawCommitmentBuilder};
 <span class="kw">use </span>ethers_conv::ToAlloy;
@@ -2186,12 +2175,7 @@
         {
             <span class="kw">if </span>version &lt; MarketplaceVersion::version() {
                 <span class="macro">ensure!</span>(
-                    fee_account.validate_fee_signature(
-                        fee_signature,
-                        <span class="kw-2">*</span>fee_amount,
-                        <span class="kw-2">&amp;</span>ns_table,
-                        <span class="kw-2">&amp;</span>payload_commitment,
-                    ),
+                    fee_account.validate_fee_signature(fee_signature, <span class="kw-2">*</span>fee_amount, <span class="kw-2">&amp;</span>ns_table,),
                     <span class="string">"invalid builder signature"
                 </span>);
             } <span class="kw">else </span>{
@@ -2955,13 +2939,8 @@
 
             <span class="kw">let </span>(fee_account, fee_key) = FeeAccount::generated_from_seed_indexed([<span class="number">0</span>; <span class="number">32</span>], <span class="number">0</span>);
             <span class="kw">let </span>fee_amount = <span class="number">0</span>;
-            <span class="kw">let </span>fee_signature = FeeAccount::sign_fee(
-                <span class="kw-2">&amp;</span>fee_key,
-                fee_amount,
-                <span class="kw-2">&amp;</span>genesis.ns_table,
-                <span class="kw-2">&amp;</span>genesis.header.payload_commitment(),
-            )
-            .unwrap();
+            <span class="kw">let </span>fee_signature =
+                FeeAccount::sign_fee(<span class="kw-2">&amp;</span>fee_key, fee_amount, <span class="kw-2">&amp;</span>genesis.ns_table).unwrap();
 
             <span class="kw">let </span>header = Header::from_info(
                 genesis.header.payload_commitment(),
@@ -3237,8 +3216,7 @@
         <span class="kw">let </span>payload_commitment = parent_header.payload_commitment();
         <span class="kw">let </span>builder_commitment = parent_header.builder_commitment();
         <span class="kw">let </span>ns_table = genesis.ns_table;
-        <span class="kw">let </span>fee_signature =
-            FeeAccount::sign_fee(<span class="kw-2">&amp;</span>key_pair, fee_amount, <span class="kw-2">&amp;</span>ns_table, <span class="kw-2">&amp;</span>payload_commitment).unwrap();
+        <span class="kw">let </span>fee_signature = FeeAccount::sign_fee(<span class="kw-2">&amp;</span>key_pair, fee_amount, <span class="kw-2">&amp;</span>ns_table).unwrap();
         <span class="kw">let </span>builder_fee = BuilderFee {
             fee_amount,
             fee_account: key_pair.fee_account(),

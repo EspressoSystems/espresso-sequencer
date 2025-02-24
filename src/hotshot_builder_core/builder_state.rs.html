@@ -1459,42 +1459,15 @@
 <a href="#1458" id="1458">1458</a>
 <a href="#1459" id="1459">1459</a>
 <a href="#1460" id="1460">1460</a>
-<a href="#1461" id="1461">1461</a>
-<a href="#1462" id="1462">1462</a>
-<a href="#1463" id="1463">1463</a>
-<a href="#1464" id="1464">1464</a>
-<a href="#1465" id="1465">1465</a>
-<a href="#1466" id="1466">1466</a>
-<a href="#1467" id="1467">1467</a>
-<a href="#1468" id="1468">1468</a>
-<a href="#1469" id="1469">1469</a>
-<a href="#1470" id="1470">1470</a>
-<a href="#1471" id="1471">1471</a>
-<a href="#1472" id="1472">1472</a>
-<a href="#1473" id="1473">1473</a>
-<a href="#1474" id="1474">1474</a>
-<a href="#1475" id="1475">1475</a>
-<a href="#1476" id="1476">1476</a>
-<a href="#1477" id="1477">1477</a>
-<a href="#1478" id="1478">1478</a>
-<a href="#1479" id="1479">1479</a>
-<a href="#1480" id="1480">1480</a>
-<a href="#1481" id="1481">1481</a>
-<a href="#1482" id="1482">1482</a>
-<a href="#1483" id="1483">1483</a>
-<a href="#1484" id="1484">1484</a>
-<a href="#1485" id="1485">1485</a>
-<a href="#1486" id="1486">1486</a>
-<a href="#1487" id="1487">1487</a></pre></div><pre class="rust"><code><span class="kw">use </span>hotshot_types::{
+<a href="#1461" id="1461">1461</a></pre></div><pre class="rust"><code><span class="kw">use </span>hotshot_types::{
     data::{DaProposal2, Leaf2, QuorumProposalWrapper},
     message::Proposal,
     traits::{
-        block_contents::{precompute_vid_commitment, BlockHeader, BlockPayload},
+        block_contents::{BlockHeader, BlockPayload},
         node_implementation::{ConsensusTime, NodeType, Versions},
         EncodeBytes,
     },
     utils::BuilderCommitment,
-    vid::{VidCommitment, VidPrecomputeData},
 };
 <span class="kw">use </span>marketplace_builder_shared::block::{BlockId, BuilderStateId, ParentBlockReferences};
 
@@ -1510,11 +1483,7 @@
 
 <span class="kw">use </span>tokio::{
     spawn,
-    sync::{
-        mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
-        oneshot,
-    },
-    task::spawn_blocking,
+    sync::{mpsc::UnboundedSender, oneshot},
     time::sleep,
 };
 
@@ -1573,8 +1542,8 @@
     <span class="kw">pub </span>block_payload: Types::BlockPayload,
     <span class="kw">pub </span>metadata: &lt;&lt;Types <span class="kw">as </span>NodeType&gt;::BlockPayload <span class="kw">as </span>BlockPayload&lt;Types&gt;&gt;::Metadata,
     <span class="kw">pub </span>vid_trigger: oneshot::Sender&lt;TriggerStatus&gt;,
-    <span class="kw">pub </span>vid_receiver: UnboundedReceiver&lt;(VidCommitment, VidPrecomputeData)&gt;,
-    <span class="comment">// Could we have included more transactions, but chose not to?
+    <span class="comment">// TODO Add precompute back.
+    // Could we have included more transactions, but chose not to?
     </span><span class="kw">pub </span>truncated: bool,
 }
 
@@ -2279,28 +2248,8 @@
         <span class="kw">let </span>block_size: u64 = encoded_txns.len() <span class="kw">as </span>u64;
         <span class="kw">let </span>offered_fee: u64 = <span class="self">self</span>.base_fee * block_size;
 
-        <span class="comment">// Get the number of nodes stored while processing the `claim_block_with_num_nodes` request
-        // or upon initialization.
-        </span><span class="kw">let </span>num_nodes = <span class="self">self</span>.global_state.read_arc().<span class="kw">await</span>.num_nodes;
-
-        <span class="kw">let </span>(trigger_send, trigger_recv) = oneshot::channel();
-
-        <span class="comment">// spawn a task to calculate the VID commitment, and pass the handle to the global state
-        // later global state can await on it before replying to the proposer
-        </span><span class="kw">let </span>(unbounded_sender, unbounded_receiver) = unbounded_channel();
-        <span class="attr">#[allow(unused_must_use)]
-        </span>spawn(<span class="kw">async move </span>{
-            <span class="kw">let </span><span class="prelude-val">Ok</span>(TriggerStatus::Start) = trigger_recv.<span class="kw">await else </span>{
-                <span class="kw">return</span>;
-            };
-
-            <span class="kw">let </span>join_handle =
-                spawn_blocking(<span class="kw">move </span>|| precompute_vid_commitment(<span class="kw-2">&amp;</span>encoded_txns, num_nodes));
-
-            <span class="kw">let </span>vidc = join_handle.<span class="kw">await</span>.unwrap();
-
-            unbounded_sender.send(vidc);
-        });
+        <span class="comment">// TODO Add precompute back.
+        </span><span class="kw">let </span>(trigger_send, <span class="kw">_</span>) = oneshot::channel();
 
         <span class="macro">tracing::info!</span>(
             <span class="string">"Builder view num {:?}, building block with {:?} txns, with builder hash {:?}"</span>,
@@ -2319,7 +2268,6 @@
             block_payload: payload,
             metadata,
             vid_trigger: trigger_send,
-            vid_receiver: unbounded_receiver,
             truncated: actual_txn_count &lt; <span class="self">self</span>.tx_queue.len(),
         })
     }

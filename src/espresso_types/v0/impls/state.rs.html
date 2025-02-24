@@ -1875,11 +1875,7 @@
 <a href="#1874" id="1874">1874</a>
 <a href="#1875" id="1875">1875</a>
 <a href="#1876" id="1876">1876</a>
-<a href="#1877" id="1877">1877</a>
-<a href="#1878" id="1878">1878</a>
-<a href="#1879" id="1879">1879</a>
-<a href="#1880" id="1880">1880</a>
-<a href="#1881" id="1881">1881</a></pre></div><pre class="rust"><code><span class="kw">use </span>anyhow::bail;
+<a href="#1877" id="1877">1877</a></pre></div><pre class="rust"><code><span class="kw">use </span>anyhow::bail;
 <span class="kw">use </span>committable::{Commitment, Committable};
 <span class="kw">use </span>ethers::types::Address;
 <span class="kw">use </span>ethers_conv::ToAlloy;
@@ -2566,7 +2562,6 @@
                     <span class="kw-2">&amp;</span>signature,
                     fee_info.amount().as_u64().unwrap(),
                     proposed_header.metadata(),
-                    <span class="kw-2">&amp;</span>proposed_header.payload_commitment(),
                 )
                 .then_some(())
                 .ok_or(BuilderValidationError::InvalidBuilderSignature)<span class="question-mark">?</span>;
@@ -3016,7 +3011,6 @@
                 <span class="kw-2">&amp;</span>key_pair,
                 fee_info.amount().as_u64().unwrap(),
                 <span class="self">self</span>.metadata(),
-                <span class="kw-2">&amp;</span><span class="self">self</span>.payload_commitment(),
             )
             .unwrap();
 
@@ -3048,7 +3042,6 @@
                 <span class="kw-2">&amp;</span>key_pair2,
                 fee_info.amount().as_u64().unwrap(),
                 <span class="self">self</span>.metadata(),
-                <span class="kw-2">&amp;</span><span class="self">self</span>.payload_commitment(),
             )
             .unwrap();
 
@@ -3645,7 +3638,6 @@
                 </span>.into();
         <span class="kw">let </span>header = parent.block_header().clone();
         <span class="kw">let </span>metadata = parent.block_header().metadata();
-        <span class="kw">let </span>vid_commitment = parent.payload_commitment();
 
         <span class="macro">debug!</span>(<span class="string">"{:?}"</span>, header.version());
 
@@ -3662,7 +3654,7 @@
             .unwrap();
 
         <span class="comment">// test v1 sig
-        </span><span class="kw">let </span>sig = FeeAccount::sign_fee(<span class="kw-2">&amp;</span>key_pair, data, metadata, <span class="kw-2">&amp;</span>vid_commitment).unwrap();
+        </span><span class="kw">let </span>sig = FeeAccount::sign_fee(<span class="kw-2">&amp;</span>key_pair, data, metadata).unwrap();
 
         <span class="kw">let </span>header = <span class="kw">match </span>header {
             Header::V1(header) =&gt; Header::V1(v0_1::Header {

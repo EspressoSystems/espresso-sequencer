@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["WaitAndKeep","WaitAndKeepGetError"],"mod":["builder_state","service"]};
+window.SIDEBAR_ITEMS = {"enum":["WaitAndKeep"],"mod":["builder_state","service"]};

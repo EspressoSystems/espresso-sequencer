@@ -812,13 +812,7 @@
 <a href="#811" id="811">811</a>
 <a href="#812" id="812">812</a>
 <a href="#813" id="813">813</a>
-<a href="#814" id="814">814</a>
-<a href="#815" id="815">815</a>
-<a href="#816" id="816">816</a>
-<a href="#817" id="817">817</a>
-<a href="#818" id="818">818</a>
-<a href="#819" id="819">819</a>
-<a href="#820" id="820">820</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
+<a href="#814" id="814">814</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
 // This file is part of the HotShot repository.
 
 // You should have received a copy of the MIT License
@@ -1032,10 +1026,7 @@
                 .number_of_empty_blocks_proposed
                 .add(<span class="number">1</span>);
 
-            <span class="kw">let </span>membership_total_nodes = <span class="self">self</span>.membership.read().<span class="kw">await</span>.total_nodes(<span class="self">self</span>.cur_epoch);
-            <span class="kw">let </span><span class="prelude-val">Some</span>(null_fee) =
-                null_block::builder_fee::&lt;TYPES, V&gt;(membership_total_nodes, version, <span class="kw-2">*</span>block_view)
-            <span class="kw">else </span>{
+            <span class="kw">let </span><span class="prelude-val">Some</span>(null_fee) = null_block::builder_fee::&lt;TYPES, V&gt;(version, <span class="kw-2">*</span>block_view) <span class="kw">else </span>{
                 <span class="macro">tracing::error!</span>(<span class="string">"Failed to get null fee"</span>);
                 <span class="kw">return </span><span class="prelude-val">None</span>;
             };
@@ -1175,10 +1166,7 @@
         block_epoch: <span class="prelude-ty">Option</span>&lt;TYPES::Epoch&gt;,
         version: Version,
     ) -&gt; <span class="prelude-ty">Option</span>&lt;PackedBundle&lt;TYPES&gt;&gt; {
-        <span class="kw">let </span>membership_total_nodes = <span class="self">self</span>.membership.read().<span class="kw">await</span>.total_nodes(<span class="self">self</span>.cur_epoch);
-        <span class="kw">let </span><span class="prelude-val">Some</span>(null_fee) =
-            null_block::builder_fee::&lt;TYPES, V&gt;(membership_total_nodes, version, <span class="kw-2">*</span>block_view)
-        <span class="kw">else </span>{
+        <span class="kw">let </span><span class="prelude-val">Some</span>(null_fee) = null_block::builder_fee::&lt;TYPES, V&gt;(version, <span class="kw-2">*</span>block_view) <span class="kw">else </span>{
             <span class="macro">tracing::error!</span>(<span class="string">"Failed to calculate null block fee."</span>);
             <span class="kw">return </span><span class="prelude-val">None</span>;
         };

@@ -224,30 +224,15 @@
 <a href="#223" id="223">223</a>
 <a href="#224" id="224">224</a>
 <a href="#225" id="225">225</a>
-<a href="#226" id="226">226</a>
-<a href="#227" id="227">227</a>
-<a href="#228" id="228">228</a>
-<a href="#229" id="229">229</a>
-<a href="#230" id="230">230</a>
-<a href="#231" id="231">231</a>
-<a href="#232" id="232">232</a>
-<a href="#233" id="233">233</a>
-<a href="#234" id="234">234</a>
-<a href="#235" id="235">235</a>
-<a href="#236" id="236">236</a>
-<a href="#237" id="237">237</a>
-<a href="#238" id="238">238</a>
-<a href="#239" id="239">239</a>
-<a href="#240" id="240">240</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
+<a href="#226" id="226">226</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
 // This file is part of the HotShot repository.
 
 // You should have received a copy of the MIT License
 // along with the HotShot repository. If not, see &lt;https://mit-license.org/&gt;.
 
-</span><span class="kw">use </span>std::{collections::HashMap, sync::Arc};
+</span><span class="kw">use </span>std::collections::HashMap;
 
 <span class="kw">use </span>async_broadcast::Receiver;
-<span class="kw">use </span>async_lock::RwLock;
 <span class="kw">use </span>async_trait::async_trait;
 <span class="kw">use </span>futures::Stream;
 <span class="kw">use </span>hotshot::{traits::BlockPayload, types::Event};
@@ -263,14 +248,13 @@
 <span class="kw">use </span>hotshot_types::{
     constants::{LEGACY_BUILDER_MODULE, MARKETPLACE_BUILDER_MODULE},
     traits::{
-        block_contents::{precompute_vid_commitment, EncodeBytes},
-        node_implementation::NodeType,
+        block_contents::EncodeBytes, node_implementation::NodeType,
         signature_key::BuilderSignatureKey,
     },
 };
 <span class="kw">use </span>tide_disco::{method::ReadState, App, Url};
 <span class="kw">use </span>tokio::spawn;
-<span class="kw">use </span>vbs::version::{StaticVersionType, Version};
+<span class="kw">use </span>vbs::version::StaticVersionType;
 
 <span class="kw">use </span><span class="kw">crate</span>::test_builder::BuilderChange;
 
@@ -410,10 +394,8 @@
 <span class="doccomment">/// Helper function to construct all builder data structures from a list of transactions
 </span><span class="kw">async fn </span>build_block&lt;TYPES: NodeType&gt;(
     transactions: Vec&lt;TYPES::Transaction&gt;,
-    num_storage_nodes: Arc&lt;RwLock&lt;usize&gt;&gt;,
     pub_key: TYPES::BuilderSignatureKey,
     priv_key: &lt;TYPES::BuilderSignatureKey <span class="kw">as </span>BuilderSignatureKey&gt;::BuilderPrivateKey,
-    _version: Version,
 ) -&gt; BlockEntry&lt;TYPES&gt;
 <span class="kw">where
     </span>&lt;TYPES <span class="kw">as </span>NodeType&gt;::InstanceState: Default,
@@ -428,9 +410,6 @@
 
     <span class="kw">let </span>commitment = block_payload.builder_commitment(<span class="kw-2">&amp;</span>metadata);
 
-    <span class="kw">let </span>(vid_commitment, vid_precompute_data) =
-        precompute_vid_commitment(<span class="kw-2">&amp;</span>block_payload.encode(), <span class="kw-2">*</span>num_storage_nodes.read_arc().<span class="kw">await</span>);
-
     <span class="comment">// Get block size from the encoded payload
     </span><span class="kw">let </span>block_size = block_payload.encode().len() <span class="kw">as </span>u64;
 
@@ -442,12 +421,8 @@
         TYPES::BuilderSignatureKey::sign_builder_message(<span class="kw-2">&amp;</span>priv_key, commitment.as_ref())
             .expect(<span class="string">"Failed to sign commitment"</span>);
 
-    <span class="kw">let </span>signature_over_vid_commitment =
-        TYPES::BuilderSignatureKey::sign_builder_message(<span class="kw-2">&amp;</span>priv_key, vid_commitment.as_ref())
-            .expect(<span class="string">"Failed to sign block vid commitment"</span>);
-
     <span class="kw">let </span>signature_over_fee_info =
-        TYPES::BuilderSignatureKey::sign_fee(<span class="kw-2">&amp;</span>priv_key, <span class="number">123_u64</span>, <span class="kw-2">&amp;</span>metadata, <span class="kw-2">&amp;</span>vid_commitment)
+        TYPES::BuilderSignatureKey::sign_fee(<span class="kw-2">&amp;</span>priv_key, <span class="number">123_u64</span>, <span class="kw-2">&amp;</span>metadata)
             .expect(<span class="string">"Failed to sign fee info"</span>);
 
     <span class="kw">let </span>block = AvailableBlockData {
@@ -465,9 +440,6 @@
         _phantom: std::marker::PhantomData,
     };
     <span class="kw">let </span>header_input = AvailableBlockHeaderInputV1 {
-        vid_commitment,
-        vid_precompute_data,
-        message_signature: signature_over_vid_commitment.clone(),
         fee_signature: signature_over_fee_info,
         sender: pub_key,
     };
