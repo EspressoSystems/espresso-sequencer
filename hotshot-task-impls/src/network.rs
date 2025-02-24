@@ -308,6 +308,9 @@ impl<TYPES: NodeType, V: Versions> NetworkMessageTaskState<TYPES, V> {
                             HotShotEvent::UpgradeVoteRecv(message)
                         }
                         GeneralConsensusMessage::HighQc(qc) => HotShotEvent::HighQcRecv(qc, sender),
+                        GeneralConsensusMessage::ExtendedQc(qc, next_epoch_qc) => {
+                            HotShotEvent::ExtendedQcRecv(qc, next_epoch_qc, sender)
+                        }
                     },
                     SequencingMessage::Da(da_message) => match da_message {
                         DaConsensusMessage::DaProposal(proposal) => {
@@ -1108,6 +1111,13 @@ impl<
                     GeneralConsensusMessage::HighQc(quorum_cert),
                 )),
                 TransmitType::Direct(leader),
+            )),
+            HotShotEvent::ExtendedQcSend(quorum_cert, next_epoch_qc, sender) => Some((
+                sender,
+                MessageKind::Consensus(SequencingMessage::General(
+                    GeneralConsensusMessage::ExtendedQc(quorum_cert, next_epoch_qc),
+                )),
+                TransmitType::Broadcast,
             )),
             _ => None,
         }
