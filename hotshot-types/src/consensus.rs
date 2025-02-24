@@ -16,6 +16,7 @@ use std::{
 use async_lock::{RwLock, RwLockReadGuard, RwLockUpgradableReadGuard, RwLockWriteGuard};
 use committable::{Commitment, Committable};
 use hotshot_utils::anytrace::*;
+use serde::{Deserialize, Serialize};
 use tracing::instrument;
 use vec1::Vec1;
 
@@ -331,11 +332,12 @@ pub struct Consensus<TYPES: NodeType> {
     pub drb_seeds_and_results: DrbSeedsAndResults<TYPES>,
 }
 
-/// Type alias to avoid complexity
-pub type PayloadWithMetadata<TYPES> = (
-    <TYPES as NodeType>::BlockPayload,
-    <<TYPES as NodeType>::BlockPayload as BlockPayload<TYPES>>::Metadata,
-);
+/// This struct holds a payload and its metadata
+#[derive(Debug, Clone, Hash, Eq, PartialEq)]
+pub struct PayloadWithMetadata<TYPES: NodeType> {
+    pub payload: TYPES::BlockPayload,
+    pub metadata: <TYPES::BlockPayload as BlockPayload<TYPES>>::Metadata,
+}
 
 /// Contains several `ConsensusMetrics` that we're interested in from the consensus interfaces
 #[derive(Clone, Debug)]
@@ -975,12 +977,12 @@ impl<TYPES: NodeType> Consensus<TYPES> {
             .epoch()?;
 
         let vid = VidDisperse::calculate_vid_disperse::<V>(
-            &payload_with_metadata.0,
+            &payload_with_metadata.payload,
             &membership,
             view,
             target_epoch,
             epoch,
-            &payload_with_metadata.1,
+            &payload_with_metadata.metadata,
             upgrade_lock,
         )
         .await

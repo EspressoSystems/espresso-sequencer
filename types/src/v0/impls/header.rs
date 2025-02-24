@@ -815,7 +815,6 @@ impl BlockHeader<SeqTypes> for Header {
             height = parent_leaf.block_header().block_number() + 1,
             parent_view = ?parent_leaf.view_number(),
             payload_commitment,
-            // payload_size = ADVZScheme::get_payload_byte_len(&_vid_common),
             ?auction_results,
             version,
         )
@@ -953,7 +952,6 @@ impl BlockHeader<SeqTypes> for Header {
             height = parent_leaf.block_header().block_number() + 1,
             parent_view = ?parent_leaf.view_number(),
             payload_commitment,
-            // payload_size = ADVZScheme::get_payload_byte_len(&_vid_common),
             version,
         )
     )]

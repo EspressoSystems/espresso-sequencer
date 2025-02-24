@@ -11,7 +11,7 @@ use async_lock::RwLock;
 use async_trait::async_trait;
 use hotshot_task::task::TaskState;
 use hotshot_types::{
-    consensus::{Consensus, OuterConsensus},
+    consensus::{Consensus, OuterConsensus, PayloadWithMetadata},
     data::{vid_commitment, DaProposal2, PackedBundle},
     event::{Event, EventType},
     message::{Proposal, UpgradeLock},
@@ -107,8 +107,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> DaTaskState<TYP
                     "Throwing away DA proposal that is more than one view older"
                 );
 
-                if let Some(payload) = self.consensus.read().await.saved_payloads().get(&view) {
-                    ensure!(payload.0.encode() == proposal.data.encoded_transactions, error!(
+                if let Some(entry) = self.consensus.read().await.saved_payloads().get(&view) {
+                    ensure!(entry.payload.encode() == proposal.data.encoded_transactions, error!(
                       "Received DA proposal for view {:?} but we already have a payload for that view and they are not identical.  Throwing it away",
                       view)
                     );
@@ -221,13 +221,13 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> DaTaskState<TYP
                     tracing::trace!("{e:?}");
                 }
 
-                let payload_with_metadata = Arc::new((
-                    TYPES::BlockPayload::from_bytes(
+                let payload_with_metadata = Arc::new(PayloadWithMetadata {
+                    payload: TYPES::BlockPayload::from_bytes(
                         proposal.data.encoded_transactions.as_ref(),
                         &proposal.data.metadata,
                     ),
-                    proposal.data.metadata.clone(),
-                ));
+                    metadata: proposal.data.metadata.clone(),
+                });
                 // Record the payload we have promised to make available.
                 if let Err(e) =
                     consensus_writer.update_saved_payloads(view_number, payload_with_metadata)
@@ -379,10 +379,13 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> DaTaskState<TYP
                     &event_stream,
                 )
                 .await;
-                let payload_with_metadata = Arc::new((
-                    TYPES::BlockPayload::from_bytes(encoded_transactions.as_ref(), metadata),
-                    metadata.clone(),
-                ));
+                let payload_with_metadata = Arc::new(PayloadWithMetadata {
+                    payload: TYPES::BlockPayload::from_bytes(
+                        encoded_transactions.as_ref(),
+                        metadata,
+                    ),
+                    metadata: metadata.clone(),
+                });
                 // Save the payload early because we might need it to calculate VID for the next epoch nodes.
                 if let Err(e) = self
                     .consensus

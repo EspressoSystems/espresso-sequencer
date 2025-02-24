@@ -314,7 +314,7 @@ pub async fn decide_from_proposal_2<TYPES: NodeType>(
             .get(&info.leaf.view_number())
         {
             info.leaf
-                .fill_block_payload_unchecked(payload.as_ref().0.clone());
+                .fill_block_payload_unchecked(payload.as_ref().payload.clone());
         }
 
         if let Some(ref payload) = info.leaf.block_payload() {
@@ -453,7 +453,7 @@ pub async fn decide_from_proposal<TYPES: NodeType>(
                 // If the block payload is available for this leaf, include it in
                 // the leaf chain that we send to the client.
                 if let Some(payload) = consensus_reader.saved_payloads().get(&leaf.view_number()) {
-                    leaf.fill_block_payload_unchecked(payload.as_ref().0.clone());
+                    leaf.fill_block_payload_unchecked(payload.as_ref().payload.clone());
                 }
 
                 // Get the VID share at the leaf's view number, corresponding to our key

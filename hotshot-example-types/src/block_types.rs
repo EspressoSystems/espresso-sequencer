@@ -398,7 +398,7 @@ impl Committable for TestBlockHeader {
                 <TestBlockHeader as BlockHeader<TestTypes>>::block_number(self),
             )
             .constant_str("payload commitment")
-            .var_size_bytes(
+            .fixed_size_bytes(
                 <TestBlockHeader as BlockHeader<TestTypes>>::payload_commitment(self).as_ref(),
             )
             .finalize()

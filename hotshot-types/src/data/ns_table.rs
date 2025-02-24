@@ -15,6 +15,7 @@ const NS_ID_BYTE_LEN: usize = 4;
 
 /// Helper function for AvidM scheme to parse a namespace table.
 /// If the namespace table is invalid, it returns a default single entry namespace table.
+/// For details, please refer to `block/full_payload/ns_table.rs` in the `sequencer` crate.
 #[allow(clippy::single_range_in_vec_init)]
 pub(crate) fn parse_ns_table(payload_byte_len: usize, bytes: &[u8]) -> Vec<Range<usize>> {
     let mut result = vec![];

@@ -209,12 +209,12 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> VidTaskState<TY
                 drop(consensus_reader);
 
                 let next_epoch_vid_disperse = VidDisperse::calculate_vid_disperse::<V>(
-                    &payload.0,
+                    &payload.payload,
                     &Arc::clone(&self.membership),
                     proposal_view_number,
                     target_epoch,
                     sender_epoch,
-                    &payload.1,
+                    &payload.metadata,
                     &self.upgrade_lock,
                 )
                 .await
