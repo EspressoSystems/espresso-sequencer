@@ -4,8 +4,13 @@
 // You should have received a copy of the MIT License
 // along with the HotShot repository. If not, see <https://mit-license.org/>.
 
+use std::{cmp::max, collections::BTreeMap, num::NonZeroU64};
+
 use hotshot_types::{
-    drb::DrbResult,
+    drb::{
+        election::{generate_stake_cdf, select_randomized_leader, RandomizedCommittee},
+        DrbResult,
+    },
     traits::{
         election::Membership,
         node_implementation::NodeType,
@@ -13,15 +18,13 @@ use hotshot_types::{
     },
     PeerConfig,
 };
-use hotshot_utils::anytrace::Result;
+use hotshot_utils::anytrace::*;
 use primitive_types::U256;
-use rand::{rngs::StdRng, Rng};
-use std::{cmp::max, collections::BTreeMap, num::NonZeroU64};
 
-#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Debug)]
 
 /// The static committee election
-pub struct RandomizedCommittee<T: NodeType> {
+pub struct Committee<T: NodeType> {
     /// The nodes eligible for leadership.
     /// NOTE: This is currently a hack because the DA leader needs to be the quorum
     /// leader but without voting rights.
@@ -33,6 +36,12 @@ pub struct RandomizedCommittee<T: NodeType> {
     /// The nodes on the committee and their stake
     da_stake_table: Vec<<T::SignatureKey as SignatureKey>::StakeTableEntry>,
 
+    /// Stake tables randomized with the DRB, used (only) for leader election
+    randomized_committees: BTreeMap<
+        <T as NodeType>::Epoch,
+        RandomizedCommittee<<T::SignatureKey as SignatureKey>::StakeTableEntry>,
+    >,
+
     /// The nodes on the committee and their stake, indexed by public key
     indexed_stake_table:
         BTreeMap<T::SignatureKey, <T::SignatureKey as SignatureKey>::StakeTableEntry>,
@@ -42,7 +51,7 @@ pub struct RandomizedCommittee<T: NodeType> {
         BTreeMap<T::SignatureKey, <T::SignatureKey as SignatureKey>::StakeTableEntry>,
 }
 
-impl<TYPES: NodeType> Membership<TYPES> for RandomizedCommittee<TYPES> {
+impl<TYPES: NodeType> Membership<TYPES> for Committee<TYPES> {
     type Error = hotshot_utils::anytrace::Error;
 
     /// Create a new election
@@ -95,6 +104,7 @@ impl<TYPES: NodeType> Membership<TYPES> for RandomizedCommittee<TYPES> {
             eligible_leaders,
             stake_table: members,
             da_stake_table: da_members,
+            randomized_committees: BTreeMap::new(),
             indexed_stake_table,
             indexed_da_stake_table,
         }
@@ -203,17 +213,24 @@ impl<TYPES: NodeType> Membership<TYPES> for RandomizedCommittee<TYPES> {
     fn lookup_leader(
         &self,
         view_number: <TYPES as NodeType>::View,
-        _epoch: Option<<TYPES as NodeType>::Epoch>,
+        epoch: Option<<TYPES as NodeType>::Epoch>,
     ) -> Result<TYPES::SignatureKey> {
-        let mut rng: StdRng = rand::SeedableRng::seed_from_u64(*view_number);
+        if let Some(epoch) = epoch {
+            let Some(randomized_committee) = self.randomized_committees.get(&epoch) else {
+                bail!("Missing randomized committee for {}", epoch);
+            };
 
-        let randomized_view_number: u64 = rng.gen_range(0..=u64::MAX);
-        #[allow(clippy::cast_possible_truncation)]
-        let index = randomized_view_number as usize % self.eligible_leaders.len();
+            let res = select_randomized_leader(randomized_committee, *view_number);
 
-        let res = self.eligible_leaders[index].clone();
+            Ok(TYPES::SignatureKey::public_key(&res))
+        } else {
+            #[allow(clippy::cast_possible_truncation)]
+            let index = *view_number as usize % self.eligible_leaders.len();
 
-        Ok(TYPES::SignatureKey::public_key(&res))
+            let res = self.eligible_leaders[index].clone();
+
+            Ok(TYPES::SignatureKey::public_key(&res))
+        }
     }
 
     /// Get the total number of nodes in the committee
@@ -248,5 +265,10 @@ impl<TYPES: NodeType> Membership<TYPES> for RandomizedCommittee<TYPES> {
         .unwrap()
     }
 
-    fn add_drb_result(&mut self, _epoch: <TYPES as NodeType>::Epoch, _drb_result: DrbResult) {}
+    fn add_drb_result(&mut self, epoch: <TYPES as NodeType>::Epoch, drb: DrbResult) {
+        let randomized_committee = generate_stake_cdf(self.eligible_leaders.clone(), drb);
+
+        self.randomized_committees
+            .insert(epoch, randomized_committee);
+    }
 }
