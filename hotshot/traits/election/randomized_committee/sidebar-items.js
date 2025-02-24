@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"struct":["RandomizedCommittee"]};
+window.SIDEBAR_ITEMS = {"struct":["Committee"]};

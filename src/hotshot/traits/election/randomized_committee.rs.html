@@ -250,14 +250,23 @@
 <a href="#249" id="249">249</a>
 <a href="#250" id="250">250</a>
 <a href="#251" id="251">251</a>
-<a href="#252" id="252">252</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
+<a href="#252" id="252">252</a>
+<a href="#253" id="253">253</a>
+<a href="#254" id="254">254</a>
+<a href="#255" id="255">255</a>
+<a href="#256" id="256">256</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
 // This file is part of the HotShot repository.
 
 // You should have received a copy of the MIT License
 // along with the HotShot repository. If not, see &lt;https://mit-license.org/&gt;.
 
-</span><span class="kw">use </span>hotshot_types::{
-    drb::DrbResult,
+</span><span class="kw">use </span>std::{cmp::max, collections::BTreeMap, num::NonZeroU64};
+
+<span class="kw">use </span>hotshot_types::{
+    drb::{
+        election::{generate_stake_cdf, select_randomized_leader, RandomizedCommittee},
+        DrbResult,
+    },
     traits::{
         election::Membership,
         node_implementation::NodeType,
@@ -265,15 +274,13 @@
     },
     PeerConfig,
 };
-<span class="kw">use </span>hotshot_utils::anytrace::Result;
+<span class="kw">use </span>hotshot_utils::anytrace::<span class="kw-2">*</span>;
 <span class="kw">use </span>primitive_types::U256;
-<span class="kw">use </span>rand::{rngs::StdRng, Rng};
-<span class="kw">use </span>std::{cmp::max, collections::BTreeMap, num::NonZeroU64};
 
-<span class="attr">#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+<span class="attr">#[derive(Clone, Debug)]
 
 </span><span class="doccomment">/// The static committee election
-</span><span class="kw">pub struct </span>RandomizedCommittee&lt;T: NodeType&gt; {
+</span><span class="kw">pub struct </span>Committee&lt;T: NodeType&gt; {
     <span class="doccomment">/// The nodes eligible for leadership.
     /// NOTE: This is currently a hack because the DA leader needs to be the quorum
     /// leader but without voting rights.
@@ -285,6 +292,9 @@
     <span class="doccomment">/// The nodes on the committee and their stake
     </span>da_stake_table: Vec&lt;&lt;T::SignatureKey <span class="kw">as </span>SignatureKey&gt;::StakeTableEntry&gt;,
 
+    <span class="doccomment">/// Stake tables randomized with the DRB, used (only) for leader election
+    </span>randomized_committee: RandomizedCommittee&lt;&lt;T::SignatureKey <span class="kw">as </span>SignatureKey&gt;::StakeTableEntry&gt;,
+
     <span class="doccomment">/// The nodes on the committee and their stake, indexed by public key
     </span>indexed_stake_table:
         BTreeMap&lt;T::SignatureKey, &lt;T::SignatureKey <span class="kw">as </span>SignatureKey&gt;::StakeTableEntry&gt;,
@@ -294,7 +304,7 @@
         BTreeMap&lt;T::SignatureKey, &lt;T::SignatureKey <span class="kw">as </span>SignatureKey&gt;::StakeTableEntry&gt;,
 }
 
-<span class="kw">impl</span>&lt;TYPES: NodeType&gt; Membership&lt;TYPES&gt; <span class="kw">for </span>RandomizedCommittee&lt;TYPES&gt; {
+<span class="kw">impl</span>&lt;TYPES: NodeType&gt; Membership&lt;TYPES&gt; <span class="kw">for </span>Committee&lt;TYPES&gt; {
     <span class="kw">type </span>Error = hotshot_utils::anytrace::Error;
 
     <span class="doccomment">/// Create a new election
@@ -343,10 +353,14 @@
             .map(|entry| (TYPES::SignatureKey::public_key(entry), entry.clone()))
             .collect();
 
+        <span class="comment">// We use a constant value of `[0u8; 32]` for the drb, since this is just meant to be used in tests
+        </span><span class="kw">let </span>randomized_committee = generate_stake_cdf(eligible_leaders.clone(), [<span class="number">0u8</span>; <span class="number">32</span>]);
+
         <span class="self">Self </span>{
             eligible_leaders,
             stake_table: members,
             da_stake_table: da_members,
+            randomized_committee,
             indexed_stake_table,
             indexed_da_stake_table,
         }
@@ -457,13 +471,7 @@
         view_number: &lt;TYPES <span class="kw">as </span>NodeType&gt;::View,
         _epoch: <span class="prelude-ty">Option</span>&lt;&lt;TYPES <span class="kw">as </span>NodeType&gt;::Epoch&gt;,
     ) -&gt; <span class="prelude-ty">Result</span>&lt;TYPES::SignatureKey&gt; {
-        <span class="kw">let </span><span class="kw-2">mut </span>rng: StdRng = rand::SeedableRng::seed_from_u64(<span class="kw-2">*</span>view_number);
-
-        <span class="kw">let </span>randomized_view_number: u64 = rng.gen_range(<span class="number">0</span>..=u64::MAX);
-        <span class="attr">#[allow(clippy::cast_possible_truncation)]
-        </span><span class="kw">let </span>index = randomized_view_number <span class="kw">as </span>usize % <span class="self">self</span>.eligible_leaders.len();
-
-        <span class="kw">let </span>res = <span class="self">self</span>.eligible_leaders[index].clone();
+        <span class="kw">let </span>res = select_randomized_leader(<span class="kw-2">&amp;</span><span class="self">self</span>.randomized_committee, <span class="kw-2">*</span>view_number);
 
         <span class="prelude-val">Ok</span>(TYPES::SignatureKey::public_key(<span class="kw-2">&amp;</span>res))
     }
@@ -500,6 +508,6 @@
         .unwrap()
     }
 
-    <span class="kw">fn </span>add_drb_result(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _epoch: &lt;TYPES <span class="kw">as </span>NodeType&gt;::Epoch, _drb_result: DrbResult) {}
+    <span class="kw">fn </span>add_drb_result(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _epoch: &lt;TYPES <span class="kw">as </span>NodeType&gt;::Epoch, _drb: DrbResult) {}
 }
 </code></pre></div></section></main></body></html>
