@@ -2,8 +2,8 @@ use anyhow::{anyhow, Context, Result};
 use client::SequencerClient;
 use espresso_types::{FeeAmount, FeeVersion, MarketplaceVersion};
 use ethers::prelude::*;
-use futures::future::join_all;
-use std::path::Path;
+use futures::future::{join_all, BoxFuture};
+use futures::FutureExt;
 use std::{fmt, str::FromStr, time::Duration};
 use surf_disco::Url;
 use tokio::time::{sleep, timeout};
@@ -292,58 +292,91 @@ pub async fn test_stake_table_update(clients: Vec<SequencerClient>) -> Result<()
     let l1_port = var("ESPRESSO_SEQUENCER_L1_PORT")?;
     let account_index = var("ESPRESSO_DEPLOYER_ACCOUNT_INDEX")?;
     let contract_address = var("ESPRESSO_SEQUENCER_PERMISSIONED_STAKE_TABLE_ADDRESS")?;
-    let initial_stake_table_path = var("ESPRESSO_SEQUENCER_INITIAL_PERMISSIONED_STAKE_TABLE_PATH")?;
+    let client = clients[0].clone();
+    // currently stake table update does not support DA node member changes
 
-    let permissioned_stake_table =
-        PermissionedStakeTableUpdate::from_toml_file(Path::new(&initial_stake_table_path))?;
+    let stake_table = client.stake_table(1).await?;
+    let da_members = client.da_members(1).await?;
 
-    // initial stake table has 5 new stakers
+    // filtering out DA nodes
+    let stakers: Vec<_> = stake_table
+        .into_iter()
+        .filter(|x| !da_members.contains(x))
+        .collect();
 
-    let new_stakers = permissioned_stake_table.new_stakers;
-    //lets remove one
-    let staker_removed = new_stakers[0].clone();
+    let assert_change =
+        move |u: PermissionedStakeTableUpdate| -> BoxFuture<'static, anyhow::Result<()>> {
+            async move {
+                let epoch_before_update = client.current_epoch().await?.context("curr epoch")?;
+                tracing::warn!("current_epoch={epoch_before_update:?}");
 
-    let st_with_one_removed = PermissionedStakeTableUpdate::new(
+                let current_stake_table = client.stake_table(epoch_before_update).await?;
+
+                let removed = u.stakers_to_remove.len();
+                let added = u.new_stakers.len();
+
+                update_stake_table(
+                    format!("http://localhost:{l1_port}").parse()?,
+                    Duration::from_secs(7),
+                    "test test test test test test test test test test test junk".to_string(),
+                    account_index.parse()?,
+                    contract_address.parse()?,
+                    u.clone(),
+                )
+                .await?;
+
+                loop {
+                    sleep(Duration::from_secs(10)).await;
+                    let epoch = client.current_epoch().await?.context("curr epoch")?;
+                    tracing::info!("current_epoch={epoch:?}");
+                    if epoch > epoch_before_update + 2 {
+                        let stake_table = client.stake_table(epoch).await?;
+                        tracing::info!("stake_table={stake_table:?}");
+                        assert_eq!(
+                            stake_table.len(),
+                            current_stake_table.len() + added - removed
+                        );
+
+                        for added in &u.new_stakers {
+                            assert!(
+                                stake_table
+                                    .iter()
+                                    .any(|st| st.stake_key == added.stake_table_key),
+                                "staker {} not found",
+                                added.stake_table_key
+                            );
+                        }
+
+                        for removed in &u.stakers_to_remove {
+                            assert!(
+                                stake_table
+                                    .iter()
+                                    .all(|st| st.stake_key != removed.stake_table_key),
+                                "staker {} found",
+                                removed.stake_table_key
+                            );
+                        }
+
+                        break;
+                    }
+                }
+
+                anyhow::Result::<_>::Ok(())
+            }
+            .boxed()
+        };
+    let node = stakers[0].clone();
+    let one_removed = PermissionedStakeTableUpdate::new(
         vec![],
         vec![StakerIdentity {
-            stake_table_key: staker_removed.stake_table_key.clone(),
+            stake_table_key: node.stake_key.clone(),
         }],
     );
-    let client = clients[0].clone();
 
-    let epoch_before_update = client.current_epoch().await?.context("curr epoch")?;
-    tracing::warn!("current_epoch={epoch_before_update:?}");
-    update_stake_table(
-        format!("http://localhost:{l1_port}").parse()?,
-        Duration::from_secs(7),
-        "test test test test test test test test test test test junk".to_string(),
-        account_index.parse()?,
-        contract_address.parse()?,
-        st_with_one_removed,
-    )
-    .await?;
-
-    loop {
-        sleep(Duration::from_secs(10)).await;
-        let epoch = clients[0].current_epoch().await?.context("curr epoch")?;
-        tracing::info!("current_epoch={epoch:?}");
-        if epoch > epoch_before_update + 6 {
-            let stake_table = client.stake_table(epoch).await?;
-            tracing::info!("stake_table={stake_table:?}");
-            assert_eq!(stake_table.len(), 4);
-
-            assert!(
-                stake_table
-                    .iter()
-                    .all(|st| st.stake_key != staker_removed.stake_table_key),
-                "Entry for {} already exists in the stake table",
-                staker_removed.stake_table_key
-            );
-
-            break;
-        }
-    }
-    // TODO: randomize this test
+    // remove one node
+    assert_change(one_removed)
+        .await
+        .expect("failed to remove one node");
 
     Ok(())
 }

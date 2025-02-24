@@ -3,7 +3,7 @@
 /// The initial stake table is passed to the permissioned stake table contract
 /// on deployment.
 use contract_bindings_ethers::permissioned_stake_table::{
-    G2Point, NodeInfo, PermissionedStakeTable,
+    G2Point, NodeInfo, PermissionedStakeTable, PermissionedStakeTableErrors,
 };
 use derive_more::derive::From;
 use ethers::{
@@ -23,6 +23,8 @@ use std::{
     sync::Arc,
     time::Duration,
 };
+
+use crate::contract_send;
 
 /// A stake table config stored in a file
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
@@ -167,11 +169,11 @@ pub async fn update_stake_table(
         anyhow::bail!("No changes to update in the stake table");
     }
 
-    let tx_receipt = contract
-        .update(update.stakers_to_remove(), update.new_stakers())
-        .send()
-        .await?
-        .await?;
+    let (tx_receipt, _) = contract_send::<_, _, PermissionedStakeTableErrors>(
+        &contract.update(update.stakers_to_remove(), update.new_stakers()),
+    )
+    .await?;
+
     tracing::info!("Transaction receipt: {:?}", tx_receipt);
     Ok(())
 }

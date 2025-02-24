@@ -148,7 +148,7 @@ impl SequencerClient {
 
     pub async fn config<T: DeserializeOwned>(&self) -> anyhow::Result<T> {
         self.0
-            .get::<T>(&format!("config/hotshot"))
+            .get::<T>("config/hotshot")
             .send()
             .await
             .context("getting hotshot config")
