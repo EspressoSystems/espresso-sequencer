@@ -2,12 +2,11 @@ use hotshot_types::{
     data::{DaProposal2, Leaf2, QuorumProposalWrapper},
     message::Proposal,
     traits::{
-        block_contents::{precompute_vid_commitment, BlockHeader, BlockPayload},
+        block_contents::{BlockHeader, BlockPayload},
         node_implementation::{ConsensusTime, NodeType, Versions},
         EncodeBytes,
     },
     utils::BuilderCommitment,
-    vid::{VidCommitment, VidPrecomputeData},
 };
 use marketplace_builder_shared::block::{BlockId, BuilderStateId, ParentBlockReferences};
 
@@ -23,11 +22,7 @@ use futures::StreamExt;
 
 use tokio::{
     spawn,
-    sync::{
-        mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
-        oneshot,
-    },
-    task::spawn_blocking,
+    sync::{mpsc::UnboundedSender, oneshot},
     time::sleep,
 };
 
@@ -86,7 +81,7 @@ pub struct BuildBlockInfo<Types: NodeType> {
     pub block_payload: Types::BlockPayload,
     pub metadata: <<Types as NodeType>::BlockPayload as BlockPayload<Types>>::Metadata,
     pub vid_trigger: oneshot::Sender<TriggerStatus>,
-    pub vid_receiver: UnboundedReceiver<(VidCommitment, VidPrecomputeData)>,
+    // TODO Add precompute back.
     // Could we have included more transactions, but chose not to?
     pub truncated: bool,
 }
@@ -792,28 +787,8 @@ impl<Types: NodeType, V: Versions> BuilderState<Types, V> {
         let block_size: u64 = encoded_txns.len() as u64;
         let offered_fee: u64 = self.base_fee * block_size;
 
-        // Get the number of nodes stored while processing the `claim_block_with_num_nodes` request
-        // or upon initialization.
-        let num_nodes = self.global_state.read_arc().await.num_nodes;
-
-        let (trigger_send, trigger_recv) = oneshot::channel();
-
-        // spawn a task to calculate the VID commitment, and pass the handle to the global state
-        // later global state can await on it before replying to the proposer
-        let (unbounded_sender, unbounded_receiver) = unbounded_channel();
-        #[allow(unused_must_use)]
-        spawn(async move {
-            let Ok(TriggerStatus::Start) = trigger_recv.await else {
-                return;
-            };
-
-            let join_handle =
-                spawn_blocking(move || precompute_vid_commitment(&encoded_txns, num_nodes));
-
-            let vidc = join_handle.await.unwrap();
-
-            unbounded_sender.send(vidc);
-        });
+        // TODO Add precompute back.
+        let (trigger_send, _) = oneshot::channel();
 
         tracing::info!(
             "Builder view num {:?}, building block with {:?} txns, with builder hash {:?}",
@@ -832,7 +807,6 @@ impl<Types: NodeType, V: Versions> BuilderState<Types, V> {
             block_payload: payload,
             metadata,
             vid_trigger: trigger_send,
-            vid_receiver: unbounded_receiver,
             truncated: actual_txn_count < self.tx_queue.len(),
         })
     }

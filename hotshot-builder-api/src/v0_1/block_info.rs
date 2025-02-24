@@ -9,7 +9,6 @@ use std::marker::PhantomData;
 use hotshot_types::{
     traits::{node_implementation::NodeType, signature_key::BuilderSignatureKey, BlockPayload},
     utils::BuilderCommitment,
-    vid::{VidCommitment, VidPrecomputeData},
 };
 use serde::{Deserialize, Serialize};
 
@@ -47,13 +46,9 @@ impl<TYPES: NodeType> AvailableBlockData<TYPES> {
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq, Hash)]
 #[serde(bound = "")]
 pub struct AvailableBlockHeaderInputV1<TYPES: NodeType> {
-    pub vid_commitment: VidCommitment,
-    pub vid_precompute_data: VidPrecomputeData,
+    // TODO Add precompute back.
     // signature over vid_commitment, BlockPayload::Metadata, and offered_fee
     pub fee_signature:
-        <<TYPES as NodeType>::BuilderSignatureKey as BuilderSignatureKey>::BuilderSignature,
-    // signature over the current response
-    pub message_signature:
         <<TYPES as NodeType>::BuilderSignatureKey as BuilderSignatureKey>::BuilderSignature,
     pub sender: <TYPES as NodeType>::BuilderSignatureKey,
 }
@@ -65,25 +60,15 @@ impl<TYPES: NodeType> AvailableBlockHeaderInputV1<TYPES> {
         metadata: &<TYPES::BlockPayload as BlockPayload<TYPES>>::Metadata,
     ) -> bool {
         self.sender
-            .validate_builder_signature(&self.message_signature, self.vid_commitment.as_ref())
-            && self.sender.validate_fee_signature(
-                &self.fee_signature,
-                offered_fee,
-                metadata,
-                &self.vid_commitment,
-            )
+            .validate_fee_signature(&self.fee_signature, offered_fee, metadata)
     }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq, Hash)]
 #[serde(bound = "")]
 pub struct AvailableBlockHeaderInputV2<TYPES: NodeType> {
-    pub vid_commitment: VidCommitment,
     // signature over vid_commitment, BlockPayload::Metadata, and offered_fee
     pub fee_signature:
-        <<TYPES as NodeType>::BuilderSignatureKey as BuilderSignatureKey>::BuilderSignature,
-    // signature over the current response
-    pub message_signature:
         <<TYPES as NodeType>::BuilderSignatureKey as BuilderSignatureKey>::BuilderSignature,
     pub sender: <TYPES as NodeType>::BuilderSignatureKey,
 }
@@ -95,12 +80,6 @@ impl<TYPES: NodeType> AvailableBlockHeaderInputV2<TYPES> {
         metadata: &<TYPES::BlockPayload as BlockPayload<TYPES>>::Metadata,
     ) -> bool {
         self.sender
-            .validate_builder_signature(&self.message_signature, self.vid_commitment.as_ref())
-            && self.sender.validate_fee_signature(
-                &self.fee_signature,
-                offered_fee,
-                metadata,
-                &self.vid_commitment,
-            )
+            .validate_fee_signature(&self.fee_signature, offered_fee, metadata)
     }
 }
