@@ -28,13 +28,10 @@ use hotshot_builder_api::{
     },
     v0_2::block_info::AvailableBlockHeaderInputV1,
 };
-use hotshot_example_types::{block_types::TestTransaction, node_types::TestVersions};
+use hotshot_example_types::block_types::TestTransaction;
 use hotshot_types::{
     network::RandomBuilderConfig,
-    traits::{
-        node_implementation::{NodeType, Versions},
-        signature_key::BuilderSignatureKey,
-    },
+    traits::{node_implementation::NodeType, signature_key::BuilderSignatureKey},
     utils::BuilderCommitment,
     vid::VidCommitment,
 };
@@ -42,7 +39,6 @@ use lru::LruCache;
 use rand::{rngs::SmallRng, Rng, RngCore, SeedableRng};
 use tide_disco::{method::ReadState, Url};
 use tokio::{spawn, time::sleep};
-use vbs::version::StaticVersionType;
 
 use super::{
     build_block, run_builder_source_0_1, BlockEntry, BuilderTask, TestBuilderImplementation,
@@ -74,7 +70,6 @@ impl RandomBuilderImplementation {
         let task = RandomBuilderTask {
             blocks,
             config,
-            num_nodes: num_nodes.clone(),
             changes,
             change_sender,
             pub_key,
@@ -107,7 +102,6 @@ where
 }
 
 pub struct RandomBuilderTask<TYPES: NodeType<Transaction = TestTransaction>> {
-    num_nodes: Arc<RwLock<usize>>,
     config: RandomBuilderConfig,
     changes: HashMap<u64, BuilderChange>,
     change_sender: Sender<BuilderChange>,
@@ -117,9 +111,8 @@ pub struct RandomBuilderTask<TYPES: NodeType<Transaction = TestTransaction>> {
 }
 
 impl<TYPES: NodeType<Transaction = TestTransaction>> RandomBuilderTask<TYPES> {
-    async fn build_blocks<V: Versions>(
+    async fn build_blocks(
         options: RandomBuilderConfig,
-        num_nodes: Arc<RwLock<usize>>,
         pub_key: <TYPES as NodeType>::BuilderSignatureKey,
         priv_key: <<TYPES as NodeType>::BuilderSignatureKey as BuilderSignatureKey>::BuilderPrivateKey,
         blocks: Arc<RwLock<LruCache<BuilderCommitment, BlockEntry<TYPES>>>>,
@@ -144,15 +137,7 @@ impl<TYPES: NodeType<Transaction = TestTransaction>> RandomBuilderTask<TYPES> {
                 .collect();
 
             // Let new VID scheme ship with Epochs upgrade.
-            let version = <V as Versions>::Epochs::VERSION;
-            let block = build_block::<TYPES>(
-                transactions,
-                num_nodes.clone(),
-                pub_key.clone(),
-                priv_key.clone(),
-                version,
-            )
-            .await;
+            let block = build_block::<TYPES>(transactions, pub_key.clone(), priv_key.clone()).await;
 
             if let Some((hash, _)) = blocks
                 .write()
@@ -181,9 +166,8 @@ where
         mut self: Box<Self>,
         mut stream: Box<dyn Stream<Item = Event<TYPES>> + std::marker::Unpin + Send + 'static>,
     ) {
-        let mut task = Some(spawn(Self::build_blocks::<TestVersions>(
+        let mut task = Some(spawn(Self::build_blocks(
             self.config.clone(),
-            self.num_nodes.clone(),
             self.pub_key.clone(),
             self.priv_key.clone(),
             self.blocks.clone(),
@@ -201,9 +185,8 @@ where
                                 match change {
                                     BuilderChange::Up => {
                                         if task.is_none() {
-                                            task = Some(spawn(Self::build_blocks::<TestVersions>(
+                                            task = Some(spawn(Self::build_blocks(
                                                 self.config.clone(),
-                                                self.num_nodes.clone(),
                                                 self.pub_key.clone(),
                                                 self.priv_key.clone(),
                                                 self.blocks.clone(),

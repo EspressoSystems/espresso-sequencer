@@ -4,10 +4,9 @@
 // You should have received a copy of the MIT License
 // along with the HotShot repository. If not, see <https://mit-license.org/>.
 
-use std::{collections::HashMap, sync::Arc};
+use std::collections::HashMap;
 
 use async_broadcast::Receiver;
-use async_lock::RwLock;
 use async_trait::async_trait;
 use futures::Stream;
 use hotshot::{traits::BlockPayload, types::Event};
@@ -23,14 +22,13 @@ use hotshot_builder_api::{
 use hotshot_types::{
     constants::{LEGACY_BUILDER_MODULE, MARKETPLACE_BUILDER_MODULE},
     traits::{
-        block_contents::{precompute_vid_commitment, EncodeBytes},
-        node_implementation::NodeType,
+        block_contents::EncodeBytes, node_implementation::NodeType,
         signature_key::BuilderSignatureKey,
     },
 };
 use tide_disco::{method::ReadState, App, Url};
 use tokio::spawn;
-use vbs::version::{StaticVersionType, Version};
+use vbs::version::StaticVersionType;
 
 use crate::test_builder::BuilderChange;
 
@@ -170,10 +168,8 @@ pub fn run_builder_source_0_1<TYPES, Source>(
 /// Helper function to construct all builder data structures from a list of transactions
 async fn build_block<TYPES: NodeType>(
     transactions: Vec<TYPES::Transaction>,
-    num_storage_nodes: Arc<RwLock<usize>>,
     pub_key: TYPES::BuilderSignatureKey,
     priv_key: <TYPES::BuilderSignatureKey as BuilderSignatureKey>::BuilderPrivateKey,
-    _version: Version,
 ) -> BlockEntry<TYPES>
 where
     <TYPES as NodeType>::InstanceState: Default,
@@ -188,9 +184,6 @@ where
 
     let commitment = block_payload.builder_commitment(&metadata);
 
-    let (vid_commitment, vid_precompute_data) =
-        precompute_vid_commitment(&block_payload.encode(), *num_storage_nodes.read_arc().await);
-
     // Get block size from the encoded payload
     let block_size = block_payload.encode().len() as u64;
 
@@ -202,12 +195,8 @@ where
         TYPES::BuilderSignatureKey::sign_builder_message(&priv_key, commitment.as_ref())
             .expect("Failed to sign commitment");
 
-    let signature_over_vid_commitment =
-        TYPES::BuilderSignatureKey::sign_builder_message(&priv_key, vid_commitment.as_ref())
-            .expect("Failed to sign block vid commitment");
-
     let signature_over_fee_info =
-        TYPES::BuilderSignatureKey::sign_fee(&priv_key, 123_u64, &metadata, &vid_commitment)
+        TYPES::BuilderSignatureKey::sign_fee(&priv_key, 123_u64, &metadata)
             .expect("Failed to sign fee info");
 
     let block = AvailableBlockData {
@@ -225,9 +214,6 @@ where
         _phantom: std::marker::PhantomData,
     };
     let header_input = AvailableBlockHeaderInputV1 {
-        vid_commitment,
-        vid_precompute_data,
-        message_signature: signature_over_vid_commitment.clone(),
         fee_signature: signature_over_fee_info,
         sender: pub_key,
     };
