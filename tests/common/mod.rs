@@ -369,7 +369,7 @@ pub async fn test_stake_table_update(clients: Vec<SequencerClient>) -> Result<()
     let one_removed = PermissionedStakeTableUpdate::new(
         vec![],
         vec![StakerIdentity {
-            stake_table_key: node.stake_key.clone(),
+            stake_table_key: node.stake_key,
         }],
     );
 

@@ -118,6 +118,8 @@ processes:
     environment:
       - ESPRESSO_SEQUENCER_PERMISSIONED_STAKE_TABLE_ADDRESS
       - ESPRESSO_SEQUENCER_STATE_PEERS=http://localhost:$ESPRESSO_SEQUENCER_API_PORT
+      - ESPRESSO_SEQUENCER_ETH_MNEMONIC
+      - ESPRESSO_SEQUENCER_L1_PROVIDER
     depends_on:
       deploy-prover-contracts:
         condition: process_completed
