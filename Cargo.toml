@@ -228,9 +228,9 @@ trait-set = "0.3.0"
 # No optimizations
 opt-level = 0
 # Skip compiling the debug information.
-debug = false
+# debug = false
 # Skip linking symbols.
-strip = true
+# strip = true
 [profile.test]
 opt-level = 1
 [profile.test.package.tests]
