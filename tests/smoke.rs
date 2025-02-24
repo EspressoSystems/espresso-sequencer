@@ -89,6 +89,7 @@ async fn test_smoke() -> Result<()> {
 
     tracing::info!("epoch before stake table update {epoch:?}");
 
+    // Check if epoch number is greater than Epoch::genesis() i.e 1
     if epoch > 1 {
         tracing::info!("testing stake table update");
         test_stake_table_update(testing.sequencer_clients).await?;
