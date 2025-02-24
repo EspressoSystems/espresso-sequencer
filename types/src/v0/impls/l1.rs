@@ -870,7 +870,6 @@ impl L1Client {
 
         // Divide the range `prev_finalized..=new_finalized` into chunks of size
         // `events_max_block_range`.
-        // let chunks = self.chunky(prev, new_finalized);
         let chunks = ChunkGenerator::new(prev, new_finalized, opt.l1_events_max_block_range);
 
         // Fetch events for each chunk.
@@ -932,6 +931,7 @@ impl L1Client {
 
         tracing::warn!("`Successfully upgrade L1Client background tasks!`");
     }
+
     /// First block we should listen to stake table events for.
     async fn first_relevant_block_st(&self, address: Address) -> u64 {
         let state = self.state.clone();
@@ -1550,8 +1550,6 @@ mod test {
 
         let anvil = Anvil::new().spawn();
         let l1_client = new_l1_client(&anvil, false).await;
-        // let l1_client = L1Client::new(vec![anvil.endpoint().parse().unwrap()])
-        //    .expect("Failed to create L1 client");
         let wallet: LocalWallet = anvil.keys()[0].clone().into();
 
         // In order to deposit we need a provider that can sign.
@@ -1774,6 +1772,7 @@ mod test {
         provider.get_block_number().await.unwrap();
         assert!(get_failover_index(&provider) == 1);
     }
+
     #[tokio::test(flavor = "multi_thread")]
     async fn test_stake_table_update_loop() -> anyhow::Result<()> {
         // Cache should get populated as blocks get finalized
