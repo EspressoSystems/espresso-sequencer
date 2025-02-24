@@ -4,9 +4,8 @@
 // You should have received a copy of the MIT License
 // along with the HotShot repository. If not, see <https://mit-license.org/>.
 
-use std::{collections::BTreeMap, num::NonZeroU64};
-
 use hotshot_types::{
+    drb::DrbResult,
     traits::{
         election::Membership,
         node_implementation::NodeType,
@@ -16,6 +15,7 @@ use hotshot_types::{
 };
 use hotshot_utils::anytrace::Result;
 use primitive_types::U256;
+use std::{collections::BTreeMap, num::NonZeroU64};
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 
@@ -246,4 +246,6 @@ impl<TYPES: NodeType> Membership<TYPES> for StaticCommitteeLeaderForTwoViews<TYP
     ) -> Option<(TYPES::Epoch, TYPES::BlockHeader)> {
         None
     }
+
+    fn add_drb_result(&mut self, _epoch: <TYPES as NodeType>::Epoch, _drb_result: DrbResult) {}
 }

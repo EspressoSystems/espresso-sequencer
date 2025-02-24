@@ -47,6 +47,13 @@ use crate::{
     quorum_vote::Versions,
 };
 
+async fn notify_membership_of_drb_result<TYPES: NodeType>(
+    membership: &EpochMembership<TYPES>,
+    drb_result: DrbResult,
+) {
+    membership.add_drb_result(drb_result).await;
+}
+
 /// Store the DRB result from the computation task to the shared `results` table.
 ///
 /// Returns the result if it exists.
@@ -90,6 +97,16 @@ async fn store_and_get_computed_drb_result<
                 .drb_seeds_and_results
                 .results
                 .insert(epoch_number, result);
+            drop(consensus_writer);
+
+            notify_membership_of_drb_result::<TYPES>(
+                &task_state
+                    .membership
+                    .membership_for_epoch(Some(epoch_number))
+                    .await?,
+                result,
+            )
+            .await;
             task_state.drb_computation = None;
             Ok(result)
         }
@@ -202,6 +219,7 @@ async fn start_drb_task<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versio
                             .drb_seeds_and_results
                             .results
                             .insert(*task_epoch, result);
+                        notify_membership_of_drb_result::<TYPES>(&epoch_membership, result).await;
                         task_state.drb_computation = None;
                     }
                     Err(e) => {
@@ -289,9 +307,13 @@ async fn store_drb_seed_and_result<TYPES: NodeType, I: NodeImplementation<TYPES>
         else {
             bail!("Failed to serialize the QC signature.");
         };
-        let Ok(drb_seed_input) = drb_seed_input_vec.try_into() else {
-            bail!("Failed to convert the serialized QC signature into a DRB seed input.");
-        };
+
+        // TODO: Replace the leader election with a weighted version.
+        // <https://github.com/EspressoSystems/HotShot/issues/3898>
+        let mut drb_seed_input = [0u8; 32];
+        let len = drb_seed_input_vec.len().min(32);
+        drb_seed_input[..len].copy_from_slice(&drb_seed_input_vec[..len]);
+
         task_state
             .consensus
             .write()
@@ -311,6 +333,14 @@ async fn store_drb_seed_and_result<TYPES: NodeType, I: NodeImplementation<TYPES>
                 .drb_seeds_and_results
                 .results
                 .insert(current_epoch_number + 1, result);
+            notify_membership_of_drb_result::<TYPES>(
+                &task_state
+                    .membership
+                    .membership_for_epoch(Some(current_epoch_number + 1))
+                    .await?,
+                result,
+            )
+            .await;
         } else {
             bail!("The last block of the epoch is decided but doesn't contain a DRB result.");
         }

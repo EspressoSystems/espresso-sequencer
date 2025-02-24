@@ -11,6 +11,7 @@ use std::{
 };
 
 use hotshot_types::{
+    drb::DrbResult,
     traits::{
         election::Membership,
         node_implementation::{ConsensusTime, NodeType},
@@ -457,4 +458,6 @@ impl<TYPES: NodeType, CONFIG: QuorumFilterConfig> Membership<TYPES>
     ) -> Option<(TYPES::Epoch, TYPES::BlockHeader)> {
         None
     }
+
+    fn add_drb_result(&mut self, _epoch: <TYPES as NodeType>::Epoch, _drb_result: DrbResult) {}
 }

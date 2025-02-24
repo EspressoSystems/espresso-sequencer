@@ -1,6 +1,5 @@
 use super::{
-    v0_3::{DAMembers, StakeTable, StakeTables},
-    Header, L1Client, NodeState, PubKey, SeqTypes,
+    v0_3::{DAMembers, StakeTable, StakeTables}, EpochVersion, Header, L1Client, NodeState, PubKey, SeqTypes, SequencerVersions
 };
 
 // use async_trait::async_trait;
@@ -10,7 +9,7 @@ use ethers_conv::ToAlloy;
 use hotshot::types::{BLSPubKey, SignatureKey as _};
 use hotshot_contract_adapter::stake_table::{bls_alloy_to_jf, NodeInfoJf};
 use hotshot_types::{
-    data::EpochNumber, epoch_membership::EpochMembership, stake_table::StakeTableEntry, traits::{
+    data::{EpochNumber, Leaf2}, drb::DrbResult, message::UpgradeLock, stake_table::StakeTableEntry, traits::{
         election::Membership,
         node_implementation::{ConsensusTime, NodeType},
         signature_key::StakeTableEntryType,
@@ -20,7 +19,7 @@ use hotshot_types::{
 use itertools::Itertools;
 use std::{
     cmp::max,
-    collections::{BTreeSet, HashMap},
+    collections::{BTreeMap, BTreeSet, HashMap},
     num::NonZeroU64,
     str::FromStr,
 };
@@ -103,6 +102,9 @@ pub struct EpochCommittees {
 
     /// Address of Stake Table Contract
     contract_address: Option<Address>,
+
+    /// The results of DRB calculations
+    drb_result_table: BTreeMap<Epoch, DrbResult>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -250,6 +252,7 @@ impl EpochCommittees {
             _epoch_size: epoch_size,
             l1_client: instance_state.l1_client.clone(),
             contract_address: instance_state.chain_config.stake_table_contract,
+            drb_result_table: BTreeMap::new(),
         }
     }
 
@@ -330,6 +333,7 @@ impl Membership<SeqTypes> for EpochCommittees {
             l1_client: L1Client::new(vec![Url::from_str("http:://ab.b").unwrap()])
                 .expect("Failed to create L1 client"),
             contract_address: None,
+            drb_result_table: BTreeMap::new(),
         }
     }
 
@@ -501,11 +505,15 @@ impl Membership<SeqTypes> for EpochCommittees {
         self.state.contains_key(&epoch)
     }
 
-    async fn get_epoch_root(&self, _block_height: u64, epoch_height: u64) -> Option<(Epoch, Header)> {
+    async fn get_epoch_root(&self, _block_height: u64, epoch_height: u64, epoch: Epoch) -> Option<(Epoch, Header)> {
         // Fetch leaves from peers
-        let leaf_chain = vec![];
-        // verify_epoch_root_chaing(leaf_chain, self, epoch_height, upgrade_lock)
+        let leaf_chain: Vec<Leaf2<SeqTypes>> = vec![];
+        verify_epoch_root_chaing(leaf_chain, self, epoch, epoch_height, &UpgradeLock::<SeqTypes, SequencerVersions<EpochVersion, EpochVersion>>::new()).await.ok()?;
         None
+    }
+
+    fn add_drb_result(&mut self, epoch: Epoch, drb_result: DrbResult) {
+        self.drb_result_table.insert(epoch, drb_result);
     }
 }
 
