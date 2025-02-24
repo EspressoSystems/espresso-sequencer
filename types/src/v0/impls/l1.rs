@@ -986,16 +986,16 @@ impl L1Client {
         let chunk_size = opt.l1_events_max_block_range;
         let state = self.state.clone();
 
-        let start_block = {
+        {
             let mut state = state.lock().await;
             if let Some(st) = state.stake.get(&block) {
-                return Some(st.clone());
-            } else {
-                // Calling this before upgrading tasks will make
-                // contract deployment block available to the stake_update_loop.
-                self.first_relevant_block_st(contract_address).await
+                return Some(st.to_owned());
             }
         };
+
+        // Calling this before upgrading tasks will make
+        // contract deployment block available to the stake_update_loop.
+        let start_block = self.first_relevant_block_st(contract_address).await;
 
         // `get_stake_table` is only called in v3. So we check here if
         // stake table update loop is running. If not, start it.
