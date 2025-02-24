@@ -202,7 +202,6 @@ impl ChainConfigPersistence for Transaction<Write> {
             [(commitment.to_string(), data)],
         )
         .await
-        .map_err(Into::into)
     }
 }
 

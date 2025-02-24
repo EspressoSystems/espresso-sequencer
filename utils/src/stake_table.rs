@@ -14,9 +14,7 @@ use ethers::{
 };
 use hotshot::types::BLSPubKey;
 use hotshot_contract_adapter::stake_table::{bls_jf_to_sol, NodeInfoJf};
-use hotshot_types::{
-    network::PeerConfigKeys, traits::signature_key::StakeTableEntryType, HotShotConfig,
-};
+use hotshot_types::network::PeerConfigKeys;
 use url::Url;
 
 use std::{
@@ -140,27 +138,6 @@ impl PermissionedStakeTableUpdate {
                 node_info.into()
             })
             .collect()
-    }
-
-    pub fn save_initial_stake_table_from_hotshot_config(
-        config: HotShotConfig<BLSPubKey>,
-        initial_stake_table_path: String,
-    ) -> anyhow::Result<()> {
-        let committee_members = config.known_nodes_with_stake.clone();
-        let known_da_nodes = config.known_da_nodes.clone().clone();
-        let members = committee_members
-            .into_iter()
-            .map(|m| PeerConfigKeys {
-                stake_table_key: m.stake_table_entry.public_key(),
-                state_ver_key: m.state_ver_key.clone(),
-                stake: m.stake_table_entry.stake().as_u64(),
-                da: known_da_nodes.contains(&m),
-            })
-            .collect();
-
-        Self::new(members, vec![]).to_toml_file(Path::new(&initial_stake_table_path))?;
-
-        Ok(())
     }
 }
 

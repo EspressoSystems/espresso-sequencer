@@ -67,7 +67,13 @@
             solhintPkg { inherit (prev) buildNpmPackage fetchFromGitHub; };
         })
 
-        
+        # The mold linker is around 50% faster on Linux than the default linker.
+        # This overlays a mkShell that is configured to use mold on Linux.
+        (final: prev: prev.lib.optionalAttrs prev.stdenv.isLinux {
+          mkShell = prev.mkShell.override {
+            stdenv = prev.stdenvAdapters.useMoldLinker prev.clangStdenv;
+          };
+        })
       ];
       pkgs = import nixpkgs { inherit system overlays; };
       crossShell = { config }:

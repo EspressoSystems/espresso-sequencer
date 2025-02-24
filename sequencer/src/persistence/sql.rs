@@ -767,7 +767,7 @@ impl Persistence {
 
                     LeafInfo {
                         leaf,
-                        vid_share: vid_share.map(Into::into),
+                        vid_share,
                         // Note: the following fields are not used in Decide event processing, and
                         // should be removed. For now, we just default them.
                         state: Default::default(),

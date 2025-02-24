@@ -23,7 +23,6 @@ use espresso_types::{
 use ethers_conv::ToAlloy;
 use genesis::L1Finalized;
 use proposal_fetcher::ProposalFetcherConfig;
-use sequencer_utils::stake_table::PermissionedStakeTableUpdate;
 use std::sync::Arc;
 use tokio::select;
 // Should move `STAKE_TABLE_CAPACITY` in the sequencer repo when we have variate stake table support
@@ -364,8 +363,9 @@ pub async fn init_node<P: SequencerPersistence, V: Versions>(
         upgrade.set_hotshot_config_parameters(&mut network_config.config);
     }
 
-    //todo(abdul): get from genesis file
-    network_config.config.epoch_height = 10;
+    let epoch_height = genesis.epoch_height.unwrap_or_default();
+    tracing::info!("setting epoch height={epoch_height:?}");
+    network_config.config.epoch_height = epoch_height;
 
     // If the `Libp2p` bootstrap nodes were supplied via the command line, override those
     // present in the config file.
@@ -495,13 +495,6 @@ pub async fn init_node<P: SequencerPersistence, V: Versions>(
         &instance_state,
         network_config.config.epoch_height,
     );
-
-    // save initial stake table into toml file
-    // this will be helpful to load it into contract
-    PermissionedStakeTableUpdate::save_initial_stake_table_from_hotshot_config(
-        network_config.config.clone(),
-        initial_stake_table_path.unwrap_or_else(|| String::from("data/initial_stake_table.toml")),
-    )?;
 
     // Initialize the Libp2p network
     let network = {
