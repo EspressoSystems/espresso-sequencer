@@ -434,16 +434,18 @@ impl L1Client {
                         continue;
                     };
 
-                    let last_finalized = {
+                    // Latest finalized block or block contract was deployed at or 0.
+                    let start_block = {
                         let state = state.lock().await;
                         state
                             .snapshot
                             .finalized
                             .map(|block_info| block_info.number)
+                            .or(state.stake_table_initial_block)
                             .unwrap_or(0)
                     };
 
-                    let chunks = ChunkGenerator::new(last_finalized, finalized.number, chunk_size);
+                    let chunks = ChunkGenerator::new(start_block, finalized.number, chunk_size);
                     let mut events: Vec<StakersUpdated> = Vec::new();
                     for Range { start, end } in chunks {
                         match stake_table_contract
@@ -906,32 +908,29 @@ impl L1Client {
             .collect()
     }
 
-    /// Upgrade background tasks for Proof Of Stake. No-op if upgrade already occurred.
+    ////Upgrade background tasks for Proof Of Stake. No-op if upgrade
+    /// already occurred. Returns the block we need to start querying from.
     async fn maybe_upgrade_background_tasks(&self, address: Address) {
-        {
-            if let Some(mut tasks) = self.update_task.0.lock().await.take() {
-                if tasks.len() > 1 {
-                    tracing::debug!("Greater than 1 tasks are running, no need to upgrade.");
-                    return;
-                } else {
-                    // Protocol upgraded to POS version. If stake_update_loop is not running,
-                    // we need to spawn.
+        if let Some(mut tasks) = self.update_task.0.lock().await.take() {
+            if tasks.len() > 1 {
+                tracing::debug!("Greater than 1 tasks are running, no need to upgrade.");
+                return;
+            } else {
+                // Protocol upgraded to POS version. If stake_update_loop is not running,
+                // we need to spawn.
 
-                    tracing::warn!(
-                        "Upgrading `L1Client` background tasks for v3 (Proof of Stake)!",
-                    );
-                    tasks.abort_all();
-                }
+                tracing::warn!("Upgrading `L1Client` background tasks for v3 (Proof of Stake)!",);
+                tasks.abort_all();
             }
-
-            let mut update_task = self.update_task.0.lock().await;
-            let mut tasks = JoinSet::new();
-            tasks.spawn(self.update_loop());
-            tasks.spawn(self.stake_update_loop(address));
-            *update_task = Some(tasks);
-
-            tracing::warn!("`Successfully upgrade L1Client background tasks!`");
         }
+
+        let mut update_task = self.update_task.0.lock().await;
+        let mut tasks = JoinSet::new();
+        tasks.spawn(self.update_loop());
+        tasks.spawn(self.stake_update_loop(address));
+        *update_task = Some(tasks);
+
+        tracing::warn!("`Successfully upgrade L1Client background tasks!`");
     }
     /// First block we should listen to stake table events for.
     async fn first_relevant_block_st(&self, address: Address) -> u64 {
@@ -944,33 +943,36 @@ impl L1Client {
         };
 
         // if both finalized and init_block are `Some` take the
-        // minimum. We do this first to avoid unnecessary call to contract.
-        if let Some(n) = finalized.zip(init_block).map(|(f, i)| f.min(i)) {
+        // maximum. If only init_block is defined, return it. We do
+        // this first to avoid unnecessary call to contract.
+        if let Some(n) = finalized
+            .zip(init_block)
+            .map(|(f, i)| f.max(i))
+            .or(init_block)
+        {
             return n;
         };
 
-        // These steps require contract
+        // Get the block contract was deployed at from the contract
+        // itself. Add it to state to avoid calling this every run. We
+        // should only hit this case in startup/early stages of
+        // run. So the next step will be to catch up stake tables from
+        // `init_block`.
         let contract = PermissionedStakeTableInstance::new(address, self.provider.clone());
         let init_block = if let Ok(init_block) = contract.initializedAtBlock().call().await {
-            Some(init_block._0.to::<u64>())
+            let init_block = Some(init_block._0.to::<u64>());
+            let mut state = state.lock().await;
+            state.stake_table_initial_block = init_block;
+            init_block
         } else {
             tracing::error!("Failed to retrieve initial block from stake-table contract");
             None
         };
 
-        let init_block = {
-            let mut state = state.lock().await;
-            state.stake_table_initial_block = init_block;
-            init_block.unwrap()
-        };
-
-        // If we have a finalized, get the initial block from contract and return minimum.
-        if let Some(finalized) = finalized {
-            return finalized.min(init_block);
-        }
-
-        // If we have no `finalized` return init_block
-        init_block
+        // init_block not set in state means we need to catch up from
+        // it. If we don't have an `init_block` return finalized. If
+        // that is also `None`, return 0.
+        init_block.or(finalized).unwrap_or(0)
     }
 
     /// Get `StakeTable` at block height. If unavailable in local cache, poll the l1.
@@ -984,21 +986,22 @@ impl L1Client {
         let chunk_size = opt.l1_events_max_block_range;
         let state = self.state.clone();
 
-        // `get_stake_table` is only called in v3. So we check here if
-        // stake table update loop is running. If not, start it.
-        self.maybe_upgrade_background_tasks(contract_address).await;
-
-        let last_finalized = {
+        let start_block = {
             let mut state = state.lock().await;
-
             if let Some(st) = state.stake.get(&block) {
                 return Some(st.clone());
             } else {
+                // Calling this before upgrading tasks will make
+                // contract deployment block available to the stake_update_loop.
                 self.first_relevant_block_st(contract_address).await
             }
         };
 
-        let chunks = ChunkGenerator::new(last_finalized, block, chunk_size);
+        // `get_stake_table` is only called in v3. So we check here if
+        // stake table update loop is running. If not, start it.
+        self.maybe_upgrade_background_tasks(contract_address).await;
+
+        let chunks = ChunkGenerator::new(start_block, block, chunk_size);
         let contract = PermissionedStakeTableInstance::new(contract_address, self.provider.clone());
 
         let mut events: Vec<StakersUpdated> = Vec::new();
