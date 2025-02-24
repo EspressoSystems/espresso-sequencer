@@ -128,7 +128,7 @@ async fn main() -> Result<()> {
                         let new_stakers = st
                             .into_iter()
                             .map(|s| PeerConfigKeys {
-                                stake_table_key: s.stake_table_entry.stake_key.clone(),
+                                stake_table_key: s.stake_table_entry.stake_key,
                                 state_ver_key: s.state_ver_key.clone(),
                                 stake: s.stake_table_entry.stake().as_u64(),
                                 da: da_nodes.contains(&s),
