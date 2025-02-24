@@ -102,7 +102,6 @@ async fn test_vid_task() {
         signature: message.signature.clone(),
         _pd: PhantomData,
     };
-    let mem = membership.membership_for_epoch(None).await.unwrap();
     let inputs = vec![
         serial![ViewChange(ViewNumber::new(1), None)],
         serial![
@@ -115,7 +114,6 @@ async fn test_vid_task() {
                 ViewNumber::new(2),
                 None,
                 vec1::vec1![null_block::builder_fee::<TestTypes, TestVersions>(
-                    mem.total_nodes().await,
                     <TestVersions as Versions>::Base::VERSION,
                     *ViewNumber::new(2),
                 )
@@ -136,7 +134,6 @@ async fn test_vid_task() {
                 },
                 ViewNumber::new(2),
                 vec1![null_block::builder_fee::<TestTypes, TestVersions>(
-                    mem.total_nodes().await,
                     <TestVersions as Versions>::Base::VERSION,
                     *ViewNumber::new(2),
                 )

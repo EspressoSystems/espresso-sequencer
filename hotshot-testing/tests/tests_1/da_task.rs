@@ -109,11 +109,6 @@ async fn test_da_task() {
                 ViewNumber::new(2),
                 None,
                 vec1::vec1![null_block::builder_fee::<TestTypes, TestVersions>(
-                    membership
-                        .membership_for_epoch(None)
-                        .await.unwrap()
-                        .total_nodes()
-                        .await,
                     <TestVersions as Versions>::Base::VERSION,
                     *ViewNumber::new(2),
                 )
@@ -225,11 +220,6 @@ async fn test_da_task_storage_failure() {
                 ViewNumber::new(2),
                 None,
                 vec1::vec1![null_block::builder_fee::<TestTypes, TestVersions>(
-                    membership
-                        .membership_for_epoch(None)
-                        .await.unwrap()
-                        .total_nodes()
-                        .await,
                     <TestVersions as Versions>::Base::VERSION,
                     *ViewNumber::new(2),
                 )

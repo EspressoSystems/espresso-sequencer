@@ -571,7 +571,6 @@ where
         let metadata;
         let offered_fee;
         let truncated;
-        let vid_data;
         {
             // We store this read lock guard separately to make it explicit
             // that this will end up holding a lock for the duration of this
@@ -589,32 +588,16 @@ where
             metadata = block_info.metadata.clone();
             offered_fee = block_info.offered_fee;
             truncated = block_info.truncated;
-            vid_data = block_info.vid_data.clone();
         };
 
-        let (vid_commitment, vid_precompute_data) = vid_data.resolve().await;
+        // TODO Add precompute back.
 
-        // sign over the vid commitment
-        let signature_over_vid_commitment =
-            <Types as NodeType>::BuilderSignatureKey::sign_builder_message(
-                &self.builder_keys.1,
-                vid_commitment.as_ref(),
-            )
-            .map_err(Error::Signing)?;
+        let signature_over_fee_info =
+            Types::BuilderSignatureKey::sign_fee(&self.builder_keys.1, offered_fee, &metadata)
+                .map_err(Error::Signing)?;
 
-        let signature_over_fee_info = Types::BuilderSignatureKey::sign_fee(
-            &self.builder_keys.1,
-            offered_fee,
-            &metadata,
-            &vid_commitment,
-        )
-        .map_err(Error::Signing)?;
-
-        let response = AvailableBlockHeaderInputV1 {
-            vid_commitment,
-            vid_precompute_data,
+        let response = AvailableBlockHeaderInputV1::<Types> {
             fee_signature: signature_over_fee_info,
-            message_signature: signature_over_vid_commitment,
             sender: self.builder_keys.0.clone(),
         };
         info!("Sending Claim Block Header Input response");
