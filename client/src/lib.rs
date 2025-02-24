@@ -10,6 +10,7 @@ use jf_merkle_tree::{
 use std::time::Duration;
 use surf_disco::{
     error::ClientError,
+    http::convert::DeserializeOwned,
     socket::{Connection, Unsupported},
     Url,
 };
@@ -134,7 +135,23 @@ impl SequencerClient {
             .get::<_>(&format!("node/stake-table/{epoch}"))
             .send()
             .await
-            .context("getting epoch value")
+            .context("getting stake table")
+    }
+
+    pub async fn da_members(&self, epoch: u64) -> anyhow::Result<Vec<StakeTableEntry<PubKey>>> {
+        self.0
+            .get::<_>(&format!("node/stake-table/da/{epoch}"))
+            .send()
+            .await
+            .context("getting da stake table")
+    }
+
+    pub async fn config<T: DeserializeOwned>(&self) -> anyhow::Result<T> {
+        self.0
+            .get::<T>(&format!("config/hotshot"))
+            .send()
+            .await
+            .context("getting hotshot config")
     }
 }
 

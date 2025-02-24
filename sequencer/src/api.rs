@@ -171,11 +171,26 @@ impl<N: ConnectedNetwork<PubKey>, D: Sync, V: Versions, P: SequencerPersistence>
         self.as_ref().get_stake_table(epoch).await
     }
 
+    /// Get the stake table for a given epoch
+    async fn get_da_members(
+        &self,
+        epoch: Option<<SeqTypes as NodeType>::Epoch>,
+    ) -> Vec<StakeTableEntry<<SeqTypes as NodeType>::SignatureKey>> {
+        self.as_ref().get_da_members(epoch).await
+    }
+
     /// Get the stake table for the current epoch if not provided
     async fn get_stake_table_current(
         &self,
     ) -> Vec<StakeTableEntry<<SeqTypes as NodeType>::SignatureKey>> {
         self.as_ref().get_stake_table_current().await
+    }
+
+    /// Get the stake table for the current epoch if not provided
+    async fn get_da_members_current(
+        &self,
+    ) -> Vec<StakeTableEntry<<SeqTypes as NodeType>::SignatureKey>> {
+        self.as_ref().get_da_members_current().await
     }
 
     /// Get the stake table for the current epoch if not provided
@@ -213,6 +228,29 @@ impl<N: ConnectedNetwork<PubKey>, V: Versions, P: SequencerPersistence>
 
     async fn get_current_epoch(&self) -> Option<<SeqTypes as NodeType>::Epoch> {
         self.consensus().await.read().await.cur_epoch().await
+    }
+
+    async fn get_da_members(
+        &self,
+        epoch: Option<<SeqTypes as NodeType>::Epoch>,
+    ) -> Vec<StakeTableEntry<<SeqTypes as NodeType>::SignatureKey>> {
+        self.consensus()
+            .await
+            .read()
+            .await
+            .memberships
+            .read()
+            .await
+            .da_stake_table(epoch)
+    }
+
+    /// Get the stake table for the current epoch if not provided
+    async fn get_da_members_current(
+        &self,
+    ) -> Vec<StakeTableEntry<<SeqTypes as NodeType>::SignatureKey>> {
+        let epoch = self.consensus().await.read().await.cur_epoch().await;
+
+        self.get_da_members(epoch).await
     }
 }
 
