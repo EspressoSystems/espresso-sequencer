@@ -1,5 +1,6 @@
 base_version = "0.3"
 upgrade_version = "0.3"
+epoch_height = 10
 
 [stake_table]
 capacity = 10
@@ -9,7 +10,6 @@ chain_id = 999999999
 max_block_size = '1mb'
 base_fee = '1 wei'
 fee_recipient = "0x0000000000000000000000000000000000000000"
-# bid_recipient = "0x0000000000000000000000000000000000000000"
 fee_contract = "0xa15bb66138824a1c7167f5e85b957d04dd34e468"
 stake_table_contract = "0xb19b36b1456e65e3a6d514d3f715f204bd59f431"
 
