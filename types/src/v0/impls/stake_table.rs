@@ -14,7 +14,10 @@ use hotshot::types::{BLSPubKey, SignatureKey as _};
 use hotshot_contract_adapter::stake_table::{bls_alloy_to_jf, NodeInfoJf};
 use hotshot_types::{
     data::EpochNumber,
-    drb::DrbResult,
+    drb::{
+        election::{generate_stake_cdf, select_randomized_leader, RandomizedCommittee},
+        DrbResult,
+    },
     stake_table::StakeTableEntry,
     traits::{
         election::Membership,
@@ -103,8 +106,8 @@ pub struct EpochCommittees {
     #[debug("{}", peers.name())]
     pub peers: Arc<dyn StateCatchup>,
 
-    /// The results of DRB calculations
-    drb_result_table: BTreeMap<Epoch, DrbResult>,
+    /// Randomized committees, filled when we receive the DrbResult
+    randomized_committees: BTreeMap<Epoch, RandomizedCommittee<StakeTableEntry<PubKey>>>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -264,7 +267,7 @@ impl EpochCommittees {
             l1_client: instance_state.l1_client.clone(),
             chain_config: instance_state.chain_config,
             peers: instance_state.peers.clone(),
-            drb_result_table: BTreeMap::new(),
+            randomized_committees: BTreeMap::new(),
         }
     }
 
@@ -402,17 +405,26 @@ impl Membership<SeqTypes> for EpochCommittees {
         view_number: <SeqTypes as NodeType>::View,
         epoch: Option<Epoch>,
     ) -> Result<PubKey, Self::Error> {
-        let leaders = self
-            .state(&epoch)
-            .ok_or(LeaderLookupError)?
-            .eligible_leaders
-            .clone();
+        if let Some(epoch) = epoch {
+            let Some(randomized_committee) = self.randomized_committees.get(&epoch) else {
+                tracing::error!(
+                    "We are missing the randomized committee for epoch {}",
+                    epoch
+                );
+                return Err(LeaderLookupError);
+            };
 
-        tracing::debug!("lookup_leader() leaders={leaders:?}");
+            Ok(PubKey::public_key(&select_randomized_leader(
+                randomized_committee,
+                *view_number,
+            )))
+        } else {
+            let leaders = &self.non_epoch_committee.eligible_leaders;
 
-        let index = *view_number as usize % leaders.len();
-        let res = leaders[index].clone();
-        Ok(PubKey::public_key(&res))
+            let index = *view_number as usize % leaders.len();
+            let res = leaders[index].clone();
+            Ok(PubKey::public_key(&res))
+        }
     }
 
     /// Get the total number of nodes in the committee
@@ -487,8 +499,17 @@ impl Membership<SeqTypes> for EpochCommittees {
             })
     }
 
-    fn add_drb_result(&mut self, epoch: Epoch, drb_result: DrbResult) {
-        self.drb_result_table.insert(epoch, drb_result);
+    fn add_drb_result(&mut self, epoch: Epoch, drb: DrbResult) {
+        let Some(raw_stake_table) = self.state.get(&epoch) else {
+            tracing::error!("add_drb_result({}, {:?}) was called, but we do not yet have the stake table for epoch {}", epoch, drb, epoch);
+            return;
+        };
+
+        let randomized_committee =
+            generate_stake_cdf(raw_stake_table.eligible_leaders.clone(), drb);
+
+        self.randomized_committees
+            .insert(epoch, randomized_committee);
     }
 }
 
