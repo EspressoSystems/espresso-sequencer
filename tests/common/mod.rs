@@ -376,14 +376,11 @@ pub async fn test_stake_table_update(clients: Vec<SequencerClient>) -> Result<()
         .filter(|x| !da_members.contains(x))
         .collect();
 
-    let node = non_da_stakers
-        .get(0)
-        .context("failed to get non DA node")?
-        .clone();
+    let node = non_da_stakers.first().context("no non da staker found")?;
     let one_removed = PermissionedStakeTableUpdate::new(
         vec![],
         vec![StakerIdentity {
-            stake_table_key: node.stake_table_entry.stake_key.clone(),
+            stake_table_key: node.stake_table_entry.stake_key,
         }],
     );
 
@@ -396,7 +393,7 @@ pub async fn test_stake_table_update(clients: Vec<SequencerClient>) -> Result<()
     let added = PermissionedStakeTableUpdate::new(
         vec![PeerConfigKeys {
             stake_table_key: *node.stake_table_entry.key(),
-            state_ver_key: node.state_ver_key,
+            state_ver_key: node.state_ver_key.clone(),
             stake: node.stake_table_entry.stake().as_u64(),
             da: false,
         }],
