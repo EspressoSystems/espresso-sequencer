@@ -147,7 +147,7 @@ The script generates new cargo profile for all combinations of the "strip",
     parser.add_argument(
         "--debug", help="Debug values", default="none,line-tables-only,limited,full"
     )
-    parser.add_argument("--lto", help="LTO values", default="off,thin")
+    parser.add_argument("--lto", help="LTO values", default="false,off")
     parser.add_argument("--dry-run", help="Only print commands", action="store_true")
     args = parser.parse_args()
 
@@ -170,7 +170,8 @@ The script generates new cargo profile for all combinations of the "strip",
                     "inherits": "dev",
                     "debug": debug,
                     "strip": strip,
-                    "lto": lto,
+                    # lto = false needs to be a boolean in Cargo.toml
+                    "lto": False if lto.lower() == "false" else lto,
                 }
 
     # Write the new profiles to Cargo.toml, tomlkit preserves the existing style.
