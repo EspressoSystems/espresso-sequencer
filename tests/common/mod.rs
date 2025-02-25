@@ -1,10 +1,14 @@
 use anyhow::{anyhow, Context, Result};
 use client::SequencerClient;
-use espresso_types::{FeeAmount, FeeVersion, MarketplaceVersion};
+use espresso_types::{FeeAmount, FeeVersion, MarketplaceVersion, PubKey};
 use ethers::prelude::*;
 use futures::future::{join_all, BoxFuture};
 use futures::FutureExt;
+use hotshot_types::network::PeerConfigKeys;
+use hotshot_types::traits::signature_key::StakeTableEntryType;
+use hotshot_types::PeerConfig;
 use std::{fmt, str::FromStr, time::Duration};
+use surf_disco::http::convert::Deserialize;
 use surf_disco::Url;
 use tokio::time::{sleep, timeout};
 use vbs::version::StaticVersionType;
@@ -284,28 +288,22 @@ async fn wait_for_service(url: Url, interval: u64, timeout_duration: u64) -> Res
     .map_err(|e| anyhow!("Wait for service, timeout: ({}) {}", url, e))?
 }
 
-pub async fn test_stake_table_update(clients: Vec<SequencerClient>) -> Result<()> {
-    /*
-            EPOCH V3
-    */
+/*
+        EPOCH V3
+*/
 
+pub async fn test_stake_table_update(clients: Vec<SequencerClient>) -> Result<()> {
     let l1_port = var("ESPRESSO_SEQUENCER_L1_PORT")?;
     let account_index = var("ESPRESSO_DEPLOYER_ACCOUNT_INDEX")?;
     let contract_address = var("ESPRESSO_SEQUENCER_PERMISSIONED_STAKE_TABLE_ADDRESS")?;
     let client = clients[0].clone();
-    // currently stake table update does not support DA node member changes
-
-    let stake_table = client.stake_table(1).await?;
-    let da_members = client.da_members(1).await?;
-
-    // filtering out DA nodes
-    let stakers: Vec<_> = stake_table
-        .into_iter()
-        .filter(|x| !da_members.contains(x))
-        .collect();
 
     let assert_change =
-        move |u: PermissionedStakeTableUpdate| -> BoxFuture<'static, anyhow::Result<()>> {
+        |u: PermissionedStakeTableUpdate| -> BoxFuture<'static, anyhow::Result<()>> {
+            let client = client.clone();
+            let l1_port = l1_port.clone();
+            let account_index = account_index.clone();
+            let contract_address = contract_address.clone();
             async move {
                 let epoch_before_update = client.current_epoch().await?.context("curr epoch")?;
                 tracing::warn!("current_epoch={epoch_before_update:?}");
@@ -365,11 +363,27 @@ pub async fn test_stake_table_update(clients: Vec<SequencerClient>) -> Result<()
             }
             .boxed()
         };
-    let node = stakers[0].clone();
+
+    let config = client.config::<PublicNetworkConfig>().await?.config;
+
+    // currently stake table update does not support DA node member changes
+    let stake_table = config.known_nodes_with_stake;
+    let da_members = config.known_da_nodes;
+
+    // filtering out DA nodes
+    let non_da_stakers: Vec<_> = stake_table
+        .into_iter()
+        .filter(|x| !da_members.contains(x))
+        .collect();
+
+    let node = non_da_stakers
+        .get(0)
+        .context("failed to get non DA node")?
+        .clone();
     let one_removed = PermissionedStakeTableUpdate::new(
         vec![],
         vec![StakerIdentity {
-            stake_table_key: node.stake_key,
+            stake_table_key: node.stake_table_entry.stake_key.clone(),
         }],
     );
 
@@ -378,5 +392,29 @@ pub async fn test_stake_table_update(clients: Vec<SequencerClient>) -> Result<()
         .await
         .expect("failed to remove one node");
 
+    // add back the removed node
+    let added = PermissionedStakeTableUpdate::new(
+        vec![PeerConfigKeys {
+            stake_table_key: *node.stake_table_entry.key(),
+            state_ver_key: node.state_ver_key,
+            stake: node.stake_table_entry.stake().as_u64(),
+            da: false,
+        }],
+        vec![],
+    );
+
+    assert_change(added).await.expect("failed to add a node");
+
     Ok(())
+}
+
+#[derive(Debug, Deserialize)]
+struct PublicHotShotConfig {
+    known_nodes_with_stake: Vec<PeerConfig<PubKey>>,
+    known_da_nodes: Vec<PeerConfig<PubKey>>,
+}
+
+#[derive(Debug, Deserialize)]
+struct PublicNetworkConfig {
+    config: PublicHotShotConfig,
 }
