@@ -9,7 +9,7 @@ use hotshot_builder_api::{
     },
     v0_2::block_info::AvailableBlockHeaderInputV1,
 };
-use hotshot_types::traits::block_contents::{precompute_vid_commitment, Transaction};
+use hotshot_types::traits::block_contents::Transaction;
 use hotshot_types::traits::EncodeBytes;
 use hotshot_types::{
     event::EventType,
@@ -24,7 +24,7 @@ use hotshot_types::{
 use marketplace_builder_shared::coordinator::BuilderStateLookup;
 use marketplace_builder_shared::error::Error;
 use marketplace_builder_shared::state::BuilderState;
-use marketplace_builder_shared::utils::{BuilderKeys, WaitAndKeep};
+use marketplace_builder_shared::utils::BuilderKeys;
 use marketplace_builder_shared::{
     block::{BlockId, BuilderStateId, ReceivedTransaction, TransactionSource},
     coordinator::BuilderStateCoordinator,
@@ -402,17 +402,6 @@ where
         let block_size: u64 = encoded_txns.len() as u64;
         let offered_fee: u64 = self.base_fee * block_size;
 
-        // Get the number of nodes stored while processing the `claim_block_with_num_nodes` request
-        // or upon initialization.
-        let num_nodes = self.num_nodes.load(Ordering::Relaxed);
-
-        let fut = async move {
-            let join_handle = tokio::task::spawn_blocking(move || {
-                precompute_vid_commitment(&encoded_txns, num_nodes)
-            });
-            join_handle.await.unwrap()
-        };
-
         info!(
             builder_id = %builder.id(),
             txn_count = actual_txn_count,
@@ -424,7 +413,6 @@ where
             block_payload: payload,
             block_size,
             metadata,
-            vid_data: WaitAndKeep::new(Box::pin(fut)),
             offered_fee,
             truncated,
         }))
@@ -571,7 +559,6 @@ where
         let metadata;
         let offered_fee;
         let truncated;
-        let vid_data;
         {
             // We store this read lock guard separately to make it explicit
             // that this will end up holding a lock for the duration of this
@@ -589,32 +576,16 @@ where
             metadata = block_info.metadata.clone();
             offered_fee = block_info.offered_fee;
             truncated = block_info.truncated;
-            vid_data = block_info.vid_data.clone();
         };
 
-        let (vid_commitment, vid_precompute_data) = vid_data.resolve().await;
+        // TODO Add precompute back.
 
-        // sign over the vid commitment
-        let signature_over_vid_commitment =
-            <Types as NodeType>::BuilderSignatureKey::sign_builder_message(
-                &self.builder_keys.1,
-                vid_commitment.as_ref(),
-            )
-            .map_err(Error::Signing)?;
+        let signature_over_fee_info =
+            Types::BuilderSignatureKey::sign_fee(&self.builder_keys.1, offered_fee, &metadata)
+                .map_err(Error::Signing)?;
 
-        let signature_over_fee_info = Types::BuilderSignatureKey::sign_fee(
-            &self.builder_keys.1,
-            offered_fee,
-            &metadata,
-            &vid_commitment,
-        )
-        .map_err(Error::Signing)?;
-
-        let response = AvailableBlockHeaderInputV1 {
-            vid_commitment,
-            vid_precompute_data,
+        let response = AvailableBlockHeaderInputV1::<Types> {
             fee_signature: signature_over_fee_info,
-            message_signature: signature_over_vid_commitment,
             sender: self.builder_keys.0.clone(),
         };
         info!("Sending Claim Block Header Input response");

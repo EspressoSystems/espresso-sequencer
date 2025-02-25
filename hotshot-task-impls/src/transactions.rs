@@ -212,10 +212,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
                 .number_of_empty_blocks_proposed
                 .add(1);
 
-            let membership_total_nodes = self.membership.read().await.total_nodes(self.cur_epoch);
-            let Some(null_fee) =
-                null_block::builder_fee::<TYPES, V>(membership_total_nodes, version, *block_view)
-            else {
+            let Some(null_fee) = null_block::builder_fee::<TYPES, V>(version, *block_view) else {
                 tracing::error!("Failed to get null fee");
                 return None;
             };
@@ -355,10 +352,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
         block_epoch: Option<TYPES::Epoch>,
         version: Version,
     ) -> Option<PackedBundle<TYPES>> {
-        let membership_total_nodes = self.membership.read().await.total_nodes(self.cur_epoch);
-        let Some(null_fee) =
-            null_block::builder_fee::<TYPES, V>(membership_total_nodes, version, *block_view)
-        else {
+        let Some(null_fee) = null_block::builder_fee::<TYPES, V>(version, *block_view) else {
             tracing::error!("Failed to calculate null block fee.");
             return None;
         };
