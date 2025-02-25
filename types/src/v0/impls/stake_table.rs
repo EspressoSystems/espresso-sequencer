@@ -1,13 +1,14 @@
-use std::{
-    cmp::max,
-    collections::{BTreeMap, BTreeSet, HashMap},
-    num::NonZeroU64,
-    str::FromStr,
+use super::{
+    traits::StateCatchup,
+    v0_3::{DAMembers, StakeTable, StakeTables},
+    v0_99::ChainConfig,
+    Header, L1Client, NodeState, PubKey, SeqTypes,
 };
 
 use async_trait::async_trait;
+use committable::Committable;
 use contract_bindings_alloy::permissionedstaketable::PermissionedStakeTable::StakersUpdated;
-use ethers::types::{Address, U256};
+use ethers::types::U256;
 use ethers_conv::ToAlloy;
 use hotshot::types::{BLSPubKey, SignatureKey as _};
 use hotshot_contract_adapter::stake_table::{bls_alloy_to_jf, NodeInfoJf};
@@ -25,14 +26,14 @@ use hotshot_types::{
     },
     PeerConfig,
 };
-use itertools::Itertools;
-use thiserror::Error;
-use url::Url;
-
-use super::{
-    v0_3::{DAMembers, StakeTable, StakeTables},
-    Header, L1Client, NodeState, PubKey, SeqTypes,
+use indexmap::IndexMap;
+use std::{
+    cmp::max,
+    collections::{BTreeMap, BTreeSet, HashMap},
+    num::NonZeroU64,
+    sync::Arc,
 };
+use thiserror::Error;
 
 type Epoch = <SeqTypes as NodeType>::Epoch;
 
@@ -53,46 +54,40 @@ impl StakeTables {
     /// should not significantly affect performance to fetch all events and
     /// perform the computation in this functions once per epoch.
     pub fn from_l1_events(updates: Vec<StakersUpdated>) -> Self {
-        let changes_per_node = updates
-            .into_iter()
-            .flat_map(|event| {
-                event
-                    .removed
-                    .into_iter()
-                    .map(|key| StakeTableChange::Remove(bls_alloy_to_jf(key)))
-                    .chain(
-                        event
-                            .added
-                            .into_iter()
-                            .map(|node_info| StakeTableChange::Add(node_info.into())),
-                    )
-            })
-            .group_by(|change| change.key());
+        let mut index_map = IndexMap::new();
 
-        // If the last event for a stakers is `Added` the staker is currently
-        // staking, if the last event is removed or (or the staker is not present)
-        // they are not staking.
-        let currently_staking = changes_per_node
-            .into_iter()
-            .map(|(_pub_key, deltas)| deltas.last().expect("deltas non-empty").clone())
-            .filter_map(|change| match change {
-                StakeTableChange::Add(node_info) => Some(node_info),
-                StakeTableChange::Remove(_) => None,
-            });
-
-        let mut consensus_stake_table: Vec<StakeTableEntry<PubKey>> = vec![];
-        let mut da_members: Vec<StakeTableEntry<PubKey>> = vec![];
-        for node in currently_staking {
-            consensus_stake_table.push(node.clone().into());
-            if node.da {
-                da_members.push(node.into());
+        for event in updates {
+            for key in event.removed {
+                let change = StakeTableChange::Remove(bls_alloy_to_jf(key));
+                index_map.insert(change.key(), change);
+            }
+            for node_info in event.added {
+                let change = StakeTableChange::Add(node_info.into());
+                index_map.insert(change.key(), change);
             }
         }
-        Self::new(consensus_stake_table.into(), da_members.into())
+
+        let mut da_members = Vec::new();
+        let mut stake_table = Vec::new();
+
+        for change in index_map.values() {
+            if let StakeTableChange::Add(node_info_jf) = change {
+                let entry: StakeTableEntry<PubKey> = node_info_jf.clone().into();
+                stake_table.push(entry.clone());
+                if change.is_da() {
+                    da_members.push(entry);
+                }
+            }
+        }
+
+        tracing::error!("DA={da_members:?}");
+        tracing::error!("ST={stake_table:?}");
+
+        Self::new(stake_table.into(), da_members.into())
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(derive_more::Debug, Clone)]
 /// Type to describe DA and Stake memberships
 pub struct EpochCommittees {
     /// Committee used when we're in pre-epoch state
@@ -107,8 +102,9 @@ pub struct EpochCommittees {
     /// L1 provider
     l1_client: L1Client,
 
-    /// Address of Stake Table Contract
-    contract_address: Option<Address>,
+    chain_config: ChainConfig,
+    #[debug("{}", peers.name())]
+    pub peers: Arc<dyn StateCatchup>,
 
     /// Randomized committees, filled when we receive the DrbResult
     randomized_committees: BTreeMap<Epoch, RandomizedCommittee<StakeTableEntry<PubKey>>>,
@@ -125,6 +121,13 @@ impl StakeTableChange {
         match self {
             StakeTableChange::Add(node_info) => node_info.stake_table_key,
             StakeTableChange::Remove(key) => *key,
+        }
+    }
+
+    pub(crate) fn is_da(&self) -> bool {
+        match self {
+            StakeTableChange::Add(node_info) => node_info.da,
+            StakeTableChange::Remove(_) => false,
         }
     }
 }
@@ -195,6 +198,9 @@ impl EpochCommittees {
         };
 
         self.state.insert(epoch, committee.clone());
+        self.state.insert(epoch + 1, committee.clone());
+        self.state.insert(epoch + 2, committee.clone());
+
         committee
     }
 
@@ -248,17 +254,19 @@ impl EpochCommittees {
             indexed_da_members,
         };
 
+        // TODO: remove this, workaround for hotshot asking for stake tables from epoch 1 and 2
         let mut map = HashMap::new();
-        map.insert(Epoch::genesis(), members.clone());
-        // TODO: remove this, workaround for hotshot asking for stake tables from epoch 1
-        map.insert(Epoch::genesis() + 1u64, members.clone());
+        for epoch in Epoch::genesis().u64()..=50 {
+            map.insert(Epoch::new(epoch), members.clone());
+        }
 
         Self {
             non_epoch_committee: members,
             state: map,
             _epoch_size: epoch_size,
             l1_client: instance_state.l1_client.clone(),
-            contract_address: instance_state.chain_config.stake_table_contract,
+            chain_config: instance_state.chain_config,
+            peers: instance_state.peers.clone(),
             randomized_committees: BTreeMap::new(),
         }
     }
@@ -284,81 +292,32 @@ impl Membership<SeqTypes> for EpochCommittees {
     fn new(
         // TODO remove `new` from trait and remove this fn as well.
         // https://github.com/EspressoSystems/HotShot/commit/fcb7d54a4443e29d643b3bbc53761856aef4de8b
-        committee_members: Vec<PeerConfig<PubKey>>,
-        da_members: Vec<PeerConfig<PubKey>>,
+        _committee_members: Vec<PeerConfig<PubKey>>,
+        _da_members: Vec<PeerConfig<PubKey>>,
     ) -> Self {
-        // For each eligible leader, get the stake table entry
-        let eligible_leaders: Vec<_> = committee_members
-            .iter()
-            .map(|member| member.stake_table_entry.clone())
-            .filter(|entry| entry.stake() > U256::zero())
-            .collect();
-
-        // For each member, get the stake table entry
-        let stake_table: Vec<_> = committee_members
-            .iter()
-            .map(|member| member.stake_table_entry.clone())
-            .filter(|entry| entry.stake() > U256::zero())
-            .collect();
-
-        // For each member, get the stake table entry
-        let da_members: Vec<_> = da_members
-            .iter()
-            .map(|member| member.stake_table_entry.clone())
-            .filter(|entry| entry.stake() > U256::zero())
-            .collect();
-
-        // Index the stake table by public key
-        let indexed_stake_table: HashMap<PubKey, _> = stake_table
-            .iter()
-            .map(|entry| (PubKey::public_key(entry), entry.clone()))
-            .collect();
-
-        // Index the stake table by public key
-        let indexed_da_members: HashMap<PubKey, _> = da_members
-            .iter()
-            .map(|entry| (PubKey::public_key(entry), entry.clone()))
-            .collect();
-
-        let members = Committee {
-            eligible_leaders,
-            stake_table,
-            da_members,
-            indexed_stake_table,
-            indexed_da_members,
-        };
-
-        let mut map = HashMap::new();
-        map.insert(Epoch::genesis(), members.clone());
-        // TODO: remove this, workaround for hotshot asking for stake tables from epoch 1
-        map.insert(Epoch::genesis() + 1u64, members.clone());
-
-        Self {
-            non_epoch_committee: members,
-            state: map,
-            _epoch_size: 12,
-            l1_client: L1Client::new(vec![Url::from_str("http:://ab.b").unwrap()])
-                .expect("Failed to create L1 client"),
-            contract_address: None,
-            randomized_committees: BTreeMap::new(),
-        }
+        panic!("EpochCommittees::new() called. This function has been replaced with new_stake()");
     }
-
     /// Get the stake table for the current view
     fn stake_table(&self, epoch: Option<Epoch>) -> Vec<StakeTableEntry<PubKey>> {
-        if let Some(st) = self.state(&epoch) {
+        let st = if let Some(st) = self.state(&epoch) {
             st.stake_table.clone()
         } else {
             vec![]
-        }
+        };
+
+        tracing::debug!("stake table = {st:?}");
+        st
     }
     /// Get the stake table for the current view
     fn da_stake_table(&self, epoch: Option<Epoch>) -> Vec<StakeTableEntry<PubKey>> {
-        if let Some(sc) = self.state(&epoch) {
+        let da = if let Some(sc) = self.state(&epoch) {
             sc.da_members.clone()
         } else {
             vec![]
-        }
+        };
+
+        tracing::debug!("da members = {da:?}");
+        da
     }
 
     /// Get all members of the committee for the current view
@@ -367,11 +326,15 @@ impl Membership<SeqTypes> for EpochCommittees {
         _view_number: <SeqTypes as NodeType>::View,
         epoch: Option<Epoch>,
     ) -> BTreeSet<PubKey> {
-        if let Some(sc) = self.state(&epoch) {
+        let committee = if let Some(sc) = self.state(&epoch) {
             sc.indexed_stake_table.clone().into_keys().collect()
         } else {
             BTreeSet::new()
-        }
+        };
+
+        tracing::debug!("committee={committee:?}");
+
+        committee
     }
 
     /// Get all members of the committee for the current view
@@ -380,11 +343,14 @@ impl Membership<SeqTypes> for EpochCommittees {
         _view_number: <SeqTypes as NodeType>::View,
         epoch: Option<Epoch>,
     ) -> BTreeSet<PubKey> {
-        if let Some(sc) = self.state(&epoch) {
+        let da = if let Some(sc) = self.state(&epoch) {
             sc.indexed_da_members.clone().into_keys().collect()
         } else {
             BTreeSet::new()
-        }
+        };
+        tracing::debug!("da committee={da:?}");
+
+        da
     }
 
     /// Get all eligible leaders of the committee for the current view
@@ -393,12 +359,16 @@ impl Membership<SeqTypes> for EpochCommittees {
         _view_number: <SeqTypes as NodeType>::View,
         epoch: Option<Epoch>,
     ) -> BTreeSet<PubKey> {
-        self.state(&epoch)
+        let committee_leaders = self
+            .state(&epoch)
             .unwrap()
             .eligible_leaders
             .iter()
             .map(PubKey::public_key)
-            .collect()
+            .collect();
+
+        tracing::debug!("committee_leaders={committee_leaders:?}");
+        committee_leaders
     }
 
     /// Get the stake table entry for a public key
@@ -506,9 +476,20 @@ impl Membership<SeqTypes> for EpochCommittees {
         epoch: Epoch,
         block_header: Header,
     ) -> Option<Box<dyn FnOnce(&mut Self) + Send>> {
-        let address = self.contract_address?;
+        let chain_config = get_chain_config(self.chain_config, &self.peers, &block_header)
+            .await
+            .ok()?;
+
+        let contract_address = chain_config.stake_table_contract;
+
+        if contract_address.is_none() {
+            tracing::error!("No stake table contract address found in Chain config");
+        }
+
+        let address = contract_address?;
+
         self.l1_client
-            .get_stake_table(address.to_alloy(), block_header.height())
+            .get_stake_table(address.to_alloy(), block_header.l1_head())
             .await
             .ok()
             .map(|stake_table| -> Box<dyn FnOnce(&mut Self) + Send> {
@@ -530,6 +511,30 @@ impl Membership<SeqTypes> for EpochCommittees {
         self.randomized_committees
             .insert(epoch, randomized_committee);
     }
+}
+
+pub(crate) async fn get_chain_config(
+    chain_config: ChainConfig,
+    peers: &impl StateCatchup,
+    header: &Header,
+) -> anyhow::Result<ChainConfig> {
+    let header_cf = header.chain_config();
+    if chain_config.commit() == header_cf.commit() {
+        return Ok(chain_config);
+    }
+
+    let cf = match header_cf.resolve() {
+        Some(cf) => cf,
+        None => peers
+            .fetch_chain_config(header_cf.commit())
+            .await
+            .map_err(|err| {
+                tracing::error!("failed to get chain_config from peers. err: {err:?}");
+                err
+            })?,
+    };
+
+    Ok(cf)
 }
 
 #[cfg(test)]
