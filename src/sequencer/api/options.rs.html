@@ -889,7 +889,7 @@
 </span><span class="attr">#[derive(Parser, Clone, Copy, Debug)]
 </span><span class="kw">pub struct </span>Http {
     <span class="doccomment">/// Port that the HTTP API will use.
-    </span><span class="attr">#[clap(long, env = <span class="string">"ESPRESSO_SEQUENCER_API_PORT"</span>)]
+    </span><span class="attr">#[clap(long, env = <span class="string">"ESPRESSO_SEQUENCER_API_PORT"</span>, default_value = <span class="string">"8080"</span>)]
     </span><span class="kw">pub </span>port: u16,
 
     <span class="doccomment">/// Maximum number of concurrent HTTP connections the server will allow.
