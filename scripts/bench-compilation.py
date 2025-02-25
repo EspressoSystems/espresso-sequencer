@@ -1,10 +1,11 @@
 #!/usr/bin/env python
 import argparse
+import os
 import subprocess
+import sys
 import time
 import tomlkit
 import typing
-import sys
 
 RESULTS = "bench-compilation-results.toml"
 
@@ -153,6 +154,7 @@ The script generates new cargo profile for all combinations of the "strip",
     # Show plan
     print("Running with the following configuration:\n")
     print(tomlkit.dumps(vars(args)))
+    print(f"CARGO_BUILD_JOBS={os.environ.get('CARGO_BUILD_JOBS')}")
     print()
 
     with open("Cargo.toml") as f:
@@ -180,18 +182,18 @@ The script generates new cargo profile for all combinations of the "strip",
         for debug in args.debug.split(","):
             for lto in args.lto.split(","):
                 profile = f"debug-{debug}_strip-{strip}_lto-{lto}"
-            command = f"{args.timed} --profile {profile}"
-            pre_build_command = f"{args.pre_build} --profile {profile}"
-            time = benchmark(
-                args.dry_run,
-                strip=strip,
-                debug=debug,
-                lto=lto,
-                setup_command=args.setup,
-                pre_build_command=pre_build_command,
-                cache_invalidation_command=args.invalidate_cache_command,
-                timed_command=command,
-            )
+                command = f"{args.timed} --profile {profile}"
+                pre_build_command = f"{args.pre_build} --profile {profile}"
+                time = benchmark(
+                    args.dry_run,
+                    strip=strip,
+                    debug=debug,
+                    lto=lto,
+                    setup_command=args.setup,
+                    pre_build_command=pre_build_command,
+                    cache_invalidation_command=args.invalidate_cache_command,
+                    timed_command=command,
+                )
 
 
 if __name__ == "__main__":
