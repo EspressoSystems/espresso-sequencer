@@ -4,15 +4,12 @@
 // You should have received a copy of the MIT License
 // along with the HotShot repository. If not, see <https://mit-license.org/>.
 
-use std::{
-    collections::{HashMap, HashSet},
-    sync::Arc,
-};
-
 use async_broadcast::{Receiver, SendError, Sender};
 use async_lock::RwLock;
 use committable::{Commitment, Committable};
+use either::Either;
 use hotshot_task::dependency::{Dependency, EventDependency};
+use hotshot_types::simple_certificate::NextEpochQuorumCertificate2;
 use hotshot_types::{
     consensus::OuterConsensus,
     data::{Leaf2, QuorumProposalWrapper, ViewChangeEvidence2},
@@ -35,6 +32,11 @@ use hotshot_types::{
     vote::{Certificate, HasViewNumber},
 };
 use hotshot_utils::anytrace::*;
+use std::time::{Duration, Instant};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
 use tokio::time::timeout;
 use tracing::instrument;
 
@@ -862,4 +864,123 @@ pub async fn broadcast_event<E: Clone + std::fmt::Debug>(event: E, sender: &Send
             );
         }
     }
+}
+
+/// Gets the next epoch QC corresponding to this epoch QC, times out if it takes too long.
+pub async fn get_next_epoch_qc<TYPES: NodeType>(
+    high_qc: &QuorumCertificate2<TYPES>,
+    consensus: &OuterConsensus<TYPES>,
+    timeout: u64,
+    view_start_time: Instant,
+    receiver: &Receiver<Arc<HotShotEvent<TYPES>>>,
+) -> Option<NextEpochQuorumCertificate2<TYPES>> {
+    tracing::debug!("getting the next epoch QC");
+    if let Some(next_epoch_qc) = consensus.read().await.next_epoch_high_qc() {
+        if next_epoch_qc.data.leaf_commit == high_qc.data.leaf_commit {
+            // We have it already, no reason to wait
+            return Some(next_epoch_qc.clone());
+        }
+    };
+
+    let wait_duration = Duration::from_millis(timeout / 2);
+
+    // TODO configure timeout
+    let Some(time_spent) = Instant::now().checked_duration_since(view_start_time) else {
+        // Shouldn't be possible, now must be after the start
+        return None;
+    };
+    let Some(time_left) = wait_duration.checked_sub(time_spent) else {
+        // No time left
+        return None;
+    };
+    let receiver = receiver.clone();
+    let Ok(Some(event)) = tokio::time::timeout(time_left, async move {
+        let this_epoch_high_qc = high_qc.clone();
+        EventDependency::new(
+            receiver,
+            Box::new(move |event| {
+                let event = event.as_ref();
+                if let HotShotEvent::NextEpochQc2Formed(Either::Left(qc)) = event {
+                    qc.data.leaf_commit == this_epoch_high_qc.data.leaf_commit
+                } else {
+                    false
+                }
+            }),
+        )
+        .completed()
+        .await
+    })
+    .await
+    else {
+        // Check again, there is a chance we missed it
+        if let Some(next_epoch_qc) = consensus.read().await.next_epoch_high_qc() {
+            if next_epoch_qc.data.leaf_commit == high_qc.data.leaf_commit {
+                return Some(next_epoch_qc.clone());
+            }
+        };
+        return None;
+    };
+    let HotShotEvent::NextEpochQc2Formed(Either::Left(next_epoch_qc)) = event.as_ref() else {
+        // this shouldn't happen
+        return None;
+    };
+    Some(next_epoch_qc.clone())
+}
+
+/// Validates qc's signatures and, if provided, validates next_epoch_qc's signatures and whether it
+/// corresponds to the provided high_qc.
+pub async fn validate_qc_and_next_epoch_qc<TYPES: NodeType, V: Versions>(
+    qc: &QuorumCertificate2<TYPES>,
+    maybe_next_epoch_qc: Option<&NextEpochQuorumCertificate2<TYPES>>,
+    consensus: &OuterConsensus<TYPES>,
+    membership: &Arc<RwLock<TYPES::Membership>>,
+    upgrade_lock: &UpgradeLock<TYPES, V>,
+) -> Result<()> {
+    let membership_reader = membership.read().await;
+    let membership_stake_table = membership_reader.stake_table(qc.data.epoch);
+    let membership_success_threshold = membership_reader.success_threshold(qc.data.epoch);
+    drop(membership_reader);
+
+    {
+        let consensus_reader = consensus.read().await;
+        qc.is_valid_cert(
+            membership_stake_table,
+            membership_success_threshold,
+            upgrade_lock,
+        )
+        .await
+        .context(|e| {
+            consensus_reader.metrics.invalid_qc.update(1);
+
+            warn!("Invalid certificate: {}", e)
+        })?;
+    }
+
+    if let Some(next_epoch_qc) = maybe_next_epoch_qc {
+        // If the next epoch qc exists, make sure it's equal to the qc
+        if qc.view_number() != next_epoch_qc.view_number()
+            || qc.data.epoch != next_epoch_qc.data.epoch
+            || qc.data.leaf_commit != next_epoch_qc.data.leaf_commit
+        {
+            bail!("Next epoch qc exists but it's not equal with qc.");
+        }
+
+        let membership_reader = membership.read().await;
+        let membership_next_stake_table =
+            membership_reader.stake_table(qc.data.epoch.map(|x| x + 1));
+        let membership_next_success_threshold =
+            membership_reader.success_threshold(qc.data.epoch.map(|x| x + 1));
+        drop(membership_reader);
+
+        // Validate the next epoch qc as well
+        next_epoch_qc
+            .is_valid_cert(
+                membership_next_stake_table,
+                membership_next_success_threshold,
+                upgrade_lock,
+            )
+            .await
+            .context(|e| warn!("Invalid next epoch certificate: {}", e))?;
+    }
+    Ok(())
 }

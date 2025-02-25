@@ -34,6 +34,7 @@ use tracing::instrument;
 use vbs::version::StaticVersionType;
 
 use super::{QuorumProposalRecvTaskState, ValidationInfo};
+use crate::helpers::validate_qc_and_next_epoch_qc;
 use crate::{
     events::HotShotEvent,
     helpers::{
@@ -42,6 +43,7 @@ use crate::{
     },
     quorum_proposal_recv::{UpgradeLock, Versions},
 };
+
 /// Update states in the event that the parent state is not found for a given `proposal`.
 #[instrument(skip_all)]
 async fn validate_proposal_liveness<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>(
@@ -168,53 +170,14 @@ pub(crate) async fn handle_quorum_proposal_recv<
         validation_info.epoch_height,
     );
 
-    let membership_reader = validation_info.membership.read().await;
-    let membership_stake_table = membership_reader.stake_table(justify_qc.data.epoch);
-    let membership_success_threshold = membership_reader.success_threshold(justify_qc.data.epoch);
-    drop(membership_reader);
-
-    {
-        let consensus_reader = validation_info.consensus.read().await;
-        justify_qc
-            .is_valid_cert(
-                membership_stake_table,
-                membership_success_threshold,
-                &validation_info.upgrade_lock,
-            )
-            .await
-            .context(|e| {
-                consensus_reader.metrics.invalid_qc.update(1);
-
-                warn!("Invalid certificate for view {}: {}", *view_number, e)
-            })?;
-    }
-
-    if let Some(ref next_epoch_justify_qc) = maybe_next_epoch_justify_qc {
-        // If the next epoch justify qc exists, make sure it's equal to the justify qc
-        if justify_qc.view_number() != next_epoch_justify_qc.view_number()
-            || justify_qc.data.epoch != next_epoch_justify_qc.data.epoch
-            || justify_qc.data.leaf_commit != next_epoch_justify_qc.data.leaf_commit
-        {
-            bail!("Next epoch justify qc exists but it's not equal with justify qc.");
-        }
-
-        let membership_reader = validation_info.membership.read().await;
-        let membership_next_stake_table =
-            membership_reader.stake_table(justify_qc.data.epoch.map(|x| x + 1));
-        let membership_next_success_threshold =
-            membership_reader.success_threshold(justify_qc.data.epoch.map(|x| x + 1));
-        drop(membership_reader);
-
-        // Validate the next epoch justify qc as well
-        next_epoch_justify_qc
-            .is_valid_cert(
-                membership_next_stake_table,
-                membership_next_success_threshold,
-                &validation_info.upgrade_lock,
-            )
-            .await
-            .context(|e| warn!("Invalid certificate for view {}: {}", *view_number, e))?;
-    }
+    validate_qc_and_next_epoch_qc(
+        &justify_qc,
+        maybe_next_epoch_justify_qc.as_ref(),
+        &validation_info.consensus,
+        &validation_info.membership,
+        &validation_info.upgrade_lock,
+    )
+    .await?;
 
     broadcast_event(
         Arc::new(HotShotEvent::QuorumProposalPreliminarilyValidated(
