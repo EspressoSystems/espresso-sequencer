@@ -14,7 +14,7 @@ use hotshot_query_service::explorer::MonetaryValue;
 use hotshot_types::traits::block_contents::BuilderFee;
 use itertools::Itertools;
 use jf_merkle_tree::{
-    ForgetableMerkleTreeScheme, ForgetableUniversalMerkleTreeScheme, LookupResult,
+    ForgettableMerkleTreeScheme, ForgettableUniversalMerkleTreeScheme, LookupResult,
     MerkleCommitment, MerkleTreeError, MerkleTreeScheme, ToTraversalPath,
     UniversalMerkleTreeScheme,
 };
