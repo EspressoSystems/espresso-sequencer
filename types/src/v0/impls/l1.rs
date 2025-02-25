@@ -1849,7 +1849,7 @@ mod test {
         }
 
         let block = receipts.last().unwrap().block_number.unwrap().as_u64();
-        let b = l1_client.wait_for_finalized_block(block).await;
+        let _ = l1_client.wait_for_finalized_block(block).await;
 
         let mut lock = l1_client.state.lock().await;
         for receipt in receipts {
