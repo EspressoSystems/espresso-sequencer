@@ -184,12 +184,14 @@ pub(crate) enum L1Event {
 }
 
 #[derive(Debug)]
+/// Wrapper for `JoinHandles` to enable access by name.
 pub struct InnerUpdateTasks {
     blocks: JoinHandle<()>,
     stake: Option<JoinHandle<()>>,
 }
 
 impl InnerUpdateTasks {
+    /// Spawn the task responsible for updating `L1State`.
     pub fn spawn_blocks<F>(task: F) -> Self
     where
         F: Future<Output = ()> + Send + 'static,
@@ -199,6 +201,7 @@ impl InnerUpdateTasks {
             stake: None,
         }
     }
+
     pub fn abort_all(self) {
         self.blocks.abort();
         if let Some(task) = self.stake {
@@ -206,6 +209,8 @@ impl InnerUpdateTasks {
         }
     }
 
+    ////Should be called upon upgrade to v3 to initialize
+    /// `stake_table_update_loop`.
     pub fn v3<F, G>(blocks: F, stake: G) -> Self
     where
         F: Future<Output = ()> + Send + 'static,
