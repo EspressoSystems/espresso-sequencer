@@ -950,16 +950,9 @@ impl L1Client {
             (init_block, finalized)
         };
 
-        // if both finalized and init_block are `Some` take the
-        // maximum. If only init_block is defined, return it. We do
-        // this first to avoid unnecessary call to contract.
-        if let Some(n) = finalized
-            .zip(init_block)
-            .map(|(f, i)| f.max(i))
-            .or(init_block)
-        {
+        if let Some(n) = finalized.iter().chain(init_block.iter()).max().copied() {
             return n;
-        };
+        }
 
         // Get the block contract was deployed at from the contract
         // itself. Add it to state to avoid calling this every run. We
