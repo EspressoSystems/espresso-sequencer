@@ -20,13 +20,3 @@ pub mod service;
 // tracking the testing
 #[cfg(test)]
 pub mod testing;
-
-use tokio::sync::mpsc::UnboundedReceiver;
-
-/// `WaitAndKeep` is a helper enum that allows for the lazy polling of a single
-/// value from an unbound receiver.
-#[derive(Debug)]
-pub enum WaitAndKeep<T> {
-    Keep(T),
-    Wait(UnboundedReceiver<T>),
-}
