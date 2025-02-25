@@ -844,23 +844,6 @@ impl L1Client {
         (state, block)
     }
 
-    /// Divide the range `start..=end` into chunks of size
-    /// `events_max_block_range`.
-    fn _chunky(&self, start: u64, end: u64) -> FromFn<impl FnMut() -> Option<(u64, u64)>> {
-        let mut start = start;
-        let chunk_size = self.options().l1_events_max_block_range;
-        std::iter::from_fn(move || {
-            let chunk_end = min(start + chunk_size - 1, end);
-            if chunk_end < start {
-                return None;
-            }
-
-            let chunk = (start, chunk_end);
-            start = chunk_end + 1;
-            Some(chunk)
-        })
-    }
-
     /// Get fee info for each `Deposit` occurring between `prev`
     /// and `new`. Returns `Vec<FeeInfo>`
     pub async fn get_finalized_deposits(
@@ -1520,28 +1503,6 @@ mod test {
             retry += 1;
         };
         tracing::info!(?final_state, "state updated");
-    }
-
-    #[tokio::test]
-    async fn test_chunky() {
-        let anvil = Anvil::new().spawn();
-        let opt = L1ClientOptions {
-            l1_events_max_block_range: 3,
-            ..Default::default()
-        };
-        let l1_client = opt
-            .connect(vec![anvil.endpoint().parse().unwrap()])
-            .unwrap();
-
-        let chunks = l1_client._chunky(3, 10);
-        let tups = stream::iter(chunks).collect::<Vec<_>>().await;
-
-        assert_eq![vec![(3, 5), (6, 8), (9, 10)], tups];
-
-        let chunks = ChunkGenerator::new(3, 10, 3);
-        let tups: Vec<(u64, u64)> = chunks.map(|range| (range.start, range.end)).collect();
-
-        assert_eq![vec![(3, 5), (6, 8), (9, 10)], tups];
     }
 
     #[tokio::test]
