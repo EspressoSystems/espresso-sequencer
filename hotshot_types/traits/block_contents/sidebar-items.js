@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["GENESIS_VID_NUM_STORAGE_NODES"],"fn":["advz_commitment","precompute_vid_commitment","vid_commitment"],"struct":["BuilderFee"],"trait":["BlockHeader","BlockPayload","EncodeBytes","TestableBlock","Transaction"]};
+window.SIDEBAR_ITEMS = {"constant":["GENESIS_VID_NUM_STORAGE_NODES"],"fn":["advz_commitment","vid_commitment"],"struct":["BuilderFee"],"trait":["BlockHeader","BlockPayload","EncodeBytes","TestableBlock","Transaction"]};

@@ -83,16 +83,13 @@
 <a href="#82" id="82">82</a>
 <a href="#83" id="83">83</a>
 <a href="#84" id="84">84</a>
-<a href="#85" id="85">85</a>
-<a href="#86" id="86">86</a>
-<a href="#87" id="87">87</a></pre></div><pre class="rust"><code><span class="kw">use </span>std::marker::PhantomData;
+<a href="#85" id="85">85</a></pre></div><pre class="rust"><code><span class="kw">use </span>std::marker::PhantomData;
 
 <span class="kw">use </span>hotshot::traits::BlockPayload;
 <span class="kw">use </span>hotshot_builder_api::v0_1::block_info::AvailableBlockInfo;
 <span class="kw">use </span>hotshot_types::traits::signature_key::BuilderSignatureKey;
-<span class="kw">use </span>hotshot_types::vid::{VidCommitment, VidPrecomputeData};
 <span class="kw">use </span>marketplace_builder_shared::error::Error;
-<span class="kw">use </span>marketplace_builder_shared::utils::{BuilderKeys, WaitAndKeep};
+<span class="kw">use </span>marketplace_builder_shared::utils::BuilderKeys;
 <span class="kw">use </span>marketplace_builder_shared::{
     block::BuilderStateId, coordinator::tiered_view_map::TieredViewMap,
 };
@@ -106,7 +103,6 @@
 </span><span class="kw">pub struct </span>BlockInfo&lt;Types: NodeType&gt; {
     <span class="kw">pub </span>block_payload: Types::BlockPayload,
     <span class="kw">pub </span>metadata: &lt;&lt;Types <span class="kw">as </span>NodeType&gt;::BlockPayload <span class="kw">as </span>BlockPayload&lt;Types&gt;&gt;::Metadata,
-    <span class="kw">pub </span>vid_data: WaitAndKeep&lt;(VidCommitment, VidPrecomputeData)&gt;,
     <span class="kw">pub </span>block_size: u64,
     <span class="kw">pub </span>offered_fee: u64,
     <span class="comment">// Could we have included more transactions with this block, but chose not to?
