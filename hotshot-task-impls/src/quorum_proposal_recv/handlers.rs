@@ -14,6 +14,7 @@ use committable::Committable;
 use hotshot_types::{
     consensus::OuterConsensus,
     data::{Leaf2, QuorumProposal, QuorumProposalWrapper},
+    epoch_membership::EpochMembershipCoordinator,
     message::Proposal,
     simple_certificate::QuorumCertificate,
     simple_vote::HasEpoch,
@@ -101,7 +102,7 @@ fn spawn_fetch_proposal<TYPES: NodeType, V: Versions>(
     view: TYPES::View,
     event_sender: Sender<Arc<HotShotEvent<TYPES>>>,
     event_receiver: Receiver<Arc<HotShotEvent<TYPES>>>,
-    membership: Arc<RwLock<TYPES::Membership>>,
+    membership: EpochMembershipCoordinator<TYPES>,
     consensus: OuterConsensus<TYPES>,
     sender_public_key: TYPES::SignatureKey,
     sender_private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
@@ -168,10 +169,14 @@ pub(crate) async fn handle_quorum_proposal_recv<
         validation_info.epoch_height,
     );
 
-    let membership_reader = validation_info.membership.read().await;
-    let membership_stake_table = membership_reader.stake_table(justify_qc.data.epoch);
-    let membership_success_threshold = membership_reader.success_threshold(justify_qc.data.epoch);
-    drop(membership_reader);
+    let qc_mem = validation_info
+        .membership
+        .coordinator
+        .membership_for_epoch(justify_qc.data.epoch)
+        .await?;
+
+    let membership_stake_table = qc_mem.stake_table().await;
+    let membership_success_threshold = qc_mem.success_threshold().await;
 
     {
         let consensus_reader = validation_info.consensus.read().await;
@@ -198,12 +203,10 @@ pub(crate) async fn handle_quorum_proposal_recv<
             bail!("Next epoch justify qc exists but it's not equal with justify qc.");
         }
 
-        let membership_reader = validation_info.membership.read().await;
-        let membership_next_stake_table =
-            membership_reader.stake_table(justify_qc.data.epoch.map(|x| x + 1));
-        let membership_next_success_threshold =
-            membership_reader.success_threshold(justify_qc.data.epoch.map(|x| x + 1));
-        drop(membership_reader);
+        let next_mem = qc_mem.next_epoch().await?;
+
+        let membership_next_stake_table = next_mem.stake_table().await;
+        let membership_next_success_threshold = next_mem.success_threshold().await;
 
         // Validate the next epoch justify qc as well
         next_epoch_justify_qc
@@ -213,9 +216,13 @@ pub(crate) async fn handle_quorum_proposal_recv<
                 &validation_info.upgrade_lock,
             )
             .await
-            .context(|e| warn!("Invalid certificate for view {}: {}", *view_number, e))?;
+            .context(|e| {
+                warn!(
+                    "Invalid next epoch certificate for view {}: {}",
+                    *view_number, e
+                )
+            })?;
     }
-
     broadcast_event(
         Arc::new(HotShotEvent::QuorumProposalPreliminarilyValidated(
             proposal.clone(),
@@ -238,7 +245,7 @@ pub(crate) async fn handle_quorum_proposal_recv<
             justify_qc.view_number(),
             event_sender.clone(),
             event_receiver.clone(),
-            Arc::clone(&validation_info.membership),
+            validation_info.membership.coordinator.clone(),
             OuterConsensus::new(Arc::clone(&validation_info.consensus.inner_consensus)),
             // Note that we explicitly use the node key here instead of the provided key in the signature.
             // This is because the key that we receive is for the prior leader, so the payload would be routed

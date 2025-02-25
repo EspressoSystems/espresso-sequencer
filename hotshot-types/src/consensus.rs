@@ -23,6 +23,7 @@ pub use crate::utils::{View, ViewInner};
 use crate::{
     data::{Leaf2, QuorumProposalWrapper, VidDisperse, VidDisperseShare},
     drb::DrbSeedsAndResults,
+    epoch_membership::EpochMembershipCoordinator,
     error::HotShotError,
     event::{HotShotAction, LeafInfo},
     message::{Proposal, UpgradeLock},
@@ -956,7 +957,7 @@ impl<TYPES: NodeType> Consensus<TYPES> {
         consensus: OuterConsensus<TYPES>,
         view: <TYPES as NodeType>::View,
         target_epoch: Option<<TYPES as NodeType>::Epoch>,
-        membership: Arc<RwLock<TYPES::Membership>>,
+        membership_coordinator: EpochMembershipCoordinator<TYPES>,
         private_key: &<TYPES::SignatureKey as SignatureKey>::PrivateKey,
         upgrade_lock: &UpgradeLock<TYPES, V>,
     ) -> Option<()> {
@@ -971,7 +972,7 @@ impl<TYPES: NodeType> Consensus<TYPES> {
 
         let vid = VidDisperse::calculate_vid_disperse::<V>(
             payload.as_ref(),
-            &membership,
+            &membership_coordinator,
             view,
             target_epoch,
             epoch,

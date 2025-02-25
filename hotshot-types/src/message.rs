@@ -30,6 +30,7 @@ use crate::{
         DaProposal, DaProposal2, Leaf, Leaf2, QuorumProposal, QuorumProposal2,
         QuorumProposalWrapper, UpgradeProposal,
     },
+    epoch_membership::EpochMembership,
     request_response::ProposalRequestPayload,
     simple_certificate::{
         DaCertificate, DaCertificate2, QuorumCertificate2, UpgradeCertificate,
@@ -42,13 +43,12 @@ use crate::{
         ViewSyncPreCommitVote, ViewSyncPreCommitVote2,
     },
     traits::{
-        block_contents::BlockHeader,
         election::Membership,
         network::{DataRequest, ResponseMessage, ViewMessage},
         node_implementation::{ConsensusTime, NodeType, Versions},
         signature_key::SignatureKey,
     },
-    utils::{mnemonic, option_epoch_from_block_number},
+    utils::mnemonic,
     vote::HasViewNumber,
 };
 
@@ -579,18 +579,9 @@ where
     /// Checks that the signature of the quorum proposal is valid.
     /// # Errors
     /// Returns an error when the proposal signature is invalid.
-    pub fn validate_signature(
-        &self,
-        membership: &TYPES::Membership,
-        epoch_height: u64,
-    ) -> Result<()> {
+    pub async fn validate_signature(&self, membership: &EpochMembership<TYPES>) -> Result<()> {
         let view_number = self.data.proposal.view_number();
-        let proposal_epoch = option_epoch_from_block_number::<TYPES>(
-            self.data.proposal.epoch().is_some(),
-            self.data.block_header().block_number(),
-            epoch_height,
-        );
-        let view_leader_key = membership.leader(view_number, proposal_epoch)?;
+        let view_leader_key = membership.leader(view_number).await?;
         let proposed_leaf = Leaf2::from_quorum_proposal(&self.data);
 
         ensure!(

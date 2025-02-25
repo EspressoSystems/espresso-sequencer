@@ -339,13 +339,12 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + std::fmt::Debug, V: Version
         &self,
         handle: &mut SystemContextHandle<TYPES, I, V>,
         network: Arc<<I as NodeImplementation<TYPES>>::Network>,
-        membership: Arc<RwLock<TYPES::Membership>>,
     ) {
         let network_state: NetworkEventTaskState<_, V, _, _> = NetworkEventTaskState {
             network,
             view: TYPES::View::genesis(),
             epoch: None,
-            membership,
+            membership_coordinator: handle.membership_coordinator.clone(),
             storage: Arc::clone(&handle.storage()),
             consensus: OuterConsensus::new(handle.consensus()),
             upgrade_lock: handle.hotshot.upgrade_lock.clone(),
