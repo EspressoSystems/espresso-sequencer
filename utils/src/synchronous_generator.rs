@@ -4,6 +4,7 @@ use std::ops::Range;
 // param instead of `u64`s.
 //
 /// Type to generate chunks of `chunk_size` from a given range.
+#[derive(Clone, Debug)]
 pub struct ChunkGenerator {
     range: Range<u64>,
     chunk_size: u64,

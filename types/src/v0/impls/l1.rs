@@ -1835,26 +1835,28 @@ mod test {
             }
             sleep(Duration::from_secs(1)).await;
         }
-        // Take block_number from the first receipt. Later
-        // blocks don't appear to become finalized. Need to wait longer?
-        let block = receipts.first().unwrap().block_number.unwrap().as_u64();
 
-        // ensure state is updated
-        let mut lock = l1_client.state.lock().await;
-        let mut success = false;
-        for _ in 0..10 {
-            if let Some(nodes) = lock.stake.get(&block) {
-                let result = nodes.stake_table.0[0].clone();
-                assert_eq!(result.stake_amount.as_u64(), 1);
-                success = true;
-                break;
-            } else {
-                sleep(Duration::from_secs(1)).await;
-                continue;
-            };
+        for _ in 0..2 {
+            deployer_client
+                .send_transaction(
+                    ethers::types::TransactionRequest::new()
+                        .to(deployer_client.address())
+                        .value(0),
+                    None,
+                )
+                .await?
+                .await?;
         }
-        if !success {
-            panic!("Update Loop did not update Cache within timeout");
+
+        let block = receipts.last().unwrap().block_number.unwrap().as_u64();
+        let b = l1_client.wait_for_finalized_block(block).await;
+
+        let mut lock = l1_client.state.lock().await;
+        for receipt in receipts {
+            let block = receipt.block_number.unwrap().as_u64();
+            let nodes = lock.stake.get(&block).unwrap();
+            let result = nodes.stake_table.0[0].clone();
+            assert_eq!(result.stake_amount.as_u64(), 1);
         }
         Ok(())
     }
