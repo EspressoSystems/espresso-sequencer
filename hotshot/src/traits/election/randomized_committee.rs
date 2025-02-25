@@ -7,6 +7,10 @@
 use std::{cmp::max, collections::BTreeMap, num::NonZeroU64};
 
 use hotshot_types::{
+    drb::{
+        election::{generate_stake_cdf, select_randomized_leader, RandomizedCommittee},
+        DrbResult,
+    },
     traits::{
         election::Membership,
         node_implementation::NodeType,
@@ -14,14 +18,13 @@ use hotshot_types::{
     },
     PeerConfig,
 };
-use hotshot_utils::anytrace::Result;
+use hotshot_utils::anytrace::*;
 use primitive_types::U256;
-use rand::{rngs::StdRng, Rng};
 
-#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Debug)]
 
 /// The static committee election
-pub struct RandomizedCommittee<T: NodeType> {
+pub struct Committee<T: NodeType> {
     /// The nodes eligible for leadership.
     /// NOTE: This is currently a hack because the DA leader needs to be the quorum
     /// leader but without voting rights.
@@ -33,6 +36,9 @@ pub struct RandomizedCommittee<T: NodeType> {
     /// The nodes on the committee and their stake
     da_stake_table: Vec<<T::SignatureKey as SignatureKey>::StakeTableEntry>,
 
+    /// Stake tables randomized with the DRB, used (only) for leader election
+    randomized_committee: RandomizedCommittee<<T::SignatureKey as SignatureKey>::StakeTableEntry>,
+
     /// The nodes on the committee and their stake, indexed by public key
     indexed_stake_table:
         BTreeMap<T::SignatureKey, <T::SignatureKey as SignatureKey>::StakeTableEntry>,
@@ -42,7 +48,7 @@ pub struct RandomizedCommittee<T: NodeType> {
         BTreeMap<T::SignatureKey, <T::SignatureKey as SignatureKey>::StakeTableEntry>,
 }
 
-impl<TYPES: NodeType> Membership<TYPES> for RandomizedCommittee<TYPES> {
+impl<TYPES: NodeType> Membership<TYPES> for Committee<TYPES> {
     type Error = hotshot_utils::anytrace::Error;
 
     /// Create a new election
@@ -91,10 +97,14 @@ impl<TYPES: NodeType> Membership<TYPES> for RandomizedCommittee<TYPES> {
             .map(|entry| (TYPES::SignatureKey::public_key(entry), entry.clone()))
             .collect();
 
+        // We use a constant value of `[0u8; 32]` for the drb, since this is just meant to be used in tests
+        let randomized_committee = generate_stake_cdf(eligible_leaders.clone(), [0u8; 32]);
+
         Self {
             eligible_leaders,
             stake_table: members,
             da_stake_table: da_members,
+            randomized_committee,
             indexed_stake_table,
             indexed_da_stake_table,
         }
@@ -205,13 +215,7 @@ impl<TYPES: NodeType> Membership<TYPES> for RandomizedCommittee<TYPES> {
         view_number: <TYPES as NodeType>::View,
         _epoch: Option<<TYPES as NodeType>::Epoch>,
     ) -> Result<TYPES::SignatureKey> {
-        let mut rng: StdRng = rand::SeedableRng::seed_from_u64(*view_number);
-
-        let randomized_view_number: u64 = rng.gen_range(0..=u64::MAX);
-        #[allow(clippy::cast_possible_truncation)]
-        let index = randomized_view_number as usize % self.eligible_leaders.len();
-
-        let res = self.eligible_leaders[index].clone();
+        let res = select_randomized_leader(&self.randomized_committee, *view_number);
 
         Ok(TYPES::SignatureKey::public_key(&res))
     }
@@ -247,4 +251,6 @@ impl<TYPES: NodeType> Membership<TYPES> for RandomizedCommittee<TYPES> {
         ))
         .unwrap()
     }
+
+    fn add_drb_result(&mut self, _epoch: <TYPES as NodeType>::Epoch, _drb: DrbResult) {}
 }

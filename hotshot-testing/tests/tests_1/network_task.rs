@@ -43,9 +43,8 @@ async fn test_network_task() {
         TestDescription::default_multiple_rounds();
     let upgrade_lock = UpgradeLock::<TestTypes, TestVersions>::new();
     let node_id = 1;
-    let handle = build_system_handle::<TestTypes, MemoryImpl, TestVersions>(node_id)
-        .await
-        .0;
+    let (handle, _, _, node_key_map) =
+        build_system_handle::<TestTypes, MemoryImpl, TestVersions>(node_id).await;
     let launcher = builder.gen_launcher();
 
     let network = (launcher.resource_generators.channel_generator)(node_id).await;
@@ -80,7 +79,7 @@ async fn test_network_task() {
     let task = Task::new(network_state, tx.clone(), rx);
     task_reg.run_task(task);
 
-    let mut generator = TestViewGenerator::<TestVersions>::generate(membership);
+    let mut generator = TestViewGenerator::<TestVersions>::generate(membership, node_key_map);
     let view = generator.next().await.unwrap();
 
     let (out_tx_internal, mut out_rx_internal) = async_broadcast::broadcast(10);
@@ -215,9 +214,8 @@ async fn test_network_storage_fail() {
     let builder: TestDescription<TestTypes, MemoryImpl, TestVersions> =
         TestDescription::default_multiple_rounds();
     let node_id = 1;
-    let handle = build_system_handle::<TestTypes, MemoryImpl, TestVersions>(node_id)
-        .await
-        .0;
+    let (handle, _, _, node_key_map) =
+        build_system_handle::<TestTypes, MemoryImpl, TestVersions>(node_id).await;
     let launcher = builder.gen_launcher();
 
     let network = (launcher.resource_generators.channel_generator)(node_id).await;
@@ -253,7 +251,7 @@ async fn test_network_storage_fail() {
     let task = Task::new(network_state, tx.clone(), rx);
     task_reg.run_task(task);
 
-    let mut generator = TestViewGenerator::<TestVersions>::generate(membership);
+    let mut generator = TestViewGenerator::<TestVersions>::generate(membership, node_key_map);
     let view = generator.next().await.unwrap();
 
     let (out_tx_internal, mut out_rx_internal): (Sender<Arc<HotShotEvent<TestTypes>>>, _) =

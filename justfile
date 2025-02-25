@@ -12,6 +12,10 @@ demo *args:
 demo-native *args: build
     scripts/demo-native {{args}}
 
+fmt:
+    cargo fmt --all
+    cargo fmt -- hotshot-testing/tests/**/*.rs
+
 lint:
     #!/usr/bin/env bash
     set -euxo pipefail

@@ -7,6 +7,7 @@
 [![Lint](https://github.com/EspressoSystems/espresso-sequencer/actions/workflows/lint.yml/badge.svg)](https://github.com/EspressoSystems/espresso-sequencer/actions/workflows/lint.yml)
 [![Audit](https://github.com/EspressoSystems/espresso-sequencer/actions/workflows/audit.yml/badge.svg)](https://github.com/EspressoSystems/espresso-sequencer/actions/workflows/audit.yml)
 [![Ubuntu](https://github.com/EspressoSystems/espresso-sequencer/actions/workflows/ubuntu-install-without-nix.yml/badge.svg)](https://github.com/EspressoSystems/espresso-sequencer/actions/workflows/ubuntu-install-without-nix.yml)
+[![Build without lockfile](https://github.com/EspressoSystems/espresso-sequencer/actions/workflows/build-without-lockfile.yml/badge.svg)](https://github.com/EspressoSystems/espresso-sequencer/actions/workflows/build-without-lockfile.yml)
 [![Coverage Status](https://coveralls.io/repos/github/EspressoSystems/espresso-sequencer/badge.svg?branch=main)](https://coveralls.io/github/EspressoSystems/espresso-sequencer?branch=main)
 
 The Espresso Sequencer offers rollups credible neutrality and enhanced interoperability, without compromising on scale.

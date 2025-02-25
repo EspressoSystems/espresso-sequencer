@@ -3,7 +3,6 @@
 
 // You should have received a copy of the MIT License
 // along with the HotShot repository. If not, see <https://mit-license.org/>.
-
 use std::{
     cmp::max,
     collections::{BTreeMap, BTreeSet},
@@ -12,6 +11,7 @@ use std::{
 };
 
 use hotshot_types::{
+    drb::DrbResult,
     traits::{
         election::Membership,
         node_implementation::{ConsensusTime, NodeType},
@@ -447,4 +447,6 @@ impl<TYPES: NodeType, CONFIG: QuorumFilterConfig> Membership<TYPES>
         let len = self.total_nodes(epoch);
         NonZeroU64::new(max((len as u64 * 9) / 10, ((len as u64 * 2) / 3) + 1)).unwrap()
     }
+
+    fn add_drb_result(&mut self, _epoch: <TYPES as NodeType>::Epoch, _drb_result: DrbResult) {}
 }
