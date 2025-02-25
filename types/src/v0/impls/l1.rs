@@ -29,13 +29,7 @@ use hotshot_types::traits::metrics::Metrics;
 use lru::LruCache;
 use parking_lot::RwLock;
 use sequencer_utils::synchronous_generator::ChunkGenerator;
-use std::{
-    cmp::{min, Ordering},
-    iter::FromFn,
-    num::NonZeroUsize,
-    sync::Arc,
-    time::Instant,
-};
+use std::{cmp::Ordering, num::NonZeroUsize, sync::Arc, time::Instant};
 use std::{ops::Range, pin::Pin, result::Result as StdResult};
 use tokio::{
     sync::{Mutex, MutexGuard, Notify},
