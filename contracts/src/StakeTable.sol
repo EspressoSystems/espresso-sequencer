@@ -6,9 +6,13 @@ import { BLSSig } from "./libraries/BLSSig.sol";
 import { AbstractStakeTable } from "./interfaces/AbstractStakeTable.sol";
 import { LightClient } from "../src/LightClient.sol";
 import { EdOnBN254 } from "./libraries/EdOnBn254.sol";
+import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
+import { InitializedAt } from "./InitializedAt.sol";
+
+using EdOnBN254 for EdOnBN254.EdOnBN254Point;
 
 /// @title Implementation of the Stake Table interface
-contract StakeTable is AbstractStakeTable {
+contract StakeTable is AbstractStakeTable, Ownable, InitializedAt {
     /// Error to notify restaking is not implemented yet.
     error RestakingNotImplemented();
 
@@ -20,6 +24,9 @@ contract StakeTable is AbstractStakeTable {
     /// Error raised when a user tries to register another set of keys from the same ethereum
     /// account.
     error NodeAlreadyRegistered();
+
+    /// Error raised when a user tries to withdraw funds from a node that is not registered.
+    error NodeNotRegistered();
 
     /// Error raised when a user tries to make a deposit or request an exit but does not control the
     /// node public key.
@@ -37,14 +44,45 @@ contract StakeTable is AbstractStakeTable {
     // Error raised when a user tries to withdraw funds before the exit escrow period is over.
     error PrematureWithdrawal();
 
+    // Error raised when this contract does not have the sufficient allowance on the stake ERC20
+    // token
+    error InsufficientAllowance(uint256, uint256);
+
+    // Error raised when the staker does not have the sufficient balance on the stake ERC20 token
+    error InsufficientBalance(uint256);
+
+    // Error raised when the staker does not have the sufficient stake balance to withdraw
+    error InsufficientStakeBalance(uint256);
+
+    // Error raised when the staker does not register with the correct stakeAmount
+    error InsufficientStakeAmount(uint256);
+
+    // Error raised when the staker does not provide a new schnorrVK
+    error InvalidSchnorrVK();
+
+    // Error raised when the staker does not provide a new blsVK
+    error InvalidBlsVK();
+
+    // Error raised when zero point keys are provided
+    error NoKeyChange();
+
+    /// Error raised when the caller is not the owner
+    error Unauthorized();
+
+    /// Error raised when the light client address is invalid
+    error InvalidAddress();
+
+    /// Error raised when the value is invalid
+    error InvalidValue();
+
+    // Error raised when the hotShotBlocksPerEpoch is zero
+    error InvalidHotShotBlocksPerEpoch();
+
     /// Mapping from a hash of a BLS key to a node struct defined in the abstract contract.
-    mapping(bytes32 keyHash => Node node) public nodes;
+    mapping(address account => Node node) public nodes;
 
-    /// Total native stake locked for the latest stake table (HEAD).
-    uint256 public totalNativeStake;
-
-    /// Total restaked stake locked for the latest stake table (HEAD).
-    uint256 public totalRestakedStake;
+    /// Total stake locked;
+    uint256 public totalStake;
 
     /// Address of the native token contract.
     address public tokenAddress;
@@ -52,35 +90,56 @@ contract StakeTable is AbstractStakeTable {
     /// Reference to the light client contract.
     LightClient public lightClient;
 
-    /// @notice the first available epoch for registration, please use `nextRegistrationEpoch()` to
-    /// get the correct epoch
-    uint64 public firstAvailableRegistrationEpoch;
-    /// @notice number of pending registrations in the `firstAvailableRegistrationEpoch` (not the
+    /// @notice the first available epoch for registration
+    uint64 public registrationEpoch;
+    /// @notice number of pending registrations in the `registrationEpoch` (not the
     /// total pending queue size!)
-    uint64 private _numPendingRegistrations;
+    uint64 public override numPendingRegistrationsInEpoch;
 
-    /// @notice the first available epoch for exit, please use `nextExitEpoch()` to get the correct
-    /// epoch
-    uint64 public firstAvailableExitEpoch;
-    /// @notice number of pending exits in the `firstAvailableExitEpoch` (not the total pending
+    /// @notice the first available epoch for exit
+    uint64 public exitEpoch;
+    /// @notice number of pending exits in the `exitEpoch` (not the total pending
     /// queue size!)
-    uint64 private _numPendingExits;
+    uint64 public override numPendingExitsInEpoch;
 
-    uint64 public maxChurnRate;
+    /// @notice The number of validators that can register per epoch as well as
+    /// the number of validators that can exit per epoch.
+    uint64 public maxNumChurnPerEpoch;
 
-    constructor(address _tokenAddress, address _lightClientAddress, uint64 churnRate) {
+    /// @notice The number of hotshot blocks per epoch.
+    uint64 public hotShotBlocksPerEpoch;
+
+    address public admin;
+
+    uint256 public minStakeAmount;
+
+    /// TODO change constructor to initialize function when we make the contract upgradeable
+    constructor(
+        address _tokenAddress,
+        address _lightClientAddress,
+        uint64 _maxNumChurnPerEpoch,
+        uint64 _hotShotBlocksPerEpoch,
+        uint256 _minStakeAmount,
+        address _initialOwner
+    ) Ownable(_initialOwner) InitializedAt() {
         tokenAddress = _tokenAddress;
         lightClient = LightClient(_lightClientAddress);
-
-        maxChurnRate = churnRate;
+        maxNumChurnPerEpoch = _maxNumChurnPerEpoch;
 
         // A set of hardcoded stakers is defined for the first epoch.
-        firstAvailableRegistrationEpoch = 1;
-        _numPendingRegistrations = 0;
+        registrationEpoch = 1;
+        numPendingRegistrationsInEpoch = 0;
 
         // It is not possible to exit during the first epoch.
-        firstAvailableExitEpoch = 1;
-        _numPendingExits = 0;
+        exitEpoch = 1;
+        numPendingExitsInEpoch = 0;
+
+        if (_hotShotBlocksPerEpoch == 0) {
+            revert InvalidHotShotBlocksPerEpoch();
+        }
+        hotShotBlocksPerEpoch = _hotShotBlocksPerEpoch;
+        minStakeAmount = _minStakeAmount;
+        admin = msg.sender;
     }
 
     /// @dev Computes a hash value of some G2 point.
@@ -90,97 +149,90 @@ contract StakeTable is AbstractStakeTable {
         return keccak256(abi.encode(blsVK.x0, blsVK.x1, blsVK.y0, blsVK.y1));
     }
 
-    /// @dev Fetches the current epoch from the light client contract.
-    /// @return current epoch (computed from the current block)
-    function currentEpoch() public view returns (uint64) {
-        return lightClient.currentEpoch();
+    /// @dev Compares two BLS keys for equality
+    /// @param a First BLS key
+    /// @param b Second BLS key
+    /// @return True if the keys are equal, false otherwise
+    function _isEqualBlsKey(BN254.G2Point memory a, BN254.G2Point memory b)
+        public
+        pure
+        returns (bool)
+    {
+        return BN254.BaseField.unwrap(a.x0) == BN254.BaseField.unwrap(b.x0)
+            && BN254.BaseField.unwrap(a.x1) == BN254.BaseField.unwrap(b.x1)
+            && BN254.BaseField.unwrap(a.y0) == BN254.BaseField.unwrap(b.y0)
+            && BN254.BaseField.unwrap(a.y1) == BN254.BaseField.unwrap(b.y1);
     }
 
-    /// @notice Total stakes of the registered keys in the latest stake table (Head).
-    /// @dev Given that the current implementation does not support restaking, the second value of
-    /// the output is set to 0.
-    /// @return The total stake for native token and restaked token respectively.
-    function totalStake() external view override returns (uint256, uint256) {
-        return (totalNativeStake, totalRestakedStake);
+    /// @dev Fetches the last hotshot block number from the light client contract to calculate the
+    /// epoch.
+    /// @return current epoch (computed from the last known hotshot block number)
+    function currentEpoch() public view virtual returns (uint64) {
+        // get the last hotshot block number from the light client contract since this contract
+        // gets the latest info from HotShot periodically
+        (, uint64 lastHotshotBlockNumber,) = lightClient.finalizedState();
+
+        uint64 epoch = lastHotshotBlockNumber / hotShotBlocksPerEpoch;
+
+        return epoch;
     }
 
-    /// @notice Look up the balance of `blsVK`
-    /// @param blsVK BLS public key controlled by the user.
+    /// @notice Add a registration
+    function pushToRegistrationQueue() internal virtual override {
+        // Either we have a need for a new registration epoch and registrations queue for the
+        // current epoch is zero or we have a free slot in the current registration epoch so we
+        // append to the registration queue, `numPendingRegistrationsInEpoch`.
+        // if the current epoch is max uint64, the registration queue will not be updated and this
+        // function will revert
+
+        if (registrationEpoch < currentEpoch() + 1) {
+            // The registration epoch is outdated.
+            registrationEpoch = currentEpoch() + 1;
+            numPendingRegistrationsInEpoch = 0;
+        } else if (numPendingRegistrationsInEpoch >= maxNumChurnPerEpoch) {
+            // The queue for in the current registration epoch is full.
+            registrationEpoch += 1;
+            numPendingRegistrationsInEpoch = 0;
+        } else {
+            // We got a free slot in the current registration epoch.
+            numPendingRegistrationsInEpoch += 1;
+        }
+    }
+
+    /// @notice Add an exit
+    function pushToExitQueue() internal virtual override {
+        // Either we have a need for a new exit epoch and exits queue for the
+        // current epoch is zero or we have a free slot in the current exit epoch so we
+        // append to the exit queue, `numPendingExitsInEpoch`.
+        // if the current epoch is max uint64, the exit queue will not be updated and this function
+        // will revert
+
+        if (exitEpoch < currentEpoch() + 1) {
+            // The exit epoch is outdated.
+            exitEpoch = currentEpoch() + 1;
+            numPendingExitsInEpoch = 0;
+        } else if (numPendingExitsInEpoch >= maxNumChurnPerEpoch) {
+            // The queue for in the current exit epoch is full.
+            exitEpoch += 1;
+            numPendingExitsInEpoch = 0;
+        } else {
+            // We got a free slot in the current exit epoch.
+            numPendingExitsInEpoch += 1;
+        }
+    }
+
+    /// @notice Look up the balance of `account`
+    /// @param account account controlled by the user.
     /// @return Current balance owned by the user.
-    function lookupStake(BN254.G2Point memory blsVK) external view override returns (uint64) {
-        Node memory node = this.lookupNode(blsVK);
+    function lookupStake(address account) external view virtual override returns (uint256) {
+        Node memory node = this.lookupNode(account);
         return node.balance;
     }
 
-    /// @notice Look up the full `Node` state associated with `blsVK`
-    /// @dev The lookup is achieved by hashing first the four field elements of blsVK using
-    /// keccak256.
-    /// @return Node indexed by blsVK
-    function lookupNode(BN254.G2Point memory blsVK) external view override returns (Node memory) {
-        return nodes[_hashBlsKey(blsVK)];
-    }
-
-    /// @notice Get the next available epoch and queue size in that epoch
-    function nextRegistrationEpoch() external view override returns (uint64, uint64) {
-        uint64 epoch;
-        uint64 queueSize;
-
-        if (firstAvailableRegistrationEpoch < currentEpoch() + 1) {
-            epoch = currentEpoch() + 1;
-            queueSize = 0;
-        } else if (_numPendingRegistrations >= maxChurnRate) {
-            epoch = firstAvailableRegistrationEpoch + 1;
-            queueSize = 0;
-        } else {
-            epoch = firstAvailableRegistrationEpoch;
-            queueSize = _numPendingRegistrations;
-        }
-        return (epoch, queueSize);
-    }
-
-    // @notice Update the registration queue
-    // @param epoch next available registration epoch
-    // @param queueSize current size of the registration queue (after insertion of new element in
-    // the queue)
-    function appendRegistrationQueue(uint64 epoch, uint64 queueSize) private {
-        firstAvailableRegistrationEpoch = epoch;
-        _numPendingRegistrations = queueSize + 1;
-    }
-
-    /// @notice Get the number of pending registration requests in the waiting queue
-    function numPendingRegistrations() external view override returns (uint64) {
-        return _numPendingRegistrations;
-    }
-
-    /// @notice Get the next available epoch for exit and queue size in that epoch
-    function nextExitEpoch() external view override returns (uint64, uint64) {
-        uint64 epoch;
-        uint64 queueSize;
-
-        if (firstAvailableExitEpoch < currentEpoch() + 1) {
-            epoch = currentEpoch() + 1;
-            queueSize = 0;
-        } else if (_numPendingExits >= maxChurnRate) {
-            epoch = firstAvailableExitEpoch + 1;
-            queueSize = 0;
-        } else {
-            epoch = firstAvailableExitEpoch;
-            queueSize = _numPendingExits;
-        }
-        return (epoch, queueSize);
-    }
-
-    // @notice Update the exit queue
-    // @param epoch next available exit epoch
-    // @param queueSize current size of the exit queue (after insertion of new element in the queue)
-    function appendExitQueue(uint64 epoch, uint64 queueSize) private {
-        firstAvailableExitEpoch = epoch;
-        _numPendingExits = queueSize + 1;
-    }
-
-    /// @notice Get the number of pending exit requests in the waiting queue
-    function numPendingExits() external view override returns (uint64) {
-        return _numPendingExits;
+    /// @notice Look up the full `Node` state associated with `account`
+    /// @return Node indexed by account
+    function lookupNode(address account) external view virtual override returns (Node memory) {
+        return nodes[account];
     }
 
     /// @notice Defines the exit escrow period for a node.
@@ -197,6 +249,7 @@ contract StakeTable is AbstractStakeTable {
     /// withdraw.
     /// @param node node which is assigned an exit escrow period.
     /// @return Number of epochs post exit after which funds can be withdrawn.
+    /// TODO modify this according to the current spec
     function exitEscrowPeriod(Node memory node) public pure returns (uint64) {
         if (node.balance > 100) {
             return 10;
@@ -210,83 +263,109 @@ contract StakeTable is AbstractStakeTable {
     /// @param blsVK The BLS verification key
     /// @param schnorrVK The Schnorr verification key (as the auxiliary info)
     /// @param amount The amount to register
-    /// @param stakeType The type of staking (native or restaking)
     /// @param blsSig The BLS signature that authenticates the ethereum account this function is
     /// called from
     /// @param validUntilEpoch The maximum epoch the sender is willing to wait to be included
     /// (cannot be smaller than the current epoch)
     ///
-    /// @dev No validity check on `schnorrVK`, as it's assumed to be sender's responsibility,
-    /// the contract only treat it as auxiliary info submitted by `blsVK`.
-    /// @dev `blsSig` field is necessary to prevent "rogue public-key attack".
+    /// @dev The function will revert if the sender does not have the correct stake amount.
+    /// @dev The function will revert if the sender does not have the correct allowance.
+    /// @dev The function will revert if the sender does not have the correct balance.
+    /// @dev The function will revert if the sender does not have the correct BLS signature.
+    /// `blsSig` field is necessary to prevent "rogue public-key attack".
     /// The signature is over the caller address of the function to ensure that each message is
     /// unique.
+    /// @dev No validity check on `schnorrVK`, as it's assumed to be sender's responsibility,
+    /// the contract only treat it as auxiliary info submitted by `blsVK`.
+    /// @dev The function will revert if the sender does not have the correct registration epoch.
     function register(
         BN254.G2Point memory blsVK,
         EdOnBN254.EdOnBN254Point memory schnorrVK,
-        uint64 amount,
-        StakeType stakeType,
+        uint256 amount,
         BN254.G1Point memory blsSig,
         uint64 validUntilEpoch
-    ) external override {
-        if (stakeType != StakeType.Native) {
-            revert RestakingNotImplemented();
+    ) external virtual override {
+        if (amount < minStakeAmount) {
+            revert InsufficientStakeAmount(amount);
         }
 
+        Node memory node = nodes[msg.sender];
+
+        if (node.account != address(0x0)) {
+            revert NodeAlreadyRegistered();
+        }
+
+        uint256 allowance = ERC20(tokenAddress).allowance(msg.sender, address(this));
+        if (allowance < amount) {
+            revert InsufficientAllowance(allowance, amount);
+        }
+
+        uint256 balance = ERC20(tokenAddress).balanceOf(msg.sender);
+        if (balance < amount) {
+            revert InsufficientBalance(balance);
+        }
+
+        if (
+            _isEqualBlsKey(
+                blsVK,
+                BN254.G2Point(
+                    BN254.BaseField.wrap(0),
+                    BN254.BaseField.wrap(0),
+                    BN254.BaseField.wrap(0),
+                    BN254.BaseField.wrap(0)
+                )
+            )
+        ) {
+            revert InvalidBlsVK();
+        }
+
+        // Verify that the validator can sign for that blsVK by ensuring that the message that has
+        // been signed is the sender's address
+        // This is to prevent "rogue public-key attack"
         bytes memory message = abi.encode(msg.sender);
         BLSSig.verifyBlsSig(message, blsSig, blsVK);
+
+        if (schnorrVK.isEqual(EdOnBN254.EdOnBN254Point(0, 0))) {
+            revert InvalidSchnorrVK();
+        }
 
         // Find the earliest epoch at which this node can register. Usually, this will be
         // currentEpoch() + 1 (the start of the next full epoch), but in periods of high churn the
         // queue may fill up and it may be later. If the queue is so full that the wait time exceeds
         // the caller's desired maximum wait, abort.
-        (uint64 registerEpoch, uint64 queueSize) = this.nextRegistrationEpoch();
-        if (registerEpoch > validUntilEpoch) {
-            revert InvalidNextRegistrationEpoch(registerEpoch, validUntilEpoch);
-        }
-        appendRegistrationQueue(registerEpoch, queueSize);
-
-        bytes32 key = _hashBlsKey(blsVK);
-        Node memory node = nodes[key];
-
-        // The node must not already be registered.
-        if (node.account != address(0x0)) {
-            revert NodeAlreadyRegistered();
+        pushToRegistrationQueue();
+        if (registrationEpoch > validUntilEpoch) {
+            revert InvalidNextRegistrationEpoch(registrationEpoch, validUntilEpoch);
         }
 
-        // Create an entry for the node.
+        SafeTransferLib.safeTransferFrom(ERC20(tokenAddress), msg.sender, address(this), amount);
+
+        totalStake += amount;
+
         node.account = msg.sender;
         node.balance = amount;
-        node.stakeType = stakeType;
+        node.blsVK = blsVK;
         node.schnorrVK = schnorrVK;
-        node.registerEpoch = registerEpoch;
+        node.registerEpoch = registrationEpoch;
 
-        nodes[key] = node;
+        nodes[msg.sender] = node;
 
-        // Lock the deposited tokens in this contract.
-        if (stakeType == StakeType.Native) {
-            totalNativeStake += amount;
-            SafeTransferLib.safeTransferFrom(ERC20(tokenAddress), msg.sender, address(this), amount);
-        } // Other case will be implemented when we support restaking
-
-        emit Registered(key, registerEpoch, stakeType, amount);
+        emit Registered(msg.sender, registrationEpoch, amount);
     }
 
     /// @notice Deposit more stakes to registered keys
     /// @dev TODO this implementation will be revisited later. See
     /// https://github.com/EspressoSystems/espresso-sequencer/issues/806
-    /// @param blsVK The BLS verification key
+    /// @dev TODO modify this according to the current spec
     /// @param amount The amount to deposit
     /// @return (newBalance, effectiveEpoch) the new balance effective at a future epoch
-    function deposit(BN254.G2Point memory blsVK, uint64 amount)
-        external
-        override
-        returns (uint64, uint64)
-    {
-        bytes32 key = _hashBlsKey(blsVK);
-        Node memory node = nodes[key];
+    function deposit(uint256 amount) external virtual override returns (uint256, uint64) {
+        Node memory node = nodes[msg.sender];
 
-        // The deposit must come from the node's registered account.
+        if (node.account == address(0)) {
+            revert NodeNotRegistered();
+        }
+
         if (node.account != msg.sender) {
             revert Unauthenticated();
         }
@@ -302,24 +381,26 @@ contract StakeTable is AbstractStakeTable {
             revert ExitRequestInProgress();
         }
 
-        nodes[key].balance += amount;
+        nodes[msg.sender].balance += amount;
         SafeTransferLib.safeTransferFrom(ERC20(tokenAddress), msg.sender, address(this), amount);
 
-        emit Deposit(_hashBlsKey(blsVK), uint256(amount));
+        emit Deposit(msg.sender, uint256(amount));
 
         uint64 effectiveEpoch = _currentEpoch + 1;
 
-        return (nodes[key].balance, effectiveEpoch);
+        return (nodes[msg.sender].balance, effectiveEpoch);
     }
 
     /// @notice Request to exit from the stake table, not immediately withdrawable!
     ///
-    /// @param blsVK The BLS verification key to exit
-    function requestExit(BN254.G2Point memory blsVK) external override {
-        bytes32 key = _hashBlsKey(blsVK);
-        Node memory node = nodes[key];
+    /// @dev TODO modify this according to the current spec
+    function requestExit() external virtual override {
+        Node memory node = nodes[msg.sender];
 
-        // The exit request must come from the node's withdrawal account.
+        if (node.account == address(0)) {
+            revert NodeNotRegistered();
+        }
+
         if (node.account != msg.sender) {
             revert Unauthenticated();
         }
@@ -336,31 +417,128 @@ contract StakeTable is AbstractStakeTable {
         }
 
         // Prepare the node to exit.
-        (uint64 exitEpoch, uint64 queueSize) = this.nextExitEpoch();
-        nodes[key].exitEpoch = exitEpoch;
+        pushToExitQueue();
+        nodes[msg.sender].exitEpoch = exitEpoch;
 
-        appendExitQueue(exitEpoch, queueSize);
-
-        emit Exit(key, exitEpoch);
+        emit Exit(msg.sender, exitEpoch);
     }
 
     /// @notice Withdraw from the staking pool. Transfers occur! Only successfully exited keys can
-    /// withdraw past their `exitEpoch`.
-    ///
-    /// @param blsVK The BLS verification key to withdraw
+    /// withdraw past their `exitEpoch`. Validators have to first call requestExit to be assigned an
+    /// exit epoch
     /// @return The total amount withdrawn, equal to `Node.balance` associated with `blsVK`
-    function withdrawFunds(BN254.G2Point memory blsVK) external override returns (uint64) {
-        bytes32 key = _hashBlsKey(blsVK);
-        Node memory node = nodes[key];
+    /// TODO: add epoch logic so that we can ensure the node has first requested to exit and waiting
+    /// for the exit escrow period to be over
+    function withdrawFunds() external virtual override returns (uint256) {
+        Node memory node = nodes[msg.sender];
 
+        if (node.account == address(0)) {
+            revert NodeNotRegistered();
+        }
+
+        if (node.account != msg.sender) {
+            revert Unauthenticated();
+        }
+
+        uint256 balance = node.balance;
+        if (balance == 0) {
+            // then there's nothing to withdraw but revert so that they're aware that the withdrawal
+            // failed
+            revert InsufficientStakeBalance(0);
+        }
+
+        // Verify that the exit escrow period is over.
         if (currentEpoch() < node.exitEpoch + exitEscrowPeriod(node)) {
             revert PrematureWithdrawal();
         }
-        uint64 balance = node.balance;
-        delete nodes[key];
+        totalStake -= balance;
 
+        // Delete the node from the stake table.
+        delete nodes[msg.sender];
+
+        // Transfer the balance to the node's account.
         SafeTransferLib.safeTransfer(ERC20(tokenAddress), node.account, balance);
 
         return balance;
+    }
+
+    /// @notice Update the consensus keys for a validator
+    /// @dev This function is used to update the consensus keys for a validator
+    /// @dev This function can only be called by the validator itself when it's not in the exit
+    /// queue
+    /// @dev The validator will need to give up either its old BLS key and/or old Schnorr key
+    /// @dev The validator will need to provide a BLS signature to prove that the account owns the
+    /// new BLS key
+    /// @param newBlsVK The new BLS verification key
+    /// @param newSchnorrVK The new Schnorr verification key
+    /// @param newBlsSig The BLS signature that the account owns the new BLS key
+    function updateConsensusKeys(
+        BN254.G2Point memory newBlsVK,
+        EdOnBN254.EdOnBN254Point memory newSchnorrVK,
+        BN254.G1Point memory newBlsSig
+    ) external virtual override {
+        Node memory node = nodes[msg.sender];
+
+        if (node.account == address(0)) revert NodeNotRegistered();
+
+        // Verify that the node is not in the exit queue
+        if (node.exitEpoch != 0) revert ExitRequestInProgress();
+
+        if (_isEqualBlsKey(newBlsVK, node.blsVK) && newSchnorrVK.isEqual(node.schnorrVK)) {
+            revert NoKeyChange();
+        }
+
+        // Zero-point constants for verification
+        BN254.G2Point memory zeroBlsKey = BN254.G2Point(
+            BN254.BaseField.wrap(0),
+            BN254.BaseField.wrap(0),
+            BN254.BaseField.wrap(0),
+            BN254.BaseField.wrap(0)
+        );
+        EdOnBN254.EdOnBN254Point memory zeroSchnorrKey = EdOnBN254.EdOnBN254Point(0, 0);
+
+        if (_isEqualBlsKey(newBlsVK, zeroBlsKey)) revert InvalidBlsVK();
+
+        if (newSchnorrVK.isEqual(zeroSchnorrKey)) revert InvalidSchnorrVK();
+
+        // Verify that the validator can sign for that newBlsVK, otherwise it inner reverts with
+        // BLSSigVerificationFailed
+        bytes memory message = abi.encode(msg.sender);
+        BLSSig.verifyBlsSig(message, newBlsSig, newBlsVK);
+
+        node.blsVK = newBlsVK;
+
+        node.schnorrVK = newSchnorrVK;
+
+        nodes[msg.sender] = node;
+
+        emit UpdatedConsensusKeys(msg.sender, node.blsVK, node.schnorrVK);
+    }
+
+    /// @notice Update the min stake amount
+    /// @dev The min stake amount cannot be set to zero
+    /// @param _minStakeAmount The new min stake amount
+    function updateMinStakeAmount(uint256 _minStakeAmount) external onlyOwner {
+        if (_minStakeAmount == 0) revert InvalidValue();
+        minStakeAmount = _minStakeAmount;
+        emit MinStakeAmountUpdated(minStakeAmount);
+    }
+
+    /// @notice Update the max churn rate
+    /// @dev The max churn rate cannot be set to zero
+    /// @param _maxChurnRate The new max churn rate
+    function updateMaxChurnRate(uint64 _maxChurnRate) external onlyOwner {
+        if (_maxChurnRate == 0) revert InvalidValue();
+        maxNumChurnPerEpoch = _maxChurnRate;
+        emit MaxChurnRateUpdated(maxNumChurnPerEpoch);
+    }
+
+    /// @notice Update the light client address
+    /// @dev The light client address cannot be set to the zero address
+    /// @param _lightClientAddress The new light client address
+    function updateLightClientAddress(address _lightClientAddress) external onlyOwner {
+        if (_lightClientAddress == address(0)) revert InvalidAddress();
+        lightClient = LightClient(_lightClientAddress);
+        emit LightClientAddressUpdated(_lightClientAddress);
     }
 }

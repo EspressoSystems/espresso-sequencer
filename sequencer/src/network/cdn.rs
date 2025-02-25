@@ -3,15 +3,19 @@ use std::marker::PhantomData;
 
 use bincode::Options;
 use cdn_broker::reexports::{
-    connection::protocols::{Quic, Tcp},
+    connection::protocols::{Quic, Tcp, TcpTls},
     crypto::signature::{Serializable, SignatureScheme},
-    def::{ConnectionDef, RunDef, Topic as TopicTrait},
+    def::{hook::NoMessageHook, ConnectionDef, RunDef, Topic as TopicTrait},
     discovery::{Embedded, Redis},
 };
-use hotshot::{traits::implementations::Topic as HotShotTopic, types::SignatureKey};
-use hotshot_types::{traits::node_implementation::NodeType, utils::bincode_opts};
+use hotshot::types::SignatureKey;
+use hotshot_types::{
+    traits::{network::Topic as HotShotTopic, node_implementation::NodeType},
+    utils::bincode_opts,
+};
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use static_assertions::const_assert_eq;
+use todo_by::todo_by;
 
 /// The enum for the topics we can subscribe to in the Push CDN
 #[repr(u8)]
@@ -22,6 +26,8 @@ pub enum Topic {
     /// The DA topic
     Da = 1,
 }
+
+pub enum Namespace {}
 
 // Make sure the topics are the same as defined in `HotShot`.
 const_assert_eq!(Topic::Global as u8, HotShotTopic::Global as u8);
@@ -40,22 +46,45 @@ impl<T: SignatureKey> SignatureScheme for WrappedSignatureKey<T> {
     type PublicKey = Self;
 
     /// Sign a message of arbitrary data and return the serialized signature
-    fn sign(private_key: &Self::PrivateKey, message: &[u8]) -> anyhow::Result<Vec<u8>> {
-        let signature = T::sign(private_key, message)?;
-        // TODO: replace with rigorously defined serialization scheme...
-        // why did we not make `PureAssembledSignatureType` be `CanonicalSerialize + CanonicalDeserialize`?
+    ///
+    /// The namespace is prefixed to the message before signing to prevent
+    /// signature replay attacks in different parts of the system.
+    fn sign(
+        private_key: &Self::PrivateKey,
+        namespace: &str,
+        message: &[u8],
+    ) -> anyhow::Result<Vec<u8>> {
+        // Combine the namespace and message into a single byte array
+        let message = [namespace.as_bytes(), message].concat();
+
+        let signature = T::sign(private_key, &message)?;
         Ok(bincode_opts().serialize(&signature)?)
     }
 
     /// Verify a message of arbitrary data and return the result
-    fn verify(public_key: &Self::PublicKey, message: &[u8], signature: &[u8]) -> bool {
-        // TODO: replace with rigorously defined signing scheme
+    ///
+    /// The namespace is prefixed to the message before verification to prevent
+    /// signature replay attacks in different parts of the system.
+    fn verify(
+        public_key: &Self::PublicKey,
+        namespace: &str,
+        message: &[u8],
+        signature: &[u8],
+    ) -> bool {
+        // Combine the namespace and message into a single byte array
+        let namespaced_message = [namespace.as_bytes(), message].concat();
+
         let signature: T::PureAssembledSignatureType = match bincode_opts().deserialize(signature) {
             Ok(key) => key,
             Err(_) => return false,
         };
 
+        todo_by!(
+            "2025-3-4",
+            "Only accept the namespaced message once everyone has upgraded"
+        );
         public_key.0.validate(&signature, message)
+            || public_key.0.validate(&signature, &namespaced_message)
     }
 }
 
@@ -75,18 +104,33 @@ impl<T: SignatureKey> Serializable for WrappedSignatureKey<T> {
 /// Uses the real protocols and a Redis discovery client.
 pub struct ProductionDef<TYPES: NodeType>(PhantomData<TYPES>);
 impl<TYPES: NodeType> RunDef for ProductionDef<TYPES> {
-    type User = UserDef<TYPES>;
+    type User = UserDefQuic<TYPES>;
+    type User2 = UserDefTcp<TYPES>;
     type Broker = BrokerDef<TYPES>;
     type DiscoveryClientType = Redis;
     type Topic = Topic;
 }
 
+todo_by!(
+    "2025-3-4",
+    "Remove this, switching to TCP+TLS singularly when everyone has updated"
+);
 /// The user definition for the Push CDN.
 /// Uses the Quic protocol and untrusted middleware.
-pub struct UserDef<TYPES: NodeType>(PhantomData<TYPES>);
-impl<TYPES: NodeType> ConnectionDef for UserDef<TYPES> {
+pub struct UserDefQuic<TYPES: NodeType>(PhantomData<TYPES>);
+impl<TYPES: NodeType> ConnectionDef for UserDefQuic<TYPES> {
     type Scheme = WrappedSignatureKey<TYPES::SignatureKey>;
     type Protocol = Quic;
+    type MessageHook = NoMessageHook;
+}
+
+/// The (parallel, TCP) user definition for the Push CDN.
+/// Uses the TCP+TLS protocol and untrusted middleware.
+pub struct UserDefTcp<TYPES: NodeType>(PhantomData<TYPES>);
+impl<TYPES: NodeType> ConnectionDef for UserDefTcp<TYPES> {
+    type Scheme = WrappedSignatureKey<TYPES::SignatureKey>;
+    type Protocol = TcpTls;
+    type MessageHook = NoMessageHook;
 }
 
 /// The broker definition for the Push CDN.
@@ -95,6 +139,7 @@ pub struct BrokerDef<TYPES: NodeType>(PhantomData<TYPES>);
 impl<TYPES: NodeType> ConnectionDef for BrokerDef<TYPES> {
     type Scheme = WrappedSignatureKey<TYPES::SignatureKey>;
     type Protocol = Tcp;
+    type MessageHook = NoMessageHook;
 }
 
 /// The client definition for the Push CDN. Uses the Quic
@@ -105,13 +150,15 @@ pub struct ClientDef<TYPES: NodeType>(PhantomData<TYPES>);
 impl<TYPES: NodeType> ConnectionDef for ClientDef<TYPES> {
     type Scheme = WrappedSignatureKey<TYPES::SignatureKey>;
     type Protocol = Quic;
+    type MessageHook = NoMessageHook;
 }
 
 /// The testing run definition for the Push CDN.
 /// Uses the real protocols, but with an embedded discovery client.
 pub struct TestingDef<TYPES: NodeType>(PhantomData<TYPES>);
 impl<TYPES: NodeType> RunDef for TestingDef<TYPES> {
-    type User = UserDef<TYPES>;
+    type User = UserDefQuic<TYPES>;
+    type User2 = UserDefTcp<TYPES>;
     type Broker = BrokerDef<TYPES>;
     type DiscoveryClientType = Embedded;
     type Topic = Topic;

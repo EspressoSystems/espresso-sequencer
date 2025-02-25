@@ -5,15 +5,13 @@ authors = ["Espresso Systems <hello@espressosys.com>"]
 edition = "2021"
 
 [features]
-testing = ["hotshot-testing"]
+testing = ["hotshot-query-service/testing"]
 
 [dependencies]
-
+alloy = { workspace = true }
 anyhow = { workspace = true }
 ark-serialize = { workspace = true }
-async-compatibility-layer = { workspace = true }
-async-once-cell = { workspace = true }
-async-std = { workspace = true } 
+async-broadcast = { workspace = true }
 async-trait = { workspace = true }
 base64-bytes = { workspace = true }
 bincode = { workspace = true }
@@ -22,38 +20,46 @@ bytesize = { workspace = true }
 clap = { workspace = true }
 cld = { workspace = true }
 committable = { workspace = true }
-contract-bindings = { path = "../contract-bindings" }
-derivative = { workspace = true }
+contract-bindings-alloy = { workspace = true }
+contract-bindings-ethers = { path = "../contract-bindings-ethers" }
 derive_more = { workspace = true }
-es-version = { workspace = true } 
 ethers = { workspace = true }
+ethers-conv = { workspace = true }
 fluent-asserter = "0.1.9"
-futures = { workspace = true } 
-hotshot = { workspace = true } 
-hotshot-orchestrator = { workspace = true }
-hotshot-query-service = { workspace = true, features = ["testing"] }
-hotshot-testing = { workspace = true, optional = true }
+futures = { workspace = true }
+hotshot = { workspace = true }
+hotshot-contract-adapter = { workspace = true }
+hotshot-query-service = { workspace = true }
 hotshot-types = { workspace = true }
 itertools = { workspace = true }
 jf-merkle-tree = { workspace = true }
-jf-utils = { workspace = true } # TODO temporary: used only for test_rng()
+jf-utils = { workspace = true }                                      # TODO temporary: used only for test_rng()
 jf-vid = { workspace = true }
+lru = { workspace = true }
 num-traits = { workspace = true }
+parking_lot = "0.12"
 paste = { workspace = true }
-pretty_assertions   = { workspace = true } 
+pretty_assertions = { workspace = true }
 rand = { workspace = true }
-rand_chacha = { workspace = true }
-rand_distr = { workspace = true }
 sequencer-utils = { path = "../utils" }
 serde = { workspace = true }
 serde_json = { workspace = true }
-sha2 = "0.10" # TODO temporary, used only for VID, should be set in hotshot
-snafu = { workspace = true }
-static_assertions = { workspace = true } 
+sha2 = { workspace = true }                                                         # TODO temporary, used only for VID, should be set in hotshot
+static_assertions = { workspace = true }
+surf-disco = { workspace = true }
 tagged-base64 = { workspace = true }
 thiserror = { workspace = true }
+tide-disco = { workspace = true }
 time = { workspace = true }
+tokio = { workspace = true }
+tower-service = { version = "0.3", default-features = false }
 tracing = { workspace = true }
-trait-set = { workspace = true }
 url = { workspace = true }
-vbs = { workspace = true } 
+vbs = { workspace = true }
+
+[dev-dependencies]
+espresso-types = { path = ".", features = [ "testing" ] }
+portpicker = { workspace = true }
+
+[package.metadata.cargo-machete]
+ignored = ["base64_bytes", "hotshot_testing"]

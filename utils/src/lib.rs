@@ -7,7 +7,6 @@ use std::{
 
 use anyhow::anyhow;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, SerializationError};
-use async_std::task::sleep;
 use committable::{Commitment, Committable};
 use ethers::{
     abi::Detokenize,
@@ -18,10 +17,14 @@ use ethers::{
     types::U256,
 };
 use tempfile::TempDir;
+use tokio::time::sleep;
 use url::Url;
 
+pub mod blocknative;
 pub mod deployer;
+pub mod logging;
 pub mod ser;
+pub mod stake_table;
 pub mod test_utils;
 
 pub type Signer = SignerMiddleware<Provider<Http>, LocalWallet>;
@@ -360,9 +363,10 @@ where
     let pending = match call.send().await {
         Ok(pending) => pending,
         Err(err) => {
-            let e = err.decode_contract_revert::<E>().unwrap();
-            tracing::error!("contract revert: {:?}", e);
-            return Err(anyhow!("error sending transaction: {:?}", e));
+            if let Some(e) = err.decode_contract_revert::<E>() {
+                tracing::error!("contract revert: {:?}", e);
+            }
+            return Err(anyhow!("error sending transaction: {:?}", err));
         }
     };
 

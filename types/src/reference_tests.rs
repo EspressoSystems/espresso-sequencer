@@ -23,17 +23,15 @@
 
 use std::{fmt::Debug, path::Path, str::FromStr};
 
-use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use committable::Committable;
-use es_version::SequencerVersion;
-use hotshot_query_service::availability::QueryablePayload;
+use hotshot_query_service::{availability::QueryablePayload, testing::mocks::MockVersions};
 use hotshot_types::traits::{
     block_contents::vid_commitment, signature_key::BuilderSignatureKey, BlockPayload, EncodeBytes,
 };
 use jf_merkle_tree::MerkleTreeScheme;
 use pretty_assertions::assert_eq;
 use rand::{Rng, RngCore};
-use sequencer_utils::commitment_to_u256;
+use sequencer_utils::{commitment_to_u256, test_utils::setup_test};
 use serde::{de::DeserializeOwned, Serialize};
 use serde_json::Value;
 use tagged_base64::TaggedBase64;
@@ -43,11 +41,14 @@ use vbs::{
 };
 
 use crate::{
-    ChainConfig, FeeAccount, FeeInfo, Header, L1BlockInfo, NamespaceId, NsTable, Payload, SeqTypes,
+    v0_1, FeeAccount, FeeInfo, Header, L1BlockInfo, NamespaceId, NsTable, Payload, SeqTypes,
     Transaction, ValidatedState,
 };
 
-type Serializer = vbs::Serializer<SequencerVersion>;
+type V1Serializer = vbs::Serializer<StaticVersion<0, 1>>;
+type V2Serializer = vbs::Serializer<StaticVersion<0, 2>>;
+type V3Serializer = vbs::Serializer<StaticVersion<0, 3>>;
+type V99Serializer = vbs::Serializer<StaticVersion<0, 99>>;
 
 async fn reference_payload() -> Payload {
     const NUM_NS_IDS: usize = 3;
@@ -92,18 +93,23 @@ fn reference_l1_block() -> L1BlockInfo {
 
 const REFERENCE_L1_BLOCK_COMMITMENT: &str = "L1BLOCK~4HpzluLK2Isz3RdPNvNrDAyQcWOF2c9JeLZzVNLmfpQ9";
 
-fn reference_chain_config() -> ChainConfig {
-    ChainConfig {
+fn reference_chain_config() -> crate::v0_99::ChainConfig {
+    crate::v0_99::ChainConfig {
         chain_id: 0x8a19.into(),
         max_block_size: 10240.into(),
         base_fee: 0.into(),
         fee_contract: Some(Default::default()),
         fee_recipient: Default::default(),
+        bid_recipient: Some(Default::default()),
+        stake_table_contract: Some(Default::default()),
     }
 }
 
-const REFERENCE_CHAIN_CONFIG_COMMITMENT: &str =
+const REFERENCE_V1_CHAIN_CONFIG_COMMITMENT: &str =
     "CHAIN_CONFIG~L6HmMktJbvnEGgpmRrsiYvQmIBstSj9UtDM7eNFFqYFO";
+
+const REFERENCE_V99_CHAIN_CONFIG_COMMITMENT: &str =
+    "CHAIN_CONFIG~ucfYQZSMbWCUHdtwYMc6vsw-4jDmlu3hi2lGDBxCRpI-";
 
 fn reference_fee_info() -> FeeInfo {
     FeeInfo::new(
@@ -119,20 +125,15 @@ async fn reference_header(version: Version) -> Header {
     let fee_info = reference_fee_info();
     let payload = reference_payload().await;
     let ns_table = payload.ns_table().clone();
-    let payload_commitment = vid_commitment(&payload.encode(), 1);
+    let payload_commitment = vid_commitment::<MockVersions>(&payload.encode(), 1, version);
     let builder_commitment = payload.builder_commitment(&ns_table);
-    let builder_signature = FeeAccount::sign_fee(
-        &builder_key,
-        fee_info.amount().as_u64().unwrap(),
-        &ns_table,
-        &payload_commitment,
-    )
-    .unwrap();
+    let builder_signature =
+        FeeAccount::sign_fee(&builder_key, fee_info.amount().as_u64().unwrap(), &ns_table).unwrap();
 
     let state = ValidatedState::default();
 
     Header::create(
-        reference_chain_config().into(),
+        reference_chain_config(),
         42,
         789,
         124,
@@ -142,15 +143,15 @@ async fn reference_header(version: Version) -> Header {
         ns_table,
         state.fee_merkle_tree.commitment(),
         state.block_merkle_tree.commitment(),
-        fee_info,
-        Some(builder_signature),
+        vec![fee_info],
+        vec![builder_signature],
         version,
     )
 }
 
 const REFERENCE_V1_HEADER_COMMITMENT: &str = "BLOCK~dh1KpdvvxSvnnPpOi2yI3DOg8h6ltr2Kv13iRzbQvtN2";
 const REFERENCE_V2_HEADER_COMMITMENT: &str = "BLOCK~V0GJjL19nCrlm9n1zZ6gaOKEekSMCT6uR5P-h7Gi6UJR";
-const REFERENCE_V3_HEADER_COMMITMENT: &str = "BLOCK~X3j5MJWJrye2dKJv5uRLk5-z3augpUDftecBFO6dYahF";
+const REFERENCE_V99_HEADER_COMMITMENT: &str = "BLOCK~nzcKNbVZPDIO-6AepK2pRQKxMXeIi3U98p-CpVv8HNUt";
 
 fn reference_transaction<R>(ns_id: NamespaceId, rng: &mut R) -> Transaction
 where
@@ -173,11 +174,10 @@ fn reference_test_without_committable<T: Serialize + DeserializeOwned + Eq + Deb
     name: &str,
     reference: &T,
 ) {
-    setup_logging();
-    setup_backtrace();
+    setup_test();
 
     // Load the expected serialization from the repo.
-    let data_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
+    let data_dir = Path::new(&std::env::var("CARGO_MANIFEST_DIR").unwrap())
         .join("../data")
         .join(version);
 
@@ -224,7 +224,14 @@ change in the serialization of this data structure.
 
     // Check that the reference object matches the expected binary form.
     let expected = std::fs::read(data_dir.join(format!("{name}.bin"))).unwrap();
-    let actual = Serializer::serialize(&reference).unwrap();
+    // todo (ab) : cleanup
+    let actual = match version {
+        "v1" => V1Serializer::serialize(&reference).unwrap(),
+        "v2" => V2Serializer::serialize(&reference).unwrap(),
+        "v3" => V3Serializer::serialize(&reference).unwrap(),
+        "v99" => V99Serializer::serialize(&reference).unwrap(),
+        _ => panic!("invalid version"),
+    };
     if actual != expected {
         // Write the actual output to a file to make it easier to compare with/replace the expected
         // file if the serialization change was actually intended.
@@ -247,7 +254,15 @@ change in the serialization of this data structure.
     }
 
     // Check that we can deserialize from the reference binary object.
-    let parsed: T = Serializer::deserialize(&expected).unwrap();
+    // todo: (ab) cleanup
+    let parsed: T = match version {
+        "v1" => V1Serializer::deserialize(&expected).unwrap(),
+        "v2" => V2Serializer::deserialize(&expected).unwrap(),
+        "v3" => V3Serializer::deserialize(&expected).unwrap(),
+        "v99" => V99Serializer::deserialize(&expected).unwrap(),
+        _ => panic!("invalid version"),
+    };
+
     assert_eq!(
         *reference, parsed,
         "Reference object commitment does not match commitment of parsed binary object. This is
@@ -261,8 +276,7 @@ fn reference_test<T: Committable + Serialize + DeserializeOwned + Eq + Debug>(
     reference: T,
     commitment: &str,
 ) {
-    setup_logging();
-    setup_backtrace();
+    setup_test();
 
     reference_test_without_committable(version, name, &reference);
 
@@ -291,17 +305,17 @@ Actual: {actual}
     );
 }
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_reference_payload() {
     reference_test_without_committable("v1", "payload", &reference_payload().await);
 }
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_reference_tx_index() {
     reference_test_without_committable("v1", "tx_index", &reference_tx_index().await);
 }
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_reference_ns_table() {
     reference_test(
         "v1",
@@ -322,12 +336,22 @@ fn test_reference_l1_block() {
 }
 
 #[test]
-fn test_reference_chain_config() {
+fn test_reference_v1_chain_config() {
     reference_test(
         "v1",
         "chain_config",
+        v0_1::ChainConfig::from(reference_chain_config()),
+        REFERENCE_V1_CHAIN_CONFIG_COMMITMENT,
+    );
+}
+
+#[test]
+fn test_reference_v99_chain_config() {
+    reference_test(
+        "v99",
+        "chain_config",
         reference_chain_config(),
-        REFERENCE_CHAIN_CONFIG_COMMITMENT,
+        REFERENCE_V99_CHAIN_CONFIG_COMMITMENT,
     );
 }
 
@@ -341,30 +365,35 @@ fn test_reference_fee_info() {
     );
 }
 
-#[async_std::test]
-async fn test_reference_header() {
+#[tokio::test(flavor = "multi_thread")]
+async fn test_reference_header_v1() {
     reference_test(
         "v1",
         "header",
         reference_header(StaticVersion::<0, 1>::version()).await,
         REFERENCE_V1_HEADER_COMMITMENT,
     );
+}
 
+#[tokio::test(flavor = "multi_thread")]
+async fn test_reference_header_v2() {
     reference_test(
         "v2",
         "header",
         reference_header(StaticVersion::<0, 2>::version()).await,
         REFERENCE_V2_HEADER_COMMITMENT,
     );
-
-    reference_test(
-        "v3",
-        "header",
-        reference_header(StaticVersion::<0, 3>::version()).await,
-        REFERENCE_V3_HEADER_COMMITMENT,
-    );
 }
 
+#[tokio::test(flavor = "multi_thread")]
+async fn test_reference_header_v99() {
+    reference_test(
+        "v99",
+        "header",
+        reference_header(StaticVersion::<0, 99>::version()).await,
+        REFERENCE_V99_HEADER_COMMITMENT,
+    );
+}
 #[test]
 fn test_reference_transaction() {
     reference_test(

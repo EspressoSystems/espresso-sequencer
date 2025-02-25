@@ -1,19 +1,18 @@
-// use crate::SeqTypes;
-
-use std::str::FromStr;
-
 use anyhow::{bail, ensure, Context};
 use ark_serialize::{
     CanonicalDeserialize, CanonicalSerialize, Compress, Read, SerializationError, Valid, Validate,
 };
 use committable::{Commitment, Committable, RawCommitmentBuilder};
-use contract_bindings::fee_contract::DepositFilter;
+use contract_bindings_alloy::feecontract::FeeContract::Deposit;
+use contract_bindings_ethers::fee_contract::DepositFilter;
 use ethers::{
     prelude::{Address, U256},
     utils::{parse_units, ParseUnits},
 };
+use ethers_conv::ToEthers;
 use hotshot_query_service::explorer::MonetaryValue;
 use hotshot_types::traits::block_contents::BuilderFee;
+use itertools::Itertools;
 use jf_merkle_tree::{
     ForgetableMerkleTreeScheme, ForgetableUniversalMerkleTreeScheme, LookupResult,
     MerkleCommitment, MerkleTreeError, MerkleTreeScheme, ToTraversalPath,
@@ -23,11 +22,13 @@ use num_traits::CheckedSub;
 use sequencer_utils::{
     impl_serde_from_string_or_integer, impl_to_fixed_bytes, ser::FromStringOrInteger,
 };
+use std::str::FromStr;
 use thiserror::Error;
 
 use crate::{
-    eth_signature_key::EthKeyPair, AccountQueryData, FeeAccount, FeeAccountProof, FeeAmount,
-    FeeInfo, FeeMerkleCommitment, FeeMerkleProof, FeeMerkleTree, SeqTypes,
+    eth_signature_key::EthKeyPair, v0_99::IterableFeeInfo, AccountQueryData, FeeAccount,
+    FeeAccountProof, FeeAmount, FeeInfo, FeeMerkleCommitment, FeeMerkleProof, FeeMerkleTree,
+    SeqTypes,
 };
 
 /// Possible charge fee failures
@@ -73,6 +74,48 @@ impl FeeInfo {
     pub fn amount(&self) -> FeeAmount {
         self.amount
     }
+    /// Get a `Vec<FeeInfo>` from `Vec<BuilderFee>`
+    pub fn from_builder_fees(fees: Vec<BuilderFee<SeqTypes>>) -> Vec<FeeInfo> {
+        fees.into_iter().map(FeeInfo::from).collect()
+    }
+}
+
+impl IterableFeeInfo for Vec<FeeInfo> {
+    /// Get sum of fee amounts
+    fn amount(&self) -> Option<FeeAmount> {
+        self.iter()
+            // getting the u64 tests that the value fits
+            .map(|fee_info| fee_info.amount.as_u64())
+            .collect::<Option<Vec<u64>>>()
+            .and_then(|amounts| amounts.iter().try_fold(0u64, |acc, n| acc.checked_add(*n)))
+            .map(FeeAmount::from)
+    }
+
+    /// Get a `Vec` of all unique fee accounts
+    fn accounts(&self) -> Vec<FeeAccount> {
+        self.iter()
+            .unique_by(|entry| &entry.account)
+            .map(|entry| entry.account)
+            .collect()
+    }
+}
+
+impl IterableFeeInfo for Vec<BuilderFee<SeqTypes>> {
+    /// Get sum of amounts
+    fn amount(&self) -> Option<FeeAmount> {
+        self.iter()
+            .map(|fee_info| fee_info.fee_amount)
+            .try_fold(0u64, |acc, n| acc.checked_add(n))
+            .map(FeeAmount::from)
+    }
+
+    /// Get a `Vec` of all unique fee accounts
+    fn accounts(&self) -> Vec<FeeAccount> {
+        self.iter()
+            .unique_by(|entry| &entry.fee_account)
+            .map(|entry| entry.fee_account)
+            .collect()
+    }
 }
 
 impl From<BuilderFee<SeqTypes>> for FeeInfo {
@@ -89,6 +132,15 @@ impl From<DepositFilter> for FeeInfo {
         Self {
             amount: item.amount.into(),
             account: item.user.into(),
+        }
+    }
+}
+
+impl From<Deposit> for FeeInfo {
+    fn from(item: Deposit) -> Self {
+        Self {
+            amount: item.amount.to_ethers().into(),
+            account: item.user.to_ethers().into(),
         }
     }
 }
@@ -373,5 +425,56 @@ impl FeeAccountProof {
 impl From<(FeeAccountProof, U256)> for AccountQueryData {
     fn from((proof, balance): (FeeAccountProof, U256)) -> Self {
         Self { balance, proof }
+    }
+}
+
+/// Get a partial snapshot of the given fee state, which contains only the specified accounts.
+///
+/// Fails if one of the requested accounts is not represented in the original `state`.
+pub fn retain_accounts(
+    state: &FeeMerkleTree,
+    accounts: impl IntoIterator<Item = FeeAccount>,
+) -> anyhow::Result<FeeMerkleTree> {
+    let mut snapshot = FeeMerkleTree::from_commitment(state.commitment());
+    for account in accounts {
+        match state.universal_lookup(account) {
+            LookupResult::Ok(elem, proof) => {
+                // This remember cannot fail, since we just constructed a valid proof, and are
+                // remembering into a tree with the same commitment.
+                snapshot.remember(account, *elem, proof).unwrap();
+            }
+            LookupResult::NotFound(proof) => {
+                // Likewise this cannot fail.
+                snapshot.non_membership_remember(account, proof).unwrap()
+            }
+            LookupResult::NotInMemory => {
+                bail!("missing account {account}");
+            }
+        }
+    }
+
+    Ok(snapshot)
+}
+
+#[cfg(test)]
+mod test {
+    use ethers::abi::Address;
+
+    use crate::{FeeAccount, FeeAmount, FeeInfo};
+
+    use super::IterableFeeInfo;
+
+    #[test]
+    fn test_iterable_fee_info() {
+        let addr = Address::zero();
+        let fee = FeeInfo::new(addr, FeeAmount::from(1));
+        let fees = vec![fee, fee, fee];
+        // check the sum of amounts
+        let sum = fees.amount().unwrap();
+        assert_eq!(FeeAmount::from(3), sum);
+
+        // check accounts collector
+        let accounts = fees.accounts();
+        assert_eq!(vec![FeeAccount::from(Address::zero())], accounts);
     }
 }

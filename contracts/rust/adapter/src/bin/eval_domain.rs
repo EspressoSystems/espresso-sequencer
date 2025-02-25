@@ -5,7 +5,7 @@ use ark_ff::{Field, PrimeField};
 use ark_poly::{EvaluationDomain, Radix2EvaluationDomain};
 
 fn main() {
-    let domain = Radix2EvaluationDomain::<Fr>::new(2u32.pow(20) as usize).unwrap();
+    let domain = Radix2EvaluationDomain::<Fr>::new(2u32.pow(5) as usize).unwrap();
 
     let size_inv = <<Fr as Field>::BasePrimeField as PrimeField>::into_bigint(domain.size_inv);
     let size_inv_str = format!("0x{:X}", size_inv).to_lowercase();
@@ -23,4 +23,17 @@ fn main() {
         "groupGen: {}, groupGenInv: {}",
         group_gen_str, group_gen_inv_str,
     );
+
+    let mut domain_elements_str = "".to_owned();
+
+    // Generates the domain elements for 8 inputs: 1, g, g^2,...,g^7
+    for i in 0..8 {
+        let mut element_fr = domain.group_gen;
+        element_fr = element_fr.pow([i]);
+
+        let element_bigint = element_fr.into_bigint();
+        let new_element_str = format!("0x{:X} ", element_bigint.clone()).to_lowercase();
+        domain_elements_str = domain_elements_str.to_owned() + &new_element_str;
+    }
+    println!("domain elements: {}", &domain_elements_str);
 }

@@ -3,11 +3,15 @@ use std::{
     path::Path,
 };
 
-use anyhow::Context;
+use anyhow::{Context, Ok};
 use espresso_types::{
-    ChainConfig, FeeAccount, FeeAmount, GenesisHeader, L1BlockInfo, Upgrade, UpgradeType,
+    v0_99::ChainConfig, FeeAccount, FeeAmount, GenesisHeader, L1BlockInfo, L1Client, Timestamp,
+    Upgrade,
 };
+use ethers::types::H160;
+use ethers_conv::ToAlloy;
 use serde::{Deserialize, Serialize};
+use url::Url;
 use vbs::version::Version;
 
 /// Initial configuration of an Espresso stake table.
@@ -33,18 +37,29 @@ pub enum L1Finalized {
     /// syncing only when a finalized block with the given number becomes available. The configured
     /// L1 client will be used to fetch the rest of the block info once available.
     Number { number: u64 },
+
+    /// A time from which to start syncing L1 blocks.
+    ///
+    /// This allows a validator to specify a future time at which the network should start. The
+    /// network will start syncing from the first L1 block with timestamp greater than or equal to
+    /// this, once said block is finalized.
+    Timestamp { timestamp: Timestamp },
 }
 
 /// Genesis of an Espresso chain.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Genesis {
+    #[serde(with = "version_ser")]
+    pub base_version: Version,
+    #[serde(with = "version_ser")]
+    pub upgrade_version: Version,
     pub chain_config: ChainConfig,
     pub stake_table: StakeTableConfig,
     #[serde(default)]
     pub accounts: HashMap<FeeAccount, FeeAmount>,
-    pub l1_finalized: Option<L1Finalized>,
+    pub l1_finalized: L1Finalized,
     pub header: GenesisHeader,
-    #[serde(rename = "upgrade", with = "upgrade_serialization")]
+    #[serde(rename = "upgrade", with = "upgrade_ser")]
     #[serde(default)]
     pub upgrades: BTreeMap<Version, Upgrade>,
 }
@@ -56,10 +71,10 @@ impl Genesis {
         let upgrades: Vec<&Upgrade> = self.upgrades.values().collect();
 
         for upgrade in upgrades {
-            match upgrade.upgrade_type {
-                UpgradeType::ChainConfig { chain_config } => {
-                    base_fee = std::cmp::max(chain_config.base_fee, base_fee);
-                }
+            let chain_config = upgrade.upgrade_type.chain_config();
+
+            if let Some(cf) = chain_config {
+                base_fee = std::cmp::max(cf.base_fee, base_fee);
             }
         }
 
@@ -67,7 +82,89 @@ impl Genesis {
     }
 }
 
-mod upgrade_serialization {
+impl Genesis {
+    pub async fn validate_fee_contract(&self, l1_rpc_url: Url) -> anyhow::Result<()> {
+        let l1 = L1Client::new(vec![l1_rpc_url]).with_context(|| "failed to create L1 client")?;
+
+        if let Some(fee_contract_address) = self.chain_config.fee_contract {
+            tracing::info!("validating fee contract at {fee_contract_address:x}");
+
+            if !l1
+                .is_proxy_contract(fee_contract_address.to_alloy())
+                .await
+                .context("checking if fee contract is a proxy")?
+            {
+                anyhow::bail!("Fee contract address {fee_contract_address:x} is not a proxy");
+            }
+        }
+
+        // now iterate over each upgrade type and validate the fee contract if it exists
+        for (version, upgrade) in &self.upgrades {
+            let chain_config = &upgrade.upgrade_type.chain_config();
+
+            if chain_config.is_none() {
+                continue;
+            }
+
+            let chain_config = chain_config.unwrap();
+
+            if let Some(fee_contract_address) = chain_config.fee_contract {
+                if fee_contract_address == H160::zero() {
+                    anyhow::bail!("Fee contract cannot use the zero address");
+                } else if !l1
+                    .is_proxy_contract(fee_contract_address.to_alloy())
+                    .await
+                    .context(format!(
+                        "checking if fee contract is a proxy in upgrade {version}",
+                    ))?
+                {
+                    anyhow::bail!("Fee contract's address is not a proxy");
+                }
+            } else {
+                // The Fee Contract address has to be provided for an upgrade so return an error
+                anyhow::bail!("Fee contract's address for the upgrade is missing");
+            }
+        }
+        // TODO: it's optional for the fee contract to be included in a proxy in v1 so no need to panic but revisit this after v1 https://github.com/EspressoSystems/espresso-sequencer/pull/2000#discussion_r1765174702
+        Ok(())
+    }
+}
+
+mod version_ser {
+
+    use vbs::version::Version;
+
+    use serde::{de, Deserialize, Deserializer, Serializer};
+
+    pub fn serialize<S>(ver: &Version, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&ver.to_string())
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Version, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let version_str = String::deserialize(deserializer)?;
+
+        let version: Vec<_> = version_str.split('.').collect();
+
+        let version = Version {
+            major: version[0]
+                .parse()
+                .map_err(|_| de::Error::custom("invalid version format"))?,
+            minor: version[1]
+                .parse()
+                .map_err(|_| de::Error::custom("invalid version format"))?,
+        };
+
+        Ok(version)
+    }
+}
+
+mod upgrade_ser {
 
     use std::{collections::BTreeMap, fmt};
 
@@ -144,8 +241,12 @@ mod upgrade_serialization {
                     let version: Vec<_> = fields.version.split('.').collect();
 
                     let version = Version {
-                        major: version[0].parse().expect("invalid version"),
-                        minor: version[1].parse().expect("invalid version"),
+                        major: version[0]
+                            .parse()
+                            .map_err(|_| de::Error::custom("invalid version format"))?,
+                        minor: version[1]
+                            .parse()
+                            .map_err(|_| de::Error::custom("invalid version format"))?,
                     };
 
                     match (fields.time_based, fields.view_based) {
@@ -220,18 +321,70 @@ impl Genesis {
 
 #[cfg(test)]
 mod test {
+    use ethers::middleware::Middleware;
+    use ethers::prelude::*;
+    use ethers::signers::Signer;
+    use ethers::utils::{Anvil, AnvilInstance};
+    use sequencer_utils::deployer::test_helpers::{
+        deploy_fee_contract, deploy_fee_contract_as_proxy,
+    };
+    use std::sync::Arc;
+
+    use anyhow::Result;
+
+    use contract_bindings_ethers::fee_contract::FeeContract;
     use espresso_types::{
         L1BlockInfo, TimeBasedUpgrade, Timestamp, UpgradeMode, UpgradeType, ViewBasedUpgrade,
     };
-    use ethers::prelude::{Address, H160, H256};
+
+    use sequencer_utils::deployer;
     use sequencer_utils::ser::FromStringOrInteger;
+    use sequencer_utils::test_utils::setup_test;
     use toml::toml;
 
     use super::*;
 
+    /// A wallet with local signer and connected to network via http
+    pub type SignerWallet = SignerMiddleware<Provider<Http>, LocalWallet>;
+
+    async fn deploy_fee_contract_for_test(
+        anvil: &AnvilInstance,
+    ) -> Result<(Arc<SignerWallet>, FeeContract<SignerWallet>)> {
+        let provider = Provider::<Http>::try_from(anvil.endpoint())?;
+        let signer = Wallet::from(anvil.keys()[0].clone())
+            .with_chain_id(provider.get_chainid().await?.as_u64());
+        let l1_wallet = Arc::new(SignerWallet::new(provider.clone(), signer));
+
+        let fee_contract_address = deploy_fee_contract(l1_wallet.clone()).await?;
+
+        let fee_contract = FeeContract::new(fee_contract_address, l1_wallet.clone());
+
+        Ok((l1_wallet, fee_contract))
+    }
+
+    async fn deploy_fee_contract_as_proxy_for_test(
+        anvil: &AnvilInstance,
+    ) -> Result<(Arc<SignerWallet>, FeeContract<SignerWallet>)> {
+        let provider = Provider::<Http>::try_from(anvil.endpoint())?;
+        let signer = Wallet::from(anvil.keys()[0].clone())
+            .with_chain_id(provider.get_chainid().await?.as_u64());
+        let l1_wallet = Arc::new(SignerWallet::new(provider.clone(), signer));
+
+        let mut contracts = deployer::Contracts::default();
+        let fee_contract_address =
+            deploy_fee_contract_as_proxy(l1_wallet.clone(), &mut contracts).await?;
+
+        let fee_contract = FeeContract::new(fee_contract_address, l1_wallet.clone());
+
+        Ok((l1_wallet, fee_contract))
+    }
+
     #[test]
     fn test_genesis_from_toml_with_optional_fields() {
         let toml = toml! {
+            base_version = "0.1"
+            upgrade_version = "0.2"
+
             [stake_table]
             capacity = 10
 
@@ -265,7 +418,9 @@ mod test {
                 max_block_size: 30000.into(),
                 base_fee: 1.into(),
                 fee_recipient: FeeAccount::default(),
-                fee_contract: Some(Address::default())
+                fee_contract: Some(Address::default()),
+                bid_recipient: None,
+                stake_table_contract: None
             }
         );
         assert_eq!(
@@ -291,21 +446,25 @@ mod test {
         );
         assert_eq!(
             genesis.l1_finalized,
-            Some(L1Finalized::Block(L1BlockInfo {
+            L1Finalized::Block(L1BlockInfo {
                 number: 64,
                 timestamp: 0x123def.into(),
+                // Can't do B256 here directly because it's the wrong endianness
                 hash: H256([
                     0x80, 0xf5, 0xdd, 0x11, 0xf2, 0xbd, 0xda, 0x28, 0x14, 0xcb, 0x1a, 0xd9, 0x4e,
                     0xf3, 0x0a, 0x47, 0xde, 0x02, 0xcf, 0x28, 0xad, 0x68, 0xc8, 0x9e, 0x10, 0x4c,
                     0x00, 0xc4, 0xe5, 0x1b, 0xb7, 0xa5
                 ])
-            }))
+            })
         );
     }
 
     #[test]
     fn test_genesis_from_toml_without_optional_fields() {
         let toml = toml! {
+            base_version = "0.1"
+            upgrade_version = "0.2"
+
             [stake_table]
             capacity = 10
 
@@ -317,6 +476,9 @@ mod test {
 
             [header]
             timestamp = 123456
+
+            [l1_finalized]
+            number = 0
         }
         .to_string();
 
@@ -329,7 +491,9 @@ mod test {
                 max_block_size: 30000.into(),
                 base_fee: 1.into(),
                 fee_recipient: FeeAccount::default(),
+                bid_recipient: None,
                 fee_contract: None,
+                stake_table_contract: None,
             }
         );
         assert_eq!(
@@ -339,12 +503,15 @@ mod test {
             }
         );
         assert_eq!(genesis.accounts, HashMap::default());
-        assert_eq!(genesis.l1_finalized, None);
+        assert_eq!(genesis.l1_finalized, L1Finalized::Number { number: 0 });
     }
 
     #[test]
     fn test_genesis_l1_finalized_number_only() {
         let toml = toml! {
+            base_version = "0.1"
+            upgrade_version = "0.2"
+
             [stake_table]
             capacity = 10
 
@@ -363,15 +530,418 @@ mod test {
         .to_string();
 
         let genesis: Genesis = toml::from_str(&toml).unwrap_or_else(|err| panic!("{err:#}"));
+        assert_eq!(genesis.l1_finalized, L1Finalized::Number { number: 42 });
+    }
+
+    #[test]
+    fn test_genesis_l1_finalized_timestamp_only() {
+        let toml = toml! {
+            base_version = "0.1"
+            upgrade_version = "0.2"
+
+            [stake_table]
+            capacity = 10
+
+            [chain_config]
+            chain_id = 12345
+            max_block_size = 30000
+            base_fee = 1
+            fee_recipient = "0x0000000000000000000000000000000000000000"
+
+            [header]
+            timestamp = 123456
+
+            [l1_finalized]
+            timestamp = "2024-01-02T00:00:00Z"
+        }
+        .to_string();
+
+        let genesis: Genesis = toml::from_str(&toml).unwrap_or_else(|err| panic!("{err:#}"));
         assert_eq!(
             genesis.l1_finalized,
-            Some(L1Finalized::Number { number: 42 })
+            L1Finalized::Timestamp {
+                timestamp: Timestamp::from_string("2024-01-02T00:00:00Z".to_string()).unwrap()
+            }
         );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_genesis_fee_contract_is_not_a_proxy() -> anyhow::Result<()> {
+        setup_test();
+
+        let anvil = Anvil::new().spawn();
+        let (_wallet, contract) = deploy_fee_contract_for_test(&anvil).await?;
+
+        let toml = format!(
+            r#"
+            base_version = "0.1"
+            upgrade_version = "0.2"
+
+            [stake_table]
+            capacity = 10
+
+            [chain_config]
+            chain_id = 12345
+            max_block_size = 30000
+            base_fee = 1
+            fee_recipient = "0x0000000000000000000000000000000000000000"
+            fee_contract = "{:?}"
+
+            [header]
+            timestamp = 123456
+
+            [l1_finalized]
+            number = 42
+        "#,
+            contract.address()
+        )
+        .to_string();
+
+        let genesis: Genesis = toml::from_str(&toml).unwrap_or_else(|err| panic!("{err:#}"));
+
+        // validate the fee_contract address
+        let result = genesis
+            .validate_fee_contract(anvil.endpoint().parse().unwrap())
+            .await;
+
+        // check if the result from the validation is an error
+        if let Err(e) = result {
+            assert!(e.to_string().contains("is not a proxy"));
+        } else {
+            panic!("Expected the fee contract to not be a proxy, but the validation succeeded");
+        }
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_genesis_fee_contract_is_a_proxy() -> anyhow::Result<()> {
+        setup_test();
+
+        let anvil = Anvil::new().spawn();
+        let (_wallet, proxy_contract) = deploy_fee_contract_as_proxy_for_test(&anvil).await?;
+
+        let toml = format!(
+            r#"
+            base_version = "0.1"
+            upgrade_version = "0.2"
+
+            [stake_table]
+            capacity = 10
+
+            [chain_config]
+            chain_id = 12345
+            max_block_size = 30000
+            base_fee = 1
+            fee_recipient = "0x0000000000000000000000000000000000000000"
+            fee_contract = "{:?}"
+
+            [header]
+            timestamp = 123456
+
+            [l1_finalized]
+            number = 42
+        "#,
+            proxy_contract.address()
+        )
+        .to_string();
+
+        let genesis: Genesis = toml::from_str(&toml).unwrap_or_else(|err| panic!("{err:#}"));
+
+        // Call the validation logic for the fee_contract address
+        let result = genesis
+            .validate_fee_contract(anvil.endpoint().parse().unwrap())
+            .await;
+
+        assert!(
+            result.is_ok(),
+            "Expected Fee Contract to be a proxy, but it was not"
+        );
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_genesis_fee_contract_is_a_proxy_with_upgrades() -> anyhow::Result<()> {
+        setup_test();
+
+        let anvil = Anvil::new().spawn();
+        let (_wallet, proxy_contract) = deploy_fee_contract_as_proxy_for_test(&anvil).await?;
+
+        let toml = format!(
+            r#"
+            base_version = "0.1"
+            upgrade_version = "0.2"
+
+            [stake_table]
+            capacity = 10
+
+            [chain_config]
+            chain_id = 12345
+            max_block_size = 30000
+            base_fee = 1
+            fee_recipient = "0x0000000000000000000000000000000000000000"
+
+            [header]
+            timestamp = 123456
+
+            [l1_finalized]
+            number = 42
+
+            [[upgrade]]
+            version = "0.2"
+            start_proposing_view = 5
+            stop_proposing_view = 15
+
+            [upgrade.fee]
+
+            [upgrade.fee.chain_config]
+            chain_id = 12345
+            max_block_size = 30000
+            base_fee = 1
+            fee_recipient = "0x0000000000000000000000000000000000000000"
+            fee_contract = "{:?}"
+
+            [[upgrade]]
+            version = "0.3"
+            start_proposing_view = 5
+            stop_proposing_view = 15
+
+            [upgrade.marketplace]
+            [upgrade.marketplace.chain_config]
+            chain_id = 999999999
+            max_block_size = 3000
+            base_fee = 1
+            fee_recipient = "0x0000000000000000000000000000000000000000"
+            bid_recipient = "0x0000000000000000000000000000000000000000"
+            fee_contract = "{:?}"
+        "#,
+            proxy_contract.clone().address(),
+            proxy_contract.clone().address()
+        )
+        .to_string();
+
+        let genesis: Genesis = toml::from_str(&toml).unwrap_or_else(|err| panic!("{err:#}"));
+
+        // Call the validation logic for the fee_contract address
+        let result = genesis
+            .validate_fee_contract(anvil.endpoint().parse().unwrap())
+            .await;
+
+        assert!(
+            result.is_ok(),
+            "Expected Fee Contract to be a proxy, but it was not"
+        );
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_genesis_fee_contract_is_not_a_proxy_with_upgrades() -> anyhow::Result<()> {
+        setup_test();
+
+        let anvil = Anvil::new().spawn();
+        let (_wallet, contract) = deploy_fee_contract_for_test(&anvil).await?;
+
+        let toml = format!(
+            r#"
+            base_version = "0.1"
+            upgrade_version = "0.2"
+
+            [stake_table]
+            capacity = 10
+
+            [chain_config]
+            chain_id = 12345
+            max_block_size = 30000
+            base_fee = 1
+            fee_recipient = "0x0000000000000000000000000000000000000000"
+
+            [header]
+            timestamp = 123456
+
+            [l1_finalized]
+            number = 42
+
+            [[upgrade]]
+            version = "0.2"
+            start_proposing_view = 5
+            stop_proposing_view = 15
+
+            [upgrade.fee]
+
+            [upgrade.fee.chain_config]
+            chain_id = 12345
+            max_block_size = 30000
+            base_fee = 1
+            fee_recipient = "0x0000000000000000000000000000000000000000"
+            fee_contract = "{:?}"
+
+            [[upgrade]]
+            version = "0.3"
+            start_proposing_view = 5
+            stop_proposing_view = 15
+
+            [upgrade.marketplace]
+            [upgrade.marketplace.chain_config]
+            chain_id = 999999999
+            max_block_size = 3000
+            base_fee = 1
+            fee_recipient = "0x0000000000000000000000000000000000000000"
+            bid_recipient = "0x0000000000000000000000000000000000000000"
+            fee_contract = "{:?}"
+        "#,
+            contract.clone().address(),
+            contract.clone().address()
+        )
+        .to_string();
+
+        let genesis: Genesis = toml::from_str(&toml).unwrap_or_else(|err| panic!("{err:#}"));
+
+        // Call the validation logic for the fee_contract address
+        let result = genesis
+            .validate_fee_contract(anvil.endpoint().parse().unwrap())
+            .await;
+
+        // check if the result from the validation is an error
+        if let Err(e) = result {
+            // assert that the error message contains "Fee contract's address is not a proxy"
+            assert!(e
+                .to_string()
+                .contains("Fee contract's address is not a proxy"));
+        } else {
+            panic!("Expected the fee contract to not be a proxy, but the validation succeeded");
+        }
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_genesis_missing_fee_contract_with_upgrades() {
+        let toml = toml! {
+            base_version = "0.1"
+            upgrade_version = "0.2"
+
+            [stake_table]
+            capacity = 10
+
+            [chain_config]
+            chain_id = 12345
+            max_block_size = 30000
+            base_fee = 1
+            fee_recipient = "0x0000000000000000000000000000000000000000"
+
+            [header]
+            timestamp = 123456
+
+            [l1_finalized]
+            number = 42
+
+            [[upgrade]]
+            version = "0.2"
+            start_proposing_view = 5
+            stop_proposing_view = 15
+
+            [upgrade.fee]
+
+            [upgrade.fee.chain_config]
+            chain_id = 12345
+            max_block_size = 30000
+            base_fee = 1
+            fee_recipient = "0x0000000000000000000000000000000000000000"
+
+            [[upgrade]]
+            version = "0.3"
+            start_proposing_view = 5
+            stop_proposing_view = 15
+
+            [upgrade.marketplace]
+            [upgrade.marketplace.chain_config]
+            chain_id = 999999999
+            max_block_size = 3000
+            base_fee = 1
+            fee_recipient = "0x0000000000000000000000000000000000000000"
+            bid_recipient = "0x0000000000000000000000000000000000000000"
+            fee_contract = "0xa15bb66138824a1c7167f5e85b957d04dd34e468" //not a proxy
+        }
+        .to_string();
+
+        let genesis: Genesis = toml::from_str(&toml).unwrap_or_else(|err| panic!("{err:#}"));
+        let rpc_url = "https://ethereum-sepolia.publicnode.com";
+
+        // validate the fee_contract address
+        let result = genesis
+            .validate_fee_contract(rpc_url.parse().unwrap())
+            .await;
+
+        // check if the result from the validation is an error
+        if let Err(e) = result {
+            // assert that the error message contains "Fee contract's address is not a proxy"
+            assert!(e
+                .to_string()
+                .contains("Fee contract's address for the upgrade is missing"));
+        } else {
+            panic!("Expected the fee contract to be missing, but the validation succeeded");
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_genesis_upgrade_fee_contract_address_is_zero() {
+        let toml = toml! {
+            base_version = "0.1"
+            upgrade_version = "0.2"
+
+            [stake_table]
+            capacity = 10
+
+            [chain_config]
+            chain_id = 12345
+            max_block_size = 30000
+            base_fee = 1
+            fee_recipient = "0x0000000000000000000000000000000000000000"
+
+            [header]
+            timestamp = 123456
+
+            [l1_finalized]
+            number = 42
+
+            [[upgrade]]
+            version = "0.2"
+            start_proposing_view = 5
+            stop_proposing_view = 15
+
+            [upgrade.fee]
+            [upgrade.fee.chain_config]
+            chain_id = 12345
+            max_block_size = 30000
+            base_fee = 1
+            fee_recipient = "0x0000000000000000000000000000000000000000"
+            fee_contract = "0x0000000000000000000000000000000000000000"
+        }
+        .to_string();
+
+        let genesis: Genesis = toml::from_str(&toml).unwrap_or_else(|err| panic!("{err:#}"));
+        let rpc_url = "https://ethereum-sepolia.publicnode.com";
+
+        // validate the fee_contract address
+        let result = genesis
+            .validate_fee_contract(rpc_url.parse().unwrap())
+            .await;
+
+        // check if the result from the validation is an error
+        if let Err(e) = result {
+            // assert that the error message contains "Fee contract's address is not a proxy"
+            assert!(e
+                .to_string()
+                .contains("Fee contract cannot use the zero address"));
+        } else {
+            panic!("Expected the fee contract to complain about the zero address but the validation succeeded");
+        }
     }
 
     #[test]
     fn test_genesis_from_toml_units() {
         let toml = toml! {
+            base_version = "0.1"
+            upgrade_version = "0.2"
+
             [stake_table]
             capacity = 10
 
@@ -383,6 +953,9 @@ mod test {
 
             [header]
             timestamp = "2024-05-16T11:20:28-04:00"
+
+            [l1_finalized]
+            number = 0
         }
         .to_string();
 
@@ -399,10 +972,13 @@ mod test {
     }
 
     #[test]
-    fn test_genesis_toml_upgrade_view_mode() {
+    fn test_genesis_toml_fee_upgrade_view_mode() {
         // without optional fields
         // with view settings
         let toml = toml! {
+            base_version = "0.1"
+            upgrade_version = "0.2"
+
             [stake_table]
             capacity = 10
 
@@ -430,7 +1006,9 @@ mod test {
             start_proposing_view = 1
             stop_proposing_view = 15
 
-            [upgrade.chain_config]
+            [upgrade.fee]
+
+            [upgrade.fee.chain_config]
             chain_id = 12345
             max_block_size = 30000
             base_fee = 1
@@ -442,6 +1020,7 @@ mod test {
         let genesis: Genesis = toml::from_str(&toml).unwrap_or_else(|err| panic!("{err:#}"));
 
         let (version, genesis_upgrade) = genesis.upgrades.last_key_value().unwrap();
+        println!("{:?}", genesis_upgrade);
 
         assert_eq!(*version, Version { major: 0, minor: 2 });
 
@@ -452,7 +1031,7 @@ mod test {
                 start_proposing_view: 1,
                 stop_proposing_view: 15,
             }),
-            upgrade_type: UpgradeType::ChainConfig {
+            upgrade_type: UpgradeType::Fee {
                 chain_config: genesis.chain_config,
             },
         };
@@ -461,10 +1040,13 @@ mod test {
     }
 
     #[test]
-    fn test_genesis_toml_upgrade_time_mode() {
+    fn test_genesis_toml_fee_upgrade_time_mode() {
         // without optional fields
         // with time settings
         let toml = toml! {
+            base_version = "0.1"
+            upgrade_version = "0.2"
+
             [stake_table]
             capacity = 10
 
@@ -492,7 +1074,9 @@ mod test {
             start_proposing_time = "2024-01-01T00:00:00Z"
             stop_proposing_time = "2024-01-02T00:00:00Z"
 
-            [upgrade.chain_config]
+            [upgrade.fee]
+
+            [upgrade.fee.chain_config]
             chain_id = 12345
             max_block_size = 30000
             base_fee = 1
@@ -516,7 +1100,7 @@ mod test {
                 stop_proposing_time: Timestamp::from_string("2024-01-02T00:00:00Z".to_string())
                     .unwrap(),
             }),
-            upgrade_type: UpgradeType::ChainConfig {
+            upgrade_type: UpgradeType::Fee {
                 chain_config: genesis.chain_config,
             },
         };
@@ -525,10 +1109,13 @@ mod test {
     }
 
     #[test]
-    fn test_genesis_toml_upgrade_view_and_time_mode() {
+    fn test_genesis_toml_fee_upgrade_view_and_time_mode() {
         // set both time and view parameters
         // this should err
         let toml = toml! {
+            base_version = "0.1"
+            upgrade_version = "0.2"
+
             [stake_table]
             capacity = 10
 
@@ -558,7 +1145,9 @@ mod test {
             start_proposing_time = 1
             stop_proposing_time = 10
 
-            [upgrade.chain_config]
+            [upgrade.fee]
+
+            [upgrade.fee.chain_config]
             chain_id = 12345
             max_block_size = 30000
             base_fee = 1
@@ -568,5 +1157,114 @@ mod test {
         .to_string();
 
         toml::from_str::<Genesis>(&toml).unwrap_err();
+    }
+
+    #[test]
+    fn test_marketplace_upgrade_toml() {
+        let toml = toml! {
+            base_version = "0.1"
+            upgrade_version = "0.2"
+
+            [stake_table]
+            capacity = 10
+
+            [chain_config]
+            chain_id = 12345
+            max_block_size = 30000
+            base_fee = 1
+            fee_recipient = "0x0000000000000000000000000000000000000000"
+            fee_contract = "0x0000000000000000000000000000000000000000"
+
+            [header]
+            timestamp = 123456
+
+            [accounts]
+            "0x23618e81E3f5cdF7f54C3d65f7FBc0aBf5B21E8f" = 100000
+            "0x0000000000000000000000000000000000000000" = 42
+
+            [l1_finalized]
+            number = 64
+            timestamp = "0x123def"
+            hash = "0x80f5dd11f2bdda2814cb1ad94ef30a47de02cf28ad68c89e104c00c4e51bb7a5"
+
+            [[upgrade]]
+            version = "0.3"
+            start_proposing_view = 1
+            stop_proposing_view = 10
+
+            [upgrade.marketplace]
+            [upgrade.marketplace.chain_config]
+            chain_id = 12345
+            max_block_size = 30000
+            base_fee = 1
+            fee_recipient = "0x0000000000000000000000000000000000000000"
+            bid_recipient = "0x0000000000000000000000000000000000000000"
+            fee_contract = "0x0000000000000000000000000000000000000000"
+
+        }
+        .to_string();
+
+        toml::from_str::<Genesis>(&toml).unwrap();
+    }
+
+    #[test]
+    fn test_marketplace_and_fee_upgrade_toml() {
+        let toml = toml! {
+            base_version = "0.1"
+            upgrade_version = "0.2"
+
+            [stake_table]
+            capacity = 10
+
+            [chain_config]
+            chain_id = 12345
+            max_block_size = 30000
+            base_fee = 1
+            fee_recipient = "0x0000000000000000000000000000000000000000"
+            fee_contract = "0x0000000000000000000000000000000000000000"
+
+            [header]
+            timestamp = 123456
+
+            [accounts]
+            "0x23618e81E3f5cdF7f54C3d65f7FBc0aBf5B21E8f" = 100000
+            "0x0000000000000000000000000000000000000000" = 42
+
+            [l1_finalized]
+            number = 64
+            timestamp = "0x123def"
+            hash = "0x80f5dd11f2bdda2814cb1ad94ef30a47de02cf28ad68c89e104c00c4e51bb7a5"
+
+            [[upgrade]]
+            version = "0.3"
+            start_proposing_view = 1
+            stop_proposing_view = 10
+
+            [upgrade.marketplace]
+            [upgrade.marketplace.chain_config]
+            chain_id = 12345
+            max_block_size = 30000
+            base_fee = 1
+            fee_recipient = "0x0000000000000000000000000000000000000000"
+            bid_recipient = "0x0000000000000000000000000000000000000000"
+            fee_contract = "0x0000000000000000000000000000000000000000"
+
+            [[upgrade]]
+            version = "0.2"
+            start_proposing_view = 1
+            stop_proposing_view = 15
+
+            [upgrade.fee]
+
+            [upgrade.fee.chain_config]
+            chain_id = 12345
+            max_block_size = 30000
+            base_fee = 1
+            fee_recipient = "0x0000000000000000000000000000000000000000"
+            fee_contract = "0x0000000000000000000000000000000000000000"
+        }
+        .to_string();
+
+        toml::from_str::<Genesis>(&toml).unwrap();
     }
 }

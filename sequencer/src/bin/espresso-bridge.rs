@@ -1,30 +1,29 @@
-use std::time::Duration;
-
 use anyhow::{bail, ensure, Context};
-use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
-use async_std::{sync::Arc, task::sleep};
-use clap::Parser;
-use contract_bindings::fee_contract::FeeContract;
-use es_version::SequencerVersion;
-use espresso_types::{eth_signature_key::EthKeyPair, FeeAccount, FeeAmount, FeeMerkleTree, Header};
+use clap::{Parser, Subcommand};
+use client::SequencerClient;
+use contract_bindings_ethers::fee_contract::FeeContract;
+use espresso_types::{eth_signature_key::EthKeyPair, parse_duration, Header};
 use ethers::{
     middleware::{Middleware, SignerMiddleware},
     providers::Provider,
     types::{Address, BlockId, U256},
 };
 use futures::stream::StreamExt;
-use jf_merkle_tree::{
-    prelude::{MerkleProof, Sha3Node},
-    MerkleTreeScheme,
-};
-use surf_disco::{error::ClientError, Url};
-
-type EspressoClient = surf_disco::Client<ClientError, SequencerVersion>;
-
-type FeeMerkleProof = MerkleProof<FeeAmount, FeeAccount, Sha3Node, { FeeMerkleTree::ARITY }>;
+use sequencer_utils::logging;
+use std::{sync::Arc, time::Duration};
+use surf_disco::Url;
 
 /// Command-line utility for working with the Espresso bridge.
 #[derive(Debug, Parser)]
+struct Options {
+    #[clap(flatten)]
+    logging: logging::Config,
+
+    #[command(subcommand)]
+    command: Command,
+}
+
+#[derive(Debug, Subcommand)]
 enum Command {
     Deposit(Deposit),
     Balance(Balance),
@@ -37,6 +36,16 @@ struct Deposit {
     /// L1 JSON-RPC provider.
     #[clap(short, long, env = "L1_PROVIDER")]
     rpc_url: Url,
+
+    /// Request rate when polling L1.
+    #[clap(
+        short,
+        long,
+        env = "L1_POLLING_INTERVAL",
+        default_value = "7s",
+        value_parser = parse_duration
+    )]
+    l1_interval: Duration,
 
     /// Espresso query service provider.
     ///
@@ -107,6 +116,16 @@ struct L1Balance {
     #[clap(short, long, env = "L1_PROVIDER")]
     rpc_url: Url,
 
+    /// Request rate when polling L1.
+    #[clap(
+        short,
+        long,
+        env = "L1_POLLING_INTERVAL",
+        default_value = "7s",
+        value_parser = parse_duration
+    )]
+    l1_interval: Duration,
+
     /// Account to check.
     #[clap(short, long, env = "ADDRESS", required_unless_present = "mnemonic")]
     address: Option<Address>,
@@ -135,13 +154,13 @@ async fn deposit(opt: Deposit) -> anyhow::Result<()> {
     let key_pair = EthKeyPair::from_mnemonic(opt.mnemonic, opt.account_index)?;
 
     // Connect to L1.
-    let rpc = Provider::try_from(opt.rpc_url.to_string())?;
+    let rpc = Provider::try_from(opt.rpc_url.to_string())?.interval(opt.l1_interval);
     let signer = key_pair.signer();
     let l1 = Arc::new(SignerMiddleware::new_with_provider_chain(rpc, signer).await?);
     let contract = FeeContract::new(opt.contract_address, l1.clone());
 
     // Connect to Espresso.
-    let espresso = EspressoClient::new(opt.espresso_provider);
+    let espresso = SequencerClient::new(opt.espresso_provider);
 
     // Validate deposit.
     let amount = U256::from(opt.amount);
@@ -157,7 +176,10 @@ async fn deposit(opt: Deposit) -> anyhow::Result<()> {
     );
 
     // Record the initial balance on Espresso.
-    let initial_balance = get_espresso_balance(&espresso, l1.address(), None).await?;
+    let initial_balance = espresso
+        .get_espresso_balance(l1.address(), None)
+        .await
+        .context("getting Espresso balance")?;
     tracing::debug!(%initial_balance, "initial balance");
 
     // Send the deposit transaction.
@@ -183,16 +205,8 @@ async fn deposit(opt: Deposit) -> anyhow::Result<()> {
     tracing::info!(l1_block, "deposit mined on L1");
 
     // Wait for Espresso to catch up to the L1.
-    let espresso_height = espresso
-        .get::<u64>("node/block-height")
-        .send()
-        .await
-        .context("getting Espresso block height")?;
-    let mut headers = espresso
-        .socket(&format!("availability/stream/headers/{espresso_height}"))
-        .subscribe()
-        .await
-        .context("subscribing to Espresso headers")?;
+    let espresso_height = espresso.get_height().await?;
+    let mut headers = espresso.subscribe_headers(espresso_height).await?;
     let espresso_block = loop {
         let header: Header = match headers.next().await.context("header stream ended")? {
             Ok(header) => header,
@@ -204,7 +218,7 @@ async fn deposit(opt: Deposit) -> anyhow::Result<()> {
         let Some(l1_finalized) = header.l1_finalized() else {
             continue;
         };
-        if l1_finalized.number >= l1_block {
+        if l1_finalized.number() >= l1_block {
             tracing::info!(block = header.height(), "deposit finalized on Espresso");
             break header.height();
         } else {
@@ -218,7 +232,9 @@ async fn deposit(opt: Deposit) -> anyhow::Result<()> {
     };
 
     // Confirm that the Espresso balance has increased.
-    let final_balance = get_espresso_balance(&espresso, l1.address(), Some(espresso_block)).await?;
+    let final_balance = espresso
+        .get_espresso_balance(l1.address(), Some(espresso_block))
+        .await?;
     if final_balance >= initial_balance + amount.into() {
         tracing::info!(%final_balance, "deposit successful");
     } else {
@@ -242,8 +258,8 @@ async fn balance(opt: Balance) -> anyhow::Result<()> {
         bail!("address or mnemonic must be provided");
     };
 
-    let espresso = EspressoClient::new(opt.espresso_provider);
-    let balance = get_espresso_balance(&espresso, address, opt.block).await?;
+    let espresso = SequencerClient::new(opt.espresso_provider);
+    let balance = espresso.get_espresso_balance(address, opt.block).await?;
 
     // Output the balance on regular standard out, rather than as a log message, to make scripting
     // easier.
@@ -262,7 +278,7 @@ async fn l1_balance(opt: L1Balance) -> anyhow::Result<()> {
         bail!("address or mnemonic must be provided");
     };
 
-    let l1 = Provider::try_from(opt.rpc_url.to_string())?;
+    let l1 = Provider::try_from(opt.rpc_url.to_string())?.interval(opt.l1_interval);
 
     let block = opt.block.map(BlockId::from);
     tracing::debug!(%address, ?block, "fetching L1 balance");
@@ -278,61 +294,12 @@ async fn l1_balance(opt: L1Balance) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn get_espresso_balance(
-    espresso: &EspressoClient,
-    address: Address,
-    block: Option<u64>,
-) -> anyhow::Result<FeeAmount> {
-    // Get the block height to query at, defaulting to the latest block.
-    let block = if let Some(block) = block {
-        block
-    } else {
-        espresso
-            .get::<u64>("node/block-height")
-            .send()
-            .await
-            .context("getting block height")?
-            - 1
-    };
-
-    // Download the Merkle path for this fee account at the specified block height. Transient errors
-    // are possible (for example, if we are fetching from the latest block, the block height might
-    // get incremented slightly before the state becomes available) so retry a few times.
-    let mut retry = 0;
-    let max_retries = 5;
-    let proof = loop {
-        tracing::debug!(%address, block, retry, "fetching Espresso balance");
-        match espresso
-            .get::<FeeMerkleProof>(&format!("fee-state/{block}/{address:#x}"))
-            .send()
-            .await
-        {
-            Ok(proof) => break proof,
-            Err(err) => {
-                tracing::warn!("error getting account balance: {err:#}");
-                retry += 1;
-
-                if retry == max_retries {
-                    return Err(err).context("getting account balance");
-                } else {
-                    sleep(Duration::from_secs(5)).await;
-                }
-            }
-        }
-    };
-
-    // If the element in the Merkle path is missing -- there is no account with this address -- the
-    // balance is defined to be 0.
-    let balance = proof.elem().copied().unwrap_or(0.into());
-    Ok(balance)
-}
-
-#[async_std::main]
+#[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    setup_logging();
-    setup_backtrace();
+    let opt = Options::parse();
+    opt.logging.init();
 
-    match Command::parse() {
+    match opt.command {
         Command::Deposit(opt) => deposit(opt).await,
         Command::Balance(opt) => balance(opt).await,
         Command::L1Balance(opt) => l1_balance(opt).await,

@@ -1,69 +1,102 @@
 //! This module contains all the traits used for building the sequencer types.
 //! It also includes some trait implementations that cannot be implemented in an external crate.
-use std::{cmp::max, collections::BTreeMap, ops::Range, sync::Arc};
+use std::{cmp::max, collections::BTreeMap, fmt::Debug, ops::Range, sync::Arc};
 
 use anyhow::{bail, ensure, Context};
-use async_std::sync::RwLock;
 use async_trait::async_trait;
 use committable::{Commitment, Committable};
 use futures::{FutureExt, TryFutureExt};
 use hotshot::{types::EventType, HotShotInitializer};
 use hotshot_types::{
     consensus::CommitmentMap,
-    data::{DaProposal, QuorumProposal, VidDisperseShare, ViewNumber},
-    event::{HotShotAction, LeafInfo},
-    message::Proposal,
-    simple_certificate::QuorumCertificate,
-    traits::{
-        node_implementation::ConsensusTime, storage::Storage, ValidatedState as HotShotState,
+    data::{
+        vid_disperse::ADVZDisperseShare, DaProposal, EpochNumber, QuorumProposal, QuorumProposal2,
+        QuorumProposalWrapper, ViewNumber,
     },
-    utils::View,
+    event::{HotShotAction, LeafInfo},
+    message::{convert_proposal, Proposal},
+    simple_certificate::{
+        NextEpochQuorumCertificate2, QuorumCertificate, QuorumCertificate2, UpgradeCertificate,
+    },
+    traits::{
+        node_implementation::{ConsensusTime, Versions},
+        storage::Storage,
+        ValidatedState as HotShotState,
+    },
+    utils::{genesis_epoch_from_version, View},
+    vid::VidSchemeType,
 };
+use itertools::Itertools;
+use jf_vid::VidScheme;
 use serde::{de::DeserializeOwned, Serialize};
 
 use crate::{
-    AccountQueryData, BackoffParams, BlockMerkleTree, ChainConfig, Event, FeeAccount,
-    FeeMerkleCommitment, Leaf, NetworkConfig, NodeState, SeqTypes, ValidatedState,
+    v0::impls::ValidatedState, v0_99::ChainConfig, BlockMerkleTree, Event, FeeAccount,
+    FeeAccountProof, FeeMerkleCommitment, FeeMerkleTree, Leaf2, NetworkConfig, SeqTypes,
 };
 
+use super::{impls::NodeState, utils::BackoffParams, Leaf};
+
 #[async_trait]
-pub trait StateCatchup: Send + Sync + std::fmt::Debug {
-    /// Try to fetch the given account state, failing without retrying if unable.
-    async fn try_fetch_account(
+pub trait StateCatchup: Send + Sync {
+    /// Try to fetch the given accounts state, failing without retrying if unable.
+    async fn try_fetch_accounts(
         &self,
+        retry: usize,
+        instance: &NodeState,
         height: u64,
         view: ViewNumber,
         fee_merkle_tree_root: FeeMerkleCommitment,
-        account: FeeAccount,
-    ) -> anyhow::Result<AccountQueryData>;
+        account: &[FeeAccount],
+    ) -> anyhow::Result<FeeMerkleTree>;
 
     /// Fetch the given list of accounts, retrying on transient errors.
     async fn fetch_accounts(
         &self,
+        instance: &NodeState,
         height: u64,
         view: ViewNumber,
         fee_merkle_tree_root: FeeMerkleCommitment,
         accounts: Vec<FeeAccount>,
-    ) -> anyhow::Result<Vec<AccountQueryData>> {
-        let mut ret = vec![];
-        for account in accounts {
-            let account = self
-                .backoff()
-                .retry(self, |provider| {
-                    provider
-                        .try_fetch_account(height, view, fee_merkle_tree_root, account)
-                        .map_err(|err| err.context("fetching account {account}"))
-                        .boxed()
-                })
-                .await;
-            ret.push(account);
-        }
-        Ok(ret)
+    ) -> anyhow::Result<Vec<FeeAccountProof>> {
+        self.backoff()
+            .retry(self, |provider, retry| {
+                let accounts = &accounts;
+                async move {
+                    let tree = provider
+                        .try_fetch_accounts(
+                            retry,
+                            instance,
+                            height,
+                            view,
+                            fee_merkle_tree_root,
+                            accounts,
+                        )
+                        .await
+                        .map_err(|err| {
+                            err.context(format!(
+                                "fetching accounts {accounts:?}, height {height}, view {view:?}"
+                            ))
+                        })?;
+                    accounts
+                        .iter()
+                        .map(|account| {
+                            FeeAccountProof::prove(&tree, (*account).into())
+                                .context(format!("missing account {account}"))
+                                .map(|(proof, _)| proof)
+                        })
+                        .collect::<anyhow::Result<Vec<FeeAccountProof>>>()
+                }
+                .boxed()
+            })
+            .await
     }
 
     /// Try to fetch and remember the blocks frontier, failing without retrying if unable.
     async fn try_remember_blocks_merkle_tree(
         &self,
+        retry: usize,
+        instance: &NodeState,
         height: u64,
         view: ViewNumber,
         mt: &mut BlockMerkleTree,
@@ -72,30 +105,34 @@ pub trait StateCatchup: Send + Sync + std::fmt::Debug {
     /// Fetch and remember the blocks frontier, retrying on transient errors.
     async fn remember_blocks_merkle_tree(
         &self,
+        instance: &NodeState,
         height: u64,
         view: ViewNumber,
         mt: &mut BlockMerkleTree,
     ) -> anyhow::Result<()> {
         self.backoff()
-            .retry(mt, |mt| {
-                self.try_remember_blocks_merkle_tree(height, view, mt)
+            .retry(mt, |mt, retry| {
+                self.try_remember_blocks_merkle_tree(retry, instance, height, view, mt)
                     .map_err(|err| err.context("fetching frontier"))
                     .boxed()
             })
-            .await;
-        Ok(())
+            .await
     }
 
     async fn try_fetch_chain_config(
         &self,
+        retry: usize,
         commitment: Commitment<ChainConfig>,
     ) -> anyhow::Result<ChainConfig>;
 
-    async fn fetch_chain_config(&self, commitment: Commitment<ChainConfig>) -> ChainConfig {
+    async fn fetch_chain_config(
+        &self,
+        commitment: Commitment<ChainConfig>,
+    ) -> anyhow::Result<ChainConfig> {
         self.backoff()
-            .retry(self, |provider| {
+            .retry(self, |provider, retry| {
                 provider
-                    .try_fetch_chain_config(commitment)
+                    .try_fetch_chain_config(retry, commitment)
                     .map_err(|err| err.context("fetching chain config"))
                     .boxed()
             })
@@ -103,151 +140,211 @@ pub trait StateCatchup: Send + Sync + std::fmt::Debug {
     }
 
     fn backoff(&self) -> &BackoffParams;
+    fn name(&self) -> String;
 }
 
 #[async_trait]
 impl<T: StateCatchup + ?Sized> StateCatchup for Box<T> {
-    async fn try_fetch_account(
+    async fn try_fetch_accounts(
         &self,
+        retry: usize,
+        instance: &NodeState,
         height: u64,
         view: ViewNumber,
         fee_merkle_tree_root: FeeMerkleCommitment,
-        account: FeeAccount,
-    ) -> anyhow::Result<AccountQueryData> {
+        accounts: &[FeeAccount],
+    ) -> anyhow::Result<FeeMerkleTree> {
         (**self)
-            .try_fetch_account(height, view, fee_merkle_tree_root, account)
+            .try_fetch_accounts(
+                retry,
+                instance,
+                height,
+                view,
+                fee_merkle_tree_root,
+                accounts,
+            )
             .await
     }
 
     async fn fetch_accounts(
         &self,
+        instance: &NodeState,
         height: u64,
         view: ViewNumber,
         fee_merkle_tree_root: FeeMerkleCommitment,
         accounts: Vec<FeeAccount>,
-    ) -> anyhow::Result<Vec<AccountQueryData>> {
+    ) -> anyhow::Result<Vec<FeeAccountProof>> {
         (**self)
-            .fetch_accounts(height, view, fee_merkle_tree_root, accounts)
+            .fetch_accounts(instance, height, view, fee_merkle_tree_root, accounts)
             .await
     }
 
     async fn try_remember_blocks_merkle_tree(
         &self,
+        retry: usize,
+        instance: &NodeState,
         height: u64,
         view: ViewNumber,
         mt: &mut BlockMerkleTree,
     ) -> anyhow::Result<()> {
         (**self)
-            .try_remember_blocks_merkle_tree(height, view, mt)
+            .try_remember_blocks_merkle_tree(retry, instance, height, view, mt)
             .await
     }
 
     async fn remember_blocks_merkle_tree(
         &self,
+        instance: &NodeState,
         height: u64,
         view: ViewNumber,
         mt: &mut BlockMerkleTree,
     ) -> anyhow::Result<()> {
-        (**self).remember_blocks_merkle_tree(height, view, mt).await
+        (**self)
+            .remember_blocks_merkle_tree(instance, height, view, mt)
+            .await
     }
 
     async fn try_fetch_chain_config(
         &self,
+        retry: usize,
         commitment: Commitment<ChainConfig>,
     ) -> anyhow::Result<ChainConfig> {
-        (**self).try_fetch_chain_config(commitment).await
+        (**self).try_fetch_chain_config(retry, commitment).await
     }
 
-    async fn fetch_chain_config(&self, commitment: Commitment<ChainConfig>) -> ChainConfig {
+    async fn fetch_chain_config(
+        &self,
+        commitment: Commitment<ChainConfig>,
+    ) -> anyhow::Result<ChainConfig> {
         (**self).fetch_chain_config(commitment).await
     }
 
     fn backoff(&self) -> &BackoffParams {
         (**self).backoff()
+    }
+
+    fn name(&self) -> String {
+        (**self).name()
     }
 }
 
 #[async_trait]
 impl<T: StateCatchup + ?Sized> StateCatchup for Arc<T> {
-    async fn try_fetch_account(
+    async fn try_fetch_accounts(
         &self,
+        retry: usize,
+        instance: &NodeState,
         height: u64,
         view: ViewNumber,
         fee_merkle_tree_root: FeeMerkleCommitment,
-        account: FeeAccount,
-    ) -> anyhow::Result<AccountQueryData> {
+        accounts: &[FeeAccount],
+    ) -> anyhow::Result<FeeMerkleTree> {
         (**self)
-            .try_fetch_account(height, view, fee_merkle_tree_root, account)
+            .try_fetch_accounts(
+                retry,
+                instance,
+                height,
+                view,
+                fee_merkle_tree_root,
+                accounts,
+            )
             .await
     }
 
     async fn fetch_accounts(
         &self,
+        instance: &NodeState,
         height: u64,
         view: ViewNumber,
         fee_merkle_tree_root: FeeMerkleCommitment,
         accounts: Vec<FeeAccount>,
-    ) -> anyhow::Result<Vec<AccountQueryData>> {
+    ) -> anyhow::Result<Vec<FeeAccountProof>> {
         (**self)
-            .fetch_accounts(height, view, fee_merkle_tree_root, accounts)
+            .fetch_accounts(instance, height, view, fee_merkle_tree_root, accounts)
             .await
     }
 
     async fn try_remember_blocks_merkle_tree(
         &self,
+        retry: usize,
+        instance: &NodeState,
         height: u64,
         view: ViewNumber,
         mt: &mut BlockMerkleTree,
     ) -> anyhow::Result<()> {
         (**self)
-            .try_remember_blocks_merkle_tree(height, view, mt)
+            .try_remember_blocks_merkle_tree(retry, instance, height, view, mt)
             .await
     }
 
     async fn remember_blocks_merkle_tree(
         &self,
+        instance: &NodeState,
         height: u64,
         view: ViewNumber,
         mt: &mut BlockMerkleTree,
     ) -> anyhow::Result<()> {
-        (**self).remember_blocks_merkle_tree(height, view, mt).await
+        (**self)
+            .remember_blocks_merkle_tree(instance, height, view, mt)
+            .await
     }
 
     async fn try_fetch_chain_config(
         &self,
+        retry: usize,
         commitment: Commitment<ChainConfig>,
     ) -> anyhow::Result<ChainConfig> {
-        (**self).try_fetch_chain_config(commitment).await
+        (**self).try_fetch_chain_config(retry, commitment).await
     }
 
-    async fn fetch_chain_config(&self, commitment: Commitment<ChainConfig>) -> ChainConfig {
+    async fn fetch_chain_config(
+        &self,
+        commitment: Commitment<ChainConfig>,
+    ) -> anyhow::Result<ChainConfig> {
         (**self).fetch_chain_config(commitment).await
     }
 
     fn backoff(&self) -> &BackoffParams {
         (**self).backoff()
+    }
+
+    fn name(&self) -> String {
+        (**self).name()
     }
 }
 
 /// Catchup from multiple providers tries each provider in a round robin fashion until it succeeds.
 #[async_trait]
 impl<T: StateCatchup> StateCatchup for Vec<T> {
-    #[tracing::instrument(skip(self))]
-    async fn try_fetch_account(
+    #[tracing::instrument(skip(self, instance))]
+    async fn try_fetch_accounts(
         &self,
+        retry: usize,
+        instance: &NodeState,
         height: u64,
         view: ViewNumber,
         fee_merkle_tree_root: FeeMerkleCommitment,
-        account: FeeAccount,
-    ) -> anyhow::Result<AccountQueryData> {
+        accounts: &[FeeAccount],
+    ) -> anyhow::Result<FeeMerkleTree> {
         for provider in self {
             match provider
-                .try_fetch_account(height, view, fee_merkle_tree_root, account)
+                .try_fetch_accounts(
+                    retry,
+                    instance,
+                    height,
+                    view,
+                    fee_merkle_tree_root,
+                    accounts,
+                )
                 .await
             {
-                Ok(account) => return Ok(account),
+                Ok(tree) => return Ok(tree),
                 Err(err) => {
-                    tracing::warn!(%account, ?provider, "failed to fetch account: {err:#}");
+                    tracing::info!(
+                        ?accounts,
+                        provider = provider.name(),
+                        "failed to fetch accounts: {err:#}"
+                    );
                 }
             }
         }
@@ -255,21 +352,26 @@ impl<T: StateCatchup> StateCatchup for Vec<T> {
         bail!("could not fetch account from any provider");
     }
 
-    #[tracing::instrument(skip(self, mt))]
+    #[tracing::instrument(skip(self, instance, mt))]
     async fn try_remember_blocks_merkle_tree(
         &self,
+        retry: usize,
+        instance: &NodeState,
         height: u64,
         view: ViewNumber,
         mt: &mut BlockMerkleTree,
     ) -> anyhow::Result<()> {
         for provider in self {
             match provider
-                .try_remember_blocks_merkle_tree(height, view, mt)
+                .try_remember_blocks_merkle_tree(retry, instance, height, view, mt)
                 .await
             {
                 Ok(()) => return Ok(()),
                 Err(err) => {
-                    tracing::warn!(?provider, "failed to fetch frontier: {err:#}");
+                    tracing::info!(
+                        provider = provider.name(),
+                        "failed to fetch frontier: {err:#}"
+                    );
                 }
             }
         }
@@ -279,13 +381,17 @@ impl<T: StateCatchup> StateCatchup for Vec<T> {
 
     async fn try_fetch_chain_config(
         &self,
+        retry: usize,
         commitment: Commitment<ChainConfig>,
     ) -> anyhow::Result<ChainConfig> {
         for provider in self {
-            match provider.try_fetch_chain_config(commitment).await {
+            match provider.try_fetch_chain_config(retry, commitment).await {
                 Ok(cf) => return Ok(cf),
                 Err(err) => {
-                    tracing::warn!(?provider, "failed to fetch chain config: {err:#}");
+                    tracing::info!(
+                        provider = provider.name(),
+                        "failed to fetch chain config: {err:#}"
+                    );
                 }
             }
         }
@@ -300,25 +406,23 @@ impl<T: StateCatchup> StateCatchup for Vec<T> {
             .max()
             .expect("provider list not empty")
     }
+
+    fn name(&self) -> String {
+        format!("[{}]", self.iter().map(StateCatchup::name).join(","))
+    }
 }
 
 #[async_trait]
 pub trait PersistenceOptions: Clone + Send + Sync + 'static {
     type Persistence: SequencerPersistence;
 
-    async fn create(self) -> anyhow::Result<Self::Persistence>;
+    fn set_view_retention(&mut self, view_retention: u64);
+    async fn create(&mut self) -> anyhow::Result<Self::Persistence>;
     async fn reset(self) -> anyhow::Result<()>;
-
-    async fn create_catchup_provider(
-        self,
-        backoff: BackoffParams,
-    ) -> anyhow::Result<Arc<dyn StateCatchup>> {
-        self.create().await?.into_catchup_provider(backoff)
-    }
 }
 
 #[async_trait]
-pub trait SequencerPersistence: Sized + Send + Sync + 'static {
+pub trait SequencerPersistence: Sized + Send + Sync + Clone + 'static {
     /// Use this storage as a state catchup backend, if supported.
     fn into_catchup_provider(
         self,
@@ -334,54 +438,48 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
     async fn load_config(&self) -> anyhow::Result<Option<NetworkConfig>>;
 
     /// Save the orchestrator config to storage.
-    async fn save_config(&mut self, cfg: &NetworkConfig) -> anyhow::Result<()>;
-
-    async fn collect_garbage(&mut self, view: ViewNumber) -> anyhow::Result<()>;
-
-    /// Saves the latest decided leaf.
-    ///
-    /// If the height of the new leaf is not greater than the height of the previous decided leaf,
-    /// storage is not updated.
-    async fn save_anchor_leaf(
-        &mut self,
-        leaf: &Leaf,
-        qc: &QuorumCertificate<SeqTypes>,
-    ) -> anyhow::Result<()>;
+    async fn save_config(&self, cfg: &NetworkConfig) -> anyhow::Result<()>;
 
     /// Load the highest view saved with [`save_voted_view`](Self::save_voted_view).
     async fn load_latest_acted_view(&self) -> anyhow::Result<Option<ViewNumber>>;
 
-    /// Load the latest leaf saved with [`save_anchor_leaf`](Self::save_anchor_leaf).
-    async fn load_anchor_leaf(&self)
-        -> anyhow::Result<Option<(Leaf, QuorumCertificate<SeqTypes>)>>;
-
     /// Load undecided state saved by consensus before we shut down.
     async fn load_undecided_state(
         &self,
-    ) -> anyhow::Result<Option<(CommitmentMap<Leaf>, BTreeMap<ViewNumber, View<SeqTypes>>)>>;
+    ) -> anyhow::Result<Option<(CommitmentMap<Leaf2>, BTreeMap<ViewNumber, View<SeqTypes>>)>>;
 
     /// Load the proposals saved by consensus
     async fn load_quorum_proposals(
         &self,
-    ) -> anyhow::Result<Option<BTreeMap<ViewNumber, Proposal<SeqTypes, QuorumProposal<SeqTypes>>>>>;
+    ) -> anyhow::Result<BTreeMap<ViewNumber, Proposal<SeqTypes, QuorumProposalWrapper<SeqTypes>>>>;
+
+    async fn load_quorum_proposal(
+        &self,
+        view: ViewNumber,
+    ) -> anyhow::Result<Proposal<SeqTypes, QuorumProposalWrapper<SeqTypes>>>;
 
     async fn load_vid_share(
         &self,
         view: ViewNumber,
-    ) -> anyhow::Result<Option<Proposal<SeqTypes, VidDisperseShare<SeqTypes>>>>;
+    ) -> anyhow::Result<Option<Proposal<SeqTypes, ADVZDisperseShare<SeqTypes>>>>;
     async fn load_da_proposal(
         &self,
         view: ViewNumber,
     ) -> anyhow::Result<Option<Proposal<SeqTypes, DaProposal<SeqTypes>>>>;
+    async fn load_upgrade_certificate(
+        &self,
+    ) -> anyhow::Result<Option<UpgradeCertificate<SeqTypes>>>;
 
     /// Load the latest known consensus state.
     ///
     /// Returns an initializer to resume HotShot from the latest saved state (or start from genesis,
-    /// if there is no saved state).
-    async fn load_consensus_state(
+    /// if there is no saved state). Also returns the anchor view number, which can be used as a
+    /// reference point to process any events which were not processed before a previous shutdown,
+    /// if applicable,.
+    async fn load_consensus_state<V: Versions>(
         &self,
         state: NodeState,
-    ) -> anyhow::Result<HotShotInitializer<SeqTypes>> {
+    ) -> anyhow::Result<(HotShotInitializer<SeqTypes>, Option<ViewNumber>)> {
         let genesis_validated_state = ValidatedState::genesis(&state).0;
         let highest_voted_view = match self
             .load_latest_acted_view()
@@ -397,7 +495,12 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
                 ViewNumber::genesis()
             }
         };
-        let (leaf, high_qc) = match self
+
+        let next_epoch_high_qc = self
+            .load_next_epoch_quorum_certificate()
+            .await
+            .context("loading next epoch qc")?;
+        let (leaf, high_qc, anchor_view) = match self
             .load_anchor_leaf()
             .await
             .context("loading anchor leaf")?
@@ -412,13 +515,20 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
                         high_qc.view_number
                     )
                 );
-                (leaf, high_qc)
+
+                let anchor_view = leaf.view_number();
+                (leaf, high_qc, Some(anchor_view))
             }
             None => {
                 tracing::info!("no saved leaf, starting from genesis leaf");
                 (
-                    Leaf::genesis(&genesis_validated_state, &state).await,
-                    QuorumCertificate::genesis(&genesis_validated_state, &state).await,
+                    hotshot_types::data::Leaf::genesis::<V>(&genesis_validated_state, &state)
+                        .await
+                        .into(),
+                    QuorumCertificate::genesis::<V>(&genesis_validated_state, &state)
+                        .await
+                        .to_qc2(),
+                    None,
                 )
             }
         };
@@ -435,10 +545,9 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
         // between `highest_voted_view` and `leaf.view_number`. This prevents double votes from
         // starting in a view in which we had already voted before the restart, and prevents
         // unnecessary catchup from starting in a view earlier than the anchor leaf.
-        let mut view = max(highest_voted_view, leaf.view_number());
-        if view != ViewNumber::genesis() {
-            view += 1;
-        }
+        let view = max(highest_voted_view, leaf.view_number());
+        // TODO:
+        let epoch = genesis_epoch_from_version::<V, SeqTypes>();
 
         let (undecided_leaves, undecided_state) = self
             .load_undecided_state()
@@ -449,101 +558,219 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
         let saved_proposals = self
             .load_quorum_proposals()
             .await
-            .context("loading saved proposals")
-            .unwrap_or_default()
-            .unwrap_or_default();
+            .context("loading saved proposals")?;
+
+        let upgrade_certificate = self
+            .load_upgrade_certificate()
+            .await
+            .context("loading upgrade certificate")?;
 
         tracing::info!(
             ?leaf,
             ?view,
+            ?epoch,
             ?high_qc,
             ?validated_state,
             ?undecided_leaves,
             ?undecided_state,
             ?saved_proposals,
+            ?upgrade_certificate,
             "loaded consensus state"
         );
-        Ok(HotShotInitializer::from_reload(
-            leaf,
-            state,
-            validated_state,
-            view,
-            saved_proposals,
-            high_qc,
-            undecided_leaves.into_values().collect(),
-            undecided_state,
+
+        Ok((
+            HotShotInitializer {
+                instance_state: state,
+                epoch_height: 0,
+                anchor_leaf: leaf,
+                anchor_state: validated_state.unwrap_or_default(),
+                anchor_state_delta: None,
+                start_view: view,
+                start_epoch: epoch,
+                last_actioned_view: highest_voted_view,
+                saved_proposals,
+                high_qc,
+                next_epoch_high_qc,
+                decided_upgrade_certificate: upgrade_certificate,
+                undecided_leaves: undecided_leaves
+                    .into_values()
+                    .map(|e| (e.view_number(), e))
+                    .collect(),
+                undecided_state,
+                saved_vid_shares: Default::default(), // TODO: implement saved_vid_shares
+            },
+            anchor_view,
         ))
     }
 
     /// Update storage based on an event from consensus.
-    async fn handle_event(&mut self, event: &Event) {
+    async fn handle_event(&self, event: &Event, consumer: &(impl EventConsumer + 'static)) {
         if let EventType::Decide { leaf_chain, qc, .. } = &event.event {
-            if let Some(LeafInfo { leaf, .. }) = leaf_chain.first() {
-                if qc.view_number != leaf.view_number() {
-                    tracing::error!(
-                        leaf_view = ?leaf.view_number(),
-                        qc_view = ?qc.view_number,
-                        "latest leaf and QC are from different views!",
-                    );
-                    return;
-                }
-                if let Err(err) = self.save_anchor_leaf(leaf, qc).await {
-                    tracing::error!(
-                        ?leaf,
-                        hash = %leaf.commit(),
-                        "Failed to save anchor leaf. When restarting make sure anchor leaf is at least as recent as this leaf. {err:#}",
-                    );
-                }
+            let Some(LeafInfo { leaf, .. }) = leaf_chain.first() else {
+                // No new leaves.
+                return;
+            };
 
-                if let Err(err) = self.collect_garbage(leaf.view_number()).await {
-                    tracing::error!("Failed to garbage collect. {err:#}",);
-                }
+            // Associate each decided leaf with a QC.
+            let chain = leaf_chain.iter().zip(
+                // The first (most recent) leaf corresponds to the QC triggering the decide event.
+                std::iter::once((**qc).clone())
+                    // Moving backwards in the chain, each leaf corresponds with the subsequent
+                    // leaf's justify QC.
+                    .chain(leaf_chain.iter().map(|leaf| leaf.leaf.justify_qc())),
+            );
+
+            if let Err(err) = self
+                .append_decided_leaves(leaf.view_number(), chain, consumer)
+                .await
+            {
+                tracing::error!(
+                    "failed to save decided leaves, chain may not be up to date: {err:#}"
+                );
+                return;
             }
         }
     }
 
+    /// Append decided leaves to persistent storage and emit a corresponding event.
+    ///
+    /// `consumer` will be sent a `Decide` event containing all decided leaves in persistent storage
+    /// up to and including `view`. If available in persistent storage, full block payloads and VID
+    /// info will also be included for each leaf.
+    ///
+    /// Once the new decided leaves have been processed, old data up to `view` will be garbage
+    /// collected The consumer's handling of this event is a prerequisite for the completion of
+    /// garbage collection: if the consumer fails to process the event, no data is deleted. This
+    /// ensures that, if called repeatedly, all decided leaves ever recorded in consensus storage
+    /// will eventually be passed to the consumer.
+    ///
+    /// Note that the converse is not true: if garbage collection fails, it is not guaranteed that
+    /// the consumer hasn't processed the decide event. Thus, in rare cases, some events may be
+    /// processed twice, or the consumer may get two events which share a subset of their data.
+    /// Thus, it is the consumer's responsibility to make sure its handling of each leaf is
+    /// idempotent.
+    ///
+    /// If the consumer fails to handle the new decide event, it may be retried, or simply postponed
+    /// until the next decide, at which point all persisted leaves from the failed GC run will be
+    /// included in the event along with subsequently decided leaves.
+    ///
+    /// This functionality is useful for keeping a separate view of the blockchain in sync with the
+    /// consensus storage. For example, the `consumer` could be used for moving data from consensus
+    /// storage to long-term archival storage.
+    async fn append_decided_leaves(
+        &self,
+        decided_view: ViewNumber,
+        leaf_chain: impl IntoIterator<Item = (&LeafInfo<SeqTypes>, QuorumCertificate2<SeqTypes>)> + Send,
+        consumer: &(impl EventConsumer + 'static),
+    ) -> anyhow::Result<()>;
+
+    async fn load_anchor_leaf(
+        &self,
+    ) -> anyhow::Result<Option<(Leaf2, QuorumCertificate2<SeqTypes>)>>;
     async fn append_vid(
-        &mut self,
-        proposal: &Proposal<SeqTypes, VidDisperseShare<SeqTypes>>,
+        &self,
+        proposal: &Proposal<SeqTypes, ADVZDisperseShare<SeqTypes>>,
     ) -> anyhow::Result<()>;
     async fn append_da(
-        &mut self,
+        &self,
         proposal: &Proposal<SeqTypes, DaProposal<SeqTypes>>,
+        vid_commit: <VidSchemeType as VidScheme>::Commit,
     ) -> anyhow::Result<()>;
     async fn record_action(
-        &mut self,
+        &self,
         view: ViewNumber,
+        epoch: Option<EpochNumber>,
         action: HotShotAction,
     ) -> anyhow::Result<()>;
     async fn update_undecided_state(
-        &mut self,
-        leaves: CommitmentMap<Leaf>,
+        &self,
+        leaves: CommitmentMap<Leaf2>,
         state: BTreeMap<ViewNumber, View<SeqTypes>>,
     ) -> anyhow::Result<()>;
     async fn append_quorum_proposal(
-        &mut self,
-        proposal: &Proposal<SeqTypes, QuorumProposal<SeqTypes>>,
+        &self,
+        proposal: &Proposal<SeqTypes, QuorumProposalWrapper<SeqTypes>>,
     ) -> anyhow::Result<()>;
+    async fn store_upgrade_certificate(
+        &self,
+        decided_upgrade_certificate: Option<UpgradeCertificate<SeqTypes>>,
+    ) -> anyhow::Result<()>;
+    async fn migrate_consensus(
+        &self,
+        migrate_leaf: fn(Leaf) -> Leaf2,
+        migrate_proposal: fn(
+            Proposal<SeqTypes, QuorumProposal<SeqTypes>>,
+        ) -> Proposal<SeqTypes, QuorumProposal2<SeqTypes>>,
+    ) -> anyhow::Result<()>;
+
+    async fn load_anchor_view(&self) -> anyhow::Result<ViewNumber> {
+        match self.load_anchor_leaf().await? {
+            Some((leaf, _)) => Ok(leaf.view_number()),
+            None => Ok(ViewNumber::genesis()),
+        }
+    }
+
+    async fn store_next_epoch_quorum_certificate(
+        &self,
+        high_qc: NextEpochQuorumCertificate2<SeqTypes>,
+    ) -> anyhow::Result<()>;
+
+    async fn load_next_epoch_quorum_certificate(
+        &self,
+    ) -> anyhow::Result<Option<NextEpochQuorumCertificate2<SeqTypes>>>;
 }
 
 #[async_trait]
-impl<P: SequencerPersistence> Storage<SeqTypes> for Arc<RwLock<P>> {
+pub trait EventConsumer: Debug + Send + Sync {
+    async fn handle_event(&self, event: &Event) -> anyhow::Result<()>;
+}
+
+#[async_trait]
+impl<T> EventConsumer for Box<T>
+where
+    T: EventConsumer + ?Sized,
+{
+    async fn handle_event(&self, event: &Event) -> anyhow::Result<()> {
+        (**self).handle_event(event).await
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct NullEventConsumer;
+
+#[async_trait]
+impl EventConsumer for NullEventConsumer {
+    async fn handle_event(&self, _event: &Event) -> anyhow::Result<()> {
+        Ok(())
+    }
+}
+
+#[async_trait]
+impl<P: SequencerPersistence> Storage<SeqTypes> for Arc<P> {
     async fn append_vid(
         &self,
-        proposal: &Proposal<SeqTypes, VidDisperseShare<SeqTypes>>,
+        proposal: &Proposal<SeqTypes, ADVZDisperseShare<SeqTypes>>,
     ) -> anyhow::Result<()> {
-        self.write().await.append_vid(proposal).await
+        (**self).append_vid(proposal).await
     }
 
     async fn append_da(
         &self,
         proposal: &Proposal<SeqTypes, DaProposal<SeqTypes>>,
+        vid_commit: <VidSchemeType as VidScheme>::Commit,
     ) -> anyhow::Result<()> {
-        self.write().await.append_da(proposal).await
+        (**self).append_da(proposal, vid_commit).await
     }
-    async fn record_action(&self, view: ViewNumber, action: HotShotAction) -> anyhow::Result<()> {
-        self.write().await.record_action(view, action).await
+
+    async fn record_action(
+        &self,
+        view: ViewNumber,
+        epoch: Option<EpochNumber>,
+        action: HotShotAction,
+    ) -> anyhow::Result<()> {
+        (**self).record_action(view, epoch, action).await
     }
+
     async fn update_high_qc(&self, _high_qc: QuorumCertificate<SeqTypes>) -> anyhow::Result<()> {
         Ok(())
     }
@@ -553,9 +780,17 @@ impl<P: SequencerPersistence> Storage<SeqTypes> for Arc<RwLock<P>> {
         leaves: CommitmentMap<Leaf>,
         state: BTreeMap<ViewNumber, View<SeqTypes>>,
     ) -> anyhow::Result<()> {
-        self.write()
-            .await
-            .update_undecided_state(leaves, state)
+        (**self)
+            .update_undecided_state(
+                leaves
+                    .into_values()
+                    .map(|leaf| {
+                        let leaf2: Leaf2 = leaf.into();
+                        (leaf2.commit(), leaf2)
+                    })
+                    .collect(),
+                state,
+            )
             .await
     }
 
@@ -563,7 +798,18 @@ impl<P: SequencerPersistence> Storage<SeqTypes> for Arc<RwLock<P>> {
         &self,
         proposal: &Proposal<SeqTypes, QuorumProposal<SeqTypes>>,
     ) -> anyhow::Result<()> {
-        self.write().await.append_quorum_proposal(proposal).await
+        (**self)
+            .append_quorum_proposal(&convert_proposal(proposal.clone()))
+            .await
+    }
+
+    async fn update_decided_upgrade_certificate(
+        &self,
+        decided_upgrade_certificate: Option<UpgradeCertificate<SeqTypes>>,
+    ) -> anyhow::Result<()> {
+        (**self)
+            .store_upgrade_certificate(decided_upgrade_certificate)
+            .await
     }
 }
 

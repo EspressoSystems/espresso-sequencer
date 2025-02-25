@@ -5,6 +5,8 @@ use serde::{de::Error, Deserialize, Deserializer};
 
 use crate::{NamespaceId, Transaction};
 
+use super::{NsPayloadBuilder, NsTableBuilder};
+
 impl From<u32> for NamespaceId {
     fn from(value: u32) -> Self {
         Self(value as u64)
@@ -60,6 +62,16 @@ impl Transaction {
         self.payload
     }
 
+    pub fn size_in_block(&self, new_ns: bool) -> u64 {
+        if new_ns {
+            // each new namespace adds overhead
+            // here self.minimum_block_size() = `self.payload().len() + NsPayloadBuilder::tx_table_entry_byte_len() + NsTableBuilder::entry_byte_len() + NsPayloadBuilder::tx_table_header_byte_len()`
+            self.minimum_block_size()
+        } else {
+            (self.payload().len() + NsPayloadBuilder::tx_table_entry_byte_len()) as u64
+        }
+    }
+
     #[cfg(any(test, feature = "testing"))]
     pub fn random(rng: &mut dyn rand::RngCore) -> Self {
         use rand::Rng;
@@ -79,7 +91,15 @@ impl Transaction {
     }
 }
 
-impl HotShotTransaction for Transaction {}
+impl HotShotTransaction for Transaction {
+    fn minimum_block_size(&self) -> u64 {
+        let len = self.payload().len()
+            + NsPayloadBuilder::tx_table_entry_byte_len()
+            + NsTableBuilder::entry_byte_len()
+            + NsPayloadBuilder::tx_table_header_byte_len();
+        len as u64
+    }
+}
 
 impl Committable for Transaction {
     fn commit(&self) -> Commitment<Self> {
@@ -98,5 +118,9 @@ impl ExplorerTransaction for Transaction {
     type NamespaceId = NamespaceId;
     fn namespace_id(&self) -> Self::NamespaceId {
         self.namespace
+    }
+
+    fn payload_size(&self) -> u64 {
+        self.payload.len() as u64
     }
 }

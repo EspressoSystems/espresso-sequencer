@@ -5,50 +5,35 @@ version = { workspace = true }
 authors = { workspace = true }
 edition = { workspace = true }
 
-[features]
-default = ["libp2p"]
-libp2p = ["sequencer/libp2p"]
-
 [dependencies]
 anyhow = { workspace = true }
-async-broadcast = "0.7.0"
-async-compatibility-layer = { workspace = true }
-async-lock = "2.2"
-async-std = { workspace = true }
-async-trait = { workspace = true }
+async-broadcast = { workspace = true }
+async-lock = { workspace = true }
 clap = { workspace = true }
-cld = { workspace = true }
 committable = { workspace = true }
-dotenvy = { workspace = true }
-es-version = { workspace = true }
-espresso-types = { path = "../types", features = ["testing"] }
+espresso-types = { path = "../types" }
 ethers = { workspace = true }
 futures = { workspace = true }
 hotshot = { workspace = true }
 hotshot-builder-api = { workspace = true }
 hotshot-builder-core = { workspace = true }
 hotshot-events-service = { workspace = true }
-hotshot-example-types = { workspace = true }
-hotshot-orchestrator = { workspace = true }
-hotshot-stake-table = { workspace = true }
-hotshot-state-prover = { path = "../hotshot-state-prover" }
+hotshot-state-prover = { workspace = true }
 hotshot-types = { workspace = true }
-jf-merkle-tree = { workspace = true }
-jf-signature = { workspace = true, features = ["bls"] }
-libp2p = { workspace = true }
+marketplace-builder-shared = { workspace = true }
 portpicker = { workspace = true }
 rand = "0.8.5"
-sequencer = { path = "../sequencer", features = ["testing"] }
-serde = { workspace = true }
-snafu = { workspace = true }
-surf = "2.3.1"
+sequencer = { path = "../sequencer" }
+sequencer-utils = { path = "../utils" }
 surf-disco = { workspace = true }
-tagged-base64 = { workspace = true }
 tide-disco = { workspace = true }
+tokio = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
 vbs = { workspace = true }
 vec1 = { workspace = true }
 
 [dev-dependencies]
+jf-signature = { workspace = true, features = ["bls"] }
 sequencer = { path = "../sequencer", features = ["testing"] }
+tempfile = { workspace = true }

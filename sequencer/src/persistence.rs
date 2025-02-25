@@ -9,108 +9,112 @@
 //! persistence which is _required_ to run a node.
 
 use async_trait::async_trait;
-use committable::Commitment;
-use espresso_types::ChainConfig;
+use espresso_types::v0_99::ChainConfig;
 
 pub mod fs;
 pub mod no_storage;
 pub mod sql;
 
 #[async_trait]
-pub trait ChainConfigPersistence: Sized + Send + Sync + 'static {
+pub trait ChainConfigPersistence: Sized + Send + Sync {
     async fn insert_chain_config(&mut self, chain_config: ChainConfig) -> anyhow::Result<()>;
-    async fn load_chain_config(
-        &self,
-        commitment: Commitment<ChainConfig>,
-    ) -> anyhow::Result<ChainConfig>;
 }
 
 #[cfg(any(test, feature = "testing"))]
 mod testing {
 
-    use espresso_types::v0::traits::SequencerPersistence;
+    use espresso_types::v0::traits::{PersistenceOptions, SequencerPersistence};
 
     use super::*;
     #[allow(dead_code)]
     #[async_trait]
     pub trait TestablePersistence: SequencerPersistence {
-        type Storage;
+        type Storage: Sync;
 
         async fn tmp_storage() -> Self::Storage;
-        async fn connect(storage: &Self::Storage) -> Self;
+        fn options(storage: &Self::Storage) -> impl PersistenceOptions<Persistence = Self>;
+
+        async fn connect(storage: &Self::Storage) -> Self {
+            Self::options(storage).create().await.unwrap()
+        }
     }
 }
 
 #[cfg(test)]
 #[espresso_macros::generic_tests]
 mod persistence_tests {
+    use std::{collections::BTreeMap, marker::PhantomData};
+    use vbs::version::StaticVersionType;
 
-    use std::collections::BTreeMap;
-
-    use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
-    use committable::Committable;
-    use espresso_types::{Leaf, NodeState, PubKey, SeqTypes, ValidatedState};
+    use anyhow::bail;
+    use async_lock::RwLock;
+    use committable::{Commitment, Committable};
+    use espresso_types::{
+        traits::{EventConsumer, NullEventConsumer, PersistenceOptions},
+        Event, Leaf, Leaf2, NodeState, PubKey, SeqTypes, ValidatedState,
+    };
     use hotshot::types::{BLSPubKey, SignatureKey};
+    use hotshot_example_types::node_types::TestVersions;
+    use hotshot_query_service::testing::mocks::MockVersions;
     use hotshot_types::{
-        data::{DaProposal, QuorumProposal, VidDisperseShare, ViewNumber},
-        event::HotShotAction,
-        message::Proposal,
-        simple_certificate::QuorumCertificate,
-        traits::{node_implementation::ConsensusTime, EncodeBytes},
-        vid::vid_scheme,
+        data::{
+            vid_disperse::ADVZDisperseShare, DaProposal, EpochNumber, QuorumProposal2,
+            QuorumProposalWrapper, VidDisperseShare, ViewNumber,
+        },
+        event::{EventType, HotShotAction, LeafInfo},
+        message::{Proposal, UpgradeLock},
+        simple_certificate::{NextEpochQuorumCertificate2, QuorumCertificate, UpgradeCertificate},
+        simple_vote::{NextEpochQuorumData2, QuorumData2, UpgradeProposalData, VersionedVoteData},
+        traits::{
+            block_contents::vid_commitment,
+            node_implementation::{ConsensusTime, Versions},
+            EncodeBytes,
+        },
+        vid::advz_scheme,
     };
     use jf_vid::VidScheme;
+    use sequencer_utils::test_utils::setup_test;
+    use std::sync::Arc;
     use testing::TestablePersistence;
+    use vbs::version::Version;
 
     use super::*;
 
-    #[async_std::test]
-    pub async fn test_anchor_leaf<P: TestablePersistence>() {
-        setup_logging();
-        setup_backtrace();
-
-        let tmp = P::tmp_storage().await;
-        let mut storage = P::connect(&tmp).await;
-
-        // Initially, there is no saved leaf.
-        assert_eq!(storage.load_anchor_leaf().await.unwrap(), None);
-
-        // Store a leaf.
-        let leaf1 = Leaf::genesis(&ValidatedState::default(), &NodeState::mock()).await;
-        let qc1 = QuorumCertificate::genesis(&ValidatedState::default(), &NodeState::mock()).await;
-        storage.save_anchor_leaf(&leaf1, &qc1).await.unwrap();
-        assert_eq!(
-            storage.load_anchor_leaf().await.unwrap().unwrap(),
-            (leaf1.clone(), qc1.clone())
-        );
-
-        // Store a newer leaf, make sure storage gets updated.
-        let mut leaf2 = leaf1.clone();
-        *leaf2.block_header_mut().height_mut() += 1;
-        let mut qc2 = qc1.clone();
-        qc2.data.leaf_commit = leaf2.commit();
-        qc2.vote_commitment = qc2.data.commit();
-        storage.save_anchor_leaf(&leaf2, &qc2).await.unwrap();
-        assert_eq!(
-            storage.load_anchor_leaf().await.unwrap().unwrap(),
-            (leaf2.clone(), qc2.clone())
-        );
-
-        // Store an old leaf, make sure storage is unchanged.
-        storage.save_anchor_leaf(&leaf1, &qc1).await.unwrap();
-        assert_eq!(
-            storage.load_anchor_leaf().await.unwrap().unwrap(),
-            (leaf2, qc2)
-        );
+    #[derive(Clone, Debug, Default)]
+    struct EventCollector {
+        events: Arc<RwLock<Vec<Event>>>,
     }
 
-    #[async_std::test]
+    impl EventCollector {
+        async fn leaf_chain(&self) -> Vec<LeafInfo<SeqTypes>> {
+            self.events
+                .read()
+                .await
+                .iter()
+                .flat_map(|event| {
+                    let EventType::Decide { leaf_chain, .. } = &event.event else {
+                        panic!("expected decide event, got {event:?}");
+                    };
+                    leaf_chain.iter().cloned().rev()
+                })
+                .collect::<Vec<_>>()
+        }
+    }
+
+    #[async_trait]
+    impl EventConsumer for EventCollector {
+        async fn handle_event(&self, event: &Event) -> anyhow::Result<()> {
+            self.events.write().await.push(event.clone());
+            Ok(())
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
     pub async fn test_voted_view<P: TestablePersistence>() {
-        setup_logging();
-        setup_backtrace();
+        setup_test();
 
         let tmp = P::tmp_storage().await;
-        let mut storage = P::connect(&tmp).await;
+        let storage = P::connect(&tmp).await;
 
         // Initially, there is no saved view.
         assert_eq!(storage.load_latest_acted_view().await.unwrap(), None);
@@ -118,7 +122,7 @@ mod persistence_tests {
         // Store a view.
         let view1 = ViewNumber::genesis();
         storage
-            .record_action(view1, HotShotAction::Vote)
+            .record_action(view1, None, HotShotAction::Vote)
             .await
             .unwrap();
         assert_eq!(
@@ -129,7 +133,7 @@ mod persistence_tests {
         // Store a newer view, make sure storage gets updated.
         let view2 = view1 + 1;
         storage
-            .record_action(view2, HotShotAction::Vote)
+            .record_action(view2, None, HotShotAction::Vote)
             .await
             .unwrap();
         assert_eq!(
@@ -139,7 +143,7 @@ mod persistence_tests {
 
         // Store an old view, make sure storage is unchanged.
         storage
-            .record_action(view1, HotShotAction::Vote)
+            .record_action(view1, None, HotShotAction::Vote)
             .await
             .unwrap();
         assert_eq!(
@@ -148,13 +152,21 @@ mod persistence_tests {
         );
     }
 
-    #[async_std::test]
-    pub async fn test_append_and_collect_garbage<P: TestablePersistence>() {
-        setup_logging();
-        setup_backtrace();
+    fn leaf_info(leaf: Leaf2) -> LeafInfo<SeqTypes> {
+        LeafInfo {
+            leaf,
+            vid_share: None,
+            state: Default::default(),
+            delta: None,
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    pub async fn test_append_and_decide<P: TestablePersistence>() {
+        setup_test();
 
         let tmp = P::tmp_storage().await;
-        let mut storage = P::connect(&tmp).await;
+        let storage = P::connect(&tmp).await;
 
         // Test append VID
         assert_eq!(
@@ -162,44 +174,63 @@ mod persistence_tests {
             None
         );
 
-        let leaf = Leaf::genesis(&ValidatedState::default(), &NodeState::mock()).await;
+        let leaf: Leaf2 =
+            Leaf::genesis::<MockVersions>(&ValidatedState::default(), &NodeState::mock())
+                .await
+                .into();
         let leaf_payload = leaf.block_payload().unwrap();
         let leaf_payload_bytes_arc = leaf_payload.encode();
-        let disperse = vid_scheme(2)
+        let disperse = advz_scheme(2)
             .disperse(leaf_payload_bytes_arc.clone())
             .unwrap();
         let (pubkey, privkey) = BLSPubKey::generated_from_seed_indexed([0; 32], 1);
         let signature = PubKey::sign(&privkey, &[]).unwrap();
-        let mut vid = VidDisperseShare::<SeqTypes> {
-            view_number: ViewNumber::new(1),
+        let mut vid = ADVZDisperseShare::<SeqTypes> {
+            view_number: ViewNumber::new(0),
             payload_commitment: Default::default(),
             share: disperse.shares[0].clone(),
             common: disperse.common,
             recipient_key: pubkey,
         };
         let mut quorum_proposal = Proposal {
-            data: QuorumProposal::<SeqTypes> {
-                block_header: leaf.block_header().clone(),
-                view_number: ViewNumber::genesis(),
-                justify_qc: QuorumCertificate::genesis(
-                    &ValidatedState::default(),
-                    &NodeState::mock(),
-                )
-                .await,
-                upgrade_certificate: None,
-                proposal_certificate: None,
+            data: QuorumProposalWrapper::<SeqTypes> {
+                proposal: QuorumProposal2::<SeqTypes> {
+                    epoch: None,
+                    block_header: leaf.block_header().clone(),
+                    view_number: ViewNumber::genesis(),
+                    justify_qc: QuorumCertificate::genesis::<TestVersions>(
+                        &ValidatedState::default(),
+                        &NodeState::mock(),
+                    )
+                    .await
+                    .to_qc2(),
+                    upgrade_certificate: None,
+                    view_change_evidence: None,
+                    next_drb_result: None,
+                    next_epoch_justify_qc: None,
+                },
             },
             signature,
             _pd: Default::default(),
         };
 
-        let vid_share1 = vid.clone().to_proposal(&privkey).unwrap().clone();
+        let vid_share0 = vid.clone().to_proposal(&privkey).unwrap().clone();
 
+        storage.append_vid(&vid_share0).await.unwrap();
+
+        assert_eq!(
+            storage.load_vid_share(ViewNumber::new(0)).await.unwrap(),
+            Some(vid_share0.clone())
+        );
+
+        vid.view_number = ViewNumber::new(1);
+
+        let vid_share1 = vid.clone().to_proposal(&privkey).unwrap().clone();
         storage.append_vid(&vid_share1).await.unwrap();
 
         assert_eq!(
-            storage.load_vid_share(ViewNumber::new(1)).await.unwrap(),
-            Some(vid_share1)
+            storage.load_vid_share(vid.view_number).await.unwrap(),
+            Some(vid_share1.clone())
         );
 
         vid.view_number = ViewNumber::new(2);
@@ -209,7 +240,7 @@ mod persistence_tests {
 
         assert_eq!(
             storage.load_vid_share(vid.view_number).await.unwrap(),
-            Some(vid_share2)
+            Some(vid_share2.clone())
         );
 
         vid.view_number = ViewNumber::new(3);
@@ -226,9 +257,9 @@ mod persistence_tests {
             .expect("Failed to sign block payload");
 
         let da_proposal_inner = DaProposal::<SeqTypes> {
-            encoded_transactions: leaf_payload_bytes_arc,
+            encoded_transactions: leaf_payload_bytes_arc.clone(),
             metadata: leaf_payload.ns_table().clone(),
-            view_number: ViewNumber::new(1),
+            view_number: ViewNumber::new(0),
         };
 
         let da_proposal = Proposal {
@@ -237,16 +268,43 @@ mod persistence_tests {
             _pd: Default::default(),
         };
 
-        storage.append_da(&da_proposal).await.unwrap();
+        let vid_commitment = vid_commitment::<TestVersions>(
+            &leaf_payload_bytes_arc,
+            2,
+            <TestVersions as Versions>::Base::VERSION,
+        );
+
+        storage
+            .append_da(&da_proposal, vid_commitment)
+            .await
+            .unwrap();
 
         assert_eq!(
-            storage.load_da_proposal(ViewNumber::new(1)).await.unwrap(),
+            storage.load_da_proposal(ViewNumber::new(0)).await.unwrap(),
             Some(da_proposal.clone())
         );
 
-        let mut da_proposal2 = da_proposal.clone();
+        let mut da_proposal1 = da_proposal.clone();
+        da_proposal1.data.view_number = ViewNumber::new(1);
+        storage
+            .append_da(&da_proposal1.clone(), vid_commitment)
+            .await
+            .unwrap();
+
+        assert_eq!(
+            storage
+                .load_da_proposal(da_proposal1.data.view_number)
+                .await
+                .unwrap(),
+            Some(da_proposal1.clone())
+        );
+
+        let mut da_proposal2 = da_proposal1.clone();
         da_proposal2.data.view_number = ViewNumber::new(2);
-        storage.append_da(&da_proposal2.clone()).await.unwrap();
+        storage
+            .append_da(&da_proposal2.clone(), vid_commitment)
+            .await
+            .unwrap();
 
         assert_eq!(
             storage
@@ -258,7 +316,10 @@ mod persistence_tests {
 
         let mut da_proposal3 = da_proposal2.clone();
         da_proposal3.data.view_number = ViewNumber::new(3);
-        storage.append_da(&da_proposal3.clone()).await.unwrap();
+        storage
+            .append_da(&da_proposal3.clone(), vid_commitment)
+            .await
+            .unwrap();
 
         assert_eq!(
             storage
@@ -276,13 +337,10 @@ mod persistence_tests {
 
         assert_eq!(
             storage.load_quorum_proposals().await.unwrap(),
-            Some(BTreeMap::from_iter([(
-                ViewNumber::genesis(),
-                quorum_proposal1.clone()
-            )]))
+            BTreeMap::from_iter([(ViewNumber::genesis(), quorum_proposal1.clone())])
         );
 
-        quorum_proposal.data.view_number = ViewNumber::new(1);
+        quorum_proposal.data.proposal.view_number = ViewNumber::new(1);
         let quorum_proposal2 = quorum_proposal.clone();
         storage
             .append_quorum_proposal(&quorum_proposal2)
@@ -291,13 +349,14 @@ mod persistence_tests {
 
         assert_eq!(
             storage.load_quorum_proposals().await.unwrap(),
-            Some(BTreeMap::from_iter([
+            BTreeMap::from_iter([
                 (ViewNumber::genesis(), quorum_proposal1.clone()),
                 (ViewNumber::new(1), quorum_proposal2.clone())
-            ]))
+            ])
         );
 
-        quorum_proposal.data.view_number = ViewNumber::new(2);
+        quorum_proposal.data.proposal.view_number = ViewNumber::new(2);
+        quorum_proposal.data.proposal.justify_qc.view_number = ViewNumber::new(1);
         let quorum_proposal3 = quorum_proposal.clone();
         storage
             .append_quorum_proposal(&quorum_proposal3)
@@ -306,14 +365,15 @@ mod persistence_tests {
 
         assert_eq!(
             storage.load_quorum_proposals().await.unwrap(),
-            Some(BTreeMap::from_iter([
+            BTreeMap::from_iter([
                 (ViewNumber::genesis(), quorum_proposal1.clone()),
                 (ViewNumber::new(1), quorum_proposal2.clone()),
                 (ViewNumber::new(2), quorum_proposal3.clone())
-            ]))
+            ])
         );
 
-        quorum_proposal.data.view_number = ViewNumber::new(10);
+        quorum_proposal.data.proposal.view_number = ViewNumber::new(3);
+        quorum_proposal.data.proposal.justify_qc.view_number = ViewNumber::new(2);
 
         // This one should stick around after GC runs.
         let quorum_proposal4 = quorum_proposal.clone();
@@ -324,17 +384,57 @@ mod persistence_tests {
 
         assert_eq!(
             storage.load_quorum_proposals().await.unwrap(),
-            Some(BTreeMap::from_iter([
-                (ViewNumber::genesis(), quorum_proposal1),
-                (ViewNumber::new(1), quorum_proposal2),
-                (ViewNumber::new(2), quorum_proposal3),
-                (ViewNumber::new(10), quorum_proposal4.clone())
-            ]))
+            BTreeMap::from_iter([
+                (ViewNumber::genesis(), quorum_proposal1.clone()),
+                (ViewNumber::new(1), quorum_proposal2.clone()),
+                (ViewNumber::new(2), quorum_proposal3.clone()),
+                (ViewNumber::new(3), quorum_proposal4.clone())
+            ])
         );
 
-        // Test garbage collection
-        // Deleting da proposals and vid shares with view number <=2
-        storage.collect_garbage(ViewNumber::new(2)).await.unwrap();
+        // Test decide and garbage collection. Pass in a leaf chain with no VID shares or payloads,
+        // so we have to fetch the missing data from storage.
+        let leaves = [
+            Leaf2::from_quorum_proposal(&quorum_proposal1.data),
+            Leaf2::from_quorum_proposal(&quorum_proposal2.data),
+            Leaf2::from_quorum_proposal(&quorum_proposal3.data),
+            Leaf2::from_quorum_proposal(&quorum_proposal4.data),
+        ];
+        let mut final_qc = leaves[3].justify_qc();
+        final_qc.view_number += 1;
+        final_qc.data.leaf_commit = Committable::commit(&leaf);
+        let qcs = [
+            leaves[1].justify_qc(),
+            leaves[2].justify_qc(),
+            leaves[3].justify_qc(),
+            final_qc,
+        ];
+
+        assert_eq!(
+            storage.load_anchor_view().await.unwrap(),
+            ViewNumber::genesis()
+        );
+
+        let consumer = EventCollector::default();
+        let leaf_chain = leaves
+            .iter()
+            .take(3)
+            .map(|leaf| leaf_info(leaf.clone()))
+            .zip(&qcs)
+            .collect::<Vec<_>>();
+        tracing::info!(?leaf_chain, "decide view 2");
+        storage
+            .append_decided_leaves(
+                ViewNumber::new(2),
+                leaf_chain.iter().map(|(leaf, qc)| (leaf, (*qc).clone())),
+                &consumer,
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            storage.load_anchor_view().await.unwrap(),
+            ViewNumber::new(2)
+        );
 
         for i in 0..=2 {
             assert_eq!(
@@ -355,16 +455,529 @@ mod persistence_tests {
 
         assert_eq!(
             storage.load_vid_share(ViewNumber::new(3)).await.unwrap(),
-            Some(vid_share3)
+            Some(vid_share3.clone())
         );
 
         let proposals = storage.load_quorum_proposals().await.unwrap();
         assert_eq!(
             proposals,
-            Some(BTreeMap::from_iter([(
-                ViewNumber::new(10),
-                quorum_proposal4
-            )]))
+            BTreeMap::from_iter([(ViewNumber::new(3), quorum_proposal4)])
+        );
+
+        // A decide event should have been processed.
+        for (leaf, info) in leaves.iter().zip(consumer.leaf_chain().await.iter()) {
+            assert_eq!(info.leaf, *leaf);
+            let decided_vid_share = info.vid_share.as_ref().unwrap();
+            let view_number = match decided_vid_share {
+                VidDisperseShare::V0(share) => share.view_number,
+                VidDisperseShare::V1(share) => share.view_number,
+            };
+            assert_eq!(view_number, leaf.view_number());
+        }
+
+        // The decided leaf should not have been garbage collected.
+        assert_eq!(
+            storage.load_anchor_leaf().await.unwrap(),
+            Some((leaves[2].clone(), qcs[2].clone()))
+        );
+        assert_eq!(
+            storage.load_anchor_view().await.unwrap(),
+            leaves[2].view_number()
+        );
+
+        // Process a second decide event.
+        let consumer = EventCollector::default();
+        tracing::info!(leaf = ?leaves[3], qc = ?qcs[3], "decide view 3");
+        storage
+            .append_decided_leaves(
+                ViewNumber::new(3),
+                vec![(&leaf_info(leaves[3].clone()), qcs[3].clone())],
+                &consumer,
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            storage.load_anchor_view().await.unwrap(),
+            ViewNumber::new(3)
+        );
+
+        // A decide event should have been processed.
+        let events = consumer.events.read().await;
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].view_number, ViewNumber::new(3));
+        let EventType::Decide { qc, leaf_chain, .. } = &events[0].event else {
+            panic!("expected decide event, got {:?}", events[0]);
+        };
+        assert_eq!(**qc, qcs[3]);
+        assert_eq!(leaf_chain.len(), 1);
+        let info = &leaf_chain[0];
+        assert_eq!(info.leaf, leaves[3]);
+
+        // The remaining data should have been GCed.
+        assert_eq!(
+            storage.load_da_proposal(ViewNumber::new(3)).await.unwrap(),
+            None
+        );
+
+        assert_eq!(
+            storage.load_vid_share(ViewNumber::new(3)).await.unwrap(),
+            None
+        );
+        assert_eq!(
+            storage.load_quorum_proposals().await.unwrap(),
+            BTreeMap::new()
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    pub async fn test_upgrade_certificate<P: TestablePersistence>() {
+        setup_test();
+
+        let tmp = P::tmp_storage().await;
+        let storage = P::connect(&tmp).await;
+
+        // Test get upgrade certificate
+        assert_eq!(storage.load_upgrade_certificate().await.unwrap(), None);
+
+        let upgrade_data = UpgradeProposalData {
+            old_version: Version { major: 0, minor: 1 },
+            new_version: Version { major: 1, minor: 0 },
+            decide_by: ViewNumber::genesis(),
+            new_version_hash: Default::default(),
+            old_version_last_view: ViewNumber::genesis(),
+            new_version_first_view: ViewNumber::genesis(),
+        };
+
+        let decide_upgrade_certificate = UpgradeCertificate::<SeqTypes>::new(
+            upgrade_data.clone(),
+            upgrade_data.commit(),
+            ViewNumber::genesis(),
+            Default::default(),
+            Default::default(),
+        );
+        let res = storage
+            .store_upgrade_certificate(Some(decide_upgrade_certificate.clone()))
+            .await;
+        assert!(res.is_ok());
+
+        let res = storage.load_upgrade_certificate().await.unwrap();
+        let view_number = res.unwrap().view_number;
+        assert_eq!(view_number, ViewNumber::genesis());
+
+        let new_view_number_for_certificate = ViewNumber::new(50);
+        let mut new_upgrade_certificate = decide_upgrade_certificate.clone();
+        new_upgrade_certificate.view_number = new_view_number_for_certificate;
+
+        let res = storage
+            .store_upgrade_certificate(Some(new_upgrade_certificate.clone()))
+            .await;
+        assert!(res.is_ok());
+
+        let res = storage.load_upgrade_certificate().await.unwrap();
+        let view_number = res.unwrap().view_number;
+        assert_eq!(view_number, new_view_number_for_certificate);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    pub async fn test_next_epoch_quorum_certificate<P: TestablePersistence>() {
+        setup_test();
+
+        let tmp = P::tmp_storage().await;
+        let storage = P::connect(&tmp).await;
+
+        //  test that next epoch qc2 does not exist
+        assert_eq!(
+            storage.load_next_epoch_quorum_certificate().await.unwrap(),
+            None
+        );
+
+        let upgrade_lock = UpgradeLock::<SeqTypes, TestVersions>::new();
+
+        let genesis_view = ViewNumber::genesis();
+
+        let data: NextEpochQuorumData2<SeqTypes> = QuorumData2 {
+            leaf_commit: Leaf2::genesis::<TestVersions>(
+                &ValidatedState::default(),
+                &NodeState::default(),
+            )
+            .await
+            .commit(),
+            epoch: Some(EpochNumber::new(1)),
+        }
+        .into();
+
+        let versioned_data =
+            VersionedVoteData::new_infallible(data.clone(), genesis_view, &upgrade_lock).await;
+
+        let bytes: [u8; 32] = versioned_data.commit().into();
+
+        let next_epoch_qc = NextEpochQuorumCertificate2::new(
+            data,
+            Commitment::from_raw(bytes),
+            genesis_view,
+            None,
+            PhantomData,
+        );
+
+        let res = storage
+            .store_next_epoch_quorum_certificate(next_epoch_qc.clone())
+            .await;
+        assert!(res.is_ok());
+
+        let res = storage.load_next_epoch_quorum_certificate().await.unwrap();
+        let view_number = res.unwrap().view_number;
+        assert_eq!(view_number, ViewNumber::genesis());
+
+        let new_view_number_for_qc = ViewNumber::new(50);
+        let mut new_qc = next_epoch_qc.clone();
+        new_qc.view_number = new_view_number_for_qc;
+
+        let res = storage
+            .store_next_epoch_quorum_certificate(new_qc.clone())
+            .await;
+        assert!(res.is_ok());
+
+        let res = storage.load_next_epoch_quorum_certificate().await.unwrap();
+        let view_number = res.unwrap().view_number;
+        assert_eq!(view_number, new_view_number_for_qc);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    pub async fn test_decide_with_failing_event_consumer<P: TestablePersistence>() {
+        #[derive(Clone, Copy, Debug)]
+        struct FailConsumer;
+
+        #[async_trait]
+        impl EventConsumer for FailConsumer {
+            async fn handle_event(&self, _: &Event) -> anyhow::Result<()> {
+                bail!("mock error injection");
+            }
+        }
+
+        setup_test();
+
+        let tmp = P::tmp_storage().await;
+        let storage = P::connect(&tmp).await;
+
+        // Create a short blockchain.
+        let mut chain = vec![];
+
+        let leaf: Leaf2 =
+            Leaf::genesis::<MockVersions>(&ValidatedState::default(), &NodeState::mock())
+                .await
+                .into();
+        let leaf_payload = leaf.block_payload().unwrap();
+        let leaf_payload_bytes_arc = leaf_payload.encode();
+        let disperse = advz_scheme(2)
+            .disperse(leaf_payload_bytes_arc.clone())
+            .unwrap();
+        let (pubkey, privkey) = BLSPubKey::generated_from_seed_indexed([0; 32], 1);
+        let mut vid = ADVZDisperseShare::<SeqTypes> {
+            view_number: ViewNumber::new(0),
+            payload_commitment: Default::default(),
+            share: disperse.shares[0].clone(),
+            common: disperse.common,
+            recipient_key: pubkey,
+        }
+        .to_proposal(&privkey)
+        .unwrap()
+        .clone();
+        let mut quorum_proposal = QuorumProposalWrapper::<SeqTypes> {
+            proposal: QuorumProposal2::<SeqTypes> {
+                block_header: leaf.block_header().clone(),
+                view_number: ViewNumber::genesis(),
+                justify_qc: QuorumCertificate::genesis::<TestVersions>(
+                    &ValidatedState::default(),
+                    &NodeState::mock(),
+                )
+                .await
+                .to_qc2(),
+                upgrade_certificate: None,
+                view_change_evidence: None,
+                next_drb_result: None,
+                next_epoch_justify_qc: None,
+                epoch: None,
+            },
+        };
+        let mut qc = QuorumCertificate::genesis::<TestVersions>(
+            &ValidatedState::default(),
+            &NodeState::mock(),
         )
+        .await
+        .to_qc2();
+
+        let block_payload_signature = BLSPubKey::sign(&privkey, &leaf_payload_bytes_arc)
+            .expect("Failed to sign block payload");
+        let mut da_proposal = Proposal {
+            data: DaProposal::<SeqTypes> {
+                encoded_transactions: leaf_payload_bytes_arc.clone(),
+                metadata: leaf_payload.ns_table().clone(),
+                view_number: ViewNumber::new(0),
+            },
+            signature: block_payload_signature,
+            _pd: Default::default(),
+        };
+
+        let vid_commitment = vid_commitment::<TestVersions>(
+            &leaf_payload_bytes_arc,
+            2,
+            <TestVersions as Versions>::Base::VERSION,
+        );
+
+        for i in 0..4 {
+            quorum_proposal.proposal.view_number = ViewNumber::new(i);
+            let leaf = Leaf2::from_quorum_proposal(&quorum_proposal);
+            qc.view_number = leaf.view_number();
+            qc.data.leaf_commit = Committable::commit(&leaf);
+            vid.data.view_number = leaf.view_number();
+            da_proposal.data.view_number = leaf.view_number();
+            chain.push((leaf.clone(), qc.clone(), vid.clone(), da_proposal.clone()));
+        }
+
+        // Add proposals.
+        for (_, _, vid, da) in &chain {
+            tracing::info!(?da, ?vid, "insert proposal");
+            storage.append_da(da, vid_commitment).await.unwrap();
+            storage.append_vid(vid).await.unwrap();
+        }
+
+        // Decide 2 leaves, but fail in event processing.
+        let leaf_chain = chain
+            .iter()
+            .take(2)
+            .map(|(leaf, qc, _, _)| (leaf_info(leaf.clone()), qc.clone()))
+            .collect::<Vec<_>>();
+        tracing::info!("decide with event handling failure");
+        storage
+            .append_decided_leaves(
+                ViewNumber::new(1),
+                leaf_chain.iter().map(|(leaf, qc)| (leaf, qc.clone())),
+                &FailConsumer,
+            )
+            .await
+            .unwrap();
+        // No garbage collection should have run.
+        for i in 0..4 {
+            tracing::info!(i, "check proposal availability");
+            assert!(storage
+                .load_vid_share(ViewNumber::new(i))
+                .await
+                .unwrap()
+                .is_some());
+            assert!(storage
+                .load_da_proposal(ViewNumber::new(i))
+                .await
+                .unwrap()
+                .is_some());
+        }
+        tracing::info!("check anchor leaf updated");
+        assert_eq!(
+            storage
+                .load_anchor_leaf()
+                .await
+                .unwrap()
+                .unwrap()
+                .0
+                .view_number(),
+            ViewNumber::new(1)
+        );
+        assert_eq!(
+            storage.load_anchor_view().await.unwrap(),
+            ViewNumber::new(1)
+        );
+
+        // Now decide remaining leaves successfully. We should now garbage collect and process a
+        // decide event for all the leaves.
+        let consumer = EventCollector::default();
+        let leaf_chain = chain
+            .iter()
+            .skip(2)
+            .map(|(leaf, qc, _, _)| (leaf_info(leaf.clone()), qc.clone()))
+            .collect::<Vec<_>>();
+        tracing::info!("decide successfully");
+        storage
+            .append_decided_leaves(
+                ViewNumber::new(3),
+                leaf_chain.iter().map(|(leaf, qc)| (leaf, qc.clone())),
+                &consumer,
+            )
+            .await
+            .unwrap();
+        // Garbage collection should have run.
+        for i in 0..4 {
+            tracing::info!(i, "check proposal garbage collected");
+            assert!(storage
+                .load_vid_share(ViewNumber::new(i))
+                .await
+                .unwrap()
+                .is_none());
+            assert!(storage
+                .load_da_proposal(ViewNumber::new(i))
+                .await
+                .unwrap()
+                .is_none());
+        }
+        tracing::info!("check anchor leaf updated");
+        assert_eq!(
+            storage
+                .load_anchor_leaf()
+                .await
+                .unwrap()
+                .unwrap()
+                .0
+                .view_number(),
+            ViewNumber::new(3)
+        );
+        assert_eq!(
+            storage.load_anchor_view().await.unwrap(),
+            ViewNumber::new(3)
+        );
+
+        // Check decide event.
+        tracing::info!("check decide event");
+        let leaf_chain = consumer.leaf_chain().await;
+        assert_eq!(leaf_chain.len(), 4, "{leaf_chain:#?}");
+        for ((leaf, _, _, _), info) in chain.iter().zip(leaf_chain.iter()) {
+            assert_eq!(info.leaf, *leaf);
+            let decided_vid_share = info.vid_share.as_ref().unwrap();
+            let view_number = match decided_vid_share {
+                VidDisperseShare::V0(share) => share.view_number,
+                VidDisperseShare::V1(share) => share.view_number,
+            };
+            assert_eq!(view_number, leaf.view_number());
+            assert!(info.leaf.block_payload().is_some());
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    pub async fn test_pruning<P: TestablePersistence>() {
+        setup_test();
+
+        let tmp = P::tmp_storage().await;
+
+        let mut options = P::options(&tmp);
+        options.set_view_retention(1);
+        let storage = options.create().await.unwrap();
+
+        // Add some "old" data, from view 0.
+        let leaf =
+            Leaf::genesis::<MockVersions>(&ValidatedState::default(), &NodeState::mock()).await;
+        let leaf_payload = leaf.block_payload().unwrap();
+        let leaf_payload_bytes_arc = leaf_payload.encode();
+        let disperse = advz_scheme(2)
+            .disperse(leaf_payload_bytes_arc.clone())
+            .unwrap();
+        let payload_commitment = disperse.commit;
+        let (pubkey, privkey) = BLSPubKey::generated_from_seed_indexed([0; 32], 1);
+        let vid_share = ADVZDisperseShare::<SeqTypes> {
+            view_number: ViewNumber::new(0),
+            payload_commitment,
+            share: disperse.shares[0].clone(),
+            common: disperse.common,
+            recipient_key: pubkey,
+        }
+        .to_proposal(&privkey)
+        .unwrap()
+        .clone();
+
+        let quorum_proposal = QuorumProposalWrapper::<SeqTypes> {
+            proposal: QuorumProposal2::<SeqTypes> {
+                block_header: leaf.block_header().clone(),
+                view_number: ViewNumber::genesis(),
+                justify_qc: QuorumCertificate::genesis::<TestVersions>(
+                    &ValidatedState::default(),
+                    &NodeState::mock(),
+                )
+                .await
+                .to_qc2(),
+                upgrade_certificate: None,
+                view_change_evidence: None,
+                next_drb_result: None,
+                next_epoch_justify_qc: None,
+                epoch: None,
+            },
+        };
+        let quorum_proposal_signature =
+            BLSPubKey::sign(&privkey, &bincode::serialize(&quorum_proposal).unwrap())
+                .expect("Failed to sign quorum proposal");
+        let quorum_proposal = Proposal {
+            data: quorum_proposal,
+            signature: quorum_proposal_signature,
+            _pd: Default::default(),
+        };
+
+        let block_payload_signature = BLSPubKey::sign(&privkey, &leaf_payload_bytes_arc)
+            .expect("Failed to sign block payload");
+        let da_proposal = Proposal {
+            data: DaProposal::<SeqTypes> {
+                encoded_transactions: leaf_payload_bytes_arc,
+                metadata: leaf_payload.ns_table().clone(),
+                view_number: ViewNumber::new(0),
+            },
+            signature: block_payload_signature,
+            _pd: Default::default(),
+        };
+
+        storage
+            .append_da(&da_proposal, payload_commitment)
+            .await
+            .unwrap();
+        storage.append_vid(&vid_share).await.unwrap();
+        storage
+            .append_quorum_proposal(&quorum_proposal)
+            .await
+            .unwrap();
+
+        // Decide a newer view, view 1.
+        storage
+            .append_decided_leaves(ViewNumber::new(1), [], &NullEventConsumer)
+            .await
+            .unwrap();
+
+        // The old data is not more than the retention period (1 view) old, so it should not be
+        // GCed.
+        assert_eq!(
+            storage
+                .load_da_proposal(ViewNumber::new(0))
+                .await
+                .unwrap()
+                .unwrap(),
+            da_proposal
+        );
+        assert_eq!(
+            storage
+                .load_vid_share(ViewNumber::new(0))
+                .await
+                .unwrap()
+                .unwrap(),
+            vid_share
+        );
+        assert_eq!(
+            storage
+                .load_quorum_proposal(ViewNumber::new(0))
+                .await
+                .unwrap(),
+            quorum_proposal
+        );
+
+        // Decide an even newer view, triggering GC of the old data.
+        storage
+            .append_decided_leaves(ViewNumber::new(2), [], &NullEventConsumer)
+            .await
+            .unwrap();
+        assert!(storage
+            .load_da_proposal(ViewNumber::new(0))
+            .await
+            .unwrap()
+            .is_none());
+        assert!(storage
+            .load_vid_share(ViewNumber::new(0))
+            .await
+            .unwrap()
+            .is_none());
+        assert!(storage
+            .load_quorum_proposal(ViewNumber::new(0))
+            .await
+            .is_err());
     }
 }

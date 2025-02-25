@@ -1,15 +1,15 @@
-use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use futures::future;
+use hotshot::helpers::initialize_logging;
 use hotshot::traits::BlockPayload;
 use hotshot_types::{
     traits::EncodeBytes,
-    vid::{vid_scheme, VidSchemeType},
+    vid::{advz_scheme, VidSchemeType},
 };
 use jf_vid::{VidDisperse, VidScheme};
 
 use crate::{v0::impls::block::test::ValidTest, NsProof, Payload};
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn ns_proof() {
     let test_cases = vec![
         vec![
@@ -23,8 +23,7 @@ async fn ns_proof() {
         vec![],
     ];
 
-    setup_logging();
-    setup_backtrace();
+    initialize_logging();
 
     let mut rng = jf_utils::test_rng();
     let mut tests = ValidTest::many_from_tx_lengths(test_cases, &mut rng);
@@ -47,7 +46,7 @@ async fn ns_proof() {
         }))
         .await;
 
-        let mut vid = vid_scheme(10);
+        let mut vid = advz_scheme(10);
         blocks_only
             .into_iter()
             .map(|block| {

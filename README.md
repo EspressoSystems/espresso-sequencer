@@ -1,11 +1,13 @@
 # Espresso Sequencer
 
 [![Build](https://github.com/EspressoSystems/espresso-sequencer/actions/workflows/build.yml/badge.svg)](https://github.com/EspressoSystems/espresso-sequencer/actions/workflows/build.yml)
-[![Docs](https://github.com/EspressoSystems/espresso-sequencer/actions/workflows/doc.yml/badge.svg)](https://github.com/EspressoSystems/espresso-sequencer/actions/workflows/doc.yml)
+[![Test](https://github.com/EspressoSystems/espresso-sequencer/actions/workflows/test.yml/badge.svg)](https://github.com/EspressoSystems/espresso-sequencer/actions/workflows/test.yml)
+[![Docs rust](https://github.com/EspressoSystems/espresso-sequencer/actions/workflows/doc-rust.yml/badge.svg)](https://github.com/EspressoSystems/espresso-sequencer/actions/workflows/doc-rust.yml)
 [![Contracts](https://github.com/EspressoSystems/espresso-sequencer/actions/workflows/contracts.yml/badge.svg)](https://github.com/EspressoSystems/espresso-sequencer/actions/workflows/contracts.yml)
 [![Lint](https://github.com/EspressoSystems/espresso-sequencer/actions/workflows/lint.yml/badge.svg)](https://github.com/EspressoSystems/espresso-sequencer/actions/workflows/lint.yml)
 [![Audit](https://github.com/EspressoSystems/espresso-sequencer/actions/workflows/audit.yml/badge.svg)](https://github.com/EspressoSystems/espresso-sequencer/actions/workflows/audit.yml)
 [![Ubuntu](https://github.com/EspressoSystems/espresso-sequencer/actions/workflows/ubuntu-install-without-nix.yml/badge.svg)](https://github.com/EspressoSystems/espresso-sequencer/actions/workflows/ubuntu-install-without-nix.yml)
+[![Build without lockfile](https://github.com/EspressoSystems/espresso-sequencer/actions/workflows/build-without-lockfile.yml/badge.svg)](https://github.com/EspressoSystems/espresso-sequencer/actions/workflows/build-without-lockfile.yml)
 [![Coverage Status](https://coveralls.io/repos/github/EspressoSystems/espresso-sequencer/badge.svg?branch=main)](https://coveralls.io/github/EspressoSystems/espresso-sequencer?branch=main)
 
 The Espresso Sequencer offers rollups credible neutrality and enhanced interoperability, without compromising on scale.
@@ -17,33 +19,10 @@ and robust infrastructure.
 
 ### Architecture
 
-This diagram below depicts a simplified view of the current architecture of the Espresso Sequencer. The diagram includes
-views of an Espresso Sequencer node, the Espresso Sequencer Network (nodes, CDN, builders, prover, state relay service),
-two rollups (one ZK rollup "Z", one optimistic rollup "O") that use the Espresso Sequencer for sequencing and some
-important L1 contracts.
+The diagram below shows how the Espresso Confirmation Layer fits into the rollup centric Ethereum ecosystem. See
+[Architecture](./doc/architecture.md) for details.
 
-- Glossary
-  - Namespace: an identifier to distinguish rollups, akin to an Ethereum chain ID
-  - Rollup transaction: a transaction a user submits to a rollup, usually an EVM transaction
-  - Transaction: a transaction inside the Espresso Sequencer: a rollup transaction plus a namespace ID of the rollup
-  - Rollup block: a block in a rollup consisting only of transactions in this rollup
-  - Espresso block: a block produced by the Espresso sequencer containing transactions of multiple rollups
-
-![Architecture diagram](./doc/architecture.svg)
-
-The sequence diagram below serves as a complement to the architecture diagram. The following interactions are depicted.
-
-1. Builders deposit funds into the fee contract on Ethereum Layer 1. These funds are later used to pay fees.
-2. Users submit transactions to the Submit APIs of sequencer nodes.
-3. The leader/proposer obtains a block from a builder.
-4. HotShot consensus creates new blocks containing sequenced rollup transactions.
-5. A rollup produces a rollup block with transactions sequenced by the Espresso sequencer.
-6. A proof for a HotShot state update is created and verified in the Light Client smart contract.
-7. A ZK rollup proves a correct state transaction by sending a proof to its rollup smart contract.
-8. A dispute is settled in an optimistic rollup. If necessary, the HotShot commitment is read from the Light Client
-   contract.
-
-![Sequence diagram](./doc/sequence-diagram.svg)
+![Architecture](./doc/espresso-overview.svg)
 
 #### ZK rollups integration
 
@@ -64,9 +43,8 @@ a dockerized Espresso Sequencer network with an example Layer 2 rollup applicati
 
 ## Documentation
 
-The rust code documentation can be found at
-[http://sequencer.docs.espressosys.com](http://sequencer.docs.espressosys.com). Please note the disclaimer about API
-stability at the end of the readme.
+The rust code documentation can be found at [sequencer.docs.espressosys.com](https://sequencer.docs.espressosys.com).
+Please note the disclaimer about API stability at the end of the readme.
 
 To generate the documentation locally and view it in the browser, run
 
@@ -141,7 +119,7 @@ forge build
 To run the tests
 
 ```shell
-forge test
+just sol-test
 ```
 
 In order to avoid constant warnings about checksum mismatches with [svm-rs](https://github.com/roynalnaruto/svm-rs)
@@ -166,7 +144,7 @@ To deploy to sepolia set `SEPOLIA_RPC_URL` and `MNEMONIC` env vars and run
 
     forge script DeployHotShot --broadcast --rpc-url sepolia
 
-To additionally verify the contact on etherscan set the `ETHERSCAN_API_KEY` env var and run
+To additionally verify the contract on etherscan set the `ETHERSCAN_API_KEY` env var and run
 
     forge script DeployHotShot --broadcast --rpc-url sepolia --verify
 
@@ -179,14 +157,14 @@ Running the script will save a file with details about the deployment in `contra
 
 #### Benchmarking and profiling
 
-The gas consumption for updating the state of the light client contract can be seen by running:
+The gas consumption for verifying a plonk proof as well as updating the state of the light client contract can be seen
+by running:
 
 ```
-> just lc-contract-benchmark
-cargo build --bin diff-test --release
-    Finished release [optimized] target(s) in 0.41s
-forge test --mt testCorrectUpdateBench | grep testCorrectUpdateBench
-[PASS] testCorrectUpdateBench() (gas: 597104)
+> just gas-benchmarks
+> cat gas-benchmarks.txt
+[PASS] test_verify_succeeds() (gas: 507774)
+[PASS] testCorrectUpdateBench() (gas: 594533)
 ```
 
 In order to profile the gas consumption of the light client contract do the following:

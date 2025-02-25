@@ -7,23 +7,23 @@ use std::{
 };
 
 use anyhow::anyhow;
-use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use clap::{Parser, ValueEnum};
 use derive_more::Display;
 use ethers::utils::hex;
 use hotshot::types::SignatureKey;
 use hotshot_types::{light_client::StateKeyPair, signature_key::BLSPubKey};
 use rand::{RngCore, SeedableRng};
+use sequencer_utils::logging;
 use tracing::info_span;
 
 #[derive(Clone, Copy, Debug, Display, Default, ValueEnum)]
 enum Scheme {
     #[default]
-    #[display(fmt = "all")]
+    #[display("all")]
     All,
-    #[display(fmt = "bls")]
+    #[display("bls")]
     Bls,
-    #[display(fmt = "schnorr")]
+    #[display("schnorr")]
     Schnorr,
 }
 
@@ -36,6 +36,7 @@ impl Scheme {
             }
             Self::Bls => {
                 let (pub_key, priv_key) = BLSPubKey::generated_from_seed_indexed(seed, index);
+                let priv_key = priv_key.to_tagged_base64()?;
                 writeln!(env_file, "ESPRESSO_SEQUENCER_PUBLIC_STAKING_KEY={pub_key}")?;
                 writeln!(
                     env_file,
@@ -45,16 +46,13 @@ impl Scheme {
             }
             Self::Schnorr => {
                 let key_pair = StateKeyPair::generate_from_seed_indexed(seed, index);
+                let priv_key = key_pair.sign_key_ref().to_tagged_base64()?;
                 writeln!(
                     env_file,
                     "ESPRESSO_SEQUENCER_PUBLIC_STATE_KEY={}",
                     key_pair.ver_key()
                 )?;
-                writeln!(
-                    env_file,
-                    "ESPRESSO_SEQUENCER_PRIVATE_STATE_KEY={}",
-                    key_pair.sign_key_ref()
-                )?;
+                writeln!(env_file, "ESPRESSO_SEQUENCER_PRIVATE_STATE_KEY={priv_key}")?;
                 tracing::info!(pub_key = %key_pair.ver_key(), "generated state key");
             }
         }
@@ -100,6 +98,9 @@ struct Options {
     /// called .seed.
     #[clap(short, long, name = "OUT")]
     out: PathBuf,
+
+    #[clap(flatten)]
+    logging: logging::Config,
 }
 
 fn parse_seed(s: &str) -> Result<[u8; 32], anyhow::Error> {
@@ -118,10 +119,8 @@ fn gen_default_seed() -> [u8; 32] {
 }
 
 fn main() -> anyhow::Result<()> {
-    setup_logging();
-    setup_backtrace();
-
     let opts = Options::parse();
+    opts.logging.init();
 
     tracing::debug!(
         "Generating {} keypairs with scheme {}",

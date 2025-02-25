@@ -3,8 +3,7 @@ use std::{
     path::PathBuf,
 };
 
-use async_compatibility_layer::channel::OneShotReceiver;
-use async_std::sync::RwLock;
+use async_lock::RwLock;
 use clap::Args;
 use ethers::types::U256;
 use futures::FutureExt;
@@ -19,6 +18,7 @@ use tide_disco::{
     method::{ReadState, WriteState},
     Api, App, Error as _, StatusCode,
 };
+use tokio::sync::oneshot;
 use url::Url;
 use vbs::version::StaticVersionType;
 
@@ -43,7 +43,7 @@ struct StateRelayServerState {
     queue: BTreeSet<u64>,
 
     /// shutdown signal
-    shutdown: Option<OneShotReceiver<()>>,
+    shutdown: Option<oneshot::Receiver<()>>,
 }
 
 impl StateRelayServerState {
@@ -54,7 +54,10 @@ impl StateRelayServerState {
         }
     }
 
-    pub fn with_shutdown_signal(mut self, shutdown_listener: Option<OneShotReceiver<()>>) -> Self {
+    pub fn with_shutdown_signal(
+        mut self,
+        shutdown_listener: Option<oneshot::Receiver<()>>,
+    ) -> Self {
         if self.shutdown.is_some() {
             panic!("A shutdown signal is already registered and can not be registered twice");
         }
@@ -114,7 +117,7 @@ impl StateRelayServerDataSource for StateRelayServerState {
         //     StatusCode::Unauthorized,
         //     "The posted key is not found in the stake table.".to_owned(),
         // ))?;
-        let state_msg: [FieldType; 7] = (&state).into();
+        let state_msg: [FieldType; 3] = (&state).into();
         if StateSignatureScheme::verify(&(), &key, state_msg, &signature).is_err() {
             return Err(tide_disco::error::ServerError::catch_all(
                 StatusCode::BAD_REQUEST,
@@ -183,16 +186,16 @@ pub struct Options {
 }
 
 /// Set up APIs for relay server
-fn define_api<State, Ver: StaticVersionType + 'static>(
+fn define_api<State, ApiVer: StaticVersionType + 'static>(
     options: &Options,
-    _: Ver,
-) -> Result<Api<State, Error, Ver>, ApiError>
+    _: ApiVer,
+) -> Result<Api<State, Error, ApiVer>, ApiError>
 where
     State: 'static + Send + Sync + ReadState + WriteState,
     <State as ReadState>::State: Send + Sync + StateRelayServerDataSource,
 {
     let mut api = match &options.api_path {
-        Some(path) => Api::<State, Error, Ver>::from_file(path)?,
+        Some(path) => Api::<State, Error, ApiVer>::from_file(path)?,
         None => {
             let toml: toml::Value = toml::from_str(include_str!(
                 "../../api/state_relay_server.toml"
@@ -200,7 +203,7 @@ where
             .map_err(|err| ApiError::CannotReadToml {
                 reason: err.to_string(),
             })?;
-            Api::<State, Error, Ver>::new(toml)?
+            Api::<State, Error, ApiVer>::new(toml)?
         }
     };
 
@@ -214,7 +217,7 @@ where
                 state: lcstate,
                 signature,
             } = req
-                .body_auto::<StateSignatureRequestBody, Ver>(Ver::instance())
+                .body_auto::<StateSignatureRequestBody, ApiVer>(ApiVer::instance())
                 .map_err(Error::from_request_error)?;
             state.post_signature(key, lcstate, signature)
         }
@@ -224,11 +227,11 @@ where
     Ok(api)
 }
 
-pub async fn run_relay_server<Ver: StaticVersionType + 'static>(
-    shutdown_listener: Option<OneShotReceiver<()>>,
+pub async fn run_relay_server<ApiVer: StaticVersionType + 'static>(
+    shutdown_listener: Option<oneshot::Receiver<()>>,
     threshold: U256,
     url: Url,
-    bind_version: Ver,
+    bind_version: ApiVer,
 ) -> std::io::Result<()> {
     let options = Options::default();
 

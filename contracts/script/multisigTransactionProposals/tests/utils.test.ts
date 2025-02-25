@@ -1,4 +1,4 @@
-import { createSafeTransactionData, getEnvVar, isValidEthereumAddress } from "../safeSDK/utils";
+import { createSafeTransactionData, getEnvVar, validateEthereumAddress } from "../safeSDK/utils";
 
 // Mocking process.argv
 const originalArgv = process.argv;
@@ -9,14 +9,14 @@ describe("environment tests", () => {
     process.argv = originalArgv; // Reset argv after each test
   });
 
-  it("should throw an error if SEPOLIA_RPC_URL environment variable is not set", () => {
-    process.env.SEPOLIA_RPC_URL = "";
-    expect(() => getEnvVar("SEPOLIA_RPC_URL")).toThrow();
+  it("should throw an error if RPC_URL environment variable is not set", () => {
+    process.env.RPC_URL = "";
+    expect(() => getEnvVar("RPC_URL")).toThrow();
   });
 
-  it("should return the rpc url if SEPOLIA_RPC_URL environment variable is set", () => {
-    process.env.SEPOLIA_RPC_URL = "http://rpc";
-    const result = getEnvVar("SEPOLIA_RPC_URL");
+  it("should return the rpc url if RPC_URL environment variable is set", () => {
+    process.env.RPC_URL = "http://rpc";
+    const result = getEnvVar("RPC_URL");
     expect(result).toEqual("http://rpc");
   });
 });
@@ -68,20 +68,22 @@ describe("createSafeTransactionData", () => {
   });
 });
 
-describe("isValidEthereumAddress", () => {
+describe("validateEthereumAddress", () => {
   test("should return true for a valid Ethereum address", () => {
-    expect(isValidEthereumAddress(validETHAddress)).toBe(true);
+    expect(() => {
+      validateEthereumAddress(validETHAddress);
+    }).not.toThrow();
   });
 
   test("should throw an error for an invalid Ethereum address", () => {
     expect(() => {
-      isValidEthereumAddress("0xInvalidEthereumAddress");
+      validateEthereumAddress("0xInvalidEthereumAddress");
     }).toThrow("Invalid Ethereum address format");
   });
 
   test("should throw an error for an empty string", () => {
     expect(() => {
-      isValidEthereumAddress("");
+      validateEthereumAddress("");
     }).toThrow("Invalid Ethereum address format");
   });
 });
