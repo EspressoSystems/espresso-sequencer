@@ -45,6 +45,7 @@ jobs:
           shared-key: "hotshot-tests"
           cache-on-failure: "true"
           save-if: ${{ github.ref == 'refs/heads/main' && matrix.test_suites == 'test-ci-rest' }}
+          prefix-key: v0-hotshot
 
       - uses: taiki-e/install-action@just
 
@@ -74,6 +75,7 @@ jobs:
           shared-key: "hotshot-examples"
           cache-on-failure: "true"
           save-if: ${{ github.ref == 'refs/heads/main' }}
+          prefix-key: v0-hotshot
 
       - uses: taiki-e/install-action@just
 
