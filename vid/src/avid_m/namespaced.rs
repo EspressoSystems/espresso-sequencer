@@ -31,7 +31,7 @@ pub struct NsAvidMShare {
 }
 
 impl NsAvidMShare {
-    fn ns_share(&self, ns_id: usize) -> AvidMShare {
+    fn inner_ns_share(&self, ns_id: usize) -> AvidMShare {
         AvidMShare {
             index: self.index,
             payload_byte_len: self.ns_lens[ns_id],
@@ -162,7 +162,10 @@ impl NsAvidMScheme {
         shares: &[NsAvidMShare],
     ) -> VidResult<Vec<u8>> {
         let ns_commit = shares[0].ns_commits[ns_id];
-        let shares: Vec<_> = shares.iter().map(|share| share.ns_share(ns_id)).collect();
+        let shares: Vec<_> = shares
+            .iter()
+            .map(|share| share.inner_ns_share(ns_id))
+            .collect();
         AvidMScheme::recover(param, &ns_commit, &shares)
     }
 }

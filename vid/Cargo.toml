@@ -1,8 +1,8 @@
 [package]
 name = "vid"
 version = "0.1.0"
-edition = "2021"
-authors = ["Espresso Systems <hello@espressosys.com>"]
+edition = { workspace = true }
+authors = { workspace = true }
 license = "MIT"
 
 [dependencies]
