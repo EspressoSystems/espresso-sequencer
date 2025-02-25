@@ -402,8 +402,6 @@ where
         let block_size: u64 = encoded_txns.len() as u64;
         let offered_fee: u64 = self.base_fee * block_size;
 
-        // TODO: Add precompute back.
-
         info!(
             builder_id = %builder.id(),
             txn_count = actual_txn_count,

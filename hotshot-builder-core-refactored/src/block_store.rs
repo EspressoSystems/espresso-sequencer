@@ -18,7 +18,6 @@ use hotshot_types::traits::node_implementation::NodeType;
 pub struct BlockInfo<Types: NodeType> {
     pub block_payload: Types::BlockPayload,
     pub metadata: <<Types as NodeType>::BlockPayload as BlockPayload<Types>>::Metadata,
-    // TODO: Add precompute back.
     pub block_size: u64,
     pub offered_fee: u64,
     // Could we have included more transactions with this block, but chose not to?
