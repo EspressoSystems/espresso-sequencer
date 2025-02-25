@@ -14,7 +14,7 @@ use hotshot_types::{
 use itertools::Itertools;
 use jf_merkle_tree::{
     prelude::{MerkleProof, Sha3Digest, Sha3Node},
-    AppendableMerkleTreeScheme, ForgetableMerkleTreeScheme, ForgetableUniversalMerkleTreeScheme,
+    AppendableMerkleTreeScheme, ForgettableMerkleTreeScheme, ForgettableUniversalMerkleTreeScheme,
     LookupResult, MerkleCommitment, MerkleTreeError, MerkleTreeScheme,
     PersistentUniversalMerkleTreeScheme, UniversalMerkleTreeScheme,
 };
