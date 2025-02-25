@@ -39,7 +39,6 @@ use std::{
 use std::{ops::Range, pin::Pin, result::Result as StdResult};
 use tokio::{
     sync::{Mutex, MutexGuard, Notify},
-    task::JoinSet,
     time::{sleep, Duration},
 };
 use tower_service::Service;
@@ -47,7 +46,7 @@ use tracing::Instrument;
 use url::Url;
 
 use super::{
-    v0_1::{SingleTransport, SingleTransportStatus, SwitchingTransport},
+    v0_1::{InnerUpdateTasks, SingleTransport, SingleTransportStatus, SwitchingTransport},
     v0_3::StakeTables,
     L1BlockInfo, L1ClientMetrics, L1State, L1UpdateTask,
 };
@@ -101,7 +100,7 @@ impl L1BlockInfo {
 
 impl Drop for L1UpdateTask {
     fn drop(&mut self) {
-        if let Some(mut tasks) = self.0.get_mut().take() {
+        if let Some(tasks) = self.0.get_mut().take() {
             tasks.abort_all()
         }
     }
@@ -371,6 +370,23 @@ impl Service<RequestPacket> for SwitchingTransport {
     }
 }
 
+// impl InnerUpdateTasks {
+//     pub fn block_task(&self) {
+//         self.blocks
+//     }
+//     pub fn abort_all(self) {
+//         self.blocks.abort();
+//         if let Some(task) = self.stake {
+//             task.abort();
+//         }
+//     }
+//
+//     pub fn upgrade(&self) {
+//         self.abort_all();
+//         Self { blocks: spawn(up) }
+//     }
+// }
+
 impl L1Client {
     fn with_provider(provider: RootProvider<SwitchingTransport>) -> Self {
         let opt = provider.client().transport().options().clone();
@@ -397,9 +413,8 @@ impl L1Client {
     pub async fn spawn_tasks(&self) {
         let mut update_task = self.update_task.0.lock().await;
         if update_task.is_none() {
-            let mut tasks = JoinSet::new();
-            tasks.spawn(self.update_loop());
-            *update_task = Some(tasks);
+            let task = InnerUpdateTasks::spawn_blocks(self.update_loop());
+            *update_task = Some(task);
         }
     }
 
@@ -408,7 +423,7 @@ impl L1Client {
     /// The L1 client will still be usable, but will stop updating until [`start`](Self::start) is
     /// called again.
     pub async fn shut_down_tasks(&self) {
-        if let Some(mut update_task) = self.update_task.0.lock().await.take() {
+        if let Some(update_task) = self.update_task.0.lock().await.take() {
             update_task.abort_all();
         }
     }
@@ -910,23 +925,16 @@ impl L1Client {
     ////Upgrade background tasks for Proof Of Stake. No-op if upgrade
     /// already occurred. Returns the block we need to start querying from.
     async fn maybe_upgrade_background_tasks(&self, address: Address) {
-        if let Some(mut tasks) = self.update_task.0.lock().await.take() {
-            if tasks.len() > 1 {
+        let mut update_task = self.update_task.0.lock().await;
+        if let Some(tasks) = update_task.take() {
+            if tasks.upgraded_v3() {
                 tracing::debug!("Greater than 1 tasks are running, no need to upgrade.");
                 return;
             } else {
-                // Protocol upgraded to POS version. If stake_update_loop is not running,
-                // we need to spawn.
-
-                tracing::warn!("Upgrading `L1Client` background tasks for v3 (Proof of Stake)!",);
                 tasks.abort_all();
             }
         }
-
-        let mut update_task = self.update_task.0.lock().await;
-        let mut tasks = JoinSet::new();
-        tasks.spawn(self.update_loop());
-        tasks.spawn(self.stake_update_loop(address));
+        let tasks = InnerUpdateTasks::v3(self.update_loop(), self.stake_update_loop(address));
         *update_task = Some(tasks);
 
         tracing::warn!("`Successfully upgrade L1Client background tasks!`");
@@ -1656,8 +1664,6 @@ mod test {
 
         let result = nodes.stake_table.0[0].clone();
         assert_eq!(result.stake_amount.as_u64(), 1);
-
-        tracing::error!(?block.header.inner.number);
 
         // ensure state is updated
         let mut lock = l1_client.state.lock().await;

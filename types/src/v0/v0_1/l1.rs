@@ -5,6 +5,7 @@ use alloy::{
 use async_broadcast::{InactiveReceiver, Sender};
 use clap::Parser;
 use derive_more::Deref;
+use futures::future::Future;
 use hotshot_types::traits::metrics::{Counter, Gauge, Metrics, NoMetrics};
 use lru::LruCache;
 use parking_lot::RwLock;
@@ -15,8 +16,9 @@ use std::{
     time::{Duration, Instant},
 };
 use tokio::{
+    spawn,
     sync::{Mutex, Notify},
-    task::JoinSet,
+    task::JoinHandle,
 };
 use url::Url;
 
@@ -181,8 +183,49 @@ pub(crate) enum L1Event {
     NewFinalized { finalized: L1BlockInfo },
 }
 
+#[derive(Debug)]
+pub struct InnerUpdateTasks {
+    blocks: JoinHandle<()>,
+    stake: Option<JoinHandle<()>>,
+}
+
+impl InnerUpdateTasks {
+    pub fn spawn_blocks<F>(task: F) -> Self
+    where
+        F: Future<Output = ()> + Send + 'static,
+    {
+        Self {
+            blocks: spawn(task),
+            stake: None,
+        }
+    }
+    pub fn abort_all(self) {
+        self.blocks.abort();
+        if let Some(task) = self.stake {
+            task.abort();
+        }
+    }
+
+    pub fn v3<F, G>(blocks: F, stake: G) -> Self
+    where
+        F: Future<Output = ()> + Send + 'static,
+        G: Future<Output = ()> + Send + 'static,
+    {
+        tracing::warn!("Upgrading `L1Client` background tasks for v3 (Proof of Stake)!");
+
+        Self {
+            blocks: spawn(blocks),
+            stake: Some(spawn(stake)),
+        }
+    }
+
+    pub fn upgraded_v3(&self) -> bool {
+        self.stake.is_some()
+    }
+}
+
 #[derive(Debug, Default)]
-pub(crate) struct L1UpdateTask(pub(crate) Mutex<Option<JoinSet<()>>>);
+pub(crate) struct L1UpdateTask(pub(crate) Mutex<Option<InnerUpdateTasks>>);
 
 #[derive(Clone, Debug)]
 pub(crate) struct L1ClientMetrics {
