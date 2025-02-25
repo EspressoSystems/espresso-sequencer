@@ -13,6 +13,7 @@ pub mod documentation;
 
 use committable::Committable;
 use futures::future::{select, Either};
+use hotshot_types::drb::INITIAL_DRB_RESULT;
 use hotshot_types::{
     message::UpgradeLock,
     traits::{network::BroadcastDelay, node_implementation::Versions},
@@ -296,6 +297,16 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> SystemContext<T
             anchored_leaf.height(),
             config.epoch_height,
         );
+
+        if let Some(epoch) = epoch {
+            // #2652 REVIEW NOTE: This epoch can't be right; what if a node starts up between when we upgrade to epochs
+            // and when we're at epoch+2? This would cause the current node to propagate the non-epochs stake table
+            // up.
+            memberships
+                .write()
+                .await
+                .set_first_epoch(epoch, INITIAL_DRB_RESULT);
+        }
 
         // Insert the validated state to state map.
         let mut validated_state_map = BTreeMap::default();
