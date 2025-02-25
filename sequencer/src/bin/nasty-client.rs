@@ -35,7 +35,7 @@ use hotshot_types::traits::{
     metrics::{Counter, Gauge, Histogram, Metrics as _},
 };
 use jf_merkle_tree::{
-    ForgetableMerkleTreeScheme, MerkleCommitment, MerkleTreeScheme, UniversalMerkleTreeScheme,
+    ForgettableMerkleTreeScheme, MerkleCommitment, MerkleTreeScheme, UniversalMerkleTreeScheme,
 };
 use rand::{seq::SliceRandom, RngCore};
 use sequencer::{api::endpoints::NamespaceProofQueryData, SequencerApiVersion};
