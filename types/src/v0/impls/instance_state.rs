@@ -199,7 +199,7 @@ pub mod mock {
     use async_trait::async_trait;
     use committable::Commitment;
     use hotshot_types::data::ViewNumber;
-    use jf_merkle_tree::{ForgetableMerkleTreeScheme, MerkleTreeScheme};
+    use jf_merkle_tree::{ForgettableMerkleTreeScheme, MerkleTreeScheme};
 
     use super::*;
     use crate::{
