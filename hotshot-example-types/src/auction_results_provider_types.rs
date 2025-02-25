@@ -33,7 +33,7 @@ pub struct TestAuctionResultsProvider<TYPES: NodeType> {
     /// particular outcome is met.
     pub solver_results: TYPES::AuctionResult,
 
-    /// A canned type to ensure that an error is thrown in absence of a true fault-injectible
+    /// A canned type to ensure that an error is thrown in absence of a true fault-injectable
     /// system for logical tests. This will guarantee that `fetch_auction_result` always throws an
     /// error.
     pub should_return_err: bool,
