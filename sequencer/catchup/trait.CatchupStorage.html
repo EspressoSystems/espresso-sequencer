@@ -4,14 +4,14 @@
         &amp;self,
         _instance: &amp;<a class="struct" href="../../espresso_types/v0/impls/instance_state/struct.NodeState.html" title="struct espresso_types::v0::impls::instance_state::NodeState">NodeState</a>,
         _height: <a class="primitive" href="https://doc.rust-lang.org/1.85.0/std/primitive.u64.html">u64</a>,
-        _view: <a class="struct" href="../../hotshot_types/data/struct.ViewNumber.html" title="struct hotshot_types::data::ViewNumber">ViewNumber</a>,
+        _view: ViewNumber,
         _accounts: &amp;[<a class="struct" href="../../espresso_types/v0/v0_1/fee_info/struct.FeeAccount.html" title="struct espresso_types::v0::v0_1::fee_info::FeeAccount">FeeAccount</a>],
     ) -&gt; impl <a class="trait" href="https://doc.rust-lang.org/1.85.0/core/marker/trait.Send.html" title="trait core::marker::Send">Send</a> + <a class="trait" href="https://doc.rust-lang.org/1.85.0/core/future/future/trait.Future.html" title="trait core::future::future::Future">Future</a>&lt;Output = <a class="type" href="https://docs.rs/anyhow/1.0.96/anyhow/type.Result.html" title="type anyhow::Result">Result</a>&lt;(<a class="type" href="../../espresso_types/v0/v0_1/state/type.FeeMerkleTree.html" title="type espresso_types::v0::v0_1::state::FeeMerkleTree">FeeMerkleTree</a>, <a class="type" href="../../espresso_types/v0/type.Leaf2.html" title="type espresso_types::v0::Leaf2">Leaf2</a>)&gt;&gt; { ... }
 <span class="item-spacer"></span>    fn <a href="#method.get_frontier" class="fn">get_frontier</a>(
         &amp;self,
         _instance: &amp;<a class="struct" href="../../espresso_types/v0/impls/instance_state/struct.NodeState.html" title="struct espresso_types::v0::impls::instance_state::NodeState">NodeState</a>,
         _height: <a class="primitive" href="https://doc.rust-lang.org/1.85.0/std/primitive.u64.html">u64</a>,
-        _view: <a class="struct" href="../../hotshot_types/data/struct.ViewNumber.html" title="struct hotshot_types::data::ViewNumber">ViewNumber</a>,
+        _view: ViewNumber,
     ) -&gt; impl <a class="trait" href="https://doc.rust-lang.org/1.85.0/core/marker/trait.Send.html" title="trait core::marker::Send">Send</a> + <a class="trait" href="https://doc.rust-lang.org/1.85.0/core/future/future/trait.Future.html" title="trait core::future::future::Future">Future</a>&lt;Output = <a class="type" href="https://docs.rs/anyhow/1.0.96/anyhow/type.Result.html" title="type anyhow::Result">Result</a>&lt;<a class="type" href="../api/type.BlocksFrontier.html" title="type sequencer::api::BlocksFrontier">BlocksFrontier</a>&gt;&gt; { ... }
 <span class="item-spacer"></span>    fn <a href="#method.get_chain_config" class="fn">get_chain_config</a>(
         &amp;self,
@@ -21,7 +21,7 @@
     &amp;self,
     _instance: &amp;<a class="struct" href="../../espresso_types/v0/impls/instance_state/struct.NodeState.html" title="struct espresso_types::v0::impls::instance_state::NodeState">NodeState</a>,
     _height: <a class="primitive" href="https://doc.rust-lang.org/1.85.0/std/primitive.u64.html">u64</a>,
-    _view: <a class="struct" href="../../hotshot_types/data/struct.ViewNumber.html" title="struct hotshot_types::data::ViewNumber">ViewNumber</a>,
+    _view: ViewNumber,
     _accounts: &amp;[<a class="struct" href="../../espresso_types/v0/v0_1/fee_info/struct.FeeAccount.html" title="struct espresso_types::v0::v0_1::fee_info::FeeAccount">FeeAccount</a>],
 ) -&gt; impl <a class="trait" href="https://doc.rust-lang.org/1.85.0/core/marker/trait.Send.html" title="trait core::marker::Send">Send</a> + <a class="trait" href="https://doc.rust-lang.org/1.85.0/core/future/future/trait.Future.html" title="trait core::future::future::Future">Future</a>&lt;Output = <a class="type" href="https://docs.rs/anyhow/1.0.96/anyhow/type.Result.html" title="type anyhow::Result">Result</a>&lt;(<a class="type" href="../../espresso_types/v0/v0_1/state/type.FeeMerkleTree.html" title="type espresso_types::v0::v0_1::state::FeeMerkleTree">FeeMerkleTree</a>, <a class="type" href="../../espresso_types/v0/type.Leaf2.html" title="type espresso_types::v0::Leaf2">Leaf2</a>)&gt;&gt;</h4></section></summary><div class="docblock"><p>Get the state of the requested <code>accounts</code>.</p>
 <p>The state is fetched from a snapshot at the given height and view, which <em>must</em> correspond!
@@ -35,7 +35,7 @@ the state from memory rather than storage.</p>
     &amp;self,
     _instance: &amp;<a class="struct" href="../../espresso_types/v0/impls/instance_state/struct.NodeState.html" title="struct espresso_types::v0::impls::instance_state::NodeState">NodeState</a>,
     _height: <a class="primitive" href="https://doc.rust-lang.org/1.85.0/std/primitive.u64.html">u64</a>,
-    _view: <a class="struct" href="../../hotshot_types/data/struct.ViewNumber.html" title="struct hotshot_types::data::ViewNumber">ViewNumber</a>,
+    _view: ViewNumber,
 ) -&gt; impl <a class="trait" href="https://doc.rust-lang.org/1.85.0/core/marker/trait.Send.html" title="trait core::marker::Send">Send</a> + <a class="trait" href="https://doc.rust-lang.org/1.85.0/core/future/future/trait.Future.html" title="trait core::future::future::Future">Future</a>&lt;Output = <a class="type" href="https://docs.rs/anyhow/1.0.96/anyhow/type.Result.html" title="type anyhow::Result">Result</a>&lt;<a class="type" href="../api/type.BlocksFrontier.html" title="type sequencer::api::BlocksFrontier">BlocksFrontier</a>&gt;&gt;</h4></section></summary><div class="docblock"><p>Get the blocks Merkle tree frontier.</p>
 <p>The state is fetched from a snapshot at the given height and view, which <em>must</em> correspond!
 <code>height</code> is provided to simplify lookups for backends where data is not indexed by view.
@@ -48,13 +48,13 @@ decided view.</p>
     &amp;self,
     instance: &amp;<a class="struct" href="../../espresso_types/v0/impls/instance_state/struct.NodeState.html" title="struct espresso_types::v0::impls::instance_state::NodeState">NodeState</a>,
     height: <a class="primitive" href="https://doc.rust-lang.org/1.85.0/std/primitive.u64.html">u64</a>,
-    view: <a class="struct" href="../../hotshot_types/data/struct.ViewNumber.html" title="struct hotshot_types::data::ViewNumber">ViewNumber</a>,
+    view: ViewNumber,
     accounts: &amp;[<a class="struct" href="../../espresso_types/v0/v0_1/fee_info/struct.FeeAccount.html" title="struct espresso_types::v0::v0_1::fee_info::FeeAccount">FeeAccount</a>],
 ) -&gt; <a class="type" href="https://docs.rs/anyhow/1.0.96/anyhow/type.Result.html" title="type anyhow::Result">Result</a>&lt;(<a class="type" href="../../espresso_types/v0/v0_1/state/type.FeeMerkleTree.html" title="type espresso_types::v0::v0_1::state::FeeMerkleTree">FeeMerkleTree</a>, <a class="type" href="../../espresso_types/v0/type.Leaf2.html" title="type espresso_types::v0::Leaf2">Leaf2</a>)&gt;</h4></section><section id="method.get_frontier-1" class="method trait-impl"><a class="src rightside" href="../../src/sequencer/api/sql.rs.html#116-150">Source</a><a href="#method.get_frontier-1" class="anchor">§</a><h4 class="code-header">async fn <a href="#method.get_frontier" class="fn">get_frontier</a>(
     &amp;self,
     instance: &amp;<a class="struct" href="../../espresso_types/v0/impls/instance_state/struct.NodeState.html" title="struct espresso_types::v0::impls::instance_state::NodeState">NodeState</a>,
     height: <a class="primitive" href="https://doc.rust-lang.org/1.85.0/std/primitive.u64.html">u64</a>,
-    view: <a class="struct" href="../../hotshot_types/data/struct.ViewNumber.html" title="struct hotshot_types::data::ViewNumber">ViewNumber</a>,
+    view: ViewNumber,
 ) -&gt; <a class="type" href="https://docs.rs/anyhow/1.0.96/anyhow/type.Result.html" title="type anyhow::Result">Result</a>&lt;<a class="type" href="../api/type.BlocksFrontier.html" title="type sequencer::api::BlocksFrontier">BlocksFrontier</a>&gt;</h4></section><section id="method.get_chain_config-1" class="method trait-impl"><a class="src rightside" href="../../src/sequencer/api/sql.rs.html#152-160">Source</a><a href="#method.get_chain_config-1" class="anchor">§</a><h4 class="code-header">async fn <a href="#method.get_chain_config" class="fn">get_chain_config</a>(
     &amp;self,
     commitment: Commitment&lt;<a class="struct" href="../../espresso_types/v0/v0_99/chain_config/struct.ChainConfig.html" title="struct espresso_types::v0::v0_99::chain_config::ChainConfig">ChainConfig</a>&gt;,
@@ -64,13 +64,13 @@ decided view.</p>
     &amp;self,
     instance: &amp;<a class="struct" href="../../espresso_types/v0/impls/instance_state/struct.NodeState.html" title="struct espresso_types::v0::impls::instance_state::NodeState">NodeState</a>,
     height: <a class="primitive" href="https://doc.rust-lang.org/1.85.0/std/primitive.u64.html">u64</a>,
-    view: <a class="struct" href="../../hotshot_types/data/struct.ViewNumber.html" title="struct hotshot_types::data::ViewNumber">ViewNumber</a>,
+    view: ViewNumber,
     accounts: &amp;[<a class="struct" href="../../espresso_types/v0/v0_1/fee_info/struct.FeeAccount.html" title="struct espresso_types::v0::v0_1::fee_info::FeeAccount">FeeAccount</a>],
 ) -&gt; <a class="type" href="https://docs.rs/anyhow/1.0.96/anyhow/type.Result.html" title="type anyhow::Result">Result</a>&lt;(<a class="type" href="../../espresso_types/v0/v0_1/state/type.FeeMerkleTree.html" title="type espresso_types::v0::v0_1::state::FeeMerkleTree">FeeMerkleTree</a>, <a class="type" href="../../espresso_types/v0/type.Leaf2.html" title="type espresso_types::v0::Leaf2">Leaf2</a>)&gt;</h4></section><section id="method.get_frontier-2" class="method trait-impl"><a class="src rightside" href="../../src/sequencer/catchup.rs.html#424-431">Source</a><a href="#method.get_frontier-2" class="anchor">§</a><h4 class="code-header">async fn <a href="#method.get_frontier" class="fn">get_frontier</a>(
     &amp;self,
     instance: &amp;<a class="struct" href="../../espresso_types/v0/impls/instance_state/struct.NodeState.html" title="struct espresso_types::v0::impls::instance_state::NodeState">NodeState</a>,
     height: <a class="primitive" href="https://doc.rust-lang.org/1.85.0/std/primitive.u64.html">u64</a>,
-    view: <a class="struct" href="../../hotshot_types/data/struct.ViewNumber.html" title="struct hotshot_types::data::ViewNumber">ViewNumber</a>,
+    view: ViewNumber,
 ) -&gt; <a class="type" href="https://docs.rs/anyhow/1.0.96/anyhow/type.Result.html" title="type anyhow::Result">Result</a>&lt;<a class="type" href="../api/type.BlocksFrontier.html" title="type sequencer::api::BlocksFrontier">BlocksFrontier</a>&gt;</h4></section><section id="method.get_chain_config-2" class="method trait-impl"><a class="src rightside" href="../../src/sequencer/catchup.rs.html#433-438">Source</a><a href="#method.get_chain_config-2" class="anchor">§</a><h4 class="code-header">async fn <a href="#method.get_chain_config" class="fn">get_chain_config</a>(
     &amp;self,
     commitment: Commitment&lt;<a class="struct" href="../../espresso_types/v0/v0_99/chain_config/struct.ChainConfig.html" title="struct espresso_types::v0::v0_99::chain_config::ChainConfig">ChainConfig</a>&gt;,
