@@ -23,21 +23,32 @@ abstract contract AbstractStakeTable {
     /// (LastEpochStart)
     uint256 public totalVotingStake;
 
-    /// @notice Signals a registration of a BLS public key.
-    /// @param account the address of the validator
-    /// @param registerEpoch epoch when the registration becomes effective.
-    /// @param amountDeposited amount deposited when registering the new node.
-    event Registered(address account, uint64 registerEpoch, uint256 amountDeposited);
+    /// @notice Signals a registration of a new Validator.
+    event Registered(Node node);
+
+    // TODO docs
+    event PoolRegistered(Node node, uint8 fee);
 
     /// @notice Signals an exit request has been granted.
     /// @param account the address of the validator
     /// @param exitEpoch epoch when the user will be allowed to withdraw its funds.
+    // TODO amount should be customizable
     event Exit(address account, uint64 exitEpoch);
 
     /// @notice Signals a deposit to a BLS public key.
     /// @param account the address of the validator
     /// @param amount amount of the deposit
     event Deposit(address account, uint256 amount);
+
+    // TODO docs
+    /// @notice Delegator deposits into pool.
+    event PoolDeposit(address validatorAddress, address delegatorAddress, uint256 amount);
+
+    // TODO docs
+    /// @notice Delegator requests withdrawal from a pool.
+    event PoolWithdrawalRequested(
+        address validatorAddress, address delegatorAddress, uint256 amount, uint64 withdrawalEpoch
+    );
 
     /// @notice Signals a consensus key update for a validator
     /// @param account the address of the validator
@@ -85,6 +96,27 @@ abstract contract AbstractStakeTable {
         uint64 exitEpoch;
         EdOnBN254.EdOnBN254Point schnorrVK;
         BN254.G2Point blsVK;
+    }
+
+    // TODO new storage schema to handle pools
+    // 1. validator info: account, keys, registration epoch
+    // 2. pool: validator info, fee, delegations
+    // 3. staker: validator info, stake amount
+
+    // TODO: docs
+    struct Pool {
+        address account;
+        uint64 registerEpoch;
+        uint64 exitEpoch;
+        EdOnBN254.EdOnBN254Point schnorrVK;
+        BN254.G2Point blsVK;
+        uint8 fee;
+        mapping(address => uint256) delegations;
+    }
+
+    struct RequestedWithdrawal {
+        uint256 amount;
+        uint64 withdrawalEpoch;
     }
 
     // === Table State & Stats ===
