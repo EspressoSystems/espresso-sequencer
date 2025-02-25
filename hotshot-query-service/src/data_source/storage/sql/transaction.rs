@@ -504,7 +504,7 @@ where
         let leaf_json = serde_json::to_value(leaf.leaf()).context("failed to serialize leaf")?;
         let qc_json = serde_json::to_value(leaf.qc()).context("failed to serialize QC")?;
         self.upsert(
-            "leaf",
+            "leaf2",
             ["height", "hash", "block_hash", "leaf", "qc"],
             ["height"],
             [(

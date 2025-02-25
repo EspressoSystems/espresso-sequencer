@@ -1097,7 +1097,7 @@ mod api_tests {
     use espresso_types::MockSequencerVersions;
     use espresso_types::{
         traits::{EventConsumer, PersistenceOptions},
-        Header, Leaf, Leaf2, NamespaceId,
+        Header, Leaf2, NamespaceId,
     };
     use ethers::utils::Anvil;
     use futures::{future, stream::StreamExt};
@@ -1106,13 +1106,14 @@ mod api_tests {
         AvailabilityDataSource, BlockQueryData, VidCommonQueryData,
     };
 
-    use hotshot_types::data::vid_disperse::ADVZDisperseShare;
+    use hotshot_types::data::vid_disperse::VidDisperseShare2;
+    use hotshot_types::data::{DaProposal2, EpochNumber, VidDisperseShare};
+    use hotshot_types::simple_certificate::QuorumCertificate2;
     use hotshot_types::vid::advz_scheme;
     use hotshot_types::{
-        data::{DaProposal, QuorumProposal2, QuorumProposalWrapper},
+        data::{QuorumProposal2, QuorumProposalWrapper},
         event::LeafInfo,
         message::Proposal,
-        simple_certificate::QuorumCertificate,
         traits::{node_implementation::ConsensusTime, signature_key::SignatureKey, EncodeBytes},
     };
 
@@ -1288,7 +1289,7 @@ mod api_tests {
         // Create two non-consecutive leaf chains.
         let mut chain1 = vec![];
 
-        let genesis = Leaf::genesis::<TestVersions>(&Default::default(), &NodeState::mock()).await;
+        let genesis = Leaf2::genesis::<TestVersions>(&Default::default(), &NodeState::mock()).await;
         let payload = genesis.block_payload().unwrap();
         let payload_bytes_arc = payload.encode();
         let disperse = advz_scheme(2).disperse(payload_bytes_arc.clone()).unwrap();
@@ -1297,12 +1298,11 @@ mod api_tests {
             proposal: QuorumProposal2::<SeqTypes> {
                 block_header: genesis.block_header().clone(),
                 view_number: ViewNumber::genesis(),
-                justify_qc: QuorumCertificate::genesis::<MockSequencerVersions>(
+                justify_qc: QuorumCertificate2::genesis::<MockSequencerVersions>(
                     &ValidatedState::default(),
                     &NodeState::mock(),
                 )
-                .await
-                .to_qc2(),
+                .await,
                 upgrade_certificate: None,
                 view_change_evidence: None,
                 next_drb_result: None,
@@ -1310,12 +1310,11 @@ mod api_tests {
                 epoch: None,
             },
         };
-        let mut qc = QuorumCertificate::genesis::<MockSequencerVersions>(
+        let mut qc = QuorumCertificate2::genesis::<MockSequencerVersions>(
             &ValidatedState::default(),
             &NodeState::mock(),
         )
-        .await
-        .to_qc2();
+        .await;
 
         let mut justify_qc = qc.clone();
         for i in 0..5 {
@@ -1333,7 +1332,7 @@ mod api_tests {
                 PubKey::sign(&privkey, &bincode::serialize(&quorum_proposal).unwrap())
                     .expect("Failed to sign quorum_proposal");
             persistence
-                .append_quorum_proposal(&Proposal {
+                .append_quorum_proposal2(&Proposal {
                     data: quorum_proposal.clone(),
                     signature: quorum_proposal_signature,
                     _pd: Default::default(),
@@ -1342,25 +1341,29 @@ mod api_tests {
                 .unwrap();
 
             // Include VID information for each leaf.
-            let share = ADVZDisperseShare::<SeqTypes> {
+            let share = VidDisperseShare::V1(VidDisperseShare2::<SeqTypes> {
                 view_number: leaf.view_number(),
                 payload_commitment,
                 share: disperse.shares[0].clone(),
                 common: disperse.common.clone(),
                 recipient_key: pubkey,
-            };
+                epoch: Some(EpochNumber::new(0)),
+                target_epoch: Some(EpochNumber::new(0)),
+                data_epoch_payload_commitment: None,
+            });
             persistence
-                .append_vid(&share.to_proposal(&privkey).unwrap())
+                .append_vid2(&share.to_proposal(&privkey).unwrap())
                 .await
                 .unwrap();
 
             // Include payload information for each leaf.
             let block_payload_signature =
                 PubKey::sign(&privkey, &payload_bytes_arc).expect("Failed to sign block payload");
-            let da_proposal_inner = DaProposal::<SeqTypes> {
+            let da_proposal_inner = DaProposal2::<SeqTypes> {
                 encoded_transactions: payload_bytes_arc.clone(),
                 metadata: payload.ns_table().clone(),
                 view_number: leaf.view_number(),
+                epoch: Some(EpochNumber::new(0)),
             };
             let da_proposal = Proposal {
                 data: da_proposal_inner,
@@ -1368,7 +1371,7 @@ mod api_tests {
                 _pd: Default::default(),
             };
             persistence
-                .append_da(&da_proposal, payload_commitment)
+                .append_da2(&da_proposal, payload_commitment)
                 .await
                 .unwrap();
         }
@@ -1414,8 +1417,8 @@ mod api_tests {
         for (leaf, qc) in chain1.iter().chain(&chain2) {
             tracing::info!(height = leaf.height(), "check archive");
             let qd = data_source.get_leaf(leaf.height() as usize).await.await;
-            let stored_leaf: Leaf2 = qd.leaf().clone().into();
-            let stored_qc = qd.qc().clone().to_qc2();
+            let stored_leaf: Leaf2 = qd.leaf().clone();
+            let stored_qc = qd.qc().clone();
             assert_eq!(&stored_leaf, leaf);
             assert_eq!(&stored_qc, qc);
 
@@ -1484,15 +1487,13 @@ mod api_tests {
             ));
         let consumer = ApiEventConsumer::from(data_source.clone());
 
-        let mut qc = QuorumCertificate::genesis::<MockSequencerVersions>(
+        let mut qc = QuorumCertificate2::genesis::<MockSequencerVersions>(
             &ValidatedState::default(),
             &NodeState::mock(),
         )
-        .await
-        .to_qc2();
+        .await;
         let leaf =
-            Leaf::genesis::<MockSequencerVersions>(&ValidatedState::default(), &NodeState::mock())
-                .await;
+            Leaf2::genesis::<TestVersions>(&ValidatedState::default(), &NodeState::mock()).await;
 
         // Append the genesis leaf. We don't use this for the test, because the update function will
         // automatically fill in the missing data for genesis. We just append this to get into a
@@ -1501,7 +1502,7 @@ mod api_tests {
         persistence
             .append_decided_leaves(
                 leaf.view_number(),
-                [(&leaf_info(leaf.clone().into()), qc.clone())],
+                [(&leaf_info(leaf.clone()), qc.clone())],
                 &consumer,
             )
             .await
@@ -1539,10 +1540,7 @@ mod api_tests {
             .unwrap();
 
         // Check that we still processed the leaf.
-        assert_eq!(
-            leaf,
-            data_source.get_leaf(1).await.await.leaf().clone().into()
-        );
+        assert_eq!(leaf, data_source.get_leaf(1).await.await.leaf().clone());
         assert!(data_source.get_vid_common(1).await.is_pending());
         assert!(data_source.get_block(1).await.is_pending());
     }
