@@ -1155,7 +1155,7 @@ impl ResourceManager<BlockQueryData<SeqTypes>> {
                 .verify(
                     header.ns_table(),
                     &header.payload_commitment(),
-                    vid_common.common()
+                    &vid_common.common().clone().unwrap(),
                 )
                 .is_some(),
             format!("failure to verify namespace proof for {block}:{ns}")

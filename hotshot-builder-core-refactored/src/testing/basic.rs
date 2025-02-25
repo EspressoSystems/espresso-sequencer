@@ -5,13 +5,13 @@ use hotshot_builder_api::v0_1::data_source::BuilderDataSource;
 use hotshot_example_types::block_types::{TestBlockHeader, TestMetadata, TestTransaction};
 use hotshot_example_types::node_types::{TestTypes, TestVersions};
 use hotshot_example_types::state_types::{TestInstanceState, TestValidatedState};
+use hotshot_types::data::VidCommitment;
 use hotshot_types::data::{Leaf2, QuorumProposal2, QuorumProposalWrapper, ViewNumber};
 use hotshot_types::event::LeafInfo;
 use hotshot_types::simple_certificate::QuorumCertificate;
 use hotshot_types::traits::block_contents::BlockHeader;
 use hotshot_types::traits::node_implementation::{ConsensusTime, NodeType};
 use hotshot_types::utils::BuilderCommitment;
-use hotshot_types::vid::VidCommitment;
 use marketplace_builder_shared::error::Error;
 use marketplace_builder_shared::testing::consensus::SimulatedChainState;
 use marketplace_builder_shared::testing::constants::{

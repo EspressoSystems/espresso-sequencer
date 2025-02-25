@@ -29,12 +29,11 @@ use typenum::Unsigned;
 use vbs::version::StaticVersionType;
 
 use crate::{
-    data::Leaf2,
+    data::{Leaf2, VidCommitment},
     traits::{
         node_implementation::{ConsensusTime, NodeType, Versions},
         ValidatedState,
     },
-    vid::VidCommitment,
 };
 
 /// A view's state

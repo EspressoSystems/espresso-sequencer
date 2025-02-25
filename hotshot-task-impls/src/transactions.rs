@@ -17,6 +17,7 @@ use hotshot_builder_api::v0_1::block_info::AvailableBlockInfo;
 use hotshot_task::task::TaskState;
 use hotshot_types::{
     consensus::OuterConsensus,
+    data::VidCommitment,
     data::{null_block, PackedBundle},
     event::{Event, EventType},
     message::UpgradeLock,
@@ -29,7 +30,6 @@ use hotshot_types::{
         BlockPayload,
     },
     utils::ViewInner,
-    vid::VidCommitment,
 };
 use hotshot_utils::anytrace::*;
 use tokio::time::{sleep, timeout};

@@ -26,12 +26,12 @@ use hotshot_builder_api::{
 use hotshot_types::bundle::Bundle;
 use hotshot_types::traits::block_contents::{BuilderFee, Transaction};
 use hotshot_types::{
+    data::VidCommitment,
     event::EventType,
     traits::{
         node_implementation::{ConsensusTime, NodeType},
         signature_key::{BuilderSignatureKey, SignatureKey},
     },
-    vid::VidCommitment,
 };
 use std::sync::Arc;
 use std::{fmt::Display, time::Instant};

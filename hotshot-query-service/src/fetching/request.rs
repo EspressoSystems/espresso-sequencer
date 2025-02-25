@@ -14,7 +14,7 @@
 
 use crate::{
     availability::{LeafHash, LeafQueryData, QcHash},
-    Payload, VidCommitment, VidCommon,
+    Payload, VidCommitment,
 };
 use derive_more::{From, Into};
 use hotshot_types::traits::node_implementation::NodeType;
@@ -41,7 +41,7 @@ impl<Types: NodeType> Request<Types> for PayloadRequest {
 pub struct VidCommonRequest(pub VidCommitment);
 
 impl<Types: NodeType> Request<Types> for VidCommonRequest {
-    type Response = VidCommon;
+    type Response = hotshot_types::vid::advz::ADVZCommon;
 }
 
 /// A request for a leaf with a given height.

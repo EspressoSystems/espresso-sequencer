@@ -448,9 +448,11 @@ use vbs::version::StaticVersionType;
 
 pub use hotshot_types::{
     data::Leaf,
+    data::{VidCommitment, VidShare},
     simple_certificate::QuorumCertificate,
-    vid::{VidCommitment, VidCommon, VidShare},
 };
+
+pub type VidCommon = Option<hotshot_types::vid::advz::ADVZCommon>;
 
 pub type Payload<Types> = <Types as NodeType>::BlockPayload;
 pub type Header<Types> = <Types as NodeType>::BlockHeader;

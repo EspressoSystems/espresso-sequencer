@@ -30,10 +30,10 @@ use hotshot_builder_api::{
 };
 use hotshot_example_types::block_types::TestTransaction;
 use hotshot_types::{
+    data::VidCommitment,
     network::RandomBuilderConfig,
     traits::{node_implementation::NodeType, signature_key::BuilderSignatureKey},
     utils::BuilderCommitment,
-    vid::VidCommitment,
 };
 use lru::LruCache;
 use rand::{rngs::SmallRng, Rng, RngCore, SeedableRng};

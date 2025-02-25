@@ -4,7 +4,7 @@
 // You should have received a copy of the MIT License
 // along with the HotShot repository. If not, see <https://mit-license.org/>.
 
-use std::marker::PhantomData;
+use std::{hash::Hash, marker::PhantomData};
 
 use hotshot_types::{
     traits::{node_implementation::NodeType, signature_key::BuilderSignatureKey, BlockPayload},
