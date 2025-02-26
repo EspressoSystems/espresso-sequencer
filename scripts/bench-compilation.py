@@ -27,12 +27,12 @@ def store_result(
     except (FileNotFoundError,):
         print(f"No cache at {RESULTS}, making a new one.")
         data = {}
-    result = commands.copy()
+    result: dict[str, typing.Any] = commands.copy()
     result["lto"] = lto
     result["strip"] = strip
     result["debug"] = debug
-    result["time"] = f"{exec_duration:.2f}"
-    result["memory_usage_mb"] = f"{max_memory_mb:.0f}"
+    result["time"] = round(exec_duration, 1)
+    result["memory_usage_mb"] = int(round(max_memory_mb, 0))
     profile = mk_profile(strip, debug, lto)
     data[profile] = result
     with open(RESULTS, "w") as f:
@@ -131,7 +131,7 @@ def benchmark(
         print(f"Running timed command: {timed_command}")
         exec_duration, max_memory_mb = measure(f, dry_run, timed_command)
         print(
-            f"Timed command at {exec_duration:.2f} seconds, used {max_memory_mb:.2f} MB"
+            f"Timed command at {exec_duration:.1f} seconds, used {max_memory_mb:.0f} MB"
         )
         commands = {
             "setup": setup_command,
