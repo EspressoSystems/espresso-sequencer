@@ -20,10 +20,10 @@ use hotshot_types::{
         node_implementation::{ConsensusTime, NodeImplementation, NodeType},
     },
 };
-use std::time::Instant;
 use std::{
     collections::{BTreeMap, HashMap},
     sync::{atomic::AtomicBool, Arc},
+    time::Instant,
 };
 use tokio::spawn;
 

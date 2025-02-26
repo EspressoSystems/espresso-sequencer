@@ -34,10 +34,9 @@ use hotshot_utils::anytrace::*;
 use tracing::instrument;
 use vbs::version::StaticVersionType;
 
-use crate::helpers::get_next_epoch_qc;
 use crate::{
     events::HotShotEvent,
-    helpers::{broadcast_event, parent_leaf_and_state},
+    helpers::{broadcast_event, parent_leaf_and_state, wait_for_next_epoch_qc},
     quorum_proposal::{UpgradeLock, Versions},
 };
 
@@ -332,7 +331,7 @@ impl<TYPES: NodeType, V: Versions> ProposalDependencyHandle<TYPES, V> {
         let next_epoch_qc = if self.upgrade_lock.epochs_enabled(self.view_number).await
             && is_high_qc_for_last_block
         {
-            get_next_epoch_qc(
+            wait_for_next_epoch_qc(
                 &parent_qc,
                 &self.consensus,
                 self.timeout,

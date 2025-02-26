@@ -24,7 +24,6 @@ use vbs::{
     BinarySerializer, Serializer,
 };
 
-use crate::simple_certificate::NextEpochQuorumCertificate2;
 use crate::{
     data::{
         vid_disperse::{ADVZDisperseShare, VidDisperseShare2},
@@ -33,9 +32,10 @@ use crate::{
     },
     request_response::ProposalRequestPayload,
     simple_certificate::{
-        DaCertificate, DaCertificate2, QuorumCertificate2, UpgradeCertificate,
-        ViewSyncCommitCertificate, ViewSyncCommitCertificate2, ViewSyncFinalizeCertificate,
-        ViewSyncFinalizeCertificate2, ViewSyncPreCommitCertificate, ViewSyncPreCommitCertificate2,
+        DaCertificate, DaCertificate2, NextEpochQuorumCertificate2, QuorumCertificate2,
+        UpgradeCertificate, ViewSyncCommitCertificate, ViewSyncCommitCertificate2,
+        ViewSyncFinalizeCertificate, ViewSyncFinalizeCertificate2, ViewSyncPreCommitCertificate,
+        ViewSyncPreCommitCertificate2,
     },
     simple_vote::{
         DaVote, DaVote2, HasEpoch, QuorumVote, QuorumVote2, TimeoutVote, TimeoutVote2, UpgradeVote,

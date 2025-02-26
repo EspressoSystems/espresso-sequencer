@@ -9,14 +9,13 @@ use async_lock::RwLock;
 use committable::{Commitment, Committable};
 use either::Either;
 use hotshot_task::dependency::{Dependency, EventDependency};
-use hotshot_types::simple_certificate::NextEpochQuorumCertificate2;
 use hotshot_types::{
     consensus::OuterConsensus,
     data::{Leaf2, QuorumProposalWrapper, ViewChangeEvidence2},
     event::{Event, EventType, LeafInfo},
     message::{Proposal, UpgradeLock},
     request_response::ProposalRequestPayload,
-    simple_certificate::{QuorumCertificate2, UpgradeCertificate},
+    simple_certificate::{NextEpochQuorumCertificate2, QuorumCertificate2, UpgradeCertificate},
     simple_vote::HasEpoch,
     traits::{
         block_contents::BlockHeader,
@@ -32,10 +31,10 @@ use hotshot_types::{
     vote::{Certificate, HasViewNumber},
 };
 use hotshot_utils::anytrace::*;
-use std::time::{Duration, Instant};
 use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
+    time::{Duration, Instant},
 };
 use tokio::time::timeout;
 use tracing::instrument;
@@ -866,8 +865,9 @@ pub async fn broadcast_event<E: Clone + std::fmt::Debug>(event: E, sender: &Send
     }
 }
 
-/// Gets the next epoch QC corresponding to this epoch QC, times out if it takes too long.
-pub async fn get_next_epoch_qc<TYPES: NodeType>(
+/// Gets the next epoch QC corresponding to this epoch QC from the shared consensus state;
+/// if it's not yet available, waits for it with a given timeout.
+pub async fn wait_for_next_epoch_qc<TYPES: NodeType>(
     high_qc: &QuorumCertificate2<TYPES>,
     consensus: &OuterConsensus<TYPES>,
     timeout: u64,
@@ -958,10 +958,7 @@ pub async fn validate_qc_and_next_epoch_qc<TYPES: NodeType, V: Versions>(
 
     if let Some(next_epoch_qc) = maybe_next_epoch_qc {
         // If the next epoch qc exists, make sure it's equal to the qc
-        if qc.view_number() != next_epoch_qc.view_number()
-            || qc.data.epoch != next_epoch_qc.data.epoch
-            || qc.data.leaf_commit != next_epoch_qc.data.leaf_commit
-        {
+        if qc.view_number() != next_epoch_qc.view_number() || qc.data != *next_epoch_qc.data {
             bail!("Next epoch qc exists but it's not equal with qc.");
         }
 

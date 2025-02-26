@@ -9,13 +9,12 @@ use async_lock::RwLock;
 use async_trait::async_trait;
 use either::Either;
 use hotshot_task::task::TaskState;
-use hotshot_types::simple_vote::HasEpoch;
 use hotshot_types::{
     consensus::OuterConsensus,
     event::Event,
     message::UpgradeLock,
     simple_certificate::{NextEpochQuorumCertificate2, QuorumCertificate2, TimeoutCertificate2},
-    simple_vote::{NextEpochQuorumVote2, QuorumVote2, TimeoutVote2},
+    simple_vote::{HasEpoch, NextEpochQuorumVote2, QuorumVote2, TimeoutVote2},
     traits::{
         node_implementation::{NodeImplementation, NodeType, Versions},
         signature_key::SignatureKey,
@@ -24,15 +23,14 @@ use hotshot_types::{
     vote::HasViewNumber,
 };
 use hotshot_utils::anytrace::*;
-use std::sync::Arc;
-use std::time::Instant;
+use std::{sync::Arc, time::Instant};
 use tokio::task::JoinHandle;
 use tracing::instrument;
 
 use self::handlers::{
     handle_quorum_vote_recv, handle_timeout, handle_timeout_vote_recv, handle_view_change,
 };
-use crate::helpers::{get_next_epoch_qc, validate_qc_and_next_epoch_qc};
+use crate::helpers::{validate_qc_and_next_epoch_qc, wait_for_next_epoch_qc};
 use crate::{events::HotShotEvent, helpers::broadcast_event, vote_collection::VoteCollectorsMap};
 
 /// Event handlers for use in the `handle` method.
@@ -157,7 +155,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> ConsensusTaskSt
                     tracing::debug!("We formed QC but not eQC. Do nothing");
                     return Ok(());
                 }
-                if get_next_epoch_qc(
+                if wait_for_next_epoch_qc(
                     quorum_cert,
                     &self.consensus,
                     self.timeout,
