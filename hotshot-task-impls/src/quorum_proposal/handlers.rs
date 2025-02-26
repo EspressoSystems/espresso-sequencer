@@ -407,7 +407,7 @@ impl<TYPES: NodeType, V: Versions> ProposalDependencyHandle<TYPES, V> {
                         .await
                         .drb_seeds_and_results
                         .results
-                        .get(epoch_val)
+                        .get(&(*epoch_val + 1))
                         .copied()
                 } else {
                     None
