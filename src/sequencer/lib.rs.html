@@ -1198,7 +1198,9 @@
 <a href="#1197" id="1197">1197</a>
 <a href="#1198" id="1198">1198</a>
 <a href="#1199" id="1199">1199</a>
-<a href="#1200" id="1200">1200</a></pre></div><pre class="rust"><code><span class="kw">pub mod </span>api;
+<a href="#1200" id="1200">1200</a>
+<a href="#1201" id="1201">1201</a>
+<a href="#1202" id="1202">1202</a></pre></div><pre class="rust"><code><span class="kw">pub mod </span>api;
 <span class="kw">pub mod </span>catchup;
 <span class="kw">pub mod </span>context;
 <span class="kw">pub mod </span>genesis;
@@ -2266,9 +2268,10 @@
     <span class="kw">use </span>hotshot::types::EventType::Decide;
     <span class="kw">use </span>hotshot_example_types::node_types::TestVersions;
     <span class="kw">use </span>hotshot_types::{
+        data::vid_commitment,
         event::LeafInfo,
         traits::block_contents::{
-            vid_commitment, BlockHeader, BlockPayload, EncodeBytes, GENESIS_VID_NUM_STORAGE_NODES,
+            BlockHeader, BlockPayload, EncodeBytes, GENESIS_VID_NUM_STORAGE_NODES,
         },
     };
     <span class="kw">use </span>sequencer_utils::{test_utils::setup_test, AnvilOptions};
@@ -2356,6 +2359,7 @@
                 </span><span class="kw">let </span>payload_bytes = genesis_payload.encode();
                 vid_commitment::&lt;TestVersions&gt;(
                     <span class="kw-2">&amp;</span>payload_bytes,
+                    <span class="kw-2">&amp;</span>genesis_ns_table.encode(),
                     GENESIS_VID_NUM_STORAGE_NODES,
                     &lt;TestVersions <span class="kw">as </span>Versions&gt;::Base::VERSION,
                 )

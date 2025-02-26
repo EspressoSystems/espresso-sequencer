@@ -279,14 +279,17 @@
 <span class="kw">use </span>async_trait::async_trait;
 <span class="kw">use </span>futures::future::Future;
 <span class="kw">use </span>hotshot::types::{Event, EventType};
-<span class="kw">use </span>hotshot_types::{data::VidDisperseShare, event::LeafInfo};
 <span class="kw">use </span>hotshot_types::{
     data::{Leaf, Leaf2, QuorumProposal},
     traits::{
         block_contents::{BlockHeader, BlockPayload, EncodeBytes, GENESIS_VID_NUM_STORAGE_NODES},
         node_implementation::{ConsensusTime, NodeType},
     },
-    vid::advz_scheme,
+    vid::advz::advz_scheme,
+};
+<span class="kw">use </span>hotshot_types::{
+    data::{VidCommitment, VidDisperseShare},
+    event::LeafInfo,
 };
 <span class="kw">use </span>jf_vid::VidScheme;
 <span class="kw">use </span>std::iter::once;
@@ -396,16 +399,13 @@
                     <span class="prelude-val">Some</span>(VidDisperseShare::V0(share)) =&gt; (
                         <span class="prelude-val">Some</span>(VidCommonQueryData::new(
                             leaf.block_header().clone(),
-                            share.common.clone(),
+                            <span class="prelude-val">Some</span>(share.common.clone()),
                         )),
-                        <span class="prelude-val">Some</span>(share.share.clone()),
+                        <span class="prelude-val">Some</span>(VidShare::V0(share.share.clone())),
                     ),
                     <span class="prelude-val">Some</span>(VidDisperseShare::V1(share)) =&gt; (
-                        <span class="prelude-val">Some</span>(VidCommonQueryData::new(
-                            leaf.block_header().clone(),
-                            share.common.clone(),
-                        )),
-                        <span class="prelude-val">Some</span>(share.share.clone()),
+                        <span class="prelude-val">Some</span>(VidCommonQueryData::new(leaf.block_header().clone(), <span class="prelude-val">None</span>)),
+                        <span class="prelude-val">Some</span>(VidShare::V1(share.share.clone())),
                     ),
                     <span class="prelude-val">None </span>=&gt; {
                         <span class="kw">if </span>leaf.view_number().u64() == <span class="number">0 </span>{
@@ -452,14 +452,14 @@
         .disperse(bytes)
         .context(<span class="string">"unable to compute VID dispersal for genesis block"</span>)<span class="question-mark">?</span>;
     <span class="macro">ensure!</span>(
-        disperse.commit == leaf.block_header().payload_commitment(),
+        VidCommitment::V0(disperse.commit) == leaf.block_header().payload_commitment(),
         <span class="string">"computed VID commit {} for genesis block does not match header commit {}"</span>,
         disperse.commit,
         leaf.block_header().payload_commitment()
     );
     <span class="prelude-val">Ok</span>((
-        VidCommonQueryData::new(leaf.block_header().clone(), disperse.common),
-        disperse.shares.remove(<span class="number">0</span>),
+        VidCommonQueryData::new(leaf.block_header().clone(), <span class="prelude-val">Some</span>(disperse.common)),
+        VidShare::V0(disperse.shares.remove(<span class="number">0</span>)),
     ))
 }
 

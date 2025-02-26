@@ -944,7 +944,9 @@
 <a href="#943" id="943">943</a>
 <a href="#944" id="944">944</a>
 <a href="#945" id="945">945</a>
-<a href="#946" id="946">946</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2022 Espresso Systems (espressosys.com)
+<a href="#946" id="946">946</a>
+<a href="#947" id="947">947</a>
+<a href="#948" id="948">948</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2022 Espresso Systems (espressosys.com)
 // This file is part of the HotShot Query Service library.
 //
 // This program is free software: you can redistribute it and/or modify it under the terms of the GNU
@@ -1394,9 +1396,11 @@
 
 <span class="kw">pub use </span>hotshot_types::{
     data::Leaf,
+    data::{VidCommitment, VidShare},
     simple_certificate::QuorumCertificate,
-    vid::{VidCommitment, VidCommon, VidShare},
 };
+
+<span class="kw">pub type </span>VidCommon = <span class="prelude-ty">Option</span>&lt;hotshot_types::vid::advz::ADVZCommon&gt;;
 
 <span class="kw">pub type </span>Payload&lt;Types&gt; = &lt;Types <span class="kw">as </span>NodeType&gt;::BlockPayload;
 <span class="kw">pub type </span>Header&lt;Types&gt; = &lt;Types <span class="kw">as </span>NodeType&gt;::BlockHeader;

@@ -1298,7 +1298,7 @@
             .get(<span class="kw-2">&amp;</span>info.leaf.view_number())
         {
             info.leaf
-                .fill_block_payload_unchecked(payload.as_ref().clone());
+                .fill_block_payload_unchecked(payload.as_ref().payload.clone());
         }
 
         <span class="kw">if let </span><span class="prelude-val">Some</span>(<span class="kw-2">ref </span>payload) = info.leaf.block_payload() {
@@ -1437,7 +1437,7 @@
                 <span class="comment">// If the block payload is available for this leaf, include it in
                 // the leaf chain that we send to the client.
                 </span><span class="kw">if let </span><span class="prelude-val">Some</span>(payload) = consensus_reader.saved_payloads().get(<span class="kw-2">&amp;</span>leaf.view_number()) {
-                    leaf.fill_block_payload_unchecked(payload.as_ref().clone());
+                    leaf.fill_block_payload_unchecked(payload.as_ref().payload.clone());
                 }
 
                 <span class="comment">// Get the VID share at the leaf's view number, corresponding to our key

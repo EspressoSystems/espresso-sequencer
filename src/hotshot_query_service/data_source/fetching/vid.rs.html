@@ -323,7 +323,8 @@
 <a href="#322" id="322">322</a>
 <a href="#323" id="323">323</a>
 <a href="#324" id="324">324</a>
-<a href="#325" id="325">325</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2022 Espresso Systems (espressosys.com)
+<a href="#325" id="325">325</a>
+<a href="#326" id="326">326</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2022 Espresso Systems (espressosys.com)
 // This file is part of the HotShot Query Service library.
 //
 // This program is free software: you can redistribute it and/or modify it under the terms of the GNU
@@ -353,7 +354,7 @@
     },
     fetching::{<span class="self">self</span>, request, Callback},
     types::HeightIndexed,
-    Header, Payload, QueryResult, VidCommon, VidShare,
+    Header, Payload, QueryResult, VidShare,
 };
 <span class="kw">use </span>async_trait::async_trait;
 <span class="kw">use </span>derivative::Derivative;
@@ -560,16 +561,17 @@
     }
 }
 
-<span class="kw">impl</span>&lt;Types: NodeType, S, P&gt; Callback&lt;VidCommon&gt; <span class="kw">for </span>VidCommonCallback&lt;Types, S, P&gt;
+<span class="kw">impl</span>&lt;Types: NodeType, S, P&gt; Callback&lt;hotshot_types::vid::advz::ADVZCommon&gt;
+    <span class="kw">for </span>VidCommonCallback&lt;Types, S, P&gt;
 <span class="kw">where
     </span>Payload&lt;Types&gt;: QueryablePayload&lt;Types&gt;,
     S: VersionedDataSource + <span class="lifetime">'static</span>,
     <span class="kw">for</span>&lt;<span class="lifetime">'a</span>&gt; S::Transaction&lt;<span class="lifetime">'a</span>&gt;: UpdateAvailabilityStorage&lt;Types&gt;,
     P: AvailabilityProvider&lt;Types&gt;,
 {
-    <span class="kw">async fn </span>run(<span class="self">self</span>, common: VidCommon) {
+    <span class="kw">async fn </span>run(<span class="self">self</span>, common: hotshot_types::vid::advz::ADVZCommon) {
         <span class="macro">tracing::info!</span>(<span class="string">"fetched VID common {:?}"</span>, <span class="self">self</span>.header.payload_commitment());
-        <span class="kw">let </span>common = VidCommonQueryData::new(<span class="self">self</span>.header, common);
+        <span class="kw">let </span>common = VidCommonQueryData::new(<span class="self">self</span>.header, <span class="prelude-val">Some</span>(common));
         <span class="self">self</span>.fetcher.store_and_notify(common).<span class="kw">await</span>;
     }
 }

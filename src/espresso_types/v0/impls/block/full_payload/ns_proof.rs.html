@@ -159,9 +159,12 @@
 <a href="#158" id="158">158</a>
 <a href="#159" id="159">159</a>
 <a href="#160" id="160">160</a>
-<a href="#161" id="161">161</a></pre></div><pre class="rust"><code><span class="kw">use </span>hotshot_types::{
+<a href="#161" id="161">161</a>
+<a href="#162" id="162">162</a>
+<a href="#163" id="163">163</a></pre></div><pre class="rust"><code><span class="kw">use </span>hotshot_query_service::VidCommitment;
+<span class="kw">use </span>hotshot_types::{
     traits::EncodeBytes,
-    vid::{advz_scheme, VidCommitment, VidCommon, VidSchemeType},
+    vid::advz::{advz_scheme, ADVZCommon, ADVZScheme},
 };
 <span class="kw">use </span>jf_vid::{
     payload_prover::{PayloadProver, Statement},
@@ -182,13 +185,13 @@
     /// conforms to this convention.) In the future we should change this API to
     /// conform to convention. But that would require a change to our RPC
     /// endpoint API at [`endpoints`](crate::api::endpoints), which is a hassle.
-    </span><span class="kw">pub fn </span>new(payload: <span class="kw-2">&amp;</span>Payload, index: <span class="kw-2">&amp;</span>NsIndex, common: <span class="kw-2">&amp;</span>VidCommon) -&gt; <span class="prelude-ty">Option</span>&lt;NsProof&gt; {
+    </span><span class="kw">pub fn </span>new(payload: <span class="kw-2">&amp;</span>Payload, index: <span class="kw-2">&amp;</span>NsIndex, common: <span class="kw-2">&amp;</span>ADVZCommon) -&gt; <span class="prelude-ty">Option</span>&lt;NsProof&gt; {
         <span class="kw">let </span>payload_byte_len = payload.byte_len();
         <span class="kw">if </span>!payload_byte_len.is_consistent(common) {
             <span class="macro">tracing::warn!</span>(
                 <span class="string">"payload byte len {} inconsistent with common {}"</span>,
                 payload_byte_len,
-                VidSchemeType::get_payload_byte_len(common)
+                ADVZScheme::get_payload_byte_len(common)
             );
             <span class="kw">return </span><span class="prelude-val">None</span>; <span class="comment">// error: payload byte len inconsistent with common
         </span>}
@@ -201,9 +204,7 @@
         <span class="comment">// TODO vid_scheme() arg should be u32 to match get_num_storage_nodes
         // https://github.com/EspressoSystems/HotShot/issues/3298
         </span><span class="kw">let </span>vid = advz_scheme(
-            VidSchemeType::get_num_storage_nodes(common)
-                .try_into()
-                .ok()<span class="question-mark">?</span>, <span class="comment">// error: failure to convert u32 to usize
+            ADVZScheme::get_num_storage_nodes(common).try_into().ok()<span class="question-mark">?</span>, <span class="comment">// error: failure to convert u32 to usize
         </span>);
 
         <span class="kw">let </span>ns_proof = <span class="kw">if </span>ns_payload_range.as_block_range().is_empty() {
@@ -239,56 +240,59 @@
         <span class="kw-2">&amp;</span><span class="self">self</span>,
         ns_table: <span class="kw-2">&amp;</span>NsTable,
         commit: <span class="kw-2">&amp;</span>VidCommitment,
-        common: <span class="kw-2">&amp;</span>VidCommon,
+        common: <span class="kw-2">&amp;</span>ADVZCommon,
     ) -&gt; <span class="prelude-ty">Option</span>&lt;(Vec&lt;Transaction&gt;, NamespaceId)&gt; {
-        VidSchemeType::is_consistent(commit, common).ok()<span class="question-mark">?</span>;
-        <span class="kw">if </span>!ns_table.in_bounds(<span class="kw-2">&amp;</span><span class="self">self</span>.ns_index) {
-            <span class="kw">return </span><span class="prelude-val">None</span>; <span class="comment">// error: index out of bounds
-        </span>}
+        <span class="kw">match </span>commit {
+            VidCommitment::V0(commit) =&gt; {
+                ADVZScheme::is_consistent(commit, common).ok()<span class="question-mark">?</span>;
+                <span class="kw">if </span>!ns_table.in_bounds(<span class="kw-2">&amp;</span><span class="self">self</span>.ns_index) {
+                    <span class="kw">return </span><span class="prelude-val">None</span>; <span class="comment">// error: index out of bounds
+                </span>}
 
-        <span class="kw">let </span>range = ns_table
-            .ns_range(<span class="kw-2">&amp;</span><span class="self">self</span>.ns_index, <span class="kw-2">&amp;</span>PayloadByteLen::from_vid_common(common))
-            .as_block_range();
+                <span class="kw">let </span>range = ns_table
+                    .ns_range(<span class="kw-2">&amp;</span><span class="self">self</span>.ns_index, <span class="kw-2">&amp;</span>PayloadByteLen::from_vid_common(common))
+                    .as_block_range();
 
-        <span class="kw">match </span>(<span class="kw-2">&amp;</span><span class="self">self</span>.ns_proof, range.is_empty()) {
-            (<span class="prelude-val">Some</span>(proof), <span class="bool-val">false</span>) =&gt; {
-                <span class="comment">// TODO advz_scheme() arg should be u32 to match get_num_storage_nodes
-                // https://github.com/EspressoSystems/HotShot/issues/3298
-                </span><span class="kw">let </span>vid = advz_scheme(
-                    VidSchemeType::get_num_storage_nodes(common)
-                        .try_into()
-                        .ok()<span class="question-mark">?</span>, <span class="comment">// error: failure to convert u32 to usize
-                </span>);
+                <span class="kw">match </span>(<span class="kw-2">&amp;</span><span class="self">self</span>.ns_proof, range.is_empty()) {
+                    (<span class="prelude-val">Some</span>(proof), <span class="bool-val">false</span>) =&gt; {
+                        <span class="comment">// TODO advz_scheme() arg should be u32 to match get_num_storage_nodes
+                        // https://github.com/EspressoSystems/HotShot/issues/3298
+                        </span><span class="kw">let </span>vid = advz_scheme(
+                            ADVZScheme::get_num_storage_nodes(common).try_into().ok()<span class="question-mark">?</span>, <span class="comment">// error: failure to convert u32 to usize
+                        </span>);
 
-                vid.payload_verify(
-                    Statement {
-                        payload_subslice: <span class="self">self</span>.ns_payload.as_bytes_slice(),
-                        range,
-                        commit,
-                        common,
-                    },
-                    proof,
-                )
-                .ok()<span class="question-mark">? </span><span class="comment">// error: internal to payload_verify()
-                </span>.ok()<span class="question-mark">?</span>; <span class="comment">// verification failure
-            </span>}
-            (<span class="prelude-val">None</span>, <span class="bool-val">true</span>) =&gt; {} <span class="comment">// 0-length namespace, nothing to verify
-            </span>(<span class="prelude-val">None</span>, <span class="bool-val">false</span>) =&gt; {
-                <span class="macro">tracing::error!</span>(
-                    <span class="string">"ns verify: missing proof for nonempty ns payload range {:?}"</span>,
-                    range
-                );
-                <span class="kw">return </span><span class="prelude-val">None</span>;
+                        vid.payload_verify(
+                            Statement {
+                                payload_subslice: <span class="self">self</span>.ns_payload.as_bytes_slice(),
+                                range,
+                                commit,
+                                common,
+                            },
+                            proof,
+                        )
+                        .ok()<span class="question-mark">? </span><span class="comment">// error: internal to payload_verify()
+                        </span>.ok()<span class="question-mark">?</span>; <span class="comment">// verification failure
+                    </span>}
+                    (<span class="prelude-val">None</span>, <span class="bool-val">true</span>) =&gt; {} <span class="comment">// 0-length namespace, nothing to verify
+                    </span>(<span class="prelude-val">None</span>, <span class="bool-val">false</span>) =&gt; {
+                        <span class="macro">tracing::error!</span>(
+                            <span class="string">"ns verify: missing proof for nonempty ns payload range {:?}"</span>,
+                            range
+                        );
+                        <span class="kw">return </span><span class="prelude-val">None</span>;
+                    }
+                    (<span class="prelude-val">Some</span>(<span class="kw">_</span>), <span class="bool-val">true</span>) =&gt; {
+                        <span class="macro">tracing::error!</span>(<span class="string">"ns verify: unexpected proof for empty ns payload range"</span>);
+                        <span class="kw">return </span><span class="prelude-val">None</span>;
+                    }
+                }
+
+                <span class="comment">// verification succeeded, return some data
+                </span><span class="kw">let </span>ns_id = ns_table.read_ns_id_unchecked(<span class="kw-2">&amp;</span><span class="self">self</span>.ns_index);
+                <span class="prelude-val">Some</span>((<span class="self">self</span>.ns_payload.export_all_txs(<span class="kw-2">&amp;</span>ns_id), ns_id))
             }
-            (<span class="prelude-val">Some</span>(<span class="kw">_</span>), <span class="bool-val">true</span>) =&gt; {
-                <span class="macro">tracing::error!</span>(<span class="string">"ns verify: unexpected proof for empty ns payload range"</span>);
-                <span class="kw">return </span><span class="prelude-val">None</span>;
-            }
+            VidCommitment::V1(<span class="kw">_</span>) =&gt; <span class="prelude-val">None</span>,
         }
-
-        <span class="comment">// verification succeeded, return some data
-        </span><span class="kw">let </span>ns_id = ns_table.read_ns_id_unchecked(<span class="kw-2">&amp;</span><span class="self">self</span>.ns_index);
-        <span class="prelude-val">Some</span>((<span class="self">self</span>.ns_payload.export_all_txs(<span class="kw-2">&amp;</span>ns_id), ns_id))
     }
 
     <span class="doccomment">/// Return all transactions in the namespace whose payload is proven by

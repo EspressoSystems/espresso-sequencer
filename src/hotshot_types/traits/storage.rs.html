@@ -145,7 +145,27 @@
 <a href="#144" id="144">144</a>
 <a href="#145" id="145">145</a>
 <a href="#146" id="146">146</a>
-<a href="#147" id="147">147</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
+<a href="#147" id="147">147</a>
+<a href="#148" id="148">148</a>
+<a href="#149" id="149">149</a>
+<a href="#150" id="150">150</a>
+<a href="#151" id="151">151</a>
+<a href="#152" id="152">152</a>
+<a href="#153" id="153">153</a>
+<a href="#154" id="154">154</a>
+<a href="#155" id="155">155</a>
+<a href="#156" id="156">156</a>
+<a href="#157" id="157">157</a>
+<a href="#158" id="158">158</a>
+<a href="#159" id="159">159</a>
+<a href="#160" id="160">160</a>
+<a href="#161" id="161">161</a>
+<a href="#162" id="162">162</a>
+<a href="#163" id="163">163</a>
+<a href="#164" id="164">164</a>
+<a href="#165" id="165">165</a>
+<a href="#166" id="166">166</a>
+<a href="#167" id="167">167</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
 // This file is part of the HotShot repository.
 
 // You should have received a copy of the MIT License
@@ -161,22 +181,21 @@
 <span class="kw">use </span>anyhow::Result;
 <span class="kw">use </span>async_trait::async_trait;
 <span class="kw">use </span>committable::Commitment;
-<span class="kw">use </span>jf_vid::VidScheme;
 
 <span class="kw">use </span><span class="kw">super</span>::node_implementation::NodeType;
 <span class="kw">use crate</span>::{
     consensus::{CommitmentMap, View},
+    data::VidCommitment,
     data::{
         vid_disperse::{ADVZDisperseShare, VidDisperseShare2},
         DaProposal, DaProposal2, Leaf, Leaf2, QuorumProposal, QuorumProposal2,
-        QuorumProposalWrapper,
+        QuorumProposalWrapper, VidDisperseShare,
     },
     event::HotShotAction,
     message::{convert_proposal, Proposal},
     simple_certificate::{
         NextEpochQuorumCertificate2, QuorumCertificate, QuorumCertificate2, UpgradeCertificate,
     },
-    vid::VidSchemeType,
 };
 
 <span class="doccomment">/// Abstraction for storing a variety of consensus payload datum.
@@ -185,24 +204,45 @@
     <span class="doccomment">/// Add a proposal to the stored VID proposals.
     </span><span class="kw">async fn </span>append_vid(<span class="kw-2">&amp;</span><span class="self">self</span>, proposal: <span class="kw-2">&amp;</span>Proposal&lt;TYPES, ADVZDisperseShare&lt;TYPES&gt;&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt;;
     <span class="doccomment">/// Add a proposal to the stored VID proposals.
-    /// TODO(Chengyu): change here because in the future disperse share types might not be convertible.
-    </span><span class="kw">async fn </span>append_vid2(
+    /// TODO(Chengyu): fix this
+    </span><span class="kw">async fn </span>append_vid2(<span class="kw-2">&amp;</span><span class="self">self</span>, proposal: <span class="kw-2">&amp;</span>Proposal&lt;TYPES, VidDisperseShare2&lt;TYPES&gt;&gt;)
+        -&gt; <span class="prelude-ty">Result</span>&lt;()&gt;;
+
+    <span class="kw">async fn </span>append_vid_general(
         <span class="kw-2">&amp;</span><span class="self">self</span>,
-        proposal: <span class="kw-2">&amp;</span>Proposal&lt;TYPES, VidDisperseShare2&lt;TYPES&gt;&gt;,
+        proposal: <span class="kw-2">&amp;</span>Proposal&lt;TYPES, VidDisperseShare&lt;TYPES&gt;&gt;,
     ) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-        <span class="self">self</span>.append_vid(<span class="kw-2">&amp;</span>convert_proposal(proposal.clone())).<span class="kw">await
-    </span>}
+        <span class="kw">let </span>signature = proposal.signature.clone();
+        <span class="kw">match </span><span class="kw-2">&amp;</span>proposal.data {
+            VidDisperseShare::V0(share) =&gt; {
+                <span class="self">self</span>.append_vid(<span class="kw-2">&amp;</span>Proposal {
+                    data: share.clone(),
+                    signature,
+                    _pd: std::marker::PhantomData,
+                })
+                .<span class="kw">await
+            </span>}
+            VidDisperseShare::V1(share) =&gt; {
+                <span class="self">self</span>.append_vid2(<span class="kw-2">&amp;</span>Proposal {
+                    data: share.clone(),
+                    signature,
+                    _pd: std::marker::PhantomData,
+                })
+                .<span class="kw">await
+            </span>}
+        }
+    }
     <span class="doccomment">/// Add a proposal to the stored DA proposals.
     </span><span class="kw">async fn </span>append_da(
         <span class="kw-2">&amp;</span><span class="self">self</span>,
         proposal: <span class="kw-2">&amp;</span>Proposal&lt;TYPES, DaProposal&lt;TYPES&gt;&gt;,
-        vid_commit: &lt;VidSchemeType <span class="kw">as </span>VidScheme&gt;::Commit,
+        vid_commit: VidCommitment,
     ) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt;;
     <span class="doccomment">/// Add a proposal to the stored DA proposals.
     </span><span class="kw">async fn </span>append_da2(
         <span class="kw-2">&amp;</span><span class="self">self</span>,
         proposal: <span class="kw-2">&amp;</span>Proposal&lt;TYPES, DaProposal2&lt;TYPES&gt;&gt;,
-        vid_commit: &lt;VidSchemeType <span class="kw">as </span>VidScheme&gt;::Commit,
+        vid_commit: VidCommitment,
     ) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
         <span class="self">self</span>.append_da(<span class="kw-2">&amp;</span>convert_proposal(proposal.clone()), vid_commit)
             .<span class="kw">await

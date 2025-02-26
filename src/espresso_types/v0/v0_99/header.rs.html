@@ -74,7 +74,7 @@
 <span class="kw">use </span><span class="kw">crate</span>::NsTable;
 <span class="kw">use </span>ark_serialize::CanonicalSerialize;
 <span class="kw">use </span>committable::{Commitment, Committable, RawCommitmentBuilder};
-<span class="kw">use </span>hotshot_types::{utils::BuilderCommitment, vid::VidCommitment};
+<span class="kw">use </span>hotshot_types::{data::VidCommitment, utils::BuilderCommitment};
 <span class="kw">use </span>serde::{Deserialize, Serialize};
 
 <span class="attr">#[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq)]
@@ -114,7 +114,7 @@
             .u64_field(<span class="string">"l1_head"</span>, <span class="self">self</span>.l1_head)
             .optional(<span class="string">"l1_finalized"</span>, <span class="kw-2">&amp;</span><span class="self">self</span>.l1_finalized)
             .constant_str(<span class="string">"payload_commitment"</span>)
-            .fixed_size_bytes(<span class="self">self</span>.payload_commitment.as_ref().as_ref())
+            .fixed_size_bytes(<span class="self">self</span>.payload_commitment.as_ref())
             .constant_str(<span class="string">"builder_commitment"</span>)
             .fixed_size_bytes(<span class="self">self</span>.builder_commitment.as_ref())
             .field(<span class="string">"ns_table"</span>, <span class="self">self</span>.ns_table.commit())

@@ -1804,7 +1804,26 @@
 <a href="#1803" id="1803">1803</a>
 <a href="#1804" id="1804">1804</a>
 <a href="#1805" id="1805">1805</a>
-<a href="#1806" id="1806">1806</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2022 Espresso Systems (espressosys.com)
+<a href="#1806" id="1806">1806</a>
+<a href="#1807" id="1807">1807</a>
+<a href="#1808" id="1808">1808</a>
+<a href="#1809" id="1809">1809</a>
+<a href="#1810" id="1810">1810</a>
+<a href="#1811" id="1811">1811</a>
+<a href="#1812" id="1812">1812</a>
+<a href="#1813" id="1813">1813</a>
+<a href="#1814" id="1814">1814</a>
+<a href="#1815" id="1815">1815</a>
+<a href="#1816" id="1816">1816</a>
+<a href="#1817" id="1817">1817</a>
+<a href="#1818" id="1818">1818</a>
+<a href="#1819" id="1819">1819</a>
+<a href="#1820" id="1820">1820</a>
+<a href="#1821" id="1821">1821</a>
+<a href="#1822" id="1822">1822</a>
+<a href="#1823" id="1823">1823</a>
+<a href="#1824" id="1824">1824</a>
+<a href="#1825" id="1825">1825</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2022 Espresso Systems (espressosys.com)
 // This file is part of the HotShot Query Service library.
 //
 // This program is free software: you can redistribute it and/or modify it under the terms of the GNU
@@ -1822,14 +1841,14 @@
     availability::{LeafQueryData, PayloadQueryData, VidCommonQueryData},
     fetching::request::{LeafRequest, PayloadRequest, VidCommonRequest},
     types::HeightIndexed,
-    Error, Payload, VidCommon,
+    Error, Payload, VidCommitment, VidCommon,
 };
 <span class="kw">use </span>async_trait::async_trait;
 <span class="kw">use </span>committable::Committable;
 <span class="kw">use </span>futures::try_join;
 <span class="kw">use </span>hotshot_types::{
     traits::{node_implementation::NodeType, EncodeBytes},
-    vid::{advz_scheme, VidSchemeType},
+    vid::advz::{advz_scheme, ADVZScheme},
 };
 <span class="kw">use </span>jf_vid::VidScheme;
 <span class="kw">use </span>surf_disco::{Client, Url};
@@ -1874,21 +1893,26 @@
         );
         <span class="kw">match </span>res {
             <span class="prelude-val">Ok</span>((payload, common)) =&gt; {
-                <span class="comment">// Verify that the data we retrieved is consistent with the request we made.
-                </span><span class="kw">let </span>num_storage_nodes =
-                    VidSchemeType::get_num_storage_nodes(common.common()) <span class="kw">as </span>usize;
-                <span class="kw">let </span>bytes = payload.data().encode();
-                <span class="kw">let </span>commit = <span class="kw">match </span>advz_scheme(num_storage_nodes).commit_only(bytes) {
-                    <span class="prelude-val">Ok</span>(commit) =&gt; commit,
-                    <span class="prelude-val">Err</span>(err) =&gt; {
-                        <span class="macro">tracing::error!</span>(%err, <span class="string">"unable to compute VID commitment"</span>);
+                <span class="kw">if let </span><span class="prelude-val">Some</span>(common) = common.common() {
+                    <span class="comment">// Verify that the data we retrieved is consistent with the request we made.
+                    </span><span class="kw">let </span>num_storage_nodes = ADVZScheme::get_num_storage_nodes(common) <span class="kw">as </span>usize;
+                    <span class="kw">let </span>bytes = payload.data().encode();
+                    <span class="kw">let </span>commit = VidCommitment::V0(
+                        <span class="kw">match </span>advz_scheme(num_storage_nodes).commit_only(bytes) {
+                            <span class="prelude-val">Ok</span>(commit) =&gt; commit,
+                            <span class="prelude-val">Err</span>(err) =&gt; {
+                                <span class="macro">tracing::error!</span>(%err, <span class="string">"unable to compute VID commitment"</span>);
+                                <span class="kw">return </span><span class="prelude-val">None</span>;
+                            }
+                        },
+                    );
+                    <span class="kw">if </span>commit != req.<span class="number">0 </span>{
+                        <span class="macro">tracing::error!</span>(<span class="question-mark">?</span>req, <span class="question-mark">?</span>commit, <span class="string">"received inconsistent payload"</span>);
                         <span class="kw">return </span><span class="prelude-val">None</span>;
                     }
-                };
-                <span class="kw">if </span>commit != req.<span class="number">0 </span>{
-                    <span class="macro">tracing::error!</span>(<span class="question-mark">?</span>req, <span class="question-mark">?</span>commit, <span class="string">"received inconsistent payload"</span>);
-                    <span class="kw">return </span><span class="prelude-val">None</span>;
-                }
+                    <span class="comment">// } else {
+                    // TODO(Chengyu): should we check AVIDM?
+                </span>}
 
                 <span class="prelude-val">Some</span>(payload.data)
             }
@@ -1948,7 +1972,7 @@
 <span class="kw">where
     </span>Types: NodeType,
 {
-    <span class="kw">async fn </span>fetch(<span class="kw-2">&amp;</span><span class="self">self</span>, req: VidCommonRequest) -&gt; <span class="prelude-ty">Option</span>&lt;VidCommon&gt; {
+    <span class="kw">async fn </span>fetch(<span class="kw-2">&amp;</span><span class="self">self</span>, req: VidCommonRequest) -&gt; VidCommon {
         <span class="kw">match </span><span class="self">self
             </span>.client
             .get::&lt;VidCommonQueryData&lt;Types&gt;&gt;(<span class="kw-2">&amp;</span><span class="macro">format!</span>(
@@ -1958,13 +1982,27 @@
             .send()
             .<span class="kw">await
         </span>{
-            <span class="prelude-val">Ok</span>(res) <span class="kw">if </span>VidSchemeType::is_consistent(<span class="kw-2">&amp;</span>req.<span class="number">0</span>, <span class="kw-2">&amp;</span>res.common).is_ok() =&gt; {
-                <span class="prelude-val">Some</span>(res.common)
-            }
-            <span class="prelude-val">Ok</span>(res) =&gt; {
-                <span class="macro">tracing::error!</span>(<span class="question-mark">?</span>req, <span class="question-mark">?</span>res, <span class="string">"fetched inconsistent VID common data"</span>);
-                <span class="prelude-val">None
-            </span>}
+            <span class="prelude-val">Ok</span>(res) =&gt; <span class="kw">match </span>req.<span class="number">0 </span>{
+                VidCommitment::V0(commit) =&gt; {
+                    <span class="kw">if let </span><span class="prelude-val">Some</span>(common) = res.common {
+                        <span class="kw">if </span>ADVZScheme::is_consistent(<span class="kw-2">&amp;</span>commit, <span class="kw-2">&amp;</span>common).is_ok() {
+                            <span class="prelude-val">Some</span>(common)
+                        } <span class="kw">else </span>{
+                            <span class="macro">tracing::error!</span>(<span class="question-mark">?</span>req, <span class="question-mark">?</span>common, <span class="string">"fetched inconsistent VID common data"</span>);
+                            <span class="prelude-val">None
+                        </span>}
+                    } <span class="kw">else </span>{
+                        <span class="macro">tracing::error!</span>(<span class="question-mark">?</span>req, <span class="question-mark">?</span>res, <span class="string">"Expect VID common data but found None"</span>);
+                        <span class="prelude-val">None
+                    </span>}
+                }
+                VidCommitment::V1(<span class="kw">_</span>) =&gt; {
+                    <span class="kw">if </span>res.common.is_some() {
+                        <span class="macro">tracing::warn!</span>(<span class="question-mark">?</span>req, <span class="question-mark">?</span>res, <span class="string">"Expect no VID common data but found some."</span>)
+                    }
+                    <span class="prelude-val">None
+                </span>}
+            },
             <span class="prelude-val">Err</span>(err) =&gt; {
                 <span class="macro">tracing::error!</span>(<span class="string">"failed to fetch VID common {req:?}: {err}"</span>);
                 <span class="prelude-val">None
@@ -2646,7 +2684,7 @@
     <span class="kw">fn </span>random_vid_commit() -&gt; VidCommitment {
         <span class="kw">let </span><span class="kw-2">mut </span>bytes = [<span class="number">0</span>; <span class="number">32</span>];
         rand::thread_rng().fill_bytes(<span class="kw-2">&amp;mut </span>bytes);
-        VidCommitment::from(GenericArray::from(bytes))
+        VidCommitment::V0(GenericArray::from(bytes).into())
     }
 
     <span class="kw">async fn </span>malicious_server(port: u16) {

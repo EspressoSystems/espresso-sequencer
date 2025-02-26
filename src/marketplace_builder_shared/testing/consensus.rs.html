@@ -183,7 +183,9 @@
 <a href="#182" id="182">182</a>
 <a href="#183" id="183">183</a>
 <a href="#184" id="184">184</a>
-<a href="#185" id="185">185</a></pre></div><pre class="rust"><code><span class="doccomment">//! This module defines types used when simulating consensus in tests
+<a href="#185" id="185">185</a>
+<a href="#186" id="186">186</a>
+<a href="#187" id="187">187</a></pre></div><pre class="rust"><code><span class="doccomment">//! This module defines types used when simulating consensus in tests
 
 </span><span class="kw">use </span>std::marker::PhantomData;
 
@@ -202,13 +204,14 @@
     state_types::{TestInstanceState, TestValidatedState},
 };
 <span class="kw">use </span>hotshot_types::{
+    data::vid_commitment,
     data::{DaProposal2, EpochNumber, Leaf2, QuorumProposal2, QuorumProposalWrapper, ViewNumber},
     message::Proposal,
     simple_certificate::{QuorumCertificate, SimpleCertificate, SuccessThreshold},
     simple_vote::QuorumData2,
     traits::{
-        block_contents::vid_commitment,
         node_implementation::{ConsensusTime, Versions},
+        EncodeBytes,
     },
 };
 <span class="kw">use </span>sha2::{Digest, Sha256};
@@ -239,12 +242,13 @@
         <span class="kw">let </span>num_transactions = transactions.len() <span class="kw">as </span>u64;
         <span class="kw">let </span>encoded_transactions = TestTransaction::encode(<span class="kw-2">&amp;</span>transactions);
         <span class="kw">let </span>block_payload = TestBlockPayload { transactions };
+        <span class="kw">let </span>metadata = TestMetadata { num_transactions };
         <span class="kw">let </span>block_vid_commitment = vid_commitment::&lt;TestVersions&gt;(
             <span class="kw-2">&amp;</span>encoded_transactions,
+            <span class="kw-2">&amp;</span>metadata.encode(),
             TEST_NUM_NODES_IN_VID_COMPUTATION,
             &lt;TestVersions <span class="kw">as </span>Versions&gt;::Base::VERSION,
         );
-        <span class="kw">let </span>metadata = TestMetadata { num_transactions };
         <span class="kw">let </span>block_builder_commitment =
             &lt;TestBlockPayload <span class="kw">as </span>BlockPayload&lt;TestTypes&gt;&gt;::builder_commitment(
                 <span class="kw-2">&amp;</span>block_payload,

@@ -273,8 +273,8 @@
 };
 <span class="kw">use </span>hotshot_types::{
     constants::LEGACY_BUILDER_MODULE,
+    data::VidCommitment,
     traits::{node_implementation::NodeType, signature_key::SignatureKey},
-    vid::VidCommitment,
 };
 <span class="kw">use </span>serde::{Deserialize, Serialize};
 <span class="kw">use </span>surf_disco::{client::HealthStatus, Client, Url};
@@ -488,8 +488,8 @@
 </span><span class="kw">pub mod </span>v0_99 {
     <span class="kw">pub use </span>hotshot_builder_api::v0_99::Version;
     <span class="kw">use </span>hotshot_types::{
-        bundle::Bundle, constants::MARKETPLACE_BUILDER_MODULE,
-        traits::node_implementation::NodeType, vid::VidCommitment,
+        bundle::Bundle, constants::MARKETPLACE_BUILDER_MODULE, data::VidCommitment,
+        traits::node_implementation::NodeType,
     };
     <span class="kw">use </span>vbs::version::StaticVersion;
 

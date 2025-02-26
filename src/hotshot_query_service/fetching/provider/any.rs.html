@@ -410,7 +410,7 @@
 <span class="kw">where
     </span>Types: NodeType,
 {
-    <span class="kw">async fn </span>fetch(<span class="kw-2">&amp;</span><span class="self">self</span>, req: VidCommonRequest) -&gt; <span class="prelude-ty">Option</span>&lt;VidCommon&gt; {
+    <span class="kw">async fn </span>fetch(<span class="kw-2">&amp;</span><span class="self">self</span>, req: VidCommonRequest) -&gt; VidCommon {
         any_fetch(<span class="kw-2">&amp;</span><span class="self">self</span>.vid_common_providers, req).<span class="kw">await
     </span>}
 }

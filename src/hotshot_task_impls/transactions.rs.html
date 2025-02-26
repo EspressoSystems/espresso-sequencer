@@ -831,6 +831,7 @@
 <span class="kw">use </span>hotshot_task::task::TaskState;
 <span class="kw">use </span>hotshot_types::{
     consensus::OuterConsensus,
+    data::VidCommitment,
     data::{null_block, PackedBundle},
     event::{Event, EventType},
     message::UpgradeLock,
@@ -843,7 +844,6 @@
         BlockPayload,
     },
     utils::ViewInner,
-    vid::VidCommitment,
 };
 <span class="kw">use </span>hotshot_utils::anytrace::<span class="kw-2">*</span>;
 <span class="kw">use </span>tokio::time::{sleep, timeout};

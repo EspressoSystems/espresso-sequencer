@@ -152,8 +152,7 @@
 <a href="#151" id="151">151</a>
 <a href="#152" id="152">152</a>
 <a href="#153" id="153">153</a>
-<a href="#154" id="154">154</a>
-<a href="#155" id="155">155</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
+<a href="#154" id="154">154</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
 // This file is part of the HotShot repository.
 
 // You should have received a copy of the MIT License
@@ -172,7 +171,6 @@
         states::{InstanceState, StateDelta, TestableState, ValidatedState},
         BlockPayload,
     },
-    vid::VidCommon,
 };
 <span class="kw">use </span>rand::Rng;
 <span class="kw">use </span>serde::{Deserialize, Serialize};
@@ -260,7 +258,7 @@
         instance: <span class="kw-2">&amp;</span><span class="self">Self</span>::Instance,
         _parent_leaf: <span class="kw-2">&amp;</span>Leaf2&lt;TYPES&gt;,
         _proposed_header: <span class="kw-2">&amp;</span>TYPES::BlockHeader,
-        _vid_common: VidCommon,
+        _payload_byte_len: u32,
         _version: Version,
         _view_number: u64,
     ) -&gt; <span class="prelude-ty">Result</span>&lt;(<span class="self">Self</span>, <span class="self">Self</span>::Delta), <span class="self">Self</span>::Error&gt; {

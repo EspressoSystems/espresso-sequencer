@@ -499,9 +499,7 @@
 <a href="#498" id="498">498</a>
 <a href="#499" id="499">499</a>
 <a href="#500" id="500">500</a>
-<a href="#501" id="501">501</a>
-<a href="#502" id="502">502</a>
-<a href="#503" id="503">503</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
+<a href="#501" id="501">501</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
 // This file is part of the HotShot repository.
 
 // You should have received a copy of the MIT License
@@ -700,7 +698,7 @@
     </span><span class="kw">async fn </span>publish_proposal(
         <span class="kw-2">&amp;</span><span class="self">self</span>,
         commitment_and_metadata: CommitmentAndMetadata&lt;TYPES&gt;,
-        vid_share: Proposal&lt;TYPES, VidDisperse&lt;TYPES&gt;&gt;,
+        _vid_share: Proposal&lt;TYPES, VidDisperse&lt;TYPES&gt;&gt;,
         view_change_evidence: <span class="prelude-ty">Option</span>&lt;ViewChangeEvidence2&lt;TYPES&gt;&gt;,
         formed_upgrade_certificate: <span class="prelude-ty">Option</span>&lt;UpgradeCertificate&lt;TYPES&gt;&gt;,
         decided_upgrade_certificate: Arc&lt;RwLock&lt;<span class="prelude-ty">Option</span>&lt;UpgradeCertificate&lt;TYPES&gt;&gt;&gt;&gt;,
@@ -781,7 +779,6 @@
                 builder_commitment,
                 metadata,
                 commitment_and_metadata.fees.first().clone(),
-                vid_share.data.vid_common_ref().clone(),
                 version,
             )
             .<span class="kw">await
@@ -797,7 +794,6 @@
                 commitment_and_metadata.metadata,
                 commitment_and_metadata.fees.to_vec(),
                 <span class="kw-2">*</span><span class="self">self</span>.view_number,
-                vid_share.data.vid_common_ref().clone(),
                 commitment_and_metadata.auction_result,
                 version,
             )

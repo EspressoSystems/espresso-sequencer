@@ -410,7 +410,17 @@
 <a href="#409" id="409">409</a>
 <a href="#410" id="410">410</a>
 <a href="#411" id="411">411</a>
-<a href="#412" id="412">412</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
+<a href="#412" id="412">412</a>
+<a href="#413" id="413">413</a>
+<a href="#414" id="414">414</a>
+<a href="#415" id="415">415</a>
+<a href="#416" id="416">416</a>
+<a href="#417" id="417">417</a>
+<a href="#418" id="418">418</a>
+<a href="#419" id="419">419</a>
+<a href="#420" id="420">420</a>
+<a href="#421" id="421">421</a>
+<a href="#422" id="422">422</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
 // This file is part of the HotShot repository.
 
 // You should have received a copy of the MIT License
@@ -423,14 +433,13 @@
 <span class="kw">use </span>async_trait::async_trait;
 <span class="kw">use </span>hotshot_task::task::TaskState;
 <span class="kw">use </span>hotshot_types::{
-    consensus::{Consensus, OuterConsensus},
-    data::{DaProposal2, PackedBundle},
+    consensus::{Consensus, OuterConsensus, PayloadWithMetadata},
+    data::{vid_commitment, DaProposal2, PackedBundle},
     event::{Event, EventType},
     message::{Proposal, UpgradeLock},
     simple_certificate::DaCertificate2,
     simple_vote::{DaData2, DaVote2, HasEpoch},
     traits::{
-        block_contents::vid_commitment,
         election::Membership,
         network::ConnectedNetwork,
         node_implementation::{NodeImplementation, NodeType, Versions},
@@ -520,8 +529,8 @@
                     <span class="string">"Throwing away DA proposal that is more than one view older"
                 </span>);
 
-                <span class="kw">if let </span><span class="prelude-val">Some</span>(payload) = <span class="self">self</span>.consensus.read().<span class="kw">await</span>.saved_payloads().get(<span class="kw-2">&amp;</span>view) {
-                    <span class="macro">ensure!</span>(payload.encode() == proposal.data.encoded_transactions, <span class="macro">error!</span>(
+                <span class="kw">if let </span><span class="prelude-val">Some</span>(entry) = <span class="self">self</span>.consensus.read().<span class="kw">await</span>.saved_payloads().get(<span class="kw-2">&amp;</span>view) {
+                    <span class="macro">ensure!</span>(entry.payload.encode() == proposal.data.encoded_transactions, <span class="macro">error!</span>(
                       <span class="string">"Received DA proposal for view {:?} but we already have a payload for that view and they are not identical.  Throwing it away"</span>,
                       view)
                     );
@@ -594,9 +603,12 @@
                 <span class="kw">let </span>version = <span class="self">self</span>.upgrade_lock.version_infallible(view_number).<span class="kw">await</span>;
 
                 <span class="kw">let </span>txns = Arc::clone(<span class="kw-2">&amp;</span>proposal.data.encoded_transactions);
-                <span class="kw">let </span>payload_commitment =
-                    spawn_blocking(<span class="kw">move </span>|| vid_commitment::&lt;V&gt;(<span class="kw-2">&amp;</span>txns, num_nodes, version)).<span class="kw">await</span>;
-                <span class="kw">let </span>payload_commitment = payload_commitment.unwrap();
+                <span class="kw">let </span>metadata = proposal.data.metadata.encode();
+                <span class="kw">let </span>payload_commitment = spawn_blocking(<span class="kw">move </span>|| {
+                    vid_commitment::&lt;V&gt;(<span class="kw-2">&amp;</span>txns, <span class="kw-2">&amp;</span>metadata, num_nodes, version)
+                })
+                .<span class="kw">await
+                </span>.unwrap();
 
                 <span class="self">self</span>.storage
                     .write()
@@ -631,12 +643,17 @@
                     <span class="macro">tracing::trace!</span>(<span class="string">"{e:?}"</span>);
                 }
 
-                <span class="kw">let </span>payload = Arc::new(TYPES::BlockPayload::from_bytes(
-                    proposal.data.encoded_transactions.as_ref(),
-                    <span class="kw-2">&amp;</span>proposal.data.metadata,
-                ));
+                <span class="kw">let </span>payload_with_metadata = Arc::new(PayloadWithMetadata {
+                    payload: TYPES::BlockPayload::from_bytes(
+                        proposal.data.encoded_transactions.as_ref(),
+                        <span class="kw-2">&amp;</span>proposal.data.metadata,
+                    ),
+                    metadata: proposal.data.metadata.clone(),
+                });
                 <span class="comment">// Record the payload we have promised to make available.
-                </span><span class="kw">if let </span><span class="prelude-val">Err</span>(e) = consensus_writer.update_saved_payloads(view_number, payload) {
+                </span><span class="kw">if let </span><span class="prelude-val">Err</span>(e) =
+                    consensus_writer.update_saved_payloads(view_number, payload_with_metadata)
+                {
                     <span class="macro">tracing::trace!</span>(<span class="string">"{e:?}"</span>);
                 }
                 <span class="comment">// Optimistically calculate and update VID if we know that the primary network is down.
@@ -784,16 +801,19 @@
                     <span class="kw-2">&amp;</span>event_stream,
                 )
                 .<span class="kw">await</span>;
-                <span class="kw">let </span>payload = Arc::new(TYPES::BlockPayload::from_bytes(
-                    encoded_transactions.as_ref(),
-                    metadata,
-                ));
+                <span class="kw">let </span>payload_with_metadata = Arc::new(PayloadWithMetadata {
+                    payload: TYPES::BlockPayload::from_bytes(
+                        encoded_transactions.as_ref(),
+                        metadata,
+                    ),
+                    metadata: metadata.clone(),
+                });
                 <span class="comment">// Save the payload early because we might need it to calculate VID for the next epoch nodes.
                 </span><span class="kw">if let </span><span class="prelude-val">Err</span>(e) = <span class="self">self
                     </span>.consensus
                     .write()
                     .<span class="kw">await
-                    </span>.update_saved_payloads(view_number, payload)
+                    </span>.update_saved_payloads(view_number, payload_with_metadata)
                 {
                     <span class="macro">tracing::trace!</span>(<span class="string">"{e:?}"</span>);
                 }

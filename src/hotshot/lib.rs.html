@@ -1146,7 +1146,14 @@
 <a href="#1145" id="1145">1145</a>
 <a href="#1146" id="1146">1146</a>
 <a href="#1147" id="1147">1147</a>
-<a href="#1148" id="1148">1148</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
+<a href="#1148" id="1148">1148</a>
+<a href="#1149" id="1149">1149</a>
+<a href="#1150" id="1150">1150</a>
+<a href="#1151" id="1151">1151</a>
+<a href="#1152" id="1152">1152</a>
+<a href="#1153" id="1153">1153</a>
+<a href="#1154" id="1154">1154</a>
+<a href="#1155" id="1155">1155</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
 // This file is part of the HotShot repository.
 
 // You should have received a copy of the MIT License
@@ -1163,7 +1170,7 @@
 <span class="kw">use </span>futures::future::{select, Either};
 <span class="kw">use </span>hotshot_types::{
     message::UpgradeLock,
-    traits::{network::BroadcastDelay, node_implementation::Versions},
+    traits::{block_contents::BlockHeader, network::BroadcastDelay, node_implementation::Versions},
 };
 <span class="kw">use </span>rand::Rng;
 <span class="kw">use </span>url::Url;
@@ -1196,7 +1203,10 @@
 </span><span class="doccomment">/// Reexport error type
 </span><span class="kw">pub use </span>hotshot_types::error::HotShotError;
 <span class="kw">use </span>hotshot_types::{
-    consensus::{Consensus, ConsensusMetricsValue, OuterConsensus, VidShares, View, ViewInner},
+    consensus::{
+        Consensus, ConsensusMetricsValue, OuterConsensus, PayloadWithMetadata, VidShares, View,
+        ViewInner,
+    },
     constants::{EVENT_CHANNEL_SIZE, EXTERNAL_EVENT_CHANNEL_SIZE},
     data::{Leaf2, QuorumProposal, QuorumProposal2},
     event::{EventType, LeafInfo},
@@ -1470,7 +1480,11 @@
             saved_leaves.insert(leaf.commit(), leaf.clone());
         }
         <span class="kw">if let </span><span class="prelude-val">Some</span>(payload) = anchored_leaf.block_payload() {
-            saved_payloads.insert(anchored_leaf.view_number(), Arc::new(payload));
+            <span class="kw">let </span>metadata = anchored_leaf.block_header().metadata().clone();
+            saved_payloads.insert(
+                anchored_leaf.view_number(),
+                Arc::new(PayloadWithMetadata { payload, metadata }),
+            );
         }
 
         <span class="kw">let </span>consensus = Consensus::new(

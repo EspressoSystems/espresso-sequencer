@@ -468,12 +468,12 @@
 <span class="kw">use </span>hotshot_types::bundle::Bundle;
 <span class="kw">use </span>hotshot_types::traits::block_contents::{BuilderFee, Transaction};
 <span class="kw">use </span>hotshot_types::{
+    data::VidCommitment,
     event::EventType,
     traits::{
         node_implementation::{ConsensusTime, NodeType},
         signature_key::{BuilderSignatureKey, SignatureKey},
     },
-    vid::VidCommitment,
 };
 <span class="kw">use </span>std::sync::Arc;
 <span class="kw">use </span>std::{fmt::Display, time::Instant};

@@ -741,7 +741,8 @@
 <a href="#740" id="740">740</a>
 <a href="#741" id="741">741</a>
 <a href="#742" id="742">742</a>
-<a href="#743" id="743">743</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2022 Espresso Systems (espressosys.com)
+<a href="#743" id="743">743</a>
+<a href="#744" id="744">744</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2022 Espresso Systems (espressosys.com)
 // This file is part of the HotShot Query Service library.
 //
 // This program is free software: you can redistribute it and/or modify it under the terms of the GNU
@@ -757,6 +758,7 @@
 <span class="kw">use </span>committable::{Commitment, Committable};
 <span class="kw">use </span>hotshot_types::{
     data::Leaf,
+    data::VidCommitment,
     simple_certificate::QuorumCertificate,
     traits::{
         <span class="self">self</span>,
@@ -764,7 +766,7 @@
         node_implementation::{NodeType, Versions},
         EncodeBytes,
     },
-    vid::{advz_scheme, VidCommitment},
+    vid::advz::advz_scheme,
 };
 <span class="kw">use </span>jf_vid::VidScheme;
 <span class="kw">use </span>serde::{de::DeserializeOwned, Deserialize, Serialize};
@@ -1225,7 +1227,7 @@
             .disperse(bytes)
             .unwrap();
 
-        <span class="self">Self</span>::new(leaf.block_header().clone(), disperse.common)
+        <span class="self">Self</span>::new(leaf.block_header().clone(), <span class="prelude-val">Some</span>(disperse.common))
     }
 
     <span class="kw">pub fn </span>block_hash(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; BlockHash&lt;Types&gt; {

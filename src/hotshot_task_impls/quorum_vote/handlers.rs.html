@@ -709,7 +709,7 @@
     data::{Leaf2, QuorumProposalWrapper, VidDisperseShare},
     drb::{compute_drb_result, DrbResult},
     event::{Event, EventType},
-    message::{convert_proposal, Proposal, UpgradeLock},
+    message::{Proposal, UpgradeLock},
     simple_vote::{HasEpoch, QuorumData2, QuorumVote2},
     traits::{
         block_contents::BlockHeader,
@@ -1268,7 +1268,7 @@
                 <span class="kw-2">&amp;</span>instance_state,
                 <span class="kw-2">&amp;</span>parent,
                 <span class="kw-2">&amp;</span>proposed_leaf.block_header().clone(),
-                vid_share.data.vid_common_ref().clone(),
+                vid_share.data.payload_byte_len(),
                 version,
                 <span class="kw-2">*</span>view_number,
             )
@@ -1364,7 +1364,7 @@
     </span>storage
         .write()
         .<span class="kw">await
-        </span>.append_vid2(<span class="kw-2">&amp;</span>convert_proposal(vid_share))
+        </span>.append_vid_general(<span class="kw-2">&amp;</span>vid_share)
         .<span class="kw">await
         </span>.wrap()
         .context(<span class="macro">error!</span>(<span class="string">"Failed to store VID share"</span>))<span class="question-mark">?</span>;

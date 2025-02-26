@@ -981,7 +981,12 @@
 <a href="#980" id="980">980</a>
 <a href="#981" id="981">981</a>
 <a href="#982" id="982">982</a>
-<a href="#983" id="983">983</a></pre></div><pre class="rust"><code><span class="doccomment">//! Sequencer node persistence.
+<a href="#983" id="983">983</a>
+<a href="#984" id="984">984</a>
+<a href="#985" id="985">985</a>
+<a href="#986" id="986">986</a>
+<a href="#987" id="987">987</a>
+<a href="#988" id="988">988</a></pre></div><pre class="rust"><code><span class="doccomment">//! Sequencer node persistence.
 //!
 //! This module implements the persistence required for a sequencer node to rejoin the network and
 //! resume participating in consensus, in the event that its process crashes or is killed and loses
@@ -1041,19 +1046,19 @@
     <span class="kw">use </span>hotshot_query_service::testing::mocks::MockVersions;
     <span class="kw">use </span>hotshot_types::{
         data::{
-            vid_disperse::ADVZDisperseShare, DaProposal, EpochNumber, QuorumProposal2,
-            QuorumProposalWrapper, VidDisperseShare, ViewNumber,
+            vid_commitment, vid_disperse::ADVZDisperseShare, DaProposal, EpochNumber,
+            QuorumProposal2, QuorumProposalWrapper, VidDisperseShare, ViewNumber,
         },
         event::{EventType, HotShotAction, LeafInfo},
         message::{Proposal, UpgradeLock},
         simple_certificate::{NextEpochQuorumCertificate2, QuorumCertificate, UpgradeCertificate},
         simple_vote::{NextEpochQuorumData2, QuorumData2, UpgradeProposalData, VersionedVoteData},
         traits::{
-            block_contents::vid_commitment,
+            block_contents::BlockHeader,
             node_implementation::{ConsensusTime, Versions},
             EncodeBytes,
         },
-        vid::advz_scheme,
+        vid::advz::advz_scheme,
     };
     <span class="kw">use </span>jf_vid::VidScheme;
     <span class="kw">use </span>sequencer_utils::test_utils::setup_test;
@@ -1253,6 +1258,7 @@
 
         <span class="kw">let </span>vid_commitment = vid_commitment::&lt;TestVersions&gt;(
             <span class="kw-2">&amp;</span>leaf_payload_bytes_arc,
+            <span class="kw-2">&amp;</span>leaf.block_header().metadata().encode(),
             <span class="number">2</span>,
             &lt;TestVersions <span class="kw">as </span>Versions&gt;::Base::VERSION,
         );
@@ -1703,6 +1709,7 @@
 
         <span class="kw">let </span>vid_commitment = vid_commitment::&lt;TestVersions&gt;(
             <span class="kw-2">&amp;</span>leaf_payload_bytes_arc,
+            <span class="kw-2">&amp;</span>leaf.block_header().metadata().encode(),
             <span class="number">2</span>,
             &lt;TestVersions <span class="kw">as </span>Versions&gt;::Base::VERSION,
         );
@@ -1902,7 +1909,10 @@
         };
 
         storage
-            .append_da(<span class="kw-2">&amp;</span>da_proposal, payload_commitment)
+            .append_da(
+                <span class="kw-2">&amp;</span>da_proposal,
+                hotshot_query_service::VidCommitment::V0(payload_commitment),
+            )
             .<span class="kw">await
             </span>.unwrap();
         storage.append_vid(<span class="kw-2">&amp;</span>vid_share).<span class="kw">await</span>.unwrap();

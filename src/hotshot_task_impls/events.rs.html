@@ -658,6 +658,7 @@
 <span class="kw">use </span>either::Either;
 <span class="kw">use </span>hotshot_task::task::TaskEvent;
 <span class="kw">use </span>hotshot_types::{
+    data::VidCommitment,
     data::{
         DaProposal2, Leaf2, PackedBundle, QuorumProposal2, QuorumProposalWrapper, UpgradeProposal,
         VidDisperse, VidDisperseShare,
@@ -678,7 +679,6 @@
         signature_key::SignatureKey, BlockPayload,
     },
     utils::BuilderCommitment,
-    vid::VidCommitment,
     vote::HasViewNumber,
 };
 <span class="kw">use </span>vec1::Vec1;

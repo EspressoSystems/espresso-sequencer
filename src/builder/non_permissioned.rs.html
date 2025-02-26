@@ -307,8 +307,7 @@
 <a href="#306" id="306">306</a>
 <a href="#307" id="307">307</a>
 <a href="#308" id="308">308</a>
-<a href="#309" id="309">309</a>
-<a href="#310" id="310">310</a></pre></div><pre class="rust"><code><span class="kw">use </span>std::{collections::VecDeque, num::NonZeroUsize, time::Duration};
+<a href="#309" id="309">309</a></pre></div><pre class="rust"><code><span class="kw">use </span>std::{collections::VecDeque, num::NonZeroUsize, time::Duration};
 
 <span class="kw">use </span>anyhow::Context;
 <span class="kw">use </span>async_broadcast::broadcast;
@@ -326,12 +325,10 @@
     },
 };
 <span class="kw">use </span>hotshot_types::{
-    data::{fake_commitment, ViewNumber},
+    data::{fake_commitment, vid_commitment, ViewNumber},
     traits::{
-        block_contents::{vid_commitment, GENESIS_VID_NUM_STORAGE_NODES},
-        metrics::NoMetrics,
-        node_implementation::Versions,
-        EncodeBytes,
+        block_contents::GENESIS_VID_NUM_STORAGE_NODES, metrics::NoMetrics,
+        node_implementation::Versions, EncodeBytes,
     },
 };
 <span class="kw">use </span>marketplace_builder_shared::block::ParentBlockReferences;
@@ -435,6 +432,7 @@
             <span class="kw">let </span>payload_bytes = genesis_payload.encode();
             vid_commitment::&lt;V&gt;(
                 <span class="kw-2">&amp;</span>payload_bytes,
+                <span class="kw-2">&amp;</span>genesis_ns_table.encode(),
                 GENESIS_VID_NUM_STORAGE_NODES,
                 V::Base::VERSION,
             )

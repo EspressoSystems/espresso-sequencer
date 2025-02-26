@@ -933,13 +933,13 @@
 <span class="kw">use </span>vbs::version::Version;
 
 <span class="kw">use crate</span>::{
+    data::VidCommitment,
     data::{Leaf, Leaf2},
     message::UpgradeLock,
     traits::{
         node_implementation::{NodeType, Versions},
         signature_key::SignatureKey,
     },
-    vid::VidCommitment,
     vote::{HasViewNumber, Vote},
 };
 

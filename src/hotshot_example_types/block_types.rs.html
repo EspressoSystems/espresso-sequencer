@@ -419,11 +419,7 @@
 <a href="#418" id="418">418</a>
 <a href="#419" id="419">419</a>
 <a href="#420" id="420">420</a>
-<a href="#421" id="421">421</a>
-<a href="#422" id="422">422</a>
-<a href="#423" id="423">423</a>
-<a href="#424" id="424">424</a>
-<a href="#425" id="425">425</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
+<a href="#421" id="421">421</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
 // This file is part of the HotShot repository.
 
 // You should have received a copy of the MIT License
@@ -438,6 +434,7 @@
 <span class="kw">use </span>async_trait::async_trait;
 <span class="kw">use </span>committable::{Commitment, Committable, RawCommitmentBuilder};
 <span class="kw">use </span>hotshot_types::{
+    data::VidCommitment,
     data::{BlockError, Leaf2},
     traits::{
         block_contents::{BlockHeader, BuilderFee, EncodeBytes, TestableBlock, Transaction},
@@ -445,7 +442,6 @@
         BlockPayload, ValidatedState,
     },
     utils::BuilderCommitment,
-    vid::{VidCommitment, VidCommon},
 };
 <span class="kw">use </span>rand::{thread_rng, Rng};
 <span class="kw">use </span>serde::{Deserialize, Serialize};
@@ -742,7 +738,6 @@
         builder_commitment: BuilderCommitment,
         metadata: &lt;TYPES::BlockPayload <span class="kw">as </span>BlockPayload&lt;TYPES&gt;&gt;::Metadata,
         _builder_fee: BuilderFee&lt;TYPES&gt;,
-        _vid_common: VidCommon,
         _version: Version,
     ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, <span class="self">Self</span>::Error&gt; {
         <span class="self">Self</span>::run_delay_settings_from_config(<span class="kw-2">&amp;</span>instance_state.delay_config).<span class="kw">await</span>;
@@ -763,7 +758,6 @@
         metadata: &lt;TYPES::BlockPayload <span class="kw">as </span>BlockPayload&lt;TYPES&gt;&gt;::Metadata,
         _builder_fee: Vec&lt;BuilderFee&lt;TYPES&gt;&gt;,
         _view_number: u64,
-        _vid_common: VidCommon,
         _auction_results: <span class="prelude-ty">Option</span>&lt;TYPES::AuctionResult&gt;,
         _version: Version,
     ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, <span class="self">Self</span>::Error&gt; {
@@ -826,9 +820,7 @@
             )
             .constant_str(<span class="string">"payload commitment"</span>)
             .fixed_size_bytes(
-                &lt;TestBlockHeader <span class="kw">as </span>BlockHeader&lt;TestTypes&gt;&gt;::payload_commitment(<span class="self">self</span>)
-                    .as_ref()
-                    .as_ref(),
+                &lt;TestBlockHeader <span class="kw">as </span>BlockHeader&lt;TestTypes&gt;&gt;::payload_commitment(<span class="self">self</span>).as_ref(),
             )
             .finalize()
     }

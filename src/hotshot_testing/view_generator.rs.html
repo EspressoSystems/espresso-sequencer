@@ -666,7 +666,13 @@
 <a href="#665" id="665">665</a>
 <a href="#666" id="666">666</a>
 <a href="#667" id="667">667</a>
-<a href="#668" id="668">668</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
+<a href="#668" id="668">668</a>
+<a href="#669" id="669">669</a>
+<a href="#670" id="670">670</a>
+<a href="#671" id="671">671</a>
+<a href="#672" id="672">672</a>
+<a href="#673" id="673">673</a>
+<a href="#674" id="674">674</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
 // This file is part of the HotShot repository.
 
 // You should have received a copy of the MIT License
@@ -801,6 +807,7 @@
         <span class="kw">let </span>payload_commitment = da_payload_commitment::&lt;TestTypes, TestVersions&gt;(
             membership,
             transactions.clone(),
+            <span class="kw-2">&amp;</span>metadata,
             genesis_epoch,
             genesis_version,
         )
@@ -810,9 +817,10 @@
             membership,
             genesis_view,
             genesis_epoch,
-            transactions.clone(),
+            <span class="kw-2">&amp;</span>block_payload,
+            <span class="kw-2">&amp;</span>metadata,
             <span class="kw-2">&amp;</span>private_key,
-            genesis_version,
+            <span class="kw-2">&amp;</span>upgrade_lock,
         )
         .<span class="kw">await</span>;
 
@@ -821,6 +829,7 @@
             genesis_view,
             genesis_epoch,
             transactions.clone(),
+            <span class="kw-2">&amp;</span>metadata,
             <span class="kw-2">&amp;</span>public_key,
             <span class="kw-2">&amp;</span>private_key,
             <span class="kw-2">&amp;</span>upgrade_lock,
@@ -965,6 +974,7 @@
         <span class="kw">let </span>payload_commitment = da_payload_commitment::&lt;TestTypes, TestVersions&gt;(
             membership,
             transactions.clone(),
+            <span class="kw-2">&amp;</span>metadata,
             <span class="self">self</span>.epoch_number,
             version,
         )
@@ -974,9 +984,10 @@
             membership,
             next_view,
             <span class="self">self</span>.epoch_number,
-            transactions.clone(),
+            <span class="kw-2">&amp;</span>block_payload,
+            <span class="kw-2">&amp;</span>metadata,
             <span class="kw-2">&amp;</span>private_key,
-            version,
+            <span class="kw-2">&amp;</span><span class="self">self</span>.upgrade_lock,
         )
         .<span class="kw">await</span>;
 
@@ -985,6 +996,7 @@
             next_view,
             <span class="self">self</span>.epoch_number,
             transactions.clone(),
+            <span class="kw-2">&amp;</span>metadata,
             <span class="kw-2">&amp;</span>public_key,
             <span class="kw-2">&amp;</span>private_key,
             <span class="kw-2">&amp;</span><span class="self">self</span>.upgrade_lock,

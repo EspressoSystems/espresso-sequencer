@@ -789,7 +789,8 @@
 <a href="#788" id="788">788</a>
 <a href="#789" id="789">789</a>
 <a href="#790" id="790">790</a>
-<a href="#791" id="791">791</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
+<a href="#791" id="791">791</a>
+<a href="#792" id="792">792</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
 // This file is part of the HotShot repository.
 
 // You should have received a copy of the MIT License
@@ -969,6 +970,7 @@
                     <span class="kw">let </span>vid_payload_commitment = <span class="kw-2">&amp;</span>share
                         .data
                         .data_epoch_payload_commitment()
+                        .map(|comm| comm.into())
                         .unwrap_or(share.data.payload_commitment());
                     vid_share = <span class="prelude-val">Some</span>(share.clone());
                     <span class="kw">if let </span><span class="prelude-val">Some</span>(<span class="kw-2">ref </span>comm) = payload_commitment {

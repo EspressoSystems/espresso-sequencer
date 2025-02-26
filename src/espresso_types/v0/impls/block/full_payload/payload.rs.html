@@ -318,7 +318,7 @@
 <span class="kw">use </span>hotshot_types::{
     traits::{BlockPayload, EncodeBytes},
     utils::BuilderCommitment,
-    vid::{VidCommon, VidSchemeType},
+    vid::advz::{ADVZCommon, ADVZScheme},
 };
 <span class="kw">use </span>jf_vid::VidScheme;
 <span class="kw">use </span>sha2::Digest;
@@ -541,10 +541,10 @@
         <span class="comment">// TODO HACK! THE RETURNED PROOF MIGHT FAIL VERIFICATION.
         // https://github.com/EspressoSystems/hotshot-query-service/issues/639
         //
-        // Need a `VidCommon` to proceed. Need to modify `QueryablePayload`
-        // trait to add a `VidCommon` arg. In the meantime tests fail if I leave
+        // Need a `ADVZCommon` to proceed. Need to modify `QueryablePayload`
+        // trait to add a `ADVZCommon` arg. In the meantime tests fail if I leave
         // it `todo!()`, so this hack allows tests to pass.
-        </span><span class="kw">let </span>common = hotshot_types::vid::advz_scheme(<span class="number">10</span>)
+        </span><span class="kw">let </span>common = hotshot_types::vid::advz::advz_scheme(<span class="number">10</span>)
             .disperse(<span class="kw-2">&amp;</span><span class="self">self</span>.raw_payload)
             .unwrap()
             .common;
@@ -574,22 +574,22 @@
 }
 
 <span class="kw">impl </span>PayloadByteLen {
-    <span class="doccomment">/// Extract payload byte length from a [`VidCommon`] and construct a new [`Self`] from it.
-    </span><span class="kw">pub fn </span>from_vid_common(common: <span class="kw-2">&amp;</span>VidCommon) -&gt; <span class="self">Self </span>{
-        <span class="self">Self</span>(usize::try_from(VidSchemeType::get_payload_byte_len(common)).unwrap())
+    <span class="doccomment">/// Extract payload byte length from a [`ADVZCommon`] and construct a new [`Self`] from it.
+    </span><span class="kw">pub fn </span>from_vid_common(common: <span class="kw-2">&amp;</span>ADVZCommon) -&gt; <span class="self">Self </span>{
+        <span class="self">Self</span>(usize::try_from(ADVZScheme::get_payload_byte_len(common)).unwrap())
     }
 
     <span class="attr">#[allow(clippy::result_unit_err)]
-    </span><span class="doccomment">/// Is the payload byte length declared in a [`VidCommon`] equal [`Self`]?
-    </span><span class="kw">pub fn </span>is_consistent(<span class="kw-2">&amp;</span><span class="self">self</span>, common: <span class="kw-2">&amp;</span>VidCommon) -&gt; bool {
+    </span><span class="doccomment">/// Is the payload byte length declared in a [`ADVZCommon`] equal [`Self`]?
+    </span><span class="kw">pub fn </span>is_consistent(<span class="kw-2">&amp;</span><span class="self">self</span>, common: <span class="kw-2">&amp;</span>ADVZCommon) -&gt; bool {
         <span class="comment">// failure to convert to usize implies that `common` cannot be
         // consistent with `self`.
-        </span><span class="kw">let </span>expected = <span class="kw">match </span>usize::try_from(VidSchemeType::get_payload_byte_len(common)) {
+        </span><span class="kw">let </span>expected = <span class="kw">match </span>usize::try_from(ADVZScheme::get_payload_byte_len(common)) {
             <span class="prelude-val">Ok</span>(n) =&gt; n,
             <span class="prelude-val">Err</span>(<span class="kw">_</span>) =&gt; {
                 <span class="macro">tracing::warn!</span>(
-                    <span class="string">"VidCommon byte len u32 {} should convert to usize"</span>,
-                    VidSchemeType::get_payload_byte_len(common)
+                    <span class="string">"ADVZCommon byte len u32 {} should convert to usize"</span>,
+                    ADVZScheme::get_payload_byte_len(common)
                 );
                 <span class="kw">return </span><span class="bool-val">false</span>;
             }

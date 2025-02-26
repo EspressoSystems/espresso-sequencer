@@ -2586,7 +2586,8 @@
 <a href="#2585" id="2585">2585</a>
 <a href="#2586" id="2586">2586</a>
 <a href="#2587" id="2587">2587</a>
-<a href="#2588" id="2588">2588</a></pre></div><pre class="rust"><code><span class="kw">use </span>anyhow::{bail, Context};
+<a href="#2588" id="2588">2588</a>
+<a href="#2589" id="2589">2589</a></pre></div><pre class="rust"><code><span class="kw">use </span>anyhow::{bail, Context};
 <span class="kw">use </span>async_lock::RwLock;
 <span class="kw">use </span>async_once_cell::Lazy;
 <span class="kw">use </span>async_trait::async_trait;
@@ -3694,8 +3695,9 @@
         AvailabilityDataSource, BlockQueryData, VidCommonQueryData,
     };
 
+    <span class="kw">use </span>hotshot_query_service::VidCommitment;
     <span class="kw">use </span>hotshot_types::data::vid_disperse::ADVZDisperseShare;
-    <span class="kw">use </span>hotshot_types::vid::advz_scheme;
+    <span class="kw">use </span>hotshot_types::vid::advz::advz_scheme;
     <span class="kw">use </span>hotshot_types::{
         data::{DaProposal, QuorumProposal2, QuorumProposalWrapper},
         event::LeafInfo,
@@ -3817,7 +3819,7 @@
                     .verify(
                         header.ns_table(),
                         <span class="kw-2">&amp;</span>header.payload_commitment(),
-                        vid_common.common(),
+                        <span class="kw-2">&amp;</span>vid_common.common().clone().unwrap(),
                     )
                     .unwrap();
             } <span class="kw">else </span>{
@@ -3956,7 +3958,7 @@
                 _pd: Default::default(),
             };
             persistence
-                .append_da(<span class="kw-2">&amp;</span>da_proposal, payload_commitment)
+                .append_da(<span class="kw-2">&amp;</span>da_proposal, VidCommitment::V0(payload_commitment))
                 .<span class="kw">await
                 </span>.unwrap();
         }

@@ -447,7 +447,8 @@
 <a href="#446" id="446">446</a>
 <a href="#447" id="447">447</a>
 <a href="#448" id="448">448</a>
-<a href="#449" id="449">449</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2022 Espresso Systems (espressosys.com)
+<a href="#449" id="449">449</a>
+<a href="#450" id="450">450</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2022 Espresso Systems (espressosys.com)
 // This file is part of the HotShot Query Service library.
 //
 // This program is free software: you can redistribute it and/or modify it under the terms of the GNU
@@ -846,7 +847,7 @@
         testing::{consensus::DataSourceLifeCycle, mocks::MockTypes, setup_test},
     };
     <span class="kw">use </span>hotshot_example_types::state_types::{TestInstanceState, TestValidatedState};
-    <span class="kw">use </span>hotshot_types::vid::advz_scheme;
+    <span class="kw">use </span>hotshot_types::{data::VidShare, vid::advz::advz_scheme};
     <span class="kw">use </span>jf_vid::VidScheme;
 
     <span class="kw">type </span>D = SqlDataSource&lt;MockTypes, NoFetching&gt;;
@@ -871,7 +872,7 @@
             <span class="kw-2">&amp;</span>TestInstanceState::default(),
         )
         .<span class="kw">await</span>;
-        <span class="kw">let </span>common = VidCommonQueryData::new(leaf.header().clone(), disperse.common);
+        <span class="kw">let </span>common = VidCommonQueryData::new(leaf.header().clone(), <span class="prelude-val">Some</span>(disperse.common));
         ds.append(BlockInfo::new(leaf, <span class="prelude-val">None</span>, <span class="prelude-val">Some</span>(common.clone()), <span class="prelude-val">None</span>))
             .<span class="kw">await
             </span>.unwrap();
@@ -882,8 +883,9 @@
             </span>.unwrap_err();
 
         <span class="comment">// Re-insert the common data with the share.
-        </span><span class="kw">let </span><span class="kw-2">mut </span>tx = ds.write().<span class="kw">await</span>.unwrap();
-        tx.insert_vid(common.clone(), <span class="prelude-val">Some</span>(disperse.shares[<span class="number">0</span>].clone()))
+        </span><span class="kw">let </span>share0 = VidShare::V0(disperse.shares[<span class="number">0</span>].clone());
+        <span class="kw">let </span><span class="kw-2">mut </span>tx = ds.write().<span class="kw">await</span>.unwrap();
+        tx.insert_vid(common.clone(), <span class="prelude-val">Some</span>(share0.clone()))
             .<span class="kw">await
             </span>.unwrap();
         tx.commit().<span class="kw">await</span>.unwrap();
@@ -892,7 +894,7 @@
             NodeStorage::&lt;MockTypes&gt;::vid_share(<span class="kw-2">&amp;mut </span>ds.read().<span class="kw">await</span>.unwrap(), <span class="number">0</span>)
                 .<span class="kw">await
                 </span>.unwrap(),
-            disperse.shares[<span class="number">0</span>]
+            share0
         );
     }
 }

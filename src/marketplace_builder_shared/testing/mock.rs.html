@@ -195,7 +195,11 @@
 <a href="#194" id="194">194</a>
 <a href="#195" id="195">195</a>
 <a href="#196" id="196">196</a>
-<a href="#197" id="197">197</a></pre></div><pre class="rust"><code><span class="doccomment">//! A collection of generator functions for mock data used in tests
+<a href="#197" id="197">197</a>
+<a href="#198" id="198">198</a>
+<a href="#199" id="199">199</a>
+<a href="#200" id="200">200</a>
+<a href="#201" id="201">201</a></pre></div><pre class="rust"><code><span class="doccomment">//! A collection of generator functions for mock data used in tests
 </span><span class="kw">use </span>std::{marker::PhantomData, sync::Arc, time::Duration};
 
 <span class="kw">use </span>async_broadcast::broadcast;
@@ -212,11 +216,12 @@
 <span class="kw">use </span>hotshot_types::event::LeafInfo;
 <span class="kw">use </span>hotshot_types::simple_certificate::QuorumCertificate2;
 <span class="kw">use </span>hotshot_types::simple_vote::QuorumData2;
-<span class="kw">use </span>hotshot_types::traits::block_contents::{vid_commitment, GENESIS_VID_NUM_STORAGE_NODES};
+<span class="kw">use </span>hotshot_types::traits::block_contents::GENESIS_VID_NUM_STORAGE_NODES;
 <span class="kw">use </span>hotshot_types::traits::node_implementation::Versions;
-<span class="kw">use </span>hotshot_types::vid::advz_scheme;
+<span class="kw">use </span>hotshot_types::traits::EncodeBytes;
+<span class="kw">use </span>hotshot_types::vid::advz::advz_scheme;
 <span class="kw">use </span>hotshot_types::{
-    data::{random_commitment, Leaf, Leaf2},
+    data::{random_commitment, vid_commitment, Leaf, Leaf2},
     message::UpgradeLock,
     simple_certificate::QuorumCertificate,
     simple_vote::VersionedVoteData,
@@ -298,6 +303,7 @@
             </span>.into(),
         vid_commitment::&lt;TestVersions&gt;(
             <span class="kw-2">&amp;</span>encoded_transactions,
+            <span class="kw-2">&amp;</span>metadata.encode(),
             GENESIS_VID_NUM_STORAGE_NODES,
             &lt;TestVersions <span class="kw">as </span>Versions&gt;::Base::VERSION,
         ),
@@ -382,9 +388,11 @@
     ParentBlockReferences {
         view_number: &lt;TestTypes <span class="kw">as </span>NodeType&gt;::View::new(view),
         leaf_commit: random_commitment(rng),
-        vid_commitment: advz_scheme(TEST_NUM_NODES_IN_VID_COMPUTATION)
-            .commit_only(rng.sample_iter(Standard).take(<span class="number">100</span>).collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;())
-            .unwrap(),
+        vid_commitment: hotshot_types::data::VidCommitment::V0(
+            advz_scheme(TEST_NUM_NODES_IN_VID_COMPUTATION)
+                .commit_only(rng.sample_iter(Standard).take(<span class="number">100</span>).collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;())
+                .unwrap(),
+        ),
         builder_commitment: BuilderCommitment::from_bytes(
             rng.sample_iter(Standard).take(<span class="number">32</span>).collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;(),
         ),

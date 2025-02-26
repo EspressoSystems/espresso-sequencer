@@ -1871,11 +1871,7 @@
 <a href="#1870" id="1870">1870</a>
 <a href="#1871" id="1871">1871</a>
 <a href="#1872" id="1872">1872</a>
-<a href="#1873" id="1873">1873</a>
-<a href="#1874" id="1874">1874</a>
-<a href="#1875" id="1875">1875</a>
-<a href="#1876" id="1876">1876</a>
-<a href="#1877" id="1877">1877</a></pre></div><pre class="rust"><code><span class="kw">use </span>anyhow::bail;
+<a href="#1873" id="1873">1873</a></pre></div><pre class="rust"><code><span class="kw">use </span>anyhow::bail;
 <span class="kw">use </span>committable::{Commitment, Committable};
 <span class="kw">use </span>ethers::types::Address;
 <span class="kw">use </span>ethers_conv::ToAlloy;
@@ -1886,7 +1882,6 @@
         block_contents::BlockHeader, node_implementation::ConsensusTime,
         signature_key::BuilderSignatureKey, states::StateDelta, ValidatedState <span class="kw">as </span>HotShotState,
     },
-    vid::{VidCommon, VidSchemeType},
 };
 <span class="kw">use </span>itertools::Itertools;
 <span class="kw">use </span>jf_merkle_tree::{
@@ -1895,7 +1890,6 @@
     LookupResult, MerkleCommitment, MerkleTreeError, MerkleTreeScheme,
     PersistentUniversalMerkleTreeScheme, UniversalMerkleTreeScheme,
 };
-<span class="kw">use </span>jf_vid::VidScheme;
 <span class="kw">use </span>num_traits::CheckedSub;
 <span class="kw">use </span>serde::{Deserialize, Serialize};
 <span class="kw">use </span>std::ops::Add;
@@ -2781,7 +2775,7 @@
         instance: <span class="kw-2">&amp;</span><span class="self">Self</span>::Instance,
         parent_leaf: <span class="kw-2">&amp;</span>Leaf2,
         proposed_header: <span class="kw-2">&amp;</span>Header,
-        vid_common: VidCommon,
+        payload_byte_len: u32,
         version: Version,
         view_number: u64,
     ) -&gt; <span class="prelude-ty">Result</span>&lt;(<span class="self">Self</span>, <span class="self">Self</span>::Delta), <span class="self">Self</span>::Error&gt; {
@@ -2803,10 +2797,7 @@
         </span><span class="kw">let </span>validated_state = ValidatedTransition::new(
             validated_state,
             parent_leaf.block_header(),
-            Proposal::new(
-                proposed_header,
-                VidSchemeType::get_payload_byte_len(<span class="kw-2">&amp;</span>vid_common),
-            ),
+            Proposal::new(proposed_header, payload_byte_len),
             view_number,
         )
         .validate()<span class="question-mark">?
@@ -2941,9 +2932,9 @@
     <span class="kw">use </span>ethers::types::U256;
     <span class="kw">use </span>hotshot::{helpers::initialize_logging, traits::BlockPayload};
     <span class="kw">use </span>hotshot_query_service::{testing::mocks::MockVersions, Resolvable};
-    <span class="kw">use </span>hotshot_types::traits::{
-        block_contents::vid_commitment, node_implementation::Versions,
-        signature_key::BuilderSignatureKey, EncodeBytes,
+    <span class="kw">use </span>hotshot_types::{
+        data::vid_commitment,
+        traits::{node_implementation::Versions, signature_key::BuilderSignatureKey, EncodeBytes},
     };
     <span class="kw">use </span>sequencer_utils::ser::FromStringOrInteger;
     <span class="kw">use </span>tracing::debug;
@@ -2970,6 +2961,7 @@
 
             <span class="kw">let </span>payload_commitment = vid_commitment::&lt;MockVersions&gt;(
                 <span class="kw-2">&amp;</span>payload_bytes,
+                <span class="kw-2">&amp;</span>metadata.encode(),
                 <span class="number">1</span>,
                 &lt;MockVersions <span class="kw">as </span>Versions&gt;::Base::VERSION,
             );

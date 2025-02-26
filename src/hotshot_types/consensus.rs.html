@@ -1116,7 +1116,14 @@
 <a href="#1115" id="1115">1115</a>
 <a href="#1116" id="1116">1116</a>
 <a href="#1117" id="1117">1117</a>
-<a href="#1118" id="1118">1118</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
+<a href="#1118" id="1118">1118</a>
+<a href="#1119" id="1119">1119</a>
+<a href="#1120" id="1120">1120</a>
+<a href="#1121" id="1121">1121</a>
+<a href="#1122" id="1122">1122</a>
+<a href="#1123" id="1123">1123</a>
+<a href="#1124" id="1124">1124</a>
+<a href="#1125" id="1125">1125</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
 // This file is part of the HotShot repository.
 
 // You should have received a copy of the MIT License
@@ -1139,7 +1146,7 @@
 
 <span class="kw">pub use </span><span class="kw">crate</span>::utils::{View, ViewInner};
 <span class="kw">use crate</span>::{
-    data::{Leaf2, QuorumProposalWrapper, VidDisperse, VidDisperseShare},
+    data::{Leaf2, QuorumProposalWrapper, VidCommitment, VidDisperse, VidDisperseShare},
     drb::DrbSeedsAndResults,
     error::HotShotError,
     event::{HotShotAction, LeafInfo},
@@ -1156,7 +1163,6 @@
         epoch_from_block_number, is_last_block_in_epoch, option_epoch_from_block_number,
         BuilderCommitment, LeafCommitment, StateAndDelta, Terminator,
     },
-    vid::VidCommitment,
     vote::{Certificate, HasViewNumber},
 };
 
@@ -1432,7 +1438,7 @@
     <span class="doccomment">/// Saved payloads.
     ///
     /// Encoded transactions for every view if we got a payload for that view.
-    </span>saved_payloads: BTreeMap&lt;TYPES::View, Arc&lt;TYPES::BlockPayload&gt;&gt;,
+    </span>saved_payloads: BTreeMap&lt;TYPES::View, Arc&lt;PayloadWithMetadata&lt;TYPES&gt;&gt;&gt;,
 
     <span class="doccomment">/// the highqc per spec
     </span>high_qc: QuorumCertificate2&lt;TYPES&gt;,
@@ -1448,6 +1454,13 @@
 
     <span class="doccomment">/// Tables for the DRB seeds and results.
     </span><span class="kw">pub </span>drb_seeds_and_results: DrbSeedsAndResults&lt;TYPES&gt;,
+}
+
+<span class="doccomment">/// This struct holds a payload and its metadata
+</span><span class="attr">#[derive(Debug, Clone, Hash, Eq, PartialEq)]
+</span><span class="kw">pub struct </span>PayloadWithMetadata&lt;TYPES: NodeType&gt; {
+    <span class="kw">pub </span>payload: TYPES::BlockPayload,
+    <span class="kw">pub </span>metadata: &lt;TYPES::BlockPayload <span class="kw">as </span>BlockPayload&lt;TYPES&gt;&gt;::Metadata,
 }
 
 <span class="doccomment">/// Contains several `ConsensusMetrics` that we're interested in from the consensus interfaces
@@ -1537,7 +1550,7 @@
         last_actioned_view: TYPES::View,
         last_proposals: BTreeMap&lt;TYPES::View, Proposal&lt;TYPES, QuorumProposalWrapper&lt;TYPES&gt;&gt;&gt;,
         saved_leaves: CommitmentMap&lt;Leaf2&lt;TYPES&gt;&gt;,
-        saved_payloads: BTreeMap&lt;TYPES::View, Arc&lt;TYPES::BlockPayload&gt;&gt;,
+        saved_payloads: BTreeMap&lt;TYPES::View, Arc&lt;PayloadWithMetadata&lt;TYPES&gt;&gt;&gt;,
         high_qc: QuorumCertificate2&lt;TYPES&gt;,
         next_epoch_high_qc: <span class="prelude-ty">Option</span>&lt;NextEpochQuorumCertificate2&lt;TYPES&gt;&gt;,
         metrics: Arc&lt;ConsensusMetricsValue&gt;,
@@ -1604,7 +1617,7 @@
     }
 
     <span class="doccomment">/// Get the saved payloads.
-    </span><span class="kw">pub fn </span>saved_payloads(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>BTreeMap&lt;TYPES::View, Arc&lt;TYPES::BlockPayload&gt;&gt; {
+    </span><span class="kw">pub fn </span>saved_payloads(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>BTreeMap&lt;TYPES::View, Arc&lt;PayloadWithMetadata&lt;TYPES&gt;&gt;&gt; {
         <span class="kw-2">&amp;</span><span class="self">self</span>.saved_payloads
     }
 
@@ -1858,7 +1871,7 @@
     </span><span class="kw">pub fn </span>update_saved_payloads(
         <span class="kw-2">&amp;mut </span><span class="self">self</span>,
         view_number: TYPES::View,
-        payload: Arc&lt;TYPES::BlockPayload&gt;,
+        payload: Arc&lt;PayloadWithMetadata&lt;TYPES&gt;&gt;,
     ) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
         <span class="macro">ensure!</span>(
             !<span class="self">self</span>.saved_payloads.contains_key(<span class="kw-2">&amp;</span>view_number),
@@ -2078,7 +2091,7 @@
         private_key: <span class="kw-2">&amp;</span>&lt;TYPES::SignatureKey <span class="kw">as </span>SignatureKey&gt;::PrivateKey,
         upgrade_lock: <span class="kw-2">&amp;</span>UpgradeLock&lt;TYPES, V&gt;,
     ) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
-        <span class="kw">let </span>payload = Arc::clone(consensus.read().<span class="kw">await</span>.saved_payloads().get(<span class="kw-2">&amp;</span>view)<span class="question-mark">?</span>);
+        <span class="kw">let </span>payload_with_metadata = Arc::clone(consensus.read().<span class="kw">await</span>.saved_payloads().get(<span class="kw-2">&amp;</span>view)<span class="question-mark">?</span>);
         <span class="kw">let </span>epoch = consensus
             .read()
             .<span class="kw">await
@@ -2088,11 +2101,12 @@
             .epoch()<span class="question-mark">?</span>;
 
         <span class="kw">let </span>vid = VidDisperse::calculate_vid_disperse::&lt;V&gt;(
-            payload.as_ref(),
+            <span class="kw-2">&amp;</span>payload_with_metadata.payload,
             <span class="kw-2">&amp;</span>membership,
             view,
             target_epoch,
             epoch,
+            <span class="kw-2">&amp;</span>payload_with_metadata.metadata,
             upgrade_lock,
         )
         .<span class="kw">await
@@ -2219,7 +2233,7 @@
 
 <span class="doccomment">/// Alias for the block payload commitment and the associated metadata. The primary data
 /// needed in order to submit a proposal.
-</span><span class="attr">#[derive(Eq, Hash, PartialEq, Debug, Clone)]
+</span><span class="attr">#[derive(Eq, PartialEq, Debug, Clone)]
 </span><span class="kw">pub struct </span>CommitmentAndMetadata&lt;TYPES: NodeType&gt; {
     <span class="doccomment">/// Vid Commitment
     </span><span class="kw">pub </span>commitment: VidCommitment,

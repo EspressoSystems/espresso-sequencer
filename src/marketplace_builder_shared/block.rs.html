@@ -140,9 +140,9 @@
 <span class="kw">use </span>hotshot_types::data::{fake_commitment, Leaf2};
 <span class="kw">use </span>hotshot_types::traits::node_implementation::ConsensusTime;
 <span class="kw">use </span>hotshot_types::{
+    data::VidCommitment,
     traits::{block_contents::Transaction, node_implementation::NodeType},
     utils::BuilderCommitment,
-    vid::VidCommitment,
 };
 
 <span class="doccomment">/// Enum to hold the different sources of the transaction
@@ -208,7 +208,7 @@
 /// and view of the block it targets to extend, i.e.
 /// builder with given state ID assumes blocks/bundles it's building
 /// are going to be included immediately after the parent block.
-</span><span class="attr">#[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
+</span><span class="attr">#[derive(Clone, Debug, Hash, PartialEq, Eq)]
 </span><span class="kw">pub struct </span>BuilderStateId&lt;Types: NodeType&gt; {
     <span class="doccomment">/// View number of the parent block
     </span><span class="kw">pub </span>parent_view: Types::View,

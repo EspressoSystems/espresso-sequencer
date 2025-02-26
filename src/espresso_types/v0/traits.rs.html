@@ -854,7 +854,18 @@
 <a href="#853" id="853">853</a>
 <a href="#854" id="854">854</a>
 <a href="#855" id="855">855</a>
-<a href="#856" id="856">856</a></pre></div><pre class="rust"><code><span class="doccomment">//! This module contains all the traits used for building the sequencer types.
+<a href="#856" id="856">856</a>
+<a href="#857" id="857">857</a>
+<a href="#858" id="858">858</a>
+<a href="#859" id="859">859</a>
+<a href="#860" id="860">860</a>
+<a href="#861" id="861">861</a>
+<a href="#862" id="862">862</a>
+<a href="#863" id="863">863</a>
+<a href="#864" id="864">864</a>
+<a href="#865" id="865">865</a>
+<a href="#866" id="866">866</a>
+<a href="#867" id="867">867</a></pre></div><pre class="rust"><code><span class="doccomment">//! This module contains all the traits used for building the sequencer types.
 //! It also includes some trait implementations that cannot be implemented in an external crate.
 </span><span class="kw">use </span>std::{cmp::max, collections::BTreeMap, fmt::Debug, ops::Range, sync::Arc};
 
@@ -866,8 +877,9 @@
 <span class="kw">use </span>hotshot_types::{
     consensus::CommitmentMap,
     data::{
-        vid_disperse::ADVZDisperseShare, DaProposal, EpochNumber, QuorumProposal, QuorumProposal2,
-        QuorumProposalWrapper, ViewNumber,
+        vid_disperse::{ADVZDisperseShare, VidDisperseShare2},
+        DaProposal, EpochNumber, QuorumProposal, QuorumProposal2, QuorumProposalWrapper,
+        VidCommitment, ViewNumber,
     },
     event::{HotShotAction, LeafInfo},
     message::{convert_proposal, Proposal},
@@ -880,10 +892,8 @@
         ValidatedState <span class="kw">as </span>HotShotState,
     },
     utils::{genesis_epoch_from_version, View},
-    vid::VidSchemeType,
 };
 <span class="kw">use </span>itertools::Itertools;
-<span class="kw">use </span>jf_vid::VidScheme;
 <span class="kw">use </span>serde::{de::DeserializeOwned, Serialize};
 
 <span class="kw">use crate</span>::{
@@ -1527,10 +1537,15 @@
         <span class="kw-2">&amp;</span><span class="self">self</span>,
         proposal: <span class="kw-2">&amp;</span>Proposal&lt;SeqTypes, ADVZDisperseShare&lt;SeqTypes&gt;&gt;,
     ) -&gt; anyhow::Result&lt;()&gt;;
+    <span class="comment">// TODO: merge these two `append_vid`s
+    </span><span class="kw">async fn </span>append_vid2(
+        <span class="kw-2">&amp;</span><span class="self">self</span>,
+        proposal: <span class="kw-2">&amp;</span>Proposal&lt;SeqTypes, VidDisperseShare2&lt;SeqTypes&gt;&gt;,
+    ) -&gt; anyhow::Result&lt;()&gt;;
     <span class="kw">async fn </span>append_da(
         <span class="kw-2">&amp;</span><span class="self">self</span>,
         proposal: <span class="kw-2">&amp;</span>Proposal&lt;SeqTypes, DaProposal&lt;SeqTypes&gt;&gt;,
-        vid_commit: &lt;VidSchemeType <span class="kw">as </span>VidScheme&gt;::Commit,
+        vid_commit: VidCommitment,
     ) -&gt; anyhow::Result&lt;()&gt;;
     <span class="kw">async fn </span>record_action(
         <span class="kw-2">&amp;</span><span class="self">self</span>,
@@ -1610,10 +1625,17 @@
         (<span class="kw-2">**</span><span class="self">self</span>).append_vid(proposal).<span class="kw">await
     </span>}
 
+    <span class="kw">async fn </span>append_vid2(
+        <span class="kw-2">&amp;</span><span class="self">self</span>,
+        proposal: <span class="kw-2">&amp;</span>Proposal&lt;SeqTypes, VidDisperseShare2&lt;SeqTypes&gt;&gt;,
+    ) -&gt; anyhow::Result&lt;()&gt; {
+        (<span class="kw-2">**</span><span class="self">self</span>).append_vid2(proposal).<span class="kw">await
+    </span>}
+
     <span class="kw">async fn </span>append_da(
         <span class="kw-2">&amp;</span><span class="self">self</span>,
         proposal: <span class="kw-2">&amp;</span>Proposal&lt;SeqTypes, DaProposal&lt;SeqTypes&gt;&gt;,
-        vid_commit: &lt;VidSchemeType <span class="kw">as </span>VidScheme&gt;::Commit,
+        vid_commit: VidCommitment,
     ) -&gt; anyhow::Result&lt;()&gt; {
         (<span class="kw-2">**</span><span class="self">self</span>).append_da(proposal, vid_commit).<span class="kw">await
     </span>}

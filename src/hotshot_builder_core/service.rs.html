@@ -4717,7 +4717,42 @@
 <a href="#4716" id="4716">4716</a>
 <a href="#4717" id="4717">4717</a>
 <a href="#4718" id="4718">4718</a>
-<a href="#4719" id="4719">4719</a></pre></div><pre class="rust"><code><span class="kw">use </span>hotshot::types::Event;
+<a href="#4719" id="4719">4719</a>
+<a href="#4720" id="4720">4720</a>
+<a href="#4721" id="4721">4721</a>
+<a href="#4722" id="4722">4722</a>
+<a href="#4723" id="4723">4723</a>
+<a href="#4724" id="4724">4724</a>
+<a href="#4725" id="4725">4725</a>
+<a href="#4726" id="4726">4726</a>
+<a href="#4727" id="4727">4727</a>
+<a href="#4728" id="4728">4728</a>
+<a href="#4729" id="4729">4729</a>
+<a href="#4730" id="4730">4730</a>
+<a href="#4731" id="4731">4731</a>
+<a href="#4732" id="4732">4732</a>
+<a href="#4733" id="4733">4733</a>
+<a href="#4734" id="4734">4734</a>
+<a href="#4735" id="4735">4735</a>
+<a href="#4736" id="4736">4736</a>
+<a href="#4737" id="4737">4737</a>
+<a href="#4738" id="4738">4738</a>
+<a href="#4739" id="4739">4739</a>
+<a href="#4740" id="4740">4740</a>
+<a href="#4741" id="4741">4741</a>
+<a href="#4742" id="4742">4742</a>
+<a href="#4743" id="4743">4743</a>
+<a href="#4744" id="4744">4744</a>
+<a href="#4745" id="4745">4745</a>
+<a href="#4746" id="4746">4746</a>
+<a href="#4747" id="4747">4747</a>
+<a href="#4748" id="4748">4748</a>
+<a href="#4749" id="4749">4749</a>
+<a href="#4750" id="4750">4750</a>
+<a href="#4751" id="4751">4751</a>
+<a href="#4752" id="4752">4752</a>
+<a href="#4753" id="4753">4753</a>
+<a href="#4754" id="4754">4754</a></pre></div><pre class="rust"><code><span class="kw">use </span>hotshot::types::Event;
 <span class="kw">use </span>hotshot_builder_api::{
     v0_1::{
         block_info::{AvailableBlockData, AvailableBlockHeaderInputV1, AvailableBlockInfo},
@@ -4727,6 +4762,7 @@
     v0_2::builder::TransactionStatus,
 };
 <span class="kw">use </span>hotshot_types::{
+    data::VidCommitment,
     data::{DaProposal2, Leaf2, QuorumProposalWrapper},
     event::EventType,
     message::Proposal,
@@ -4736,7 +4772,6 @@
         signature_key::{BuilderSignatureKey, SignatureKey},
     },
     utils::BuilderCommitment,
-    vid::VidCommitment,
 };
 <span class="kw">use </span>lru::LruCache;
 <span class="kw">use </span>vbs::version::StaticVersionType;
@@ -6274,13 +6309,10 @@ Running Non-Permissioned Builder Service
     <span class="kw">use </span>hotshot_types::traits::block_contents::Transaction;
     <span class="kw">use </span>hotshot_types::traits::node_implementation::Versions;
     <span class="kw">use </span>hotshot_types::{
-        data::{Leaf, ViewNumber},
+        data::{vid_commitment, Leaf, ViewNumber},
         message::Proposal,
         simple_certificate::QuorumCertificate,
-        traits::{
-            block_contents::vid_commitment, node_implementation::ConsensusTime,
-            signature_key::BuilderSignatureKey,
-        },
+        traits::{node_implementation::ConsensusTime, signature_key::BuilderSignatureKey},
         utils::BuilderCommitment,
     };
     <span class="kw">use </span>marketplace_builder_shared::{
@@ -6330,6 +6362,7 @@ Running Non-Permissioned Builder Service
         <span class="kw">let </span>(bootstrap_sender, <span class="kw">_</span>) = async_broadcast::broadcast(<span class="number">10</span>);
         <span class="kw">let </span>(tx_sender, <span class="kw">_</span>) = async_broadcast::broadcast(<span class="number">10</span>);
         <span class="kw">let </span>parent_commit = vid_commitment::&lt;TestVersions&gt;(
+            <span class="kw-2">&amp;</span>[],
             <span class="kw-2">&amp;</span>[],
             TEST_NUM_NODES_IN_VID_COMPUTATION,
             &lt;TestVersions <span class="kw">as </span>Versions&gt;::Base::VERSION,
@@ -6407,6 +6440,7 @@ Running Non-Permissioned Builder Service
         <span class="kw">let </span>(bootstrap_sender, <span class="kw">_</span>) = async_broadcast::broadcast(<span class="number">10</span>);
         <span class="kw">let </span>(tx_sender, <span class="kw">_</span>) = async_broadcast::broadcast(<span class="number">10</span>);
         <span class="kw">let </span>parent_commit = vid_commitment::&lt;TestVersions&gt;(
+            <span class="kw-2">&amp;</span>[],
             <span class="kw-2">&amp;</span>[],
             TEST_NUM_NODES_IN_VID_COMPUTATION,
             &lt;TestVersions <span class="kw">as </span>Versions&gt;::Base::VERSION,
@@ -6507,6 +6541,7 @@ Running Non-Permissioned Builder Service
         <span class="kw">let </span>(bootstrap_sender, <span class="kw">_</span>) = async_broadcast::broadcast(<span class="number">10</span>);
         <span class="kw">let </span>(tx_sender, <span class="kw">_</span>) = async_broadcast::broadcast(<span class="number">10</span>);
         <span class="kw">let </span>parent_commit = vid_commitment::&lt;TestVersions&gt;(
+            <span class="kw-2">&amp;</span>[],
             <span class="kw-2">&amp;</span>[],
             TEST_NUM_NODES_IN_VID_COMPUTATION,
             &lt;TestVersions <span class="kw">as </span>Versions&gt;::Base::VERSION,
@@ -6635,6 +6670,7 @@ Running Non-Permissioned Builder Service
         <span class="kw">let </span>(tx_sender, <span class="kw">_</span>) = async_broadcast::broadcast(<span class="number">10</span>);
         <span class="kw">let </span>parent_commit = vid_commitment::&lt;TestVersions&gt;(
             <span class="kw-2">&amp;</span>[],
+            <span class="kw-2">&amp;</span>[],
             TEST_NUM_NODES_IN_VID_COMPUTATION,
             &lt;TestVersions <span class="kw">as </span>Versions&gt;::Base::VERSION,
         );
@@ -6741,6 +6777,7 @@ Running Non-Permissioned Builder Service
         <span class="kw">let </span>(tx_sender, <span class="kw">_</span>) = async_broadcast::broadcast(<span class="number">10</span>);
         <span class="kw">let </span>parent_commit = vid_commitment::&lt;TestVersions&gt;(
             <span class="kw-2">&amp;</span>[],
+            <span class="kw-2">&amp;</span>[],
             TEST_NUM_NODES_IN_VID_COMPUTATION,
             &lt;TestVersions <span class="kw">as </span>Versions&gt;::Base::VERSION,
         );
@@ -6757,7 +6794,7 @@ Running Non-Permissioned Builder Service
         );
 
         <span class="kw">let </span>new_parent_commit =
-            vid_commitment::&lt;TestVersions&gt;(<span class="kw-2">&amp;</span>[], <span class="number">9</span>, &lt;TestVersions <span class="kw">as </span>Versions&gt;::Base::VERSION);
+            vid_commitment::&lt;TestVersions&gt;(<span class="kw-2">&amp;</span>[], <span class="kw-2">&amp;</span>[], <span class="number">9</span>, &lt;TestVersions <span class="kw">as </span>Versions&gt;::Base::VERSION);
         <span class="kw">let </span>new_view_num = ViewNumber::new(<span class="number">1</span>);
         <span class="kw">let </span>builder_state_id = BuilderStateId {
             parent_commitment: new_parent_commit,
@@ -6915,6 +6952,7 @@ Running Non-Permissioned Builder Service
         <span class="kw">let </span>(tx_sender, <span class="kw">_</span>) = async_broadcast::broadcast(<span class="number">10</span>);
         <span class="kw">let </span>parent_commit = vid_commitment::&lt;TestVersions&gt;(
             <span class="kw-2">&amp;</span>[],
+            <span class="kw-2">&amp;</span>[],
             TEST_NUM_NODES_IN_VID_COMPUTATION,
             &lt;TestVersions <span class="kw">as </span>Versions&gt;::Base::VERSION,
         );
@@ -6931,7 +6969,7 @@ Running Non-Permissioned Builder Service
         );
 
         <span class="kw">let </span>new_parent_commit =
-            vid_commitment::&lt;TestVersions&gt;(<span class="kw-2">&amp;</span>[], <span class="number">9</span>, &lt;TestVersions <span class="kw">as </span>Versions&gt;::Base::VERSION);
+            vid_commitment::&lt;TestVersions&gt;(<span class="kw-2">&amp;</span>[], <span class="kw-2">&amp;</span>[], <span class="number">9</span>, &lt;TestVersions <span class="kw">as </span>Versions&gt;::Base::VERSION);
         <span class="kw">let </span>new_view_num = ViewNumber::new(<span class="number">1</span>);
         <span class="kw">let </span>builder_state_id = BuilderStateId {
             parent_commitment: new_parent_commit,
@@ -7151,6 +7189,7 @@ Running Non-Permissioned Builder Service
         <span class="kw">let </span>(tx_sender, <span class="kw">_</span>) = async_broadcast::broadcast(<span class="number">10</span>);
         <span class="kw">let </span>parent_commit = vid_commitment::&lt;TestVersions&gt;(
             <span class="kw-2">&amp;</span>[<span class="number">0</span>],
+            <span class="kw-2">&amp;</span>[],
             TEST_NUM_NODES_IN_VID_COMPUTATION,
             &lt;TestVersions <span class="kw">as </span>Versions&gt;::Base::VERSION,
         );
@@ -7170,6 +7209,7 @@ Running Non-Permissioned Builder Service
         </span><span class="kw">for </span>i <span class="kw">in </span><span class="number">1</span>..=<span class="number">10 </span>{
             <span class="kw">let </span>vid_commit = vid_commitment::&lt;TestVersions&gt;(
                 <span class="kw-2">&amp;</span>[i],
+                <span class="kw-2">&amp;</span>[],
                 TEST_NUM_NODES_IN_VID_COMPUTATION,
                 &lt;TestVersions <span class="kw">as </span>Versions&gt;::Base::VERSION,
             );
@@ -7214,6 +7254,7 @@ Running Non-Permissioned Builder Service
         <span class="kw">let </span>builder_state_id = BuilderStateId {
             parent_commitment: vid_commitment::&lt;TestVersions&gt;(
                 <span class="kw-2">&amp;</span>[<span class="number">10</span>],
+                <span class="kw-2">&amp;</span>[],
                 TEST_NUM_NODES_IN_VID_COMPUTATION,
                 &lt;TestVersions <span class="kw">as </span>Versions&gt;::Base::VERSION,
             ),
@@ -7234,6 +7275,7 @@ Running Non-Permissioned Builder Service
             state.spawned_builder_states.contains_key(<span class="kw-2">&amp;</span>BuilderStateId {
                 parent_commitment: vid_commitment::&lt;TestVersions&gt;(
                     <span class="kw-2">&amp;</span>[<span class="number">10</span>],
+                    <span class="kw-2">&amp;</span>[],
                     TEST_NUM_NODES_IN_VID_COMPUTATION,
                     &lt;TestVersions <span class="kw">as </span>Versions&gt;::Base::VERSION
                 ),
@@ -7265,6 +7307,7 @@ Running Non-Permissioned Builder Service
         <span class="kw">let </span>(tx_sender, <span class="kw">_</span>) = async_broadcast::broadcast(<span class="number">10</span>);
         <span class="kw">let </span>parent_commit = vid_commitment::&lt;TestVersions&gt;(
             <span class="kw-2">&amp;</span>[<span class="number">0</span>],
+            <span class="kw-2">&amp;</span>[],
             TEST_NUM_NODES_IN_VID_COMPUTATION,
             &lt;TestVersions <span class="kw">as </span>Versions&gt;::Base::VERSION,
         );
@@ -7284,6 +7327,7 @@ Running Non-Permissioned Builder Service
         </span><span class="kw">for </span>i <span class="kw">in </span><span class="number">1</span>..=<span class="number">10 </span>{
             <span class="kw">let </span>vid_commit = vid_commitment::&lt;TestVersions&gt;(
                 <span class="kw-2">&amp;</span>[i],
+                <span class="kw-2">&amp;</span>[],
                 TEST_NUM_NODES_IN_VID_COMPUTATION,
                 &lt;TestVersions <span class="kw">as </span>Versions&gt;::Base::VERSION,
             );
@@ -7312,6 +7356,7 @@ Running Non-Permissioned Builder Service
             BuilderStateId {
                 parent_commitment: vid_commitment::&lt;TestVersions&gt;(
                     <span class="kw-2">&amp;</span>[<span class="number">10</span>],
+                    <span class="kw-2">&amp;</span>[],
                     TEST_NUM_NODES_IN_VID_COMPUTATION,
                     &lt;TestVersions <span class="kw">as </span>Versions&gt;::Base::VERSION
                 ),
@@ -7360,6 +7405,7 @@ Running Non-Permissioned Builder Service
         <span class="kw">let </span>(tx_sender, <span class="kw">_</span>) = async_broadcast::broadcast(<span class="number">10</span>);
         <span class="kw">let </span>parent_commit = vid_commitment::&lt;TestVersions&gt;(
             <span class="kw-2">&amp;</span>[<span class="number">0</span>],
+            <span class="kw-2">&amp;</span>[],
             TEST_NUM_NODES_IN_VID_COMPUTATION,
             &lt;TestVersions <span class="kw">as </span>Versions&gt;::Base::VERSION,
         );
@@ -7379,6 +7425,7 @@ Running Non-Permissioned Builder Service
         </span><span class="kw">for </span>i <span class="kw">in </span><span class="number">1</span>..=<span class="number">10 </span>{
             <span class="kw">let </span>vid_commit = vid_commitment::&lt;TestVersions&gt;(
                 <span class="kw-2">&amp;</span>[i],
+                <span class="kw-2">&amp;</span>[],
                 TEST_NUM_NODES_IN_VID_COMPUTATION,
                 &lt;TestVersions <span class="kw">as </span>Versions&gt;::Base::VERSION,
             );
@@ -7407,6 +7454,7 @@ Running Non-Permissioned Builder Service
             BuilderStateId {
                 parent_commitment: vid_commitment::&lt;TestVersions&gt;(
                     <span class="kw-2">&amp;</span>[<span class="number">10</span>],
+                    <span class="kw-2">&amp;</span>[],
                     TEST_NUM_NODES_IN_VID_COMPUTATION,
                     &lt;TestVersions <span class="kw">as </span>Versions&gt;::Base::VERSION
                 ),
@@ -7431,6 +7479,7 @@ Running Non-Permissioned Builder Service
         </span><span class="kw">for </span>i <span class="kw">in </span><span class="number">1</span>..<span class="number">10 </span>{
             <span class="kw">let </span>vid_commit = vid_commitment::&lt;TestVersions&gt;(
                 <span class="kw-2">&amp;</span>[i],
+                <span class="kw-2">&amp;</span>[],
                 TEST_NUM_NODES_IN_VID_COMPUTATION,
                 &lt;TestVersions <span class="kw">as </span>Versions&gt;::Base::VERSION,
             );
@@ -7482,6 +7531,7 @@ Running Non-Permissioned Builder Service
         <span class="kw">let </span>(tx_sender, <span class="kw">_</span>) = async_broadcast::broadcast(<span class="number">10</span>);
         <span class="kw">let </span>parent_commit = vid_commitment::&lt;TestVersions&gt;(
             <span class="kw-2">&amp;</span>[<span class="number">0</span>],
+            <span class="kw-2">&amp;</span>[],
             TEST_NUM_NODES_IN_VID_COMPUTATION,
             &lt;TestVersions <span class="kw">as </span>Versions&gt;::Base::VERSION,
         );
@@ -7501,6 +7551,7 @@ Running Non-Permissioned Builder Service
         </span><span class="kw">for </span>i <span class="kw">in </span><span class="number">1</span>..=<span class="number">10 </span>{
             <span class="kw">let </span>vid_commit = vid_commitment::&lt;TestVersions&gt;(
                 <span class="kw-2">&amp;</span>[i],
+                <span class="kw-2">&amp;</span>[],
                 TEST_NUM_NODES_IN_VID_COMPUTATION,
                 &lt;TestVersions <span class="kw">as </span>Versions&gt;::Base::VERSION,
             );
@@ -7535,6 +7586,7 @@ Running Non-Permissioned Builder Service
             BuilderStateId {
                 parent_commitment: vid_commitment::&lt;TestVersions&gt;(
                     <span class="kw-2">&amp;</span>[<span class="number">10</span>],
+                    <span class="kw-2">&amp;</span>[],
                     TEST_NUM_NODES_IN_VID_COMPUTATION,
                     &lt;TestVersions <span class="kw">as </span>Versions&gt;::Base::VERSION
                 ),
@@ -7570,6 +7622,7 @@ Running Non-Permissioned Builder Service
             <span class="kw">let </span>builder_state_id = BuilderStateId {
                 parent_commitment: vid_commitment::&lt;TestVersions&gt;(
                     <span class="kw-2">&amp;</span>[i],
+                    <span class="kw-2">&amp;</span>[],
                     TEST_NUM_NODES_IN_VID_COMPUTATION,
                     &lt;TestVersions <span class="kw">as </span>Versions&gt;::Base::VERSION,
                 ),
@@ -7585,6 +7638,7 @@ Running Non-Permissioned Builder Service
             <span class="kw">let </span>builder_state_id = BuilderStateId {
                 parent_commitment: vid_commitment::&lt;TestVersions&gt;(
                     <span class="kw-2">&amp;</span>[i],
+                    <span class="kw-2">&amp;</span>[],
                     TEST_NUM_NODES_IN_VID_COMPUTATION,
                     &lt;TestVersions <span class="kw">as </span>Versions&gt;::Base::VERSION,
                 ),
@@ -7617,6 +7671,7 @@ Running Non-Permissioned Builder Service
             &lt;BLSPubKey <span class="kw">as </span>SignatureKey&gt;::generated_from_seed_indexed([<span class="number">0</span>; <span class="number">32</span>], <span class="number">1</span>);
         <span class="kw">let </span>parent_commit = vid_commitment::&lt;TestVersions&gt;(
             <span class="kw-2">&amp;</span>[],
+            <span class="kw-2">&amp;</span>[],
             TEST_NUM_NODES_IN_VID_COMPUTATION,
             &lt;TestVersions <span class="kw">as </span>Versions&gt;::Base::VERSION,
         );
@@ -7644,6 +7699,7 @@ Running Non-Permissioned Builder Service
         </span><span class="kw">let </span>result = state
             .available_blocks_implementation(
                 <span class="kw-2">&amp;</span>vid_commitment::&lt;TestVersions&gt;(
+                    <span class="kw-2">&amp;</span>[],
                     <span class="kw-2">&amp;</span>[],
                     TEST_NUM_NODES_IN_VID_COMPUTATION,
                     &lt;TestVersions <span class="kw">as </span>Versions&gt;::Base::VERSION,
@@ -7686,6 +7742,7 @@ Running Non-Permissioned Builder Service
             &lt;BLSPubKey <span class="kw">as </span>SignatureKey&gt;::generated_from_seed_indexed([<span class="number">0</span>; <span class="number">32</span>], <span class="number">1</span>);
         <span class="kw">let </span>parent_commit = vid_commitment::&lt;TestVersions&gt;(
             <span class="kw-2">&amp;</span>[],
+            <span class="kw-2">&amp;</span>[],
             TEST_NUM_NODES_IN_VID_COMPUTATION,
             &lt;TestVersions <span class="kw">as </span>Versions&gt;::Base::VERSION,
         );
@@ -7713,6 +7770,7 @@ Running Non-Permissioned Builder Service
         </span><span class="kw">let </span>result = state
             .available_blocks_implementation(
                 <span class="kw-2">&amp;</span>vid_commitment::&lt;TestVersions&gt;(
+                    <span class="kw-2">&amp;</span>[],
                     <span class="kw-2">&amp;</span>[],
                     TEST_NUM_NODES_IN_VID_COMPUTATION,
                     &lt;TestVersions <span class="kw">as </span>Versions&gt;::Base::VERSION,
@@ -7755,6 +7813,7 @@ Running Non-Permissioned Builder Service
             &lt;BLSPubKey <span class="kw">as </span>SignatureKey&gt;::generated_from_seed_indexed([<span class="number">0</span>; <span class="number">32</span>], <span class="number">1</span>);
         <span class="kw">let </span>parent_commit = vid_commitment::&lt;TestVersions&gt;(
             <span class="kw-2">&amp;</span>[],
+            <span class="kw-2">&amp;</span>[],
             TEST_NUM_NODES_IN_VID_COMPUTATION,
             &lt;TestVersions <span class="kw">as </span>Versions&gt;::Base::VERSION,
         );
@@ -7782,6 +7841,7 @@ Running Non-Permissioned Builder Service
         </span><span class="kw">let </span>result = state
             .available_blocks_implementation(
                 <span class="kw-2">&amp;</span>vid_commitment::&lt;TestVersions&gt;(
+                    <span class="kw-2">&amp;</span>[],
                     <span class="kw-2">&amp;</span>[],
                     TEST_NUM_NODES_IN_VID_COMPUTATION,
                     &lt;TestVersions <span class="kw">as </span>Versions&gt;::Base::VERSION,
@@ -7824,6 +7884,7 @@ Running Non-Permissioned Builder Service
         <span class="kw">let </span>(leader_public_key, leader_private_key) =
             &lt;BLSPubKey <span class="kw">as </span>SignatureKey&gt;::generated_from_seed_indexed([<span class="number">0</span>; <span class="number">32</span>], <span class="number">1</span>);
         <span class="kw">let </span>parent_commit = vid_commitment::&lt;TestVersions&gt;(
+            <span class="kw-2">&amp;</span>[],
             <span class="kw-2">&amp;</span>[],
             TEST_NUM_NODES_IN_VID_COMPUTATION,
             &lt;TestVersions <span class="kw">as </span>Versions&gt;::Base::VERSION,
@@ -7899,6 +7960,7 @@ Running Non-Permissioned Builder Service
         <span class="kw">let </span>(leader_public_key, leader_private_key) =
             &lt;BLSPubKey <span class="kw">as </span>SignatureKey&gt;::generated_from_seed_indexed([<span class="number">0</span>; <span class="number">32</span>], <span class="number">1</span>);
         <span class="kw">let </span>parent_commit = vid_commitment::&lt;TestVersions&gt;(
+            <span class="kw-2">&amp;</span>[],
             <span class="kw-2">&amp;</span>[],
             TEST_NUM_NODES_IN_VID_COMPUTATION,
             &lt;TestVersions <span class="kw">as </span>Versions&gt;::Base::VERSION,
@@ -8044,6 +8106,7 @@ Running Non-Permissioned Builder Service
         <span class="kw">let </span>(leader_public_key, leader_private_key) =
             &lt;BLSPubKey <span class="kw">as </span>SignatureKey&gt;::generated_from_seed_indexed([<span class="number">0</span>; <span class="number">32</span>], <span class="number">1</span>);
         <span class="kw">let </span>parent_commit = vid_commitment::&lt;TestVersions&gt;(
+            <span class="kw-2">&amp;</span>[],
             <span class="kw-2">&amp;</span>[],
             TEST_NUM_NODES_IN_VID_COMPUTATION,
             &lt;TestVersions <span class="kw">as </span>Versions&gt;::Base::VERSION,
@@ -8197,6 +8260,7 @@ Running Non-Permissioned Builder Service
             &lt;BLSPubKey <span class="kw">as </span>SignatureKey&gt;::generated_from_seed_indexed([<span class="number">0</span>; <span class="number">32</span>], <span class="number">1</span>);
         <span class="kw">let </span>parent_commit = vid_commitment::&lt;TestVersions&gt;(
             <span class="kw-2">&amp;</span>[],
+            <span class="kw-2">&amp;</span>[],
             TEST_NUM_NODES_IN_VID_COMPUTATION,
             &lt;TestVersions <span class="kw">as </span>Versions&gt;::Base::VERSION,
         );
@@ -8257,6 +8321,7 @@ Running Non-Permissioned Builder Service
             &lt;BLSPubKey <span class="kw">as </span>SignatureKey&gt;::generated_from_seed_indexed([<span class="number">0</span>; <span class="number">32</span>], <span class="number">1</span>);
         <span class="kw">let </span>parent_commit = vid_commitment::&lt;TestVersions&gt;(
             <span class="kw-2">&amp;</span>[],
+            <span class="kw-2">&amp;</span>[],
             TEST_NUM_NODES_IN_VID_COMPUTATION,
             &lt;TestVersions <span class="kw">as </span>Versions&gt;::Base::VERSION,
         );
@@ -8309,6 +8374,7 @@ Running Non-Permissioned Builder Service
         <span class="kw">let </span>(leader_public_key, leader_private_key) =
             &lt;BLSPubKey <span class="kw">as </span>SignatureKey&gt;::generated_from_seed_indexed([<span class="number">0</span>; <span class="number">32</span>], <span class="number">1</span>);
         <span class="kw">let </span>parent_commit = vid_commitment::&lt;TestVersions&gt;(
+            <span class="kw-2">&amp;</span>[],
             <span class="kw-2">&amp;</span>[],
             TEST_NUM_NODES_IN_VID_COMPUTATION,
             &lt;TestVersions <span class="kw">as </span>Versions&gt;::Base::VERSION,
@@ -8413,6 +8479,7 @@ Running Non-Permissioned Builder Service
             &lt;BLSPubKey <span class="kw">as </span>SignatureKey&gt;::generated_from_seed_indexed([<span class="number">0</span>; <span class="number">32</span>], <span class="number">1</span>);
         <span class="kw">let </span>parent_commit = vid_commitment::&lt;TestVersions&gt;(
             <span class="kw-2">&amp;</span>[],
+            <span class="kw-2">&amp;</span>[],
             TEST_NUM_NODES_IN_VID_COMPUTATION,
             &lt;TestVersions <span class="kw">as </span>Versions&gt;::Base::VERSION,
         );
@@ -8474,6 +8541,7 @@ Running Non-Permissioned Builder Service
             &lt;BLSPubKey <span class="kw">as </span>SignatureKey&gt;::generated_from_seed_indexed([<span class="number">0</span>; <span class="number">32</span>], <span class="number">1</span>);
         <span class="kw">let </span>parent_commit = vid_commitment::&lt;TestVersions&gt;(
             <span class="kw-2">&amp;</span>[],
+            <span class="kw-2">&amp;</span>[],
             TEST_NUM_NODES_IN_VID_COMPUTATION,
             &lt;TestVersions <span class="kw">as </span>Versions&gt;::Base::VERSION,
         );
@@ -8527,6 +8595,7 @@ Running Non-Permissioned Builder Service
         <span class="kw">let </span>(leader_public_key, leader_private_key) =
             &lt;BLSPubKey <span class="kw">as </span>SignatureKey&gt;::generated_from_seed_indexed([<span class="number">0</span>; <span class="number">32</span>], <span class="number">1</span>);
         <span class="kw">let </span>parent_commit = vid_commitment::&lt;TestVersions&gt;(
+            <span class="kw-2">&amp;</span>[],
             <span class="kw-2">&amp;</span>[],
             TEST_NUM_NODES_IN_VID_COMPUTATION,
             &lt;TestVersions <span class="kw">as </span>Versions&gt;::Base::VERSION,
@@ -9191,6 +9260,7 @@ Running Non-Permissioned Builder Service
         <span class="kw">let </span><span class="kw-2">mut </span>round = <span class="number">0</span>;
         <span class="kw">let </span><span class="kw-2">mut </span>current_builder_state_id = BuilderStateId::&lt;TestTypes&gt; {
             parent_commitment: vid_commitment::&lt;TestVersions&gt;(
+                <span class="kw-2">&amp;</span>[],
                 <span class="kw-2">&amp;</span>[],
                 <span class="number">8</span>,
                 &lt;TestVersions <span class="kw">as </span>Versions&gt;::Base::VERSION,

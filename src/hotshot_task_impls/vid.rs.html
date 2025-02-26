@@ -268,7 +268,10 @@
 <a href="#267" id="267">267</a>
 <a href="#268" id="268">268</a>
 <a href="#269" id="269">269</a>
-<a href="#270" id="270">270</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
+<a href="#270" id="270">270</a>
+<a href="#271" id="271">271</a>
+<a href="#272" id="272">272</a>
+<a href="#273" id="273">273</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
 // This file is part of the HotShot repository.
 
 // You should have received a copy of the MIT License
@@ -376,6 +379,7 @@
                     <span class="kw-2">*</span>view_number,
                     epoch,
                     epoch,
+                    metadata,
                     <span class="kw-2">&amp;</span><span class="self">self</span>.upgrade_lock,
                 )
                 .<span class="kw">await
@@ -405,9 +409,10 @@
                 .<span class="kw">await</span>;
 
                 <span class="kw">let </span>view_number = <span class="kw-2">*</span>view_number;
-                <span class="kw">let </span><span class="prelude-val">Ok</span>(signature) =
-                    TYPES::SignatureKey::sign(<span class="kw-2">&amp;</span><span class="self">self</span>.private_key, payload_commitment.as_ref())
-                <span class="kw">else </span>{
+                <span class="kw">let </span><span class="prelude-val">Ok</span>(signature) = TYPES::SignatureKey::sign(
+                    <span class="kw-2">&amp;</span><span class="self">self</span>.private_key,
+                    vid_disperse.payload_commitment_ref(),
+                ) <span class="kw">else </span>{
                     <span class="macro">error!</span>(<span class="string">"VID: failed to sign dispersal payload"</span>);
                     <span class="kw">return </span><span class="prelude-val">None</span>;
                 };
@@ -477,11 +482,12 @@
                 drop(consensus_reader);
 
                 <span class="kw">let </span>next_epoch_vid_disperse = VidDisperse::calculate_vid_disperse::&lt;V&gt;(
-                    payload.as_ref(),
+                    <span class="kw-2">&amp;</span>payload.payload,
                     <span class="kw-2">&amp;</span>Arc::clone(<span class="kw-2">&amp;</span><span class="self">self</span>.membership),
                     proposal_view_number,
                     target_epoch,
                     sender_epoch,
+                    <span class="kw-2">&amp;</span>payload.metadata,
                     <span class="kw-2">&amp;</span><span class="self">self</span>.upgrade_lock,
                 )
                 .<span class="kw">await

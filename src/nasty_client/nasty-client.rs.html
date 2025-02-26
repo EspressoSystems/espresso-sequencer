@@ -2577,7 +2577,7 @@
                 .verify(
                     header.ns_table(),
                     <span class="kw-2">&amp;</span>header.payload_commitment(),
-                    vid_common.common()
+                    <span class="kw-2">&amp;</span>vid_common.common().clone().unwrap(),
                 )
                 .is_some(),
             <span class="macro">format!</span>(<span class="string">"failure to verify namespace proof for {block}:{ns}"</span>)

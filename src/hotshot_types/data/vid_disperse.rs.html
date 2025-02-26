@@ -429,7 +429,115 @@
 <a href="#428" id="428">428</a>
 <a href="#429" id="429">429</a>
 <a href="#430" id="430">430</a>
-<a href="#431" id="431">431</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
+<a href="#431" id="431">431</a>
+<a href="#432" id="432">432</a>
+<a href="#433" id="433">433</a>
+<a href="#434" id="434">434</a>
+<a href="#435" id="435">435</a>
+<a href="#436" id="436">436</a>
+<a href="#437" id="437">437</a>
+<a href="#438" id="438">438</a>
+<a href="#439" id="439">439</a>
+<a href="#440" id="440">440</a>
+<a href="#441" id="441">441</a>
+<a href="#442" id="442">442</a>
+<a href="#443" id="443">443</a>
+<a href="#444" id="444">444</a>
+<a href="#445" id="445">445</a>
+<a href="#446" id="446">446</a>
+<a href="#447" id="447">447</a>
+<a href="#448" id="448">448</a>
+<a href="#449" id="449">449</a>
+<a href="#450" id="450">450</a>
+<a href="#451" id="451">451</a>
+<a href="#452" id="452">452</a>
+<a href="#453" id="453">453</a>
+<a href="#454" id="454">454</a>
+<a href="#455" id="455">455</a>
+<a href="#456" id="456">456</a>
+<a href="#457" id="457">457</a>
+<a href="#458" id="458">458</a>
+<a href="#459" id="459">459</a>
+<a href="#460" id="460">460</a>
+<a href="#461" id="461">461</a>
+<a href="#462" id="462">462</a>
+<a href="#463" id="463">463</a>
+<a href="#464" id="464">464</a>
+<a href="#465" id="465">465</a>
+<a href="#466" id="466">466</a>
+<a href="#467" id="467">467</a>
+<a href="#468" id="468">468</a>
+<a href="#469" id="469">469</a>
+<a href="#470" id="470">470</a>
+<a href="#471" id="471">471</a>
+<a href="#472" id="472">472</a>
+<a href="#473" id="473">473</a>
+<a href="#474" id="474">474</a>
+<a href="#475" id="475">475</a>
+<a href="#476" id="476">476</a>
+<a href="#477" id="477">477</a>
+<a href="#478" id="478">478</a>
+<a href="#479" id="479">479</a>
+<a href="#480" id="480">480</a>
+<a href="#481" id="481">481</a>
+<a href="#482" id="482">482</a>
+<a href="#483" id="483">483</a>
+<a href="#484" id="484">484</a>
+<a href="#485" id="485">485</a>
+<a href="#486" id="486">486</a>
+<a href="#487" id="487">487</a>
+<a href="#488" id="488">488</a>
+<a href="#489" id="489">489</a>
+<a href="#490" id="490">490</a>
+<a href="#491" id="491">491</a>
+<a href="#492" id="492">492</a>
+<a href="#493" id="493">493</a>
+<a href="#494" id="494">494</a>
+<a href="#495" id="495">495</a>
+<a href="#496" id="496">496</a>
+<a href="#497" id="497">497</a>
+<a href="#498" id="498">498</a>
+<a href="#499" id="499">499</a>
+<a href="#500" id="500">500</a>
+<a href="#501" id="501">501</a>
+<a href="#502" id="502">502</a>
+<a href="#503" id="503">503</a>
+<a href="#504" id="504">504</a>
+<a href="#505" id="505">505</a>
+<a href="#506" id="506">506</a>
+<a href="#507" id="507">507</a>
+<a href="#508" id="508">508</a>
+<a href="#509" id="509">509</a>
+<a href="#510" id="510">510</a>
+<a href="#511" id="511">511</a>
+<a href="#512" id="512">512</a>
+<a href="#513" id="513">513</a>
+<a href="#514" id="514">514</a>
+<a href="#515" id="515">515</a>
+<a href="#516" id="516">516</a>
+<a href="#517" id="517">517</a>
+<a href="#518" id="518">518</a>
+<a href="#519" id="519">519</a>
+<a href="#520" id="520">520</a>
+<a href="#521" id="521">521</a>
+<a href="#522" id="522">522</a>
+<a href="#523" id="523">523</a>
+<a href="#524" id="524">524</a>
+<a href="#525" id="525">525</a>
+<a href="#526" id="526">526</a>
+<a href="#527" id="527">527</a>
+<a href="#528" id="528">528</a>
+<a href="#529" id="529">529</a>
+<a href="#530" id="530">530</a>
+<a href="#531" id="531">531</a>
+<a href="#532" id="532">532</a>
+<a href="#533" id="533">533</a>
+<a href="#534" id="534">534</a>
+<a href="#535" id="535">535</a>
+<a href="#536" id="536">536</a>
+<a href="#537" id="537">537</a>
+<a href="#538" id="538">538</a>
+<a href="#539" id="539">539</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
 // This file is part of the HotShot repository.
 
 // You should have received a copy of the MIT License
@@ -451,13 +559,22 @@
     simple_vote::HasEpoch,
     traits::{
         block_contents::EncodeBytes, election::Membership, node_implementation::NodeType,
-        signature_key::SignatureKey,
+        signature_key::SignatureKey, BlockPayload,
     },
-    vid::{advz_scheme, VidCommitment, VidCommon, VidSchemeType, VidShare},
+    vid::{
+        advz::{advz_scheme, ADVZCommitment, ADVZCommon, ADVZScheme, ADVZShare},
+        avidm::{init_avidm_param, AvidMCommitment, AvidMScheme, AvidMShare},
+    },
     vote::HasViewNumber,
 };
 
-<span class="macro">impl_has_epoch!</span>(ADVZDisperse&lt;TYPES&gt;, VidDisperseShare2&lt;TYPES&gt;);
+<span class="kw">use </span><span class="kw">super</span>::ns_table::parse_ns_table;
+
+<span class="macro">impl_has_epoch!</span>(
+    ADVZDisperse&lt;TYPES&gt;,
+    AvidMDisperse&lt;TYPES&gt;,
+    VidDisperseShare2&lt;TYPES&gt;
+);
 
 <span class="doccomment">/// ADVZ dispersal data
 </span><span class="attr">#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Hash)]
@@ -469,13 +586,13 @@
     <span class="doccomment">/// Epoch to which the recipients of this VID belong to
     </span><span class="kw">pub </span>target_epoch: <span class="prelude-ty">Option</span>&lt;TYPES::Epoch&gt;,
     <span class="doccomment">/// VidCommitment calculated based on the number of nodes in `target_epoch`.
-    </span><span class="kw">pub </span>payload_commitment: VidCommitment,
+    </span><span class="kw">pub </span>payload_commitment: ADVZCommitment,
     <span class="doccomment">/// VidCommitment calculated based on the number of nodes in `epoch`. Needed during epoch transition.
-    </span><span class="kw">pub </span>data_epoch_payload_commitment: <span class="prelude-ty">Option</span>&lt;VidCommitment&gt;,
+    </span><span class="kw">pub </span>data_epoch_payload_commitment: <span class="prelude-ty">Option</span>&lt;ADVZCommitment&gt;,
     <span class="doccomment">/// A storage node's key and its corresponding VID share
-    </span><span class="kw">pub </span>shares: BTreeMap&lt;TYPES::SignatureKey, VidShare&gt;,
+    </span><span class="kw">pub </span>shares: BTreeMap&lt;TYPES::SignatureKey, ADVZShare&gt;,
     <span class="doccomment">/// VID common data sent to all storage nodes
-    </span><span class="kw">pub </span>common: VidCommon,
+    </span><span class="kw">pub </span>common: ADVZCommon,
 }
 
 <span class="kw">impl</span>&lt;TYPES: NodeType&gt; HasViewNumber&lt;TYPES&gt; <span class="kw">for </span>ADVZDisperse&lt;TYPES&gt; {
@@ -488,13 +605,13 @@
     <span class="doccomment">/// Create VID dispersal from a specified membership for the target epoch.
     /// Uses the specified function to calculate share dispersal
     /// Allows for more complex stake table functionality
-    </span><span class="kw">pub async fn </span>from_membership(
+    </span><span class="kw">async fn </span>from_membership(
         view_number: TYPES::View,
-        <span class="kw-2">mut </span>vid_disperse: JfVidDisperse&lt;VidSchemeType&gt;,
+        <span class="kw-2">mut </span>vid_disperse: JfVidDisperse&lt;ADVZScheme&gt;,
         membership: <span class="kw-2">&amp;</span>Arc&lt;RwLock&lt;TYPES::Membership&gt;&gt;,
         target_epoch: <span class="prelude-ty">Option</span>&lt;TYPES::Epoch&gt;,
         data_epoch: <span class="prelude-ty">Option</span>&lt;TYPES::Epoch&gt;,
-        data_epoch_payload_commitment: <span class="prelude-ty">Option</span>&lt;VidCommitment&gt;,
+        data_epoch_payload_commitment: <span class="prelude-ty">Option</span>&lt;ADVZCommitment&gt;,
     ) -&gt; <span class="self">Self </span>{
         <span class="kw">let </span>shares = membership
             .read()
@@ -566,6 +683,11 @@
         )
         .<span class="kw">await</span>)
     }
+
+    <span class="doccomment">/// Returns the payload length in bytes.
+    </span><span class="kw">pub fn </span>payload_byte_len(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; u32 {
+        ADVZScheme::get_payload_byte_len(<span class="kw-2">&amp;</span><span class="self">self</span>.common)
+    }
 }
 
 <span class="attr">#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Hash)]
@@ -574,11 +696,11 @@
     <span class="doccomment">/// The view number for which this VID data is intended
     </span><span class="kw">pub </span>view_number: TYPES::View,
     <span class="doccomment">/// Block payload commitment
-    </span><span class="kw">pub </span>payload_commitment: VidCommitment,
+    </span><span class="kw">pub </span>payload_commitment: ADVZCommitment,
     <span class="doccomment">/// A storage node's key and its corresponding VID share
-    </span><span class="kw">pub </span>share: VidShare,
+    </span><span class="kw">pub </span>share: ADVZShare,
     <span class="doccomment">/// VID common data sent to all storage nodes
-    </span><span class="kw">pub </span>common: VidCommon,
+    </span><span class="kw">pub </span>common: ADVZCommon,
     <span class="doccomment">/// a public key of the share recipient
     </span><span class="kw">pub </span>recipient_key: TYPES::SignatureKey,
 }
@@ -684,6 +806,144 @@
             .verify_share(<span class="kw-2">&amp;</span><span class="self">self</span>.share, <span class="kw-2">&amp;</span><span class="self">self</span>.common, <span class="kw-2">&amp;</span><span class="self">self</span>.payload_commitment)
             .unwrap_or(<span class="prelude-val">Err</span>(()))
     }
+
+    <span class="doccomment">/// Returns the payload length in bytes.
+    </span><span class="kw">pub fn </span>payload_byte_len(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; u32 {
+        ADVZScheme::get_payload_byte_len(<span class="kw-2">&amp;</span><span class="self">self</span>.common)
+    }
+}
+
+<span class="doccomment">/// ADVZ dispersal data
+</span><span class="attr">#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Hash)]
+</span><span class="kw">pub struct </span>AvidMDisperse&lt;TYPES: NodeType&gt; {
+    <span class="doccomment">/// The view number for which this VID data is intended
+    </span><span class="kw">pub </span>view_number: TYPES::View,
+    <span class="doccomment">/// Epoch the data of this proposal belongs to
+    </span><span class="kw">pub </span>epoch: <span class="prelude-ty">Option</span>&lt;TYPES::Epoch&gt;,
+    <span class="doccomment">/// Epoch to which the recipients of this VID belong to
+    </span><span class="kw">pub </span>target_epoch: <span class="prelude-ty">Option</span>&lt;TYPES::Epoch&gt;,
+    <span class="doccomment">/// VidCommitment calculated based on the number of nodes in `target_epoch`.
+    </span><span class="kw">pub </span>payload_commitment: AvidMCommitment,
+    <span class="doccomment">/// VidCommitment calculated based on the number of nodes in `epoch`. Needed during epoch transition.
+    </span><span class="kw">pub </span>data_epoch_payload_commitment: <span class="prelude-ty">Option</span>&lt;AvidMCommitment&gt;,
+    <span class="doccomment">/// A storage node's key and its corresponding VID share
+    </span><span class="kw">pub </span>shares: BTreeMap&lt;TYPES::SignatureKey, AvidMShare&gt;,
+    <span class="doccomment">/// Length of payload in bytes
+    </span><span class="kw">pub </span>payload_byte_len: usize,
+}
+
+<span class="kw">impl</span>&lt;TYPES: NodeType&gt; HasViewNumber&lt;TYPES&gt; <span class="kw">for </span>AvidMDisperse&lt;TYPES&gt; {
+    <span class="kw">fn </span>view_number(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; TYPES::View {
+        <span class="self">self</span>.view_number
+    }
+}
+
+<span class="kw">impl</span>&lt;TYPES: NodeType&gt; AvidMDisperse&lt;TYPES&gt; {
+    <span class="doccomment">/// Create VID dispersal from a specified membership for the target epoch.
+    /// Uses the specified function to calculate share dispersal
+    /// Allows for more complex stake table functionality
+    </span><span class="kw">async fn </span>from_membership(
+        view_number: TYPES::View,
+        commit: AvidMCommitment,
+        shares: <span class="kw-2">&amp;</span>[AvidMShare],
+        membership: <span class="kw-2">&amp;</span>Arc&lt;RwLock&lt;TYPES::Membership&gt;&gt;,
+        target_epoch: <span class="prelude-ty">Option</span>&lt;TYPES::Epoch&gt;,
+        data_epoch: <span class="prelude-ty">Option</span>&lt;TYPES::Epoch&gt;,
+        data_epoch_payload_commitment: <span class="prelude-ty">Option</span>&lt;AvidMCommitment&gt;,
+    ) -&gt; <span class="self">Self </span>{
+        <span class="kw">let </span>payload_byte_len = shares[<span class="number">0</span>].payload_byte_len();
+        <span class="kw">let </span>shares = membership
+            .read()
+            .<span class="kw">await
+            </span>.committee_members(view_number, target_epoch)
+            .iter()
+            .zip(shares)
+            .map(|(node, share)| (node.clone(), share.clone()))
+            .collect();
+
+        <span class="self">Self </span>{
+            view_number,
+            shares,
+            payload_commitment: commit,
+            data_epoch_payload_commitment,
+            epoch: data_epoch,
+            target_epoch,
+            payload_byte_len,
+        }
+    }
+
+    <span class="doccomment">/// Calculate the vid disperse information from the payload given a view, epoch and membership,
+    /// If the sender epoch is missing, it means it's the same as the target epoch.
+    ///
+    /// # Errors
+    /// Returns an error if the disperse or commitment calculation fails
+    </span><span class="attr">#[allow(clippy::panic)]
+    #[allow(clippy::single_range_in_vec_init)]
+    </span><span class="kw">pub async fn </span>calculate_vid_disperse(
+        payload: <span class="kw-2">&amp;</span>TYPES::BlockPayload,
+        membership: <span class="kw-2">&amp;</span>Arc&lt;RwLock&lt;TYPES::Membership&gt;&gt;,
+        view: TYPES::View,
+        target_epoch: <span class="prelude-ty">Option</span>&lt;TYPES::Epoch&gt;,
+        data_epoch: <span class="prelude-ty">Option</span>&lt;TYPES::Epoch&gt;,
+        metadata: <span class="kw-2">&amp;</span>&lt;TYPES::BlockPayload <span class="kw">as </span>BlockPayload&lt;TYPES&gt;&gt;::Metadata,
+    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>&gt; {
+        <span class="kw">let </span>num_nodes = membership.read().<span class="kw">await</span>.total_nodes(target_epoch);
+
+        <span class="kw">let </span>txns = payload.encode();
+        <span class="kw">let </span>txns_clone = Arc::clone(<span class="kw-2">&amp;</span>txns);
+        <span class="kw">let </span>num_txns = txns.len();
+
+        <span class="kw">let </span>avidm_param = init_avidm_param(num_nodes)<span class="question-mark">?</span>;
+        <span class="comment">// TODO: get weight distribution
+        </span><span class="kw">let </span>weights = <span class="macro">vec!</span>[<span class="number">1u32</span>; num_nodes];
+        <span class="kw">let </span>ns_table = parse_ns_table(num_txns, <span class="kw-2">&amp;</span>metadata.encode());
+        <span class="kw">let </span>ns_table_clone = ns_table.clone();
+        <span class="kw">let </span>(commit, shares) = spawn_blocking(<span class="kw">move </span>|| {
+            AvidMScheme::ns_disperse(<span class="kw-2">&amp;</span>avidm_param, <span class="kw-2">&amp;</span>weights, <span class="kw-2">&amp;</span>txns_clone, ns_table_clone)
+        })
+        .<span class="kw">await
+        </span>.wrap()
+        .context(<span class="macro">error!</span>(<span class="string">"Join error"</span>))<span class="question-mark">?
+        </span>.wrap()
+        .context(|err| <span class="macro">error!</span>(<span class="string">"Failed to calculate VID disperse. Error: {}"</span>, err))<span class="question-mark">?</span>;
+
+        <span class="kw">let </span>payload_commitment = <span class="kw">if </span>target_epoch == data_epoch {
+            <span class="prelude-val">None
+        </span>} <span class="kw">else </span>{
+            <span class="kw">let </span>num_nodes = membership.read().<span class="kw">await</span>.total_nodes(data_epoch);
+            <span class="kw">let </span>avidm_param = init_avidm_param(num_nodes)<span class="question-mark">?</span>;
+
+            <span class="prelude-val">Some</span>(
+              spawn_blocking(<span class="kw">move </span>||
+                AvidMScheme::commit(
+                    <span class="kw-2">&amp;</span>avidm_param,
+                    <span class="kw-2">&amp;</span>txns,
+                    ns_table,
+                ))
+                .<span class="kw">await
+                </span>.wrap()
+                .context(<span class="macro">error!</span>(<span class="string">"Join error"</span>))<span class="question-mark">?
+                </span>.wrap()
+                .context(|err| <span class="macro">error!</span>(<span class="string">"Failed to calculate VID commitment with (num_storage_nodes, payload_byte_len) = ({}, {}). Error: {}"</span>, num_nodes, num_txns, err))<span class="question-mark">?
+            </span>)
+        };
+
+        <span class="prelude-val">Ok</span>(<span class="self">Self</span>::from_membership(
+            view,
+            commit,
+            <span class="kw-2">&amp;</span>shares,
+            membership,
+            target_epoch,
+            data_epoch,
+            payload_commitment,
+        )
+        .<span class="kw">await</span>)
+    }
+
+    <span class="doccomment">/// Returns the payload length in bytes.
+    </span><span class="kw">pub fn </span>payload_byte_len(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; u32 {
+        <span class="self">self</span>.payload_byte_len <span class="kw">as </span>u32
+    }
 }
 
 <span class="attr">#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Hash)]
@@ -696,13 +956,11 @@
     <span class="doccomment">/// The epoch number to which the recipient of this VID belongs to
     </span><span class="kw">pub </span>target_epoch: <span class="prelude-ty">Option</span>&lt;TYPES::Epoch&gt;,
     <span class="doccomment">/// Block payload commitment
-    </span><span class="kw">pub </span>payload_commitment: VidCommitment,
+    </span><span class="kw">pub </span>payload_commitment: AvidMCommitment,
     <span class="doccomment">/// VidCommitment calculated based on the number of nodes in `epoch`. Needed during epoch transition.
-    </span><span class="kw">pub </span>data_epoch_payload_commitment: <span class="prelude-ty">Option</span>&lt;VidCommitment&gt;,
+    </span><span class="kw">pub </span>data_epoch_payload_commitment: <span class="prelude-ty">Option</span>&lt;AvidMCommitment&gt;,
     <span class="doccomment">/// A storage node's key and its corresponding VID share
-    </span><span class="kw">pub </span>share: VidShare,
-    <span class="doccomment">/// VID common data sent to all storage nodes
-    </span><span class="kw">pub </span>common: VidCommon,
+    </span><span class="kw">pub </span>share: AvidMShare,
     <span class="doccomment">/// a public key of the share recipient
     </span><span class="kw">pub </span>recipient_key: TYPES::SignatureKey,
 }
@@ -715,7 +973,7 @@
 
 <span class="kw">impl</span>&lt;TYPES: NodeType&gt; VidDisperseShare2&lt;TYPES&gt; {
     <span class="doccomment">/// Create a vector of `VidDisperseShare` from `VidDisperse`
-    </span><span class="kw">pub fn </span>from_vid_disperse(vid_disperse: ADVZDisperse&lt;TYPES&gt;) -&gt; Vec&lt;<span class="self">Self</span>&gt; {
+    </span><span class="kw">pub fn </span>from_vid_disperse(vid_disperse: AvidMDisperse&lt;TYPES&gt;) -&gt; Vec&lt;<span class="self">Self</span>&gt; {
         vid_disperse
             .shares
             .into_iter()
@@ -723,7 +981,6 @@
                 share,
                 recipient_key,
                 view_number: vid_disperse.view_number,
-                common: vid_disperse.common.clone(),
                 payload_commitment: vid_disperse.payload_commitment,
                 data_epoch_payload_commitment: vid_disperse.data_epoch_payload_commitment,
                 epoch: vid_disperse.epoch,
@@ -751,24 +1008,25 @@
     }
 
     <span class="doccomment">/// Create `VidDisperse` out of an iterator to `VidDisperseShare`s
-    </span><span class="kw">pub fn </span>to_vid_disperse&lt;<span class="lifetime">'a</span>, I&gt;(<span class="kw-2">mut </span>it: I) -&gt; <span class="prelude-ty">Option</span>&lt;ADVZDisperse&lt;TYPES&gt;&gt;
+    </span><span class="kw">pub fn </span>to_vid_disperse&lt;<span class="lifetime">'a</span>, I&gt;(<span class="kw-2">mut </span>it: I) -&gt; <span class="prelude-ty">Option</span>&lt;AvidMDisperse&lt;TYPES&gt;&gt;
     <span class="kw">where
         </span>I: Iterator&lt;Item = <span class="kw-2">&amp;</span><span class="lifetime">'a </span><span class="self">Self</span>&gt;,
     {
         <span class="kw">let </span>first_vid_disperse_share = it.next()<span class="question-mark">?</span>.clone();
+        <span class="kw">let </span>payload_byte_len = first_vid_disperse_share.share.payload_byte_len();
         <span class="kw">let </span><span class="kw-2">mut </span>share_map = BTreeMap::new();
         share_map.insert(
             first_vid_disperse_share.recipient_key,
             first_vid_disperse_share.share,
         );
-        <span class="kw">let </span><span class="kw-2">mut </span>vid_disperse = ADVZDisperse {
+        <span class="kw">let </span><span class="kw-2">mut </span>vid_disperse = AvidMDisperse {
             view_number: first_vid_disperse_share.view_number,
             epoch: first_vid_disperse_share.epoch,
             target_epoch: first_vid_disperse_share.target_epoch,
             payload_commitment: first_vid_disperse_share.payload_commitment,
             data_epoch_payload_commitment: first_vid_disperse_share.data_epoch_payload_commitment,
-            common: first_vid_disperse_share.common,
             shares: share_map,
+            payload_byte_len,
         };
         <span class="kw">let _ </span>= it.map(|vid_disperse_share| {
             vid_disperse.shares.insert(
@@ -779,9 +1037,14 @@
         <span class="prelude-val">Some</span>(vid_disperse)
     }
 
+    <span class="doccomment">/// Returns the payload length in bytes.
+    </span><span class="kw">pub fn </span>payload_byte_len(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; u32 {
+        <span class="self">self</span>.share.payload_byte_len() <span class="kw">as </span>u32
+    }
+
     <span class="doccomment">/// Split a VID share proposal into a proposal for each recipient.
     </span><span class="kw">pub fn </span>to_vid_share_proposals(
-        vid_disperse: ADVZDisperse&lt;TYPES&gt;,
+        vid_disperse: AvidMDisperse&lt;TYPES&gt;,
         signature: <span class="kw-2">&amp;</span>&lt;TYPES::SignatureKey <span class="kw">as </span>SignatureKey&gt;::PureAssembledSignatureType,
     ) -&gt; Vec&lt;Proposal&lt;TYPES, <span class="self">Self</span>&gt;&gt; {
         vid_disperse
@@ -792,7 +1055,6 @@
                     share,
                     recipient_key,
                     view_number: vid_disperse.view_number,
-                    common: vid_disperse.common.clone(),
                     payload_commitment: vid_disperse.payload_commitment,
                     data_epoch_payload_commitment: vid_disperse.data_epoch_payload_commitment,
                     epoch: vid_disperse.epoch,
@@ -809,55 +1071,9 @@
     /// # Errors
     </span><span class="attr">#[allow(clippy::result_unit_err)]
     </span><span class="kw">pub fn </span>verify_share(<span class="kw-2">&amp;</span><span class="self">self</span>, total_nodes: usize) -&gt; std::result::Result&lt;(), ()&gt; {
-        advz_scheme(total_nodes)
-            .verify_share(<span class="kw-2">&amp;</span><span class="self">self</span>.share, <span class="kw-2">&amp;</span><span class="self">self</span>.common, <span class="kw-2">&amp;</span><span class="self">self</span>.payload_commitment)
+        <span class="kw">let </span>avidm_param = init_avidm_param(total_nodes).map_err(|<span class="kw">_</span>| ())<span class="question-mark">?</span>;
+        AvidMScheme::verify_share(<span class="kw-2">&amp;</span>avidm_param, <span class="kw-2">&amp;</span><span class="self">self</span>.payload_commitment, <span class="kw-2">&amp;</span><span class="self">self</span>.share)
             .unwrap_or(<span class="prelude-val">Err</span>(()))
-    }
-}
-
-<span class="kw">impl</span>&lt;TYPES: NodeType&gt; From&lt;VidDisperseShare2&lt;TYPES&gt;&gt; <span class="kw">for </span>ADVZDisperseShare&lt;TYPES&gt; {
-    <span class="kw">fn </span>from(vid_disperse2: VidDisperseShare2&lt;TYPES&gt;) -&gt; <span class="self">Self </span>{
-        <span class="kw">let </span>VidDisperseShare2 {
-            view_number,
-            epoch: <span class="kw">_</span>,
-            target_epoch: <span class="kw">_</span>,
-            payload_commitment,
-            data_epoch_payload_commitment: <span class="kw">_</span>,
-            share,
-            common,
-            recipient_key,
-        } = vid_disperse2;
-
-        <span class="self">Self </span>{
-            view_number,
-            payload_commitment,
-            share,
-            common,
-            recipient_key,
-        }
-    }
-}
-
-<span class="kw">impl</span>&lt;TYPES: NodeType&gt; From&lt;ADVZDisperseShare&lt;TYPES&gt;&gt; <span class="kw">for </span>VidDisperseShare2&lt;TYPES&gt; {
-    <span class="kw">fn </span>from(vid_disperse: ADVZDisperseShare&lt;TYPES&gt;) -&gt; <span class="self">Self </span>{
-        <span class="kw">let </span>ADVZDisperseShare {
-            view_number,
-            payload_commitment,
-            share,
-            common,
-            recipient_key,
-        } = vid_disperse;
-
-        <span class="self">Self </span>{
-            view_number,
-            epoch: <span class="prelude-val">None</span>,
-            target_epoch: <span class="prelude-val">None</span>,
-            payload_commitment,
-            data_epoch_payload_commitment: <span class="prelude-val">None</span>,
-            share,
-            common,
-            recipient_key,
-        }
     }
 }
 </code></pre></div></section></main></body></html>

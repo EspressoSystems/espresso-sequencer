@@ -802,6 +802,7 @@
 <span class="kw">use </span>hotshot_types::traits::block_contents::Transaction;
 <span class="kw">use </span>hotshot_types::traits::EncodeBytes;
 <span class="kw">use </span>hotshot_types::{
+    data::VidCommitment,
     event::EventType,
     traits::{
         block_contents::BlockPayload,
@@ -809,7 +810,6 @@
         signature_key::{BuilderSignatureKey, SignatureKey},
     },
     utils::BuilderCommitment,
-    vid::VidCommitment,
 };
 <span class="kw">use </span>marketplace_builder_shared::coordinator::BuilderStateLookup;
 <span class="kw">use </span>marketplace_builder_shared::error::Error;
