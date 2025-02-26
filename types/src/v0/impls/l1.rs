@@ -364,23 +364,6 @@ impl Service<RequestPacket> for SwitchingTransport {
     }
 }
 
-// impl InnerUpdateTasks {
-//     pub fn block_task(&self) {
-//         self.blocks
-//     }
-//     pub fn abort_all(self) {
-//         self.blocks.abort();
-//         if let Some(task) = self.stake {
-//             task.abort();
-//         }
-//     }
-//
-//     pub fn upgrade(&self) {
-//         self.abort_all();
-//         Self { blocks: spawn(up) }
-//     }
-// }
-
 impl L1Client {
     fn with_provider(provider: RootProvider<SwitchingTransport>) -> Self {
         let opt = provider.client().transport().options().clone();
