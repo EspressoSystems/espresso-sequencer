@@ -120,6 +120,9 @@ reexport_unchanged_types!(
     TimeBasedUpgrade,
     ViewBasedUpgrade,
     BlockSize,
+    PublicHotShotConfig,
+    PublicNetworkConfig,
+    PublicValidatorConfig
 );
 
 pub(crate) use v0_3::{L1ClientMetrics, L1Event, L1State, L1UpdateTask};
@@ -175,8 +178,8 @@ pub type MockSequencerVersions = SequencerVersions<StaticVersion<0, 1>, StaticVe
 pub type V0_0 = StaticVersion<0, 0>;
 pub type V0_1 = StaticVersion<0, 1>;
 pub type FeeVersion = StaticVersion<0, 2>;
+pub type EpochVersion = StaticVersion<0, 3>;
 pub type MarketplaceVersion = StaticVersion<0, 99>;
-pub type EpochVersion = StaticVersion<0, 100>;
 
 pub type Leaf = hotshot_types::data::Leaf<SeqTypes>;
 pub type Leaf2 = hotshot_types::data::Leaf2<SeqTypes>;

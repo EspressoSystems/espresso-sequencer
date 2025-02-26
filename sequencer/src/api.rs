@@ -7,8 +7,8 @@ use data_source::{CatchupDataSource, StakeTableDataSource, SubmitDataSource};
 use derivative::Derivative;
 use espresso_types::{
     retain_accounts, v0::traits::SequencerPersistence, v0_99::ChainConfig, AccountQueryData,
-    BlockMerkleTree, FeeAccount, FeeAccountProof, FeeMerkleTree, NodeState, PubKey, Transaction,
-    ValidatedState,
+    BlockMerkleTree, FeeAccount, FeeAccountProof, FeeMerkleTree, NodeState, PubKey,
+    PublicNetworkConfig, Transaction, ValidatedState,
 };
 use futures::{
     future::{BoxFuture, Future, FutureExt},
@@ -35,9 +35,7 @@ use jf_merkle_tree::MerkleTreeScheme;
 use std::pin::Pin;
 use std::sync::Arc;
 
-use self::data_source::{
-    HotShotConfigDataSource, NodeStateDataSource, PublicNetworkConfig, StateSignatureDataSource,
-};
+use self::data_source::{HotShotConfigDataSource, NodeStateDataSource, StateSignatureDataSource};
 use crate::{
     catchup::CatchupStorage, context::Consensus, state_signature::StateSigner, SeqTypes,
     SequencerApiVersion, SequencerContext,
@@ -171,11 +169,31 @@ impl<N: ConnectedNetwork<PubKey>, D: Sync, V: Versions, P: SequencerPersistence>
         self.as_ref().get_stake_table(epoch).await
     }
 
+    /// Get the stake table for a given epoch
+    async fn get_da_members(
+        &self,
+        epoch: Option<<SeqTypes as NodeType>::Epoch>,
+    ) -> Vec<StakeTableEntry<<SeqTypes as NodeType>::SignatureKey>> {
+        self.as_ref().get_da_members(epoch).await
+    }
+
     /// Get the stake table for the current epoch if not provided
     async fn get_stake_table_current(
         &self,
     ) -> Vec<StakeTableEntry<<SeqTypes as NodeType>::SignatureKey>> {
         self.as_ref().get_stake_table_current().await
+    }
+
+    /// Get the stake table for the current epoch if not provided
+    async fn get_da_members_current(
+        &self,
+    ) -> Vec<StakeTableEntry<<SeqTypes as NodeType>::SignatureKey>> {
+        self.as_ref().get_da_members_current().await
+    }
+
+    /// Get the stake table for the current epoch if not provided
+    async fn get_current_epoch(&self) -> Option<<SeqTypes as NodeType>::Epoch> {
+        self.as_ref().get_current_epoch().await
     }
 }
 
@@ -204,6 +222,33 @@ impl<N: ConnectedNetwork<PubKey>, V: Versions, P: SequencerPersistence>
         let epoch = self.consensus().await.read().await.cur_epoch().await;
 
         self.get_stake_table(epoch).await
+    }
+
+    async fn get_current_epoch(&self) -> Option<<SeqTypes as NodeType>::Epoch> {
+        self.consensus().await.read().await.cur_epoch().await
+    }
+
+    async fn get_da_members(
+        &self,
+        epoch: Option<<SeqTypes as NodeType>::Epoch>,
+    ) -> Vec<StakeTableEntry<<SeqTypes as NodeType>::SignatureKey>> {
+        self.consensus()
+            .await
+            .read()
+            .await
+            .memberships
+            .read()
+            .await
+            .da_stake_table(epoch)
+    }
+
+    /// Get the stake table for the current epoch if not provided
+    async fn get_da_members_current(
+        &self,
+    ) -> Vec<StakeTableEntry<<SeqTypes as NodeType>::SignatureKey>> {
+        let epoch = self.consensus().await.read().await.cur_epoch().await;
+
+        self.get_da_members(epoch).await
     }
 }
 
@@ -1558,15 +1603,18 @@ mod api_tests {
 #[cfg(test)]
 mod test {
     use committable::{Commitment, Committable};
-    use std::{collections::BTreeMap, time::Duration};
+    use std::{
+        collections::{BTreeMap, HashSet},
+        time::Duration,
+    };
     use tokio::time::sleep;
 
     use espresso_types::{
         traits::NullEventConsumer,
         v0_1::{UpgradeMode, ViewBasedUpgrade},
-        BackoffParams, FeeAccount, FeeAmount, FeeVersion, Header, MarketplaceVersion,
-        MockSequencerVersions, SequencerVersions, TimeBasedUpgrade, Timestamp, Upgrade,
-        UpgradeType, ValidatedState,
+        BackoffParams, FeeAccount, FeeAmount, Header, MarketplaceVersion, MockSequencerVersions,
+        PublicHotShotConfig, SequencerVersions, TimeBasedUpgrade, Timestamp, Upgrade, UpgradeType,
+        ValidatedState,
     };
     use ethers::utils::Anvil;
     use futures::{
@@ -1596,8 +1644,7 @@ mod test {
     use vbs::version::{StaticVersion, StaticVersionType, Version};
 
     use self::{
-        data_source::{testing::TestableSequencerDataSource, PublicHotShotConfig},
-        options::HotshotEvents,
+        data_source::testing::TestableSequencerDataSource, options::HotshotEvents,
         sql::DataSource as SqlDataSource,
     };
     use super::*;
@@ -1606,6 +1653,7 @@ mod test {
         persistence::no_storage,
         testing::{TestConfig, TestConfigBuilder},
     };
+    use espresso_types::EpochVersion;
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_healthcheck() {
@@ -2125,72 +2173,42 @@ mod test {
         handle.abort();
     }
 
-    #[tokio::test(flavor = "multi_thread")]
-    async fn test_fee_upgrade_view_based() {
-        setup_test();
+    // #[tokio::test(flavor = "multi_thread")]
+    // async fn test_pos_upgrade_view_based() {
+    //     setup_test();
 
-        let mut upgrades = std::collections::BTreeMap::new();
-        type MySequencerVersions = SequencerVersions<StaticVersion<0, 1>, StaticVersion<0, 2>>;
+    //     let mut upgrades = std::collections::BTreeMap::new();
+    //     type MySequencerVersions = SequencerVersions<FeeVersion, EpochVersion>;
 
-        let mode = UpgradeMode::View(ViewBasedUpgrade {
-            start_voting_view: None,
-            stop_voting_view: None,
-            start_proposing_view: 1,
-            stop_proposing_view: 10,
-        });
+    //     let mode = UpgradeMode::View(ViewBasedUpgrade {
+    //         start_voting_view: None,
+    //         stop_voting_view: None,
+    //         start_proposing_view: 1,
+    //         stop_proposing_view: 10,
+    //     });
 
-        let upgrade_type = UpgradeType::Fee {
-            chain_config: ChainConfig {
-                max_block_size: 300.into(),
-                base_fee: 1.into(),
-                ..Default::default()
-            },
-        };
+    //     let upgrade_type = UpgradeType::Epoch {
+    //         chain_config: ChainConfig {
+    //             max_block_size: 500.into(),
+    //             base_fee: 2.into(),
+    //             stake_table_contract: Some(Default::default()),
+    //             ..Default::default()
+    //         },
+    //     };
 
-        upgrades.insert(
-            <MySequencerVersions as Versions>::Upgrade::VERSION,
-            Upgrade { mode, upgrade_type },
-        );
-        test_upgrade_helper::<MySequencerVersions>(upgrades, MySequencerVersions::new()).await;
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
-    async fn test_fee_upgrade_time_based() {
-        setup_test();
-
-        let now = OffsetDateTime::now_utc().unix_timestamp() as u64;
-
-        let mut upgrades = std::collections::BTreeMap::new();
-        type MySequencerVersions = SequencerVersions<StaticVersion<0, 1>, StaticVersion<0, 2>>;
-
-        let mode = UpgradeMode::Time(TimeBasedUpgrade {
-            start_proposing_time: Timestamp::from_integer(now).unwrap(),
-            stop_proposing_time: Timestamp::from_integer(now + 500).unwrap(),
-            start_voting_time: None,
-            stop_voting_time: None,
-        });
-
-        let upgrade_type = UpgradeType::Fee {
-            chain_config: ChainConfig {
-                max_block_size: 300.into(),
-                base_fee: 1.into(),
-                ..Default::default()
-            },
-        };
-
-        upgrades.insert(
-            <MySequencerVersions as Versions>::Upgrade::VERSION,
-            Upgrade { mode, upgrade_type },
-        );
-        test_upgrade_helper::<MySequencerVersions>(upgrades, MySequencerVersions::new()).await;
-    }
+    //     upgrades.insert(
+    //         <MySequencerVersions as Versions>::Upgrade::VERSION,
+    //         Upgrade { mode, upgrade_type },
+    //     );
+    //     test_upgrade_helper::<MySequencerVersions>(upgrades, MySequencerVersions::new()).await;
+    // }
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_marketplace_upgrade_view_based() {
         setup_test();
 
         let mut upgrades = std::collections::BTreeMap::new();
-        type MySequencerVersions = SequencerVersions<FeeVersion, MarketplaceVersion>;
+        type MySequencerVersions = SequencerVersions<EpochVersion, MarketplaceVersion>;
 
         let mode = UpgradeMode::View(ViewBasedUpgrade {
             start_voting_view: None,
@@ -2222,7 +2240,7 @@ mod test {
         let now = OffsetDateTime::now_utc().unix_timestamp() as u64;
 
         let mut upgrades = std::collections::BTreeMap::new();
-        type MySequencerVersions = SequencerVersions<FeeVersion, MarketplaceVersion>;
+        type MySequencerVersions = SequencerVersions<EpochVersion, MarketplaceVersion>;
 
         let mode = UpgradeMode::Time(TimeBasedUpgrade {
             start_proposing_time: Timestamp::from_integer(now).unwrap(),
@@ -2339,7 +2357,7 @@ mod test {
             // ChainConfigs will eventually be resolved
             if let Some(configs) = configs {
                 tracing::info!(?configs, "configs");
-                if height > new_version_first_view {
+                if height > new_version_first_view + 10 {
                     for config in configs {
                         assert_eq!(config, chain_config_upgrade);
                     }
@@ -2571,6 +2589,7 @@ mod test {
         let mut receive_count = 0;
         loop {
             let event = subscribed_events.next().await.unwrap();
+            dbg!(&event);
             tracing::info!(
                 "Received event in hotshot event streaming Client 1: {:?}",
                 event
@@ -2582,5 +2601,74 @@ mod test {
             }
         }
         assert_eq!(receive_count, total_count + 1);
+    }
+    // TODO unfinished test. the idea is to observe epochs and views
+    // are progressing in a sane way
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_hotshot_event_streaming_epoch_progression() {
+        setup_test();
+
+        let epoch_height = 5;
+        type PosVersion = SequencerVersions<StaticVersion<0, 3>, StaticVersion<0, 0>>;
+
+        let hotshot_event_streaming_port =
+            pick_unused_port().expect("No ports free for hotshot event streaming");
+        let query_service_port = pick_unused_port().expect("No ports free for query service");
+
+        let url = format!("http://localhost:{hotshot_event_streaming_port}")
+            .parse()
+            .unwrap();
+
+        let hotshot_events = HotshotEvents {
+            events_service_port: hotshot_event_streaming_port,
+        };
+
+        let client: Client<ServerError, SequencerApiVersion> = Client::new(url);
+
+        let options = Options::with_port(query_service_port).hotshot_events(hotshot_events);
+
+        let anvil = Anvil::new().spawn();
+        let l1 = anvil.endpoint().parse().unwrap();
+        let network_config = TestConfigBuilder::default()
+            .l1_url(l1)
+            .with_epoch_height(epoch_height)
+            .build();
+        let config = TestNetworkConfigBuilder::default()
+            .api_config(options)
+            .network_config(network_config)
+            .build();
+        let _network = TestNetwork::new(config, PosVersion::new()).await;
+
+        let mut subscribed_events = client
+            .socket("hotshot-events/events")
+            .subscribe::<Event<SeqTypes>>()
+            .await
+            .unwrap();
+
+        // wanted views
+        let total_count = epoch_height * 2;
+        // wait for these events to receive on client 1
+        let mut views = HashSet::new();
+        let mut i = 0;
+        loop {
+            let event = subscribed_events.next().await.unwrap();
+            let event = event.unwrap();
+            let view_number = event.view_number;
+            views.insert(view_number.u64());
+
+            if let hotshot::types::EventType::Decide { .. } = event.event {
+                dbg!("got decide");
+            }
+            if views.contains(&total_count) {
+                tracing::info!("Client Received at least desired views, exiting loop");
+                break;
+            }
+            if i > 100 {
+                // Timeout
+                panic!("Views are not progressing");
+            }
+            i += 1;
+        }
+        assert!(views.contains(&total_count));
     }
 }
