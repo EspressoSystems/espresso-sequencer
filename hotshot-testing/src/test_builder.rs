@@ -4,25 +4,26 @@
 // You should have received a copy of the MIT License
 // along with the HotShot repository. If not, see <https://mit-license.org/>.
 
-use std::{collections::HashMap, num::NonZeroUsize, rc::Rc, sync::Arc, time::Duration};
-
 use async_lock::RwLock;
 use hotshot::{
     tasks::EventTransformerState,
     traits::{NetworkReliability, NodeImplementation, TestableNodeImplementation},
     types::SystemContextHandle,
-    HotShotInitializer, MarketplaceConfig, SystemContext, TwinsHandlerState,
+    HotShotInitializer, InitializerEpochInfo, MarketplaceConfig, SystemContext, TwinsHandlerState,
 };
 use hotshot_example_types::{
     auction_results_provider_types::TestAuctionResultsProvider, node_types::TestTypes,
     state_types::TestInstanceState, storage_types::TestStorage, testable_delay::DelayConfig,
 };
+use hotshot_types::traits::node_implementation::ConsensusTime;
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
+    drb::INITIAL_DRB_RESULT,
     traits::node_implementation::{NodeType, Versions},
     HotShotConfig, PeerConfig, ValidatorConfig,
 };
 use hotshot_utils::anytrace::*;
+use std::{collections::HashMap, num::NonZeroUsize, rc::Rc, sync::Arc, time::Duration};
 use tide_disco::Url;
 use vec1::Vec1;
 
@@ -241,6 +242,11 @@ pub async fn create_test_handle<
         TestInstanceState::new(metadata.async_delay_config),
         metadata.test_config.epoch_height,
         metadata.test_config.epoch_start_block,
+        vec![InitializerEpochInfo::<TYPES> {
+            epoch: TYPES::Epoch::new(1),
+            drb_result: INITIAL_DRB_RESULT,
+            block_header: None,
+        }],
     )
     .await
     .unwrap();

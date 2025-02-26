@@ -248,6 +248,7 @@ async fn init_consensus(
                         TestInstanceState::default(),
                         0,
                         0,
+                        vec![],
                     )
                     .await
                     .unwrap(),

@@ -13,7 +13,7 @@ use committable::Committable;
 use hotshot_types::{
     consensus::OuterConsensus,
     data::{Leaf2, QuorumProposalWrapper, VidDisperseShare},
-    drb::{compute_drb_result, DrbResult},
+    drb::{compute_drb_result, DrbResult, INITIAL_DRB_RESULT},
     event::{Event, EventType},
     message::{Proposal, UpgradeLock},
     simple_vote::{HasEpoch, QuorumData2, QuorumVote2},
@@ -51,6 +51,7 @@ async fn notify_membership_of_drb_result<TYPES: NodeType>(
     epoch: <TYPES as NodeType>::Epoch,
     drb_result: DrbResult,
 ) {
+    tracing::debug!("Calling add_drb_result for epoch {:?}", epoch);
     membership.write().await.add_drb_result(epoch, drb_result);
 }
 
@@ -369,7 +370,7 @@ pub(crate) async fn handle_quorum_proposal_validated<
         included_txns,
         decided_upgrade_cert,
     } = if version >= V::Epochs::VERSION {
-        decide_from_proposal_2::<TYPES, V>(
+        decide_from_proposal_2(
             proposal,
             OuterConsensus::new(Arc::clone(&task_state.consensus.inner_consensus)),
             Arc::clone(&task_state.upgrade_lock.decided_upgrade_certificate),
@@ -406,12 +407,26 @@ pub(crate) async fn handle_quorum_proposal_validated<
                 .await
                 .update_decided_upgrade_certificate(Some(cert.clone()))
                 .await;
+
+            task_state.staged_epoch_upgrade_certificate = None;
         }
     };
 
     if let Some(cert) = decided_upgrade_cert.clone() {
         if cert.data.new_version == V::Epochs::VERSION {
             task_state.staged_epoch_upgrade_certificate = Some(cert);
+
+            let epoch_height = task_state.consensus.read().await.epoch_height;
+            let first_epoch_number = TYPES::Epoch::new(epoch_from_block_number(
+                task_state.epoch_upgrade_block_height,
+                epoch_height,
+            ));
+            tracing::debug!("Calling set_first_epoch for epoch {:?}", first_epoch_number);
+            task_state
+                .membership
+                .write()
+                .await
+                .set_first_epoch(first_epoch_number, INITIAL_DRB_RESULT);
         } else {
             let mut decided_certificate_lock = task_state
                 .upgrade_lock

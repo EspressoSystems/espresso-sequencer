@@ -244,63 +244,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> SystemContext<T
         .await
     }
 
-    async fn load_start_epoch_info(
-        membership: &Arc<RwLock<TYPES::Membership>>,
-        start_epoch_info: &Vec<InitializerEpochInfo<TYPES>>,
-    ) {
-        /*        if let Some(epoch) = epoch {
-            // #2652 REVIEW NOTE: This epoch can't be right; what if a node starts up between when we upgrade to epochs
-            // and when we're at epoch+2? This would cause the current node to propagate the non-epochs stake table
-            // up.
-            memberships
-                .write()
-                .await
-                .set_first_epoch(epoch, INITIAL_DRB_RESULT);
-        }*/
-
-        // Iterate through start_epoch_info, find the first block header
-        for epoch_info in start_epoch_info {
-            if epoch_info.block_header.is_some() {
-                membership
-                    .write()
-                    .await
-                    .set_first_epoch(epoch_info.epoch, INITIAL_DRB_RESULT);
-                break;
-            }
-        }
-
-        for epoch_info in start_epoch_info {
-            membership
-                .write()
-                .await
-                .add_drb_result(epoch_info.epoch, epoch_info.drb_result);
-
-            if let Some(block_header) = &epoch_info.block_header {
-                let write_callback = {
-                    let membership_reader = membership.read().await;
-                    membership_reader
-                        .add_epoch_root(epoch_info.epoch, block_header.clone())
-                        .await
-                };
-
-                if let Some(write_callback) = write_callback {
-                    let mut membership_writer = membership.write().await;
-                    write_callback(&mut *membership_writer);
-                }
-            }
-        }
-
-        let write_callback = {
-            let membership_reader = membership.read().await;
-            membership_reader.sync_l1().await
-        };
-
-        if let Some(write_callback) = write_callback {
-            let mut membership_writer = membership.write().await;
-            write_callback(&mut *membership_writer);
-        }
-    }
-
     /// Creates a new [`Arc<SystemContext>`] with the given configuration options.
     ///
     /// To do a full initialization, use `fn init` instead, which will set up background tasks as
@@ -358,9 +301,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> SystemContext<T
             config.epoch_height,
         );
 
-        Self::load_start_epoch_info(&membership, &initializer.start_epoch_info).await;
-
-        // Populate
+        load_start_epoch_info(&membership, &initializer.start_epoch_info).await;
 
         // Insert the validated state to state map.
         let mut validated_state_map = BTreeMap::default();
@@ -1050,10 +991,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> ConsensusApi<TY
 
 #[derive(Clone)]
 pub struct InitializerEpochInfo<TYPES: NodeType> {
-    epoch: TYPES::Epoch,
-    drb_result: DrbResult,
-    // stake_table: Option<StakeTable>, // TODO: Figure out how to connect this up
-    block_header: Option<TYPES::BlockHeader>,
+    pub epoch: TYPES::Epoch,
+    pub drb_result: DrbResult,
+    // pub stake_table: Option<StakeTable>, // TODO: Figure out how to connect this up
+    pub block_header: Option<TYPES::BlockHeader>,
 }
 
 #[derive(Clone)]
@@ -1123,6 +1064,7 @@ impl<TYPES: NodeType> HotShotInitializer<TYPES> {
         instance_state: TYPES::InstanceState,
         epoch_height: u64,
         epoch_start_block: u64,
+        start_epoch_info: Vec<InitializerEpochInfo<TYPES>>,
     ) -> Result<Self, HotShotError<TYPES>> {
         let (validated_state, state_delta) = TYPES::ValidatedState::genesis(&instance_state);
         let high_qc = QuorumCertificate2::genesis::<V>(&validated_state, &instance_state).await;
@@ -1144,7 +1086,7 @@ impl<TYPES: NodeType> HotShotInitializer<TYPES> {
             saved_vid_shares: BTreeMap::new(),
             epoch_height,
             epoch_start_block,
-            start_epoch_info: Vec::new(),
+            start_epoch_info,
         })
     }
 
@@ -1234,5 +1176,39 @@ impl<TYPES: NodeType> HotShotInitializer<TYPES> {
         };
 
         initializer.update_undecided()
+    }
+}
+
+async fn load_start_epoch_info<TYPES: NodeType>(
+    membership: &Arc<RwLock<TYPES::Membership>>,
+    start_epoch_info: &Vec<InitializerEpochInfo<TYPES>>,
+) {
+    for epoch_info in start_epoch_info {
+        tracing::debug!("Calling add_drb_result for epoch {:?}", epoch_info.epoch);
+        membership
+            .write()
+            .await
+            .add_drb_result(epoch_info.epoch, epoch_info.drb_result);
+
+        if let Some(block_header) = &epoch_info.block_header {
+            tracing::debug!("Calling add_epoch_root for epoch {:?}", epoch_info.epoch);
+            let write_callback = {
+                let membership_reader = membership.read().await;
+                membership_reader
+                    .add_epoch_root(epoch_info.epoch, block_header.clone())
+                    .await
+            };
+
+            if let Some(write_callback) = write_callback {
+                let mut membership_writer = membership.write().await;
+                write_callback(&mut *membership_writer);
+            }
+        } else {
+            tracing::debug!("Calling set_first_epoch for epoch {:?}", epoch_info.epoch);
+            membership
+                .write()
+                .await
+                .set_first_epoch(epoch_info.epoch, INITIAL_DRB_RESULT);
+        }
     }
 }

@@ -12,7 +12,6 @@ use hotshot_task::dependency::{Dependency, EventDependency};
 use hotshot_types::{
     consensus::OuterConsensus,
     data::{Leaf2, QuorumProposalWrapper, ViewChangeEvidence2},
-    drb::INITIAL_DRB_RESULT,
     event::{Event, EventType, LeafInfo},
     message::{Proposal, UpgradeLock},
     request_response::ProposalRequestPayload,
@@ -40,7 +39,6 @@ use std::{
 };
 use tokio::time::timeout;
 use tracing::instrument;
-use vbs::version::StaticVersionType;
 
 use crate::{events::HotShotEvent, quorum_proposal_recv::ValidationInfo, request::REQUEST_TIMEOUT};
 
@@ -188,6 +186,7 @@ async fn decide_epoch_root<TYPES: NodeType>(
             TYPES::Epoch::new(epoch_from_block_number(decided_block_number, epoch_height) + 1);
 
         let write_callback = {
+            tracing::debug!("Calling add_epoch_root for epoch {:?}", next_epoch_number);
             let membership_reader = membership.read().await;
             membership_reader
                 .add_epoch_root(next_epoch_number, decided_leaf.block_header().clone())
@@ -245,7 +244,7 @@ impl<TYPES: NodeType + Default> Default for LeafChainTraversalOutcome<TYPES> {
 /// # Panics
 /// If the leaf chain contains no decided leaf while reaching a decided view, which should be
 /// impossible.
-pub async fn decide_from_proposal_2<TYPES: NodeType, V: Versions>(
+pub async fn decide_from_proposal_2<TYPES: NodeType>(
     proposal: &QuorumProposalWrapper<TYPES>,
     consensus: OuterConsensus<TYPES>,
     existing_upgrade_cert: Arc<RwLock<Option<UpgradeCertificate<TYPES>>>>,
@@ -487,20 +486,6 @@ pub async fn decide_from_proposal<TYPES: NodeType, V: Versions>(
             decide_epoch_root(&decided_leaf_info.leaf, epoch_height, membership).await;
         } else {
             tracing::info!("No decided leaf while a view has been decided.");
-        }
-    }
-
-    if let (Some(decided_upgrade_cert), Some(decided_leaf_info)) =
-        (&res.decided_upgrade_cert, res.leaf_views.last())
-    {
-        if decided_upgrade_cert.data.new_version == V::Epochs::VERSION {
-            let decided_block_number = decided_leaf_info.leaf.block_header().block_number();
-            let first_epoch_number =
-                TYPES::Epoch::new(epoch_from_block_number(decided_block_number, epoch_height));
-            membership
-                .write()
-                .await
-                .set_first_epoch(first_epoch_number, INITIAL_DRB_RESULT);
         }
     }
 
