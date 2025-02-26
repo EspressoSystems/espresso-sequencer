@@ -7,8 +7,8 @@ use data_source::{CatchupDataSource, StakeTableDataSource, SubmitDataSource};
 use derivative::Derivative;
 use espresso_types::{
     retain_accounts, v0::traits::SequencerPersistence, v0_99::ChainConfig, AccountQueryData,
-    BlockMerkleTree, FeeAccount, FeeAccountProof, FeeMerkleTree, NodeState, PubKey, Transaction,
-    ValidatedState,
+    BlockMerkleTree, FeeAccount, FeeAccountProof, FeeMerkleTree, NodeState, PubKey,
+    PublicNetworkConfig, Transaction, ValidatedState,
 };
 use futures::{
     future::{BoxFuture, Future, FutureExt},
@@ -36,9 +36,7 @@ use jf_merkle_tree::MerkleTreeScheme;
 use std::pin::Pin;
 use std::sync::Arc;
 
-use self::data_source::{
-    HotShotConfigDataSource, NodeStateDataSource, PublicNetworkConfig, StateSignatureDataSource,
-};
+use self::data_source::{HotShotConfigDataSource, NodeStateDataSource, StateSignatureDataSource};
 use crate::{
     catchup::CatchupStorage, context::Consensus, state_signature::StateSigner, SeqTypes,
     SequencerApiVersion, SequencerContext,
@@ -1564,6 +1562,7 @@ mod test {
     use std::{collections::BTreeMap, time::Duration};
     use tokio::time::sleep;
 
+    use espresso_types::PublicHotShotConfig;
     use espresso_types::{
         traits::NullEventConsumer,
         v0_1::{UpgradeMode, ViewBasedUpgrade},
@@ -1599,8 +1598,7 @@ mod test {
     use vbs::version::{StaticVersion, StaticVersionType, Version};
 
     use self::{
-        data_source::{testing::TestableSequencerDataSource, PublicHotShotConfig},
-        options::HotshotEvents,
+        data_source::testing::TestableSequencerDataSource, options::HotshotEvents,
         sql::DataSource as SqlDataSource,
     };
     use super::*;

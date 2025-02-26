@@ -120,6 +120,9 @@ reexport_unchanged_types!(
     TimeBasedUpgrade,
     ViewBasedUpgrade,
     BlockSize,
+    PublicHotShotConfig,
+    PublicNetworkConfig,
+    PublicValidatorConfig
 );
 
 pub(crate) use v0_3::{L1ClientMetrics, L1Event, L1State, L1UpdateTask};

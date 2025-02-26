@@ -2536,6 +2536,7 @@ dependencies = [
  "ethers",
  "futures",
  "jf-merkle-tree 0.1.0",
+ "serde_json",
  "surf-disco",
  "tokio",
  "tracing",
@@ -3838,6 +3839,7 @@ dependencies = [
  "tracing",
  "url",
  "vbs",
+ "vec1",
 ]
 
 [[package]]
