@@ -105,6 +105,7 @@ sequencer-utils = { path = "../utils" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
+byteorder = "1"
 snafu = "0.8"
 sqlx = { workspace = true, features = [
 	"bit-vec",
@@ -112,6 +113,7 @@ sqlx = { workspace = true, features = [
 	"runtime-tokio",
 	"tls-native-tls",
 ] }
+request-response = { path = "../request-response" }
 static_assertions = "1"
 strum = { workspace = true }
 surf-disco = { workspace = true }
