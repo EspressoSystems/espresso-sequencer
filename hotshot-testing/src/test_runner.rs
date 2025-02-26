@@ -5,15 +5,10 @@
 // along with the HotShot repository. If not, see <https://mit-license.org/>.
 
 #![allow(clippy::panic)]
-use std::{
-    collections::{BTreeMap, HashMap, HashSet},
-    marker::PhantomData,
-    sync::Arc,
-};
-
 use async_broadcast::{broadcast, Receiver, Sender};
 use async_lock::RwLock;
 use futures::future::join_all;
+use hotshot::InitializerEpochInfo;
 use hotshot::{
     traits::TestableNodeImplementation,
     types::{Event, SystemContextHandle},
@@ -38,14 +33,17 @@ use hotshot_types::{
         network::ConnectedNetwork,
         node_implementation::{ConsensusTime, NodeImplementation, NodeType, Versions},
     },
-    utils::genesis_epoch_from_version,
     HotShotConfig, ValidatorConfig,
+};
+use std::{
+    collections::{BTreeMap, HashMap, HashSet},
+    marker::PhantomData,
+    sync::Arc,
 };
 use tide_disco::Url;
 use tokio::{spawn, task::JoinHandle};
 #[allow(deprecated)]
 use tracing::info;
-use vbs::version::StaticVersionType;
 
 use super::{
     completion_task::CompletionTask, consistency_task::ConsistencyTask, txn_task::TxnTask,
@@ -322,7 +320,6 @@ where
 
     pub async fn init_builders<B: TestBuilderImplementation<TYPES>>(
         &self,
-        num_nodes: usize,
     ) -> (Vec<Box<dyn BuilderTask<TYPES>>>, Vec<Url>, Url) {
         let config = self.launcher.metadata.test_config.clone();
         let mut builder_tasks = Vec::new();
@@ -332,7 +329,7 @@ where
             let builder_url =
                 Url::parse(&format!("http://localhost:{builder_port}")).expect("Invalid URL");
             let builder_task = B::start(
-                num_nodes,
+                0, // This field gets updated while the test is running, 0 is just to seed it
                 builder_url.clone(),
                 B::Config::default(),
                 metadata.changes.clone(),
@@ -397,22 +394,10 @@ where
         let mut results = vec![];
         let config = self.launcher.metadata.test_config.clone();
 
-        // TODO This is only a workaround. Number of nodes changes from epoch to epoch. Builder should be made epoch-aware.
-        let mut temp_memberships = <TYPES as NodeType>::Membership::new(
-            config.known_nodes_with_stake.clone(),
-            config.known_da_nodes.clone(),
-        );
-
-        // if we're doing epochs, then tell the membership
-        if V::Base::VERSION >= V::Epochs::VERSION {
-            temp_memberships
-                .set_first_epoch(<TYPES as NodeType>::Epoch::new(1), INITIAL_DRB_RESULT);
-        }
-
-        // #3967 is it enough to check versions now? Or should we also be checking epoch_height?
-        let num_nodes = temp_memberships.total_nodes(genesis_epoch_from_version::<V, TYPES>());
+        // Num_nodes is updated on the fly now via claim_block_with_num_nodes. This stays around to seed num_nodes
+        // in the builders for tests which don't update that field.
         let (mut builder_tasks, builder_urls, fallback_builder_url) =
-            self.init_builders::<B>(num_nodes).await;
+            self.init_builders::<B>().await;
 
         if self.launcher.metadata.start_solver {
             self.add_solver(builder_urls.clone()).await;
@@ -430,11 +415,6 @@ where
             let node_id = self.next_node_id;
             self.next_node_id += 1;
             tracing::debug!("launch node {}", i);
-
-            //let memberships =Arc::new(RwLock::new(<TYPES as NodeType>::Membership::new(
-            //config.known_nodes_with_stake.clone(),
-            //config.known_da_nodes.clone(),
-            //)));
 
             config.builder_urls = builder_urls
                 .clone()
@@ -487,6 +467,11 @@ where
                         TestInstanceState::new(self.launcher.metadata.async_delay_config.clone()),
                         config.epoch_height,
                         config.epoch_start_block,
+                        vec![InitializerEpochInfo::<TYPES> {
+                            epoch: TYPES::Epoch::new(1),
+                            drb_result: INITIAL_DRB_RESULT,
+                            block_header: None,
+                        }],
                     )
                     .await
                     .unwrap();
