@@ -88,6 +88,7 @@ itertools = { workspace = true }
 jf-crhf = { workspace = true }
 jf-merkle-tree = { workspace = true }
 jf-rescue = { workspace = true }
+byteorder = "1"
 
 jf-signature = { workspace = true, features = ["bls", "schnorr"] }
 jf-vid = { workspace = true }
@@ -101,11 +102,11 @@ priority-queue = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
 rand_distr = { workspace = true }
+request-response = { path = "../request-response" }
 sequencer-utils = { path = "../utils" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
-byteorder = "1"
 snafu = "0.8"
 sqlx = { workspace = true, features = [
 	"bit-vec",
@@ -113,7 +114,6 @@ sqlx = { workspace = true, features = [
 	"runtime-tokio",
 	"tls-native-tls",
 ] }
-request-response = { path = "../request-response" }
 static_assertions = "1"
 strum = { workspace = true }
 surf-disco = { workspace = true }
