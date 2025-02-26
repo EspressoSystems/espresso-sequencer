@@ -17,11 +17,11 @@ use hotshot_task::{
 };
 use hotshot_types::{
     consensus::{ConsensusMetricsValue, OuterConsensus},
-    simple_certificate::{UpgradeCertificate},
     data::{Leaf2, QuorumProposalWrapper},
     drb::DrbComputation,
     event::Event,
     message::{Proposal, UpgradeLock},
+    simple_certificate::UpgradeCertificate,
     simple_vote::HasEpoch,
     traits::{
         block_contents::BlockHeader,
