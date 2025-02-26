@@ -80,7 +80,7 @@ where
                     }
                 };
                 if commit != req.0 {
-                    tracing::error!(?req, ?commit, "received inconsistent payload");
+                    tracing::error!(?req, ?commit, ?payload, "received inconsistent payload");
                     return None;
                 }
 
