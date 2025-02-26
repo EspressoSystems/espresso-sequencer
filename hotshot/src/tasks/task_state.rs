@@ -244,6 +244,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> CreateTaskState
             storage: Arc::clone(&handle.storage),
             upgrade_lock: handle.hotshot.upgrade_lock.clone(),
             epoch_height: handle.hotshot.config.epoch_height,
+            epoch_upgrade_block_height: handle.hotshot.config.epoch_start_block,
+            staged_epoch_upgrade_certificate: None,
             consensus_metrics,
         }
     }
