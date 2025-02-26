@@ -251,7 +251,6 @@ impl<TYPES: NodeType> VidDisperse<TYPES> {
         membership: &Arc<RwLock<TYPES::Membership>>,
         target_epoch: Option<TYPES::Epoch>,
         data_epoch: Option<TYPES::Epoch>,
-        data_epoch_payload_commitment: Option<VidCommitment>,
     ) -> Self {
         Self::V0(
             ADVZDisperse::from_membership(
@@ -260,7 +259,6 @@ impl<TYPES: NodeType> VidDisperse<TYPES> {
                 membership,
                 target_epoch,
                 data_epoch,
-                data_epoch_payload_commitment,
             )
             .await,
         )
@@ -413,14 +411,6 @@ impl<TYPES: NodeType> VidDisperseShare<TYPES> {
         match self {
             Self::V0(share) => share.payload_commitment,
             Self::V1(share) => share.payload_commitment,
-        }
-    }
-    /// Return the internal data epoch payload VID commitment
-    /// TODO(Chengyu): restructure this, since payload commitment will have different types given different version.
-    pub fn data_epoch_payload_commitment(&self) -> Option<VidCommitment> {
-        match self {
-            Self::V0(_) => None,
-            Self::V1(share) => share.data_epoch_payload_commitment,
         }
     }
 

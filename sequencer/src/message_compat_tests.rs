@@ -233,7 +233,6 @@ async fn test_message_compat<Ver: StaticVersionType>(_ver: Ver) {
                     &membership,
                     Some(EpochNumber::genesis()),
                     Some(EpochNumber::new(1)),
-                    Some(block_header.payload_commitment()),
                 )
                 .await,
             )

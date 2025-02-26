@@ -362,7 +362,6 @@ pub async fn build_vid_proposal<TYPES: NodeType, V: Versions>(
         membership,
         epoch_number,
         epoch_number,
-        None,
     )
     .await;
 

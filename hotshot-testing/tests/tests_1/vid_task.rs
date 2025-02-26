@@ -94,7 +94,6 @@ async fn test_vid_task() {
         &membership,
         None,
         None,
-        None,
     )
     .await;
 
