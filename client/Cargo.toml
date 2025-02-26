@@ -16,3 +16,4 @@ surf-disco = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 vbs = { workspace = true }
+serde_json = { workspace = true }

@@ -1,10 +1,10 @@
 use anyhow::{Context, Result};
 use clap::Parser;
 use client::SequencerClient;
-use espresso_types::parse_duration;
+use espresso_types::{parse_duration, PublicNetworkConfig};
 use ethers::types::Address;
 use hotshot_types::{network::PeerConfigKeys, traits::signature_key::StakeTableEntryType};
-use sequencer::api::data_source::PublicNetworkConfig;
+
 use sequencer_utils::{
     logging,
     stake_table::{update_stake_table, PermissionedStakeTableUpdate},

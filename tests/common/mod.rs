@@ -1,14 +1,13 @@
 use anyhow::{anyhow, Context, Result};
 use client::SequencerClient;
-use espresso_types::{FeeAmount, FeeVersion, MarketplaceVersion, PubKey};
+use espresso_types::{FeeAmount, FeeVersion, MarketplaceVersion};
 use ethers::prelude::*;
 use futures::future::{join_all, BoxFuture};
 use futures::FutureExt;
 use hotshot_types::network::PeerConfigKeys;
 use hotshot_types::traits::signature_key::StakeTableEntryType;
-use hotshot_types::PeerConfig;
+
 use std::{fmt, str::FromStr, time::Duration};
-use surf_disco::http::convert::Deserialize;
 use surf_disco::Url;
 use tokio::time::{sleep, timeout};
 use vbs::version::StaticVersionType;
@@ -364,11 +363,11 @@ pub async fn test_stake_table_update(clients: Vec<SequencerClient>) -> Result<()
             .boxed()
         };
 
-    let config = client.config::<PublicNetworkConfig>().await?.config;
+    let config = client.config().await?.hotshot_config();
 
     // currently stake table update does not support DA node member changes
-    let stake_table = config.known_nodes_with_stake;
-    let da_members = config.known_da_nodes;
+    let stake_table = config.known_nodes_with_stake();
+    let da_members = config.known_da_nodes();
 
     // filtering out DA nodes
     let non_da_stakers: Vec<_> = stake_table
@@ -403,15 +402,4 @@ pub async fn test_stake_table_update(clients: Vec<SequencerClient>) -> Result<()
     assert_change(added).await.expect("failed to add a node");
 
     Ok(())
-}
-
-#[derive(Debug, Deserialize)]
-struct PublicHotShotConfig {
-    known_nodes_with_stake: Vec<PeerConfig<PubKey>>,
-    known_da_nodes: Vec<PeerConfig<PubKey>>,
-}
-
-#[derive(Debug, Deserialize)]
-struct PublicNetworkConfig {
-    config: PublicHotShotConfig,
 }
