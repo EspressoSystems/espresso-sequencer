@@ -207,7 +207,7 @@ impl EpochCommittees {
         self.randomized_committees
             .insert(epoch + 1, randomized_committee.clone());
         self.randomized_committees
-            .insert(epoch + 1, randomized_committee.clone());
+            .insert(epoch + 2, randomized_committee.clone());
 
         committee
     }

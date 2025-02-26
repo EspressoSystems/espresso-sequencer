@@ -1610,7 +1610,11 @@ mod test {
     use tokio::time::sleep;
 
     use espresso_types::{
-        traits::NullEventConsumer, v0_1::{UpgradeMode, ViewBasedUpgrade}, BackoffParams, FeeAccount, FeeAmount, Header, MarketplaceVersion, MockSequencerVersions, PublicHotShotConfig, SequencerVersions, TimeBasedUpgrade, Timestamp, Upgrade, UpgradeType, ValidatedState
+        traits::NullEventConsumer,
+        v0_1::{UpgradeMode, ViewBasedUpgrade},
+        BackoffParams, FeeAccount, FeeAmount, Header, MarketplaceVersion, MockSequencerVersions,
+        PublicHotShotConfig, SequencerVersions, TimeBasedUpgrade, Timestamp, Upgrade, UpgradeType,
+        ValidatedState,
     };
     use ethers::utils::Anvil;
     use futures::{

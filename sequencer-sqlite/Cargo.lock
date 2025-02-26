@@ -2388,6 +2388,7 @@ dependencies = [
  "futures",
  "hotshot-types",
  "jf-merkle-tree",
+ "serde_json",
  "surf-disco",
  "tokio",
  "tracing",
@@ -3579,6 +3580,7 @@ dependencies = [
  "tracing",
  "url",
  "vbs",
+ "vec1",
 ]
 
 [[package]]

@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use clap::Parser;
 use client::SequencerClient;
-use espresso_types::{parse_duration, PublicNetworkConfig};
+use espresso_types::parse_duration;
 use ethers::types::Address;
 use hotshot_types::{network::PeerConfigKeys, traits::signature_key::StakeTableEntryType};
 
@@ -109,7 +109,7 @@ async fn main() -> Result<()> {
             for client in &clients {
                 tracing::warn!("calling config endpoint of {client:?}");
 
-                match client.config::<PublicNetworkConfig>().await {
+                match client.config().await {
                     Ok(config) => {
                         let hotshot = config.hotshot_config().into_hotshot_config();
                         let st = hotshot.known_nodes_with_stake;
