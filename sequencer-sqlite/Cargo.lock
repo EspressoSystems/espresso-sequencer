@@ -2386,7 +2386,7 @@ dependencies = [
  "espresso-types",
  "ethers",
  "futures",
- "jf-merkle-tree",
+ "jf-merkle-tree 0.1.0",
  "surf-disco",
  "tokio",
  "tracing",
@@ -3553,7 +3553,7 @@ dependencies = [
  "hotshot-query-service",
  "hotshot-types",
  "itertools 0.12.1",
- "jf-merkle-tree",
+ "jf-merkle-tree 0.1.0",
  "jf-utils",
  "jf-vid",
  "lru 0.12.5",
@@ -4978,7 +4978,7 @@ dependencies = [
  "hotshot-types",
  "include_dir",
  "itertools 0.12.1",
- "jf-merkle-tree",
+ "jf-merkle-tree 0.1.0",
  "jf-vid",
  "lazy_static",
  "log",
@@ -5014,7 +5014,7 @@ dependencies = [
  "ark-std 0.4.0",
  "digest 0.10.7",
  "hotshot-types",
- "jf-crhf",
+ "jf-crhf 0.1.0",
  "jf-rescue",
  "jf-signature 0.2.0",
  "jf-utils",
@@ -5045,7 +5045,7 @@ dependencies = [
  "hotshot-stake-table",
  "hotshot-types",
  "itertools 0.12.1",
- "jf-crhf",
+ "jf-crhf 0.1.0",
  "jf-pcs",
  "jf-plonk",
  "jf-relation",
@@ -5206,6 +5206,7 @@ dependencies = [
  "url",
  "vbs",
  "vec1",
+ "vid",
  "workspace-hack",
 ]
 
@@ -5923,6 +5924,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "jf-crhf"
+version = "0.1.1"
+source = "git+https://github.com/EspressoSystems/jellyfish?tag=jf-crhf-v0.1.1#8f3dce0bc2bd161b4648f6ac029dcc1a23aaf4c5"
+dependencies = [
+ "ark-serialize 0.4.2",
+ "ark-std 0.4.0",
+]
+
+[[package]]
 name = "jf-merkle-tree"
 version = "0.1.0"
 source = "git+https://github.com/EspressoSystems/jellyfish?tag=0.4.5#7d71dbeff14f1a501b0b0dc391f1dffa1b8374fb"
@@ -5942,6 +5952,37 @@ dependencies = [
  "jf-relation",
  "jf-rescue",
  "jf-utils",
+ "num-bigint",
+ "num-traits",
+ "serde",
+ "sha3",
+ "tagged-base64",
+]
+
+[[package]]
+name = "jf-merkle-tree"
+version = "0.2.1"
+source = "git+https://github.com/EspressoSystems/jellyfish?tag=jf-merkle-tree-v0.2.1#9595d842355b3c88c7545deb2980dcba4824af92"
+dependencies = [
+ "ark-bls12-377",
+ "ark-bls12-381",
+ "ark-bn254",
+ "ark-ec",
+ "ark-ff 0.4.2",
+ "ark-serialize 0.4.2",
+ "ark-std 0.4.0",
+ "derivative",
+ "digest 0.10.7",
+ "displaydoc",
+ "hashbrown 0.14.5",
+ "hex",
+ "itertools 0.12.1",
+ "jf-crhf 0.1.1",
+ "jf-poseidon2",
+ "jf-relation",
+ "jf-rescue",
+ "jf-utils",
+ "nimue",
  "num-bigint",
  "num-traits",
  "serde",
@@ -5984,7 +6025,7 @@ dependencies = [
  "espresso-systems-common",
  "hashbrown 0.14.5",
  "itertools 0.12.1",
- "jf-crhf",
+ "jf-crhf 0.1.0",
  "jf-pcs",
  "jf-relation",
  "jf-rescue",
@@ -5996,6 +6037,23 @@ dependencies = [
  "serde",
  "sha3",
  "tagged-base64",
+]
+
+[[package]]
+name = "jf-poseidon2"
+version = "0.1.0"
+source = "git+https://github.com/EspressoSystems/jellyfish?tag=jf-poseidon2-v0.1.0#9595d842355b3c88c7545deb2980dcba4824af92"
+dependencies = [
+ "ark-bls12-381",
+ "ark-bn254",
+ "ark-ff 0.4.2",
+ "ark-std 0.4.0",
+ "displaydoc",
+ "hex",
+ "jf-crhf 0.1.1",
+ "lazy_static",
+ "nimue",
+ "zeroize",
 ]
 
 [[package]]
@@ -6051,7 +6109,7 @@ dependencies = [
  "displaydoc",
  "itertools 0.12.1",
  "jf-commitment",
- "jf-crhf",
+ "jf-crhf 0.1.0",
  "jf-prf",
  "jf-relation",
  "jf-utils",
@@ -6074,7 +6132,7 @@ dependencies = [
  "displaydoc",
  "hashbrown 0.14.5",
  "itertools 0.12.1",
- "jf-crhf",
+ "jf-crhf 0.1.0",
  "jf-relation",
  "jf-rescue",
  "jf-utils",
@@ -6103,7 +6161,7 @@ dependencies = [
  "displaydoc",
  "hashbrown 0.14.5",
  "itertools 0.12.1",
- "jf-crhf",
+ "jf-crhf 0.1.0",
  "jf-relation",
  "jf-rescue",
  "jf-utils",
@@ -6152,7 +6210,7 @@ dependencies = [
  "displaydoc",
  "generic-array",
  "itertools 0.12.1",
- "jf-merkle-tree",
+ "jf-merkle-tree 0.1.0",
  "jf-pcs",
  "jf-utils",
  "rayon",
@@ -7273,6 +7331,24 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "650eef8c711430f1a879fdd01d4745a7deea475becfb90269c06775983bbf086"
 
 [[package]]
+name = "nimue"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e0dc7d3b2b7bd112c0cecf7d6f4f16a174ee7a98e27615b1d08256d0176588f2"
+dependencies = [
+ "ark-ec",
+ "ark-ff 0.4.2",
+ "ark-serialize 0.4.2",
+ "digest 0.10.7",
+ "generic-array",
+ "hex",
+ "keccak",
+ "log",
+ "rand 0.8.5",
+ "zeroize",
+]
+
+[[package]]
 name = "nix"
 version = "0.26.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7571,6 +7647,15 @@ name = "overload"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b15813163c1d831bf4a13c3610c05c0d03b39feb07f7e09fa234dac9b15aaf39"
+
+[[package]]
+name = "p3-maybe-rayon"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3925562a4c03183eafc92fd07b19f65ac6cb4b48d68c3920ce58d9bee6efe362"
+dependencies = [
+ "rayon",
+]
 
 [[package]]
 name = "parity-scale-codec"
@@ -9392,8 +9477,8 @@ dependencies = [
  "hotshot-types",
  "include_dir",
  "itertools 0.12.1",
- "jf-crhf",
- "jf-merkle-tree",
+ "jf-crhf 0.1.0",
+ "jf-merkle-tree 0.1.0",
  "jf-rescue",
  "jf-signature 0.2.0",
  "jf-vid",
@@ -11602,6 +11687,28 @@ name = "version_check"
 version = "0.9.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
+
+[[package]]
+name = "vid"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "ark-bn254",
+ "ark-ff 0.4.2",
+ "ark-poly",
+ "ark-serialize 0.4.2",
+ "ark-std 0.4.0",
+ "displaydoc",
+ "jf-crhf 0.1.1",
+ "jf-merkle-tree 0.2.1",
+ "jf-poseidon2",
+ "jf-utils",
+ "p3-maybe-rayon",
+ "serde",
+ "sha2 0.10.8",
+ "sha3",
+ "tagged-base64",
+]
 
 [[package]]
 name = "void"

@@ -13,6 +13,7 @@ use std::{
 use async_trait::async_trait;
 use committable::{Commitment, Committable, RawCommitmentBuilder};
 use hotshot_types::{
+    data::VidCommitment,
     data::{BlockError, Leaf2},
     traits::{
         block_contents::{BlockHeader, BuilderFee, EncodeBytes, TestableBlock, Transaction},
@@ -20,7 +21,6 @@ use hotshot_types::{
         BlockPayload, ValidatedState,
     },
     utils::BuilderCommitment,
-    vid::{VidCommitment, VidCommon},
 };
 use rand::{thread_rng, Rng};
 use serde::{Deserialize, Serialize};
@@ -317,7 +317,6 @@ impl<
         builder_commitment: BuilderCommitment,
         metadata: <TYPES::BlockPayload as BlockPayload<TYPES>>::Metadata,
         _builder_fee: BuilderFee<TYPES>,
-        _vid_common: VidCommon,
         _version: Version,
     ) -> Result<Self, Self::Error> {
         Self::run_delay_settings_from_config(&instance_state.delay_config).await;
@@ -338,7 +337,6 @@ impl<
         metadata: <TYPES::BlockPayload as BlockPayload<TYPES>>::Metadata,
         _builder_fee: Vec<BuilderFee<TYPES>>,
         _view_number: u64,
-        _vid_common: VidCommon,
         _auction_results: Option<TYPES::AuctionResult>,
         _version: Version,
     ) -> Result<Self, Self::Error> {
@@ -401,9 +399,7 @@ impl Committable for TestBlockHeader {
             )
             .constant_str("payload commitment")
             .fixed_size_bytes(
-                <TestBlockHeader as BlockHeader<TestTypes>>::payload_commitment(self)
-                    .as_ref()
-                    .as_ref(),
+                <TestBlockHeader as BlockHeader<TestTypes>>::payload_commitment(self).as_ref(),
             )
             .finalize()
     }
