@@ -391,7 +391,45 @@
 <a href="#390" id="390">390</a>
 <a href="#391" id="391">391</a>
 <a href="#392" id="392">392</a>
-<a href="#393" id="393">393</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
+<a href="#393" id="393">393</a>
+<a href="#394" id="394">394</a>
+<a href="#395" id="395">395</a>
+<a href="#396" id="396">396</a>
+<a href="#397" id="397">397</a>
+<a href="#398" id="398">398</a>
+<a href="#399" id="399">399</a>
+<a href="#400" id="400">400</a>
+<a href="#401" id="401">401</a>
+<a href="#402" id="402">402</a>
+<a href="#403" id="403">403</a>
+<a href="#404" id="404">404</a>
+<a href="#405" id="405">405</a>
+<a href="#406" id="406">406</a>
+<a href="#407" id="407">407</a>
+<a href="#408" id="408">408</a>
+<a href="#409" id="409">409</a>
+<a href="#410" id="410">410</a>
+<a href="#411" id="411">411</a>
+<a href="#412" id="412">412</a>
+<a href="#413" id="413">413</a>
+<a href="#414" id="414">414</a>
+<a href="#415" id="415">415</a>
+<a href="#416" id="416">416</a>
+<a href="#417" id="417">417</a>
+<a href="#418" id="418">418</a>
+<a href="#419" id="419">419</a>
+<a href="#420" id="420">420</a>
+<a href="#421" id="421">421</a>
+<a href="#422" id="422">422</a>
+<a href="#423" id="423">423</a>
+<a href="#424" id="424">424</a>
+<a href="#425" id="425">425</a>
+<a href="#426" id="426">426</a>
+<a href="#427" id="427">427</a>
+<a href="#428" id="428">428</a>
+<a href="#429" id="429">429</a>
+<a href="#430" id="430">430</a>
+<a href="#431" id="431">431</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
 // This file is part of the HotShot repository.
 
 // You should have received a copy of the MIT License
@@ -399,7 +437,7 @@
 
 </span><span class="kw">use </span>std::{sync::Arc, time::Duration};
 
-<span class="kw">use </span>async_broadcast::Sender;
+<span class="kw">use </span>async_broadcast::{Receiver, Sender};
 <span class="kw">use </span>chrono::Utc;
 <span class="kw">use </span>hotshot_types::{
     event::{Event, EventType},
@@ -418,7 +456,9 @@
 
 <span class="kw">use </span><span class="kw">super</span>::ConsensusTaskState;
 <span class="kw">use crate</span>::{
-    consensus::Versions, events::HotShotEvent, helpers::broadcast_event,
+    consensus::Versions,
+    events::HotShotEvent,
+    helpers::{broadcast_event, wait_for_next_epoch_qc},
     vote_collection::handle_vote,
 };
 
@@ -549,6 +589,7 @@
 </span><span class="kw">pub async fn </span>send_high_qc&lt;TYPES: NodeType, V: Versions, I: NodeImplementation&lt;TYPES&gt;&gt;(
     new_view_number: TYPES::View,
     sender: <span class="kw-2">&amp;</span>Sender&lt;Arc&lt;HotShotEvent&lt;TYPES&gt;&gt;&gt;,
+    receiver: <span class="kw-2">&amp;</span>Receiver&lt;Arc&lt;HotShotEvent&lt;TYPES&gt;&gt;&gt;,
     task_state: <span class="kw-2">&amp;mut </span>ConsensusTaskState&lt;TYPES, I, V&gt;,
 ) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
     <span class="kw">let </span>version = task_state.upgrade_lock.version(new_view_number).<span class="kw">await</span><span class="question-mark">?</span>;
@@ -556,21 +597,55 @@
         version &gt;= V::Epochs::VERSION,
         <span class="macro">debug!</span>(<span class="string">"HotStuff 2 upgrade not yet in effect"</span>)
     );
-    <span class="kw">let </span>high_qc = task_state.consensus.read().<span class="kw">await</span>.high_qc().clone();
-    <span class="kw">let </span>leader = task_state
-        .membership
-        .read()
+
+    <span class="kw">let </span>consensus_reader = task_state.consensus.read().<span class="kw">await</span>;
+    <span class="kw">let </span>high_qc = consensus_reader.high_qc().clone();
+    <span class="kw">let </span>is_eqc = consensus_reader.is_leaf_extended(high_qc.data.leaf_commit);
+    drop(consensus_reader);
+
+    <span class="kw">if </span>is_eqc {
+        <span class="kw">let </span><span class="prelude-val">Some</span>(next_epoch_high_qc) = wait_for_next_epoch_qc(
+            <span class="kw-2">&amp;</span>high_qc,
+            <span class="kw-2">&amp;</span>task_state.consensus,
+            task_state.timeout,
+            task_state.view_start_time,
+            receiver,
+        )
         .<span class="kw">await
-        </span>.leader(new_view_number, task_state.cur_epoch)<span class="question-mark">?</span>;
-    broadcast_event(
-        Arc::new(HotShotEvent::HighQcSend(
-            high_qc,
-            leader,
-            task_state.public_key.clone(),
-        )),
-        sender,
-    )
-    .<span class="kw">await</span>;
+        else </span>{
+            <span class="macro">bail!</span>(<span class="string">"We've seen an extended QC but we don't have a corresponding next epoch extended QC"</span>);
+        };
+        <span class="macro">tracing::debug!</span>(
+            <span class="string">"Broadcasting Extended QC for view {:?} and epoch {:?}, my id {:?}."</span>,
+            high_qc.view_number(),
+            high_qc.epoch(),
+            task_state.id
+        );
+        broadcast_event(
+            Arc::new(HotShotEvent::ExtendedQcSend(
+                high_qc,
+                next_epoch_high_qc,
+                task_state.public_key.clone(),
+            )),
+            sender,
+        )
+        .<span class="kw">await</span>;
+    } <span class="kw">else </span>{
+        <span class="kw">let </span>leader = task_state
+            .membership
+            .read()
+            .<span class="kw">await
+            </span>.leader(new_view_number, task_state.cur_epoch)<span class="question-mark">?</span>;
+        broadcast_event(
+            Arc::new(HotShotEvent::HighQcSend(
+                high_qc,
+                leader,
+                task_state.public_key.clone(),
+            )),
+            sender,
+        )
+        .<span class="kw">await</span>;
+    }
     <span class="prelude-val">Ok</span>(())
 }
 
@@ -584,6 +659,7 @@
     new_view_number: TYPES::View,
     epoch_number: <span class="prelude-ty">Option</span>&lt;TYPES::Epoch&gt;,
     sender: <span class="kw-2">&amp;</span>Sender&lt;Arc&lt;HotShotEvent&lt;TYPES&gt;&gt;&gt;,
+    receiver: <span class="kw-2">&amp;</span>Receiver&lt;Arc&lt;HotShotEvent&lt;TYPES&gt;&gt;&gt;,
     task_state: <span class="kw-2">&amp;mut </span>ConsensusTaskState&lt;TYPES, I, V&gt;,
 ) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
     <span class="kw">if </span>epoch_number &gt; task_state.cur_epoch {
@@ -608,7 +684,7 @@
 
     <span class="comment">// Send our high qc to the next leader immediately upon finishing a view.
     // Part of HotStuff 2
-    </span><span class="kw">let _ </span>= send_high_qc(new_view_number, sender, task_state)
+    </span><span class="kw">let _ </span>= send_high_qc(new_view_number, sender, receiver, task_state)
         .<span class="kw">await
         </span>.inspect_err(|e| {
             <span class="macro">tracing::debug!</span>(<span class="string">"High QC sending failed with error: {:?}"</span>, e);

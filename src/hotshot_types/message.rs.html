@@ -742,7 +742,16 @@
 <a href="#741" id="741">741</a>
 <a href="#742" id="742">742</a>
 <a href="#743" id="743">743</a>
-<a href="#744" id="744">744</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
+<a href="#744" id="744">744</a>
+<a href="#745" id="745">745</a>
+<a href="#746" id="746">746</a>
+<a href="#747" id="747">747</a>
+<a href="#748" id="748">748</a>
+<a href="#749" id="749">749</a>
+<a href="#750" id="750">750</a>
+<a href="#751" id="751">751</a>
+<a href="#752" id="752">752</a>
+<a href="#753" id="753">753</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
 // This file is part of the HotShot repository.
 
 // You should have received a copy of the MIT License
@@ -776,9 +785,10 @@
     },
     request_response::ProposalRequestPayload,
     simple_certificate::{
-        DaCertificate, DaCertificate2, QuorumCertificate2, UpgradeCertificate,
-        ViewSyncCommitCertificate, ViewSyncCommitCertificate2, ViewSyncFinalizeCertificate,
-        ViewSyncFinalizeCertificate2, ViewSyncPreCommitCertificate, ViewSyncPreCommitCertificate2,
+        DaCertificate, DaCertificate2, NextEpochQuorumCertificate2, QuorumCertificate2,
+        UpgradeCertificate, ViewSyncCommitCertificate, ViewSyncCommitCertificate2,
+        ViewSyncFinalizeCertificate, ViewSyncFinalizeCertificate2, ViewSyncPreCommitCertificate,
+        ViewSyncPreCommitCertificate2,
     },
     simple_vote::{
         DaVote, DaVote2, HasEpoch, QuorumVote, QuorumVote2, TimeoutVote, TimeoutVote2, UpgradeVote,
@@ -986,6 +996,12 @@
     <span class="doccomment">/// Message for the next leader containing our highest QC
     </span>HighQc(QuorumCertificate2&lt;TYPES&gt;),
 
+    <span class="doccomment">/// Message for the next leader containing our highest QC
+    </span>ExtendedQc(
+        QuorumCertificate2&lt;TYPES&gt;,
+        NextEpochQuorumCertificate2&lt;TYPES&gt;,
+    ),
+
     <span class="doccomment">/// Message with a view sync pre-commit vote
     </span>ViewSyncPreCommitVote2(ViewSyncPreCommitVote2&lt;TYPES&gt;),
 
@@ -1111,7 +1127,8 @@
                     }
                     GeneralConsensusMessage::UpgradeProposal(message) =&gt; message.data.view_number(),
                     GeneralConsensusMessage::UpgradeVote(message) =&gt; message.view_number(),
-                    GeneralConsensusMessage::HighQc(qc) =&gt; qc.view_number(),
+                    GeneralConsensusMessage::HighQc(qc)
+                    | GeneralConsensusMessage::ExtendedQc(qc, <span class="kw">_</span>) =&gt; qc.view_number(),
                 }
             }
             SequencingMessage::Da(da_message) =&gt; {
@@ -1181,7 +1198,8 @@
                     }
                     GeneralConsensusMessage::UpgradeProposal(message) =&gt; message.data.epoch(),
                     GeneralConsensusMessage::UpgradeVote(message) =&gt; message.epoch(),
-                    GeneralConsensusMessage::HighQc(qc) =&gt; qc.epoch(),
+                    GeneralConsensusMessage::HighQc(qc)
+                    | GeneralConsensusMessage::ExtendedQc(qc, <span class="kw">_</span>) =&gt; qc.epoch(),
                 }
             }
             SequencingMessage::Da(da_message) =&gt; {

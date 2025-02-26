@@ -1188,7 +1188,7 @@
                 <span class="kw">let </span>keep_view = TYPES::View::new(view.saturating_sub(<span class="number">1</span>));
                 <span class="self">self</span>.cancel_tasks(keep_view);
             }
-            HotShotEvent::HighQcSend(qc, ..) =&gt; {
+            HotShotEvent::HighQcSend(qc, ..) | HotShotEvent::ExtendedQcSend(qc, ..) =&gt; {
                 <span class="macro">ensure!</span>(qc.view_number() &gt; <span class="self">self</span>.highest_qc.view_number());
                 <span class="kw">let </span>cert_epoch_number = qc.data.epoch;
 
