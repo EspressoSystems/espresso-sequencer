@@ -490,17 +490,17 @@ pub async fn decide_from_proposal<TYPES: NodeType, V: Versions>(
         }
     }
 
-    if let Some(ref decided_upgrade_cert) = res.decided_upgrade_cert {
+    if let (Some(decided_upgrade_cert), Some(decided_leaf_info)) =
+        (&res.decided_upgrade_cert, res.leaf_views.last())
+    {
         if decided_upgrade_cert.data.new_version == V::Epochs::VERSION {
-            if let Some(decided_leaf_info) = res.leaf_views.last() {
-                let decided_block_number = decided_leaf_info.leaf.block_header().block_number();
-                let first_epoch_number =
-                    TYPES::Epoch::new(epoch_from_block_number(decided_block_number, epoch_height));
-                membership
-                    .write()
-                    .await
-                    .set_first_epoch(first_epoch_number, INITIAL_DRB_RESULT);
-            }
+            let decided_block_number = decided_leaf_info.leaf.block_header().block_number();
+            let first_epoch_number =
+                TYPES::Epoch::new(epoch_from_block_number(decided_block_number, epoch_height));
+            membership
+                .write()
+                .await
+                .set_first_epoch(first_epoch_number, INITIAL_DRB_RESULT);
         }
     }
 
