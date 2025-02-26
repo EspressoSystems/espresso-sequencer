@@ -390,21 +390,44 @@ pub(crate) async fn handle_quorum_proposal_validated<
         .await
     };
 
-    if let Some(cert) = decided_upgrade_cert.clone() {
-        let mut decided_certificate_lock = task_state
-            .upgrade_lock
-            .decided_upgrade_certificate
-            .write()
-            .await;
-        *decided_certificate_lock = Some(cert.clone());
-        drop(decided_certificate_lock);
+    if let Some(cert) = &task_state.staged_epoch_upgrade_certificate {
+        if leaf_views.last().unwrap().leaf.height() >= task_state.epoch_upgrade_block_height {
+            let mut decided_certificate_lock = task_state
+                .upgrade_lock
+                .decided_upgrade_certificate
+                .write()
+                .await;
+            *decided_certificate_lock = Some(cert.clone());
+            drop(decided_certificate_lock);
 
-        let _ = task_state
-            .storage
-            .write()
-            .await
-            .update_decided_upgrade_certificate(Some(cert.clone()))
-            .await;
+            let _ = task_state
+                .storage
+                .write()
+                .await
+                .update_decided_upgrade_certificate(Some(cert.clone()))
+                .await;
+        }
+    };
+
+    if let Some(cert) = decided_upgrade_cert.clone() {
+        if cert.data.new_version == V::Epochs::VERSION {
+            task_state.staged_epoch_upgrade_certificate = Some(cert);
+        } else {
+            let mut decided_certificate_lock = task_state
+                .upgrade_lock
+                .decided_upgrade_certificate
+                .write()
+                .await;
+            *decided_certificate_lock = Some(cert.clone());
+            drop(decided_certificate_lock);
+
+            let _ = task_state
+                .storage
+                .write()
+                .await
+                .update_decided_upgrade_certificate(Some(cert.clone()))
+                .await;
+        }
     }
 
     let mut consensus_writer = task_state.consensus.write().await;
