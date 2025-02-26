@@ -189,6 +189,8 @@ impl EpochCommittees {
             .filter(|entry| entry.stake() > U256::zero())
             .collect();
 
+        let randomized_committee = generate_stake_cdf(eligible_leaders.clone(), [0u8; 32]);
+
         let committee = Committee {
             eligible_leaders,
             stake_table,
@@ -200,6 +202,12 @@ impl EpochCommittees {
         self.state.insert(epoch, committee.clone());
         self.state.insert(epoch + 1, committee.clone());
         self.state.insert(epoch + 2, committee.clone());
+        self.randomized_committees
+            .insert(epoch, randomized_committee.clone());
+        self.randomized_committees
+            .insert(epoch + 1, randomized_committee.clone());
+        self.randomized_committees
+            .insert(epoch + 1, randomized_committee.clone());
 
         committee
     }
@@ -245,6 +253,7 @@ impl EpochCommittees {
             .iter()
             .map(|entry| (PubKey::public_key(entry), entry.clone()))
             .collect();
+        let randomized_committee = generate_stake_cdf(eligible_leaders.clone(), [0u8; 32]);
 
         let members = Committee {
             eligible_leaders,
@@ -254,10 +263,13 @@ impl EpochCommittees {
             indexed_da_members,
         };
 
+        let mut randomized_committees = BTreeMap::new();
+
         // TODO: remove this, workaround for hotshot asking for stake tables from epoch 1 and 2
         let mut map = HashMap::new();
         for epoch in Epoch::genesis().u64()..=50 {
             map.insert(Epoch::new(epoch), members.clone());
+            randomized_committees.insert(Epoch::new(epoch), randomized_committee.clone());
         }
 
         Self {
@@ -267,7 +279,7 @@ impl EpochCommittees {
             l1_client: instance_state.l1_client.clone(),
             chain_config: instance_state.chain_config,
             peers: instance_state.peers.clone(),
-            randomized_committees: BTreeMap::new(),
+            randomized_committees,
         }
     }
 
