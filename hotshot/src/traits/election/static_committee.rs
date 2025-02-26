@@ -119,18 +119,16 @@ impl<TYPES: NodeType> Membership<TYPES> for StaticCommittee<TYPES> {
     /// Get the stake table for the current view
     fn stake_table(
         &self,
-        epoch: Option<<TYPES as NodeType>::Epoch>,
+        _epoch: Option<<TYPES as NodeType>::Epoch>,
     ) -> Vec<<<TYPES as NodeType>::SignatureKey as SignatureKey>::StakeTableEntry> {
-        self.check_first_epoch(epoch);
         self.stake_table.clone()
     }
 
     /// Get the stake table for the current view
     fn da_stake_table(
         &self,
-        epoch: Option<<TYPES as NodeType>::Epoch>,
+        _epoch: Option<<TYPES as NodeType>::Epoch>,
     ) -> Vec<<<TYPES as NodeType>::SignatureKey as SignatureKey>::StakeTableEntry> {
-        self.check_first_epoch(epoch);
         self.da_stake_table.clone()
     }
 

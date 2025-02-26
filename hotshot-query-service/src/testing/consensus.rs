@@ -193,6 +193,7 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
                                 TestInstanceState::default(),
                                 0,
                                 0,
+                                vec![],
                             )
                             .await
                             .unwrap(),
