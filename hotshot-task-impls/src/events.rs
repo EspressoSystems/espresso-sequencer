@@ -258,6 +258,20 @@ pub enum HotShotEvent<TYPES: NodeType> {
         TYPES::SignatureKey,
         TYPES::SignatureKey,
     ),
+
+    /// A replica sent us an extended QuorumCertificate and NextEpochQuorumCertificate
+    ExtendedQcRecv(
+        QuorumCertificate2<TYPES>,
+        NextEpochQuorumCertificate2<TYPES>,
+        TYPES::SignatureKey,
+    ),
+
+    /// Send our extended QuorumCertificate and NextEpochQuorumCertificate to all nodes in the old and new epoch
+    ExtendedQcSend(
+        QuorumCertificate2<TYPES>,
+        NextEpochQuorumCertificate2<TYPES>,
+        TYPES::SignatureKey,
+    ),
 }
 
 impl<TYPES: NodeType> HotShotEvent<TYPES> {
@@ -341,9 +355,10 @@ impl<TYPES: NodeType> HotShotEvent<TYPES> {
             | HotShotEvent::VidRequestRecv(request, _) => Some(request.view),
             HotShotEvent::VidResponseSend(_, _, proposal)
             | HotShotEvent::VidResponseRecv(_, proposal) => Some(proposal.data.view_number()),
-            HotShotEvent::HighQcRecv(qc, _) | HotShotEvent::HighQcSend(qc, ..) => {
-                Some(qc.view_number())
-            }
+            HotShotEvent::HighQcRecv(qc, _)
+            | HotShotEvent::HighQcSend(qc, ..)
+            | HotShotEvent::ExtendedQcRecv(qc, _, _)
+            | HotShotEvent::ExtendedQcSend(qc, _, _) => Some(qc.view_number()),
         }
     }
 }
@@ -621,6 +636,12 @@ impl<TYPES: NodeType> Display for HotShotEvent<TYPES> {
             }
             HotShotEvent::HighQcSend(qc, ..) => {
                 write!(f, "HighQcSend(view_number={:?}", qc.view_number())
+            }
+            HotShotEvent::ExtendedQcRecv(qc, ..) => {
+                write!(f, "ExtendedQcRecv(view_number={:?}", qc.view_number())
+            }
+            HotShotEvent::ExtendedQcSend(qc, ..) => {
+                write!(f, "ExtendedQcSend(view_number={:?}", qc.view_number())
             }
         }
     }
