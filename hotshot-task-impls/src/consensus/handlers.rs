@@ -27,7 +27,7 @@ use super::ConsensusTaskState;
 use crate::{
     consensus::Versions,
     events::HotShotEvent,
-    helpers::{broadcast_event, get_next_epoch_qc},
+    helpers::{broadcast_event, wait_for_next_epoch_qc},
     vote_collection::handle_vote,
 };
 
@@ -173,7 +173,7 @@ pub async fn send_high_qc<TYPES: NodeType, V: Versions, I: NodeImplementation<TY
     drop(consensus_reader);
 
     if is_eqc {
-        let Some(next_epoch_high_qc) = get_next_epoch_qc(
+        let Some(next_epoch_high_qc) = wait_for_next_epoch_qc(
             &high_qc,
             &task_state.consensus,
             task_state.timeout,

@@ -34,12 +34,11 @@ use tracing::instrument;
 use vbs::version::StaticVersionType;
 
 use super::{QuorumProposalRecvTaskState, ValidationInfo};
-use crate::helpers::validate_qc_and_next_epoch_qc;
 use crate::{
     events::HotShotEvent,
     helpers::{
         broadcast_event, fetch_proposal, validate_proposal_safety_and_liveness,
-        validate_proposal_view_and_certs,
+        validate_proposal_view_and_certs, validate_qc_and_next_epoch_qc,
     },
     quorum_proposal_recv::{UpgradeLock, Versions},
 };
