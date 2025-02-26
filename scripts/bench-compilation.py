@@ -6,12 +6,19 @@ import sys
 import time
 import tomlkit
 import typing
+from memory_profiler import memory_usage
 
 RESULTS = "bench-compilation-results.toml"
 
 
 def store_result(
-    run_time, *, strip: str, debug: str, lto: str, commands: dict[str, str]
+    *,
+    exec_duration: float,
+    max_memory_mb: float,
+    strip: str,
+    debug: str,
+    lto: str,
+    commands: dict[str, str],
 ):
     """A decorator to cache function results to a file"""
     try:
@@ -24,7 +31,8 @@ def store_result(
     result["lto"] = lto
     result["strip"] = strip
     result["debug"] = debug
-    result["time"] = f"{run_time:.2f}"
+    result["time"] = f"{exec_duration:.2f}"
+    result["memory_usage_mb"] = f"{max_memory_mb:.0f}"
     profile = mk_profile(strip, debug, lto)
     data[profile] = result
     with open(RESULTS, "w") as f:
@@ -58,6 +66,40 @@ def run(log_file: typing.IO, dry_run: bool, command: str):
         sys.exit(1)
 
 
+def measure(log_file: typing.IO, dry_run: bool, command: str) -> tuple[float, float]:
+    if dry_run:
+        return 0.0, 0.0
+    tic = time.time()
+    proc = subprocess.Popen(
+        command,
+        shell=True,
+        stdout=log_file,
+        stderr=subprocess.STDOUT,
+    )
+    mems = []
+    while True:
+        # check if process terminated
+        return_code = proc.poll()
+        if return_code is not None:
+            if return_code != 0:
+                print(f"Command failed: {command} with return code {return_code}")
+                sys.exit(1)
+            toc = time.time()
+            break
+
+        # measure memory usage
+        mems.append(
+            memory_usage(
+                proc=proc,
+                interval=0.1,
+                timeout=None,
+                include_children=True,
+                max_usage=True,
+            )
+        )
+    return toc - tic, max(mems)
+
+
 def benchmark(
     dry_run: bool = False,
     *,
@@ -87,18 +129,24 @@ def benchmark(
         run(f, dry_run, cache_invalidation_command)
 
         print(f"Running timed command: {timed_command}")
-        tic = time.time()
-        run(f, dry_run, timed_command)
-        toc = time.time()
-        run_time = toc - tic
-        print(f"Timed command at {run_time:.2f} seconds")
+        exec_duration, max_memory_mb = measure(f, dry_run, timed_command)
+        print(
+            f"Timed command at {exec_duration:.2f} seconds, used {max_memory_mb:.2f} MB"
+        )
         commands = {
             "setup": setup_command,
             "pre_build": pre_build_command,
             "cache_invalidation": cache_invalidation_command,
             "timed": timed_command,
         }
-        store_result(run_time, strip=strip, debug=debug, lto=lto, commands=commands)
+        store_result(
+            exec_duration=exec_duration,
+            max_memory_mb=max_memory_mb,
+            strip=strip,
+            debug=debug,
+            lto=lto,
+            commands=commands,
+        )
 
 
 def main():
