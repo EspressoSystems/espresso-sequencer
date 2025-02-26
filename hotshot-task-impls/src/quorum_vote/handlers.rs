@@ -326,10 +326,10 @@ async fn store_drb_seed_and_result<TYPES: NodeType, I: NodeImplementation<TYPES>
                 .await
                 .drb_seeds_and_results
                 .results
-                .insert(current_epoch_number + 1, result);
+                .insert(current_epoch_number + 2, result);
             notify_membership_of_drb_result::<TYPES>(
                 &task_state.membership,
-                current_epoch_number + 1,
+                current_epoch_number + 2,
                 result,
             )
             .await;
