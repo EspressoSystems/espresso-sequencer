@@ -9,7 +9,7 @@
     event_stream: &amp;Sender&lt;<a class="struct" href="https://doc.rust-lang.org/1.85.0/alloc/sync/struct.Arc.html" title="struct alloc::sync::Arc">Arc</a>&lt;<a class="enum" href="../events/enum.HotShotEvent.html" title="enum hotshot_task_impls::events::HotShotEvent">HotShotEvent</a>&lt;TYPES&gt;&gt;&gt;,
     upgrade_lock: &amp;UpgradeLock&lt;TYPES, V&gt;,
     transition_indicator: EpochTransitionIndicator,
-) -&gt; Result&lt;<a class="primitive" href="https://doc.rust-lang.org/1.85.0/std/primitive.unit.html">()</a>&gt;<div class="where">where
+) -&gt; <a class="type" href="../../hotshot_utils/anytrace/type.Result.html" title="type hotshot_utils::anytrace::Result">Result</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/1.85.0/std/primitive.unit.html">()</a>&gt;<div class="where">where
     <a class="struct" href="struct.VoteCollectionTaskState.html" title="struct hotshot_task_impls::vote_collection::VoteCollectionTaskState">VoteCollectionTaskState</a>&lt;TYPES, VOTE, CERT, V&gt;: <a class="trait" href="trait.HandleVoteEvent.html" title="trait hotshot_task_impls::vote_collection::HandleVoteEvent">HandleVoteEvent</a>&lt;TYPES, VOTE, CERT&gt;,</div></code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>A helper function that handles a vote regardless whether it’s the first vote in the view or not.</p>
 <h2 id="errors"><a class="doc-anchor" href="#errors">§</a>Errors</h2>
 <p>If we fail to handle the vote</p>

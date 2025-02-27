@@ -670,7 +670,21 @@
 <a href="#669" id="669">669</a>
 <a href="#670" id="670">670</a>
 <a href="#671" id="671">671</a>
-<a href="#672" id="672">672</a></pre></div><pre class="rust"><code><span class="attr">#![allow(clippy::needless_lifetimes)]
+<a href="#672" id="672">672</a>
+<a href="#673" id="673">673</a>
+<a href="#674" id="674">674</a>
+<a href="#675" id="675">675</a>
+<a href="#676" id="676">676</a>
+<a href="#677" id="677">677</a>
+<a href="#678" id="678">678</a>
+<a href="#679" id="679">679</a>
+<a href="#680" id="680">680</a>
+<a href="#681" id="681">681</a>
+<a href="#682" id="682">682</a>
+<a href="#683" id="683">683</a>
+<a href="#684" id="684">684</a>
+<a href="#685" id="685">685</a>
+<a href="#686" id="686">686</a></pre></div><pre class="rust"><code><span class="attr">#![allow(clippy::needless_lifetimes)]
 
 </span><span class="kw">use </span>core::fmt::Display;
 <span class="kw">use </span>jf_signature::{bls_over_bn254, schnorr};
@@ -1218,6 +1232,8 @@
                 SequencerModule::Http(m) =&gt; curr = m.add(<span class="kw-2">&amp;mut </span>modules.http, <span class="kw-2">&amp;mut </span>provided)<span class="question-mark">?</span>,
                 SequencerModule::Query(m) =&gt; curr = m.add(<span class="kw-2">&amp;mut </span>modules.query, <span class="kw-2">&amp;mut </span>provided)<span class="question-mark">?</span>,
                 SequencerModule::Submit(m) =&gt; curr = m.add(<span class="kw-2">&amp;mut </span>modules.submit, <span class="kw-2">&amp;mut </span>provided)<span class="question-mark">?</span>,
+                SequencerModule::Status(m) =&gt; curr = m.add(<span class="kw-2">&amp;mut </span>modules.status, <span class="kw-2">&amp;mut </span>provided)<span class="question-mark">?</span>,
+                SequencerModule::Catchup(m) =&gt; curr = m.add(<span class="kw-2">&amp;mut </span>modules.catchup, <span class="kw-2">&amp;mut </span>provided)<span class="question-mark">?</span>,
                 SequencerModule::Config(m) =&gt; curr = m.add(<span class="kw-2">&amp;mut </span>modules.config, <span class="kw-2">&amp;mut </span>provided)<span class="question-mark">?</span>,
                 SequencerModule::HotshotEvents(m) =&gt; {
                     curr = m.add(<span class="kw-2">&amp;mut </span>modules.hotshot_events, <span class="kw-2">&amp;mut </span>provided)<span class="question-mark">?
@@ -1254,6 +1270,8 @@
 <span class="macro">module!</span>(<span class="string">"http"</span>, api::options::Http);
 <span class="macro">module!</span>(<span class="string">"query"</span>, api::options::Query, requires: <span class="string">"http"</span>);
 <span class="macro">module!</span>(<span class="string">"submit"</span>, api::options::Submit, requires: <span class="string">"http"</span>);
+<span class="macro">module!</span>(<span class="string">"status"</span>, api::options::Status, requires: <span class="string">"http"</span>);
+<span class="macro">module!</span>(<span class="string">"catchup"</span>, api::options::Catchup, requires: <span class="string">"http"</span>);
 <span class="macro">module!</span>(<span class="string">"config"</span>, api::options::Config, requires: <span class="string">"http"</span>);
 <span class="macro">module!</span>(<span class="string">"hotshot-events"</span>, api::options::HotshotEvents, requires: <span class="string">"http"</span>);
 <span class="macro">module!</span>(<span class="string">"explorer"</span>, api::options::Explorer, requires: <span class="string">"http"</span>, <span class="string">"storage-sql"</span>);
@@ -1318,6 +1336,14 @@
     ///
     /// This module requires the http module to be started.
     </span>Submit(Module&lt;api::options::Submit&gt;),
+    <span class="doccomment">/// Run the status API module.
+    ///
+    /// This module requires the http module to be started.
+    </span>Status(Module&lt;api::options::Status&gt;),
+    <span class="doccomment">/// Run the state catchup API module.
+    ///
+    /// This module requires the http module to be started.
+    </span>Catchup(Module&lt;api::options::Catchup&gt;),
     <span class="doccomment">/// Run the config API module.
     </span>Config(Module&lt;api::options::Config&gt;),
 
@@ -1338,6 +1364,8 @@
     <span class="kw">pub </span>http: <span class="prelude-ty">Option</span>&lt;api::options::Http&gt;,
     <span class="kw">pub </span>query: <span class="prelude-ty">Option</span>&lt;api::options::Query&gt;,
     <span class="kw">pub </span>submit: <span class="prelude-ty">Option</span>&lt;api::options::Submit&gt;,
+    <span class="kw">pub </span>status: <span class="prelude-ty">Option</span>&lt;api::options::Status&gt;,
+    <span class="kw">pub </span>catchup: <span class="prelude-ty">Option</span>&lt;api::options::Catchup&gt;,
     <span class="kw">pub </span>config: <span class="prelude-ty">Option</span>&lt;api::options::Config&gt;,
     <span class="kw">pub </span>hotshot_events: <span class="prelude-ty">Option</span>&lt;api::options::HotshotEvents&gt;,
     <span class="kw">pub </span>explorer: <span class="prelude-ty">Option</span>&lt;api::options::Explorer&gt;,
