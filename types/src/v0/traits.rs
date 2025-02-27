@@ -698,23 +698,29 @@ pub trait SequencerPersistence: Sized + Send + Sync + Clone + 'static {
         decided_upgrade_certificate: Option<UpgradeCertificate<SeqTypes>>,
     ) -> anyhow::Result<()>;
     async fn migrate_consensus(&self) -> anyhow::Result<()> {
-        tracing::info!("migrating consensus data");
+        tracing::warn!("migrating consensus data...");
 
+        tracing::info!("migrating decided leaves...");
         self.migrate_anchor_leaf().await?;
-        tracing::info!("migrated anchor leaf");
+        tracing::info!("migrated decided leaves");
 
+        tracing::info!("migrating da proposals...");
         self.migrate_da_proposals().await?;
         tracing::info!("migrated da proposals");
 
+        tracing::info!("migrating vid shares...");
         self.migrate_vid_shares().await?;
         tracing::info!("migrated vid shares");
 
+        tracing::info!("migrating undecided state...");
         self.migrate_undecided_state().await?;
         tracing::info!("migrated undecided state");
 
+        tracing::info!("migrating quorum proposals...");
         self.migrate_quorum_proposals().await?;
         tracing::info!("migrated quorum proposals");
 
+        tracing::info!("migrating quorum certificates...");
         self.migrate_quorum_certificates().await?;
         tracing::info!("migrated quorum certificates");
 

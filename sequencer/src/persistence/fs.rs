@@ -1024,9 +1024,7 @@ impl SequencerPersistence for Persistence {
         }
 
         inner.migrated.insert("anchor_leaf".to_string());
-        inner.update_migration()?;
-
-        Ok(())
+        inner.update_migration()
     }
     async fn migrate_da_proposals(&self) -> anyhow::Result<()> {
         let mut inner = self.inner.write().await;
@@ -1168,7 +1166,10 @@ impl SequencerPersistence for Persistence {
                 file.write_all(&bytes)?;
                 Ok(())
             },
-        )
+        )?;
+
+        inner.migrated.insert("undecided_state".to_string());
+        inner.update_migration()
     }
     async fn migrate_quorum_proposals(&self) -> anyhow::Result<()> {
         let mut inner = self.inner.write().await;
