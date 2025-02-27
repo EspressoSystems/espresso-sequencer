@@ -58,8 +58,9 @@ mod persistence_tests {
     use hotshot_query_service::testing::mocks::MockVersions;
     use hotshot_types::{
         data::{
-            vid_commitment, vid_disperse::VidDisperseShare2, DaProposal2, EpochNumber,
-            QuorumProposal2, QuorumProposalWrapper, VidCommitment, VidDisperseShare, ViewNumber,
+            ns_table::parse_ns_table, vid_commitment, vid_disperse::VidDisperseShare2, DaProposal2,
+            EpochNumber, QuorumProposal2, QuorumProposalWrapper, VidCommitment, VidDisperseShare,
+            ViewNumber,
         },
         event::{EventType, HotShotAction, LeafInfo},
         message::{convert_proposal, Proposal, UpgradeLock},
@@ -185,13 +186,10 @@ mod persistence_tests {
         let avidm_param = init_avidm_param(2).unwrap();
         let weights = vec![1u32; 2];
 
-        let (payload_commitment, shares) = AvidMScheme::ns_disperse(
-            &avidm_param,
-            &weights,
-            &leaf_payload.encode(),
-            [(0usize..15), (15..48)],
-        )
-        .unwrap();
+        let ns_table = parse_ns_table(leaf_payload.byte_len().as_usize(), &leaf_payload.encode());
+        let (payload_commitment, shares) =
+            AvidMScheme::ns_disperse(&avidm_param, &weights, &leaf_payload_bytes_arc, ns_table)
+                .unwrap();
 
         let (pubkey, privkey) = BLSPubKey::generated_from_seed_indexed([0; 32], 1);
         let signature = PubKey::sign(&privkey, &[]).unwrap();
@@ -684,14 +682,10 @@ mod persistence_tests {
         let leaf_payload_bytes_arc = leaf_payload.encode();
         let avidm_param = init_avidm_param(2).unwrap();
         let weights = vec![1u32; 2];
-
-        let (payload_commitment, shares) = AvidMScheme::ns_disperse(
-            &avidm_param,
-            &weights,
-            &leaf_payload_bytes_arc,
-            [(0usize..15), (15..48)],
-        )
-        .unwrap();
+        let ns_table = parse_ns_table(leaf_payload.byte_len().as_usize(), &leaf_payload.encode());
+        let (payload_commitment, shares) =
+            AvidMScheme::ns_disperse(&avidm_param, &weights, &leaf_payload_bytes_arc, ns_table)
+                .unwrap();
 
         let (pubkey, privkey) = BLSPubKey::generated_from_seed_indexed([0; 32], 1);
         let mut vid = VidDisperseShare2::<SeqTypes> {
@@ -892,13 +886,10 @@ mod persistence_tests {
         let avidm_param = init_avidm_param(2).unwrap();
         let weights = vec![1u32; 2];
 
-        let (payload_commitment, shares) = AvidMScheme::ns_disperse(
-            &avidm_param,
-            &weights,
-            &leaf_payload_bytes_arc,
-            [(0usize..15), (15..48)],
-        )
-        .unwrap();
+        let ns_table = parse_ns_table(leaf_payload.byte_len().as_usize(), &leaf_payload.encode());
+        let (payload_commitment, shares) =
+            AvidMScheme::ns_disperse(&avidm_param, &weights, &leaf_payload_bytes_arc, ns_table)
+                .unwrap();
 
         let (pubkey, privkey) = BLSPubKey::generated_from_seed_indexed([0; 32], 1);
         let vid_share = VidDisperseShare2::<SeqTypes> {

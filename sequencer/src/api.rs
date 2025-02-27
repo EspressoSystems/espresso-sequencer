@@ -1106,6 +1106,7 @@ mod api_tests {
         AvailabilityDataSource, BlockQueryData, VidCommonQueryData,
     };
 
+    use hotshot_types::data::ns_table::parse_ns_table;
     use hotshot_types::data::vid_disperse::VidDisperseShare2;
     use hotshot_types::data::{DaProposal2, EpochNumber, VidCommitment};
     use hotshot_types::simple_certificate::QuorumCertificate2;
@@ -1296,13 +1297,9 @@ mod api_tests {
         let avidm_param = init_avidm_param(2).unwrap();
         let weights = vec![1u32; 2];
 
-        let (payload_commitment, shares) = AvidMScheme::ns_disperse(
-            &avidm_param,
-            &weights,
-            &payload_bytes_arc.clone(),
-            [(0usize..15), (15..48)],
-        )
-        .unwrap();
+        let ns_table = parse_ns_table(payload.byte_len().as_usize(), &payload.encode());
+        let (payload_commitment, shares) =
+            AvidMScheme::ns_disperse(&avidm_param, &weights, &payload_bytes_arc, ns_table).unwrap();
 
         let mut quorum_proposal = QuorumProposalWrapper::<SeqTypes> {
             proposal: QuorumProposal2::<SeqTypes> {

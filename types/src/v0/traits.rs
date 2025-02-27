@@ -737,11 +737,6 @@ pub trait SequencerPersistence: Sized + Send + Sync + Clone + 'static {
         &self,
     ) -> anyhow::Result<Option<NextEpochQuorumCertificate2<SeqTypes>>>;
 
-    // async fn append_vid2(
-    //     &self,
-    //     proposal: &Proposal<SeqTypes, VidDisperseShare<SeqTypes>>,
-    // ) -> anyhow::Result<()>;
-
     async fn append_da2(
         &self,
         proposal: &Proposal<SeqTypes, DaProposal2<SeqTypes>>,

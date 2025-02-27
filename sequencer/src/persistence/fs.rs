@@ -676,11 +676,13 @@ impl SequencerPersistence for Persistence {
     ) -> anyhow::Result<()> {
         let mut inner = self.inner.write().await;
         let view_number = proposal.data.view_number().u64();
+
         let dir_path = inner.vid2_dir_path();
 
         fs::create_dir_all(dir_path.clone()).context("failed to create vid dir")?;
 
         let file_path = dir_path.join(view_number.to_string()).with_extension("txt");
+
         inner.replace(
             &file_path,
             |_| {
@@ -690,6 +692,8 @@ impl SequencerPersistence for Persistence {
                 Ok(false)
             },
             |mut file| {
+                let proposal: Proposal<SeqTypes, VidDisperseShare<SeqTypes>> =
+                    convert_proposal(proposal.clone());
                 let proposal_bytes = bincode::serialize(&proposal).context("serialize proposal")?;
                 file.write_all(&proposal_bytes)?;
                 Ok(())

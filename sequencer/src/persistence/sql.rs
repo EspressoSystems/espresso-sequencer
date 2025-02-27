@@ -1186,11 +1186,13 @@ impl SequencerPersistence for Persistence {
     ) -> anyhow::Result<()> {
         let view = proposal.data.view_number.u64();
         let payload_hash = proposal.data.payload_commitment;
-        let data_bytes = bincode::serialize(proposal).unwrap();
+        let proposal: Proposal<SeqTypes, VidDisperseShare<SeqTypes>> =
+            convert_proposal(proposal.clone());
+        let data_bytes = bincode::serialize(&proposal).unwrap();
 
         let mut tx = self.db.write().await?;
         tx.upsert(
-            "vid_share",
+            "vid_share2",
             ["view", "data", "payload_hash"],
             ["view"],
             [(view as i64, data_bytes, payload_hash.to_string())],
@@ -2045,7 +2047,10 @@ mod test {
     use futures::stream::TryStreamExt;
     use hotshot_example_types::node_types::TestVersions;
     use hotshot_types::{
-        data::{vid_commitment, vid_disperse::VidDisperseShare2, EpochNumber, QuorumProposal2},
+        data::{
+            ns_table::parse_ns_table, vid_commitment, vid_disperse::VidDisperseShare2, EpochNumber,
+            QuorumProposal2,
+        },
         message::convert_proposal,
         simple_certificate::QuorumCertificate,
         simple_vote::QuorumData,
@@ -2158,14 +2163,10 @@ mod test {
         let avidm_param = init_avidm_param(2).unwrap();
         let weights = vec![1u32; 2];
 
-        let (payload_commitment, shares) = AvidMScheme::ns_disperse(
-            &avidm_param,
-            &weights,
-            &leaf_payload.encode(),
-            [(0usize..15), (15..48)],
-        )
-        .unwrap();
-
+        let ns_table = parse_ns_table(leaf_payload.byte_len().as_usize(), &leaf_payload.encode());
+        let (payload_commitment, shares) =
+            AvidMScheme::ns_disperse(&avidm_param, &weights, &leaf_payload_bytes_arc, ns_table)
+                .unwrap();
         let (pubkey, privkey) = BLSPubKey::generated_from_seed_indexed([0; 32], 1);
         let vid_share = VidDisperseShare2::<SeqTypes> {
             view_number: ViewNumber::new(0),
@@ -2303,13 +2304,10 @@ mod test {
         let avidm_param = init_avidm_param(2).unwrap();
         let weights = vec![1u32; 2];
 
-        let (payload_commitment, shares) = AvidMScheme::ns_disperse(
-            &avidm_param,
-            &weights,
-            &leaf_payload.encode(),
-            [(0usize..15), (15..48)],
-        )
-        .unwrap();
+        let ns_table = parse_ns_table(leaf_payload.byte_len().as_usize(), &leaf_payload.encode());
+        let (payload_commitment, shares) =
+            AvidMScheme::ns_disperse(&avidm_param, &weights, &leaf_payload_bytes_arc, ns_table)
+                .unwrap();
 
         let (pubkey, privkey) = BLSPubKey::generated_from_seed_indexed([0; 32], 1);
         let vid = VidDisperseShare2::<SeqTypes> {
