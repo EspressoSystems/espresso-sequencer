@@ -595,12 +595,6 @@ impl SqlStorage {
 
         conn.close().await?;
 
-        // Migrate existing storage data V1 types to new Proof of stake V2 types
-        // This migrates leaf1 to leaf2 and vid to vid2
-        // There are separate tables for leaf2 and vid2
-
-        // storage.migrate_types().await?;
-
         Ok(Self {
             pool,
             pool_metrics,
@@ -1671,7 +1665,7 @@ mod test {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn test_leaf_migration() {
+    async fn test_types_migration() {
         setup_test();
 
         let num_leaves = 200;

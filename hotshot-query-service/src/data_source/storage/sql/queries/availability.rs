@@ -134,7 +134,7 @@ where
         let sql = format!(
             "SELECT {VID_COMMON_COLUMNS}
               FROM header AS h
-              JOIN vid AS v ON h.height = v.height
+              JOIN vid2 AS v ON h.height = v.height
               WHERE {where_clause}
               ORDER BY h.height
               LIMIT 1"
@@ -155,7 +155,7 @@ where
         let sql = format!(
             "SELECT {VID_COMMON_METADATA_COLUMNS}
               FROM header AS h
-              JOIN vid AS v ON h.height = v.height
+              JOIN vid2 AS v ON h.height = v.height
               WHERE {where_clause}
               ORDER BY h.height ASC
               LIMIT 1"
@@ -296,7 +296,7 @@ where
         let sql = format!(
             "SELECT {VID_COMMON_COLUMNS}
               FROM header AS h
-              JOIN vid AS v ON h.height = v.height
+              JOIN vid2 AS v ON h.height = v.height
               {where_clause}
               ORDER BY h.height"
         );
@@ -321,7 +321,7 @@ where
         let sql = format!(
             "SELECT {VID_COMMON_METADATA_COLUMNS}
               FROM header AS h
-              JOIN vid AS v ON h.height = v.height
+              JOIN vid2 AS v ON h.height = v.height
               {where_clause}
               ORDER BY h.height ASC"
         );

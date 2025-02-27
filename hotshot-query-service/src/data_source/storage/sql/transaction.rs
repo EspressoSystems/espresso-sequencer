@@ -601,7 +601,7 @@ where
         if let Some(share) = share {
             let share_data = bincode::serialize(&share).context("failed to serialize VID share")?;
             self.upsert(
-                "vid",
+                "vid2",
                 ["height", "common", "share"],
                 ["height"],
                 [(height as i64, common_data, share_data)],
@@ -612,7 +612,7 @@ where
             // possible that this column already exists, and we are just upserting the common data,
             // in which case we don't want to overwrite the share with NULL.
             self.upsert(
-                "vid",
+                "vid2",
                 ["height", "common"],
                 ["height"],
                 [(height as i64, common_data)],
