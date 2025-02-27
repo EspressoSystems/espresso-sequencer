@@ -48,8 +48,6 @@ pub struct ADVZDisperse<TYPES: NodeType> {
     pub target_epoch: Option<TYPES::Epoch>,
     /// VidCommitment calculated based on the number of nodes in `target_epoch`.
     pub payload_commitment: ADVZCommitment,
-    /// VidCommitment calculated based on the number of nodes in `epoch`. Needed during epoch transition.
-    pub data_epoch_payload_commitment: Option<ADVZCommitment>,
     /// A storage node's key and its corresponding VID share
     pub shares: BTreeMap<TYPES::SignatureKey, ADVZShare>,
     /// VID common data sent to all storage nodes
@@ -72,7 +70,6 @@ impl<TYPES: NodeType> ADVZDisperse<TYPES> {
         membership: &Arc<RwLock<TYPES::Membership>>,
         target_epoch: Option<TYPES::Epoch>,
         data_epoch: Option<TYPES::Epoch>,
-        data_epoch_payload_commitment: Option<ADVZCommitment>,
     ) -> Self {
         let shares = membership
             .read()
@@ -87,7 +84,6 @@ impl<TYPES: NodeType> ADVZDisperse<TYPES> {
             shares,
             common: vid_disperse.common,
             payload_commitment: vid_disperse.commit,
-            data_epoch_payload_commitment,
             epoch: data_epoch,
             target_epoch,
         }
@@ -107,42 +103,16 @@ impl<TYPES: NodeType> ADVZDisperse<TYPES> {
         data_epoch: Option<TYPES::Epoch>,
     ) -> Result<Self> {
         let num_nodes = membership.read().await.total_nodes(target_epoch);
-
         let txns = payload.encode();
-        let txns_clone = Arc::clone(&txns);
-        let num_txns = txns.len();
 
-        let vid_disperse = spawn_blocking(move || advz_scheme(num_nodes).disperse(&txns_clone))
+        let vid_disperse = spawn_blocking(move || advz_scheme(num_nodes).disperse(&txns))
             .await
             .wrap()
             .context(error!("Join error"))?
             .wrap()
             .context(|err| error!("Failed to calculate VID disperse. Error: {}", err))?;
 
-        let payload_commitment = if target_epoch == data_epoch {
-            None
-        } else {
-            let num_nodes = membership.read().await.total_nodes(data_epoch);
-
-            Some(
-              spawn_blocking(move || advz_scheme(num_nodes).commit_only(&txns))
-                .await
-                .wrap()
-                .context(error!("Join error"))?
-                .wrap()
-                .context(|err| error!("Failed to calculate VID commitment with (num_storage_nodes, payload_byte_len) = ({}, {}). Error: {}", num_nodes, num_txns, err))?
-            )
-        };
-
-        Ok(Self::from_membership(
-            view,
-            vid_disperse,
-            membership,
-            target_epoch,
-            data_epoch,
-            payload_commitment,
-        )
-        .await)
+        Ok(Self::from_membership(view, vid_disperse, membership, target_epoch, data_epoch).await)
     }
 
     /// Returns the payload length in bytes.
@@ -222,7 +192,6 @@ impl<TYPES: NodeType> ADVZDisperseShare<TYPES> {
             epoch: None,
             target_epoch: None,
             payload_commitment: first_vid_disperse_share.payload_commitment,
-            data_epoch_payload_commitment: None,
             common: first_vid_disperse_share.common,
             shares: share_map,
         };
@@ -285,8 +254,6 @@ pub struct AvidMDisperse<TYPES: NodeType> {
     pub target_epoch: Option<TYPES::Epoch>,
     /// VidCommitment calculated based on the number of nodes in `target_epoch`.
     pub payload_commitment: AvidMCommitment,
-    /// VidCommitment calculated based on the number of nodes in `epoch`. Needed during epoch transition.
-    pub data_epoch_payload_commitment: Option<AvidMCommitment>,
     /// A storage node's key and its corresponding VID share
     pub shares: BTreeMap<TYPES::SignatureKey, AvidMShare>,
     /// Length of payload in bytes
@@ -310,7 +277,6 @@ impl<TYPES: NodeType> AvidMDisperse<TYPES> {
         membership: &Arc<RwLock<TYPES::Membership>>,
         target_epoch: Option<TYPES::Epoch>,
         data_epoch: Option<TYPES::Epoch>,
-        data_epoch_payload_commitment: Option<AvidMCommitment>,
     ) -> Self {
         let payload_byte_len = shares[0].payload_byte_len();
         let shares = membership
@@ -326,7 +292,6 @@ impl<TYPES: NodeType> AvidMDisperse<TYPES> {
             view_number,
             shares,
             payload_commitment: commit,
-            data_epoch_payload_commitment,
             epoch: data_epoch,
             target_epoch,
             payload_byte_len,
@@ -351,7 +316,6 @@ impl<TYPES: NodeType> AvidMDisperse<TYPES> {
         let num_nodes = membership.read().await.total_nodes(target_epoch);
 
         let txns = payload.encode();
-        let txns_clone = Arc::clone(&txns);
         let num_txns = txns.len();
 
         let avidm_param = init_avidm_param(num_nodes)?;
@@ -360,7 +324,7 @@ impl<TYPES: NodeType> AvidMDisperse<TYPES> {
         let ns_table = parse_ns_table(num_txns, &metadata.encode());
         let ns_table_clone = ns_table.clone();
         let (commit, shares) = spawn_blocking(move || {
-            AvidMScheme::ns_disperse(&avidm_param, &weights, &txns_clone, ns_table_clone)
+            AvidMScheme::ns_disperse(&avidm_param, &weights, &txns, ns_table_clone)
         })
         .await
         .wrap()
@@ -368,37 +332,10 @@ impl<TYPES: NodeType> AvidMDisperse<TYPES> {
         .wrap()
         .context(|err| error!("Failed to calculate VID disperse. Error: {}", err))?;
 
-        let payload_commitment = if target_epoch == data_epoch {
-            None
-        } else {
-            let num_nodes = membership.read().await.total_nodes(data_epoch);
-            let avidm_param = init_avidm_param(num_nodes)?;
-
-            Some(
-              spawn_blocking(move ||
-                AvidMScheme::commit(
-                    &avidm_param,
-                    &txns,
-                    ns_table,
-                ))
-                .await
-                .wrap()
-                .context(error!("Join error"))?
-                .wrap()
-                .context(|err| error!("Failed to calculate VID commitment with (num_storage_nodes, payload_byte_len) = ({}, {}). Error: {}", num_nodes, num_txns, err))?
-            )
-        };
-
-        Ok(Self::from_membership(
-            view,
-            commit,
-            &shares,
-            membership,
-            target_epoch,
-            data_epoch,
-            payload_commitment,
+        Ok(
+            Self::from_membership(view, commit, &shares, membership, target_epoch, data_epoch)
+                .await,
         )
-        .await)
     }
 
     /// Returns the payload length in bytes.
@@ -418,8 +355,6 @@ pub struct VidDisperseShare2<TYPES: NodeType> {
     pub target_epoch: Option<TYPES::Epoch>,
     /// Block payload commitment
     pub payload_commitment: AvidMCommitment,
-    /// VidCommitment calculated based on the number of nodes in `epoch`. Needed during epoch transition.
-    pub data_epoch_payload_commitment: Option<AvidMCommitment>,
     /// A storage node's key and its corresponding VID share
     pub share: AvidMShare,
     /// a public key of the share recipient
@@ -443,7 +378,6 @@ impl<TYPES: NodeType> VidDisperseShare2<TYPES> {
                 recipient_key,
                 view_number: vid_disperse.view_number,
                 payload_commitment: vid_disperse.payload_commitment,
-                data_epoch_payload_commitment: vid_disperse.data_epoch_payload_commitment,
                 epoch: vid_disperse.epoch,
                 target_epoch: vid_disperse.target_epoch,
             })
@@ -485,7 +419,6 @@ impl<TYPES: NodeType> VidDisperseShare2<TYPES> {
             epoch: first_vid_disperse_share.epoch,
             target_epoch: first_vid_disperse_share.target_epoch,
             payload_commitment: first_vid_disperse_share.payload_commitment,
-            data_epoch_payload_commitment: first_vid_disperse_share.data_epoch_payload_commitment,
             shares: share_map,
             payload_byte_len,
         };
@@ -517,7 +450,6 @@ impl<TYPES: NodeType> VidDisperseShare2<TYPES> {
                     recipient_key,
                     view_number: vid_disperse.view_number,
                     payload_commitment: vid_disperse.payload_commitment,
-                    data_epoch_payload_commitment: vid_disperse.data_epoch_payload_commitment,
                     epoch: vid_disperse.epoch,
                     target_epoch: vid_disperse.target_epoch,
                 },
