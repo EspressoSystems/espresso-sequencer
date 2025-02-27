@@ -27,9 +27,8 @@ mod tests {
     use hotshot_types::simple_vote::QuorumData2;
     use hotshot_types::traits::node_implementation::Versions;
     use hotshot_types::{
-        signature_key::BuilderKey,
-        traits::block_contents::{vid_commitment, BlockHeader},
-        utils::BuilderCommitment,
+        data::vid_commitment, signature_key::BuilderKey, traits::block_contents::BlockHeader,
+        traits::EncodeBytes, utils::BuilderCommitment,
     };
 
     use hotshot_example_types::{
@@ -118,6 +117,7 @@ mod tests {
             BLSPubKey::generated_from_seed_indexed(seed, 2011_u64);
         // instantiate the global state also
         let initial_commitment = vid_commitment::<TestVersions>(
+            &[],
             &[],
             TEST_NUM_NODES_IN_VID_COMPUTATION,
             <TestVersions as Versions>::Base::VERSION,
@@ -339,6 +339,7 @@ mod tests {
 
                     let block_payload_commitment = vid_commitment::<TestVersions>(
                         &encoded_transactions,
+                        &metadata.encode(),
                         NUM_NODES_IN_VID_COMPUTATION,
                         <TestVersions as Versions>::Base::VERSION,
                     );

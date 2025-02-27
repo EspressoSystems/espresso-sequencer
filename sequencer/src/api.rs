@@ -1230,7 +1230,7 @@ mod api_tests {
                     .verify(
                         header.ns_table(),
                         &header.payload_commitment(),
-                        vid_common.common(),
+                        &vid_common.common().clone().unwrap(),
                     )
                     .unwrap();
             } else {

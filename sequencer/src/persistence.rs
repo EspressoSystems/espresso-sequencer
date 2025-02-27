@@ -68,12 +68,11 @@ mod persistence_tests {
         },
         simple_vote::{NextEpochQuorumData2, QuorumData2, UpgradeProposalData, VersionedVoteData},
         traits::{
-            block_contents::vid_commitment,
+            block_contents::BlockHeader,
             node_implementation::{ConsensusTime, Versions},
             EncodeBytes,
         },
         vid::advz_scheme,
-        vote::HasViewNumber,
     };
     use jf_vid::VidScheme;
     use sequencer_utils::test_utils::setup_test;
@@ -275,6 +274,7 @@ mod persistence_tests {
 
         let vid_commitment = vid_commitment::<TestVersions>(
             &leaf_payload_bytes_arc,
+            &leaf.block_header().metadata().encode(),
             2,
             <TestVersions as Versions>::Base::VERSION,
         );
@@ -729,6 +729,7 @@ mod persistence_tests {
 
         let vid_commitment = vid_commitment::<TestVersions>(
             &leaf_payload_bytes_arc,
+            &leaf.block_header().metadata().encode(),
             2,
             <TestVersions as Versions>::Base::VERSION,
         );
@@ -932,7 +933,7 @@ mod persistence_tests {
         };
 
         storage
-            .append_da2(&da_proposal, payload_commitment)
+            .append_da(&da_proposal, payload_commitment)
             .await
             .unwrap();
         storage.append_vid2(&vid_share).await.unwrap();

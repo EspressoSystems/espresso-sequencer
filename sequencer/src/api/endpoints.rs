@@ -134,14 +134,16 @@ where
                         })
                 }
             )?;
-
+            let common = &common.common().clone().context(CustomSnafu {
+                message: format!("failed to make proof for namespace {ns_id}"),
+                status: StatusCode::NOT_FOUND,
+            })?;
             if let Some(ns_index) = block.payload().ns_table().find_ns_id(&ns_id) {
-                let proof = NsProof::new(block.payload(), &ns_index, common.common()).context(
-                    CustomSnafu {
+                let proof =
+                    NsProof::new(block.payload(), &ns_index, common).context(CustomSnafu {
                         message: format!("failed to make proof for namespace {ns_id}"),
                         status: StatusCode::NOT_FOUND,
-                    },
-                )?;
+                    })?;
 
                 Ok(NamespaceProofQueryData {
                     transactions: proof.export_all_txs(&ns_id),

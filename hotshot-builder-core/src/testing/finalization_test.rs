@@ -23,11 +23,12 @@ use hotshot_example_types::{
 };
 use hotshot_types::simple_certificate::QuorumCertificate2;
 use hotshot_types::{
-    data::{DaProposal2, QuorumProposal2, QuorumProposalWrapper, ViewNumber},
+    data::{vid_commitment, DaProposal2, QuorumProposal2, QuorumProposalWrapper, ViewNumber},
     message::Proposal,
     traits::{
-        block_contents::{vid_commitment, BlockHeader},
+        block_contents::BlockHeader,
         node_implementation::{ConsensusTime, Versions},
+        EncodeBytes,
     },
     utils::BuilderCommitment,
 };
@@ -60,6 +61,7 @@ pub fn setup_builder_for_test() -> TestSetup {
     let (tx_sender, tx_receiver) = broadcast(TEST_CHANNEL_BUFFER_SIZE);
 
     let parent_commitment = vid_commitment::<TestVersions>(
+        &[],
         &[],
         TEST_NUM_NODES_IN_VID_COMPUTATION,
         <TestVersions as Versions>::Base::VERSION,
@@ -298,6 +300,7 @@ async fn progress_round_with_transactions(
 
         let payload_commitment = vid_commitment::<TestVersions>(
             &encoded_transactions,
+            &metadata.encode(),
             TEST_NUM_NODES_IN_VID_COMPUTATION,
             <TestVersions as Versions>::Base::VERSION,
         );
@@ -389,6 +392,7 @@ async fn test_empty_block_rate() {
     let mut current_builder_state_id = BuilderStateId::<TestTypes> {
         parent_commitment: vid_commitment::<TestVersions>(
             &[],
+            &[],
             TEST_NUM_NODES_IN_VID_COMPUTATION,
             <TestVersions as Versions>::Base::VERSION,
         ),
@@ -443,6 +447,7 @@ async fn test_eager_block_rate() {
 
     let mut current_builder_state_id = BuilderStateId::<TestTypes> {
         parent_commitment: vid_commitment::<TestVersions>(
+            &[],
             &[],
             TEST_NUM_NODES_IN_VID_COMPUTATION,
             <TestVersions as Versions>::Base::VERSION,

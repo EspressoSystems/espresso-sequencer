@@ -21,7 +21,7 @@ use hotshot_types::{
         node_implementation::{NodeType, Versions},
         EncodeBytes,
     },
-    vid::{advz_scheme, VidCommitment},
+    vid::advz::advz_scheme,
 };
 use jf_vid::VidScheme;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
@@ -482,7 +482,7 @@ impl<Types: NodeType> VidCommonQueryData<Types> {
             .disperse(bytes)
             .unwrap();
 
-        Self::new(leaf.block_header().clone(), disperse.common)
+        Self::new(leaf.block_header().clone(), Some(disperse.common))
     }
 
     pub fn block_hash(&self) -> BlockHash<Types> {

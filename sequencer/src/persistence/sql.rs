@@ -27,6 +27,7 @@ use hotshot_query_service::{
         Provider,
     },
     merklized_state::MerklizedState,
+    VidCommitment, VidCommon,
 };
 use hotshot_types::{
     consensus::CommitmentMap,
@@ -1180,6 +1181,25 @@ impl SequencerPersistence for Persistence {
         tx.commit().await
     }
 
+    async fn append_vid2(
+        &self,
+        proposal: &Proposal<SeqTypes, VidDisperseShare2<SeqTypes>>,
+    ) -> anyhow::Result<()> {
+        let view = proposal.data.view_number.u64();
+        let payload_hash = proposal.data.payload_commitment;
+        let data_bytes = bincode::serialize(proposal).unwrap();
+
+        let mut tx = self.db.write().await?;
+        tx.upsert(
+            "vid_share",
+            ["view", "data", "payload_hash"],
+            ["view"],
+            [(view as i64, data_bytes, payload_hash.to_string())],
+        )
+        .await?;
+        tx.commit().await
+    }
+
     async fn append_da(
         &self,
         proposal: &Proposal<SeqTypes, DaProposal<SeqTypes>>,
@@ -1838,7 +1858,7 @@ impl SequencerPersistence for Persistence {
 #[async_trait]
 impl Provider<SeqTypes, VidCommonRequest> for Persistence {
     #[tracing::instrument(skip(self))]
-    async fn fetch(&self, req: VidCommonRequest) -> Option<VidCommon> {
+    async fn fetch(&self, req: VidCommonRequest) -> VidCommon {
         let mut tx = match self.db.read().await {
             Ok(tx) => tx,
             Err(err) => {
@@ -2047,10 +2067,10 @@ mod test {
         simple_certificate::QuorumCertificate,
         simple_vote::QuorumData,
         traits::{
-            block_contents::vid_commitment, node_implementation::Versions,
+            block_contents::BlockHeader, node_implementation::Versions,
             signature_key::SignatureKey, EncodeBytes,
         },
-        vid::advz_scheme,
+        vid::advz::advz_scheme,
     };
     use jf_vid::VidScheme;
     use sequencer_utils::test_utils::setup_test;
@@ -2236,14 +2256,18 @@ mod test {
         assert_eq!(
             vid_share.data.common,
             storage
-                .fetch(VidCommonRequest(vid_share.data.payload_commitment))
+                .fetch(VidCommonRequest(VidCommitment::V0(
+                    vid_share.data.payload_commitment
+                )))
                 .await
                 .unwrap()
         );
         assert_eq!(
             leaf_payload,
             storage
-                .fetch(PayloadRequest(vid_share.data.payload_commitment))
+                .fetch(PayloadRequest(VidCommitment::V0(
+                    vid_share.data.payload_commitment
+                )))
                 .await
                 .unwrap()
         );
@@ -2288,9 +2312,11 @@ mod test {
             .unwrap();
         let payload_commitment = vid_commitment::<TestVersions>(
             &leaf_payload_bytes_arc,
+            &leaf.block_header().metadata().encode(),
             2,
             <TestVersions as Versions>::Base::VERSION,
-        );
+        )
+        .unwrap_v0();
         let (pubkey, privkey) = BLSPubKey::generated_from_seed_indexed([0; 32], 1);
         let vid = VidDisperseShare::V1(VidDisperseShare2::<SeqTypes> {
             view_number: data_view,

@@ -7,6 +7,7 @@ use espresso_types::{
     v0::traits::{EventConsumer, PersistenceOptions, SequencerPersistence},
     Leaf2, NetworkConfig,
 };
+use hotshot_query_service::VidCommitment;
 use hotshot_types::{
     consensus::CommitmentMap,
     data::{
@@ -17,9 +18,7 @@ use hotshot_types::{
     message::Proposal,
     simple_certificate::{NextEpochQuorumCertificate2, QuorumCertificate2, UpgradeCertificate},
     utils::View,
-    vid::VidSchemeType,
 };
-use jf_vid::VidScheme;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
@@ -135,10 +134,16 @@ impl SequencerPersistence for NoStorage {
     ) -> anyhow::Result<()> {
         Ok(())
     }
+    async fn append_vid2(
+        &self,
+        _proposal: &Proposal<SeqTypes, VidDisperseShare2<SeqTypes>>,
+    ) -> anyhow::Result<()> {
+        Ok(())
+    }
     async fn append_da(
         &self,
         _proposal: &Proposal<SeqTypes, DaProposal<SeqTypes>>,
-        _vid_commit: <VidSchemeType as VidScheme>::Commit,
+        _vid_commit: VidCommitment,
     ) -> anyhow::Result<()> {
         Ok(())
     }
