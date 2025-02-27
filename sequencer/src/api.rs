@@ -7,8 +7,8 @@ use data_source::{CatchupDataSource, StakeTableDataSource, SubmitDataSource};
 use derivative::Derivative;
 use espresso_types::{
     retain_accounts, v0::traits::SequencerPersistence, v0_99::ChainConfig, AccountQueryData,
-    BlockMerkleTree, FeeAccount, FeeAccountProof, FeeMerkleTree, NodeState, PubKey, Transaction,
-    ValidatedState,
+    BlockMerkleTree, FeeAccount, FeeAccountProof, FeeMerkleTree, Leaf2, NodeState, PubKey,
+    Transaction, ValidatedState,
 };
 use futures::{
     future::{BoxFuture, Future, FutureExt},
@@ -18,7 +18,6 @@ use hotshot_events_service::events_source::{
     EventFilterSet, EventsSource, EventsStreamer, StartupInfo,
 };
 use hotshot_query_service::data_source::ExtensibleDataSource;
-use hotshot_types::stake_table::StakeTableEntry;
 use hotshot_types::{
     data::ViewNumber,
     event::Event,
@@ -31,6 +30,8 @@ use hotshot_types::{
     },
     utils::{View, ViewInner},
 };
+use hotshot_types::{stake_table::StakeTableEntry, vote::HasViewNumber};
+use itertools::Itertools;
 use jf_merkle_tree::MerkleTreeScheme;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -375,6 +376,18 @@ impl<
         // Try storage.
         self.inner().get_chain_config(commitment).await
     }
+    async fn get_leaf_chain(&self, height: u64) -> anyhow::Result<Vec<Leaf2>> {
+        // Check if we have the desired state in memory.
+        match self.as_ref().get_leaf_chain(height).await {
+            Ok(cf) => return Ok(cf),
+            Err(err) => {
+                tracing::info!("chain config is not in memory, trying storage: {err:#}");
+            }
+        }
+
+        // Try storage.
+        self.inner().get_leaf_chain(height).await
+    }
 }
 
 // #[async_trait]
@@ -465,6 +478,48 @@ impl<N: ConnectedNetwork<PubKey>, V: Versions, P: SequencerPersistence> CatchupD
         } else {
             bail!("chain config not found")
         }
+    }
+
+    async fn get_leaf_chain(&self, height: u64) -> anyhow::Result<Vec<Leaf2>> {
+        let mut leafs = self
+            .consensus()
+            .await
+            .read()
+            .await
+            .consensus()
+            .read()
+            .await
+            .undecided_leaves();
+        leafs.sort_by_key(|l| l.height());
+        let (position, mut last_leaf) = leafs
+            .iter()
+            .find_position(|l| l.height() == height)
+            .context(format!("leaf chain not available for {height}"))?;
+        let mut chain = vec![last_leaf.clone()];
+        for leaf in leafs.iter().skip(position + 1) {
+            if leaf.justify_qc().view_number() == last_leaf.view_number() {
+                chain.push(leaf.clone());
+            } else {
+                continue;
+            }
+            if leaf.view_number() == last_leaf.view_number() + 1 {
+                // one away from decide
+                last_leaf = leaf;
+                break;
+            }
+            last_leaf = leaf;
+        }
+        // Make sure we got one more leaf to confirm the decide
+        for leaf in leafs
+            .iter()
+            .skip_while(|l| l.height() <= last_leaf.height())
+        {
+            if leaf.justify_qc().view_number() == last_leaf.view_number() {
+                chain.push(leaf.clone());
+                return Ok(chain);
+            }
+        }
+        bail!(format!("leaf chain not available for {height}"))
     }
 }
 

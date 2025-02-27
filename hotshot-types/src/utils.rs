@@ -29,9 +29,14 @@ use typenum::Unsigned;
 use vbs::version::StaticVersionType;
 
 use crate::{
-    data::Leaf2, traits::{
-        election::Membership, node_implementation::{ConsensusTime, NodeType, Versions}, ValidatedState
-    }, vid::VidCommitment, vote::{Certificate, HasViewNumber}
+    data::Leaf2,
+    traits::{
+        election::Membership,
+        node_implementation::{ConsensusTime, NodeType, Versions},
+        ValidatedState,
+    },
+    vid::VidCommitment,
+    vote::{Certificate, HasViewNumber},
 };
 
 /// A view's state

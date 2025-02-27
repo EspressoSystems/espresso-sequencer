@@ -6,7 +6,7 @@ use committable::Commitment;
 use espresso_types::{
     v0::traits::{PersistenceOptions, SequencerPersistence},
     v0_99::ChainConfig,
-    FeeAccount, FeeAccountProof, FeeMerkleTree, NodeState, PubKey, Transaction,
+    FeeAccount, FeeAccountProof, FeeMerkleTree, Leaf2, NodeState, PubKey, Transaction,
 };
 use futures::future::Future;
 use hotshot_query_service::{
@@ -185,6 +185,11 @@ pub(crate) trait CatchupDataSource: Sync {
         &self,
         commitment: Commitment<ChainConfig>,
     ) -> impl Send + Future<Output = anyhow::Result<ChainConfig>>;
+
+    fn get_leaf_chain(
+        &self,
+        height: u64,
+    ) -> impl Send + Future<Output = anyhow::Result<Vec<Leaf2>>>;
 }
 
 /// This struct defines the public Hotshot validator configuration.

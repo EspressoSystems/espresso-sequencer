@@ -378,6 +378,18 @@ where
                 .map_err(|err| Error::catch_all(StatusCode::NOT_FOUND, format!("{err:#}")))
         }
         .boxed()
+    })?
+    .get("leaf_chain", |req, state| {
+        async move {
+            let height = req
+                .integer_param("height")
+                .map_err(Error::from_request_error)?;
+            state
+                .get_leaf_chain(height)
+                .await
+                .map_err(|err| Error::catch_all(StatusCode::NOT_FOUND, format!("{err:#}")))
+        }
+        .boxed()
     })?;
 
     Ok(api)
