@@ -481,7 +481,7 @@ impl<N: ConnectedNetwork<PubKey>, V: Versions, P: SequencerPersistence> CatchupD
     }
 
     async fn get_leaf_chain(&self, height: u64) -> anyhow::Result<Vec<Leaf2>> {
-        let mut leafs = self
+        let mut leaves = self
             .consensus()
             .await
             .read()
@@ -490,13 +490,13 @@ impl<N: ConnectedNetwork<PubKey>, V: Versions, P: SequencerPersistence> CatchupD
             .read()
             .await
             .undecided_leaves();
-        leafs.sort_by_key(|l| l.height());
-        let (position, mut last_leaf) = leafs
+        leaves.sort_by_key(|l| l.height());
+        let (position, mut last_leaf) = leaves
             .iter()
             .find_position(|l| l.height() == height)
             .context(format!("leaf chain not available for {height}"))?;
         let mut chain = vec![last_leaf.clone()];
-        for leaf in leafs.iter().skip(position + 1) {
+        for leaf in leaves.iter().skip(position + 1) {
             if leaf.justify_qc().view_number() == last_leaf.view_number() {
                 chain.push(leaf.clone());
             } else {
@@ -510,7 +510,7 @@ impl<N: ConnectedNetwork<PubKey>, V: Versions, P: SequencerPersistence> CatchupD
             last_leaf = leaf;
         }
         // Make sure we got one more leaf to confirm the decide
-        for leaf in leafs
+        for leaf in leaves
             .iter()
             .skip_while(|l| l.height() <= last_leaf.height())
         {

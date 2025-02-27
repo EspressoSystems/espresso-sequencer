@@ -19,7 +19,7 @@ use hotshot_types::{
         node_implementation::{ConsensusTime, NodeType},
         signature_key::StakeTableEntryType,
     },
-    utils::verify_epoch_root_chaing,
+    utils::verify_epoch_root_chain,
     PeerConfig,
 };
 
@@ -520,7 +520,7 @@ impl Membership<SeqTypes> for EpochCommittees {
     ) -> Option<(Epoch, Header)> {
         // Fetch leaves from peers
         let leaf_chain: Vec<Leaf2<SeqTypes>> = vec![];
-        verify_epoch_root_chaing(
+        verify_epoch_root_chain(
             leaf_chain,
             self,
             epoch,

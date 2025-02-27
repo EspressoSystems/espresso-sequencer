@@ -102,14 +102,14 @@ pub type StateAndDelta<TYPES> = (
     Option<Arc<<<TYPES as NodeType>::ValidatedState as ValidatedState<TYPES>>::Delta>>,
 );
 
-pub async fn verify_epoch_root_chaing<T: NodeType, V: Versions>(
+pub async fn verify_epoch_root_chain<T: NodeType, V: Versions>(
     leaf_chain: Vec<Leaf2<T>>,
     membership: &T::Membership,
     epoch: T::Epoch,
     epoch_height: u64,
     upgrade_lock: &crate::message::UpgradeLock<T, V>,
 ) -> anyhow::Result<Leaf2<T>> {
-    // Chek we actually have a chain long enough for deciding
+    // Check we actually have a chain long enough for deciding
     if leaf_chain.len() < 3 {
         return Err(anyhow!("Leaf chain is not long enough for a decide"));
     }

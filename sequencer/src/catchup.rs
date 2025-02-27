@@ -328,7 +328,7 @@ impl<ApiVer: StaticVersionType> StateCatchup for StatePeers<ApiVer> {
         })
         .await
     }
-    async fn try_fetch_leafs(&self, retry: usize, height: u64) -> anyhow::Result<Vec<Leaf2>> {
+    async fn try_fetch_leaves(&self, retry: usize, height: u64) -> anyhow::Result<Vec<Leaf2>> {
         self.fetch(retry, |client| async move {
             let leaf = client
                 .get::<Vec<Leaf2>>(&format!("catchup/leaf-chain/{}", height))
@@ -477,7 +477,7 @@ impl<T> StateCatchup for SqlStateCatchup<T>
 where
     T: CatchupStorage + Send + Sync,
 {
-    async fn try_fetch_leafs(&self, _retry: usize, height: u64) -> anyhow::Result<Vec<Leaf2>> {
+    async fn try_fetch_leaves(&self, _retry: usize, height: u64) -> anyhow::Result<Vec<Leaf2>> {
         self.db.get_leaf_chain(height).await
     }
     // TODO: add a test for the account proof validation
@@ -586,7 +586,7 @@ impl NullStateCatchup {
 
 #[async_trait]
 impl StateCatchup for NullStateCatchup {
-    async fn try_fetch_leafs(&self, _retry: usize, _height: u64) -> anyhow::Result<Vec<Leaf2>> {
+    async fn try_fetch_leaves(&self, _retry: usize, _height: u64) -> anyhow::Result<Vec<Leaf2>> {
         bail!("state catchup is didabled")
     }
     async fn try_fetch_accounts(

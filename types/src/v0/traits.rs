@@ -39,7 +39,7 @@ use super::{impls::NodeState, utils::BackoffParams, Leaf};
 
 #[async_trait]
 pub trait StateCatchup: Send + Sync {
-    async fn try_fetch_leafs(&self, retry: usize, height: u64) -> anyhow::Result<Vec<Leaf2>>;
+    async fn try_fetch_leaves(&self, retry: usize, height: u64) -> anyhow::Result<Vec<Leaf2>>;
 
     /// Try to fetch the given accounts state, failing without retrying if unable.
     async fn try_fetch_accounts(
@@ -147,8 +147,8 @@ pub trait StateCatchup: Send + Sync {
 
 #[async_trait]
 impl<T: StateCatchup + ?Sized> StateCatchup for Box<T> {
-    async fn try_fetch_leafs(&self, retry: usize, height: u64) -> anyhow::Result<Vec<Leaf2>> {
-        (**self).try_fetch_leafs(retry, height).await
+    async fn try_fetch_leaves(&self, retry: usize, height: u64) -> anyhow::Result<Vec<Leaf2>> {
+        (**self).try_fetch_leaves(retry, height).await
     }
     async fn try_fetch_accounts(
         &self,
@@ -235,8 +235,8 @@ impl<T: StateCatchup + ?Sized> StateCatchup for Box<T> {
 
 #[async_trait]
 impl<T: StateCatchup + ?Sized> StateCatchup for Arc<T> {
-    async fn try_fetch_leafs(&self, retry: usize, height: u64) -> anyhow::Result<Vec<Leaf2>> {
-        (**self).try_fetch_leafs(retry, height).await
+    async fn try_fetch_leaves(&self, retry: usize, height: u64) -> anyhow::Result<Vec<Leaf2>> {
+        (**self).try_fetch_leaves(retry, height).await
     }
     async fn try_fetch_accounts(
         &self,
@@ -324,10 +324,10 @@ impl<T: StateCatchup + ?Sized> StateCatchup for Arc<T> {
 /// Catchup from multiple providers tries each provider in a round robin fashion until it succeeds.
 #[async_trait]
 impl<T: StateCatchup> StateCatchup for Vec<T> {
-    async fn try_fetch_leafs(&self, retry: usize, height: u64) -> anyhow::Result<Vec<Leaf2>> {
+    async fn try_fetch_leaves(&self, retry: usize, height: u64) -> anyhow::Result<Vec<Leaf2>> {
         for provider in self {
-            match provider.try_fetch_leafs(retry, height).await {
-                Ok(leafs) => return Ok(leafs),
+            match provider.try_fetch_leaves(retry, height).await {
+                Ok(leaves) => return Ok(leaves),
                 Err(err) => {
                     tracing::info!(
                         provider = provider.name(),
