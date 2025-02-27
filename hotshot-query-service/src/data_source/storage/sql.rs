@@ -1264,9 +1264,12 @@ mod test {
         node_types::TestVersions,
         state_types::{TestInstanceState, TestValidatedState},
     };
+    use jf_vid::VidScheme;
+
     use hotshot_types::{
         data::vid_commitment,
         traits::{node_implementation::Versions, EncodeBytes},
+        vid::advz::advz_scheme,
     };
     use hotshot_types::{
         data::{QuorumProposal, ViewNumber},
@@ -1668,12 +1671,12 @@ mod test {
     async fn test_types_migration() {
         setup_test();
 
-        let num_leaves = 200;
+        let num_rows = 200;
         let db = TmpDb::init().await;
 
         let storage = SqlStorage::connect(db.config()).await.unwrap();
 
-        for i in 0..num_leaves {
+        for i in 0..num_rows {
             let view = ViewNumber::new(i);
             let validated_state = TestValidatedState::default();
             let instance_state = TestInstanceState::default();
@@ -1727,7 +1730,7 @@ mod test {
 
             let mut leaf = Leaf::from_quorum_proposal(&quorum_proposal);
             leaf.fill_block_payload::<MockVersions>(
-                payload,
+                payload.clone(),
                 4,
                 <MockVersions as Versions>::Base::VERSION,
             )
@@ -1777,6 +1780,23 @@ mod test {
             )
             .await
             .unwrap();
+
+            let mut vid = advz_scheme(2);
+            let disperse = vid.disperse(payload.encode()).unwrap();
+            let common = Some(disperse.common);
+            let share = disperse.shares[0].clone();
+
+            let common_bytes = bincode::serialize(&common).unwrap();
+            let share_bytes = bincode::serialize(&share).unwrap();
+
+            tx.upsert(
+                "vid",
+                ["height", "common", "share"],
+                ["height"],
+                [(height, common_bytes, share_bytes)],
+            )
+            .await
+            .unwrap();
             tx.commit().await.unwrap();
         }
 
@@ -1785,11 +1805,17 @@ mod test {
             .expect("failed to migrate");
 
         let mut tx = storage.read().await.unwrap();
-        let (count,) = query_as::<(i64,)>("SELECT COUNT(*) from leaf2")
+        let (leaf_count,) = query_as::<(i64,)>("SELECT COUNT(*) from leaf2")
             .fetch_one(tx.as_mut())
             .await
             .unwrap();
 
-        assert_eq!(count as u64, num_leaves, "not all leaves migrated");
+        let (vid_count,) = query_as::<(i64,)>("SELECT COUNT(*) from vid2")
+            .fetch_one(tx.as_mut())
+            .await
+            .unwrap();
+
+        assert_eq!(leaf_count as u64, num_rows, "not all leaves migrated");
+        assert_eq!(vid_count as u64, num_rows, "not all vid migrated");
     }
 }
