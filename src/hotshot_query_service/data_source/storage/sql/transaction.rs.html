@@ -957,7 +957,7 @@
         // statement that has no actual effect on the database is suitable for this purpose, hence
         // the `WHERE false`.
         </span><span class="attr">#[cfg(feature = <span class="string">"embedded-db"</span>)]
-        </span>conn.execute(<span class="string">"UPDATE header SET height = height WHERE false"</span>)
+        </span>conn.execute(<span class="string">"UPDATE pruned_height SET id = id WHERE false"</span>)
             .<span class="kw">await</span><span class="question-mark">?</span>;
 
         <span class="comment">// With Postgres things are much more straightforward: just tell Postgres we want a write

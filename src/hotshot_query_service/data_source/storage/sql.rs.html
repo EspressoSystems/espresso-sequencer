@@ -1496,7 +1496,21 @@
 <a href="#1495" id="1495">1495</a>
 <a href="#1496" id="1496">1496</a>
 <a href="#1497" id="1497">1497</a>
-<a href="#1498" id="1498">1498</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2022 Espresso Systems (espressosys.com)
+<a href="#1498" id="1498">1498</a>
+<a href="#1499" id="1499">1499</a>
+<a href="#1500" id="1500">1500</a>
+<a href="#1501" id="1501">1501</a>
+<a href="#1502" id="1502">1502</a>
+<a href="#1503" id="1503">1503</a>
+<a href="#1504" id="1504">1504</a>
+<a href="#1505" id="1505">1505</a>
+<a href="#1506" id="1506">1506</a>
+<a href="#1507" id="1507">1507</a>
+<a href="#1508" id="1508">1508</a>
+<a href="#1509" id="1509">1509</a>
+<a href="#1510" id="1510">1510</a>
+<a href="#1511" id="1511">1511</a>
+<a href="#1512" id="1512">1512</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2022 Espresso Systems (espressosys.com)
 // This file is part of the HotShot Query Service library.
 //
 // This program is free software: you can redistribute it and/or modify it under the terms of the GNU
@@ -2229,6 +2243,13 @@
             }
         }
 
+        <span class="attr">#[cfg(feature = <span class="string">"embedded-db"</span>)]
+        </span>{
+            <span class="kw">let </span><span class="kw-2">mut </span>conn = <span class="self">self</span>.pool().acquire().<span class="kw">await</span><span class="question-mark">?</span>;
+            query(<span class="string">"VACUUM"</span>).execute(conn.as_mut()).<span class="kw">await</span><span class="question-mark">?</span>;
+            conn.close().<span class="kw">await</span><span class="question-mark">?</span>;
+        }
+
         <span class="comment">// If threshold is set, prune data exceeding minimum retention in batches
         // This parameter is needed for SQL storage as there is no direct way to get free space.
         </span><span class="kw">if let </span><span class="prelude-val">Some</span>(threshold) = cfg.pruning_threshold() {
@@ -2262,6 +2283,13 @@
                         tx.commit().<span class="kw">await</span>.map_err(|e| QueryError::Error {
                             message: <span class="macro">format!</span>(<span class="string">"failed to commit {e}"</span>),
                         })<span class="question-mark">?</span>;
+
+                        <span class="attr">#[cfg(feature = <span class="string">"embedded-db"</span>)]
+                        </span>{
+                            <span class="kw">let </span><span class="kw-2">mut </span>conn = <span class="self">self</span>.pool().acquire().<span class="kw">await</span><span class="question-mark">?</span>;
+                            query(<span class="string">"VACUUM"</span>).execute(conn.as_mut()).<span class="kw">await</span><span class="question-mark">?</span>;
+                            conn.close().<span class="kw">await</span><span class="question-mark">?</span>;
+                        }
 
                         pruner.pruned_height = <span class="prelude-val">Some</span>(height);
 
