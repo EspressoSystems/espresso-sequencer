@@ -32,7 +32,6 @@ use hotshot_types::{
         node_implementation::ConsensusTime, signature_key::SignatureKey, BlockPayload, EncodeBytes,
     },
 };
-use jf_vid::VidScheme;
 use pretty_assertions::assert_eq;
 use serde_json::Value;
 use vbs::{
@@ -57,7 +56,6 @@ async fn test_message_compat<Ver: StaticVersionType>(_ver: Ver) {
             TimeoutData, TimeoutVote, ViewSyncCommitData, ViewSyncCommitVote, ViewSyncFinalizeData,
             ViewSyncFinalizeVote, ViewSyncPreCommitData, ViewSyncPreCommitVote,
         },
-        vid::advz_scheme,
         PeerConfig,
     };
 
@@ -227,14 +225,15 @@ async fn test_message_compat<Ver: StaticVersionType>(_ver: Ver) {
         )),
         DaConsensusMessage::VidDisperseMsg(Proposal {
             data: ADVZDisperseShare::from_advz_disperse(
-                ADVZDisperse::from_membership(
-                    ViewNumber::genesis(),
-                    advz_scheme(1).disperse(payload.encode()).unwrap(),
+                ADVZDisperse::calculate_vid_disperse(
+                    &payload,
                     &membership,
+                    ViewNumber::genesis(),
                     Some(EpochNumber::genesis()),
                     Some(EpochNumber::new(1)),
                 )
-                .await,
+                .await
+                .unwrap(),
             )
             .remove(0),
             signature: signature.clone(),

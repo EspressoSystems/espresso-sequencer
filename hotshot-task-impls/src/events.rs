@@ -10,6 +10,7 @@ use async_broadcast::Sender;
 use either::Either;
 use hotshot_task::task::TaskEvent;
 use hotshot_types::{
+    data::VidCommitment,
     data::{
         DaProposal2, Leaf2, PackedBundle, QuorumProposal2, QuorumProposalWrapper, UpgradeProposal,
         VidDisperse, VidDisperseShare,
@@ -30,7 +31,6 @@ use hotshot_types::{
         signature_key::SignatureKey, BlockPayload,
     },
     utils::BuilderCommitment,
-    vid::VidCommitment,
     vote::HasViewNumber,
 };
 use vec1::Vec1;

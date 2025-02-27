@@ -12,8 +12,8 @@ use hotshot_builder_api::v0_1::{
 };
 use hotshot_types::{
     constants::LEGACY_BUILDER_MODULE,
+    data::VidCommitment,
     traits::{node_implementation::NodeType, signature_key::SignatureKey},
-    vid::VidCommitment,
 };
 use serde::{Deserialize, Serialize};
 use surf_disco::{client::HealthStatus, Client, Url};
@@ -227,8 +227,8 @@ pub mod v0_2 {
 pub mod v0_99 {
     pub use hotshot_builder_api::v0_99::Version;
     use hotshot_types::{
-        bundle::Bundle, constants::MARKETPLACE_BUILDER_MODULE,
-        traits::node_implementation::NodeType, vid::VidCommitment,
+        bundle::Bundle, constants::MARKETPLACE_BUILDER_MODULE, data::VidCommitment,
+        traits::node_implementation::NodeType,
     };
     use vbs::version::StaticVersion;
 
