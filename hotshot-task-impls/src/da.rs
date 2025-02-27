@@ -11,14 +11,13 @@ use async_lock::RwLock;
 use async_trait::async_trait;
 use hotshot_task::task::TaskState;
 use hotshot_types::{
-    consensus::{Consensus, OuterConsensus},
-    data::{DaProposal2, PackedBundle},
+    consensus::{Consensus, OuterConsensus, PayloadWithMetadata},
+    data::{vid_commitment, DaProposal2, PackedBundle},
     event::{Event, EventType},
     message::{Proposal, UpgradeLock},
     simple_certificate::DaCertificate2,
     simple_vote::{DaData2, DaVote2, HasEpoch},
     traits::{
-        block_contents::vid_commitment,
         election::Membership,
         network::ConnectedNetwork,
         node_implementation::{NodeImplementation, NodeType, Versions},
@@ -108,8 +107,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> DaTaskState<TYP
                     "Throwing away DA proposal that is more than one view older"
                 );
 
-                if let Some(payload) = self.consensus.read().await.saved_payloads().get(&view) {
-                    ensure!(payload.encode() == proposal.data.encoded_transactions, error!(
+                if let Some(entry) = self.consensus.read().await.saved_payloads().get(&view) {
+                    ensure!(entry.payload.encode() == proposal.data.encoded_transactions, error!(
                       "Received DA proposal for view {:?} but we already have a payload for that view and they are not identical.  Throwing it away",
                       view)
                     );
@@ -177,14 +176,39 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> DaTaskState<TYP
                     )
                 );
                 let num_nodes = membership_reader.total_nodes(epoch_number);
+                let next_epoch_num_nodes =
+                    membership_reader.total_nodes(epoch_number.map(|e| e + 1));
                 drop(membership_reader);
 
                 let version = self.upgrade_lock.version_infallible(view_number).await;
 
                 let txns = Arc::clone(&proposal.data.encoded_transactions);
-                let payload_commitment =
-                    spawn_blocking(move || vid_commitment::<V>(&txns, num_nodes, version)).await;
+                let txns_clone = Arc::clone(&txns);
+                let metadata = proposal.data.metadata.encode();
+                let metadata_clone = metadata.clone();
+                let payload_commitment = spawn_blocking(move || {
+                    vid_commitment::<V>(&txns, &metadata, num_nodes, version)
+                })
+                .await;
                 let payload_commitment = payload_commitment.unwrap();
+                let next_epoch_payload_commitment = if self
+                    .upgrade_lock
+                    .epochs_enabled(proposal.data.view_number())
+                    .await
+                {
+                    let commit_result = spawn_blocking(move || {
+                        vid_commitment::<V>(
+                            &txns_clone,
+                            &metadata_clone,
+                            next_epoch_num_nodes,
+                            version,
+                        )
+                    })
+                    .await;
+                    Some(commit_result.unwrap())
+                } else {
+                    None
+                };
 
                 self.storage
                     .write()
@@ -197,6 +221,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> DaTaskState<TYP
                 let vote = DaVote2::create_signed_vote(
                     DaData2 {
                         payload_commit: payload_commitment,
+                        next_epoch_payload_commit: next_epoch_payload_commitment,
                         epoch: epoch_number,
                     },
                     view_number,
@@ -219,14 +244,22 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> DaTaskState<TYP
                     tracing::trace!("{e:?}");
                 }
 
-                let payload = Arc::new(TYPES::BlockPayload::from_bytes(
-                    proposal.data.encoded_transactions.as_ref(),
-                    &proposal.data.metadata,
-                ));
+                let payload_with_metadata = Arc::new(PayloadWithMetadata {
+                    payload: TYPES::BlockPayload::from_bytes(
+                        proposal.data.encoded_transactions.as_ref(),
+                        &proposal.data.metadata,
+                    ),
+                    metadata: proposal.data.metadata.clone(),
+                });
+
                 // Record the payload we have promised to make available.
-                if let Err(e) = consensus_writer.update_saved_payloads(view_number, payload) {
+                if let Err(e) =
+                    consensus_writer.update_saved_payloads(view_number, payload_with_metadata)
+                {
                     tracing::trace!("{e:?}");
                 }
+                drop(consensus_writer);
+
                 // Optimistically calculate and update VID if we know that the primary network is down.
                 if self.network.is_primary_down() {
                     let consensus =
@@ -372,16 +405,19 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> DaTaskState<TYP
                     &event_stream,
                 )
                 .await;
-                let payload = Arc::new(TYPES::BlockPayload::from_bytes(
-                    encoded_transactions.as_ref(),
-                    metadata,
-                ));
+                let payload_with_metadata = Arc::new(PayloadWithMetadata {
+                    payload: TYPES::BlockPayload::from_bytes(
+                        encoded_transactions.as_ref(),
+                        metadata,
+                    ),
+                    metadata: metadata.clone(),
+                });
                 // Save the payload early because we might need it to calculate VID for the next epoch nodes.
                 if let Err(e) = self
                     .consensus
                     .write()
                     .await
-                    .update_saved_payloads(view_number, payload)
+                    .update_saved_payloads(view_number, payload_with_metadata)
                 {
                     tracing::trace!("{e:?}");
                 }

@@ -9,9 +9,9 @@ use std::{
 };
 
 use hotshot_types::{
+    data::VidCommitment,
     traits::node_implementation::{ConsensusTime, NodeType},
     utils::BuilderCommitment,
-    vid::VidCommitment,
 };
 use nonempty_collections::{nem, NEMap};
 

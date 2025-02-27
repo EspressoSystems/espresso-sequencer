@@ -35,13 +35,13 @@ use hotshot_builder_api::{
 use hotshot_types::{
     bundle::Bundle,
     constants::{LEGACY_BUILDER_MODULE, MARKETPLACE_BUILDER_MODULE},
+    data::VidCommitment,
     traits::{
         block_contents::{BlockHeader, BuilderFee},
         node_implementation::NodeType,
         signature_key::BuilderSignatureKey,
     },
     utils::BuilderCommitment,
-    vid::VidCommitment,
 };
 use lru::LruCache;
 use tide_disco::{method::ReadState, App, Url};
