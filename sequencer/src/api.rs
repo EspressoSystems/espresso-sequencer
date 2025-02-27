@@ -1355,7 +1355,6 @@ mod api_tests {
                 recipient_key: pubkey,
                 epoch: Some(EpochNumber::new(0)),
                 target_epoch: Some(EpochNumber::new(0)),
-                data_epoch_payload_commitment: None,
             };
             persistence
                 .append_vid2(&share.to_proposal(&privkey).unwrap())

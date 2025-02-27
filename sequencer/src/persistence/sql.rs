@@ -2175,7 +2175,6 @@ mod test {
             recipient_key: pubkey,
             epoch: None,
             target_epoch: None,
-            data_epoch_payload_commitment: None,
         }
         .to_proposal(&privkey)
         .unwrap()
@@ -2317,7 +2316,6 @@ mod test {
             recipient_key: pubkey,
             epoch: None,
             target_epoch: None,
-            data_epoch_payload_commitment: None,
         }
         .to_proposal(&privkey)
         .unwrap()

@@ -200,7 +200,6 @@ mod persistence_tests {
             recipient_key: pubkey,
             epoch: Some(EpochNumber::new(0)),
             target_epoch: Some(EpochNumber::new(0)),
-            data_epoch_payload_commitment: None,
         };
         let mut quorum_proposal = Proposal {
             data: QuorumProposalWrapper::<SeqTypes> {
@@ -695,7 +694,6 @@ mod persistence_tests {
             recipient_key: pubkey,
             epoch: Some(EpochNumber::new(0)),
             target_epoch: Some(EpochNumber::new(0)),
-            data_epoch_payload_commitment: None,
         }
         .to_proposal(&privkey)
         .unwrap()
@@ -899,7 +897,6 @@ mod persistence_tests {
             recipient_key: pubkey,
             epoch: None,
             target_epoch: None,
-            data_epoch_payload_commitment: None,
         }
         .to_proposal(&privkey)
         .unwrap()
