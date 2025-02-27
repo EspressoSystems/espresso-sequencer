@@ -68,6 +68,7 @@ async fn test_da_task() {
             view.create_da_vote(
                 DaData2 {
                     payload_commit,
+                    next_epoch_payload_commit: None,
                     epoch: view.da_proposal.data.epoch,
                 },
                 &handle,
@@ -87,6 +88,7 @@ async fn test_da_task() {
             view.create_da_vote(
                 DaData2 {
                     payload_commit,
+                    next_epoch_payload_commit: None,
                     epoch: view.da_proposal.data.epoch,
                 },
                 &handle,
@@ -177,6 +179,7 @@ async fn test_da_task_storage_failure() {
             view.create_da_vote(
                 DaData2 {
                     payload_commit,
+                    next_epoch_payload_commit: None,
                     epoch: view.da_proposal.data.epoch,
                 },
                 &handle,
@@ -196,6 +199,7 @@ async fn test_da_task_storage_failure() {
             view.create_da_vote(
                 DaData2 {
                     payload_commit,
+                    next_epoch_payload_commit: None,
                     epoch: view.da_proposal.data.epoch,
                 },
                 &handle,

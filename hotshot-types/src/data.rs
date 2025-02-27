@@ -587,13 +587,6 @@ impl<TYPES: NodeType> VidDisperseShare<TYPES> {
             Self::V1(share) => share.payload_commitment.into(),
         }
     }
-    /// Return the internal data epoch payload VID commitment
-    pub fn data_epoch_payload_commitment(&self) -> Option<AvidMCommitment> {
-        match self {
-            Self::V0(_) => None,
-            Self::V1(share) => share.data_epoch_payload_commitment,
-        }
-    }
 
     /// Return the target epoch
     pub fn target_epoch(&self) -> Option<<TYPES as NodeType>::Epoch> {
