@@ -57,7 +57,7 @@ pub mod testing {
         },
     };
     use hotshot_builder_api::v0_2::block_info::{
-        AvailableBlockData, AvailableBlockHeaderInput, AvailableBlockInfo,
+        AvailableBlockData, AvailableBlockHeaderInputV1, AvailableBlockInfo,
     };
     use hotshot_events_service::{
         events::{Error as EventStreamApiError, Options as EventStreamingApiOptions},
@@ -489,7 +489,7 @@ pub mod testing {
 
         // Test claiming block header input
         let _available_block_header = match builder_client
-                .get::<AvailableBlockHeaderInput<SeqTypes>>(&format!(
+                .get::<AvailableBlockHeaderInputV1<SeqTypes>>(&format!(
                     "block_info/claimheaderinput/{builder_commitment}/{view_num}/{hotshot_client_pub_key}/{encoded_signature}"
                 ))
                 .send()

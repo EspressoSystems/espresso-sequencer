@@ -481,12 +481,7 @@ impl Header {
         {
             if version < MarketplaceVersion::version() {
                 ensure!(
-                    fee_account.validate_fee_signature(
-                        fee_signature,
-                        *fee_amount,
-                        &ns_table,
-                        &payload_commitment,
-                    ),
+                    fee_account.validate_fee_signature(fee_signature, *fee_amount, &ns_table,),
                     "invalid builder signature"
                 );
             } else {
@@ -1243,13 +1238,8 @@ mod test_headers {
 
             let (fee_account, fee_key) = FeeAccount::generated_from_seed_indexed([0; 32], 0);
             let fee_amount = 0;
-            let fee_signature = FeeAccount::sign_fee(
-                &fee_key,
-                fee_amount,
-                &genesis.ns_table,
-                &genesis.header.payload_commitment(),
-            )
-            .unwrap();
+            let fee_signature =
+                FeeAccount::sign_fee(&fee_key, fee_amount, &genesis.ns_table).unwrap();
 
             let header = Header::from_info(
                 genesis.header.payload_commitment(),
@@ -1525,8 +1515,7 @@ mod test_headers {
         let payload_commitment = parent_header.payload_commitment();
         let builder_commitment = parent_header.builder_commitment();
         let ns_table = genesis.ns_table;
-        let fee_signature =
-            FeeAccount::sign_fee(&key_pair, fee_amount, &ns_table, &payload_commitment).unwrap();
+        let fee_signature = FeeAccount::sign_fee(&key_pair, fee_amount, &ns_table).unwrap();
         let builder_fee = BuilderFee {
             fee_amount,
             fee_account: key_pair.fee_account(),

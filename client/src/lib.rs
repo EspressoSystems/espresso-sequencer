@@ -1,5 +1,5 @@
 use anyhow::Context;
-use espresso_types::{FeeAccount, FeeAmount, FeeMerkleTree, Header, PubKey};
+use espresso_types::{FeeAccount, FeeAmount, FeeMerkleTree, Header, PubKey, PublicNetworkConfig};
 use ethers::types::Address;
 use futures::{stream::BoxStream, StreamExt};
 use hotshot_types::stake_table::StakeTableEntry;
@@ -10,7 +10,6 @@ use jf_merkle_tree::{
 use std::time::Duration;
 use surf_disco::{
     error::ClientError,
-    http::convert::DeserializeOwned,
     socket::{Connection, Unsupported},
     Url,
 };
@@ -146,9 +145,9 @@ impl SequencerClient {
             .context("getting da stake table")
     }
 
-    pub async fn config<T: DeserializeOwned>(&self) -> anyhow::Result<T> {
+    pub async fn config(&self) -> anyhow::Result<PublicNetworkConfig> {
         self.0
-            .get::<T>("config/hotshot")
+            .get::<PublicNetworkConfig>("config/hotshot")
             .send()
             .await
             .context("getting hotshot config")

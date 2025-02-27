@@ -94,8 +94,8 @@ jobs:
 
       - name: Build Bins
         run: |
-          cargo build --locked --profile test --bins
-          cargo build --manifest-path ./sequencer-sqlite/Cargo.toml --target-dir ./target
+          cargo build --features "fee,pos,marketplace" --locked --profile test --bins 
+          cargo build --features "fee,pos,marketplace" --manifest-path ./sequencer-sqlite/Cargo.toml --target-dir ./target 
         timeout-minutes: 60
 
       - name: Upload archive to workflow
@@ -194,7 +194,7 @@ jobs:
     needs: [build-test-bins, build-test-artifacts-postgres]
     strategy:
       matrix:
-        version: [03]
+        version: [02, 03, 99]
         include:
           - version: 02
             compose: "-f process-compose.yaml -D"

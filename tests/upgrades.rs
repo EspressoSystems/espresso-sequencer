@@ -26,14 +26,18 @@ async fn test_upgrade() -> Result<()> {
     println!("Initial State:{}", initial);
 
     let clients = testing.sequencer_clients;
-
+    let client = clients[0].clone();
     let height = test_header_version(clients.clone(), base, upgrade).await?;
     // check that atleast 50 blocks are produced after the upgrade
     test_blocks_production(clients.clone(), height, 50).await?;
 
     if upgrade == EpochVersion::version() {
-        test_stake_table_update(clients).await?;
+        test_stake_table_update(clients.clone()).await?;
     }
+
+    let height = client.get_height().await?;
+    // check that atleast 50 blocks are produced after the stake table updates
+    test_blocks_production(clients.clone(), height, 50).await?;
 
     // TODO assert transactions are incrementing
     Ok(())

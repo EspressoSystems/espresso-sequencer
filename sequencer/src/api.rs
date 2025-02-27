@@ -7,8 +7,8 @@ use data_source::{CatchupDataSource, StakeTableDataSource, SubmitDataSource};
 use derivative::Derivative;
 use espresso_types::{
     retain_accounts, v0::traits::SequencerPersistence, v0_99::ChainConfig, AccountQueryData,
-    BlockMerkleTree, FeeAccount, FeeAccountProof, FeeMerkleTree, NodeState, PubKey, Transaction,
-    ValidatedState,
+    BlockMerkleTree, FeeAccount, FeeAccountProof, FeeMerkleTree, NodeState, PubKey,
+    PublicNetworkConfig, Transaction, ValidatedState,
 };
 use futures::{
     future::{BoxFuture, Future, FutureExt},
@@ -35,9 +35,7 @@ use jf_merkle_tree::MerkleTreeScheme;
 use std::pin::Pin;
 use std::sync::Arc;
 
-use self::data_source::{
-    HotShotConfigDataSource, NodeStateDataSource, PublicNetworkConfig, StateSignatureDataSource,
-};
+use self::data_source::{HotShotConfigDataSource, NodeStateDataSource, StateSignatureDataSource};
 use crate::{
     catchup::CatchupStorage, context::Consensus, state_signature::StateSigner, SeqTypes,
     SequencerApiVersion, SequencerContext,
@@ -1615,7 +1613,8 @@ mod test {
         traits::NullEventConsumer,
         v0_1::{UpgradeMode, ViewBasedUpgrade},
         BackoffParams, FeeAccount, FeeAmount, Header, MarketplaceVersion, MockSequencerVersions,
-        SequencerVersions, TimeBasedUpgrade, Timestamp, Upgrade, UpgradeType, ValidatedState,
+        PublicHotShotConfig, SequencerVersions, TimeBasedUpgrade, Timestamp, Upgrade, UpgradeType,
+        ValidatedState,
     };
     use ethers::utils::Anvil;
     use futures::{
@@ -1645,8 +1644,7 @@ mod test {
     use vbs::version::{StaticVersion, StaticVersionType, Version};
 
     use self::{
-        data_source::{testing::TestableSequencerDataSource, PublicHotShotConfig},
-        options::HotshotEvents,
+        data_source::testing::TestableSequencerDataSource, options::HotshotEvents,
         sql::DataSource as SqlDataSource,
     };
     use super::*;
@@ -2359,7 +2357,7 @@ mod test {
             // ChainConfigs will eventually be resolved
             if let Some(configs) = configs {
                 tracing::info!(?configs, "configs");
-                if height > new_version_first_view {
+                if height > new_version_first_view + 10 {
                     for config in configs {
                         assert_eq!(config, chain_config_upgrade);
                     }
