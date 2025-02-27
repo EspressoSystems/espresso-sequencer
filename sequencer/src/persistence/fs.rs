@@ -1637,19 +1637,7 @@ mod test {
                 .unwrap();
         }
 
-        let qp_fn = |v: Proposal<SeqTypes, QuorumProposal<SeqTypes>>| {
-            let qc = v.data;
-
-            let qc2 = qc.into();
-
-            Proposal {
-                data: qc2,
-                signature: v.signature,
-                _pd: PhantomData,
-            }
-        };
-
-        storage.migrate_consensus(Leaf2::from, qp_fn).await.unwrap();
+        storage.migrate_consensus().await.unwrap();
         let inner = storage.inner.read().await;
         let decided_leaves = fs::read_dir(inner.decided_leaf2_path()).unwrap();
         let decided_leaves_count = decided_leaves

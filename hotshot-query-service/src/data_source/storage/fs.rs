@@ -15,6 +15,7 @@
 use super::{
     ledger_log::{Iter, LedgerLog},
     pruning::{PruneStorage, PrunedHeightStorage, PrunerConfig},
+    sql::MigrateTypes,
     Aggregate, AggregatesStorage, AvailabilityStorage, NodeStorage, PayloadMetadata,
     UpdateAggregatesStorage, UpdateAvailabilityStorage, VidCommonMetadata,
 };
@@ -133,6 +134,16 @@ where
     Payload<Types>: QueryablePayload<Types>,
 {
     type Pruner = ();
+}
+
+#[async_trait]
+impl<Types: NodeType> MigrateTypes<Types> for FileSystemStorage<Types>
+where
+    Payload<Types>: QueryablePayload<Types>,
+{
+    async fn migrate_types(&self) -> anyhow::Result<()> {
+        Ok(())
+    }
 }
 
 impl<Types: NodeType> FileSystemStorage<Types>

@@ -53,9 +53,9 @@ use hotshot_types::{
         ViewInner,
     },
     constants::{EVENT_CHANNEL_SIZE, EXTERNAL_EVENT_CHANNEL_SIZE},
-    data::{Leaf2, QuorumProposal, QuorumProposal2},
+    data::Leaf2,
     event::{EventType, LeafInfo},
-    message::{convert_proposal, DataMessage, Message, MessageKind, Proposal},
+    message::{DataMessage, Message, MessageKind, Proposal},
     simple_certificate::{NextEpochQuorumCertificate2, QuorumCertificate2, UpgradeCertificate},
     traits::{
         consensus_api::ConsensusApi,
@@ -210,13 +210,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> SystemContext<T
         marketplace_config: MarketplaceConfig<TYPES, I>,
     ) -> Arc<Self> {
         #[allow(clippy::panic)]
-        match storage
-            .migrate_consensus(
-                Into::<Leaf2<TYPES>>::into,
-                convert_proposal::<TYPES, QuorumProposal<TYPES>, QuorumProposal2<TYPES>>,
-            )
-            .await
-        {
+        match storage.migrate_consensus().await {
             Ok(()) => {}
             Err(e) => {
                 panic!("Failed to migrate consensus storage: {e}");

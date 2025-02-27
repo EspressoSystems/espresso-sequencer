@@ -14,6 +14,7 @@
 
 use super::{
     pruning::{PruneStorage, PrunedHeightStorage, PrunerCfg, PrunerConfig},
+    sql::MigrateTypes,
     Aggregate, AggregatesStorage, AvailabilityStorage, NodeStorage, UpdateAggregatesStorage,
     UpdateAvailabilityStorage,
 };
@@ -250,6 +251,16 @@ where
 
     fn get_pruning_config(&self) -> Option<PrunerCfg> {
         self.inner.get_pruning_config()
+    }
+}
+
+#[async_trait]
+impl<S, Types: NodeType> MigrateTypes<Types> for FailStorage<S>
+where
+    S: MigrateTypes<Types> + Sync,
+{
+    async fn migrate_types(&self) -> anyhow::Result<()> {
+        Ok(())
     }
 }
 

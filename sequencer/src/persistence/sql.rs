@@ -2594,19 +2594,7 @@ mod test {
             tx.commit().await.expect("failed to commit");
         }
 
-        let qp_fn = |v: Proposal<SeqTypes, QuorumProposal<SeqTypes>>| {
-            let qc = v.data;
-
-            let qc2 = qc.into();
-
-            Proposal {
-                data: qc2,
-                signature: v.signature,
-                _pd: std::marker::PhantomData,
-            }
-        };
-
-        storage.migrate_consensus(Leaf2::from, qp_fn).await.unwrap();
+        storage.migrate_consensus().await.unwrap();
 
         let mut tx = storage.db.read().await.unwrap();
         let (anchor_leaf2_count,) = query_as::<(i64,)>("SELECT COUNT(*) from anchor_leaf2")

@@ -26,9 +26,10 @@ use async_trait::async_trait;
 use chrono::Utc;
 use committable::Committable;
 use hotshot_types::{
-    data::{Leaf, Leaf2},
+    data::{Leaf, Leaf2, VidShare},
     simple_certificate::{QuorumCertificate, QuorumCertificate2},
     traits::{metrics::Metrics, node_implementation::NodeType},
+    vid::advz::ADVZShare,
 };
 
 use itertools::Itertools;
@@ -36,7 +37,6 @@ use log::LevelFilter;
 
 #[cfg(not(feature = "embedded-db"))]
 use futures::future::FutureExt;
-use serde_json::Value;
 #[cfg(not(feature = "embedded-db"))]
 use sqlx::postgres::{PgConnectOptions, PgSslMode};
 #[cfg(feature = "embedded-db")]
@@ -595,6 +595,12 @@ impl SqlStorage {
 
         conn.close().await?;
 
+        // Migrate existing storage data V1 types to new Proof of stake V2 types
+        // This migrates leaf1 to leaf2 and vid to vid2
+        // There are separate tables for leaf2 and vid2
+
+        // storage.migrate_types().await?;
+
         Ok(Self {
             pool,
             pool_metrics,
@@ -802,28 +808,29 @@ impl VersionedDataSource for SqlStorage {
     }
 }
 
-struct Leaf2Row {
-    height: i64,
-    hash: String,
-    block_hash: String,
-    leaf2: Value,
-    qc2: Value,
+#[async_trait]
+pub trait MigrateTypes<Types: NodeType> {
+    async fn migrate_types(&self) -> anyhow::Result<()>;
 }
-impl SqlStorage {
-    pub async fn migrate_types<Types: NodeType>(&self) -> anyhow::Result<()> {
+
+#[async_trait]
+impl<Types: NodeType> MigrateTypes<Types> for SqlStorage {
+    async fn migrate_types(&self) -> anyhow::Result<()> {
         let mut offset = 0;
         let limit = 10000;
         let mut tx = self.read().await.map_err(|err| QueryError::Error {
             message: err.to_string(),
         })?;
 
+        tracing::warn!("migrating query service types storage");
+
         let (is_migration_completed,) =
-            query_as::<(bool,)>("SELECT completed from leaf_migration LIMIT 1 ")
+            query_as::<(bool,)>("SELECT completed from types_migration LIMIT 1 ")
                 .fetch_one(tx.as_mut())
                 .await?;
 
         if is_migration_completed {
-            tracing::info!("leaf1 to leaf2 migration already completed");
+            tracing::info!("types migration already completed");
             return Ok(());
         }
         loop {
@@ -833,7 +840,7 @@ impl SqlStorage {
 
             let rows = QueryBuilder::default()
                 .query(&format!(
-                    "SELECT leaf, qc FROM leaf ORDER BY height LIMIT {} OFFSET {}",
+                    "SELECT leaf, qc, common as vid_common, share as vid_share FROM leaf INNER JOIN vid on leaf.height = vid.height ORDER BY leaf.height LIMIT {} OFFSET {}",
                     limit, offset
                 ))
                 .fetch_all(tx.as_mut())
@@ -846,6 +853,7 @@ impl SqlStorage {
             }
 
             let mut leaf_rows = Vec::new();
+            let mut vid_rows = Vec::new();
 
             for row in rows.iter() {
                 let leaf1 = row.try_get("leaf")?;
@@ -862,24 +870,54 @@ impl SqlStorage {
                     serde_json::to_value(leaf2.clone()).context("failed to serialize leaf2")?;
                 let qc2_json = serde_json::to_value(qc2).context("failed to serialize QC2")?;
 
-                leaf_rows.push(Leaf2Row {
-                    height: leaf2.height() as i64,
-                    hash: commit.to_string(),
-                    block_hash: leaf2.block_header().commit().to_string(),
-                    leaf2: leaf2_json,
-                    qc2: qc2_json,
-                })
+                // TODO (abdul): revisit after V1 VID has common field
+                let vid_common_bytes: Vec<u8> = row.try_get("vid_common")?;
+                let vid_share_bytes: Vec<u8> = row.try_get("vid_share")?;
+
+                let vid_share: ADVZShare = bincode::deserialize(&vid_share_bytes)
+                    .context("failed to serialize vid_share")?;
+
+                let new_vid_share_bytes = bincode::serialize(&VidShare::V0(vid_share))
+                    .context("failed to serialize vid_share")?;
+
+                vid_rows.push((leaf2.height() as i64, vid_common_bytes, new_vid_share_bytes));
+                leaf_rows.push((
+                    leaf2.height() as i64,
+                    commit.to_string(),
+                    leaf2.block_header().commit().to_string(),
+                    leaf2_json,
+                    qc2_json,
+                ));
             }
 
+            // migrate leaf2
             let mut query_builder: sqlx::QueryBuilder<Db> =
                 sqlx::QueryBuilder::new("INSERT INTO leaf2 (height, hash, block_hash, leaf, qc) ");
 
             query_builder.push_values(leaf_rows.into_iter(), |mut b, row| {
-                b.push_bind(row.height)
-                    .push_bind(row.hash)
-                    .push_bind(row.block_hash)
-                    .push_bind(row.leaf2)
-                    .push_bind(row.qc2);
+                b.push_bind(row.0)
+                    .push_bind(row.1)
+                    .push_bind(row.2)
+                    .push_bind(row.3)
+                    .push_bind(row.4);
+            });
+
+            let query = query_builder.build();
+
+            let mut tx = self.write().await.map_err(|err| QueryError::Error {
+                message: err.to_string(),
+            })?;
+
+            query.execute(tx.as_mut()).await?;
+
+            tx.commit().await?;
+            tracing::warn!("inserted {} rows into leaf2 table", offset);
+            // migrate vid
+            let mut query_builder: sqlx::QueryBuilder<Db> =
+                sqlx::QueryBuilder::new("INSERT INTO vid2 (height, common, share) ");
+
+            query_builder.push_values(vid_rows.into_iter(), |mut b, row| {
+                b.push_bind(row.0).push_bind(row.1).push_bind(row.2);
             });
 
             let query = query_builder.build();
@@ -892,6 +930,8 @@ impl SqlStorage {
 
             tx.commit().await?;
 
+            tracing::warn!("inserted {} rows into vid2 table", offset);
+
             if rows.len() < limit {
                 break;
             }
@@ -903,8 +943,15 @@ impl SqlStorage {
             message: err.to_string(),
         })?;
 
-        tx.upsert("leaf_migration", ["completed"], ["id"], [(true,)])
-            .await?;
+        tracing::info!("query service types migration is completed!");
+
+        tx.upsert(
+            "types_migration",
+            ["id", "completed"],
+            ["id"],
+            [(0_i64, true)],
+        )
+        .await?;
 
         tx.commit().await?;
         Ok(())
@@ -1739,10 +1786,10 @@ mod test {
             tx.commit().await.unwrap();
         }
 
-        storage
-            .migrate_types::<MockTypes>()
+        <SqlStorage as MigrateTypes<MockTypes>>::migrate_types(&storage)
             .await
             .expect("failed to migrate");
+
         let mut tx = storage.read().await.unwrap();
         let (count,) = query_as::<(i64,)>("SELECT COUNT(*) from leaf2")
             .fetch_one(tx.as_mut())

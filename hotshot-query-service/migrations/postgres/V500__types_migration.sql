@@ -7,9 +7,17 @@ CREATE TABLE leaf2
     qc   JSONB NOT NULL
 );
 
-CREATE TABLE leaf_migration ( 
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+CREATE TABLE types_migration ( 
+    id SERIAL PRIMARY KEY,
     completed bool NOT NULL DEFAULT false
 );
 
-INSERT INTO leaf_migration ("completed") VALUES (false);
+INSERT INTO types_migration ("completed") VALUES (false);
+
+
+CREATE TABLE vid2
+(
+    height BIGINT PRIMARY KEY REFERENCES header (height) ON DELETE CASCADE,
+    common BYTEA  NOT NULL,
+    share  BYTEA
+);
