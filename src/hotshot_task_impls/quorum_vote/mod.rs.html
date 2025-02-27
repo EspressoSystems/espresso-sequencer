@@ -790,7 +790,27 @@
 <a href="#789" id="789">789</a>
 <a href="#790" id="790">790</a>
 <a href="#791" id="791">791</a>
-<a href="#792" id="792">792</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
+<a href="#792" id="792">792</a>
+<a href="#793" id="793">793</a>
+<a href="#794" id="794">794</a>
+<a href="#795" id="795">795</a>
+<a href="#796" id="796">796</a>
+<a href="#797" id="797">797</a>
+<a href="#798" id="798">798</a>
+<a href="#799" id="799">799</a>
+<a href="#800" id="800">800</a>
+<a href="#801" id="801">801</a>
+<a href="#802" id="802">802</a>
+<a href="#803" id="803">803</a>
+<a href="#804" id="804">804</a>
+<a href="#805" id="805">805</a>
+<a href="#806" id="806">806</a>
+<a href="#807" id="807">807</a>
+<a href="#808" id="808">808</a>
+<a href="#809" id="809">809</a>
+<a href="#810" id="810">810</a>
+<a href="#811" id="811">811</a>
+<a href="#812" id="812">812</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
 // This file is part of the HotShot repository.
 
 // You should have received a copy of the MIT License
@@ -900,6 +920,7 @@
     #[instrument(skip_all, fields(id = <span class="self">self</span>.id, view = <span class="kw-2">*</span><span class="self">self</span>.view_number))]
     </span><span class="kw">async fn </span>handle_dep_result(<span class="self">self</span>, res: <span class="self">Self</span>::Output) {
         <span class="kw">let </span><span class="kw-2">mut </span>payload_commitment = <span class="prelude-val">None</span>;
+        <span class="kw">let </span><span class="kw-2">mut </span>next_epoch_payload_commitment = <span class="prelude-val">None</span>;
         <span class="kw">let </span><span class="kw-2">mut </span>leaf = <span class="prelude-val">None</span>;
         <span class="kw">let </span><span class="kw-2">mut </span>vid_share = <span class="prelude-val">None</span>;
         <span class="kw">let </span><span class="kw-2">mut </span>parent_view_number = <span class="prelude-val">None</span>;
@@ -957,6 +978,7 @@
                 }
                 HotShotEvent::DaCertificateValidated(cert) =&gt; {
                     <span class="kw">let </span>cert_payload_comm = <span class="kw-2">&amp;</span>cert.data().payload_commit;
+                    <span class="kw">let </span>next_epoch_cert_payload_comm = cert.data().next_epoch_payload_commit;
                     <span class="kw">if let </span><span class="prelude-val">Some</span>(<span class="kw-2">ref </span>comm) = payload_commitment {
                         <span class="kw">if </span>cert_payload_comm != comm {
                             <span class="macro">tracing::error!</span>(<span class="string">"DAC has inconsistent payload commitment with quorum proposal or VID."</span>);
@@ -965,15 +987,33 @@
                     } <span class="kw">else </span>{
                         payload_commitment = <span class="prelude-val">Some</span>(<span class="kw-2">*</span>cert_payload_comm);
                     }
+                    <span class="kw">if </span>next_epoch_payload_commitment.is_some()
+                        &amp;&amp; next_epoch_payload_commitment != next_epoch_cert_payload_comm
+                    {
+                        <span class="macro">tracing::error!</span>(
+                            <span class="string">"DAC has inconsistent next epoch payload commitment with VID."
+                        </span>);
+                        <span class="kw">return</span>;
+                    } <span class="kw">else </span>{
+                        next_epoch_payload_commitment = next_epoch_cert_payload_comm;
+                    }
                 }
                 HotShotEvent::VidShareValidated(share) =&gt; {
-                    <span class="kw">let </span>vid_payload_commitment = <span class="kw-2">&amp;</span>share
-                        .data
-                        .data_epoch_payload_commitment()
-                        .map(|comm| comm.into())
-                        .unwrap_or(share.data.payload_commitment());
+                    <span class="kw">let </span>vid_payload_commitment = <span class="kw-2">&amp;</span>share.data.payload_commitment();
                     vid_share = <span class="prelude-val">Some</span>(share.clone());
-                    <span class="kw">if let </span><span class="prelude-val">Some</span>(<span class="kw-2">ref </span>comm) = payload_commitment {
+                    <span class="kw">let </span>is_next_epoch_vid = share.data.epoch() != share.data.target_epoch();
+                    <span class="kw">if </span>is_next_epoch_vid {
+                        <span class="kw">if let </span><span class="prelude-val">Some</span>(<span class="kw-2">ref </span>comm) = next_epoch_payload_commitment {
+                            <span class="kw">if </span>vid_payload_commitment != comm {
+                                <span class="macro">tracing::error!</span>(
+                                    <span class="string">"VID has inconsistent next epoch payload commitment with DAC."
+                                </span>);
+                                <span class="kw">return</span>;
+                            }
+                        } <span class="kw">else </span>{
+                            next_epoch_payload_commitment = <span class="prelude-val">Some</span>(<span class="kw-2">*</span>vid_payload_commitment);
+                        }
+                    } <span class="kw">else if let </span><span class="prelude-val">Some</span>(<span class="kw-2">ref </span>comm) = payload_commitment {
                         <span class="kw">if </span>vid_payload_commitment != comm {
                             <span class="macro">tracing::error!</span>(<span class="string">"VID has inconsistent payload commitment with quorum proposal or DAC."</span>);
                             <span class="kw">return</span>;

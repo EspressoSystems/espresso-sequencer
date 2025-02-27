@@ -912,7 +912,15 @@
 <a href="#911" id="911">911</a>
 <a href="#912" id="912">912</a>
 <a href="#913" id="913">913</a>
-<a href="#914" id="914">914</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
+<a href="#914" id="914">914</a>
+<a href="#915" id="915">915</a>
+<a href="#916" id="916">916</a>
+<a href="#917" id="917">917</a>
+<a href="#918" id="918">918</a>
+<a href="#919" id="919">919</a>
+<a href="#920" id="920">920</a>
+<a href="#921" id="921">921</a>
+<a href="#922" id="922">922</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
 // This file is part of the HotShot repository.
 
 // You should have received a copy of the MIT License
@@ -977,6 +985,8 @@
 </span><span class="kw">pub struct </span>DaData2&lt;TYPES: NodeType&gt; {
     <span class="doccomment">/// Commitment to a block payload
     </span><span class="kw">pub </span>payload_commit: VidCommitment,
+    <span class="doccomment">/// An optional commitment to a block payload calculated for the next epoch (epoch + 1)
+    </span><span class="kw">pub </span>next_epoch_payload_commit: <span class="prelude-ty">Option</span>&lt;VidCommitment&gt;,
     <span class="doccomment">/// Epoch number
     </span><span class="kw">pub </span>epoch: <span class="prelude-ty">Option</span>&lt;TYPES::Epoch&gt;,
 }
@@ -1327,11 +1337,16 @@
     <span class="kw">fn </span>commit(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Commitment&lt;<span class="self">Self</span>&gt; {
         <span class="kw">let </span>DaData2 {
             payload_commit,
+            next_epoch_payload_commit,
             epoch,
         } = <span class="self">self</span>;
 
         <span class="kw">let </span><span class="kw-2">mut </span>cb = committable::RawCommitmentBuilder::new(<span class="string">"DA data"</span>)
             .var_size_bytes(payload_commit.as_ref());
+
+        <span class="kw">if let </span><span class="prelude-val">Some</span>(<span class="kw-2">ref </span>next_epoch_payload_commit) = <span class="kw-2">*</span>next_epoch_payload_commit {
+            cb = cb.var_size_bytes(next_epoch_payload_commit.as_ref());
+        }
 
         <span class="kw">if let </span><span class="prelude-val">Some</span>(<span class="kw-2">ref </span>epoch) = <span class="kw-2">*</span>epoch {
             cb = cb.u64_field(<span class="string">"epoch number"</span>, <span class="kw-2">**</span>epoch);
@@ -1586,6 +1601,7 @@
         <span class="kw">let </span>signature = <span class="self">self</span>.signature;
         <span class="kw">let </span>data = DaData2 {
             payload_commit: <span class="self">self</span>.data.payload_commit,
+            next_epoch_payload_commit: <span class="prelude-val">None</span>,
             epoch: <span class="prelude-val">None</span>,
         };
         <span class="kw">let </span>view_number = <span class="self">self</span>.view_number;

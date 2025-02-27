@@ -440,7 +440,22 @@
 <a href="#439" id="439">439</a>
 <a href="#440" id="440">440</a>
 <a href="#441" id="441">441</a>
-<a href="#442" id="442">442</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
+<a href="#442" id="442">442</a>
+<a href="#443" id="443">443</a>
+<a href="#444" id="444">444</a>
+<a href="#445" id="445">445</a>
+<a href="#446" id="446">446</a>
+<a href="#447" id="447">447</a>
+<a href="#448" id="448">448</a>
+<a href="#449" id="449">449</a>
+<a href="#450" id="450">450</a>
+<a href="#451" id="451">451</a>
+<a href="#452" id="452">452</a>
+<a href="#453" id="453">453</a>
+<a href="#454" id="454">454</a>
+<a href="#455" id="455">455</a>
+<a href="#456" id="456">456</a>
+<a href="#457" id="457">457</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
 // This file is part of the HotShot repository.
 
 // You should have received a copy of the MIT License
@@ -815,8 +830,23 @@
         upgrade_lock.version_infallible(view_number).<span class="kw">await</span>,
     );
 
+    <span class="kw">let </span>next_epoch_da_payload_commitment = <span class="kw">if </span>upgrade_lock.epochs_enabled(view_number).<span class="kw">await </span>{
+        <span class="prelude-val">Some</span>(vid_commitment::&lt;V&gt;(
+            <span class="kw-2">&amp;</span>encoded_transactions,
+            <span class="kw-2">&amp;</span>metadata.encode(),
+            membership
+                .read()
+                .<span class="kw">await
+                </span>.total_nodes(epoch_number.map(|e| e + <span class="number">1</span>)),
+            upgrade_lock.version_infallible(view_number).<span class="kw">await</span>,
+        ))
+    } <span class="kw">else </span>{
+        <span class="prelude-val">None
+    </span>};
+
     <span class="kw">let </span>da_data = DaData2 {
         payload_commit: da_payload_commitment,
+        next_epoch_payload_commit: next_epoch_da_payload_commitment,
         epoch: epoch_number,
     };
 

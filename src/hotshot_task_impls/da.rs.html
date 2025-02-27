@@ -420,7 +420,30 @@
 <a href="#419" id="419">419</a>
 <a href="#420" id="420">420</a>
 <a href="#421" id="421">421</a>
-<a href="#422" id="422">422</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
+<a href="#422" id="422">422</a>
+<a href="#423" id="423">423</a>
+<a href="#424" id="424">424</a>
+<a href="#425" id="425">425</a>
+<a href="#426" id="426">426</a>
+<a href="#427" id="427">427</a>
+<a href="#428" id="428">428</a>
+<a href="#429" id="429">429</a>
+<a href="#430" id="430">430</a>
+<a href="#431" id="431">431</a>
+<a href="#432" id="432">432</a>
+<a href="#433" id="433">433</a>
+<a href="#434" id="434">434</a>
+<a href="#435" id="435">435</a>
+<a href="#436" id="436">436</a>
+<a href="#437" id="437">437</a>
+<a href="#438" id="438">438</a>
+<a href="#439" id="439">439</a>
+<a href="#440" id="440">440</a>
+<a href="#441" id="441">441</a>
+<a href="#442" id="442">442</a>
+<a href="#443" id="443">443</a>
+<a href="#444" id="444">444</a>
+<a href="#445" id="445">445</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
 // This file is part of the HotShot repository.
 
 // You should have received a copy of the MIT License
@@ -598,17 +621,39 @@
                     )
                 );
                 <span class="kw">let </span>num_nodes = membership_reader.total_nodes(epoch_number);
+                <span class="kw">let </span>next_epoch_num_nodes =
+                    membership_reader.total_nodes(epoch_number.map(|e| e + <span class="number">1</span>));
                 drop(membership_reader);
 
                 <span class="kw">let </span>version = <span class="self">self</span>.upgrade_lock.version_infallible(view_number).<span class="kw">await</span>;
 
                 <span class="kw">let </span>txns = Arc::clone(<span class="kw-2">&amp;</span>proposal.data.encoded_transactions);
+                <span class="kw">let </span>txns_clone = Arc::clone(<span class="kw-2">&amp;</span>txns);
                 <span class="kw">let </span>metadata = proposal.data.metadata.encode();
+                <span class="kw">let </span>metadata_clone = metadata.clone();
                 <span class="kw">let </span>payload_commitment = spawn_blocking(<span class="kw">move </span>|| {
                     vid_commitment::&lt;V&gt;(<span class="kw-2">&amp;</span>txns, <span class="kw-2">&amp;</span>metadata, num_nodes, version)
                 })
-                .<span class="kw">await
-                </span>.unwrap();
+                .<span class="kw">await</span>;
+                <span class="kw">let </span>payload_commitment = payload_commitment.unwrap();
+                <span class="kw">let </span>next_epoch_payload_commitment = <span class="kw">if </span><span class="self">self
+                    </span>.upgrade_lock
+                    .epochs_enabled(proposal.data.view_number())
+                    .<span class="kw">await
+                </span>{
+                    <span class="kw">let </span>commit_result = spawn_blocking(<span class="kw">move </span>|| {
+                        vid_commitment::&lt;V&gt;(
+                            <span class="kw-2">&amp;</span>txns_clone,
+                            <span class="kw-2">&amp;</span>metadata_clone,
+                            next_epoch_num_nodes,
+                            version,
+                        )
+                    })
+                    .<span class="kw">await</span>;
+                    <span class="prelude-val">Some</span>(commit_result.unwrap())
+                } <span class="kw">else </span>{
+                    <span class="prelude-val">None
+                </span>};
 
                 <span class="self">self</span>.storage
                     .write()
@@ -621,6 +666,7 @@
                 </span><span class="kw">let </span>vote = DaVote2::create_signed_vote(
                     DaData2 {
                         payload_commit: payload_commitment,
+                        next_epoch_payload_commit: next_epoch_payload_commitment,
                         epoch: epoch_number,
                     },
                     view_number,

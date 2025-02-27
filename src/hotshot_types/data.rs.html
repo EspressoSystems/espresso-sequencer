@@ -1908,14 +1908,7 @@
 <a href="#1907" id="1907">1907</a>
 <a href="#1908" id="1908">1908</a>
 <a href="#1909" id="1909">1909</a>
-<a href="#1910" id="1910">1910</a>
-<a href="#1911" id="1911">1911</a>
-<a href="#1912" id="1912">1912</a>
-<a href="#1913" id="1913">1913</a>
-<a href="#1914" id="1914">1914</a>
-<a href="#1915" id="1915">1915</a>
-<a href="#1916" id="1916">1916</a>
-<a href="#1917" id="1917">1917</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
+<a href="#1910" id="1910">1910</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
 // This file is part of the HotShot repository.
 
 // You should have received a copy of the MIT License
@@ -2502,13 +2495,6 @@
         <span class="kw">match </span><span class="self">self </span>{
             <span class="self">Self</span>::V0(share) =&gt; VidCommitment::V0(share.payload_commitment),
             <span class="self">Self</span>::V1(share) =&gt; share.payload_commitment.into(),
-        }
-    }
-    <span class="doccomment">/// Return the internal data epoch payload VID commitment
-    </span><span class="kw">pub fn </span>data_epoch_payload_commitment(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;AvidMCommitment&gt; {
-        <span class="kw">match </span><span class="self">self </span>{
-            <span class="self">Self</span>::V0(<span class="kw">_</span>) =&gt; <span class="prelude-val">None</span>,
-            <span class="self">Self</span>::V1(share) =&gt; share.data_epoch_payload_commitment,
         }
     }
 
