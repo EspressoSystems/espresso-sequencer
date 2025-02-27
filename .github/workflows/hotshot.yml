@@ -51,6 +51,9 @@ jobs:
 
       - uses: taiki-e/install-action@nextest
 
+      - name: Show memory
+        run: free -h
+
       - name: Unit and integration tests for all crates in workspace
         run: |
           just hotshot::${{ matrix.test_suites }}
