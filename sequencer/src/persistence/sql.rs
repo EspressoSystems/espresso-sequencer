@@ -1328,10 +1328,11 @@ impl SequencerPersistence for Persistence {
         .await?;
 
         if is_completed {
-            tracing::info!("anchor leaf migration already done");
+            tracing::info!("anchor leaf migration already completed");
 
             return Ok(());
         }
+
         loop {
             let mut tx = self.db.read().await?;
             let rows =
@@ -1370,17 +1371,19 @@ impl SequencerPersistence for Persistence {
                 b.push_bind(view).push_bind(leaf).push_bind(qc);
             });
 
-            offset += batch_size;
-
             let query = query_builder.build();
 
             let mut tx = self.db.write().await?;
             query.execute(tx.as_mut()).await?;
             tx.commit().await?;
 
+            tracing::info!("anchor leaf: migrated {} rows", offset);
+
             if rows.len() < batch_size as usize {
                 break;
             }
+
+            offset += batch_size;
         }
 
         let mut tx = self.db.write().await?;

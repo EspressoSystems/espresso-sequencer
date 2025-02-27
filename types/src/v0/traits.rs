@@ -701,11 +701,26 @@ pub trait SequencerPersistence: Sized + Send + Sync + Clone + 'static {
         tracing::info!("migrating consensus data");
 
         self.migrate_anchor_leaf().await?;
+        tracing::info!("migrated anchor leaf");
+
         self.migrate_da_proposals().await?;
+        tracing::info!("migrated da proposals");
+
         self.migrate_vid_shares().await?;
+        tracing::info!("migrated vid shares");
+
         self.migrate_undecided_state().await?;
+        tracing::info!("migrated undecided state");
+
         self.migrate_quorum_proposals().await?;
-        self.migrate_quorum_certificates().await
+        tracing::info!("migrated quorum proposals");
+
+        self.migrate_quorum_certificates().await?;
+        tracing::info!("migrated quorum certificates");
+
+        tracing::warn!("migrated whole consensus storage to new types");
+
+        Ok(())
     }
 
     async fn migrate_anchor_leaf(&self) -> anyhow::Result<()>;
