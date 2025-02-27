@@ -251,7 +251,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> DaTaskState<TYP
                     ),
                     metadata: proposal.data.metadata.clone(),
                 });
-                
+
                 // Record the payload we have promised to make available.
                 if let Err(e) =
                     consensus_writer.update_saved_payloads(view_number, payload_with_metadata)
