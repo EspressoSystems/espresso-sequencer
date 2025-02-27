@@ -772,19 +772,19 @@ impl PruneStorage for SqlStorage {
                             message: format!("failed to commit {e}"),
                         })?;
 
+                        #[cfg(feature = "embedded-db")]
+                        {
+                            let mut conn = self.pool().acquire().await?;
+                            query("VACUUM").execute(conn.as_mut()).await?;
+                            conn.close().await?;
+                        }
+
                         pruner.pruned_height = Some(height);
 
                         return Ok(Some(height));
                     }
                 }
             }
-        }
-
-        #[cfg(feature = "embedded-db")]
-        {
-            let mut conn = self.pool().acquire().await?;
-            query("VACUUM").execute(conn.as_mut()).await?;
-            conn.close().await?;
         }
 
         Ok(None)
