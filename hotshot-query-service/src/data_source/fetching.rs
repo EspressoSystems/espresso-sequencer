@@ -101,7 +101,7 @@ use crate::{
     status::{HasMetrics, StatusDataSource},
     task::BackgroundTask,
     types::HeightIndexed,
-    Header, Payload, QueryError, QueryResult, VidShare,
+    Header, Payload, QueryError, QueryResult,
 };
 use anyhow::{bail, Context};
 use async_lock::Semaphore;
@@ -113,9 +113,12 @@ use futures::{
     future::{self, join_all, BoxFuture, Either, Future, FutureExt},
     stream::{self, BoxStream, StreamExt},
 };
-use hotshot_types::traits::{
-    metrics::{Gauge, Metrics},
-    node_implementation::NodeType,
+use hotshot_types::{
+    data::VidShare,
+    traits::{
+        metrics::{Gauge, Metrics},
+        node_implementation::NodeType,
+    },
 };
 use jf_merkle_tree::{prelude::MerkleProof, MerkleTreeScheme};
 use std::sync::Arc;

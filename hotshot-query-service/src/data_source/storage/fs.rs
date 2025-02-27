@@ -33,14 +33,16 @@ use crate::{
     status::HasMetrics,
     types::HeightIndexed,
     ErrorSnafu, Header, MissingSnafu, NotFoundSnafu, Payload, QueryError, QueryResult,
-    VidCommitment, VidShare,
 };
 use async_lock::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 use async_trait::async_trait;
 use atomic_store::{AtomicStore, AtomicStoreLoader, PersistenceError};
 use committable::Committable;
 use futures::future::Future;
-use hotshot_types::traits::{block_contents::BlockHeader, node_implementation::NodeType};
+use hotshot_types::{
+    data::{VidCommitment, VidShare},
+    traits::{block_contents::BlockHeader, node_implementation::NodeType},
+};
 use serde::{de::DeserializeOwned, Serialize};
 use snafu::OptionExt;
 use std::collections::{

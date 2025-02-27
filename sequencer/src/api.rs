@@ -1107,9 +1107,10 @@ mod api_tests {
     };
 
     use hotshot_types::data::vid_disperse::VidDisperseShare2;
-    use hotshot_types::data::{DaProposal2, EpochNumber, VidDisperseShare};
+    use hotshot_types::data::{DaProposal2, EpochNumber, VidCommitment};
     use hotshot_types::simple_certificate::QuorumCertificate2;
-    use hotshot_types::vid::advz_scheme;
+
+    use hotshot_types::vid::avidm::{init_avidm_param, AvidMScheme};
     use hotshot_types::{
         data::{QuorumProposal2, QuorumProposalWrapper},
         event::LeafInfo,
@@ -1117,7 +1118,6 @@ mod api_tests {
         traits::{node_implementation::ConsensusTime, signature_key::SignatureKey, EncodeBytes},
     };
 
-    use jf_vid::VidScheme;
     use portpicker::pick_unused_port;
     use sequencer_utils::test_utils::setup_test;
     use std::fmt::Debug;
@@ -1292,8 +1292,18 @@ mod api_tests {
         let genesis = Leaf2::genesis::<TestVersions>(&Default::default(), &NodeState::mock()).await;
         let payload = genesis.block_payload().unwrap();
         let payload_bytes_arc = payload.encode();
-        let disperse = advz_scheme(2).disperse(payload_bytes_arc.clone()).unwrap();
-        let payload_commitment = disperse.commit;
+
+        let avidm_param = init_avidm_param(2).unwrap();
+        let weights = vec![1u32; 2];
+
+        let (payload_commitment, shares) = AvidMScheme::ns_disperse(
+            &avidm_param,
+            &weights,
+            &payload_bytes_arc.clone(),
+            [(0usize..15), (15..48)],
+        )
+        .unwrap();
+
         let mut quorum_proposal = QuorumProposalWrapper::<SeqTypes> {
             proposal: QuorumProposal2::<SeqTypes> {
                 block_header: genesis.block_header().clone(),
@@ -1341,16 +1351,15 @@ mod api_tests {
                 .unwrap();
 
             // Include VID information for each leaf.
-            let share = VidDisperseShare::V1(VidDisperseShare2::<SeqTypes> {
+            let share = VidDisperseShare2::<SeqTypes> {
                 view_number: leaf.view_number(),
                 payload_commitment,
-                share: disperse.shares[0].clone(),
-                common: disperse.common.clone(),
+                share: shares[0].clone(),
                 recipient_key: pubkey,
                 epoch: Some(EpochNumber::new(0)),
                 target_epoch: Some(EpochNumber::new(0)),
                 data_epoch_payload_commitment: None,
-            });
+            };
             persistence
                 .append_vid2(&share.to_proposal(&privkey).unwrap())
                 .await
@@ -1371,7 +1380,7 @@ mod api_tests {
                 _pd: Default::default(),
             };
             persistence
-                .append_da2(&da_proposal, payload_commitment)
+                .append_da2(&da_proposal, VidCommitment::V1(payload_commitment))
                 .await
                 .unwrap();
         }

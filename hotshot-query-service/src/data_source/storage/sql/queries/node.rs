@@ -22,12 +22,15 @@ use crate::{
     },
     node::{BlockId, SyncStatus, TimeWindowQueryData, WindowStart},
     types::HeightIndexed,
-    Header, MissingSnafu, NotFoundSnafu, QueryError, QueryResult, VidShare,
+    Header, MissingSnafu, NotFoundSnafu, QueryError, QueryResult,
 };
 use anyhow::anyhow;
 use async_trait::async_trait;
 use futures::stream::{StreamExt, TryStreamExt};
-use hotshot_types::traits::{block_contents::BlockHeader, node_implementation::NodeType};
+use hotshot_types::{
+    data::VidShare,
+    traits::{block_contents::BlockHeader, node_implementation::NodeType},
+};
 use snafu::OptionExt;
 use sqlx::Row;
 use std::ops::{Bound, RangeBounds};

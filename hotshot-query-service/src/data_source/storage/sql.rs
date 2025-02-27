@@ -1223,14 +1223,14 @@ mod test {
         node_types::TestVersions,
         state_types::{TestInstanceState, TestValidatedState},
     };
-    use hotshot_types::traits::{node_implementation::Versions, EncodeBytes};
+    use hotshot_types::{
+        data::vid_commitment,
+        traits::{node_implementation::Versions, EncodeBytes},
+    };
     use hotshot_types::{
         data::{QuorumProposal, ViewNumber},
         simple_vote::QuorumData,
-        traits::{
-            block_contents::{vid_commitment, BlockHeader},
-            node_implementation::ConsensusTime,
-        },
+        traits::{block_contents::BlockHeader, node_implementation::ConsensusTime},
     };
     use jf_merkle_tree::{
         prelude::UniversalMerkleTree, MerkleTreeScheme, ToTraversalPath, UniversalMerkleTreeScheme,
@@ -1650,6 +1650,7 @@ mod test {
 
             let payload_commitment = vid_commitment::<MockVersions>(
                 &payload_bytes,
+                &metadata.encode(),
                 4,
                 <MockVersions as Versions>::Base::VERSION,
             );

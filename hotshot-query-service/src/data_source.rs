@@ -771,7 +771,7 @@ pub mod node_tests {
             setup_test, sleep,
         },
         types::HeightIndexed,
-        Header, VidCommitment, VidShare,
+        Header,
     };
     use committable::Committable;
     use futures::{future::join_all, stream::StreamExt};
@@ -784,7 +784,7 @@ pub mod node_tests {
         state_types::TestInstanceState,
     };
     use hotshot_types::{
-        data::vid_commitment,
+        data::{vid_commitment, VidCommitment, VidShare},
         traits::{block_contents::EncodeBytes, node_implementation::Versions},
         vid::advz::{advz_scheme, ADVZScheme},
     };

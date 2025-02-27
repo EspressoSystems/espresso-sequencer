@@ -10,10 +10,10 @@
 // You should have received a copy of the GNU General Public License along with this program. If not,
 // see <https://www.gnu.org/licenses/>.
 
-use crate::{types::HeightIndexed, Header, Metadata, Payload, Transaction, VidCommon, VidShare};
+use crate::{types::HeightIndexed, Header, Metadata, Payload, Transaction, VidCommon};
 use committable::{Commitment, Committable};
 use hotshot_types::{
-    data::{Leaf, Leaf2},
+    data::{Leaf, Leaf2, VidCommitment, VidShare},
     simple_certificate::QuorumCertificate2,
     traits::{
         self,

@@ -27,13 +27,14 @@ use hotshot_query_service::{
         Provider,
     },
     merklized_state::MerklizedState,
-    VidCommitment, VidCommon,
+    VidCommon,
 };
 use hotshot_types::{
     consensus::CommitmentMap,
     data::{
-        vid_disperse::ADVZDisperseShare, DaProposal, DaProposal2, EpochNumber, QuorumProposal,
-        QuorumProposalWrapper, VidDisperseShare,
+        vid_disperse::{ADVZDisperseShare, VidDisperseShare2},
+        DaProposal, DaProposal2, EpochNumber, QuorumProposal, QuorumProposalWrapper, VidCommitment,
+        VidDisperseShare,
     },
     event::{Event, EventType, HotShotAction, LeafInfo},
     message::{convert_proposal, Proposal},
@@ -45,11 +46,9 @@ use hotshot_types::{
         node_implementation::ConsensusTime,
     },
     utils::View,
-    vid::{VidCommitment, VidCommon, VidSchemeType},
     vote::HasViewNumber,
 };
 use itertools::Itertools;
-use jf_vid::VidScheme;
 use sqlx::Row;
 use sqlx::{query, Executor};
 use std::{collections::BTreeMap, path::PathBuf, str::FromStr, sync::Arc, time::Duration};
@@ -1791,30 +1790,10 @@ impl SequencerPersistence for Persistence {
             .transpose()
     }
 
-    async fn append_vid2(
-        &self,
-        proposal: &Proposal<SeqTypes, VidDisperseShare<SeqTypes>>,
-    ) -> anyhow::Result<()> {
-        let view = proposal.data.view_number().u64();
-
-        let payload_hash = proposal.data.payload_commitment();
-        let data_bytes = bincode::serialize(proposal).unwrap();
-
-        let mut tx = self.db.write().await?;
-        tx.upsert(
-            "vid_share2",
-            ["view", "data", "payload_hash"],
-            ["view"],
-            [(view as i64, data_bytes, payload_hash.to_string())],
-        )
-        .await?;
-        tx.commit().await
-    }
-
     async fn append_da2(
         &self,
         proposal: &Proposal<SeqTypes, DaProposal2<SeqTypes>>,
-        vid_commit: <VidSchemeType as VidScheme>::Commit,
+        vid_commit: VidCommitment,
     ) -> anyhow::Result<()> {
         let data = &proposal.data;
         let view = data.view_number().u64();
@@ -1891,7 +1870,11 @@ impl Provider<SeqTypes, VidCommonRequest> for Persistence {
                 }
             };
 
-        Some(share.data.vid_common_ref().clone())
+        match share.data {
+            VidDisperseShare::V0(vid) => Some(vid.common),
+            // TODO (abdul): V1 VID does not have common field
+            _ => None,
+        }
     }
 }
 
@@ -2062,7 +2045,7 @@ mod test {
     use futures::stream::TryStreamExt;
     use hotshot_example_types::node_types::TestVersions;
     use hotshot_types::{
-        data::{vid_disperse::VidDisperseShare2, EpochNumber, QuorumProposal2},
+        data::{vid_commitment, vid_disperse::VidDisperseShare2, EpochNumber, QuorumProposal2},
         message::convert_proposal,
         simple_certificate::QuorumCertificate,
         simple_vote::QuorumData,
@@ -2070,7 +2053,10 @@ mod test {
             block_contents::BlockHeader, node_implementation::Versions,
             signature_key::SignatureKey, EncodeBytes,
         },
-        vid::advz::advz_scheme,
+        vid::{
+            advz::advz_scheme,
+            avidm::{init_avidm_param, AvidMScheme},
+        },
     };
     use jf_vid::VidScheme;
     use sequencer_utils::test_utils::setup_test;
@@ -2168,16 +2154,23 @@ mod test {
             Leaf2::genesis::<TestVersions>(&ValidatedState::default(), &NodeState::mock()).await;
         let leaf_payload = leaf.block_payload().unwrap();
         let leaf_payload_bytes_arc = leaf_payload.encode();
-        let disperse = advz_scheme(2)
-            .disperse(leaf_payload_bytes_arc.clone())
-            .unwrap();
-        let payload_commitment = disperse.commit;
+
+        let avidm_param = init_avidm_param(2).unwrap();
+        let weights = vec![1u32; 2];
+
+        let (payload_commitment, shares) = AvidMScheme::ns_disperse(
+            &avidm_param,
+            &weights,
+            &leaf_payload.encode(),
+            [(0usize..15), (15..48)],
+        )
+        .unwrap();
+
         let (pubkey, privkey) = BLSPubKey::generated_from_seed_indexed([0; 32], 1);
         let vid_share = VidDisperseShare2::<SeqTypes> {
             view_number: ViewNumber::new(0),
             payload_commitment,
-            share: disperse.shares[0].clone(),
-            common: disperse.common,
+            share: shares[0].clone(),
             recipient_key: pubkey,
             epoch: None,
             target_epoch: None,
@@ -2234,7 +2227,7 @@ mod test {
 
         // Add to database.
         storage
-            .append_da2(&da_proposal, payload_commitment)
+            .append_da2(&da_proposal, VidCommitment::V1(payload_commitment))
             .await
             .unwrap();
         storage
@@ -2253,19 +2246,19 @@ mod test {
             .unwrap();
 
         // Fetch it as if we were rebuilding an archive.
+        // TODO (abdul):
         assert_eq!(
-            vid_share.data.common,
+            None,
             storage
-                .fetch(VidCommonRequest(VidCommitment::V0(
+                .fetch(VidCommonRequest(VidCommitment::V1(
                     vid_share.data.payload_commitment
                 )))
                 .await
-                .unwrap()
         );
         assert_eq!(
             leaf_payload,
             storage
-                .fetch(PayloadRequest(VidCommitment::V0(
+                .fetch(PayloadRequest(VidCommitment::V1(
                     vid_share.data.payload_commitment
                 )))
                 .await
@@ -2307,27 +2300,27 @@ mod test {
         let leaf_payload = leaf.block_payload().unwrap();
         let leaf_payload_bytes_arc = leaf_payload.encode();
 
-        let disperse = advz_scheme(2)
-            .disperse(leaf_payload_bytes_arc.clone())
-            .unwrap();
-        let payload_commitment = vid_commitment::<TestVersions>(
-            &leaf_payload_bytes_arc,
-            &leaf.block_header().metadata().encode(),
-            2,
-            <TestVersions as Versions>::Base::VERSION,
+        let avidm_param = init_avidm_param(2).unwrap();
+        let weights = vec![1u32; 2];
+
+        let (payload_commitment, shares) = AvidMScheme::ns_disperse(
+            &avidm_param,
+            &weights,
+            &leaf_payload.encode(),
+            [(0usize..15), (15..48)],
         )
-        .unwrap_v0();
+        .unwrap();
+
         let (pubkey, privkey) = BLSPubKey::generated_from_seed_indexed([0; 32], 1);
-        let vid = VidDisperseShare::V1(VidDisperseShare2::<SeqTypes> {
+        let vid = VidDisperseShare2::<SeqTypes> {
             view_number: data_view,
             payload_commitment,
-            share: disperse.shares[0].clone(),
-            common: disperse.common,
+            share: shares[0].clone(),
             recipient_key: pubkey,
             epoch: None,
             target_epoch: None,
             data_epoch_payload_commitment: None,
-        })
+        }
         .to_proposal(&privkey)
         .unwrap()
         .clone();
@@ -2372,7 +2365,7 @@ mod test {
         tracing::info!(?vid, ?da_proposal, ?quorum_proposal, "append data");
         storage.append_vid2(&vid).await.unwrap();
         storage
-            .append_da2(&da_proposal, payload_commitment)
+            .append_da2(&da_proposal, VidCommitment::V1(payload_commitment))
             .await
             .unwrap();
         storage
@@ -2389,7 +2382,7 @@ mod test {
             .unwrap();
         assert_eq!(
             storage.load_vid_share(data_view).await.unwrap().unwrap(),
-            vid
+            convert_proposal(vid)
         );
         assert_eq!(
             storage.load_da_proposal(data_view).await.unwrap().unwrap(),
@@ -2466,6 +2459,7 @@ mod test {
 
             let payload_commitment = vid_commitment::<TestVersions>(
                 &payload_bytes,
+                &metadata.encode(),
                 4,
                 <TestVersions as Versions>::Base::VERSION,
             );
@@ -2569,7 +2563,7 @@ mod test {
                 .await
                 .unwrap();
             storage
-                .append_da(&da_proposal, disperse.commit)
+                .append_da(&da_proposal, VidCommitment::V0(disperse.commit))
                 .await
                 .unwrap();
 

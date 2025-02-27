@@ -11,8 +11,8 @@ use hotshot_types::{
     consensus::CommitmentMap,
     data::{
         vid_disperse::{ADVZDisperseShare, VidDisperseShare2},
-        DaProposal, EpochNumber, QuorumProposal, QuorumProposal2, QuorumProposalWrapper,
-        VidCommitment, ViewNumber,
+        DaProposal, DaProposal2, EpochNumber, QuorumProposal, QuorumProposal2,
+        QuorumProposalWrapper, VidCommitment, VidDisperseShare, ViewNumber,
     },
     event::{HotShotAction, LeafInfo},
     message::{convert_proposal, Proposal},
@@ -737,15 +737,15 @@ pub trait SequencerPersistence: Sized + Send + Sync + Clone + 'static {
         &self,
     ) -> anyhow::Result<Option<NextEpochQuorumCertificate2<SeqTypes>>>;
 
-    async fn append_vid2(
-        &self,
-        proposal: &Proposal<SeqTypes, VidDisperseShare<SeqTypes>>,
-    ) -> anyhow::Result<()>;
+    // async fn append_vid2(
+    //     &self,
+    //     proposal: &Proposal<SeqTypes, VidDisperseShare<SeqTypes>>,
+    // ) -> anyhow::Result<()>;
 
     async fn append_da2(
         &self,
         proposal: &Proposal<SeqTypes, DaProposal2<SeqTypes>>,
-        vid_commit: <VidSchemeType as VidScheme>::Commit,
+        vid_commit: VidCommitment,
     ) -> anyhow::Result<()>;
 
     async fn append_proposal2(
@@ -808,7 +808,7 @@ impl<P: SequencerPersistence> Storage<SeqTypes> for Arc<P> {
     async fn append_da2(
         &self,
         proposal: &Proposal<SeqTypes, DaProposal2<SeqTypes>>,
-        vid_commit: <VidSchemeType as VidScheme>::Commit,
+        vid_commit: VidCommitment,
     ) -> anyhow::Result<()> {
         (**self).append_da2(proposal, vid_commit).await
     }

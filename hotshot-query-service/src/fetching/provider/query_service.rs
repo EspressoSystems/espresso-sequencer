@@ -16,12 +16,13 @@ use crate::{
     availability::{LeafQueryData, PayloadQueryData, VidCommonQueryData},
     fetching::request::{LeafRequest, PayloadRequest, VidCommonRequest},
     types::HeightIndexed,
-    Error, Payload, VidCommitment, VidCommon,
+    Error, Payload, VidCommon,
 };
 use async_trait::async_trait;
 use committable::Committable;
 use futures::try_join;
 use hotshot_types::{
+    data::VidCommitment,
     traits::{node_implementation::NodeType, EncodeBytes},
     vid::advz::{advz_scheme, ADVZScheme},
 };
@@ -216,7 +217,7 @@ mod test {
             setup_test, sleep,
         },
         types::HeightIndexed,
-        ApiState, VidCommitment,
+        ApiState,
     };
     use committable::Committable;
     use futures::{

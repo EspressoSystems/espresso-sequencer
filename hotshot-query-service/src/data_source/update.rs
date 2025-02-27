@@ -16,12 +16,13 @@ use crate::{
         BlockInfo, BlockQueryData, LeafQueryData, QueryablePayload, UpdateAvailabilityData,
         VidCommonQueryData,
     },
-    Payload, VidShare,
+    Payload,
 };
 use anyhow::{ensure, Context};
 use async_trait::async_trait;
 use futures::future::Future;
 use hotshot::types::{Event, EventType};
+use hotshot_types::data::{VidDisperseShare, VidShare};
 use hotshot_types::{
     data::Leaf2,
     traits::{
@@ -30,11 +31,7 @@ use hotshot_types::{
     },
     vid::advz::advz_scheme,
 };
-use hotshot_types::{
-    data::{VidCommitment, VidDisperseShare},
-    event::LeafInfo,
-};
-use hotshot_types::{data::VidDisperseShare, event::LeafInfo};
+use hotshot_types::{data::VidCommitment, event::LeafInfo};
 use jf_vid::VidScheme;
 use std::iter::once;
 
@@ -121,13 +118,13 @@ where
                 let (vid_common, vid_share) = match vid_share {
                     Some(VidDisperseShare::V0(share)) => (
                         Some(VidCommonQueryData::new(
-                            leaf.block_header().clone(),
+                            leaf2.block_header().clone(),
                             Some(share.common.clone()),
                         )),
                         Some(VidShare::V0(share.share.clone())),
                     ),
                     Some(VidDisperseShare::V1(share)) => (
-                        Some(VidCommonQueryData::new(leaf.block_header().clone(), None)),
+                        Some(VidCommonQueryData::new(leaf2.block_header().clone(), None)),
                         Some(VidShare::V1(share.share.clone())),
                     ),
                     None => {

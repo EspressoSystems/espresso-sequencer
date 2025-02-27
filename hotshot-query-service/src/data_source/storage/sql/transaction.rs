@@ -36,7 +36,7 @@ use crate::{
     },
     merklized_state::{MerklizedState, UpdateStateData},
     types::HeightIndexed,
-    Header, Payload, QueryError, QueryResult, VidShare,
+    Header, Payload, QueryError, QueryResult,
 };
 use anyhow::{bail, Context};
 use ark_serialize::CanonicalSerialize;
@@ -44,11 +44,14 @@ use async_trait::async_trait;
 use committable::Committable;
 use derive_more::{Deref, DerefMut};
 use futures::{future::Future, stream::TryStreamExt};
-use hotshot_types::traits::{
-    block_contents::BlockHeader,
-    metrics::{Counter, Gauge, Histogram, Metrics},
-    node_implementation::NodeType,
-    EncodeBytes,
+use hotshot_types::{
+    data::VidShare,
+    traits::{
+        block_contents::BlockHeader,
+        metrics::{Counter, Gauge, Histogram, Metrics},
+        node_implementation::NodeType,
+        EncodeBytes,
+    },
 };
 use itertools::Itertools;
 use jf_merkle_tree::prelude::{MerkleNode, MerkleProof};

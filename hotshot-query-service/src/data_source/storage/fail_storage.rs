@@ -29,12 +29,12 @@ use crate::{
     metrics::PrometheusMetrics,
     node::{SyncStatus, TimeWindowQueryData, WindowStart},
     status::HasMetrics,
-    Header, Payload, QueryError, QueryResult, VidShare,
+    Header, Payload, QueryError, QueryResult,
 };
 use async_lock::Mutex;
 use async_trait::async_trait;
 use futures::future::Future;
-use hotshot_types::traits::node_implementation::NodeType;
+use hotshot_types::{data::VidShare, traits::node_implementation::NodeType};
 use std::ops::RangeBounds;
 use std::sync::Arc;
 

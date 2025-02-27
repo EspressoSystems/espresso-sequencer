@@ -6,12 +6,12 @@ use espresso_types::{
     v0::traits::{EventConsumer, PersistenceOptions, SequencerPersistence},
     Leaf, Leaf2, NetworkConfig, Payload, SeqTypes,
 };
-use hotshot_query_service::VidCommitment;
 use hotshot_types::{
     consensus::CommitmentMap,
     data::{
-        vid_disperse::ADVZDisperseShare, DaProposal, DaProposal2, EpochNumber, QuorumProposal,
-        QuorumProposal2, QuorumProposalWrapper, VidDisperseShare,
+        vid_disperse::{ADVZDisperseShare, VidDisperseShare2},
+        DaProposal, DaProposal2, EpochNumber, QuorumProposal, QuorumProposal2,
+        QuorumProposalWrapper, VidCommitment, VidDisperseShare,
     },
     event::{Event, EventType, HotShotAction, LeafInfo},
     message::{convert_proposal, Proposal},
@@ -367,7 +367,6 @@ impl Inner {
             let info = LeafInfo {
                 leaf,
                 vid_share,
-
                 // Note: the following fields are not used in Decide event processing, and should be
                 // removed. For now, we just default them.
                 state: Default::default(),
@@ -677,7 +676,7 @@ impl SequencerPersistence for Persistence {
     ) -> anyhow::Result<()> {
         let mut inner = self.inner.write().await;
         let view_number = proposal.data.view_number().u64();
-        let dir_path = inner.vid_dir_path();
+        let dir_path = inner.vid2_dir_path();
 
         fs::create_dir_all(dir_path.clone()).context("failed to create vid dir")?;
 
@@ -931,37 +930,10 @@ impl SequencerPersistence for Persistence {
         ))
     }
 
-    async fn append_vid2(
-        &self,
-        proposal: &Proposal<SeqTypes, VidDisperseShare<SeqTypes>>,
-    ) -> anyhow::Result<()> {
-        let mut inner = self.inner.write().await;
-        let view_number = proposal.data.view_number().u64();
-        let dir_path = inner.vid2_dir_path();
-
-        fs::create_dir_all(dir_path.clone()).context("failed to create vid2 dir")?;
-
-        let file_path = dir_path.join(view_number.to_string()).with_extension("txt");
-        inner.replace(
-            &file_path,
-            |_| {
-                // Don't overwrite an existing share, but warn about it as this is likely not intended
-                // behavior from HotShot.
-                tracing::warn!(view_number, "duplicate VID share");
-                Ok(false)
-            },
-            |mut file| {
-                let proposal_bytes = bincode::serialize(&proposal).context("serialize proposal")?;
-                file.write_all(&proposal_bytes)?;
-                Ok(())
-            },
-        )
-    }
-
     async fn append_da2(
         &self,
         proposal: &Proposal<SeqTypes, DaProposal2<SeqTypes>>,
-        _vid_commit: <VidSchemeType as VidScheme>::Commit,
+        _vid_commit: VidCommitment,
     ) -> anyhow::Result<()> {
         let mut inner = self.inner.write().await;
         let view_number = proposal.data.view_number().u64();
@@ -1375,9 +1347,10 @@ mod test {
     use hotshot::types::SignatureKey;
     use hotshot_example_types::node_types::TestVersions;
     use hotshot_query_service::testing::mocks::MockVersions;
-    use hotshot_types::data::QuorumProposal2;
+    use hotshot_types::data::{vid_commitment, QuorumProposal2};
     use hotshot_types::traits::node_implementation::Versions;
-    use hotshot_types::vid::advz_scheme;
+
+    use hotshot_types::vid::advz::advz_scheme;
     use sequencer_utils::test_utils::setup_test;
     use vbs::version::StaticVersionType;
 
@@ -1393,9 +1366,7 @@ mod test {
     use espresso_types::{Header, Leaf, ValidatedState};
 
     use hotshot_types::{
-        simple_certificate::QuorumCertificate,
-        simple_vote::QuorumData,
-        traits::{block_contents::vid_commitment, EncodeBytes},
+        simple_certificate::QuorumCertificate, simple_vote::QuorumData, traits::EncodeBytes,
     };
     use jf_vid::VidScheme;
 
@@ -1529,6 +1500,7 @@ mod test {
 
             let payload_commitment = vid_commitment::<TestVersions>(
                 &payload_bytes,
+                &metadata.encode(),
                 4,
                 <TestVersions as Versions>::Base::VERSION,
             );
@@ -1656,7 +1628,7 @@ mod test {
 
             tracing::debug!("inserting da for {view}");
             storage
-                .append_da(&da_proposal, disperse.commit)
+                .append_da(&da_proposal, VidCommitment::V0(disperse.commit))
                 .await
                 .unwrap();
         }
