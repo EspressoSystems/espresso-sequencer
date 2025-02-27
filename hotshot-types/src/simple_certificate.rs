@@ -543,6 +543,7 @@ impl<TYPES: NodeType> DaCertificate<TYPES> {
     pub fn to_dac2(self) -> DaCertificate2<TYPES> {
         let data = DaData2 {
             payload_commit: self.data.payload_commit,
+            next_epoch_payload_commit: None,
             epoch: None,
         };
 
