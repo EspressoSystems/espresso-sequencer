@@ -52,22 +52,22 @@ impl<TYPES: NodeType> Membership<TYPES> for StaticCommitteeLeaderForTwoViews<TYP
         // For each eligible leader, get the stake table entry
         let eligible_leaders: Vec<PeerConfig<TYPES::SignatureKey>> = committee_members
             .iter()
-            .map(|member| member.clone())
-            .filter(|member| member.stake_table_entry.stake() > U256::zero())
+            .filter(|&member| member.stake_table_entry.stake() > U256::zero())
+            .cloned()
             .collect();
 
         // For each member, get the stake table entry
         let members: Vec<PeerConfig<TYPES::SignatureKey>> = committee_members
             .iter()
-            .map(|member| member.clone())
-            .filter(|member| member.stake_table_entry.stake() > U256::zero())
+            .filter(|&member| member.stake_table_entry.stake() > U256::zero())
+            .cloned()
             .collect();
 
         // For each member, get the stake table entry
         let da_members: Vec<PeerConfig<TYPES::SignatureKey>> = da_members
             .iter()
-            .map(|member| member.clone())
-            .filter(|member| member.stake_table_entry.stake() > U256::zero())
+            .filter(|&member| member.stake_table_entry.stake() > U256::zero())
+            .cloned()
             .collect();
 
         // Index the stake table by public key

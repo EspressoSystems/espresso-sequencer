@@ -104,22 +104,22 @@ impl<TYPES: NodeType, CONFIG: QuorumFilterConfig> Membership<TYPES>
         // For each eligible leader, get the stake table entry
         let eligible_leaders = committee_members
             .iter()
-            .map(|member| member.clone())
-            .filter(|member| member.stake_table_entry.stake() > U256::zero())
+            .filter(|&member| member.stake_table_entry.stake() > U256::zero())
+            .cloned()
             .collect();
 
         // For each member, get the stake table entry
         let members: Vec<PeerConfig<<TYPES as NodeType>::SignatureKey>> = committee_members
             .iter()
-            .map(|member| member.clone())
-            .filter(|entry| entry.stake_table_entry.stake() > U256::zero())
+            .filter(|&entry| entry.stake_table_entry.stake() > U256::zero())
+            .cloned()
             .collect();
 
         // For each da member, get the stake table entry
         let da_members: Vec<PeerConfig<<TYPES as NodeType>::SignatureKey>> = da_members
             .iter()
-            .map(|member| member.clone())
-            .filter(|entry| entry.stake_table_entry.stake() > U256::zero())
+            .filter(|&entry| entry.stake_table_entry.stake() > U256::zero())
+            .cloned()
             .collect();
 
         // Index the stake table by public key

@@ -2,7 +2,6 @@ use std::{
     cmp::max,
     collections::{BTreeMap, BTreeSet, HashMap},
     num::NonZeroU64,
-    str::FromStr,
 };
 
 use anyhow::{bail, Context};
@@ -28,7 +27,6 @@ use hotshot_types::{
 };
 use itertools::Itertools;
 use thiserror::Error;
-use url::Url;
 
 use super::{
     v0_3::{DAMembers, StakeTable, StakeTables},
@@ -220,22 +218,22 @@ impl EpochCommittees {
         // For each eligible leader, get the stake table entry
         let eligible_leaders: Vec<_> = committee_members
             .iter()
-            .map(|member| member.clone())
-            .filter(|peer_config| peer_config.stake_table_entry.stake() > U256::zero())
+            .filter(|&peer_config| peer_config.stake_table_entry.stake() > U256::zero())
+            .cloned()
             .collect();
 
         // For each member, get the stake table entry
         let stake_table: Vec<_> = committee_members
             .iter()
-            .map(|member| member.clone())
-            .filter(|peer_config| peer_config.stake_table_entry.stake() > U256::zero())
+            .filter(|&peer_config| peer_config.stake_table_entry.stake() > U256::zero())
+            .cloned()
             .collect();
 
         // For each member, get the stake table entry
         let da_members: Vec<_> = da_members
             .iter()
-            .map(|member| member.clone())
-            .filter(|peer_config| peer_config.stake_table_entry.stake() > U256::zero())
+            .filter(|&peer_config| peer_config.stake_table_entry.stake() > U256::zero())
+            .cloned()
             .collect();
 
         // Index the stake table by public key
@@ -306,7 +304,7 @@ impl Membership<SeqTypes> for EpochCommittees {
         _committee_members: Vec<PeerConfig<PubKey>>,
         _da_members: Vec<PeerConfig<PubKey>>,
     ) -> Self {
-        panic!("This function has been repalce with new_stake()");
+        panic!("This function has been replaced with new_stake()");
     }
 
     /// Get the stake table for the current view

@@ -1,7 +1,7 @@
 use crate::PubKey;
 use derive_more::derive::{From, Into};
 use hotshot_contract_adapter::stake_table::NodeInfoJf;
-use hotshot_types::{network::PeerConfigKeys, stake_table::StakeTableEntry, PeerConfig};
+use hotshot_types::{network::PeerConfigKeys, PeerConfig};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, From)]

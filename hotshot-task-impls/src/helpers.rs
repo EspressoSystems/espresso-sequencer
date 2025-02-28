@@ -211,9 +211,6 @@ async fn decide_epoch_root<TYPES: NodeType>(
         if let Some(write_callback) = write_callback {
             let mut membership_writer = membership.write().await;
             write_callback(&mut *membership_writer);
-        } else {
-            // If we didn't get a write callback out of add_epoch_root, then don't bother locking and calling sync_l1
-            return;
         }
     }
 }

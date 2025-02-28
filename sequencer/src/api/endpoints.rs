@@ -208,7 +208,7 @@ where
             state
                 .read(|state| state.get_stake_table(epoch).boxed())
                 .await
-                .map_err(|err| hotshot_query_service::node::Error::Custom {
+                .map_err(|_| hotshot_query_service::node::Error::Custom {
                     message: "stake table not found".to_string(),
                     status: StatusCode::NOT_FOUND,
                 })
@@ -220,7 +220,7 @@ where
             state
                 .read(|state| state.get_stake_table_current().boxed())
                 .await
-                .map_err(|err| hotshot_query_service::node::Error::Custom {
+                .map_err(|_| hotshot_query_service::node::Error::Custom {
                     message: "stake table not found".to_string(),
                     status: StatusCode::NOT_FOUND,
                 })

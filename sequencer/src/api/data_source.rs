@@ -20,7 +20,6 @@ use hotshot_types::{
     data::ViewNumber,
     light_client::StateSignatureRequestBody,
     network::NetworkConfig,
-    stake_table::StakeTableEntry,
     traits::{network::ConnectedNetwork, node_implementation::Versions},
     HotShotConfig, PeerConfig, ValidatorConfig,
 };

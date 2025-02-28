@@ -189,7 +189,7 @@ impl<TYPES: NodeType> Membership<TYPES> for TwoStaticCommittees<TYPES> {
         if *epoch != 0 && *epoch % 2 == 0 {
             Ok(self.stake_table.0.clone())
         } else {
-            Ok(self.stake_table.0.clone())
+            Ok(self.stake_table.1.clone())
         }
     }
 
@@ -202,7 +202,7 @@ impl<TYPES: NodeType> Membership<TYPES> for TwoStaticCommittees<TYPES> {
         if *epoch != 0 && *epoch % 2 == 0 {
             Ok(self.da_stake_table.0.clone())
         } else {
-            Ok(self.da_stake_table.0.clone())
+            Ok(self.da_stake_table.1.clone())
         }
     }
 

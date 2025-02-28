@@ -18,6 +18,7 @@ use hotshot_events_service::events_source::{
     EventFilterSet, EventsSource, EventsStreamer, StartupInfo,
 };
 use hotshot_query_service::data_source::ExtensibleDataSource;
+use hotshot_types::traits::election::Membership;
 use hotshot_types::{
     data::ViewNumber,
     event::Event,
@@ -31,7 +32,6 @@ use hotshot_types::{
     utils::{View, ViewInner},
     PeerConfig,
 };
-use hotshot_types::{stake_table::StakeTableEntry, traits::election::Membership};
 use jf_merkle_tree::MerkleTreeScheme;
 use std::pin::Pin;
 use std::sync::Arc;
