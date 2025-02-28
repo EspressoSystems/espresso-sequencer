@@ -138,7 +138,9 @@ pub trait Membership<TYPES: NodeType>: Debug + Send + Sync {
     fn get_epoch_root(
         &self,
         block_height: u64,
-    ) -> impl std::future::Future<Output = Option<(TYPES::Epoch, TYPES::BlockHeader)>> + Send;
+        epoch_height: u64,
+        epoch: TYPES::Epoch,
+    ) -> impl std::future::Future<Output = anyhow::Result<(TYPES::Epoch, TYPES::BlockHeader)>> + Send;
 
     #[allow(clippy::type_complexity)]
     /// Handles notifications that a new epoch root has been created

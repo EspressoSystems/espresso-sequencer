@@ -254,8 +254,10 @@ impl<TYPES: NodeType> Membership<TYPES> for Committee<TYPES> {
     async fn get_epoch_root(
         &self,
         _block_height: u64,
-    ) -> Option<(TYPES::Epoch, TYPES::BlockHeader)> {
-        None
+        _epoch_height: u64,
+        _epoch: TYPES::Epoch,
+    ) -> anyhow::Result<(TYPES::Epoch, TYPES::BlockHeader)> {
+        anyhow::bail!("Not implemented")
     }
     fn add_drb_result(&mut self, _epoch: <TYPES as NodeType>::Epoch, _drb: DrbResult) {}
 }

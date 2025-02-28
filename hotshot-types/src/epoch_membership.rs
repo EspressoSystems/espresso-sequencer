@@ -121,10 +121,12 @@ where
 
         // Get the epoch root headers and update our membership with them, finally sync them
         // Verification of the root is handled in get_epoch_root
-        let (next_epoch, header) = root_membership
+        let Ok((next_epoch, header)) = root_membership
             .get_epoch_root(root_block_in_epoch(*root_epoch, self.epoch_height))
             .await
-            .ok_or(anytrace::warn!("get epoch root failed"))?;
+        else {
+            anytrace::bail!("get epoch root failed");
+        };
         let updater = self
             .membership
             .read()
@@ -230,12 +232,15 @@ impl<TYPES: NodeType> EpochMembership<TYPES> {
     async fn get_epoch_root(
         &self,
         block_height: u64,
-    ) -> Option<(TYPES::Epoch, TYPES::BlockHeader)> {
+    ) -> anyhow::Result<(TYPES::Epoch, TYPES::BlockHeader)> {
+        let Some(epoch) = self.epoch else {
+            anyhow::bail!("Cannot get root for None epoch");
+        };
         self.coordinator
             .membership
             .read()
             .await
-            .get_epoch_root(block_height)
+            .get_epoch_root(block_height, self.coordinator.epoch_height, epoch)
             .await
     }
 

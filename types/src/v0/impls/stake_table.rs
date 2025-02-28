@@ -5,7 +5,6 @@ use std::{
     str::FromStr,
 };
 
-// use async_trait::async_trait;
 use contract_bindings_alloy::permissionedstaketable::PermissionedStakeTable::StakersUpdated;
 use ethers::types::{Address, U256};
 use ethers_conv::ToAlloy;
@@ -17,22 +16,26 @@ use hotshot_types::{
         election::{generate_stake_cdf, select_randomized_leader, RandomizedCommittee},
         DrbResult,
     },
+    message::UpgradeLock,
     stake_table::StakeTableEntry,
     traits::{
         election::Membership,
         node_implementation::{ConsensusTime, NodeType},
         signature_key::StakeTableEntryType,
     },
+    utils::verify_epoch_root_chain,
     PeerConfig,
 };
 
 use itertools::Itertools;
+use std::{fmt::Debug, sync::Arc};
 use thiserror::Error;
 use url::Url;
 
 use super::{
+    traits::StateCatchup,
     v0_3::{DAMembers, StakeTable, StakeTables},
-    Header, L1Client, NodeState, PubKey, SeqTypes,
+    EpochVersion, Header, L1Client, Leaf2, NodeState, PubKey, SeqTypes, SequencerVersions,
 };
 
 type Epoch = <SeqTypes as NodeType>::Epoch;
@@ -93,7 +96,7 @@ impl StakeTables {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, derive_more::derive::Debug)]
 /// Type to describe DA and Stake memberships
 pub struct EpochCommittees {
     /// Committee used when we're in pre-epoch state
@@ -113,6 +116,10 @@ pub struct EpochCommittees {
 
     /// Randomized committees, filled when we receive the DrbResult
     randomized_committees: BTreeMap<Epoch, RandomizedCommittee<StakeTableEntry<PubKey>>>,
+
+    /// Peers for catching up the stake table
+    #[debug(skip)]
+    peers: Option<Arc<dyn StateCatchup>>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -261,6 +268,7 @@ impl EpochCommittees {
             l1_client: instance_state.l1_client.clone(),
             contract_address: instance_state.chain_config.stake_table_contract,
             randomized_committees: BTreeMap::new(),
+            peers: Some(instance_state.peers.clone()),
         }
     }
 
@@ -342,6 +350,7 @@ impl Membership<SeqTypes> for EpochCommittees {
                 .expect("Failed to create L1 client"),
             contract_address: None,
             randomized_committees: BTreeMap::new(),
+            peers: None,
         }
     }
 
@@ -524,8 +533,26 @@ impl Membership<SeqTypes> for EpochCommittees {
         self.state.contains_key(&epoch)
     }
 
-    async fn get_epoch_root(&self, _block_height: u64) -> Option<(Epoch, Header)> {
-        None
+    async fn get_epoch_root(
+        &self,
+        block_height: u64,
+        epoch_height: u64,
+        epoch: Epoch,
+    ) -> anyhow::Result<(Epoch, Header)> {
+        let Some(ref peers) = self.peers else {
+            anyhow::bail!("No Peers Configured for Catchup");
+        };
+        // Fetch leaves from peers
+        let leaf_chain: Vec<Leaf2> = peers.try_fetch_leaves(1, block_height).await?;
+        let root_leaf = verify_epoch_root_chain(
+            leaf_chain,
+            self,
+            epoch,
+            epoch_height,
+            &UpgradeLock::<SeqTypes, SequencerVersions<EpochVersion, EpochVersion>>::new(),
+        )
+        .await?;
+        Ok((epoch, root_leaf.block_header().clone()))
     }
 
     fn add_drb_result(&mut self, epoch: Epoch, drb: DrbResult) {

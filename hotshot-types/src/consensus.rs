@@ -922,6 +922,10 @@ impl<TYPES: NodeType> Consensus<TYPES> {
         self.saved_leaves.get(&leaf).unwrap().clone()
     }
 
+    pub fn undecided_leaves(&self) -> Vec<Leaf2<TYPES>> {
+        self.saved_leaves.values().cloned().collect::<Vec<_>>()
+    }
+
     /// Gets the validated state with the given view number, if in the state map.
     #[must_use]
     pub fn state(&self, view_number: TYPES::View) -> Option<&Arc<TYPES::ValidatedState>> {
