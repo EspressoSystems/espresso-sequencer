@@ -190,10 +190,7 @@ async fn start_drb_task<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versio
         .read()
         .await
         .has_stake(&task_state.public_key, Some(current_epoch_number))
-        .unwrap_or_else(|_| {
-            tracing::error!("Failed to check if we have stake in the current epoch.");
-            false
-        })
+        .unwrap_or_default()
     {
         let new_epoch_number = current_epoch_number + 1;
 
