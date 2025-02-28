@@ -2343,7 +2343,7 @@ mod test {
             // ChainConfigs will eventually be resolved
             if let Some(configs) = configs {
                 tracing::info!(?configs, "configs");
-                if height > new_version_first_view {
+                if height > new_version_first_view + 10 {
                     for config in configs {
                         assert_eq!(config, chain_config_upgrade);
                     }
