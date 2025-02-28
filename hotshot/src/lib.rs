@@ -14,6 +14,7 @@ pub mod documentation;
 use committable::Committable;
 use futures::future::{select, Either};
 use hotshot_types::{
+    epoch_membership::EpochMembershipCoordinator,
     message::UpgradeLock,
     traits::{block_contents::BlockHeader, network::BroadcastDelay, node_implementation::Versions},
 };
@@ -59,7 +60,6 @@ use hotshot_types::{
     simple_certificate::{NextEpochQuorumCertificate2, QuorumCertificate2, UpgradeCertificate},
     traits::{
         consensus_api::ConsensusApi,
-        election::Membership,
         network::ConnectedNetwork,
         node_implementation::{ConsensusTime, NodeType},
         signature_key::SignatureKey,
@@ -111,7 +111,7 @@ pub struct SystemContext<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versi
     pub network: Arc<I::Network>,
 
     /// Memberships used by consensus
-    pub memberships: Arc<RwLock<TYPES::Membership>>,
+    pub membership_coordinator: EpochMembershipCoordinator<TYPES>,
 
     /// the metrics that the implementor is using.
     metrics: Arc<ConsensusMetricsValue>,
@@ -166,7 +166,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> Clone
             private_key: self.private_key.clone(),
             config: self.config.clone(),
             network: Arc::clone(&self.network),
-            memberships: Arc::clone(&self.memberships),
+            membership_coordinator: self.membership_coordinator.clone(),
             metrics: Arc::clone(&self.metrics),
             consensus: self.consensus.clone(),
             instance_state: Arc::clone(&self.instance_state),
@@ -202,7 +202,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> SystemContext<T
         private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
         nonce: u64,
         config: HotShotConfig<TYPES::SignatureKey>,
-        memberships: Arc<RwLock<TYPES::Membership>>,
+        memberships: EpochMembershipCoordinator<TYPES>,
         network: Arc<I::Network>,
         initializer: HotShotInitializer<TYPES>,
         metrics: ConsensusMetricsValue,
@@ -256,7 +256,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> SystemContext<T
         private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
         nonce: u64,
         config: HotShotConfig<TYPES::SignatureKey>,
-        memberships: Arc<RwLock<TYPES::Membership>>,
+        membership_coordinator: EpochMembershipCoordinator<TYPES>,
         network: Arc<I::Network>,
         initializer: HotShotInitializer<TYPES>,
         metrics: ConsensusMetricsValue,
@@ -365,7 +365,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> SystemContext<T
             start_view: initializer.start_view,
             start_epoch: initializer.start_epoch,
             network,
-            memberships,
+            membership_coordinator,
             metrics: Arc::clone(&consensus_metrics),
             internal_event_stream: (internal_tx, internal_rx.deactivate()),
             output_event_stream: (external_tx.clone(), external_rx.clone().deactivate()),
@@ -514,12 +514,15 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> SystemContext<T
             HotShotError::FailedToSerialize(format!("failed to serialize transaction: {err}"))
         })?;
 
+        let membership = match api.membership_coordinator.membership_for_epoch(epoch).await {
+            Ok(m) => m,
+            Err(e) => return Err(HotShotError::InvalidState(e.message)),
+        };
+
         spawn(async move {
-            let memberships_da_committee_members = api
-                .memberships
-                .read()
+            let memberships_da_committee_members = membership
+                .da_committee_members(view_number)
                 .await
-                .da_committee_members(view_number, epoch)
                 .iter()
                 .cloned()
                 .collect();
@@ -620,7 +623,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> SystemContext<T
         private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
         node_id: u64,
         config: HotShotConfig<TYPES::SignatureKey>,
-        memberships: Arc<RwLock<TYPES::Membership>>,
+        memberships: EpochMembershipCoordinator<TYPES>,
         network: Arc<I::Network>,
         initializer: HotShotInitializer<TYPES>,
         metrics: ConsensusMetricsValue,
@@ -678,7 +681,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> SystemContext<T
             hotshot: self.clone().into(),
             storage: Arc::clone(&self.storage),
             network: Arc::clone(&self.network),
-            memberships: Arc::clone(&self.memberships),
+            membership_coordinator: self.membership_coordinator.clone(),
             epoch_height: self.config.epoch_height,
         };
 
@@ -783,7 +786,7 @@ where
         private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
         nonce: u64,
         config: HotShotConfig<TYPES::SignatureKey>,
-        memberships: Arc<RwLock<TYPES::Membership>>,
+        memberships: EpochMembershipCoordinator<TYPES>,
         network: Arc<I::Network>,
         initializer: HotShotInitializer<TYPES>,
         metrics: ConsensusMetricsValue,
@@ -799,7 +802,7 @@ where
             private_key.clone(),
             nonce,
             config.clone(),
-            Arc::clone(&memberships),
+            memberships.clone(),
             Arc::clone(&network),
             initializer.clone(),
             metrics.clone(),
@@ -860,7 +863,7 @@ where
             hotshot: Arc::clone(&left_system_context),
             storage: Arc::clone(&left_system_context.storage),
             network: Arc::clone(&left_system_context.network),
-            memberships: Arc::clone(&left_system_context.memberships),
+            membership_coordinator: left_system_context.membership_coordinator.clone(),
             epoch_height,
         };
 
@@ -872,7 +875,7 @@ where
             hotshot: Arc::clone(&right_system_context),
             storage: Arc::clone(&right_system_context.storage),
             network: Arc::clone(&right_system_context.network),
-            memberships: Arc::clone(&right_system_context.memberships),
+            membership_coordinator: right_system_context.membership_coordinator.clone(),
             epoch_height,
         };
 
