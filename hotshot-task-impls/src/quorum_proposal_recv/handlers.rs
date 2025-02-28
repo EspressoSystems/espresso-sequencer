@@ -174,7 +174,7 @@ pub(crate) async fn handle_quorum_proposal_recv<
         &justify_qc,
         maybe_next_epoch_justify_qc.as_ref(),
         &validation_info.consensus,
-        &validation_info.membership,
+        &validation_info.membership.coordinator,
         &validation_info.upgrade_lock,
     )
     .await?;

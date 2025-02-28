@@ -207,10 +207,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> ConsensusTaskSt
                     high_qc,
                     Some(next_epoch_high_qc),
                     &self.consensus,
-                    &self
-                        .membership_coordinator
-                        .membership_for_epoch(high_qc.data.epoch)
-                        .await?,
+                    &self.membership_coordinator,
                     &self.upgrade_lock,
                 )
                 .await
