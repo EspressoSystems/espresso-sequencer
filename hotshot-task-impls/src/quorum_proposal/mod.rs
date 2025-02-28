@@ -572,9 +572,20 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                 let cert_epoch_number = qc.data.epoch;
 
                 let membership_reader = self.membership.read().await;
-                let membership_stake_table = membership_reader.stake_table(cert_epoch_number)?;
-                let membership_success_threshold =
-                    membership_reader.success_threshold(cert_epoch_number)?;
+                let membership_stake_table = membership_reader
+                    .stake_table(cert_epoch_number)
+                    .map_err(|_| {
+                        error!(format!(
+                            " stake table not found for epoch = {cert_epoch_number:?}"
+                        ))
+                    })?;
+                let membership_success_threshold = membership_reader
+                    .success_threshold(cert_epoch_number)
+                    .map_err(|_| {
+                        error!(format!(
+                            " success_threshold not found for epoch = {cert_epoch_number:?}"
+                        ))
+                    })?;
                 drop(membership_reader);
 
                 let membership_stake_table = membership_stake_table

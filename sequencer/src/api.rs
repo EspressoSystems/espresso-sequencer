@@ -29,6 +29,7 @@ use hotshot_types::{
         ValidatedState as _,
     },
     utils::{View, ViewInner},
+    PeerConfig,
 };
 use hotshot_types::{stake_table::StakeTableEntry, traits::election::Membership};
 use jf_merkle_tree::MerkleTreeScheme;
@@ -167,14 +168,14 @@ impl<N: ConnectedNetwork<PubKey>, D: Sync, V: Versions, P: SequencerPersistence>
     async fn get_stake_table(
         &self,
         epoch: Option<<SeqTypes as NodeType>::Epoch>,
-    ) -> Vec<StakeTableEntry<<SeqTypes as NodeType>::SignatureKey>> {
+    ) -> anyhow::Result<Vec<PeerConfig<<SeqTypes as NodeType>::SignatureKey>>> {
         self.as_ref().get_stake_table(epoch).await
     }
 
     /// Get the stake table for the current epoch if not provided
     async fn get_stake_table_current(
         &self,
-    ) -> Vec<StakeTableEntry<<SeqTypes as NodeType>::SignatureKey>> {
+    ) -> anyhow::Result<Vec<PeerConfig<<SeqTypes as NodeType>::SignatureKey>>> {
         self.as_ref().get_stake_table_current().await
     }
 }
@@ -186,7 +187,7 @@ impl<N: ConnectedNetwork<PubKey>, V: Versions, P: SequencerPersistence>
     async fn get_stake_table(
         &self,
         epoch: Option<<SeqTypes as NodeType>::Epoch>,
-    ) -> Vec<StakeTableEntry<<SeqTypes as NodeType>::SignatureKey>> {
+    ) -> anyhow::Result<Vec<PeerConfig<<SeqTypes as NodeType>::SignatureKey>>> {
         self.consensus()
             .await
             .read()
@@ -200,7 +201,7 @@ impl<N: ConnectedNetwork<PubKey>, V: Versions, P: SequencerPersistence>
     /// Get the stake table for the current epoch if not provided
     async fn get_stake_table_current(
         &self,
-    ) -> Vec<StakeTableEntry<<SeqTypes as NodeType>::SignatureKey>> {
+    ) -> anyhow::Result<Vec<PeerConfig<<SeqTypes as NodeType>::SignatureKey>>> {
         let epoch = self.consensus().await.read().await.cur_epoch().await;
 
         self.get_stake_table(epoch).await

@@ -5,7 +5,7 @@ use std::{
     str::FromStr,
 };
 
-use anyhow::Context;
+use anyhow::{bail, Context};
 use async_trait::async_trait;
 use contract_bindings_alloy::permissionedstaketable::PermissionedStakeTable::StakersUpdated;
 use ethers::types::{Address, U256};
@@ -367,7 +367,7 @@ impl Membership<SeqTypes> for EpochCommittees {
             .context(format!("failed to get state for epoch={epoch:?}"))?
             .eligible_leaders
             .iter()
-            .map(PubKey::public_key)
+            .map(|c| PubKey::public_key(&c.stake_table_entry))
             .collect())
     }
 
@@ -392,7 +392,7 @@ impl Membership<SeqTypes> for EpochCommittees {
             .indexed_stake_table
             .get(pub_key)
             .context("failed to get stake")?;
-        Ok(stake.stake() > U256::zero())
+        Ok(stake.stake_table_entry.stake() > U256::zero())
     }
 
     /// Check if a node has stake in the committee
@@ -402,7 +402,7 @@ impl Membership<SeqTypes> for EpochCommittees {
             .indexed_da_members
             .get(pub_key)
             .context("failed to get stake")?;
-        Ok(stake.stake() > U256::zero())
+        Ok(stake.stake_table_entry.stake() > U256::zero())
     }
 
     /// Index the vector of public keys with the current view number
@@ -417,7 +417,7 @@ impl Membership<SeqTypes> for EpochCommittees {
                     "We are missing the randomized committee for epoch {}",
                     epoch
                 );
-                bail!("failed to get leader for epoch={epoch:?}");
+                bail!("failed to get leader for epoch={epoch:?}")
             };
 
             Ok(PubKey::public_key(&select_randomized_leader(
@@ -429,7 +429,7 @@ impl Membership<SeqTypes> for EpochCommittees {
 
             let index = *view_number as usize % leaders.len();
             let res = leaders[index].clone();
-            Ok(PubKey::public_key(&res))
+            Ok(PubKey::public_key(&res.stake_table_entry))
         }
     }
 
@@ -550,13 +550,19 @@ mod tests {
 
         // The DA stake table contains the DA node only
         assert_eq!(st.da_members.0.len(), 1);
-        assert_eq!(st.da_members.0[0].stake_key, da_node.stake_table_key);
+        assert_eq!(
+            st.da_members.0[0].stake_table_entry.stake_key,
+            da_node.stake_table_key
+        );
 
         // The consensus stake table contains both nodes
         assert_eq!(st.stake_table.0.len(), 2);
-        assert_eq!(st.stake_table.0[0].stake_key, da_node.stake_table_key);
         assert_eq!(
-            st.stake_table.0[1].stake_key,
+            st.stake_table.0[0].stake_table_entry.stake_key,
+            da_node.stake_table_key
+        );
+        assert_eq!(
+            st.stake_table.0[1].stake_table_entry.stake_key,
             consensus_node.stake_table_key
         );
 
@@ -573,13 +579,25 @@ mod tests {
 
         // The DA stake stable now contains both nodes
         assert_eq!(st.da_members.0.len(), 2);
-        assert_eq!(st.da_members.0[0].stake_key, da_node.stake_table_key);
-        assert_eq!(st.da_members.0[1].stake_key, new_da_node.stake_table_key);
+        assert_eq!(
+            st.da_members.0[0].stake_table_entry.stake_key,
+            da_node.stake_table_key
+        );
+        assert_eq!(
+            st.da_members.0[1].stake_table_entry.stake_key,
+            new_da_node.stake_table_key
+        );
 
         // The consensus stake stable (still) contains both nodes
         assert_eq!(st.stake_table.0.len(), 2);
-        assert_eq!(st.stake_table.0[0].stake_key, da_node.stake_table_key);
-        assert_eq!(st.stake_table.0[1].stake_key, new_da_node.stake_table_key);
+        assert_eq!(
+            st.stake_table.0[0].stake_table_entry.stake_key,
+            da_node.stake_table_key
+        );
+        assert_eq!(
+            st.stake_table.0[1].stake_table_entry.stake_key,
+            new_da_node.stake_table_key
+        );
 
         // Simulate removing the second node
         updates.push(StakersUpdated {
@@ -590,11 +608,17 @@ mod tests {
 
         // The DA stake table contains only the original DA node
         assert_eq!(st.da_members.0.len(), 1);
-        assert_eq!(st.da_members.0[0].stake_key, da_node.stake_table_key);
+        assert_eq!(
+            st.da_members.0[0].stake_table_entry.stake_key,
+            da_node.stake_table_key
+        );
 
         // The consensus stake table also contains only the original DA node
         assert_eq!(st.stake_table.0.len(), 1);
-        assert_eq!(st.stake_table.0[0].stake_key, da_node.stake_table_key);
+        assert_eq!(
+            st.stake_table.0[0].stake_table_entry.stake_key,
+            da_node.stake_table_key
+        );
     }
 
     // TODO: test that repeatedly removes and adds more nodes
