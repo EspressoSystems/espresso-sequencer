@@ -17,13 +17,14 @@ use hotshot_example_types::{
     state_types::{TestInstanceState, TestValidatedState},
 };
 use hotshot_types::{
+    data::vid_commitment,
     data::{DaProposal2, EpochNumber, Leaf2, QuorumProposal2, QuorumProposalWrapper, ViewNumber},
     message::Proposal,
     simple_certificate::{QuorumCertificate, SimpleCertificate, SuccessThreshold},
     simple_vote::QuorumData2,
     traits::{
-        block_contents::vid_commitment,
         node_implementation::{ConsensusTime, Versions},
+        EncodeBytes,
     },
 };
 use sha2::{Digest, Sha256};
@@ -54,12 +55,13 @@ impl SimulatedChainState {
         let num_transactions = transactions.len() as u64;
         let encoded_transactions = TestTransaction::encode(&transactions);
         let block_payload = TestBlockPayload { transactions };
+        let metadata = TestMetadata { num_transactions };
         let block_vid_commitment = vid_commitment::<TestVersions>(
             &encoded_transactions,
+            &metadata.encode(),
             TEST_NUM_NODES_IN_VID_COMPUTATION,
             <TestVersions as Versions>::Base::VERSION,
         );
-        let metadata = TestMetadata { num_transactions };
         let block_builder_commitment =
             <TestBlockPayload as BlockPayload<TestTypes>>::builder_commitment(
                 &block_payload,

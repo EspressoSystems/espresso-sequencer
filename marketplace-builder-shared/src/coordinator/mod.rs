@@ -358,7 +358,7 @@ where
     /// The primary cause of this has to due with the interface of the
     /// [`BuilderStateCoordinator`]'s API.  In general, we want to be able to retrieve
     /// a [`BuilderState`] via the [`BuilderStateId`]. The [`BuilderStateId`] only references
-    /// a [`ViewNumber`](hotshot_types::data::ViewNumber) and a [`VidCommitment`](`hotshot_types::vid::VidCommitment`).
+    /// a [`ViewNumber`](hotshot_types::data::ViewNumber) and a [`VidCommitment`](`hotshot_types::data::VidCommitment`).
     /// While this information is available in the [`QuorumProposalWrapper`],
     /// it only helps us to rule out [`BuilderState`]s that already exist.
     /// It does **NOT** help us to pick a [`BuilderState`] that is the best fit to extend from.

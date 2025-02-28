@@ -15,21 +15,21 @@ use hotshot_example_types::{
 use hotshot_macros::{run_test, test_scripts};
 use hotshot_task_impls::{events::HotShotEvent::*, vid::VidTaskState};
 use hotshot_testing::{
-    helpers::{build_system_handle, vid_scheme_from_view_number},
+    helpers::build_system_handle,
     predicates::event::exact,
     script::{Expectations, InputOrder, TaskScript},
     serial,
 };
 use hotshot_types::{
     data::{null_block, DaProposal, PackedBundle, VidDisperse, ViewNumber},
+    message::UpgradeLock,
     traits::{
         consensus_api::ConsensusApi,
         node_implementation::{ConsensusTime, NodeType, Versions},
         BlockPayload,
     },
 };
-use jf_vid::VidScheme;
-use vbs::version::{StaticVersionType, Version};
+use vbs::version::StaticVersionType;
 use vec1::vec1;
 
 #[tokio::test(flavor = "multi_thread")]
@@ -54,6 +54,7 @@ async fn test_vid_task() {
         default_version,
     )
     .await;
+    let upgrade_lock = UpgradeLock::<TestTypes, TestVersions>::new();
     let transactions = vec![TestTransaction::new(vec![0])];
 
     let (payload, metadata) = <TestBlockPayload as BlockPayload<TestTypes>>::from_transactions(
@@ -63,11 +64,23 @@ async fn test_vid_task() {
     )
     .await
     .unwrap();
+
+    let vid_disperse = VidDisperse::calculate_vid_disperse(
+        &payload,
+        &membership,
+        ViewNumber::new(2), // this view number should be the same as the one in DA proposal
+        None,
+        None,
+        &metadata,
+        &upgrade_lock,
+    )
+    .await
+    .expect("Failed to calculate the vid disperse");
+
     let builder_commitment =
         <TestBlockPayload as BlockPayload<TestTypes>>::builder_commitment(&payload, &metadata);
-    let encoded_transactions = Arc::from(TestTransaction::encode(&transactions));
-    let vid_disperse = vid.disperse(&encoded_transactions).unwrap();
-    let payload_commitment = vid_disperse.commit;
+    let encoded_transactions: Arc<[u8]> = Arc::from(TestTransaction::encode(&transactions));
+    let payload_commitment = vid_disperse.payload_commitment();
 
     let signature = <TestTypes as NodeType>::SignatureKey::sign(
         handle.private_key(),
@@ -86,16 +99,6 @@ async fn test_vid_task() {
         signature,
         _pd: PhantomData,
     };
-
-    let vid_disperse = VidDisperse::from_membership(
-        message.data.view_number,
-        vid_disperse,
-        &membership,
-        None,
-        None,
-        None,
-    )
-    .await;
 
     let vid_proposal = Proposal {
         data: vid_disperse.clone(),

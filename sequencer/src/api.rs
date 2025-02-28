@@ -1110,8 +1110,9 @@ mod api_tests {
         AvailabilityDataSource, BlockQueryData, VidCommonQueryData,
     };
 
+    use hotshot_query_service::VidCommitment;
     use hotshot_types::data::vid_disperse::ADVZDisperseShare;
-    use hotshot_types::vid::advz_scheme;
+    use hotshot_types::vid::advz::advz_scheme;
     use hotshot_types::{
         data::{DaProposal, QuorumProposal2, QuorumProposalWrapper},
         event::LeafInfo,
@@ -1233,7 +1234,7 @@ mod api_tests {
                     .verify(
                         header.ns_table(),
                         &header.payload_commitment(),
-                        vid_common.common(),
+                        &vid_common.common().clone().unwrap(),
                     )
                     .unwrap();
             } else {
@@ -1372,7 +1373,7 @@ mod api_tests {
                 _pd: Default::default(),
             };
             persistence
-                .append_da(&da_proposal, payload_commitment)
+                .append_da(&da_proposal, VidCommitment::V0(payload_commitment))
                 .await
                 .unwrap();
         }

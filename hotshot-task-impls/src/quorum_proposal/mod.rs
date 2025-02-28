@@ -563,7 +563,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                 let keep_view = TYPES::View::new(view.saturating_sub(1));
                 self.cancel_tasks(keep_view);
             }
-            HotShotEvent::HighQcSend(qc, ..) => {
+            HotShotEvent::HighQcSend(qc, ..) | HotShotEvent::ExtendedQcSend(qc, ..) => {
                 ensure!(qc.view_number() > self.highest_qc.view_number());
                 let cert_epoch_number = qc.data.epoch;
 

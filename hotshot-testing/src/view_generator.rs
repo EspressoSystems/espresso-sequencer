@@ -132,6 +132,7 @@ impl TestView {
         let payload_commitment = da_payload_commitment::<TestTypes, TestVersions>(
             &epoch_membership,
             transactions.clone(),
+            &metadata,
             genesis_version,
         )
         .await;
@@ -140,9 +141,10 @@ impl TestView {
             &epoch_membership,
             genesis_view,
             genesis_epoch,
-            transactions.clone(),
+            &block_payload,
+            &metadata,
             &private_key,
-            genesis_version,
+            &upgrade_lock,
         )
         .await;
 
@@ -151,11 +153,13 @@ impl TestView {
             genesis_view,
             genesis_epoch,
             transactions.clone(),
+            &metadata,
             &public_key,
             &private_key,
             &upgrade_lock,
         )
-        .await;
+        .await
+        .unwrap();
 
         let block_header = TestBlockHeader::new(
             &Leaf2::<TestTypes>::genesis::<V>(
@@ -308,6 +312,7 @@ impl TestView {
         let payload_commitment = da_payload_commitment::<TestTypes, TestVersions>(
             &membership,
             transactions.clone(),
+            &metadata,
             version,
         )
         .await;
@@ -316,9 +321,10 @@ impl TestView {
             &membership,
             next_view,
             self.epoch_number,
-            transactions.clone(),
+            &block_payload,
+            &metadata,
             &private_key,
-            version,
+            &self.upgrade_lock,
         )
         .await;
 
@@ -327,11 +333,13 @@ impl TestView {
             next_view,
             self.epoch_number,
             transactions.clone(),
+            &metadata,
             &public_key,
             &private_key,
             &self.upgrade_lock,
         )
-        .await;
+        .await
+        .unwrap();
 
         let quorum_certificate = build_cert::<
             TestTypes,
