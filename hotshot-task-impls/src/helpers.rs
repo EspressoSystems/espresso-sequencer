@@ -133,9 +133,26 @@ pub(crate) async fn fetch_proposal<TYPES: NodeType, V: Versions>(
     let justify_qc_epoch = justify_qc.data.epoch();
 
     let membership_reader = membership.read().await;
-    let membership_stake_table = membership_reader.stake_table(justify_qc_epoch);
-    let membership_success_threshold = membership_reader.success_threshold(justify_qc_epoch);
+    let membership_stake_table = membership_reader
+        .stake_table(justify_qc_epoch)
+        .map_err(|_| {
+            error!(format!(
+                "failed to get stake table for epoch = {justify_qc_epoch:?}"
+            ))
+        })?;
+    let membership_success_threshold = membership_reader
+        .success_threshold(justify_qc_epoch)
+        .map_err(|_| {
+            error!(format!(
+                "failed to get success threshold for epoch = {justify_qc_epoch:?}"
+            ))
+        })?;
     drop(membership_reader);
+
+    let membership_stake_table = membership_stake_table
+        .into_iter()
+        .map(|config| config.stake_table_entry)
+        .collect::<Vec<_>>();
 
     justify_qc
         .is_valid_cert(
@@ -189,19 +206,6 @@ async fn decide_epoch_root<TYPES: NodeType>(
             membership_reader
                 .add_epoch_root(next_epoch_number, decided_leaf.block_header().clone())
                 .await
-        };
-
-        if let Some(write_callback) = write_callback {
-            let mut membership_writer = membership.write().await;
-            write_callback(&mut *membership_writer);
-        } else {
-            // If we didn't get a write callback out of add_epoch_root, then don't bother locking and calling sync_l1
-            return;
-        }
-
-        let write_callback = {
-            let membership_reader = membership.read().await;
-            membership_reader.sync_l1().await
         };
 
         if let Some(write_callback) = write_callback {
@@ -778,10 +782,18 @@ pub(crate) async fn validate_proposal_view_and_certs<
                 let timeout_cert_epoch = timeout_cert.data().epoch();
 
                 let membership_reader = validation_info.membership.read().await;
-                let membership_stake_table = membership_reader.stake_table(timeout_cert_epoch);
-                let membership_success_threshold =
-                    membership_reader.success_threshold(timeout_cert_epoch);
+                let membership_stake_table = membership_reader
+                    .stake_table(timeout_cert_epoch)
+                    .map_err(|_| error!("failed to get stake table"))?;
+                let membership_success_threshold = membership_reader
+                    .success_threshold(timeout_cert_epoch)
+                    .map_err(|_| error!("failed to get success_threshold"))?;
                 drop(membership_reader);
+
+                let membership_stake_table = membership_stake_table
+                    .into_iter()
+                    .map(|config| config.stake_table_entry)
+                    .collect::<Vec<_>>();
 
                 timeout_cert
                     .is_valid_cert(
@@ -808,11 +820,17 @@ pub(crate) async fn validate_proposal_view_and_certs<
                 let view_sync_cert_epoch = view_sync_cert.data().epoch();
 
                 let membership_reader = validation_info.membership.read().await;
-                let membership_stake_table = membership_reader.stake_table(view_sync_cert_epoch);
-                let membership_success_threshold =
-                    membership_reader.success_threshold(view_sync_cert_epoch);
+                let membership_stake_table = membership_reader
+                    .stake_table(view_sync_cert_epoch)
+                    .map_err(|_| error!("failed to get stake_table"))?;
+                let membership_success_threshold = membership_reader
+                    .success_threshold(view_sync_cert_epoch)
+                    .map_err(|_| error!("failed to get success_threshold"))?;
                 drop(membership_reader);
-
+                let membership_stake_table = membership_stake_table
+                    .into_iter()
+                    .map(|config| config.stake_table_entry)
+                    .collect::<Vec<_>>();
                 // View sync certs must also be valid.
                 view_sync_cert
                     .is_valid_cert(
@@ -937,10 +955,24 @@ pub async fn validate_qc_and_next_epoch_qc<TYPES: NodeType, V: Versions>(
     upgrade_lock: &UpgradeLock<TYPES, V>,
 ) -> Result<()> {
     let membership_reader = membership.read().await;
-    let membership_stake_table = membership_reader.stake_table(qc.data.epoch);
-    let membership_success_threshold = membership_reader.success_threshold(qc.data.epoch);
+    let qc_epoch = qc.data.epoch;
+    let membership_stake_table = membership_reader.stake_table(qc_epoch).map_err(|_| {
+        error!(format!(
+            "failed to get stake table for epoch = {qc_epoch:?}"
+        ))
+    })?;
+    let membership_success_threshold =
+        membership_reader.success_threshold(qc_epoch).map_err(|_| {
+            error!(format!(
+                "failed to get success_threshold for epoch = {qc_epoch:?}"
+            ))
+        })?;
     drop(membership_reader);
 
+    let membership_stake_table = membership_stake_table
+        .into_iter()
+        .map(|config| config.stake_table_entry)
+        .collect::<Vec<_>>();
     {
         let consensus_reader = consensus.read().await;
         qc.is_valid_cert(
@@ -963,11 +995,18 @@ pub async fn validate_qc_and_next_epoch_qc<TYPES: NodeType, V: Versions>(
         }
 
         let membership_reader = membership.read().await;
-        let membership_next_stake_table =
-            membership_reader.stake_table(qc.data.epoch.map(|x| x + 1));
-        let membership_next_success_threshold =
-            membership_reader.success_threshold(qc.data.epoch.map(|x| x + 1));
+        let membership_next_stake_table = membership_reader
+            .stake_table(qc.data.epoch.map(|x| x + 1))
+            .map_err(|_| error!("failed to get stake table"))?;
+        let membership_next_success_threshold = membership_reader
+            .success_threshold(qc.data.epoch.map(|x| x + 1))
+            .map_err(|_| error!("failed to get success threshold stake table"))?;
         drop(membership_reader);
+
+        let membership_next_stake_table = membership_next_stake_table
+            .into_iter()
+            .map(|config| config.stake_table_entry)
+            .collect::<Vec<_>>();
 
         // Validate the next epoch qc as well
         next_epoch_qc

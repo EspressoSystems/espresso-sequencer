@@ -85,19 +85,19 @@ pub trait Certificate<TYPES: NodeType, T>: HasViewNumber<TYPES> {
     fn threshold<MEMBERSHIP: Membership<TYPES>>(
         membership: &MEMBERSHIP,
         epoch: Option<TYPES::Epoch>,
-    ) -> u64;
+    ) -> Result<u64>;
 
     /// Get  Stake Table from Membership implementation.
     fn stake_table<MEMBERSHIP: Membership<TYPES>>(
         membership: &MEMBERSHIP,
         epoch: Option<TYPES::Epoch>,
-    ) -> Vec<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry>;
+    ) -> Result<Vec<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry>>;
 
     /// Get Total Nodes from Membership implementation.
     fn total_nodes<MEMBERSHIP: Membership<TYPES>>(
         membership: &MEMBERSHIP,
         epoch: Option<TYPES::Epoch>,
-    ) -> usize;
+    ) -> Result<usize>;
 
     /// Get  `StakeTableEntry` from Membership implementation.
     fn stake_table_entry<MEMBERSHIP: Membership<TYPES>>(
@@ -189,9 +189,9 @@ impl<
 
         let membership_reader = membership.read().await;
         let stake_table_entry = CERT::stake_table_entry(&*membership_reader, &key, epoch)?;
-        let stake_table = CERT::stake_table(&*membership_reader, epoch);
-        let total_nodes = CERT::total_nodes(&*membership_reader, epoch);
-        let threshold = CERT::threshold(&*membership_reader, epoch);
+        let stake_table = CERT::stake_table(&*membership_reader, epoch).ok()?;
+        let total_nodes = CERT::total_nodes(&*membership_reader, epoch).ok()?;
+        let threshold = CERT::threshold(&*membership_reader, epoch).ok()?;
         drop(membership_reader);
 
         let vote_node_id = stake_table

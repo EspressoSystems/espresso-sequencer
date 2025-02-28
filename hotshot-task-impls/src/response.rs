@@ -210,7 +210,11 @@ impl<TYPES: NodeType, V: Versions> NetworkResponseState<TYPES, V> {
         sender: &TYPES::SignatureKey,
         epoch: Option<TYPES::Epoch>,
     ) -> bool {
-        self.membership.read().await.has_stake(sender, epoch)
+        self.membership
+            .read()
+            .await
+            .has_stake(sender, epoch)
+            .unwrap_or(false)
     }
 }
 

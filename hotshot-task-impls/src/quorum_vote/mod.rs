@@ -546,10 +546,25 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> QuorumVoteTaskS
                 let cert_epoch = cert.data.epoch;
 
                 let membership_reader = self.membership.read().await;
-                let membership_da_stake_table = membership_reader.da_stake_table(cert_epoch);
-                let membership_da_success_threshold =
-                    membership_reader.da_success_threshold(cert_epoch);
+                let membership_da_stake_table =
+                    membership_reader.da_stake_table(cert_epoch).map_err(|_| {
+                        error!(format!(
+                            "da stake table not found for epoch = {cert_epoch:?}"
+                        ))
+                    })?;
+                let membership_da_success_threshold = membership_reader
+                    .da_success_threshold(cert_epoch)
+                    .map_err(|_| {
+                        error!(format!(
+                            "da_success_threshold not found for epoch = {cert_epoch:?}"
+                        ))
+                    })?;
                 drop(membership_reader);
+
+                let membership_da_stake_table = membership_da_stake_table
+                    .into_iter()
+                    .map(|config| config.stake_table_entry)
+                    .collect::<Vec<_>>();
 
                 // Validate the DAC.
                 cert.is_valid_cert(
@@ -603,12 +618,20 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> QuorumVoteTaskS
                 ensure!(
                     membership_reader
                         .da_committee_members(view, vid_epoch)
+                        .map_err(|_| error!(format!(
+                            "da members not found for epoch = {vid_epoch:?}"
+                        )))?
                         .contains(sender)
                         || *sender == membership_reader.leader(view, vid_epoch)?,
                     "VID share was not sent by a DA member or the view leader."
                 );
 
-                let membership_total_nodes = membership_reader.total_nodes(target_epoch);
+                let membership_total_nodes =
+                    membership_reader.total_nodes(target_epoch).map_err(|_| {
+                        error!(format!(
+                            "total nodes not found for epoch = {target_epoch:?}"
+                        ))
+                    })?;
                 drop(membership_reader);
 
                 if let Err(()) = share.data.verify_share(membership_total_nodes) {
