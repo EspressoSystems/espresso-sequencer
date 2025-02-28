@@ -149,6 +149,7 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
             start_voting_time: 0,
             stop_voting_time: 0,
             epoch_height: 0,
+            epoch_start_block: 0,
         };
         update_config(&mut config);
 
@@ -191,6 +192,8 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
                             HotShotInitializer::from_genesis::<MockVersions>(
                                 TestInstanceState::default(),
                                 0,
+                                0,
+                                vec![],
                             )
                             .await
                             .unwrap(),
