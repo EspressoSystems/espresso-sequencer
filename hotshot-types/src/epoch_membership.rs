@@ -4,8 +4,8 @@ use std::{collections::HashMap, sync::Arc};
 
 use async_broadcast::{broadcast, InactiveReceiver};
 use async_lock::{Mutex, RwLock};
-use hotshot_utils::anytrace::{Error, Level, Result};
-use hotshot_utils::{line_info, warn};
+use hotshot_utils::anytrace::{self, Error, Level, Result, DEFAULT_LOG_LEVEL};
+use hotshot_utils::{ensure, line_info, log, warn};
 
 use crate::drb::DrbResult;
 use crate::traits::election::Membership;
@@ -14,7 +14,7 @@ use crate::traits::signature_key::SignatureKey;
 use crate::utils::root_block_in_epoch;
 
 type EpochMap<TYPES> =
-    HashMap<<TYPES as NodeType>::Epoch, InactiveReceiver<Option<EpochMembership<TYPES>>>>;
+    HashMap<<TYPES as NodeType>::Epoch, InactiveReceiver<Result<EpochMembership<TYPES>>>>;
 
 /// Struct to Coordinate membership catchup
 pub struct EpochMembershipCoordinator<TYPES: NodeType> {
@@ -81,7 +81,7 @@ where
         }
         if self.catchup_map.lock().await.contains_key(&epoch) {
             return Err(warn!(
-                "Stake table for Epoch {:?} Unavailable. Catching already in Progress",
+                "Stake table for Epoch {:?} Unavailable. Catch up already in Progress",
                 epoch
             ));
         }
@@ -89,7 +89,7 @@ where
         spawn_catchup(coordinator, epoch);
 
         Err(warn!(
-            "Stake table for Epoch {:?} Unavailable. Starting catchpu",
+            "Stake table for Epoch {:?} Unavailable. Starting catchup",
             epoch
         ))
     }
@@ -102,17 +102,13 @@ where
     /// e.g. if we start with only epoch 0 stake table and call catchup for epoch 10, then call catchup for epoch 20
     /// the first caller will actually do the work for to catchup to epoch 10 then the second caller will continue
     /// catching up to epoch 20
-    async fn catchup(self, epoch: TYPES::Epoch) -> Option<EpochMembership<TYPES>> {
+    async fn catchup(self, epoch: TYPES::Epoch) -> Result<EpochMembership<TYPES>> {
         // recursively catchup until we have a stake table for the epoch containing our root
-        assert!(
-            *epoch != 0,
+        ensure!(
+            *epoch != 0 && *epoch != 1,
             "We are trying to catchup to epoch 0! This means the initial stake table is missing!"
         );
-        let root_epoch = if *epoch == 1 {
-            TYPES::Epoch::new(*epoch - 1)
-        } else {
-            TYPES::Epoch::new(*epoch - 2)
-        };
+        let root_epoch = TYPES::Epoch::new(*epoch - 2);
 
         let root_membership = if self.membership.read().await.has_epoch(root_epoch) {
             EpochMembership {
@@ -120,7 +116,6 @@ where
                 coordinator: self.clone(),
             }
         } else {
-            spawn_catchup(self.clone(), root_epoch);
             Box::pin(self.wait_for_catchup(root_epoch)).await?
         };
 
@@ -128,24 +123,32 @@ where
         // Verification of the root is handled in get_epoch_root
         let (next_epoch, header) = root_membership
             .get_epoch_root(root_block_in_epoch(*root_epoch, self.epoch_height))
-            .await?;
+            .await
+            .ok_or(anytrace::warn!("get epoch root failed"))?;
         let updater = self
             .membership
             .read()
             .await
             .add_epoch_root(next_epoch, header)
-            .await?;
+            .await
+            .ok_or(anytrace::warn!("add epoch root failed"))?;
         updater(&mut *(self.membership.write().await));
 
-        let sync = self.membership.read().await.sync_l1().await?;
+        let sync = self
+            .membership
+            .read()
+            .await
+            .sync_l1()
+            .await
+            .ok_or(anytrace::warn!("sync L1 failed"))?;
         sync(&mut *(self.membership.write().await));
-        Some(EpochMembership {
+        Ok(EpochMembership {
             epoch: Some(epoch),
             coordinator: self.clone(),
         })
     }
 
-    pub async fn wait_for_catchup(&self, epoch: TYPES::Epoch) -> Option<EpochMembership<TYPES>> {
+    pub async fn wait_for_catchup(&self, epoch: TYPES::Epoch) -> Result<EpochMembership<TYPES>> {
         let Some(mut rx) = self
             .catchup_map
             .lock()
@@ -155,10 +158,10 @@ where
         else {
             return self.clone().catchup(epoch).await;
         };
-        let Ok(Some(mem)) = rx.recv_direct().await else {
+        let Ok(Ok(mem)) = rx.recv_direct().await else {
             return self.clone().catchup(epoch).await;
         };
-        Some(mem)
+        Ok(mem)
     }
 }
 
@@ -204,13 +207,13 @@ impl<TYPES: NodeType> EpochMembership<TYPES> {
 
     /// Get a membership for the next epoch
     pub async fn next_epoch(&self) -> Result<Self> {
-        if self.epoch.is_none() {
-            Ok(self.clone())
-        } else {
-            self.coordinator
-                .membership_for_epoch(self.epoch.map(|e| e + 1))
-                .await
-        }
+        ensure!(
+            self.epoch().is_some(),
+            "No next epoch because epoch is None"
+        );
+        self.coordinator
+            .membership_for_epoch(self.epoch.map(|e| e + 1))
+            .await
     }
 
     /// Get the prior epoch
@@ -218,9 +221,8 @@ impl<TYPES: NodeType> EpochMembership<TYPES> {
         let Some(epoch) = self.epoch else {
             return Ok(self.clone());
         };
-        if *epoch == 0 {
-            return Ok(self.clone());
-        }
+        ensure!(*epoch > 0, "There is no previous epoch");
+
         self.coordinator.membership_for_epoch(Some(epoch - 1)).await
     }
 

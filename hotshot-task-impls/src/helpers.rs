@@ -114,9 +114,9 @@ pub(crate) async fn fetch_proposal<TYPES: NodeType, V: Versions>(
                             quorum_proposal.data.block_header().block_number(),
                             epoch_height,
                         );
-                        let mem = mem_coordinator.membership_for_epoch(proposal_epoch).await.ok()?;
+                        let epoch_membership = mem_coordinator.membership_for_epoch(proposal_epoch).await.ok()?;
                         // Make sure that the quorum_proposal is valid
-                        if quorum_proposal.validate_signature(&mem).await.is_ok() {
+                        if quorum_proposal.validate_signature(&epoch_membership).await.is_ok() {
                             proposal = Some(quorum_proposal.clone());
                         }
 
@@ -138,11 +138,11 @@ pub(crate) async fn fetch_proposal<TYPES: NodeType, V: Versions>(
 
     let justify_qc_epoch = justify_qc.data.epoch();
 
-    let mem = membership_coordinator
+    let epoch_membership = membership_coordinator
         .membership_for_epoch(justify_qc_epoch)
         .await?;
-    let membership_stake_table = mem.stake_table().await;
-    let membership_success_threshold = mem.success_threshold().await;
+    let membership_stake_table = epoch_membership.stake_table().await;
+    let membership_success_threshold = epoch_membership.success_threshold().await;
 
     justify_qc
         .is_valid_cert(

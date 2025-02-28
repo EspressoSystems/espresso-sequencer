@@ -223,16 +223,16 @@ impl<TYPES: NodeType, V: Versions> UpgradeTaskState<TYPES, V> {
 
                 // Check if we are the leader.
                 let view = vote.view_number();
-                let mem = self
+                let epoch_membership = self
                     .membership_coordinator
                     .membership_for_epoch(self.cur_epoch)
                     .await?;
                 ensure!(
-                    mem.leader(view).await? == self.public_key,
+                    epoch_membership.leader(view).await? == self.public_key,
                     debug!(
                         "We are not the leader for view {} are we leader for next view? {}",
                         *view,
-                        mem.leader(view + 1).await? == self.public_key
+                        epoch_membership.leader(view + 1).await? == self.public_key
                     )
                 );
 
@@ -240,7 +240,7 @@ impl<TYPES: NodeType, V: Versions> UpgradeTaskState<TYPES, V> {
                     &mut self.vote_collectors,
                     vote,
                     self.public_key.clone(),
-                    &mem,
+                    &epoch_membership,
                     self.id,
                     &event,
                     &tx,

@@ -661,14 +661,14 @@ impl<V: Versions> Stream for TestViewGenerator<V> {
     type Item = TestView;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        let mem = self.membership.clone();
+        let epoch_membership = self.membership.clone();
         let nkm = Arc::clone(&self.node_key_map);
         let curr_view = &self.current_view.clone();
 
         let mut fut = if let Some(ref view) = curr_view {
             async move { TestView::next_view(view).await }.boxed()
         } else {
-            async move { TestView::genesis::<V>(&mem, nkm).await }.boxed()
+            async move { TestView::genesis::<V>(&epoch_membership, nkm).await }.boxed()
         };
 
         match fut.as_mut().poll(cx) {
