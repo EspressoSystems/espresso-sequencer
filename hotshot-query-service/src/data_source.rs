@@ -134,9 +134,11 @@ pub mod availability_tests {
     use committable::Committable;
     use futures::stream::StreamExt;
     use hotshot_types::data::Leaf;
-    use std::collections::HashMap;
-    use std::fmt::Debug;
-    use std::ops::{Bound, RangeBounds};
+    use std::{
+        collections::HashMap,
+        fmt::Debug,
+        ops::{Bound, RangeBounds},
+    };
 
     async fn validate(ds: &impl TestableDataSource) {
         // Check the consistency of every block/leaf pair. Keep track of payloads and transactions
@@ -777,11 +779,9 @@ pub mod node_tests {
     use futures::{future::join_all, stream::StreamExt};
     use hotshot::traits::BlockPayload;
     use hotshot_example_types::{
-        block_types::TestBlockPayload, node_types::TestTypes, state_types::TestValidatedState,
-    };
-    use hotshot_example_types::{
-        block_types::{TestBlockHeader, TestMetadata},
-        state_types::TestInstanceState,
+        block_types::{TestBlockHeader, TestBlockPayload, TestMetadata},
+        node_types::TestTypes,
+        state_types::{TestInstanceState, TestValidatedState},
     };
     use hotshot_types::{
         data::vid_commitment,

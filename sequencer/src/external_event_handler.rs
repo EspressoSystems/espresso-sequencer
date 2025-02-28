@@ -13,8 +13,7 @@ use hotshot_types::{
 };
 use serde::{Deserialize, Serialize};
 use std::{marker::PhantomData, sync::Arc};
-use tokio::sync::mpsc::channel;
-use tokio::sync::mpsc::{Receiver, Sender};
+use tokio::sync::mpsc::{channel, Receiver, Sender};
 use url::Url;
 
 /// An external message that can be sent to or received from a node
@@ -122,11 +121,11 @@ impl<V: Versions> ExternalEventHandler<V> {
                 self.outbound_message_sender
                     .try_send(OutboundMessage::Direct(response_bytes, pub_key))
                     .with_context(|| "External outbound message queue is full")?;
-            }
+            },
 
             _ => {
                 return Err(anyhow::anyhow!("Unknown external message type"));
-            }
+            },
         }
         Ok(())
     }
@@ -166,7 +165,7 @@ impl<V: Versions> ExternalEventHandler<V> {
                     if let Err(err) = network.direct_message(message, recipient).await {
                         tracing::error!("Failed to send message: {:?}", err);
                     };
-                }
+                },
 
                 OutboundMessage::Broadcast(message) => {
                     // Broadcast the message to the global topic
@@ -176,7 +175,7 @@ impl<V: Versions> ExternalEventHandler<V> {
                     {
                         tracing::error!("Failed to broadcast message: {:?}", err);
                     };
-                }
+                },
             }
         }
     }

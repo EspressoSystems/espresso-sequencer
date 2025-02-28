@@ -15,10 +15,9 @@ mod message_compat_tests;
 use anyhow::Context;
 use catchup::StatePeers;
 use context::SequencerContext;
-use espresso_types::EpochCommittees;
 use espresso_types::{
-    traits::EventConsumer, BackoffParams, L1ClientOptions, NodeState, PubKey, SeqTypes,
-    SolverAuctionResultsProvider, ValidatedState,
+    traits::EventConsumer, BackoffParams, EpochCommittees, L1ClientOptions, NodeState, PubKey,
+    SeqTypes, SolverAuctionResultsProvider, ValidatedState,
 };
 use ethers_conv::ToAlloy;
 use genesis::L1Finalized;
@@ -38,19 +37,16 @@ pub mod state;
 use derivative::Derivative;
 use espresso_types::v0::traits::SequencerPersistence;
 pub use genesis::Genesis;
-use hotshot::traits::implementations::{
-    derive_libp2p_multiaddr, CombinedNetworks, GossipConfig, Libp2pNetwork, RequestResponseConfig,
-};
 use hotshot::{
     traits::implementations::{
-        derive_libp2p_peer_id, CdnMetricsValue, CdnTopic, KeyPair, MemoryNetwork, PushCdnNetwork,
-        WrappedSignatureKey,
+        derive_libp2p_multiaddr, derive_libp2p_peer_id, CdnMetricsValue, CdnTopic,
+        CombinedNetworks, GossipConfig, KeyPair, Libp2pNetwork, MemoryNetwork, PushCdnNetwork,
+        RequestResponseConfig, WrappedSignatureKey,
     },
     types::SignatureKey,
     MarketplaceConfig,
 };
-use hotshot_orchestrator::client::get_complete_config;
-use hotshot_orchestrator::client::OrchestratorClient;
+use hotshot_orchestrator::client::{get_complete_config, OrchestratorClient};
 use hotshot_types::{
     data::ViewNumber,
     light_client::{StateKeyPair, StateSignKey},
@@ -65,8 +61,7 @@ use hotshot_types::{
 };
 pub use options::Options;
 use serde::{Deserialize, Serialize};
-use std::time::Duration;
-use std::{fmt::Debug, marker::PhantomData};
+use std::{fmt::Debug, marker::PhantomData, time::Duration};
 use vbs::version::{StaticVersion, StaticVersionType};
 pub mod network;
 
@@ -311,7 +306,7 @@ pub async fn init_node<P: SequencerPersistence, V: Versions>(
         (Some(config), _) => {
             tracing::info!("loaded network config from storage, rejoining existing network");
             (config, false)
-        }
+        },
         // If we were told to fetch the config from an already-started peer, do so.
         (None, Some(peers)) => {
             tracing::info!(?peers, "loading network config from peers");
@@ -329,7 +324,7 @@ pub async fn init_node<P: SequencerPersistence, V: Versions>(
             );
             persistence.save_config(&config).await?;
             (config, false)
-        }
+        },
         // Otherwise, this is a fresh network; load from the orchestrator.
         (None, None) => {
             tracing::info!("loading network config from orchestrator");
@@ -355,7 +350,7 @@ pub async fn init_node<P: SequencerPersistence, V: Versions>(
             persistence.save_config(&config).await?;
             tracing::error!("all nodes connected");
             (config, true)
-        }
+        },
     };
 
     if let Some(upgrade) = genesis.upgrades.get(&V::Upgrade::VERSION) {
@@ -450,7 +445,7 @@ pub async fn init_node<P: SequencerPersistence, V: Versions>(
                     ethers::types::U256::from(timestamp.unix_timestamp()).to_alloy(),
                 )
                 .await
-        }
+        },
     };
 
     let mut genesis_state = ValidatedState {
@@ -590,13 +585,16 @@ pub mod testing {
     use hotshot_testing::block_builder::{
         BuilderTask, SimpleBuilderImplementation, TestBuilderImplementation,
     };
-    use hotshot_types::traits::network::Topic;
-    use hotshot_types::traits::signature_key::StakeTableEntryType;
     use hotshot_types::{
         event::LeafInfo,
         light_client::{CircuitField, StateKeyPair, StateVerKey},
-        traits::signature_key::BuilderSignatureKey,
-        traits::{block_contents::BlockHeader, metrics::NoMetrics, stake_table::StakeTableScheme},
+        traits::{
+            block_contents::BlockHeader,
+            metrics::NoMetrics,
+            network::Topic,
+            signature_key::{BuilderSignatureKey, StakeTableEntryType},
+            stake_table::StakeTableScheme,
+        },
         HotShotConfig, PeerConfig,
     };
     use marketplace_builder_core::{

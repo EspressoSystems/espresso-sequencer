@@ -2,8 +2,7 @@
 
 use std::marker::PhantomData;
 
-use crate::block::BuilderStateId;
-use crate::testing::constants::TEST_NUM_NODES_IN_VID_COMPUTATION;
+use crate::{block::BuilderStateId, testing::constants::TEST_NUM_NODES_IN_VID_COMPUTATION};
 use async_broadcast::Sender;
 use committable::Committable;
 use hotshot::{
@@ -17,8 +16,10 @@ use hotshot_example_types::{
     state_types::{TestInstanceState, TestValidatedState},
 };
 use hotshot_types::{
-    data::vid_commitment,
-    data::{DaProposal2, EpochNumber, Leaf2, QuorumProposal2, QuorumProposalWrapper, ViewNumber},
+    data::{
+        vid_commitment, DaProposal2, EpochNumber, Leaf2, QuorumProposal2, QuorumProposalWrapper,
+        ViewNumber,
+    },
     message::Proposal,
     simple_certificate::{QuorumCertificate, SimpleCertificate, SuccessThreshold},
     simple_vote::QuorumData2,
@@ -123,7 +124,7 @@ impl SimulatedChainState {
                     prev_justify_qc.signatures.clone(),
                     PhantomData,
                 )
-            }
+            },
         };
 
         tracing::debug!("Iteration: {} justify_qc: {:?}", self.round, justify_qc);

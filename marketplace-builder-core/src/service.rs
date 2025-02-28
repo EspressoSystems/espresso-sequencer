@@ -10,10 +10,10 @@ use marketplace_builder_shared::{
 pub use async_broadcast::{broadcast, RecvError, TryRecvError};
 use async_trait::async_trait;
 use committable::{Commitment, Committable};
-use futures::{future::BoxFuture, stream::FuturesUnordered, Stream};
 use futures::{
-    stream::{FuturesOrdered, StreamExt},
-    TryStreamExt,
+    future::BoxFuture,
+    stream::{FuturesOrdered, FuturesUnordered, StreamExt},
+    Stream, TryStreamExt,
 };
 use hotshot::types::Event;
 use hotshot_builder_api::{
@@ -23,18 +23,17 @@ use hotshot_builder_api::{
         data_source::{AcceptsTxnSubmits, BuilderDataSource},
     },
 };
-use hotshot_types::bundle::Bundle;
-use hotshot_types::traits::block_contents::{BuilderFee, Transaction};
 use hotshot_types::{
+    bundle::Bundle,
     data::VidCommitment,
     event::EventType,
     traits::{
+        block_contents::{BuilderFee, Transaction},
         node_implementation::{ConsensusTime, NodeType},
         signature_key::{BuilderSignatureKey, SignatureKey},
     },
 };
-use std::sync::Arc;
-use std::{fmt::Display, time::Instant};
+use std::{fmt::Display, sync::Arc, time::Instant};
 use tagged_base64::TaggedBase64;
 use tide_disco::{app::AppError, method::ReadState, App};
 use tokio::{spawn, task::JoinHandle, time::sleep};
@@ -189,7 +188,7 @@ where
             match event.event {
                 EventType::Error { error } => {
                     tracing::error!("Error event in HotShot: {:?}", error);
-                }
+                },
                 EventType::Transactions { transactions } => {
                     let hooks = Arc::clone(&hooks);
                     let coordinator = Arc::clone(&coordinator);
@@ -208,20 +207,20 @@ where
                             .collect::<Vec<_>>()
                             .await;
                     });
-                }
+                },
                 EventType::Decide { leaf_chain, .. } => {
                     let coordinator = Arc::clone(&coordinator);
                     spawn(async move { coordinator.handle_decide(leaf_chain).await });
-                }
+                },
                 EventType::DaProposal { proposal, .. } => {
                     let coordinator = Arc::clone(&coordinator);
                     spawn(async move { coordinator.handle_da_proposal(proposal.data).await });
-                }
+                },
                 EventType::QuorumProposal { proposal, .. } => {
                     let coordinator = Arc::clone(&coordinator);
                     spawn(async move { coordinator.handle_quorum_proposal(proposal.data).await });
-                }
-                _ => {}
+                },
+                _ => {},
             }
         }
     }
@@ -356,14 +355,14 @@ where
                     // If we couldn't find the state because it hasn't yet been created, try again
                     sleep(self.api_timeout / 10).await;
                     continue;
-                }
+                },
                 BuilderStateLookup::Decided => {
                     // If we couldn't find the state because the view has already been decided, we can just return an error
                     tracing::warn!("Requested a bundle for view we already GCd as decided",);
                     return Err(BuildError::Error(
                         "Request for a bundle for a view that has already been decided.".to_owned(),
                     ));
-                }
+                },
             };
 
             tracing::info!(

@@ -747,7 +747,7 @@ mod persistence_tests {
         let leaf_chain = chain
             .iter()
             .take(2)
-            .map(|(leaf, qc, _, _)| (leaf_info(leaf.clone()), qc.clone()))
+            .map(|(leaf, qc, ..)| (leaf_info(leaf.clone()), qc.clone()))
             .collect::<Vec<_>>();
         tracing::info!("decide with event handling failure");
         storage
@@ -794,7 +794,7 @@ mod persistence_tests {
         let leaf_chain = chain
             .iter()
             .skip(2)
-            .map(|(leaf, qc, _, _)| (leaf_info(leaf.clone()), qc.clone()))
+            .map(|(leaf, qc, ..)| (leaf_info(leaf.clone()), qc.clone()))
             .collect::<Vec<_>>();
         tracing::info!("decide successfully");
         storage
@@ -839,7 +839,7 @@ mod persistence_tests {
         tracing::info!("check decide event");
         let leaf_chain = consumer.leaf_chain().await;
         assert_eq!(leaf_chain.len(), 4, "{leaf_chain:#?}");
-        for ((leaf, _, _, _), info) in chain.iter().zip(leaf_chain.iter()) {
+        for ((leaf, ..), info) in chain.iter().zip(leaf_chain.iter()) {
             assert_eq!(info.leaf, *leaf);
             let decided_vid_share = info.vid_share.as_ref().unwrap();
             let view_number = match decided_vid_share {

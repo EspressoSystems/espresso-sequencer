@@ -17,9 +17,10 @@ use super::{
 };
 use crate::{
     availability::{BlockQueryData, QueryableHeader, QueryablePayload, TransactionHash},
+    node::BlockHash,
+    types::HeightIndexed,
     Header, Payload, Resolvable, Transaction,
 };
-use crate::{node::BlockHash, types::HeightIndexed};
 use hotshot_types::traits::node_implementation::NodeType;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -79,7 +80,7 @@ impl<Types: NodeType> Display for TransactionIdentifier<Types> {
             TransactionIdentifier::Latest => write!(f, "latest"),
             TransactionIdentifier::HeightAndOffset(height, offset) => {
                 write!(f, "{} {}", height, offset)
-            }
+            },
             TransactionIdentifier::Hash(hash) => write!(f, "{}", hash),
         }
     }

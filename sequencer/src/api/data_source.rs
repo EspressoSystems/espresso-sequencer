@@ -19,14 +19,15 @@ use hotshot_query_service::{
 use hotshot_types::{
     data::ViewNumber,
     light_client::StateSignatureRequestBody,
-    network::NetworkConfig,
+    network::{
+        BuilderType, CombinedNetworkConfig, Libp2pConfig, NetworkConfig, RandomBuilderConfig,
+    },
     stake_table::StakeTableEntry,
-    traits::{network::ConnectedNetwork, node_implementation::Versions},
+    traits::{
+        network::ConnectedNetwork,
+        node_implementation::{NodeType, Versions},
+    },
     HotShotConfig, PeerConfig, ValidatorConfig,
-};
-use hotshot_types::{
-    network::{BuilderType, CombinedNetworkConfig, Libp2pConfig, RandomBuilderConfig},
-    traits::node_implementation::NodeType,
 };
 use serde::{Deserialize, Serialize};
 use tide_disco::Url;

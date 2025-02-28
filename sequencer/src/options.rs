@@ -472,10 +472,10 @@ fn fmt_opt_urls(
             write!(fmt, "Some(")?;
             fmt_urls(urls, fmt)?;
             write!(fmt, ")")?;
-        }
+        },
         None => {
             write!(fmt, "None")?;
-        }
+        },
     }
     Ok(())
 }
@@ -536,13 +536,13 @@ impl ModuleArgs {
             match module {
                 SequencerModule::Storage(m) => {
                     curr = m.add(&mut modules.storage_fs, &mut provided)?
-                }
+                },
                 SequencerModule::StorageFs(m) => {
                     curr = m.add(&mut modules.storage_fs, &mut provided)?
-                }
+                },
                 SequencerModule::StorageSql(m) => {
                     curr = m.add(&mut modules.storage_sql, &mut provided)?
-                }
+                },
                 SequencerModule::Http(m) => curr = m.add(&mut modules.http, &mut provided)?,
                 SequencerModule::Query(m) => curr = m.add(&mut modules.query, &mut provided)?,
                 SequencerModule::Submit(m) => curr = m.add(&mut modules.submit, &mut provided)?,
@@ -551,10 +551,10 @@ impl ModuleArgs {
                 SequencerModule::Config(m) => curr = m.add(&mut modules.config, &mut provided)?,
                 SequencerModule::HotshotEvents(m) => {
                     curr = m.add(&mut modules.hotshot_events, &mut provided)?
-                }
+                },
                 SequencerModule::Explorer(m) => {
                     curr = m.add(&mut modules.explorer, &mut provided)?
-                }
+                },
             }
         }
 

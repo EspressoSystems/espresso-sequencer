@@ -48,8 +48,7 @@ use hotshot_types::{
     vote::HasViewNumber,
 };
 use itertools::Itertools;
-use sqlx::Row;
-use sqlx::{query, Executor};
+use sqlx::{query, Executor, Row};
 use std::{collections::BTreeMap, path::PathBuf, str::FromStr, sync::Arc, time::Duration};
 
 use crate::{catchup::SqlStateCatchup, SeqTypes, ViewNumber};
@@ -659,7 +658,7 @@ impl Persistence {
                         // we do have.
                         tracing::warn!("error loading row: {err:#}");
                         break;
-                    }
+                    },
                 };
 
                 let leaf_data: Vec<u8> = row.get("leaf");
@@ -1398,7 +1397,7 @@ impl Provider<SeqTypes, VidCommonRequest> for Persistence {
             Err(err) => {
                 tracing::warn!("could not open transaction: {err:#}");
                 return None;
-            }
+            },
         };
 
         let bytes = match query_as::<(Vec<u8>,)>(
@@ -1413,7 +1412,7 @@ impl Provider<SeqTypes, VidCommonRequest> for Persistence {
             Err(err) => {
                 tracing::warn!("error loading VID share: {err:#}");
                 return None;
-            }
+            },
         };
 
         let share: Proposal<SeqTypes, ADVZDisperseShare<SeqTypes>> =
@@ -1422,7 +1421,7 @@ impl Provider<SeqTypes, VidCommonRequest> for Persistence {
                 Err(err) => {
                     tracing::warn!("error decoding VID share: {err:#}");
                     return None;
-                }
+                },
             };
 
         Some(share.data.common)
@@ -1438,7 +1437,7 @@ impl Provider<SeqTypes, PayloadRequest> for Persistence {
             Err(err) => {
                 tracing::warn!("could not open transaction: {err:#}");
                 return None;
-            }
+            },
         };
 
         let bytes = match query_as::<(Vec<u8>,)>(
@@ -1453,7 +1452,7 @@ impl Provider<SeqTypes, PayloadRequest> for Persistence {
             Err(err) => {
                 tracing::warn!("error loading DA proposal: {err:#}");
                 return None;
-            }
+            },
         };
 
         let proposal: Proposal<SeqTypes, DaProposal<SeqTypes>> = match bincode::deserialize(&bytes)
@@ -1462,7 +1461,7 @@ impl Provider<SeqTypes, PayloadRequest> for Persistence {
             Err(err) => {
                 tracing::warn!("error decoding DA proposal: {err:#}");
                 return None;
-            }
+            },
         };
 
         Some(Payload::from_bytes(
@@ -1481,7 +1480,7 @@ impl Provider<SeqTypes, LeafRequest<SeqTypes>> for Persistence {
             Err(err) => {
                 tracing::warn!("could not open transaction: {err:#}");
                 return None;
-            }
+            },
         };
 
         let (leaf, qc) = match fetch_leaf_from_proposals(&mut tx, req).await {
@@ -1489,7 +1488,7 @@ impl Provider<SeqTypes, LeafRequest<SeqTypes>> for Persistence {
             Err(err) => {
                 tracing::info!("requested leaf not found in undecided proposals: {err:#}");
                 return None;
-            }
+            },
         };
 
         match LeafQueryData::new(leaf, qc) {
@@ -1497,7 +1496,7 @@ impl Provider<SeqTypes, LeafRequest<SeqTypes>> for Persistence {
             Err(err) => {
                 tracing::warn!("fetched invalid leaf: {err:#}");
                 None
-            }
+            },
         }
     }
 }

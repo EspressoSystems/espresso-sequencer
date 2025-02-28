@@ -139,7 +139,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> DaTaskState<TYP
                     &event_stream,
                 )
                 .await;
-            }
+            },
             HotShotEvent::DaProposalValidated(proposal, sender) => {
                 let cur_view = self.consensus.read().await.cur_view();
                 let view_number = proposal.data.view_number();
@@ -310,7 +310,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> DaTaskState<TYP
                         }
                     });
                 }
-            }
+            },
             HotShotEvent::DaVoteRecv(ref vote) => {
                 tracing::debug!("DA vote recv, Main Task {:?}", vote.view_number());
                 // Check if we are the leader and the vote is from the sender.
@@ -341,7 +341,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> DaTaskState<TYP
                     EpochTransitionIndicator::NotInTransition,
                 )
                 .await?;
-            }
+            },
             HotShotEvent::ViewChange(view, epoch) => {
                 if *epoch > self.cur_epoch {
                     self.cur_epoch = *epoch;
@@ -357,7 +357,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> DaTaskState<TYP
                     tracing::info!("View changed by more than 1 going to view {:?}", view);
                 }
                 self.cur_view = view;
-            }
+            },
             HotShotEvent::BlockRecv(packed_bundle) => {
                 let PackedBundle::<TYPES> {
                     encoded_transactions,
@@ -421,8 +421,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> DaTaskState<TYP
                 {
                     tracing::trace!("{e:?}");
                 }
-            }
-            _ => {}
+            },
+            _ => {},
         }
         Ok(())
     }

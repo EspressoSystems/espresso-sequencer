@@ -390,7 +390,7 @@ impl FeeAccountProof {
                     .elem()
                     .context("presence proof is missing account balance")?
                     .0)
-            }
+            },
             FeeMerkleProof::Absence(proof) => {
                 let tree = FeeMerkleTree::from_commitment(comm);
                 ensure!(
@@ -398,7 +398,7 @@ impl FeeAccountProof {
                     "invalid proof"
                 );
                 Ok(0.into())
-            }
+            },
         }
     }
 
@@ -413,11 +413,11 @@ impl FeeAccountProof {
                     proof,
                 )?;
                 Ok(())
-            }
+            },
             FeeMerkleProof::Absence(proof) => {
                 tree.non_membership_remember(FeeAccount(self.account), proof)?;
                 Ok(())
-            }
+            },
         }
     }
 }
@@ -442,14 +442,14 @@ pub fn retain_accounts(
                 // This remember cannot fail, since we just constructed a valid proof, and are
                 // remembering into a tree with the same commitment.
                 snapshot.remember(account, *elem, proof).unwrap();
-            }
+            },
             LookupResult::NotFound(proof) => {
                 // Likewise this cannot fail.
                 snapshot.non_membership_remember(account, proof).unwrap()
-            }
+            },
             LookupResult::NotInMemory => {
                 bail!("missing account {account}");
-            }
+            },
         }
     }
 

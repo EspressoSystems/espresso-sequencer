@@ -17,8 +17,7 @@ use hotshot_builder_api::v0_1::block_info::AvailableBlockInfo;
 use hotshot_task::task::TaskState;
 use hotshot_types::{
     consensus::OuterConsensus,
-    data::VidCommitment,
-    data::{null_block, PackedBundle},
+    data::{null_block, PackedBundle, VidCommitment},
     event::{Event, EventType},
     message::UpgradeLock,
     traits::{
@@ -135,7 +134,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
             Err(e) => {
                 tracing::error!("Failed to calculate version: {:?}", e);
                 return None;
-            }
+            },
         };
 
         if version < V::Marketplace::VERSION {
@@ -160,7 +159,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
             Err(err) => {
                 tracing::error!("Upgrade certificate requires unsupported version, refusing to request blocks: {}", err);
                 return None;
-            }
+            },
         };
 
         // Request a block from the builder unless we are between versions.
@@ -304,11 +303,11 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
                 Ok(Err(e)) => {
                     tracing::debug!("Failed to retrieve bundle: {e}");
                     continue;
-                }
+                },
                 Err(e) => {
                     tracing::debug!("Failed to retrieve bundle: {e}");
                     continue;
-                }
+                },
             }
         }
 
@@ -385,7 +384,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
             Err(err) => {
                 tracing::error!("Upgrade certificate requires unsupported version, refusing to request blocks: {}", err);
                 return None;
-            }
+            },
         };
 
         let packed_bundle = match self
@@ -411,7 +410,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
                     .add(1);
 
                 null_block
-            }
+            },
         };
 
         broadcast_event(
@@ -459,7 +458,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
                     &self.output_event_stream,
                 )
                 .await;
-            }
+            },
             HotShotEvent::ViewChange(view, epoch) => {
                 let view = TYPES::View::new(std::cmp::max(1, **view));
                 let epoch = if self.upgrade_lock.epochs_enabled(view).await {
@@ -487,8 +486,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
                     self.handle_view_change(&event_stream, view, epoch).await;
                     return Ok(());
                 }
-            }
-            _ => {}
+            },
+            _ => {},
         }
         Ok(())
     }
@@ -509,7 +508,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
                     // We still have time, will re-try in a bit
                     sleep(RETRY_DELAY).await;
                     continue;
-                }
+                },
             }
         }
     }
@@ -543,13 +542,13 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
                     let leaf = consensus_reader.saved_leaves().get(leaf_commitment).context
                         (info!("Missing leaf with commitment {leaf_commitment} for view {target_view} in saved_leaves"))?;
                     return Ok((target_view, leaf.payload_commitment()));
-                }
+                },
                 ViewInner::Failed => {
                     // For failed views, backtrack
                     target_view =
                         TYPES::View::new(target_view.checked_sub(1).context(warn!("Reached genesis. Something is wrong -- have we not decided any blocks since genesis?"))?);
                     continue;
-                }
+                },
             }
         }
     }
@@ -567,7 +566,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
             Err(e) => {
                 tracing::warn!("Failed to find last vid commitment in time: {e}");
                 return None;
-            }
+            },
         };
 
         let parent_comm_sig = match <<TYPES as NodeType>::SignatureKey as SignatureKey>::sign(
@@ -578,7 +577,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
             Err(err) => {
                 tracing::error!(%err, "Failed to sign block hash");
                 return None;
-            }
+            },
         };
 
         while task_start_time.elapsed() < self.builder_timeout {
@@ -592,7 +591,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
                 // We got a block
                 Ok(Ok(block)) => {
                     return Some(block);
-                }
+                },
 
                 // We failed to get a block
                 Ok(Err(err)) => {
@@ -600,13 +599,13 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
                     // pause a bit
                     sleep(RETRY_DELAY).await;
                     continue;
-                }
+                },
 
                 // We timed out while getting available blocks
                 Err(err) => {
                     tracing::info!(%err, "Timeout while getting available blocks");
                     return None;
-                }
+                },
             }
         }
 
@@ -671,7 +670,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
                 Err(err) => {
                     tracing::warn!(%err,"Error getting available blocks");
                     None
-                }
+                },
             })
             .flatten()
             .collect::<Vec<_>>()
@@ -731,7 +730,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
                 Err(err) => {
                     tracing::error!(%err, "Failed to sign block hash");
                     continue;
-                }
+                },
             };
 
             let response = {
@@ -747,7 +746,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
                     Err(err) => {
                         tracing::warn!(%err, "Error claiming block data");
                         continue;
-                    }
+                    },
                 };
 
                 let header_input = match header_input {
@@ -755,7 +754,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
                     Err(err) => {
                         tracing::warn!(%err, "Error claiming header input");
                         continue;
-                    }
+                    },
                 };
 
                 // verify the signature over the message

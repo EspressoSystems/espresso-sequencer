@@ -103,7 +103,7 @@ async fn store_and_get_computed_drb_result<
                 .await;
             task_state.drb_computation = None;
             Ok(result)
-        }
+        },
         Err(e) => Err(warn!("Error in DRB calculation: {:?}.", e)),
     }
 }
@@ -215,10 +215,10 @@ async fn start_drb_task<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versio
                         )
                         .await;
                         task_state.drb_computation = None;
-                    }
+                    },
                     Err(e) => {
                         tracing::error!("error joining DRB computation task: {e:?}");
-                    }
+                    },
                 }
             } else if *task_epoch == new_epoch_number {
                 return;
@@ -535,10 +535,10 @@ pub(crate) async fn update_shared_state<
                 Some((leaf, view)) => {
                     maybe_validated_view = Some(view);
                     Some(leaf)
-                }
+                },
                 None => None,
             }
-        }
+        },
     };
 
     let parent = maybe_parent.context(info!(

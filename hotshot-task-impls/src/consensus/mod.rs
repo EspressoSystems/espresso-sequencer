@@ -30,8 +30,11 @@ use tracing::instrument;
 use self::handlers::{
     handle_quorum_vote_recv, handle_timeout, handle_timeout_vote_recv, handle_view_change,
 };
-use crate::helpers::{validate_qc_and_next_epoch_qc, wait_for_next_epoch_qc};
-use crate::{events::HotShotEvent, helpers::broadcast_event, vote_collection::VoteCollectorsMap};
+use crate::{
+    events::HotShotEvent,
+    helpers::{broadcast_event, validate_qc_and_next_epoch_qc, wait_for_next_epoch_qc},
+    vote_collection::VoteCollectorsMap,
+};
 
 /// Event handlers for use in the `handle` method.
 mod handlers;
@@ -118,14 +121,14 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> ConsensusTaskSt
                 {
                     tracing::debug!("Failed to handle QuorumVoteRecv event; error = {e}");
                 }
-            }
+            },
             HotShotEvent::TimeoutVoteRecv(ref vote) => {
                 if let Err(e) =
                     handle_timeout_vote_recv(vote, Arc::clone(&event), &sender, self).await
                 {
                     tracing::debug!("Failed to handle TimeoutVoteRecv event; error = {e}");
                 }
-            }
+            },
             HotShotEvent::ViewChange(new_view_number, epoch_number) => {
                 if let Err(e) =
                     handle_view_change(*new_view_number, *epoch_number, &sender, &receiver, self)
@@ -134,12 +137,12 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> ConsensusTaskSt
                     tracing::trace!("Failed to handle ViewChange event; error = {e}");
                 }
                 self.view_start_time = Instant::now();
-            }
+            },
             HotShotEvent::Timeout(view_number, epoch) => {
                 if let Err(e) = handle_timeout(*view_number, *epoch, &sender, self).await {
                     tracing::debug!("Failed to handle Timeout event; error = {e}");
                 }
-            }
+            },
             HotShotEvent::Qc2Formed(Either::Left(quorum_cert)) => {
                 let cert_view = quorum_cert.view_number();
                 if !self.upgrade_lock.epochs_enabled(cert_view).await {
@@ -192,7 +195,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> ConsensusTaskSt
                     &sender,
                 )
                 .await;
-            }
+            },
             HotShotEvent::ExtendedQcRecv(high_qc, next_epoch_high_qc, _) => {
                 if !self
                     .consensus
@@ -241,8 +244,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> ConsensusTaskSt
                     )
                     .await;
                 }
-            }
-            _ => {}
+            },
+            _ => {},
         }
 
         Ok(())

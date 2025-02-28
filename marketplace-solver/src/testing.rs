@@ -192,7 +192,7 @@ mod test {
         let client = surf_disco::Client::<SolverError, MarketplaceVersion>::new(solver_api);
         client.connect(None).await;
 
-        let (reg_ns_1, _, _) =
+        let (reg_ns_1, ..) =
             register_rollup_helper(1, Some("http://localhost"), 200, true, "test").await;
 
         // registering a rollup
@@ -230,7 +230,7 @@ mod test {
         let client = surf_disco::Client::<SolverError, MarketplaceVersion>::new(solver_api);
         client.connect(None).await;
 
-        let (reg_ns_1, _, _) =
+        let (reg_ns_1, ..) =
             register_rollup_helper(1, Some("http://localhost"), 200, true, "test").await;
 
         // registering a rollup
@@ -268,7 +268,7 @@ mod test {
         // Ensure the error indicates an invalid signature
         match err {
             SolverError::InvalidSignature(signature)
-                if reg_ns_2.signature.to_string() == signature => {}
+                if reg_ns_2.signature.to_string() == signature => {},
             _ => panic!("err {err:?}"),
         }
     }
@@ -375,7 +375,7 @@ mod test {
             .unwrap_err();
 
         match err {
-            SolverError::Database(_) => {}
+            SolverError::Database(_) => {},
             _ => panic!("err {err:?}"),
         }
     }
@@ -532,7 +532,7 @@ mod test {
         client.connect(Some(Duration::from_secs(5))).await;
 
         // Register the first rollup (ns = 1)
-        let (reg_ns_1, _, _) =
+        let (reg_ns_1, ..) =
             register_rollup_helper(1, Some("http://localhost"), 200, true, "test").await;
         let _: RollupRegistration = client
             .post("register_rollup")
@@ -543,7 +543,7 @@ mod test {
             .unwrap();
 
         // Register the second rollup (ns = 2)
-        let (reg_ns_2, _, _) =
+        let (reg_ns_2, ..) =
             register_rollup_helper(2, Some("http://localhost"), 200, true, "test").await;
         let _: RollupRegistration = client
             .post("register_rollup")

@@ -571,11 +571,11 @@ impl SqlStorage {
             match runner.run_async(&mut Migrator::from(&mut conn)).await {
                 Ok(report) => {
                     tracing::info!("ran DB migrations: {report:?}");
-                }
+                },
                 Err(err) => {
                     tracing::error!("DB migrations failed: {:?}", err.report());
                     Err(err)?;
-                }
+                },
             }
         }
 
@@ -703,7 +703,7 @@ impl PruneStorage for SqlStorage {
                 };
 
                 height
-            }
+            },
         };
 
         // Prune data exceeding target retention in batches
@@ -821,8 +821,7 @@ pub mod testing {
         str::{self, FromStr},
         time::Duration,
     };
-    use tokio::net::TcpStream;
-    use tokio::time::timeout;
+    use tokio::{net::TcpStream, time::timeout};
 
     use portpicker::pick_unused_port;
 

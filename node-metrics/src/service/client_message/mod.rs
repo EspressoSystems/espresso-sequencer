@@ -38,8 +38,7 @@ impl ClientMessage {
 
 #[cfg(test)]
 mod tests {
-    use super::InternalClientMessage;
-    use super::*;
+    use super::{InternalClientMessage, *};
     use crate::service::server_message::ServerMessage;
     use futures::channel::mpsc::Sender;
     use std::iter::zip;
@@ -141,7 +140,7 @@ mod tests {
                 match internal_client_message {
                     InternalClientMessage::Request(id, _) => {
                         assert_eq!(id, client_id);
-                    }
+                    },
                     _ => panic!("Unexpected InternalClientMessage"),
                 }
             }

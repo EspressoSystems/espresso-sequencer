@@ -344,7 +344,7 @@ impl<T: StateCatchup> StateCatchup for Vec<T> {
                         provider = provider.name(),
                         "failed to fetch accounts: {err:#}"
                     );
-                }
+                },
             }
         }
 
@@ -371,7 +371,7 @@ impl<T: StateCatchup> StateCatchup for Vec<T> {
                         provider = provider.name(),
                         "failed to fetch frontier: {err:#}"
                     );
-                }
+                },
             }
         }
 
@@ -391,7 +391,7 @@ impl<T: StateCatchup> StateCatchup for Vec<T> {
                         provider = provider.name(),
                         "failed to fetch chain config: {err:#}"
                     );
-                }
+                },
             }
         }
 
@@ -488,11 +488,11 @@ pub trait SequencerPersistence: Sized + Send + Sync + Clone + 'static {
             Some(view) => {
                 tracing::info!(?view, "starting from saved view");
                 view
-            }
+            },
             None => {
                 tracing::info!("no saved view, starting from genesis");
                 ViewNumber::genesis()
-            }
+            },
         };
 
         let next_epoch_high_qc = self
@@ -517,7 +517,7 @@ pub trait SequencerPersistence: Sized + Send + Sync + Clone + 'static {
 
                 let anchor_view = leaf.view_number();
                 (leaf, high_qc, Some(anchor_view))
-            }
+            },
             None => {
                 tracing::info!("no saved leaf, starting from genesis leaf");
                 (
@@ -529,7 +529,7 @@ pub trait SequencerPersistence: Sized + Send + Sync + Clone + 'static {
                         .to_qc2(),
                     None,
                 )
-            }
+            },
         };
         let validated_state = if leaf.block_header().height() == 0 {
             // If we are starting from genesis, we can provide the full state.

@@ -34,7 +34,7 @@ async fn main() -> anyhow::Result<()> {
         Command::Pubkey(opt) => {
             pubkey::run(opt);
             Ok(())
-        }
+        },
         Command::ResetStorage(opt) => reset_storage::run(opt).await,
     }
 }

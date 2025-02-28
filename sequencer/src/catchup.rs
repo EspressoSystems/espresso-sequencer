@@ -3,12 +3,11 @@ use std::sync::Arc;
 use anyhow::{anyhow, bail, ensure, Context};
 use async_lock::RwLock;
 use async_trait::async_trait;
-use committable::Commitment;
-use committable::Committable;
-use espresso_types::traits::SequencerPersistence;
+use committable::{Commitment, Committable};
 use espresso_types::{
-    v0::traits::StateCatchup, v0_99::ChainConfig, BackoffParams, BlockMerkleTree, FeeAccount,
-    FeeAccountProof, FeeMerkleCommitment, FeeMerkleTree, Leaf2, NodeState,
+    traits::SequencerPersistence, v0::traits::StateCatchup, v0_99::ChainConfig, BackoffParams,
+    BlockMerkleTree, FeeAccount, FeeAccountProof, FeeMerkleCommitment, FeeMerkleTree, Leaf2,
+    NodeState,
 };
 use futures::future::{Future, FutureExt, TryFuture, TryFutureExt};
 use hotshot_types::{
@@ -76,7 +75,7 @@ pub(crate) async fn local_and_remote(
         Err(err) => {
             tracing::warn!("not using local catchup: {err:#}");
             Arc::new(remote)
-        }
+        },
     }
 }
 
@@ -165,15 +164,15 @@ impl<ApiVer: StaticVersionType> StatePeers<ApiVer> {
                     requests.insert(id, true);
                     res = Ok(t);
                     break;
-                }
+                },
                 Ok(Err(err)) => {
                     tracing::warn!(id, ?score, peer = %client.url, "error from peer: {err:#}");
                     requests.insert(id, false);
-                }
+                },
                 Err(_) => {
                     tracing::warn!(id, ?score, peer = %client.url, ?timeout_dur, "request timed out");
                     requests.insert(id, false);
-                }
+                },
             }
         }
 

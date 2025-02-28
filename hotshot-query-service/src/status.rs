@@ -28,9 +28,7 @@ use derive_more::From;
 use futures::FutureExt;
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
-use std::borrow::Cow;
-use std::fmt::Display;
-use std::path::PathBuf;
+use std::{borrow::Cow, fmt::Display, path::PathBuf};
 use tide_disco::{api::ApiError, method::ReadState, Api, RequestError, StatusCode};
 use vbs::version::StaticVersionType;
 
@@ -122,8 +120,7 @@ mod test {
     use futures::FutureExt;
     use portpicker::pick_unused_port;
     use reqwest::redirect::Policy;
-    use std::str::FromStr;
-    use std::time::Duration;
+    use std::{str::FromStr, time::Duration};
     use surf_disco::Client;
     use tempfile::TempDir;
     use tide_disco::{App, Url};

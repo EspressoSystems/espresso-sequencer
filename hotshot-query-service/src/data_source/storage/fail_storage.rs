@@ -35,8 +35,7 @@ use async_lock::Mutex;
 use async_trait::async_trait;
 use futures::future::Future;
 use hotshot_types::traits::node_implementation::NodeType;
-use std::ops::RangeBounds;
-use std::sync::Arc;
+use std::{ops::RangeBounds, sync::Arc};
 
 /// A specific action that can be targeted to inject an error.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -86,8 +85,8 @@ impl FailureMode {
         match self {
             Self::Once(fail_action) if fail_action.matches(action) => {
                 *self = Self::Never;
-            }
-            Self::Always(fail_action) if fail_action.matches(action) => {}
+            },
+            Self::Always(fail_action) if fail_action.matches(action) => {},
             _ => return Ok(()),
         }
 

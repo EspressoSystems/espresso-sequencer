@@ -121,7 +121,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static, V: Versions> Handl
                         Err(e) => {
                             tracing::error!("{e:#}");
                             return;
-                        }
+                        },
                     };
                     let proposal_payload_comm = proposal.data.block_header().payload_commitment();
                     let parent_commitment = parent_leaf.commit();
@@ -163,7 +163,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static, V: Versions> Handl
                     }
                     leaf = Some(proposed_leaf);
                     parent_view_number = Some(parent_leaf.view_number());
-                }
+                },
                 HotShotEvent::DaCertificateValidated(cert) => {
                     let cert_payload_comm = &cert.data().payload_commit;
                     let next_epoch_cert_payload_comm = cert.data().next_epoch_payload_commit;
@@ -185,7 +185,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static, V: Versions> Handl
                     } else {
                         next_epoch_payload_commitment = next_epoch_cert_payload_comm;
                     }
-                }
+                },
                 HotShotEvent::VidShareValidated(share) => {
                     let vid_payload_commitment = &share.data.payload_commitment();
                     vid_share = Some(share.clone());
@@ -209,8 +209,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static, V: Versions> Handl
                     } else {
                         payload_commitment = Some(*vid_payload_commitment);
                     }
-                }
-                _ => {}
+                },
+                _ => {},
             }
         }
 
@@ -360,21 +360,21 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> QuorumVoteTaskS
                         } else {
                             return false;
                         }
-                    }
+                    },
                     VoteDependency::Dac => {
                         if let HotShotEvent::DaCertificateValidated(cert) = event {
                             cert.view_number
                         } else {
                             return false;
                         }
-                    }
+                    },
                     VoteDependency::Vid => {
                         if let HotShotEvent::VidShareValidated(disperse) = event {
                             disperse.data.view_number()
                         } else {
                             return false;
                         }
-                    }
+                    },
                 };
                 if event_view == view_number {
                     tracing::trace!(
@@ -532,7 +532,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> QuorumVoteTaskS
                         Arc::clone(&event),
                     );
                 }
-            }
+            },
             HotShotEvent::DaCertificateRecv(cert) => {
                 let view = cert.view_number;
 
@@ -577,7 +577,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> QuorumVoteTaskS
                     &event_sender,
                     Arc::clone(&event),
                 );
-            }
+            },
             HotShotEvent::VidShareRecv(sender, share) => {
                 let view = share.data.view_number();
                 // Do nothing if the VID share is old
@@ -636,7 +636,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> QuorumVoteTaskS
                     &event_sender,
                     Arc::clone(&event),
                 );
-            }
+            },
             HotShotEvent::Timeout(view, ..) => {
                 let view = TYPES::View::new(view.saturating_sub(1));
                 // cancel old tasks
@@ -645,7 +645,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> QuorumVoteTaskS
                     task.abort();
                 }
                 self.vote_dependencies = current_tasks;
-            }
+            },
             HotShotEvent::ViewChange(mut view, _) => {
                 view = TYPES::View::new(view.saturating_sub(1));
                 if !self.update_latest_voted_view(view).await {
@@ -657,8 +657,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> QuorumVoteTaskS
                     task.abort();
                 }
                 self.vote_dependencies = current_tasks;
-            }
-            _ => {}
+            },
+            _ => {},
         }
         Ok(())
     }

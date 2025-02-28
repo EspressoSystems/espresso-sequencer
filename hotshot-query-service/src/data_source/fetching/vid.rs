@@ -35,8 +35,7 @@ use derivative::Derivative;
 use derive_more::From;
 use futures::future::{BoxFuture, FutureExt};
 use hotshot_types::traits::{block_contents::BlockHeader, node_implementation::NodeType};
-use std::sync::Arc;
-use std::{cmp::Ordering, future::IntoFuture, iter::once, ops::RangeBounds};
+use std::{cmp::Ordering, future::IntoFuture, iter::once, ops::RangeBounds, sync::Arc};
 
 pub(super) type VidCommonFetcher<Types, S, P> =
     fetching::Fetcher<request::VidCommonRequest, VidCommonCallback<Types, S, P>>;

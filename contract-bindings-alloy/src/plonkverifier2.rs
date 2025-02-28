@@ -280,7 +280,7 @@ pub mod BN254 {
             match _t {
                 alloy_sol_types::private::AssertTypeEq::<
                     <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                >(_) => {}
+                >(_) => {},
             }
         }
         #[automatically_derived]
@@ -659,7 +659,7 @@ pub mod IPlonkVerifier {
             match _t {
                 alloy_sol_types::private::AssertTypeEq::<
                     <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                >(_) => {}
+                >(_) => {},
             }
         }
         #[automatically_derived]
@@ -1203,7 +1203,7 @@ pub mod IPlonkVerifier {
             match _t {
                 alloy_sol_types::private::AssertTypeEq::<
                     <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                >(_) => {}
+                >(_) => {},
             }
         }
         #[automatically_derived]
@@ -2623,7 +2623,7 @@ pub mod PlonkVerifier2 {
             match _t {
                 alloy_sol_types::private::AssertTypeEq::<
                     <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                >(_) => {}
+                >(_) => {},
             }
         }
         #[automatically_derived]
@@ -2690,7 +2690,7 @@ pub mod PlonkVerifier2 {
                 match _t {
                     alloy_sol_types::private::AssertTypeEq::<
                         <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                    >(_) => {}
+                    >(_) => {},
                 }
             }
             #[automatically_derived]
@@ -2719,7 +2719,7 @@ pub mod PlonkVerifier2 {
                 match _t {
                     alloy_sol_types::private::AssertTypeEq::<
                         <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                    >(_) => {}
+                    >(_) => {},
                 }
             }
             #[automatically_derived]
@@ -2800,7 +2800,7 @@ pub mod PlonkVerifier2 {
                 match _t {
                     alloy_sol_types::private::AssertTypeEq::<
                         <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                    >(_) => {}
+                    >(_) => {},
                 }
             }
             #[automatically_derived]
@@ -2829,7 +2829,7 @@ pub mod PlonkVerifier2 {
                 match _t {
                     alloy_sol_types::private::AssertTypeEq::<
                         <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                    >(_) => {}
+                    >(_) => {},
                 }
             }
             #[automatically_derived]
@@ -2925,7 +2925,7 @@ pub mod PlonkVerifier2 {
                 match _t {
                     alloy_sol_types::private::AssertTypeEq::<
                         <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                    >(_) => {}
+                    >(_) => {},
                 }
             }
             #[automatically_derived]
@@ -2958,7 +2958,7 @@ pub mod PlonkVerifier2 {
                 match _t {
                     alloy_sol_types::private::AssertTypeEq::<
                         <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                    >(_) => {}
+                    >(_) => {},
                 }
             }
             #[automatically_derived]
@@ -3118,13 +3118,13 @@ pub mod PlonkVerifier2 {
             match self {
                 Self::P_MOD(inner) => {
                     <P_MODCall as alloy_sol_types::SolCall>::abi_encoded_size(inner)
-                }
+                },
                 Self::R_MOD(inner) => {
                     <R_MODCall as alloy_sol_types::SolCall>::abi_encoded_size(inner)
-                }
+                },
                 Self::verify(inner) => {
                     <verifyCall as alloy_sol_types::SolCall>::abi_encoded_size(inner)
-                }
+                },
             }
         }
         #[inline]
@@ -3132,13 +3132,13 @@ pub mod PlonkVerifier2 {
             match self {
                 Self::P_MOD(inner) => {
                     <P_MODCall as alloy_sol_types::SolCall>::abi_encode_raw(inner, out)
-                }
+                },
                 Self::R_MOD(inner) => {
                     <R_MODCall as alloy_sol_types::SolCall>::abi_encode_raw(inner, out)
-                }
+                },
                 Self::verify(inner) => {
                     <verifyCall as alloy_sol_types::SolCall>::abi_encode_raw(inner, out)
-                }
+                },
             }
         }
     }
@@ -3166,7 +3166,7 @@ pub mod PlonkVerifier2 {
             match self {
                 Self::UnsupportedDegree(_) => {
                     <UnsupportedDegree as alloy_sol_types::SolError>::SELECTOR
-                }
+                },
             }
         }
         #[inline]
@@ -3211,7 +3211,7 @@ pub mod PlonkVerifier2 {
             match self {
                 Self::UnsupportedDegree(inner) => {
                     <UnsupportedDegree as alloy_sol_types::SolError>::abi_encoded_size(inner)
-                }
+                },
             }
         }
         #[inline]
@@ -3219,7 +3219,7 @@ pub mod PlonkVerifier2 {
             match self {
                 Self::UnsupportedDegree(inner) => {
                     <UnsupportedDegree as alloy_sol_types::SolError>::abi_encode_raw(inner, out)
-                }
+                },
             }
         }
     }

@@ -25,13 +25,13 @@ use hotshot_types::{
     utils::View,
     vote::HasViewNumber,
 };
-use std::sync::Arc;
 use std::{
     collections::BTreeMap,
     fs::{self, File, OpenOptions},
     io::{Read, Seek, SeekFrom, Write},
     ops::RangeInclusive,
     path::{Path, PathBuf},
+    sync::Arc,
 };
 
 use crate::ViewNumber;
@@ -554,7 +554,7 @@ impl SequencerPersistence for Persistence {
                 // managed to persist the decided leaves successfully, and the event processing will
                 // just run again at the next decide.
                 tracing::warn!(?view, "event processing failed: {err:#}");
-            }
+            },
             Ok(intervals) => {
                 if let Err(err) = inner.collect_garbage(view, &intervals) {
                     // Similarly, garbage collection is not an error. We have done everything we
@@ -562,7 +562,7 @@ impl SequencerPersistence for Persistence {
                     // error but do not return it.
                     tracing::warn!(?view, "GC failed: {err:#}");
                 }
-            }
+            },
         }
 
         Ok(())
@@ -794,7 +794,7 @@ impl SequencerPersistence for Persistence {
                         // some unintended file whose name happened to match the naming convention.
                         tracing::warn!(?view, "ignoring malformed quorum proposal file: {err:#}");
                         continue;
-                    }
+                    },
                 };
             let proposal2 = convert_proposal(proposal);
 

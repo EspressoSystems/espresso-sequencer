@@ -447,8 +447,7 @@ use tide_disco::{method::ReadState, App, StatusCode};
 use vbs::version::StaticVersionType;
 
 pub use hotshot_types::{
-    data::Leaf,
-    data::{VidCommitment, VidShare},
+    data::{Leaf, VidCommitment, VidShare},
     simple_certificate::QuorumCertificate,
 };
 
@@ -601,8 +600,10 @@ mod test {
     use futures::future::FutureExt;
     use hotshot_types::simple_certificate::QuorumCertificate;
     use portpicker::pick_unused_port;
-    use std::ops::{Bound, RangeBounds};
-    use std::time::Duration;
+    use std::{
+        ops::{Bound, RangeBounds},
+        time::Duration,
+    };
     use surf_disco::Client;
     use tempfile::TempDir;
     use testing::mocks::MockBase;

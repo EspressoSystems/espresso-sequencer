@@ -48,7 +48,7 @@ pub async fn main() -> anyhow::Result<()> {
                 SequencerVersions::<FeeVersion, MarketplaceVersion>::new(),
             )
             .await
-        }
+        },
         #[cfg(feature = "fee")]
         (FeeVersion::VERSION, _) => {
             run(
@@ -58,7 +58,7 @@ pub async fn main() -> anyhow::Result<()> {
                 SequencerVersions::<FeeVersion, V0_0>::new(),
             )
             .await
-        }
+        },
         #[cfg(feature = "marketplace")]
         (MarketplaceVersion::VERSION, _) => {
             run(
@@ -68,7 +68,7 @@ pub async fn main() -> anyhow::Result<()> {
                 SequencerVersions::<MarketplaceVersion, V0_0>::new(),
             )
             .await
-        }
+        },
         _ => panic!(
             "Invalid base ({base}) and upgrade ({upgrade}) versions specified in the toml file."
         ),
@@ -237,7 +237,7 @@ where
                     .boxed()
                 })
                 .await?
-        }
+        },
         None => {
             init_node(
                 genesis,
@@ -253,7 +253,7 @@ where
                 proposal_fetcher_config,
             )
             .await?
-        }
+        },
     };
 
     Ok(ctx)

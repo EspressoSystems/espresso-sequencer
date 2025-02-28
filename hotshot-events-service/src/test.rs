@@ -23,8 +23,10 @@ mod tests {
     use vbs::version::{StaticVersion, StaticVersionType};
 
     //use crate::fetch::Fetch;
-    use crate::events::{define_api, Error, Options};
-    use crate::events_source::{EventConsumer, EventsStreamer, StartupInfo}; // EventsUpdater};
+    use crate::{
+        events::{define_api, Error, Options},
+        events_source::{EventConsumer, EventsStreamer, StartupInfo},
+    }; // EventsUpdater};
 
     // return a empty transaction event
     fn generate_event<Types: NodeType<View = ViewNumber>>(view_number: u64) -> Event<Types> {

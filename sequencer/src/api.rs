@@ -23,17 +23,17 @@ use hotshot_types::{
     event::Event,
     light_client::StateSignatureRequestBody,
     network::NetworkConfig,
+    stake_table::StakeTableEntry,
     traits::{
+        election::Membership,
         network::ConnectedNetwork,
         node_implementation::{NodeType, Versions},
         ValidatedState as _,
     },
     utils::{View, ViewInner},
 };
-use hotshot_types::{stake_table::StakeTableEntry, traits::election::Membership};
 use jf_merkle_tree::MerkleTreeScheme;
-use std::pin::Pin;
-use std::sync::Arc;
+use std::{pin::Pin, sync::Arc};
 
 use self::data_source::{
     HotShotConfigDataSource, NodeStateDataSource, PublicNetworkConfig, StateSignatureDataSource,
@@ -281,7 +281,7 @@ impl<
             Ok(accounts) => return Ok(accounts),
             Err(err) => {
                 tracing::info!("accounts not in memory, trying storage: {err:#}");
-            }
+            },
         }
 
         // Try storage.
@@ -318,7 +318,7 @@ impl<
                 }
 
                 (Arc::new(state), delta.clone())
-            }
+            },
             _ => {
                 // If we don't already have a leaf for this view, or if we don't have the view
                 // at all, we can create a new view based on the recovered leaf and add it to
@@ -327,7 +327,7 @@ impl<
                 let mut state = ValidatedState::from_header(leaf.block_header());
                 state.fee_merkle_tree = tree.clone();
                 (Arc::new(state), None)
-            }
+            },
         };
         if let Err(err) = consensus.update_leaf(leaf, Arc::clone(&state), delta) {
             tracing::warn!(?view, "cannot update fetched account state: {err:#}");
@@ -349,7 +349,7 @@ impl<
             Ok(frontier) => return Ok(frontier),
             Err(err) => {
                 tracing::info!("frontier is not in memory, trying storage: {err:#}");
-            }
+            },
         }
 
         // Try storage.
@@ -365,7 +365,7 @@ impl<
             Ok(cf) => return Ok(cf),
             Err(err) => {
                 tracing::info!("chain config is not in memory, trying storage: {err:#}");
-            }
+            },
         }
 
         // Try storage.
@@ -507,10 +507,9 @@ pub mod test_helpers {
     use tokio::{spawn, time::sleep};
 
     use crate::network;
-    use espresso_types::MockSequencerVersions;
     use espresso_types::{
         v0::traits::{NullEventConsumer, PersistenceOptions, StateCatchup},
-        MarketplaceVersion, NamespaceId, ValidatedState,
+        MarketplaceVersion, MockSequencerVersions, NamespaceId, ValidatedState,
     };
     use ethers::{prelude::Address, utils::Anvil};
     use futures::{
@@ -528,8 +527,7 @@ pub mod test_helpers {
     use portpicker::pick_unused_port;
     use sequencer_utils::test_utils::setup_test;
     use surf_disco::Client;
-    use tide_disco::error::ServerError;
-    use tide_disco::{Api, App, Error, StatusCode};
+    use tide_disco::{error::ServerError, Api, App, Error, StatusCode};
     use tokio::task::JoinHandle;
     use url::Url;
     use vbs::version::{StaticVersion, StaticVersionType};
@@ -1094,10 +1092,9 @@ mod api_tests {
     use committable::Committable;
     use data_source::testing::TestableSequencerDataSource;
     use endpoints::NamespaceProofQueryData;
-    use espresso_types::MockSequencerVersions;
     use espresso_types::{
         traits::{EventConsumer, PersistenceOptions},
-        Header, Leaf, Leaf2, NamespaceId,
+        Header, Leaf, Leaf2, MockSequencerVersions, NamespaceId,
     };
     use ethers::utils::Anvil;
     use futures::{future, stream::StreamExt};
@@ -1107,14 +1104,15 @@ mod api_tests {
     };
 
     use hotshot_query_service::VidCommitment;
-    use hotshot_types::data::vid_disperse::ADVZDisperseShare;
-    use hotshot_types::vid::advz::advz_scheme;
     use hotshot_types::{
-        data::{DaProposal, QuorumProposal2, QuorumProposalWrapper},
+        data::{
+            vid_disperse::ADVZDisperseShare, DaProposal, QuorumProposal2, QuorumProposalWrapper,
+        },
         event::LeafInfo,
         message::Proposal,
         simple_certificate::QuorumCertificate,
         traits::{node_implementation::ConsensusTime, signature_key::SignatureKey, EncodeBytes},
+        vid::advz::advz_scheme,
     };
 
     use jf_vid::VidScheme;
@@ -1130,8 +1128,8 @@ mod api_tests {
     use vbs::version::StaticVersion;
 
     use super::{update::ApiEventConsumer, *};
-    use crate::network;
     use crate::{
+        network,
         persistence::no_storage::NoStorage,
         testing::{wait_for_decide_on_handle, TestConfigBuilder},
     };
@@ -2301,7 +2299,7 @@ mod test {
                     let new_version = upgrade.new_version;
                     assert_eq!(new_version, <MockSeqVersions as Versions>::Upgrade::VERSION);
                     break upgrade.new_version_first_view;
-                }
+                },
                 _ => continue,
             }
         };

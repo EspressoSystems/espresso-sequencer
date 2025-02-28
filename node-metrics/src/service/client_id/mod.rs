@@ -108,8 +108,10 @@ mod tests {
 
     #[test]
     fn test_hash() {
-        use std::collections::hash_map::DefaultHasher;
-        use std::hash::{Hash, Hasher};
+        use std::{
+            collections::hash_map::DefaultHasher,
+            hash::{Hash, Hasher},
+        };
 
         let hash_1 = {
             let client_id = ClientId::from_count(1);

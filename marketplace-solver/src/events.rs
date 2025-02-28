@@ -59,7 +59,7 @@ pub async fn handle_events(
         match event.event {
             hotshot::types::EventType::ViewFinished { view_number } => {
                 tracing::debug!("received view finished event {view_number:?}")
-            }
+            },
             _ => (),
         }
     }
@@ -184,8 +184,7 @@ pub mod mock {
 mod test {
     use espresso_types::SeqTypes;
     use futures::StreamExt as _;
-    use hotshot::helpers::initialize_logging;
-    use hotshot::types::Event;
+    use hotshot::{helpers::initialize_logging, types::Event};
     use hotshot_events_service::events_source::StartupInfo;
     use surf_disco::Client;
 

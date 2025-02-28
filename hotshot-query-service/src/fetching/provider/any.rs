@@ -20,8 +20,7 @@ use crate::{
 use async_trait::async_trait;
 use derivative::Derivative;
 use hotshot_types::traits::node_implementation::NodeType;
-use std::fmt::Debug;
-use std::sync::Arc;
+use std::{fmt::Debug, sync::Arc};
 
 /// Blanket trait combining [`Debug`] and [`Provider`].
 ///
@@ -191,7 +190,7 @@ where
                     providers.len()
                 );
                 continue;
-            }
+            },
         }
     }
 

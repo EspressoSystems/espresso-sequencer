@@ -229,7 +229,7 @@ async fn main() {
             Err(err) => {
                 tracing::warn!("error getting block: {err}");
                 continue;
-            }
+            },
         };
         let received_at = Instant::now();
         tracing::debug!("got block {}", block.height());
