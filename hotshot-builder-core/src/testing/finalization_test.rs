@@ -21,10 +21,10 @@ use hotshot_example_types::{
     node_types::{TestTypes, TestVersions},
     state_types::{TestInstanceState, TestValidatedState},
 };
+use hotshot_types::simple_certificate::QuorumCertificate2;
 use hotshot_types::{
     data::{vid_commitment, DaProposal2, QuorumProposal2, QuorumProposalWrapper, ViewNumber},
     message::Proposal,
-    simple_certificate::QuorumCertificate,
     traits::{
         block_contents::BlockHeader,
         node_implementation::{ConsensusTime, Versions},
@@ -332,12 +332,11 @@ async fn progress_round_with_transactions(
             proposal: QuorumProposal2::<TestTypes> {
                 block_header,
                 view_number: next_view,
-                justify_qc: QuorumCertificate::<TestTypes>::genesis::<TestVersions>(
+                justify_qc: QuorumCertificate2::<TestTypes>::genesis::<TestVersions>(
                     &TestValidatedState::default(),
                     &TestInstanceState::default(),
                 )
-                .await
-                .to_qc2(),
+                .await,
                 upgrade_certificate: None,
                 view_change_evidence: None,
                 next_epoch_justify_qc: None,

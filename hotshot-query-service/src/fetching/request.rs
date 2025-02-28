@@ -14,10 +14,10 @@
 
 use crate::{
     availability::{LeafHash, LeafQueryData, QcHash},
-    Payload, VidCommitment,
+    Payload,
 };
 use derive_more::{From, Into};
-use hotshot_types::traits::node_implementation::NodeType;
+use hotshot_types::{data::VidCommitment, traits::node_implementation::NodeType};
 
 use std::fmt::Debug;
 use std::hash::Hash;

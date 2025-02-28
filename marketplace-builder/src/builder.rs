@@ -231,9 +231,10 @@ mod test {
         events::{Error as EventStreamApiError, Options as EventStreamingApiOptions},
         events_source::{EventConsumer, EventsStreamer},
     };
-    use hotshot_query_service::{availability::LeafQueryData, VidCommitment};
+    use hotshot_query_service::availability::LeafQueryData;
     use hotshot_types::{
         bundle::Bundle,
+        data::VidCommitment,
         event::LeafInfo,
         light_client::StateKeyPair,
         signature_key::BLSPubKey,

@@ -77,6 +77,7 @@ use super::{
     notifier::Notifier,
     storage::{
         pruning::{PruneStorage, PrunedHeightDataSource, PrunedHeightStorage},
+        sql::MigrateTypes,
         Aggregate, AggregatesStorage, AvailabilityStorage, ExplorerStorage,
         MerklizedStateHeightStorage, MerklizedStateStorage, NodeStorage, UpdateAggregatesStorage,
         UpdateAvailabilityStorage,
@@ -101,7 +102,7 @@ use crate::{
     status::{HasMetrics, StatusDataSource},
     task::BackgroundTask,
     types::HeightIndexed,
-    Header, Payload, QueryError, QueryResult, VidShare,
+    Header, Payload, QueryError, QueryResult,
 };
 use anyhow::{bail, Context};
 use async_lock::Semaphore;
@@ -113,9 +114,12 @@ use futures::{
     future::{self, join_all, BoxFuture, Either, Future, FutureExt},
     stream::{self, BoxStream, StreamExt},
 };
-use hotshot_types::traits::{
-    metrics::{Gauge, Metrics},
-    node_implementation::NodeType,
+use hotshot_types::{
+    data::VidShare,
+    traits::{
+        metrics::{Gauge, Metrics},
+        node_implementation::NodeType,
+    },
 };
 use jf_merkle_tree::{prelude::MerkleProof, MerkleTreeScheme};
 use std::sync::Arc;
@@ -369,7 +373,7 @@ where
     Types: NodeType,
     Payload<Types>: QueryablePayload<Types>,
     Header<Types>: QueryableHeader<Types>,
-    S: PruneStorage + VersionedDataSource + HasMetrics + 'static,
+    S: PruneStorage + VersionedDataSource + HasMetrics + MigrateTypes<Types> + 'static,
     for<'a> S::ReadOnly<'a>:
         AvailabilityStorage<Types> + PrunedHeightStorage + NodeStorage<Types> + AggregatesStorage,
     for<'a> S::Transaction<'a>: UpdateAvailabilityStorage<Types> + UpdateAggregatesStorage<Types>,
@@ -482,7 +486,7 @@ where
     Types: NodeType,
     Payload<Types>: QueryablePayload<Types>,
     Header<Types>: QueryableHeader<Types>,
-    S: VersionedDataSource + PruneStorage + HasMetrics + 'static,
+    S: VersionedDataSource + PruneStorage + HasMetrics + MigrateTypes<Types> + 'static,
     for<'a> S::Transaction<'a>: UpdateAvailabilityStorage<Types> + UpdateAggregatesStorage<Types>,
     for<'a> S::ReadOnly<'a>:
         AvailabilityStorage<Types> + NodeStorage<Types> + PrunedHeightStorage + AggregatesStorage,
@@ -510,6 +514,13 @@ where
         let aggregator_metrics = AggregatorMetrics::new(builder.storage.metrics());
 
         let fetcher = Arc::new(Fetcher::new(builder).await?);
+
+        // Migrate the old types to new PoS types
+        // This is a one-time operation that should be done before starting the data source
+        // It migrates leaf1 storage to leaf2
+        // and vid to vid2
+        fetcher.storage.migrate_types().await?;
+
         let scanner = if proactive_fetching && !leaf_only {
             Some(BackgroundTask::spawn(
                 "proactive scanner",

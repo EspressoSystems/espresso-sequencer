@@ -20,7 +20,7 @@ use hotshot_types::{
         QuorumProposalWrapper, VidCommitment,
     },
     event::HotShotAction,
-    message::Proposal,
+    message::{convert_proposal, Proposal},
     simple_certificate::{NextEpochQuorumCertificate2, QuorumCertificate2, UpgradeCertificate},
     traits::{
         node_implementation::{ConsensusTime, NodeType},
@@ -362,13 +362,7 @@ impl<TYPES: NodeType> Storage<TYPES> for TestStorage<TYPES> {
         Ok(())
     }
 
-    async fn migrate_consensus(
-        &self,
-        _convert_leaf: fn(Leaf<TYPES>) -> Leaf2<TYPES>,
-        convert_proposal: fn(
-            Proposal<TYPES, QuorumProposal<TYPES>>,
-        ) -> Proposal<TYPES, QuorumProposal2<TYPES>>,
-    ) -> Result<()> {
+    async fn migrate_consensus(&self) -> Result<()> {
         let mut storage_writer = self.inner.write().await;
 
         for (view, proposal) in storage_writer.proposals.clone().iter() {

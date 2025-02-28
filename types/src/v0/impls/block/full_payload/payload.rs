@@ -64,7 +64,7 @@ impl Payload {
         self.read_ns_payload(&ns_payload_range)
     }
 
-    pub(crate) fn byte_len(&self) -> PayloadByteLen {
+    pub fn byte_len(&self) -> PayloadByteLen {
         PayloadByteLen(self.raw_payload.len())
     }
 
@@ -287,7 +287,7 @@ impl PayloadByteLen {
         self.0 == expected
     }
 
-    pub(in crate::v0::impls::block::full_payload) fn as_usize(&self) -> usize {
+    pub fn as_usize(&self) -> usize {
         self.0
     }
 }

@@ -446,11 +446,7 @@ use task::BackgroundTask;
 use tide_disco::{method::ReadState, App, StatusCode};
 use vbs::version::StaticVersionType;
 
-pub use hotshot_types::{
-    data::Leaf,
-    data::{VidCommitment, VidShare},
-    simple_certificate::QuorumCertificate,
-};
+pub use hotshot_types::{data::Leaf2, simple_certificate::QuorumCertificate};
 
 pub type VidCommon = Option<hotshot_types::vid::advz::ADVZCommon>;
 
@@ -543,15 +539,28 @@ where
     ApiVer: StaticVersionType + 'static,
 {
     // Create API modules.
-    let availability_api =
-        availability::define_api(&options.availability, bind_version).map_err(Error::internal)?;
+    let availability_api_v0 = availability::define_api(
+        &options.availability,
+        bind_version,
+        "0.0.1".parse().unwrap(),
+    )
+    .map_err(Error::internal)?;
+
+    let availability_api_v1 = availability::define_api(
+        &options.availability,
+        bind_version,
+        "1.0.0".parse().unwrap(),
+    )
+    .map_err(Error::internal)?;
     let node_api = node::define_api(&options.node, bind_version).map_err(Error::internal)?;
     let status_api = status::define_api(&options.status, bind_version).map_err(Error::internal)?;
 
     // Create app.
     let data_source = Arc::new(data_source);
     let mut app = App::<_, Error>::with_state(ApiState(data_source.clone()));
-    app.register_module("availability", availability_api)
+    app.register_module("availability", availability_api_v0)
+        .map_err(Error::internal)?
+        .register_module("availability", availability_api_v1)
         .map_err(Error::internal)?
         .register_module("node", node_api)
         .map_err(Error::internal)?
@@ -599,7 +608,7 @@ mod test {
     use async_trait::async_trait;
     use atomic_store::{load_store::BincodeLoadStore, AtomicStore, AtomicStoreLoader, RollingLog};
     use futures::future::FutureExt;
-    use hotshot_types::simple_certificate::QuorumCertificate;
+    use hotshot_types::{data::VidShare, simple_certificate::QuorumCertificate2};
     use portpicker::pick_unused_port;
     use std::ops::{Bound, RangeBounds};
     use std::time::Duration;
@@ -828,10 +837,10 @@ mod test {
 
         // Mock up some data and add a block to the store.
         let leaf =
-            Leaf::<MockTypes>::genesis::<TestVersions>(&Default::default(), &Default::default())
+            Leaf2::<MockTypes>::genesis::<TestVersions>(&Default::default(), &Default::default())
                 .await;
         let qc =
-            QuorumCertificate::genesis::<TestVersions>(&Default::default(), &Default::default())
+            QuorumCertificate2::genesis::<TestVersions>(&Default::default(), &Default::default())
                 .await;
         let leaf = LeafQueryData::new(leaf, qc).unwrap();
         let block = BlockQueryData::new(leaf.header().clone(), MockPayload::genesis());
@@ -862,7 +871,12 @@ mod test {
         let mut app = App::<_, Error>::with_state(RwLock::new(state));
         app.register_module(
             "availability",
-            availability::define_api(&Default::default(), MockBase::instance()).unwrap(),
+            availability::define_api(
+                &Default::default(),
+                MockBase::instance(),
+                "1.0.0".parse().unwrap(),
+            )
+            .unwrap(),
         )
         .unwrap()
         .register_module(

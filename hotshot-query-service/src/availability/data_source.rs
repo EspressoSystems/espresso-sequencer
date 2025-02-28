@@ -18,7 +18,7 @@ use super::{
         VidCommonQueryData,
     },
 };
-use crate::{types::HeightIndexed, Header, Payload, VidCommitment, VidShare};
+use crate::{types::HeightIndexed, Header, Payload};
 use async_trait::async_trait;
 use derivative::Derivative;
 use derive_more::{Display, From};
@@ -26,7 +26,10 @@ use futures::{
     future::Future,
     stream::{BoxStream, StreamExt},
 };
-use hotshot_types::traits::node_implementation::NodeType;
+use hotshot_types::{
+    data::{VidCommitment, VidShare},
+    traits::node_implementation::NodeType,
+};
 use std::{
     cmp::Ordering,
     ops::{Bound, RangeBounds},

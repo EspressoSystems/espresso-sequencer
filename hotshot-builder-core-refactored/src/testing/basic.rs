@@ -8,7 +8,7 @@ use hotshot_example_types::state_types::{TestInstanceState, TestValidatedState};
 use hotshot_types::data::VidCommitment;
 use hotshot_types::data::{Leaf2, QuorumProposal2, QuorumProposalWrapper, ViewNumber};
 use hotshot_types::event::LeafInfo;
-use hotshot_types::simple_certificate::QuorumCertificate;
+use hotshot_types::simple_certificate::QuorumCertificate2;
 use hotshot_types::traits::block_contents::BlockHeader;
 use hotshot_types::traits::node_implementation::{ConsensusTime, NodeType};
 use hotshot_types::utils::BuilderCommitment;
@@ -186,9 +186,7 @@ async fn test_pruning() {
     // everything else is boilerplate.
 
     let mock_qc =
-        QuorumCertificate::genesis::<TestVersions>(&Default::default(), &Default::default())
-            .await
-            .to_qc2();
+        QuorumCertificate2::genesis::<TestVersions>(&Default::default(), &Default::default()).await;
     let leaf = Leaf2::from_quorum_proposal(&QuorumProposalWrapper {
         proposal: QuorumProposal2 {
             block_header: <TestBlockHeader as BlockHeader<TestTypes>>::genesis(

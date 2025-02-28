@@ -2,18 +2,16 @@ use anyhow::{ensure, Context};
 use ark_serialize::CanonicalSerialize;
 use committable::{Commitment, Committable, RawCommitmentBuilder};
 use ethers_conv::ToAlloy;
-use hotshot_query_service::{
-    availability::QueryableHeader, explorer::ExplorerHeader, VidCommitment,
-};
+use hotshot_query_service::{availability::QueryableHeader, explorer::ExplorerHeader};
 use hotshot_types::{
+    data::VidCommitment,
     traits::{
         block_contents::{BlockHeader, BuilderFee},
         node_implementation::NodeType,
         signature_key::BuilderSignatureKey,
         BlockPayload, ValidatedState as _,
     },
-    utils::BuilderCommitment,
-    // vid::advz::{ADVZCommon, ADVZScheme},
+    utils::BuilderCommitment, // vid::advz::{ADVZCommon, ADVZScheme},
 };
 use jf_merkle_tree::{AppendableMerkleTreeScheme, MerkleTreeScheme};
 // use jf_vid::VidScheme;
