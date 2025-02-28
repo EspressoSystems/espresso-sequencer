@@ -9,15 +9,12 @@ use ark_std::{
     UniformRand,
 };
 use ethers::types::U256;
-use hotshot_contract_adapter::{
-    jellyfish::{open_key, u256_to_field},
-    light_client::{ParsedLightClientState, ParsedStakeTableState},
-};
+use hotshot_contract_adapter::jellyfish::{field_to_u256, open_key};
 use hotshot_stake_table::vec_based::StakeTable;
+use hotshot_types::utils::is_last_block_in_epoch;
 use hotshot_types::{
     light_client::{
         GenericLightClientState, GenericPublicInput, GenericStakeTableState, LightClientState,
-        StakeTableState,
     },
     traits::stake_table::{SnapshotVersion, StakeTableScheme},
 };
@@ -42,19 +39,24 @@ type SchnorrVerKey = jf_signature::schnorr::VerKey<EdwardsConfig>;
 type SchnorrSignKey = jf_signature::schnorr::SignKey<ark_ed_on_bn254::Fr>;
 
 /// Stake table capacity used for testing
-pub const STAKE_TABLE_CAPACITY: usize = 10;
+pub const STAKE_TABLE_CAPACITY_FOR_TEST: usize = 10;
+/// Number of block per epoch for testing
+pub const EPOCH_HEIGHT_FOR_TEST: usize = 4;
 
 /// Mock for system parameter of `MockLedger`
 pub struct MockSystemParam {
     /// max capacity of stake table
     st_cap: usize,
+    /// number of block per epoch
+    epoch_height: usize,
 }
 
 impl MockSystemParam {
     /// Init the system parameters (some fixed, some adjustable)
     pub fn init() -> Self {
         Self {
-            st_cap: STAKE_TABLE_CAPACITY,
+            st_cap: STAKE_TABLE_CAPACITY_FOR_TEST,
+            epoch_height: EPOCH_HEIGHT_FOR_TEST,
         }
     }
 }
@@ -66,9 +68,7 @@ pub struct MockLedger {
     pub rng: StdRng,
     epoch: u64,
     state: GenericLightClientState<F>,
-    stake_table_state: GenericStakeTableState<F>,
     pub(crate) st: StakeTable<BLSVerKey, SchnorrVerKey, F>,
-    threshold: U256, // quorum threshold for SnapShot::LastEpochStart
     pub(crate) qc_keys: Vec<BLSVerKey>,
     pub(crate) state_keys: Vec<(SchnorrSignKey, SchnorrVerKey)>,
     key_archive: HashMap<BLSVerKey, SchnorrSignKey>,
@@ -85,21 +85,9 @@ impl MockLedger {
             key_archive.insert(qc_keys[i], state_keys[i].0.clone());
         }
         let st = stake_table_for_testing(&qc_keys, &state_keys);
-        let (bls_key_comm, schnorr_key_comm, amount_comm) =
-            st.commitment(SnapshotVersion::LastEpochStart).unwrap();
-        let threshold =
-            one_honest_threshold(st.total_stake(SnapshotVersion::LastEpochStart).unwrap());
-
-        let stake_table_state = StakeTableState {
-            threshold: u256_to_field(threshold),
-            bls_key_comm,
-            schnorr_key_comm,
-            amount_comm,
-        };
 
         // arbitrary commitment values as they don't affect logic being tested
         let block_comm_root = F::from(1234);
-
         let genesis = LightClientState {
             view_number: 0,
             block_height: 0,
@@ -111,27 +99,25 @@ impl MockLedger {
             rng,
             epoch: 0,
             state: genesis,
-            stake_table_state,
             st,
-            threshold,
             qc_keys,
             state_keys,
             key_archive,
         }
     }
 
-    /// Elapse a view with a new finalized block
-    pub fn elapse_with_block(&mut self) {
+    /// attempt to advance epoch, should be invoked at the *beginning* of every `fn elapse_xx()`
+    fn try_advance_epoch(&mut self) {
         // if the new block is the first block of an epoch, update epoch
-        if self.state.block_height != 0 {
+        if is_last_block_in_epoch(self.state.block_height as u64, self.pp.epoch_height as u64) {
             self.epoch += 1;
             self.st.advance();
-            self.threshold = one_honest_threshold(
-                self.st
-                    .total_stake(SnapshotVersion::LastEpochStart)
-                    .unwrap(),
-            );
         }
+    }
+
+    /// Elapse a view with a new finalized block
+    pub fn elapse_with_block(&mut self) {
+        self.try_advance_epoch();
 
         let new_root = self.new_dummy_comm();
         // let new_fee_ledger_comm = self.new_dummy_comm();
@@ -144,6 +130,7 @@ impl MockLedger {
     /// Elapse a view without a new finalized block
     /// (e.g. insufficient votes, malicious leaders or inconsecutive noterized views)
     pub fn elapse_without_block(&mut self) {
+        self.try_advance_epoch();
         self.state.view_number += 1;
     }
 
@@ -186,26 +173,11 @@ impl MockLedger {
         assert!(self.qc_keys.len() == before_st_size + num_reg - num_exit);
     }
 
-    // NOTE: uncomment when we add back epoch logic
-    // /// Elapse an epoch with `num_reg` of new registration, `num_exit` of key deregistration
-    // pub fn elapse_epoch(&mut self, num_reg: usize, num_exit: usize) {
-    //     assert!(self.qc_keys.len() + num_reg - num_exit <= self.pp.st_cap);
-
-    //     // random number of notarized but not finalized block
-    //     let num_non_blk = self.rng.gen_range(0..10);
-    //     for _ in 0..num_non_blk {
-    //         self.elapse_without_block();
-    //     }
-
-    //     for _ in 0..self.pp.blk_per_epoch {
-    //         self.elapse_with_block();
-    //     }
-
-    //     self.sync_stake_table(num_reg, num_exit);
-    // }
-
     /// Return the light client state and proof of consensus on this finalized state
     pub fn gen_state_proof(&mut self) -> (GenericPublicInput<F>, Proof) {
+        let voting_st_state = self.voting_stake_table_state();
+        let next_st_state = self.next_stake_table_state();
+
         let state_msg: [F; 3] = self.state.clone().into();
 
         let st: Vec<(BLSVerKey, U256, SchnorrVerKey)> = self
@@ -218,7 +190,7 @@ impl MockLedger {
         // find a quorum whose accumulated weights exceed threshold
         let mut bit_vec = vec![false; st_size];
         let mut total_weight = U256::from(0);
-        while total_weight < self.threshold {
+        while total_weight < field_to_u256(voting_st_state.threshold) {
             let signer_idx = self.rng.gen_range(0..st_size);
             // if already selected, skip to next random sample
             if bit_vec[signer_idx] {
@@ -260,7 +232,7 @@ impl MockLedger {
                 powers_of_h: vec![srs.h, srs.beta_h],
             }
         };
-        let (pk, _) = preprocess(&srs, STAKE_TABLE_CAPACITY)
+        let (pk, _) = preprocess(&srs, STAKE_TABLE_CAPACITY_FOR_TEST)
             .expect("Fail to preprocess state prover circuit");
         let stake_table_entries = self
             .st
@@ -275,8 +247,9 @@ impl MockLedger {
             &bit_vec,
             &sigs,
             &self.state,
-            &self.stake_table_state,
-            STAKE_TABLE_CAPACITY,
+            &voting_st_state,
+            STAKE_TABLE_CAPACITY_FOR_TEST,
+            &next_st_state,
         )
         .expect("Fail to generate state proof");
 
@@ -292,15 +265,16 @@ impl MockLedger {
         let new_state = self.state.clone();
 
         let (adv_qc_keys, adv_state_keys) =
-            key_pairs_for_testing(STAKE_TABLE_CAPACITY, &mut self.rng);
+            key_pairs_for_testing(STAKE_TABLE_CAPACITY_FOR_TEST, &mut self.rng);
         let adv_st = stake_table_for_testing(&adv_qc_keys, &adv_state_keys);
+        let adv_st_state = adv_st.voting_state().unwrap();
 
         // replace new state with adversarial stake table commitment
         // new_state.stake_table_comm = adv_st.commitment(SnapshotVersion::EpochStart).unwrap();
         let state_msg: [F; 3] = new_state.clone().into();
 
         // every fake stakers sign on the adverarial new state
-        let bit_vec = vec![true; STAKE_TABLE_CAPACITY];
+        let bit_vec = vec![true; STAKE_TABLE_CAPACITY_FOR_TEST];
         let sigs = adv_state_keys
             .iter()
             .map(|(sk, _)| {
@@ -322,7 +296,7 @@ impl MockLedger {
                 powers_of_h: vec![srs.h, srs.beta_h],
             }
         };
-        let (pk, _) = preprocess(&srs, STAKE_TABLE_CAPACITY)
+        let (pk, _) = preprocess(&srs, STAKE_TABLE_CAPACITY_FOR_TEST)
             .expect("Fail to preprocess state prover circuit");
         let stake_table_entries = adv_st
             .try_iter(SnapshotVersion::LastEpochStart)
@@ -336,30 +310,33 @@ impl MockLedger {
             &bit_vec,
             &sigs,
             &new_state,
-            &self.stake_table_state,
-            STAKE_TABLE_CAPACITY,
+            &adv_st_state,
+            STAKE_TABLE_CAPACITY_FOR_TEST,
+            &adv_st_state,
         )
         .expect("Fail to generate state proof");
 
-        let (bls_key_comm, schnorr_key_comm, amount_comm) =
-            adv_st.commitment(SnapshotVersion::LastEpochStart).unwrap();
-        let stake_table = StakeTableState {
-            threshold: u256_to_field(self.threshold),
-            bls_key_comm,
-            schnorr_key_comm,
-            amount_comm,
-        };
-
-        (pi, proof, stake_table)
-    }
-    /// Returns the `LightClientState` for solidity
-    pub fn get_state(&self) -> ParsedLightClientState {
-        self.state.clone().into()
+        (pi, proof, adv_st.voting_state().unwrap())
     }
 
-    /// Returns the `StakeTableState` in solidity
-    pub fn get_stake_table_state(&self) -> ParsedStakeTableState {
-        self.stake_table_state.into()
+    /// Returns the stake table state for current voting
+    pub fn voting_stake_table_state(&self) -> GenericStakeTableState<F> {
+        self.st.voting_state().unwrap()
+    }
+
+    /// Returns epoch-aware stake table state for the next block.
+    /// This will be the same most of the time as `self.voting_st_state()` except during epoch change
+    pub fn next_stake_table_state(&self) -> GenericStakeTableState<F> {
+        if is_last_block_in_epoch(self.state.block_height as u64, self.pp.epoch_height as u64) {
+            self.st.next_voting_state().unwrap().into()
+        } else {
+            self.voting_stake_table_state()
+        }
+    }
+
+    /// Returns the light client state
+    pub fn light_client_state(&self) -> GenericLightClientState<F> {
+        self.state.clone()
     }
 
     // return a dummy commitment value
@@ -391,7 +368,7 @@ fn stake_table_for_testing(
     bls_keys: &[BLSVerKey],
     schnorr_keys: &[(SchnorrSignKey, SchnorrVerKey)],
 ) -> StakeTable<BLSVerKey, SchnorrVerKey, F> {
-    let mut st = StakeTable::<BLSVerKey, SchnorrVerKey, F>::new(STAKE_TABLE_CAPACITY);
+    let mut st = StakeTable::<BLSVerKey, SchnorrVerKey, F>::new(STAKE_TABLE_CAPACITY_FOR_TEST);
     // Registering keys
     bls_keys
         .iter()

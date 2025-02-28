@@ -44,6 +44,7 @@ vbs = { workspace = true }
 
 [dev-dependencies]
 sequencer-utils = { path = "../utils", features = ["testing"] }
+hotshot-types = { workspace = true }
 
 [features]
 default = ["parallel"]

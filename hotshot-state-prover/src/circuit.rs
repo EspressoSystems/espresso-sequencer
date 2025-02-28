@@ -166,7 +166,7 @@ where
         .map(|item| {
             let item = item.borrow();
             let state_ver_key = circuit.create_signature_vk_variable(&item.0)?;
-            let stake_amount = circuit.create_variable(u256_to_field::<F>(&item.1))?;
+            let stake_amount = circuit.create_variable(u256_to_field::<F>(item.1))?;
             Ok(StakeTableEntryVar {
                 state_ver_key,
                 stake_amount,
@@ -331,11 +331,10 @@ where
 #[cfg(test)]
 mod tests {
     use ark_ed_on_bn254::EdwardsConfig as Config;
+    use ark_std::UniformRand;
     use hotshot_types::light_client::LightClientState;
     use hotshot_types::traits::stake_table::{SnapshotVersion, StakeTableScheme};
-    use jf_crhf::CRHF;
     use jf_relation::Circuit;
-    use jf_rescue::crhf::VariableLengthRescueCRHF;
     use jf_signature::{
         schnorr::{SchnorrSignatureScheme, Signature},
         SignatureScheme,
@@ -343,9 +342,7 @@ mod tests {
     use jf_utils::test_rng;
 
     use super::build;
-    use crate::test_utils::{
-        genesis_stake_table_state, key_pairs_for_testing, stake_table_for_testing,
-    };
+    use crate::test_utils::{key_pairs_for_testing, stake_table_for_testing};
 
     type F = ark_ed_on_bn254::Fq;
     const ST_CAPACITY: usize = 20;
@@ -358,7 +355,8 @@ mod tests {
 
         let (qc_keys, state_keys) = key_pairs_for_testing(num_validators, &mut prng);
         let st = stake_table_for_testing(ST_CAPACITY, &qc_keys, &state_keys);
-        let st_state = genesis_stake_table_state(&st);
+        let st_state = st.voting_state().unwrap();
+        let next_st_state = st_state.clone();
 
         let entries = st
             .try_iter(SnapshotVersion::LastEpochStart)
@@ -366,14 +364,10 @@ mod tests {
             .map(|(_, stake_amount, state_key)| (state_key, stake_amount))
             .collect::<Vec<_>>();
 
-        let block_comm_root =
-            VariableLengthRescueCRHF::<F, 1>::evaluate(vec![F::from(1u32), F::from(2u32)]).unwrap()
-                [0];
-
         let lightclient_state = LightClientState {
             view_number: 100,
             block_height: 73,
-            block_comm_root,
+            block_comm_root: F::rand(&mut prng),
         };
         let state_msg: [F; 3] = lightclient_state.clone().into();
 

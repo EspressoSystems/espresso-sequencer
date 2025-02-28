@@ -12,9 +12,12 @@ use ethers::{
     abi::{AbiDecode, AbiEncode, Address},
     types::{Bytes, U256},
 };
-use hotshot_contract_adapter::{jellyfish::*, light_client::ParsedLightClientState};
+use hotshot_contract_adapter::{
+    jellyfish::*,
+    light_client::{ParsedLightClientState, ParsedStakeTableState},
+};
 use hotshot_state_prover::mock_ledger::{
-    gen_plonk_proof_for_test, MockLedger, MockSystemParam, STAKE_TABLE_CAPACITY,
+    gen_plonk_proof_for_test, MockLedger, MockSystemParam, STAKE_TABLE_CAPACITY_FOR_TEST,
 };
 use jf_pcs::prelude::Commitment;
 use jf_plonk::proof_system::structs::{Proof, VerifyingKey};
@@ -380,7 +383,10 @@ fn main() {
             let pp = MockSystemParam::init();
             let ledger = MockLedger::init(pp, num_init_validators as usize);
 
-            let res = (ledger.get_state(), ledger.get_stake_table_state());
+            let res: (ParsedLightClientState, ParsedStakeTableState) = (
+                ledger.light_client_state().into(),
+                ledger.voting_stake_table_state().into(),
+            );
             println!("{}", res.encode_hex());
         }
         Action::MockConsecutiveFinalizedStates => {
@@ -427,7 +433,7 @@ fn main() {
             };
 
             let pp = MockSystemParam::init();
-            let mut ledger = MockLedger::init(pp, STAKE_TABLE_CAPACITY / 2);
+            let mut ledger = MockLedger::init(pp, STAKE_TABLE_CAPACITY_FOR_TEST / 2);
 
             for _ in 0..num_block_skipped {
                 ledger.elapse_with_block();
@@ -439,7 +445,7 @@ fn main() {
                 let proof_parsed: ParsedPlonkProof = proof.into();
                 (state_parsed, proof_parsed)
             } else {
-                let state_parsed = ledger.get_state();
+                let state_parsed = ledger.light_client_state().into();
                 let proof_parsed = ParsedPlonkProof::dummy(&mut ledger.rng);
                 (state_parsed, proof_parsed)
             };
