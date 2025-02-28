@@ -44,13 +44,14 @@ pub(crate) async fn handle_quorum_vote_recv<
         .read()
         .await
         .is_high_qc_for_last_block();
-    let mem = task_state
+    let epoch_membership = task_state
         .membership_coordinator
         .membership_for_epoch(vote.data.epoch)
         .await
         .context(warn!("No stake table for epoch"))?;
 
-    let we_are_leader = mem.leader(vote.view_number() + 1).await? == task_state.public_key;
+    let we_are_leader =
+        epoch_membership.leader(vote.view_number() + 1).await? == task_state.public_key;
     ensure!(
         in_transition || we_are_leader,
         info!(
@@ -68,7 +69,7 @@ pub(crate) async fn handle_quorum_vote_recv<
         &mut task_state.vote_collectors,
         vote,
         task_state.public_key.clone(),
-        &mem,
+        &epoch_membership,
         task_state.id,
         &event,
         sender,
@@ -79,13 +80,17 @@ pub(crate) async fn handle_quorum_vote_recv<
 
     if vote.epoch().is_some() {
         // If the vote sender belongs to the next epoch, collect it separately to form the second QC
-        let has_stake = mem.next_epoch().await?.has_stake(&vote.signing_key()).await;
+        let has_stake = epoch_membership
+            .next_epoch()
+            .await?
+            .has_stake(&vote.signing_key())
+            .await;
         if has_stake {
             handle_vote(
                 &mut task_state.next_epoch_vote_collectors,
                 &vote.clone().into(),
                 task_state.public_key.clone(),
-                &mem.next_epoch().await?.clone(),
+                &epoch_membership.next_epoch().await?.clone(),
                 task_state.id,
                 &event,
                 sender,
@@ -110,14 +115,14 @@ pub(crate) async fn handle_timeout_vote_recv<
     sender: &Sender<Arc<HotShotEvent<TYPES>>>,
     task_state: &mut ConsensusTaskState<TYPES, I, V>,
 ) -> Result<()> {
-    let mem = task_state
+    let epoch_membership = task_state
         .membership_coordinator
         .membership_for_epoch(task_state.cur_epoch)
         .await
         .context(warn!("No stake table for epoch"))?;
     // Are we the leader for this view?
     ensure!(
-        mem.leader(vote.view_number() + 1).await? == task_state.public_key,
+        epoch_membership.leader(vote.view_number() + 1).await? == task_state.public_key,
         info!(
             "We are not the leader for view {:?}",
             vote.view_number() + 1

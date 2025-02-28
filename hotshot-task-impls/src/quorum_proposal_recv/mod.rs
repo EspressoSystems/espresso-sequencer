@@ -143,7 +143,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
     ) {
         match event.as_ref() {
             HotShotEvent::QuorumProposalRecv(proposal, sender) => {
-                // tracing::error!("proposal recv {:?}", proposal.data);
                 if self.consensus.read().await.cur_view() > proposal.data.view_number()
                     || self.cur_view > proposal.data.view_number()
                 {
@@ -182,7 +181,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                 .await
                 {
                     Ok(()) => {}
-                    Err(e) => debug!(?e, "Failed to validate the proposal"),
+                    Err(e) => error!(?e, "Failed to validate the proposal"),
                 }
             }
             HotShotEvent::ViewChange(view, epoch) => {

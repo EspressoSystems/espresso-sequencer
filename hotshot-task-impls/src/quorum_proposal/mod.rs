@@ -280,11 +280,12 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
         event: Arc<HotShotEvent<TYPES>>,
         epoch_transition_indicator: EpochTransitionIndicator,
     ) -> Result<()> {
-        let mem = self
+        let epoch_membership = self
             .membership_coordinator
             .membership_for_epoch(epoch_number)
             .await?;
-        let leader_in_current_epoch = mem.leader(view_number).await? == self.public_key;
+        let leader_in_current_epoch =
+            epoch_membership.leader(view_number).await? == self.public_key;
         // If we are in the epoch transition and we are the leader in the next epoch,
         // we might want to start collecting dependencies for our next epoch proposal.
 
@@ -293,7 +294,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                 epoch_transition_indicator,
                 EpochTransitionIndicator::InTransition
             )
-            && mem
+            && epoch_membership
                 .next_epoch()
                 .await
                 .context(warn!(
@@ -335,7 +336,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                 view_number,
                 sender: event_sender,
                 receiver: event_receiver,
-                membership: mem,
+                membership: epoch_membership,
                 public_key: self.public_key.clone(),
                 private_key: self.private_key.clone(),
                 instance_state: Arc::clone(&self.instance_state),
@@ -479,14 +480,14 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
             }
             HotShotEvent::ViewSyncFinalizeCertificateRecv(certificate) => {
                 let epoch_number = certificate.data.epoch;
-                let mem = self
+                let epoch_membership = self
                     .membership_coordinator
                     .membership_for_epoch(epoch_number)
                     .await
                     .context(warn!("No Stake Table for Epoch = {:?}", epoch_number))?;
 
-                let membership_stake_table = mem.stake_table().await;
-                let membership_success_threshold = mem.success_threshold().await;
+                let membership_stake_table = epoch_membership.stake_table().await;
+                let membership_success_threshold = epoch_membership.success_threshold().await;
 
                 certificate
                     .is_valid_cert(
@@ -567,12 +568,12 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                 ensure!(qc.view_number() > self.highest_qc.view_number());
                 let cert_epoch_number = qc.data.epoch;
 
-                let mem = self
+                let epoch_membership = self
                     .membership_coordinator
                     .membership_for_epoch(cert_epoch_number)
                     .await?;
-                let membership_stake_table = mem.stake_table().await;
-                let membership_success_threshold = mem.success_threshold().await;
+                let membership_stake_table = epoch_membership.stake_table().await;
+                let membership_success_threshold = epoch_membership.success_threshold().await;
 
                 qc.is_valid_cert(
                     membership_stake_table,

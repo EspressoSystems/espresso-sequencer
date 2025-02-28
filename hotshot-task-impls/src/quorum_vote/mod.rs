@@ -258,12 +258,12 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static, V: Versions> Handl
             self.epoch_height,
         );
 
-        let mem = match self
+        let epoch_membership = match self
             .membership_coordinator
             .membership_for_epoch(cur_epoch)
             .await
         {
-            Ok(mem) => mem,
+            Ok(epoch_membership) => epoch_membership,
             Err(e) => {
                 tracing::warn!("{:?}", e);
                 return;
@@ -283,7 +283,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static, V: Versions> Handl
 
         if let Err(e) = submit_vote::<TYPES, I, V>(
             self.sender.clone(),
-            mem,
+            epoch_membership,
             self.public_key.clone(),
             self.private_key.clone(),
             self.upgrade_lock.clone(),
@@ -557,9 +557,9 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> QuorumVoteTaskS
 
                 let cert_epoch = cert.data.epoch;
 
-                let mem = self.membership.membership_for_epoch(cert_epoch).await?;
-                let membership_da_stake_table = mem.da_stake_table().await;
-                let membership_da_success_threshold = mem.da_success_threshold().await;
+                let epoch_membership = self.membership.membership_for_epoch(cert_epoch).await?;
+                let membership_da_stake_table = epoch_membership.da_stake_table().await;
+                let membership_da_success_threshold = epoch_membership.da_success_threshold().await;
 
                 // Validate the DAC.
                 cert.is_valid_cert(

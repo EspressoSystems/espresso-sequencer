@@ -156,7 +156,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static, V: Versions>
             signed_proposal_request.commit().as_ref(),
         )?;
 
-        let mem = self.membership_coordinator.clone();
+        let membership_coordinator = self.membership_coordinator.clone();
         let receiver = self.internal_event_stream.1.activate_cloned();
         let sender = self.internal_event_stream.0.clone();
         let epoch_height = self.epoch_height;
@@ -191,7 +191,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static, V: Versions>
                         quorum_proposal.data.block_header().block_number(),
                         epoch_height,
                     );
-                    let membership = match mem.membership_for_epoch(maybe_epoch).await {
+                    let membership = match membership_coordinator
+                        .membership_for_epoch(maybe_epoch)
+                        .await
+                    {
                         Result::Ok(m) => m,
                         Err(e) => {
                             tracing::warn!(e.message);

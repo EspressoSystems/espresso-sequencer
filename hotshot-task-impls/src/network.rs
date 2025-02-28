@@ -1090,9 +1090,10 @@ impl<
                 self.cancel_tasks(keep_view);
                 let net = Arc::clone(&self.network);
                 let epoch = self.epoch.map(|x| x.u64());
-                let mem = self.membership_coordinator.clone();
+                let membership_coordinator = self.membership_coordinator.clone();
                 spawn(async move {
-                    net.update_view::<TYPES>(*keep_view, epoch, mem).await;
+                    net.update_view::<TYPES>(*keep_view, epoch, membership_coordinator)
+                        .await;
                 });
                 None
             }

@@ -127,13 +127,18 @@ impl<TYPES: NodeType, V: Versions> ProposalDependencyHandle<TYPES, V> {
         while let Ok(event) = rx.recv_direct().await {
             if let HotShotEvent::HighQcRecv(qc, _sender) = event.as_ref() {
                 let prev_epoch = qc.data.epoch;
-                let mem = if prev_epoch < self.membership.epoch() {
-                    &self.membership.prev_epoch().await.ok()?
+                let epoch_membership = if prev_epoch == self.membership.epoch() {
+                    self.membership.clone()
                 } else {
-                    &self.membership
+                    let prev_membership = self.membership.prev_epoch().await.ok()?;
+                    if prev_epoch != prev_membership.epoch {
+                        tracing::info!("High QC recieved is not fror current or previous epoch");
+                        return None;
+                    }
+                    prev_membership
                 };
-                let membership_stake_table = mem.stake_table().await;
-                let membership_success_threshold = mem.success_threshold().await;
+                let membership_stake_table = epoch_membership.stake_table().await;
+                let membership_success_threshold = epoch_membership.success_threshold().await;
 
                 if qc
                     .is_valid_cert(
@@ -310,14 +315,19 @@ impl<TYPES: NodeType, V: Versions> ProposalDependencyHandle<TYPES, V> {
             self.epoch_height,
         );
 
-        let mem = if self.membership.epoch() != epoch {
-            self.membership.next_epoch().await?
+        let epoch_membership = if self.membership.epoch() != epoch {
+            let next_membership = self.membership.next_epoch().await?;
+            ensure!(
+                next_membership.epoch() == epoch,
+                "Trying to propose in epoch that is more than 1 more than the last QC's epoch"
+            );
+            next_membership
         } else {
             self.membership.clone()
         };
         // Make sure we are the leader for the view and epoch.
         // We might have ended up here because we were in the epoch transition.
-        if mem.leader(self.view_number).await? != self.public_key {
+        if epoch_membership.leader(self.view_number).await? != self.public_key {
             tracing::warn!(
                 "We are not the leader in the epoch for which we are about to propose. Do not send the quorum proposal."
             );
