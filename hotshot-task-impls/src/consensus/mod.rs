@@ -155,7 +155,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> ConsensusTaskSt
                     tracing::debug!("We formed QC but not eQC. Do nothing");
                     return Ok(());
                 }
-                if wait_for_next_epoch_qc(
+                wait_for_next_epoch_qc(
                     quorum_cert,
                     &self.consensus,
                     self.timeout,
@@ -163,11 +163,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> ConsensusTaskSt
                     &receiver,
                 )
                 .await
-                .is_none()
-                {
-                    tracing::warn!("We formed eQC but we don't have corresponding next epoch eQC.");
-                    return Ok(());
-                }
+                .context(warn!(
+                    "We formed eQC but we don't have corresponding next epoch eQC."
+                ))?;
+
                 let cert_block_number = self
                     .consensus
                     .read()

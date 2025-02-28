@@ -13,6 +13,11 @@ use std::{
     time::{Duration, Instant},
 };
 
+use crate::{
+    events::HotShotEvent,
+    helpers::{broadcast_event, parent_leaf_and_state, wait_for_next_epoch_qc},
+    quorum_proposal::{UpgradeLock, Versions},
+};
 use anyhow::{ensure, Context, Result};
 use async_broadcast::{Receiver, Sender};
 use async_lock::RwLock;
@@ -33,12 +38,6 @@ use hotshot_types::{
 use hotshot_utils::anytrace::*;
 use tracing::instrument;
 use vbs::version::StaticVersionType;
-
-use crate::{
-    events::HotShotEvent,
-    helpers::{broadcast_event, parent_leaf_and_state, wait_for_next_epoch_qc},
-    quorum_proposal::{UpgradeLock, Versions},
-};
 
 /// Proposal dependency types. These types represent events that precipitate a proposal.
 #[derive(PartialEq, Debug)]
@@ -329,14 +328,20 @@ impl<TYPES: NodeType, V: Versions> ProposalDependencyHandle<TYPES, V> {
         let next_epoch_qc = if self.upgrade_lock.epochs_enabled(self.view_number).await
             && is_high_qc_for_last_block
         {
-            wait_for_next_epoch_qc(
-                &parent_qc,
-                &self.consensus,
-                self.timeout,
-                self.view_start_time,
-                &self.receiver,
+            Some(
+                wait_for_next_epoch_qc(
+                    &parent_qc,
+                    &self.consensus,
+                    self.timeout,
+                    self.view_start_time,
+                    &self.receiver,
+                )
+                .await
+                .context(
+                    "Jusify QC on our proposal is for the last block in the epoch \
+                    but we don't have the corresponding next epoch QC. Do not propose.",
+                )?,
             )
-            .await
         } else {
             None
         };
