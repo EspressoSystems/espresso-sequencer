@@ -385,15 +385,17 @@ pub async fn build_da_certificate<TYPES: NodeType, V: Versions>(
         epoch: epoch_number,
     };
 
-    anyhow::Ok(build_cert::<TYPES, V, DaData2<TYPES>, DaVote2<TYPES>, DaCertificate2<TYPES>>(
-        da_data,
-        membership,
-        view_number,
-        public_key,
-        private_key,
-        upgrade_lock,
+    anyhow::Ok(
+        build_cert::<TYPES, V, DaData2<TYPES>, DaVote2<TYPES>, DaCertificate2<TYPES>>(
+            da_data,
+            membership,
+            view_number,
+            public_key,
+            private_key,
+            upgrade_lock,
+        )
+        .await,
     )
-    .await)
 }
 
 /// This function permutes the provided input vector `inputs`, given some order provided within the
