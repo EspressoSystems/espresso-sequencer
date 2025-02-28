@@ -11,7 +11,7 @@ pub use hotshot::traits::election::helpers::{
 };
 use hotshot::traits::{
     election::{
-        helpers::QuorumFilterConfig, randomized_committee::RandomizedCommittee,
+        helpers::QuorumFilterConfig, randomized_committee::Committee,
         randomized_committee_members::RandomizedCommitteeMembers,
         static_committee::StaticCommittee,
         static_committee_leader_two_views::StaticCommitteeLeaderForTwoViews,
@@ -97,7 +97,7 @@ impl NodeType for TestTypesRandomizedLeader {
     type Transaction = TestTransaction;
     type ValidatedState = TestValidatedState;
     type InstanceState = TestInstanceState;
-    type Membership = RandomizedCommittee<TestTypesRandomizedLeader>;
+    type Membership = Committee<TestTypesRandomizedLeader>;
     type BuilderSignatureKey = BuilderKey;
 }
 

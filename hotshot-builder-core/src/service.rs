@@ -8,6 +8,7 @@ use hotshot_builder_api::{
     v0_2::builder::TransactionStatus,
 };
 use hotshot_types::{
+    data::VidCommitment,
     data::{DaProposal2, Leaf2, QuorumProposalWrapper},
     event::EventType,
     message::Proposal,
@@ -17,7 +18,6 @@ use hotshot_types::{
         signature_key::{BuilderSignatureKey, SignatureKey},
     },
     utils::BuilderCommitment,
-    vid::{VidCommitment, VidPrecomputeData},
 };
 use lru::LruCache;
 use vbs::version::StaticVersionType;
@@ -27,7 +27,6 @@ use crate::builder_state::{
     TriggerStatus,
 };
 use crate::builder_state::{MessageType, RequestMessage, ResponseMessage};
-use crate::{WaitAndKeep, WaitAndKeepGetError};
 pub use async_broadcast::{broadcast, RecvError, TryRecvError};
 use async_broadcast::{Sender as BroadcastSender, TrySendError};
 use async_lock::RwLock;
@@ -49,15 +48,13 @@ use tokio::{
     time::{sleep, timeout},
 };
 
-const VID_RESPONSE_TARGET_MARGIN_DIVISOR: u32 = 10;
-
 // It holds all the necessary information for a block
 #[derive(Debug)]
 pub struct BlockInfo<Types: NodeType> {
     pub block_payload: Types::BlockPayload,
     pub metadata: <<Types as NodeType>::BlockPayload as BlockPayload<Types>>::Metadata,
     pub vid_trigger: Arc<RwLock<Option<oneshot::Sender<TriggerStatus>>>>,
-    pub vid_receiver: Arc<RwLock<WaitAndKeep<(VidCommitment, VidPrecomputeData)>>>,
+    // TODO Add precompute back.
     pub offered_fee: u64,
     // Could we have included more transactions with this block, but chose not to?
     pub truncated: bool,
@@ -316,7 +313,6 @@ impl<Types: NodeType> GlobalState<Types> {
             block_payload,
             metadata,
             vid_trigger,
-            vid_receiver,
             offered_fee,
             truncated,
             ..
@@ -328,7 +324,6 @@ impl<Types: NodeType> GlobalState<Types> {
                 block_payload,
                 metadata,
                 vid_trigger: Arc::new(RwLock::new(Some(vid_trigger))),
-                vid_receiver: Arc::new(RwLock::new(WaitAndKeep::Wait(vid_receiver))),
                 offered_fee,
                 truncated,
             },
@@ -600,11 +595,6 @@ impl<Types: NodeType> From<ClaimBlockError<Types>> for BuildError {
 enum ClaimBlockHeaderInputError<Types: NodeType> {
     SignatureValidationFailed,
     BlockHeaderNotFound,
-    CouldNotGetVidInTime,
-    WaitAndKeepGetError(WaitAndKeepGetError),
-    FailedToSignVidCommitment(
-        <<Types as NodeType>::BuilderSignatureKey as BuilderSignatureKey>::SignError,
-    ),
     FailedToSignFeeInfo(
         <<Types as NodeType>::BuilderSignatureKey as BuilderSignatureKey>::SignError,
     ),
@@ -618,13 +608,6 @@ impl<Types: NodeType> From<ClaimBlockHeaderInputError<Types>> for BuildError {
             ),
             ClaimBlockHeaderInputError::BlockHeaderNotFound => {
                 BuildError::Error("Block header not found".to_string())
-            }
-            ClaimBlockHeaderInputError::CouldNotGetVidInTime => {
-                BuildError::Error("Couldn't get vid in time".to_string())
-            }
-            ClaimBlockHeaderInputError::WaitAndKeepGetError(e) => e.into(),
-            ClaimBlockHeaderInputError::FailedToSignVidCommitment(e) => {
-                BuildError::Error(format!("Failed to sign VID commitment: {:?}", e))
             }
             ClaimBlockHeaderInputError::FailedToSignFeeInfo(e) => {
                 BuildError::Error(format!("Failed to sign fee info: {:?}", e))
@@ -919,7 +902,6 @@ impl<Types: NodeType> ProxyGlobalState<Types> {
 
             block_info_some.map(|block_info| {
                 (
-                    block_info.vid_receiver.clone(),
                     block_info.metadata.clone(),
                     block_info.offered_fee,
                     block_info.truncated,
@@ -927,90 +909,18 @@ impl<Types: NodeType> ProxyGlobalState<Types> {
             })
         };
 
-        if let Some((vid_receiver, metadata, offered_fee, truncated)) = extracted_block_info_option
-        {
-            tracing::info!("Waiting for vid commitment for block {id}");
-
-            let timeout_after = Instant::now() + self.max_api_waiting_time;
-            let check_duration = self.max_api_waiting_time / 10;
-
-            let response_received = loop {
-                match timeout(check_duration, vid_receiver.write().await.get()).await {
-                    Err(_toe) => {
-                        if Instant::now() >= timeout_after {
-                            tracing::warn!("Couldn't get vid commitment in time for block {id}",);
-                            {
-                                // we can't keep up with this block size, reduce max block size
-                                self.global_state
-                                    .write_arc()
-                                    .await
-                                    .block_size_limits
-                                    .decrement_block_size();
-                            }
-                            break Err(ClaimBlockHeaderInputError::CouldNotGetVidInTime);
-                        }
-                        continue;
-                    }
-                    Ok(recv_attempt) => {
-                        if recv_attempt.is_err() {
-                            tracing::error!(
-                                "Channel closed while getting vid commitment for block {id}",
-                            );
-                        }
-                        break recv_attempt
-                            .map_err(ClaimBlockHeaderInputError::WaitAndKeepGetError);
-                    }
-                }
-            };
-
-            tracing::info!("Got vid commitment for block {id}",);
-
-            // We got VID in time with margin left.
-            // Maybe we can handle bigger blocks?
-            if timeout_after.duration_since(Instant::now())
-                > self.max_api_waiting_time / VID_RESPONSE_TARGET_MARGIN_DIVISOR
-            {
-                // Increase max block size
-                self.global_state
-                    .write_arc()
-                    .await
-                    .block_size_limits
-                    .try_increment_block_size(truncated);
-            }
-
-            match response_received {
-                Ok((vid_commitment, vid_precompute_data)) => {
-                    // sign over the vid commitment
-                    let signature_over_vid_commitment =
-                        <Types as NodeType>::BuilderSignatureKey::sign_builder_message(
-                            &sign_key,
-                            vid_commitment.as_ref(),
-                        )
-                        .map_err(ClaimBlockHeaderInputError::FailedToSignVidCommitment)?;
-
-                    let signature_over_fee_info = Types::BuilderSignatureKey::sign_fee(
-                        &sign_key,
-                        offered_fee,
-                        &metadata,
-                        &vid_commitment,
-                    )
+        // TODO Add precompute back.
+        if let Some((metadata, offered_fee, _)) = extracted_block_info_option {
+            let signature_over_fee_info =
+                Types::BuilderSignatureKey::sign_fee(&sign_key, offered_fee, &metadata)
                     .map_err(ClaimBlockHeaderInputError::FailedToSignFeeInfo)?;
 
-                    let response = AvailableBlockHeaderInputV1 {
-                        vid_commitment,
-                        vid_precompute_data,
-                        fee_signature: signature_over_fee_info,
-                        message_signature: signature_over_vid_commitment,
-                        sender: pub_key.clone(),
-                    };
-                    tracing::info!("Sending Claim Block Header Input response for {id}",);
-                    Ok(response)
-                }
-                Err(err) => {
-                    tracing::warn!("Claim Block Header Input not found");
-                    Err(err)
-                }
-            }
+            let response = AvailableBlockHeaderInputV1::<Types> {
+                fee_signature: signature_over_fee_info,
+                sender: pub_key.clone(),
+            };
+            tracing::info!("Sending Claim Block Header Input response for {id}",);
+            Ok(response)
         } else {
             tracing::warn!("Claim Block Header Input not found");
             Err(ClaimBlockHeaderInputError::BlockHeaderNotFound)
@@ -1642,17 +1552,13 @@ mod test {
     use hotshot_types::data::EpochNumber;
     use hotshot_types::data::Leaf2;
     use hotshot_types::data::{QuorumProposal2, QuorumProposalWrapper};
-    use hotshot_types::traits::block_contents::precompute_vid_commitment;
     use hotshot_types::traits::block_contents::Transaction;
     use hotshot_types::traits::node_implementation::Versions;
     use hotshot_types::{
-        data::{Leaf, ViewNumber},
+        data::{vid_commitment, Leaf, ViewNumber},
         message::Proposal,
         simple_certificate::QuorumCertificate,
-        traits::{
-            block_contents::vid_commitment, node_implementation::ConsensusTime,
-            signature_key::BuilderSignatureKey,
-        },
+        traits::{node_implementation::ConsensusTime, signature_key::BuilderSignatureKey},
         utils::BuilderCommitment,
     };
     use marketplace_builder_shared::{
@@ -1702,6 +1608,7 @@ mod test {
         let (bootstrap_sender, _) = async_broadcast::broadcast(10);
         let (tx_sender, _) = async_broadcast::broadcast(10);
         let parent_commit = vid_commitment::<TestVersions>(
+            &[],
             &[],
             TEST_NUM_NODES_IN_VID_COMPUTATION,
             <TestVersions as Versions>::Base::VERSION,
@@ -1779,6 +1686,7 @@ mod test {
         let (bootstrap_sender, _) = async_broadcast::broadcast(10);
         let (tx_sender, _) = async_broadcast::broadcast(10);
         let parent_commit = vid_commitment::<TestVersions>(
+            &[],
             &[],
             TEST_NUM_NODES_IN_VID_COMPUTATION,
             <TestVersions as Versions>::Base::VERSION,
@@ -1879,6 +1787,7 @@ mod test {
         let (bootstrap_sender, _) = async_broadcast::broadcast(10);
         let (tx_sender, _) = async_broadcast::broadcast(10);
         let parent_commit = vid_commitment::<TestVersions>(
+            &[],
             &[],
             TEST_NUM_NODES_IN_VID_COMPUTATION,
             <TestVersions as Versions>::Base::VERSION,
@@ -2007,6 +1916,7 @@ mod test {
         let (tx_sender, _) = async_broadcast::broadcast(10);
         let parent_commit = vid_commitment::<TestVersions>(
             &[],
+            &[],
             TEST_NUM_NODES_IN_VID_COMPUTATION,
             <TestVersions as Versions>::Base::VERSION,
         );
@@ -2113,6 +2023,7 @@ mod test {
         let (tx_sender, _) = async_broadcast::broadcast(10);
         let parent_commit = vid_commitment::<TestVersions>(
             &[],
+            &[],
             TEST_NUM_NODES_IN_VID_COMPUTATION,
             <TestVersions as Versions>::Base::VERSION,
         );
@@ -2129,7 +2040,7 @@ mod test {
         );
 
         let new_parent_commit =
-            vid_commitment::<TestVersions>(&[], 9, <TestVersions as Versions>::Base::VERSION);
+            vid_commitment::<TestVersions>(&[], &[], 9, <TestVersions as Versions>::Base::VERSION);
         let new_view_num = ViewNumber::new(1);
         let builder_state_id = BuilderStateId {
             parent_commitment: new_parent_commit,
@@ -2143,7 +2054,6 @@ mod test {
         };
 
         let (vid_trigger_sender, vid_trigger_receiver) = oneshot::channel();
-        let (vid_sender, vid_receiver) = unbounded_channel();
         let (block_payload, metadata) =
             <TestBlockPayload as BlockPayload<TestTypes>>::from_transactions(
                 vec![TestTransaction::new(vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10])],
@@ -2163,7 +2073,6 @@ mod test {
             block_payload: block_payload.clone(),
             metadata,
             vid_trigger: vid_trigger_sender,
-            vid_receiver,
             truncated,
         };
 
@@ -2239,39 +2148,7 @@ mod test {
             }
         }
 
-        {
-            // This ensures that the vid_sender that is stored is still the
-            // same, or links to the vid_receiver that we submitted.
-            let (vid_commitment, vid_precompute_data) =
-                precompute_vid_commitment(&[1, 2, 3, 4, 5], TEST_NUM_NODES_IN_VID_COMPUTATION);
-
-            assert_eq!(
-                vid_sender.send((vid_commitment, vid_precompute_data.clone())),
-                Ok(()),
-                "The vid_sender should be able to send the vid commitment"
-            );
-
-            let mut vid_receiver_write_lock_guard =
-                retrieved_block_info.vid_receiver.write_arc().await;
-
-            // Get and Keep object
-
-            match vid_receiver_write_lock_guard.get().await {
-                Ok((received_vid_commitment, received_vid_precompute_data)) => {
-                    assert_eq!(
-                        received_vid_commitment, vid_commitment,
-                        "The received vid commitment should match the expected vid commitment"
-                    );
-                    assert_eq!(
-                        received_vid_precompute_data, vid_precompute_data,
-                        "The received vid precompute data should match the expected vid precompute data"
-                    );
-                }
-                _ => {
-                    panic!("did not receive the expected vid commitment from vid_receiver_write_lock_guard");
-                }
-            }
-        }
+        // TODO Add precompute back.
 
         // finish with builder_state_to_last_built_block
 
@@ -2321,6 +2198,7 @@ mod test {
         let (tx_sender, _) = async_broadcast::broadcast(10);
         let parent_commit = vid_commitment::<TestVersions>(
             &[],
+            &[],
             TEST_NUM_NODES_IN_VID_COMPUTATION,
             <TestVersions as Versions>::Base::VERSION,
         );
@@ -2337,7 +2215,7 @@ mod test {
         );
 
         let new_parent_commit =
-            vid_commitment::<TestVersions>(&[], 9, <TestVersions as Versions>::Base::VERSION);
+            vid_commitment::<TestVersions>(&[], &[], 9, <TestVersions as Versions>::Base::VERSION);
         let new_view_num = ViewNumber::new(1);
         let builder_state_id = BuilderStateId {
             parent_commitment: new_parent_commit,
@@ -2350,7 +2228,6 @@ mod test {
             view: new_view_num,
         };
         let (vid_trigger_sender_1, vid_trigger_receiver_1) = oneshot::channel();
-        let (vid_sender_1, vid_receiver_1) = unbounded_channel();
         let (block_payload_1, metadata_1) =
             <TestBlockPayload as BlockPayload<TestTypes>>::from_transactions(
                 vec![TestTransaction::new(vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10])],
@@ -2369,7 +2246,6 @@ mod test {
             block_payload: block_payload_1.clone(),
             metadata: metadata_1,
             vid_trigger: vid_trigger_sender_1,
-            vid_receiver: vid_receiver_1,
             truncated: truncated_1,
         };
         let response_msg_1 = ResponseMessage {
@@ -2395,7 +2271,6 @@ mod test {
             view: new_view_num,
         };
         let (vid_trigger_sender_2, vid_trigger_receiver_2) = oneshot::channel();
-        let (vid_sender_2, vid_receiver_2) = unbounded_channel();
         let (block_payload_2, metadata_2) =
             <TestBlockPayload as BlockPayload<TestTypes>>::from_transactions(
                 vec![TestTransaction::new(vec![2, 3, 4, 5, 6, 7, 8, 9, 10, 11])],
@@ -2414,7 +2289,6 @@ mod test {
             block_payload: block_payload_2.clone(),
             metadata: metadata_2,
             vid_trigger: vid_trigger_sender_2,
-            vid_receiver: vid_receiver_2,
             truncated: truncated_2,
         };
         let response_msg_2: ResponseMessage = ResponseMessage {
@@ -2504,46 +2378,7 @@ mod test {
             );
         }
 
-        {
-            // This ensures that the vid_sender that is stored is still the
-            // same, or links to the vid_receiver that we submitted.
-            let (vid_commitment, vid_precompute_data) =
-                precompute_vid_commitment(&[1, 2, 3, 4, 5], TEST_NUM_NODES_IN_VID_COMPUTATION);
-
-            assert_eq!(
-                vid_sender_2.send((vid_commitment, vid_precompute_data.clone())),
-                Ok(()),
-                "The vid_sender should be able to send the vid commitment"
-            );
-
-            assert!(
-                vid_sender_1
-                    .send((vid_commitment, vid_precompute_data.clone()))
-                    .is_err(),
-                "The vid_sender should not be able to send the vid commitment"
-            );
-
-            let mut vid_receiver_write_lock_guard =
-                retrieved_block_info.vid_receiver.write_arc().await;
-
-            // Get and Keep object
-
-            match vid_receiver_write_lock_guard.get().await {
-                Ok((received_vid_commitment, received_vid_precompute_data)) => {
-                    assert_eq!(
-                        received_vid_commitment, vid_commitment,
-                        "The received vid commitment should match the expected vid commitment"
-                    );
-                    assert_eq!(
-                        received_vid_precompute_data, vid_precompute_data,
-                        "The received vid precompute data should match the expected vid precompute data"
-                    );
-                }
-                _ => {
-                    panic!("did not receive the expected vid commitment from vid_receiver_write_lock_guard");
-                }
-            }
-        }
+        // TODO Add precompute back.
 
         // finish with builder_state_to_last_built_block
 
@@ -2600,6 +2435,7 @@ mod test {
         let (tx_sender, _) = async_broadcast::broadcast(10);
         let parent_commit = vid_commitment::<TestVersions>(
             &[0],
+            &[],
             TEST_NUM_NODES_IN_VID_COMPUTATION,
             <TestVersions as Versions>::Base::VERSION,
         );
@@ -2619,6 +2455,7 @@ mod test {
         for i in 1..=10 {
             let vid_commit = vid_commitment::<TestVersions>(
                 &[i],
+                &[],
                 TEST_NUM_NODES_IN_VID_COMPUTATION,
                 <TestVersions as Versions>::Base::VERSION,
             );
@@ -2663,6 +2500,7 @@ mod test {
         let builder_state_id = BuilderStateId {
             parent_commitment: vid_commitment::<TestVersions>(
                 &[10],
+                &[],
                 TEST_NUM_NODES_IN_VID_COMPUTATION,
                 <TestVersions as Versions>::Base::VERSION,
             ),
@@ -2683,6 +2521,7 @@ mod test {
             state.spawned_builder_states.contains_key(&BuilderStateId {
                 parent_commitment: vid_commitment::<TestVersions>(
                     &[10],
+                    &[],
                     TEST_NUM_NODES_IN_VID_COMPUTATION,
                     <TestVersions as Versions>::Base::VERSION
                 ),
@@ -2714,6 +2553,7 @@ mod test {
         let (tx_sender, _) = async_broadcast::broadcast(10);
         let parent_commit = vid_commitment::<TestVersions>(
             &[0],
+            &[],
             TEST_NUM_NODES_IN_VID_COMPUTATION,
             <TestVersions as Versions>::Base::VERSION,
         );
@@ -2733,6 +2573,7 @@ mod test {
         for i in 1..=10 {
             let vid_commit = vid_commitment::<TestVersions>(
                 &[i],
+                &[],
                 TEST_NUM_NODES_IN_VID_COMPUTATION,
                 <TestVersions as Versions>::Base::VERSION,
             );
@@ -2761,6 +2602,7 @@ mod test {
             BuilderStateId {
                 parent_commitment: vid_commitment::<TestVersions>(
                     &[10],
+                    &[],
                     TEST_NUM_NODES_IN_VID_COMPUTATION,
                     <TestVersions as Versions>::Base::VERSION
                 ),
@@ -2809,6 +2651,7 @@ mod test {
         let (tx_sender, _) = async_broadcast::broadcast(10);
         let parent_commit = vid_commitment::<TestVersions>(
             &[0],
+            &[],
             TEST_NUM_NODES_IN_VID_COMPUTATION,
             <TestVersions as Versions>::Base::VERSION,
         );
@@ -2828,6 +2671,7 @@ mod test {
         for i in 1..=10 {
             let vid_commit = vid_commitment::<TestVersions>(
                 &[i],
+                &[],
                 TEST_NUM_NODES_IN_VID_COMPUTATION,
                 <TestVersions as Versions>::Base::VERSION,
             );
@@ -2856,6 +2700,7 @@ mod test {
             BuilderStateId {
                 parent_commitment: vid_commitment::<TestVersions>(
                     &[10],
+                    &[],
                     TEST_NUM_NODES_IN_VID_COMPUTATION,
                     <TestVersions as Versions>::Base::VERSION
                 ),
@@ -2880,6 +2725,7 @@ mod test {
         for i in 1..10 {
             let vid_commit = vid_commitment::<TestVersions>(
                 &[i],
+                &[],
                 TEST_NUM_NODES_IN_VID_COMPUTATION,
                 <TestVersions as Versions>::Base::VERSION,
             );
@@ -2931,6 +2777,7 @@ mod test {
         let (tx_sender, _) = async_broadcast::broadcast(10);
         let parent_commit = vid_commitment::<TestVersions>(
             &[0],
+            &[],
             TEST_NUM_NODES_IN_VID_COMPUTATION,
             <TestVersions as Versions>::Base::VERSION,
         );
@@ -2950,6 +2797,7 @@ mod test {
         for i in 1..=10 {
             let vid_commit = vid_commitment::<TestVersions>(
                 &[i],
+                &[],
                 TEST_NUM_NODES_IN_VID_COMPUTATION,
                 <TestVersions as Versions>::Base::VERSION,
             );
@@ -2984,6 +2832,7 @@ mod test {
             BuilderStateId {
                 parent_commitment: vid_commitment::<TestVersions>(
                     &[10],
+                    &[],
                     TEST_NUM_NODES_IN_VID_COMPUTATION,
                     <TestVersions as Versions>::Base::VERSION
                 ),
@@ -3019,6 +2868,7 @@ mod test {
             let builder_state_id = BuilderStateId {
                 parent_commitment: vid_commitment::<TestVersions>(
                     &[i],
+                    &[],
                     TEST_NUM_NODES_IN_VID_COMPUTATION,
                     <TestVersions as Versions>::Base::VERSION,
                 ),
@@ -3034,6 +2884,7 @@ mod test {
             let builder_state_id = BuilderStateId {
                 parent_commitment: vid_commitment::<TestVersions>(
                     &[i],
+                    &[],
                     TEST_NUM_NODES_IN_VID_COMPUTATION,
                     <TestVersions as Versions>::Base::VERSION,
                 ),
@@ -3066,6 +2917,7 @@ mod test {
             <BLSPubKey as SignatureKey>::generated_from_seed_indexed([0; 32], 1);
         let parent_commit = vid_commitment::<TestVersions>(
             &[],
+            &[],
             TEST_NUM_NODES_IN_VID_COMPUTATION,
             <TestVersions as Versions>::Base::VERSION,
         );
@@ -3093,6 +2945,7 @@ mod test {
         let result = state
             .available_blocks_implementation(
                 &vid_commitment::<TestVersions>(
+                    &[],
                     &[],
                     TEST_NUM_NODES_IN_VID_COMPUTATION,
                     <TestVersions as Versions>::Base::VERSION,
@@ -3135,6 +2988,7 @@ mod test {
             <BLSPubKey as SignatureKey>::generated_from_seed_indexed([0; 32], 1);
         let parent_commit = vid_commitment::<TestVersions>(
             &[],
+            &[],
             TEST_NUM_NODES_IN_VID_COMPUTATION,
             <TestVersions as Versions>::Base::VERSION,
         );
@@ -3162,6 +3016,7 @@ mod test {
         let result = state
             .available_blocks_implementation(
                 &vid_commitment::<TestVersions>(
+                    &[],
                     &[],
                     TEST_NUM_NODES_IN_VID_COMPUTATION,
                     <TestVersions as Versions>::Base::VERSION,
@@ -3204,6 +3059,7 @@ mod test {
             <BLSPubKey as SignatureKey>::generated_from_seed_indexed([0; 32], 1);
         let parent_commit = vid_commitment::<TestVersions>(
             &[],
+            &[],
             TEST_NUM_NODES_IN_VID_COMPUTATION,
             <TestVersions as Versions>::Base::VERSION,
         );
@@ -3231,6 +3087,7 @@ mod test {
         let result = state
             .available_blocks_implementation(
                 &vid_commitment::<TestVersions>(
+                    &[],
                     &[],
                     TEST_NUM_NODES_IN_VID_COMPUTATION,
                     <TestVersions as Versions>::Base::VERSION,
@@ -3273,6 +3130,7 @@ mod test {
         let (leader_public_key, leader_private_key) =
             <BLSPubKey as SignatureKey>::generated_from_seed_indexed([0; 32], 1);
         let parent_commit = vid_commitment::<TestVersions>(
+            &[],
             &[],
             TEST_NUM_NODES_IN_VID_COMPUTATION,
             <TestVersions as Versions>::Base::VERSION,
@@ -3348,6 +3206,7 @@ mod test {
         let (leader_public_key, leader_private_key) =
             <BLSPubKey as SignatureKey>::generated_from_seed_indexed([0; 32], 1);
         let parent_commit = vid_commitment::<TestVersions>(
+            &[],
             &[],
             TEST_NUM_NODES_IN_VID_COMPUTATION,
             <TestVersions as Versions>::Base::VERSION,
@@ -3493,6 +3352,7 @@ mod test {
         let (leader_public_key, leader_private_key) =
             <BLSPubKey as SignatureKey>::generated_from_seed_indexed([0; 32], 1);
         let parent_commit = vid_commitment::<TestVersions>(
+            &[],
             &[],
             TEST_NUM_NODES_IN_VID_COMPUTATION,
             <TestVersions as Versions>::Base::VERSION,
@@ -3646,6 +3506,7 @@ mod test {
             <BLSPubKey as SignatureKey>::generated_from_seed_indexed([0; 32], 1);
         let parent_commit = vid_commitment::<TestVersions>(
             &[],
+            &[],
             TEST_NUM_NODES_IN_VID_COMPUTATION,
             <TestVersions as Versions>::Base::VERSION,
         );
@@ -3706,6 +3567,7 @@ mod test {
             <BLSPubKey as SignatureKey>::generated_from_seed_indexed([0; 32], 1);
         let parent_commit = vid_commitment::<TestVersions>(
             &[],
+            &[],
             TEST_NUM_NODES_IN_VID_COMPUTATION,
             <TestVersions as Versions>::Base::VERSION,
         );
@@ -3759,6 +3621,7 @@ mod test {
             <BLSPubKey as SignatureKey>::generated_from_seed_indexed([0; 32], 1);
         let parent_commit = vid_commitment::<TestVersions>(
             &[],
+            &[],
             TEST_NUM_NODES_IN_VID_COMPUTATION,
             <TestVersions as Versions>::Base::VERSION,
         );
@@ -3795,7 +3658,6 @@ mod test {
             };
 
             let (vid_trigger_sender, vid_trigger_receiver) = oneshot::channel();
-            let (_, vid_receiver) = unbounded_channel();
 
             global_state_write_lock.blocks.put(
                 block_id,
@@ -3805,9 +3667,6 @@ mod test {
                         num_transactions: 1,
                     },
                     vid_trigger: Arc::new(async_lock::RwLock::new(Some(vid_trigger_sender))),
-                    vid_receiver: Arc::new(async_lock::RwLock::new(crate::WaitAndKeep::Wait(
-                        vid_receiver,
-                    ))),
                     offered_fee: 100,
                     truncated: false,
                 },
@@ -3865,6 +3724,7 @@ mod test {
         let (leader_public_key, _leader_private_key) =
             <BLSPubKey as SignatureKey>::generated_from_seed_indexed([0; 32], 1);
         let parent_commit = vid_commitment::<TestVersions>(
+            &[],
             &[],
             TEST_NUM_NODES_IN_VID_COMPUTATION,
             <TestVersions as Versions>::Base::VERSION,
@@ -3927,6 +3787,7 @@ mod test {
             <BLSPubKey as SignatureKey>::generated_from_seed_indexed([0; 32], 1);
         let parent_commit = vid_commitment::<TestVersions>(
             &[],
+            &[],
             TEST_NUM_NODES_IN_VID_COMPUTATION,
             <TestVersions as Versions>::Base::VERSION,
         );
@@ -3969,218 +3830,6 @@ mod test {
         }
     }
 
-    /// This test checks that the error `ClaimBlockHeaderInputError::CouldNotGetVidInTime`
-    /// is returned when the VID is not received in time.
-    ///
-    /// To trigger this condition, we simply submit a request to the
-    /// implementation of claim_block, but we do not provide a VID. As a result,
-    /// the implementation will ultimately timeout, and return an error that
-    /// indicates that the VID was not received in time.
-    ///
-    /// At least that's what it should do.  At the moment, this results in a
-    /// deadlock due to attempting to acquire the `write_arc` twice.
-    #[tokio::test]
-    async fn test_claim_block_header_input_error_could_not_get_vid_in_time() {
-        let (bootstrap_sender, _) = async_broadcast::broadcast(10);
-        let (tx_sender, _) = async_broadcast::broadcast(10);
-        let (builder_public_key, builder_private_key) =
-            <BLSPubKey as BuilderSignatureKey>::generated_from_seed_indexed([0; 32], 0);
-        let (leader_public_key, leader_private_key) =
-            <BLSPubKey as SignatureKey>::generated_from_seed_indexed([0; 32], 1);
-        let parent_commit = vid_commitment::<TestVersions>(
-            &[],
-            TEST_NUM_NODES_IN_VID_COMPUTATION,
-            <TestVersions as Versions>::Base::VERSION,
-        );
-
-        let state = Arc::new(ProxyGlobalState::<TestTypes>::new(
-            Arc::new(RwLock::new(GlobalState::<TestTypes>::new(
-                bootstrap_sender,
-                tx_sender,
-                parent_commit,
-                ViewNumber::new(0),
-                ViewNumber::new(0),
-                TEST_MAX_BLOCK_SIZE_INCREMENT_PERIOD,
-                TEST_PROTOCOL_MAX_BLOCK_SIZE,
-                TEST_NUM_NODES_IN_VID_COMPUTATION,
-                TEST_MAX_TX_NUM,
-            ))),
-            (builder_public_key, builder_private_key.clone()),
-            Duration::from_secs(1),
-        ));
-
-        let commitment = BuilderCommitment::from_bytes([0; 256]);
-        let cloned_commitment = commitment.clone();
-        let cloned_state = state.clone();
-
-        let _vid_sender = {
-            let mut global_state_write_lock = state.global_state.write_arc().await;
-            let block_id = BlockId {
-                hash: commitment,
-                view: ViewNumber::new(1),
-            };
-
-            let payload = TestBlockPayload {
-                transactions: vec![TestTransaction::new(vec![1, 2, 3, 4])],
-            };
-
-            let (vid_trigger_sender, _) = oneshot::channel();
-            let (vid_sender, vid_receiver) = unbounded_channel();
-
-            global_state_write_lock.blocks.put(
-                block_id,
-                BlockInfo {
-                    block_payload: payload,
-                    metadata: TestMetadata {
-                        num_transactions: 1,
-                    },
-                    vid_trigger: Arc::new(async_lock::RwLock::new(Some(vid_trigger_sender))),
-                    vid_receiver: Arc::new(async_lock::RwLock::new(crate::WaitAndKeep::Wait(
-                        vid_receiver,
-                    ))),
-                    offered_fee: 100,
-                    truncated: false,
-                },
-            );
-
-            vid_sender
-        };
-
-        let claim_block_header_input_join_handle = spawn(async move {
-            let signature =
-                BLSPubKey::sign(&leader_private_key, cloned_commitment.as_ref()).unwrap();
-            cloned_state
-                .claim_block_header_input_implementation(
-                    &cloned_commitment,
-                    1,
-                    leader_public_key,
-                    &signature,
-                )
-                .await
-        });
-
-        let result = claim_block_header_input_join_handle
-            .await
-            .expect("join error");
-
-        match result {
-            Err(ClaimBlockHeaderInputError::CouldNotGetVidInTime) => {
-                // This is what we expect.
-                // This message *should* indicate that the signature passed
-                // did not match the given public key.
-            }
-            Err(err) => {
-                panic!("Unexpected error: {:?}", err);
-            }
-            Ok(_) => {
-                panic!("Expected an error, but got a result");
-            }
-        }
-    }
-
-    /// This test checks that the error `ClaimBlockHeaderInputError::WaitAndKeepGetError`
-    /// is returned when the VID is not received in time.
-    ///
-    /// To trigger this condition, we simply submit a request to the
-    /// implementation of claim_block, but we close the VID receiver channel's
-    /// sender.
-    #[tokio::test]
-    async fn test_claim_block_header_input_error_keep_and_wait_get_error() {
-        let (bootstrap_sender, _) = async_broadcast::broadcast(10);
-        let (tx_sender, _) = async_broadcast::broadcast(10);
-        let (builder_public_key, builder_private_key) =
-            <BLSPubKey as BuilderSignatureKey>::generated_from_seed_indexed([0; 32], 0);
-        let (leader_public_key, leader_private_key) =
-            <BLSPubKey as SignatureKey>::generated_from_seed_indexed([0; 32], 1);
-        let parent_commit = vid_commitment::<TestVersions>(
-            &[],
-            TEST_NUM_NODES_IN_VID_COMPUTATION,
-            <TestVersions as Versions>::Base::VERSION,
-        );
-
-        let state = Arc::new(ProxyGlobalState::<TestTypes>::new(
-            Arc::new(RwLock::new(GlobalState::<TestTypes>::new(
-                bootstrap_sender,
-                tx_sender,
-                parent_commit,
-                ViewNumber::new(0),
-                ViewNumber::new(0),
-                TEST_MAX_BLOCK_SIZE_INCREMENT_PERIOD,
-                TEST_PROTOCOL_MAX_BLOCK_SIZE,
-                TEST_NUM_NODES_IN_VID_COMPUTATION,
-                TEST_MAX_TX_NUM,
-            ))),
-            (builder_public_key, builder_private_key.clone()),
-            Duration::from_secs(1),
-        ));
-
-        let commitment = BuilderCommitment::from_bytes([0; 256]);
-        let cloned_commitment = commitment.clone();
-        let cloned_state = state.clone();
-
-        {
-            let mut global_state_write_lock = state.global_state.write_arc().await;
-            let block_id = BlockId {
-                hash: commitment,
-                view: ViewNumber::new(1),
-            };
-
-            let payload = TestBlockPayload {
-                transactions: vec![TestTransaction::new(vec![1, 2, 3, 4])],
-            };
-
-            let (vid_trigger_sender, _) = oneshot::channel();
-            let (_, vid_receiver) = unbounded_channel();
-
-            global_state_write_lock.blocks.put(
-                block_id,
-                BlockInfo {
-                    block_payload: payload,
-                    metadata: TestMetadata {
-                        num_transactions: 1,
-                    },
-                    vid_trigger: Arc::new(async_lock::RwLock::new(Some(vid_trigger_sender))),
-                    vid_receiver: Arc::new(async_lock::RwLock::new(crate::WaitAndKeep::Wait(
-                        vid_receiver,
-                    ))),
-                    offered_fee: 100,
-                    truncated: false,
-                },
-            );
-        };
-
-        let claim_block_header_input_join_handle = spawn(async move {
-            let signature =
-                BLSPubKey::sign(&leader_private_key, cloned_commitment.as_ref()).unwrap();
-            cloned_state
-                .claim_block_header_input_implementation(
-                    &cloned_commitment,
-                    1,
-                    leader_public_key,
-                    &signature,
-                )
-                .await
-        });
-
-        let result = claim_block_header_input_join_handle
-            .await
-            .expect("join error");
-
-        match result {
-            Err(ClaimBlockHeaderInputError::WaitAndKeepGetError(_)) => {
-                // This is what we expect.
-                // This message *should* indicate that the signature passed
-                // did not match the given public key.
-            }
-            Err(err) => {
-                panic!("Unexpected error: {:?}", err);
-            }
-            Ok(_) => {
-                panic!("Expected an error, but got a result");
-            }
-        }
-    }
-
     /// This test checks that successful response is returned when the VID is
     /// received in time.
     #[tokio::test]
@@ -4193,6 +3842,7 @@ mod test {
             <BLSPubKey as SignatureKey>::generated_from_seed_indexed([0; 32], 1);
         let parent_commit = vid_commitment::<TestVersions>(
             &[],
+            &[],
             TEST_NUM_NODES_IN_VID_COMPUTATION,
             <TestVersions as Versions>::Base::VERSION,
         );
@@ -4217,39 +3867,6 @@ mod test {
         let cloned_commitment = commitment.clone();
         let cloned_state = state.clone();
 
-        let vid_sender = {
-            let mut global_state_write_lock = state.global_state.write_arc().await;
-            let block_id = BlockId {
-                hash: commitment,
-                view: ViewNumber::new(1),
-            };
-
-            let payload = TestBlockPayload {
-                transactions: vec![TestTransaction::new(vec![1, 2, 3, 4])],
-            };
-
-            let (vid_trigger_sender, _) = oneshot::channel();
-            let (vid_sender, vid_receiver) = unbounded_channel();
-
-            global_state_write_lock.blocks.put(
-                block_id,
-                BlockInfo {
-                    block_payload: payload,
-                    metadata: TestMetadata {
-                        num_transactions: 1,
-                    },
-                    vid_trigger: Arc::new(async_lock::RwLock::new(Some(vid_trigger_sender))),
-                    vid_receiver: Arc::new(async_lock::RwLock::new(crate::WaitAndKeep::Wait(
-                        vid_receiver,
-                    ))),
-                    offered_fee: 100,
-                    truncated: false,
-                },
-            );
-
-            vid_sender
-        };
-
         let claim_block_header_input_join_handle = spawn(async move {
             let signature =
                 BLSPubKey::sign(&leader_private_key, cloned_commitment.as_ref()).unwrap();
@@ -4263,11 +3880,7 @@ mod test {
                 .await
         });
 
-        vid_sender
-            .send(
-                hotshot_types::traits::block_contents::precompute_vid_commitment(&[1, 2, 3, 4], 2),
-            )
-            .unwrap();
+        // TODO Add precompute back.
 
         let result = claim_block_header_input_join_handle.await;
 
@@ -4893,6 +4506,7 @@ mod test {
         let mut round = 0;
         let mut current_builder_state_id = BuilderStateId::<TestTypes> {
             parent_commitment: vid_commitment::<TestVersions>(
+                &[],
                 &[],
                 8,
                 <TestVersions as Versions>::Base::VERSION,

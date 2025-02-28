@@ -17,7 +17,7 @@ use hotshot_types::{
     drb::{compute_drb_result, DrbResult},
     epoch_membership::EpochMembershipCoordinator,
     event::{Event, EventType},
-    message::{convert_proposal, Proposal, UpgradeLock},
+    message::{Proposal, UpgradeLock},
     simple_vote::{HasEpoch, QuorumData2, QuorumVote2},
     traits::{
         block_contents::BlockHeader,
@@ -582,7 +582,7 @@ pub(crate) async fn update_shared_state<
                 &instance_state,
                 &parent,
                 &proposed_leaf.block_header().clone(),
-                vid_share.data.vid_common_ref().clone(),
+                vid_share.data.payload_byte_len(),
                 version,
                 *view_number,
             )
@@ -670,7 +670,7 @@ pub(crate) async fn submit_vote<TYPES: NodeType, I: NodeImplementation<TYPES>, V
     storage
         .write()
         .await
-        .append_vid2(&convert_proposal(vid_share))
+        .append_vid_general(&vid_share)
         .await
         .wrap()
         .context(error!("Failed to store VID share"))?;

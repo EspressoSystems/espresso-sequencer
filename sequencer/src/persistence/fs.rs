@@ -6,11 +6,12 @@ use espresso_types::{
     v0::traits::{EventConsumer, PersistenceOptions, SequencerPersistence},
     Leaf, Leaf2, NetworkConfig, Payload, SeqTypes,
 };
+use hotshot_query_service::VidCommitment;
 use hotshot_types::{
     consensus::CommitmentMap,
     data::{
-        vid_disperse::ADVZDisperseShare, DaProposal, EpochNumber, QuorumProposal, QuorumProposal2,
-        QuorumProposalWrapper,
+        vid_disperse::{ADVZDisperseShare, VidDisperseShare2},
+        DaProposal, EpochNumber, QuorumProposal, QuorumProposal2, QuorumProposalWrapper,
     },
     event::{Event, EventType, HotShotAction, LeafInfo},
     message::{convert_proposal, Proposal},
@@ -22,10 +23,8 @@ use hotshot_types::{
         node_implementation::ConsensusTime,
     },
     utils::View,
-    vid::VidSchemeType,
     vote::HasViewNumber,
 };
-use jf_vid::VidScheme;
 use std::sync::Arc;
 use std::{
     collections::BTreeMap,
@@ -629,10 +628,36 @@ impl SequencerPersistence for Persistence {
             },
         )
     }
+    async fn append_vid2(
+        &self,
+        proposal: &Proposal<SeqTypes, VidDisperseShare2<SeqTypes>>,
+    ) -> anyhow::Result<()> {
+        let mut inner = self.inner.write().await;
+        let view_number = proposal.data.view_number().u64();
+        let dir_path = inner.vid_dir_path();
+
+        fs::create_dir_all(dir_path.clone()).context("failed to create vid dir")?;
+
+        let file_path = dir_path.join(view_number.to_string()).with_extension("txt");
+        inner.replace(
+            &file_path,
+            |_| {
+                // Don't overwrite an existing share, but warn about it as this is likely not intended
+                // behavior from HotShot.
+                tracing::warn!(view_number, "duplicate VID share");
+                Ok(false)
+            },
+            |mut file| {
+                let proposal_bytes = bincode::serialize(&proposal).context("serialize proposal")?;
+                file.write_all(&proposal_bytes)?;
+                Ok(())
+            },
+        )
+    }
     async fn append_da(
         &self,
         proposal: &Proposal<SeqTypes, DaProposal<SeqTypes>>,
-        _vid_commit: <VidSchemeType as VidScheme>::Commit,
+        _vid_commit: VidCommitment,
     ) -> anyhow::Result<()> {
         let mut inner = self.inner.write().await;
         let view_number = proposal.data.view_number().u64();

@@ -32,17 +32,16 @@ use hotshot_builder_api::{
     v0_2::block_info::AvailableBlockHeaderInputV1,
     v0_99,
 };
-use hotshot_example_types::node_types::TestVersions;
 use hotshot_types::{
     bundle::Bundle,
     constants::{LEGACY_BUILDER_MODULE, MARKETPLACE_BUILDER_MODULE},
+    data::VidCommitment,
     traits::{
         block_contents::{BlockHeader, BuilderFee},
-        node_implementation::{NodeType, Versions},
+        node_implementation::NodeType,
         signature_key::BuilderSignatureKey,
     },
     utils::BuilderCommitment,
-    vid::VidCommitment,
 };
 use lru::LruCache;
 use tide_disco::{method::ReadState, App, Url};
@@ -248,16 +247,8 @@ where
             return Ok(vec![]);
         }
 
-        // Let new VID scheme ships with Epochs upgrade
-        let version = <TestVersions as Versions>::Epochs::VERSION;
-        let block_entry = build_block::<TYPES>(
-            transactions,
-            self.num_nodes.clone(),
-            self.pub_key.clone(),
-            self.priv_key.clone(),
-            version,
-        )
-        .await;
+        let block_entry =
+            build_block::<TYPES>(transactions, self.pub_key.clone(), self.priv_key.clone()).await;
 
         let metadata = block_entry.metadata.clone();
 

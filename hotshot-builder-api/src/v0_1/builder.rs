@@ -225,9 +225,7 @@ where
                     });
 
                 out.map(|input| AvailableBlockHeaderInputV2::<Types> {
-                    vid_commitment: input.vid_commitment,
                     fee_signature: input.fee_signature,
-                    message_signature: input.message_signature,
                     sender: input.sender,
                 })
             }

@@ -6,7 +6,7 @@
 
 use std::{sync::Arc, time::Duration};
 
-use async_broadcast::Sender;
+use async_broadcast::{Receiver, Sender};
 use chrono::Utc;
 use hotshot_types::{
     event::{Event, EventType},
@@ -22,7 +22,9 @@ use vbs::version::StaticVersionType;
 
 use super::ConsensusTaskState;
 use crate::{
-    consensus::Versions, events::HotShotEvent, helpers::broadcast_event,
+    consensus::Versions,
+    events::HotShotEvent,
+    helpers::{broadcast_event, wait_for_next_epoch_qc},
     vote_collection::handle_vote,
 };
 
@@ -150,6 +152,7 @@ pub(crate) async fn handle_timeout_vote_recv<
 pub async fn send_high_qc<TYPES: NodeType, V: Versions, I: NodeImplementation<TYPES>>(
     new_view_number: TYPES::View,
     sender: &Sender<Arc<HotShotEvent<TYPES>>>,
+    receiver: &Receiver<Arc<HotShotEvent<TYPES>>>,
     task_state: &mut ConsensusTaskState<TYPES, I, V>,
 ) -> Result<()> {
     let version = task_state.upgrade_lock.version(new_view_number).await?;
@@ -157,23 +160,56 @@ pub async fn send_high_qc<TYPES: NodeType, V: Versions, I: NodeImplementation<TY
         version >= V::Epochs::VERSION,
         debug!("HotStuff 2 upgrade not yet in effect")
     );
-    let high_qc = task_state.consensus.read().await.high_qc().clone();
-    let leader = task_state
-        .membership_coordinator
-        .membership_for_epoch(task_state.cur_epoch)
+
+    let consensus_reader = task_state.consensus.read().await;
+    let high_qc = consensus_reader.high_qc().clone();
+    let is_eqc = consensus_reader.is_leaf_extended(high_qc.data.leaf_commit);
+    drop(consensus_reader);
+
+    if is_eqc {
+        let Some(next_epoch_high_qc) = wait_for_next_epoch_qc(
+            &high_qc,
+            &task_state.consensus,
+            task_state.timeout,
+            task_state.view_start_time,
+            receiver,
+        )
         .await
-        .context(warn!("No stake table for epoch"))?
-        .leader(new_view_number)
-        .await?;
-    broadcast_event(
-        Arc::new(HotShotEvent::HighQcSend(
-            high_qc,
-            leader,
-            task_state.public_key.clone(),
-        )),
-        sender,
-    )
-    .await;
+        else {
+            bail!("We've seen an extended QC but we don't have a corresponding next epoch extended QC");
+        };
+        tracing::debug!(
+            "Broadcasting Extended QC for view {:?} and epoch {:?}, my id {:?}.",
+            high_qc.view_number(),
+            high_qc.epoch(),
+            task_state.id
+        );
+        broadcast_event(
+            Arc::new(HotShotEvent::ExtendedQcSend(
+                high_qc,
+                next_epoch_high_qc,
+                task_state.public_key.clone(),
+            )),
+            sender,
+        )
+        .await;
+    } else {
+        let leader = task_state
+            .membership_coordinator
+            .membership_for_epoch(task_state.cur_epoch)
+            .await?
+            .leader(new_view_number)
+            .await?;
+        broadcast_event(
+            Arc::new(HotShotEvent::HighQcSend(
+                high_qc,
+                leader,
+                task_state.public_key.clone(),
+            )),
+            sender,
+        )
+        .await;
+    }
     Ok(())
 }
 
@@ -187,6 +223,7 @@ pub(crate) async fn handle_view_change<
     new_view_number: TYPES::View,
     epoch_number: Option<TYPES::Epoch>,
     sender: &Sender<Arc<HotShotEvent<TYPES>>>,
+    receiver: &Receiver<Arc<HotShotEvent<TYPES>>>,
     task_state: &mut ConsensusTaskState<TYPES, I, V>,
 ) -> Result<()> {
     if epoch_number > task_state.cur_epoch {
@@ -211,7 +248,7 @@ pub(crate) async fn handle_view_change<
 
     // Send our high qc to the next leader immediately upon finishing a view.
     // Part of HotStuff 2
-    let _ = send_high_qc(new_view_number, sender, task_state)
+    let _ = send_high_qc(new_view_number, sender, receiver, task_state)
         .await
         .inspect_err(|e| {
             tracing::debug!("High QC sending failed with error: {:?}", e);

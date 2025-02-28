@@ -16,7 +16,7 @@ use futures::future::{select, Either};
 use hotshot_types::{
     epoch_membership::EpochMembershipCoordinator,
     message::UpgradeLock,
-    traits::{network::BroadcastDelay, node_implementation::Versions},
+    traits::{block_contents::BlockHeader, network::BroadcastDelay, node_implementation::Versions},
 };
 use rand::Rng;
 use url::Url;
@@ -49,7 +49,10 @@ use hotshot_task_impls::{events::HotShotEvent, helpers::broadcast_event};
 /// Reexport error type
 pub use hotshot_types::error::HotShotError;
 use hotshot_types::{
-    consensus::{Consensus, ConsensusMetricsValue, OuterConsensus, VidShares, View, ViewInner},
+    consensus::{
+        Consensus, ConsensusMetricsValue, OuterConsensus, PayloadWithMetadata, VidShares, View,
+        ViewInner,
+    },
     constants::{EVENT_CHANNEL_SIZE, EXTERNAL_EVENT_CHANNEL_SIZE},
     data::{Leaf2, QuorumProposal, QuorumProposal2},
     event::{EventType, LeafInfo},
@@ -322,7 +325,11 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> SystemContext<T
             saved_leaves.insert(leaf.commit(), leaf.clone());
         }
         if let Some(payload) = anchored_leaf.block_payload() {
-            saved_payloads.insert(anchored_leaf.view_number(), Arc::new(payload));
+            let metadata = anchored_leaf.block_header().metadata().clone();
+            saved_payloads.insert(
+                anchored_leaf.view_number(),
+                Arc::new(PayloadWithMetadata { payload, metadata }),
+            );
         }
 
         let consensus = Consensus::new(
