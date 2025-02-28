@@ -128,7 +128,8 @@ where
         // Verification of the root is handled in get_epoch_root
         let (next_epoch, header) = root_membership
             .get_epoch_root(root_block_in_epoch(*root_epoch, self.epoch_height))
-            .await?;
+            .await
+            .ok()?;
         let updater = self
             .membership
             .read()
@@ -228,12 +229,15 @@ impl<TYPES: NodeType> EpochMembership<TYPES> {
     async fn get_epoch_root(
         &self,
         block_height: u64,
-    ) -> Option<(TYPES::Epoch, TYPES::BlockHeader)> {
+    ) -> anyhow::Result<(TYPES::Epoch, TYPES::BlockHeader)> {
+        let Some(epoch) = self.epoch else {
+            anyhow::bail!("Cannot get root for None epoch");
+        };
         self.coordinator
             .membership
             .read()
             .await
-            .get_epoch_root(block_height, self.coordinator.epoch_height, self.epoch?)
+            .get_epoch_root(block_height, self.coordinator.epoch_height, epoch)
             .await
     }
 

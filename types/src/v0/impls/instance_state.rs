@@ -224,7 +224,11 @@ pub mod mock {
 
     #[async_trait]
     impl StateCatchup for MockStateCatchup {
-        async fn try_fetch_leaves(&self, _retry: usize, _height: u64) -> anyhow::Result<Vec<Leaf2>> {
+        async fn try_fetch_leaves(
+            &self,
+            _retry: usize,
+            _height: u64,
+        ) -> anyhow::Result<Vec<Leaf2>> {
             Err(anyhow::anyhow!("todo"))
         }
         async fn try_fetch_accounts(

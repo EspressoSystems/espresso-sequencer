@@ -244,8 +244,8 @@ impl<TYPES: NodeType> Membership<TYPES> for StaticCommitteeLeaderForTwoViews<TYP
         _block_height: u64,
         _epoch_height: u64,
         _epoch: TYPES::Epoch,
-    ) -> Option<(TYPES::Epoch, TYPES::BlockHeader)> {
-        None
+    ) -> anyhow::Result<(TYPES::Epoch, TYPES::BlockHeader)> {
+        anyhow::bail!("Not implemented")
     }
 
     fn add_drb_result(&mut self, _epoch: <TYPES as NodeType>::Epoch, _drb_result: DrbResult) {}
