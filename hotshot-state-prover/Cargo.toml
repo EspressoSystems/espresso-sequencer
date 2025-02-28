@@ -43,8 +43,8 @@ url = { workspace = true }
 vbs = { workspace = true }
 
 [dev-dependencies]
-sequencer-utils = { path = "../utils", features = ["testing"] }
 hotshot-types = { workspace = true }
+sequencer-utils = { path = "../utils", features = ["testing"] }
 
 [features]
 default = ["parallel"]

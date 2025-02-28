@@ -25,7 +25,10 @@ use hotshot_contract_adapter::{
     jellyfish::{field_to_u256, ParsedPlonkProof},
     light_client::{ParsedLightClientState, ParsedStakeTableState},
 };
-use hotshot_stake_table::{vec_based::{config::FieldType, StakeTable}, utils::one_honest_threshold};
+use hotshot_stake_table::{
+    utils::one_honest_threshold,
+    vec_based::{config::FieldType, StakeTable},
+};
 use hotshot_types::{
     light_client::{
         CircuitField, LightClientState, PublicInput, StakeTableState, StateSignaturesBundle,
@@ -799,7 +802,6 @@ mod test {
 
         let genesis_l1: ParsedLightClientState = contract.genesis_state().await?.into();
         assert_eq!(genesis_l1, genesis, "mismatched genesis, aborting tests");
-
 
         // simulate some block elapsing
         for _ in 0..10 {

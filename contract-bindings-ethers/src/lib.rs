@@ -11,5 +11,4 @@ pub mod light_client_arbitrum;
 pub mod light_client_mock;
 pub mod permissioned_stake_table;
 pub mod plonk_verifier;
-pub mod plonk_verifier_2;
 pub mod shared_types;
