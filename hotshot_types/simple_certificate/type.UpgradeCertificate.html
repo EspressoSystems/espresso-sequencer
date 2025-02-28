@@ -14,7 +14,7 @@
     &amp;self,
     view_number: TYPES::<a class="associatedtype" href="../traits/node_implementation/trait.NodeType.html#associatedtype.View" title="type hotshot_types::traits::node_implementation::NodeType::View">View</a>,
     decided_upgrade_certificate: <a class="struct" href="https://doc.rust-lang.org/1.85.0/alloc/sync/struct.Arc.html" title="struct alloc::sync::Arc">Arc</a>&lt;RwLock&lt;<a class="enum" href="https://doc.rust-lang.org/1.85.0/core/option/enum.Option.html" title="enum core::option::Option">Option</a>&lt;Self&gt;&gt;&gt;,
-) -&gt; <a class="type" href="../../hotshot_utils/anytrace/type.Result.html" title="type hotshot_utils::anytrace::Result">Result</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/1.85.0/std/primitive.unit.html">()</a>&gt;</h4></section></summary><div class="docblock"><p>Determines whether or not a certificate is relevant (i.e. we still have time to reach a
+) -&gt; Result&lt;<a class="primitive" href="https://doc.rust-lang.org/1.85.0/std/primitive.unit.html">()</a>&gt;</h4></section></summary><div class="docblock"><p>Determines whether or not a certificate is relevant (i.e. we still have time to reach a
 decide)</p>
 <h5 id="errors"><a class="doc-anchor" href="#errors">§</a>Errors</h5>
 <p>Returns an error when the certificate is no longer relevant</p>
@@ -23,7 +23,7 @@ decide)</p>
     membership: &amp;RwLock&lt;TYPES::<a class="associatedtype" href="../traits/node_implementation/trait.NodeType.html#associatedtype.Membership" title="type hotshot_types::traits::node_implementation::NodeType::Membership">Membership</a>&gt;,
     epoch: <a class="enum" href="https://doc.rust-lang.org/1.85.0/core/option/enum.Option.html" title="enum core::option::Option">Option</a>&lt;TYPES::<a class="associatedtype" href="../traits/node_implementation/trait.NodeType.html#associatedtype.Epoch" title="type hotshot_types::traits::node_implementation::NodeType::Epoch">Epoch</a>&gt;,
     upgrade_lock: &amp;<a class="struct" href="../message/struct.UpgradeLock.html" title="struct hotshot_types::message::UpgradeLock">UpgradeLock</a>&lt;TYPES, V&gt;,
-) -&gt; <a class="type" href="../../hotshot_utils/anytrace/type.Result.html" title="type hotshot_utils::anytrace::Result">Result</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/1.85.0/std/primitive.unit.html">()</a>&gt;</h4></section></summary><div class="docblock"><p>Validate an upgrade certificate.</p>
+) -&gt; Result&lt;<a class="primitive" href="https://doc.rust-lang.org/1.85.0/std/primitive.unit.html">()</a>&gt;</h4></section></summary><div class="docblock"><p>Validate an upgrade certificate.</p>
 <h5 id="errors-1"><a class="doc-anchor" href="#errors-1">§</a>Errors</h5>
 <p>Returns an error when the upgrade certificate is invalid.</p>
 </div></details><details class="toggle method-toggle" open><summary><section id="method.upgrading_in" class="method"><a class="src rightside" href="../../src/hotshot_types/simple_certificate.rs.html#493-495">Source</a><h4 class="code-header">pub fn <a href="#method.upgrading_in" class="fn">upgrading_in</a>(&amp;self, view: TYPES::<a class="associatedtype" href="../traits/node_implementation/trait.NodeType.html#associatedtype.View" title="type hotshot_types::traits::node_implementation::NodeType::View">View</a>) -&gt; <a class="primitive" href="https://doc.rust-lang.org/1.85.0/std/primitive.bool.html">bool</a></h4></section></summary><div class="docblock"><p>Given an upgrade certificate and a view, tests whether the view is in the period

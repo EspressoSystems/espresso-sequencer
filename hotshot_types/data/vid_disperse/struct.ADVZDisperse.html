@@ -27,7 +27,7 @@ Allows for more complex stake table functionality</p>
     view: TYPES::<a class="associatedtype" href="../../traits/node_implementation/trait.NodeType.html#associatedtype.View" title="type hotshot_types::traits::node_implementation::NodeType::View">View</a>,
     target_epoch: <a class="enum" href="https://doc.rust-lang.org/1.85.0/core/option/enum.Option.html" title="enum core::option::Option">Option</a>&lt;TYPES::<a class="associatedtype" href="../../traits/node_implementation/trait.NodeType.html#associatedtype.Epoch" title="type hotshot_types::traits::node_implementation::NodeType::Epoch">Epoch</a>&gt;,
     data_epoch: <a class="enum" href="https://doc.rust-lang.org/1.85.0/core/option/enum.Option.html" title="enum core::option::Option">Option</a>&lt;TYPES::<a class="associatedtype" href="../../traits/node_implementation/trait.NodeType.html#associatedtype.Epoch" title="type hotshot_types::traits::node_implementation::NodeType::Epoch">Epoch</a>&gt;,
-) -&gt; <a class="type" href="../../../hotshot_utils/anytrace/type.Result.html" title="type hotshot_utils::anytrace::Result">Result</a>&lt;Self&gt;</h4></section></summary><div class="docblock"><p>Calculate the vid disperse information from the payload given a view, epoch and membership,
+) -&gt; Result&lt;Self&gt;</h4></section></summary><div class="docblock"><p>Calculate the vid disperse information from the payload given a view, epoch and membership,
 If the sender epoch is missing, it means it’s the same as the target epoch.</p>
 <h5 id="errors"><a class="doc-anchor" href="#errors">§</a>Errors</h5>
 <p>Returns an error if the disperse or commitment calculation fails</p>

@@ -3,7 +3,7 @@
     sender: &amp;Sender&lt;<a class="struct" href="https://doc.rust-lang.org/1.85.0/alloc/sync/struct.Arc.html" title="struct alloc::sync::Arc">Arc</a>&lt;<a class="enum" href="../../events/enum.HotShotEvent.html" title="enum hotshot_task_impls::events::HotShotEvent">HotShotEvent</a>&lt;TYPES&gt;&gt;&gt;,
     receiver: &amp;Receiver&lt;<a class="struct" href="https://doc.rust-lang.org/1.85.0/alloc/sync/struct.Arc.html" title="struct alloc::sync::Arc">Arc</a>&lt;<a class="enum" href="../../events/enum.HotShotEvent.html" title="enum hotshot_task_impls::events::HotShotEvent">HotShotEvent</a>&lt;TYPES&gt;&gt;&gt;,
     task_state: &amp;mut <a class="struct" href="../struct.ConsensusTaskState.html" title="struct hotshot_task_impls::consensus::ConsensusTaskState">ConsensusTaskState</a>&lt;TYPES, I, V&gt;,
-) -&gt; <a class="type" href="../../../hotshot_utils/anytrace/type.Result.html" title="type hotshot_utils::anytrace::Result">Result</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/1.85.0/std/primitive.unit.html">()</a>&gt;</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Send an event to the next leader containing the highest QC we have
+) -&gt; Result&lt;<a class="primitive" href="https://doc.rust-lang.org/1.85.0/std/primitive.unit.html">()</a>&gt;</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Send an event to the next leader containing the highest QC we have
 This is a necessary part of HotStuff 2 but not the original HotStuff</p>
 <p>#Errors
 Returns and error if we can’t get the version or the version doesn’t
