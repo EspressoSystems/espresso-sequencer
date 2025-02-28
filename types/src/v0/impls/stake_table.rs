@@ -11,26 +11,31 @@ use ethers_conv::ToAlloy;
 use hotshot::types::{BLSPubKey, SignatureKey as _};
 use hotshot_contract_adapter::stake_table::{bls_alloy_to_jf, NodeInfoJf};
 use hotshot_types::{
-    data::EpochNumber, drb::{
+    data::EpochNumber,
+    drb::{
         election::{generate_stake_cdf, select_randomized_leader, RandomizedCommittee},
         DrbResult,
-    }, message::UpgradeLock, stake_table::StakeTableEntry, traits::{
+    },
+    message::UpgradeLock,
+    stake_table::StakeTableEntry,
+    traits::{
         election::Membership,
         node_implementation::{ConsensusTime, NodeType},
         signature_key::StakeTableEntryType,
-    }, utils::verify_epoch_root_chain, PeerConfig
+    },
+    utils::verify_epoch_root_chain,
+    PeerConfig,
 };
 
 use itertools::Itertools;
-use std::{
-    fmt::Debug,
-    sync::Arc,
-};
+use std::{fmt::Debug, sync::Arc};
 use thiserror::Error;
 use url::Url;
 
 use super::{
-    traits::StateCatchup, v0_3::{DAMembers, StakeTable, StakeTables}, EpochVersion, Header, L1Client, Leaf2, NodeState, PubKey, SeqTypes, SequencerVersions
+    traits::StateCatchup,
+    v0_3::{DAMembers, StakeTable, StakeTables},
+    EpochVersion, Header, L1Client, Leaf2, NodeState, PubKey, SeqTypes, SequencerVersions,
 };
 
 type Epoch = <SeqTypes as NodeType>::Epoch;
