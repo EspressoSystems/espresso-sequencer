@@ -13,8 +13,7 @@
 use crate::{types::HeightIndexed, Header, Metadata, Payload, Transaction, VidCommon, VidShare};
 use committable::{Commitment, Committable};
 use hotshot_types::{
-    data::Leaf,
-    data::VidCommitment,
+    data::{Leaf, VidCommitment},
     simple_certificate::QuorumCertificate,
     traits::{
         self,

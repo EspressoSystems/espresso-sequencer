@@ -64,12 +64,12 @@ impl RoundTransactionBehavior {
                     ]),
                 );
                 transactions
-            }
+            },
             RoundTransactionBehavior::AdjustRemoveTail => {
                 let mut transactions = transactions.clone();
                 transactions.pop();
                 transactions
-            }
+            },
             RoundTransactionBehavior::ProposeInAdvance(propose_in_advance_round) => {
                 let mut transactions = transactions.clone();
                 transactions.push(TestTransaction::new(vec![
@@ -77,12 +77,12 @@ impl RoundTransactionBehavior {
                     0_u8,
                 ]));
                 transactions
-            }
+            },
             RoundTransactionBehavior::AdjustRemove => {
                 let mut transactions = transactions.clone();
                 transactions.remove(rand::random::<usize>() % (transactions.len() - 1));
                 transactions
-            }
+            },
         }
     }
 }

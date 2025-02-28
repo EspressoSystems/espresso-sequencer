@@ -18,11 +18,10 @@ use committable::Commitment;
 use super::node_implementation::NodeType;
 use crate::{
     consensus::{CommitmentMap, View},
-    data::VidCommitment,
     data::{
         vid_disperse::{ADVZDisperseShare, VidDisperseShare2},
         DaProposal, DaProposal2, Leaf, Leaf2, QuorumProposal, QuorumProposal2,
-        QuorumProposalWrapper, VidDisperseShare,
+        QuorumProposalWrapper, VidCommitment, VidDisperseShare,
     },
     event::HotShotAction,
     message::{convert_proposal, Proposal},
@@ -54,7 +53,7 @@ pub trait Storage<TYPES: NodeType>: Send + Sync + Clone {
                     _pd: std::marker::PhantomData,
                 })
                 .await
-            }
+            },
             VidDisperseShare::V1(share) => {
                 self.append_vid2(&Proposal {
                     data: share.clone(),
@@ -62,7 +61,7 @@ pub trait Storage<TYPES: NodeType>: Send + Sync + Clone {
                     _pd: std::marker::PhantomData,
                 })
                 .await
-            }
+            },
         }
     }
     /// Add a proposal to the stored DA proposals.

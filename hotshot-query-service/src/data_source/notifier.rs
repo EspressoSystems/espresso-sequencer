@@ -73,13 +73,17 @@
 use async_lock::Mutex;
 use derivative::Derivative;
 use futures::future::{BoxFuture, FutureExt};
-use std::sync::Arc;
 use std::{
     future::IntoFuture,
-    sync::atomic::{AtomicBool, Ordering},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
 };
-use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
-use tokio::sync::oneshot;
+use tokio::sync::{
+    mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
+    oneshot,
+};
 use tracing::warn;
 
 /// A predicate on a type `<T>`.

@@ -22,8 +22,7 @@ use hotshot_types::{
         node_implementation::Versions, EncodeBytes,
     },
 };
-use marketplace_builder_shared::block::ParentBlockReferences;
-use marketplace_builder_shared::utils::EventServiceStream;
+use marketplace_builder_shared::{block::ParentBlockReferences, utils::EventServiceStream};
 use sequencer::{catchup::StatePeers, L1Params, SequencerApiVersion};
 use std::sync::Arc;
 use tide_disco::Url;

@@ -13,11 +13,12 @@ use hotshot_query_service::{
     availability::{self, AvailabilityDataSource, CustomSnafu, FetchBlockSnafu},
     explorer::{self, ExplorerDataSource},
     merklized_state::{
-        self, MerklizedState, MerklizedStateDataSource, MerklizedStateHeightPersistence,
+        self, MerklizedState, MerklizedStateDataSource, MerklizedStateHeightPersistence, Snapshot,
     },
-    node, ApiState, Error,
+    node,
+    node::NodeDataSource,
+    ApiState, Error,
 };
-use hotshot_query_service::{merklized_state::Snapshot, node::NodeDataSource};
 use hotshot_types::{
     data::{EpochNumber, ViewNumber},
     traits::{

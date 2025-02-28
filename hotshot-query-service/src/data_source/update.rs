@@ -23,16 +23,13 @@ use async_trait::async_trait;
 use futures::future::Future;
 use hotshot::types::{Event, EventType};
 use hotshot_types::{
-    data::{Leaf, Leaf2, QuorumProposal},
+    data::{Leaf, Leaf2, QuorumProposal, VidCommitment, VidDisperseShare},
+    event::LeafInfo,
     traits::{
         block_contents::{BlockHeader, BlockPayload, EncodeBytes, GENESIS_VID_NUM_STORAGE_NODES},
         node_implementation::{ConsensusTime, NodeType},
     },
     vid::advz::advz_scheme,
-};
-use hotshot_types::{
-    data::{VidCommitment, VidDisperseShare},
-    event::LeafInfo,
 };
 use jf_vid::VidScheme;
 use std::iter::once;
@@ -129,7 +126,7 @@ where
                             "inconsistent leaf; cannot append leaf information: {err:#}"
                         );
                         return Err(leaf.block_header().block_number());
-                    }
+                    },
                 };
                 let block_data = leaf
                     .block_payload()
@@ -161,12 +158,12 @@ where
                                 Err(err) => {
                                     tracing::warn!("failed to compute genesis VID: {err:#}");
                                     (None, None)
-                                }
+                                },
                             }
                         } else {
                             (None, None)
                         }
-                    }
+                    },
                 };
 
                 if vid_common.is_none() {

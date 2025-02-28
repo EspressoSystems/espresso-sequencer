@@ -132,7 +132,7 @@ impl<KEY: SignatureKey> PeerConfig<KEY> {
             Err(e) => {
                 error!(?e, "Failed to serialize public key");
                 vec![]
-            }
+            },
         }
     }
 
@@ -146,7 +146,7 @@ impl<KEY: SignatureKey> PeerConfig<KEY> {
             Err(e) => {
                 error!(?e, "Failed to deserialize public key");
                 None
-            }
+            },
         }
     }
 }

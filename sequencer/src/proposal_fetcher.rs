@@ -184,10 +184,10 @@ where
                     let leaf = proposal.data.justify_qc().data.leaf_commit;
                     self.request((view, leaf)).await;
                     return Ok(());
-                }
+                },
                 Err(err) => {
                     tracing::info!("proposal missing from storage; fetching from network: {err:#}");
-                }
+                },
             }
 
             let future = self.consensus.read().await.request_proposal(view, leaf)?;

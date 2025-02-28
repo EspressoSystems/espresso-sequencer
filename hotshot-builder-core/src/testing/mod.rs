@@ -6,8 +6,7 @@ use crate::{
     },
     service::ReceivedTransaction,
 };
-use async_broadcast::broadcast;
-use async_broadcast::Sender as BroadcastSender;
+use async_broadcast::{broadcast, Sender as BroadcastSender};
 use hotshot::{
     traits::BlockPayload,
     types::{BLSPubKey, SignatureKey},
@@ -43,8 +42,7 @@ use marketplace_builder_shared::{
         TEST_MAX_BLOCK_SIZE_INCREMENT_PERIOD, TEST_MAX_TX_NUM, TEST_PROTOCOL_MAX_BLOCK_SIZE,
     },
 };
-use std::sync::Arc;
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 
 mod basic_test;
 pub mod finalization_test;
@@ -207,7 +205,7 @@ pub async fn calc_proposal_msg<V: Versions>(
                 prev_justify_qc.signatures.clone(),
                 PhantomData,
             )
-        }
+        },
     };
 
     tracing::debug!("Iteration: {} justify_qc: {:?}", round, justify_qc);

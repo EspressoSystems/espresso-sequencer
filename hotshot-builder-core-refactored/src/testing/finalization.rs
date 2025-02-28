@@ -1,15 +1,16 @@
 use async_broadcast::broadcast;
 use tracing_test::traced_test;
 
-use hotshot_example_types::block_types::TestTransaction;
-use hotshot_example_types::state_types::TestInstanceState;
-use marketplace_builder_shared::testing::consensus::SimulatedChainState;
-use marketplace_builder_shared::testing::constants::{
-    TEST_NUM_NODES_IN_VID_COMPUTATION, TEST_PROTOCOL_MAX_BLOCK_SIZE,
+use hotshot_example_types::{block_types::TestTransaction, state_types::TestInstanceState};
+use marketplace_builder_shared::testing::{
+    consensus::SimulatedChainState,
+    constants::{TEST_NUM_NODES_IN_VID_COMPUTATION, TEST_PROTOCOL_MAX_BLOCK_SIZE},
 };
 
-use crate::service::{BuilderConfig, GlobalState, ALLOW_EMPTY_BLOCK_PERIOD};
-use crate::testing::TestServiceWrapper;
+use crate::{
+    service::{BuilderConfig, GlobalState, ALLOW_EMPTY_BLOCK_PERIOD},
+    testing::TestServiceWrapper,
+};
 use std::sync::Arc;
 
 // How many times consensus will re-try getting available blocks

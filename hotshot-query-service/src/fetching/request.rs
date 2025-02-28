@@ -19,8 +19,7 @@ use crate::{
 use derive_more::{From, Into};
 use hotshot_types::traits::node_implementation::NodeType;
 
-use std::fmt::Debug;
-use std::hash::Hash;
+use std::{fmt::Debug, hash::Hash};
 
 /// A request for a resource.
 pub trait Request<Types>: Copy + Debug + Eq + Hash + Send {

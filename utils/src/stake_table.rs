@@ -144,8 +144,10 @@ pub async fn update_stake_table(
 
 #[cfg(test)]
 mod test {
-    use crate::stake_table::{PermissionedStakeTableConfig, PermissionedStakeTableUpdate};
-    use crate::test_utils::setup_test;
+    use crate::{
+        stake_table::{PermissionedStakeTableConfig, PermissionedStakeTableUpdate},
+        test_utils::setup_test,
+    };
     use hotshot::types::{BLSPubKey, SignatureKey};
     use hotshot_types::{light_client::StateKeyPair, network::PeerConfigKeys};
     use toml::toml;

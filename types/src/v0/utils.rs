@@ -294,14 +294,14 @@ impl BackoffParams {
                 Ok(res) => return Ok(res),
                 Err(err) if self.disable => {
                     return Err(err.context("Retryable operation failed; retries disabled"));
-                }
+                },
                 Err(err) => {
                     tracing::warn!(
                         "Retryable operation failed, will retry after {delay:?}: {err:#}"
                     );
                     sleep(delay).await;
                     delay = self.backoff(delay);
-                }
+                },
             }
         }
         unreachable!()

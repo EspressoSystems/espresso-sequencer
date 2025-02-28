@@ -147,7 +147,7 @@ impl<
                 self.accumulator = None;
 
                 Ok(Some(cert))
-            }
+            },
         }
     }
 }
@@ -294,7 +294,7 @@ where
             entry.insert(collector);
 
             Ok(())
-        }
+        },
         Entry::Occupied(mut entry) => {
             // handle the vote, and garbage collect if the vote collector is finished
             if entry
@@ -308,7 +308,7 @@ where
             }
 
             Ok(())
-        }
+        },
     }
 }
 
@@ -533,7 +533,7 @@ impl<TYPES: NodeType, V: Versions>
         match event.as_ref() {
             HotShotEvent::QuorumVoteRecv(vote) => {
                 self.accumulate_vote(vote, self.epoch, sender).await
-            }
+            },
             _ => Ok(None),
         }
     }
@@ -562,7 +562,7 @@ impl<TYPES: NodeType, V: Versions>
                     .ok_or_else(|| error!("epoch should not be none in handle_vote_event"))?;
                 self.accumulate_vote(&vote.clone().into(), Some(next_epoch), sender)
                     .await
-            }
+            },
             _ => Ok(None),
         }
     }
@@ -585,7 +585,7 @@ impl<TYPES: NodeType, V: Versions>
         match event.as_ref() {
             HotShotEvent::UpgradeVoteRecv(vote) => {
                 self.accumulate_vote(vote, self.epoch, sender).await
-            }
+            },
             _ => Ok(None),
         }
     }
@@ -626,7 +626,7 @@ impl<TYPES: NodeType, V: Versions>
         match event.as_ref() {
             HotShotEvent::TimeoutVoteRecv(vote) => {
                 self.accumulate_vote(vote, self.epoch, sender).await
-            }
+            },
             _ => Ok(None),
         }
     }
@@ -648,7 +648,7 @@ impl<TYPES: NodeType, V: Versions>
         match event.as_ref() {
             HotShotEvent::ViewSyncPreCommitVoteRecv(vote) => {
                 self.accumulate_vote(vote, self.epoch, sender).await
-            }
+            },
             _ => Ok(None),
         }
     }
@@ -670,7 +670,7 @@ impl<TYPES: NodeType, V: Versions>
         match event.as_ref() {
             HotShotEvent::ViewSyncCommitVoteRecv(vote) => {
                 self.accumulate_vote(vote, self.epoch, sender).await
-            }
+            },
             _ => Ok(None),
         }
     }
@@ -692,7 +692,7 @@ impl<TYPES: NodeType, V: Versions>
         match event.as_ref() {
             HotShotEvent::ViewSyncFinalizeVoteRecv(vote) => {
                 self.accumulate_vote(vote, self.epoch, sender).await
-            }
+            },
             _ => Ok(None),
         }
     }

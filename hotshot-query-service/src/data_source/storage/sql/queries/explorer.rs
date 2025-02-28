@@ -282,7 +282,7 @@ where
         let query_stmt = match request.target {
             BlockIdentifier::Latest => {
                 query(&GET_BLOCK_SUMMARIES_QUERY_FOR_LATEST).bind(request.num_blocks.get() as i64)
-            }
+            },
             BlockIdentifier::Height(height) => query(&GET_BLOCK_SUMMARIES_QUERY_FOR_HEIGHT)
                 .bind(height as i64)
                 .bind(request.num_blocks.get() as i64),
@@ -305,10 +305,10 @@ where
             BlockIdentifier::Latest => query(&GET_BLOCK_DETAIL_QUERY_FOR_LATEST),
             BlockIdentifier::Height(height) => {
                 query(&GET_BLOCK_DETAIL_QUERY_FOR_HEIGHT).bind(height as i64)
-            }
+            },
             BlockIdentifier::Hash(hash) => {
                 query(&GET_BLOCK_DETAIL_QUERY_FOR_HASH).bind(hash.to_string())
-            }
+            },
         };
 
         let query_result = query_stmt.fetch_one(self.as_mut()).await?;
@@ -375,7 +375,7 @@ where
 
             TransactionSummaryFilter::Block(block) => {
                 query(&GET_TRANSACTION_SUMMARIES_QUERY_FOR_BLOCK).bind(*block as i64)
-            }
+            },
         };
 
         let block_stream = query_stmt
@@ -432,10 +432,10 @@ where
                 query(&GET_TRANSACTION_DETAIL_QUERY_FOR_HEIGHT_AND_OFFSET)
                     .bind(height as i64)
                     .bind(offset as i64)
-            }
+            },
             TransactionIdentifier::Hash(hash) => {
                 query(&GET_TRANSACTION_DETAIL_QUERY_FOR_HASH).bind(hash.to_string())
-            }
+            },
         };
 
         let query_row = query_stmt.fetch_one(self.as_mut()).await?;
@@ -455,7 +455,7 @@ where
                         key: format!("at {height} and {offset}"),
                     }),
                 )
-            }
+            },
             TransactionIdentifier::Hash(hash) => txns
                 .into_iter()
                 .enumerate()

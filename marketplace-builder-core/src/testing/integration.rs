@@ -125,8 +125,7 @@ mod tests {
         validation::BuilderValidationConfig,
     };
 
-    use hotshot_example_types::node_types::MarketplaceTestVersions;
-    use hotshot_example_types::node_types::{MemoryImpl, TestTypes};
+    use hotshot_example_types::node_types::{MarketplaceTestVersions, MemoryImpl, TestTypes};
     use hotshot_macros::cross_tests;
     use hotshot_testing::{
         completion_task::{CompletionTaskDescription, TimeBasedCompletionTaskDescription},

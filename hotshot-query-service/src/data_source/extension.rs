@@ -11,7 +11,6 @@
 // see <https://www.gnu.org/licenses/>.
 
 use super::VersionedDataSource;
-use crate::data_source::storage::pruning::PrunedHeightDataSource;
 use crate::{
     availability::{
         AvailabilityDataSource, BlockId, BlockInfo, BlockQueryData, Fetch, FetchStream, LeafId,
@@ -19,6 +18,7 @@ use crate::{
         TransactionHash, TransactionQueryData, UpdateAvailabilityData, VidCommonMetadata,
         VidCommonQueryData,
     },
+    data_source::storage::pruning::PrunedHeightDataSource,
     explorer::{self, ExplorerDataSource, ExplorerHeader, ExplorerTransaction},
     merklized_state::{
         MerklizedState, MerklizedStateDataSource, MerklizedStateHeightPersistence, Snapshot,

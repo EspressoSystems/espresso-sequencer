@@ -8,8 +8,7 @@ use espresso_types::{v0::traits::SequencerPersistence, PubKey};
 use hotshot::types::Event;
 use hotshot_query_service::data_source::UpdateDataSource;
 use hotshot_types::traits::{network::ConnectedNetwork, node_implementation::Versions};
-use std::fmt::Debug;
-use std::sync::Arc;
+use std::{fmt::Debug, sync::Arc};
 
 use super::{data_source::SequencerDataSource, StorageState};
 use crate::{EventConsumer, SeqTypes};

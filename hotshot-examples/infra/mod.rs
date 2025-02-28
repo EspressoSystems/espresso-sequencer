@@ -437,13 +437,13 @@ pub trait RunDa<
             match event_stream.next().await {
                 None => {
                     panic!("Error! Event stream completed before consensus ended.");
-                }
+                },
                 Some(Event { event, .. }) => {
                     match event {
                         EventType::Error { error } => {
                             error!("Error in consensus: {:?}", error);
                             // TODO what to do here
-                        }
+                        },
                         EventType::Decide {
                             leaf_chain,
                             qc: _,
@@ -510,16 +510,16 @@ pub trait RunDa<
                                 warn!("Leaf chain is greater than 1 with len {}", leaf_chain.len());
                             }
                             // when we make progress, submit new events
-                        }
+                        },
                         EventType::ReplicaViewTimeout { view_number } => {
                             warn!("Timed out as a replicas in view {:?}", view_number);
-                        }
+                        },
                         EventType::ViewTimeout { view_number } => {
                             warn!("Timed out in view {:?}", view_number);
-                        }
-                        _ => {} // mostly DA proposal
+                        },
+                        _ => {}, // mostly DA proposal
                     }
-                }
+                },
             }
         }
         let num_eligible_leaders = context
@@ -1088,11 +1088,11 @@ where
                 })
                 .collect();
             bind_address = Url::parse(&format!("http://0.0.0.0:{port}")).unwrap();
-        }
+        },
         Some(ref addr) => {
             bind_address = Url::parse(&format!("http://{addr}")).expect("Valid URL");
             advertise_urls = vec![bind_address.clone()];
-        }
+        },
     }
 
     match run_config.builder {
@@ -1112,7 +1112,7 @@ where
                 .await;
 
             Some(builder_task)
-        }
+        },
         BuilderType::Simple => {
             let builder_task =
                 <SimpleBuilderImplementation as TestBuilderImplementation<TYPES>>::start(
@@ -1128,7 +1128,7 @@ where
                 .await;
 
             Some(builder_task)
-        }
+        },
     }
 }
 

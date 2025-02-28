@@ -165,10 +165,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                 )
                 .await
                 {
-                    Ok(()) => {}
+                    Ok(()) => {},
                     Err(e) => debug!(?e, "Failed to validate the proposal"),
                 }
-            }
+            },
             HotShotEvent::ViewChange(view, epoch) => {
                 if *epoch > self.cur_epoch {
                     self.cur_epoch = *epoch;
@@ -183,8 +183,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                 // to enter view V + 1.
                 let oldest_view_to_keep = TYPES::View::new(view.saturating_sub(1));
                 self.cancel_tasks(oldest_view_to_keep);
-            }
-            _ => {}
+            },
+            _ => {},
         }
     }
 }

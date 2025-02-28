@@ -18,10 +18,12 @@ use async_lock::RwLock;
 use async_trait::async_trait;
 use derivative::Derivative;
 use hotshot_types::traits::node_implementation::NodeType;
-use std::sync::Arc;
 use std::{
     fmt::Debug,
-    sync::atomic::{AtomicBool, Ordering},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
 };
 use tokio::sync::broadcast;
 

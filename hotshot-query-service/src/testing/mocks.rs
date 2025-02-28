@@ -10,10 +10,10 @@
 // You should have received a copy of the GNU General Public License along with this program. If not,
 // see <https://www.gnu.org/licenses/>.
 
-use crate::explorer::traits::{ExplorerHeader, ExplorerTransaction};
-use crate::merklized_state::MerklizedState;
 use crate::{
     availability::{QueryableHeader, QueryablePayload},
+    explorer::traits::{ExplorerHeader, ExplorerTransaction},
+    merklized_state::MerklizedState,
     types::HeightIndexed,
 };
 use hotshot::traits::{
@@ -25,11 +25,10 @@ use hotshot_example_types::{
     state_types::{TestInstanceState, TestValidatedState},
     storage_types::TestStorage,
 };
-use hotshot_types::traits::node_implementation::Versions;
 use hotshot_types::{
     data::{QuorumProposal, ViewNumber},
     signature_key::BLSPubKey,
-    traits::node_implementation::NodeType,
+    traits::node_implementation::{NodeType, Versions},
 };
 
 use jf_merkle_tree::{

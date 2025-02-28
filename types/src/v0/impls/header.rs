@@ -177,7 +177,7 @@ impl<'de> Deserialize<'de> for Header {
                     )),
                     EitherOrVersion::Version(v) => {
                         Err(serde::de::Error::custom(format!("invalid version {v:?}")))
-                    }
+                    },
                 }
             }
 
@@ -214,7 +214,7 @@ impl<'de> Deserialize<'de> for Header {
                         )),
                         EitherOrVersion::Version(v) => {
                             Err(de::Error::custom(format!("invalid version {v:?}")))
-                        }
+                        },
                         chain_config => Err(de::Error::custom(format!(
                             "expected version, found chain_config {chain_config:?}"
                         ))),
@@ -607,7 +607,7 @@ impl Header {
                     .as_ref()
                     .fetch_chain_config(validated_cf.commit())
                     .await
-            }
+            },
         }
     }
 }

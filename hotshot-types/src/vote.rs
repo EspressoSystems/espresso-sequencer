@@ -179,7 +179,7 @@ impl<
             Err(e) => {
                 tracing::warn!("Failed to generate versioned vote data: {e}");
                 return None;
-            }
+            },
         };
 
         if !key.validate(&vote.signature(), vote_commitment.as_ref()) {

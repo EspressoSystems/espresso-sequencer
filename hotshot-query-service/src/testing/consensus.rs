@@ -43,10 +43,7 @@ use hotshot_types::{
     traits::{election::Membership, network::Topic, signature_key::SignatureKey as _},
     HotShotConfig, PeerConfig,
 };
-use std::num::NonZeroUsize;
-use std::sync::Arc;
-use std::time::Duration;
-use std::{fmt::Display, str::FromStr};
+use std::{fmt::Display, num::NonZeroUsize, str::FromStr, sync::Arc, time::Duration};
 use tokio::{
     runtime::Handle,
     task::{block_in_place, yield_now},

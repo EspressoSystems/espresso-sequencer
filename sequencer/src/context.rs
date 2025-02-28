@@ -27,8 +27,10 @@ use hotshot_types::{
     PeerConfig, ValidatorConfig,
 };
 use parking_lot::Mutex;
-use std::fmt::Debug;
-use std::{fmt::Display, sync::Arc};
+use std::{
+    fmt::{Debug, Display},
+    sync::Arc,
+};
 use tokio::{spawn, task::JoinHandle};
 use tracing::{Instrument, Level};
 use url::Url;

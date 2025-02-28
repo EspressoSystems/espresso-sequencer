@@ -110,7 +110,7 @@ impl SequencerClient {
                     } else {
                         sleep(Duration::from_millis(200)).await;
                     }
-                }
+                },
             }
         };
 

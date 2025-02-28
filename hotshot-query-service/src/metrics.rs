@@ -19,8 +19,10 @@ use prometheus::{
     Encoder, HistogramVec, Opts, Registry, TextEncoder,
 };
 use snafu::Snafu;
-use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
+use std::{
+    collections::HashMap,
+    sync::{Arc, RwLock},
+};
 
 #[derive(Debug, Snafu)]
 pub enum MetricsError {

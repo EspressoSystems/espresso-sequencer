@@ -269,25 +269,25 @@ impl<TYPES: NodeType, V: Versions> ViewSyncTaskState<TYPES, V> {
                 let view = certificate.view_number();
                 self.send_to_or_create_replica(event, view, &event_stream)
                     .await;
-            }
+            },
             HotShotEvent::ViewSyncCommitCertificateRecv(certificate) => {
                 tracing::debug!("Received view sync cert for phase {:?}", certificate);
                 let view = certificate.view_number();
                 self.send_to_or_create_replica(event, view, &event_stream)
                     .await;
-            }
+            },
             HotShotEvent::ViewSyncFinalizeCertificateRecv(certificate) => {
                 tracing::debug!("Received view sync cert for phase {:?}", certificate);
                 let view = certificate.view_number();
                 self.send_to_or_create_replica(event, view, &event_stream)
                     .await;
-            }
-            HotShotEvent::ViewSyncTimeout(view, _, _) => {
+            },
+            HotShotEvent::ViewSyncTimeout(view, ..) => {
                 tracing::debug!("view sync timeout in main task {:?}", view);
                 let view = *view;
                 self.send_to_or_create_replica(event, view, &event_stream)
                     .await;
-            }
+            },
 
             HotShotEvent::ViewSyncPreCommitVoteRecv(ref vote) => {
                 let mut map = self.pre_commit_relay_map.write().await;
@@ -336,7 +336,7 @@ impl<TYPES: NodeType, V: Versions> ViewSyncTaskState<TYPES, V> {
                 .await?;
 
                 relay_map.insert(relay, vote_collector);
-            }
+            },
 
             HotShotEvent::ViewSyncCommitVoteRecv(ref vote) => {
                 let mut map = self.commit_relay_map.write().await;
@@ -385,7 +385,7 @@ impl<TYPES: NodeType, V: Versions> ViewSyncTaskState<TYPES, V> {
                 )
                 .await?;
                 relay_map.insert(relay, vote_collector);
-            }
+            },
 
             HotShotEvent::ViewSyncFinalizeVoteRecv(vote) => {
                 let mut map = self.finalize_relay_map.write().await;
@@ -435,7 +435,7 @@ impl<TYPES: NodeType, V: Versions> ViewSyncTaskState<TYPES, V> {
                 if let Ok(vote_task) = vote_collector {
                     relay_map.insert(relay, vote_task);
                 }
-            }
+            },
 
             &HotShotEvent::ViewChange(new_view, epoch) => {
                 if epoch > self.cur_epoch {
@@ -477,7 +477,7 @@ impl<TYPES: NodeType, V: Versions> ViewSyncTaskState<TYPES, V> {
 
                     self.last_garbage_collected_view = self.cur_view - 1;
                 }
-            }
+            },
             &HotShotEvent::Timeout(view_number, ..) => {
                 // This is an old timeout and we can ignore it
                 ensure!(
@@ -521,9 +521,9 @@ impl<TYPES: NodeType, V: Versions> ViewSyncTaskState<TYPES, V> {
                     )
                     .await;
                 }
-            }
+            },
 
-            _ => {}
+            _ => {},
         }
         Ok(())
     }
@@ -630,7 +630,7 @@ impl<TYPES: NodeType, V: Versions> ViewSyncReplicaTaskState<TYPES, V> {
                         .await;
                     }
                 }));
-            }
+            },
 
             HotShotEvent::ViewSyncCommitCertificateRecv(certificate) => {
                 let last_seen_certificate = ViewSyncPhase::Commit;
@@ -737,7 +737,7 @@ impl<TYPES: NodeType, V: Versions> ViewSyncReplicaTaskState<TYPES, V> {
                         .await;
                     }
                 }));
-            }
+            },
 
             HotShotEvent::ViewSyncFinalizeCertificateRecv(certificate) => {
                 // Ignore certificate if it is for an older round
@@ -792,7 +792,7 @@ impl<TYPES: NodeType, V: Versions> ViewSyncReplicaTaskState<TYPES, V> {
                 )
                 .await;
                 return Some(HotShotTaskCompleted);
-            }
+            },
 
             HotShotEvent::ViewSyncTrigger(view_number) => {
                 let view_number = *view_number;
@@ -846,7 +846,7 @@ impl<TYPES: NodeType, V: Versions> ViewSyncReplicaTaskState<TYPES, V> {
                 }));
 
                 return None;
-            }
+            },
 
             HotShotEvent::ViewSyncTimeout(round, relay, last_seen_certificate) => {
                 let round = *round;
@@ -880,11 +880,11 @@ impl<TYPES: NodeType, V: Versions> ViewSyncReplicaTaskState<TYPES, V> {
                                 &event_stream,
                             )
                             .await;
-                        }
+                        },
                         ViewSyncPhase::Finalize => {
                             // This should never occur
                             unimplemented!()
-                        }
+                        },
                     }
 
                     self.timeout_task = Some(spawn({
@@ -913,7 +913,7 @@ impl<TYPES: NodeType, V: Versions> ViewSyncReplicaTaskState<TYPES, V> {
 
                     return None;
                 }
-            }
+            },
             _ => return None,
         }
         None

@@ -112,8 +112,7 @@ mod impl_testable_data_source {
 
 #[cfg(test)]
 mod test {
-    use super::super::status_tests;
-    use super::MetricsDataSource;
+    use super::{super::status_tests, MetricsDataSource};
 
     // For some reason this is the only way to import the macro defined in another module of this
     // crate.

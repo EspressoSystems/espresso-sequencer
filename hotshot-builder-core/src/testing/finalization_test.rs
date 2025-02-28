@@ -12,9 +12,10 @@ use hotshot::{
     traits::BlockPayload,
     types::{BLSPubKey, SignatureKey},
 };
-use hotshot_builder_api::{
-    v0_1::{block_info::AvailableBlockInfo, data_source::BuilderDataSource},
-    v0_1::{builder::BuildError, data_source::AcceptsTxnSubmits},
+use hotshot_builder_api::v0_1::{
+    block_info::AvailableBlockInfo,
+    builder::BuildError,
+    data_source::{AcceptsTxnSubmits, BuilderDataSource},
 };
 use hotshot_example_types::{
     block_types::{TestBlockHeader, TestBlockPayload, TestMetadata, TestTransaction},
@@ -32,15 +33,13 @@ use hotshot_types::{
     },
     utils::BuilderCommitment,
 };
-use marketplace_builder_shared::testing::constants::{
-    TEST_CHANNEL_BUFFER_SIZE, TEST_MAX_TX_NUM, TEST_NUM_CONSENSUS_RETRIES,
-    TEST_NUM_NODES_IN_VID_COMPUTATION,
-};
 use marketplace_builder_shared::{
-    block::BuilderStateId, testing::constants::TEST_MAX_BLOCK_SIZE_INCREMENT_PERIOD,
-};
-use marketplace_builder_shared::{
-    block::ParentBlockReferences, testing::constants::TEST_PROTOCOL_MAX_BLOCK_SIZE,
+    block::{BuilderStateId, ParentBlockReferences},
+    testing::constants::{
+        TEST_CHANNEL_BUFFER_SIZE, TEST_MAX_BLOCK_SIZE_INCREMENT_PERIOD, TEST_MAX_TX_NUM,
+        TEST_NUM_CONSENSUS_RETRIES, TEST_NUM_NODES_IN_VID_COMPUTATION,
+        TEST_PROTOCOL_MAX_BLOCK_SIZE,
+    },
 };
 use sha2::{Digest, Sha256};
 use vbs::version::StaticVersionType;

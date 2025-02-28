@@ -167,7 +167,7 @@ pub mod BN254 {
             match _t {
                 alloy_sol_types::private::AssertTypeEq::<
                     <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                >(_) => {}
+                >(_) => {},
             }
         }
         #[automatically_derived]
@@ -494,7 +494,7 @@ pub mod EdOnBN254 {
             match _t {
                 alloy_sol_types::private::AssertTypeEq::<
                     <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                >(_) => {}
+                >(_) => {},
             }
         }
         #[automatically_derived]
@@ -1411,7 +1411,7 @@ pub mod PermissionedStakeTable {
             match _t {
                 alloy_sol_types::private::AssertTypeEq::<
                     <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                >(_) => {}
+                >(_) => {},
             }
         }
         #[automatically_derived]
@@ -1613,7 +1613,7 @@ pub mod PermissionedStakeTable {
             match _t {
                 alloy_sol_types::private::AssertTypeEq::<
                     <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                >(_) => {}
+                >(_) => {},
             }
         }
         #[automatically_derived]
@@ -1673,7 +1673,7 @@ pub mod PermissionedStakeTable {
             match _t {
                 alloy_sol_types::private::AssertTypeEq::<
                     <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                >(_) => {}
+                >(_) => {},
             }
         }
         #[automatically_derived]
@@ -1735,7 +1735,7 @@ pub mod PermissionedStakeTable {
             match _t {
                 alloy_sol_types::private::AssertTypeEq::<
                     <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                >(_) => {}
+                >(_) => {},
             }
         }
         #[automatically_derived]
@@ -1801,7 +1801,7 @@ pub mod PermissionedStakeTable {
             match _t {
                 alloy_sol_types::private::AssertTypeEq::<
                     <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                >(_) => {}
+                >(_) => {},
             }
         }
         #[automatically_derived]
@@ -1867,7 +1867,7 @@ pub mod PermissionedStakeTable {
             match _t {
                 alloy_sol_types::private::AssertTypeEq::<
                     <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                >(_) => {}
+                >(_) => {},
             }
         }
         #[automatically_derived]
@@ -1932,7 +1932,7 @@ pub mod PermissionedStakeTable {
             match _t {
                 alloy_sol_types::private::AssertTypeEq::<
                     <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                >(_) => {}
+                >(_) => {},
             }
         }
         #[automatically_derived]
@@ -2316,7 +2316,7 @@ pub mod PermissionedStakeTable {
                 match _t {
                     alloy_sol_types::private::AssertTypeEq::<
                         <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                    >(_) => {}
+                    >(_) => {},
                 }
             }
             #[automatically_derived]
@@ -2391,7 +2391,7 @@ pub mod PermissionedStakeTable {
                 match _t {
                     alloy_sol_types::private::AssertTypeEq::<
                         <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                    >(_) => {}
+                    >(_) => {},
                 }
             }
             #[automatically_derived]
@@ -2420,7 +2420,7 @@ pub mod PermissionedStakeTable {
                 match _t {
                     alloy_sol_types::private::AssertTypeEq::<
                         <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                    >(_) => {}
+                    >(_) => {},
                 }
             }
             #[automatically_derived]
@@ -2501,7 +2501,7 @@ pub mod PermissionedStakeTable {
                 match _t {
                     alloy_sol_types::private::AssertTypeEq::<
                         <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                    >(_) => {}
+                    >(_) => {},
                 }
             }
             #[automatically_derived]
@@ -2530,7 +2530,7 @@ pub mod PermissionedStakeTable {
                 match _t {
                     alloy_sol_types::private::AssertTypeEq::<
                         <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                    >(_) => {}
+                    >(_) => {},
                 }
             }
             #[automatically_derived]
@@ -2611,7 +2611,7 @@ pub mod PermissionedStakeTable {
                 match _t {
                     alloy_sol_types::private::AssertTypeEq::<
                         <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                    >(_) => {}
+                    >(_) => {},
                 }
             }
             #[automatically_derived]
@@ -2640,7 +2640,7 @@ pub mod PermissionedStakeTable {
                 match _t {
                     alloy_sol_types::private::AssertTypeEq::<
                         <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                    >(_) => {}
+                    >(_) => {},
                 }
             }
             #[automatically_derived]
@@ -2724,7 +2724,7 @@ pub mod PermissionedStakeTable {
                 match _t {
                     alloy_sol_types::private::AssertTypeEq::<
                         <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                    >(_) => {}
+                    >(_) => {},
                 }
             }
             #[automatically_derived]
@@ -2753,7 +2753,7 @@ pub mod PermissionedStakeTable {
                 match _t {
                     alloy_sol_types::private::AssertTypeEq::<
                         <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                    >(_) => {}
+                    >(_) => {},
                 }
             }
             #[automatically_derived]
@@ -2836,7 +2836,7 @@ pub mod PermissionedStakeTable {
                 match _t {
                     alloy_sol_types::private::AssertTypeEq::<
                         <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                    >(_) => {}
+                    >(_) => {},
                 }
             }
             #[automatically_derived]
@@ -2865,7 +2865,7 @@ pub mod PermissionedStakeTable {
                 match _t {
                     alloy_sol_types::private::AssertTypeEq::<
                         <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                    >(_) => {}
+                    >(_) => {},
                 }
             }
             #[automatically_derived]
@@ -2944,7 +2944,7 @@ pub mod PermissionedStakeTable {
                 match _t {
                     alloy_sol_types::private::AssertTypeEq::<
                         <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                    >(_) => {}
+                    >(_) => {},
                 }
             }
             #[automatically_derived]
@@ -2973,7 +2973,7 @@ pub mod PermissionedStakeTable {
                 match _t {
                     alloy_sol_types::private::AssertTypeEq::<
                         <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                    >(_) => {}
+                    >(_) => {},
                 }
             }
             #[automatically_derived]
@@ -3054,7 +3054,7 @@ pub mod PermissionedStakeTable {
                 match _t {
                     alloy_sol_types::private::AssertTypeEq::<
                         <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                    >(_) => {}
+                    >(_) => {},
                 }
             }
             #[automatically_derived]
@@ -3083,7 +3083,7 @@ pub mod PermissionedStakeTable {
                 match _t {
                     alloy_sol_types::private::AssertTypeEq::<
                         <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                    >(_) => {}
+                    >(_) => {},
                 }
             }
             #[automatically_derived]
@@ -3179,7 +3179,7 @@ pub mod PermissionedStakeTable {
                 match _t {
                     alloy_sol_types::private::AssertTypeEq::<
                         <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                    >(_) => {}
+                    >(_) => {},
                 }
             }
             #[automatically_derived]
@@ -3211,7 +3211,7 @@ pub mod PermissionedStakeTable {
                 match _t {
                     alloy_sol_types::private::AssertTypeEq::<
                         <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                    >(_) => {}
+                    >(_) => {},
                 }
             }
             #[automatically_derived]
@@ -3312,15 +3312,15 @@ pub mod PermissionedStakeTable {
                 Self::initialize(_) => <initializeCall as alloy_sol_types::SolCall>::SELECTOR,
                 Self::initializedAtBlock(_) => {
                     <initializedAtBlockCall as alloy_sol_types::SolCall>::SELECTOR
-                }
+                },
                 Self::isStaker(_) => <isStakerCall as alloy_sol_types::SolCall>::SELECTOR,
                 Self::owner(_) => <ownerCall as alloy_sol_types::SolCall>::SELECTOR,
                 Self::renounceOwnership(_) => {
                     <renounceOwnershipCall as alloy_sol_types::SolCall>::SELECTOR
-                }
+                },
                 Self::transferOwnership(_) => {
                     <transferOwnershipCall as alloy_sol_types::SolCall>::SELECTOR
-                }
+                },
                 Self::update(_) => <updateCall as alloy_sol_types::SolCall>::SELECTOR,
             }
         }
@@ -3446,28 +3446,28 @@ pub mod PermissionedStakeTable {
             match self {
                 Self::_hashBlsKey(inner) => {
                     <_hashBlsKeyCall as alloy_sol_types::SolCall>::abi_encoded_size(inner)
-                }
+                },
                 Self::initialize(inner) => {
                     <initializeCall as alloy_sol_types::SolCall>::abi_encoded_size(inner)
-                }
+                },
                 Self::initializedAtBlock(inner) => {
                     <initializedAtBlockCall as alloy_sol_types::SolCall>::abi_encoded_size(inner)
-                }
+                },
                 Self::isStaker(inner) => {
                     <isStakerCall as alloy_sol_types::SolCall>::abi_encoded_size(inner)
-                }
+                },
                 Self::owner(inner) => {
                     <ownerCall as alloy_sol_types::SolCall>::abi_encoded_size(inner)
-                }
+                },
                 Self::renounceOwnership(inner) => {
                     <renounceOwnershipCall as alloy_sol_types::SolCall>::abi_encoded_size(inner)
-                }
+                },
                 Self::transferOwnership(inner) => {
                     <transferOwnershipCall as alloy_sol_types::SolCall>::abi_encoded_size(inner)
-                }
+                },
                 Self::update(inner) => {
                     <updateCall as alloy_sol_types::SolCall>::abi_encoded_size(inner)
-                }
+                },
             }
         }
         #[inline]
@@ -3475,28 +3475,28 @@ pub mod PermissionedStakeTable {
             match self {
                 Self::_hashBlsKey(inner) => {
                     <_hashBlsKeyCall as alloy_sol_types::SolCall>::abi_encode_raw(inner, out)
-                }
+                },
                 Self::initialize(inner) => {
                     <initializeCall as alloy_sol_types::SolCall>::abi_encode_raw(inner, out)
-                }
+                },
                 Self::initializedAtBlock(inner) => {
                     <initializedAtBlockCall as alloy_sol_types::SolCall>::abi_encode_raw(inner, out)
-                }
+                },
                 Self::isStaker(inner) => {
                     <isStakerCall as alloy_sol_types::SolCall>::abi_encode_raw(inner, out)
-                }
+                },
                 Self::owner(inner) => {
                     <ownerCall as alloy_sol_types::SolCall>::abi_encode_raw(inner, out)
-                }
+                },
                 Self::renounceOwnership(inner) => {
                     <renounceOwnershipCall as alloy_sol_types::SolCall>::abi_encode_raw(inner, out)
-                }
+                },
                 Self::transferOwnership(inner) => {
                     <transferOwnershipCall as alloy_sol_types::SolCall>::abi_encode_raw(inner, out)
-                }
+                },
                 Self::update(inner) => {
                     <updateCall as alloy_sol_types::SolCall>::abi_encode_raw(inner, out)
-                }
+                },
             }
         }
     }
@@ -3536,19 +3536,19 @@ pub mod PermissionedStakeTable {
             match self {
                 Self::InvalidInitialization(_) => {
                     <InvalidInitialization as alloy_sol_types::SolError>::SELECTOR
-                }
+                },
                 Self::NotInitializing(_) => {
                     <NotInitializing as alloy_sol_types::SolError>::SELECTOR
-                }
+                },
                 Self::OwnableInvalidOwner(_) => {
                     <OwnableInvalidOwner as alloy_sol_types::SolError>::SELECTOR
-                }
+                },
                 Self::OwnableUnauthorizedAccount(_) => {
                     <OwnableUnauthorizedAccount as alloy_sol_types::SolError>::SELECTOR
-                }
+                },
                 Self::StakerAlreadyExists(_) => {
                     <StakerAlreadyExists as alloy_sol_types::SolError>::SELECTOR
-                }
+                },
                 Self::StakerNotFound(_) => <StakerNotFound as alloy_sol_types::SolError>::SELECTOR,
             }
         }
@@ -3658,24 +3658,24 @@ pub mod PermissionedStakeTable {
             match self {
                 Self::InvalidInitialization(inner) => {
                     <InvalidInitialization as alloy_sol_types::SolError>::abi_encoded_size(inner)
-                }
+                },
                 Self::NotInitializing(inner) => {
                     <NotInitializing as alloy_sol_types::SolError>::abi_encoded_size(inner)
-                }
+                },
                 Self::OwnableInvalidOwner(inner) => {
                     <OwnableInvalidOwner as alloy_sol_types::SolError>::abi_encoded_size(inner)
-                }
+                },
                 Self::OwnableUnauthorizedAccount(inner) => {
                     <OwnableUnauthorizedAccount as alloy_sol_types::SolError>::abi_encoded_size(
                         inner,
                     )
-                }
+                },
                 Self::StakerAlreadyExists(inner) => {
                     <StakerAlreadyExists as alloy_sol_types::SolError>::abi_encoded_size(inner)
-                }
+                },
                 Self::StakerNotFound(inner) => {
                     <StakerNotFound as alloy_sol_types::SolError>::abi_encoded_size(inner)
-                }
+                },
             }
         }
         #[inline]
@@ -3683,24 +3683,24 @@ pub mod PermissionedStakeTable {
             match self {
                 Self::InvalidInitialization(inner) => {
                     <InvalidInitialization as alloy_sol_types::SolError>::abi_encode_raw(inner, out)
-                }
+                },
                 Self::NotInitializing(inner) => {
                     <NotInitializing as alloy_sol_types::SolError>::abi_encode_raw(inner, out)
-                }
+                },
                 Self::OwnableInvalidOwner(inner) => {
                     <OwnableInvalidOwner as alloy_sol_types::SolError>::abi_encode_raw(inner, out)
-                }
+                },
                 Self::OwnableUnauthorizedAccount(inner) => {
                     <OwnableUnauthorizedAccount as alloy_sol_types::SolError>::abi_encode_raw(
                         inner, out,
                     )
-                }
+                },
                 Self::StakerAlreadyExists(inner) => {
                     <StakerAlreadyExists as alloy_sol_types::SolError>::abi_encode_raw(inner, out)
-                }
+                },
                 Self::StakerNotFound(inner) => {
                     <StakerNotFound as alloy_sol_types::SolError>::abi_encode_raw(inner, out)
-                }
+                },
             }
         }
     }
@@ -3751,19 +3751,19 @@ pub mod PermissionedStakeTable {
                         topics, data, validate,
                     )
                     .map(Self::Initialized)
-                }
+                },
                 Some(<OwnershipTransferred as alloy_sol_types::SolEvent>::SIGNATURE_HASH) => {
                     <OwnershipTransferred as alloy_sol_types::SolEvent>::decode_raw_log(
                         topics, data, validate,
                     )
                     .map(Self::OwnershipTransferred)
-                }
+                },
                 Some(<StakersUpdated as alloy_sol_types::SolEvent>::SIGNATURE_HASH) => {
                     <StakersUpdated as alloy_sol_types::SolEvent>::decode_raw_log(
                         topics, data, validate,
                     )
                     .map(Self::StakersUpdated)
-                }
+                },
                 _ => alloy_sol_types::private::Err(alloy_sol_types::Error::InvalidLog {
                     name: <Self as alloy_sol_types::SolEventInterface>::NAME,
                     log: alloy_sol_types::private::Box::new(
@@ -3782,26 +3782,26 @@ pub mod PermissionedStakeTable {
             match self {
                 Self::Initialized(inner) => {
                     alloy_sol_types::private::IntoLogData::to_log_data(inner)
-                }
+                },
                 Self::OwnershipTransferred(inner) => {
                     alloy_sol_types::private::IntoLogData::to_log_data(inner)
-                }
+                },
                 Self::StakersUpdated(inner) => {
                     alloy_sol_types::private::IntoLogData::to_log_data(inner)
-                }
+                },
             }
         }
         fn into_log_data(self) -> alloy_sol_types::private::LogData {
             match self {
                 Self::Initialized(inner) => {
                     alloy_sol_types::private::IntoLogData::into_log_data(inner)
-                }
+                },
                 Self::OwnershipTransferred(inner) => {
                     alloy_sol_types::private::IntoLogData::into_log_data(inner)
-                }
+                },
                 Self::StakersUpdated(inner) => {
                     alloy_sol_types::private::IntoLogData::into_log_data(inner)
-                }
+                },
             }
         }
     }

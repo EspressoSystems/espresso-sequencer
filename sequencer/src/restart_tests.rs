@@ -31,10 +31,10 @@ use hotshot_testing::{
     block_builder::{SimpleBuilderImplementation, TestBuilderImplementation},
     test_builder::BuilderChange,
 };
-use hotshot_types::network::{Libp2pConfig, NetworkConfig};
 use hotshot_types::{
     event::{Event, EventType},
     light_client::StateKeyPair,
+    network::{Libp2pConfig, NetworkConfig},
     traits::{node_implementation::ConsensusTime, signature_key::SignatureKey},
 };
 use itertools::Itertools;
@@ -45,10 +45,9 @@ use sequencer_utils::test_utils::setup_test;
 use std::{collections::HashSet, path::Path, time::Duration};
 use surf_disco::{error::ClientError, Url};
 use tempfile::TempDir;
-use tokio::time::timeout;
 use tokio::{
     task::{spawn, JoinHandle},
-    time::sleep,
+    time::{sleep, timeout},
 };
 use vbs::version::Version;
 use vec1::vec1;
@@ -358,7 +357,7 @@ impl<S: TestableSequencerDataSource> TestNode<S> {
                         sleep(delay).await;
                         delay *= 2;
                         retries -= 1;
-                    }
+                    },
                 }
             };
 
