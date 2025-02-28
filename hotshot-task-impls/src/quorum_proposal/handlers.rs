@@ -127,10 +127,15 @@ impl<TYPES: NodeType, V: Versions> ProposalDependencyHandle<TYPES, V> {
         while let Ok(event) = rx.recv_direct().await {
             if let HotShotEvent::HighQcRecv(qc, _sender) = event.as_ref() {
                 let membership_reader = self.membership.read().await;
-                let membership_stake_table = membership_reader.stake_table(qc.data.epoch);
+                let membership_stake_table = membership_reader.stake_table(qc.data.epoch).ok()?;
                 let membership_success_threshold =
-                    membership_reader.success_threshold(qc.data.epoch);
+                    membership_reader.success_threshold(qc.data.epoch).ok()?;
                 drop(membership_reader);
+
+                let membership_stake_table = membership_stake_table
+                    .iter()
+                    .map(|config| config.stake_table_entry.clone())
+                    .collect::<Vec<_>>();
 
                 if qc
                     .is_valid_cert(

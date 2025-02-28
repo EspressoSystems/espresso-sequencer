@@ -149,7 +149,7 @@ async fn verify_drb_result<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Ver
 
     if let Some(epoch_val) = epoch {
         let has_stake_current_epoch =
-            membership_reader.has_stake(&task_state.public_key, Some(epoch_val));
+            membership_reader.has_stake(&task_state.public_key, Some(epoch_val))?;
 
         drop(membership_reader);
 
@@ -189,6 +189,10 @@ async fn start_drb_task<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versio
         .read()
         .await
         .has_stake(&task_state.public_key, Some(current_epoch_number))
+        .unwrap_or_else(|_| {
+            tracing::error!("Failed to check if we have stake in the current epoch.");
+            false
+        })
     {
         let new_epoch_number = current_epoch_number + 1;
 
@@ -636,12 +640,13 @@ pub(crate) async fn submit_vote<TYPES: NodeType, I: NodeImplementation<TYPES>, V
     );
 
     let membership_reader = membership.read().await;
-    let committee_member_in_current_epoch = membership_reader.has_stake(&public_key, epoch_number);
+    let committee_member_in_current_epoch =
+        membership_reader.has_stake(&public_key, epoch_number)?;
     // If the proposed leaf is for the last block in the epoch and the node is part of the quorum committee
     // in the next epoch, the node should vote to achieve the double quorum.
     let committee_member_in_next_epoch = leaf.with_epoch
         && is_last_block_in_epoch(leaf.height(), epoch_height)
-        && membership_reader.has_stake(&public_key, epoch_number.map(|x| x + 1));
+        && membership_reader.has_stake(&public_key, epoch_number.map(|x| x + 1))?;
     drop(membership_reader);
 
     ensure!(

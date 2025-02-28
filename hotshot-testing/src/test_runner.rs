@@ -399,7 +399,9 @@ where
             config.known_da_nodes.clone(),
         );
         // #3967 is it enough to check versions now? Or should we also be checking epoch_height?
-        let num_nodes = temp_memberships.total_nodes(genesis_epoch_from_version::<V, TYPES>());
+        let num_nodes = temp_memberships
+            .total_nodes(genesis_epoch_from_version::<V, TYPES>())
+            .unwrap_or_default();
         let (mut builder_tasks, builder_urls, fallback_builder_url) =
             self.init_builders::<B>(num_nodes).await;
 

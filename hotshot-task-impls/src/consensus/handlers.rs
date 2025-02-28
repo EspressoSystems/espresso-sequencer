@@ -86,7 +86,8 @@ pub(crate) async fn handle_quorum_vote_recv<
             .membership
             .read()
             .await
-            .has_stake(&vote.signing_key(), Some(vote_epoch + 1));
+            .has_stake(&vote.signing_key(), Some(vote_epoch + 1))
+            .map_err(|_| error!("stake not found"))?;
         if has_stake {
             handle_vote(
                 &mut task_state.next_epoch_vote_collectors,
@@ -370,7 +371,8 @@ pub(crate) async fn handle_timeout<TYPES: NodeType, I: NodeImplementation<TYPES>
             .membership
             .read()
             .await
-            .has_stake(&task_state.public_key, epoch),
+            .has_stake(&task_state.public_key, epoch)
+            .map_err(|_| error!("stake not found"))?,
         debug!(
             "We were not chosen for the consensus committee for view {:?}",
             view_number

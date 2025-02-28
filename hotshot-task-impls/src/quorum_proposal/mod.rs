@@ -472,10 +472,25 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                 let epoch_number = certificate.data.epoch;
 
                 let membership_reader = self.membership.read().await;
-                let membership_stake_table = membership_reader.stake_table(epoch_number);
-                let membership_success_threshold =
-                    membership_reader.success_threshold(epoch_number);
+                let membership_stake_table =
+                    membership_reader.stake_table(epoch_number).map_err(|_| {
+                        error!(format!(
+                            "stake table not found for epoch = {epoch_number:?}"
+                        ))
+                    })?;
+                let membership_success_threshold = membership_reader
+                    .success_threshold(epoch_number)
+                    .map_err(|_| {
+                        error!(format!(
+                            "success_threshold not found for epoch = {epoch_number:?}"
+                        ))
+                    })?;
                 drop(membership_reader);
+
+                let membership_stake_table = membership_stake_table
+                    .into_iter()
+                    .map(|config| config.stake_table_entry.clone())
+                    .collect::<Vec<_>>();
 
                 certificate
                     .is_valid_cert(
@@ -557,11 +572,15 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                 let cert_epoch_number = qc.data.epoch;
 
                 let membership_reader = self.membership.read().await;
-                let membership_stake_table = membership_reader.stake_table(cert_epoch_number);
+                let membership_stake_table = membership_reader.stake_table(cert_epoch_number)?;
                 let membership_success_threshold =
-                    membership_reader.success_threshold(cert_epoch_number);
+                    membership_reader.success_threshold(cert_epoch_number)?;
                 drop(membership_reader);
 
+                let membership_stake_table = membership_stake_table
+                    .into_iter()
+                    .map(|config| config.stake_table_entry.clone())
+                    .collect::<Vec<_>>();
                 qc.is_valid_cert(
                     membership_stake_table,
                     membership_success_threshold,

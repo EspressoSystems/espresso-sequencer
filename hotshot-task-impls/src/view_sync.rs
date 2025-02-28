@@ -549,10 +549,15 @@ impl<TYPES: NodeType, V: Versions> ViewSyncReplicaTaskState<TYPES, V> {
                 }
 
                 let membership_reader = self.membership.read().await;
-                let membership_stake_table = membership_reader.stake_table(self.cur_epoch);
+                let membership_stake_table = membership_reader.stake_table(self.cur_epoch).ok()?;
                 let membership_failure_threshold =
-                    membership_reader.failure_threshold(self.cur_epoch);
+                    membership_reader.failure_threshold(self.cur_epoch).ok()?;
                 drop(membership_reader);
+
+                let membership_stake_table = membership_stake_table
+                    .into_iter()
+                    .map(|config| config.stake_table_entry)
+                    .collect::<Vec<_>>();
 
                 // If certificate is not valid, return current state
                 if let Err(e) = certificate
@@ -643,10 +648,15 @@ impl<TYPES: NodeType, V: Versions> ViewSyncReplicaTaskState<TYPES, V> {
                 }
 
                 let membership_reader = self.membership.read().await;
-                let membership_stake_table = membership_reader.stake_table(self.cur_epoch);
+                let membership_stake_table = membership_reader.stake_table(self.cur_epoch).ok()?;
                 let membership_success_threshold =
-                    membership_reader.success_threshold(self.cur_epoch);
+                    membership_reader.success_threshold(self.cur_epoch).ok()?;
                 drop(membership_reader);
+
+                let membership_stake_table = membership_stake_table
+                    .into_iter()
+                    .map(|config| config.stake_table_entry)
+                    .collect::<Vec<_>>();
 
                 // If certificate is not valid, return current state
                 if let Err(e) = certificate
@@ -748,10 +758,15 @@ impl<TYPES: NodeType, V: Versions> ViewSyncReplicaTaskState<TYPES, V> {
                 }
 
                 let membership_reader = self.membership.read().await;
-                let membership_stake_table = membership_reader.stake_table(self.cur_epoch);
+                let membership_stake_table = membership_reader.stake_table(self.cur_epoch).ok()?;
                 let membership_success_threshold =
-                    membership_reader.success_threshold(self.cur_epoch);
+                    membership_reader.success_threshold(self.cur_epoch).ok()?;
                 drop(membership_reader);
+
+                let membership_stake_table = membership_stake_table
+                    .into_iter()
+                    .map(|config| config.stake_table_entry)
+                    .collect::<Vec<_>>();
 
                 // If certificate is not valid, return current state
                 if let Err(e) = certificate
