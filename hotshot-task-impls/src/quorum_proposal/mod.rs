@@ -472,12 +472,9 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                 let epoch_number = certificate.data.epoch;
 
                 let membership_reader = self.membership.read().await;
-                let membership_stake_table =
-                    membership_reader.stake_table(epoch_number).map_err(|_| {
-                        error!(format!(
-                            "stake table not found for epoch = {epoch_number:?}"
-                        ))
-                    })?;
+                let membership_stake_table = membership_reader
+                    .stake_table(epoch_number)
+                    .unwrap_or_default();
                 let membership_success_threshold = membership_reader
                     .success_threshold(epoch_number)
                     .map_err(|_| {
@@ -574,11 +571,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                 let membership_reader = self.membership.read().await;
                 let membership_stake_table = membership_reader
                     .stake_table(cert_epoch_number)
-                    .map_err(|_| {
-                        error!(format!(
-                            " stake table not found for epoch = {cert_epoch_number:?}"
-                        ))
-                    })?;
+                    .unwrap_or_default();
                 let membership_success_threshold = membership_reader
                     .success_threshold(cert_epoch_number)
                     .map_err(|_| {

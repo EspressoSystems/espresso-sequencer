@@ -122,14 +122,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TaskState for NetworkRequest
                 let membership_reader = self.membership.read().await;
                 if !membership_reader
                     .has_stake(&self.public_key, prop_epoch)
-                    .map_err(|_| {
-                        error!(format!(" stake table not found for epoch = {prop_epoch:?}"))
-                    })?
+                    .unwrap_or_default()
                     && (!membership_reader
                         .has_stake(&self.public_key, next_epoch)
-                        .map_err(|_| {
-                            error!(format!(" stake table not found for epoch = {next_epoch:?}"))
-                        })?
+                        .unwrap_or_default()
                         || !is_last_block_in_epoch(
                             proposal.data.block_header().block_number(),
                             self.epoch_height,

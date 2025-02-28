@@ -171,9 +171,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> DaTaskState<TYP
                 ensure!(
                     membership_reader
                         .has_da_stake(&self.public_key, epoch_number)
-                        .map_err(|_| error!(format!(
-                            "stake not found for epoch = {epoch_number:?}"
-                        )))?,
+                        .unwrap_or_default(),
                     debug!(
                         "We were not chosen for consensus committee for view {:?} in epoch {:?}",
                         view_number, epoch_number
