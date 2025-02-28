@@ -130,6 +130,17 @@ pub struct GenericStakeTableState<F: PrimeField> {
     pub threshold: F,
 }
 
+impl<F: PrimeField> From<GenericStakeTableState<F>> for [F; 4] {
+    fn from(state: GenericStakeTableState<F>) -> Self {
+        [
+            state.bls_key_comm,
+            state.schnorr_key_comm,
+            state.amount_comm,
+            state.threshold,
+        ]
+    }
+}
+
 impl std::ops::Deref for StateKeyPair {
     type Target = schnorr::KeyPair<Config>;
 
@@ -180,7 +191,11 @@ pub struct GenericPublicInput<F: PrimeField>(Vec<F>);
 
 impl<F: PrimeField> GenericPublicInput<F> {
     /// Construct a public input from light client state and static stake table state
-    pub fn new(lc_state: GenericLightClientState<F>, st_state: GenericStakeTableState<F>) -> Self {
+    pub fn new(
+        lc_state: GenericLightClientState<F>,
+        st_state: GenericStakeTableState<F>,
+        new_st_state: GenericStakeTableState<F>,
+    ) -> Self {
         let lc_state_f: [F; 3] = lc_state.into();
         Self(vec![
             lc_state_f[0],
@@ -190,6 +205,10 @@ impl<F: PrimeField> GenericPublicInput<F> {
             st_state.schnorr_key_comm,
             st_state.amount_comm,
             st_state.threshold,
+            new_st_state.bls_key_comm,
+            new_st_state.schnorr_key_comm,
+            new_st_state.amount_comm,
+            new_st_state.threshold,
         ])
     }
 }
@@ -225,10 +244,16 @@ impl<F: PrimeField> GenericPublicInput<F> {
         self.0[2]
     }
 
-    /// Return the stake table commitment of the light client state
+    /// Return the voting stake table commitment of the light client state
     #[must_use]
     pub fn stake_table_comm(&self) -> (F, F, F) {
         (self.0[3], self.0[4], self.0[5])
+    }
+
+    /// Return the next-block stake table commitment
+    #[must_use]
+    pub fn next_stake_table_comm(&self) -> (F, F, F) {
+        (self.0[7], self.0[8], self.0[9])
     }
 
     /// Return the qc key commitment of the light client state

@@ -178,7 +178,11 @@ impl MockLedger {
         let voting_st_state = self.voting_stake_table_state();
         let next_st_state = self.next_stake_table_state();
 
+        let mut msg = Vec::with_capacity(7);
         let state_msg: [F; 3] = self.state.clone().into();
+        msg.extend_from_slice(&state_msg);
+        let st_state_msg: [F; 4] = next_st_state.clone().into();
+        msg.extend_from_slice(&st_state_msg);
 
         let st: Vec<(BLSVerKey, U256, SchnorrVerKey)> = self
             .st
@@ -209,7 +213,7 @@ impl MockLedger {
                     SchnorrSignatureScheme::<EdwardsConfig>::sign(
                         &(),
                         self.key_archive.get(&st[i].0).unwrap(),
-                        state_msg,
+                        &msg,
                         &mut self.rng,
                     )
                 } else {
@@ -270,15 +274,18 @@ impl MockLedger {
         let adv_st_state = adv_st.voting_state().unwrap();
 
         // replace new state with adversarial stake table commitment
-        // new_state.stake_table_comm = adv_st.commitment(SnapshotVersion::EpochStart).unwrap();
+        let mut msg = Vec::with_capacity(7);
         let state_msg: [F; 3] = new_state.clone().into();
+        msg.extend_from_slice(&state_msg);
+        let adv_st_state_msg: [F; 4] = adv_st_state.clone().into();
+        msg.extend_from_slice(&adv_st_state_msg);
 
         // every fake stakers sign on the adverarial new state
         let bit_vec = vec![true; STAKE_TABLE_CAPACITY_FOR_TEST];
         let sigs = adv_state_keys
             .iter()
             .map(|(sk, _)| {
-                SchnorrSignatureScheme::<EdwardsConfig>::sign(&(), sk, state_msg, &mut self.rng)
+                SchnorrSignatureScheme::<EdwardsConfig>::sign(&(), sk, &msg, &mut self.rng)
             })
             .collect::<Result<Vec<_>, _>>()
             .unwrap();

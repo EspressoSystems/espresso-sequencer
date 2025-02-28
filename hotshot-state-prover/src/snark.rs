@@ -43,7 +43,8 @@ pub fn preprocess(
 /// - a list of stake table entries (`Vec<(BLSVerKey, Amount, SchnorrVerKey)>`)
 /// - a list of schnorr signatures of the updated states (`Vec<SchnorrSignature>`), default if the node doesn't sign the state
 /// - updated light client state (`(view_number, block_height, block_comm_root)`)
-/// - the static stake table state (containing 3 commitments to the 3 columns of the stake table and a threshold)
+/// - voting stake table state (containing 3 commitments to the 3 columns of the stake table and a threshold)
+/// - stake table state for the next block (same as the voting stake table except at epoch boundries)
 /// - a bit vector indicates the signers
 ///
 /// Returns error or a pair `(proof, public_inputs)` asserting that
@@ -66,6 +67,7 @@ pub fn generate_state_update_proof<STIter, R, BitIter, SigIter>(
     lightclient_state: &LightClientState,
     stake_table_state: &StakeTableState,
     stake_table_capacity: usize,
+    next_stake_table_state: &StakeTableState,
 ) -> Result<(Proof, PublicInput), PlonkError>
 where
     STIter: IntoIterator,
@@ -94,6 +96,7 @@ where
         lightclient_state,
         stake_table_state,
         stake_table_capacity,
+        next_stake_table_state,
     )?;
     let proof = PlonkKzgSnark::<Bn254>::prove::<_, _, SolidityTranscript>(rng, &circuit, pk, None)?;
     Ok((proof, public_inputs))
@@ -208,11 +211,16 @@ mod tests {
             block_height: 73,
             block_comm_root: CircuitField::rand(&mut prng),
         };
+
+        let mut msg = Vec::with_capacity(7);
         let state_msg: [CircuitField; 3] = lightclient_state.clone().into();
+        msg.extend_from_slice(&state_msg);
+        let next_st_state_msg: [CircuitField; 4] = next_st_state.clone().into();
+        msg.extend_from_slice(&next_st_state_msg);
 
         let sigs = schnorr_keys
             .iter()
-            .map(|(key, _)| SchnorrSignatureScheme::<Config>::sign(&(), key, state_msg, &mut prng))
+            .map(|(key, _)| SchnorrSignatureScheme::<Config>::sign(&(), key, &msg, &mut prng))
             .collect::<Result<Vec<_>, _>>()
             .unwrap();
 
@@ -254,6 +262,7 @@ mod tests {
             &lightclient_state,
             &st_state,
             ST_CAPACITY,
+            &next_st_state,
         );
         assert!(result.is_ok());
 
@@ -278,6 +287,7 @@ mod tests {
             &lightclient_state,
             &bad_st_state,
             ST_CAPACITY,
+            &next_st_state,
         );
         assert!(result.is_err());
     }

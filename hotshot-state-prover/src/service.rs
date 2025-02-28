@@ -117,11 +117,13 @@ pub fn init_stake_table(
 }
 
 #[derive(Debug, Deserialize)]
+/// Part of the full `PublicHotShotConfig` needed for our state-prover purposes
 struct PublicHotShotConfig {
     known_nodes_with_stake: Vec<PeerConfig<BLSPubKey>>,
 }
 
 #[derive(Debug, Deserialize)]
+/// Part of the full `PublicNetworkConfig` needed for our state-prover purposes
 struct PublicNetworkConfig {
     config: PublicHotShotConfig,
 }
@@ -416,6 +418,7 @@ pub async fn sync_state<ApiVer: StaticVersionType>(
             &bundle.state,
             &st_state,
             stake_table_capacity,
+            &st_state, // FIXME: use next_st_state later!
         )
     })
     .await
