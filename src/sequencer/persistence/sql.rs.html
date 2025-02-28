@@ -1962,7 +1962,8 @@
 <a href="#1961" id="1961">1961</a>
 <a href="#1962" id="1962">1962</a>
 <a href="#1963" id="1963">1963</a>
-<a href="#1964" id="1964">1964</a></pre></div><pre class="rust"><code><span class="kw">use </span>anyhow::Context;
+<a href="#1964" id="1964">1964</a>
+<a href="#1965" id="1965">1965</a></pre></div><pre class="rust"><code><span class="kw">use </span>anyhow::Context;
 <span class="kw">use </span>async_trait::async_trait;
 <span class="kw">use </span>clap::Parser;
 <span class="kw">use </span>committable::Committable;
@@ -2154,6 +2155,7 @@
     </span><span class="attr">#[clap(
         long,
         env = <span class="string">"ESPRESSO_SEQUENCER_LIGHTWEIGHT"</span>,
+        default_value_t = <span class="bool-val">false</span>,
         conflicts_with = <span class="string">"archive"
     </span>)]
     </span><span class="kw">pub</span>(<span class="kw">crate</span>) lightweight: bool,
