@@ -25,7 +25,7 @@ use hotshot_contract_adapter::{
     jellyfish::{field_to_u256, ParsedPlonkProof},
     light_client::{ParsedLightClientState, ParsedStakeTableState},
 };
-use hotshot_stake_table::vec_based::{config::FieldType, StakeTable};
+use hotshot_stake_table::{vec_based::{config::FieldType, StakeTable}, utils::one_honest_threshold};
 use hotshot_types::{
     light_client::{
         CircuitField, LightClientState, PublicInput, StakeTableState, StateSignaturesBundle,
@@ -96,12 +96,6 @@ impl StateProverConfig {
 
         Ok(())
     }
-}
-
-#[inline]
-/// A helper function to compute the quorum threshold given a total amount of stake.
-pub fn one_honest_threshold(total_stake: U256) -> U256 {
-    total_stake / 3 + 1
 }
 
 pub fn init_stake_table(

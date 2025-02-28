@@ -35,9 +35,7 @@ use jf_signature::{
 };
 use jf_utils::test_rng;
 
-use crate::{
-    generate_state_update_proof, preprocess, service::one_honest_threshold, Proof, VerifyingKey,
-};
+use crate::{generate_state_update_proof, preprocess, Proof, VerifyingKey};
 
 type F = ark_ed_on_bn254::Fq;
 type SchnorrVerKey = jf_signature::schnorr::VerKey<EdwardsConfig>;

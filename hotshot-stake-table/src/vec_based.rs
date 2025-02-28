@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     config::STAKE_TABLE_CAPACITY,
-    utils::{u256_to_field, ToFields},
+    utils::{one_honest_threshold, u256_to_field, ToFields},
 };
 
 pub mod config;

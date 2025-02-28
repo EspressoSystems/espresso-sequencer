@@ -12,8 +12,9 @@ use ethers::{
 };
 use futures::{future::BoxFuture, stream::FuturesUnordered, FutureExt, StreamExt};
 use hotshot_state_prover::service::{
-    one_honest_threshold, run_prover_service_with_stake_table, StateProverConfig,
+    run_prover_service_with_stake_table, StateProverConfig,
 };
+use hotshot_stake_table::utils::one_honest_threshold;
 use hotshot_types::traits::stake_table::{SnapshotVersion, StakeTableScheme};
 use portpicker::pick_unused_port;
 use sequencer::{

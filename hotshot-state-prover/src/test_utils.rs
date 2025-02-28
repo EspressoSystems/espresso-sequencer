@@ -12,8 +12,6 @@ use jf_signature::{
     SignatureScheme,
 };
 
-use crate::{circuit::u256_to_field, service::one_honest_threshold};
-
 type F = ark_ed_on_bn254::Fq;
 type SchnorrVerKey = jf_signature::schnorr::VerKey<EdwardsConfig>;
 type SchnorrSignKey = jf_signature::schnorr::SignKey<ark_ed_on_bn254::Fr>;
