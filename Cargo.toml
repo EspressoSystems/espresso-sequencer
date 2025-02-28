@@ -229,12 +229,15 @@ time = "0.3"
 trait-set = "0.3.0"
 
 [profile.dev]
-# No optimizations
-opt-level = 0
-# Skip compiling the debug information.
-debug = false
-# Skip linking symbols.
-strip = true
+# Strip debugging information from binaries. Reduces memory usage during
+# compilation by about 2/3, avoids OOM errors on CI.
+strip = "debuginfo"
+
+# Keep everything, for debugging.
+[profile.dev-debug]
+inherits = "dev"
+strip = "none"
+
 [profile.test]
 opt-level = 1
 [profile.test.package.tests]
