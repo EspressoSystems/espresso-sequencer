@@ -4,6 +4,12 @@
 // You should have received a copy of the MIT License
 // along with the HotShot repository. If not, see <https://mit-license.org/>.
 
+use std::{
+    collections::{BTreeMap, HashMap},
+    sync::{atomic::AtomicBool, Arc},
+    time::Instant,
+};
+
 use async_trait::async_trait;
 use chrono::Utc;
 use hotshot_task_impls::{
@@ -19,11 +25,6 @@ use hotshot_types::{
         consensus_api::ConsensusApi,
         node_implementation::{ConsensusTime, NodeImplementation, NodeType},
     },
-};
-use std::{
-    collections::{BTreeMap, HashMap},
-    sync::{atomic::AtomicBool, Arc},
-    time::Instant,
 };
 use tokio::spawn;
 
@@ -244,6 +245,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> CreateTaskState
             storage: Arc::clone(&handle.storage),
             upgrade_lock: handle.hotshot.upgrade_lock.clone(),
             epoch_height: handle.hotshot.config.epoch_height,
+            epoch_upgrade_block_height: handle.hotshot.config.epoch_start_block,
+            staged_epoch_upgrade_certificate: None,
             consensus_metrics,
         }
     }
