@@ -36,7 +36,7 @@ contract StakeTable_register_Test is Test {
     uint256 public constant MIN_STAKE_AMOUNT = 10 ether;
     address public exampleTokenCreator;
     uint64 public churnRate = 10;
-    uint64 public hotShotBlocksPerEpoch = 1;
+    uint64 public constant BLOCKS_PER_EPOCH = 1;
 
     function genClientWallet(address sender, string memory seed)
         private
@@ -64,7 +64,7 @@ contract StakeTable_register_Test is Test {
         );
     }
 
-    function setUpCustom(uint64 _churnRate, uint64 _blocksPerEpoch) public {
+    function setUp() public {
         exampleTokenCreator = makeAddr("tokenCreator");
         vm.prank(exampleTokenCreator);
         token = new ExampleToken(INITIAL_BALANCE);
@@ -82,25 +82,9 @@ contract StakeTable_register_Test is Test {
         LightClientMock.LightClientState memory genesis = state;
         LightClientMock.StakeTableState memory genesisStakeTableState = stakeState;
 
-        lcMock = new LightClientMock(genesis, genesisStakeTableState, 864000);
+        lcMock = new LightClientMock(genesis, genesisStakeTableState, 864000, BLOCKS_PER_EPOCH);
         stakeTable = new StakeTableMock(
-            address(token),
-            address(lcMock),
-            _churnRate,
-            _blocksPerEpoch,
-            MIN_STAKE_AMOUNT,
-            exampleTokenCreator
-        );
-    }
-
-    function setUp() public {
-        setUpCustom(churnRate, hotShotBlocksPerEpoch);
-    }
-
-    function test_RevertWhen_InvalidHotShotBlocksPerEpoch() external {
-        vm.expectRevert(S.InvalidHotShotBlocksPerEpoch.selector);
-        new StakeTableMock(
-            address(token), address(lcMock), churnRate, 0, MIN_STAKE_AMOUNT, exampleTokenCreator
+            address(token), address(lcMock), churnRate, MIN_STAKE_AMOUNT, exampleTokenCreator
         );
     }
 
@@ -137,7 +121,7 @@ contract StakeTable_register_Test is Test {
     // commenting out epoch related tests for now
     // function testFuzz_RevertWhen_InvalidNextRegistrationEpoch(uint64 rand) external {
     //     LCMock.setCurrentEpoch(3);
-    //     uint64 currentEpoch = stakeTable.currentEpoch();
+    //     uint64 currentEpoch = lcMock.currentEpoch();
 
     //     uint64 depositAmount = 10 ether;
     //     vm.prank(exampleTokenCreator);
@@ -735,7 +719,7 @@ contract StakeTable_register_Test is Test {
         lcMock.setFinalizedState(
             LightClient.LightClientState(0, node.registerEpoch + 1, BN254.ScalarField.wrap(0))
         );
-        assertGe(stakeTable.currentEpoch(), node.registerEpoch + 1);
+        assertGe(lcMock.currentEpoch(), node.registerEpoch + 1);
 
         stakeTable.requestExit();
 
@@ -748,7 +732,7 @@ contract StakeTable_register_Test is Test {
         lcMock.setFinalizedState(
             LightClient.LightClientState(0, validWithdrawalEpoch, BN254.ScalarField.wrap(0))
         );
-        assertGe(stakeTable.currentEpoch(), validWithdrawalEpoch);
+        assertGe(lcMock.currentEpoch(), validWithdrawalEpoch);
 
         // Withdraw the funds
         vm.startPrank(exampleTokenCreator);
@@ -900,85 +884,13 @@ contract StakeTable_register_Test is Test {
         stakeTable.updateLightClientAddress(address(0));
     }
 
-    // TESTS FOR CURRENT EPOCH
-    function test_initialEpoch_isZero() public view {
-        // assert the current block height is initialBlockHeight
-        uint64 initialBlockHeight = 0;
-        (, uint64 currentBlockHeight,) = lcMock.finalizedState();
-        assertEq(currentBlockHeight, initialBlockHeight);
-
-        // Calculate the expected epoch
-        uint64 expectedEpoch = 0;
-
-        // Call the currentEpoch function
-        uint64 currentEpoch = stakeTable.currentEpoch();
-
-        // Assert that the current epoch is calculated correctly
-        assertEq(currentEpoch, expectedEpoch);
-        assertEq(currentEpoch, 0);
-    }
-
-    function test_currentEpoch_isUpdated() public {
-        test_initialEpoch_isZero();
-
-        // set new finalized state on the light client contract
-        lcMock.setFinalizedState(LightClient.LightClientState(0, 10, BN254.ScalarField.wrap(0)));
-
-        // verify the current epoch is updated and is non-zero
-        assertNotEq(stakeTable.currentEpoch(), 0);
-
-        // verify the expected epoch
-        uint64 expectedEpoch = 10; // 10 / 1
-        assertEq(stakeTable.currentEpoch(), expectedEpoch);
-    }
-
-    function test_currentEpoch_blocksPerEpochNotOne() public {
-        setUpCustom(10, /*churn*/ 3 /*blocksPerEpoch*/ );
-        test_initialEpoch_isZero();
-        lcMock.setFinalizedState(LightClient.LightClientState(0, 2, BN254.ScalarField.wrap(0)));
-        assertEq(stakeTable.currentEpoch(), 0);
-        lcMock.setFinalizedState(LightClient.LightClientState(0, 3, BN254.ScalarField.wrap(0)));
-        assertEq(stakeTable.currentEpoch(), 1);
-    }
-
-    // test various edge cases for the currentEpoch
-    function test_currentEpoch_edgeCases() public {
-        // test edge case when the block height is less than the hotShotBlocksPerEpoch
-        uint64 hotShotBlockHeight = 0;
-        lcMock.setFinalizedState(
-            LightClient.LightClientState(0, hotShotBlockHeight, BN254.ScalarField.wrap(0))
-        );
-        assertEq(stakeTable.currentEpoch(), 0);
-
-        // test edge case when the block height is exactly divisible by the hotShotBlocksPerEpoch
-        hotShotBlockHeight = 1;
-        lcMock.setFinalizedState(
-            LightClient.LightClientState(0, hotShotBlockHeight, BN254.ScalarField.wrap(0))
-        );
-        assertEq(stakeTable.currentEpoch(), 1);
-
-        // test edge case when the block height is greater than the hotShotBlocksPerEpoch
-        hotShotBlockHeight = 2;
-        lcMock.setFinalizedState(
-            LightClient.LightClientState(0, hotShotBlockHeight, BN254.ScalarField.wrap(0))
-        );
-        assertEq(stakeTable.currentEpoch(), 2);
-
-        // test edge case when the block height is very large
-        hotShotBlockHeight = type(uint64).max;
-        lcMock.setFinalizedState(
-            LightClient.LightClientState(0, hotShotBlockHeight, BN254.ScalarField.wrap(0))
-        );
-        assertEq(stakeTable.currentEpoch(), hotShotBlockHeight / hotShotBlocksPerEpoch);
-    }
-
     // TESTS FOR NEXT REGISTRATION EPOCH
 
     /// @notice test the next available epoch (registration/exit) when the current epoch is zero
     function test_nextAvailableEpoch_whenCurrentEpochIsZero() public {
         // test for registration
         // check that the current epoch is zero
-        assertEq(stakeTable.currentEpoch(), 0);
+        assertEq(lcMock.currentEpoch(), 0);
 
         // check that the first registration epoch is equal to one
         assertEq(stakeTable.registrationEpoch(), 1);
@@ -1005,15 +917,15 @@ contract StakeTable_register_Test is Test {
         // test for registration
         // set the current epoch to 1 by updating the latest hotshot block number on the LC contract
         lcMock.setFinalizedState(LightClient.LightClientState(0, 1, BN254.ScalarField.wrap(0)));
-        assertEq(stakeTable.currentEpoch(), 1);
+        assertEq(lcMock.currentEpoch(), 1);
 
         // assert that the registrationEpoch is 1
         assertEq(stakeTable.registrationEpoch(), 1);
-        assertGe(stakeTable.currentEpoch() + 1, stakeTable.registrationEpoch());
+        assertGe(lcMock.currentEpoch() + 1, stakeTable.registrationEpoch());
 
-        // assert that the next registration epoch is equal to stakeTable.currentEpoch() + 1
+        // assert that the next registration epoch is equal to lcMock.currentEpoch() + 1
         stakeTable.mockPushToRegistrationQueue();
-        assertEq(stakeTable.registrationEpoch(), stakeTable.currentEpoch() + 1);
+        assertEq(stakeTable.registrationEpoch(), lcMock.currentEpoch() + 1);
         assertEq(stakeTable.numPendingRegistrationsInEpoch(), 0);
 
         // test for exit
@@ -1021,7 +933,7 @@ contract StakeTable_register_Test is Test {
 
         // assert that the next exit epoch is equal to 2
         stakeTable.mockPushToExitQueue();
-        assertEq(stakeTable.exitEpoch(), stakeTable.currentEpoch() + 1);
+        assertEq(stakeTable.exitEpoch(), lcMock.currentEpoch() + 1);
         assertEq(stakeTable.numPendingExitsInEpoch(), 0);
     }
 
@@ -1032,14 +944,14 @@ contract StakeTable_register_Test is Test {
     {
         // set the current epoch to 1 by updating the latest hotshot block number on the LC contract
         lcMock.setFinalizedState(LightClient.LightClientState(0, 1, BN254.ScalarField.wrap(0)));
-        assertEq(stakeTable.currentEpoch(), 1);
+        assertEq(lcMock.currentEpoch(), 1);
 
         // set the  registration epoch to 3
         uint64 registrationEpoch = 3;
         stakeTable.setRegistrationEpoch(registrationEpoch);
 
         // assert that the next registration epoch is greater than the current epoch
-        assertGt(stakeTable.registrationEpoch(), stakeTable.currentEpoch());
+        assertGt(stakeTable.registrationEpoch(), lcMock.currentEpoch());
 
         // assert that the next registration epoch is equal to 3
         stakeTable.mockPushToRegistrationQueue();
@@ -1072,7 +984,7 @@ contract StakeTable_register_Test is Test {
         // test for registration
         // set the current epoch to 1 by updating the latest hotshot block number on the LC contract
         lcMock.setFinalizedState(LightClient.LightClientState(0, 1, BN254.ScalarField.wrap(0)));
-        assertEq(stakeTable.currentEpoch(), 1);
+        assertEq(lcMock.currentEpoch(), 1);
 
         // set the  registration epoch to 2
         uint64 registrationEpoch = 2;
@@ -1102,12 +1014,12 @@ contract StakeTable_register_Test is Test {
         lcMock.setFinalizedState(
             LightClient.LightClientState(0, type(uint64).max, BN254.ScalarField.wrap(0))
         );
-        assertEq(stakeTable.currentEpoch(), type(uint64).max);
+        assertEq(lcMock.currentEpoch(), type(uint64).max);
 
         // set the hotshot blocks per epoch to 1
         vm.prank(exampleTokenCreator);
         stakeTable.mockUpdateHotShotBlocksPerEpoch(1);
-        assertEq(stakeTable.hotShotBlocksPerEpoch(), 1);
+        assertEq(lcMock.BLOCKS_PER_EPOCH(), 1);
 
         // push to registration queue and expect a panic due to arithmetic overflow
         vm.expectRevert(stdError.arithmeticError);

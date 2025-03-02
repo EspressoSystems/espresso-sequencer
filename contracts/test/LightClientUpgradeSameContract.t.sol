@@ -25,10 +25,12 @@ contract LightClientUpgradeSameContractTest is Test {
     address public proxy;
 
     uint32 public constant MAX_HISTORY_SECONDS = 864000; //10 days
+    uint64 public constant BLOCKS_PER_EPOCH = 4;
 
     // deploy the first implementation with its proxy
     function setUp() public {
-        (proxy, admin, stateV1, stakeStateV1) = deployer.run(5, MAX_HISTORY_SECONDS);
+        (proxy, admin, stateV1, stakeStateV1) =
+            deployer.run(5, MAX_HISTORY_SECONDS, BLOCKS_PER_EPOCH);
         lcV1Proxy = LCV1(proxy);
     }
 

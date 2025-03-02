@@ -22,6 +22,7 @@ contract LightClientCommonTest is Test {
     uint32 public constant DELAY_THRESHOLD = 6;
     uint32 public constant MAX_HISTORY_SECONDS = 1 days;
     uint32 public initialBlockTimestamp = 1 days;
+    uint64 public constant BLOCKS_PER_EPOCH = 4;
     // this constant should be consistent with `hotshot_contract::light_client.rs`
     uint64 internal constant STAKE_TABLE_CAPACITY = 10;
     DeployLightClientTestScript public deployer = new DeployLightClientTestScript();
@@ -32,12 +33,14 @@ contract LightClientCommonTest is Test {
     function deployAndInitProxy(
         LC.LightClientState memory state,
         LC.StakeTableState memory stakeState,
-        uint32 stateHistoryRetentionPeriod
+        uint32 stateHistoryRetentionPeriod,
+        uint64 blocksPerEpoch
     ) public returns (address payable, address) {
         vm.warp(1 days);
         //deploy light client test with a proxy
-        (lcTestProxy, admin, state) =
-            deployer.deployContract(state, stakeState, stateHistoryRetentionPeriod, admin);
+        (lcTestProxy, admin, state) = deployer.deployContract(
+            state, stakeState, stateHistoryRetentionPeriod, admin, blocksPerEpoch
+        );
 
         //cast the proxy to be of type light client test
         lc = LCMock(lcTestProxy);
@@ -63,8 +66,9 @@ contract LightClientCommonTest is Test {
         genesis = state;
         genesisStakeTableState = stakeState;
 
-        (lcTestProxy, admin) =
-            deployAndInitProxy(genesis, genesisStakeTableState, MAX_HISTORY_SECONDS);
+        (lcTestProxy, admin) = deployAndInitProxy(
+            genesis, genesisStakeTableState, MAX_HISTORY_SECONDS, BLOCKS_PER_EPOCH
+        );
 
         (
             uint256 threshold,
@@ -87,7 +91,6 @@ contract LightClientCommonTest is Test {
         assertEq(stakeState.schnorrKeyComm, votingSchnorrKeyComm);
         assertEq(stakeState.amountComm, votingAmountComm);
         assertEq(stakeState.threshold, votingThreshold);
-
     }
 
     function assertEq(BN254.ScalarField a, BN254.ScalarField b) public pure {
@@ -113,18 +116,22 @@ contract LightClient_constructor_Test is LightClientCommonTest {
     function initWithExpectRevert(
         LC.LightClientState memory _genesis,
         LC.StakeTableState memory _genesisStakeTableState,
-        uint32 _stateHistoryRetentionPeriod
+        uint32 _stateHistoryRetentionPeriod,
+        uint64 blocksPerEpoch
     ) private {
         vm.expectRevert(LC.InvalidArgs.selector);
-
-        lc = new LCMock(_genesis, _genesisStakeTableState, _stateHistoryRetentionPeriod);
+        lc = new LCMock(
+            _genesis, _genesisStakeTableState, _stateHistoryRetentionPeriod, blocksPerEpoch
+        );
     }
 
     // test that initializing the contract reverts when the stateHistoryRetentionPeriod is below the
     // required threshold
     function test_RevertWhen_InvalidStateHistoryRetentionPeriodOnSetUp() public {
         uint32 invalidRetentionPeriod = 10;
-        initWithExpectRevert(genesis, genesisStakeTableState, invalidRetentionPeriod);
+        initWithExpectRevert(
+            genesis, genesisStakeTableState, invalidRetentionPeriod, BLOCKS_PER_EPOCH
+        );
     }
 
     function test_RevertWhen_InvalidGenesis() external {
@@ -133,36 +140,48 @@ contract LightClient_constructor_Test is LightClientCommonTest {
 
         // wrong viewNum would revert
         badGenesis.viewNum = 1;
-        initWithExpectRevert(badGenesis, badGenesisStakeTableState, MAX_HISTORY_SECONDS);
+        initWithExpectRevert(
+            badGenesis, badGenesisStakeTableState, MAX_HISTORY_SECONDS, BLOCKS_PER_EPOCH
+        );
         badGenesis.viewNum = genesis.viewNum; // revert to correct
 
         // wrong blockHeight would revert
         badGenesis.blockHeight = 1;
-        initWithExpectRevert(badGenesis, badGenesisStakeTableState, MAX_HISTORY_SECONDS);
+        initWithExpectRevert(
+            badGenesis, badGenesisStakeTableState, MAX_HISTORY_SECONDS, BLOCKS_PER_EPOCH
+        );
         badGenesis.blockHeight = genesis.blockHeight; // revert to correct
 
         // zero-valued stake table commitments would revert
         badGenesisStakeTableState.blsKeyComm = BN254.ScalarField.wrap(0);
-        initWithExpectRevert(badGenesis, badGenesisStakeTableState, MAX_HISTORY_SECONDS);
+        initWithExpectRevert(
+            badGenesis, badGenesisStakeTableState, MAX_HISTORY_SECONDS, BLOCKS_PER_EPOCH
+        );
+        // revert to correct
+        badGenesisStakeTableState.blsKeyComm = badGenesisStakeTableState.blsKeyComm;
 
-        badGenesisStakeTableState.blsKeyComm = badGenesisStakeTableState.blsKeyComm; // revert
-            // to correct
         badGenesisStakeTableState.schnorrKeyComm = BN254.ScalarField.wrap(0);
-        initWithExpectRevert(badGenesis, badGenesisStakeTableState, MAX_HISTORY_SECONDS);
+        initWithExpectRevert(
+            badGenesis, badGenesisStakeTableState, MAX_HISTORY_SECONDS, BLOCKS_PER_EPOCH
+        );
+        // revert to correct
+        badGenesisStakeTableState.schnorrKeyComm = badGenesisStakeTableState.schnorrKeyComm;
 
-        badGenesisStakeTableState.schnorrKeyComm = badGenesisStakeTableState.schnorrKeyComm; // revert
-            // to correct
         badGenesisStakeTableState.amountComm = BN254.ScalarField.wrap(0);
-
-        initWithExpectRevert(badGenesis, badGenesisStakeTableState, MAX_HISTORY_SECONDS);
-        badGenesisStakeTableState.amountComm = badGenesisStakeTableState.amountComm; // revert
-            // to correct
+        initWithExpectRevert(
+            badGenesis, badGenesisStakeTableState, MAX_HISTORY_SECONDS, BLOCKS_PER_EPOCH
+        );
+        badGenesisStakeTableState.amountComm = badGenesisStakeTableState.amountComm;
 
         // zero-valued threshold would revert
         badGenesisStakeTableState.threshold = 0;
-        initWithExpectRevert(badGenesis, badGenesisStakeTableState, MAX_HISTORY_SECONDS);
-        badGenesisStakeTableState.threshold = badGenesisStakeTableState.threshold; // revert to
-            // correct
+        initWithExpectRevert(
+            badGenesis, badGenesisStakeTableState, MAX_HISTORY_SECONDS, BLOCKS_PER_EPOCH
+        );
+        badGenesisStakeTableState.threshold = badGenesisStakeTableState.threshold; // revert
+
+        // zero-valued epoch length would revert
+        initWithExpectRevert(badGenesis, badGenesisStakeTableState, MAX_HISTORY_SECONDS, 0);
     }
 }
 
@@ -352,8 +371,9 @@ contract LightClient_newFinalizedState_Test is LightClientCommonTest {
             abi.decode(result, (LC.LightClientState, LC.StakeTableState));
         genesis = state;
         genesisStakeTableState = stakeState;
-        (lcTestProxy, admin) =
-            deployAndInitProxy(genesis, genesisStakeTableState, MAX_HISTORY_SECONDS);
+        (lcTestProxy, admin) = deployAndInitProxy(
+            genesis, genesisStakeTableState, MAX_HISTORY_SECONDS, BLOCKS_PER_EPOCH
+        );
 
         // Generating a few consecutive states and proofs
         cmds = new string[](3);
@@ -390,7 +410,7 @@ contract LightClient_newFinalizedState_Test is LightClientCommonTest {
         numBlockSkipped = uint32(bound(numBlockSkipped, 1, 3));
 
         // re-assign LightClient with the same genesis
-        deployAndInitProxy(genesis, genesisStakeTableState, MAX_HISTORY_SECONDS);
+        deployAndInitProxy(genesis, genesisStakeTableState, MAX_HISTORY_SECONDS, BLOCKS_PER_EPOCH);
 
         string[] memory cmds = new string[](3);
         cmds[0] = "diff-test";
@@ -1117,5 +1137,21 @@ contract LightClient_HotShotCommUpdatesTest is LightClientCommonTest {
         (,, hotShotBlockHeight, hotShotBlockComm) = lc.stateHistoryCommitments(numCommitments - 1);
         vm.expectRevert();
         lc.getHotShotCommitment(hotShotBlockHeight);
+    }
+}
+
+contract LightClient_EpochTest is LightClientCommonTest {
+    function setUp() public {
+        init();
+        // checking init from epoch 0
+        assertEq(lc.currentEpoch(), 0);
+    }
+
+    function testFuzz_correctEpochComputation(uint64 newBlockHeight) public {
+        uint64 anyView = 10;
+        BN254.ScalarField anyRoot = genesis.blockCommRoot;
+
+        lc.setFinalizedState(LC.LightClientState(anyView, newBlockHeight, anyRoot));
+        assertEq(lc.currentEpoch(), newBlockHeight / BLOCKS_PER_EPOCH);
     }
 }

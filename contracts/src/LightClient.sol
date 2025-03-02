@@ -39,8 +39,16 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @notice when the permissioned prover is unset, this event is emitted.
     event PermissionedProverNotRequired();
 
+    /// @notice Event that a new finalized state has been successfully verified and updated
+    event NewState(
+        uint64 indexed viewNum, uint64 indexed blockHeight, BN254.ScalarField blockCommRoot
+    );
+
     // === System Parameters ===
     //
+    /// @notice number of blocks per epoch
+    uint64 public BLOCKS_PER_EPOCH;
+
     // === Storage ===
     //
     /// @notice genesis stake commitment
@@ -108,11 +116,6 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         BN254.ScalarField hotShotBlockCommRoot;
     }
 
-    /// @notice Event that a new finalized state has been successfully verified and updated
-    event NewState(
-        uint64 indexed viewNum, uint64 indexed blockHeight, BN254.ScalarField blockCommRoot
-    );
-
     /// @notice The state is outdated and older than currently known `finalizedState`
     error OutdatedState();
     /// @notice Invalid user inputs: wrong format or non-sensible arguments
@@ -149,15 +152,19 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @param _stateHistoryRetentionPeriod The maximum retention period (in seconds) for the state
     /// history. the min retention period allowed is 1 hour and max 365 days
     /// @param owner The address of the contract owner
+    /// @param blocksPerEpoch Number of HotShot block per epoch (also per stake table snapshot)
     function initialize(
         LightClientState memory _genesis,
         StakeTableState memory _genesisStakeTableState,
         uint32 _stateHistoryRetentionPeriod,
-        address owner
+        address owner,
+        uint64 blocksPerEpoch
     ) public initializer {
         __Ownable_init(owner); //sets owner of the contract
         __UUPSUpgradeable_init();
-        _initializeState(_genesis, _genesisStakeTableState, _stateHistoryRetentionPeriod);
+        _initializeState(
+            _genesis, _genesisStakeTableState, _stateHistoryRetentionPeriod, blocksPerEpoch
+        );
     }
 
     /// @notice returns the current block number
@@ -189,10 +196,12 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @param _genesisStakeTableState The initial stake table state of the light client
     /// @param _stateHistoryRetentionPeriod The maximum retention period (in seconds) for the state
     /// history. The min retention period allowed is 1 hour and the max is 365 days.
+    /// @param blocksPerEpoch Number of HotShot block per epoch (also per stake table snapshot)
     function _initializeState(
         LightClientState memory _genesis,
         StakeTableState memory _genesisStakeTableState,
-        uint32 _stateHistoryRetentionPeriod
+        uint32 _stateHistoryRetentionPeriod,
+        uint64 blocksPerEpoch
     ) internal {
         // The viewNum and blockHeight in the genesis state must be zero to indicate that this is
         // the initial state. Stake table commitments and threshold cannot be zero, otherwise it's
@@ -205,7 +214,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
                 || BN254.ScalarField.unwrap(_genesisStakeTableState.schnorrKeyComm) == 0
                 || BN254.ScalarField.unwrap(_genesisStakeTableState.amountComm) == 0
                 || _genesisStakeTableState.threshold == 0 || _stateHistoryRetentionPeriod < 1 hours
-                || _stateHistoryRetentionPeriod > 365 days
+                || _stateHistoryRetentionPeriod > 365 days || blocksPerEpoch == 0
         ) {
             revert InvalidArgs();
         }
@@ -216,6 +225,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         votingStakeTableState = _genesisStakeTableState;
 
         stateHistoryRetentionPeriod = _stateHistoryRetentionPeriod;
+        BLOCKS_PER_EPOCH = blocksPerEpoch;
     }
 
     // === State Modifying APIs ===
@@ -476,5 +486,15 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @notice Check if permissioned prover is enabled
     function isPermissionedProverEnabled() public view returns (bool) {
         return (permissionedProver != address(0));
+    }
+
+    // === Epoch-related logic ===
+    //
+
+    /// @dev Fetches the last hotshot block number from the light client contract to calculate the
+    /// epoch.
+    /// @return current epoch (computed from the last known hotshot block number)
+    function currentEpoch() public view virtual returns (uint64) {
+        return uint64(finalizedState.blockHeight / BLOCKS_PER_EPOCH);
     }
 }

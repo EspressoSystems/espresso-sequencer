@@ -2,24 +2,16 @@
 pragma solidity ^0.8.0;
 
 import { StakeTable } from "../../src/StakeTable.sol";
+import { LightClientMock } from "./LightClientMock.sol";
 
 contract StakeTableMock is StakeTable {
     constructor(
         address token,
         address lightClientAddress,
         uint64 churnRate,
-        uint64 hotShotBlocksPerEpoch,
         uint256 minStakeAmount,
         address initialOwner
-    )
-        StakeTable(
-            token,
-            lightClientAddress,
-            churnRate,
-            hotShotBlocksPerEpoch,
-            minStakeAmount,
-            initialOwner
-        )
+    ) StakeTable(token, lightClientAddress, churnRate, minStakeAmount, initialOwner) 
     // solhint-disable-next-line no-empty-blocks
     { }
 
@@ -46,6 +38,6 @@ contract StakeTableMock is StakeTable {
     }
 
     function mockUpdateHotShotBlocksPerEpoch(uint64 newHotShotBlocksPerEpoch) public {
-        hotShotBlocksPerEpoch = newHotShotBlocksPerEpoch;
+        LightClientMock(address(lightClient)).setBlocksPerEpoch(newHotShotBlocksPerEpoch);
     }
 }

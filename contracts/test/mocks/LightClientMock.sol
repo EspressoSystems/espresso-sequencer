@@ -16,9 +16,10 @@ contract LightClientMock is LC {
     constructor(
         LC.LightClientState memory genesis,
         LC.StakeTableState memory genesisStakeTableState,
-        uint32 maxHistorySeconds
+        uint32 maxHistorySeconds,
+        uint64 blocksPerEpoch
     ) LC() {
-        _initializeState(genesis, genesisStakeTableState, maxHistorySeconds);
+        _initializeState(genesis, genesisStakeTableState, maxHistorySeconds, blocksPerEpoch);
     }
 
     /// @dev Directly mutate finalizedState variable for test
@@ -83,5 +84,9 @@ contract LightClientMock is LC {
         return hotShotDown
             ? blockNumber - frozenL1Height > threshold
             : super.lagOverEscapeHatchThreshold(blockNumber, threshold);
+    }
+
+    function setBlocksPerEpoch(uint64 newBlocksPerEpoch) public {
+        BLOCKS_PER_EPOCH = newBlocksPerEpoch;
     }
 }
