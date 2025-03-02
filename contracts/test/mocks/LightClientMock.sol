@@ -35,7 +35,7 @@ contract LightClientMock is LC {
         IPlonkVerifier.VerifyingKey memory vk = VkLib.getVk();
 
         // Prepare the public input
-        uint256[7] memory publicInput;
+        uint256[11] memory publicInput;
         publicInput[0] = uint256(state.viewNum);
         publicInput[1] = uint256(state.blockHeight);
         publicInput[2] = BN254.ScalarField.unwrap(state.blockCommRoot);
@@ -43,6 +43,11 @@ contract LightClientMock is LC {
         publicInput[4] = BN254.ScalarField.unwrap(genesisStakeTableState.schnorrKeyComm);
         publicInput[5] = BN254.ScalarField.unwrap(genesisStakeTableState.amountComm);
         publicInput[6] = genesisStakeTableState.threshold;
+        // FIXME: use nextStakeTable instead, current just satisify compiler first
+        publicInput[7] = BN254.ScalarField.unwrap(genesisStakeTableState.blsKeyComm);
+        publicInput[8] = BN254.ScalarField.unwrap(genesisStakeTableState.schnorrKeyComm);
+        publicInput[9] = BN254.ScalarField.unwrap(genesisStakeTableState.amountComm);
+        publicInput[10] = genesisStakeTableState.threshold;
 
         if (!PlonkVerifier.verify(vk, publicInput, proof)) {
             revert InvalidProof();
