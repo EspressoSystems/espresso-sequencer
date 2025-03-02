@@ -45,10 +45,10 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     //
     /// @notice genesis stake commitment
     StakeTableState public genesisStakeTableState;
-
+    /// @notice stake table commitments for the current voting stakers
+    StakeTableState public votingStakeTableState;
     /// @notice genesis block commitment
     LightClientState public genesisState;
-
     /// @notice Finalized HotShot's light client state
     LightClientState public finalizedState;
 
@@ -211,8 +211,9 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         }
 
         genesisState = _genesis;
-        genesisStakeTableState = _genesisStakeTableState;
         finalizedState = _genesis;
+        genesisStakeTableState = _genesisStakeTableState;
+        votingStakeTableState = _genesisStakeTableState;
 
         stateHistoryRetentionPeriod = _stateHistoryRetentionPeriod;
     }
@@ -273,15 +274,15 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         publicInput[0] = uint256(state.viewNum);
         publicInput[1] = uint256(state.blockHeight);
         publicInput[2] = BN254.ScalarField.unwrap(state.blockCommRoot);
-        publicInput[3] = BN254.ScalarField.unwrap(genesisStakeTableState.blsKeyComm);
-        publicInput[4] = BN254.ScalarField.unwrap(genesisStakeTableState.schnorrKeyComm);
-        publicInput[5] = BN254.ScalarField.unwrap(genesisStakeTableState.amountComm);
-        publicInput[6] = genesisStakeTableState.threshold;
+        publicInput[3] = BN254.ScalarField.unwrap(votingStakeTableState.blsKeyComm);
+        publicInput[4] = BN254.ScalarField.unwrap(votingStakeTableState.schnorrKeyComm);
+        publicInput[5] = BN254.ScalarField.unwrap(votingStakeTableState.amountComm);
+        publicInput[6] = votingStakeTableState.threshold;
         // FIXME: use nextStakeTable instead, current just satisify compiler first
-        publicInput[7] = BN254.ScalarField.unwrap(genesisStakeTableState.blsKeyComm);
-        publicInput[8] = BN254.ScalarField.unwrap(genesisStakeTableState.schnorrKeyComm);
-        publicInput[9] = BN254.ScalarField.unwrap(genesisStakeTableState.amountComm);
-        publicInput[10] = genesisStakeTableState.threshold;
+        publicInput[7] = BN254.ScalarField.unwrap(votingStakeTableState.blsKeyComm);
+        publicInput[8] = BN254.ScalarField.unwrap(votingStakeTableState.schnorrKeyComm);
+        publicInput[9] = BN254.ScalarField.unwrap(votingStakeTableState.amountComm);
+        publicInput[10] = votingStakeTableState.threshold;
 
         if (!PlonkVerifier.verify(vk, publicInput, proof)) {
             revert InvalidProof();

@@ -72,11 +72,22 @@ contract LightClientCommonTest is Test {
             BN254.ScalarField stakeTableSchnorrKeyComm,
             BN254.ScalarField stakeTableAmountComm
         ) = lc.genesisStakeTableState();
-
         assertEq(stakeState.blsKeyComm, stakeTableBlsKeyComm);
         assertEq(stakeState.schnorrKeyComm, stakeTableSchnorrKeyComm);
         assertEq(stakeState.amountComm, stakeTableAmountComm);
         assertEq(stakeState.threshold, threshold);
+
+        (
+            uint256 votingThreshold,
+            BN254.ScalarField votingBlsKeyComm,
+            BN254.ScalarField votingSchnorrKeyComm,
+            BN254.ScalarField votingAmountComm
+        ) = lc.votingStakeTableState();
+        assertEq(stakeState.blsKeyComm, votingBlsKeyComm);
+        assertEq(stakeState.schnorrKeyComm, votingSchnorrKeyComm);
+        assertEq(stakeState.amountComm, votingAmountComm);
+        assertEq(stakeState.threshold, votingThreshold);
+
     }
 
     function assertEq(BN254.ScalarField a, BN254.ScalarField b) public pure {

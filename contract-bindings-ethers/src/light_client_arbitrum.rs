@@ -645,6 +645,45 @@ pub mod light_client_arbitrum {
                         state_mutability: ::ethers::core::abi::ethabi::StateMutability::Payable,
                     },],
                 ),
+                (
+                    ::std::borrow::ToOwned::to_owned("votingStakeTableState"),
+                    ::std::vec![::ethers::core::abi::ethabi::Function {
+                        name: ::std::borrow::ToOwned::to_owned("votingStakeTableState",),
+                        inputs: ::std::vec![],
+                        outputs: ::std::vec![
+                            ::ethers::core::abi::ethabi::Param {
+                                name: ::std::borrow::ToOwned::to_owned("threshold"),
+                                kind: ::ethers::core::abi::ethabi::ParamType::Uint(256usize,),
+                                internal_type: ::core::option::Option::Some(
+                                    ::std::borrow::ToOwned::to_owned("uint256"),
+                                ),
+                            },
+                            ::ethers::core::abi::ethabi::Param {
+                                name: ::std::borrow::ToOwned::to_owned("blsKeyComm"),
+                                kind: ::ethers::core::abi::ethabi::ParamType::Uint(256usize,),
+                                internal_type: ::core::option::Option::Some(
+                                    ::std::borrow::ToOwned::to_owned("BN254.ScalarField"),
+                                ),
+                            },
+                            ::ethers::core::abi::ethabi::Param {
+                                name: ::std::borrow::ToOwned::to_owned("schnorrKeyComm"),
+                                kind: ::ethers::core::abi::ethabi::ParamType::Uint(256usize,),
+                                internal_type: ::core::option::Option::Some(
+                                    ::std::borrow::ToOwned::to_owned("BN254.ScalarField"),
+                                ),
+                            },
+                            ::ethers::core::abi::ethabi::Param {
+                                name: ::std::borrow::ToOwned::to_owned("amountComm"),
+                                kind: ::ethers::core::abi::ethabi::ParamType::Uint(256usize,),
+                                internal_type: ::core::option::Option::Some(
+                                    ::std::borrow::ToOwned::to_owned("BN254.ScalarField"),
+                                ),
+                            },
+                        ],
+                        constant: ::core::option::Option::None,
+                        state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
+                    },],
+                ),
             ]),
             events: ::core::convert::From::from([
                 (
@@ -1186,6 +1225,22 @@ pub mod light_client_arbitrum {
         ) -> ::ethers::contract::builders::ContractCall<M, ()> {
             self.0
                 .method_hash([79, 30, 242, 134], (new_implementation, data))
+                .expect("method not found (this should never happen)")
+        }
+        ///Calls the contract's `votingStakeTableState` (0x0625e19b) function
+        pub fn voting_stake_table_state(
+            &self,
+        ) -> ::ethers::contract::builders::ContractCall<
+            M,
+            (
+                ::ethers::core::types::U256,
+                ::ethers::core::types::U256,
+                ::ethers::core::types::U256,
+                ::ethers::core::types::U256,
+            ),
+        > {
+            self.0
+                .method_hash([6, 37, 225, 155], ())
                 .expect("method not found (this should never happen)")
         }
         ///Gets the contract's `Initialized` event
@@ -2626,6 +2681,21 @@ pub mod light_client_arbitrum {
         pub new_implementation: ::ethers::core::types::Address,
         pub data: ::ethers::core::types::Bytes,
     }
+    ///Container type for all input parameters for the `votingStakeTableState` function with signature `votingStakeTableState()` and selector `0x0625e19b`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthCall,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    #[ethcall(name = "votingStakeTableState", abi = "votingStakeTableState()")]
+    pub struct VotingStakeTableStateCall;
     ///Container type for all of the contract's call
     #[derive(Clone, ::ethers::contract::EthAbiType, serde::Serialize, serde::Deserialize)]
     pub enum LightClientArbitrumCalls {
@@ -2653,6 +2723,7 @@ pub mod light_client_arbitrum {
         StateHistoryRetentionPeriod(StateHistoryRetentionPeriodCall),
         TransferOwnership(TransferOwnershipCall),
         UpgradeToAndCall(UpgradeToAndCallCall),
+        VotingStakeTableState(VotingStakeTableStateCall),
     }
     impl ::ethers::core::abi::AbiDecode for LightClientArbitrumCalls {
         fn decode(
@@ -2771,6 +2842,11 @@ pub mod light_client_arbitrum {
             {
                 return Ok(Self::UpgradeToAndCall(decoded));
             }
+            if let Ok(decoded) =
+                <VotingStakeTableStateCall as ::ethers::core::abi::AbiDecode>::decode(data)
+            {
+                return Ok(Self::VotingStakeTableState(decoded));
+            }
             Err(::ethers::core::abi::Error::InvalidData.into())
         }
     }
@@ -2829,6 +2905,9 @@ pub mod light_client_arbitrum {
                 }
                 Self::TransferOwnership(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::UpgradeToAndCall(element) => ::ethers::core::abi::AbiEncode::encode(element),
+                Self::VotingStakeTableState(element) => {
+                    ::ethers::core::abi::AbiEncode::encode(element)
+                }
             }
         }
     }
@@ -2863,6 +2942,7 @@ pub mod light_client_arbitrum {
                 Self::StateHistoryRetentionPeriod(element) => ::core::fmt::Display::fmt(element, f),
                 Self::TransferOwnership(element) => ::core::fmt::Display::fmt(element, f),
                 Self::UpgradeToAndCall(element) => ::core::fmt::Display::fmt(element, f),
+                Self::VotingStakeTableState(element) => ::core::fmt::Display::fmt(element, f),
             }
         }
     }
@@ -2984,6 +3064,11 @@ pub mod light_client_arbitrum {
     impl ::core::convert::From<UpgradeToAndCallCall> for LightClientArbitrumCalls {
         fn from(value: UpgradeToAndCallCall) -> Self {
             Self::UpgradeToAndCall(value)
+        }
+    }
+    impl ::core::convert::From<VotingStakeTableStateCall> for LightClientArbitrumCalls {
+        fn from(value: VotingStakeTableStateCall) -> Self {
+            Self::VotingStakeTableState(value)
         }
     }
     ///Container type for all return fields from the `UPGRADE_INTERFACE_VERSION` function with signature `UPGRADE_INTERFACE_VERSION()` and selector `0xad3cb1cc`
@@ -3235,4 +3320,23 @@ pub mod light_client_arbitrum {
         Hash,
     )]
     pub struct StateHistoryRetentionPeriodReturn(pub u32);
+    ///Container type for all return fields from the `votingStakeTableState` function with signature `votingStakeTableState()` and selector `0x0625e19b`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthAbiType,
+        ::ethers::contract::EthAbiCodec,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    pub struct VotingStakeTableStateReturn {
+        pub threshold: ::ethers::core::types::U256,
+        pub bls_key_comm: ::ethers::core::types::U256,
+        pub schnorr_key_comm: ::ethers::core::types::U256,
+        pub amount_comm: ::ethers::core::types::U256,
+    }
 }
