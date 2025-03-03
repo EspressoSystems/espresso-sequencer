@@ -33,7 +33,7 @@ impl RecipientSourceTrait<Request, PubKey> for RecipientSource {
                 memberships
                     .stake_table(Some(EpochNumber::new(0)))
                     .iter()
-                    .map(|entry| entry.stake_key)
+                    .map(|entry| entry.stake_table_entry.stake_key)
                     .collect()
             }
         }
