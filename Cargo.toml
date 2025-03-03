@@ -231,7 +231,7 @@ trait-set = "0.3.0"
 [profile.dev]
 # Strip debugging information from binaries. Reduces memory usage during
 # compilation by about 2/3, avoids OOM errors on CI.
-strip = "debuginfo"
+strip = "none"
 debug = "line-tables-only"
 
 # Keep everything, for debugging.
