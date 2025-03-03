@@ -22,6 +22,7 @@ use hotshot_types::{
     drb::DrbComputation,
     event::Event,
     message::{Proposal, UpgradeLock},
+    simple_certificate::UpgradeCertificate,
     simple_vote::HasEpoch,
     traits::{
         block_contents::BlockHeader,
@@ -338,6 +339,12 @@ pub struct QuorumVoteTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>, V:
 
     /// Number of blocks in an epoch, zero means there are no epochs
     pub epoch_height: u64,
+
+    /// Upgrade certificate to enable epochs, staged until we reach the specified block height
+    pub staged_epoch_upgrade_certificate: Option<UpgradeCertificate<TYPES>>,
+
+    /// Block height at which to enable the epoch upgrade
+    pub epoch_upgrade_block_height: u64,
 }
 
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> QuorumVoteTaskState<TYPES, I, V> {
