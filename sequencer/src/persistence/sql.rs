@@ -191,6 +191,7 @@ pub struct Options {
     #[clap(
         long,
         env = "ESPRESSO_SEQUENCER_LIGHTWEIGHT",
+        default_value_t = false,
         conflicts_with = "archive"
     )]
     pub(crate) lightweight: bool,
