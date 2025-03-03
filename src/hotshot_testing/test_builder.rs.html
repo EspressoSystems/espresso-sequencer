@@ -599,31 +599,46 @@
 <a href="#598" id="598">598</a>
 <a href="#599" id="599">599</a>
 <a href="#600" id="600">600</a>
-<a href="#601" id="601">601</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
+<a href="#601" id="601">601</a>
+<a href="#602" id="602">602</a>
+<a href="#603" id="603">603</a>
+<a href="#604" id="604">604</a>
+<a href="#605" id="605">605</a>
+<a href="#606" id="606">606</a>
+<a href="#607" id="607">607</a>
+<a href="#608" id="608">608</a>
+<a href="#609" id="609">609</a>
+<a href="#610" id="610">610</a>
+<a href="#611" id="611">611</a>
+<a href="#612" id="612">612</a>
+<a href="#613" id="613">613</a>
+<a href="#614" id="614">614</a>
+<a href="#615" id="615">615</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
 // This file is part of the HotShot repository.
 
 // You should have received a copy of the MIT License
 // along with the HotShot repository. If not, see &lt;https://mit-license.org/&gt;.
 
-</span><span class="kw">use </span>std::{collections::HashMap, num::NonZeroUsize, rc::Rc, sync::Arc, time::Duration};
-
-<span class="kw">use </span>async_lock::RwLock;
+</span><span class="kw">use </span>async_lock::RwLock;
 <span class="kw">use </span>hotshot::{
     tasks::EventTransformerState,
     traits::{NetworkReliability, NodeImplementation, TestableNodeImplementation},
     types::SystemContextHandle,
-    HotShotInitializer, MarketplaceConfig, SystemContext, TwinsHandlerState,
+    HotShotInitializer, InitializerEpochInfo, MarketplaceConfig, SystemContext, TwinsHandlerState,
 };
 <span class="kw">use </span>hotshot_example_types::{
     auction_results_provider_types::TestAuctionResultsProvider, node_types::TestTypes,
     state_types::TestInstanceState, storage_types::TestStorage, testable_delay::DelayConfig,
 };
+<span class="kw">use </span>hotshot_types::traits::node_implementation::ConsensusTime;
 <span class="kw">use </span>hotshot_types::{
     consensus::ConsensusMetricsValue,
+    drb::INITIAL_DRB_RESULT,
     traits::node_implementation::{NodeType, Versions},
     HotShotConfig, PeerConfig, ValidatorConfig,
 };
 <span class="kw">use </span>hotshot_utils::anytrace::<span class="kw-2">*</span>;
+<span class="kw">use </span>std::{collections::HashMap, num::NonZeroUsize, rc::Rc, sync::Arc, time::Duration};
 <span class="kw">use </span>tide_disco::Url;
 <span class="kw">use </span>vec1::Vec1;
 
@@ -662,6 +677,7 @@
     known_da_nodes: Vec&lt;PeerConfig&lt;TYPES::SignatureKey&gt;&gt;,
     num_bootstrap_nodes: usize,
     epoch_height: u64,
+    epoch_start_block: u64,
 ) -&gt; HotShotConfig&lt;TYPES::SignatureKey&gt; {
     HotShotConfig {
         start_threshold: (<span class="number">1</span>, <span class="number">1</span>),
@@ -686,6 +702,7 @@
         start_voting_time: u64::MAX,
         stop_voting_time: <span class="number">0</span>,
         epoch_height,
+        epoch_start_block,
     }
 }
 
@@ -839,6 +856,12 @@
     <span class="kw">let </span>initializer = HotShotInitializer::&lt;TYPES&gt;::from_genesis::&lt;V&gt;(
         TestInstanceState::new(metadata.async_delay_config),
         metadata.test_config.epoch_height,
+        metadata.test_config.epoch_start_block,
+        <span class="macro">vec!</span>[InitializerEpochInfo::&lt;TYPES&gt; {
+            epoch: TYPES::Epoch::new(<span class="number">1</span>),
+            drb_result: INITIAL_DRB_RESULT,
+            block_header: <span class="prelude-val">None</span>,
+        }],
     )
     .<span class="kw">await
     </span>.unwrap();
@@ -994,6 +1017,7 @@
         <span class="kw">let </span>num_nodes_with_stake = <span class="number">20</span>;
         <span class="kw">let </span>num_da_nodes = <span class="number">14</span>;
         <span class="kw">let </span>epoch_height = <span class="number">10</span>;
+        <span class="kw">let </span>epoch_start_block = <span class="number">0</span>;
 
         <span class="kw">let </span>(staked_nodes, da_nodes) = gen_node_lists::&lt;TYPES&gt;(num_nodes_with_stake, num_da_nodes);
 
@@ -1003,6 +1027,7 @@
                 da_nodes,
                 num_nodes_with_stake.try_into().unwrap(),
                 epoch_height,
+                epoch_start_block,
             ),
             <span class="comment">// The first 14 (i.e., 20 - f) nodes are in the DA committee and we may shutdown the
             // remaining 6 (i.e., f) nodes. We could remove this restriction after fixing the
@@ -1039,6 +1064,7 @@
                 da_nodes,
                 <span class="self">self</span>.test_config.num_bootstrap,
                 <span class="self">self</span>.test_config.epoch_height,
+                <span class="self">self</span>.test_config.epoch_start_block,
             ),
             ..<span class="self">self
         </span>}
@@ -1064,6 +1090,7 @@
         <span class="kw">let </span>num_nodes_with_stake = <span class="number">7</span>;
         <span class="kw">let </span>num_da_nodes = num_nodes_with_stake;
         <span class="kw">let </span>epoch_height = <span class="number">10</span>;
+        <span class="kw">let </span>epoch_start_block = <span class="number">0</span>;
 
         <span class="kw">let </span>(staked_nodes, da_nodes) = gen_node_lists::&lt;TYPES&gt;(num_nodes_with_stake, num_da_nodes);
 
@@ -1073,6 +1100,7 @@
                 da_nodes,
                 num_nodes_with_stake.try_into().unwrap(),
                 epoch_height,
+                epoch_start_block,
             ),
             timing_data: TimingData::default(),
             skip_late: <span class="bool-val">false</span>,

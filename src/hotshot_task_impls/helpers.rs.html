@@ -969,7 +969,8 @@
 <a href="#968" id="968">968</a>
 <a href="#969" id="969">969</a>
 <a href="#970" id="970">970</a>
-<a href="#971" id="971">971</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
+<a href="#971" id="971">971</a>
+<a href="#972" id="972">972</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
 // This file is part of the HotShot repository.
 
 // You should have received a copy of the MIT License
@@ -1157,6 +1158,7 @@
             TYPES::Epoch::new(epoch_from_block_number(decided_block_number, epoch_height) + <span class="number">1</span>);
 
         <span class="kw">let </span>write_callback = {
+            <span class="macro">tracing::debug!</span>(<span class="string">"Calling add_epoch_root for epoch {:?}"</span>, next_epoch_number);
             <span class="kw">let </span>membership_reader = membership.read().<span class="kw">await</span>;
             membership_reader
                 .add_epoch_root(next_epoch_number, decided_leaf.block_header().clone())
@@ -1335,7 +1337,7 @@
 /// # Panics
 /// If the leaf chain contains no decided leaf while reaching a decided view, which should be
 /// impossible.
-</span><span class="kw">pub async fn </span>decide_from_proposal&lt;TYPES: NodeType&gt;(
+</span><span class="kw">pub async fn </span>decide_from_proposal&lt;TYPES: NodeType, V: Versions&gt;(
     proposal: <span class="kw-2">&amp;</span>QuorumProposalWrapper&lt;TYPES&gt;,
     consensus: OuterConsensus&lt;TYPES&gt;,
     existing_upgrade_cert: Arc&lt;RwLock&lt;<span class="prelude-ty">Option</span>&lt;UpgradeCertificate&lt;TYPES&gt;&gt;&gt;&gt;,
@@ -1448,10 +1450,10 @@
         <span class="macro">tracing::debug!</span>(<span class="string">"Leaf ascension failed; error={e}"</span>);
     }
 
-    <span class="kw">if </span>with_epochs &amp;&amp; res.new_decided_view_number.is_some() {
-        <span class="kw">let </span>epoch_height = consensus_reader.epoch_height;
-        drop(consensus_reader);
+    <span class="kw">let </span>epoch_height = consensus_reader.epoch_height;
+    drop(consensus_reader);
 
+    <span class="kw">if </span>with_epochs &amp;&amp; res.new_decided_view_number.is_some() {
         <span class="kw">if let </span><span class="prelude-val">Some</span>(decided_leaf_info) = res.leaf_views.last() {
             decide_epoch_root(<span class="kw-2">&amp;</span>decided_leaf_info.leaf, epoch_height, membership).<span class="kw">await</span>;
         } <span class="kw">else </span>{

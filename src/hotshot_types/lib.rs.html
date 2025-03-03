@@ -236,7 +236,9 @@
 <a href="#235" id="235">235</a>
 <a href="#236" id="236">236</a>
 <a href="#237" id="237">237</a>
-<a href="#238" id="238">238</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
+<a href="#238" id="238">238</a>
+<a href="#239" id="239">239</a>
+<a href="#240" id="240">240</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
 // This file is part of the HotShot repository.
 
 // You should have received a copy of the MIT License
@@ -459,6 +461,8 @@
     </span><span class="kw">pub </span>stop_voting_time: u64,
     <span class="doccomment">/// Number of blocks in an epoch, zero means there are no epochs
     </span><span class="kw">pub </span>epoch_height: u64,
+    <span class="doccomment">/// Epoch start block
+    </span><span class="kw">pub </span>epoch_start_block: u64,
 }
 
 <span class="kw">impl</span>&lt;KEY: SignatureKey&gt; HotShotConfig&lt;KEY&gt; {

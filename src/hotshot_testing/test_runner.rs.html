@@ -723,25 +723,17 @@
 <a href="#722" id="722">722</a>
 <a href="#723" id="723">723</a>
 <a href="#724" id="724">724</a>
-<a href="#725" id="725">725</a>
-<a href="#726" id="726">726</a>
-<a href="#727" id="727">727</a>
-<a href="#728" id="728">728</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
+<a href="#725" id="725">725</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
 // This file is part of the HotShot repository.
 
 // You should have received a copy of the MIT License
 // along with the HotShot repository. If not, see &lt;https://mit-license.org/&gt;.
 
 </span><span class="attr">#![allow(clippy::panic)]
-</span><span class="kw">use </span>std::{
-    collections::{BTreeMap, HashMap, HashSet},
-    marker::PhantomData,
-    sync::Arc,
-};
-
-<span class="kw">use </span>async_broadcast::{broadcast, Receiver, Sender};
+</span><span class="kw">use </span>async_broadcast::{broadcast, Receiver, Sender};
 <span class="kw">use </span>async_lock::RwLock;
 <span class="kw">use </span>futures::future::join_all;
+<span class="kw">use </span>hotshot::InitializerEpochInfo;
 <span class="kw">use </span>hotshot::{
     traits::TestableNodeImplementation,
     types::{Event, SystemContextHandle},
@@ -755,6 +747,7 @@
 };
 <span class="kw">use </span>hotshot_fakeapi::fake_solver::FakeSolverState;
 <span class="kw">use </span>hotshot_task_impls::events::HotShotEvent;
+<span class="kw">use </span>hotshot_types::drb::INITIAL_DRB_RESULT;
 <span class="kw">use </span>hotshot_types::{
     consensus::ConsensusMetricsValue,
     constants::EVENT_CHANNEL_SIZE,
@@ -765,8 +758,12 @@
         network::ConnectedNetwork,
         node_implementation::{ConsensusTime, NodeImplementation, NodeType, Versions},
     },
-    utils::genesis_epoch_from_version,
     HotShotConfig, ValidatorConfig,
+};
+<span class="kw">use </span>std::{
+    collections::{BTreeMap, HashMap, HashSet},
+    marker::PhantomData,
+    sync::Arc,
 };
 <span class="kw">use </span>tide_disco::Url;
 <span class="kw">use </span>tokio::{spawn, task::JoinHandle};
@@ -906,7 +903,9 @@
 
         <span class="kw">let </span>spinning_task_state = SpinningTask {
             epoch_height: launcher.metadata.test_config.epoch_height,
-            handles: Arc::clone(<span class="kw-2">&amp;</span>handles),
+            epoch_start_block: launcher.metadata.test_config.epoch_start_block,
+            start_epoch_info: Vec::new(), <span class="comment">// #2652 REVIEW NOTE: Same as other instances of start_epoch_info
+            </span>handles: Arc::clone(<span class="kw-2">&amp;</span>handles),
             late_start,
             latest_view: <span class="prelude-val">None</span>,
             changes,
@@ -1046,7 +1045,6 @@
 
     <span class="kw">pub async fn </span>init_builders&lt;B: TestBuilderImplementation&lt;TYPES&gt;&gt;(
         <span class="kw-2">&amp;</span><span class="self">self</span>,
-        num_nodes: usize,
     ) -&gt; (Vec&lt;Box&lt;<span class="kw">dyn </span>BuilderTask&lt;TYPES&gt;&gt;&gt;, Vec&lt;Url&gt;, Url) {
         <span class="kw">let </span>config = <span class="self">self</span>.launcher.metadata.test_config.clone();
         <span class="kw">let </span><span class="kw-2">mut </span>builder_tasks = Vec::new();
@@ -1056,8 +1054,8 @@
             <span class="kw">let </span>builder_url =
                 Url::parse(<span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"http://localhost:{builder_port}"</span>)).expect(<span class="string">"Invalid URL"</span>);
             <span class="kw">let </span>builder_task = B::start(
-                num_nodes,
-                builder_url.clone(),
+                <span class="number">0</span>, <span class="comment">// This field gets updated while the test is running, 0 is just to seed it
+                </span>builder_url.clone(),
                 B::Config::default(),
                 metadata.changes.clone(),
             )
@@ -1121,15 +1119,10 @@
         <span class="kw">let </span><span class="kw-2">mut </span>results = <span class="macro">vec!</span>[];
         <span class="kw">let </span>config = <span class="self">self</span>.launcher.metadata.test_config.clone();
 
-        <span class="comment">// TODO This is only a workaround. Number of nodes changes from epoch to epoch. Builder should be made epoch-aware.
-        </span><span class="kw">let </span>temp_memberships = &lt;TYPES <span class="kw">as </span>NodeType&gt;::Membership::new(
-            config.known_nodes_with_stake.clone(),
-            config.known_da_nodes.clone(),
-        );
-        <span class="comment">// #3967 is it enough to check versions now? Or should we also be checking epoch_height?
-        </span><span class="kw">let </span>num_nodes = temp_memberships.total_nodes(genesis_epoch_from_version::&lt;V, TYPES&gt;());
-        <span class="kw">let </span>(<span class="kw-2">mut </span>builder_tasks, builder_urls, fallback_builder_url) =
-            <span class="self">self</span>.init_builders::&lt;B&gt;(num_nodes).<span class="kw">await</span>;
+        <span class="comment">// Num_nodes is updated on the fly now via claim_block_with_num_nodes. This stays around to seed num_nodes
+        // in the builders for tests which don't update that field.
+        </span><span class="kw">let </span>(<span class="kw-2">mut </span>builder_tasks, builder_urls, fallback_builder_url) =
+            <span class="self">self</span>.init_builders::&lt;B&gt;().<span class="kw">await</span>;
 
         <span class="kw">if </span><span class="self">self</span>.launcher.metadata.start_solver {
             <span class="self">self</span>.add_solver(builder_urls.clone()).<span class="kw">await</span>;
@@ -1148,12 +1141,7 @@
             <span class="self">self</span>.next_node_id += <span class="number">1</span>;
             <span class="macro">tracing::debug!</span>(<span class="string">"launch node {}"</span>, i);
 
-            <span class="comment">//let memberships =Arc::new(RwLock::new(&lt;TYPES as NodeType&gt;::Membership::new(
-            //config.known_nodes_with_stake.clone(),
-            //config.known_da_nodes.clone(),
-            //)));
-
-            </span>config.builder_urls = builder_urls
+            config.builder_urls = builder_urls
                 .clone()
                 .try_into()
                 .expect(<span class="string">"Non-empty by construction"</span>);
@@ -1203,6 +1191,12 @@
                     <span class="kw">let </span>initializer = HotShotInitializer::&lt;TYPES&gt;::from_genesis::&lt;V&gt;(
                         TestInstanceState::new(<span class="self">self</span>.launcher.metadata.async_delay_config.clone()),
                         config.epoch_height,
+                        config.epoch_start_block,
+                        <span class="macro">vec!</span>[InitializerEpochInfo::&lt;TYPES&gt; {
+                            epoch: TYPES::Epoch::new(<span class="number">1</span>),
+                            drb_result: INITIAL_DRB_RESULT,
+                            block_header: <span class="prelude-val">None</span>,
+                        }],
                     )
                     .<span class="kw">await
                     </span>.unwrap();

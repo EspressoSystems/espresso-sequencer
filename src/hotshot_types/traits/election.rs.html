@@ -143,7 +143,13 @@
 <a href="#142" id="142">142</a>
 <a href="#143" id="143">143</a>
 <a href="#144" id="144">144</a>
-<a href="#145" id="145">145</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
+<a href="#145" id="145">145</a>
+<a href="#146" id="146">146</a>
+<a href="#147" id="147">147</a>
+<a href="#148" id="148">148</a>
+<a href="#149" id="149">149</a>
+<a href="#150" id="150">150</a>
+<a href="#151" id="151">151</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
 // This file is part of the HotShot repository.
 
 // You should have received a copy of the MIT License
@@ -287,5 +293,11 @@
     <span class="doccomment">/// Called to notify the Membership when a new DRB result has been calculated.
     /// Observes the same semantics as add_epoch_root
     </span><span class="kw">fn </span>add_drb_result(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _epoch: TYPES::Epoch, _drb_result: DrbResult);
+
+    <span class="doccomment">/// Called to notify the Membership that Epochs are enabled.
+    /// Implementations should copy the pre-epoch stake table into epoch and epoch+1
+    /// when this is called. The value of initial_drb_result should be used for DRB
+    /// calculations for epochs (epoch+1) and earlier.
+    </span><span class="kw">fn </span>set_first_epoch(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _epoch: TYPES::Epoch, _initial_drb_result: DrbResult);
 }
 </code></pre></div></section></main></body></html>

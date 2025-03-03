@@ -343,13 +343,22 @@
 <a href="#342" id="342">342</a>
 <a href="#343" id="343">343</a>
 <a href="#344" id="344">344</a>
-<a href="#345" id="345">345</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
+<a href="#345" id="345">345</a>
+<a href="#346" id="346">346</a>
+<a href="#347" id="347">347</a>
+<a href="#348" id="348">348</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
 // This file is part of the HotShot repository.
 
 // You should have received a copy of the MIT License
 // along with the HotShot repository. If not, see &lt;https://mit-license.org/&gt;.
 
-</span><span class="kw">use </span>async_trait::async_trait;
+</span><span class="kw">use </span>std::{
+    collections::{BTreeMap, HashMap},
+    sync::{atomic::AtomicBool, Arc},
+    time::Instant,
+};
+
+<span class="kw">use </span>async_trait::async_trait;
 <span class="kw">use </span>chrono::Utc;
 <span class="kw">use </span>hotshot_task_impls::{
     builder::BuilderClient, consensus::ConsensusTaskState, da::DaTaskState,
@@ -364,11 +373,6 @@
         consensus_api::ConsensusApi,
         node_implementation::{ConsensusTime, NodeImplementation, NodeType},
     },
-};
-<span class="kw">use </span>std::{
-    collections::{BTreeMap, HashMap},
-    sync::{atomic::AtomicBool, Arc},
-    time::Instant,
 };
 <span class="kw">use </span>tokio::spawn;
 
@@ -589,6 +593,8 @@
             storage: Arc::clone(<span class="kw-2">&amp;</span>handle.storage),
             upgrade_lock: handle.hotshot.upgrade_lock.clone(),
             epoch_height: handle.hotshot.config.epoch_height,
+            epoch_upgrade_block_height: handle.hotshot.config.epoch_start_block,
+            staged_epoch_upgrade_certificate: <span class="prelude-val">None</span>,
             consensus_metrics,
         }
     }

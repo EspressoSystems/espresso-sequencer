@@ -865,7 +865,9 @@
 <a href="#864" id="864">864</a>
 <a href="#865" id="865">865</a>
 <a href="#866" id="866">866</a>
-<a href="#867" id="867">867</a></pre></div><pre class="rust"><code><span class="doccomment">//! This module contains all the traits used for building the sequencer types.
+<a href="#867" id="867">867</a>
+<a href="#868" id="868">868</a>
+<a href="#869" id="869">869</a></pre></div><pre class="rust"><code><span class="doccomment">//! This module contains all the traits used for building the sequencer types.
 //! It also includes some trait implementations that cannot be implemented in an external crate.
 </span><span class="kw">use </span>std::{cmp::max, collections::BTreeMap, fmt::Debug, ops::Range, sync::Arc};
 
@@ -1448,6 +1450,7 @@
             HotShotInitializer {
                 instance_state: state,
                 epoch_height: <span class="number">0</span>,
+                epoch_start_block: <span class="number">0</span>,
                 anchor_leaf: leaf,
                 anchor_state: validated_state.unwrap_or_default(),
                 anchor_state_delta: <span class="prelude-val">None</span>,
@@ -1464,6 +1467,7 @@
                     .collect(),
                 undecided_state,
                 saved_vid_shares: Default::default(), <span class="comment">// TODO: implement saved_vid_shares
+                </span>start_epoch_info: Default::default(), <span class="comment">// TODO: implement start_epoch_info
             </span>},
             anchor_view,
         ))

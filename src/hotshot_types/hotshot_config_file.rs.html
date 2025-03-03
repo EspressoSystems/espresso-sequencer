@@ -131,7 +131,11 @@
 <a href="#130" id="130">130</a>
 <a href="#131" id="131">131</a>
 <a href="#132" id="132">132</a>
-<a href="#133" id="133">133</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
+<a href="#133" id="133">133</a>
+<a href="#134" id="134">134</a>
+<a href="#135" id="135">135</a>
+<a href="#136" id="136">136</a>
+<a href="#137" id="137">137</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
 // This file is part of the HotShot repository.
 
 // You should have received a copy of the MIT License
@@ -188,6 +192,8 @@
     </span><span class="kw">pub </span>upgrade: UpgradeConfig,
     <span class="doccomment">/// Number of blocks in an epoch, zero means there are no epochs
     </span><span class="kw">pub </span>epoch_height: u64,
+    <span class="doccomment">/// Epoch start block
+    </span><span class="kw">pub </span>epoch_start_block: u64,
 }
 
 <span class="kw">impl</span>&lt;KEY: SignatureKey&gt; From&lt;HotShotConfigFile&lt;KEY&gt;&gt; <span class="kw">for </span>HotShotConfig&lt;KEY&gt; {
@@ -216,6 +222,7 @@
             start_voting_time: val.upgrade.start_voting_time,
             stop_voting_time: val.upgrade.stop_voting_time,
             epoch_height: val.epoch_height,
+            epoch_start_block: val.epoch_start_block,
         }
     }
 }
@@ -261,6 +268,7 @@
             builder_urls: default_builder_urls(),
             upgrade: UpgradeConfig::default(),
             epoch_height: <span class="number">0</span>,
+            epoch_start_block: <span class="number">0</span>,
         }
     }
 }

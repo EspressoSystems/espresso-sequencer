@@ -430,7 +430,9 @@
 <a href="#429" id="429">429</a>
 <a href="#430" id="430">430</a>
 <a href="#431" id="431">431</a>
-<a href="#432" id="432">432</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
+<a href="#432" id="432">432</a>
+<a href="#433" id="433">433</a>
+<a href="#434" id="434">434</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
 // This file is part of the HotShot repository.
 
 // You should have received a copy of the MIT License
@@ -861,5 +863,7 @@
     }
 
     <span class="kw">fn </span>add_drb_result(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _epoch: &lt;TYPES <span class="kw">as </span>NodeType&gt;::Epoch, _drb_result: DrbResult) {}
+
+    <span class="kw">fn </span>set_first_epoch(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _epoch: TYPES::Epoch, _initial_drb_result: DrbResult) {}
 }
 </code></pre></div></section></main></body></html>

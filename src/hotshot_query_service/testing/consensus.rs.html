@@ -352,7 +352,10 @@
 <a href="#351" id="351">351</a>
 <a href="#352" id="352">352</a>
 <a href="#353" id="353">353</a>
-<a href="#354" id="354">354</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2022 Espresso Systems (espressosys.com)
+<a href="#354" id="354">354</a>
+<a href="#355" id="355">355</a>
+<a href="#356" id="356">356</a>
+<a href="#357" id="357">357</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2022 Espresso Systems (espressosys.com)
 // This file is part of the HotShot Query Service library.
 //
 // This program is free software: you can redistribute it and/or modify it under the terms of the GNU
@@ -503,6 +506,7 @@
             start_voting_time: <span class="number">0</span>,
             stop_voting_time: <span class="number">0</span>,
             epoch_height: <span class="number">0</span>,
+            epoch_start_block: <span class="number">0</span>,
         };
         update_config(<span class="kw-2">&amp;mut </span>config);
 
@@ -545,6 +549,8 @@
                             HotShotInitializer::from_genesis::&lt;MockVersions&gt;(
                                 TestInstanceState::default(),
                                 <span class="number">0</span>,
+                                <span class="number">0</span>,
+                                <span class="macro">vec!</span>[],
                             )
                             .<span class="kw">await
                             </span>.unwrap(),

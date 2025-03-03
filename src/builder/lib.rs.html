@@ -520,7 +520,8 @@
 <a href="#519" id="519">519</a>
 <a href="#520" id="520">520</a>
 <a href="#521" id="521">521</a>
-<a href="#522" id="522">522</a></pre></div><pre class="rust"><code><span class="kw">use </span>espresso_types::SeqTypes;
+<a href="#522" id="522">522</a>
+<a href="#523" id="523">523</a></pre></div><pre class="rust"><code><span class="kw">use </span>espresso_types::SeqTypes;
 <span class="kw">use </span>hotshot_builder_api::v0_1::builder::{
     Error <span class="kw">as </span>BuilderApiError, Options <span class="kw">as </span>HotshotBuilderApiOptions,
 };
@@ -661,6 +662,7 @@
                 stop_proposing_time: <span class="number">0</span>,
                 stop_voting_time: <span class="number">0</span>,
                 epoch_height: <span class="number">0</span>,
+                epoch_start_block: <span class="number">0</span>,
             };
 
             <span class="self">Self </span>{

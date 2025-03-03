@@ -811,7 +811,14 @@
 <a href="#810" id="810">810</a>
 <a href="#811" id="811">811</a>
 <a href="#812" id="812">812</a>
-<a href="#813" id="813">813</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
+<a href="#813" id="813">813</a>
+<a href="#814" id="814">814</a>
+<a href="#815" id="815">815</a>
+<a href="#816" id="816">816</a>
+<a href="#817" id="817">817</a>
+<a href="#818" id="818">818</a>
+<a href="#819" id="819">819</a>
+<a href="#820" id="820">820</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
 // This file is part of the HotShot repository.
 
 // You should have received a copy of the MIT License
@@ -835,6 +842,7 @@
     drb::DrbComputation,
     event::Event,
     message::{Proposal, UpgradeLock},
+    simple_certificate::UpgradeCertificate,
     simple_vote::HasEpoch,
     traits::{
         block_contents::BlockHeader,
@@ -1151,6 +1159,12 @@
 
     <span class="doccomment">/// Number of blocks in an epoch, zero means there are no epochs
     </span><span class="kw">pub </span>epoch_height: u64,
+
+    <span class="doccomment">/// Upgrade certificate to enable epochs, staged until we reach the specified block height
+    </span><span class="kw">pub </span>staged_epoch_upgrade_certificate: <span class="prelude-ty">Option</span>&lt;UpgradeCertificate&lt;TYPES&gt;&gt;,
+
+    <span class="doccomment">/// Block height at which to enable the epoch upgrade
+    </span><span class="kw">pub </span>epoch_upgrade_block_height: u64,
 }
 
 <span class="kw">impl</span>&lt;TYPES: NodeType, I: NodeImplementation&lt;TYPES&gt;, V: Versions&gt; QuorumVoteTaskState&lt;TYPES, I, V&gt; {

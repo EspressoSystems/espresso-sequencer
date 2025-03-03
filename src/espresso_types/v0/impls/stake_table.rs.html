@@ -600,7 +600,19 @@
 <a href="#599" id="599">599</a>
 <a href="#600" id="600">600</a>
 <a href="#601" id="601">601</a>
-<a href="#602" id="602">602</a></pre></div><pre class="rust"><code><span class="kw">use </span>std::{
+<a href="#602" id="602">602</a>
+<a href="#603" id="603">603</a>
+<a href="#604" id="604">604</a>
+<a href="#605" id="605">605</a>
+<a href="#606" id="606">606</a>
+<a href="#607" id="607">607</a>
+<a href="#608" id="608">608</a>
+<a href="#609" id="609">609</a>
+<a href="#610" id="610">610</a>
+<a href="#611" id="611">611</a>
+<a href="#612" id="612">612</a>
+<a href="#613" id="613">613</a>
+<a href="#614" id="614">614</a></pre></div><pre class="rust"><code><span class="kw">use </span>std::{
     cmp::max,
     collections::{BTreeMap, BTreeSet, HashMap},
     num::NonZeroU64,
@@ -712,6 +724,10 @@
 
     <span class="doccomment">/// Randomized committees, filled when we receive the DrbResult
     </span>randomized_committees: BTreeMap&lt;Epoch, RandomizedCommittee&lt;StakeTableEntry&lt;PubKey&gt;&gt;&gt;,
+
+    <span class="doccomment">/// Contains the epoch after which initial_drb_result will not be used (set_first_epoch.epoch + 2)
+    /// And the DrbResult to use before that epoch
+    </span>initial_drb_result: <span class="prelude-ty">Option</span>&lt;(Epoch, DrbResult)&gt;,
 }
 
 <span class="attr">#[derive(Debug, Clone, PartialEq)]
@@ -879,6 +895,7 @@
             l1_client: instance_state.l1_client.clone(),
             contract_address: instance_state.chain_config.stake_table_contract,
             randomized_committees: BTreeMap::new(),
+            initial_drb_result: <span class="prelude-val">None</span>,
         }
     }
 
@@ -1098,6 +1115,13 @@
 
         <span class="self">self</span>.randomized_committees
             .insert(epoch, randomized_committee);
+    }
+
+    <span class="kw">fn </span>set_first_epoch(<span class="kw-2">&amp;mut </span><span class="self">self</span>, epoch: Epoch, initial_drb_result: DrbResult) {
+        <span class="self">self</span>.state.insert(epoch, <span class="self">self</span>.non_epoch_committee.clone());
+        <span class="self">self</span>.state
+            .insert(epoch + <span class="number">1</span>, <span class="self">self</span>.non_epoch_committee.clone());
+        <span class="self">self</span>.initial_drb_result = <span class="prelude-val">Some</span>((epoch + <span class="number">2</span>, initial_drb_result));
     }
 }
 

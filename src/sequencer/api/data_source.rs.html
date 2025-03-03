@@ -444,7 +444,11 @@
 <a href="#443" id="443">443</a>
 <a href="#444" id="444">444</a>
 <a href="#445" id="445">445</a>
-<a href="#446" id="446">446</a></pre></div><pre class="rust"><code><span class="kw">use </span>std::{num::NonZeroUsize, time::Duration};
+<a href="#446" id="446">446</a>
+<a href="#447" id="447">447</a>
+<a href="#448" id="448">448</a>
+<a href="#449" id="449">449</a>
+<a href="#450" id="450">450</a></pre></div><pre class="rust"><code><span class="kw">use </span>std::{num::NonZeroUsize, time::Duration};
 
 <span class="kw">use </span>anyhow::Context;
 <span class="kw">use </span>async_trait::async_trait;
@@ -694,6 +698,7 @@
     start_voting_time: u64,
     stop_voting_time: u64,
     epoch_height: u64,
+    epoch_start_block: u64,
 }
 
 <span class="kw">impl </span>From&lt;HotShotConfig&lt;PubKey&gt;&gt; <span class="kw">for </span>PublicHotShotConfig {
@@ -723,6 +728,7 @@
             start_voting_time,
             stop_voting_time,
             epoch_height,
+            epoch_start_block,
         } = v;
 
         <span class="self">Self </span>{
@@ -747,6 +753,7 @@
             start_voting_time,
             stop_voting_time,
             epoch_height,
+            epoch_start_block,
         }
     }
 }
@@ -775,6 +782,7 @@
             start_voting_time: <span class="self">self</span>.start_voting_time,
             stop_voting_time: <span class="self">self</span>.stop_voting_time,
             epoch_height: <span class="self">self</span>.epoch_height,
+            epoch_start_block: <span class="self">self</span>.epoch_start_block,
         }
     }
 }

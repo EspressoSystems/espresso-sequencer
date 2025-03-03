@@ -432,7 +432,16 @@
 <a href="#431" id="431">431</a>
 <a href="#432" id="432">432</a>
 <a href="#433" id="433">433</a>
-<a href="#434" id="434">434</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
+<a href="#434" id="434">434</a>
+<a href="#435" id="435">435</a>
+<a href="#436" id="436">436</a>
+<a href="#437" id="437">437</a>
+<a href="#438" id="438">438</a>
+<a href="#439" id="439">439</a>
+<a href="#440" id="440">440</a>
+<a href="#441" id="441">441</a>
+<a href="#442" id="442">442</a>
+<a href="#443" id="443">443</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
 // This file is part of the HotShot repository.
 
 // You should have received a copy of the MIT License
@@ -448,7 +457,8 @@
 <span class="kw">use </span>async_trait::async_trait;
 <span class="kw">use </span>futures::future::join_all;
 <span class="kw">use </span>hotshot::{
-    traits::TestableNodeImplementation, types::EventType, HotShotInitializer, SystemContext,
+    traits::TestableNodeImplementation, types::EventType, HotShotInitializer, InitializerEpochInfo,
+    SystemContext,
 };
 <span class="kw">use </span>hotshot_example_types::{
     auction_results_provider_types::TestAuctionResultsProvider,
@@ -491,6 +501,10 @@
 &gt; {
     <span class="doccomment">/// epoch height
     </span><span class="kw">pub </span>epoch_height: u64,
+    <span class="doccomment">/// Epoch start block
+    </span><span class="kw">pub </span>epoch_start_block: u64,
+    <span class="doccomment">/// Saved epoch information. This must be sorted ascending by epoch.
+    </span><span class="kw">pub </span>start_epoch_info: Vec&lt;InitializerEpochInfo&lt;TYPES&gt;&gt;,
     <span class="doccomment">/// handle to the nodes
     </span><span class="kw">pub</span>(<span class="kw">crate</span>) handles: Arc&lt;RwLock&lt;Vec&lt;Node&lt;TYPES, I, V&gt;&gt;&gt;&gt;,
     <span class="doccomment">/// late start nodes
@@ -595,6 +609,8 @@
                                         <span class="kw">let </span>initializer = HotShotInitializer::&lt;TYPES&gt;::load(
                                             TestInstanceState::new(<span class="self">self</span>.async_delay_config.clone()),
                                             <span class="self">self</span>.epoch_height,
+                                            <span class="self">self</span>.epoch_start_block,
+                                            <span class="self">self</span>.start_epoch_info.clone(),
                                             <span class="self">self</span>.last_decided_leaf.clone(),
                                             (
                                                 TYPES::View::genesis(),
@@ -702,6 +718,8 @@
                                 <span class="kw">let </span>initializer = HotShotInitializer::&lt;TYPES&gt;::load(
                                     TestInstanceState::new(<span class="self">self</span>.async_delay_config.clone()),
                                     <span class="self">self</span>.epoch_height,
+                                    <span class="self">self</span>.epoch_start_block,
+                                    <span class="self">self</span>.start_epoch_info.clone(),
                                     <span class="self">self</span>.last_decided_leaf.clone(),
                                     (start_view, start_epoch),
                                     (high_qc, next_epoch_high_qc),
