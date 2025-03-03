@@ -19,6 +19,22 @@ pub mod light_client {
             }),
             functions: ::core::convert::From::from([
                 (
+                    ::std::borrow::ToOwned::to_owned("BLOCKS_PER_EPOCH"),
+                    ::std::vec![::ethers::core::abi::ethabi::Function {
+                        name: ::std::borrow::ToOwned::to_owned("BLOCKS_PER_EPOCH"),
+                        inputs: ::std::vec![],
+                        outputs: ::std::vec![::ethers::core::abi::ethabi::Param {
+                            name: ::std::string::String::new(),
+                            kind: ::ethers::core::abi::ethabi::ParamType::Uint(64usize),
+                            internal_type: ::core::option::Option::Some(
+                                ::std::borrow::ToOwned::to_owned("uint64"),
+                            ),
+                        },],
+                        constant: ::core::option::Option::None,
+                        state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
+                    },],
+                ),
+                (
                     ::std::borrow::ToOwned::to_owned("UPGRADE_INTERFACE_VERSION"),
                     ::std::vec![::ethers::core::abi::ethabi::Function {
                         name: ::std::borrow::ToOwned::to_owned("UPGRADE_INTERFACE_VERSION",),
@@ -51,6 +67,22 @@ pub mod light_client {
                     },],
                 ),
                 (
+                    ::std::borrow::ToOwned::to_owned("currentEpoch"),
+                    ::std::vec![::ethers::core::abi::ethabi::Function {
+                        name: ::std::borrow::ToOwned::to_owned("currentEpoch"),
+                        inputs: ::std::vec![],
+                        outputs: ::std::vec![::ethers::core::abi::ethabi::Param {
+                            name: ::std::string::String::new(),
+                            kind: ::ethers::core::abi::ethabi::ParamType::Uint(64usize),
+                            internal_type: ::core::option::Option::Some(
+                                ::std::borrow::ToOwned::to_owned("uint64"),
+                            ),
+                        },],
+                        constant: ::core::option::Option::None,
+                        state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
+                    },],
+                ),
+                (
                     ::std::borrow::ToOwned::to_owned("disablePermissionedProverMode"),
                     ::std::vec![::ethers::core::abi::ethabi::Function {
                         name: ::std::borrow::ToOwned::to_owned("disablePermissionedProverMode",),
@@ -58,6 +90,37 @@ pub mod light_client {
                         outputs: ::std::vec![],
                         constant: ::core::option::Option::None,
                         state_mutability: ::ethers::core::abi::ethabi::StateMutability::NonPayable,
+                    },],
+                ),
+                (
+                    ::std::borrow::ToOwned::to_owned("epochFromBlockNumber"),
+                    ::std::vec![::ethers::core::abi::ethabi::Function {
+                        name: ::std::borrow::ToOwned::to_owned("epochFromBlockNumber",),
+                        inputs: ::std::vec![
+                            ::ethers::core::abi::ethabi::Param {
+                                name: ::std::borrow::ToOwned::to_owned("blockNum"),
+                                kind: ::ethers::core::abi::ethabi::ParamType::Uint(64usize),
+                                internal_type: ::core::option::Option::Some(
+                                    ::std::borrow::ToOwned::to_owned("uint64"),
+                                ),
+                            },
+                            ::ethers::core::abi::ethabi::Param {
+                                name: ::std::borrow::ToOwned::to_owned("blocksPerEpoch"),
+                                kind: ::ethers::core::abi::ethabi::ParamType::Uint(64usize),
+                                internal_type: ::core::option::Option::Some(
+                                    ::std::borrow::ToOwned::to_owned("uint64"),
+                                ),
+                            },
+                        ],
+                        outputs: ::std::vec![::ethers::core::abi::ethabi::Param {
+                            name: ::std::string::String::new(),
+                            kind: ::ethers::core::abi::ethabi::ParamType::Uint(64usize),
+                            internal_type: ::core::option::Option::Some(
+                                ::std::borrow::ToOwned::to_owned("uint64"),
+                            ),
+                        },],
+                        constant: ::core::option::Option::None,
+                        state_mutability: ::ethers::core::abi::ethabi::StateMutability::Pure,
                     },],
                 ),
                 (
@@ -290,10 +353,39 @@ pub mod light_client {
                                     ::std::borrow::ToOwned::to_owned("address"),
                                 ),
                             },
+                            ::ethers::core::abi::ethabi::Param {
+                                name: ::std::borrow::ToOwned::to_owned("blocksPerEpoch"),
+                                kind: ::ethers::core::abi::ethabi::ParamType::Uint(64usize),
+                                internal_type: ::core::option::Option::Some(
+                                    ::std::borrow::ToOwned::to_owned("uint64"),
+                                ),
+                            },
                         ],
                         outputs: ::std::vec![],
                         constant: ::core::option::Option::None,
                         state_mutability: ::ethers::core::abi::ethabi::StateMutability::NonPayable,
+                    },],
+                ),
+                (
+                    ::std::borrow::ToOwned::to_owned("isLastBlockInEpoch"),
+                    ::std::vec![::ethers::core::abi::ethabi::Function {
+                        name: ::std::borrow::ToOwned::to_owned("isLastBlockInEpoch"),
+                        inputs: ::std::vec![::ethers::core::abi::ethabi::Param {
+                            name: ::std::borrow::ToOwned::to_owned("blockHeight"),
+                            kind: ::ethers::core::abi::ethabi::ParamType::Uint(64usize),
+                            internal_type: ::core::option::Option::Some(
+                                ::std::borrow::ToOwned::to_owned("uint64"),
+                            ),
+                        },],
+                        outputs: ::std::vec![::ethers::core::abi::ethabi::Param {
+                            name: ::std::string::String::new(),
+                            kind: ::ethers::core::abi::ethabi::ParamType::Bool,
+                            internal_type: ::core::option::Option::Some(
+                                ::std::borrow::ToOwned::to_owned("bool"),
+                            ),
+                        },],
+                        constant: ::core::option::Option::None,
+                        state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
                     },],
                 ),
                 (
@@ -358,6 +450,20 @@ pub mod light_client {
                                 internal_type: ::core::option::Option::Some(
                                     ::std::borrow::ToOwned::to_owned(
                                         "struct LightClient.LightClientState",
+                                    ),
+                                ),
+                            },
+                            ::ethers::core::abi::ethabi::Param {
+                                name: ::std::borrow::ToOwned::to_owned("nextStakeTable"),
+                                kind: ::ethers::core::abi::ethabi::ParamType::Tuple(::std::vec![
+                                    ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
+                                    ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
+                                    ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
+                                    ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
+                                ],),
+                                internal_type: ::core::option::Option::Some(
+                                    ::std::borrow::ToOwned::to_owned(
+                                        "struct LightClient.StakeTableState",
                                     ),
                                 ),
                             },
@@ -701,6 +807,18 @@ pub mod light_client {
                     },],
                 ),
                 (
+                    ::std::borrow::ToOwned::to_owned("NewEpoch"),
+                    ::std::vec![::ethers::core::abi::ethabi::Event {
+                        name: ::std::borrow::ToOwned::to_owned("NewEpoch"),
+                        inputs: ::std::vec![::ethers::core::abi::ethabi::EventParam {
+                            name: ::std::borrow::ToOwned::to_owned("epoch"),
+                            kind: ::ethers::core::abi::ethabi::ParamType::Uint(64usize),
+                            indexed: false,
+                        },],
+                        anonymous: false,
+                    },],
+                ),
+                (
                     ::std::borrow::ToOwned::to_owned("NewState"),
                     ::std::vec![::ethers::core::abi::ethabi::Event {
                         name: ::std::borrow::ToOwned::to_owned("NewState"),
@@ -881,6 +999,13 @@ pub mod light_client {
                     },],
                 ),
                 (
+                    ::std::borrow::ToOwned::to_owned("MissingLastBlockInEpochUpdate"),
+                    ::std::vec![::ethers::core::abi::ethabi::AbiError {
+                        name: ::std::borrow::ToOwned::to_owned("MissingLastBlockInEpochUpdate",),
+                        inputs: ::std::vec![],
+                    },],
+                ),
+                (
                     ::std::borrow::ToOwned::to_owned("NoChangeRequired"),
                     ::std::vec![::ethers::core::abi::ethabi::AbiError {
                         name: ::std::borrow::ToOwned::to_owned("NoChangeRequired"),
@@ -1006,6 +1131,12 @@ pub mod light_client {
                 client,
             ))
         }
+        ///Calls the contract's `BLOCKS_PER_EPOCH` (0x1f3adc0f) function
+        pub fn blocks_per_epoch(&self) -> ::ethers::contract::builders::ContractCall<M, u64> {
+            self.0
+                .method_hash([31, 58, 220, 15], ())
+                .expect("method not found (this should never happen)")
+        }
         ///Calls the contract's `UPGRADE_INTERFACE_VERSION` (0xad3cb1cc) function
         pub fn upgrade_interface_version(
             &self,
@@ -1022,12 +1153,28 @@ pub mod light_client {
                 .method_hash([55, 142, 194, 59], ())
                 .expect("method not found (this should never happen)")
         }
+        ///Calls the contract's `currentEpoch` (0x76671808) function
+        pub fn current_epoch(&self) -> ::ethers::contract::builders::ContractCall<M, u64> {
+            self.0
+                .method_hash([118, 103, 24, 8], ())
+                .expect("method not found (this should never happen)")
+        }
         ///Calls the contract's `disablePermissionedProverMode` (0x69cc6a04) function
         pub fn disable_permissioned_prover_mode(
             &self,
         ) -> ::ethers::contract::builders::ContractCall<M, ()> {
             self.0
                 .method_hash([105, 204, 106, 4], ())
+                .expect("method not found (this should never happen)")
+        }
+        ///Calls the contract's `epochFromBlockNumber` (0x90c14390) function
+        pub fn epoch_from_block_number(
+            &self,
+            block_num: u64,
+            blocks_per_epoch: u64,
+        ) -> ::ethers::contract::builders::ContractCall<M, u64> {
+            self.0
+                .method_hash([144, 193, 67, 144], (block_num, blocks_per_epoch))
                 .expect("method not found (this should never happen)")
         }
         ///Calls the contract's `finalizedState` (0x9fdb54a7) function
@@ -1088,24 +1235,35 @@ pub mod light_client {
                 .method_hash([13, 142, 110, 44], ())
                 .expect("method not found (this should never happen)")
         }
-        ///Calls the contract's `initialize` (0x9baa3cc9) function
+        ///Calls the contract's `initialize` (0x811f853f) function
         pub fn initialize(
             &self,
             genesis: LightClientState,
             genesis_stake_table_state: StakeTableState,
             state_history_retention_period: u32,
             owner: ::ethers::core::types::Address,
+            blocks_per_epoch: u64,
         ) -> ::ethers::contract::builders::ContractCall<M, ()> {
             self.0
                 .method_hash(
-                    [155, 170, 60, 201],
+                    [129, 31, 133, 63],
                     (
                         genesis,
                         genesis_stake_table_state,
                         state_history_retention_period,
                         owner,
+                        blocks_per_epoch,
                     ),
                 )
+                .expect("method not found (this should never happen)")
+        }
+        ///Calls the contract's `isLastBlockInEpoch` (0xa1be8d52) function
+        pub fn is_last_block_in_epoch(
+            &self,
+            block_height: u64,
+        ) -> ::ethers::contract::builders::ContractCall<M, bool> {
+            self.0
+                .method_hash([161, 190, 141, 82], block_height)
                 .expect("method not found (this should never happen)")
         }
         ///Calls the contract's `isPermissionedProverEnabled` (0x826e41fc) function
@@ -1126,14 +1284,15 @@ pub mod light_client {
                 .method_hash([224, 48, 51, 1], (block_number, block_threshold))
                 .expect("method not found (this should never happen)")
         }
-        ///Calls the contract's `newFinalizedState` (0x2063d4f7) function
+        ///Calls the contract's `newFinalizedState` (0x757c37ad) function
         pub fn new_finalized_state(
             &self,
             new_state: LightClientState,
+            next_stake_table: StakeTableState,
             proof: PlonkProof,
         ) -> ::ethers::contract::builders::ContractCall<M, ()> {
             self.0
-                .method_hash([32, 99, 212, 247], (new_state, proof))
+                .method_hash([117, 124, 55, 173], (new_state, next_stake_table, proof))
                 .expect("method not found (this should never happen)")
         }
         ///Calls the contract's `owner` (0x8da5cb5b) function
@@ -1250,6 +1409,12 @@ pub mod light_client {
             &self,
         ) -> ::ethers::contract::builders::Event<::std::sync::Arc<M>, M, InitializedFilter>
         {
+            self.0.event()
+        }
+        ///Gets the contract's `NewEpoch` event
+        pub fn new_epoch_filter(
+            &self,
+        ) -> ::ethers::contract::builders::Event<::std::sync::Arc<M>, M, NewEpochFilter> {
             self.0.event()
         }
         ///Gets the contract's `NewState` event
@@ -1489,6 +1654,24 @@ pub mod light_client {
     )]
     #[etherror(name = "InvalidProof", abi = "InvalidProof()")]
     pub struct InvalidProof;
+    ///Custom Error type `MissingLastBlockInEpochUpdate` with signature `MissingLastBlockInEpochUpdate()` and selector `0x7150de45`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthError,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    #[etherror(
+        name = "MissingLastBlockInEpochUpdate",
+        abi = "MissingLastBlockInEpochUpdate()"
+    )]
+    pub struct MissingLastBlockInEpochUpdate;
     ///Custom Error type `NoChangeRequired` with signature `NoChangeRequired()` and selector `0xa863aec9`
     #[derive(
         Clone,
@@ -1662,6 +1845,7 @@ pub mod light_client {
         InvalidInitialization(InvalidInitialization),
         InvalidMaxStateHistory(InvalidMaxStateHistory),
         InvalidProof(InvalidProof),
+        MissingLastBlockInEpochUpdate(MissingLastBlockInEpochUpdate),
         NoChangeRequired(NoChangeRequired),
         NotInitializing(NotInitializing),
         OutdatedState(OutdatedState),
@@ -1732,6 +1916,11 @@ pub mod light_client {
             if let Ok(decoded) = <InvalidProof as ::ethers::core::abi::AbiDecode>::decode(data) {
                 return Ok(Self::InvalidProof(decoded));
             }
+            if let Ok(decoded) =
+                <MissingLastBlockInEpochUpdate as ::ethers::core::abi::AbiDecode>::decode(data)
+            {
+                return Ok(Self::MissingLastBlockInEpochUpdate(decoded));
+            }
             if let Ok(decoded) = <NoChangeRequired as ::ethers::core::abi::AbiDecode>::decode(data)
             {
                 return Ok(Self::NoChangeRequired(decoded));
@@ -1799,6 +1988,9 @@ pub mod light_client {
                     ::ethers::core::abi::AbiEncode::encode(element)
                 }
                 Self::InvalidProof(element) => ::ethers::core::abi::AbiEncode::encode(element),
+                Self::MissingLastBlockInEpochUpdate(element) => {
+                    ::ethers::core::abi::AbiEncode::encode(element)
+                }
                 Self::NoChangeRequired(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::NotInitializing(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::OutdatedState(element) => ::ethers::core::abi::AbiEncode::encode(element),
@@ -1869,6 +2061,10 @@ pub mod light_client {
                 _ if selector
                     == <InvalidProof as ::ethers::contract::EthError>::selector() => true,
                 _ if selector
+                    == <MissingLastBlockInEpochUpdate as ::ethers::contract::EthError>::selector() => {
+                    true
+                }
+                _ if selector
                     == <NoChangeRequired as ::ethers::contract::EthError>::selector() => {
                     true
                 }
@@ -1926,6 +2122,9 @@ pub mod light_client {
                 Self::InvalidInitialization(element) => ::core::fmt::Display::fmt(element, f),
                 Self::InvalidMaxStateHistory(element) => ::core::fmt::Display::fmt(element, f),
                 Self::InvalidProof(element) => ::core::fmt::Display::fmt(element, f),
+                Self::MissingLastBlockInEpochUpdate(element) => {
+                    ::core::fmt::Display::fmt(element, f)
+                }
                 Self::NoChangeRequired(element) => ::core::fmt::Display::fmt(element, f),
                 Self::NotInitializing(element) => ::core::fmt::Display::fmt(element, f),
                 Self::OutdatedState(element) => ::core::fmt::Display::fmt(element, f),
@@ -2001,6 +2200,11 @@ pub mod light_client {
             Self::InvalidProof(value)
         }
     }
+    impl ::core::convert::From<MissingLastBlockInEpochUpdate> for LightClientErrors {
+        fn from(value: MissingLastBlockInEpochUpdate) -> Self {
+            Self::MissingLastBlockInEpochUpdate(value)
+        }
+    }
     impl ::core::convert::From<NoChangeRequired> for LightClientErrors {
         fn from(value: NoChangeRequired) -> Self {
             Self::NoChangeRequired(value)
@@ -2061,6 +2265,22 @@ pub mod light_client {
     #[ethevent(name = "Initialized", abi = "Initialized(uint64)")]
     pub struct InitializedFilter {
         pub version: u64,
+    }
+    #[derive(
+        Clone,
+        ::ethers::contract::EthEvent,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    #[ethevent(name = "NewEpoch", abi = "NewEpoch(uint64)")]
+    pub struct NewEpochFilter {
+        pub epoch: u64,
     }
     #[derive(
         Clone,
@@ -2186,6 +2406,7 @@ pub mod light_client {
     )]
     pub enum LightClientEvents {
         InitializedFilter(InitializedFilter),
+        NewEpochFilter(NewEpochFilter),
         NewStateFilter(NewStateFilter),
         OwnershipTransferredFilter(OwnershipTransferredFilter),
         PermissionedProverNotRequiredFilter(PermissionedProverNotRequiredFilter),
@@ -2199,6 +2420,9 @@ pub mod light_client {
         ) -> ::core::result::Result<Self, ::ethers::core::abi::Error> {
             if let Ok(decoded) = InitializedFilter::decode_log(log) {
                 return Ok(LightClientEvents::InitializedFilter(decoded));
+            }
+            if let Ok(decoded) = NewEpochFilter::decode_log(log) {
+                return Ok(LightClientEvents::NewEpochFilter(decoded));
             }
             if let Ok(decoded) = NewStateFilter::decode_log(log) {
                 return Ok(LightClientEvents::NewStateFilter(decoded));
@@ -2227,6 +2451,7 @@ pub mod light_client {
         fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
             match self {
                 Self::InitializedFilter(element) => ::core::fmt::Display::fmt(element, f),
+                Self::NewEpochFilter(element) => ::core::fmt::Display::fmt(element, f),
                 Self::NewStateFilter(element) => ::core::fmt::Display::fmt(element, f),
                 Self::OwnershipTransferredFilter(element) => ::core::fmt::Display::fmt(element, f),
                 Self::PermissionedProverNotRequiredFilter(element) => {
@@ -2243,6 +2468,11 @@ pub mod light_client {
     impl ::core::convert::From<InitializedFilter> for LightClientEvents {
         fn from(value: InitializedFilter) -> Self {
             Self::InitializedFilter(value)
+        }
+    }
+    impl ::core::convert::From<NewEpochFilter> for LightClientEvents {
+        fn from(value: NewEpochFilter) -> Self {
+            Self::NewEpochFilter(value)
         }
     }
     impl ::core::convert::From<NewStateFilter> for LightClientEvents {
@@ -2275,6 +2505,21 @@ pub mod light_client {
             Self::UpgradedFilter(value)
         }
     }
+    ///Container type for all input parameters for the `BLOCKS_PER_EPOCH` function with signature `BLOCKS_PER_EPOCH()` and selector `0x1f3adc0f`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthCall,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    #[ethcall(name = "BLOCKS_PER_EPOCH", abi = "BLOCKS_PER_EPOCH()")]
+    pub struct BlocksPerEpochCall;
     ///Container type for all input parameters for the `UPGRADE_INTERFACE_VERSION` function with signature `UPGRADE_INTERFACE_VERSION()` and selector `0xad3cb1cc`
     #[derive(
         Clone,
@@ -2308,6 +2553,21 @@ pub mod light_client {
     )]
     #[ethcall(name = "currentBlockNumber", abi = "currentBlockNumber()")]
     pub struct CurrentBlockNumberCall;
+    ///Container type for all input parameters for the `currentEpoch` function with signature `currentEpoch()` and selector `0x76671808`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthCall,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    #[ethcall(name = "currentEpoch", abi = "currentEpoch()")]
+    pub struct CurrentEpochCall;
     ///Container type for all input parameters for the `disablePermissionedProverMode` function with signature `disablePermissionedProverMode()` and selector `0x69cc6a04`
     #[derive(
         Clone,
@@ -2326,6 +2586,27 @@ pub mod light_client {
         abi = "disablePermissionedProverMode()"
     )]
     pub struct DisablePermissionedProverModeCall;
+    ///Container type for all input parameters for the `epochFromBlockNumber` function with signature `epochFromBlockNumber(uint64,uint64)` and selector `0x90c14390`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthCall,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    #[ethcall(
+        name = "epochFromBlockNumber",
+        abi = "epochFromBlockNumber(uint64,uint64)"
+    )]
+    pub struct EpochFromBlockNumberCall {
+        pub block_num: u64,
+        pub blocks_per_epoch: u64,
+    }
     ///Container type for all input parameters for the `finalizedState` function with signature `finalizedState()` and selector `0x9fdb54a7`
     #[derive(
         Clone,
@@ -2418,7 +2699,7 @@ pub mod light_client {
     )]
     #[ethcall(name = "getVersion", abi = "getVersion()")]
     pub struct GetVersionCall;
-    ///Container type for all input parameters for the `initialize` function with signature `initialize((uint64,uint64,uint256),(uint256,uint256,uint256,uint256),uint32,address)` and selector `0x9baa3cc9`
+    ///Container type for all input parameters for the `initialize` function with signature `initialize((uint64,uint64,uint256),(uint256,uint256,uint256,uint256),uint32,address,uint64)` and selector `0x811f853f`
     #[derive(
         Clone,
         ::ethers::contract::EthCall,
@@ -2433,13 +2714,31 @@ pub mod light_client {
     )]
     #[ethcall(
         name = "initialize",
-        abi = "initialize((uint64,uint64,uint256),(uint256,uint256,uint256,uint256),uint32,address)"
+        abi = "initialize((uint64,uint64,uint256),(uint256,uint256,uint256,uint256),uint32,address,uint64)"
     )]
     pub struct InitializeCall {
         pub genesis: LightClientState,
         pub genesis_stake_table_state: StakeTableState,
         pub state_history_retention_period: u32,
         pub owner: ::ethers::core::types::Address,
+        pub blocks_per_epoch: u64,
+    }
+    ///Container type for all input parameters for the `isLastBlockInEpoch` function with signature `isLastBlockInEpoch(uint64)` and selector `0xa1be8d52`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthCall,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    #[ethcall(name = "isLastBlockInEpoch", abi = "isLastBlockInEpoch(uint64)")]
+    pub struct IsLastBlockInEpochCall {
+        pub block_height: u64,
     }
     ///Container type for all input parameters for the `isPermissionedProverEnabled` function with signature `isPermissionedProverEnabled()` and selector `0x826e41fc`
     #[derive(
@@ -2480,7 +2779,7 @@ pub mod light_client {
         pub block_number: ::ethers::core::types::U256,
         pub block_threshold: ::ethers::core::types::U256,
     }
-    ///Container type for all input parameters for the `newFinalizedState` function with signature `newFinalizedState((uint64,uint64,uint256),((uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256))` and selector `0x2063d4f7`
+    ///Container type for all input parameters for the `newFinalizedState` function with signature `newFinalizedState((uint64,uint64,uint256),(uint256,uint256,uint256,uint256),((uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256))` and selector `0x757c37ad`
     #[derive(
         Clone,
         ::ethers::contract::EthCall,
@@ -2490,10 +2789,11 @@ pub mod light_client {
     )]
     #[ethcall(
         name = "newFinalizedState",
-        abi = "newFinalizedState((uint64,uint64,uint256),((uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256))"
+        abi = "newFinalizedState((uint64,uint64,uint256),(uint256,uint256,uint256,uint256),((uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256))"
     )]
     pub struct NewFinalizedStateCall {
         pub new_state: LightClientState,
+        pub next_stake_table: StakeTableState,
         pub proof: PlonkProof,
     }
     ///Container type for all input parameters for the `owner` function with signature `owner()` and selector `0x8da5cb5b`
@@ -2697,9 +2997,12 @@ pub mod light_client {
     ///Container type for all of the contract's call
     #[derive(Clone, ::ethers::contract::EthAbiType, serde::Serialize, serde::Deserialize)]
     pub enum LightClientCalls {
+        BlocksPerEpoch(BlocksPerEpochCall),
         UpgradeInterfaceVersion(UpgradeInterfaceVersionCall),
         CurrentBlockNumber(CurrentBlockNumberCall),
+        CurrentEpoch(CurrentEpochCall),
         DisablePermissionedProverMode(DisablePermissionedProverModeCall),
+        EpochFromBlockNumber(EpochFromBlockNumberCall),
         FinalizedState(FinalizedStateCall),
         GenesisStakeTableState(GenesisStakeTableStateCall),
         GenesisState(GenesisStateCall),
@@ -2707,6 +3010,7 @@ pub mod light_client {
         GetStateHistoryCount(GetStateHistoryCountCall),
         GetVersion(GetVersionCall),
         Initialize(InitializeCall),
+        IsLastBlockInEpoch(IsLastBlockInEpochCall),
         IsPermissionedProverEnabled(IsPermissionedProverEnabledCall),
         LagOverEscapeHatchThreshold(LagOverEscapeHatchThresholdCall),
         NewFinalizedState(NewFinalizedStateCall),
@@ -2729,6 +3033,11 @@ pub mod light_client {
         ) -> ::core::result::Result<Self, ::ethers::core::abi::AbiError> {
             let data = data.as_ref();
             if let Ok(decoded) =
+                <BlocksPerEpochCall as ::ethers::core::abi::AbiDecode>::decode(data)
+            {
+                return Ok(Self::BlocksPerEpoch(decoded));
+            }
+            if let Ok(decoded) =
                 <UpgradeInterfaceVersionCall as ::ethers::core::abi::AbiDecode>::decode(data)
             {
                 return Ok(Self::UpgradeInterfaceVersion(decoded));
@@ -2738,10 +3047,19 @@ pub mod light_client {
             {
                 return Ok(Self::CurrentBlockNumber(decoded));
             }
+            if let Ok(decoded) = <CurrentEpochCall as ::ethers::core::abi::AbiDecode>::decode(data)
+            {
+                return Ok(Self::CurrentEpoch(decoded));
+            }
             if let Ok(decoded) =
                 <DisablePermissionedProverModeCall as ::ethers::core::abi::AbiDecode>::decode(data)
             {
                 return Ok(Self::DisablePermissionedProverMode(decoded));
+            }
+            if let Ok(decoded) =
+                <EpochFromBlockNumberCall as ::ethers::core::abi::AbiDecode>::decode(data)
+            {
+                return Ok(Self::EpochFromBlockNumber(decoded));
             }
             if let Ok(decoded) =
                 <FinalizedStateCall as ::ethers::core::abi::AbiDecode>::decode(data)
@@ -2772,6 +3090,11 @@ pub mod light_client {
             }
             if let Ok(decoded) = <InitializeCall as ::ethers::core::abi::AbiDecode>::decode(data) {
                 return Ok(Self::Initialize(decoded));
+            }
+            if let Ok(decoded) =
+                <IsLastBlockInEpochCall as ::ethers::core::abi::AbiDecode>::decode(data)
+            {
+                return Ok(Self::IsLastBlockInEpoch(decoded));
             }
             if let Ok(decoded) =
                 <IsPermissionedProverEnabledCall as ::ethers::core::abi::AbiDecode>::decode(data)
@@ -2851,13 +3174,18 @@ pub mod light_client {
     impl ::ethers::core::abi::AbiEncode for LightClientCalls {
         fn encode(self) -> Vec<u8> {
             match self {
+                Self::BlocksPerEpoch(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::UpgradeInterfaceVersion(element) => {
                     ::ethers::core::abi::AbiEncode::encode(element)
                 }
                 Self::CurrentBlockNumber(element) => {
                     ::ethers::core::abi::AbiEncode::encode(element)
                 }
+                Self::CurrentEpoch(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::DisablePermissionedProverMode(element) => {
+                    ::ethers::core::abi::AbiEncode::encode(element)
+                }
+                Self::EpochFromBlockNumber(element) => {
                     ::ethers::core::abi::AbiEncode::encode(element)
                 }
                 Self::FinalizedState(element) => ::ethers::core::abi::AbiEncode::encode(element),
@@ -2873,6 +3201,9 @@ pub mod light_client {
                 }
                 Self::GetVersion(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::Initialize(element) => ::ethers::core::abi::AbiEncode::encode(element),
+                Self::IsLastBlockInEpoch(element) => {
+                    ::ethers::core::abi::AbiEncode::encode(element)
+                }
                 Self::IsPermissionedProverEnabled(element) => {
                     ::ethers::core::abi::AbiEncode::encode(element)
                 }
@@ -2912,11 +3243,14 @@ pub mod light_client {
     impl ::core::fmt::Display for LightClientCalls {
         fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
             match self {
+                Self::BlocksPerEpoch(element) => ::core::fmt::Display::fmt(element, f),
                 Self::UpgradeInterfaceVersion(element) => ::core::fmt::Display::fmt(element, f),
                 Self::CurrentBlockNumber(element) => ::core::fmt::Display::fmt(element, f),
+                Self::CurrentEpoch(element) => ::core::fmt::Display::fmt(element, f),
                 Self::DisablePermissionedProverMode(element) => {
                     ::core::fmt::Display::fmt(element, f)
                 }
+                Self::EpochFromBlockNumber(element) => ::core::fmt::Display::fmt(element, f),
                 Self::FinalizedState(element) => ::core::fmt::Display::fmt(element, f),
                 Self::GenesisStakeTableState(element) => ::core::fmt::Display::fmt(element, f),
                 Self::GenesisState(element) => ::core::fmt::Display::fmt(element, f),
@@ -2924,6 +3258,7 @@ pub mod light_client {
                 Self::GetStateHistoryCount(element) => ::core::fmt::Display::fmt(element, f),
                 Self::GetVersion(element) => ::core::fmt::Display::fmt(element, f),
                 Self::Initialize(element) => ::core::fmt::Display::fmt(element, f),
+                Self::IsLastBlockInEpoch(element) => ::core::fmt::Display::fmt(element, f),
                 Self::IsPermissionedProverEnabled(element) => ::core::fmt::Display::fmt(element, f),
                 Self::LagOverEscapeHatchThreshold(element) => ::core::fmt::Display::fmt(element, f),
                 Self::NewFinalizedState(element) => ::core::fmt::Display::fmt(element, f),
@@ -2944,6 +3279,11 @@ pub mod light_client {
             }
         }
     }
+    impl ::core::convert::From<BlocksPerEpochCall> for LightClientCalls {
+        fn from(value: BlocksPerEpochCall) -> Self {
+            Self::BlocksPerEpoch(value)
+        }
+    }
     impl ::core::convert::From<UpgradeInterfaceVersionCall> for LightClientCalls {
         fn from(value: UpgradeInterfaceVersionCall) -> Self {
             Self::UpgradeInterfaceVersion(value)
@@ -2954,9 +3294,19 @@ pub mod light_client {
             Self::CurrentBlockNumber(value)
         }
     }
+    impl ::core::convert::From<CurrentEpochCall> for LightClientCalls {
+        fn from(value: CurrentEpochCall) -> Self {
+            Self::CurrentEpoch(value)
+        }
+    }
     impl ::core::convert::From<DisablePermissionedProverModeCall> for LightClientCalls {
         fn from(value: DisablePermissionedProverModeCall) -> Self {
             Self::DisablePermissionedProverMode(value)
+        }
+    }
+    impl ::core::convert::From<EpochFromBlockNumberCall> for LightClientCalls {
+        fn from(value: EpochFromBlockNumberCall) -> Self {
+            Self::EpochFromBlockNumber(value)
         }
     }
     impl ::core::convert::From<FinalizedStateCall> for LightClientCalls {
@@ -2992,6 +3342,11 @@ pub mod light_client {
     impl ::core::convert::From<InitializeCall> for LightClientCalls {
         fn from(value: InitializeCall) -> Self {
             Self::Initialize(value)
+        }
+    }
+    impl ::core::convert::From<IsLastBlockInEpochCall> for LightClientCalls {
+        fn from(value: IsLastBlockInEpochCall) -> Self {
+            Self::IsLastBlockInEpoch(value)
         }
     }
     impl ::core::convert::From<IsPermissionedProverEnabledCall> for LightClientCalls {
@@ -3069,6 +3424,20 @@ pub mod light_client {
             Self::VotingStakeTableState(value)
         }
     }
+    ///Container type for all return fields from the `BLOCKS_PER_EPOCH` function with signature `BLOCKS_PER_EPOCH()` and selector `0x1f3adc0f`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthAbiType,
+        ::ethers::contract::EthAbiCodec,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    pub struct BlocksPerEpochReturn(pub u64);
     ///Container type for all return fields from the `UPGRADE_INTERFACE_VERSION` function with signature `UPGRADE_INTERFACE_VERSION()` and selector `0xad3cb1cc`
     #[derive(
         Clone,
@@ -3097,6 +3466,34 @@ pub mod light_client {
         Hash,
     )]
     pub struct CurrentBlockNumberReturn(pub ::ethers::core::types::U256);
+    ///Container type for all return fields from the `currentEpoch` function with signature `currentEpoch()` and selector `0x76671808`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthAbiType,
+        ::ethers::contract::EthAbiCodec,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    pub struct CurrentEpochReturn(pub u64);
+    ///Container type for all return fields from the `epochFromBlockNumber` function with signature `epochFromBlockNumber(uint64,uint64)` and selector `0x90c14390`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthAbiType,
+        ::ethers::contract::EthAbiCodec,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    pub struct EpochFromBlockNumberReturn(pub u64);
     ///Container type for all return fields from the `finalizedState` function with signature `finalizedState()` and selector `0x9fdb54a7`
     #[derive(
         Clone,
@@ -3201,6 +3598,20 @@ pub mod light_client {
         pub minor_version: u8,
         pub patch_version: u8,
     }
+    ///Container type for all return fields from the `isLastBlockInEpoch` function with signature `isLastBlockInEpoch(uint64)` and selector `0xa1be8d52`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthAbiType,
+        ::ethers::contract::EthAbiCodec,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    pub struct IsLastBlockInEpochReturn(pub bool);
     ///Container type for all return fields from the `isPermissionedProverEnabled` function with signature `isPermissionedProverEnabled()` and selector `0x826e41fc`
     #[derive(
         Clone,
