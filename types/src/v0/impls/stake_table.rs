@@ -4,6 +4,7 @@ use std::{
     num::NonZeroU64,
 };
 
+use anyhow::{bail, Context};
 use async_trait::async_trait;
 use contract_bindings_alloy::permissionedstaketable::PermissionedStakeTable::StakersUpdated;
 use ethers::types::{Address, U256};
@@ -295,7 +296,7 @@ pub struct LeaderLookupError;
 
 #[async_trait]
 impl Membership<SeqTypes> for EpochCommittees {
-    type Error = LeaderLookupError;
+    type Error = anyhow::Error;
     // DO NOT USE. Dummy constructor to comply w/ trait.
     fn new(
         // TODO remove `new` from trait and remove this fn as well.
@@ -307,20 +308,20 @@ impl Membership<SeqTypes> for EpochCommittees {
     }
 
     /// Get the stake table for the current view
-    fn stake_table(&self, epoch: Option<Epoch>) -> Vec<PeerConfig<PubKey>> {
-        if let Some(st) = self.state(&epoch) {
-            st.stake_table.clone()
-        } else {
-            vec![]
-        }
+    fn stake_table(&self, epoch: Option<Epoch>) -> anyhow::Result<Vec<PeerConfig<PubKey>>> {
+        Ok(self
+            .state(&epoch)
+            .context(format!("failed to get state for epoch={epoch:?}"))?
+            .stake_table
+            .clone())
     }
     /// Get the stake table for the current view
-    fn da_stake_table(&self, epoch: Option<Epoch>) -> Vec<PeerConfig<PubKey>> {
-        if let Some(sc) = self.state(&epoch) {
-            sc.da_members.clone()
-        } else {
-            vec![]
-        }
+    fn da_stake_table(&self, epoch: Option<Epoch>) -> anyhow::Result<Vec<PeerConfig<PubKey>>> {
+        Ok(self
+            .state(&epoch)
+            .context(format!("failed to get state for epoch={epoch:?}"))?
+            .da_members
+            .clone())
     }
 
     /// Get all members of the committee for the current view
@@ -328,12 +329,14 @@ impl Membership<SeqTypes> for EpochCommittees {
         &self,
         _view_number: <SeqTypes as NodeType>::View,
         epoch: Option<Epoch>,
-    ) -> BTreeSet<PubKey> {
-        if let Some(sc) = self.state(&epoch) {
-            sc.indexed_stake_table.clone().into_keys().collect()
-        } else {
-            BTreeSet::new()
-        }
+    ) -> anyhow::Result<BTreeSet<PubKey>> {
+        Ok(self
+            .state(&epoch)
+            .context(format!("failed to get state for epoch={epoch:?}"))?
+            .indexed_stake_table
+            .clone()
+            .into_keys()
+            .collect())
     }
 
     /// Get all members of the committee for the current view
@@ -341,12 +344,14 @@ impl Membership<SeqTypes> for EpochCommittees {
         &self,
         _view_number: <SeqTypes as NodeType>::View,
         epoch: Option<Epoch>,
-    ) -> BTreeSet<PubKey> {
-        if let Some(sc) = self.state(&epoch) {
-            sc.indexed_da_members.clone().into_keys().collect()
-        } else {
-            BTreeSet::new()
-        }
+    ) -> anyhow::Result<BTreeSet<PubKey>> {
+        Ok(self
+            .state(&epoch)
+            .context(format!("failed to get state for epoch={epoch:?}"))?
+            .indexed_da_members
+            .clone()
+            .into_keys()
+            .collect())
     }
 
     /// Get all eligible leaders of the committee for the current view
@@ -354,13 +359,14 @@ impl Membership<SeqTypes> for EpochCommittees {
         &self,
         _view_number: <SeqTypes as NodeType>::View,
         epoch: Option<Epoch>,
-    ) -> BTreeSet<PubKey> {
-        self.state(&epoch)
-            .unwrap()
+    ) -> anyhow::Result<BTreeSet<PubKey>> {
+        Ok(self
+            .state(&epoch)
+            .context(format!("failed to get state for epoch={epoch:?}"))?
             .eligible_leaders
             .iter()
-            .map(|x| PubKey::public_key(&x.stake_table_entry))
-            .collect()
+            .map(|c| PubKey::public_key(&c.stake_table_entry))
+            .collect())
     }
 
     /// Get the stake table entry for a public key
@@ -378,17 +384,23 @@ impl Membership<SeqTypes> for EpochCommittees {
     }
 
     /// Check if a node has stake in the committee
-    fn has_stake(&self, pub_key: &PubKey, epoch: Option<Epoch>) -> bool {
-        self.state(&epoch)
-            .and_then(|h| h.indexed_stake_table.get(pub_key))
-            .is_some_and(|x| x.stake_table_entry.stake() > U256::zero())
+    fn has_stake(&self, pub_key: &PubKey, epoch: Option<Epoch>) -> anyhow::Result<bool> {
+        let committee = self.state(&epoch).context("failed to get state")?;
+        let stake = committee
+            .indexed_stake_table
+            .get(pub_key)
+            .context("failed to get stake")?;
+        Ok(stake.stake_table_entry.stake() > U256::zero())
     }
 
     /// Check if a node has stake in the committee
-    fn has_da_stake(&self, pub_key: &PubKey, epoch: Option<Epoch>) -> bool {
-        self.state(&epoch)
-            .and_then(|h| h.indexed_da_members.get(pub_key))
-            .is_some_and(|x| x.stake_table_entry.stake() > U256::zero())
+    fn has_da_stake(&self, pub_key: &PubKey, epoch: Option<Epoch>) -> anyhow::Result<bool> {
+        let committee = self.state(&epoch).context("failed to get state")?;
+        let stake = committee
+            .indexed_da_members
+            .get(pub_key)
+            .context("failed to get stake")?;
+        Ok(stake.stake_table_entry.stake() > U256::zero())
     }
 
     /// Index the vector of public keys with the current view number
@@ -396,14 +408,14 @@ impl Membership<SeqTypes> for EpochCommittees {
         &self,
         view_number: <SeqTypes as NodeType>::View,
         epoch: Option<Epoch>,
-    ) -> Result<PubKey, Self::Error> {
+    ) -> anyhow::Result<PubKey> {
         if let Some(epoch) = epoch {
             let Some(randomized_committee) = self.randomized_committees.get(&epoch) else {
                 tracing::error!(
                     "We are missing the randomized committee for epoch {}",
                     epoch
                 );
-                return Err(LeaderLookupError);
+                bail!("failed to get leader for epoch={epoch:?}")
             };
 
             Ok(PubKey::public_key(&select_randomized_leader(
@@ -420,47 +432,59 @@ impl Membership<SeqTypes> for EpochCommittees {
     }
 
     /// Get the total number of nodes in the committee
-    fn total_nodes(&self, epoch: Option<Epoch>) -> usize {
+    fn total_nodes(&self, epoch: Option<Epoch>) -> anyhow::Result<usize> {
         self.state(&epoch)
+            .context("failed to get state")
             .map(|sc| sc.stake_table.len())
-            .unwrap_or_default()
     }
 
     /// Get the total number of DA nodes in the committee
-    fn da_total_nodes(&self, epoch: Option<Epoch>) -> usize {
+    fn da_total_nodes(&self, epoch: Option<Epoch>) -> anyhow::Result<usize> {
         self.state(&epoch)
-            .map(|sc: &Committee| sc.da_members.len())
-            .unwrap_or_default()
+            .context("failed to get state")
+            .map(|sc| sc.da_members.len())
     }
 
     /// Get the voting success threshold for the committee
-    fn success_threshold(&self, epoch: Option<Epoch>) -> NonZeroU64 {
-        let quorum_len = self.state(&epoch).unwrap().stake_table.len();
-        NonZeroU64::new(((quorum_len as u64 * 2) / 3) + 1).unwrap()
+    fn success_threshold(&self, epoch: Option<Epoch>) -> anyhow::Result<NonZeroU64> {
+        let quorum_len = self
+            .state(&epoch)
+            .context("failed to get state")?
+            .stake_table
+            .len();
+        NonZeroU64::new(((quorum_len as u64 * 2) / 3) + 1).context("threshold is zero")
     }
 
     /// Get the voting success threshold for the committee
-    fn da_success_threshold(&self, epoch: Option<Epoch>) -> NonZeroU64 {
+    fn da_success_threshold(&self, epoch: Option<Epoch>) -> anyhow::Result<NonZeroU64> {
         let da_len = self.state(&epoch).unwrap().da_members.len();
-        NonZeroU64::new(((da_len as u64 * 2) / 3) + 1).unwrap()
+        NonZeroU64::new(((da_len as u64 * 2) / 3) + 1).context("threshold is zero")
     }
 
     /// Get the voting failure threshold for the committee
-    fn failure_threshold(&self, epoch: Option<Epoch>) -> NonZeroU64 {
-        let quorum_len = self.state(&epoch).unwrap().stake_table.len();
+    fn failure_threshold(&self, epoch: Option<Epoch>) -> anyhow::Result<NonZeroU64> {
+        let quorum_len = self
+            .state(&epoch)
+            .context("failed to get state")?
+            .stake_table
+            .len();
 
-        NonZeroU64::new(((quorum_len as u64) / 3) + 1).unwrap()
+        NonZeroU64::new(((quorum_len as u64) / 3) + 1).context("threshold is zero")
     }
 
     /// Get the voting upgrade threshold for the committee
-    fn upgrade_threshold(&self, epoch: Option<Epoch>) -> NonZeroU64 {
-        let quorum_len = self.state(&epoch).unwrap().indexed_stake_table.len();
+    fn upgrade_threshold(&self, epoch: Option<Epoch>) -> anyhow::Result<NonZeroU64> {
+        let quorum_len = self
+            .state(&epoch)
+            .context("failed to get state")?
+            .indexed_stake_table
+            .len();
 
         NonZeroU64::new(max(
             (quorum_len as u64 * 9) / 10,
             ((quorum_len as u64 * 2) / 3) + 1,
         ))
-        .unwrap()
+        .context("threshold is zero")
     }
 
     async fn add_epoch_root(

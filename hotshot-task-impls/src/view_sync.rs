@@ -30,8 +30,7 @@ use hotshot_types::{
         signature_key::SignatureKey,
     },
     utils::EpochTransitionIndicator,
-    vote::{Certificate, HasViewNumber, Vote},
-    StakeTableEntries,
+    vote::{Certificate, HasViewNumber, Vote}, StakeTableEntries,
 };
 use hotshot_utils::anytrace::*;
 use tokio::{spawn, task::JoinHandle, time::sleep};
@@ -550,9 +549,9 @@ impl<TYPES: NodeType, V: Versions> ViewSyncReplicaTaskState<TYPES, V> {
                 }
 
                 let membership_reader = self.membership.read().await;
-                let membership_stake_table = membership_reader.stake_table(self.cur_epoch);
+                let membership_stake_table = membership_reader.stake_table(self.cur_epoch).ok()?;
                 let membership_failure_threshold =
-                    membership_reader.failure_threshold(self.cur_epoch);
+                    membership_reader.failure_threshold(self.cur_epoch).ok()?;
                 drop(membership_reader);
 
                 // If certificate is not valid, return current state
@@ -644,9 +643,9 @@ impl<TYPES: NodeType, V: Versions> ViewSyncReplicaTaskState<TYPES, V> {
                 }
 
                 let membership_reader = self.membership.read().await;
-                let membership_stake_table = membership_reader.stake_table(self.cur_epoch);
+                let membership_stake_table = membership_reader.stake_table(self.cur_epoch).ok()?;
                 let membership_success_threshold =
-                    membership_reader.success_threshold(self.cur_epoch);
+                    membership_reader.success_threshold(self.cur_epoch).ok()?;
                 drop(membership_reader);
 
                 // If certificate is not valid, return current state
@@ -749,9 +748,9 @@ impl<TYPES: NodeType, V: Versions> ViewSyncReplicaTaskState<TYPES, V> {
                 }
 
                 let membership_reader = self.membership.read().await;
-                let membership_stake_table = membership_reader.stake_table(self.cur_epoch);
+                let membership_stake_table = membership_reader.stake_table(self.cur_epoch).ok()?;
                 let membership_success_threshold =
-                    membership_reader.success_threshold(self.cur_epoch);
+                    membership_reader.success_threshold(self.cur_epoch).ok()?;
                 drop(membership_reader);
 
                 // If certificate is not valid, return current state

@@ -15,7 +15,6 @@ use hotshot_task::{
     dependency_task::DependencyTask,
     task::TaskState,
 };
-use hotshot_types::StakeTableEntries;
 use hotshot_types::{
     consensus::OuterConsensus,
     message::UpgradeLock,
@@ -27,7 +26,7 @@ use hotshot_types::{
         storage::Storage,
     },
     utils::EpochTransitionIndicator,
-    vote::{Certificate, HasViewNumber},
+    vote::{Certificate, HasViewNumber}, StakeTableEntries,
 };
 use hotshot_utils::anytrace::*;
 use tokio::task::JoinHandle;
@@ -473,9 +472,16 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                 let epoch_number = certificate.data.epoch;
 
                 let membership_reader = self.membership.read().await;
-                let membership_stake_table = membership_reader.stake_table(epoch_number);
-                let membership_success_threshold =
-                    membership_reader.success_threshold(epoch_number);
+                let membership_stake_table = membership_reader
+                    .stake_table(epoch_number)
+                    .unwrap_or_default();
+                let membership_success_threshold = membership_reader
+                    .success_threshold(epoch_number)
+                    .map_err(|_| {
+                        error!(format!(
+                            "success_threshold not found for epoch = {epoch_number:?}"
+                        ))
+                    })?;
                 drop(membership_reader);
 
                 certificate
@@ -558,9 +564,16 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                 let cert_epoch_number = qc.data.epoch;
 
                 let membership_reader = self.membership.read().await;
-                let membership_stake_table = membership_reader.stake_table(cert_epoch_number);
-                let membership_success_threshold =
-                    membership_reader.success_threshold(cert_epoch_number);
+                let membership_stake_table = membership_reader
+                    .stake_table(cert_epoch_number)
+                    .unwrap_or_default();
+                let membership_success_threshold = membership_reader
+                    .success_threshold(cert_epoch_number)
+                    .map_err(|_| {
+                        error!(format!(
+                            " success_threshold not found for epoch = {cert_epoch_number:?}"
+                        ))
+                    })?;
                 drop(membership_reader);
 
                 qc.is_valid_cert(

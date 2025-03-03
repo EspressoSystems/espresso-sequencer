@@ -37,7 +37,7 @@ use hotshot_types::{
     },
     utils::{option_epoch_from_block_number, View, ViewInner},
     vote::{Certificate, HasViewNumber, Vote},
-    StakeTableEntries, ValidatorConfig,
+    ValidatorConfig,
 };
 use primitive_types::U256;
 use serde::Serialize;
@@ -226,11 +226,11 @@ pub async fn build_assembled_sig<
     upgrade_lock: &UpgradeLock<TYPES, V>,
 ) -> <TYPES::SignatureKey as SignatureKey>::QcType {
     let membership_reader = membership.read().await;
-    let stake_table = CERT::stake_table(&*membership_reader, epoch);
+    let stake_table = CERT::stake_table(&*membership_reader, epoch).unwrap_or_default();
     let real_qc_pp: <TYPES::SignatureKey as SignatureKey>::QcParams =
         <TYPES::SignatureKey as SignatureKey>::public_parameter(
-            StakeTableEntries::<TYPES>::from(stake_table.clone()).0,
-            U256::from(CERT::threshold(&*membership_reader, epoch)),
+            stake_table.clone(),
+            U256::from(CERT::threshold(&*membership_reader, epoch).unwrap_or_default()),
         );
     drop(membership_reader);
 
@@ -289,7 +289,11 @@ pub async fn da_payload_commitment<TYPES: NodeType, V: Versions>(
     vid_commitment::<V>(
         &encoded_transactions,
         &metadata.encode(),
-        membership.read().await.total_nodes(epoch_number),
+        membership
+            .read()
+            .await
+            .total_nodes(epoch_number)
+            .unwrap_or_default(),
         version,
     )
 }
@@ -303,7 +307,12 @@ pub async fn build_payload_commitment<TYPES: NodeType, V: Versions>(
     // Make some empty encoded transactions, we just care about having a commitment handy for the
     // later calls. We need the VID commitment to be able to propose later.
     let encoded_transactions = Vec::new();
-    let num_storage_nodes = membership.read().await.committee_members(view, epoch).len();
+    let num_storage_nodes = membership
+        .read()
+        .await
+        .committee_members(view, epoch)
+        .unwrap_or_default()
+        .len();
     vid_commitment::<V>(&encoded_transactions, &[], num_storage_nodes, version)
 }
 
@@ -369,7 +378,11 @@ pub async fn build_da_certificate<TYPES: NodeType, V: Versions>(
     let da_payload_commitment = vid_commitment::<V>(
         &encoded_transactions,
         &metadata.encode(),
-        membership.read().await.total_nodes(epoch_number),
+        membership
+            .read()
+            .await
+            .total_nodes(epoch_number)
+            .unwrap_or_default(),
         upgrade_lock.version_infallible(view_number).await,
     );
 
@@ -380,7 +393,8 @@ pub async fn build_da_certificate<TYPES: NodeType, V: Versions>(
             membership
                 .read()
                 .await
-                .total_nodes(epoch_number.map(|e| e + 1)),
+                .total_nodes(epoch_number.map(|e| e + 1))
+                .unwrap_or_default(),
             upgrade_lock.version_infallible(view_number).await,
         ))
     } else {

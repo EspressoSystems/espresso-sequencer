@@ -29,7 +29,6 @@ use crate::{
         node_implementation::{NodeType, Versions},
         signature_key::{SignatureKey, StakeTableEntryType},
     },
-    PeerConfig, StakeTableEntries,
 };
 
 /// A simple vote that has a signer and commitment to the data voted on.
@@ -86,26 +85,26 @@ pub trait Certificate<TYPES: NodeType, T>: HasViewNumber<TYPES> {
     fn threshold<MEMBERSHIP: Membership<TYPES>>(
         membership: &MEMBERSHIP,
         epoch: Option<TYPES::Epoch>,
-    ) -> u64;
+    ) -> Result<u64>;
 
     /// Get  Stake Table from Membership implementation.
     fn stake_table<MEMBERSHIP: Membership<TYPES>>(
         membership: &MEMBERSHIP,
         epoch: Option<TYPES::Epoch>,
-    ) -> Vec<PeerConfig<TYPES::SignatureKey>>;
+    ) -> Result<Vec<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry>>;
 
     /// Get Total Nodes from Membership implementation.
     fn total_nodes<MEMBERSHIP: Membership<TYPES>>(
         membership: &MEMBERSHIP,
         epoch: Option<TYPES::Epoch>,
-    ) -> usize;
+    ) -> Result<usize>;
 
     /// Get  `StakeTableEntry` from Membership implementation.
     fn stake_table_entry<MEMBERSHIP: Membership<TYPES>>(
         membership: &MEMBERSHIP,
         pub_key: &TYPES::SignatureKey,
         epoch: Option<TYPES::Epoch>,
-    ) -> Option<PeerConfig<TYPES::SignatureKey>>;
+    ) -> Option<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry>;
 
     /// Get the commitment which was voted on
     fn data(&self) -> &Self::Voteable;
@@ -190,9 +189,9 @@ impl<
 
         let membership_reader = membership.read().await;
         let stake_table_entry = CERT::stake_table_entry(&*membership_reader, &key, epoch)?;
-        let stake_table = CERT::stake_table(&*membership_reader, epoch);
-        let total_nodes = CERT::total_nodes(&*membership_reader, epoch);
-        let threshold = CERT::threshold(&*membership_reader, epoch);
+        let stake_table = CERT::stake_table(&*membership_reader, epoch).ok()?;
+        let total_nodes = CERT::total_nodes(&*membership_reader, epoch).ok()?;
+        let threshold = CERT::threshold(&*membership_reader, epoch).ok()?;
         drop(membership_reader);
 
         let vote_node_id = stake_table
@@ -222,14 +221,14 @@ impl<
         signers.set(vote_node_id, true);
         sig_list.push(original_signature);
 
-        *total_stake_casted += stake_table_entry.stake_table_entry.stake();
+        *total_stake_casted += stake_table_entry.stake();
         total_vote_map.insert(key, (vote.signature(), vote_commitment));
 
         if *total_stake_casted >= threshold.into() {
             // Assemble QC
             let real_qc_pp: <<TYPES as NodeType>::SignatureKey as SignatureKey>::QcParams =
                 <TYPES::SignatureKey as SignatureKey>::public_parameter(
-                    StakeTableEntries::<TYPES>::from(stake_table).0,
+                    stake_table,
                     U256::from(threshold),
                 );
 

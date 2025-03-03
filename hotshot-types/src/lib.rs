@@ -157,7 +157,6 @@ impl<KEY: SignatureKey> Default for PeerConfig<KEY> {
         default_validator_config.public_config()
     }
 }
-
 pub struct StakeTableEntries<TYPES: NodeType>(
     pub Vec<<<TYPES as NodeType>::SignatureKey as SignatureKey>::StakeTableEntry>,
 );

@@ -531,6 +531,7 @@ pub trait RunDa<
                 TYPES::View::genesis(),
                 genesis_epoch_from_version::<V, TYPES>(),
             )
+            .unwrap_or_default()
             .len();
         let consensus_lock = context.hotshot.consensus();
         let consensus_reader = consensus_lock.read().await;

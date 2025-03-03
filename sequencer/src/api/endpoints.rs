@@ -15,7 +15,8 @@ use hotshot_query_service::{
     merklized_state::{
         self, MerklizedState, MerklizedStateDataSource, MerklizedStateHeightPersistence,
     },
-    node, ApiState, Error,
+    node::{self},
+    ApiState, Error,
 };
 use hotshot_query_service::{merklized_state::Snapshot, node::NodeDataSource};
 use hotshot_types::{
@@ -204,17 +205,25 @@ where
                 })?
                 .map(EpochNumber::new);
 
-            Ok(state
+            state
                 .read(|state| state.get_stake_table(epoch).boxed())
-                .await)
+                .await
+                .map_err(|_| hotshot_query_service::node::Error::Custom {
+                    message: "stake table not found".to_string(),
+                    status: StatusCode::NOT_FOUND,
+                })
         }
         .boxed()
     })?
     .at("stake_table_current", |_, state| {
         async move {
-            Ok(state
+            state
                 .read(|state| state.get_stake_table_current().boxed())
-                .await)
+                .await
+                .map_err(|_| hotshot_query_service::node::Error::Custom {
+                    message: "stake table not found".to_string(),
+                    status: StatusCode::NOT_FOUND,
+                })
         }
         .boxed()
     })?;
