@@ -6,12 +6,6 @@
 
 //! Implementations of the simple certificate type.  Used for Quorum, DA, and Timeout Certificates
 
-use async_lock::RwLock;
-use committable::{Commitment, Committable};
-use hotshot_utils::anytrace::Result;
-use hotshot_utils::anytrace::*;
-use primitive_types::U256;
-use serde::{Deserialize, Serialize};
 use std::{
     fmt::{self, Debug, Display, Formatter},
     hash::Hash,
@@ -19,6 +13,12 @@ use std::{
     num::NonZeroU64,
     sync::Arc,
 };
+
+use async_lock::RwLock;
+use committable::{Commitment, Committable};
+use hotshot_utils::anytrace::*;
+use primitive_types::U256;
+use serde::{Deserialize, Serialize};
 
 use crate::{
     data::serialize_signature2,
@@ -35,6 +35,7 @@ use crate::{
         signature_key::SignatureKey,
     },
     vote::{Certificate, HasViewNumber},
+    PeerConfig, StakeTableEntries,
 };
 
 /// Trait which allows use to inject different threshold calculations into a Certificate type
@@ -43,7 +44,7 @@ pub trait Threshold<TYPES: NodeType> {
     fn threshold<MEMBERSHIP: Membership<TYPES>>(
         membership: &MEMBERSHIP,
         epoch: Option<TYPES::Epoch>,
-    ) -> Result<u64>;
+    ) -> u64;
 }
 
 /// Defines a threshold which is 2f + 1 (Amount needed for Quorum)
@@ -54,15 +55,8 @@ impl<TYPES: NodeType> Threshold<TYPES> for SuccessThreshold {
     fn threshold<MEMBERSHIP: Membership<TYPES>>(
         membership: &MEMBERSHIP,
         epoch: Option<TYPES::Epoch>,
-    ) -> Result<u64> {
-        membership
-            .success_threshold(epoch)
-            .map(Into::into)
-            .map_err(|_| {
-                error!(format!(
-                    "failed to get success_threshold for epoch={epoch:?}"
-                ))
-            })
+    ) -> u64 {
+        membership.success_threshold(epoch).into()
     }
 }
 
@@ -74,11 +68,8 @@ impl<TYPES: NodeType> Threshold<TYPES> for OneHonestThreshold {
     fn threshold<MEMBERSHIP: Membership<TYPES>>(
         membership: &MEMBERSHIP,
         epoch: Option<TYPES::Epoch>,
-    ) -> Result<u64> {
-        membership
-            .failure_threshold(epoch)
-            .map(Into::into)
-            .map_err(|_| error!(format!("failed to get threshold for epoch={epoch:?}")))
+    ) -> u64 {
+        membership.failure_threshold(epoch).into()
     }
 }
 
@@ -90,15 +81,8 @@ impl<TYPES: NodeType> Threshold<TYPES> for UpgradeThreshold {
     fn threshold<MEMBERSHIP: Membership<TYPES>>(
         membership: &MEMBERSHIP,
         epoch: Option<TYPES::Epoch>,
-    ) -> Result<u64> {
-        membership
-            .upgrade_threshold(epoch)
-            .map(Into::into)
-            .map_err(|_| {
-                error!(format!(
-                    "failed to get upgrade_threshold for epoch={epoch:?}"
-                ))
-            })
+    ) -> u64 {
+        membership.upgrade_threshold(epoch).into()
     }
 }
 
@@ -209,44 +193,29 @@ impl<TYPES: NodeType, THRESHOLD: Threshold<TYPES>> Certificate<TYPES, DaData>
         membership: &MEMBERSHIP,
         pub_key: &TYPES::SignatureKey,
         epoch: Option<TYPES::Epoch>,
-    ) -> Option<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry> {
-        membership
-            .da_stake(pub_key, epoch)
-            .map(|peer_config| peer_config.stake_table_entry)
+    ) -> Option<PeerConfig<TYPES::SignatureKey>> {
+        membership.da_stake(pub_key, epoch)
     }
 
     /// Proxy's to `Membership.da_stake_table`
     fn stake_table<MEMBERSHIP: Membership<TYPES>>(
         membership: &MEMBERSHIP,
         epoch: Option<TYPES::Epoch>,
-    ) -> Result<Vec<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry>> {
-        membership
-            .da_stake_table(epoch)
-            .map(|configs| {
-                configs
-                    .into_iter()
-                    .map(|config| config.stake_table_entry)
-                    .collect()
-            })
-            .map_err(|_| error!(format!("failed to get stake_table for epoch={epoch:?}")))
+    ) -> Vec<PeerConfig<TYPES::SignatureKey>> {
+        membership.da_stake_table(epoch)
     }
     /// Proxy's to `Membership.da_total_nodes`
     fn total_nodes<MEMBERSHIP: Membership<TYPES>>(
         membership: &MEMBERSHIP,
         epoch: Option<TYPES::Epoch>,
-    ) -> Result<usize> {
-        membership
-            .da_total_nodes(epoch)
-            .map_err(|_| error!(format!("failed to get total_nodes for epoch={epoch:?}")))
+    ) -> usize {
+        membership.da_total_nodes(epoch)
     }
     fn threshold<MEMBERSHIP: Membership<TYPES>>(
         membership: &MEMBERSHIP,
         epoch: Option<TYPES::Epoch>,
-    ) -> Result<u64> {
-        membership
-            .da_success_threshold(epoch)
-            .map(Into::into)
-            .map_err(|_| error!(format!("failed to get threshold for epoch={epoch:?}")))
+    ) -> u64 {
+        membership.da_success_threshold(epoch).into()
     }
     fn data(&self) -> &Self::Voteable {
         &self.data
@@ -313,44 +282,29 @@ impl<TYPES: NodeType, THRESHOLD: Threshold<TYPES>> Certificate<TYPES, DaData2<TY
         membership: &MEMBERSHIP,
         pub_key: &TYPES::SignatureKey,
         epoch: Option<TYPES::Epoch>,
-    ) -> Option<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry> {
-        membership
-            .da_stake(pub_key, epoch)
-            .map(|peer_config| peer_config.stake_table_entry)
+    ) -> Option<PeerConfig<TYPES::SignatureKey>> {
+        membership.da_stake(pub_key, epoch)
     }
 
     /// Proxy's to `Membership.da_stake_table`
     fn stake_table<MEMBERSHIP: Membership<TYPES>>(
         membership: &MEMBERSHIP,
         epoch: Option<TYPES::Epoch>,
-    ) -> Result<Vec<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry>> {
-        membership
-            .da_stake_table(epoch)
-            .map(|configs| {
-                configs
-                    .into_iter()
-                    .map(|config| config.stake_table_entry)
-                    .collect()
-            })
-            .map_err(|_| error!(format!("failed to get stake_table for epoch={epoch:?}")))
+    ) -> Vec<PeerConfig<TYPES::SignatureKey>> {
+        membership.da_stake_table(epoch)
     }
     /// Proxy's to `Membership.da_total_nodes`
     fn total_nodes<MEMBERSHIP: Membership<TYPES>>(
         membership: &MEMBERSHIP,
         epoch: Option<TYPES::Epoch>,
-    ) -> Result<usize> {
-        membership
-            .da_total_nodes(epoch)
-            .map_err(|_| error!(format!("failed to get total_nodes for epoch={epoch:?}")))
+    ) -> usize {
+        membership.da_total_nodes(epoch)
     }
     fn threshold<MEMBERSHIP: Membership<TYPES>>(
         membership: &MEMBERSHIP,
         epoch: Option<TYPES::Epoch>,
-    ) -> Result<u64> {
-        membership
-            .da_success_threshold(epoch)
-            .map(Into::into)
-            .map_err(|_| error!(format!("failed to get threshold for epoch={epoch:?}")))
+    ) -> u64 {
+        membership.da_success_threshold(epoch).into()
     }
     fn data(&self) -> &Self::Voteable {
         &self.data
@@ -418,7 +372,7 @@ impl<
     fn threshold<MEMBERSHIP: Membership<TYPES>>(
         membership: &MEMBERSHIP,
         epoch: Option<TYPES::Epoch>,
-    ) -> Result<u64> {
+    ) -> u64 {
         THRESHOLD::threshold(membership, epoch)
     }
 
@@ -426,35 +380,23 @@ impl<
         membership: &MEMBERSHIP,
         pub_key: &TYPES::SignatureKey,
         epoch: Option<TYPES::Epoch>,
-    ) -> Option<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry> {
-        membership
-            .stake(pub_key, epoch)
-            .map(|peer_config| peer_config.stake_table_entry)
+    ) -> Option<PeerConfig<TYPES::SignatureKey>> {
+        membership.stake(pub_key, epoch)
     }
 
     fn stake_table<MEMBERSHIP: Membership<TYPES>>(
         membership: &MEMBERSHIP,
         epoch: Option<TYPES::Epoch>,
-    ) -> Result<Vec<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry>> {
-        membership
-            .stake_table(epoch)
-            .map(|configs| {
-                configs
-                    .into_iter()
-                    .map(|config| config.stake_table_entry)
-                    .collect()
-            })
-            .map_err(|_| error!(format!("failed to get stake_table for epoch={epoch:?}")))
+    ) -> Vec<PeerConfig<TYPES::SignatureKey>> {
+        membership.stake_table(epoch)
     }
 
     /// Proxy's to `Membership.total_nodes`
     fn total_nodes<MEMBERSHIP: Membership<TYPES>>(
         membership: &MEMBERSHIP,
         epoch: Option<TYPES::Epoch>,
-    ) -> Result<usize> {
-        membership
-            .total_nodes(epoch)
-            .map_err(|_| error!(format!("failed to get total_nodes for epoch={epoch:?}")))
+    ) -> usize {
+        membership.total_nodes(epoch)
     }
 
     fn data(&self) -> &Self::Voteable {
@@ -531,24 +473,12 @@ impl<TYPES: NodeType> UpgradeCertificate<TYPES> {
     ) -> Result<()> {
         if let Some(ref cert) = upgrade_certificate {
             let membership_reader = membership.read().await;
-            let membership_stake_table = membership_reader
-                .stake_table(epoch)
-                .map_err(|_| error!(format!("failed to get stake table for epoch={epoch:?}")))?;
-            let membership_upgrade_threshold =
-                membership_reader.upgrade_threshold(epoch).map_err(|_| {
-                    error!(format!(
-                        "failed to get upgrade_threshold for epoch={epoch:?}"
-                    ))
-                })?;
+            let membership_stake_table = membership_reader.stake_table(epoch);
+            let membership_upgrade_threshold = membership_reader.upgrade_threshold(epoch);
             drop(membership_reader);
 
-            let membership_stake_table = membership_stake_table
-                .into_iter()
-                .map(|config| config.stake_table_entry)
-                .collect();
-
             cert.is_valid_cert(
-                membership_stake_table,
+                StakeTableEntries::<TYPES>::from(membership_stake_table).0,
                 membership_upgrade_threshold,
                 upgrade_lock,
             )

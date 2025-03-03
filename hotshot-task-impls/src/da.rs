@@ -169,24 +169,15 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> DaTaskState<TYP
 
                 let membership_reader = self.membership.read().await;
                 ensure!(
-                    membership_reader
-                        .has_da_stake(&self.public_key, epoch_number)
-                        .unwrap_or_default(),
+                    membership_reader.has_da_stake(&self.public_key, epoch_number),
                     debug!(
                         "We were not chosen for consensus committee for view {:?} in epoch {:?}",
                         view_number, epoch_number
                     )
                 );
-                let num_nodes = membership_reader.total_nodes(epoch_number).map_err(|_| {
-                    error!(format!(
-                        "total_nodes not found for epoch = {epoch_number:?}"
-                    ))
-                })?;
-                let next_epoch = epoch_number.map(|e| e + 1);
+                let num_nodes = membership_reader.total_nodes(epoch_number);
                 let next_epoch_num_nodes =
-                    membership_reader.total_nodes(next_epoch).map_err(|_| {
-                        error!(format!("total_nodes not found for epoch = {next_epoch:?}",))
-                    })?;
+                    membership_reader.total_nodes(epoch_number.map(|e| e + 1));
                 drop(membership_reader);
 
                 let version = self.upgrade_lock.version_infallible(view_number).await;
@@ -282,20 +273,9 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> DaTaskState<TYP
                     let next_epoch = proposal_epoch.map(|epoch| epoch + 1);
 
                     let membership_reader = membership.read().await;
-                    let target_epoch = if membership_reader
-                        .has_stake(&public_key, proposal_epoch)
-                        .map_err(|_| {
-                        error!(format!(
-                            "failed to get stake for epoch = {proposal_epoch:?}"
-                        ))
-                    })? {
+                    let target_epoch = if membership_reader.has_stake(&public_key, proposal_epoch) {
                         proposal_epoch
-                    } else if membership_reader
-                        .has_stake(&public_key, next_epoch)
-                        .map_err(|_| {
-                            error!(format!("failed to get stake for epoch = {next_epoch:?}"))
-                        })?
-                    {
+                    } else if membership_reader.has_stake(&public_key, next_epoch) {
                         next_epoch
                     } else {
                         bail!("Not calculating VID, the node doesn't belong to the current epoch or the next epoch.");

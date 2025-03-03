@@ -536,9 +536,7 @@ where
         upgrade_lock: &UpgradeLock<TYPES, V>,
     ) -> Result<()> {
         let view_number = self.data.view_number();
-        let view_leader_key = membership
-            .leader(view_number, None)
-            .map_err(|_| error!("leader not found"))?;
+        let view_leader_key = membership.leader(view_number, None)?;
         let proposed_leaf = Leaf::from_quorum_proposal(&self.data);
 
         ensure!(
@@ -601,9 +599,7 @@ where
             self.data.block_header().block_number(),
             epoch_height,
         );
-        let view_leader_key = membership
-            .leader(view_number, proposal_epoch)
-            .map_err(|_| error!("leader not found"))?;
+        let view_leader_key = membership.leader(view_number, proposal_epoch)?;
         let proposed_leaf = Leaf2::from_quorum_proposal(&self.data);
 
         ensure!(

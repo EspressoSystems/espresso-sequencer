@@ -12,11 +12,7 @@
 pub mod documentation;
 
 use committable::Committable;
-use futures::{
-    future::{select, Either},
-    join,
-};
-
+use futures::future::{select, Either};
 use hotshot_types::{
     message::UpgradeLock,
     traits::{block_contents::BlockHeader, network::BroadcastDelay, node_implementation::Versions},
@@ -45,6 +41,7 @@ use std::{
 use async_broadcast::{broadcast, InactiveReceiver, Receiver, Sender};
 use async_lock::RwLock;
 use async_trait::async_trait;
+use futures::join;
 use hotshot_task::task::{ConsensusTaskRegistry, NetworkTaskRegistry};
 use hotshot_task_impls::{events::HotShotEvent, helpers::broadcast_event};
 // Internal
@@ -523,7 +520,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> SystemContext<T
                 .read()
                 .await
                 .da_committee_members(view_number, epoch)
-                .unwrap_or_default()
                 .iter()
                 .cloned()
                 .collect();

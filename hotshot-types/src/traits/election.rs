@@ -8,6 +8,7 @@
 use std::{collections::BTreeSet, fmt::Debug, num::NonZeroU64};
 
 use async_trait::async_trait;
+use hotshot_utils::anytrace::Result;
 
 use super::node_implementation::NodeType;
 use crate::{drb::DrbResult, PeerConfig};
@@ -26,37 +27,31 @@ pub trait Membership<TYPES: NodeType>: Debug + Send + Sync {
     ) -> Self;
 
     /// Get all participants in the committee (including their stake) for a specific epoch
-    fn stake_table(
-        &self,
-        epoch: Option<TYPES::Epoch>,
-    ) -> Result<Vec<PeerConfig<TYPES::SignatureKey>>, Self::Error>;
+    fn stake_table(&self, epoch: Option<TYPES::Epoch>) -> Vec<PeerConfig<TYPES::SignatureKey>>;
 
     /// Get all participants in the committee (including their stake) for a specific epoch
-    fn da_stake_table(
-        &self,
-        epoch: Option<TYPES::Epoch>,
-    ) -> Result<Vec<PeerConfig<TYPES::SignatureKey>>, Self::Error>;
+    fn da_stake_table(&self, epoch: Option<TYPES::Epoch>) -> Vec<PeerConfig<TYPES::SignatureKey>>;
 
     /// Get all participants in the committee for a specific view for a specific epoch
     fn committee_members(
         &self,
         view_number: TYPES::View,
         epoch: Option<TYPES::Epoch>,
-    ) -> Result<BTreeSet<TYPES::SignatureKey>, Self::Error>;
+    ) -> BTreeSet<TYPES::SignatureKey>;
 
     /// Get all participants in the committee for a specific view for a specific epoch
     fn da_committee_members(
         &self,
         view_number: TYPES::View,
         epoch: Option<TYPES::Epoch>,
-    ) -> Result<BTreeSet<TYPES::SignatureKey>, Self::Error>;
+    ) -> BTreeSet<TYPES::SignatureKey>;
 
     /// Get all leaders in the committee for a specific view for a specific epoch
     fn committee_leaders(
         &self,
         view_number: TYPES::View,
         epoch: Option<TYPES::Epoch>,
-    ) -> Result<BTreeSet<TYPES::SignatureKey>, Self::Error>;
+    ) -> BTreeSet<TYPES::SignatureKey>;
 
     /// Get the stake table entry for a public key, returns `None` if the
     /// key is not in the table for a specific epoch
@@ -75,18 +70,10 @@ pub trait Membership<TYPES: NodeType>: Debug + Send + Sync {
     ) -> Option<PeerConfig<TYPES::SignatureKey>>;
 
     /// See if a node has stake in the committee in a specific epoch
-    fn has_stake(
-        &self,
-        pub_key: &TYPES::SignatureKey,
-        epoch: Option<TYPES::Epoch>,
-    ) -> Result<bool, Self::Error>;
+    fn has_stake(&self, pub_key: &TYPES::SignatureKey, epoch: Option<TYPES::Epoch>) -> bool;
 
     /// See if a node has stake in the committee in a specific epoch
-    fn has_da_stake(
-        &self,
-        pub_key: &TYPES::SignatureKey,
-        epoch: Option<TYPES::Epoch>,
-    ) -> Result<bool, Self::Error>;
+    fn has_da_stake(&self, pub_key: &TYPES::SignatureKey, epoch: Option<TYPES::Epoch>) -> bool;
 
     /// The leader of the committee for view `view_number` in `epoch`.
     ///
@@ -99,14 +86,12 @@ pub trait Membership<TYPES: NodeType>: Debug + Send + Sync {
         &self,
         view: TYPES::View,
         epoch: Option<TYPES::Epoch>,
-    ) -> hotshot_utils::anytrace::Result<TYPES::SignatureKey> {
+    ) -> Result<TYPES::SignatureKey> {
         use hotshot_utils::anytrace::*;
 
-        self.lookup_leader(view, epoch)
-            .wrap()
-            .context(info!(format!(
-                "Failed to get leader for view {view} in epoch {epoch:?}"
-            )))
+        self.lookup_leader(view, epoch).wrap().context(info!(
+            "Failed to get leader for view {view} in epoch {epoch}"
+        ))
     }
 
     /// The leader of the committee for view `view_number` in `epoch`.
@@ -120,25 +105,25 @@ pub trait Membership<TYPES: NodeType>: Debug + Send + Sync {
         &self,
         view: TYPES::View,
         epoch: Option<TYPES::Epoch>,
-    ) -> Result<TYPES::SignatureKey, Self::Error>;
+    ) -> std::result::Result<TYPES::SignatureKey, Self::Error>;
 
     /// Returns the number of total nodes in the committee in an epoch `epoch`
-    fn total_nodes(&self, epoch: Option<TYPES::Epoch>) -> Result<usize, Self::Error>;
+    fn total_nodes(&self, epoch: Option<TYPES::Epoch>) -> usize;
 
     /// Returns the number of total DA nodes in the committee in an epoch `epoch`
-    fn da_total_nodes(&self, epoch: Option<TYPES::Epoch>) -> Result<usize, Self::Error>;
+    fn da_total_nodes(&self, epoch: Option<TYPES::Epoch>) -> usize;
 
     /// Returns the threshold for a specific `Membership` implementation
-    fn success_threshold(&self, epoch: Option<TYPES::Epoch>) -> Result<NonZeroU64, Self::Error>;
+    fn success_threshold(&self, epoch: Option<TYPES::Epoch>) -> NonZeroU64;
 
     /// Returns the DA threshold for a specific `Membership` implementation
-    fn da_success_threshold(&self, epoch: Option<TYPES::Epoch>) -> Result<NonZeroU64, Self::Error>;
+    fn da_success_threshold(&self, epoch: Option<TYPES::Epoch>) -> NonZeroU64;
 
     /// Returns the threshold for a specific `Membership` implementation
-    fn failure_threshold(&self, epoch: Option<TYPES::Epoch>) -> Result<NonZeroU64, Self::Error>;
+    fn failure_threshold(&self, epoch: Option<TYPES::Epoch>) -> NonZeroU64;
 
     /// Returns the threshold required to upgrade the network protocol
-    fn upgrade_threshold(&self, epoch: Option<TYPES::Epoch>) -> Result<NonZeroU64, Self::Error>;
+    fn upgrade_threshold(&self, epoch: Option<TYPES::Epoch>) -> NonZeroU64;
 
     #[allow(clippy::type_complexity)]
     /// Handles notifications that a new epoch root has been created

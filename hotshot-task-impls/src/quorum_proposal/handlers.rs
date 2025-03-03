@@ -28,7 +28,7 @@ use hotshot_types::{
         signature_key::SignatureKey,
     },
     utils::{is_last_block_in_epoch, option_epoch_from_block_number},
-    vote::{Certificate, HasViewNumber},
+    vote::{Certificate, HasViewNumber}, StakeTableEntries,
 };
 use hotshot_utils::anytrace::*;
 use tracing::instrument;
@@ -127,19 +127,14 @@ impl<TYPES: NodeType, V: Versions> ProposalDependencyHandle<TYPES, V> {
         while let Ok(event) = rx.recv_direct().await {
             if let HotShotEvent::HighQcRecv(qc, _sender) = event.as_ref() {
                 let membership_reader = self.membership.read().await;
-                let membership_stake_table = membership_reader.stake_table(qc.data.epoch).ok()?;
+                let membership_stake_table = membership_reader.stake_table(qc.data.epoch);
                 let membership_success_threshold =
-                    membership_reader.success_threshold(qc.data.epoch).ok()?;
+                    membership_reader.success_threshold(qc.data.epoch);
                 drop(membership_reader);
-
-                let membership_stake_table = membership_stake_table
-                    .iter()
-                    .map(|config| config.stake_table_entry.clone())
-                    .collect::<Vec<_>>();
 
                 if qc
                     .is_valid_cert(
-                        membership_stake_table,
+                        StakeTableEntries::<TYPES>::from(membership_stake_table).0,
                         membership_success_threshold,
                         &self.upgrade_lock,
                     )

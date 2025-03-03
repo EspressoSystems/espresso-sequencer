@@ -1149,8 +1149,7 @@ impl<
             .membership
             .read()
             .await
-            .da_committee_members(view_number, self.epoch)
-            .unwrap_or_default();
+            .da_committee_members(view_number, self.epoch);
         let network = Arc::clone(&self.network);
         let storage = Arc::clone(&self.storage);
         let consensus = OuterConsensus::new(Arc::clone(&self.consensus.inner_consensus));

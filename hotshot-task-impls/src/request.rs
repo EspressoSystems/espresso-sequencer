@@ -33,7 +33,7 @@ use hotshot_types::{
     utils::is_last_block_in_epoch,
     vote::HasViewNumber,
 };
-use hotshot_utils::anytrace::*;
+use hotshot_utils::anytrace::Result;
 use rand::{seq::SliceRandom, thread_rng};
 use sha2::{Digest, Sha256};
 use tokio::{
@@ -120,12 +120,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TaskState for NetworkRequest
                 // 1. we are part of the current epoch or
                 // 2. we are part of the next epoch and this is a proposal for the last block.
                 let membership_reader = self.membership.read().await;
-                if !membership_reader
-                    .has_stake(&self.public_key, prop_epoch)
-                    .unwrap_or_default()
-                    && (!membership_reader
-                        .has_stake(&self.public_key, next_epoch)
-                        .unwrap_or_default()
+                if !membership_reader.has_stake(&self.public_key, prop_epoch)
+                    && (!membership_reader.has_stake(&self.public_key, next_epoch)
                         || !is_last_block_in_epoch(
                             proposal.data.block_header().block_number(),
                             self.epoch_height,
@@ -218,9 +214,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> NetworkRequestState<TYPES, I
 
         // Get the committee members for the view and the leader, if applicable
         let membership_reader = self.membership.read().await;
-        let mut da_committee_for_view = membership_reader
-            .da_committee_members(view, epoch)
-            .unwrap_or_default();
+        let mut da_committee_for_view = membership_reader.da_committee_members(view, epoch);
         if let Ok(leader) = membership_reader.leader(view, epoch) {
             da_committee_for_view.insert(leader);
         }
@@ -228,7 +222,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> NetworkRequestState<TYPES, I
         // Get committee members for view
         let mut recipients: Vec<TYPES::SignatureKey> = membership_reader
             .da_committee_members(view, epoch)
-            .unwrap_or_default()
             .into_iter()
             .collect();
         drop(membership_reader);

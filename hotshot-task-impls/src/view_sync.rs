@@ -31,6 +31,7 @@ use hotshot_types::{
     },
     utils::EpochTransitionIndicator,
     vote::{Certificate, HasViewNumber, Vote},
+    StakeTableEntries,
 };
 use hotshot_utils::anytrace::*;
 use tokio::{spawn, task::JoinHandle, time::sleep};
@@ -549,20 +550,15 @@ impl<TYPES: NodeType, V: Versions> ViewSyncReplicaTaskState<TYPES, V> {
                 }
 
                 let membership_reader = self.membership.read().await;
-                let membership_stake_table = membership_reader.stake_table(self.cur_epoch).ok()?;
+                let membership_stake_table = membership_reader.stake_table(self.cur_epoch);
                 let membership_failure_threshold =
-                    membership_reader.failure_threshold(self.cur_epoch).ok()?;
+                    membership_reader.failure_threshold(self.cur_epoch);
                 drop(membership_reader);
-
-                let membership_stake_table = membership_stake_table
-                    .into_iter()
-                    .map(|config| config.stake_table_entry)
-                    .collect::<Vec<_>>();
 
                 // If certificate is not valid, return current state
                 if let Err(e) = certificate
                     .is_valid_cert(
-                        membership_stake_table,
+                        StakeTableEntries::<TYPES>::from(membership_stake_table).0,
                         membership_failure_threshold,
                         &self.upgrade_lock,
                     )
@@ -648,20 +644,15 @@ impl<TYPES: NodeType, V: Versions> ViewSyncReplicaTaskState<TYPES, V> {
                 }
 
                 let membership_reader = self.membership.read().await;
-                let membership_stake_table = membership_reader.stake_table(self.cur_epoch).ok()?;
+                let membership_stake_table = membership_reader.stake_table(self.cur_epoch);
                 let membership_success_threshold =
-                    membership_reader.success_threshold(self.cur_epoch).ok()?;
+                    membership_reader.success_threshold(self.cur_epoch);
                 drop(membership_reader);
-
-                let membership_stake_table = membership_stake_table
-                    .into_iter()
-                    .map(|config| config.stake_table_entry)
-                    .collect::<Vec<_>>();
 
                 // If certificate is not valid, return current state
                 if let Err(e) = certificate
                     .is_valid_cert(
-                        membership_stake_table,
+                        StakeTableEntries::<TYPES>::from(membership_stake_table).0,
                         membership_success_threshold,
                         &self.upgrade_lock,
                     )
@@ -758,20 +749,15 @@ impl<TYPES: NodeType, V: Versions> ViewSyncReplicaTaskState<TYPES, V> {
                 }
 
                 let membership_reader = self.membership.read().await;
-                let membership_stake_table = membership_reader.stake_table(self.cur_epoch).ok()?;
+                let membership_stake_table = membership_reader.stake_table(self.cur_epoch);
                 let membership_success_threshold =
-                    membership_reader.success_threshold(self.cur_epoch).ok()?;
+                    membership_reader.success_threshold(self.cur_epoch);
                 drop(membership_reader);
-
-                let membership_stake_table = membership_stake_table
-                    .into_iter()
-                    .map(|config| config.stake_table_entry)
-                    .collect::<Vec<_>>();
 
                 // If certificate is not valid, return current state
                 if let Err(e) = certificate
                     .is_valid_cert(
-                        membership_stake_table,
+                        StakeTableEntries::<TYPES>::from(membership_stake_table).0,
                         membership_success_threshold,
                         &self.upgrade_lock,
                     )

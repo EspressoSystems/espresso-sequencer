@@ -8,7 +8,12 @@
 
 use std::{collections::BTreeMap, fmt::Debug, hash::Hash, marker::PhantomData, sync::Arc};
 
-use super::ns_table::parse_ns_table;
+use async_lock::RwLock;
+use hotshot_utils::anytrace::*;
+use jf_vid::{VidDisperse as JfVidDisperse, VidScheme};
+use serde::{Deserialize, Serialize};
+use tokio::task::spawn_blocking;
+
 use crate::{
     impl_has_epoch,
     message::Proposal,
@@ -23,12 +28,8 @@ use crate::{
     },
     vote::HasViewNumber,
 };
-use async_lock::RwLock;
-use hotshot_utils::anytrace::*;
-use jf_vid::{VidDisperse as JfVidDisperse, VidScheme};
-use serde::{Deserialize, Serialize};
 
-use tokio::task::spawn_blocking;
+use super::ns_table::parse_ns_table;
 
 impl_has_epoch!(
     ADVZDisperse<TYPES>,
@@ -69,28 +70,23 @@ impl<TYPES: NodeType> ADVZDisperse<TYPES> {
         membership: &Arc<RwLock<TYPES::Membership>>,
         target_epoch: Option<TYPES::Epoch>,
         data_epoch: Option<TYPES::Epoch>,
-    ) -> Result<Self> {
+    ) -> Self {
         let shares = membership
             .read()
             .await
             .committee_members(view_number, target_epoch)
-            .map_err(|_| {
-                error!(format!(
-                    "failed to get committee members for epoch={target_epoch:?}"
-                ))
-            })?
             .iter()
             .map(|node| (node.clone(), vid_disperse.shares.remove(0)))
             .collect();
 
-        Ok(Self {
+        Self {
             view_number,
             shares,
             common: vid_disperse.common,
             payload_commitment: vid_disperse.commit,
             epoch: data_epoch,
             target_epoch,
-        })
+        }
     }
 
     /// Calculate the vid disperse information from the payload given a view, epoch and membership,
@@ -106,15 +102,7 @@ impl<TYPES: NodeType> ADVZDisperse<TYPES> {
         target_epoch: Option<TYPES::Epoch>,
         data_epoch: Option<TYPES::Epoch>,
     ) -> Result<Self> {
-        let num_nodes = membership
-            .read()
-            .await
-            .total_nodes(target_epoch)
-            .map_err(|_| {
-                error!(format!(
-                    "failed to get total nodes for epoch={target_epoch:?}"
-                ))
-            })?;
+        let num_nodes = membership.read().await.total_nodes(target_epoch);
         let txns = payload.encode();
 
         let vid_disperse = spawn_blocking(move || advz_scheme(num_nodes).disperse(&txns))
@@ -123,7 +111,8 @@ impl<TYPES: NodeType> ADVZDisperse<TYPES> {
             .context(error!("Join error"))?
             .wrap()
             .context(|err| error!("Failed to calculate VID disperse. Error: {}", err))?;
-        Self::from_membership(view, vid_disperse, membership, target_epoch, data_epoch).await
+
+        Ok(Self::from_membership(view, vid_disperse, membership, target_epoch, data_epoch).await)
     }
 
     /// Returns the payload length in bytes.
@@ -288,26 +277,25 @@ impl<TYPES: NodeType> AvidMDisperse<TYPES> {
         membership: &Arc<RwLock<TYPES::Membership>>,
         target_epoch: Option<TYPES::Epoch>,
         data_epoch: Option<TYPES::Epoch>,
-    ) -> Result<Self> {
+    ) -> Self {
         let payload_byte_len = shares[0].payload_byte_len();
         let shares = membership
             .read()
             .await
             .committee_members(view_number, target_epoch)
-            .map_err(|_| error!("failed to get committee members"))?
             .iter()
             .zip(shares)
             .map(|(node, share)| (node.clone(), share.clone()))
             .collect();
 
-        Ok(Self {
+        Self {
             view_number,
             shares,
             payload_commitment: commit,
             epoch: data_epoch,
             target_epoch,
             payload_byte_len,
-        })
+        }
     }
 
     /// Calculate the vid disperse information from the payload given a view, epoch and membership,
@@ -325,15 +313,7 @@ impl<TYPES: NodeType> AvidMDisperse<TYPES> {
         data_epoch: Option<TYPES::Epoch>,
         metadata: &<TYPES::BlockPayload as BlockPayload<TYPES>>::Metadata,
     ) -> Result<Self> {
-        let num_nodes = membership
-            .read()
-            .await
-            .total_nodes(target_epoch)
-            .map_err(|_| {
-                error!(format!(
-                    "failed to get total nodes for epoch={target_epoch:?}"
-                ))
-            })?;
+        let num_nodes = membership.read().await.total_nodes(target_epoch);
 
         let txns = payload.encode();
         let num_txns = txns.len();
@@ -352,7 +332,10 @@ impl<TYPES: NodeType> AvidMDisperse<TYPES> {
         .wrap()
         .context(|err| error!("Failed to calculate VID disperse. Error: {}", err))?;
 
-        Self::from_membership(view, commit, &shares, membership, target_epoch, data_epoch).await
+        Ok(
+            Self::from_membership(view, commit, &shares, membership, target_epoch, data_epoch)
+                .await,
+        )
     }
 
     /// Returns the payload length in bytes.

@@ -127,16 +127,16 @@ impl<TYPES: NodeType> Membership<TYPES> for Committee<TYPES> {
     fn stake_table(
         &self,
         _epoch: Option<<TYPES as NodeType>::Epoch>,
-    ) -> Result<Vec<PeerConfig<<TYPES as NodeType>::SignatureKey>>> {
-        Ok(self.stake_table.clone())
+    ) -> Vec<PeerConfig<TYPES::SignatureKey>> {
+        self.stake_table.clone()
     }
 
     /// Get the stake table for the current view
     fn da_stake_table(
         &self,
         _epoch: Option<<TYPES as NodeType>::Epoch>,
-    ) -> Result<Vec<PeerConfig<<TYPES as NodeType>::SignatureKey>>> {
-        Ok(self.da_stake_table.clone())
+    ) -> Vec<PeerConfig<TYPES::SignatureKey>> {
+        self.da_stake_table.clone()
     }
 
     /// Get all members of the committee for the current view
@@ -144,12 +144,11 @@ impl<TYPES: NodeType> Membership<TYPES> for Committee<TYPES> {
         &self,
         _view_number: <TYPES as NodeType>::View,
         _epoch: Option<<TYPES as NodeType>::Epoch>,
-    ) -> Result<BTreeSet<<TYPES as NodeType>::SignatureKey>> {
-        Ok(self
-            .stake_table
+    ) -> BTreeSet<<TYPES as NodeType>::SignatureKey> {
+        self.stake_table
             .iter()
             .map(|x| TYPES::SignatureKey::public_key(&x.stake_table_entry))
-            .collect())
+            .collect()
     }
 
     /// Get all members of the committee for the current view
@@ -157,12 +156,11 @@ impl<TYPES: NodeType> Membership<TYPES> for Committee<TYPES> {
         &self,
         _view_number: <TYPES as NodeType>::View,
         _epoch: Option<<TYPES as NodeType>::Epoch>,
-    ) -> Result<BTreeSet<<TYPES as NodeType>::SignatureKey>> {
-        Ok(self
-            .da_stake_table
+    ) -> BTreeSet<<TYPES as NodeType>::SignatureKey> {
+        self.da_stake_table
             .iter()
             .map(|x| TYPES::SignatureKey::public_key(&x.stake_table_entry))
-            .collect())
+            .collect()
     }
 
     /// Get all eligible leaders of the committee for the current view
@@ -170,12 +168,11 @@ impl<TYPES: NodeType> Membership<TYPES> for Committee<TYPES> {
         &self,
         _view_number: <TYPES as NodeType>::View,
         _epoch: Option<<TYPES as NodeType>::Epoch>,
-    ) -> Result<BTreeSet<<TYPES as NodeType>::SignatureKey>> {
-        Ok(self
-            .eligible_leaders
+    ) -> BTreeSet<<TYPES as NodeType>::SignatureKey> {
+        self.eligible_leaders
             .iter()
             .map(|x| TYPES::SignatureKey::public_key(&x.stake_table_entry))
-            .collect())
+            .collect()
     }
 
     /// Get the stake table entry for a public key
@@ -203,14 +200,10 @@ impl<TYPES: NodeType> Membership<TYPES> for Committee<TYPES> {
         &self,
         pub_key: &<TYPES as NodeType>::SignatureKey,
         _epoch: Option<<TYPES as NodeType>::Epoch>,
-    ) -> Result<bool> {
-        Ok(self
-            .indexed_stake_table
+    ) -> bool {
+        self.indexed_stake_table
             .get(pub_key)
-            .context(error!("Error getting stake for public key"))?
-            .stake_table_entry
-            .stake()
-            > U256::zero())
+            .is_some_and(|x| x.stake_table_entry.stake() > U256::zero())
     }
 
     /// Check if a node has stake in the committee
@@ -218,14 +211,10 @@ impl<TYPES: NodeType> Membership<TYPES> for Committee<TYPES> {
         &self,
         pub_key: &<TYPES as NodeType>::SignatureKey,
         _epoch: Option<<TYPES as NodeType>::Epoch>,
-    ) -> Result<bool> {
-        Ok(self
-            .indexed_da_stake_table
+    ) -> bool {
+        self.indexed_da_stake_table
             .get(pub_key)
-            .context(error!("Error getting stake for public key"))?
-            .stake_table_entry
-            .stake()
-            > U256::zero())
+            .is_some_and(|x| x.stake_table_entry.stake() > U256::zero())
     }
 
     // /// Get the network topic for the committee
@@ -245,41 +234,35 @@ impl<TYPES: NodeType> Membership<TYPES> for Committee<TYPES> {
     }
 
     /// Get the total number of nodes in the committee
-    fn total_nodes(&self, _epoch: Option<<TYPES as NodeType>::Epoch>) -> Result<usize> {
-        Ok(self.stake_table.len())
+    fn total_nodes(&self, _epoch: Option<<TYPES as NodeType>::Epoch>) -> usize {
+        self.stake_table.len()
     }
     /// Get the total number of nodes in the committee
-    fn da_total_nodes(&self, _epoch: Option<<TYPES as NodeType>::Epoch>) -> Result<usize> {
-        Ok(self.da_stake_table.len())
+    fn da_total_nodes(&self, _epoch: Option<<TYPES as NodeType>::Epoch>) -> usize {
+        self.da_stake_table.len()
     }
     /// Get the voting success threshold for the committee
-    fn success_threshold(&self, _epoch: Option<<TYPES as NodeType>::Epoch>) -> Result<NonZeroU64> {
-        NonZeroU64::new(((self.stake_table.len() as u64 * 2) / 3) + 1)
-            .context(error!("success threshold is zero"))
+    fn success_threshold(&self, _epoch: Option<<TYPES as NodeType>::Epoch>) -> NonZeroU64 {
+        NonZeroU64::new(((self.stake_table.len() as u64 * 2) / 3) + 1).unwrap()
     }
 
     /// Get the voting success threshold for the committee
-    fn da_success_threshold(
-        &self,
-        _epoch: Option<<TYPES as NodeType>::Epoch>,
-    ) -> Result<NonZeroU64> {
-        NonZeroU64::new(((self.da_stake_table.len() as u64 * 2) / 3) + 1)
-            .context(error!("da success threshold is zero"))
+    fn da_success_threshold(&self, _epoch: Option<<TYPES as NodeType>::Epoch>) -> NonZeroU64 {
+        NonZeroU64::new(((self.da_stake_table.len() as u64 * 2) / 3) + 1).unwrap()
     }
 
     /// Get the voting failure threshold for the committee
-    fn failure_threshold(&self, _epoch: Option<<TYPES as NodeType>::Epoch>) -> Result<NonZeroU64> {
-        NonZeroU64::new(((self.stake_table.len() as u64) / 3) + 1)
-            .context(error!("failure threshold is zero"))
+    fn failure_threshold(&self, _epoch: Option<<TYPES as NodeType>::Epoch>) -> NonZeroU64 {
+        NonZeroU64::new(((self.stake_table.len() as u64) / 3) + 1).unwrap()
     }
 
     /// Get the voting upgrade threshold for the committee
-    fn upgrade_threshold(&self, _epoch: Option<<TYPES as NodeType>::Epoch>) -> Result<NonZeroU64> {
+    fn upgrade_threshold(&self, _epoch: Option<<TYPES as NodeType>::Epoch>) -> NonZeroU64 {
         NonZeroU64::new(max(
             (self.stake_table.len() as u64 * 9) / 10,
             ((self.stake_table.len() as u64 * 2) / 3) + 1,
         ))
-        .context(error!("upgrade threshold is zero"))
+        .unwrap()
     }
 
     fn add_drb_result(&mut self, _epoch: <TYPES as NodeType>::Epoch, _drb: DrbResult) {}
