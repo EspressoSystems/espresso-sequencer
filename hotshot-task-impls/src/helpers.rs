@@ -935,41 +935,12 @@ pub async fn validate_qc_and_next_epoch_qc<TYPES: NodeType, V: Versions>(
     membership_coordinator: &EpochMembershipCoordinator<TYPES>,
     upgrade_lock: &UpgradeLock<TYPES, V>,
 ) -> Result<()> {
-    let membership = membership_coordinator
+    let mut epoch_membership = membership_coordinator
         .membership_for_epoch(qc.data.epoch)
         .await?;
-    if let Some(next_epoch_qc) = maybe_next_epoch_qc {
-        ensure!(next_epoch_qc
-            .data
-            .epoch
-            .is_some_and(|e| e == membership.epoch().unwrap()));
-        // If the next epoch qc exists, make sure it's equal to the qc
-        if qc.view_number() != next_epoch_qc.view_number() || qc.data != *next_epoch_qc.data {
-            bail!("Next epoch qc exists but it's not equal with qc.");
-        }
-        if next_epoch_qc.data.epoch.is_none()
-            || qc.data.epoch.is_none()
-                && next_epoch_qc.data.epoch.unwrap() != qc.data.epoch.unwrap() + 1
-        {
-            bail!("eQC is not for the next epoch after QC");
-        }
-        let next_membership = membership.next_epoch().await?;
 
-        let membership_next_stake_table = next_membership.stake_table().await;
-        let membership_next_success_threshold = next_membership.success_threshold().await;
-
-        // Validate the next epoch qc as well
-        next_epoch_qc
-            .is_valid_cert(
-                StakeTableEntries::<TYPES>::from(membership_next_stake_table).0,
-                membership_next_success_threshold,
-                upgrade_lock,
-            )
-            .await
-            .context(|e| warn!("Invalid next epoch certificate: {}", e))?;
-    }
-    let membership_stake_table = membership.stake_table().await;
-    let membership_success_threshold = membership.success_threshold().await;
+    let membership_stake_table = epoch_membership.stake_table().await;
+    let membership_success_threshold = epoch_membership.success_threshold().await;
 
     {
         let consensus_reader = consensus.read().await;
@@ -991,11 +962,9 @@ pub async fn validate_qc_and_next_epoch_qc<TYPES: NodeType, V: Versions>(
         if qc.view_number() != next_epoch_qc.view_number() || qc.data != *next_epoch_qc.data {
             bail!("Next epoch qc exists but it's not equal with qc.");
         }
-
-        let membership_reader = membership.next_epoch().await?;
-        let membership_next_stake_table = membership_reader.stake_table().await;
-        let membership_next_success_threshold = membership_reader.success_threshold().await;
-        drop(membership_reader);
+        epoch_membership = epoch_membership.next_epoch().await?;
+        let membership_next_stake_table = epoch_membership.stake_table().await;
+        let membership_next_success_threshold = epoch_membership.success_threshold().await;
 
         // Validate the next epoch qc as well
         next_epoch_qc

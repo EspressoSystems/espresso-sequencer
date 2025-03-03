@@ -368,16 +368,17 @@ pub async fn build_da_certificate<TYPES: NodeType, V: Versions>(
         upgrade_lock.version_infallible(view_number).await,
     );
 
-    let next_epoch_da_payload_commitment = if upgrade_lock.epochs_enabled(view_number).await {
-        Some(vid_commitment::<V>(
-            &encoded_transactions,
-            &metadata.encode(),
-            membership.next_epoch().await?.total_nodes().await,
-            upgrade_lock.version_infallible(view_number).await,
-        ))
-    } else {
-        None
-    };
+    let next_epoch_da_payload_commitment =
+        if upgrade_lock.epochs_enabled(view_number).await && membership.epoch().is_some() {
+            Some(vid_commitment::<V>(
+                &encoded_transactions,
+                &metadata.encode(),
+                membership.next_epoch().await?.total_nodes().await,
+                upgrade_lock.version_infallible(view_number).await,
+            ))
+        } else {
+            None
+        };
 
     let da_data = DaData2 {
         payload_commit: da_payload_commitment,
