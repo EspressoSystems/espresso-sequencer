@@ -403,6 +403,7 @@ fn main() {
 
             let mut new_states: Vec<ParsedLightClientState> = vec![];
             let mut proofs: Vec<ParsedPlonkProof> = vec![];
+            let mut next_st_states: Vec<ParsedStakeTableState> = vec![];
 
             for _ in 1..4 {
                 // random number of notarized but not finalized block
@@ -416,11 +417,12 @@ fn main() {
                 ledger.elapse_with_block();
 
                 let (pi, proof) = ledger.gen_state_proof();
+                next_st_states.push(ledger.next_stake_table_state().into());
                 new_states.push(pi.into());
                 proofs.push(proof.into());
             }
 
-            let res = (new_states, proofs);
+            let res = (new_states, next_st_states, proofs);
             println!("{}", res.encode_hex());
         }
         Action::MockSkipBlocks => {
@@ -446,11 +448,15 @@ fn main() {
                 let (state, proof) = ledger.gen_state_proof();
                 let state_parsed: ParsedLightClientState = state.into();
                 let proof_parsed: ParsedPlonkProof = proof.into();
-                (state_parsed, proof_parsed)
+                let next_stake_table: ParsedStakeTableState =
+                    ledger.next_stake_table_state().into();
+                (state_parsed, next_stake_table, proof_parsed)
             } else {
                 let state_parsed = ledger.light_client_state().into();
                 let proof_parsed = ParsedPlonkProof::dummy(&mut ledger.rng);
-                (state_parsed, proof_parsed)
+                let next_stake_table: ParsedStakeTableState =
+                    ledger.next_stake_table_state().into();
+                (state_parsed, next_stake_table, proof_parsed)
             };
             println!("{}", res.encode_hex());
         }

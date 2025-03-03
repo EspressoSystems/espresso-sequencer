@@ -42,7 +42,7 @@ contract LightClientUpgradeToVxTest is Test {
     address public lcV1Impl;
 
     uint32 public constant MAX_HISTORY_SECONDS = 864000; //10 days
-    uint64 public constant BLOCKS_PER_EPOCH = 4;
+    uint64 public constant BLOCKS_PER_EPOCH = 3;
 
     // deploy the first implementation with its proxy
     function setUp() public {

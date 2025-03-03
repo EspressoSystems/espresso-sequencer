@@ -62,6 +62,7 @@ contract LightClientV2 is LightClient {
     /// become the snapshots used for vote verifications later on.
     function newFinalizedState(
         ExtendedLightClientState memory newState,
+        StakeTableState memory nextStakeTable,
         IPlonkVerifier.PlonkProof memory proof
     ) external virtual {
         if (
@@ -74,7 +75,7 @@ contract LightClientV2 is LightClient {
         BN254.validateScalarField(newState.blockCommRoot);
 
         // check plonk proof
-        verifyProof(newState, proof);
+        verifyProof(newState, nextStakeTable, proof);
 
         // New condition to check w.r.t. LightClient contract V1
         require(newField == 0, "newField can only be set to 0");
@@ -93,6 +94,7 @@ contract LightClientV2 is LightClient {
     /// used in inherited contracts.
     function verifyProof(
         ExtendedLightClientState memory state,
+        StakeTableState memory nextStakeTable,
         IPlonkVerifier.PlonkProof memory proof
     ) internal virtual {
         IPlonkVerifier.VerifyingKey memory vk = VkLib.getVk();
@@ -102,15 +104,24 @@ contract LightClientV2 is LightClient {
         publicInput[0] = uint256(state.viewNum);
         publicInput[1] = uint256(state.blockHeight);
         publicInput[2] = BN254.ScalarField.unwrap(state.blockCommRoot);
-        publicInput[3] = BN254.ScalarField.unwrap(genesisStakeTableState.blsKeyComm);
-        publicInput[4] = BN254.ScalarField.unwrap(genesisStakeTableState.schnorrKeyComm);
-        publicInput[5] = BN254.ScalarField.unwrap(genesisStakeTableState.amountComm);
-        publicInput[6] = genesisStakeTableState.threshold;
-        // FIXME: use nextStakeTable instead, current just satisfy compiler first
-        publicInput[7] = BN254.ScalarField.unwrap(genesisStakeTableState.blsKeyComm);
-        publicInput[8] = BN254.ScalarField.unwrap(genesisStakeTableState.schnorrKeyComm);
-        publicInput[9] = BN254.ScalarField.unwrap(genesisStakeTableState.amountComm);
-        publicInput[10] = genesisStakeTableState.threshold;
+        publicInput[3] = BN254.ScalarField.unwrap(votingStakeTableState.blsKeyComm);
+        publicInput[4] = BN254.ScalarField.unwrap(votingStakeTableState.schnorrKeyComm);
+        publicInput[5] = BN254.ScalarField.unwrap(votingStakeTableState.amountComm);
+        publicInput[6] = votingStakeTableState.threshold;
+
+        if (isLastBlockInEpoch(state.blockHeight)) {
+            // during epoch change: use the next stake table
+            publicInput[7] = BN254.ScalarField.unwrap(nextStakeTable.blsKeyComm);
+            publicInput[8] = BN254.ScalarField.unwrap(nextStakeTable.schnorrKeyComm);
+            publicInput[9] = BN254.ScalarField.unwrap(nextStakeTable.amountComm);
+            publicInput[10] = nextStakeTable.threshold;
+        } else {
+            // use the previous stake table, effectively force nextStakeTable == votingStakeTable
+            publicInput[7] = BN254.ScalarField.unwrap(votingStakeTableState.blsKeyComm);
+            publicInput[8] = BN254.ScalarField.unwrap(votingStakeTableState.schnorrKeyComm);
+            publicInput[9] = BN254.ScalarField.unwrap(votingStakeTableState.amountComm);
+            publicInput[10] = votingStakeTableState.threshold;
+        }
 
         if (!PlonkVerifier.verify(vk, publicInput, proof)) {
             revert InvalidProof();

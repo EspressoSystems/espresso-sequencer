@@ -38,6 +38,8 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     /// @notice when the permissioned prover is unset, this event is emitted.
     event PermissionedProverNotRequired();
+    /// @notice When entering a new epoch and a new stake table snapshot.
+    event NewEpoch(uint64 epoch);
 
     /// @notice Event that a new finalized state has been successfully verified and updated
     event NewState(
@@ -136,6 +138,8 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     error InvalidHotShotBlockForCommitmentCheck();
     /// @notice Invalid Max Block States
     error InvalidMaxStateHistory();
+    /// @notice The last block of the epoch (of the finalizedState) should not be skipped
+    error MissingLastBlockInEpochUpdate();
 
     /// @notice Constructor disables initializers to prevent the implementation contract from being
     /// initialized
@@ -241,9 +245,12 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @notice While `newState.stakeTable*` refers to the (possibly) new stake table states,
     /// the entire `newState` needs to be signed by stakers in `finalizedState`
     /// @param newState new light client state
+    /// @param nextStakeTable the stake table to use in the next block (same as the current except
+    /// during epoch change)
     /// @param proof PlonkProof
     function newFinalizedState(
         LightClientState memory newState,
+        StakeTableState memory nextStakeTable,
         IPlonkVerifier.PlonkProof memory proof
     ) external virtual {
         //revert if we're in permissionedProver mode and the permissioned prover has not been set
@@ -260,11 +267,34 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         // format validity check
         BN254.validateScalarField(newState.blockCommRoot);
 
+        // epoch-related checks
+        uint64 lastUpdateEpoch = currentEpoch();
+        uint64 newEpoch = epochFromBlockNumber(newState.blockHeight, BLOCKS_PER_EPOCH);
+        if (
+            newEpoch == lastUpdateEpoch + 1 && !isLastBlockInEpoch(finalizedState.blockHeight)
+                && lastUpdateEpoch > 0
+        ) {
+            // advancing 1 epoch is only allowed if the last block of last epoch was submitted
+            // or if there is no last epoch (i.e. when current epoch is epoch 1)
+            revert MissingLastBlockInEpochUpdate();
+        }
+        if (newEpoch >= lastUpdateEpoch + 2) {
+            revert MissingLastBlockInEpochUpdate();
+        }
+        BN254.validateScalarField(nextStakeTable.blsKeyComm);
+        BN254.validateScalarField(nextStakeTable.schnorrKeyComm);
+        BN254.validateScalarField(nextStakeTable.amountComm);
+
         // check plonk proof
-        verifyProof(newState, proof);
+        verifyProof(newState, nextStakeTable, proof);
 
         // upon successful verification, update the latest finalized state
+        // during epoch change, also update to the new stake table
         finalizedState = newState;
+        if (isLastBlockInEpoch(newState.blockHeight)) {
+            votingStakeTableState = nextStakeTable;
+            emit NewEpoch(newEpoch + 1);
+        }
 
         updateStateHistory(uint64(currentBlockNumber()), uint64(block.timestamp), newState);
 
@@ -273,10 +303,11 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     /// @notice Verify the Plonk proof, marked as `virtual` for easier testing as we can swap VK
     /// used in inherited contracts.
-    function verifyProof(LightClientState memory state, IPlonkVerifier.PlonkProof memory proof)
-        internal
-        virtual
-    {
+    function verifyProof(
+        LightClientState memory state,
+        StakeTableState memory nextStakeTable,
+        IPlonkVerifier.PlonkProof memory proof
+    ) internal virtual {
         IPlonkVerifier.VerifyingKey memory vk = VkLib.getVk();
 
         // Prepare the public input
@@ -288,11 +319,20 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         publicInput[4] = BN254.ScalarField.unwrap(votingStakeTableState.schnorrKeyComm);
         publicInput[5] = BN254.ScalarField.unwrap(votingStakeTableState.amountComm);
         publicInput[6] = votingStakeTableState.threshold;
-        // FIXME: use nextStakeTable instead, current just satisfy compiler first
-        publicInput[7] = BN254.ScalarField.unwrap(votingStakeTableState.blsKeyComm);
-        publicInput[8] = BN254.ScalarField.unwrap(votingStakeTableState.schnorrKeyComm);
-        publicInput[9] = BN254.ScalarField.unwrap(votingStakeTableState.amountComm);
-        publicInput[10] = votingStakeTableState.threshold;
+
+        if (isLastBlockInEpoch(state.blockHeight)) {
+            // during epoch change: use the next stake table
+            publicInput[7] = BN254.ScalarField.unwrap(nextStakeTable.blsKeyComm);
+            publicInput[8] = BN254.ScalarField.unwrap(nextStakeTable.schnorrKeyComm);
+            publicInput[9] = BN254.ScalarField.unwrap(nextStakeTable.amountComm);
+            publicInput[10] = nextStakeTable.threshold;
+        } else {
+            // use the previous stake table, effectively force nextStakeTable == votingStakeTable
+            publicInput[7] = BN254.ScalarField.unwrap(votingStakeTableState.blsKeyComm);
+            publicInput[8] = BN254.ScalarField.unwrap(votingStakeTableState.schnorrKeyComm);
+            publicInput[9] = BN254.ScalarField.unwrap(votingStakeTableState.amountComm);
+            publicInput[10] = votingStakeTableState.threshold;
+        }
 
         if (!PlonkVerifier.verify(vk, publicInput, proof)) {
             revert InvalidProof();
