@@ -15,11 +15,12 @@ use hotshot_types::data::{QuorumProposal2, QuorumProposalWrapper};
 use hotshot_types::event::LeafInfo;
 use hotshot_types::simple_certificate::QuorumCertificate2;
 use hotshot_types::simple_vote::QuorumData2;
-use hotshot_types::traits::block_contents::{vid_commitment, GENESIS_VID_NUM_STORAGE_NODES};
+use hotshot_types::traits::block_contents::GENESIS_VID_NUM_STORAGE_NODES;
 use hotshot_types::traits::node_implementation::Versions;
-use hotshot_types::vid::advz_scheme;
+use hotshot_types::traits::EncodeBytes;
+use hotshot_types::vid::advz::advz_scheme;
 use hotshot_types::{
-    data::{random_commitment, Leaf, Leaf2},
+    data::{random_commitment, vid_commitment, Leaf, Leaf2},
     message::UpgradeLock,
     simple_certificate::QuorumCertificate,
     simple_vote::VersionedVoteData,
@@ -101,6 +102,7 @@ pub async fn proposals_with_transactions(
             .into(),
         vid_commitment::<TestVersions>(
             &encoded_transactions,
+            &metadata.encode(),
             GENESIS_VID_NUM_STORAGE_NODES,
             <TestVersions as Versions>::Base::VERSION,
         ),
@@ -185,9 +187,11 @@ pub fn parent_references(view: u64) -> ParentBlockReferences<TestTypes> {
     ParentBlockReferences {
         view_number: <TestTypes as NodeType>::View::new(view),
         leaf_commit: random_commitment(rng),
-        vid_commitment: advz_scheme(TEST_NUM_NODES_IN_VID_COMPUTATION)
-            .commit_only(rng.sample_iter(Standard).take(100).collect::<Vec<_>>())
-            .unwrap(),
+        vid_commitment: hotshot_types::data::VidCommitment::V0(
+            advz_scheme(TEST_NUM_NODES_IN_VID_COMPUTATION)
+                .commit_only(rng.sample_iter(Standard).take(100).collect::<Vec<_>>())
+                .unwrap(),
+        ),
         builder_commitment: BuilderCommitment::from_bytes(
             rng.sample_iter(Standard).take(32).collect::<Vec<_>>(),
         ),
