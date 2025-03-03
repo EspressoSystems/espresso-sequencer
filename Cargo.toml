@@ -234,6 +234,7 @@ debug = "line-tables-only"
 [profile.dev-debug]
 inherits = "dev"
 strip = "none"
+debug = "full"
 
 [profile.test]
 opt-level = 1
