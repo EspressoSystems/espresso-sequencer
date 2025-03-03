@@ -132,7 +132,7 @@ impl<TYPES: NodeType, V: Versions> ProposalDependencyHandle<TYPES, V> {
                 } else {
                     let prev_membership = self.membership.prev_epoch().await.ok()?;
                     if prev_epoch != prev_membership.epoch {
-                        tracing::info!("High QC recieved is not fror current or previous epoch");
+                        tracing::info!("High QC received is not fror current or previous epoch");
                         return None;
                     }
                     prev_membership
