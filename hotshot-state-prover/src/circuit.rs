@@ -88,7 +88,7 @@ impl LightClientStateVar {
 /// - a list of schnorr signatures of the updated states (`Vec<SchnorrSignature>`), default if the node doesn't sign the state
 /// - updated light client state (`(view_number, block_height, block_comm_root)`)
 /// - voting stake table state (containing 3 commitments to the 3 columns of the stake table and a threshold)
-/// - stake table state for the next block (same as the voting stake table except at epoch boundries)
+/// - stake table state for the next block (same as the voting stake table except at epoch boundaries)
 ///
 /// Lengths of input vectors should not exceed the `stake_table_capacity`.
 /// The list of stake table entries, bit indicators and signatures will be padded to the `stake_table_capacity`.

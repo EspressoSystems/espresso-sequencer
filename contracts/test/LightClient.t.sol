@@ -1147,11 +1147,35 @@ contract LightClient_EpochTest is LightClientCommonTest {
         assertEq(lc.currentEpoch(), 0);
     }
 
-    function testFuzz_correctEpochComputation(uint64 newBlockHeight) public {
+    function testFuzz_CorrectEpochCompute(uint64 blockNum, uint64 blocksPerEpoch) external {
+        string[] memory cmds = new string[](4);
+        cmds[0] = "diff-test";
+        cmds[1] = "epoch-compute";
+        cmds[2] = vm.toString(blockNum);
+        cmds[3] = vm.toString(blocksPerEpoch);
+
+        bytes memory result = vm.ffi(cmds);
+        (uint64 epoch) = abi.decode(result, (uint64));
+        assertEq(epoch, lc.epochFromBlockNumber(blockNum, blocksPerEpoch));
+    }
+
+    function testFuzz_currentEpoch(uint64 newBlockHeight) public {
         uint64 anyView = 10;
         BN254.ScalarField anyRoot = genesis.blockCommRoot;
 
         lc.setFinalizedState(LC.LightClientState(anyView, newBlockHeight, anyRoot));
-        assertEq(lc.currentEpoch(), newBlockHeight / BLOCKS_PER_EPOCH);
+        // note: since we've tested `lc.epochFromBlockNumber()` in the last test, we use it as
+        // ground truth here
+        assertEq(lc.currentEpoch(), lc.epochFromBlockNumber(newBlockHeight, lc.BLOCKS_PER_EPOCH()));
+    }
+
+    function test_isLastBlockInEpoch() public view {
+        assertFalse(lc.isLastBlockInEpoch(0));
+        for (uint64 i = 1; i < BLOCKS_PER_EPOCH - 1; i++) {
+            assertFalse(lc.isLastBlockInEpoch(i));
+            assertFalse(lc.isLastBlockInEpoch(i + 3 * BLOCKS_PER_EPOCH));
+        }
+        assertTrue(lc.isLastBlockInEpoch(BLOCKS_PER_EPOCH));
+        assertTrue(lc.isLastBlockInEpoch(4 * BLOCKS_PER_EPOCH));
     }
 }

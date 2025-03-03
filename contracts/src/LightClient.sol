@@ -288,7 +288,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         publicInput[4] = BN254.ScalarField.unwrap(votingStakeTableState.schnorrKeyComm);
         publicInput[5] = BN254.ScalarField.unwrap(votingStakeTableState.amountComm);
         publicInput[6] = votingStakeTableState.threshold;
-        // FIXME: use nextStakeTable instead, current just satisify compiler first
+        // FIXME: use nextStakeTable instead, current just satisfy compiler first
         publicInput[7] = BN254.ScalarField.unwrap(votingStakeTableState.blsKeyComm);
         publicInput[8] = BN254.ScalarField.unwrap(votingStakeTableState.schnorrKeyComm);
         publicInput[9] = BN254.ScalarField.unwrap(votingStakeTableState.amountComm);
@@ -491,10 +491,36 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     // === Epoch-related logic ===
     //
 
-    /// @dev Fetches the last hotshot block number from the light client contract to calculate the
-    /// epoch.
+    /// @notice Returns the current epoch according the latest update on finalizedState
     /// @return current epoch (computed from the last known hotshot block number)
-    function currentEpoch() public view virtual returns (uint64) {
-        return uint64(finalizedState.blockHeight / BLOCKS_PER_EPOCH);
+    function currentEpoch() public view returns (uint64) {
+        return epochFromBlockNumber(finalizedState.blockHeight, BLOCKS_PER_EPOCH);
+    }
+
+    /// @notice Calculate the epoch number from the hotshot block number
+    /// @dev same logic as `hotshot_types::utils::epoch_from_block_number()`
+    function epochFromBlockNumber(uint64 blockNum, uint64 blocksPerEpoch)
+        public
+        pure
+        returns (uint64)
+    {
+        if (blocksPerEpoch == 0) {
+            // this case is unreachable in our context since we reject zero-valued BLOCKS_PER_EPOCH
+            // at init time
+            return 0;
+        } else if (blockNum % blocksPerEpoch == 0) {
+            return blockNum / blocksPerEpoch;
+        } else {
+            return blockNum / blocksPerEpoch + 1;
+        }
+    }
+
+    /// @notice Decide if a block height is the last block in an epoch
+    function isLastBlockInEpoch(uint64 blockHeight) public view returns (bool) {
+        if (blockHeight == 0) {
+            return false;
+        } else {
+            return blockHeight % BLOCKS_PER_EPOCH == 0;
+        }
     }
 }

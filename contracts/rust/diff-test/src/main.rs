@@ -19,6 +19,7 @@ use hotshot_contract_adapter::{
 use hotshot_state_prover::mock_ledger::{
     gen_plonk_proof_for_test, MockLedger, MockSystemParam, STAKE_TABLE_CAPACITY_FOR_TEST,
 };
+use hotshot_types::utils::epoch_from_block_number;
 use jf_pcs::prelude::Commitment;
 use jf_plonk::proof_system::structs::{Proof, VerifyingKey};
 use jf_plonk::proof_system::PlonkKzgSnark;
@@ -86,6 +87,8 @@ enum Action {
     MockConsecutiveFinalizedStates,
     /// Get a light client state that skipped a few blocks
     MockSkipBlocks,
+    /// Compute the epoch number from block height
+    EpochCompute,
 }
 
 #[allow(clippy::type_complexity)]
@@ -492,6 +495,16 @@ fn main() {
 
             let res = (vk_parsed, sig_parsed);
             println!("{}", res.encode_hex());
+        }
+        Action::EpochCompute => {
+            if cli.args.len() != 2 {
+                panic!("Should provide arg1=blockNum, arg2=blocksPerEpoch");
+            }
+            let block_num = cli.args[0].parse::<u64>().unwrap();
+            let epoch_height = cli.args[1].parse::<u64>().unwrap();
+
+            let res = epoch_from_block_number(block_num, epoch_height);
+            println!("{}", (res,).encode_hex());
         }
     };
 }

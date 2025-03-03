@@ -44,7 +44,7 @@ contract LightClientMock is LC {
         publicInput[4] = BN254.ScalarField.unwrap(genesisStakeTableState.schnorrKeyComm);
         publicInput[5] = BN254.ScalarField.unwrap(genesisStakeTableState.amountComm);
         publicInput[6] = genesisStakeTableState.threshold;
-        // FIXME: use nextStakeTable instead, current just satisify compiler first
+        // FIXME: use nextStakeTable instead, current just satisfy compiler first
         publicInput[7] = BN254.ScalarField.unwrap(genesisStakeTableState.blsKeyComm);
         publicInput[8] = BN254.ScalarField.unwrap(genesisStakeTableState.schnorrKeyComm);
         publicInput[9] = BN254.ScalarField.unwrap(genesisStakeTableState.amountComm);
