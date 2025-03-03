@@ -17,8 +17,10 @@ use crate::test_task::{TestResult, TestTaskState};
 /// `ViewSync` Task error
 #[derive(Error, Debug, Clone)]
 pub enum ViewSyncTaskError {
-    #[error("{} nodes hit view sync", hit_view_sync.len())]
-    HitViewSync { hit_view_sync: HashSet<usize> },
+    #[error("{len} nodes hit view sync")]
+    HitViewSync { 
+        hit_view_sync: HashSet<usize> },
+        #[source] len: usize,
 }
 
 /// `ViewSync` task state
@@ -80,7 +82,7 @@ impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> TestTaskState
     }
 }
 
-/// enum desecribing whether a node should hit view sync
+/// enum describing whether a node should hit view sync
 #[derive(Clone, Debug, Copy)]
 pub enum ShouldHitViewSync {
     /// the node should hit view sync
