@@ -420,7 +420,7 @@ mod tests {
         )
         .unwrap();
         assert!(circuit
-            .check_circuit_satisfiability(public_inputs.as_ref())
+            .check_circuit_satisfiability(&public_inputs.to_vec())
             .is_ok());
 
         // lower threshold should also pass
@@ -437,7 +437,7 @@ mod tests {
         )
         .unwrap();
         assert!(circuit
-            .check_circuit_satisfiability(public_inputs.as_ref())
+            .check_circuit_satisfiability(&public_inputs.to_vec())
             .is_ok());
 
         // bad path: feeding non-bit vector
@@ -453,7 +453,7 @@ mod tests {
         )
         .unwrap();
         assert!(circuit
-            .check_circuit_satisfiability(public_inputs.as_ref())
+            .check_circuit_satisfiability(&public_inputs.to_vec())
             .is_err());
 
         // bad path: total weight doesn't meet the threshold
@@ -486,7 +486,7 @@ mod tests {
         )
         .unwrap();
         assert!(bad_circuit
-            .check_circuit_satisfiability(public_inputs.as_ref())
+            .check_circuit_satisfiability(&public_inputs.to_vec())
             .is_err());
 
         // bad path: bad stake table commitment
@@ -504,7 +504,7 @@ mod tests {
         )
         .unwrap();
         assert!(bad_circuit
-            .check_circuit_satisfiability(public_inputs.as_ref())
+            .check_circuit_satisfiability(&public_inputs.to_vec())
             .is_err());
 
         // bad path: incorrect signing message
@@ -525,7 +525,7 @@ mod tests {
         )
         .unwrap();
         assert!(bad_circuit
-            .check_circuit_satisfiability(public_inputs.as_ref())
+            .check_circuit_satisfiability(&public_inputs.to_vec())
             .is_err());
 
         // bad path: overflowing stake table size

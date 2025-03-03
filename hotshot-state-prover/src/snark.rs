@@ -269,7 +269,7 @@ mod tests {
         let (proof, public_inputs) = result.unwrap();
         assert!(PlonkKzgSnark::<Bn254>::verify::<SolidityTranscript>(
             &vk,
-            public_inputs.as_ref(),
+            &public_inputs.to_vec(),
             &proof,
             None
         )

@@ -153,6 +153,10 @@ struct Args {
     )]
     max_block_size: u64,
 
+    /// Number of HotShot blocks in an epoch within which the same stake table snapshot will be used.
+    #[clap(long, env = "ESPRESSO_SEQUENCER_BLOCKS_PER_EPOCH")]
+    blocks_per_epoch: u64,
+
     #[clap(flatten)]
     sql: persistence::sql::Options,
 
@@ -186,6 +190,7 @@ async fn main() -> anyhow::Result<()> {
         alt_prover_update_intervals,
         l1_interval,
         max_block_size,
+        blocks_per_epoch,
     } = cli_params;
 
     logging.init();
@@ -292,6 +297,7 @@ async fn main() -> anyhow::Result<()> {
             None,
             contracts.clone(),
             None, // initial stake table
+            blocks_per_epoch,
         )
         .await?;
 

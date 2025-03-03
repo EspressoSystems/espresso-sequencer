@@ -311,9 +311,10 @@ pub async fn submit_state_and_proof(
 ) -> Result<(), ProverError> {
     // prepare the input the contract call and the tx itself
     let proof: ParsedPlonkProof = proof.into();
-    let new_state: ParsedLightClientState = public_input.into();
+    let new_state: ParsedLightClientState = public_input.lc_state.into();
+    let next_stake_table: ParsedStakeTableState = public_input.next_st_state.into();
 
-    let mut tx = contract.new_finalized_state(new_state.into(), proof.into());
+    let mut tx = contract.new_finalized_state(new_state.into(), next_stake_table.into(), proof.into());
 
     // only use gas oracle for mainnet
     if contract.client_ref().get_chainid().await?.as_u64() == 1 {
@@ -597,6 +598,7 @@ mod test {
 
     const MAX_HISTORY_SECONDS: u32 = 864000;
     const NUM_INIT_VALIDATORS: usize = STAKE_TABLE_CAPACITY_FOR_TEST / 2;
+    const BLOCKS_PER_EPOCH_FOR_TEST: u64 = 3;
 
     /// deploy LightClientMock.sol on local blockchain (via `anvil`) for testing
     /// return (signer-loaded wallet, contract instance)
@@ -615,6 +617,7 @@ mod test {
             light_client_state: genesis,
             stake_table_state: stake_genesis,
             max_history_seconds: MAX_HISTORY_SECONDS,
+            blocks_per_epoch: BLOCKS_PER_EPOCH_FOR_TEST,
         };
 
         let mut contracts = deployer::Contracts::default();
@@ -643,6 +646,7 @@ mod test {
             light_client_state: genesis,
             stake_table_state: stake_genesis,
             max_history_seconds: MAX_HISTORY_SECONDS,
+            blocks_per_epoch: BLOCKS_PER_EPOCH_FOR_TEST,
         };
 
         let mut contracts = deployer::Contracts::default();
@@ -803,14 +807,33 @@ mod test {
         let genesis_l1: ParsedLightClientState = contract.genesis_state().await?.into();
         assert_eq!(genesis_l1, genesis, "mismatched genesis, aborting tests");
 
-        // simulate some block elapsing
-        for _ in 0..10 {
+        // simulate some block elapsing until the end of epoch 1
+        for _ in 0..BLOCKS_PER_EPOCH_FOR_TEST {
             ledger.elapse_with_block();
         }
 
         let (pi, proof) = ledger.gen_state_proof();
         tracing::info!("Successfully generated proof for new state.");
 
+        let contract = super::prepare_contract(
+            config.provider.clone(),
+            config.signing_key.clone(),
+            config.light_client_address,
+        )
+        .await?;
+        super::submit_state_and_proof(proof, pi, &contract).await?;
+        tracing::info!("Successfully submitted new finalized state to L1.");
+        // test if new state is updated in l1
+        let finalized_l1: ParsedLightClientState = contract.finalized_state().await?.into();
+        let voting_st_l1: ParsedStakeTableState = contract.voting_stake_table_state().await?.into();
+        assert_eq!(finalized_l1, ledger.light_client_state().into());
+        // test if the new stake table state is synced as the new voting stake table snapshot
+        assert_eq!(voting_st_l1, ledger.next_stake_table_state().into());
+
+        // simulate more block elapsing in epoch 2
+        ledger.elapse_with_block();
+        let (pi, proof) = ledger.gen_state_proof();
+        tracing::info!("Successfully generated proof for new state in epoch 2.");
         let contract = super::prepare_contract(
             config.provider,
             config.signing_key,
@@ -819,9 +842,7 @@ mod test {
         .await?;
         super::submit_state_and_proof(proof, pi, &contract).await?;
         tracing::info!("Successfully submitted new finalized state to L1.");
-        // test if new state is updated in l1
-        let finalized_l1: ParsedLightClientState = contract.finalized_state().await?.into();
-        assert_eq!(finalized_l1, ledger.light_client_state().into());
+
         Ok(())
     }
 }

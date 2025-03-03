@@ -417,8 +417,8 @@ fn main() {
                 ledger.elapse_with_block();
 
                 let (pi, proof) = ledger.gen_state_proof();
-                next_st_states.push(ledger.next_stake_table_state().into());
-                new_states.push(pi.into());
+                next_st_states.push(pi.next_st_state.into());
+                new_states.push(pi.lc_state.into());
                 proofs.push(proof.into());
             }
 
@@ -445,11 +445,10 @@ fn main() {
             }
 
             let res = if require_valid_proof {
-                let (state, proof) = ledger.gen_state_proof();
-                let state_parsed: ParsedLightClientState = state.into();
+                let (pi, proof) = ledger.gen_state_proof();
+                let state_parsed: ParsedLightClientState = pi.lc_state.into();
                 let proof_parsed: ParsedPlonkProof = proof.into();
-                let next_stake_table: ParsedStakeTableState =
-                    ledger.next_stake_table_state().into();
+                let next_stake_table: ParsedStakeTableState = pi.next_st_state.into();
                 (state_parsed, next_stake_table, proof_parsed)
             } else {
                 let state_parsed = ledger.light_client_state().into();
