@@ -218,6 +218,7 @@ async fn init_consensus(
         start_voting_time: 0,
         stop_voting_time: 0,
         epoch_height: 0,
+        epoch_start_block: 0,
     };
 
     let nodes = join_all(priv_keys.into_iter().zip(data_sources).enumerate().map(
@@ -251,6 +252,8 @@ async fn init_consensus(
                     HotShotInitializer::from_genesis::<MockVersions>(
                         TestInstanceState::default(),
                         0,
+                        0,
+                        vec![],
                     )
                     .await
                     .unwrap(),

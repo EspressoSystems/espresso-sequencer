@@ -150,4 +150,10 @@ pub trait Membership<TYPES: NodeType>: Debug + Send + Sync {
     /// Called to notify the Membership when a new DRB result has been calculated.
     /// Observes the same semantics as add_epoch_root
     fn add_drb_result(&mut self, _epoch: TYPES::Epoch, _drb_result: DrbResult);
+
+    /// Called to notify the Membership that Epochs are enabled.
+    /// Implementations should copy the pre-epoch stake table into epoch and epoch+1
+    /// when this is called. The value of initial_drb_result should be used for DRB
+    /// calculations for epochs (epoch+1) and earlier.
+    fn set_first_epoch(&mut self, _epoch: TYPES::Epoch, _initial_drb_result: DrbResult);
 }

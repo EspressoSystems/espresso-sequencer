@@ -111,6 +111,10 @@ pub struct EpochCommittees {
 
     /// Randomized committees, filled when we receive the DrbResult
     randomized_committees: BTreeMap<Epoch, RandomizedCommittee<StakeTableEntry<PubKey>>>,
+
+    /// Contains the epoch after which initial_drb_result will not be used (set_first_epoch.epoch + 2)
+    /// And the DrbResult to use before that epoch
+    initial_drb_result: Option<(Epoch, DrbResult)>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -278,6 +282,7 @@ impl EpochCommittees {
             l1_client: instance_state.l1_client.clone(),
             contract_address: instance_state.chain_config.stake_table_contract,
             randomized_committees: BTreeMap::new(),
+            initial_drb_result: None,
         }
     }
 
@@ -506,6 +511,13 @@ impl Membership<SeqTypes> for EpochCommittees {
 
         self.randomized_committees
             .insert(epoch, randomized_committee);
+    }
+
+    fn set_first_epoch(&mut self, epoch: Epoch, initial_drb_result: DrbResult) {
+        self.state.insert(epoch, self.non_epoch_committee.clone());
+        self.state
+            .insert(epoch + 1, self.non_epoch_committee.clone());
+        self.initial_drb_result = Some((epoch + 2, initial_drb_result));
     }
 }
 

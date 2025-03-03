@@ -25,11 +25,9 @@ use hotshot_testing::{
     view_generator::TestViewGenerator,
 };
 use hotshot_types::{
-    data::{null_block, EpochNumber, Leaf2, ViewChangeEvidence2, ViewNumber},
+    data::{null_block, Leaf2, ViewChangeEvidence2, ViewNumber},
     simple_vote::{TimeoutData2, ViewSyncFinalizeData2},
-    traits::{
-        node_implementation::{ConsensusTime, Versions},
-    },
+    traits::node_implementation::{ConsensusTime, Versions},
     utils::BuilderCommitment,
 };
 use sha2::Digest;
