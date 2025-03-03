@@ -26,8 +26,8 @@ use hotshot_types::traits::node_implementation::ConsensusTime;
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
     data::{vid_commitment, Leaf2, VidCommitment, VidDisperse, VidDisperseShare},
-    epoch_membership::{EpochMembership, EpochMembershipCoordinator},
     drb::INITIAL_DRB_RESULT,
+    epoch_membership::{EpochMembership, EpochMembershipCoordinator},
     message::{Proposal, UpgradeLock},
     simple_certificate::DaCertificate2,
     simple_vote::{DaData2, DaVote2, SimpleVote, VersionedVoteData},

@@ -14,8 +14,8 @@ use hotshot_types::epoch_membership::EpochMembership;
 use hotshot_types::{
     consensus::OuterConsensus,
     data::{Leaf2, QuorumProposalWrapper, VidDisperseShare},
-    epoch_membership::EpochMembershipCoordinator,
     drb::{compute_drb_result, DrbResult, INITIAL_DRB_RESULT},
+    epoch_membership::EpochMembershipCoordinator,
     event::{Event, EventType},
     message::{Proposal, UpgradeLock},
     simple_vote::{HasEpoch, QuorumData2, QuorumVote2},
@@ -432,7 +432,8 @@ pub(crate) async fn handle_quorum_proposal_validated<
             ));
             tracing::debug!("Calling set_first_epoch for epoch {:?}", first_epoch_number);
             task_state
-                .membership.membership()
+                .membership
+                .membership()
                 .write()
                 .await
                 .set_first_epoch(first_epoch_number, INITIAL_DRB_RESULT);

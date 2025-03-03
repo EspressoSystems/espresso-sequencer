@@ -14,10 +14,13 @@ pub mod documentation;
 use committable::Committable;
 use futures::future::{select, Either};
 use hotshot_types::{
-    epoch_membership::EpochMembershipCoordinator,
     drb::{DrbResult, INITIAL_DRB_RESULT},
+    epoch_membership::EpochMembershipCoordinator,
     message::UpgradeLock,
-    traits::{block_contents::BlockHeader, election::Membership, network::BroadcastDelay, node_implementation::Versions},
+    traits::{
+        block_contents::BlockHeader, election::Membership, network::BroadcastDelay,
+        node_implementation::Versions,
+    },
 };
 use rand::Rng;
 use url::Url;
@@ -301,7 +304,11 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> SystemContext<T
             config.epoch_height,
         );
 
-        load_start_epoch_info(membership_coordinator.membership(), &initializer.start_epoch_info).await;
+        load_start_epoch_info(
+            membership_coordinator.membership(),
+            &initializer.start_epoch_info,
+        )
+        .await;
 
         // Insert the validated state to state map.
         let mut validated_state_map = BTreeMap::default();

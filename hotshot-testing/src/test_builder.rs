@@ -18,8 +18,8 @@ use hotshot_example_types::{
 use hotshot_types::traits::node_implementation::ConsensusTime;
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
-    epoch_membership::EpochMembershipCoordinator,
     drb::INITIAL_DRB_RESULT,
+    epoch_membership::EpochMembershipCoordinator,
     traits::node_implementation::{NodeType, Versions},
     HotShotConfig, PeerConfig, ValidatorConfig,
 };
