@@ -364,7 +364,7 @@ mod tests {
         let (qc_keys, state_keys) = key_pairs_for_testing(num_validators, &mut prng);
         let st = stake_table_for_testing(ST_CAPACITY, &qc_keys, &state_keys);
         let st_state = st.voting_state().unwrap();
-        let next_st_state = st_state.clone();
+        let next_st_state = st_state;
 
         let entries = st
             .try_iter(SnapshotVersion::LastEpochStart)
@@ -380,7 +380,7 @@ mod tests {
         let mut msg = Vec::with_capacity(7);
         let state_msg: [F; 3] = lightclient_state.clone().into();
         msg.extend_from_slice(&state_msg);
-        let next_st_state_msg: [F; 4] = next_st_state.clone().into();
+        let next_st_state_msg: [F; 4] = next_st_state.into();
         msg.extend_from_slice(&next_st_state_msg);
 
         let sigs = state_keys

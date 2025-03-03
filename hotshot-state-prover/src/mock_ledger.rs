@@ -181,7 +181,7 @@ impl MockLedger {
         let mut msg = Vec::with_capacity(7);
         let state_msg: [F; 3] = self.state.clone().into();
         msg.extend_from_slice(&state_msg);
-        let st_state_msg: [F; 4] = next_st_state.clone().into();
+        let st_state_msg: [F; 4] = next_st_state.into();
         msg.extend_from_slice(&st_state_msg);
 
         let st: Vec<(BLSVerKey, U256, SchnorrVerKey)> = self
@@ -277,7 +277,7 @@ impl MockLedger {
         let mut msg = Vec::with_capacity(7);
         let state_msg: [F; 3] = new_state.clone().into();
         msg.extend_from_slice(&state_msg);
-        let adv_st_state_msg: [F; 4] = adv_st_state.clone().into();
+        let adv_st_state_msg: [F; 4] = adv_st_state.into();
         msg.extend_from_slice(&adv_st_state_msg);
 
         // every fake stakers sign on the adverarial new state
@@ -335,7 +335,7 @@ impl MockLedger {
     /// This will be the same most of the time as `self.voting_st_state()` except during epoch change
     pub fn next_stake_table_state(&self) -> GenericStakeTableState<F> {
         if is_last_block_in_epoch(self.state.block_height as u64, self.pp.epoch_height as u64) {
-            self.st.next_voting_state().unwrap().into()
+            self.st.next_voting_state().unwrap()
         } else {
             self.voting_stake_table_state()
         }

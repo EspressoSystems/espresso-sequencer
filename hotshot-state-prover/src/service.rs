@@ -314,7 +314,8 @@ pub async fn submit_state_and_proof(
     let new_state: ParsedLightClientState = public_input.lc_state.into();
     let next_stake_table: ParsedStakeTableState = public_input.next_st_state.into();
 
-    let mut tx = contract.new_finalized_state(new_state.into(), next_stake_table.into(), proof.into());
+    let mut tx =
+        contract.new_finalized_state(new_state.into(), next_stake_table.into(), proof.into());
 
     // only use gas oracle for mainnet
     if contract.client_ref().get_chainid().await?.as_u64() == 1 {
@@ -794,7 +795,7 @@ mod test {
         setup_test();
 
         let pp = MockSystemParam::init();
-        let mut ledger = MockLedger::init(pp, NUM_INIT_VALIDATORS as usize);
+        let mut ledger = MockLedger::init(pp, NUM_INIT_VALIDATORS);
         let genesis: ParsedLightClientState = ledger.light_client_state().into();
         let stake_genesis: ParsedStakeTableState = ledger.voting_stake_table_state().into();
 

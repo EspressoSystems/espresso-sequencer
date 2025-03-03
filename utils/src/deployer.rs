@@ -377,7 +377,13 @@ pub async fn deploy(
         let (genesis_lc, genesis_stake) = genesis.await?.clone();
 
         let data = light_client
-            .initialize(genesis_lc.into(), genesis_stake.into(), 864000, deployer, blocks_per_epoch)
+            .initialize(
+                genesis_lc.into(),
+                genesis_stake.into(),
+                864000,
+                deployer,
+                blocks_per_epoch,
+            )
             .calldata()
             .context("calldata for initialize transaction not available")?;
         let light_client_proxy_address = contracts

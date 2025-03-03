@@ -198,7 +198,7 @@ mod tests {
         let (bls_keys, schnorr_keys) = key_pairs_for_testing(num_validators, &mut prng);
         let st = stake_table_for_testing(ST_CAPACITY, &bls_keys, &schnorr_keys);
         let st_state = st.voting_state().unwrap();
-        let next_st_state = st_state.clone();
+        let next_st_state = st_state;
 
         let stake_table_entries = st
             .try_iter(SnapshotVersion::LastEpochStart)
@@ -215,7 +215,7 @@ mod tests {
         let mut msg = Vec::with_capacity(7);
         let state_msg: [CircuitField; 3] = lightclient_state.clone().into();
         msg.extend_from_slice(&state_msg);
-        let next_st_state_msg: [CircuitField; 4] = next_st_state.clone().into();
+        let next_st_state_msg: [CircuitField; 4] = next_st_state.into();
         msg.extend_from_slice(&next_st_state_msg);
 
         let sigs = schnorr_keys
