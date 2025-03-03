@@ -15,6 +15,7 @@ use hotshot_task::{
     dependency_task::DependencyTask,
     task::TaskState,
 };
+use hotshot_types::StakeTableEntries;
 use hotshot_types::{
     consensus::OuterConsensus,
     epoch_membership::EpochMembershipCoordinator,
@@ -491,7 +492,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
 
                 certificate
                     .is_valid_cert(
-                        membership_stake_table,
+                        StakeTableEntries::<TYPES>::from(membership_stake_table).0,
                         membership_success_threshold,
                         &self.upgrade_lock,
                     )
@@ -576,7 +577,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                 let membership_success_threshold = epoch_membership.success_threshold().await;
 
                 qc.is_valid_cert(
-                    membership_stake_table,
+                    StakeTableEntries::<TYPES>::from(membership_stake_table).0,
                     membership_success_threshold,
                     &self.upgrade_lock,
                 )

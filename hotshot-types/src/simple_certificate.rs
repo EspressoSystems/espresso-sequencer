@@ -36,6 +36,7 @@ use crate::{
         signature_key::SignatureKey,
     },
     vote::{Certificate, HasViewNumber},
+    PeerConfig, StakeTableEntries,
 };
 
 /// Trait which allows use to inject different threshold calculations into a Certificate type
@@ -180,14 +181,14 @@ impl<TYPES: NodeType, THRESHOLD: Threshold<TYPES>> Certificate<TYPES, DaData>
     async fn stake_table_entry(
         membership: &EpochMembership<TYPES>,
         pub_key: &TYPES::SignatureKey,
-    ) -> Option<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry> {
+    ) -> Option<PeerConfig<TYPES::SignatureKey>> {
         membership.da_stake(pub_key).await
     }
 
     /// Proxy's to `Membership.da_stake_table`
     async fn stake_table(
         membership: &EpochMembership<TYPES>,
-    ) -> Vec<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry> {
+    ) -> Vec<PeerConfig<TYPES::SignatureKey>> {
         membership.da_stake_table().await
     }
     /// Proxy's to `Membership.da_total_nodes`
@@ -261,14 +262,14 @@ impl<TYPES: NodeType, THRESHOLD: Threshold<TYPES>> Certificate<TYPES, DaData2<TY
     async fn stake_table_entry(
         membership: &EpochMembership<TYPES>,
         pub_key: &TYPES::SignatureKey,
-    ) -> Option<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry> {
+    ) -> Option<PeerConfig<TYPES::SignatureKey>> {
         membership.da_stake(pub_key).await
     }
 
     /// Proxy's to `Membership.da_stake_table`
     async fn stake_table(
         membership: &EpochMembership<TYPES>,
-    ) -> Vec<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry> {
+    ) -> Vec<PeerConfig<TYPES::SignatureKey>> {
         membership.da_stake_table().await
     }
     /// Proxy's to `Membership.da_total_nodes`
@@ -348,13 +349,13 @@ impl<
     async fn stake_table_entry(
         membership: &EpochMembership<TYPES>,
         pub_key: &TYPES::SignatureKey,
-    ) -> Option<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry> {
+    ) -> Option<PeerConfig<TYPES::SignatureKey>> {
         membership.stake(pub_key).await
     }
 
     async fn stake_table(
         membership: &EpochMembership<TYPES>,
-    ) -> Vec<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry> {
+    ) -> Vec<PeerConfig<TYPES::SignatureKey>> {
         membership.stake_table().await
     }
 
@@ -441,7 +442,7 @@ impl<TYPES: NodeType> UpgradeCertificate<TYPES> {
             let membership_upgrade_threshold = membership.upgrade_threshold().await;
 
             cert.is_valid_cert(
-                membership_stake_table,
+                StakeTableEntries::<TYPES>::from(membership_stake_table).0,
                 membership_upgrade_threshold,
                 upgrade_lock,
             )

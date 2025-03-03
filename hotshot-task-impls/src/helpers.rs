@@ -30,6 +30,7 @@ use hotshot_types::{
         option_epoch_from_block_number, Terminator, View, ViewInner,
     },
     vote::{Certificate, HasViewNumber},
+    StakeTableEntries,
 };
 use hotshot_utils::anytrace::*;
 use std::{
@@ -146,7 +147,7 @@ pub(crate) async fn fetch_proposal<TYPES: NodeType, V: Versions>(
 
     justify_qc
         .is_valid_cert(
-            membership_stake_table,
+            StakeTableEntries::<TYPES>::from(membership_stake_table).0,
             membership_success_threshold,
             upgrade_lock,
         )
@@ -196,19 +197,6 @@ async fn decide_epoch_root<TYPES: NodeType>(
             membership_reader
                 .add_epoch_root(next_epoch_number, decided_leaf.block_header().clone())
                 .await
-        };
-
-        if let Some(write_callback) = write_callback {
-            let mut membership_writer = membership.write().await;
-            write_callback(&mut *membership_writer);
-        } else {
-            // If we didn't get a write callback out of add_epoch_root, then don't bother locking and calling sync_l1
-            return;
-        }
-
-        let write_callback = {
-            let membership_reader = membership.read().await;
-            membership_reader.sync_l1().await
         };
 
         if let Some(write_callback) = write_callback {
@@ -794,7 +782,7 @@ pub(crate) async fn validate_proposal_view_and_certs<
 
                 timeout_cert
                     .is_valid_cert(
-                        membership_stake_table,
+                        StakeTableEntries::<TYPES>::from(membership_stake_table).0,
                         membership_success_threshold,
                         &validation_info.upgrade_lock,
                     )
@@ -827,7 +815,7 @@ pub(crate) async fn validate_proposal_view_and_certs<
                 // View sync certs must also be valid.
                 view_sync_cert
                     .is_valid_cert(
-                        membership_stake_table,
+                        StakeTableEntries::<TYPES>::from(membership_stake_table).0,
                         membership_success_threshold,
                         &validation_info.upgrade_lock,
                     )
@@ -973,7 +961,7 @@ pub async fn validate_qc_and_next_epoch_qc<TYPES: NodeType, V: Versions>(
         // Validate the next epoch qc as well
         next_epoch_qc
             .is_valid_cert(
-                membership_next_stake_table,
+                StakeTableEntries::<TYPES>::from(membership_next_stake_table).0,
                 membership_next_success_threshold,
                 upgrade_lock,
             )
@@ -986,7 +974,7 @@ pub async fn validate_qc_and_next_epoch_qc<TYPES: NodeType, V: Versions>(
     {
         let consensus_reader = consensus.read().await;
         qc.is_valid_cert(
-            membership_stake_table,
+            StakeTableEntries::<TYPES>::from(membership_stake_table).0,
             membership_success_threshold,
             upgrade_lock,
         )
@@ -998,5 +986,28 @@ pub async fn validate_qc_and_next_epoch_qc<TYPES: NodeType, V: Versions>(
         })?;
     }
 
+    if let Some(next_epoch_qc) = maybe_next_epoch_qc {
+        // If the next epoch qc exists, make sure it's equal to the qc
+        if qc.view_number() != next_epoch_qc.view_number() || qc.data != *next_epoch_qc.data {
+            bail!("Next epoch qc exists but it's not equal with qc.");
+        }
+
+        let membership_reader = membership.next_epoch().await?;
+        let membership_next_stake_table =
+            membership_reader.stake_table().await;
+        let membership_next_success_threshold =
+            membership_reader.success_threshold().await;
+        drop(membership_reader);
+
+        // Validate the next epoch qc as well
+        next_epoch_qc
+            .is_valid_cert(
+                StakeTableEntries::<TYPES>::from(membership_next_stake_table).0,
+                membership_next_success_threshold,
+                upgrade_lock,
+            )
+            .await
+            .context(|e| warn!("Invalid next epoch certificate: {}", e))?;
+    }
     Ok(())
 }

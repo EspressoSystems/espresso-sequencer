@@ -28,6 +28,7 @@ use crate::{
         node_implementation::{NodeType, Versions},
         signature_key::{SignatureKey, StakeTableEntryType},
     },
+    PeerConfig, StakeTableEntries,
 };
 
 /// A simple vote that has a signer and commitment to the data voted on.
@@ -86,7 +87,7 @@ pub trait Certificate<TYPES: NodeType, T>: HasViewNumber<TYPES> {
     /// Get  Stake Table from Membership implementation.
     fn stake_table(
         membership: &EpochMembership<TYPES>,
-    ) -> impl Future<Output = Vec<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry>> + Send;
+    ) -> impl Future<Output = Vec<PeerConfig<TYPES::SignatureKey>>> + Send;
 
     /// Get Total Nodes from Membership implementation.
     fn total_nodes(membership: &EpochMembership<TYPES>) -> impl Future<Output = usize> + Send;
@@ -95,7 +96,7 @@ pub trait Certificate<TYPES: NodeType, T>: HasViewNumber<TYPES> {
     fn stake_table_entry(
         membership: &EpochMembership<TYPES>,
         pub_key: &TYPES::SignatureKey,
-    ) -> impl Future<Output = Option<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry>> + Send;
+    ) -> impl Future<Output = Option<PeerConfig<TYPES::SignatureKey>>> + Send;
 
     /// Get the commitment which was voted on
     fn data(&self) -> &Self::Voteable;
@@ -209,14 +210,14 @@ impl<
         signers.set(vote_node_id, true);
         sig_list.push(original_signature);
 
-        *total_stake_casted += stake_table_entry.stake();
+        *total_stake_casted += stake_table_entry.stake_table_entry.stake();
         total_vote_map.insert(key, (vote.signature(), vote_commitment));
 
         if *total_stake_casted >= threshold.into() {
             // Assemble QC
             let real_qc_pp: <<TYPES as NodeType>::SignatureKey as SignatureKey>::QcParams =
                 <TYPES::SignatureKey as SignatureKey>::public_parameter(
-                    stake_table,
+                    StakeTableEntries::<TYPES>::from(stake_table).0,
                     U256::from(threshold),
                 );
 
