@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use async_trait::async_trait;
 use committable::Committable;
@@ -263,42 +263,55 @@ impl UpdateSolverState for GlobalState {
         &self,
         view_number: ViewNumber,
     ) -> SolverResult<SolverAuctionResults> {
-        // todo (ab): actual logic needs to implemented
-        // for we, we just return some default results
-
+        // Get all rollup registrations to include as reserve bids
         let rollups = self.get_all_rollup_registrations().await?;
+        let reserve_bids = rollups
+            .into_iter()
+            .filter_map(|r| Some((r.body.namespace_id, r.body.reserve_url?)))
+            .collect::<Vec<_>>();
+
+        // Get all bids for the current view number
+        let winning_bids = match self.solver.bid_txs.get(&view_number) {
+            Some(bids_map) => {
+                // Group bids by namespace
+                let mut namespace_bids: HashMap<NamespaceId, Vec<&BidTx>> = HashMap::new();
+                
+                for bid_tx in bids_map.values() {
+                    for namespace in bid_tx.body.namespaces.iter() {
+                        namespace_bids.entry(*namespace).or_default().push(bid_tx);
+                    }
+                }
+                
+                // For each namespace, select the highest bid
+                let mut winners = HashSet::new();
+                for bids in namespace_bids.values() {
+                    if let Some(highest_bid) = bids.iter().max_by_key(|bid| bid.amount()) {
+                        winners.insert(*highest_bid);
+                    }
+                }
+                
+                winners.into_iter().cloned().collect()
+            }
+            None => Vec::new(),
+        };
 
         let results = SolverAuctionResults::new(
             view_number,
-            Vec::new(),
-            rollups
-                .into_iter()
-                .filter_map(|r| Some((r.body.namespace_id, r.body.reserve_url?)))
-                .collect(),
+            winning_bids,
+            reserve_bids,
         );
 
         Ok(results)
     }
+    
     async fn calculate_auction_results_permissioned(
         &self,
         view_number: ViewNumber,
-        _signauture: <SeqTypes as NodeType>::SignatureKey,
+        _signature: <SeqTypes as NodeType>::SignatureKey,
     ) -> SolverResult<SolverAuctionResults> {
-        // todo (ab): actual logic needs to implemented
-        // for we, we just return some default results
-
-        let rollups = self.get_all_rollup_registrations().await?;
-
-        let results = SolverAuctionResults::new(
-            view_number,
-            Vec::new(),
-            rollups
-                .into_iter()
-                .filter_map(|r| Some((r.body.namespace_id, r.body.reserve_url?)))
-                .collect(),
-        );
-
-        Ok(results)
+        // For permissioned calculation, we use the same logic as permissionless
+        // but we could add additional validation based on the signature if needed
+        self.calculate_auction_results_permissionless(view_number).await
     }
 }
 
