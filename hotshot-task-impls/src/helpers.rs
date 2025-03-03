@@ -993,10 +993,8 @@ pub async fn validate_qc_and_next_epoch_qc<TYPES: NodeType, V: Versions>(
         }
 
         let membership_reader = membership.next_epoch().await?;
-        let membership_next_stake_table =
-            membership_reader.stake_table().await;
-        let membership_next_success_threshold =
-            membership_reader.success_threshold().await;
+        let membership_next_stake_table = membership_reader.stake_table().await;
+        let membership_next_success_threshold = membership_reader.success_threshold().await;
         drop(membership_reader);
 
         // Validate the next epoch qc as well
