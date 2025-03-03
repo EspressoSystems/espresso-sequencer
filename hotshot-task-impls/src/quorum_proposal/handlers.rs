@@ -28,7 +28,7 @@ use hotshot_types::{
         signature_key::SignatureKey,
     },
     utils::{is_last_block_in_epoch, option_epoch_from_block_number},
-    vote::{Certificate, HasViewNumber},
+    vote::{Certificate, HasViewNumber}, StakeTableEntries,
 };
 use hotshot_utils::anytrace::*;
 use tracing::instrument;
@@ -134,7 +134,7 @@ impl<TYPES: NodeType, V: Versions> ProposalDependencyHandle<TYPES, V> {
 
                 if qc
                     .is_valid_cert(
-                        membership_stake_table,
+                        StakeTableEntries::<TYPES>::from(membership_stake_table).0,
                         membership_success_threshold,
                         &self.upgrade_lock,
                     )
@@ -348,7 +348,7 @@ impl<TYPES: NodeType, V: Versions> ProposalDependencyHandle<TYPES, V> {
                         .await
                         .drb_seeds_and_results
                         .results
-                        .get(epoch_val)
+                        .get(&(*epoch_val + 1))
                         .copied()
                 } else {
                     None
