@@ -182,7 +182,11 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> DaTaskState<TYP
                     )
                 );
                 let num_nodes = membership.total_nodes().await;
-                let next_epoch_num_nodes = membership.next_epoch().await?.total_nodes().await;
+                let next_epoch_num_nodes = if epoch_number.is_some() {
+                    membership.next_epoch().await?.total_nodes().await
+                } else {
+                    num_nodes
+                };
 
                 let version = self.upgrade_lock.version_infallible(view_number).await;
 
