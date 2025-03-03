@@ -810,7 +810,8 @@
 <a href="#809" id="809">809</a>
 <a href="#810" id="810">810</a>
 <a href="#811" id="811">811</a>
-<a href="#812" id="812">812</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
+<a href="#812" id="812">812</a>
+<a href="#813" id="813">813</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
 // This file is part of the HotShot repository.
 
 // You should have received a copy of the MIT License
@@ -827,6 +828,7 @@
     dependency_task::{DependencyTask, HandleDepOutput},
     task::TaskState,
 };
+<span class="kw">use </span>hotshot_types::StakeTableEntries;
 <span class="kw">use </span>hotshot_types::{
     consensus::{ConsensusMetricsValue, OuterConsensus},
     data::{Leaf2, QuorumProposalWrapper},
@@ -1365,7 +1367,7 @@
 
                 <span class="comment">// Validate the DAC.
                 </span>cert.is_valid_cert(
-                    membership_da_stake_table,
+                    StakeTableEntries::&lt;TYPES&gt;::from(membership_da_stake_table).<span class="number">0</span>,
                     membership_da_success_threshold,
                     <span class="kw-2">&amp;</span><span class="self">self</span>.upgrade_lock,
                 )

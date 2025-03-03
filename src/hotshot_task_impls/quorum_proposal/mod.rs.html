@@ -634,7 +634,8 @@
 <a href="#633" id="633">633</a>
 <a href="#634" id="634">634</a>
 <a href="#635" id="635">635</a>
-<a href="#636" id="636">636</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
+<a href="#636" id="636">636</a>
+<a href="#637" id="637">637</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
 // This file is part of the HotShot repository.
 
 // You should have received a copy of the MIT License
@@ -651,6 +652,7 @@
     dependency_task::DependencyTask,
     task::TaskState,
 };
+<span class="kw">use </span>hotshot_types::StakeTableEntries;
 <span class="kw">use </span>hotshot_types::{
     consensus::OuterConsensus,
     message::UpgradeLock,
@@ -1115,7 +1117,7 @@
 
                 certificate
                     .is_valid_cert(
-                        membership_stake_table,
+                        StakeTableEntries::&lt;TYPES&gt;::from(membership_stake_table).<span class="number">0</span>,
                         membership_success_threshold,
                         <span class="kw-2">&amp;</span><span class="self">self</span>.upgrade_lock,
                     )
@@ -1199,7 +1201,7 @@
                 drop(membership_reader);
 
                 qc.is_valid_cert(
-                    membership_stake_table,
+                    StakeTableEntries::&lt;TYPES&gt;::from(membership_stake_table).<span class="number">0</span>,
                     membership_success_threshold,
                     <span class="kw-2">&amp;</span><span class="self">self</span>.upgrade_lock,
                 )

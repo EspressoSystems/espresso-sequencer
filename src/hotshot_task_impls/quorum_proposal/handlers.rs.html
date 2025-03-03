@@ -499,7 +499,8 @@
 <a href="#498" id="498">498</a>
 <a href="#499" id="499">499</a>
 <a href="#500" id="500">500</a>
-<a href="#501" id="501">501</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
+<a href="#501" id="501">501</a>
+<a href="#502" id="502">502</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
 // This file is part of the HotShot repository.
 
 // You should have received a copy of the MIT License
@@ -530,6 +531,7 @@
     },
     utils::{is_last_block_in_epoch, option_epoch_from_block_number},
     vote::{Certificate, HasViewNumber},
+    StakeTableEntries,
 };
 <span class="kw">use </span>hotshot_utils::anytrace::<span class="kw-2">*</span>;
 <span class="kw">use </span>tracing::instrument;
@@ -635,7 +637,7 @@
 
                 <span class="kw">if </span>qc
                     .is_valid_cert(
-                        membership_stake_table,
+                        StakeTableEntries::&lt;TYPES&gt;::from(membership_stake_table).<span class="number">0</span>,
                         membership_success_threshold,
                         <span class="kw-2">&amp;</span><span class="self">self</span>.upgrade_lock,
                     )
@@ -849,7 +851,7 @@
                         .<span class="kw">await
                         </span>.drb_seeds_and_results
                         .results
-                        .get(epoch_val)
+                        .get(<span class="kw-2">&amp;</span>(<span class="kw-2">*</span>epoch_val + <span class="number">1</span>))
                         .copied()
                 } <span class="kw">else </span>{
                     <span class="prelude-val">None

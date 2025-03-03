@@ -787,7 +787,8 @@
 <a href="#786" id="786">786</a>
 <a href="#787" id="787">787</a>
 <a href="#788" id="788">788</a>
-<a href="#789" id="789">789</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
+<a href="#789" id="789">789</a>
+<a href="#790" id="790">790</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
 // This file is part of the HotShot repository.
 
 // You should have received a copy of the MIT License
@@ -824,6 +825,7 @@
         signature_key::SignatureKey,
     },
     vote::{Certificate, HasViewNumber},
+    PeerConfig, StakeTableEntries,
 };
 
 <span class="doccomment">/// Trait which allows use to inject different threshold calculations into a Certificate type
@@ -981,7 +983,7 @@
         membership: <span class="kw-2">&amp;</span>MEMBERSHIP,
         pub_key: <span class="kw-2">&amp;</span>TYPES::SignatureKey,
         epoch: <span class="prelude-ty">Option</span>&lt;TYPES::Epoch&gt;,
-    ) -&gt; <span class="prelude-ty">Option</span>&lt;&lt;TYPES::SignatureKey <span class="kw">as </span>SignatureKey&gt;::StakeTableEntry&gt; {
+    ) -&gt; <span class="prelude-ty">Option</span>&lt;PeerConfig&lt;TYPES::SignatureKey&gt;&gt; {
         membership.da_stake(pub_key, epoch)
     }
 
@@ -989,7 +991,7 @@
     </span><span class="kw">fn </span>stake_table&lt;MEMBERSHIP: Membership&lt;TYPES&gt;&gt;(
         membership: <span class="kw-2">&amp;</span>MEMBERSHIP,
         epoch: <span class="prelude-ty">Option</span>&lt;TYPES::Epoch&gt;,
-    ) -&gt; Vec&lt;&lt;TYPES::SignatureKey <span class="kw">as </span>SignatureKey&gt;::StakeTableEntry&gt; {
+    ) -&gt; Vec&lt;PeerConfig&lt;TYPES::SignatureKey&gt;&gt; {
         membership.da_stake_table(epoch)
     }
     <span class="doccomment">/// Proxy's to `Membership.da_total_nodes`
@@ -1070,7 +1072,7 @@
         membership: <span class="kw-2">&amp;</span>MEMBERSHIP,
         pub_key: <span class="kw-2">&amp;</span>TYPES::SignatureKey,
         epoch: <span class="prelude-ty">Option</span>&lt;TYPES::Epoch&gt;,
-    ) -&gt; <span class="prelude-ty">Option</span>&lt;&lt;TYPES::SignatureKey <span class="kw">as </span>SignatureKey&gt;::StakeTableEntry&gt; {
+    ) -&gt; <span class="prelude-ty">Option</span>&lt;PeerConfig&lt;TYPES::SignatureKey&gt;&gt; {
         membership.da_stake(pub_key, epoch)
     }
 
@@ -1078,7 +1080,7 @@
     </span><span class="kw">fn </span>stake_table&lt;MEMBERSHIP: Membership&lt;TYPES&gt;&gt;(
         membership: <span class="kw-2">&amp;</span>MEMBERSHIP,
         epoch: <span class="prelude-ty">Option</span>&lt;TYPES::Epoch&gt;,
-    ) -&gt; Vec&lt;&lt;TYPES::SignatureKey <span class="kw">as </span>SignatureKey&gt;::StakeTableEntry&gt; {
+    ) -&gt; Vec&lt;PeerConfig&lt;TYPES::SignatureKey&gt;&gt; {
         membership.da_stake_table(epoch)
     }
     <span class="doccomment">/// Proxy's to `Membership.da_total_nodes`
@@ -1168,14 +1170,14 @@
         membership: <span class="kw-2">&amp;</span>MEMBERSHIP,
         pub_key: <span class="kw-2">&amp;</span>TYPES::SignatureKey,
         epoch: <span class="prelude-ty">Option</span>&lt;TYPES::Epoch&gt;,
-    ) -&gt; <span class="prelude-ty">Option</span>&lt;&lt;TYPES::SignatureKey <span class="kw">as </span>SignatureKey&gt;::StakeTableEntry&gt; {
+    ) -&gt; <span class="prelude-ty">Option</span>&lt;PeerConfig&lt;TYPES::SignatureKey&gt;&gt; {
         membership.stake(pub_key, epoch)
     }
 
     <span class="kw">fn </span>stake_table&lt;MEMBERSHIP: Membership&lt;TYPES&gt;&gt;(
         membership: <span class="kw-2">&amp;</span>MEMBERSHIP,
         epoch: <span class="prelude-ty">Option</span>&lt;TYPES::Epoch&gt;,
-    ) -&gt; Vec&lt;&lt;TYPES::SignatureKey <span class="kw">as </span>SignatureKey&gt;::StakeTableEntry&gt; {
+    ) -&gt; Vec&lt;PeerConfig&lt;TYPES::SignatureKey&gt;&gt; {
         membership.stake_table(epoch)
     }
 
@@ -1266,7 +1268,7 @@
             drop(membership_reader);
 
             cert.is_valid_cert(
-                membership_stake_table,
+                StakeTableEntries::&lt;TYPES&gt;::from(membership_stake_table).<span class="number">0</span>,
                 membership_upgrade_threshold,
                 upgrade_lock,
             )

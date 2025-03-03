@@ -143,21 +143,7 @@
 <a href="#142" id="142">142</a>
 <a href="#143" id="143">143</a>
 <a href="#144" id="144">144</a>
-<a href="#145" id="145">145</a>
-<a href="#146" id="146">146</a>
-<a href="#147" id="147">147</a>
-<a href="#148" id="148">148</a>
-<a href="#149" id="149">149</a>
-<a href="#150" id="150">150</a>
-<a href="#151" id="151">151</a>
-<a href="#152" id="152">152</a>
-<a href="#153" id="153">153</a>
-<a href="#154" id="154">154</a>
-<a href="#155" id="155">155</a>
-<a href="#156" id="156">156</a>
-<a href="#157" id="157">157</a>
-<a href="#158" id="158">158</a>
-<a href="#159" id="159">159</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
+<a href="#145" id="145">145</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
 // This file is part of the HotShot repository.
 
 // You should have received a copy of the MIT License
@@ -170,14 +156,13 @@
 <span class="kw">use </span>hotshot_utils::anytrace::Result;
 
 <span class="kw">use </span><span class="kw">super</span>::node_implementation::NodeType;
-<span class="kw">use crate</span>::{drb::DrbResult, traits::signature_key::SignatureKey, PeerConfig};
+<span class="kw">use crate</span>::{drb::DrbResult, PeerConfig};
 
 <span class="attr">#[async_trait]
 </span><span class="doccomment">/// A protocol for determining membership in and participating in a committee.
 </span><span class="kw">pub trait </span>Membership&lt;TYPES: NodeType&gt;: Debug + Send + Sync {
     <span class="doccomment">/// The error type returned by methods like `lookup_leader`.
     </span><span class="kw">type </span>Error: std::fmt::Display;
-
     <span class="doccomment">/// Create a committee
     </span><span class="kw">fn </span>new(
         <span class="comment">// Note: eligible_leaders is currently a hack because the DA leader == the quorum leader
@@ -187,16 +172,10 @@
     ) -&gt; <span class="self">Self</span>;
 
     <span class="doccomment">/// Get all participants in the committee (including their stake) for a specific epoch
-    </span><span class="kw">fn </span>stake_table(
-        <span class="kw-2">&amp;</span><span class="self">self</span>,
-        epoch: <span class="prelude-ty">Option</span>&lt;TYPES::Epoch&gt;,
-    ) -&gt; Vec&lt;&lt;TYPES::SignatureKey <span class="kw">as </span>SignatureKey&gt;::StakeTableEntry&gt;;
+    </span><span class="kw">fn </span>stake_table(<span class="kw-2">&amp;</span><span class="self">self</span>, epoch: <span class="prelude-ty">Option</span>&lt;TYPES::Epoch&gt;) -&gt; Vec&lt;PeerConfig&lt;TYPES::SignatureKey&gt;&gt;;
 
     <span class="doccomment">/// Get all participants in the committee (including their stake) for a specific epoch
-    </span><span class="kw">fn </span>da_stake_table(
-        <span class="kw-2">&amp;</span><span class="self">self</span>,
-        epoch: <span class="prelude-ty">Option</span>&lt;TYPES::Epoch&gt;,
-    ) -&gt; Vec&lt;&lt;TYPES::SignatureKey <span class="kw">as </span>SignatureKey&gt;::StakeTableEntry&gt;;
+    </span><span class="kw">fn </span>da_stake_table(<span class="kw-2">&amp;</span><span class="self">self</span>, epoch: <span class="prelude-ty">Option</span>&lt;TYPES::Epoch&gt;) -&gt; Vec&lt;PeerConfig&lt;TYPES::SignatureKey&gt;&gt;;
 
     <span class="doccomment">/// Get all participants in the committee for a specific view for a specific epoch
     </span><span class="kw">fn </span>committee_members(
@@ -225,7 +204,7 @@
         <span class="kw-2">&amp;</span><span class="self">self</span>,
         pub_key: <span class="kw-2">&amp;</span>TYPES::SignatureKey,
         epoch: <span class="prelude-ty">Option</span>&lt;TYPES::Epoch&gt;,
-    ) -&gt; <span class="prelude-ty">Option</span>&lt;&lt;TYPES::SignatureKey <span class="kw">as </span>SignatureKey&gt;::StakeTableEntry&gt;;
+    ) -&gt; <span class="prelude-ty">Option</span>&lt;PeerConfig&lt;TYPES::SignatureKey&gt;&gt;;
 
     <span class="doccomment">/// Get the DA stake table entry for a public key, returns `None` if the
     /// key is not in the table for a specific epoch
@@ -233,7 +212,7 @@
         <span class="kw-2">&amp;</span><span class="self">self</span>,
         pub_key: <span class="kw-2">&amp;</span>TYPES::SignatureKey,
         epoch: <span class="prelude-ty">Option</span>&lt;TYPES::Epoch&gt;,
-    ) -&gt; <span class="prelude-ty">Option</span>&lt;&lt;TYPES::SignatureKey <span class="kw">as </span>SignatureKey&gt;::StakeTableEntry&gt;;
+    ) -&gt; <span class="prelude-ty">Option</span>&lt;PeerConfig&lt;TYPES::SignatureKey&gt;&gt;;
 
     <span class="doccomment">/// See if a node has stake in the committee in a specific epoch
     </span><span class="kw">fn </span>has_stake(<span class="kw-2">&amp;</span><span class="self">self</span>, pub_key: <span class="kw-2">&amp;</span>TYPES::SignatureKey, epoch: <span class="prelude-ty">Option</span>&lt;TYPES::Epoch&gt;) -&gt; bool;
@@ -302,13 +281,6 @@
         _epoch: TYPES::Epoch,
         _block_header: TYPES::BlockHeader,
     ) -&gt; <span class="prelude-ty">Option</span>&lt;Box&lt;<span class="kw">dyn </span>FnOnce(<span class="kw-2">&amp;mut </span><span class="self">Self</span>) + Send&gt;&gt; {
-        <span class="prelude-val">None
-    </span>}
-
-    <span class="attr">#[allow(clippy::type_complexity)]
-    </span><span class="doccomment">/// Called after add_epoch_root runs and any callback has been invoked.
-    /// Causes a read lock to be reacquired for this functionality.
-    </span><span class="kw">async fn </span>sync_l1(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;Box&lt;<span class="kw">dyn </span>FnOnce(<span class="kw-2">&amp;mut </span><span class="self">Self</span>) + Send&gt;&gt; {
         <span class="prelude-val">None
     </span>}
 

@@ -27,7 +27,7 @@
 <a href="#26" id="26">26</a></pre></div><pre class="rust"><code><span class="kw">use </span><span class="kw">crate</span>::PubKey;
 <span class="kw">use </span>derive_more::derive::{From, Into};
 <span class="kw">use </span>hotshot_contract_adapter::stake_table::NodeInfoJf;
-<span class="kw">use </span>hotshot_types::{network::PeerConfigKeys, stake_table::StakeTableEntry};
+<span class="kw">use </span>hotshot_types::{network::PeerConfigKeys, PeerConfig};
 <span class="kw">use </span>serde::{Deserialize, Serialize};
 
 <span class="attr">#[derive(Debug, Clone, Serialize, Deserialize, From)]
@@ -39,11 +39,11 @@
 
 <span class="attr">#[derive(Clone, Debug, From, Into)]
 </span><span class="doccomment">/// NewType to disambiguate DA Membership
-</span><span class="kw">pub struct </span>DAMembers(<span class="kw">pub </span>Vec&lt;StakeTableEntry&lt;PubKey&gt;&gt;);
+</span><span class="kw">pub struct </span>DAMembers(<span class="kw">pub </span>Vec&lt;PeerConfig&lt;PubKey&gt;&gt;);
 
 <span class="attr">#[derive(Clone, Debug, From, Into)]
 </span><span class="doccomment">/// NewType to disambiguate StakeTable
-</span><span class="kw">pub struct </span>StakeTable(<span class="kw">pub </span>Vec&lt;StakeTableEntry&lt;PubKey&gt;&gt;);
+</span><span class="kw">pub struct </span>StakeTable(<span class="kw">pub </span>Vec&lt;PeerConfig&lt;PubKey&gt;&gt;);
 
 <span class="attr">#[derive(Clone, Debug)]
 </span><span class="kw">pub struct </span>StakeTables {

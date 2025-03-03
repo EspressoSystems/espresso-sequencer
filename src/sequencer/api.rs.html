@@ -2607,6 +2607,7 @@
     EventFilterSet, EventsSource, EventsStreamer, StartupInfo,
 };
 <span class="kw">use </span>hotshot_query_service::data_source::ExtensibleDataSource;
+<span class="kw">use </span>hotshot_types::traits::election::Membership;
 <span class="kw">use </span>hotshot_types::{
     data::ViewNumber,
     event::Event,
@@ -2618,8 +2619,8 @@
         ValidatedState <span class="kw">as _</span>,
     },
     utils::{View, ViewInner},
+    PeerConfig,
 };
-<span class="kw">use </span>hotshot_types::{stake_table::StakeTableEntry, traits::election::Membership};
 <span class="kw">use </span>jf_merkle_tree::MerkleTreeScheme;
 <span class="kw">use </span>std::pin::Pin;
 <span class="kw">use </span>std::sync::Arc;
@@ -2756,18 +2757,17 @@
     </span><span class="kw">async fn </span>get_stake_table(
         <span class="kw-2">&amp;</span><span class="self">self</span>,
         epoch: <span class="prelude-ty">Option</span>&lt;&lt;SeqTypes <span class="kw">as </span>NodeType&gt;::Epoch&gt;,
-    ) -&gt; Vec&lt;StakeTableEntry&lt;&lt;SeqTypes <span class="kw">as </span>NodeType&gt;::SignatureKey&gt;&gt; {
+    ) -&gt; Vec&lt;PeerConfig&lt;&lt;SeqTypes <span class="kw">as </span>NodeType&gt;::SignatureKey&gt;&gt; {
         <span class="self">self</span>.as_ref().get_stake_table(epoch).<span class="kw">await
     </span>}
 
     <span class="doccomment">/// Get the stake table for the current epoch if not provided
     </span><span class="kw">async fn </span>get_stake_table_current(
         <span class="kw-2">&amp;</span><span class="self">self</span>,
-    ) -&gt; Vec&lt;StakeTableEntry&lt;&lt;SeqTypes <span class="kw">as </span>NodeType&gt;::SignatureKey&gt;&gt; {
+    ) -&gt; Vec&lt;PeerConfig&lt;&lt;SeqTypes <span class="kw">as </span>NodeType&gt;::SignatureKey&gt;&gt; {
         <span class="self">self</span>.as_ref().get_stake_table_current().<span class="kw">await
     </span>}
 }
-
 <span class="kw">impl</span>&lt;N: ConnectedNetwork&lt;PubKey&gt;, V: Versions, P: SequencerPersistence&gt;
     StakeTableDataSource&lt;SeqTypes&gt; <span class="kw">for </span>ApiState&lt;N, P, V&gt;
 {
@@ -2775,7 +2775,7 @@
     </span><span class="kw">async fn </span>get_stake_table(
         <span class="kw-2">&amp;</span><span class="self">self</span>,
         epoch: <span class="prelude-ty">Option</span>&lt;&lt;SeqTypes <span class="kw">as </span>NodeType&gt;::Epoch&gt;,
-    ) -&gt; Vec&lt;StakeTableEntry&lt;&lt;SeqTypes <span class="kw">as </span>NodeType&gt;::SignatureKey&gt;&gt; {
+    ) -&gt; Vec&lt;PeerConfig&lt;&lt;SeqTypes <span class="kw">as </span>NodeType&gt;::SignatureKey&gt;&gt; {
         <span class="self">self</span>.consensus()
             .<span class="kw">await
             </span>.read()
@@ -2789,7 +2789,7 @@
     <span class="doccomment">/// Get the stake table for the current epoch if not provided
     </span><span class="kw">async fn </span>get_stake_table_current(
         <span class="kw-2">&amp;</span><span class="self">self</span>,
-    ) -&gt; Vec&lt;StakeTableEntry&lt;&lt;SeqTypes <span class="kw">as </span>NodeType&gt;::SignatureKey&gt;&gt; {
+    ) -&gt; Vec&lt;PeerConfig&lt;&lt;SeqTypes <span class="kw">as </span>NodeType&gt;::SignatureKey&gt;&gt; {
         <span class="kw">let </span>epoch = <span class="self">self</span>.consensus().<span class="kw">await</span>.read().<span class="kw">await</span>.cur_epoch().<span class="kw">await</span>;
 
         <span class="self">self</span>.get_stake_table(epoch).<span class="kw">await
@@ -4931,7 +4931,7 @@
             <span class="comment">// ChainConfigs will eventually be resolved
             </span><span class="kw">if let </span><span class="prelude-val">Some</span>(configs) = configs {
                 <span class="macro">tracing::info!</span>(<span class="question-mark">?</span>configs, <span class="string">"configs"</span>);
-                <span class="kw">if </span>height &gt; new_version_first_view {
+                <span class="kw">if </span>height &gt; new_version_first_view + <span class="number">10 </span>{
                     <span class="kw">for </span>config <span class="kw">in </span>configs {
                         <span class="macro">assert_eq!</span>(config, chain_config_upgrade);
                     }

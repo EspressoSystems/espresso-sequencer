@@ -600,20 +600,10 @@
 <a href="#599" id="599">599</a>
 <a href="#600" id="600">600</a>
 <a href="#601" id="601">601</a>
-<a href="#602" id="602">602</a>
-<a href="#603" id="603">603</a>
-<a href="#604" id="604">604</a>
-<a href="#605" id="605">605</a>
-<a href="#606" id="606">606</a>
-<a href="#607" id="607">607</a>
-<a href="#608" id="608">608</a>
-<a href="#609" id="609">609</a>
-<a href="#610" id="610">610</a>
-<a href="#611" id="611">611</a></pre></div><pre class="rust"><code><span class="kw">use </span>std::{
+<a href="#602" id="602">602</a></pre></div><pre class="rust"><code><span class="kw">use </span>std::{
     cmp::max,
     collections::{BTreeMap, BTreeSet, HashMap},
     num::NonZeroU64,
-    str::FromStr,
 };
 
 <span class="kw">use </span>async_trait::async_trait;
@@ -638,7 +628,6 @@
 };
 <span class="kw">use </span>itertools::Itertools;
 <span class="kw">use </span>thiserror::Error;
-<span class="kw">use </span>url::Url;
 
 <span class="kw">use super</span>::{
     v0_3::{DAMembers, StakeTable, StakeTables},
@@ -691,8 +680,8 @@
                 StakeTableChange::Remove(<span class="kw">_</span>) =&gt; <span class="prelude-val">None</span>,
             });
 
-        <span class="kw">let </span><span class="kw-2">mut </span>consensus_stake_table: Vec&lt;StakeTableEntry&lt;PubKey&gt;&gt; = <span class="macro">vec!</span>[];
-        <span class="kw">let </span><span class="kw-2">mut </span>da_members: Vec&lt;StakeTableEntry&lt;PubKey&gt;&gt; = <span class="macro">vec!</span>[];
+        <span class="kw">let </span><span class="kw-2">mut </span>consensus_stake_table: Vec&lt;PeerConfig&lt;PubKey&gt;&gt; = <span class="macro">vec!</span>[];
+        <span class="kw">let </span><span class="kw-2">mut </span>da_members: Vec&lt;PeerConfig&lt;PubKey&gt;&gt; = <span class="macro">vec!</span>[];
         <span class="kw">for </span>node <span class="kw">in </span>currently_staking {
             consensus_stake_table.push(node.clone().into());
             <span class="kw">if </span>node.da {
@@ -746,19 +735,19 @@
     <span class="doccomment">/// The nodes eligible for leadership.
     /// NOTE: This is currently a hack because the DA leader needs to be the quorum
     /// leader but without voting rights.
-    </span>eligible_leaders: Vec&lt;StakeTableEntry&lt;PubKey&gt;&gt;,
+    </span>eligible_leaders: Vec&lt;PeerConfig&lt;PubKey&gt;&gt;,
 
     <span class="doccomment">/// Keys for nodes participating in the network
-    </span>stake_table: Vec&lt;StakeTableEntry&lt;PubKey&gt;&gt;,
+    </span>stake_table: Vec&lt;PeerConfig&lt;PubKey&gt;&gt;,
 
     <span class="doccomment">/// Keys for DA members
-    </span>da_members: Vec&lt;StakeTableEntry&lt;PubKey&gt;&gt;,
+    </span>da_members: Vec&lt;PeerConfig&lt;PubKey&gt;&gt;,
 
     <span class="doccomment">/// Stake entries indexed by public key, for efficient lookup.
-    </span>indexed_stake_table: HashMap&lt;PubKey, StakeTableEntry&lt;PubKey&gt;&gt;,
+    </span>indexed_stake_table: HashMap&lt;PubKey, PeerConfig&lt;PubKey&gt;&gt;,
 
     <span class="doccomment">/// DA entries indexed by public key, for efficient lookup.
-    </span>indexed_da_members: HashMap&lt;PubKey, StakeTableEntry&lt;PubKey&gt;&gt;,
+    </span>indexed_da_members: HashMap&lt;PubKey, PeerConfig&lt;PubKey&gt;&gt;,
 }
 
 <span class="kw">impl </span>EpochCommittees {
@@ -773,28 +762,37 @@
         // more subtlety when start fetching only the events since last update.
 
         </span><span class="kw">let </span>stake_table = st.stake_table.<span class="number">0</span>.clone();
-
         <span class="kw">let </span>da_members = st.da_members.<span class="number">0</span>.clone();
 
         <span class="kw">let </span>indexed_stake_table: HashMap&lt;PubKey, <span class="kw">_</span>&gt; = st
             .stake_table
             .<span class="number">0
             </span>.iter()
-            .map(|entry| (PubKey::public_key(entry), entry.clone()))
+            .map(|peer_config| {
+                (
+                    PubKey::public_key(<span class="kw-2">&amp;</span>peer_config.stake_table_entry),
+                    peer_config.clone(),
+                )
+            })
             .collect();
 
         <span class="kw">let </span>indexed_da_members: HashMap&lt;PubKey, <span class="kw">_</span>&gt; = st
             .da_members
             .<span class="number">0
             </span>.iter()
-            .map(|entry| (PubKey::public_key(entry), entry.clone()))
+            .map(|peer_config| {
+                (
+                    PubKey::public_key(<span class="kw-2">&amp;</span>peer_config.stake_table_entry),
+                    peer_config.clone(),
+                )
+            })
             .collect();
 
         <span class="kw">let </span>eligible_leaders: Vec&lt;<span class="kw">_</span>&gt; = st
             .stake_table
             .<span class="number">0
             </span>.into_iter()
-            .filter(|entry| entry.stake() &gt; U256::zero())
+            .filter(|peer_config| peer_config.stake_table_entry.stake() &gt; U256::zero())
             .collect();
 
         <span class="kw">let </span>committee = Committee {
@@ -821,34 +819,44 @@
         <span class="comment">// For each eligible leader, get the stake table entry
         </span><span class="kw">let </span>eligible_leaders: Vec&lt;<span class="kw">_</span>&gt; = committee_members
             .iter()
-            .map(|member| member.stake_table_entry.clone())
-            .filter(|entry| entry.stake() &gt; U256::zero())
+            .filter(|<span class="kw-2">&amp;</span>peer_config| peer_config.stake_table_entry.stake() &gt; U256::zero())
+            .cloned()
             .collect();
 
         <span class="comment">// For each member, get the stake table entry
         </span><span class="kw">let </span>stake_table: Vec&lt;<span class="kw">_</span>&gt; = committee_members
             .iter()
-            .map(|member| member.stake_table_entry.clone())
-            .filter(|entry| entry.stake() &gt; U256::zero())
+            .filter(|<span class="kw-2">&amp;</span>peer_config| peer_config.stake_table_entry.stake() &gt; U256::zero())
+            .cloned()
             .collect();
 
         <span class="comment">// For each member, get the stake table entry
         </span><span class="kw">let </span>da_members: Vec&lt;<span class="kw">_</span>&gt; = da_members
             .iter()
-            .map(|member| member.stake_table_entry.clone())
-            .filter(|entry| entry.stake() &gt; U256::zero())
+            .filter(|<span class="kw-2">&amp;</span>peer_config| peer_config.stake_table_entry.stake() &gt; U256::zero())
+            .cloned()
             .collect();
 
         <span class="comment">// Index the stake table by public key
         </span><span class="kw">let </span>indexed_stake_table: HashMap&lt;PubKey, <span class="kw">_</span>&gt; = stake_table
             .iter()
-            .map(|entry| (PubKey::public_key(entry), entry.clone()))
+            .map(|peer_config| {
+                (
+                    PubKey::public_key(<span class="kw-2">&amp;</span>peer_config.stake_table_entry),
+                    peer_config.clone(),
+                )
+            })
             .collect();
 
         <span class="comment">// Index the stake table by public key
         </span><span class="kw">let </span>indexed_da_members: HashMap&lt;PubKey, <span class="kw">_</span>&gt; = da_members
             .iter()
-            .map(|entry| (PubKey::public_key(entry), entry.clone()))
+            .map(|peer_config| {
+                (
+                    PubKey::public_key(<span class="kw-2">&amp;</span>peer_config.stake_table_entry),
+                    peer_config.clone(),
+                )
+            })
             .collect();
 
         <span class="kw">let </span>members = Committee {
@@ -890,73 +898,18 @@
 <span class="attr">#[async_trait]
 </span><span class="kw">impl </span>Membership&lt;SeqTypes&gt; <span class="kw">for </span>EpochCommittees {
     <span class="kw">type </span>Error = LeaderLookupError;
-
     <span class="comment">// DO NOT USE. Dummy constructor to comply w/ trait.
     </span><span class="kw">fn </span>new(
         <span class="comment">// TODO remove `new` from trait and remove this fn as well.
         // https://github.com/EspressoSystems/HotShot/commit/fcb7d54a4443e29d643b3bbc53761856aef4de8b
-        </span>committee_members: Vec&lt;PeerConfig&lt;PubKey&gt;&gt;,
-        da_members: Vec&lt;PeerConfig&lt;PubKey&gt;&gt;,
+        </span>_committee_members: Vec&lt;PeerConfig&lt;PubKey&gt;&gt;,
+        _da_members: Vec&lt;PeerConfig&lt;PubKey&gt;&gt;,
     ) -&gt; <span class="self">Self </span>{
-        <span class="comment">// For each eligible leader, get the stake table entry
-        </span><span class="kw">let </span>eligible_leaders: Vec&lt;<span class="kw">_</span>&gt; = committee_members
-            .iter()
-            .map(|member| member.stake_table_entry.clone())
-            .filter(|entry| entry.stake() &gt; U256::zero())
-            .collect();
-
-        <span class="comment">// For each member, get the stake table entry
-        </span><span class="kw">let </span>stake_table: Vec&lt;<span class="kw">_</span>&gt; = committee_members
-            .iter()
-            .map(|member| member.stake_table_entry.clone())
-            .filter(|entry| entry.stake() &gt; U256::zero())
-            .collect();
-
-        <span class="comment">// For each member, get the stake table entry
-        </span><span class="kw">let </span>da_members: Vec&lt;<span class="kw">_</span>&gt; = da_members
-            .iter()
-            .map(|member| member.stake_table_entry.clone())
-            .filter(|entry| entry.stake() &gt; U256::zero())
-            .collect();
-
-        <span class="comment">// Index the stake table by public key
-        </span><span class="kw">let </span>indexed_stake_table: HashMap&lt;PubKey, <span class="kw">_</span>&gt; = stake_table
-            .iter()
-            .map(|entry| (PubKey::public_key(entry), entry.clone()))
-            .collect();
-
-        <span class="comment">// Index the stake table by public key
-        </span><span class="kw">let </span>indexed_da_members: HashMap&lt;PubKey, <span class="kw">_</span>&gt; = da_members
-            .iter()
-            .map(|entry| (PubKey::public_key(entry), entry.clone()))
-            .collect();
-
-        <span class="kw">let </span>members = Committee {
-            eligible_leaders,
-            stake_table,
-            da_members,
-            indexed_stake_table,
-            indexed_da_members,
-        };
-
-        <span class="kw">let </span><span class="kw-2">mut </span>map = HashMap::new();
-        map.insert(Epoch::genesis(), members.clone());
-        <span class="comment">// TODO: remove this, workaround for hotshot asking for stake tables from epoch 1
-        </span>map.insert(Epoch::genesis() + <span class="number">1u64</span>, members.clone());
-
-        <span class="self">Self </span>{
-            non_epoch_committee: members,
-            state: map,
-            _epoch_size: <span class="number">12</span>,
-            l1_client: L1Client::new(<span class="macro">vec!</span>[Url::from_str(<span class="string">"http:://ab.b"</span>).unwrap()])
-                .expect(<span class="string">"Failed to create L1 client"</span>),
-            contract_address: <span class="prelude-val">None</span>,
-            randomized_committees: BTreeMap::new(),
-        }
+        <span class="macro">panic!</span>(<span class="string">"This function has been replaced with new_stake()"</span>);
     }
 
     <span class="doccomment">/// Get the stake table for the current view
-    </span><span class="kw">fn </span>stake_table(<span class="kw-2">&amp;</span><span class="self">self</span>, epoch: <span class="prelude-ty">Option</span>&lt;Epoch&gt;) -&gt; Vec&lt;StakeTableEntry&lt;PubKey&gt;&gt; {
+    </span><span class="kw">fn </span>stake_table(<span class="kw-2">&amp;</span><span class="self">self</span>, epoch: <span class="prelude-ty">Option</span>&lt;Epoch&gt;) -&gt; Vec&lt;PeerConfig&lt;PubKey&gt;&gt; {
         <span class="kw">if let </span><span class="prelude-val">Some</span>(st) = <span class="self">self</span>.state(<span class="kw-2">&amp;</span>epoch) {
             st.stake_table.clone()
         } <span class="kw">else </span>{
@@ -964,7 +917,7 @@
         }
     }
     <span class="doccomment">/// Get the stake table for the current view
-    </span><span class="kw">fn </span>da_stake_table(<span class="kw-2">&amp;</span><span class="self">self</span>, epoch: <span class="prelude-ty">Option</span>&lt;Epoch&gt;) -&gt; Vec&lt;StakeTableEntry&lt;PubKey&gt;&gt; {
+    </span><span class="kw">fn </span>da_stake_table(<span class="kw-2">&amp;</span><span class="self">self</span>, epoch: <span class="prelude-ty">Option</span>&lt;Epoch&gt;) -&gt; Vec&lt;PeerConfig&lt;PubKey&gt;&gt; {
         <span class="kw">if let </span><span class="prelude-val">Some</span>(sc) = <span class="self">self</span>.state(<span class="kw-2">&amp;</span>epoch) {
             sc.da_members.clone()
         } <span class="kw">else </span>{
@@ -1008,19 +961,19 @@
             .unwrap()
             .eligible_leaders
             .iter()
-            .map(PubKey::public_key)
+            .map(|x| PubKey::public_key(<span class="kw-2">&amp;</span>x.stake_table_entry))
             .collect()
     }
 
     <span class="doccomment">/// Get the stake table entry for a public key
-    </span><span class="kw">fn </span>stake(<span class="kw-2">&amp;</span><span class="self">self</span>, pub_key: <span class="kw-2">&amp;</span>PubKey, epoch: <span class="prelude-ty">Option</span>&lt;Epoch&gt;) -&gt; <span class="prelude-ty">Option</span>&lt;StakeTableEntry&lt;PubKey&gt;&gt; {
+    </span><span class="kw">fn </span>stake(<span class="kw-2">&amp;</span><span class="self">self</span>, pub_key: <span class="kw-2">&amp;</span>PubKey, epoch: <span class="prelude-ty">Option</span>&lt;Epoch&gt;) -&gt; <span class="prelude-ty">Option</span>&lt;PeerConfig&lt;PubKey&gt;&gt; {
         <span class="comment">// Only return the stake if it is above zero
         </span><span class="self">self</span>.state(<span class="kw-2">&amp;</span>epoch)
             .and_then(|h| h.indexed_stake_table.get(pub_key).cloned())
     }
 
     <span class="doccomment">/// Get the DA stake table entry for a public key
-    </span><span class="kw">fn </span>da_stake(<span class="kw-2">&amp;</span><span class="self">self</span>, pub_key: <span class="kw-2">&amp;</span>PubKey, epoch: <span class="prelude-ty">Option</span>&lt;Epoch&gt;) -&gt; <span class="prelude-ty">Option</span>&lt;StakeTableEntry&lt;PubKey&gt;&gt; {
+    </span><span class="kw">fn </span>da_stake(<span class="kw-2">&amp;</span><span class="self">self</span>, pub_key: <span class="kw-2">&amp;</span>PubKey, epoch: <span class="prelude-ty">Option</span>&lt;Epoch&gt;) -&gt; <span class="prelude-ty">Option</span>&lt;PeerConfig&lt;PubKey&gt;&gt; {
         <span class="comment">// Only return the stake if it is above zero
         </span><span class="self">self</span>.state(<span class="kw-2">&amp;</span>epoch)
             .and_then(|h| h.indexed_da_members.get(pub_key).cloned())
@@ -1030,14 +983,14 @@
     </span><span class="kw">fn </span>has_stake(<span class="kw-2">&amp;</span><span class="self">self</span>, pub_key: <span class="kw-2">&amp;</span>PubKey, epoch: <span class="prelude-ty">Option</span>&lt;Epoch&gt;) -&gt; bool {
         <span class="self">self</span>.state(<span class="kw-2">&amp;</span>epoch)
             .and_then(|h| h.indexed_stake_table.get(pub_key))
-            .is_some_and(|x| x.stake() &gt; U256::zero())
+            .is_some_and(|x| x.stake_table_entry.stake() &gt; U256::zero())
     }
 
     <span class="doccomment">/// Check if a node has stake in the committee
     </span><span class="kw">fn </span>has_da_stake(<span class="kw-2">&amp;</span><span class="self">self</span>, pub_key: <span class="kw-2">&amp;</span>PubKey, epoch: <span class="prelude-ty">Option</span>&lt;Epoch&gt;) -&gt; bool {
         <span class="self">self</span>.state(<span class="kw-2">&amp;</span>epoch)
             .and_then(|h| h.indexed_da_members.get(pub_key))
-            .is_some_and(|x| x.stake() &gt; U256::zero())
+            .is_some_and(|x| x.stake_table_entry.stake() &gt; U256::zero())
     }
 
     <span class="doccomment">/// Index the vector of public keys with the current view number
@@ -1064,7 +1017,7 @@
 
             <span class="kw">let </span>index = <span class="kw-2">*</span>view_number <span class="kw">as </span>usize % leaders.len();
             <span class="kw">let </span>res = leaders[index].clone();
-            <span class="prelude-val">Ok</span>(PubKey::public_key(<span class="kw-2">&amp;</span>res))
+            <span class="prelude-val">Ok</span>(PubKey::public_key(<span class="kw-2">&amp;</span>res.stake_table_entry))
         }
     }
 
@@ -1135,8 +1088,13 @@
             <span class="kw">return</span>;
         };
 
-        <span class="kw">let </span>randomized_committee =
-            generate_stake_cdf(raw_stake_table.eligible_leaders.clone(), drb);
+        <span class="kw">let </span>leaders = raw_stake_table
+            .eligible_leaders
+            .clone()
+            .into_iter()
+            .map(|peer_config| peer_config.stake_table_entry)
+            .collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;();
+        <span class="kw">let </span>randomized_committee = generate_stake_cdf(leaders, drb);
 
         <span class="self">self</span>.randomized_committees
             .insert(epoch, randomized_committee);
@@ -1168,13 +1126,19 @@
 
         <span class="comment">// The DA stake table contains the DA node only
         </span><span class="macro">assert_eq!</span>(st.da_members.<span class="number">0</span>.len(), <span class="number">1</span>);
-        <span class="macro">assert_eq!</span>(st.da_members.<span class="number">0</span>[<span class="number">0</span>].stake_key, da_node.stake_table_key);
+        <span class="macro">assert_eq!</span>(
+            st.da_members.<span class="number">0</span>[<span class="number">0</span>].stake_table_entry.stake_key,
+            da_node.stake_table_key
+        );
 
         <span class="comment">// The consensus stake table contains both nodes
         </span><span class="macro">assert_eq!</span>(st.stake_table.<span class="number">0</span>.len(), <span class="number">2</span>);
-        <span class="macro">assert_eq!</span>(st.stake_table.<span class="number">0</span>[<span class="number">0</span>].stake_key, da_node.stake_table_key);
         <span class="macro">assert_eq!</span>(
-            st.stake_table.<span class="number">0</span>[<span class="number">1</span>].stake_key,
+            st.stake_table.<span class="number">0</span>[<span class="number">0</span>].stake_table_entry.stake_key,
+            da_node.stake_table_key
+        );
+        <span class="macro">assert_eq!</span>(
+            st.stake_table.<span class="number">0</span>[<span class="number">1</span>].stake_table_entry.stake_key,
             consensus_node.stake_table_key
         );
 
@@ -1191,13 +1155,25 @@
 
         <span class="comment">// The DA stake stable now contains both nodes
         </span><span class="macro">assert_eq!</span>(st.da_members.<span class="number">0</span>.len(), <span class="number">2</span>);
-        <span class="macro">assert_eq!</span>(st.da_members.<span class="number">0</span>[<span class="number">0</span>].stake_key, da_node.stake_table_key);
-        <span class="macro">assert_eq!</span>(st.da_members.<span class="number">0</span>[<span class="number">1</span>].stake_key, new_da_node.stake_table_key);
+        <span class="macro">assert_eq!</span>(
+            st.da_members.<span class="number">0</span>[<span class="number">0</span>].stake_table_entry.stake_key,
+            da_node.stake_table_key
+        );
+        <span class="macro">assert_eq!</span>(
+            st.da_members.<span class="number">0</span>[<span class="number">1</span>].stake_table_entry.stake_key,
+            new_da_node.stake_table_key
+        );
 
         <span class="comment">// The consensus stake stable (still) contains both nodes
         </span><span class="macro">assert_eq!</span>(st.stake_table.<span class="number">0</span>.len(), <span class="number">2</span>);
-        <span class="macro">assert_eq!</span>(st.stake_table.<span class="number">0</span>[<span class="number">0</span>].stake_key, da_node.stake_table_key);
-        <span class="macro">assert_eq!</span>(st.stake_table.<span class="number">0</span>[<span class="number">1</span>].stake_key, new_da_node.stake_table_key);
+        <span class="macro">assert_eq!</span>(
+            st.stake_table.<span class="number">0</span>[<span class="number">0</span>].stake_table_entry.stake_key,
+            da_node.stake_table_key
+        );
+        <span class="macro">assert_eq!</span>(
+            st.stake_table.<span class="number">0</span>[<span class="number">1</span>].stake_table_entry.stake_key,
+            new_da_node.stake_table_key
+        );
 
         <span class="comment">// Simulate removing the second node
         </span>updates.push(StakersUpdated {
@@ -1208,11 +1184,17 @@
 
         <span class="comment">// The DA stake table contains only the original DA node
         </span><span class="macro">assert_eq!</span>(st.da_members.<span class="number">0</span>.len(), <span class="number">1</span>);
-        <span class="macro">assert_eq!</span>(st.da_members.<span class="number">0</span>[<span class="number">0</span>].stake_key, da_node.stake_table_key);
+        <span class="macro">assert_eq!</span>(
+            st.da_members.<span class="number">0</span>[<span class="number">0</span>].stake_table_entry.stake_key,
+            da_node.stake_table_key
+        );
 
         <span class="comment">// The consensus stake table also contains only the original DA node
         </span><span class="macro">assert_eq!</span>(st.stake_table.<span class="number">0</span>.len(), <span class="number">1</span>);
-        <span class="macro">assert_eq!</span>(st.stake_table.<span class="number">0</span>[<span class="number">0</span>].stake_key, da_node.stake_table_key);
+        <span class="macro">assert_eq!</span>(
+            st.stake_table.<span class="number">0</span>[<span class="number">0</span>].stake_table_entry.stake_key,
+            da_node.stake_table_key
+        );
     }
 
     <span class="comment">// TODO: test that repeatedly removes and adds more nodes

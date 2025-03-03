@@ -444,8 +444,7 @@
 <a href="#443" id="443">443</a>
 <a href="#444" id="444">444</a>
 <a href="#445" id="445">445</a>
-<a href="#446" id="446">446</a>
-<a href="#447" id="447">447</a></pre></div><pre class="rust"><code><span class="kw">use </span>std::{num::NonZeroUsize, time::Duration};
+<a href="#446" id="446">446</a></pre></div><pre class="rust"><code><span class="kw">use </span>std::{num::NonZeroUsize, time::Duration};
 
 <span class="kw">use </span>anyhow::Context;
 <span class="kw">use </span>async_trait::async_trait;
@@ -467,7 +466,6 @@
     data::ViewNumber,
     light_client::StateSignatureRequestBody,
     network::NetworkConfig,
-    stake_table::StakeTableEntry,
     traits::{network::ConnectedNetwork, node_implementation::Versions},
     HotShotConfig, PeerConfig, ValidatorConfig,
 };
@@ -568,12 +566,12 @@
     </span><span class="kw">fn </span>get_stake_table(
         <span class="kw-2">&amp;</span><span class="self">self</span>,
         epoch: <span class="prelude-ty">Option</span>&lt;&lt;T <span class="kw">as </span>NodeType&gt;::Epoch&gt;,
-    ) -&gt; <span class="kw">impl </span>Send + Future&lt;Output = Vec&lt;StakeTableEntry&lt;T::SignatureKey&gt;&gt;&gt;;
+    ) -&gt; <span class="kw">impl </span>Send + Future&lt;Output = Vec&lt;PeerConfig&lt;T::SignatureKey&gt;&gt;&gt;;
 
     <span class="doccomment">/// Get the stake table for  the current epoch if not provided
     </span><span class="kw">fn </span>get_stake_table_current(
         <span class="kw-2">&amp;</span><span class="self">self</span>,
-    ) -&gt; <span class="kw">impl </span>Send + Future&lt;Output = Vec&lt;StakeTableEntry&lt;T::SignatureKey&gt;&gt;&gt;;
+    ) -&gt; <span class="kw">impl </span>Send + Future&lt;Output = Vec&lt;PeerConfig&lt;T::SignatureKey&gt;&gt;&gt;;
 }
 
 <span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">trait </span>CatchupDataSource: Sync {

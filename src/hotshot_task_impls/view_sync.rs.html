@@ -919,7 +919,8 @@
 <a href="#918" id="918">918</a>
 <a href="#919" id="919">919</a>
 <a href="#920" id="920">920</a>
-<a href="#921" id="921">921</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
+<a href="#921" id="921">921</a>
+<a href="#922" id="922">922</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
 // This file is part of the HotShot repository.
 
 // You should have received a copy of the MIT License
@@ -952,6 +953,7 @@
     },
     utils::EpochTransitionIndicator,
     vote::{Certificate, HasViewNumber, Vote},
+    StakeTableEntries,
 };
 <span class="kw">use </span>hotshot_utils::anytrace::<span class="kw-2">*</span>;
 <span class="kw">use </span>tokio::{spawn, task::JoinHandle, time::sleep};
@@ -1478,7 +1480,7 @@
                 <span class="comment">// If certificate is not valid, return current state
                 </span><span class="kw">if let </span><span class="prelude-val">Err</span>(e) = certificate
                     .is_valid_cert(
-                        membership_stake_table,
+                        StakeTableEntries::&lt;TYPES&gt;::from(membership_stake_table).<span class="number">0</span>,
                         membership_failure_threshold,
                         <span class="kw-2">&amp;</span><span class="self">self</span>.upgrade_lock,
                     )
@@ -1572,7 +1574,7 @@
                 <span class="comment">// If certificate is not valid, return current state
                 </span><span class="kw">if let </span><span class="prelude-val">Err</span>(e) = certificate
                     .is_valid_cert(
-                        membership_stake_table,
+                        StakeTableEntries::&lt;TYPES&gt;::from(membership_stake_table).<span class="number">0</span>,
                         membership_success_threshold,
                         <span class="kw-2">&amp;</span><span class="self">self</span>.upgrade_lock,
                     )
@@ -1677,7 +1679,7 @@
                 <span class="comment">// If certificate is not valid, return current state
                 </span><span class="kw">if let </span><span class="prelude-val">Err</span>(e) = certificate
                     .is_valid_cert(
-                        membership_stake_table,
+                        StakeTableEntries::&lt;TYPES&gt;::from(membership_stake_table).<span class="number">0</span>,
                         membership_success_threshold,
                         <span class="kw-2">&amp;</span><span class="self">self</span>.upgrade_lock,
                     )

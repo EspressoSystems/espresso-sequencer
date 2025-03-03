@@ -2934,7 +2934,7 @@
             </span>.unwrap();
 
         <span class="kw">let </span>result = nodes.stake_table.<span class="number">0</span>[<span class="number">0</span>].clone();
-        <span class="macro">assert_eq!</span>(result.stake_amount.as_u64(), <span class="number">1</span>);
+        <span class="macro">assert_eq!</span>(result.stake_table_entry.stake_amount.as_u64(), <span class="number">1</span>);
         <span class="prelude-val">Ok</span>(())
     }
 

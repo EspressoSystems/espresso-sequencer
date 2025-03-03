@@ -459,7 +459,8 @@
 <a href="#458" id="458">458</a>
 <a href="#459" id="459">459</a>
 <a href="#460" id="460">460</a>
-<a href="#461" id="461">461</a></pre></div><pre class="rust"><code><span class="doccomment">//! Sequencer-specific API endpoint handlers.
+<a href="#461" id="461">461</a>
+<a href="#462" id="462">462</a></pre></div><pre class="rust"><code><span class="doccomment">//! Sequencer-specific API endpoint handlers.
 
 </span><span class="kw">use </span>std::{
     collections::{BTreeSet, HashMap},
@@ -489,6 +490,7 @@
 <span class="kw">use </span>jf_merkle_tree::MerkleTreeScheme;
 <span class="kw">use </span>serde::{de::Error <span class="kw">as _</span>, Deserialize, Serialize};
 <span class="kw">use </span>snafu::OptionExt;
+
 <span class="kw">use </span>tagged_base64::TaggedBase64;
 <span class="kw">use </span>tide_disco::{method::ReadState, Api, Error <span class="kw">as _</span>, StatusCode};
 <span class="kw">use </span>vbs::version::{StaticVersion, StaticVersionType};

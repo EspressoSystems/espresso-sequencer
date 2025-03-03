@@ -494,7 +494,7 @@
     },
     utils::{option_epoch_from_block_number, View, ViewInner},
     vote::{Certificate, HasViewNumber, Vote},
-    ValidatorConfig,
+    StakeTableEntries, ValidatorConfig,
 };
 <span class="kw">use </span>primitive_types::U256;
 <span class="kw">use </span>serde::Serialize;
@@ -686,7 +686,7 @@
     <span class="kw">let </span>stake_table = CERT::stake_table(<span class="kw-2">&amp;*</span>membership_reader, epoch);
     <span class="kw">let </span>real_qc_pp: &lt;TYPES::SignatureKey <span class="kw">as </span>SignatureKey&gt;::QcParams =
         &lt;TYPES::SignatureKey <span class="kw">as </span>SignatureKey&gt;::public_parameter(
-            stake_table.clone(),
+            StakeTableEntries::&lt;TYPES&gt;::from(stake_table.clone()).<span class="number">0</span>,
             U256::from(CERT::threshold(<span class="kw-2">&amp;*</span>membership_reader, epoch)),
         );
     drop(membership_reader);

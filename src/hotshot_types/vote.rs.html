@@ -252,7 +252,8 @@
 <a href="#251" id="251">251</a>
 <a href="#252" id="252">252</a>
 <a href="#253" id="253">253</a>
-<a href="#254" id="254">254</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
+<a href="#254" id="254">254</a>
+<a href="#255" id="255">255</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
 // This file is part of the HotShot repository.
 
 // You should have received a copy of the MIT License
@@ -283,6 +284,7 @@
         node_implementation::{NodeType, Versions},
         signature_key::{SignatureKey, StakeTableEntryType},
     },
+    PeerConfig, StakeTableEntries,
 };
 
 <span class="doccomment">/// A simple vote that has a signer and commitment to the data voted on.
@@ -345,7 +347,7 @@ The votes all must be over the `Commitment` associated type.
     </span><span class="kw">fn </span>stake_table&lt;MEMBERSHIP: Membership&lt;TYPES&gt;&gt;(
         membership: <span class="kw-2">&amp;</span>MEMBERSHIP,
         epoch: <span class="prelude-ty">Option</span>&lt;TYPES::Epoch&gt;,
-    ) -&gt; Vec&lt;&lt;TYPES::SignatureKey <span class="kw">as </span>SignatureKey&gt;::StakeTableEntry&gt;;
+    ) -&gt; Vec&lt;PeerConfig&lt;TYPES::SignatureKey&gt;&gt;;
 
     <span class="doccomment">/// Get Total Nodes from Membership implementation.
     </span><span class="kw">fn </span>total_nodes&lt;MEMBERSHIP: Membership&lt;TYPES&gt;&gt;(
@@ -358,7 +360,7 @@ The votes all must be over the `Commitment` associated type.
         membership: <span class="kw-2">&amp;</span>MEMBERSHIP,
         pub_key: <span class="kw-2">&amp;</span>TYPES::SignatureKey,
         epoch: <span class="prelude-ty">Option</span>&lt;TYPES::Epoch&gt;,
-    ) -&gt; <span class="prelude-ty">Option</span>&lt;&lt;TYPES::SignatureKey <span class="kw">as </span>SignatureKey&gt;::StakeTableEntry&gt;;
+    ) -&gt; <span class="prelude-ty">Option</span>&lt;PeerConfig&lt;TYPES::SignatureKey&gt;&gt;;
 
     <span class="doccomment">/// Get the commitment which was voted on
     </span><span class="kw">fn </span>data(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span><span class="self">Self</span>::Voteable;
@@ -475,14 +477,14 @@ The votes all must be over the `Commitment` associated type.
         signers.set(vote_node_id, <span class="bool-val">true</span>);
         sig_list.push(original_signature);
 
-        <span class="kw-2">*</span>total_stake_casted += stake_table_entry.stake();
+        <span class="kw-2">*</span>total_stake_casted += stake_table_entry.stake_table_entry.stake();
         total_vote_map.insert(key, (vote.signature(), vote_commitment));
 
         <span class="kw">if </span><span class="kw-2">*</span>total_stake_casted &gt;= threshold.into() {
             <span class="comment">// Assemble QC
             </span><span class="kw">let </span>real_qc_pp: &lt;&lt;TYPES <span class="kw">as </span>NodeType&gt;::SignatureKey <span class="kw">as </span>SignatureKey&gt;::QcParams =
                 &lt;TYPES::SignatureKey <span class="kw">as </span>SignatureKey&gt;::public_parameter(
-                    stake_table,
+                    StakeTableEntries::&lt;TYPES&gt;::from(stake_table).<span class="number">0</span>,
                     U256::from(threshold),
                 );
 

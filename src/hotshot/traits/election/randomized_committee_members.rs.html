@@ -449,8 +449,7 @@
 <a href="#448" id="448">448</a>
 <a href="#449" id="449">449</a>
 <a href="#450" id="450">450</a>
-<a href="#451" id="451">451</a>
-<a href="#452" id="452">452</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
+<a href="#451" id="451">451</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
 // This file is part of the HotShot repository.
 
 // You should have received a copy of the MIT License
@@ -484,21 +483,19 @@
     <span class="doccomment">/// The nodes eligible for leadership.
     /// NOTE: This is currently a hack because the DA leader needs to be the quorum
     /// leader but without voting rights.
-    </span>eligible_leaders: Vec&lt;&lt;T::SignatureKey <span class="kw">as </span>SignatureKey&gt;::StakeTableEntry&gt;,
+    </span>eligible_leaders: Vec&lt;PeerConfig&lt;T::SignatureKey&gt;&gt;,
 
     <span class="doccomment">/// The nodes on the committee and their stake
-    </span>stake_table: Vec&lt;&lt;T::SignatureKey <span class="kw">as </span>SignatureKey&gt;::StakeTableEntry&gt;,
+    </span>stake_table: Vec&lt;PeerConfig&lt;T::SignatureKey&gt;&gt;,
 
     <span class="doccomment">/// The nodes on the da committee and their stake
-    </span>da_stake_table: Vec&lt;&lt;T::SignatureKey <span class="kw">as </span>SignatureKey&gt;::StakeTableEntry&gt;,
+    </span>da_stake_table: Vec&lt;PeerConfig&lt;T::SignatureKey&gt;&gt;,
 
     <span class="doccomment">/// The nodes on the committee and their stake, indexed by public key
-    </span>indexed_stake_table:
-        BTreeMap&lt;T::SignatureKey, &lt;T::SignatureKey <span class="kw">as </span>SignatureKey&gt;::StakeTableEntry&gt;,
+    </span>indexed_stake_table: BTreeMap&lt;T::SignatureKey, PeerConfig&lt;T::SignatureKey&gt;&gt;,
 
     <span class="doccomment">/// The nodes on the da committee and their stake, indexed by public key
-    </span>indexed_da_stake_table:
-        BTreeMap&lt;T::SignatureKey, &lt;T::SignatureKey <span class="kw">as </span>SignatureKey&gt;::StakeTableEntry&gt;,
+    </span>indexed_da_stake_table: BTreeMap&lt;T::SignatureKey, PeerConfig&lt;T::SignatureKey&gt;&gt;,
 
     <span class="doccomment">/// Phantom
     </span>_pd: PhantomData&lt;C&gt;,
@@ -550,51 +547,52 @@
     <span class="kw">for </span>RandomizedCommitteeMembers&lt;TYPES, CONFIG&gt;
 {
     <span class="kw">type </span>Error = hotshot_utils::anytrace::Error;
-
     <span class="doccomment">/// Create a new election
     </span><span class="kw">fn </span>new(
         committee_members: Vec&lt;PeerConfig&lt;&lt;TYPES <span class="kw">as </span>NodeType&gt;::SignatureKey&gt;&gt;,
         da_members: Vec&lt;PeerConfig&lt;&lt;TYPES <span class="kw">as </span>NodeType&gt;::SignatureKey&gt;&gt;,
     ) -&gt; <span class="self">Self </span>{
         <span class="comment">// For each eligible leader, get the stake table entry
-        </span><span class="kw">let </span>eligible_leaders: Vec&lt;&lt;TYPES::SignatureKey <span class="kw">as </span>SignatureKey&gt;::StakeTableEntry&gt; =
-            committee_members
-                .iter()
-                .map(|member| member.stake_table_entry.clone())
-                .filter(|entry| entry.stake() &gt; U256::zero())
-                .collect();
+        </span><span class="kw">let </span>eligible_leaders = committee_members
+            .iter()
+            .filter(|<span class="kw-2">&amp;</span>member| member.stake_table_entry.stake() &gt; U256::zero())
+            .cloned()
+            .collect();
 
         <span class="comment">// For each member, get the stake table entry
-        </span><span class="kw">let </span>members: Vec&lt;&lt;TYPES::SignatureKey <span class="kw">as </span>SignatureKey&gt;::StakeTableEntry&gt; =
-            committee_members
-                .iter()
-                .map(|member| member.stake_table_entry.clone())
-                .filter(|entry| entry.stake() &gt; U256::zero())
-                .collect();
+        </span><span class="kw">let </span>members: Vec&lt;PeerConfig&lt;&lt;TYPES <span class="kw">as </span>NodeType&gt;::SignatureKey&gt;&gt; = committee_members
+            .iter()
+            .filter(|<span class="kw-2">&amp;</span>entry| entry.stake_table_entry.stake() &gt; U256::zero())
+            .cloned()
+            .collect();
 
         <span class="comment">// For each da member, get the stake table entry
-        </span><span class="kw">let </span>da_members: Vec&lt;&lt;TYPES::SignatureKey <span class="kw">as </span>SignatureKey&gt;::StakeTableEntry&gt; = da_members
+        </span><span class="kw">let </span>da_members: Vec&lt;PeerConfig&lt;&lt;TYPES <span class="kw">as </span>NodeType&gt;::SignatureKey&gt;&gt; = da_members
             .iter()
-            .map(|member| member.stake_table_entry.clone())
-            .filter(|entry| entry.stake() &gt; U256::zero())
+            .filter(|<span class="kw-2">&amp;</span>entry| entry.stake_table_entry.stake() &gt; U256::zero())
+            .cloned()
             .collect();
 
         <span class="comment">// Index the stake table by public key
-        </span><span class="kw">let </span>indexed_stake_table: BTreeMap&lt;
-            TYPES::SignatureKey,
-            &lt;TYPES::SignatureKey <span class="kw">as </span>SignatureKey&gt;::StakeTableEntry,
-        &gt; = members
+        </span><span class="kw">let </span>indexed_stake_table = members
             .iter()
-            .map(|entry| (TYPES::SignatureKey::public_key(entry), entry.clone()))
+            .map(|entry| {
+                (
+                    TYPES::SignatureKey::public_key(<span class="kw-2">&amp;</span>entry.stake_table_entry),
+                    entry.clone(),
+                )
+            })
             .collect();
 
         <span class="comment">// Index the stake table by public key
-        </span><span class="kw">let </span>indexed_da_stake_table: BTreeMap&lt;
-            TYPES::SignatureKey,
-            &lt;TYPES::SignatureKey <span class="kw">as </span>SignatureKey&gt;::StakeTableEntry,
-        &gt; = da_members
+        </span><span class="kw">let </span>indexed_da_stake_table = da_members
             .iter()
-            .map(|entry| (TYPES::SignatureKey::public_key(entry), entry.clone()))
+            .map(|entry| {
+                (
+                    TYPES::SignatureKey::public_key(<span class="kw-2">&amp;</span>entry.stake_table_entry),
+                    entry.clone(),
+                )
+            })
             .collect();
 
         <span class="kw">let </span>s = <span class="self">Self </span>{
@@ -615,7 +613,7 @@
     </span><span class="kw">fn </span>stake_table(
         <span class="kw-2">&amp;</span><span class="self">self</span>,
         epoch: <span class="prelude-ty">Option</span>&lt;&lt;TYPES <span class="kw">as </span>NodeType&gt;::Epoch&gt;,
-    ) -&gt; Vec&lt;&lt;&lt;TYPES <span class="kw">as </span>NodeType&gt;::SignatureKey <span class="kw">as </span>SignatureKey&gt;::StakeTableEntry&gt; {
+    ) -&gt; Vec&lt;PeerConfig&lt;TYPES::SignatureKey&gt;&gt; {
         <span class="kw">if let </span><span class="prelude-val">Some</span>(epoch) = epoch {
             <span class="kw">let </span>filter = <span class="self">self</span>.make_quorum_filter(epoch);
             <span class="comment">//self.stake_table.clone()s
@@ -634,7 +632,7 @@
     </span><span class="kw">fn </span>da_stake_table(
         <span class="kw-2">&amp;</span><span class="self">self</span>,
         epoch: <span class="prelude-ty">Option</span>&lt;&lt;TYPES <span class="kw">as </span>NodeType&gt;::Epoch&gt;,
-    ) -&gt; Vec&lt;&lt;&lt;TYPES <span class="kw">as </span>NodeType&gt;::SignatureKey <span class="kw">as </span>SignatureKey&gt;::StakeTableEntry&gt; {
+    ) -&gt; Vec&lt;PeerConfig&lt;TYPES::SignatureKey&gt;&gt; {
         <span class="kw">if let </span><span class="prelude-val">Some</span>(epoch) = epoch {
             <span class="kw">let </span>filter = <span class="self">self</span>.make_da_quorum_filter(epoch);
             <span class="comment">//self.stake_table.clone()s
@@ -661,12 +659,12 @@
                 .iter()
                 .enumerate()
                 .filter(|(idx, <span class="kw">_</span>)| filter.contains(idx))
-                .map(|(<span class="kw">_</span>, v)| TYPES::SignatureKey::public_key(v))
+                .map(|(<span class="kw">_</span>, v)| TYPES::SignatureKey::public_key(<span class="kw-2">&amp;</span>v.stake_table_entry))
                 .collect()
         } <span class="kw">else </span>{
             <span class="self">self</span>.stake_table
                 .iter()
-                .map(TYPES::SignatureKey::public_key)
+                .map(|config| TYPES::SignatureKey::public_key(<span class="kw-2">&amp;</span>config.stake_table_entry))
                 .collect()
         }
     }
@@ -683,12 +681,12 @@
                 .iter()
                 .enumerate()
                 .filter(|(idx, <span class="kw">_</span>)| filter.contains(idx))
-                .map(|(<span class="kw">_</span>, v)| TYPES::SignatureKey::public_key(v))
+                .map(|(<span class="kw">_</span>, v)| TYPES::SignatureKey::public_key(<span class="kw-2">&amp;</span>v.stake_table_entry))
                 .collect()
         } <span class="kw">else </span>{
             <span class="self">self</span>.da_stake_table
                 .iter()
-                .map(TYPES::SignatureKey::public_key)
+                .map(|config| TYPES::SignatureKey::public_key(<span class="kw-2">&amp;</span>config.stake_table_entry))
                 .collect()
         }
     }
@@ -707,7 +705,7 @@
         <span class="kw-2">&amp;</span><span class="self">self</span>,
         pub_key: <span class="kw-2">&amp;</span>&lt;TYPES <span class="kw">as </span>NodeType&gt;::SignatureKey,
         epoch: <span class="prelude-ty">Option</span>&lt;&lt;TYPES <span class="kw">as </span>NodeType&gt;::Epoch&gt;,
-    ) -&gt; <span class="prelude-ty">Option</span>&lt;&lt;TYPES::SignatureKey <span class="kw">as </span>SignatureKey&gt;::StakeTableEntry&gt; {
+    ) -&gt; <span class="prelude-ty">Option</span>&lt;PeerConfig&lt;&lt;TYPES <span class="kw">as </span>NodeType&gt;::SignatureKey&gt;&gt; {
         <span class="kw">if let </span><span class="prelude-val">Some</span>(epoch) = epoch {
             <span class="kw">let </span>filter = <span class="self">self</span>.make_quorum_filter(epoch);
             <span class="kw">let </span>actual_members: BTreeSet&lt;<span class="kw">_</span>&gt; = <span class="self">self
@@ -715,7 +713,7 @@
                 .iter()
                 .enumerate()
                 .filter(|(idx, <span class="kw">_</span>)| filter.contains(idx))
-                .map(|(<span class="kw">_</span>, v)| TYPES::SignatureKey::public_key(v))
+                .map(|(<span class="kw">_</span>, v)| TYPES::SignatureKey::public_key(<span class="kw-2">&amp;</span>v.stake_table_entry))
                 .collect();
 
             <span class="kw">if </span>actual_members.contains(pub_key) {
@@ -735,7 +733,7 @@
         <span class="kw-2">&amp;</span><span class="self">self</span>,
         pub_key: <span class="kw-2">&amp;</span>&lt;TYPES <span class="kw">as </span>NodeType&gt;::SignatureKey,
         epoch: <span class="prelude-ty">Option</span>&lt;&lt;TYPES <span class="kw">as </span>NodeType&gt;::Epoch&gt;,
-    ) -&gt; <span class="prelude-ty">Option</span>&lt;&lt;TYPES::SignatureKey <span class="kw">as </span>SignatureKey&gt;::StakeTableEntry&gt; {
+    ) -&gt; <span class="prelude-ty">Option</span>&lt;PeerConfig&lt;&lt;TYPES <span class="kw">as </span>NodeType&gt;::SignatureKey&gt;&gt; {
         <span class="kw">if let </span><span class="prelude-val">Some</span>(epoch) = epoch {
             <span class="kw">let </span>filter = <span class="self">self</span>.make_da_quorum_filter(epoch);
             <span class="kw">let </span>actual_members: BTreeSet&lt;<span class="kw">_</span>&gt; = <span class="self">self
@@ -743,7 +741,7 @@
                 .iter()
                 .enumerate()
                 .filter(|(idx, <span class="kw">_</span>)| filter.contains(idx))
-                .map(|(<span class="kw">_</span>, v)| TYPES::SignatureKey::public_key(v))
+                .map(|(<span class="kw">_</span>, v)| TYPES::SignatureKey::public_key(<span class="kw-2">&amp;</span>v.stake_table_entry))
                 .collect();
 
             <span class="kw">if </span>actual_members.contains(pub_key) {
@@ -771,13 +769,13 @@
                 .iter()
                 .enumerate()
                 .filter(|(idx, <span class="kw">_</span>)| filter.contains(idx))
-                .map(|(<span class="kw">_</span>, v)| TYPES::SignatureKey::public_key(v))
+                .map(|(<span class="kw">_</span>, v)| TYPES::SignatureKey::public_key(<span class="kw-2">&amp;</span>v.stake_table_entry))
                 .collect();
 
             <span class="kw">if </span>actual_members.contains(pub_key) {
                 <span class="self">self</span>.indexed_stake_table
                     .get(pub_key)
-                    .is_some_and(|x| x.stake() &gt; U256::zero())
+                    .is_some_and(|x| x.stake_table_entry.stake() &gt; U256::zero())
             } <span class="kw">else </span>{
                 <span class="comment">// Skip members which aren't included based on the quorum filter
                 </span><span class="bool-val">false
@@ -785,7 +783,7 @@
         } <span class="kw">else </span>{
             <span class="self">self</span>.indexed_stake_table
                 .get(pub_key)
-                .is_some_and(|x| x.stake() &gt; U256::zero())
+                .is_some_and(|x| x.stake_table_entry.stake() &gt; U256::zero())
         }
     }
 
@@ -802,13 +800,13 @@
                 .iter()
                 .enumerate()
                 .filter(|(idx, <span class="kw">_</span>)| filter.contains(idx))
-                .map(|(<span class="kw">_</span>, v)| TYPES::SignatureKey::public_key(v))
+                .map(|(<span class="kw">_</span>, v)| TYPES::SignatureKey::public_key(<span class="kw-2">&amp;</span>v.stake_table_entry))
                 .collect();
 
             <span class="kw">if </span>actual_members.contains(pub_key) {
                 <span class="self">self</span>.indexed_da_stake_table
                     .get(pub_key)
-                    .is_some_and(|x| x.stake() &gt; U256::zero())
+                    .is_some_and(|x| x.stake_table_entry.stake() &gt; U256::zero())
             } <span class="kw">else </span>{
                 <span class="comment">// Skip members which aren't included based on the quorum filter
                 </span><span class="bool-val">false
@@ -816,7 +814,7 @@
         } <span class="kw">else </span>{
             <span class="self">self</span>.indexed_da_stake_table
                 .get(pub_key)
-                .is_some_and(|x| x.stake() &gt; U256::zero())
+                .is_some_and(|x| x.stake_table_entry.stake() &gt; U256::zero())
         }
     }
 
@@ -844,7 +842,7 @@
 
             <span class="kw">let </span>res = leader_vec[index].clone();
 
-            <span class="prelude-val">Ok</span>(TYPES::SignatureKey::public_key(<span class="kw-2">&amp;</span>res))
+            <span class="prelude-val">Ok</span>(TYPES::SignatureKey::public_key(<span class="kw-2">&amp;</span>res.stake_table_entry))
         } <span class="kw">else </span>{
             <span class="kw">let </span><span class="kw-2">mut </span>rng: StdRng = rand::SeedableRng::seed_from_u64(<span class="kw-2">*</span>view_number);
 
@@ -854,7 +852,7 @@
 
             <span class="kw">let </span>res = <span class="self">self</span>.eligible_leaders[index].clone();
 
-            <span class="prelude-val">Ok</span>(TYPES::SignatureKey::public_key(<span class="kw-2">&amp;</span>res))
+            <span class="prelude-val">Ok</span>(TYPES::SignatureKey::public_key(<span class="kw-2">&amp;</span>res.stake_table_entry))
         }
     }
 
