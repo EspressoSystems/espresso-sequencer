@@ -18,6 +18,7 @@ def store_result(
     strip: str,
     debug: str,
     lto: str,
+    split_debuginfo: str,
     commands: dict[str, str],
 ):
     """A decorator to cache function results to a file"""
@@ -33,7 +34,7 @@ def store_result(
     result["debug"] = debug
     result["time"] = round(exec_duration, 1)
     result["memory_usage_mb"] = int(round(max_memory_mb, 0))
-    profile = mk_profile(strip, debug, lto)
+    profile = mk_profile(strip, debug, lto, split_debuginfo)
     data[profile] = result
     with open(RESULTS, "w") as f:
         tomlkit.dump(data, f)
@@ -48,8 +49,8 @@ def result_exists(profile):
     return profile in data
 
 
-def mk_profile(strip: str, debug: str, lto: str):
-    return f"debug-{debug}_strip-{strip}_lto-{lto}"
+def mk_profile(strip: str, debug: str, lto: str, split_debuginfo: str):
+    return f"debug-{debug}_strip-{strip}_lto-{lto}_split-debuginfo_{split_debuginfo}"
 
 
 def run(log_file: typing.IO, dry_run: bool, command: str):
@@ -106,12 +107,13 @@ def benchmark(
     strip: str,
     debug: str,
     lto: str,
+    split_debuginfo: str,
     setup_command: str,
     pre_build_command: str,
     cache_invalidation_command: str,
     timed_command: str,
 ):
-    profile = mk_profile(strip, debug, lto)
+    profile = mk_profile(strip, debug, lto, split_debuginfo)
     if result_exists(profile):
         print(f"Skipping {profile}, already benchmarked.")
         return
@@ -122,11 +124,13 @@ def benchmark(
         print(f"Running setup command: {setup_command}")
         run(f, dry_run, setup_command)
 
-        print(f"Running pre-build command: {pre_build_command}")
-        run(f, dry_run, pre_build_command)
+        if pre_build_command:
+            print(f"Running pre-build command: {pre_build_command}")
+            run(f, dry_run, pre_build_command)
 
-        print(f"Running cache invalidation command: {cache_invalidation_command}")
-        run(f, dry_run, cache_invalidation_command)
+        if cache_invalidation_command:
+            print(f"Running cache invalidation command: {cache_invalidation_command}")
+            run(f, dry_run, cache_invalidation_command)
 
         print(f"Running timed command: {timed_command}")
         exec_duration, max_memory_mb = measure(f, dry_run, timed_command)
@@ -145,6 +149,7 @@ def benchmark(
             strip=strip,
             debug=debug,
             lto=lto,
+            split_debuginfo=split_debuginfo,
             commands=commands,
         )
 
@@ -195,8 +200,16 @@ The script generates new cargo profile for all combinations of the "strip",
     parser.add_argument(
         "--debug", help="Debug values", default="none,line-tables-only,limited,full"
     )
+    parser.add_argument(
+        "--profile-arg",
+        help="Profile argument to pass to commands, use 'cargo-profile' for nextest run",
+        default="profile",
+    )
     parser.add_argument("--lto", help="LTO values", default="false,off")
     parser.add_argument("--dry-run", help="Only print commands", action="store_true")
+    parser.add_argument(
+        "--split-debuginfo", help="split-debuginfo values", type=str, default="off"
+    )
     args = parser.parse_args()
 
     # Show plan
@@ -212,15 +225,17 @@ The script generates new cargo profile for all combinations of the "strip",
     for strip in args.strip.split(","):
         for debug in args.debug.split(","):
             for lto in args.lto.split(","):
-                profile = mk_profile(strip, debug, lto)
-                profiles.append(profile)
-                profile_section[profile] = {
-                    "inherits": "dev",
-                    "debug": debug,
-                    "strip": strip,
-                    # lto = false needs to be a boolean in Cargo.toml
-                    "lto": False if lto.lower() == "false" else lto,
-                }
+                for split_debuginfo in args.split_debuginfo.split(","):
+                    profile = mk_profile(strip, debug, lto, split_debuginfo)
+                    profiles.append(profile)
+                    profile_section[profile] = {
+                        "inherits": "dev",
+                        "debug": debug,
+                        "strip": strip,
+                        # lto = false needs to be a boolean in Cargo.toml
+                        "lto": False if lto.lower() == "false" else lto,
+                        "split-debuginfo": split_debuginfo,
+                    }
 
     # Write the new profiles to Cargo.toml, tomlkit preserves the existing style.
     with open("Cargo.toml", "w") as f:
@@ -230,19 +245,25 @@ The script generates new cargo profile for all combinations of the "strip",
     for strip in args.strip.split(","):
         for debug in args.debug.split(","):
             for lto in args.lto.split(","):
-                profile = f"debug-{debug}_strip-{strip}_lto-{lto}"
-                command = f"{args.timed} --profile {profile}"
-                pre_build_command = f"{args.pre_build} --profile {profile}"
-                time = benchmark(
-                    args.dry_run,
-                    strip=strip,
-                    debug=debug,
-                    lto=lto,
-                    setup_command=args.setup,
-                    pre_build_command=pre_build_command,
-                    cache_invalidation_command=args.invalidate_cache_command,
-                    timed_command=command,
-                )
+                for split_debuginfo in args.split_debuginfo.split(","):
+                    profile = mk_profile(strip, debug, lto, split_debuginfo)
+                    command = f"{args.timed} --{args.profile_arg} {profile}"
+                    pre_build_command = (
+                        (f"{args.pre_build} --{args.profile_arg} {profile}")
+                        if args.pre_build
+                        else ""
+                    )
+                    benchmark(
+                        args.dry_run,
+                        strip=strip,
+                        debug=debug,
+                        lto=lto,
+                        split_debuginfo=split_debuginfo,
+                        setup_command=args.setup,
+                        pre_build_command=pre_build_command,
+                        cache_invalidation_command=args.invalidate_cache_command,
+                        timed_command=command,
+                    )
 
 
 if __name__ == "__main__":
