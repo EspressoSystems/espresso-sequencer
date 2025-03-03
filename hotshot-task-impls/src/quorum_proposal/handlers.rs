@@ -28,7 +28,8 @@ use hotshot_types::{
         signature_key::SignatureKey,
     },
     utils::{is_last_block_in_epoch, option_epoch_from_block_number},
-    vote::{Certificate, HasViewNumber}, StakeTableEntries,
+    vote::{Certificate, HasViewNumber},
+    StakeTableEntries,
 };
 use hotshot_utils::anytrace::*;
 use tracing::instrument;

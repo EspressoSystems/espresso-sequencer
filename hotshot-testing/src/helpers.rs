@@ -25,11 +25,19 @@ use hotshot_example_types::{
 };
 use hotshot_task_impls::events::HotShotEvent;
 use hotshot_types::{
-    consensus::ConsensusMetricsValue, data::{vid_commitment, Leaf2, VidCommitment, VidDisperse, VidDisperseShare}, message::{Proposal, UpgradeLock}, simple_certificate::DaCertificate2, simple_vote::{DaData2, DaVote2, SimpleVote, VersionedVoteData}, traits::{
+    consensus::ConsensusMetricsValue,
+    data::{vid_commitment, Leaf2, VidCommitment, VidDisperse, VidDisperseShare},
+    message::{Proposal, UpgradeLock},
+    simple_certificate::DaCertificate2,
+    simple_vote::{DaData2, DaVote2, SimpleVote, VersionedVoteData},
+    traits::{
         election::Membership,
         node_implementation::{NodeType, Versions},
         EncodeBytes,
-    }, utils::{option_epoch_from_block_number, View, ViewInner}, vote::{Certificate, HasViewNumber, Vote}, StakeTableEntries, ValidatorConfig
+    },
+    utils::{option_epoch_from_block_number, View, ViewInner},
+    vote::{Certificate, HasViewNumber, Vote},
+    StakeTableEntries, ValidatorConfig,
 };
 use primitive_types::U256;
 use serde::Serialize;
