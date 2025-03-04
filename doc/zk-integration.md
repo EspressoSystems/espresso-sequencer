@@ -167,7 +167,7 @@ The circuit depicted in Figure 2 operates as follows:
   With witnesses of all transactions to the rollup `ROLLUP_TXS` and proofs that they are complete and correctly filtered
   from finalized Espresso blocks since last update `TXS_NAMESPACE_PROOFS`, it checks that:
   - Namespace proofs `TXS_NAMESPACE_PROOFS` are valid, saying that `ROLLUP_TXS` are complete and correctly filtered from
-    Espresso blockscommited in a Merkle tree with root `blk_cm_root` since last update.
+    Espresso blocks commited in a Merkle tree with root `blk_cm_root` since last update.
   - Given `cm_txs_rollup` commits to the filtered transactions `ROLLUP_TXS`.
 - The _zkVM_ gadget is the original gadget of the rollup circuit that proves a correct transition from state
   `cm_state_vm i` to the next state `cm_state_vm i+1` when applying the transactions represented by the commitment value
