@@ -101,7 +101,7 @@ impl<T: Clone + Send + Sync> Dependency<T> for OrDependency<T> {
 }
 
 impl<T: Clone + Send + Sync + 'static> OrDependency<T> {
-    /// Creat an `OrDependency` from a vec of dependencies
+    /// Create an `OrDependency` from a vec of dependencies
     #[must_use]
     pub fn from_deps(deps: Vec<impl Dependency<T> + Send + 'static>) -> Self {
         let mut pinned = vec![];
