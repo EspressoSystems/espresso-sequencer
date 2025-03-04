@@ -106,10 +106,12 @@ impl<V: Versions> ExternalEventHandler<V> {
                     };
 
                     // Serialize it
-                    let Ok(message_bytes) = hotshot_upgrade_lock.serialize(&message_inner).await
-                    else {
-                        tracing::error!("Failed to serialize direct message");
-                        continue;
+                    let message_bytes = match hotshot_upgrade_lock.serialize(&message_inner).await {
+                        Ok(message_bytes) => message_bytes,
+                        Err(err) => {
+                            tracing::warn!("Failed to serialize direct message: {}", err);
+                            continue;
+                        }
                     };
 
                     // Send the message to the recipient
@@ -126,10 +128,12 @@ impl<V: Versions> ExternalEventHandler<V> {
                     };
 
                     // Serialize it
-                    let Ok(message_bytes) = hotshot_upgrade_lock.serialize(&message_inner).await
-                    else {
-                        tracing::error!("Failed to serialize broadcast message");
-                        continue;
+                    let message_bytes = match hotshot_upgrade_lock.serialize(&message_inner).await {
+                        Ok(message_bytes) => message_bytes,
+                        Err(err) => {
+                            tracing::warn!("Failed to serialize broadcast message: {}", err);
+                            continue;
+                        }
                     };
 
                     // Broadcast the message to the global topic
