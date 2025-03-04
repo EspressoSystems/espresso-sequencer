@@ -881,12 +881,14 @@ pub async fn wait_for_next_epoch_qc<TYPES: NodeType>(
     // TODO configure timeout
     let Some(time_spent) = Instant::now().checked_duration_since(view_start_time) else {
         // Shouldn't be possible, now must be after the start
+        tracing::error!("lrzasik: Shouldn't be possible, now must be after the start");
         return Err(warn!(
             "Now is earlier than the view start time. Shouldn't be possible."
         ));
     };
     let Some(time_left) = wait_duration.checked_sub(time_spent) else {
         // No time left
+        tracing::error!("lrzasik: No time left");
         return Err(warn!("Run out of time waiting for the next epoch QC."));
     };
     let receiver = receiver.clone();
@@ -914,10 +916,12 @@ pub async fn wait_for_next_epoch_qc<TYPES: NodeType>(
                 return Ok(next_epoch_qc.clone());
             }
         };
+        tracing::error!("lrzasik: timeout elapsed");
         return Err(warn!("Error while waiting for the next epoch QC."));
     };
     let HotShotEvent::NextEpochQc2Formed(Either::Left(next_epoch_qc)) = event.as_ref() else {
         // this shouldn't happen
+        tracing::error!("lrzasik: event mismatch. this shouldn't happen");
         return Err(warn!("Received event is not NextEpochQc2Formed but we checked it earlier. Shouldn't be possible."));
     };
     Ok(next_epoch_qc.clone())

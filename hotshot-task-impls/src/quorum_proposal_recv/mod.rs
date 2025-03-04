@@ -6,14 +6,19 @@
 
 #![allow(unused_imports)]
 
-use std::{collections::BTreeMap, sync::Arc};
-
+use self::handlers::handle_quorum_proposal_recv;
+use crate::helpers::wait_for_next_epoch_qc;
+use crate::{
+    events::{HotShotEvent, ProposalMissing},
+    helpers::{broadcast_event, fetch_proposal, parent_leaf_and_state},
+};
 use async_broadcast::{broadcast, Receiver, Sender};
 use async_lock::RwLock;
 use async_trait::async_trait;
 use either::Either;
 use futures::future::{err, join_all};
 use hotshot_task::task::{Task, TaskState};
+use hotshot_types::utils::option_epoch_from_block_number;
 use hotshot_types::{
     consensus::{Consensus, OuterConsensus},
     data::{EpochNumber, Leaf, ViewChangeEvidence2},
@@ -26,16 +31,13 @@ use hotshot_types::{
     },
     vote::{Certificate, HasViewNumber},
 };
-use hotshot_utils::anytrace::{bail, Result};
+use hotshot_utils::anytrace::{bail, Context, Result};
+use std::time::Instant;
+use std::{collections::BTreeMap, sync::Arc};
 use tokio::task::JoinHandle;
 use tracing::{debug, error, info, instrument, warn};
 use vbs::version::Version;
 
-use self::handlers::handle_quorum_proposal_recv;
-use crate::{
-    events::{HotShotEvent, ProposalMissing},
-    helpers::{broadcast_event, fetch_proposal, parent_leaf_and_state},
-};
 /// Event handlers for this task.
 mod handlers;
 
@@ -81,6 +83,9 @@ pub struct QuorumProposalRecvTaskState<TYPES: NodeType, I: NodeImplementation<TY
 
     /// Number of blocks in an epoch, zero means there are no epochs
     pub epoch_height: u64,
+
+    /// The time this view started
+    pub view_start_time: Instant,
 }
 
 /// all the info we need to validate a proposal.  This makes it easy to spawn an effemeral task to
@@ -183,6 +188,63 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                 // to enter view V + 1.
                 let oldest_view_to_keep = TYPES::View::new(view.saturating_sub(1));
                 self.cancel_tasks(oldest_view_to_keep);
+                self.view_start_time = Instant::now();
+            }
+            HotShotEvent::Qc2Formed(Either::Left(quorum_cert)) => {
+                let cert_view = quorum_cert.view_number();
+                if !self.upgrade_lock.epochs_enabled(cert_view).await {
+                    tracing::debug!("QC2 formed but epochs not enabled. Do nothing");
+                    return;
+                }
+                if !self
+                    .consensus
+                    .read()
+                    .await
+                    .is_leaf_extended(quorum_cert.data.leaf_commit)
+                {
+                    tracing::debug!("We formed QC but not eQC. Do nothing");
+                    return;
+                }
+                if wait_for_next_epoch_qc(
+                    quorum_cert,
+                    &self.consensus,
+                    self.timeout,
+                    self.view_start_time,
+                    &event_receiver,
+                )
+                .await
+                .is_err()
+                {
+                    tracing::warn!("We formed eQC but we don't have corresponding next epoch eQC.");
+                    return;
+                }
+
+                let cert_block_number = if let Some(leaf) = self
+                    .consensus
+                    .read()
+                    .await
+                    .saved_leaves()
+                    .get(&quorum_cert.data.leaf_commit)
+                {
+                    leaf.height()
+                } else {
+                    tracing::error!("Could not find the leaf for the eQC. It shouldn't happen.");
+                    return;
+                };
+
+                let cert_epoch = option_epoch_from_block_number::<TYPES>(
+                    true,
+                    cert_block_number,
+                    self.epoch_height,
+                );
+                // Transition to the new epoch by sending ViewChange
+                let next_epoch = cert_epoch.map(|x| x + 1);
+                tracing::info!("Entering new epoch: {:?}", next_epoch);
+                broadcast_event(
+                    Arc::new(HotShotEvent::ViewChange(cert_view + 1, next_epoch)),
+                    &event_sender,
+                )
+                .await;
             }
             _ => {}
         }
