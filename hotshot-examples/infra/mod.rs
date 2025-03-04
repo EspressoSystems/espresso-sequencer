@@ -368,6 +368,8 @@ pub trait RunDa<
         let initializer = hotshot::HotShotInitializer::<TYPES>::from_genesis::<V>(
             TestInstanceState::default(),
             self.config().config.epoch_height,
+            self.config().config.epoch_start_block,
+            vec![],
         )
         .await
         .expect("Couldn't generate genesis block");

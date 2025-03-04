@@ -18,13 +18,14 @@ use hotshot_task::{
     dependency_task::{DependencyTask, HandleDepOutput},
     task::TaskState,
 };
-use hotshot_types::utils::is_last_block_in_epoch;
+use hotshot_types::StakeTableEntries;
 use hotshot_types::{
     consensus::{ConsensusMetricsValue, OuterConsensus},
     data::{Leaf2, QuorumProposalWrapper},
     drb::DrbComputation,
     event::Event,
     message::{Proposal, UpgradeLock},
+    simple_certificate::UpgradeCertificate,
     simple_vote::HasEpoch,
     traits::{
         block_contents::BlockHeader,
@@ -33,7 +34,7 @@ use hotshot_types::{
         signature_key::SignatureKey,
         storage::Storage,
     },
-    utils::{epoch_from_block_number, option_epoch_from_block_number},
+    utils::{epoch_from_block_number, is_last_block_in_epoch, option_epoch_from_block_number},
     vote::{Certificate, HasViewNumber},
 };
 use hotshot_utils::anytrace::*;
@@ -392,6 +393,12 @@ pub struct QuorumVoteTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>, V:
     /// Number of blocks in an epoch, zero means there are no epochs
     pub epoch_height: u64,
 
+    /// Upgrade certificate to enable epochs, staged until we reach the specified block height
+    pub staged_epoch_upgrade_certificate: Option<UpgradeCertificate<TYPES>>,
+
+    /// Block height at which to enable the epoch upgrade
+    pub epoch_upgrade_block_height: u64,
+
     /// View timeout from config.
     pub timeout: u64,
 }
@@ -612,7 +619,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> QuorumVoteTaskS
 
                 // Validate the DAC.
                 cert.is_valid_cert(
-                    membership_da_stake_table,
+                    StakeTableEntries::<TYPES>::from(membership_da_stake_table).0,
                     membership_da_success_threshold,
                     &self.upgrade_lock,
                 )
