@@ -7,18 +7,20 @@ use espresso_types::{
     v0::traits::{EventConsumer, PersistenceOptions, SequencerPersistence},
     Leaf, Leaf2, NetworkConfig,
 };
+use hotshot_libp2p_networking::network::behaviours::dht::store::persistent::{
+    DhtPersistentStorage, SerializableRecord,
+};
+use hotshot_query_service::VidCommitment;
 use hotshot_types::{
     consensus::CommitmentMap,
-    data::{DaProposal, QuorumProposal, QuorumProposal2, VidDisperseShare},
+    data::{
+        vid_disperse::{ADVZDisperseShare, VidDisperseShare2},
+        DaProposal, EpochNumber, QuorumProposal, QuorumProposal2, QuorumProposalWrapper,
+    },
     event::{Event, EventType, HotShotAction, LeafInfo},
     message::Proposal,
     simple_certificate::{NextEpochQuorumCertificate2, QuorumCertificate2, UpgradeCertificate},
     utils::View,
-    vid::VidSchemeType,
-};
-use jf_vid::VidScheme;
-use libp2p_networking::network::behaviours::dht::store::persistent::{
-    DhtPersistentStorage, SerializableRecord,
 };
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -107,19 +109,20 @@ impl SequencerPersistence for NoStorage {
     async fn load_vid_share(
         &self,
         _view: ViewNumber,
-    ) -> anyhow::Result<Option<Proposal<SeqTypes, VidDisperseShare<SeqTypes>>>> {
+    ) -> anyhow::Result<Option<Proposal<SeqTypes, ADVZDisperseShare<SeqTypes>>>> {
         Ok(None)
     }
 
     async fn load_quorum_proposals(
         &self,
-    ) -> anyhow::Result<BTreeMap<ViewNumber, Proposal<SeqTypes, QuorumProposal2<SeqTypes>>>> {
+    ) -> anyhow::Result<BTreeMap<ViewNumber, Proposal<SeqTypes, QuorumProposalWrapper<SeqTypes>>>>
+    {
         Ok(Default::default())
     }
     async fn load_quorum_proposal(
         &self,
         view: ViewNumber,
-    ) -> anyhow::Result<Proposal<SeqTypes, QuorumProposal2<SeqTypes>>> {
+    ) -> anyhow::Result<Proposal<SeqTypes, QuorumProposalWrapper<SeqTypes>>> {
         bail!("proposal {view:?} not available");
     }
     async fn load_upgrade_certificate(
@@ -130,18 +133,29 @@ impl SequencerPersistence for NoStorage {
 
     async fn append_vid(
         &self,
-        _proposal: &Proposal<SeqTypes, VidDisperseShare<SeqTypes>>,
+        _proposal: &Proposal<SeqTypes, ADVZDisperseShare<SeqTypes>>,
+    ) -> anyhow::Result<()> {
+        Ok(())
+    }
+    async fn append_vid2(
+        &self,
+        _proposal: &Proposal<SeqTypes, VidDisperseShare2<SeqTypes>>,
     ) -> anyhow::Result<()> {
         Ok(())
     }
     async fn append_da(
         &self,
         _proposal: &Proposal<SeqTypes, DaProposal<SeqTypes>>,
-        _vid_commit: <VidSchemeType as VidScheme>::Commit,
+        _vid_commit: VidCommitment,
     ) -> anyhow::Result<()> {
         Ok(())
     }
-    async fn record_action(&self, _view: ViewNumber, _action: HotShotAction) -> anyhow::Result<()> {
+    async fn record_action(
+        &self,
+        _view: ViewNumber,
+        _epoch: Option<EpochNumber>,
+        _action: HotShotAction,
+    ) -> anyhow::Result<()> {
         Ok(())
     }
     async fn update_undecided_state(
@@ -153,7 +167,7 @@ impl SequencerPersistence for NoStorage {
     }
     async fn append_quorum_proposal(
         &self,
-        _proposal: &Proposal<SeqTypes, QuorumProposal2<SeqTypes>>,
+        _proposal: &Proposal<SeqTypes, QuorumProposalWrapper<SeqTypes>>,
     ) -> anyhow::Result<()> {
         Ok(())
     }

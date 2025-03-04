@@ -28,6 +28,7 @@ use hotshot_types::{
 use jf_merkle_tree::MerkleTreeScheme;
 use serde::{de::Error as _, Deserialize, Serialize};
 use snafu::OptionExt;
+
 use tagged_base64::TaggedBase64;
 use tide_disco::{method::ReadState, Api, Error as _, StatusCode};
 use vbs::version::{StaticVersion, StaticVersionType};
@@ -132,14 +133,16 @@ where
                         })
                 }
             )?;
-
+            let common = &common.common().clone().context(CustomSnafu {
+                message: format!("failed to make proof for namespace {ns_id}"),
+                status: StatusCode::NOT_FOUND,
+            })?;
             if let Some(ns_index) = block.payload().ns_table().find_ns_id(&ns_id) {
-                let proof = NsProof::new(block.payload(), &ns_index, common.common()).context(
-                    CustomSnafu {
+                let proof =
+                    NsProof::new(block.payload(), &ns_index, common).context(CustomSnafu {
                         message: format!("failed to make proof for namespace {ns_id}"),
                         status: StatusCode::NOT_FOUND,
-                    },
-                )?;
+                    })?;
 
                 Ok(NamespaceProofQueryData {
                     transactions: proof.export_all_txs(&ns_id),
@@ -193,15 +196,16 @@ where
         async move {
             // Try to get the epoch from the request. If this fails, error
             // as it was probably a mistake
-            let epoch = EpochNumber::new(req.integer_param("epoch_number").map_err(|_| {
-                hotshot_query_service::node::Error::Custom {
+            let epoch = req
+                .opt_integer_param("epoch_number")
+                .map_err(|_| hotshot_query_service::node::Error::Custom {
                     message: "Epoch number is required".to_string(),
                     status: StatusCode::BAD_REQUEST,
-                }
-            })?);
+                })?
+                .map(EpochNumber::new);
 
             Ok(state
-                .read(|state| state.get_stake_table(Some(epoch)).boxed())
+                .read(|state| state.get_stake_table(epoch).boxed())
                 .await)
         }
         .boxed()
@@ -209,7 +213,7 @@ where
     .at("stake_table_current", |_, state| {
         async move {
             Ok(state
-                .read(|state| state.get_stake_table(None).boxed())
+                .read(|state| state.get_stake_table_current().boxed())
                 .await)
         }
         .boxed()

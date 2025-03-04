@@ -1053,10 +1053,26 @@ contract LightClient_HotShotCommUpdatesTest is LightClientCommonTest {
     }
 
     function test_GetHotShotCommitmentValid() public {
-        vm.prank(permissionedProver);
-        vm.expectEmit(true, true, true, true);
-        emit LC.NewState(newState.viewNum, newState.blockHeight, newState.blockCommRoot);
-        lc.newFinalizedState(newState, newProof);
+        //add state to the mock client
+        string[] memory cmds = new string[](3);
+        cmds[0] = "diff-test";
+        cmds[1] = "mock-consecutive-finalized-states";
+        cmds[2] = vm.toString(STAKE_TABLE_CAPACITY / 2);
+
+        bytes memory result = vm.ffi(cmds);
+        (LC.LightClientState[] memory _states, V.PlonkProof[] memory _proofs) =
+            abi.decode(result, (LC.LightClientState[], V.PlonkProof[]));
+
+        uint256 statesCount = _states.length - 1;
+        // Update the state and thus the l1BlockUpdates array would be updated
+        for (uint8 i = 1; i <= statesCount; i++) {
+            LC.LightClientState memory state = _states[i];
+            V.PlonkProof memory proof = _proofs[i];
+            vm.prank(permissionedProver);
+            vm.expectEmit(true, true, true, true);
+            emit LC.NewState(state.viewNum, state.blockHeight, state.blockCommRoot);
+            lc.newFinalizedState(state, proof);
+        }
 
         // Test for a smaller hotShotBlockHeight
         (BN254.ScalarField hotShotBlockComm, uint64 hotShotBlockHeight) =
@@ -1064,19 +1080,31 @@ contract LightClient_HotShotCommUpdatesTest is LightClientCommonTest {
         assertEqBN254(hotShotBlockComm, newState.blockCommRoot);
         assertEq(hotShotBlockHeight, newState.blockHeight);
 
-        // Test for max hotShotBlockHeight stored on contract
+        // Test for max hotShotBlockHeight stored on contract that is available (max
+        // hotshotBlockHeight -1)
         // Get the highest HotShot blockheight recorded
         uint256 numCommitments = lc.getStateHistoryCount();
+        //get the block comm for the entry that will be returned which is one past the requested
+        // height.
         (,, hotShotBlockHeight, hotShotBlockComm) = lc.stateHistoryCommitments(numCommitments - 1);
+        //because of the above, the hotshot height will be 1 above the actual hotshot height needed
+        // to fetch the correct commitment
         (BN254.ScalarField blockComm, uint64 blockHeight) =
-            lc.getHotShotCommitment(hotShotBlockHeight);
+            lc.getHotShotCommitment(hotShotBlockHeight - 1);
         assertEqBN254(hotShotBlockComm, blockComm);
         assertEq(hotShotBlockHeight, blockHeight);
 
         // Get the smallest HotShot blockheight recorded
         (,, hotShotBlockHeight, hotShotBlockComm) = lc.stateHistoryCommitments(0);
-        (blockComm, blockHeight) = lc.getHotShotCommitment(hotShotBlockHeight);
+        //Same here, the return semantic is to get the block comm of the block after the height you
+        // requested.
+        (blockComm, blockHeight) = lc.getHotShotCommitment(hotShotBlockHeight - 1);
         assertEqBN254(hotShotBlockComm, blockComm);
         assertEq(hotShotBlockHeight, blockHeight);
+
+        //Assert that getting the last block will fail
+        (,, hotShotBlockHeight, hotShotBlockComm) = lc.stateHistoryCommitments(numCommitments - 1);
+        vm.expectRevert();
+        lc.getHotShotCommitment(hotShotBlockHeight);
     }
 }

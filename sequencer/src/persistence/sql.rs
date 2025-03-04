@@ -5,11 +5,14 @@ use committable::Committable;
 use derivative::Derivative;
 use derive_more::derive::{From, Into};
 use espresso_types::{
-    downgrade_commitment_map, downgrade_leaf, parse_duration, upgrade_commitment_map,
+    downgrade_commitment_map, downgrade_leaf, parse_duration, parse_size, upgrade_commitment_map,
     v0::traits::{EventConsumer, PersistenceOptions, SequencerPersistence, StateCatchup},
-    BackoffParams, Leaf, Leaf2, NetworkConfig, Payload,
+    BackoffParams, BlockMerkleTree, FeeMerkleTree, Leaf, Leaf2, NetworkConfig, Payload,
 };
 use futures::stream::StreamExt;
+use hotshot_libp2p_networking::network::behaviours::dht::store::persistent::{
+    DhtPersistentStorage, SerializableRecord,
+};
 use hotshot_query_service::{
     availability::LeafQueryData,
     data_source::{
@@ -26,10 +29,15 @@ use hotshot_query_service::{
         request::{LeafRequest, PayloadRequest, VidCommonRequest},
         Provider,
     },
+    merklized_state::MerklizedState,
+    VidCommitment, VidCommon,
 };
 use hotshot_types::{
     consensus::CommitmentMap,
-    data::{DaProposal, QuorumProposal, QuorumProposal2, VidDisperseShare},
+    data::{
+        vid_disperse::{ADVZDisperseShare, VidDisperseShare2},
+        DaProposal, EpochNumber, QuorumProposal, QuorumProposal2, QuorumProposalWrapper,
+    },
     event::{Event, EventType, HotShotAction, LeafInfo},
     message::{convert_proposal, Proposal},
     simple_certificate::{
@@ -40,13 +48,9 @@ use hotshot_types::{
         node_implementation::ConsensusTime,
     },
     utils::View,
-    vid::{VidCommitment, VidCommon},
     vote::HasViewNumber,
 };
 use itertools::Itertools;
-use libp2p_networking::network::behaviours::dht::store::persistent::{
-    DhtPersistentStorage, SerializableRecord,
-};
 use sqlx::Row;
 use sqlx::{query, Executor};
 use std::{collections::BTreeMap, path::PathBuf, str::FromStr, sync::Arc, time::Duration};
@@ -150,7 +154,7 @@ pub struct Options {
     /// - batch_size: 1000
     /// - max_usage: 80%
     /// - interval: 1 hour
-    #[clap(long, env = "ESPRESSO_SEQUENCER_POSTGRES_PRUNE")]
+    #[clap(long, env = "ESPRESSO_SEQUENCER_DATABASE_PRUNE")]
     pub(crate) prune: bool,
 
     /// Pruning parameters.
@@ -184,6 +188,15 @@ pub struct Options {
     /// fetching from peers.
     #[clap(long, env = "ESPRESSO_SEQUENCER_ARCHIVE", conflicts_with = "prune")]
     pub(crate) archive: bool,
+
+    /// Turns on leaf only data storage
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_LIGHTWEIGHT",
+        default_value_t = false,
+        conflicts_with = "archive"
+    )]
+    pub(crate) lightweight: bool,
 
     /// The maximum idle time of a database connection.
     ///
@@ -406,7 +419,7 @@ pub struct PruningOptions {
     /// Threshold for pruning, specified in bytes.
     /// If the disk usage surpasses this threshold, pruning is initiated for data older than the specified minimum retention period.
     /// Pruning continues until the disk usage drops below the MAX USAGE.
-    #[clap(long, env = "ESPRESSO_SEQUENCER_PRUNER_PRUNING_THRESHOLD")]
+    #[clap(long, env = "ESPRESSO_SEQUENCER_PRUNER_PRUNING_THRESHOLD", value_parser = parse_size)]
     pruning_threshold: Option<u64>,
 
     /// Minimum retention period.
@@ -470,6 +483,11 @@ impl From<PruningOptions> for PrunerCfg {
         if let Some(interval) = opt.interval {
             cfg = cfg.with_interval(interval);
         }
+
+        cfg = cfg.with_state_tables(vec![
+            BlockMerkleTree::state_type().to_string(),
+            FeeMerkleTree::state_type().to_string(),
+        ]);
 
         cfg
     }
@@ -696,7 +714,7 @@ impl Persistence {
                     let view: i64 = row.get("view");
                     let data: Vec<u8> = row.get("data");
                     let vid_proposal = bincode::deserialize::<
-                        Proposal<SeqTypes, VidDisperseShare<SeqTypes>>,
+                        Proposal<SeqTypes, ADVZDisperseShare<SeqTypes>>,
                     >(&data)?;
                     Ok((view as u64, vid_proposal.data))
                 })
@@ -1093,7 +1111,7 @@ impl SequencerPersistence for Persistence {
     async fn load_vid_share(
         &self,
         view: ViewNumber,
-    ) -> anyhow::Result<Option<Proposal<SeqTypes, VidDisperseShare<SeqTypes>>>> {
+    ) -> anyhow::Result<Option<Proposal<SeqTypes, ADVZDisperseShare<SeqTypes>>>> {
         let result = self
             .db
             .read()
@@ -1113,7 +1131,8 @@ impl SequencerPersistence for Persistence {
 
     async fn load_quorum_proposals(
         &self,
-    ) -> anyhow::Result<BTreeMap<ViewNumber, Proposal<SeqTypes, QuorumProposal2<SeqTypes>>>> {
+    ) -> anyhow::Result<BTreeMap<ViewNumber, Proposal<SeqTypes, QuorumProposalWrapper<SeqTypes>>>>
+    {
         let rows = self
             .db
             .read()
@@ -1138,7 +1157,7 @@ impl SequencerPersistence for Persistence {
     async fn load_quorum_proposal(
         &self,
         view: ViewNumber,
-    ) -> anyhow::Result<Proposal<SeqTypes, QuorumProposal2<SeqTypes>>> {
+    ) -> anyhow::Result<Proposal<SeqTypes, QuorumProposalWrapper<SeqTypes>>> {
         let mut tx = self.db.read().await?;
         let (data,) =
             query_as::<(Vec<u8>,)>("SELECT data FROM quorum_proposals WHERE view = $1 LIMIT 1")
@@ -1152,7 +1171,26 @@ impl SequencerPersistence for Persistence {
 
     async fn append_vid(
         &self,
-        proposal: &Proposal<SeqTypes, VidDisperseShare<SeqTypes>>,
+        proposal: &Proposal<SeqTypes, ADVZDisperseShare<SeqTypes>>,
+    ) -> anyhow::Result<()> {
+        let view = proposal.data.view_number.u64();
+        let payload_hash = proposal.data.payload_commitment;
+        let data_bytes = bincode::serialize(proposal).unwrap();
+
+        let mut tx = self.db.write().await?;
+        tx.upsert(
+            "vid_share",
+            ["view", "data", "payload_hash"],
+            ["view"],
+            [(view as i64, data_bytes, payload_hash.to_string())],
+        )
+        .await?;
+        tx.commit().await
+    }
+
+    async fn append_vid2(
+        &self,
+        proposal: &Proposal<SeqTypes, VidDisperseShare2<SeqTypes>>,
     ) -> anyhow::Result<()> {
         let view = proposal.data.view_number.u64();
         let payload_hash = proposal.data.payload_commitment;
@@ -1189,7 +1227,12 @@ impl SequencerPersistence for Persistence {
         tx.commit().await
     }
 
-    async fn record_action(&self, view: ViewNumber, action: HotShotAction) -> anyhow::Result<()> {
+    async fn record_action(
+        &self,
+        view: ViewNumber,
+        _epoch: Option<EpochNumber>,
+        action: HotShotAction,
+    ) -> anyhow::Result<()> {
         // Todo Remove this after https://github.com/EspressoSystems/espresso-sequencer/issues/1931
         if !matches!(action, HotShotAction::Propose | HotShotAction::Vote) {
             return Ok(());
@@ -1230,7 +1273,7 @@ impl SequencerPersistence for Persistence {
     }
     async fn append_quorum_proposal(
         &self,
-        proposal: &Proposal<SeqTypes, QuorumProposal2<SeqTypes>>,
+        proposal: &Proposal<SeqTypes, QuorumProposalWrapper<SeqTypes>>,
     ) -> anyhow::Result<()> {
         let proposal: Proposal<SeqTypes, QuorumProposal<SeqTypes>> =
             convert_proposal(proposal.clone());
@@ -1408,7 +1451,7 @@ impl DhtPersistentStorage for Persistence {
 #[async_trait]
 impl Provider<SeqTypes, VidCommonRequest> for Persistence {
     #[tracing::instrument(skip(self))]
-    async fn fetch(&self, req: VidCommonRequest) -> Option<VidCommon> {
+    async fn fetch(&self, req: VidCommonRequest) -> VidCommon {
         let mut tx = match self.db.read().await {
             Ok(tx) => tx,
             Err(err) => {
@@ -1432,7 +1475,7 @@ impl Provider<SeqTypes, VidCommonRequest> for Persistence {
             }
         };
 
-        let share: Proposal<SeqTypes, VidDisperseShare<SeqTypes>> =
+        let share: Proposal<SeqTypes, ADVZDisperseShare<SeqTypes>> =
             match bincode::deserialize(&bytes) {
                 Ok(share) => share,
                 Err(err) => {
@@ -1604,32 +1647,40 @@ mod generic_tests {
 
 #[cfg(test)]
 mod test {
-
     use super::*;
     use crate::{persistence::testing::TestablePersistence, BLSPubKey, PubKey};
-    use espresso_types::{traits::NullEventConsumer, Leaf, NodeState, ValidatedState};
+    use espresso_types::{
+        traits::NullEventConsumer, Leaf, MockSequencerVersions, NodeState, ValidatedState,
+    };
     use futures::stream::TryStreamExt;
     use hotshot_example_types::node_types::TestVersions;
     use hotshot_types::{
+        data::vid_commitment,
         simple_certificate::QuorumCertificate,
-        traits::{block_contents::vid_commitment, signature_key::SignatureKey, EncodeBytes},
-        vid::vid_scheme,
+        traits::{
+            block_contents::BlockHeader, node_implementation::Versions,
+            signature_key::SignatureKey, EncodeBytes,
+        },
+        vid::advz::advz_scheme,
     };
     use jf_vid::VidScheme;
     use sequencer_utils::test_utils::setup_test;
+    use vbs::version::StaticVersionType;
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_quorum_proposals_leaf_hash_migration() {
         setup_test();
 
         // Create some quorum proposals to test with.
-        let leaf: Leaf2 = Leaf::genesis(&ValidatedState::default(), &NodeState::mock())
-            .await
-            .into();
+        let leaf: Leaf2 =
+            Leaf::genesis::<TestVersions>(&ValidatedState::default(), &NodeState::mock())
+                .await
+                .into();
         let privkey = BLSPubKey::generated_from_seed_indexed([0; 32], 1).1;
         let signature = PubKey::sign(&privkey, &[]).unwrap();
         let mut quorum_proposal = Proposal {
             data: QuorumProposal2::<SeqTypes> {
+                epoch: None,
                 block_header: leaf.block_header().clone(),
                 view_number: ViewNumber::genesis(),
                 justify_qc: QuorumCertificate::genesis::<TestVersions>(
@@ -1704,15 +1755,16 @@ mod test {
         let storage = Persistence::connect(&tmp).await;
 
         // Mock up some data.
-        let leaf = Leaf::genesis(&ValidatedState::default(), &NodeState::mock()).await;
+        let leaf =
+            Leaf::genesis::<TestVersions>(&ValidatedState::default(), &NodeState::mock()).await;
         let leaf_payload = leaf.block_payload().unwrap();
         let leaf_payload_bytes_arc = leaf_payload.encode();
-        let disperse = vid_scheme(2)
+        let disperse = advz_scheme(2)
             .disperse(leaf_payload_bytes_arc.clone())
             .unwrap();
         let payload_commitment = disperse.commit;
         let (pubkey, privkey) = BLSPubKey::generated_from_seed_indexed([0; 32], 1);
-        let vid_share = VidDisperseShare::<SeqTypes> {
+        let vid_share = ADVZDisperseShare::<SeqTypes> {
             view_number: ViewNumber::new(0),
             payload_commitment,
             share: disperse.shares[0].clone(),
@@ -1723,14 +1775,17 @@ mod test {
         .unwrap()
         .clone();
 
-        let quorum_proposal = QuorumProposal2::<SeqTypes> {
-            block_header: leaf.block_header().clone(),
-            view_number: leaf.view_number(),
-            justify_qc: leaf.justify_qc().to_qc2(),
-            upgrade_certificate: None,
-            view_change_evidence: None,
-            next_drb_result: None,
-            next_epoch_justify_qc: None,
+        let quorum_proposal = QuorumProposalWrapper::<SeqTypes> {
+            proposal: QuorumProposal2::<SeqTypes> {
+                epoch: None,
+                block_header: leaf.block_header().clone(),
+                view_number: leaf.view_number(),
+                justify_qc: leaf.justify_qc().to_qc2(),
+                upgrade_certificate: None,
+                view_change_evidence: None,
+                next_drb_result: None,
+                next_epoch_justify_qc: None,
+            },
         };
         let quorum_proposal_signature =
             BLSPubKey::sign(&privkey, &bincode::serialize(&quorum_proposal).unwrap())
@@ -1754,15 +1809,19 @@ mod test {
         };
 
         let mut next_quorum_proposal = quorum_proposal.clone();
-        next_quorum_proposal.data.view_number += 1;
-        next_quorum_proposal.data.justify_qc.view_number += 1;
-        next_quorum_proposal.data.justify_qc.data.leaf_commit =
-            Committable::commit(&leaf.clone().into());
-        let qc = &next_quorum_proposal.data.justify_qc;
+        next_quorum_proposal.data.proposal.view_number += 1;
+        next_quorum_proposal.data.proposal.justify_qc.view_number += 1;
+        next_quorum_proposal
+            .data
+            .proposal
+            .justify_qc
+            .data
+            .leaf_commit = Committable::commit(&leaf.clone().into());
+        let qc = next_quorum_proposal.data.justify_qc();
 
         // Add to database.
         storage
-            .append_da(&da_proposal, payload_commitment)
+            .append_da(&da_proposal, VidCommitment::V0(payload_commitment))
             .await
             .unwrap();
         storage.append_vid(&vid_share).await.unwrap();
@@ -1781,14 +1840,18 @@ mod test {
         assert_eq!(
             vid_share.data.common,
             storage
-                .fetch(VidCommonRequest(vid_share.data.payload_commitment))
+                .fetch(VidCommonRequest(VidCommitment::V0(
+                    vid_share.data.payload_commitment
+                )))
                 .await
                 .unwrap()
         );
         assert_eq!(
             leaf_payload,
             storage
-                .fetch(PayloadRequest(vid_share.data.payload_commitment))
+                .fetch(PayloadRequest(VidCommitment::V0(
+                    vid_share.data.payload_commitment
+                )))
                 .await
                 .unwrap()
         );
@@ -1823,16 +1886,24 @@ mod test {
         let data_view = ViewNumber::new(1);
 
         // Populate some data.
-        let leaf = Leaf::genesis(&ValidatedState::default(), &NodeState::mock()).await;
+        let leaf =
+            Leaf::genesis::<MockSequencerVersions>(&ValidatedState::default(), &NodeState::mock())
+                .await;
         let leaf_payload = leaf.block_payload().unwrap();
         let leaf_payload_bytes_arc = leaf_payload.encode();
 
-        let disperse = vid_scheme(2)
+        let disperse = advz_scheme(2)
             .disperse(leaf_payload_bytes_arc.clone())
             .unwrap();
-        let payload_commitment = vid_commitment(&leaf_payload_bytes_arc, 2);
+        let payload_commitment = vid_commitment::<TestVersions>(
+            &leaf_payload_bytes_arc,
+            &leaf.block_header().metadata().encode(),
+            2,
+            <TestVersions as Versions>::Base::VERSION,
+        )
+        .unwrap_v0();
         let (pubkey, privkey) = BLSPubKey::generated_from_seed_indexed([0; 32], 1);
-        let vid = VidDisperseShare::<SeqTypes> {
+        let vid = ADVZDisperseShare::<SeqTypes> {
             view_number: data_view,
             payload_commitment,
             share: disperse.shares[0].clone(),
@@ -1842,19 +1913,22 @@ mod test {
         .to_proposal(&privkey)
         .unwrap()
         .clone();
-        let quorum_proposal = QuorumProposal2::<SeqTypes> {
-            block_header: leaf.block_header().clone(),
-            view_number: data_view,
-            justify_qc: QuorumCertificate::genesis::<TestVersions>(
-                &ValidatedState::default(),
-                &NodeState::mock(),
-            )
-            .await
-            .to_qc2(),
-            upgrade_certificate: None,
-            view_change_evidence: None,
-            next_drb_result: None,
-            next_epoch_justify_qc: None,
+        let quorum_proposal = QuorumProposalWrapper::<SeqTypes> {
+            proposal: QuorumProposal2::<SeqTypes> {
+                epoch: None,
+                block_header: leaf.block_header().clone(),
+                view_number: data_view,
+                justify_qc: QuorumCertificate::genesis::<TestVersions>(
+                    &ValidatedState::default(),
+                    &NodeState::mock(),
+                )
+                .await
+                .to_qc2(),
+                upgrade_certificate: None,
+                view_change_evidence: None,
+                next_drb_result: None,
+                next_epoch_justify_qc: None,
+            },
         };
         let quorum_proposal_signature =
             BLSPubKey::sign(&privkey, &bincode::serialize(&quorum_proposal).unwrap())
@@ -1880,7 +1954,7 @@ mod test {
         tracing::info!(?vid, ?da_proposal, ?quorum_proposal, "append data");
         storage.append_vid(&vid).await.unwrap();
         storage
-            .append_da(&da_proposal, payload_commitment)
+            .append_da(&da_proposal, VidCommitment::V0(payload_commitment))
             .await
             .unwrap();
         storage

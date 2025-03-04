@@ -29,7 +29,7 @@ use hotshot_events_service::{
 use hotshot_types::{
     data::{fake_commitment, Leaf, ViewNumber},
     traits::{
-        block_contents::{vid_commitment, Transaction as _, GENESIS_VID_NUM_STORAGE_NODES},
+        block_contents::{Transaction as _, GENESIS_VID_NUM_STORAGE_NODES},
         metrics::NoMetrics,
         node_implementation::{ConsensusTime, NodeType, Versions},
         EncodeBytes,
@@ -68,7 +68,11 @@ pub fn build_instance_state<V: Versions>(
     l1_params: L1Params,
     state_peers: Vec<Url>,
 ) -> NodeState {
-    let l1_client = l1_params.options.connect(l1_params.urls);
+    let l1_client = l1_params
+        .options
+        .connect(l1_params.urls)
+        .expect("failed to create L1 client");
+
     NodeState::new(
         u64::MAX, // dummy node ID, only used for debugging
         chain_config,
@@ -398,7 +402,7 @@ mod test {
     /// Get the view number and commitment if given a `QuorumProposal` event.
     async fn proposal_view_number_and_commitment(event: Event) -> Option<(u64, VidCommitment)> {
         if let EventType::QuorumProposal { proposal, .. } = event.event {
-            let view_number = *proposal.data.view_number;
+            let view_number = *proposal.data.view_number();
             let commitment = Leaf2::from_quorum_proposal(&proposal.data).payload_commitment();
             return Some((view_number, commitment));
         }

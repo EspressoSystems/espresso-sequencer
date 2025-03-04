@@ -47,6 +47,18 @@ abstract contract AbstractStakeTable {
         address account, BN254.G2Point newBlsVK, EdOnBN254.EdOnBN254Point newSchnorrVK
     );
 
+    /// @notice Signals the min stake amount has been updated
+    /// @param minStakeAmount the new min stake amount
+    event MinStakeAmountUpdated(uint256 minStakeAmount);
+
+    /// @notice Signals the max churn rate has been updated
+    /// @param maxChurnRate the new max churn rate
+    event MaxChurnRateUpdated(uint256 maxChurnRate);
+
+    /// @notice Signals the light client address has been updated
+    /// @param lightClientAddress the new light client address
+    event LightClientAddressUpdated(address lightClientAddress);
+
     /// @dev (sadly, Solidity doesn't support type alias on non-primitive types)
     // We avoid declaring another struct even if the type info helps with readability,
     // extra layer of struct introduces overhead and more gas cost.
@@ -85,14 +97,17 @@ abstract contract AbstractStakeTable {
 
     // === Queuing Stats ===
 
-    /// @notice Get the next available epoch and queue size in that epoch
-    function nextRegistrationEpoch() external view virtual returns (uint64, uint64);
     /// @notice Get the number of pending registration requests in the waiting queue
-    function numPendingRegistrations() external view virtual returns (uint64);
-    /// @notice Get the next available epoch for exit and queue size in that epoch
-    function nextExitEpoch() external view virtual returns (uint64, uint64);
+    function numPendingRegistrationsInEpoch() external view virtual returns (uint64);
+
     /// @notice Get the number of pending exit requests in the waiting queue
-    function numPendingExits() external view virtual returns (uint64);
+    function numPendingExitsInEpoch() external view virtual returns (uint64);
+
+    /// @notice push a registration request to the waiting queue
+    function pushToRegistrationQueue() internal virtual;
+
+    /// @notice push an exit request to the waiting queue
+    function pushToExitQueue() internal virtual;
 
     // === Write APIs ===
 

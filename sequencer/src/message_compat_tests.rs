@@ -20,8 +20,7 @@ use committable::Committable;
 use espresso_types::{NodeState, PubKey, ValidatedState};
 use hotshot_types::{
     data::{
-        DaProposal, EpochNumber, QuorumProposal, UpgradeProposal, VidDisperse, VidDisperseShare,
-        ViewChangeEvidence, ViewNumber,
+        DaProposal, EpochNumber, QuorumProposal, UpgradeProposal, ViewChangeEvidence, ViewNumber,
     },
     message::{
         DaConsensusMessage, DataMessage, GeneralConsensusMessage, Message, MessageKind, Proposal,
@@ -32,9 +31,7 @@ use hotshot_types::{
     traits::{
         node_implementation::ConsensusTime, signature_key::SignatureKey, BlockPayload, EncodeBytes,
     },
-    vid::vid_scheme,
 };
-use jf_vid::VidScheme;
 use pretty_assertions::assert_eq;
 use serde_json::Value;
 use vbs::{
@@ -50,6 +47,7 @@ async fn test_message_compat<Ver: StaticVersionType>(_ver: Ver) {
     use espresso_types::{EpochCommittees, Leaf, Payload, SeqTypes, Transaction};
     use hotshot_example_types::node_types::TestVersions;
     use hotshot_types::{
+        data::vid_disperse::{ADVZDisperse, ADVZDisperseShare},
         simple_certificate::{
             TimeoutCertificate, ViewSyncCommitCertificate, ViewSyncFinalizeCertificate,
             ViewSyncPreCommitCertificate,
@@ -78,7 +76,7 @@ async fn test_message_compat<Ver: StaticVersionType>(_ver: Ver) {
         old_version_last_view: ViewNumber::genesis(),
         new_version_first_view: ViewNumber::genesis(),
     };
-    let leaf = Leaf::genesis(
+    let leaf = Leaf::genesis::<TestVersions>(
         &ValidatedState::default(),
         &NodeState::mock().with_current_version(Ver::VERSION),
     )
@@ -226,16 +224,16 @@ async fn test_message_compat<Ver: StaticVersionType>(_ver: Ver) {
             Default::default(),
         )),
         DaConsensusMessage::VidDisperseMsg(Proposal {
-            data: VidDisperseShare::from_vid_disperse(
-                VidDisperse::from_membership(
-                    ViewNumber::genesis(),
-                    vid_scheme(1).disperse(payload.encode()).unwrap(),
+            data: ADVZDisperseShare::from_advz_disperse(
+                ADVZDisperse::calculate_vid_disperse(
+                    &payload,
                     &membership,
-                    EpochNumber::genesis(),
-                    EpochNumber::new(1),
-                    Some(block_header.payload_commitment()),
+                    ViewNumber::genesis(),
+                    Some(EpochNumber::genesis()),
+                    Some(EpochNumber::new(1)),
                 )
-                .await,
+                .await
+                .unwrap(),
             )
             .remove(0),
             signature: signature.clone(),

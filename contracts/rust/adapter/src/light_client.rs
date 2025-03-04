@@ -43,8 +43,8 @@ impl FromStr for ParsedLightClientState {
     }
 }
 
-impl From<contract_bindings::light_client::LightClientState> for ParsedLightClientState {
-    fn from(state: contract_bindings::light_client::LightClientState) -> Self {
+impl From<contract_bindings_ethers::light_client::LightClientState> for ParsedLightClientState {
+    fn from(state: contract_bindings_ethers::light_client::LightClientState) -> Self {
         Self {
             view_num: state.view_num,
             block_height: state.block_height,
@@ -93,7 +93,7 @@ impl From<(u64, u64, U256)> for ParsedLightClientState {
     }
 }
 
-impl From<ParsedLightClientState> for contract_bindings::light_client::LightClientState {
+impl From<ParsedLightClientState> for contract_bindings_ethers::light_client::LightClientState {
     fn from(s: ParsedLightClientState) -> Self {
         // exactly the same struct with same field types, safe to transmute
         unsafe { std::mem::transmute(s) }
@@ -144,8 +144,8 @@ impl FromStr for ParsedStakeTableState {
     }
 }
 
-impl From<contract_bindings::light_client::StakeTableState> for ParsedStakeTableState {
-    fn from(state: contract_bindings::light_client::StakeTableState) -> Self {
+impl From<contract_bindings_ethers::light_client::StakeTableState> for ParsedStakeTableState {
+    fn from(state: contract_bindings_ethers::light_client::StakeTableState) -> Self {
         Self {
             threshold: state.threshold,
             bls_key_comm: state.bls_key_comm,
@@ -166,7 +166,7 @@ impl From<(U256, U256, U256, U256)> for ParsedStakeTableState {
     }
 }
 
-impl From<ParsedStakeTableState> for contract_bindings::light_client::StakeTableState {
+impl From<ParsedStakeTableState> for contract_bindings_ethers::light_client::StakeTableState {
     fn from(s: ParsedStakeTableState) -> Self {
         // exactly the same struct with same field types, safe to transmute
         unsafe { std::mem::transmute(s) }

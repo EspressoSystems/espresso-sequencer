@@ -1,13 +1,13 @@
-use crate::parse_duration;
+use alloy::{
+    providers::RootProvider,
+    transports::http::{Client, Http},
+};
 use async_broadcast::{InactiveReceiver, Sender};
 use clap::Parser;
 use derive_more::Deref;
-use ethers::{
-    prelude::{H256, U256},
-    providers::{Http, Provider},
-};
 use hotshot_types::traits::metrics::{Counter, Gauge, Metrics, NoMetrics};
 use lru::LruCache;
+use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::{
     num::NonZeroUsize,
@@ -15,16 +15,18 @@ use std::{
     time::{Duration, Instant},
 };
 use tokio::{
-    sync::{Mutex, RwLock},
+    sync::{Mutex, Notify},
     task::JoinHandle,
 };
 use url::Url;
 
+use crate::v0::utils::parse_duration;
+
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, Hash, PartialEq, Eq)]
 pub struct L1BlockInfo {
     pub number: u64,
-    pub timestamp: U256,
-    pub hash: H256,
+    pub timestamp: ethers::types::U256,
+    pub hash: ethers::types::H256,
 }
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, Hash, PartialEq, Eq)]
@@ -140,7 +142,7 @@ pub struct L1ClientOptions {
     pub metrics: Arc<Box<dyn Metrics>>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Deref)]
 /// An Ethereum provider and configuration to interact with the L1.
 ///
 /// This client runs asynchronously, updating an in-memory snapshot of the relevant L1 information
@@ -149,8 +151,9 @@ pub struct L1ClientOptions {
 /// easy to use a subscription instead of polling for new blocks, vastly reducing the number of L1
 /// RPC calls we make.
 pub struct L1Client {
-    /// `Provider` from `ethers-provider`.
-    pub(crate) provider: Arc<Provider<MultiRpcClient>>,
+    /// A `RootProvider` from `alloy` which uses our custom `SwitchingTransport`
+    #[deref]
+    pub provider: RootProvider<SwitchingTransport>,
     /// Shared state updated by an asynchronous task which polls the L1.
     pub(crate) state: Arc<Mutex<L1State>>,
     /// Channel used by the async update task to send events to clients.
@@ -183,35 +186,39 @@ pub(crate) struct L1ClientMetrics {
     pub(crate) finalized: Arc<dyn Gauge>,
     pub(crate) reconnects: Arc<dyn Counter>,
     pub(crate) failovers: Arc<dyn Counter>,
+    pub(crate) failures: Arc<Vec<Box<dyn Counter>>>,
 }
 
-/// An RPC client with multiple remote providers.
+/// An RPC client with multiple remote (HTTP) providers.
 ///
 /// This client utilizes one RPC provider at a time, but if it detects that the provider is in a
 /// failing state, it will automatically switch to the next provider in its list.
 #[derive(Clone, Debug)]
-pub(crate) struct MultiRpcClient {
-    pub(crate) clients: Arc<Vec<L1Provider>>,
-    pub(crate) status: Arc<RwLock<MultiRpcClientStatus>>,
-    pub(crate) failover_send: Sender<()>,
-    pub(crate) failover_recv: InactiveReceiver<()>,
-    pub(crate) opt: L1ClientOptions,
+pub struct SwitchingTransport {
+    /// The transport currently being used by the client
+    pub(crate) current_transport: Arc<RwLock<SingleTransport>>,
+    /// The list of configured HTTP URLs to use for RPC requests
+    pub(crate) urls: Arc<Vec<Url>>,
+    pub(crate) opt: Arc<L1ClientOptions>,
     pub(crate) metrics: L1ClientMetrics,
+    pub(crate) switch_notify: Arc<Notify>,
 }
 
-/// The state of the current provider being used by a [`MultiRpcClient`].
-#[derive(Debug, Default)]
-pub(crate) struct MultiRpcClientStatus {
-    pub(crate) client: usize,
+/// The state of the current provider being used by a [`SwitchingTransport`].
+/// This is cloneable and returns a reference to the same underlying data.
+#[derive(Debug, Clone)]
+pub(crate) struct SingleTransport {
+    pub(crate) client: Http<Client>,
+    pub(crate) status: Arc<RwLock<SingleTransportStatus>>,
+}
+
+/// The status of a single transport
+#[derive(Debug)]
+pub(crate) struct SingleTransportStatus {
+    pub(crate) url_index: usize,
     pub(crate) last_failure: Option<Instant>,
     pub(crate) consecutive_failures: usize,
     pub(crate) rate_limited_until: Option<Instant>,
-}
-
-/// A single provider in a [`MultiRpcClient`].
-#[derive(Debug, Deref)]
-pub(crate) struct L1Provider {
-    #[deref]
-    pub(crate) inner: Http,
-    pub(crate) failures: Box<dyn Counter>,
+    /// Whether or not this current transport is being shut down (switching to the next transport)
+    pub(crate) shutting_down: bool,
 }

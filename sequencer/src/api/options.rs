@@ -51,7 +51,6 @@ pub struct Options {
     pub status: Option<Status>,
     pub catchup: Option<Catchup>,
     pub config: Option<Config>,
-    pub state: Option<State>,
     pub hotshot_events: Option<HotshotEvents>,
     pub explorer: Option<Explorer>,
     pub storage_fs: Option<persistence::fs::Options>,
@@ -67,7 +66,6 @@ impl From<Http> for Options {
             status: None,
             catchup: None,
             config: None,
-            state: None,
             hotshot_events: None,
             explorer: None,
             storage_fs: None,
@@ -117,12 +115,6 @@ impl Options {
     /// Add a config API module.
     pub fn config(mut self, opt: Config) -> Self {
         self.config = Some(opt);
-        self
-    }
-
-    /// Add a state API module.
-    pub fn state(mut self, opt: State) -> Self {
-        self.state = Some(opt);
         self
     }
 
@@ -275,19 +267,32 @@ impl Options {
         let mut app = App::<_, Error>::with_state(api_state);
 
         // Initialize status API
-        if self.status.is_some() {
-            let status_api = status::define_api::<endpoints::AvailState<N, P, D, _>, _>(
-                &Default::default(),
-                bind_version,
-            )?;
-            app.register_module("status", status_api)?;
-        }
+        let status_api = status::define_api::<endpoints::AvailState<N, P, D, _>, _>(
+            &Default::default(),
+            bind_version,
+        )?;
+        app.register_module("status", status_api)?;
 
         // Initialize availability and node APIs (these both use the same data source).
         app.register_module("availability", endpoints::availability()?)?;
         app.register_module("node", endpoints::node()?)?;
 
-        self.init_hotshot_modules(&mut app)?;
+        // Initialize submit API
+        if self.submit.is_some() {
+            app.register_module(
+                "submit",
+                endpoints::submit::<_, _, _, SequencerApiVersion>()?,
+            )?;
+        }
+
+        tracing::info!("initializing catchup API");
+        app.register_module("catchup", endpoints::catchup(bind_version)?)?;
+
+        app.register_module("state-signature", endpoints::state_signature(bind_version)?)?;
+
+        if self.config.is_some() {
+            app.register_module("config", endpoints::config(bind_version)?)?;
+        }
         Ok((metrics, ds, app))
     }
 
@@ -354,26 +359,25 @@ impl Options {
             app.register_module("explorer", endpoints::explorer()?)?;
         }
 
-        if self.state.is_some() {
-            // Initialize merklized state module for block merkle tree
-            app.register_module(
-                "block-state",
-                endpoints::merklized_state::<N, P, _, BlockMerkleTree, _, 3>()?,
-            )?;
-            // Initialize merklized state module for fee merkle tree
-            app.register_module(
-                "fee-state",
-                endpoints::get_balance::<_, SequencerApiVersion>()?,
-            )?;
+        // Initialize merklized state module for block merkle tree
+        app.register_module(
+            "block-state",
+            endpoints::merklized_state::<N, P, _, BlockMerkleTree, _, 3>()?,
+        )?;
+        // Initialize merklized state module for fee merkle tree
+        app.register_module(
+            "fee-state",
+            endpoints::get_balance::<_, SequencerApiVersion>()?,
+        )?;
 
+        let get_node_state = {
             let state = state.clone();
-            let get_node_state = async move { state.node_state().await.clone() };
-            tasks.spawn(
-                "merklized state storage update loop",
-                update_state_storage_loop(ds.clone(), get_node_state),
-            );
-        }
-
+            async move { state.node_state().await.clone() }
+        };
+        tasks.spawn(
+            "merklized state storage update loop",
+            update_state_storage_loop(ds.clone(), get_node_state),
+        );
         if self.hotshot_events.is_some() {
             self.init_and_spawn_hotshot_event_streaming_module(state, tasks)?;
         }
@@ -498,7 +502,7 @@ impl Options {
 #[derive(Parser, Clone, Copy, Debug)]
 pub struct Http {
     /// Port that the HTTP API will use.
-    #[clap(long, env = "ESPRESSO_SEQUENCER_API_PORT")]
+    #[clap(long, env = "ESPRESSO_SEQUENCER_API_PORT", default_value = "8080")]
     pub port: u16,
 
     /// Maximum number of concurrent HTTP connections the server will allow.

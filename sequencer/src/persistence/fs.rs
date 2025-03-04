@@ -6,9 +6,16 @@ use espresso_types::{
     v0::traits::{EventConsumer, PersistenceOptions, SequencerPersistence},
     Leaf, Leaf2, NetworkConfig, Payload, SeqTypes,
 };
+use hotshot_libp2p_networking::network::behaviours::dht::store::persistent::{
+    DhtPersistentStorage, SerializableRecord,
+};
+use hotshot_query_service::VidCommitment;
 use hotshot_types::{
     consensus::CommitmentMap,
-    data::{DaProposal, QuorumProposal, QuorumProposal2, VidDisperseShare},
+    data::{
+        vid_disperse::{ADVZDisperseShare, VidDisperseShare2},
+        DaProposal, EpochNumber, QuorumProposal, QuorumProposal2, QuorumProposalWrapper,
+    },
     event::{Event, EventType, HotShotAction, LeafInfo},
     message::{convert_proposal, Proposal},
     simple_certificate::{
@@ -19,12 +26,7 @@ use hotshot_types::{
         node_implementation::ConsensusTime,
     },
     utils::View,
-    vid::VidSchemeType,
     vote::HasViewNumber,
-};
-use jf_vid::VidScheme;
-use libp2p_networking::network::behaviours::dht::store::persistent::{
-    DhtPersistentStorage, SerializableRecord,
 };
 use std::sync::Arc;
 use std::{
@@ -225,49 +227,56 @@ impl Inner {
 
     fn collect_garbage(
         &mut self,
-        view: ViewNumber,
-        intervals: &[RangeInclusive<u64>],
+        decided_view: ViewNumber,
+        prune_intervals: &[RangeInclusive<ViewNumber>],
     ) -> anyhow::Result<()> {
-        let view_number = view.u64();
-        let prune_view = view.saturating_sub(self.view_retention);
+        let prune_view = ViewNumber::new(decided_view.saturating_sub(self.view_retention));
 
-        let delete_files =
-            |intervals: &[RangeInclusive<u64>], keep, dir_path: PathBuf| -> anyhow::Result<()> {
-                if !dir_path.is_dir() {
-                    return Ok(());
-                }
-
-                for entry in fs::read_dir(dir_path)? {
-                    let entry = entry?;
-                    let path = entry.path();
-
-                    if let Some(file) = path.file_stem().and_then(|n| n.to_str()) {
-                        if let Ok(v) = file.parse::<u64>() {
-                            // If the view is the anchor view, keep it no matter what.
-                            if let Some(keep) = keep {
-                                if keep == v {
-                                    continue;
-                                }
-                            }
-                            // Otherwise, delete it if it is time to prune this view _or_ if the
-                            // given intervals, which we've already successfully processed, contain
-                            // the view; in this case we simply don't need it anymore.
-                            if v < prune_view || intervals.iter().any(|i| i.contains(&v)) {
-                                fs::remove_file(&path)?;
-                            }
-                        }
-                    }
-                }
-
-                Ok(())
-            };
-
-        delete_files(intervals, None, self.da_dir_path())?;
-        delete_files(intervals, None, self.vid_dir_path())?;
-        delete_files(intervals, None, self.quorum_proposals_dir_path())?;
+        self.prune_files(self.da_dir_path(), prune_view, None, prune_intervals)?;
+        self.prune_files(self.vid_dir_path(), prune_view, None, prune_intervals)?;
+        self.prune_files(
+            self.quorum_proposals_dir_path(),
+            prune_view,
+            None,
+            prune_intervals,
+        )?;
 
         // Save the most recent leaf as it will be our anchor point if the node restarts.
-        delete_files(intervals, Some(view_number), self.decided_leaf_path())?;
+        self.prune_files(
+            self.decided_leaf_path(),
+            prune_view,
+            Some(decided_view),
+            prune_intervals,
+        )?;
+
+        Ok(())
+    }
+
+    fn prune_files(
+        &mut self,
+        dir_path: PathBuf,
+        prune_view: ViewNumber,
+        keep_decided_view: Option<ViewNumber>,
+        prune_intervals: &[RangeInclusive<ViewNumber>],
+    ) -> anyhow::Result<()> {
+        if !dir_path.is_dir() {
+            return Ok(());
+        }
+
+        for (file_view, path) in view_files(dir_path)? {
+            // If the view is the anchor view, keep it no matter what.
+            if let Some(decided_view) = keep_decided_view {
+                if decided_view == file_view {
+                    continue;
+                }
+            }
+            // Otherwise, delete it if it is time to prune this view _or_ if the given intervals,
+            // which we've already successfully processed, contain the view; in this case we simply
+            // don't need it anymore.
+            if file_view < prune_view || prune_intervals.iter().any(|i| i.contains(&file_view)) {
+                fs::remove_file(&path)?;
+            }
+        }
 
         Ok(())
     }
@@ -280,22 +289,13 @@ impl Inner {
         &self,
         view: ViewNumber,
         consumer: &impl EventConsumer,
-    ) -> anyhow::Result<Vec<RangeInclusive<u64>>> {
+    ) -> anyhow::Result<Vec<RangeInclusive<ViewNumber>>> {
         // Generate a decide event for each leaf, to be processed by the event consumer. We make a
         // separate event for each leaf because it is possible we have non-consecutive leaves in our
         // storage, which would not be valid as a single decide with a single leaf chain.
         let mut leaves = BTreeMap::new();
-        for entry in fs::read_dir(self.decided_leaf_path())? {
-            let entry = entry?;
-            let path = entry.path();
-
-            let Some(file) = path.file_stem().and_then(|n| n.to_str()) else {
-                continue;
-            };
-            let Ok(v) = file.parse::<u64>() else {
-                continue;
-            };
-            if v > view.u64() {
+        for (v, path) in view_files(self.decided_leaf_path())? {
+            if v > view {
                 continue;
             }
 
@@ -306,22 +306,20 @@ impl Inner {
                     .context(format!("parsing decided leaf {}", path.display()))?;
 
             // Include the VID share if available.
-            let vid_share = self
-                .load_vid_share(ViewNumber::new(v))?
-                .map(|proposal| proposal.data);
+            let vid_share = self.load_vid_share(v)?.map(|proposal| proposal.data);
             if vid_share.is_none() {
-                tracing::debug!(view = v, "VID share not available at decide");
+                tracing::debug!(?v, "VID share not available at decide");
             }
 
             // Fill in the full block payload using the DA proposals we had persisted.
-            if let Some(proposal) = self.load_da_proposal(ViewNumber::new(v))? {
+            if let Some(proposal) = self.load_da_proposal(v)? {
                 let payload = Payload::from_bytes(
                     &proposal.data.encoded_transactions,
                     &proposal.data.metadata,
                 );
                 leaf.fill_block_payload_unchecked(payload);
             } else {
-                tracing::debug!(view = v, "DA proposal not available at decide");
+                tracing::debug!(?v, "DA proposal not available at decide");
             }
 
             let info = LeafInfo {
@@ -343,7 +341,7 @@ impl Inner {
         if let Some((oldest_view, _)) = leaves.first_key_value() {
             // The only exception is when the oldest leaf is the genesis leaf; then there was no
             // previous decide event.
-            if *oldest_view > 0 {
+            if *oldest_view > ViewNumber::genesis() {
                 leaves.pop_first();
             }
         }
@@ -354,7 +352,7 @@ impl Inner {
             let height = leaf.leaf.block_header().block_number();
             consumer
                 .handle_event(&Event {
-                    view_number: ViewNumber::new(view),
+                    view_number: view,
                     event: EventType::Decide {
                         qc: Arc::new(qc.to_qc2()),
                         leaf_chain: Arc::new(vec![leaf]),
@@ -407,7 +405,7 @@ impl Inner {
     fn load_vid_share(
         &self,
         view: ViewNumber,
-    ) -> anyhow::Result<Option<Proposal<SeqTypes, VidDisperseShare<SeqTypes>>>> {
+    ) -> anyhow::Result<Option<Proposal<SeqTypes, ADVZDisperseShare<SeqTypes>>>> {
         let dir_path = self.vid_dir_path();
 
         let file_path = dir_path.join(view.u64().to_string()).with_extension("txt");
@@ -417,7 +415,7 @@ impl Inner {
         }
 
         let vid_share_bytes = fs::read(file_path)?;
-        let vid_share: Proposal<SeqTypes, VidDisperseShare<SeqTypes>> =
+        let vid_share: Proposal<SeqTypes, ADVZDisperseShare<SeqTypes>> =
             bincode::deserialize(&vid_share_bytes)?;
         Ok(Some(vid_share))
     }
@@ -427,15 +425,12 @@ impl Inner {
             let mut anchor: Option<(Leaf2, QuorumCertificate2<SeqTypes>)> = None;
 
             // Return the latest decided leaf.
-            for entry in
-                fs::read_dir(self.decided_leaf_path()).context("opening decided leaf directory")?
-            {
-                let file = entry.context("reading decided leaf directory")?.path();
+            for (_, path) in view_files(self.decided_leaf_path())? {
                 let bytes =
-                    fs::read(&file).context(format!("reading decided leaf {}", file.display()))?;
+                    fs::read(&path).context(format!("reading decided leaf {}", path.display()))?;
                 let (leaf, qc) =
                     bincode::deserialize::<(Leaf, QuorumCertificate<SeqTypes>)>(&bytes)
-                        .context(format!("parsing decided leaf {}", file.display()))?;
+                        .context(format!("parsing decided leaf {}", path.display()))?;
                 if let Some((anchor_leaf, _)) = &anchor {
                     if leaf.view_number() > anchor_leaf.view_number() {
                         let leaf2 = leaf.into();
@@ -610,13 +605,39 @@ impl SequencerPersistence for Persistence {
     async fn load_vid_share(
         &self,
         view: ViewNumber,
-    ) -> anyhow::Result<Option<Proposal<SeqTypes, VidDisperseShare<SeqTypes>>>> {
+    ) -> anyhow::Result<Option<Proposal<SeqTypes, ADVZDisperseShare<SeqTypes>>>> {
         self.inner.read().await.load_vid_share(view)
     }
 
     async fn append_vid(
         &self,
-        proposal: &Proposal<SeqTypes, VidDisperseShare<SeqTypes>>,
+        proposal: &Proposal<SeqTypes, ADVZDisperseShare<SeqTypes>>,
+    ) -> anyhow::Result<()> {
+        let mut inner = self.inner.write().await;
+        let view_number = proposal.data.view_number().u64();
+        let dir_path = inner.vid_dir_path();
+
+        fs::create_dir_all(dir_path.clone()).context("failed to create vid dir")?;
+
+        let file_path = dir_path.join(view_number.to_string()).with_extension("txt");
+        inner.replace(
+            &file_path,
+            |_| {
+                // Don't overwrite an existing share, but warn about it as this is likely not intended
+                // behavior from HotShot.
+                tracing::warn!(view_number, "duplicate VID share");
+                Ok(false)
+            },
+            |mut file| {
+                let proposal_bytes = bincode::serialize(&proposal).context("serialize proposal")?;
+                file.write_all(&proposal_bytes)?;
+                Ok(())
+            },
+        )
+    }
+    async fn append_vid2(
+        &self,
+        proposal: &Proposal<SeqTypes, VidDisperseShare2<SeqTypes>>,
     ) -> anyhow::Result<()> {
         let mut inner = self.inner.write().await;
         let view_number = proposal.data.view_number().u64();
@@ -643,7 +664,7 @@ impl SequencerPersistence for Persistence {
     async fn append_da(
         &self,
         proposal: &Proposal<SeqTypes, DaProposal<SeqTypes>>,
-        _vid_commit: <VidSchemeType as VidScheme>::Commit,
+        _vid_commit: VidCommitment,
     ) -> anyhow::Result<()> {
         let mut inner = self.inner.write().await;
         let view_number = proposal.data.view_number().u64();
@@ -667,7 +688,12 @@ impl SequencerPersistence for Persistence {
             },
         )
     }
-    async fn record_action(&self, view: ViewNumber, action: HotShotAction) -> anyhow::Result<()> {
+    async fn record_action(
+        &self,
+        view: ViewNumber,
+        _epoch: Option<EpochNumber>,
+        action: HotShotAction,
+    ) -> anyhow::Result<()> {
         // Todo Remove this after https://github.com/EspressoSystems/espresso-sequencer/issues/1931
         if !matches!(action, HotShotAction::Propose | HotShotAction::Vote) {
             return Ok(());
@@ -722,7 +748,7 @@ impl SequencerPersistence for Persistence {
     }
     async fn append_quorum_proposal(
         &self,
-        proposal: &Proposal<SeqTypes, QuorumProposal2<SeqTypes>>,
+        proposal: &Proposal<SeqTypes, QuorumProposalWrapper<SeqTypes>>,
     ) -> anyhow::Result<()> {
         let proposal: Proposal<SeqTypes, QuorumProposal<SeqTypes>> =
             convert_proposal(proposal.clone());
@@ -749,7 +775,8 @@ impl SequencerPersistence for Persistence {
     }
     async fn load_quorum_proposals(
         &self,
-    ) -> anyhow::Result<BTreeMap<ViewNumber, Proposal<SeqTypes, QuorumProposal2<SeqTypes>>>> {
+    ) -> anyhow::Result<BTreeMap<ViewNumber, Proposal<SeqTypes, QuorumProposalWrapper<SeqTypes>>>>
+    {
         let inner = self.inner.read().await;
 
         // First, get the proposal directory.
@@ -758,45 +785,28 @@ impl SequencerPersistence for Persistence {
             return Ok(Default::default());
         }
 
-        // Then, we want to get the entries in this directory since they'll be the
-        // key/value pairs for our map.
-        let files: Vec<fs::DirEntry> = fs::read_dir(dir_path.clone())?
-            .filter_map(|entry| {
-                entry
-                    .ok()
-                    .filter(|e| e.file_type().map(|ft| ft.is_file()).unwrap_or(false))
-            })
-            .collect();
-
-        // Read all of the files
-        let proposal_files = files
-            .into_iter()
-            .map(|entry| dir_path.join(entry.file_name()).with_extension("txt"));
-
+        // Read quorum proposals from every data file in this directory.
         let mut map = BTreeMap::new();
-        for file in proposal_files.into_iter() {
-            // This operation shouldn't fail, but we don't want to panic here if the filesystem
-            // somehow gets corrupted. We get the stem to remove the ".txt" from the end.
-            if let Some(file_name) = file.file_stem() {
-                // We need to convert the filename (which corresponds to the view)
-                let view_number = ViewNumber::new(
-                    file_name
-                        .to_string_lossy()
-                        .parse::<u64>()
-                        .context("convert file name to u64")?,
-                );
+        for (view, path) in view_files(&dir_path)? {
+            let proposal_bytes = fs::read(path)?;
+            let proposal: Proposal<SeqTypes, QuorumProposal<SeqTypes>> =
+                match bincode::deserialize(&proposal_bytes) {
+                    Ok(proposal) => proposal,
+                    Err(err) => {
+                        // At this point, if the file contents are invalid, it is most likely an
+                        // error rather than a miscellaneous file somehow ending up in the
+                        // directory. However, we continue on, because it is better to collect as
+                        // many proposals as we can rather than letting one bad proposal cause the
+                        // entire operation to fail, and it is still possible that this was just
+                        // some unintended file whose name happened to match the naming convention.
+                        tracing::warn!(?view, "ignoring malformed quorum proposal file: {err:#}");
+                        continue;
+                    }
+                };
+            let proposal2 = convert_proposal(proposal);
 
-                // Now, we'll try and load the proposal associated with this function.
-                let proposal_bytes = fs::read(file)?;
-
-                // Then, deserialize.
-                let proposal: Proposal<SeqTypes, QuorumProposal<SeqTypes>> =
-                    bincode::deserialize(&proposal_bytes)?;
-                let proposal2 = convert_proposal(proposal);
-
-                // Push to the map and we're done.
-                map.insert(view_number, proposal2);
-            }
+            // Push to the map and we're done.
+            map.insert(view, proposal2);
         }
 
         Ok(map)
@@ -805,14 +815,15 @@ impl SequencerPersistence for Persistence {
     async fn load_quorum_proposal(
         &self,
         view: ViewNumber,
-    ) -> anyhow::Result<Proposal<SeqTypes, QuorumProposal2<SeqTypes>>> {
+    ) -> anyhow::Result<Proposal<SeqTypes, QuorumProposalWrapper<SeqTypes>>> {
         let inner = self.inner.read().await;
         let dir_path = inner.quorum_proposals_dir_path();
         let file_path = dir_path.join(view.to_string()).with_extension("txt");
         let bytes = fs::read(file_path)?;
         let proposal: Proposal<SeqTypes, QuorumProposal<SeqTypes>> = bincode::deserialize(&bytes)?;
-        let proposal2 = convert_proposal(proposal);
-        Ok(proposal2)
+        // TODO: rather than converting, we should store the value of QuorumProposalWrapper::with_epoch
+        let proposal_wrapper = convert_proposal(proposal);
+        Ok(proposal_wrapper)
     }
 
     async fn load_upgrade_certificate(
@@ -1019,6 +1030,31 @@ fn migrate_network_config(
     Ok(network_config)
 }
 
+/// Get all paths under `dir` whose name is of the form <view number>.txt.
+fn view_files(
+    dir: impl AsRef<Path>,
+) -> anyhow::Result<impl Iterator<Item = (ViewNumber, PathBuf)>> {
+    Ok(fs::read_dir(dir.as_ref())?.filter_map(move |entry| {
+        let dir = dir.as_ref().display();
+        let entry = entry.ok()?;
+        if !entry.file_type().ok()?.is_file() {
+            tracing::debug!(%dir, ?entry, "ignoring non-file in data directory");
+            return None;
+        }
+        let path = entry.path();
+        if path.extension()? != "txt" {
+            tracing::debug!(%dir, ?entry, "ignoring non-text file in data directory");
+            return None;
+        }
+        let file_name = path.file_stem()?;
+        let Ok(view_number) = file_name.to_string_lossy().parse::<u64>() else {
+            tracing::debug!(%dir, ?file_name, "ignoring extraneous file in data directory");
+            return None;
+        };
+        Some((ViewNumber::new(view_number), entry.path().to_owned()))
+    }))
+}
+
 #[cfg(test)]
 mod testing {
     use tempfile::TempDir;
@@ -1051,9 +1087,15 @@ mod generic_tests {
 
 #[cfg(test)]
 mod test {
+    use espresso_types::{NodeState, PubKey};
+    use hotshot::types::SignatureKey;
+    use hotshot_example_types::node_types::TestVersions;
+    use hotshot_query_service::testing::mocks::MockVersions;
+    use sequencer_utils::test_utils::setup_test;
     use serde_json::json;
 
     use super::*;
+    use crate::persistence::testing::TestablePersistence;
 
     #[test]
     fn test_config_migrations_add_builder_urls() {
@@ -1151,5 +1193,128 @@ mod test {
         });
 
         assert_eq!(migrate_network_config(before.clone()).unwrap(), before);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_load_quorum_proposals_invalid_extension() {
+        setup_test();
+
+        let tmp = Persistence::tmp_storage().await;
+        let storage = Persistence::connect(&tmp).await;
+
+        // Generate a couple of valid quorum proposals.
+        let leaf: Leaf2 = Leaf::genesis::<MockVersions>(&Default::default(), &NodeState::mock())
+            .await
+            .into();
+        let privkey = PubKey::generated_from_seed_indexed([0; 32], 1).1;
+        let signature = PubKey::sign(&privkey, &[]).unwrap();
+        let mut quorum_proposal = Proposal {
+            data: QuorumProposalWrapper::<SeqTypes> {
+                proposal: QuorumProposal2::<SeqTypes> {
+                    epoch: None,
+                    block_header: leaf.block_header().clone(),
+                    view_number: ViewNumber::genesis(),
+                    justify_qc: QuorumCertificate::genesis::<TestVersions>(
+                        &Default::default(),
+                        &NodeState::mock(),
+                    )
+                    .await
+                    .to_qc2(),
+                    upgrade_certificate: None,
+                    view_change_evidence: None,
+                    next_drb_result: None,
+                    next_epoch_justify_qc: None,
+                },
+            },
+            signature,
+            _pd: Default::default(),
+        };
+
+        // Store quorum proposals.
+        let quorum_proposal1 = quorum_proposal.clone();
+        storage
+            .append_quorum_proposal(&quorum_proposal1)
+            .await
+            .unwrap();
+        quorum_proposal.data.proposal.view_number = ViewNumber::new(1);
+        let quorum_proposal2 = quorum_proposal.clone();
+        storage
+            .append_quorum_proposal(&quorum_proposal2)
+            .await
+            .unwrap();
+
+        // Change one of the file extensions. It can happen that we end up with files with the wrong
+        // extension if, for example, the node is killed before cleaning up a swap file.
+        fs::rename(
+            tmp.path().join("quorum_proposals/1.txt"),
+            tmp.path().join("quorum_proposals/1.swp"),
+        )
+        .unwrap();
+
+        // Loading should simply ignore the unrecognized extension.
+        assert_eq!(
+            storage.load_quorum_proposals().await.unwrap(),
+            [(ViewNumber::genesis(), quorum_proposal1)]
+                .into_iter()
+                .collect::<BTreeMap<_, _>>()
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_load_quorum_proposals_malformed_data() {
+        setup_test();
+
+        let tmp = Persistence::tmp_storage().await;
+        let storage = Persistence::connect(&tmp).await;
+
+        // Generate a valid quorum proposal.
+        let leaf: Leaf2 = Leaf::genesis::<MockVersions>(&Default::default(), &NodeState::mock())
+            .await
+            .into();
+        let privkey = PubKey::generated_from_seed_indexed([0; 32], 1).1;
+        let signature = PubKey::sign(&privkey, &[]).unwrap();
+        let quorum_proposal = Proposal {
+            data: QuorumProposalWrapper::<SeqTypes> {
+                proposal: QuorumProposal2::<SeqTypes> {
+                    epoch: None,
+                    block_header: leaf.block_header().clone(),
+                    view_number: ViewNumber::new(1),
+                    justify_qc: QuorumCertificate::genesis::<TestVersions>(
+                        &Default::default(),
+                        &NodeState::mock(),
+                    )
+                    .await
+                    .to_qc2(),
+                    upgrade_certificate: None,
+                    view_change_evidence: None,
+                    next_drb_result: None,
+                    next_epoch_justify_qc: None,
+                },
+            },
+            signature,
+            _pd: Default::default(),
+        };
+
+        // First store an invalid quorum proposal.
+        fs::create_dir_all(tmp.path().join("quorum_proposals")).unwrap();
+        fs::write(
+            tmp.path().join("quorum_proposals/0.txt"),
+            "invalid data".as_bytes(),
+        )
+        .unwrap();
+
+        // Store valid quorum proposal.
+        storage
+            .append_quorum_proposal(&quorum_proposal)
+            .await
+            .unwrap();
+
+        // Loading should ignore the invalid data and return the valid proposal.
+        assert_eq!(
+            storage.load_quorum_proposals().await.unwrap(),
+            [(ViewNumber::new(1), quorum_proposal)]
+                .into_iter()
+                .collect::<BTreeMap<_, _>>()
+        );
     }
 }

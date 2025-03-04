@@ -16,12 +16,10 @@ use hotshot_builder_core::{
     },
 };
 use hotshot_types::{
-    data::{fake_commitment, ViewNumber},
+    data::{fake_commitment, vid_commitment, ViewNumber},
     traits::{
-        block_contents::{vid_commitment, GENESIS_VID_NUM_STORAGE_NODES},
-        metrics::NoMetrics,
-        node_implementation::Versions,
-        EncodeBytes,
+        block_contents::GENESIS_VID_NUM_STORAGE_NODES, metrics::NoMetrics,
+        node_implementation::Versions, EncodeBytes,
     },
 };
 use marketplace_builder_shared::block::ParentBlockReferences;
@@ -46,7 +44,11 @@ pub fn build_instance_state<V: Versions>(
     l1_params: L1Params,
     state_peers: Vec<Url>,
 ) -> NodeState {
-    let l1_client = l1_params.options.connect(l1_params.urls);
+    let l1_client = l1_params
+        .options
+        .connect(l1_params.urls)
+        .expect("failed to create L1 client");
+
     NodeState::new(
         u64::MAX, // dummy node ID, only used for debugging
         chain_config,
@@ -119,7 +121,12 @@ impl BuilderConfig {
 
         let vid_commitment = {
             let payload_bytes = genesis_payload.encode();
-            vid_commitment(&payload_bytes, GENESIS_VID_NUM_STORAGE_NODES)
+            vid_commitment::<V>(
+                &payload_bytes,
+                &genesis_ns_table.encode(),
+                GENESIS_VID_NUM_STORAGE_NODES,
+                V::Base::VERSION,
+            )
         };
 
         // create the global state
@@ -138,7 +145,7 @@ impl BuilderConfig {
         let global_state = Arc::new(RwLock::new(global_state));
         let global_state_clone = global_state.clone();
 
-        let builder_state = BuilderState::<SeqTypes>::new(
+        let builder_state = BuilderState::<SeqTypes, V>::new(
             ParentBlockReferences {
                 view_number: bootstrapped_view,
                 vid_commitment,

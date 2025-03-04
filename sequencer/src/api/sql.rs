@@ -65,6 +65,11 @@ impl SequencerDataSource for DataSource {
             builder = builder.with_rate_limit(limit);
         }
 
+        if opt.lightweight {
+            tracing::warn!("enabling light weight mode..");
+            builder = builder.leaf_only();
+        }
+
         if let Some(delay) = active_fetch_delay {
             builder = builder.with_active_fetch_delay(delay);
         }
@@ -198,7 +203,6 @@ impl ChainConfigPersistence for Transaction<Write> {
             [(commitment.to_string(), data)],
         )
         .await
-        .map_err(Into::into)
     }
 }
 
@@ -490,6 +494,15 @@ mod impl_testable_data_source {
 
         fn persistence_options(storage: &Self::Storage) -> Self::Options {
             tmp_options(storage)
+        }
+
+        fn leaf_only_ds_options(
+            storage: &Self::Storage,
+            opt: api::Options,
+        ) -> anyhow::Result<api::Options> {
+            let mut ds_opts = tmp_options(storage);
+            ds_opts.lightweight = true;
+            Ok(opt.query_sql(Default::default(), ds_opts))
         }
 
         fn options(storage: &Self::Storage, opt: api::Options) -> api::Options {

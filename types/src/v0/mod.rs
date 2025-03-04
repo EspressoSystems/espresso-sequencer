@@ -9,6 +9,7 @@ use hotshot_types::{
 use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
 
+pub mod config;
 mod header;
 mod impls;
 pub mod traits;
@@ -122,10 +123,7 @@ reexport_unchanged_types!(
     BlockSize,
 );
 
-pub(crate) use v0_3::{
-    L1ClientMetrics, L1Event, L1Provider, L1State, L1UpdateTask, MultiRpcClient,
-    MultiRpcClientStatus,
-};
+pub(crate) use v0_3::{L1ClientMetrics, L1Event, L1State, L1UpdateTask};
 
 #[derive(
     Clone, Copy, Debug, Default, Hash, Eq, PartialEq, PartialOrd, Ord, Deserialize, Serialize,

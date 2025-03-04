@@ -57,7 +57,7 @@ pub mod testing {
         },
     };
     use hotshot_builder_api::v0_2::block_info::{
-        AvailableBlockData, AvailableBlockHeaderInput, AvailableBlockInfo,
+        AvailableBlockData, AvailableBlockHeaderInputV1, AvailableBlockInfo,
     };
     use hotshot_events_service::{
         events::{Error as EventStreamApiError, Options as EventStreamingApiOptions},
@@ -139,6 +139,7 @@ pub mod testing {
                 stop_proposing_time: 0,
                 stop_voting_time: 0,
                 epoch_height: 0,
+                epoch_start_block: 0,
             };
 
             Self {
@@ -434,7 +435,7 @@ pub mod testing {
             let event = subscribed_events.next().await.unwrap();
             tracing::warn!("Event: {:?}", event.event);
             if let EventType::QuorumProposal { proposal, .. } = event.event {
-                let parent_view_number = *proposal.data.view_number;
+                let parent_view_number = *proposal.data.view_number();
                 let parent_commitment =
                     Leaf2::from_quorum_proposal(&proposal.data).payload_commitment();
                 let encoded_signature = <SeqTypes as NodeType>::SignatureKey::sign(
@@ -489,7 +490,7 @@ pub mod testing {
 
         // Test claiming block header input
         let _available_block_header = match builder_client
-                .get::<AvailableBlockHeaderInput<SeqTypes>>(&format!(
+                .get::<AvailableBlockHeaderInputV1<SeqTypes>>(&format!(
                     "block_info/claimheaderinput/{builder_commitment}/{view_num}/{hotshot_client_pub_key}/{encoded_signature}"
                 ))
                 .send()
