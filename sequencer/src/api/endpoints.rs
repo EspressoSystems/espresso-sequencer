@@ -382,7 +382,7 @@ where
         }
         .boxed()
     })?
-    .get("leaf_chain", |req, state| {
+    .get("leafchain", |req, state| {
         async move {
             let height = req
                 .integer_param("height")
