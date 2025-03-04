@@ -73,7 +73,7 @@ Returns the chain config -- this includes parameters such as `max_block_size`, `
 
 [route.leafchain]
 PATH = ["/:height/leafchain"]
-":commitment" = "TaggedBase64"
+":height" = "Integer"
 DOC = """
 
 This Endpoint fetches a leaf chain which decides a specified block height.  This endpoint should be used
