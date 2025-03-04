@@ -229,13 +229,14 @@ time = "0.3"
 trait-set = "0.3.0"
 
 [profile.dev]
-# Strip debugging information from binaries. Reduces memory usage during
-# compilation by about 2/3, avoids OOM errors on CI.
+# Probably the least demanding setting in terms of compilation time and memory
+# that still provide tracebacks with line numbers.
 strip = "none"
 debug = "line-tables-only"
 
-# Keep everything, for debugging.
 [profile.dev-debug]
+# This profile should allow connecting debuggers. Compiles more slowly and
+# requires significantly more memory to compile.
 inherits = "dev"
 strip = "none"
 debug = "full"
