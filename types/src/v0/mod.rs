@@ -9,6 +9,7 @@ use hotshot_types::{
 use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
 
+pub mod config;
 mod header;
 mod impls;
 pub mod traits;

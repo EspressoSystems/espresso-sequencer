@@ -15,12 +15,14 @@ use hotshot_task::{
     dependency_task::{DependencyTask, HandleDepOutput},
     task::TaskState,
 };
+use hotshot_types::StakeTableEntries;
 use hotshot_types::{
     consensus::{ConsensusMetricsValue, OuterConsensus},
     data::{Leaf2, QuorumProposalWrapper},
     drb::DrbComputation,
     event::Event,
     message::{Proposal, UpgradeLock},
+    simple_certificate::UpgradeCertificate,
     simple_vote::HasEpoch,
     traits::{
         block_contents::BlockHeader,
@@ -108,6 +110,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static, V: Versions> Handl
     #[instrument(skip_all, fields(id = self.id, view = *self.view_number))]
     async fn handle_dep_result(self, res: Self::Output) {
         let mut payload_commitment = None;
+        let mut next_epoch_payload_commitment = None;
         let mut leaf = None;
         let mut vid_share = None;
         let mut parent_view_number = None;
@@ -165,6 +168,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static, V: Versions> Handl
                 }
                 HotShotEvent::DaCertificateValidated(cert) => {
                     let cert_payload_comm = &cert.data().payload_commit;
+                    let next_epoch_cert_payload_comm = cert.data().next_epoch_payload_commit;
                     if let Some(ref comm) = payload_commitment {
                         if cert_payload_comm != comm {
                             tracing::error!("DAC has inconsistent payload commitment with quorum proposal or VID.");
@@ -173,15 +177,33 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static, V: Versions> Handl
                     } else {
                         payload_commitment = Some(*cert_payload_comm);
                     }
+                    if next_epoch_payload_commitment.is_some()
+                        && next_epoch_payload_commitment != next_epoch_cert_payload_comm
+                    {
+                        tracing::error!(
+                            "DAC has inconsistent next epoch payload commitment with VID."
+                        );
+                        return;
+                    } else {
+                        next_epoch_payload_commitment = next_epoch_cert_payload_comm;
+                    }
                 }
                 HotShotEvent::VidShareValidated(share) => {
-                    let vid_payload_commitment = &share
-                        .data
-                        .data_epoch_payload_commitment()
-                        .map(|comm| comm.into())
-                        .unwrap_or(share.data.payload_commitment());
+                    let vid_payload_commitment = &share.data.payload_commitment();
                     vid_share = Some(share.clone());
-                    if let Some(ref comm) = payload_commitment {
+                    let is_next_epoch_vid = share.data.epoch() != share.data.target_epoch();
+                    if is_next_epoch_vid {
+                        if let Some(ref comm) = next_epoch_payload_commitment {
+                            if vid_payload_commitment != comm {
+                                tracing::error!(
+                                    "VID has inconsistent next epoch payload commitment with DAC."
+                                );
+                                return;
+                            }
+                        } else {
+                            next_epoch_payload_commitment = Some(*vid_payload_commitment);
+                        }
+                    } else if let Some(ref comm) = payload_commitment {
                         if vid_payload_commitment != comm {
                             tracing::error!("VID has inconsistent payload commitment with quorum proposal or DAC.");
                             return;
@@ -317,6 +339,12 @@ pub struct QuorumVoteTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>, V:
 
     /// Number of blocks in an epoch, zero means there are no epochs
     pub epoch_height: u64,
+
+    /// Upgrade certificate to enable epochs, staged until we reach the specified block height
+    pub staged_epoch_upgrade_certificate: Option<UpgradeCertificate<TYPES>>,
+
+    /// Block height at which to enable the epoch upgrade
+    pub epoch_upgrade_block_height: u64,
 }
 
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> QuorumVoteTaskState<TYPES, I, V> {
@@ -533,7 +561,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> QuorumVoteTaskS
 
                 // Validate the DAC.
                 cert.is_valid_cert(
-                    membership_da_stake_table,
+                    StakeTableEntries::<TYPES>::from(membership_da_stake_table).0,
                     membership_da_success_threshold,
                     &self.upgrade_lock,
                 )

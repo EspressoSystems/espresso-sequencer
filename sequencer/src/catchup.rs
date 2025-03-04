@@ -5,6 +5,7 @@ use async_lock::RwLock;
 use async_trait::async_trait;
 use committable::Commitment;
 use committable::Committable;
+use espresso_types::config::PublicNetworkConfig;
 use espresso_types::traits::SequencerPersistence;
 use espresso_types::{
     v0::traits::StateCatchup, v0_99::ChainConfig, BackoffParams, BlockMerkleTree, FeeAccount,
@@ -31,10 +32,8 @@ use tokio::time::timeout;
 use url::Url;
 use vbs::version::StaticVersionType;
 
-use crate::{
-    api::{data_source::PublicNetworkConfig, BlocksFrontier},
-    PubKey,
-};
+use crate::api::BlocksFrontier;
+use crate::PubKey;
 
 // This newtype is probably not worth having. It's only used to be able to log
 // URLs before doing requests.

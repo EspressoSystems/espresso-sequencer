@@ -29,6 +29,7 @@ use hotshot_types::{
         option_epoch_from_block_number, Terminator, View, ViewInner,
     },
     vote::{Certificate, HasViewNumber},
+    StakeTableEntries,
 };
 use hotshot_utils::anytrace::*;
 use std::{
@@ -139,7 +140,7 @@ pub(crate) async fn fetch_proposal<TYPES: NodeType, V: Versions>(
 
     justify_qc
         .is_valid_cert(
-            membership_stake_table,
+            StakeTableEntries::<TYPES>::from(membership_stake_table).0,
             membership_success_threshold,
             upgrade_lock,
         )
@@ -185,23 +186,11 @@ async fn decide_epoch_root<TYPES: NodeType>(
             TYPES::Epoch::new(epoch_from_block_number(decided_block_number, epoch_height) + 1);
 
         let write_callback = {
+            tracing::debug!("Calling add_epoch_root for epoch {:?}", next_epoch_number);
             let membership_reader = membership.read().await;
             membership_reader
                 .add_epoch_root(next_epoch_number, decided_leaf.block_header().clone())
                 .await
-        };
-
-        if let Some(write_callback) = write_callback {
-            let mut membership_writer = membership.write().await;
-            write_callback(&mut *membership_writer);
-        } else {
-            // If we didn't get a write callback out of add_epoch_root, then don't bother locking and calling sync_l1
-            return;
-        }
-
-        let write_callback = {
-            let membership_reader = membership.read().await;
-            membership_reader.sync_l1().await
         };
 
         if let Some(write_callback) = write_callback {
@@ -376,7 +365,7 @@ pub async fn decide_from_proposal_2<TYPES: NodeType>(
 /// # Panics
 /// If the leaf chain contains no decided leaf while reaching a decided view, which should be
 /// impossible.
-pub async fn decide_from_proposal<TYPES: NodeType>(
+pub async fn decide_from_proposal<TYPES: NodeType, V: Versions>(
     proposal: &QuorumProposalWrapper<TYPES>,
     consensus: OuterConsensus<TYPES>,
     existing_upgrade_cert: Arc<RwLock<Option<UpgradeCertificate<TYPES>>>>,
@@ -489,10 +478,10 @@ pub async fn decide_from_proposal<TYPES: NodeType>(
         tracing::debug!("Leaf ascension failed; error={e}");
     }
 
-    if with_epochs && res.new_decided_view_number.is_some() {
-        let epoch_height = consensus_reader.epoch_height;
-        drop(consensus_reader);
+    let epoch_height = consensus_reader.epoch_height;
+    drop(consensus_reader);
 
+    if with_epochs && res.new_decided_view_number.is_some() {
         if let Some(decided_leaf_info) = res.leaf_views.last() {
             decide_epoch_root(&decided_leaf_info.leaf, epoch_height, membership).await;
         } else {
@@ -785,7 +774,7 @@ pub(crate) async fn validate_proposal_view_and_certs<
 
                 timeout_cert
                     .is_valid_cert(
-                        membership_stake_table,
+                        StakeTableEntries::<TYPES>::from(membership_stake_table).0,
                         membership_success_threshold,
                         &validation_info.upgrade_lock,
                     )
@@ -816,7 +805,7 @@ pub(crate) async fn validate_proposal_view_and_certs<
                 // View sync certs must also be valid.
                 view_sync_cert
                     .is_valid_cert(
-                        membership_stake_table,
+                        StakeTableEntries::<TYPES>::from(membership_stake_table).0,
                         membership_success_threshold,
                         &validation_info.upgrade_lock,
                     )
@@ -944,7 +933,7 @@ pub async fn validate_qc_and_next_epoch_qc<TYPES: NodeType, V: Versions>(
     {
         let consensus_reader = consensus.read().await;
         qc.is_valid_cert(
-            membership_stake_table,
+            StakeTableEntries::<TYPES>::from(membership_stake_table).0,
             membership_success_threshold,
             upgrade_lock,
         )
@@ -972,7 +961,7 @@ pub async fn validate_qc_and_next_epoch_qc<TYPES: NodeType, V: Versions>(
         // Validate the next epoch qc as well
         next_epoch_qc
             .is_valid_cert(
-                membership_next_stake_table,
+                StakeTableEntries::<TYPES>::from(membership_next_stake_table).0,
                 membership_next_success_threshold,
                 upgrade_lock,
             )
