@@ -316,16 +316,7 @@ impl<TYPES: NodeType, V: Versions> ProposalDependencyHandle<TYPES, V> {
             self.epoch_height,
         );
 
-        let epoch_membership = if self.membership.epoch() != epoch {
-            let next_membership = self.membership.next_epoch().await?;
-            ensure!(
-                next_membership.epoch() == epoch,
-                "Trying to propose in epoch that is more than 1 more than the last QC's epoch"
-            );
-            next_membership
-        } else {
-            self.membership.clone()
-        };
+        let epoch_membership = self.membership.coordinator.membership_for_epoch(epoch).await?;
         // Make sure we are the leader for the view and epoch.
         // We might have ended up here because we were in the epoch transition.
         if epoch_membership.leader(self.view_number).await? != self.public_key {
