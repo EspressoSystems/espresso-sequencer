@@ -850,8 +850,6 @@ impl<P: SequencerPersistence> Storage<SeqTypes> for Arc<P> {
         &self,
         proposal: &Proposal<SeqTypes, QuorumProposal2<SeqTypes>>,
     ) -> anyhow::Result<()> {
-        // TODO: this is a bug in hotshot with makes with_epoch = true
-        // when converting from qp2 to qp wrapper
         let proposal_qp_wrapper: Proposal<SeqTypes, QuorumProposalWrapper<SeqTypes>> =
             convert_proposal(proposal.clone());
         (**self).append_quorum_proposal2(&proposal_qp_wrapper).await

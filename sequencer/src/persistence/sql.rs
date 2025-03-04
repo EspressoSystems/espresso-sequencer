@@ -1377,14 +1377,12 @@ impl SequencerPersistence for Persistence {
             let mut tx = self.db.write().await?;
             query.execute(tx.as_mut()).await?;
             tx.commit().await?;
-
-            tracing::info!("anchor leaf: migrated {} rows", offset);
+            offset += batch_size;
+            tracing::info!("anchor leaf migration progress: {} rows", offset);
 
             if rows.len() < batch_size as usize {
                 break;
             }
-
-            offset += batch_size;
         }
 
         tracing::warn!("migrated decided leaves");
@@ -1458,14 +1456,15 @@ impl SequencerPersistence for Persistence {
                 b.push_bind(view).push_bind(payload_hash).push_bind(data);
             });
 
-            offset += batch_size;
-
             let query = query_builder.build();
 
             let mut tx = self.db.write().await?;
             query.execute(tx.as_mut()).await?;
 
             tx.commit().await?;
+
+            tracing::warn!("DA proposals migration progress: {} rows", offset);
+            offset += batch_size;
 
             if rows.len() < batch_size as usize {
                 break;
@@ -1541,13 +1540,14 @@ impl SequencerPersistence for Persistence {
                 b.push_bind(view).push_bind(payload_hash).push_bind(data);
             });
 
-            offset += batch_size;
-
             let query = query_builder.build();
 
             let mut tx = self.db.write().await?;
             query.execute(tx.as_mut()).await?;
             tx.commit().await?;
+            tracing::warn!("VID shares migration progress: {} rows", offset);
+            offset += batch_size;
+
             if rows.len() < batch_size as usize {
                 break;
             }
@@ -1607,6 +1607,7 @@ impl SequencerPersistence for Persistence {
                 [(0_i32, leaves2_bytes, state_bytes)],
             )
             .await?;
+            tx.commit().await?;
         };
 
         tracing::warn!("migrated undecided state");
@@ -1683,13 +1684,15 @@ impl SequencerPersistence for Persistence {
                 b.push_bind(view).push_bind(leaf_hash).push_bind(data);
             });
 
-            offset += batch_size;
-
             let query = query_builder.build();
 
             let mut tx = self.db.write().await?;
             query.execute(tx.as_mut()).await?;
             tx.commit().await?;
+
+            offset += batch_size;
+            tracing::warn!("quorum proposals migration progress: {} rows", offset);
+
             if rows.len() < batch_size as usize {
                 break;
             }
@@ -1764,13 +1767,15 @@ impl SequencerPersistence for Persistence {
                 b.push_bind(view).push_bind(leaf_hash).push_bind(data);
             });
 
-            offset += batch_size;
-
             let query = query_builder.build();
 
             let mut tx = self.db.write().await?;
             query.execute(tx.as_mut()).await?;
             tx.commit().await?;
+            offset += batch_size;
+
+            tracing::warn!("Quorum certificates migration progress: {} rows", offset);
+
             if rows.len() < batch_size as usize {
                 break;
             }
@@ -2280,7 +2285,6 @@ mod test {
             .unwrap();
 
         // Fetch it as if we were rebuilding an archive.
-        // TODO (abdul):
         assert_eq!(
             None,
             storage

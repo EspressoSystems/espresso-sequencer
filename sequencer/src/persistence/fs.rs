@@ -977,18 +977,17 @@ impl SequencerPersistence for Persistence {
             return Ok(());
         }
 
-        let decided_leaf2_path = inner.decided_leaf2_path();
+        let new_leaf_dir = inner.decided_leaf2_path();
 
-        fs::create_dir_all(decided_leaf2_path.clone())
-            .context("failed to create anchor leaf 2  dir")?;
+        fs::create_dir_all(new_leaf_dir.clone()).context("failed to create anchor leaf 2  dir")?;
 
-        let decided_leaf_path = inner.decided_leaf_path();
-        if !decided_leaf_path.is_dir() {
+        let old_leaf_dir = inner.decided_leaf_path();
+        if !old_leaf_dir.is_dir() {
             return Ok(());
         }
 
         tracing::warn!("migrating decided leaves..");
-        for entry in fs::read_dir(decided_leaf_path)? {
+        for entry in fs::read_dir(old_leaf_dir)? {
             let entry = entry?;
             let path = entry.path();
 
@@ -1007,12 +1006,10 @@ impl SequencerPersistence for Persistence {
             let leaf2: Leaf2 = leaf.into();
             let qc2 = qc.to_qc2();
 
-            let file_path = decided_leaf2_path
-                .join(view.to_string())
-                .with_extension("txt");
+            let new_leaf_path = new_leaf_dir.join(view.to_string()).with_extension("txt");
 
             inner.replace(
-                &file_path,
+                &new_leaf_path,
                 |_| {
                     tracing::warn!(view, "duplicate decided leaf");
                     Ok(false)
@@ -1023,6 +1020,10 @@ impl SequencerPersistence for Persistence {
                     Ok(())
                 },
             )?;
+
+            if view % 100 == 0 {
+                tracing::info!(view, "decided leaves migration progress");
+            }
         }
 
         inner.migrated.insert("anchor_leaf".to_string());
@@ -1038,18 +1039,18 @@ impl SequencerPersistence for Persistence {
             return Ok(());
         }
 
-        let da2_path = inner.da2_dir_path();
+        let new_da_dir = inner.da2_dir_path();
 
-        fs::create_dir_all(da2_path.clone()).context("failed to create da proposals 2 dir")?;
+        fs::create_dir_all(new_da_dir.clone()).context("failed to create da proposals 2 dir")?;
 
-        let da_dir = inner.da_dir_path();
-        if !da_dir.is_dir() {
+        let old_da_dir = inner.da_dir_path();
+        if !old_da_dir.is_dir() {
             return Ok(());
         }
 
         tracing::warn!("migrating da proposals..");
 
-        for entry in fs::read_dir(da_dir)? {
+        for entry in fs::read_dir(old_da_dir)? {
             let entry = entry?;
             let path = entry.path();
 
@@ -1065,12 +1066,12 @@ impl SequencerPersistence for Persistence {
             let proposal = bincode::deserialize::<Proposal<SeqTypes, DaProposal<SeqTypes>>>(&bytes)
                 .context(format!("parsing da proposal {}", path.display()))?;
 
-            let file_path = da2_path.join(view.to_string()).with_extension("txt");
+            let new_da_path = new_da_dir.join(view.to_string()).with_extension("txt");
 
             let proposal2: Proposal<SeqTypes, DaProposal2<SeqTypes>> = convert_proposal(proposal);
 
             inner.replace(
-                &file_path,
+                &new_da_path,
                 |_| {
                     tracing::warn!(view, "duplicate DA proposal 2");
                     Ok(false)
@@ -1081,6 +1082,10 @@ impl SequencerPersistence for Persistence {
                     Ok(())
                 },
             )?;
+
+            if view % 100 == 0 {
+                tracing::info!(view, "DA proposals migration progress");
+            }
         }
 
         inner.migrated.insert("da_proposal".to_string());
@@ -1096,18 +1101,18 @@ impl SequencerPersistence for Persistence {
             return Ok(());
         }
 
-        let vid2_path = inner.vid2_dir_path();
+        let new_vid_dir = inner.vid2_dir_path();
 
-        fs::create_dir_all(vid2_path.clone()).context("failed to create vid shares 2 dir")?;
+        fs::create_dir_all(new_vid_dir.clone()).context("failed to create vid shares 2 dir")?;
 
-        let vid_dir = inner.vid_dir_path();
-        if !vid_dir.is_dir() {
+        let old_vid_dir = inner.vid_dir_path();
+        if !old_vid_dir.is_dir() {
             return Ok(());
         }
 
         tracing::warn!("migrating vid shares..");
 
-        for entry in fs::read_dir(vid_dir)? {
+        for entry in fs::read_dir(old_vid_dir)? {
             let entry = entry?;
             let path = entry.path();
 
@@ -1123,13 +1128,13 @@ impl SequencerPersistence for Persistence {
                 bincode::deserialize::<Proposal<SeqTypes, ADVZDisperseShare<SeqTypes>>>(&bytes)
                     .context(format!("parsing vid share {}", path.display()))?;
 
-            let file_path = vid2_path.join(view.to_string()).with_extension("txt");
+            let new_vid_path = new_vid_dir.join(view.to_string()).with_extension("txt");
 
             let proposal2: Proposal<SeqTypes, VidDisperseShare<SeqTypes>> =
                 convert_proposal(proposal);
 
             inner.replace(
-                &file_path,
+                &new_vid_path,
                 |_| {
                     tracing::warn!(view, "duplicate VID share ");
                     Ok(false)
@@ -1140,6 +1145,10 @@ impl SequencerPersistence for Persistence {
                     Ok(())
                 },
             )?;
+
+            if view % 100 == 0 {
+                tracing::info!(view, "VID shares migration progress");
+            }
         }
 
         inner.migrated.insert("vid_share".to_string());
@@ -1154,15 +1163,15 @@ impl SequencerPersistence for Persistence {
             return Ok(());
         }
 
-        let undecided_state2_path = &inner.undecided2_state_path();
+        let new_undecided_state_path = &inner.undecided2_state_path();
 
-        let undecided_state_path = inner.undecided_state_path();
+        let old_undecided_state_path = inner.undecided_state_path();
 
-        if !undecided_state_path.is_file() {
+        if !old_undecided_state_path.is_file() {
             return Ok(());
         }
 
-        let bytes = fs::read(&undecided_state_path).context("read")?;
+        let bytes = fs::read(&old_undecided_state_path).context("read")?;
         let (leaves, state): (CommitmentMap<Leaf>, QuorumCertificate<SeqTypes>) =
             bincode::deserialize(&bytes).context("deserialize")?;
 
@@ -1171,7 +1180,7 @@ impl SequencerPersistence for Persistence {
 
         tracing::warn!("migrating undecided state..");
         inner.replace(
-            undecided_state2_path,
+            new_undecided_state_path,
             |_| {
                 // Always overwrite the previous file.
                 Ok(true)
@@ -1197,18 +1206,19 @@ impl SequencerPersistence for Persistence {
             return Ok(());
         }
 
-        let qp2_path = inner.quorum_proposals2_dir_path();
+        let new_quorum_proposals_dir = inner.quorum_proposals2_dir_path();
 
-        fs::create_dir_all(qp2_path.clone()).context("failed to create quorum proposals 2 dir")?;
+        fs::create_dir_all(new_quorum_proposals_dir.clone())
+            .context("failed to create quorum proposals 2 dir")?;
 
-        let qp_dir = inner.quorum_proposals_dir_path();
-        if !qp_dir.is_dir() {
+        let old_quorum_proposals_dir = inner.quorum_proposals_dir_path();
+        if !old_quorum_proposals_dir.is_dir() {
             tracing::info!("no existing quorum proposals found for migration");
             return Ok(());
         }
 
         tracing::warn!("migrating quorum proposals..");
-        for entry in fs::read_dir(qp_dir)? {
+        for entry in fs::read_dir(old_quorum_proposals_dir)? {
             let entry = entry?;
             let path = entry.path();
 
@@ -1225,13 +1235,15 @@ impl SequencerPersistence for Persistence {
                 bincode::deserialize::<Proposal<SeqTypes, QuorumProposal<SeqTypes>>>(&bytes)
                     .context(format!("parsing quorum proposal {}", path.display()))?;
 
-            let file_path = qp2_path.join(view.to_string()).with_extension("txt");
+            let new_file_path = new_quorum_proposals_dir
+                .join(view.to_string())
+                .with_extension("txt");
 
             let proposal2: Proposal<SeqTypes, QuorumProposalWrapper<SeqTypes>> =
                 convert_proposal(proposal);
 
             inner.replace(
-                &file_path,
+                &new_file_path,
                 |_| {
                     tracing::warn!(view, "duplicate Quorum proposal2 ");
                     Ok(false)
@@ -1242,6 +1254,10 @@ impl SequencerPersistence for Persistence {
                     Ok(())
                 },
             )?;
+
+            if view % 100 == 0 {
+                tracing::info!(view, "Quorum proposals migration progress");
+            }
         }
 
         inner.migrated.insert("quorum_proposals".to_string());

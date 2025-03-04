@@ -11,10 +11,9 @@ use hotshot_types::{
         signature_key::BuilderSignatureKey,
         BlockPayload, ValidatedState as _,
     },
-    utils::BuilderCommitment, // vid::advz::{ADVZCommon, ADVZScheme},
+    utils::BuilderCommitment,
 };
 use jf_merkle_tree::{AppendableMerkleTreeScheme, MerkleTreeScheme};
-// use jf_vid::VidScheme;
 use serde::{
     de::{self, MapAccess, SeqAccess, Visitor},
     Deserialize, Deserializer, Serialize, Serializer,
