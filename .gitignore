@@ -57,7 +57,3 @@ docs/
 
 # Autogen files
 .vscode/
-
-# cargo compilation benchmark
-bench-compilation-results.toml
-bench-compilation.log
