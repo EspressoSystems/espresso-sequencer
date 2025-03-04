@@ -41,7 +41,7 @@ pub enum OutboundMessage {
 }
 
 impl<V: Versions> ExternalEventHandler<V> {
-    /// Creates a new `ExternalEventHandler` with the given network and roll call info
+    /// Creates a new `ExternalEventHandler` with the given network
     pub async fn new<N: ConnectedNetwork<PubKey>>(
         tasks: &mut TaskList,
         request_response_sender: Sender<Bytes>,
