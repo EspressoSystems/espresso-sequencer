@@ -1318,7 +1318,7 @@ impl SequencerPersistence for Persistence {
     }
 
     async fn migrate_anchor_leaf(&self) -> anyhow::Result<()> {
-        let batch_size: i64 = 1000;
+        let batch_size: i64 = 10000;
         let mut offset: i64 = 0;
         let mut tx = self.db.read().await?;
 
@@ -1403,7 +1403,7 @@ impl SequencerPersistence for Persistence {
     }
 
     async fn migrate_da_proposals(&self) -> anyhow::Result<()> {
-        let batch_size: i64 = 1000;
+        let batch_size: i64 = 10000;
         let mut offset: i64 = 0;
         let mut tx = self.db.read().await?;
 
@@ -1489,7 +1489,7 @@ impl SequencerPersistence for Persistence {
     }
 
     async fn migrate_vid_shares(&self) -> anyhow::Result<()> {
-        let batch_size: i64 = 1000;
+        let batch_size: i64 = 10000;
         let mut offset: i64 = 0;
         let mut tx = self.db.read().await?;
 
@@ -1628,7 +1628,7 @@ impl SequencerPersistence for Persistence {
     }
 
     async fn migrate_quorum_proposals(&self) -> anyhow::Result<()> {
-        let batch_size: i64 = 1000;
+        let batch_size: i64 = 10000;
         let mut offset: i64 = 0;
         let mut tx = self.db.read().await?;
 
@@ -1716,7 +1716,7 @@ impl SequencerPersistence for Persistence {
     }
 
     async fn migrate_quorum_certificates(&self) -> anyhow::Result<()> {
-        let batch_size: i64 = 1000;
+        let batch_size: i64 = 10000;
         let mut offset: i64 = 0;
         let mut tx = self.db.read().await?;
 
