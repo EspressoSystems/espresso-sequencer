@@ -23,13 +23,16 @@ pub struct RecipientSource {
 /// intended recipients for a given request
 #[async_trait]
 impl RecipientSourceTrait<Request, PubKey> for RecipientSource {
-    async fn get_recipients_for(&self, request: &Request) -> Vec<PubKey> {
+    async fn get_expected_responders(&self, request: &Request) -> Vec<PubKey> {
         match request {
             Request::Example => {
                 // Get the memberships
                 let memberships = self.memberships.read().await;
 
                 // Get everyone in the stake table
+
+                // NOTE: This is just an example request, therefore this is hardcoded to get members of epoch 0.
+                // When doing a real request, please choose the appropriate epoch to get members from.
                 memberships
                     .stake_table(Some(EpochNumber::new(0)))
                     .iter()
