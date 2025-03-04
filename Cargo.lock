@@ -3838,6 +3838,7 @@ dependencies = [
  "tracing",
  "url",
  "vbs",
+ "vec1",
 ]
 
 [[package]]
