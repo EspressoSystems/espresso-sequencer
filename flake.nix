@@ -238,7 +238,7 @@
             solc
             nodePackages.prettier
             solhint
-            (python3.withPackages (ps: with ps; [ black tomlkit memory_profiler ]))
+            (python3.withPackages (ps: with ps; [ black ]))
             yarn
           ] ++ lib.optionals stdenv.isDarwin
             [ darwin.apple_sdk.frameworks.SystemConfiguration ]
