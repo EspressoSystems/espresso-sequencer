@@ -1207,7 +1207,7 @@ contract LightClient_EpochTest is LightClientCommonTest {
         lc.setFinalizedState(LC.LightClientState(anyView, newBlockHeight, anyRoot));
         // note: since we've tested `lc.epochFromBlockNumber()` in the last test, we use it as
         // ground truth here
-        assertEq(lc.currentEpoch(), lc.epochFromBlockNumber(newBlockHeight, lc.BLOCKS_PER_EPOCH()));
+        assertEq(lc.currentEpoch(), lc.epochFromBlockNumber(newBlockHeight, lc._blocksPerEpoch()));
     }
 
     function test_isLastBlockInEpoch() public view {
@@ -1224,7 +1224,7 @@ contract LightClient_EpochTest is LightClientCommonTest {
         string[] memory cmds = new string[](3);
         cmds[0] = "diff-test";
         cmds[1] = "mock-skip-blocks";
-        cmds[2] = vm.toString(lc.BLOCKS_PER_EPOCH() + 1); // skipping the entire first epoch
+        cmds[2] = vm.toString(lc._blocksPerEpoch() + 1); // skipping the entire first epoch
 
         bytes memory result = vm.ffi(cmds);
         (
@@ -1241,7 +1241,7 @@ contract LightClient_EpochTest is LightClientCommonTest {
         lc.setFinalizedState(state);
         cmds[0] = "diff-test";
         cmds[1] = "mock-skip-blocks";
-        cmds[2] = vm.toString(3 * lc.BLOCKS_PER_EPOCH() + 1); // skipping to epoch 4
+        cmds[2] = vm.toString(3 * lc._blocksPerEpoch() + 1); // skipping to epoch 4
 
         result = vm.ffi(cmds);
         (state, nextStakeTable, proof) =
@@ -1293,7 +1293,7 @@ contract LightClient_EpochTest is LightClientCommonTest {
         string[] memory cmds = new string[](3);
         cmds[0] = "diff-test";
         cmds[1] = "mock-skip-blocks";
-        cmds[2] = vm.toString(lc.BLOCKS_PER_EPOCH());
+        cmds[2] = vm.toString(lc._blocksPerEpoch());
 
         bytes memory result = vm.ffi(cmds);
         (

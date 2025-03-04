@@ -17,22 +17,6 @@ pub mod light_client_arbitrum {
             constructor: ::core::option::Option::None,
             functions: ::core::convert::From::from([
                 (
-                    ::std::borrow::ToOwned::to_owned("BLOCKS_PER_EPOCH"),
-                    ::std::vec![::ethers::core::abi::ethabi::Function {
-                        name: ::std::borrow::ToOwned::to_owned("BLOCKS_PER_EPOCH"),
-                        inputs: ::std::vec![],
-                        outputs: ::std::vec![::ethers::core::abi::ethabi::Param {
-                            name: ::std::string::String::new(),
-                            kind: ::ethers::core::abi::ethabi::ParamType::Uint(64usize),
-                            internal_type: ::core::option::Option::Some(
-                                ::std::borrow::ToOwned::to_owned("uint64"),
-                            ),
-                        },],
-                        constant: ::core::option::Option::None,
-                        state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
-                    },],
-                ),
-                (
                     ::std::borrow::ToOwned::to_owned("UPGRADE_INTERFACE_VERSION"),
                     ::std::vec![::ethers::core::abi::ethabi::Function {
                         name: ::std::borrow::ToOwned::to_owned("UPGRADE_INTERFACE_VERSION",),
@@ -42,6 +26,22 @@ pub mod light_client_arbitrum {
                             kind: ::ethers::core::abi::ethabi::ParamType::String,
                             internal_type: ::core::option::Option::Some(
                                 ::std::borrow::ToOwned::to_owned("string"),
+                            ),
+                        },],
+                        constant: ::core::option::Option::None,
+                        state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
+                    },],
+                ),
+                (
+                    ::std::borrow::ToOwned::to_owned("_blocksPerEpoch"),
+                    ::std::vec![::ethers::core::abi::ethabi::Function {
+                        name: ::std::borrow::ToOwned::to_owned("_blocksPerEpoch"),
+                        inputs: ::std::vec![],
+                        outputs: ::std::vec![::ethers::core::abi::ethabi::Param {
+                            name: ::std::string::String::new(),
+                            kind: ::ethers::core::abi::ethabi::ParamType::Uint(64usize),
+                            internal_type: ::core::option::Option::Some(
+                                ::std::borrow::ToOwned::to_owned("uint64"),
                             ),
                         },],
                         constant: ::core::option::Option::None,
@@ -1129,18 +1129,18 @@ pub mod light_client_arbitrum {
                 client,
             ))
         }
-        ///Calls the contract's `BLOCKS_PER_EPOCH` (0x1f3adc0f) function
-        pub fn blocks_per_epoch(&self) -> ::ethers::contract::builders::ContractCall<M, u64> {
-            self.0
-                .method_hash([31, 58, 220, 15], ())
-                .expect("method not found (this should never happen)")
-        }
         ///Calls the contract's `UPGRADE_INTERFACE_VERSION` (0xad3cb1cc) function
         pub fn upgrade_interface_version(
             &self,
         ) -> ::ethers::contract::builders::ContractCall<M, ::std::string::String> {
             self.0
                 .method_hash([173, 60, 177, 204], ())
+                .expect("method not found (this should never happen)")
+        }
+        ///Calls the contract's `_blocksPerEpoch` (0xb2424e3f) function
+        pub fn blocks_per_epoch(&self) -> ::ethers::contract::builders::ContractCall<M, u64> {
+            self.0
+                .method_hash([178, 66, 78, 63], ())
                 .expect("method not found (this should never happen)")
         }
         ///Calls the contract's `currentBlockNumber` (0x378ec23b) function
@@ -2507,21 +2507,6 @@ pub mod light_client_arbitrum {
             Self::UpgradedFilter(value)
         }
     }
-    ///Container type for all input parameters for the `BLOCKS_PER_EPOCH` function with signature `BLOCKS_PER_EPOCH()` and selector `0x1f3adc0f`
-    #[derive(
-        Clone,
-        ::ethers::contract::EthCall,
-        ::ethers::contract::EthDisplay,
-        serde::Serialize,
-        serde::Deserialize,
-        Default,
-        Debug,
-        PartialEq,
-        Eq,
-        Hash,
-    )]
-    #[ethcall(name = "BLOCKS_PER_EPOCH", abi = "BLOCKS_PER_EPOCH()")]
-    pub struct BlocksPerEpochCall;
     ///Container type for all input parameters for the `UPGRADE_INTERFACE_VERSION` function with signature `UPGRADE_INTERFACE_VERSION()` and selector `0xad3cb1cc`
     #[derive(
         Clone,
@@ -2540,6 +2525,21 @@ pub mod light_client_arbitrum {
         abi = "UPGRADE_INTERFACE_VERSION()"
     )]
     pub struct UpgradeInterfaceVersionCall;
+    ///Container type for all input parameters for the `_blocksPerEpoch` function with signature `_blocksPerEpoch()` and selector `0xb2424e3f`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthCall,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    #[ethcall(name = "_blocksPerEpoch", abi = "_blocksPerEpoch()")]
+    pub struct BlocksPerEpochCall;
     ///Container type for all input parameters for the `currentBlockNumber` function with signature `currentBlockNumber()` and selector `0x378ec23b`
     #[derive(
         Clone,
@@ -2999,8 +2999,8 @@ pub mod light_client_arbitrum {
     ///Container type for all of the contract's call
     #[derive(Clone, ::ethers::contract::EthAbiType, serde::Serialize, serde::Deserialize)]
     pub enum LightClientArbitrumCalls {
-        BlocksPerEpoch(BlocksPerEpochCall),
         UpgradeInterfaceVersion(UpgradeInterfaceVersionCall),
+        BlocksPerEpoch(BlocksPerEpochCall),
         CurrentBlockNumber(CurrentBlockNumberCall),
         CurrentEpoch(CurrentEpochCall),
         DisablePermissionedProverMode(DisablePermissionedProverModeCall),
@@ -3035,14 +3035,14 @@ pub mod light_client_arbitrum {
         ) -> ::core::result::Result<Self, ::ethers::core::abi::AbiError> {
             let data = data.as_ref();
             if let Ok(decoded) =
-                <BlocksPerEpochCall as ::ethers::core::abi::AbiDecode>::decode(data)
-            {
-                return Ok(Self::BlocksPerEpoch(decoded));
-            }
-            if let Ok(decoded) =
                 <UpgradeInterfaceVersionCall as ::ethers::core::abi::AbiDecode>::decode(data)
             {
                 return Ok(Self::UpgradeInterfaceVersion(decoded));
+            }
+            if let Ok(decoded) =
+                <BlocksPerEpochCall as ::ethers::core::abi::AbiDecode>::decode(data)
+            {
+                return Ok(Self::BlocksPerEpoch(decoded));
             }
             if let Ok(decoded) =
                 <CurrentBlockNumberCall as ::ethers::core::abi::AbiDecode>::decode(data)
@@ -3176,10 +3176,10 @@ pub mod light_client_arbitrum {
     impl ::ethers::core::abi::AbiEncode for LightClientArbitrumCalls {
         fn encode(self) -> Vec<u8> {
             match self {
-                Self::BlocksPerEpoch(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::UpgradeInterfaceVersion(element) => {
                     ::ethers::core::abi::AbiEncode::encode(element)
                 }
+                Self::BlocksPerEpoch(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::CurrentBlockNumber(element) => {
                     ::ethers::core::abi::AbiEncode::encode(element)
                 }
@@ -3245,8 +3245,8 @@ pub mod light_client_arbitrum {
     impl ::core::fmt::Display for LightClientArbitrumCalls {
         fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
             match self {
-                Self::BlocksPerEpoch(element) => ::core::fmt::Display::fmt(element, f),
                 Self::UpgradeInterfaceVersion(element) => ::core::fmt::Display::fmt(element, f),
+                Self::BlocksPerEpoch(element) => ::core::fmt::Display::fmt(element, f),
                 Self::CurrentBlockNumber(element) => ::core::fmt::Display::fmt(element, f),
                 Self::CurrentEpoch(element) => ::core::fmt::Display::fmt(element, f),
                 Self::DisablePermissionedProverMode(element) => {
@@ -3281,14 +3281,14 @@ pub mod light_client_arbitrum {
             }
         }
     }
-    impl ::core::convert::From<BlocksPerEpochCall> for LightClientArbitrumCalls {
-        fn from(value: BlocksPerEpochCall) -> Self {
-            Self::BlocksPerEpoch(value)
-        }
-    }
     impl ::core::convert::From<UpgradeInterfaceVersionCall> for LightClientArbitrumCalls {
         fn from(value: UpgradeInterfaceVersionCall) -> Self {
             Self::UpgradeInterfaceVersion(value)
+        }
+    }
+    impl ::core::convert::From<BlocksPerEpochCall> for LightClientArbitrumCalls {
+        fn from(value: BlocksPerEpochCall) -> Self {
+            Self::BlocksPerEpoch(value)
         }
     }
     impl ::core::convert::From<CurrentBlockNumberCall> for LightClientArbitrumCalls {
@@ -3426,20 +3426,6 @@ pub mod light_client_arbitrum {
             Self::VotingStakeTableState(value)
         }
     }
-    ///Container type for all return fields from the `BLOCKS_PER_EPOCH` function with signature `BLOCKS_PER_EPOCH()` and selector `0x1f3adc0f`
-    #[derive(
-        Clone,
-        ::ethers::contract::EthAbiType,
-        ::ethers::contract::EthAbiCodec,
-        serde::Serialize,
-        serde::Deserialize,
-        Default,
-        Debug,
-        PartialEq,
-        Eq,
-        Hash,
-    )]
-    pub struct BlocksPerEpochReturn(pub u64);
     ///Container type for all return fields from the `UPGRADE_INTERFACE_VERSION` function with signature `UPGRADE_INTERFACE_VERSION()` and selector `0xad3cb1cc`
     #[derive(
         Clone,
@@ -3454,6 +3440,20 @@ pub mod light_client_arbitrum {
         Hash,
     )]
     pub struct UpgradeInterfaceVersionReturn(pub ::std::string::String);
+    ///Container type for all return fields from the `_blocksPerEpoch` function with signature `_blocksPerEpoch()` and selector `0xb2424e3f`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthAbiType,
+        ::ethers::contract::EthAbiCodec,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    pub struct BlocksPerEpochReturn(pub u64);
     ///Container type for all return fields from the `currentBlockNumber` function with signature `currentBlockNumber()` and selector `0x378ec23b`
     #[derive(
         Clone,

@@ -96,6 +96,6 @@ contract LightClientMock is LC {
     }
 
     function setBlocksPerEpoch(uint64 newBlocksPerEpoch) public {
-        BLOCKS_PER_EPOCH = newBlocksPerEpoch;
+        _blocksPerEpoch = newBlocksPerEpoch;
     }
 }

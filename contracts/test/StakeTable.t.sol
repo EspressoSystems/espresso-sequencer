@@ -1019,7 +1019,7 @@ contract StakeTable_register_Test is Test {
         // set the hotshot blocks per epoch to 1
         vm.prank(exampleTokenCreator);
         stakeTable.mockUpdateHotShotBlocksPerEpoch(1);
-        assertEq(lcMock.BLOCKS_PER_EPOCH(), 1);
+        assertEq(lcMock._blocksPerEpoch(), 1);
 
         // push to registration queue and expect a panic due to arithmetic overflow
         vm.expectRevert(stdError.arithmeticError);

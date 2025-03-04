@@ -49,7 +49,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     // === System Parameters ===
     //
     /// @notice number of blocks per epoch
-    uint64 public BLOCKS_PER_EPOCH;
+    uint64 public _blocksPerEpoch;
 
     // === Storage ===
     //
@@ -229,7 +229,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         votingStakeTableState = _genesisStakeTableState;
 
         stateHistoryRetentionPeriod = _stateHistoryRetentionPeriod;
-        BLOCKS_PER_EPOCH = blocksPerEpoch;
+        _blocksPerEpoch = blocksPerEpoch;
     }
 
     // === State Modifying APIs ===
@@ -269,7 +269,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
         // epoch-related checks
         uint64 lastUpdateEpoch = currentEpoch();
-        uint64 newEpoch = epochFromBlockNumber(newState.blockHeight, BLOCKS_PER_EPOCH);
+        uint64 newEpoch = epochFromBlockNumber(newState.blockHeight, _blocksPerEpoch);
         if (
             newEpoch == lastUpdateEpoch + 1 && !isLastBlockInEpoch(finalizedState.blockHeight)
                 && lastUpdateEpoch > 0
@@ -534,7 +534,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @notice Returns the current epoch according the latest update on finalizedState
     /// @return current epoch (computed from the last known hotshot block number)
     function currentEpoch() public view returns (uint64) {
-        return epochFromBlockNumber(finalizedState.blockHeight, BLOCKS_PER_EPOCH);
+        return epochFromBlockNumber(finalizedState.blockHeight, _blocksPerEpoch);
     }
 
     /// @notice Calculate the epoch number from the hotshot block number
@@ -545,7 +545,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         returns (uint64)
     {
         if (blocksPerEpoch == 0) {
-            // this case is unreachable in our context since we reject zero-valued BLOCKS_PER_EPOCH
+            // this case is unreachable in our context since we reject zero-valued _blocksPerEpoch
             // at init time
             return 0;
         } else if (blockNum % blocksPerEpoch == 0) {
@@ -560,7 +560,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         if (blockHeight == 0) {
             return false;
         } else {
-            return blockHeight % BLOCKS_PER_EPOCH == 0;
+            return blockHeight % _blocksPerEpoch == 0;
         }
     }
 }
