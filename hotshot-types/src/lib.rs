@@ -11,7 +11,7 @@ use bincode::Options;
 use displaydoc::Display;
 use light_client::StateVerKey;
 use tracing::error;
-use traits::signature_key::SignatureKey;
+use traits::{node_implementation::NodeType, signature_key::SignatureKey};
 use url::Url;
 use vec1::Vec1;
 
@@ -158,6 +158,21 @@ impl<KEY: SignatureKey> Default for PeerConfig<KEY> {
     }
 }
 
+pub struct StakeTableEntries<TYPES: NodeType>(
+    pub Vec<<<TYPES as NodeType>::SignatureKey as SignatureKey>::StakeTableEntry>,
+);
+
+impl<TYPES: NodeType> From<Vec<PeerConfig<TYPES::SignatureKey>>> for StakeTableEntries<TYPES> {
+    fn from(peers: Vec<PeerConfig<TYPES::SignatureKey>>) -> Self {
+        Self(
+            peers
+                .into_iter()
+                .map(|peer| peer.stake_table_entry)
+                .collect::<Vec<_>>(),
+        )
+    }
+}
+
 /// Holds configuration for a `HotShot`
 #[derive(Clone, derive_more::Debug, serde::Serialize, serde::Deserialize)]
 #[serde(bound(deserialize = ""))]
@@ -206,6 +221,8 @@ pub struct HotShotConfig<KEY: SignatureKey> {
     pub stop_voting_time: u64,
     /// Number of blocks in an epoch, zero means there are no epochs
     pub epoch_height: u64,
+    /// Epoch start block
+    pub epoch_start_block: u64,
 }
 
 impl<KEY: SignatureKey> HotShotConfig<KEY> {

@@ -10,8 +10,9 @@ use hotshot::{types::EventType, HotShotInitializer};
 use hotshot_types::{
     consensus::CommitmentMap,
     data::{
-        vid_disperse::ADVZDisperseShare, DaProposal, EpochNumber, QuorumProposal, QuorumProposal2,
-        QuorumProposalWrapper, ViewNumber,
+        vid_disperse::{ADVZDisperseShare, VidDisperseShare2},
+        DaProposal, EpochNumber, QuorumProposal, QuorumProposal2, QuorumProposalWrapper,
+        VidCommitment, ViewNumber,
     },
     event::{HotShotAction, LeafInfo},
     message::{convert_proposal, Proposal},
@@ -24,10 +25,8 @@ use hotshot_types::{
         ValidatedState as HotShotState,
     },
     utils::{genesis_epoch_from_version, View},
-    vid::VidSchemeType,
 };
 use itertools::Itertools;
-use jf_vid::VidScheme;
 use serde::{de::DeserializeOwned, Serialize};
 
 use crate::{
@@ -582,6 +581,7 @@ pub trait SequencerPersistence: Sized + Send + Sync + Clone + 'static {
             HotShotInitializer {
                 instance_state: state,
                 epoch_height: 0,
+                epoch_start_block: 0,
                 anchor_leaf: leaf,
                 anchor_state: validated_state.unwrap_or_default(),
                 anchor_state_delta: None,
@@ -598,6 +598,7 @@ pub trait SequencerPersistence: Sized + Send + Sync + Clone + 'static {
                     .collect(),
                 undecided_state,
                 saved_vid_shares: Default::default(), // TODO: implement saved_vid_shares
+                start_epoch_info: Default::default(), // TODO: implement start_epoch_info
             },
             anchor_view,
         ))
@@ -671,10 +672,15 @@ pub trait SequencerPersistence: Sized + Send + Sync + Clone + 'static {
         &self,
         proposal: &Proposal<SeqTypes, ADVZDisperseShare<SeqTypes>>,
     ) -> anyhow::Result<()>;
+    // TODO: merge these two `append_vid`s
+    async fn append_vid2(
+        &self,
+        proposal: &Proposal<SeqTypes, VidDisperseShare2<SeqTypes>>,
+    ) -> anyhow::Result<()>;
     async fn append_da(
         &self,
         proposal: &Proposal<SeqTypes, DaProposal<SeqTypes>>,
-        vid_commit: <VidSchemeType as VidScheme>::Commit,
+        vid_commit: VidCommitment,
     ) -> anyhow::Result<()>;
     async fn record_action(
         &self,
@@ -754,10 +760,17 @@ impl<P: SequencerPersistence> Storage<SeqTypes> for Arc<P> {
         (**self).append_vid(proposal).await
     }
 
+    async fn append_vid2(
+        &self,
+        proposal: &Proposal<SeqTypes, VidDisperseShare2<SeqTypes>>,
+    ) -> anyhow::Result<()> {
+        (**self).append_vid2(proposal).await
+    }
+
     async fn append_da(
         &self,
         proposal: &Proposal<SeqTypes, DaProposal<SeqTypes>>,
-        vid_commit: <VidSchemeType as VidScheme>::Commit,
+        vid_commit: VidCommitment,
     ) -> anyhow::Result<()> {
         (**self).append_da(proposal, vid_commit).await
     }

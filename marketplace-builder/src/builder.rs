@@ -29,7 +29,7 @@ use hotshot_events_service::{
 use hotshot_types::{
     data::{fake_commitment, Leaf, ViewNumber},
     traits::{
-        block_contents::{vid_commitment, Transaction as _, GENESIS_VID_NUM_STORAGE_NODES},
+        block_contents::{Transaction as _, GENESIS_VID_NUM_STORAGE_NODES},
         metrics::NoMetrics,
         node_implementation::{ConsensusTime, NodeType, Versions},
         EncodeBytes,

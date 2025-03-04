@@ -16,12 +16,10 @@ use hotshot_builder_core::{
     },
 };
 use hotshot_types::{
-    data::{fake_commitment, ViewNumber},
+    data::{fake_commitment, vid_commitment, ViewNumber},
     traits::{
-        block_contents::{vid_commitment, GENESIS_VID_NUM_STORAGE_NODES},
-        metrics::NoMetrics,
-        node_implementation::Versions,
-        EncodeBytes,
+        block_contents::GENESIS_VID_NUM_STORAGE_NODES, metrics::NoMetrics,
+        node_implementation::Versions, EncodeBytes,
     },
 };
 use marketplace_builder_shared::block::ParentBlockReferences;
@@ -125,6 +123,7 @@ impl BuilderConfig {
             let payload_bytes = genesis_payload.encode();
             vid_commitment::<V>(
                 &payload_bytes,
+                &genesis_ns_table.encode(),
                 GENESIS_VID_NUM_STORAGE_NODES,
                 V::Base::VERSION,
             )
