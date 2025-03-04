@@ -36,6 +36,7 @@ use crate::{
         ValidatedState,
     },
     vote::{Certificate, HasViewNumber},
+    StakeTableEntries,
 };
 
 /// A view's state
@@ -139,15 +140,27 @@ pub async fn verify_epoch_root_chain<T: NodeType, V: Versions>(
     let threshold = membership.success_threshold(Some(epoch));
     newest_leaf
         .justify_qc()
-        .is_valid_cert(stake_table.clone(), threshold, upgrade_lock)
+        .is_valid_cert(
+            StakeTableEntries::<T>::from(stake_table.clone()).0,
+            threshold,
+            upgrade_lock,
+        )
         .await?;
     parent
         .justify_qc()
-        .is_valid_cert(stake_table.clone(), threshold, upgrade_lock)
+        .is_valid_cert(
+            StakeTableEntries::<T>::from(stake_table.clone()).0,
+            threshold,
+            upgrade_lock,
+        )
         .await?;
     grand_parent
         .justify_qc()
-        .is_valid_cert(stake_table.clone(), threshold, upgrade_lock)
+        .is_valid_cert(
+            StakeTableEntries::<T>::from(stake_table.clone()).0,
+            threshold,
+            upgrade_lock,
+        )
         .await?;
 
     // Verify the
@@ -157,7 +170,11 @@ pub async fn verify_epoch_root_chain<T: NodeType, V: Versions>(
         ensure!(last_leaf.justify_qc().view_number() == leaf.view_number());
         ensure!(last_leaf.justify_qc().data().leaf_commit == leaf.commit());
         leaf.justify_qc()
-            .is_valid_cert(stake_table.clone(), threshold, upgrade_lock)
+            .is_valid_cert(
+                StakeTableEntries::<T>::from(stake_table.clone()).0,
+                threshold,
+                upgrade_lock,
+            )
             .await?;
         if leaf.height() % root_height_interval == 0 {
             return Ok(leaf.clone());
