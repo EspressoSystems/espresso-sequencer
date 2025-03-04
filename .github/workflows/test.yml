@@ -42,6 +42,14 @@ jobs:
           cache-all-crates: true
           cache-provider: buildjet
 
+      - name: Show memory
+        run: free -h
+
+      - name: Collect Workflow Telemetry
+        uses: catchpoint/workflow-telemetry-action@v2
+        with:
+          comment_on_pr: false
+
       - name: Build and archive tests
         run: cargo nextest archive --locked --workspace --archive-file nextest-archive-postgres.tar.zst
 
@@ -68,6 +76,14 @@ jobs:
         with:
           cache-all-crates: true
           cache-provider: buildjet
+
+      - name: Show memory
+        run: free -h
+
+      - name: Collect Workflow Telemetry
+        uses: catchpoint/workflow-telemetry-action@v2
+        with:
+          comment_on_pr: false
 
       - name: Build and archive tests
         run: cargo nextest archive --locked --features "embedded-db testing" --workspace --archive-file nextest-archive-sqlite.tar.zst
