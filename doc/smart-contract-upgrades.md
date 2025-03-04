@@ -200,7 +200,7 @@ contract V2 is V1 {
 
 The logic in existing functions can be overridden but be sure not to introduce breaking changes.
 
-Criteria for Overriding Functions::
+Criteria for Overriding Functions:
 
 - a function must be marked as `virtual` in the base contract so that it can be eligible to be overridden in a derived
   contract.
