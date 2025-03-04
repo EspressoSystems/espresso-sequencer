@@ -1124,7 +1124,8 @@ pub mod test_helpers {
                 })
             }
             .boxed()
-        })?.get("leafchain", |_req, _state| {
+        })?
+        .get("leafchain", |_req, _state| {
             async move {
                 Result::<Vec<Leaf2>, _>::Err(hotshot_query_service::Error::catch_all(
                     StatusCode::BAD_REQUEST,
