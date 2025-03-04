@@ -1329,11 +1329,11 @@ impl SequencerPersistence for Persistence {
         .await?;
 
         if is_completed {
-            tracing::info!("anchor leaf migration already completed");
-
+            tracing::info!("decided leaves already migrated");
             return Ok(());
         }
 
+        tracing::warn!("migrating decided leaves..");
         loop {
             let mut tx = self.db.read().await?;
             let rows =
@@ -1387,6 +1387,8 @@ impl SequencerPersistence for Persistence {
             offset += batch_size;
         }
 
+        tracing::warn!("migrated decided leaves");
+
         let mut tx = self.db.write().await?;
         tx.upsert(
             "epoch_migration",
@@ -1396,6 +1398,8 @@ impl SequencerPersistence for Persistence {
         )
         .await?;
         tx.commit().await?;
+
+        tracing::info!("updated epoch_migration table for anchor_leaf");
 
         Ok(())
     }
@@ -1413,9 +1417,10 @@ impl SequencerPersistence for Persistence {
 
         if is_completed {
             tracing::info!("da proposals migration already done");
-
             return Ok(());
         }
+
+        tracing::warn!("migrating da proposals..");
 
         loop {
             let mut tx = self.db.read().await?;
@@ -1467,6 +1472,8 @@ impl SequencerPersistence for Persistence {
             }
         }
 
+        tracing::warn!("migrated da proposals");
+
         let mut tx = self.db.write().await?;
         tx.upsert(
             "epoch_migration",
@@ -1476,6 +1483,8 @@ impl SequencerPersistence for Persistence {
         )
         .await?;
         tx.commit().await?;
+
+        tracing::info!("updated epoch_migration table for da_proposal");
 
         Ok(())
     }
@@ -1493,9 +1502,10 @@ impl SequencerPersistence for Persistence {
 
         if is_completed {
             tracing::info!("vid_share migration already done");
-
             return Ok(());
         }
+
+        tracing::warn!("migrating vid shares..");
         loop {
             let mut tx = self.db.read().await?;
             let rows =
@@ -1543,6 +1553,8 @@ impl SequencerPersistence for Persistence {
             }
         }
 
+        tracing::warn!("migrated vid shares");
+
         let mut tx = self.db.write().await?;
         tx.upsert(
             "epoch_migration",
@@ -1552,6 +1564,8 @@ impl SequencerPersistence for Persistence {
         )
         .await?;
         tx.commit().await?;
+
+        tracing::info!("updated epoch_migration table for vid_share");
 
         Ok(())
     }
@@ -1575,6 +1589,8 @@ impl SequencerPersistence for Persistence {
             return Ok(());
         }
 
+        tracing::warn!("migrating undecided state..");
+
         if let Some(row) = row {
             let leaves_bytes: Vec<u8> = row.try_get("leaves")?;
             let leaves: CommitmentMap<Leaf> = bincode::deserialize(&leaves_bytes)?;
@@ -1593,6 +1609,8 @@ impl SequencerPersistence for Persistence {
             .await?;
         };
 
+        tracing::warn!("migrated undecided state");
+
         let mut tx = self.db.write().await?;
         tx.upsert(
             "epoch_migration",
@@ -1602,6 +1620,8 @@ impl SequencerPersistence for Persistence {
         )
         .await?;
         tx.commit().await?;
+
+        tracing::info!("updated epoch_migration table for undecided_state");
 
         Ok(())
     }
@@ -1619,9 +1639,11 @@ impl SequencerPersistence for Persistence {
 
         if is_completed {
             tracing::info!("quorum proposals migration already done");
-
             return Ok(());
         }
+
+        tracing::warn!("migrating quorum proposals..");
+
         loop {
             let mut tx = self.db.read().await?;
             let rows =
@@ -1673,6 +1695,8 @@ impl SequencerPersistence for Persistence {
             }
         }
 
+        tracing::warn!("migrated quorum proposals");
+
         let mut tx = self.db.write().await?;
         tx.upsert(
             "epoch_migration",
@@ -1682,6 +1706,8 @@ impl SequencerPersistence for Persistence {
         )
         .await?;
         tx.commit().await?;
+
+        tracing::info!("updated epoch_migration table for quorum_proposals");
 
         Ok(())
     }
@@ -1698,10 +1724,11 @@ impl SequencerPersistence for Persistence {
         .await?;
 
         if is_completed {
-            tracing::info!(" quorum certificates migration already done");
-
+            tracing::info!("quorum certificates migration already done");
             return Ok(());
         }
+
+        tracing::warn!("migrating quorum certificates..");
         loop {
             let mut tx = self.db.read().await?;
             let rows =
@@ -1749,6 +1776,8 @@ impl SequencerPersistence for Persistence {
             }
         }
 
+        tracing::warn!("migrated quorum certificates");
+
         let mut tx = self.db.write().await?;
         tx.upsert(
             "epoch_migration",
@@ -1758,6 +1787,7 @@ impl SequencerPersistence for Persistence {
         )
         .await?;
         tx.commit().await?;
+        tracing::info!("updated epoch_migration table for quorum_certificate");
 
         Ok(())
     }

@@ -973,6 +973,7 @@ impl SequencerPersistence for Persistence {
         let mut inner = self.inner.write().await;
 
         if inner.migrated.contains("anchor_leaf") {
+            tracing::info!("decided leaves already migrated");
             return Ok(());
         }
 
@@ -986,6 +987,7 @@ impl SequencerPersistence for Persistence {
             return Ok(());
         }
 
+        tracing::warn!("migrating decided leaves..");
         for entry in fs::read_dir(decided_leaf_path)? {
             let entry = entry?;
             let path = entry.path();
@@ -1024,12 +1026,15 @@ impl SequencerPersistence for Persistence {
         }
 
         inner.migrated.insert("anchor_leaf".to_string());
-        inner.update_migration()
+        inner.update_migration()?;
+        tracing::warn!("successfully migrated decided leaves");
+        Ok(())
     }
     async fn migrate_da_proposals(&self) -> anyhow::Result<()> {
         let mut inner = self.inner.write().await;
 
         if inner.migrated.contains("da_proposal") {
+            tracing::info!("da proposals already migrated");
             return Ok(());
         }
 
@@ -1041,6 +1046,8 @@ impl SequencerPersistence for Persistence {
         if !da_dir.is_dir() {
             return Ok(());
         }
+
+        tracing::warn!("migrating da proposals..");
 
         for entry in fs::read_dir(da_dir)? {
             let entry = entry?;
@@ -1077,12 +1084,15 @@ impl SequencerPersistence for Persistence {
         }
 
         inner.migrated.insert("da_proposal".to_string());
-        inner.update_migration()
+        inner.update_migration()?;
+        tracing::warn!("successfully migrated da proposals");
+        Ok(())
     }
     async fn migrate_vid_shares(&self) -> anyhow::Result<()> {
         let mut inner = self.inner.write().await;
 
         if inner.migrated.contains("vid_share") {
+            tracing::info!("vid shares already migrated");
             return Ok(());
         }
 
@@ -1094,6 +1104,8 @@ impl SequencerPersistence for Persistence {
         if !vid_dir.is_dir() {
             return Ok(());
         }
+
+        tracing::warn!("migrating vid shares..");
 
         for entry in fs::read_dir(vid_dir)? {
             let entry = entry?;
@@ -1131,11 +1143,14 @@ impl SequencerPersistence for Persistence {
         }
 
         inner.migrated.insert("vid_share".to_string());
-        inner.update_migration()
+        inner.update_migration()?;
+        tracing::warn!("successfully migrated vid shares");
+        Ok(())
     }
     async fn migrate_undecided_state(&self) -> anyhow::Result<()> {
         let mut inner = self.inner.write().await;
         if inner.migrated.contains("undecided_state") {
+            tracing::info!("undecided state already migrated");
             return Ok(());
         }
 
@@ -1154,6 +1169,7 @@ impl SequencerPersistence for Persistence {
         let leaves2 = upgrade_commitment_map(leaves);
         let state2 = state.to_qc2();
 
+        tracing::warn!("migrating undecided state..");
         inner.replace(
             undecided_state2_path,
             |_| {
@@ -1169,12 +1185,15 @@ impl SequencerPersistence for Persistence {
         )?;
 
         inner.migrated.insert("undecided_state".to_string());
-        inner.update_migration()
+        inner.update_migration()?;
+        tracing::warn!("successfully migrated undecided state");
+        Ok(())
     }
     async fn migrate_quorum_proposals(&self) -> anyhow::Result<()> {
         let mut inner = self.inner.write().await;
 
         if inner.migrated.contains("quorum_proposals") {
+            tracing::info!("quorum proposals already migrated");
             return Ok(());
         }
 
@@ -1184,9 +1203,11 @@ impl SequencerPersistence for Persistence {
 
         let qp_dir = inner.quorum_proposals_dir_path();
         if !qp_dir.is_dir() {
+            tracing::info!("no existing quorum proposals found for migration");
             return Ok(());
         }
 
+        tracing::warn!("migrating quorum proposals..");
         for entry in fs::read_dir(qp_dir)? {
             let entry = entry?;
             let path = entry.path();
@@ -1224,7 +1245,9 @@ impl SequencerPersistence for Persistence {
         }
 
         inner.migrated.insert("quorum_proposals".to_string());
-        inner.update_migration()
+        inner.update_migration()?;
+        tracing::warn!("successfully migrated quorum proposals");
+        Ok(())
     }
     async fn migrate_quorum_certificates(&self) -> anyhow::Result<()> {
         Ok(())

@@ -830,8 +830,6 @@ impl<Types: NodeType> MigrateTypes<Types> for SqlStorage {
             message: err.to_string(),
         })?;
 
-        tracing::warn!("migrating query service types storage");
-
         let (is_migration_completed,) =
             query_as::<(bool,)>("SELECT completed from types_migration LIMIT 1 ")
                 .fetch_one(tx.as_mut())
@@ -841,6 +839,9 @@ impl<Types: NodeType> MigrateTypes<Types> for SqlStorage {
             tracing::info!("types migration already completed");
             return Ok(());
         }
+
+        tracing::warn!("migrating query service types storage");
+
         loop {
             let mut tx = self.read().await.map_err(|err| QueryError::Error {
                 message: err.to_string(),
@@ -951,7 +952,7 @@ impl<Types: NodeType> MigrateTypes<Types> for SqlStorage {
             message: err.to_string(),
         })?;
 
-        tracing::info!("query service types migration is completed!");
+        tracing::warn!("query service types migration is completed!");
 
         tx.upsert(
             "types_migration",
@@ -960,6 +961,8 @@ impl<Types: NodeType> MigrateTypes<Types> for SqlStorage {
             [(0_i64, true)],
         )
         .await?;
+
+        tracing::info!("updated types_migration table");
 
         tx.commit().await?;
         Ok(())
