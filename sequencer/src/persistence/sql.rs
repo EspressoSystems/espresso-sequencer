@@ -1463,7 +1463,7 @@ impl SequencerPersistence for Persistence {
 
             tx.commit().await?;
 
-            tracing::warn!("DA proposals migration progress: {} rows", offset);
+            tracing::info!("DA proposals migration progress: {} rows", offset);
             offset += batch_size;
 
             if rows.len() < batch_size as usize {
@@ -1545,7 +1545,7 @@ impl SequencerPersistence for Persistence {
             let mut tx = self.db.write().await?;
             query.execute(tx.as_mut()).await?;
             tx.commit().await?;
-            tracing::warn!("VID shares migration progress: {} rows", offset);
+            tracing::info!("VID shares migration progress: {} rows", offset);
             offset += batch_size;
 
             if rows.len() < batch_size as usize {
@@ -1691,7 +1691,7 @@ impl SequencerPersistence for Persistence {
             tx.commit().await?;
 
             offset += batch_size;
-            tracing::warn!("quorum proposals migration progress: {} rows", offset);
+            tracing::info!("quorum proposals migration progress: {} rows", offset);
 
             if rows.len() < batch_size as usize {
                 break;
@@ -1774,7 +1774,7 @@ impl SequencerPersistence for Persistence {
             tx.commit().await?;
             offset += batch_size;
 
-            tracing::warn!("Quorum certificates migration progress: {} rows", offset);
+            tracing::info!("Quorum certificates migration progress: {} rows", offset);
 
             if rows.len() < batch_size as usize {
                 break;
