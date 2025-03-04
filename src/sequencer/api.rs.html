@@ -2585,9 +2585,7 @@
 <a href="#2584" id="2584">2584</a>
 <a href="#2585" id="2585">2585</a>
 <a href="#2586" id="2586">2586</a>
-<a href="#2587" id="2587">2587</a>
-<a href="#2588" id="2588">2588</a>
-<a href="#2589" id="2589">2589</a></pre></div><pre class="rust"><code><span class="kw">use </span>anyhow::{bail, Context};
+<a href="#2587" id="2587">2587</a></pre></div><pre class="rust"><code><span class="kw">use </span>anyhow::{bail, Context};
 <span class="kw">use </span>async_lock::RwLock;
 <span class="kw">use </span>async_once_cell::Lazy;
 <span class="kw">use </span>async_trait::async_trait;
@@ -2595,9 +2593,9 @@
 <span class="kw">use </span>data_source::{CatchupDataSource, StakeTableDataSource, SubmitDataSource};
 <span class="kw">use </span>derivative::Derivative;
 <span class="kw">use </span>espresso_types::{
-    retain_accounts, v0::traits::SequencerPersistence, v0_99::ChainConfig, AccountQueryData,
-    BlockMerkleTree, FeeAccount, FeeAccountProof, FeeMerkleTree, NodeState, PubKey, Transaction,
-    ValidatedState,
+    config::PublicNetworkConfig, retain_accounts, v0::traits::SequencerPersistence,
+    v0_99::ChainConfig, AccountQueryData, BlockMerkleTree, FeeAccount, FeeAccountProof,
+    FeeMerkleTree, NodeState, PubKey, Transaction, ValidatedState,
 };
 <span class="kw">use </span>futures::{
     future::{BoxFuture, Future, FutureExt},
@@ -2625,9 +2623,7 @@
 <span class="kw">use </span>std::pin::Pin;
 <span class="kw">use </span>std::sync::Arc;
 
-<span class="kw">use </span><span class="self">self</span>::data_source::{
-    HotShotConfigDataSource, NodeStateDataSource, PublicNetworkConfig, StateSignatureDataSource,
-};
+<span class="kw">use </span><span class="self">self</span>::data_source::{HotShotConfigDataSource, NodeStateDataSource, StateSignatureDataSource};
 <span class="kw">use crate</span>::{
     catchup::CatchupStorage, context::Consensus, state_signature::StateSigner, SeqTypes,
     SequencerApiVersion, SequencerContext,
@@ -4154,6 +4150,7 @@
     <span class="kw">use </span>tokio::time::sleep;
 
     <span class="kw">use </span>espresso_types::{
+        config::PublicHotShotConfig,
         traits::NullEventConsumer,
         v0_1::{UpgradeMode, ViewBasedUpgrade},
         BackoffParams, FeeAccount, FeeAmount, FeeVersion, Header, MarketplaceVersion,
@@ -4188,8 +4185,7 @@
     <span class="kw">use </span>vbs::version::{StaticVersion, StaticVersionType, Version};
 
     <span class="kw">use </span><span class="self">self</span>::{
-        data_source::{testing::TestableSequencerDataSource, PublicHotShotConfig},
-        options::HotshotEvents,
+        data_source::testing::TestableSequencerDataSource, options::HotshotEvents,
         sql::DataSource <span class="kw">as </span>SqlDataSource,
     };
     <span class="kw">use super</span>::<span class="kw-2">*</span>;

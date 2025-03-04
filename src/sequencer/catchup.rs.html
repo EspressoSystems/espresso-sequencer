@@ -624,14 +624,14 @@
 <a href="#623" id="623">623</a>
 <a href="#624" id="624">624</a>
 <a href="#625" id="625">625</a>
-<a href="#626" id="626">626</a>
-<a href="#627" id="627">627</a></pre></div><pre class="rust"><code><span class="kw">use </span>std::sync::Arc;
+<a href="#626" id="626">626</a></pre></div><pre class="rust"><code><span class="kw">use </span>std::sync::Arc;
 
 <span class="kw">use </span>anyhow::{anyhow, bail, ensure, Context};
 <span class="kw">use </span>async_lock::RwLock;
 <span class="kw">use </span>async_trait::async_trait;
 <span class="kw">use </span>committable::Commitment;
 <span class="kw">use </span>committable::Committable;
+<span class="kw">use </span>espresso_types::config::PublicNetworkConfig;
 <span class="kw">use </span>espresso_types::traits::SequencerPersistence;
 <span class="kw">use </span>espresso_types::{
     v0::traits::StateCatchup, v0_99::ChainConfig, BackoffParams, BlockMerkleTree, FeeAccount,
@@ -658,10 +658,8 @@
 <span class="kw">use </span>url::Url;
 <span class="kw">use </span>vbs::version::StaticVersionType;
 
-<span class="kw">use crate</span>::{
-    api::{data_source::PublicNetworkConfig, BlocksFrontier},
-    PubKey,
-};
+<span class="kw">use </span><span class="kw">crate</span>::api::BlocksFrontier;
+<span class="kw">use </span><span class="kw">crate</span>::PubKey;
 
 <span class="comment">// This newtype is probably not worth having. It's only used to be able to log
 // URLs before doing requests.
