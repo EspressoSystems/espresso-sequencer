@@ -1,8 +1,8 @@
 use anyhow::Context;
 use async_trait::async_trait;
 use committable::Commitment;
-use espresso_types::PublicNetworkConfig;
 use espresso_types::{
+    config::PublicNetworkConfig,
     v0::traits::{PersistenceOptions, SequencerPersistence},
     v0_99::ChainConfig,
     FeeAccount, FeeAccountProof, FeeMerkleTree, NodeState, PubKey, Transaction,
