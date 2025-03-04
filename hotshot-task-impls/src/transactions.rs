@@ -175,6 +175,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
             {
                 None
             } else {
+                tracing::error!("lrzasik: got block from wait_for_block");
                 self.wait_for_block(block_view).await
             }
         };
@@ -185,6 +186,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
             fee,
         }) = block
         {
+            tracing::error!("lrzasik: got block");
             broadcast_event(
                 Arc::new(HotShotEvent::BlockRecv(PackedBundle::new(
                     block_payload.encode(),
@@ -484,6 +486,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
 
                 let leader = self.membership.read().await.leader(view, epoch)?;
                 if leader == self.public_key {
+                    tracing::error!("lrzasik: calling handle_view_change in Transaction");
                     self.handle_view_change(&event_stream, view, epoch).await;
                     return Ok(());
                 }
@@ -591,6 +594,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
             {
                 // We got a block
                 Ok(Ok(block)) => {
+                    tracing::error!("lrzasik: got block from block_from_builder");
                     return Some(block);
                 }
 
