@@ -1362,7 +1362,7 @@ impl DhtPersistentStorage for Persistence {
             bincode::serialize(&records).with_context(|| "failed to serialize records")?;
 
         // Prepare the statement
-        let stmt = "INSERT OR REPLACE INTO libp2p_dht (id, serialized_records) VALUES (0, $1)";
+        let stmt = "UPSERT INTO libp2p_dht (id, serialized_records) VALUES (0, $1)";
 
         // Execute the query
         let mut tx = self
@@ -1385,17 +1385,14 @@ impl DhtPersistentStorage for Persistence {
     /// - If we fail to deserialize the records
     async fn load(&self) -> anyhow::Result<Vec<SerializableRecord>> {
         // Fetch the results from the DB
-        let Some(result) = self
+        let result = self
             .db
             .read()
             .await
             .with_context(|| "failed to start a DB read transaction")?
-            .fetch_optional("SELECT * FROM libp2p_dht where id = 0")
+            .fetch_one("SELECT * FROM libp2p_dht where id = 0")
             .await
-            .with_context(|| "failed to fetch from DB")?
-        else {
-            anyhow::bail!("no rows returned")
-        };
+            .with_context(|| "failed to fetch from DB")?;
 
         // Get the `serialized_records` row
         let serialied_records: Vec<u8> = result.get("serialized_records");

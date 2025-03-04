@@ -911,11 +911,33 @@ impl DhtPersistentStorage for Persistence {
     async fn save(&self, records: Vec<SerializableRecord>) -> anyhow::Result<()> {
         // Bincode-serialize the records
         let to_save =
-            bincode::serialize(&records).with_context(|| "Failed to serialize records")?;
+            bincode::serialize(&records).with_context(|| "failed to serialize records")?;
 
-        // Write the serialized records to the file
-        std::fs::write(self.inner.read().await.libp2p_dht_path(), to_save)
-            .with_context(|| "Failed to write records to file")?;
+        // Get the path to save the file to
+        let path = self.inner.read().await.libp2p_dht_path();
+
+        // Create the directory if it doesn't exist
+        fs::create_dir_all(path.parent().with_context(|| "directory had no parent")?)
+            .with_context(|| "failed to create directory")?;
+
+        // Get a write lock on the inner struct
+        let mut inner = self.inner.write().await;
+
+        // Save the file, replacing the previous one if it exists
+        inner
+            .replace(
+                &path,
+                |_| {
+                    // Always overwrite the previous file
+                    Ok(true)
+                },
+                |mut file| {
+                    file.write_all(&to_save)
+                        .with_context(|| "failed to write records to file")?;
+                    Ok(())
+                },
+            )
+            .with_context(|| "failed to save records to file")?;
 
         Ok(())
     }
