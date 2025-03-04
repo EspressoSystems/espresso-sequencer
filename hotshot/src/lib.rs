@@ -14,9 +14,13 @@ pub mod documentation;
 use committable::Committable;
 use futures::future::{select, Either};
 use hotshot_types::{
+    drb::{DrbResult, INITIAL_DRB_RESULT},
     epoch_membership::EpochMembershipCoordinator,
     message::UpgradeLock,
-    traits::{block_contents::BlockHeader, network::BroadcastDelay, node_implementation::Versions},
+    traits::{
+        block_contents::BlockHeader, election::Membership, network::BroadcastDelay,
+        node_implementation::Versions,
+    },
 };
 use rand::Rng;
 use url::Url;
@@ -299,6 +303,12 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> SystemContext<T
             anchored_leaf.height(),
             config.epoch_height,
         );
+
+        load_start_epoch_info(
+            membership_coordinator.membership(),
+            &initializer.start_epoch_info,
+        )
+        .await;
 
         // Insert the validated state to state map.
         let mut validated_state_map = BTreeMap::default();
@@ -990,6 +1000,14 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> ConsensusApi<TY
 }
 
 #[derive(Clone)]
+pub struct InitializerEpochInfo<TYPES: NodeType> {
+    pub epoch: TYPES::Epoch,
+    pub drb_result: DrbResult,
+    // pub stake_table: Option<StakeTable>, // TODO: Figure out how to connect this up
+    pub block_header: Option<TYPES::BlockHeader>,
+}
+
+#[derive(Clone)]
 /// initializer struct for creating starting block
 pub struct HotShotInitializer<TYPES: NodeType> {
     /// Instance-level state.
@@ -997,6 +1015,9 @@ pub struct HotShotInitializer<TYPES: NodeType> {
 
     /// Epoch height
     pub epoch_height: u64,
+
+    /// Epoch start block
+    pub epoch_start_block: u64,
 
     /// the anchor leaf for the hotshot initializer
     pub anchor_leaf: Leaf2<TYPES>,
@@ -1040,6 +1061,9 @@ pub struct HotShotInitializer<TYPES: NodeType> {
 
     /// Saved VID shares
     pub saved_vid_shares: VidShares<TYPES>,
+
+    /// Saved epoch information. This must be sorted ascending by epoch.
+    pub start_epoch_info: Vec<InitializerEpochInfo<TYPES>>,
 }
 
 impl<TYPES: NodeType> HotShotInitializer<TYPES> {
@@ -1049,6 +1073,8 @@ impl<TYPES: NodeType> HotShotInitializer<TYPES> {
     pub async fn from_genesis<V: Versions>(
         instance_state: TYPES::InstanceState,
         epoch_height: u64,
+        epoch_start_block: u64,
+        start_epoch_info: Vec<InitializerEpochInfo<TYPES>>,
     ) -> Result<Self, HotShotError<TYPES>> {
         let (validated_state, state_delta) = TYPES::ValidatedState::genesis(&instance_state);
         let high_qc = QuorumCertificate2::genesis::<V>(&validated_state, &instance_state).await;
@@ -1069,6 +1095,8 @@ impl<TYPES: NodeType> HotShotInitializer<TYPES> {
             instance_state,
             saved_vid_shares: BTreeMap::new(),
             epoch_height,
+            epoch_start_block,
+            start_epoch_info,
         })
     }
 
@@ -1120,6 +1148,8 @@ impl<TYPES: NodeType> HotShotInitializer<TYPES> {
     pub fn load(
         instance_state: TYPES::InstanceState,
         epoch_height: u64,
+        epoch_start_block: u64,
+        start_epoch_info: Vec<InitializerEpochInfo<TYPES>>,
         anchor_leaf: Leaf2<TYPES>,
         (start_view, start_epoch): (TYPES::View, Option<TYPES::Epoch>),
         (high_qc, next_epoch_high_qc): (
@@ -1138,6 +1168,7 @@ impl<TYPES: NodeType> HotShotInitializer<TYPES> {
         let initializer = Self {
             instance_state,
             epoch_height,
+            epoch_start_block,
             anchor_leaf,
             anchor_state,
             anchor_state_delta,
@@ -1151,8 +1182,43 @@ impl<TYPES: NodeType> HotShotInitializer<TYPES> {
             decided_upgrade_certificate,
             undecided_leaves: BTreeMap::new(),
             undecided_state: BTreeMap::new(),
+            start_epoch_info,
         };
 
         initializer.update_undecided()
+    }
+}
+
+async fn load_start_epoch_info<TYPES: NodeType>(
+    membership: &Arc<RwLock<TYPES::Membership>>,
+    start_epoch_info: &Vec<InitializerEpochInfo<TYPES>>,
+) {
+    for epoch_info in start_epoch_info {
+        tracing::debug!("Calling add_drb_result for epoch {:?}", epoch_info.epoch);
+        membership
+            .write()
+            .await
+            .add_drb_result(epoch_info.epoch, epoch_info.drb_result);
+
+        if let Some(block_header) = &epoch_info.block_header {
+            tracing::debug!("Calling add_epoch_root for epoch {:?}", epoch_info.epoch);
+            let write_callback = {
+                let membership_reader = membership.read().await;
+                membership_reader
+                    .add_epoch_root(epoch_info.epoch, block_header.clone())
+                    .await
+            };
+
+            if let Some(write_callback) = write_callback {
+                let mut membership_writer = membership.write().await;
+                write_callback(&mut *membership_writer);
+            }
+        } else {
+            tracing::debug!("Calling set_first_epoch for epoch {:?}", epoch_info.epoch);
+            membership
+                .write()
+                .await
+                .set_first_epoch(epoch_info.epoch, INITIAL_DRB_RESULT);
+        }
     }
 }

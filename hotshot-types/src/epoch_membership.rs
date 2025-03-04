@@ -10,8 +10,8 @@ use hotshot_utils::{ensure, line_info, log, warn};
 use crate::drb::DrbResult;
 use crate::traits::election::Membership;
 use crate::traits::node_implementation::{ConsensusTime, NodeType};
-use crate::traits::signature_key::SignatureKey;
 use crate::utils::root_block_in_epoch;
+use crate::PeerConfig;
 
 type EpochMap<TYPES> =
     HashMap<<TYPES as NodeType>::Epoch, InactiveReceiver<Result<EpochMembership<TYPES>>>>;
@@ -136,14 +136,6 @@ where
             .ok_or(anytrace::warn!("add epoch root failed"))?;
         updater(&mut *(self.membership.write().await));
 
-        let sync = self
-            .membership
-            .read()
-            .await
-            .sync_l1()
-            .await
-            .ok_or(anytrace::warn!("sync L1 failed"))?;
-        sync(&mut *(self.membership.write().await));
         Ok(EpochMembership {
             epoch: Some(epoch),
             coordinator: self.clone(),
@@ -245,7 +237,7 @@ impl<TYPES: NodeType> EpochMembership<TYPES> {
     }
 
     /// Get all participants in the committee (including their stake) for a specific epoch
-    pub async fn stake_table(&self) -> Vec<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry> {
+    pub async fn stake_table(&self) -> Vec<PeerConfig<TYPES::SignatureKey>> {
         self.coordinator
             .membership
             .read()
@@ -254,9 +246,7 @@ impl<TYPES: NodeType> EpochMembership<TYPES> {
     }
 
     /// Get all participants in the committee (including their stake) for a specific epoch
-    pub async fn da_stake_table(
-        &self,
-    ) -> Vec<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry> {
+    pub async fn da_stake_table(&self) -> Vec<PeerConfig<TYPES::SignatureKey>> {
         self.coordinator
             .membership
             .read()
@@ -305,7 +295,7 @@ impl<TYPES: NodeType> EpochMembership<TYPES> {
     pub async fn stake(
         &self,
         pub_key: &TYPES::SignatureKey,
-    ) -> Option<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry> {
+    ) -> Option<PeerConfig<TYPES::SignatureKey>> {
         self.coordinator
             .membership
             .read()
@@ -318,7 +308,7 @@ impl<TYPES: NodeType> EpochMembership<TYPES> {
     pub async fn da_stake(
         &self,
         pub_key: &TYPES::SignatureKey,
-    ) -> Option<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry> {
+    ) -> Option<PeerConfig<TYPES::SignatureKey>> {
         self.coordinator
             .membership
             .read()

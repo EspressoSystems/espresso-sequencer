@@ -5,8 +5,6 @@
 // along with the HotShot repository. If not, see <https://mit-license.org/>.
 
 #![allow(clippy::panic)]
-use std::{collections::BTreeMap, fmt::Debug, hash::Hash, marker::PhantomData, sync::Arc};
-
 use async_broadcast::{Receiver, Sender};
 use async_lock::RwLock;
 use bitvec::bitvec;
@@ -14,7 +12,7 @@ use committable::Committable;
 use hotshot::{
     traits::{BlockPayload, NodeImplementation, TestableNodeImplementation},
     types::{SignatureKey, SystemContextHandle},
-    HotShotInitializer, SystemContext,
+    HotShotInitializer, InitializerEpochInfo, SystemContext,
 };
 use hotshot_example_types::{
     auction_results_provider_types::TestAuctionResultsProvider,
@@ -24,9 +22,11 @@ use hotshot_example_types::{
     storage_types::TestStorage,
 };
 use hotshot_task_impls::events::HotShotEvent;
+use hotshot_types::traits::node_implementation::ConsensusTime;
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
     data::{vid_commitment, Leaf2, VidCommitment, VidDisperse, VidDisperseShare},
+    drb::INITIAL_DRB_RESULT,
     epoch_membership::{EpochMembership, EpochMembershipCoordinator},
     message::{Proposal, UpgradeLock},
     simple_certificate::DaCertificate2,
@@ -38,10 +38,11 @@ use hotshot_types::{
     },
     utils::{option_epoch_from_block_number, View, ViewInner},
     vote::{Certificate, HasViewNumber, Vote},
-    ValidatorConfig,
+    StakeTableEntries, ValidatorConfig,
 };
 use primitive_types::U256;
 use serde::Serialize;
+use std::{collections::BTreeMap, fmt::Debug, hash::Hash, marker::PhantomData, sync::Arc};
 use vbs::version::Version;
 
 use crate::{test_builder::TestDescription, test_launcher::TestLauncher};
@@ -106,6 +107,19 @@ pub async fn build_system_handle_from_launcher<
     let initializer = HotShotInitializer::<TYPES>::from_genesis::<V>(
         TestInstanceState::new(launcher.metadata.async_delay_config.clone()),
         launcher.metadata.test_config.epoch_height,
+        launcher.metadata.test_config.epoch_start_block,
+        vec![
+            InitializerEpochInfo::<TYPES> {
+                epoch: TYPES::Epoch::new(1),
+                drb_result: INITIAL_DRB_RESULT,
+                block_header: None,
+            },
+            InitializerEpochInfo::<TYPES> {
+                epoch: TYPES::Epoch::new(2),
+                drb_result: INITIAL_DRB_RESULT,
+                block_header: None,
+            },
+        ],
     )
     .await
     .unwrap();
@@ -227,7 +241,7 @@ pub async fn build_assembled_sig<
     let stake_table = CERT::stake_table(epoch_membership).await;
     let real_qc_pp: <TYPES::SignatureKey as SignatureKey>::QcParams =
         <TYPES::SignatureKey as SignatureKey>::public_parameter(
-            stake_table.clone(),
+            StakeTableEntries::<TYPES>::from(stake_table.clone()).0,
             U256::from(CERT::threshold(epoch_membership).await),
         );
 
@@ -368,16 +382,17 @@ pub async fn build_da_certificate<TYPES: NodeType, V: Versions>(
         upgrade_lock.version_infallible(view_number).await,
     );
 
-    let next_epoch_da_payload_commitment = if upgrade_lock.epochs_enabled(view_number).await {
-        Some(vid_commitment::<V>(
-            &encoded_transactions,
-            &metadata.encode(),
-            membership.next_epoch().await?.total_nodes().await,
-            upgrade_lock.version_infallible(view_number).await,
-        ))
-    } else {
-        None
-    };
+    let next_epoch_da_payload_commitment =
+        if upgrade_lock.epochs_enabled(view_number).await && membership.epoch().is_some() {
+            Some(vid_commitment::<V>(
+                &encoded_transactions,
+                &metadata.encode(),
+                membership.next_epoch().await?.total_nodes().await,
+                upgrade_lock.version_infallible(view_number).await,
+            ))
+        } else {
+            None
+        };
 
     let da_data = DaData2 {
         payload_commit: da_payload_commitment,

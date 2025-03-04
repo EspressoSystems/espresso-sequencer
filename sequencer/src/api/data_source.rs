@@ -20,7 +20,6 @@ use hotshot_types::{
     data::ViewNumber,
     light_client::StateSignatureRequestBody,
     network::NetworkConfig,
-    stake_table::StakeTableEntry,
     traits::{network::ConnectedNetwork, node_implementation::Versions},
     HotShotConfig, PeerConfig, ValidatorConfig,
 };
@@ -121,12 +120,12 @@ pub(crate) trait StakeTableDataSource<T: NodeType> {
     fn get_stake_table(
         &self,
         epoch: Option<<T as NodeType>::Epoch>,
-    ) -> impl Send + Future<Output = Vec<StakeTableEntry<T::SignatureKey>>>;
+    ) -> impl Send + Future<Output = Vec<PeerConfig<T::SignatureKey>>>;
 
     /// Get the stake table for  the current epoch if not provided
     fn get_stake_table_current(
         &self,
-    ) -> impl Send + Future<Output = Vec<StakeTableEntry<T::SignatureKey>>>;
+    ) -> impl Send + Future<Output = Vec<PeerConfig<T::SignatureKey>>>;
 }
 
 pub(crate) trait CatchupDataSource: Sync {
@@ -254,6 +253,7 @@ pub struct PublicHotShotConfig {
     start_voting_time: u64,
     stop_voting_time: u64,
     epoch_height: u64,
+    epoch_start_block: u64,
 }
 
 impl From<HotShotConfig<PubKey>> for PublicHotShotConfig {
@@ -283,6 +283,7 @@ impl From<HotShotConfig<PubKey>> for PublicHotShotConfig {
             start_voting_time,
             stop_voting_time,
             epoch_height,
+            epoch_start_block,
         } = v;
 
         Self {
@@ -307,6 +308,7 @@ impl From<HotShotConfig<PubKey>> for PublicHotShotConfig {
             start_voting_time,
             stop_voting_time,
             epoch_height,
+            epoch_start_block,
         }
     }
 }
@@ -335,6 +337,7 @@ impl PublicHotShotConfig {
             start_voting_time: self.start_voting_time,
             stop_voting_time: self.stop_voting_time,
             epoch_height: self.epoch_height,
+            epoch_start_block: self.epoch_start_block,
         }
     }
 }

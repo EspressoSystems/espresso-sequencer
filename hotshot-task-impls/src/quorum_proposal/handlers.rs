@@ -29,6 +29,7 @@ use hotshot_types::{
     },
     utils::{is_last_block_in_epoch, option_epoch_from_block_number},
     vote::{Certificate, HasViewNumber},
+    StakeTableEntries,
 };
 use hotshot_utils::anytrace::*;
 use tracing::instrument;
@@ -132,7 +133,7 @@ impl<TYPES: NodeType, V: Versions> ProposalDependencyHandle<TYPES, V> {
                 } else {
                     let prev_membership = self.membership.prev_epoch().await.ok()?;
                     if prev_epoch != prev_membership.epoch {
-                        tracing::info!("High QC recieved is not fror current or previous epoch");
+                        tracing::info!("High QC received is not fror current or previous epoch");
                         return None;
                     }
                     prev_membership
@@ -142,7 +143,7 @@ impl<TYPES: NodeType, V: Versions> ProposalDependencyHandle<TYPES, V> {
 
                 if qc
                     .is_valid_cert(
-                        membership_stake_table,
+                        StakeTableEntries::<TYPES>::from(membership_stake_table).0,
                         membership_success_threshold,
                         &self.upgrade_lock,
                     )
@@ -315,16 +316,11 @@ impl<TYPES: NodeType, V: Versions> ProposalDependencyHandle<TYPES, V> {
             self.epoch_height,
         );
 
-        let epoch_membership = if self.membership.epoch() != epoch {
-            let next_membership = self.membership.next_epoch().await?;
-            ensure!(
-                next_membership.epoch() == epoch,
-                "Trying to propose in epoch that is more than 1 more than the last QC's epoch"
-            );
-            next_membership
-        } else {
-            self.membership.clone()
-        };
+        let epoch_membership = self
+            .membership
+            .coordinator
+            .membership_for_epoch(epoch)
+            .await?;
         // Make sure we are the leader for the view and epoch.
         // We might have ended up here because we were in the epoch transition.
         if epoch_membership.leader(self.view_number).await? != self.public_key {
@@ -360,7 +356,7 @@ impl<TYPES: NodeType, V: Versions> ProposalDependencyHandle<TYPES, V> {
                         .await
                         .drb_seeds_and_results
                         .results
-                        .get(epoch_val)
+                        .get(&(*epoch_val + 1))
                         .copied()
                 } else {
                     None
