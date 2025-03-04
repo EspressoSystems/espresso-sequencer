@@ -581,6 +581,7 @@ pub trait SequencerPersistence: Sized + Send + Sync + Clone + 'static {
             HotShotInitializer {
                 instance_state: state,
                 epoch_height: 0,
+                epoch_start_block: 0,
                 anchor_leaf: leaf,
                 anchor_state: validated_state.unwrap_or_default(),
                 anchor_state_delta: None,
@@ -597,6 +598,7 @@ pub trait SequencerPersistence: Sized + Send + Sync + Clone + 'static {
                     .collect(),
                 undecided_state,
                 saved_vid_shares: Default::default(), // TODO: implement saved_vid_shares
+                start_epoch_info: Default::default(), // TODO: implement start_epoch_info
             },
             anchor_view,
         ))

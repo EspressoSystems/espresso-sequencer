@@ -25,11 +25,9 @@ use hotshot_testing::{
     view_generator::TestViewGenerator,
 };
 use hotshot_types::{
-    data::{null_block, EpochNumber, Leaf2, ViewChangeEvidence2, ViewNumber},
+    data::{null_block, Leaf2, ViewChangeEvidence2, ViewNumber},
     simple_vote::{TimeoutData2, ViewSyncFinalizeData2},
-    traits::{
-        node_implementation::{ConsensusTime, Versions},
-    },
+    traits::node_implementation::{ConsensusTime, Versions},
     utils::BuilderCommitment,
 };
 use sha2::Digest;
@@ -59,7 +57,7 @@ async fn test_quorum_proposal_task_quorum_proposal_view_1() {
     let payload_commitment = build_payload_commitment::<TestTypes, TestVersions>(
         &membership,
         ViewNumber::new(node_id),
-        Some(EpochNumber::new(1)),
+        None,
         version,
     )
     .await;
@@ -206,7 +204,7 @@ async fn test_quorum_proposal_task_quorum_proposal_view_gt_1() {
                 build_payload_commitment::<TestTypes, TestVersions>(
                     &membership,
                     ViewNumber::new(1),
-                    Some(EpochNumber::new(1)),
+                    None,
                     version_1,
                 )
                 .await,
@@ -227,7 +225,7 @@ async fn test_quorum_proposal_task_quorum_proposal_view_gt_1() {
                 build_payload_commitment::<TestTypes, TestVersions>(
                     &membership,
                     ViewNumber::new(2),
-                    Some(EpochNumber::new(1)),
+                    None,
                     version_2,
                 )
                 .await,
@@ -246,7 +244,7 @@ async fn test_quorum_proposal_task_quorum_proposal_view_gt_1() {
                 build_payload_commitment::<TestTypes, TestVersions>(
                     &membership,
                     ViewNumber::new(3),
-                    Some(EpochNumber::new(1)),
+                    None,
                     version_3,
                 )
                 .await,
@@ -265,7 +263,7 @@ async fn test_quorum_proposal_task_quorum_proposal_view_gt_1() {
                 build_payload_commitment::<TestTypes, TestVersions>(
                     &membership,
                     ViewNumber::new(4),
-                    Some(EpochNumber::new(1)),
+                    None,
                     version_4,
                 )
                 .await,
@@ -284,7 +282,7 @@ async fn test_quorum_proposal_task_quorum_proposal_view_gt_1() {
                 build_payload_commitment::<TestTypes, TestVersions>(
                     &membership,
                     ViewNumber::new(5),
-                    Some(EpochNumber::new(1)),
+                    None,
                     version_5,
                 )
                 .await,
@@ -338,7 +336,7 @@ async fn test_quorum_proposal_task_qc_timeout() {
     let payload_commitment = build_payload_commitment::<TestTypes, TestVersions>(
         &membership,
         ViewNumber::new(node_id),
-        Some(EpochNumber::new(1)),
+        None,
         version,
     )
     .await;
@@ -433,7 +431,7 @@ async fn test_quorum_proposal_task_view_sync() {
     let payload_commitment = build_payload_commitment::<TestTypes, TestVersions>(
         &membership,
         ViewNumber::new(node_id),
-        Some(EpochNumber::new(1)),
+        None,
         version,
     )
     .await;
@@ -574,7 +572,7 @@ async fn test_quorum_proposal_task_liveness_check() {
                 build_payload_commitment::<TestTypes, TestVersions>(
                     &membership,
                     ViewNumber::new(1),
-                    Some(EpochNumber::new(1)),
+                    None,
                     version_1,
                 )
                 .await,
@@ -595,7 +593,7 @@ async fn test_quorum_proposal_task_liveness_check() {
                 build_payload_commitment::<TestTypes, TestVersions>(
                     &membership,
                     ViewNumber::new(2),
-                    Some(EpochNumber::new(1)),
+                    None,
                     version_2,
                 )
                 .await,
@@ -614,7 +612,7 @@ async fn test_quorum_proposal_task_liveness_check() {
                 build_payload_commitment::<TestTypes, TestVersions>(
                     &membership,
                     ViewNumber::new(3),
-                    Some(EpochNumber::new(1)),
+                    None,
                     version_3,
                 )
                 .await,
@@ -633,7 +631,7 @@ async fn test_quorum_proposal_task_liveness_check() {
                 build_payload_commitment::<TestTypes, TestVersions>(
                     &membership,
                     ViewNumber::new(4),
-                    Some(EpochNumber::new(1)),
+                    None,
                     version_4,
                 )
                 .await,
@@ -652,7 +650,7 @@ async fn test_quorum_proposal_task_liveness_check() {
                 build_payload_commitment::<TestTypes, TestVersions>(
                     &membership,
                     ViewNumber::new(5),
-                    Some(EpochNumber::new(1)),
+                    None,
                     version_5,
                 )
                 .await,
