@@ -15,7 +15,7 @@ use hotshot_types::{
         VidCommitment, ViewNumber,
     },
     event::{HotShotAction, LeafInfo},
-    message::{convert_proposal, Proposal},
+    message::{convert_proposal, Proposal, UpgradeLock},
     simple_certificate::{
         NextEpochQuorumCertificate2, QuorumCertificate, QuorumCertificate2, UpgradeCertificate,
     },
@@ -24,7 +24,7 @@ use hotshot_types::{
         storage::Storage,
         ValidatedState as HotShotState,
     },
-    utils::{genesis_epoch_from_version, View},
+    utils::{genesis_epoch_from_version, verify_epoch_root_chain, View},
 };
 use itertools::Itertools;
 use serde::{de::DeserializeOwned, Serialize};
@@ -34,11 +34,34 @@ use crate::{
     FeeAccountProof, FeeMerkleCommitment, FeeMerkleTree, Leaf2, NetworkConfig, SeqTypes,
 };
 
-use super::{impls::NodeState, utils::BackoffParams, Leaf};
+use super::{
+    impls::NodeState, utils::BackoffParams, EpochCommittees, EpochVersion, Leaf, SequencerVersions,
+};
 
 #[async_trait]
 pub trait StateCatchup: Send + Sync {
     async fn try_fetch_leaves(&self, retry: usize, height: u64) -> anyhow::Result<Vec<Leaf2>>;
+
+    async fn fetch_leaf(
+        &self,
+        height: u64,
+        membership: &EpochCommittees,
+        epoch: EpochNumber,
+        epoch_height: u64,
+    ) -> anyhow::Result<Leaf2> {
+        self.backoff().retry(
+            self, |provider, retry| {
+                async move {
+                    let chain = provider.try_fetch_leaves(retry, height).await?;
+                    verify_epoch_root_chain(
+                        chain,
+                        membership,
+                        epoch,
+                        epoch_height,
+                        &UpgradeLock::<SeqTypes, SequencerVersions<EpochVersion, EpochVersion>>::new()).await
+                }.boxed()
+            }).await
+    }
 
     /// Try to fetch the given accounts state, failing without retrying if unable.
     async fn try_fetch_accounts(
@@ -149,6 +172,18 @@ impl<T: StateCatchup + ?Sized> StateCatchup for Box<T> {
     async fn try_fetch_leaves(&self, retry: usize, height: u64) -> anyhow::Result<Vec<Leaf2>> {
         (**self).try_fetch_leaves(retry, height).await
     }
+
+    async fn fetch_leaf(
+        &self,
+        height: u64,
+        membership: &EpochCommittees,
+        epoch: EpochNumber,
+        epoch_height: u64,
+    ) -> anyhow::Result<Leaf2> {
+        (**self)
+            .fetch_leaf(height, membership, epoch, epoch_height)
+            .await
+    }
     async fn try_fetch_accounts(
         &self,
         retry: usize,
@@ -236,6 +271,18 @@ impl<T: StateCatchup + ?Sized> StateCatchup for Box<T> {
 impl<T: StateCatchup + ?Sized> StateCatchup for Arc<T> {
     async fn try_fetch_leaves(&self, retry: usize, height: u64) -> anyhow::Result<Vec<Leaf2>> {
         (**self).try_fetch_leaves(retry, height).await
+    }
+
+    async fn fetch_leaf(
+        &self,
+        height: u64,
+        membership: &EpochCommittees,
+        epoch: EpochNumber,
+        epoch_height: u64,
+    ) -> anyhow::Result<Leaf2> {
+        (**self)
+            .fetch_leaf(height, membership, epoch, epoch_height)
+            .await
     }
     async fn try_fetch_accounts(
         &self,

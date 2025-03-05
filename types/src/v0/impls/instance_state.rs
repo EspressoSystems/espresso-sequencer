@@ -231,6 +231,7 @@ pub mod mock {
         ) -> anyhow::Result<Vec<Leaf2>> {
             Err(anyhow::anyhow!("todo"))
         }
+
         async fn try_fetch_accounts(
             &self,
             _retry: usize,

@@ -15,14 +15,12 @@ use hotshot_types::{
         election::{generate_stake_cdf, select_randomized_leader, RandomizedCommittee},
         DrbResult,
     },
-    message::UpgradeLock,
     stake_table::StakeTableEntry,
     traits::{
         election::Membership,
         node_implementation::{ConsensusTime, NodeType},
         signature_key::StakeTableEntryType,
     },
-    utils::verify_epoch_root_chain,
     PeerConfig,
 };
 
@@ -33,7 +31,7 @@ use thiserror::Error;
 use super::{
     traits::StateCatchup,
     v0_3::{DAMembers, StakeTable, StakeTables},
-    EpochVersion, Header, L1Client, Leaf2, NodeState, PubKey, SeqTypes, SequencerVersions,
+    Header, L1Client, Leaf2, NodeState, PubKey, SeqTypes,
 };
 
 type Epoch = <SeqTypes as NodeType>::Epoch;
@@ -508,16 +506,10 @@ impl Membership<SeqTypes> for EpochCommittees {
             anyhow::bail!("No Peers Configured for Catchup");
         };
         // Fetch leaves from peers
-        let leaf_chain: Vec<Leaf2> = peers.try_fetch_leaves(1, block_height).await?;
-        let root_leaf = verify_epoch_root_chain(
-            leaf_chain,
-            self,
-            epoch,
-            epoch_height,
-            &UpgradeLock::<SeqTypes, SequencerVersions<EpochVersion, EpochVersion>>::new(),
-        )
-        .await?;
-        Ok((epoch, root_leaf.block_header().clone()))
+        let leaf: Leaf2 = peers
+            .fetch_leaf(block_height, self, epoch, epoch_height)
+            .await?;
+        Ok((epoch, leaf.block_header().clone()))
     }
 
     fn add_drb_result(&mut self, epoch: Epoch, drb: DrbResult) {
