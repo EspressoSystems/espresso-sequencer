@@ -499,7 +499,7 @@ where
         let query = query("INSERT INTO payload (height) VALUES ($1) ON CONFLICT DO NOTHING")
             .bind(height as i64);
         query.execute(self.as_mut()).await?;
-        
+
         // Finally, we insert the leaf itself, which references the header row we created.
         // Serialize the full leaf and QC to JSON for easy storage.
         let leaf_json = serde_json::to_value(leaf.leaf()).context("failed to serialize leaf")?;
