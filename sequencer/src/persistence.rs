@@ -54,6 +54,7 @@ mod persistence_tests {
         Event, Leaf, Leaf2, NodeState, PubKey, SeqTypes, ValidatedState,
     };
     use hotshot::types::{BLSPubKey, SignatureKey};
+    use hotshot::InitializerEpochInfo;
     use hotshot_example_types::node_types::TestVersions;
     use hotshot_query_service::testing::mocks::MockVersions;
     use hotshot_types::{
@@ -153,6 +154,52 @@ mod persistence_tests {
         assert_eq!(
             storage.load_latest_acted_view().await.unwrap().unwrap(),
             view2
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    pub async fn test_epoch_info<P: TestablePersistence>() {
+        setup_test();
+
+        let tmp = P::tmp_storage().await;
+        let storage = P::connect(&tmp).await;
+
+        // Initially, there is no saved info.
+        assert_eq!(storage.load_start_epoch_info().await.unwrap(), Vec::new());
+
+        // Store a drb result.
+        storage
+            .add_drb_result(EpochNumber::new(1), [1; 32])
+            .await
+            .unwrap();
+        assert_eq!(
+            storage.load_start_epoch_info().await.unwrap(),
+            vec![InitializerEpochInfo::<SeqTypes> {
+                epoch: EpochNumber::new(1),
+                drb_result: [1; 32],
+                block_header: None,
+            }]
+        );
+
+        // Store a second DRB result
+        storage
+            .add_drb_result(EpochNumber::new(2), [3; 32])
+            .await
+            .unwrap();
+        assert_eq!(
+            storage.load_start_epoch_info().await.unwrap(),
+            vec![
+                InitializerEpochInfo::<SeqTypes> {
+                    epoch: EpochNumber::new(1),
+                    drb_result: [1; 32],
+                    block_header: None,
+                },
+                InitializerEpochInfo::<SeqTypes> {
+                    epoch: EpochNumber::new(2),
+                    drb_result: [3; 32],
+                    block_header: None,
+                }
+            ]
         );
     }
 

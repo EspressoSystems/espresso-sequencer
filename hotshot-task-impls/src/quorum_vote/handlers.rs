@@ -48,11 +48,25 @@ use crate::{
     quorum_vote::Versions,
 };
 
-async fn notify_membership_of_drb_result<TYPES: NodeType>(
+async fn handle_drb_result<TYPES: NodeType, I: NodeImplementation<TYPES>>(
     membership: &EpochMembership<TYPES>,
+    storage: &Arc<RwLock<I::Storage>>,
     drb_result: DrbResult,
 ) {
     tracing::debug!("Calling add_drb_result for epoch {:?}", membership.epoch());
+
+    // membership.epoch should always be Some
+    if let Some(epoch) = membership.epoch() {
+        if let Err(e) = storage
+            .write()
+            .await
+            .add_drb_result(epoch, drb_result)
+            .await
+        {
+            tracing::error!("Failed to store drb result for epoch {:?}: {}", epoch, e);
+        }
+    }
+
     membership.add_drb_result(drb_result).await;
 }
 
@@ -101,11 +115,12 @@ async fn store_and_get_computed_drb_result<
                 .insert(epoch_number, result);
             drop(consensus_writer);
 
-            notify_membership_of_drb_result::<TYPES>(
+            handle_drb_result::<TYPES, I>(
                 &task_state
                     .membership
                     .membership_for_epoch(Some(epoch_number))
                     .await?,
+                &task_state.storage,
                 result,
             )
             .await;
@@ -221,7 +236,12 @@ async fn start_drb_task<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versio
                             .drb_seeds_and_results
                             .results
                             .insert(*task_epoch, result);
-                        notify_membership_of_drb_result::<TYPES>(&epoch_membership, result).await;
+                        handle_drb_result::<TYPES, I>(
+                            &epoch_membership,
+                            &task_state.storage,
+                            result,
+                        )
+                        .await;
                         task_state.drb_computation = None;
                     }
                     Err(e) => {
@@ -335,11 +355,12 @@ async fn store_drb_seed_and_result<TYPES: NodeType, I: NodeImplementation<TYPES>
                 .drb_seeds_and_results
                 .results
                 .insert(current_epoch_number + 1, result);
-            notify_membership_of_drb_result::<TYPES>(
+            handle_drb_result::<TYPES, I>(
                 &task_state
                     .membership
                     .membership_for_epoch(Some(current_epoch_number + 1))
                     .await?,
+                &task_state.storage,
                 result,
             )
             .await;
@@ -379,23 +400,25 @@ pub(crate) async fn handle_quorum_proposal_validated<
         included_txns,
         decided_upgrade_cert,
     } = if version >= V::Epochs::VERSION {
-        decide_from_proposal_2(
+        decide_from_proposal_2::<TYPES, I>(
             proposal,
             OuterConsensus::new(Arc::clone(&task_state.consensus.inner_consensus)),
             Arc::clone(&task_state.upgrade_lock.decided_upgrade_certificate),
             &task_state.public_key,
             version >= V::Epochs::VERSION,
             task_state.membership.membership(),
+            &task_state.storage,
         )
         .await
     } else {
-        decide_from_proposal::<TYPES, V>(
+        decide_from_proposal::<TYPES, I, V>(
             proposal,
             OuterConsensus::new(Arc::clone(&task_state.consensus.inner_consensus)),
             Arc::clone(&task_state.upgrade_lock.decided_upgrade_certificate),
             &task_state.public_key,
             version >= V::Epochs::VERSION,
             task_state.membership.membership(),
+            &task_state.storage,
         )
         .await
     };

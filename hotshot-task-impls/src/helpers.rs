@@ -9,6 +9,7 @@ use async_lock::RwLock;
 use committable::{Commitment, Committable};
 use either::Either;
 use hotshot_task::dependency::{Dependency, EventDependency};
+use hotshot_types::traits::storage::Storage;
 use hotshot_types::{
     consensus::OuterConsensus,
     data::{Leaf2, QuorumProposalWrapper, ViewChangeEvidence2},
@@ -180,10 +181,11 @@ pub(crate) async fn fetch_proposal<TYPES: NodeType, V: Versions>(
 }
 
 /// Handles calling add_epoch_root and sync_l1 on Membership if necessary.
-async fn decide_epoch_root<TYPES: NodeType>(
+async fn decide_epoch_root<TYPES: NodeType, I: NodeImplementation<TYPES>>(
     decided_leaf: &Leaf2<TYPES>,
     epoch_height: u64,
     membership: &Arc<RwLock<TYPES::Membership>>,
+    storage: &Arc<RwLock<I::Storage>>,
 ) {
     let decided_block_number = decided_leaf.block_header().block_number();
 
@@ -191,6 +193,19 @@ async fn decide_epoch_root<TYPES: NodeType>(
     if epoch_height != 0 && is_epoch_root(decided_block_number, epoch_height) {
         let next_epoch_number =
             TYPES::Epoch::new(epoch_from_block_number(decided_block_number, epoch_height) + 2);
+
+        if let Err(e) = storage
+            .write()
+            .await
+            .add_epoch_root(next_epoch_number, decided_leaf.block_header().clone())
+            .await
+        {
+            tracing::error!(
+                "Failed to store epoch root for epoch {:?}: {}",
+                next_epoch_number,
+                e
+            );
+        }
 
         let write_callback = {
             tracing::debug!("Calling add_epoch_root for epoch {:?}", next_epoch_number);
@@ -251,13 +266,14 @@ impl<TYPES: NodeType + Default> Default for LeafChainTraversalOutcome<TYPES> {
 /// # Panics
 /// If the leaf chain contains no decided leaf while reaching a decided view, which should be
 /// impossible.
-pub async fn decide_from_proposal_2<TYPES: NodeType>(
+pub async fn decide_from_proposal_2<TYPES: NodeType, I: NodeImplementation<TYPES>>(
     proposal: &QuorumProposalWrapper<TYPES>,
     consensus: OuterConsensus<TYPES>,
     existing_upgrade_cert: Arc<RwLock<Option<UpgradeCertificate<TYPES>>>>,
     public_key: &TYPES::SignatureKey,
     with_epochs: bool,
     membership: &Arc<RwLock<TYPES::Membership>>,
+    storage: &Arc<RwLock<I::Storage>>,
 ) -> LeafChainTraversalOutcome<TYPES> {
     let mut res = LeafChainTraversalOutcome::default();
     let consensus_reader = consensus.read().await;
@@ -332,7 +348,13 @@ pub async fn decide_from_proposal_2<TYPES: NodeType>(
         drop(consensus_reader);
 
         for decided_leaf_info in &res.leaf_views {
-            decide_epoch_root(&decided_leaf_info.leaf, epoch_height, membership).await;
+            decide_epoch_root::<TYPES, I>(
+                &decided_leaf_info.leaf,
+                epoch_height,
+                membership,
+                storage,
+            )
+            .await;
         }
     }
 
@@ -370,13 +392,14 @@ pub async fn decide_from_proposal_2<TYPES: NodeType>(
 /// # Panics
 /// If the leaf chain contains no decided leaf while reaching a decided view, which should be
 /// impossible.
-pub async fn decide_from_proposal<TYPES: NodeType, V: Versions>(
+pub async fn decide_from_proposal<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>(
     proposal: &QuorumProposalWrapper<TYPES>,
     consensus: OuterConsensus<TYPES>,
     existing_upgrade_cert: Arc<RwLock<Option<UpgradeCertificate<TYPES>>>>,
     public_key: &TYPES::SignatureKey,
     with_epochs: bool,
     membership: &Arc<RwLock<TYPES::Membership>>,
+    storage: &Arc<RwLock<I::Storage>>,
 ) -> LeafChainTraversalOutcome<TYPES> {
     let consensus_reader = consensus.read().await;
     let existing_upgrade_cert_reader = existing_upgrade_cert.read().await;
@@ -488,7 +511,13 @@ pub async fn decide_from_proposal<TYPES: NodeType, V: Versions>(
 
     if with_epochs && res.new_decided_view_number.is_some() {
         for decided_leaf_info in &res.leaf_views {
-            decide_epoch_root(&decided_leaf_info.leaf, epoch_height, membership).await;
+            decide_epoch_root::<TYPES, I>(
+                &decided_leaf_info.leaf,
+                epoch_height,
+                membership,
+                storage,
+            )
+            .await;
         }
     }
 

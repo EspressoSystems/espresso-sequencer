@@ -7,6 +7,7 @@ use espresso_types::{
     v0::traits::{EventConsumer, PersistenceOptions, SequencerPersistence},
     Leaf2, NetworkConfig,
 };
+use hotshot::InitializerEpochInfo;
 use hotshot_types::{
     consensus::CommitmentMap,
     data::{
@@ -14,6 +15,7 @@ use hotshot_types::{
         DaProposal, DaProposal2, EpochNumber, QuorumProposalWrapper, VidCommitment,
         VidDisperseShare,
     },
+    drb::DrbResult,
     event::{Event, EventType, HotShotAction, LeafInfo},
     message::Proposal,
     simple_certificate::{NextEpochQuorumCertificate2, QuorumCertificate2, UpgradeCertificate},
@@ -22,7 +24,7 @@ use hotshot_types::{
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use crate::{SeqTypes, ViewNumber};
+use crate::{NodeType, SeqTypes, ViewNumber};
 
 #[derive(Clone, Copy, Debug)]
 pub struct Options;
@@ -220,5 +222,25 @@ impl SequencerPersistence for NoStorage {
     }
     async fn migrate_quorum_certificates(&self) -> anyhow::Result<()> {
         Ok(())
+    }
+
+    async fn add_drb_result(
+        &self,
+        _epoch: EpochNumber,
+        _drb_result: DrbResult,
+    ) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    async fn add_epoch_root(
+        &self,
+        _epoch: EpochNumber,
+        _block_header: <SeqTypes as NodeType>::BlockHeader,
+    ) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    async fn load_start_epoch_info(&self) -> anyhow::Result<Vec<InitializerEpochInfo<SeqTypes>>> {
+        Ok(Vec::new())
     }
 }
