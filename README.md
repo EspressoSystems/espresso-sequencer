@@ -1,4 +1,4 @@
-# Espresso Sequencer
+# Espresso Network
 
 [![Build](https://github.com/EspressoSystems/espresso-sequencer/actions/workflows/build.yml/badge.svg)](https://github.com/EspressoSystems/espresso-sequencer/actions/workflows/build.yml)
 [![Test](https://github.com/EspressoSystems/espresso-sequencer/actions/workflows/test.yml/badge.svg)](https://github.com/EspressoSystems/espresso-sequencer/actions/workflows/test.yml)
@@ -10,10 +10,11 @@
 [![Build without lockfile](https://github.com/EspressoSystems/espresso-sequencer/actions/workflows/build-without-lockfile.yml/badge.svg)](https://github.com/EspressoSystems/espresso-sequencer/actions/workflows/build-without-lockfile.yml)
 [![Coverage Status](https://coveralls.io/repos/github/EspressoSystems/espresso-sequencer/badge.svg?branch=main)](https://coveralls.io/github/EspressoSystems/espresso-sequencer?branch=main)
 
-The Espresso Sequencer offers rollups credible neutrality and enhanced interoperability, without compromising on scale.
+The Espresso Network is the global confirmation layer for rollups in the Ethereum ecosystem. Espresso's [global confirmation layer(GCL)](https://eng-wiki.espressosys.com/mainli1.html#glo:gcl) provides agreement on inputs to a collection of composable blockchains, providing a high trust, fast, and verifiable way to process inputs on any chain, providing fast confirmations in return.
+<!-- The Espresso Sequencer offers rollups credible neutrality and enhanced interoperability, without compromising on scale.
 Consisting of a data availability solution and a decentralized network of nodes that sequences transactions, layer-2
 rollups can leverage the Espresso Sequencer to give developers and end users fast confirmations, low (and fair) fees,
-and robust infrastructure.
+and robust infrastructure. -->
 
 [Official Documentation](https://docs.espressosys.com/sequencer/espresso-sequencer-architecture/readme)
 
@@ -36,7 +37,7 @@ a dockerized Espresso Sequencer network with an example Layer 2 rollup applicati
 
 # Development
 
-- Obtain code: `git clone git@github.com:EspressoSystems/espresso-sequencer`.
+- Obtain code: `git clone git@github.com:EspressoSystems/espresso-network`.
 - Make sure [nix](https://nixos.org/download.html) is installed.
 - Activate the environment with `nix-shell`, or `nix develop`, or `direnv allow` if using [direnv](https://direnv.net/).
 - For installation without nix please see [ubuntu.md](./doc/ubuntu.md).
