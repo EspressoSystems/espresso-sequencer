@@ -30,8 +30,11 @@ use tracing::instrument;
 use self::handlers::{
     handle_quorum_vote_recv, handle_timeout, handle_timeout_vote_recv, handle_view_change,
 };
-use crate::helpers::{validate_qc_and_next_epoch_qc, wait_for_next_epoch_qc};
-use crate::{events::HotShotEvent, helpers::broadcast_event, vote_collection::VoteCollectorsMap};
+use crate::{
+    events::HotShotEvent,
+    helpers::{broadcast_event, validate_qc_and_next_epoch_qc},
+    vote_collection::VoteCollectorsMap,
+};
 
 /// Event handlers for use in the `handle` method.
 mod handlers;
@@ -155,24 +158,63 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> ConsensusTaskSt
                     tracing::debug!("We formed QC but not eQC. Do nothing");
                     return Ok(());
                 }
-                wait_for_next_epoch_qc(
-                    quorum_cert,
-                    &self.consensus,
-                    self.timeout,
-                    self.view_start_time,
-                    &receiver,
-                )
-                .await
-                .context(warn!(
-                    "We formed eQC but we don't have corresponding next epoch eQC."
-                ))?;
 
+                let consensus_reader = self.consensus.read().await;
+                let Some(next_epoch_qc) = consensus_reader.next_epoch_high_qc() else {
+                    tracing::debug!("We formed the current epoch eQC but we don't have the next epoch eQC at all.");
+                    return Ok(());
+                };
+                if quorum_cert.view_number() != next_epoch_qc.view_number()
+                    || quorum_cert.data != *next_epoch_qc.data
+                {
+                    tracing::debug!("We formed the current epoch eQC but we don't have the corresponding next epoch eQC.");
+                    return Ok(());
+                }
+                drop(consensus_reader);
+
+                broadcast_event(
+                    Arc::new(HotShotEvent::ExtendedQc2Formed(quorum_cert.clone())),
+                    &sender,
+                )
+                .await;
+            }
+            HotShotEvent::NextEpochQc2Formed(Either::Left(next_epoch_qc)) => {
+                let cert_view = next_epoch_qc.view_number();
+                if !self.upgrade_lock.epochs_enabled(cert_view).await {
+                    tracing::debug!("Next epoch QC2 formed but epochs not enabled. Do nothing");
+                    return Ok(());
+                }
+                if !self
+                    .consensus
+                    .read()
+                    .await
+                    .is_leaf_extended(next_epoch_qc.data.leaf_commit)
+                {
+                    tracing::debug!("We formed next epoch QC but not eQC. Do nothing");
+                    return Ok(());
+                }
+
+                let consensus_reader = self.consensus.read().await;
+                let high_qc = consensus_reader.high_qc();
+                if high_qc.view_number() != next_epoch_qc.view_number()
+                    || high_qc.data != *next_epoch_qc.data
+                {
+                    tracing::debug!("We formed the current epoch eQC but we don't have the corresponding next epoch eQC.");
+                    return Ok(());
+                }
+                let high_qc = high_qc.clone();
+                drop(consensus_reader);
+
+                broadcast_event(Arc::new(HotShotEvent::ExtendedQc2Formed(high_qc)), &sender).await;
+            }
+            HotShotEvent::ExtendedQc2Formed(eqc) => {
+                let cert_view = eqc.view_number();
                 let cert_block_number = self
                     .consensus
                     .read()
                     .await
                     .saved_leaves()
-                    .get(&quorum_cert.data.leaf_commit)
+                    .get(&eqc.data.leaf_commit)
                     .context(error!(
                         "Could not find the leaf for the eQC. It shouldn't happen."
                     ))?
