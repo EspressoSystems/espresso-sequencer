@@ -24,7 +24,7 @@ env:
 
 jobs:
   build:
-    runs-on: buildjet-8vcpu-ubuntu-2204
+    runs-on: ubuntu-latest
     steps:
       - uses: rui314/setup-mold@v1
 
