@@ -771,12 +771,7 @@ pub(crate) async fn validate_proposal_view_and_certs<
                     *view_number
                 );
                 let timeout_cert_epoch = timeout_cert.data().epoch();
-                if timeout_cert_epoch < membership.epoch() {
-                    membership = membership
-                        .prev_epoch()
-                        .await
-                        .context(warn!("No stake table for epoch"))?;
-                }
+                membership = membership.get_new_epoch(timeout_cert_epoch).await?;
 
                 let membership_stake_table = membership.stake_table().await;
                 let membership_success_threshold = membership.success_threshold().await;
@@ -804,12 +799,8 @@ pub(crate) async fn validate_proposal_view_and_certs<
                 );
 
                 let view_sync_cert_epoch = view_sync_cert.data().epoch();
-                if view_sync_cert_epoch < membership.epoch() {
-                    membership = membership
-                        .prev_epoch()
-                        .await
-                        .context(warn!("No stake table for epoch"))?;
-                }
+                membership = membership.get_new_epoch(view_sync_cert_epoch).await?;
+
                 let membership_stake_table = membership.stake_table().await;
                 let membership_success_threshold = membership.success_threshold().await;
 

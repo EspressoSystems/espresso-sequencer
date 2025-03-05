@@ -207,15 +207,8 @@ impl<TYPES: NodeType> EpochMembership<TYPES> {
             .membership_for_epoch(self.epoch.map(|e| e + 1))
             .await
     }
-
-    /// Get the prior epoch
-    pub async fn prev_epoch(&self) -> Result<Self> {
-        let Some(epoch) = self.epoch else {
-            return Ok(self.clone());
-        };
-        ensure!(*epoch > 0, "There is no previous epoch");
-
-        self.coordinator.membership_for_epoch(Some(epoch - 1)).await
+    pub async fn get_new_epoch(&self, epoch: Option<TYPES::Epoch>) -> Result<Self> {
+        self.coordinator.membership_for_epoch(epoch).await
     }
 
     /// Wraps the same named Membership trait fn

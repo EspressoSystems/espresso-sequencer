@@ -128,16 +128,7 @@ impl<TYPES: NodeType, V: Versions> ProposalDependencyHandle<TYPES, V> {
         while let Ok(event) = rx.recv_direct().await {
             if let HotShotEvent::HighQcRecv(qc, _sender) = event.as_ref() {
                 let prev_epoch = qc.data.epoch;
-                let epoch_membership = if prev_epoch == self.membership.epoch() {
-                    self.membership.clone()
-                } else {
-                    let prev_membership = self.membership.prev_epoch().await.ok()?;
-                    if prev_epoch != prev_membership.epoch {
-                        tracing::info!("High QC received is not fror current or previous epoch");
-                        return None;
-                    }
-                    prev_membership
-                };
+                let epoch_membership = self.membership.get_new_epoch(prev_epoch).await.ok()?;
                 let membership_stake_table = epoch_membership.stake_table().await;
                 let membership_success_threshold = epoch_membership.success_threshold().await;
 

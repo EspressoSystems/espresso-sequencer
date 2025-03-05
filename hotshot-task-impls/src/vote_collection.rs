@@ -27,7 +27,7 @@ use hotshot_types::{
         DaVote2, NextEpochQuorumVote2, QuorumVote, QuorumVote2, TimeoutVote2, UpgradeVote,
         ViewSyncCommitVote2, ViewSyncFinalizeVote2, ViewSyncPreCommitVote2,
     },
-    traits::node_implementation::{NodeType, Versions},
+    traits::node_implementation::{ConsensusTime, NodeType, Versions},
     utils::EpochTransitionIndicator,
     vote::{Certificate, HasViewNumber, Vote, VoteAccumulator},
 };
@@ -371,8 +371,11 @@ impl<TYPES: NodeType>
     for NextEpochQuorumVote2<TYPES>
 {
     async fn leader(&self, membership: &EpochMembership<TYPES>) -> Result<TYPES::SignatureKey> {
+        let epoch = membership
+            .epoch
+            .map(|e| TYPES::Epoch::new(e.saturating_sub(1)));
         membership
-            .prev_epoch()
+            .get_new_epoch(epoch)
             .await?
             .leader(self.view_number() + 1)
             .await
