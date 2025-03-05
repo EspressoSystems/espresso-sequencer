@@ -321,7 +321,7 @@ impl<
             // that we don't always send to the same recipients in the same order
             let mut recipients = self
                 .recipient_source
-                .get_recipients_for(&request_message.request)
+                .get_expected_responders(&request_message.request)
                 .await;
             recipients.shuffle(&mut rand::thread_rng());
 
@@ -636,7 +636,7 @@ mod tests {
     // Implement the [`RecipientSource`] trait for the [`TestSender`] type
     #[async_trait]
     impl RecipientSource<TestRequest, BLSPubKey> for TestSender {
-        async fn get_recipients_for(&self, _request: &TestRequest) -> Vec<BLSPubKey> {
+        async fn get_expected_responders(&self, _request: &TestRequest) -> Vec<BLSPubKey> {
             // Get all the participants in the network
             self.network.keys().copied().collect()
         }
