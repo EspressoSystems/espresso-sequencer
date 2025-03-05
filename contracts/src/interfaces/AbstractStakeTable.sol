@@ -53,7 +53,7 @@ abstract contract AbstractStakeTable {
         address account, BN254.G2Point blsVK, EdOnBN254.EdOnBN254Point schnorrVK
     );
 
-    /// @notice Unlocked funds were withdrawan.
+    /// @notice Unlocked funds were claimed.
     ///
     /// @dev This event is not relevant for the confirmation layer because the
     /// events that remove stake from the stake table are `Undelegated` and
