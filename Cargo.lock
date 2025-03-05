@@ -3812,6 +3812,7 @@ dependencies = [
  "hotshot-contract-adapter",
  "hotshot-query-service",
  "hotshot-types",
+ "indexmap 2.7.1",
  "itertools 0.12.1",
  "jf-merkle-tree 0.1.0",
  "jf-utils",

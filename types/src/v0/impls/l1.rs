@@ -19,23 +19,28 @@ use contract_bindings_alloy::{
     permissionedstaketable::PermissionedStakeTable::{
         PermissionedStakeTableInstance, StakersUpdated,
     },
+    staketable::StakeTable::{
+        Delegated, StakeTableInstance, Undelegated, ValidatorExit, ValidatorRegistered,
+    },
 };
 use ethers_conv::ToEthers;
 use futures::{
     future::Future,
     stream::{self, StreamExt},
 };
+use hotshot::types::BLSPubKey;
 use hotshot_types::traits::metrics::Metrics;
 use lru::LruCache;
 use parking_lot::RwLock;
-use std::result::Result as StdResult;
 use std::{
     cmp::{min, Ordering},
+    collections::BTreeMap,
     num::NonZeroUsize,
     pin::Pin,
     sync::Arc,
     time::Instant,
 };
+use std::{collections::BTreeSet, result::Result as StdResult};
 use tokio::{
     spawn,
     sync::{Mutex, MutexGuard, Notify},
@@ -47,7 +52,7 @@ use url::Url;
 
 use super::{
     v0_1::{SingleTransport, SingleTransportStatus, SwitchingTransport},
-    v0_3::StakeTables,
+    v0_3::{StakeTables, StakerConfig},
     L1BlockInfo, L1ClientMetrics, L1State, L1UpdateTask,
 };
 use crate::{FeeInfo, L1Client, L1ClientOptions, L1Event, L1Snapshot};
@@ -832,23 +837,45 @@ impl L1Client {
         &self,
         contract: Address,
         block: u64,
-    ) -> anyhow::Result<StakeTables> {
+    ) -> anyhow::Result<Vec<StakerConfig<BLSPubKey>>> {
         // TODO stake_table_address needs to be passed in to L1Client
         // before update loop starts.
-        let stake_table_contract =
-            PermissionedStakeTableInstance::new(contract, self.provider.clone());
+        let stake_table_contract = StakeTableInstance::new(contract, self.provider.clone());
 
-        let events: Vec<StakersUpdated> = stake_table_contract
-            .StakersUpdated_filter()
+        let registered = stake_table_contract
+            .ValidatorRegistered_filter()
             .from_block(0)
             .to_block(block)
             .query()
-            .await?
-            .into_iter()
-            .map(|(event, _)| event)
-            .collect();
+            .await?;
 
-        Ok(StakeTables::from_l1_events(events.clone()))
+        let deregistered = stake_table_contract
+            .ValidatorExit_filter()
+            .from_block(0)
+            .to_block(block)
+            .query()
+            .await?;
+
+        let delegated = stake_table_contract
+            .Delegated_filter()
+            .from_block(0)
+            .to_block(block)
+            .query()
+            .await?;
+
+        let undelegated = stake_table_contract
+            .Undelegated_filter()
+            .from_block(0)
+            .to_block(block)
+            .query()
+            .await?;
+
+        Ok(StakeTables::from_l1_events(
+            registered,
+            deregistered,
+            delegated,
+            undelegated,
+        ))
     }
 
     /// Check if the given address is a proxy contract.
