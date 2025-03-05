@@ -10,7 +10,7 @@
 [![Build without lockfile](https://github.com/EspressoSystems/espresso-sequencer/actions/workflows/build-without-lockfile.yml/badge.svg)](https://github.com/EspressoSystems/espresso-sequencer/actions/workflows/build-without-lockfile.yml)
 [![Coverage Status](https://coveralls.io/repos/github/EspressoSystems/espresso-sequencer/badge.svg?branch=main)](https://coveralls.io/github/EspressoSystems/espresso-sequencer?branch=main)
 
-The Espresso Network is the global confirmation layer for rollups in the Ethereum ecosystem. Espresso's [global confirmation layer(GCL)](https://eng-wiki.espressosys.com/mainli1.html#glo:gcl) provides agreement on inputs to a collection of composable blockchains, providing a high trust, fast, and verifiable way to process inputs on any chain, providing fast confirmations in return.
+The Espresso Network is the global confirmation layer for rollups in the Ethereum ecosystem. Espresso's [global confirmation layer(GCL)](https://docs.espressosys.com/network/learn/the-espresso-network) provides agreement on inputs to a collection of composable blockchains, providing a high trust, fast, and verifiable way to process inputs on any chain, providing fast confirmations in return.
 <!-- The Espresso Sequencer offers rollups credible neutrality and enhanced interoperability, without compromising on scale.
 Consisting of a data availability solution and a decentralized network of nodes that sequences transactions, layer-2
 rollups can leverage the Espresso Sequencer to give developers and end users fast confirmations, low (and fair) fees,
