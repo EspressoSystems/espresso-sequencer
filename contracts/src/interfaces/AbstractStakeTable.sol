@@ -11,19 +11,6 @@ import { EdOnBN254 } from "../libraries/EdOnBn254.sol";
 /// @dev Stake table contract should store a reference to the `LightClient.sol` to query
 /// "epoch-related" info
 abstract contract AbstractStakeTable {
-    /// @notice Supported stake type, either using native token or re-staked using ETH
-    enum StakeType {
-        Native,
-        Restake
-    }
-
-    /// @notice Get the total number of stakers, uniquely identified by their `blsVK`
-    uint32 public totalKeys;
-    /// @notice Get the total stake of the registered keys in the voting stake table
-    /// (LastEpochStart)
-    uint256 public totalVotingStake;
-
-
     // === Events ===
 
     /// @notice Signals a registration of a new validator.
@@ -32,10 +19,7 @@ abstract contract AbstractStakeTable {
     /// delegations. The confirmation layer needs to to use this event to keep
     /// track of the validator's keys for the stake table.
     event ValidatorRegistered(
-        address account,
-        BN254.G2Point blsVk,
-        EdOnBN254.EdOnBN254Point schnorrVk,
-        uint16 commission
+        address account, BN254.G2Point blsVk, EdOnBN254.EdOnBN254Point schnorrVk, uint16 commission
     );
 
     /// @notice Validator initiated exit from stake table
@@ -71,7 +55,9 @@ abstract contract AbstractStakeTable {
 
     /// @notice Unlocked funds were withdrawan.
     ///
-    /// This event is not relevant to the confirmation layer.
+    /// @dev This event is not relevant for the confirmation layer because the
+    /// events that remove stake from the stake table are `Undelegated` and
+    /// `ValidatorExit`.
     event Withdrawal(address account, uint256 amount);
 
     // === Structs ===
@@ -95,20 +81,26 @@ abstract contract AbstractStakeTable {
     /// @param schnorrVK The Schnorr verification key associated. Used for signing the light client
     /// state.
     /// @param blsVK The BLS verification key associated. Used for consensus voting.
-    struct Node {
-        address account;
-        uint256 balance;
-        EdOnBN254.EdOnBN254Point schnorrVK;
-        BN254.G2Point blsVK;
-    }
+    // struct Node {
+    //     address account;
+    //     uint256 balance;
+    //     EdOnBN254.EdOnBN254Point schnorrVK;
+    //     BN254.G2Point blsVK;
+    // }
+
+    /// These are just examples for now
+    // enum SlashableOffense {
+    //     DoubleSigning,
+    //     InvalidSignature
+    // }
 
     // === Table State & Stats ===
 
-    /// @notice Look up the balance of `account`
-    function lookupStake(address account) external view virtual returns (uint256);
+    // /// @notice Look up the balance of `account`
+    // function lookupStake(address account) external view virtual returns (uint256);
 
-    /// @notice Look up the full `Node` state associated with `account`
-    function lookupNode(address account) external view virtual returns (Node memory);
+    // /// @notice Look up the full `Node` state associated with `account`
+    // function lookupNode(address account) external view virtual returns (Node memory);
 
     // === Write APIs ===
 
@@ -129,9 +121,10 @@ abstract contract AbstractStakeTable {
         uint16 commission
     ) external virtual;
 
+    /// @notice The validator and all their delegation will exit the stake table.
     function deregisterValidator() external virtual;
 
-    /// @notice Deposit more stakes to registered keys
+    /// @notice Delegate
     ///
     /// @param amount The amount to deposit
     function delegate(address validator, uint256 amount) external virtual;
@@ -139,11 +132,11 @@ abstract contract AbstractStakeTable {
     /// @notice initiate withdrawal
     function undelegate(address validator, uint256 amount) external virtual;
 
-    /// @notice Withdraw from the staking pool. Transfers occur! Only successfully exited keys can
-    /// withdraw past their `exitEpoch`.
-    ///
-    /// @return The total amount withdrawn, equal to `Node.balance` associated with `blsVK`
-    function withdrawFunds() external virtual returns (uint256);
+    /// @notice Withdraw an undelegation
+    function claimWithdrawal(address validator) external virtual;
+
+    /// @notice Withdraw after a validator has exited
+    function claimValidatorExit(address validator) external virtual;
 
     /// @notice Update the consensus keys for a validator
     /// @dev This function is used to update the consensus keys for a validator
