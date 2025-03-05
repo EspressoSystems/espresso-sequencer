@@ -496,6 +496,10 @@ where
         // Similarly, we can initialize the payload table with a null payload, which can help us
         // distinguish between blocks that haven't been produced yet and blocks we haven't received
         // yet when answering queries.
+        // We don't overwrite the payload if it already exists.
+        // During epoch transition in PoS, the same height block is sent multiple times.
+        // The first block may have the payload, but subsequent blocks might be missing it.
+        // Overwriting would cause the payload to be lost since the block height is the same
         let query = query("INSERT INTO payload (height) VALUES ($1) ON CONFLICT DO NOTHING")
             .bind(height as i64);
         query.execute(self.as_mut()).await?;
