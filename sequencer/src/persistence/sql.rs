@@ -1405,7 +1405,7 @@ impl DhtPersistentStorage for Persistence {
             bincode::serialize(&records).with_context(|| "failed to serialize records")?;
 
         // Prepare the statement
-        let stmt = "UPSERT INTO libp2p_dht (id, serialized_records) VALUES (0, $1)";
+        let stmt = "INSERT INTO libp2p_dht (id, serialized_records) VALUES (0, $1) ON CONFLICT (id) DO UPDATE SET serialized_records = $1";
 
         // Execute the query
         let mut tx = self
