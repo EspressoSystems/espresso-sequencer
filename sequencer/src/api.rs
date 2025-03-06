@@ -174,7 +174,7 @@ impl<N: ConnectedNetwork<PubKey>, D: Sync, V: Versions, P: SequencerPersistence>
     async fn get_da_members(
         &self,
         epoch: Option<<SeqTypes as NodeType>::Epoch>,
-    ) -> Vec<StakeTableEntry<<SeqTypes as NodeType>::SignatureKey>> {
+    ) -> Vec<PeerConfig<<SeqTypes as NodeType>::SignatureKey>> {
         self.as_ref().get_da_members(epoch).await
     }
 
@@ -188,7 +188,7 @@ impl<N: ConnectedNetwork<PubKey>, D: Sync, V: Versions, P: SequencerPersistence>
     /// Get the stake table for the current epoch if not provided
     async fn get_da_members_current(
         &self,
-    ) -> Vec<StakeTableEntry<<SeqTypes as NodeType>::SignatureKey>> {
+    ) -> Vec<PeerConfig<<SeqTypes as NodeType>::SignatureKey>> {
         self.as_ref().get_da_members_current().await
     }
 
@@ -231,7 +231,7 @@ impl<N: ConnectedNetwork<PubKey>, V: Versions, P: SequencerPersistence>
     async fn get_da_members(
         &self,
         epoch: Option<<SeqTypes as NodeType>::Epoch>,
-    ) -> Vec<StakeTableEntry<<SeqTypes as NodeType>::SignatureKey>> {
+    ) -> Vec<PeerConfig<<SeqTypes as NodeType>::SignatureKey>> {
         self.consensus()
             .await
             .read()
@@ -245,7 +245,7 @@ impl<N: ConnectedNetwork<PubKey>, V: Versions, P: SequencerPersistence>
     /// Get the stake table for the current epoch if not provided
     async fn get_da_members_current(
         &self,
-    ) -> Vec<StakeTableEntry<<SeqTypes as NodeType>::SignatureKey>> {
+    ) -> Vec<PeerConfig<<SeqTypes as NodeType>::SignatureKey>> {
         let epoch = self.consensus().await.read().await.cur_epoch().await;
 
         self.get_da_members(epoch).await
@@ -1619,8 +1619,7 @@ mod test {
         traits::NullEventConsumer,
         v0_1::{UpgradeMode, ViewBasedUpgrade},
         BackoffParams, FeeAccount, FeeAmount, Header, MarketplaceVersion, MockSequencerVersions,
-        PublicHotShotConfig, SequencerVersions, TimeBasedUpgrade, Timestamp, Upgrade, UpgradeType,
-        ValidatedState,
+        SequencerVersions, TimeBasedUpgrade, Timestamp, Upgrade, UpgradeType, ValidatedState,
     };
     use ethers::utils::Anvil;
     use futures::{

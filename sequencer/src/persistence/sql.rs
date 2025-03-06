@@ -49,7 +49,6 @@ use hotshot_types::{
     vote::HasViewNumber,
 };
 use itertools::Itertools;
-use jf_vid::VidScheme;
 use sqlx::Row;
 use sqlx::{query, Executor};
 use std::{collections::BTreeMap, path::PathBuf, str::FromStr, sync::Arc, time::Duration};

@@ -1,5 +1,7 @@
 use anyhow::Context;
-use espresso_types::{FeeAccount, FeeAmount, FeeMerkleTree, Header, PubKey, PublicNetworkConfig};
+use espresso_types::{
+    config::PublicNetworkConfig, FeeAccount, FeeAmount, FeeMerkleTree, Header, PubKey,
+};
 use ethers::types::Address;
 use futures::{stream::BoxStream, StreamExt};
 use hotshot_types::stake_table::StakeTableEntry;

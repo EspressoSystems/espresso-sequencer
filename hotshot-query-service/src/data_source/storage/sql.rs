@@ -37,7 +37,6 @@ use log::LevelFilter;
 
 #[cfg(not(feature = "embedded-db"))]
 use futures::future::FutureExt;
-use serde_json::Value;
 #[cfg(not(feature = "embedded-db"))]
 use sqlx::postgres::{PgConnectOptions, PgSslMode};
 #[cfg(feature = "embedded-db")]

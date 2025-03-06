@@ -1558,10 +1558,7 @@ mod test {
     use hotshot_types::{
         data::{vid_commitment, Leaf, ViewNumber},
         message::Proposal,
-        traits::{
-            block_contents::vid_commitment, node_implementation::ConsensusTime,
-            signature_key::BuilderSignatureKey,
-        },
+        traits::{node_implementation::ConsensusTime, signature_key::BuilderSignatureKey},
         utils::BuilderCommitment,
     };
     use marketplace_builder_shared::{

@@ -43,7 +43,8 @@ mod testing {
 #[cfg(test)]
 #[espresso_macros::generic_tests]
 mod persistence_tests {
-    use std::{collections::BTreeMap, marker::PhantomData};
+    use sequencer_utils::test_utils::setup_test;
+    use std::{collections::BTreeMap, marker::PhantomData, sync::Arc};
     use vbs::version::StaticVersionType;
 
     use anyhow::bail;
@@ -77,7 +78,7 @@ mod persistence_tests {
         vote::HasViewNumber,
     };
 
-    use super::*;
+    use super::{testing::TestablePersistence, *};
     use vbs::version::Version;
 
     #[derive(Clone, Debug, Default)]
@@ -227,7 +228,7 @@ mod persistence_tests {
             Some(convert_proposal(vid_share0.clone()))
         );
 
-        vid.set_view_number(ViewNumber::new(1));
+        vid.view_number = ViewNumber::new(1);
 
         let vid_share1 = vid.clone().to_proposal(&privkey).unwrap().clone();
         storage.append_vid2(&vid_share1).await.unwrap();
@@ -237,7 +238,7 @@ mod persistence_tests {
             Some(convert_proposal(vid_share1.clone()))
         );
 
-        vid.set_view_number(ViewNumber::new(2));
+        vid.view_number = ViewNumber::new(2);
 
         let vid_share2 = vid.clone().to_proposal(&privkey).unwrap().clone();
         storage.append_vid2(&vid_share2).await.unwrap();
@@ -247,7 +248,7 @@ mod persistence_tests {
             Some(convert_proposal(vid_share2.clone()))
         );
 
-        vid.set_view_number(ViewNumber::new(3));
+        vid.view_number = ViewNumber::new(3);
 
         let vid_share3 = vid.clone().to_proposal(&privkey).unwrap().clone();
         storage.append_vid2(&vid_share3).await.unwrap();
@@ -742,7 +743,7 @@ mod persistence_tests {
             let leaf = Leaf2::from_quorum_proposal(&quorum_proposal);
             qc.view_number = leaf.view_number();
             qc.data.leaf_commit = Committable::commit(&leaf);
-            vid.data.set_view_number(leaf.view_number());
+            vid.data.view_number = leaf.view_number();
             da_proposal.data.view_number = leaf.view_number();
             chain.push((leaf.clone(), qc.clone(), vid.clone(), da_proposal.clone()));
         }
