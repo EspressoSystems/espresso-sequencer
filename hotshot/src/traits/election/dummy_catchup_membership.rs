@@ -1,7 +1,10 @@
 use std::{collections::HashSet, time::Duration};
 
 use anyhow::Ok;
-use hotshot_types::traits::{election::Membership, node_implementation::NodeType};
+use hotshot_types::{
+    drb::DrbResult,
+    traits::{election::Membership, node_implementation::NodeType},
+};
 
 use super::static_committee::StaticCommittee;
 
@@ -160,14 +163,14 @@ where
         self.epochs.contains(&epoch)
     }
 
-    async fn get_epoch_root(
+    async fn get_epoch_root_and_drb(
         &self,
         _block_height: u64,
         _epoch_height: u64,
-        epoch: TYPES::Epoch,
-    ) -> anyhow::Result<(TYPES::Epoch, TYPES::BlockHeader)> {
+        _epoch: TYPES::Epoch,
+    ) -> anyhow::Result<(TYPES::BlockHeader, DrbResult)> {
         tokio::time::sleep(Duration::from_secs(1)).await;
-        Ok((epoch, TYPES::BlockHeader::default()))
+        Ok((TYPES::BlockHeader::default(), DrbResult::default()))
     }
 
     fn add_drb_result(&mut self, epoch: TYPES::Epoch, drb_result: hotshot_types::drb::DrbResult) {

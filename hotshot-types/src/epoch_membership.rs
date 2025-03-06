@@ -120,9 +120,9 @@ where
         };
 
         // Get the epoch root headers and update our membership with them, finally sync them
-        // Verification of the root is handled in get_epoch_root
-        let Ok((next_epoch, header)) = root_membership
-            .get_epoch_root(root_block_in_epoch(*root_epoch, self.epoch_height))
+        // Verification of the root is handled in get_epoch_root_and_drb
+        let Ok((header, drb)) = root_membership
+            .get_epoch_root_and_drb(root_block_in_epoch(*root_epoch, self.epoch_height))
             .await
         else {
             anytrace::bail!("get epoch root failed for epoch {:?}", root_epoch);
@@ -131,10 +131,12 @@ where
             .membership
             .read()
             .await
-            .add_epoch_root(next_epoch, header)
+            .add_epoch_root(epoch, header)
             .await
             .ok_or(anytrace::warn!("add epoch root failed"))?;
         updater(&mut *(self.membership.write().await));
+
+        self.membership.write().await.add_drb_result(epoch, drb);
 
         Ok(EpochMembership {
             epoch: Some(epoch),
@@ -214,10 +216,10 @@ impl<TYPES: NodeType> EpochMembership<TYPES> {
     }
 
     /// Wraps the same named Membership trait fn
-    async fn get_epoch_root(
+    async fn get_epoch_root_and_drb(
         &self,
         block_height: u64,
-    ) -> anyhow::Result<(TYPES::Epoch, TYPES::BlockHeader)> {
+    ) -> anyhow::Result<(TYPES::BlockHeader, DrbResult)> {
         let Some(epoch) = self.epoch else {
             anyhow::bail!("Cannot get root for None epoch");
         };
@@ -225,7 +227,7 @@ impl<TYPES: NodeType> EpochMembership<TYPES> {
             .membership
             .read()
             .await
-            .get_epoch_root(block_height, self.coordinator.epoch_height, epoch)
+            .get_epoch_root_and_drb(block_height, self.coordinator.epoch_height, epoch)
             .await
     }
 

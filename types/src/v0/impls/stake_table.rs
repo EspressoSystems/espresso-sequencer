@@ -4,6 +4,7 @@ use std::{
     num::NonZeroU64,
 };
 
+use anyhow::Context;
 use contract_bindings_alloy::permissionedstaketable::PermissionedStakeTable::StakersUpdated;
 use ethers::types::{Address, U256};
 use ethers_conv::ToAlloy;
@@ -496,12 +497,12 @@ impl Membership<SeqTypes> for EpochCommittees {
         self.state.contains_key(&epoch)
     }
 
-    async fn get_epoch_root(
+    async fn get_epoch_root_and_drb(
         &self,
         block_height: u64,
         epoch_height: u64,
         epoch: Epoch,
-    ) -> anyhow::Result<(Epoch, Header)> {
+    ) -> anyhow::Result<(Header, DrbResult)> {
         let Some(ref peers) = self.peers else {
             anyhow::bail!("No Peers Configured for Catchup");
         };
@@ -509,7 +510,18 @@ impl Membership<SeqTypes> for EpochCommittees {
         let leaf: Leaf2 = peers
             .fetch_leaf(block_height, self, epoch, epoch_height)
             .await?;
-        Ok((epoch, leaf.block_header().clone()))
+        //DRB height is decided in the next epoch's last block
+        let drb_height = block_height + epoch_height + 3;
+        let drb_leaf = peers
+            .fetch_leaf(drb_height, self, epoch, epoch_height)
+            .await?;
+
+        Ok((
+            leaf.block_header().clone(),
+            drb_leaf
+                .next_drb_result
+                .context(format!("No DRB result on decided leaf at {drb_height}"))?,
+        ))
     }
 
     fn add_drb_result(&mut self, epoch: Epoch, drb: DrbResult) {

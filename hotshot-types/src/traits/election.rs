@@ -128,12 +128,17 @@ pub trait Membership<TYPES: NodeType>: Debug + Send + Sync {
 
     /// Gets the validated block header and epoch number of the epoch root
     /// at the given block height
-    fn get_epoch_root(
+    fn get_epoch_root_and_drb(
         &self,
-        block_height: u64,
-        epoch_height: u64,
-        epoch: TYPES::Epoch,
-    ) -> impl std::future::Future<Output = anyhow::Result<(TYPES::Epoch, TYPES::BlockHeader)>> + Send;
+        _block_height: u64,
+        _epoch_height: u64,
+        _epoch: TYPES::Epoch,
+    ) -> impl std::future::Future<Output = anyhow::Result<(TYPES::BlockHeader, DrbResult)>> + Send
+    {
+        async {
+            anyhow::bail!("Not implemented");
+        }
+    }
 
     #[allow(clippy::type_complexity)]
     /// Handles notifications that a new epoch root has been created

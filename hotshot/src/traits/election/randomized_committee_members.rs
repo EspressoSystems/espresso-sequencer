@@ -450,15 +450,6 @@ impl<TYPES: NodeType, CONFIG: QuorumFilterConfig> Membership<TYPES>
         true
     }
 
-    async fn get_epoch_root(
-        &self,
-        _block_height: u64,
-        _epoch_height: u64,
-        _epoch: TYPES::Epoch,
-    ) -> anyhow::Result<(TYPES::Epoch, TYPES::BlockHeader)> {
-        anyhow::bail!("Not implemented");
-    }
-
     fn add_drb_result(&mut self, _epoch: <TYPES as NodeType>::Epoch, _drb_result: DrbResult) {}
 
     fn set_first_epoch(&mut self, _epoch: TYPES::Epoch, _initial_drb_result: DrbResult) {}
