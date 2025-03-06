@@ -273,24 +273,31 @@ impl UpdateSolverState for GlobalState {
         // Get all bids for the current view number
         let winning_bids = match self.solver.bid_txs.get(&view_number) {
             Some(bids_map) => {
-                // Group bids by namespace
-                let mut namespace_bids: HashMap<NamespaceId, Vec<&BidTx>> = HashMap::new();
+                // Create a map to track which namespaces have been claimed
+                let mut claimed_namespaces = HashSet::new();
+                let mut winners = Vec::new();
                 
-                for bid_tx in bids_map.values() {
-                    for namespace in bid_tx.body.namespaces.iter() {
-                        namespace_bids.entry(*namespace).or_default().push(bid_tx);
+                // Sort bids by amount (highest first)
+                let mut bids = bids_map.values().collect::<Vec<_>>();
+                bids.sort_by(|a, b| b.amount().cmp(&a.amount()));
+                
+                // Process bids in order of highest amount
+                for bid in bids {
+                    let namespaces = &bid.body.namespaces;
+                    
+                    // Check if any of the namespaces in this bid are already claimed
+                    let has_conflict = namespaces.iter().any(|ns| claimed_namespaces.contains(ns));
+                    
+                    if !has_conflict {
+                        // If no conflicts, this bid wins
+                        for namespace in namespaces {
+                            claimed_namespaces.insert(*namespace);
+                        }
+                        winners.push(bid.clone());
                     }
                 }
                 
-                // For each namespace, select the highest bid
-                let mut winners = HashSet::new();
-                for bids in namespace_bids.values() {
-                    if let Some(highest_bid) = bids.iter().max_by_key(|bid| bid.amount()) {
-                        winners.insert(*highest_bid);
-                    }
-                }
-                
-                winners.into_iter().cloned().collect()
+                winners
             }
             None => Vec::new(),
         };
