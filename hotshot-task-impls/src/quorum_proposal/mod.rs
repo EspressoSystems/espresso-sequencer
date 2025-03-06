@@ -35,6 +35,7 @@ use tracing::instrument;
 
 use self::handlers::{ProposalDependency, ProposalDependencyHandle};
 use crate::events::HotShotEvent;
+use crate::quorum_proposal::handlers::handle_eqc_formed;
 
 mod handlers;
 
@@ -437,6 +438,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                         .await
                         .wrap()
                         .context(error!("Failed to update high QC in storage!"))?;
+
+                    handle_eqc_formed(qc.view_number(), qc.data.leaf_commit, self, &event_sender)
+                        .await;
+
                     let view_number = qc.view_number() + 1;
                     self.create_dependency_task_if_new(
                         view_number,
@@ -598,6 +603,14 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                     .await
                     .wrap()
                     .context(error!("Failed to update next epoch high QC in storage!"))?;
+
+                handle_eqc_formed(
+                    next_epoch_qc.view_number(),
+                    next_epoch_qc.data.leaf_commit,
+                    self,
+                    &event_sender,
+                )
+                .await;
             }
             _ => {}
         }
