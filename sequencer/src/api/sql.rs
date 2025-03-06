@@ -165,27 +165,16 @@ impl CatchupStorage for SqlStorage {
             .read()
             .await
             .context(format!("opening transaction to fetch leaf at {height}"))?;
-        let leaf = tx
-            .get_leaf((height as usize).into())
-            .await
-            .context(format!("leaf {height} not available"))?;
-        let last_leaf: Leaf2 = leaf.leaf().clone().into();
-        let mut chain = vec![last_leaf.clone()];
-        let mut h = height + 1;
-        while let Ok(leaf) = tx.get_leaf((h as usize).into()).await {
-            let leaf: Leaf2 = leaf.leaf().clone().into();
-            chain.push(leaf.clone());
-            // just one away from deciding
-            if leaf.view_number() == last_leaf.view_number() + 1 {
-                break;
-            }
-            h += 1;
+        let h = usize::try_from(height)?;
+        let query_leaf_chain = tx.get_leaf_range(h..=(h + 2)).await.context(format!("leaf chain {height} not available"))?;
+        let mut chain = vec![];
+
+        for query_result in query_leaf_chain {
+            let Ok(leaf_query) = query_result else {
+                bail!(format!("leaf chain {height} not available"));
+            };
+            chain.push(leaf_query.leaf().clone().into());
         }
-        let leaf = tx
-            .get_leaf((height as usize).into())
-            .await
-            .context(format!("leaf to decide leaf with {height} not available"))?;
-        chain.push(leaf.leaf().clone().into());
         Ok(chain)
     }
 }
