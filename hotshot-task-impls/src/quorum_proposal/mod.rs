@@ -15,6 +15,7 @@ use hotshot_task::{
     dependency_task::DependencyTask,
     task::TaskState,
 };
+use hotshot_types::StakeTableEntries;
 use hotshot_types::{
     consensus::OuterConsensus,
     message::UpgradeLock,
@@ -34,6 +35,7 @@ use tracing::instrument;
 
 use self::handlers::{ProposalDependency, ProposalDependencyHandle};
 use crate::events::HotShotEvent;
+use crate::quorum_proposal::handlers::handle_eqc_formed;
 
 mod handlers;
 
@@ -436,6 +438,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                         .await
                         .wrap()
                         .context(error!("Failed to update high QC in storage!"))?;
+
+                    handle_eqc_formed(qc.view_number(), qc.data.leaf_commit, self, &event_sender)
+                        .await;
+
                     let view_number = qc.view_number() + 1;
                     self.create_dependency_task_if_new(
                         view_number,
@@ -479,7 +485,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
 
                 certificate
                     .is_valid_cert(
-                        membership_stake_table,
+                        StakeTableEntries::<TYPES>::from(membership_stake_table).0,
                         membership_success_threshold,
                         &self.upgrade_lock,
                     )
@@ -552,7 +558,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                 let keep_view = TYPES::View::new(view.saturating_sub(1));
                 self.cancel_tasks(keep_view);
             }
-            HotShotEvent::HighQcSend(qc, ..) => {
+            HotShotEvent::HighQcSend(qc, ..) | HotShotEvent::ExtendedQcSend(qc, ..) => {
                 ensure!(qc.view_number() > self.highest_qc.view_number());
                 let cert_epoch_number = qc.data.epoch;
 
@@ -563,7 +569,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                 drop(membership_reader);
 
                 qc.is_valid_cert(
-                    membership_stake_table,
+                    StakeTableEntries::<TYPES>::from(membership_stake_table).0,
                     membership_success_threshold,
                     &self.upgrade_lock,
                 )
@@ -597,6 +603,14 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                     .await
                     .wrap()
                     .context(error!("Failed to update next epoch high QC in storage!"))?;
+
+                handle_eqc_formed(
+                    next_epoch_qc.view_number(),
+                    next_epoch_qc.data.leaf_commit,
+                    self,
+                    &event_sender,
+                )
+                .await;
             }
             _ => {}
         }

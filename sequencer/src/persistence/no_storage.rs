@@ -10,16 +10,15 @@ use espresso_types::{
 use hotshot_types::{
     consensus::CommitmentMap,
     data::{
-        vid_disperse::ADVZDisperseShare, DaProposal, DaProposal2, EpochNumber,
-        QuorumProposalWrapper, VidDisperseShare,
+        vid_disperse::{ADVZDisperseShare, VidDisperseShare2},
+        DaProposal, DaProposal2, EpochNumber, QuorumProposalWrapper, VidCommitment,
+        VidDisperseShare,
     },
     event::{Event, EventType, HotShotAction, LeafInfo},
     message::Proposal,
     simple_certificate::{NextEpochQuorumCertificate2, QuorumCertificate2, UpgradeCertificate},
     utils::View,
-    vid::VidSchemeType,
 };
-use jf_vid::VidScheme;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
@@ -135,10 +134,16 @@ impl SequencerPersistence for NoStorage {
     ) -> anyhow::Result<()> {
         Ok(())
     }
+    async fn append_vid2(
+        &self,
+        _proposal: &Proposal<SeqTypes, VidDisperseShare2<SeqTypes>>,
+    ) -> anyhow::Result<()> {
+        Ok(())
+    }
     async fn append_da(
         &self,
         _proposal: &Proposal<SeqTypes, DaProposal<SeqTypes>>,
-        _vid_commit: <VidSchemeType as VidScheme>::Commit,
+        _vid_commit: VidCommitment,
     ) -> anyhow::Result<()> {
         Ok(())
     }
@@ -183,17 +188,10 @@ impl SequencerPersistence for NoStorage {
         Ok(None)
     }
 
-    async fn append_vid2(
-        &self,
-        _proposal: &Proposal<SeqTypes, VidDisperseShare<SeqTypes>>,
-    ) -> anyhow::Result<()> {
-        Ok(())
-    }
-
     async fn append_da2(
         &self,
         _proposal: &Proposal<SeqTypes, DaProposal2<SeqTypes>>,
-        _vid_commit: <VidSchemeType as VidScheme>::Commit,
+        _vid_commit: VidCommitment,
     ) -> anyhow::Result<()> {
         Ok(())
     }

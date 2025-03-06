@@ -3,6 +3,7 @@ pub mod catchup;
 pub mod context;
 pub mod genesis;
 mod proposal_fetcher;
+mod request_response;
 
 mod external_event_handler;
 pub mod options;
@@ -546,7 +547,6 @@ pub async fn init_node<P: SequencerPersistence, V: Versions>(
         Some(network_params.state_relay_server_url),
         metrics,
         genesis.stake_table.capacity,
-        network_params.public_api_url,
         event_consumer,
         seq_versions,
         marketplace_config,
@@ -821,6 +821,7 @@ pub mod testing {
                 stop_proposing_time: 0,
                 stop_voting_time: 0,
                 epoch_height: 150,
+                epoch_start_block: 0,
             };
 
             Self {
@@ -1013,7 +1014,6 @@ pub mod testing {
                 self.state_relay_url.clone(),
                 metrics,
                 stake_table_capacity,
-                None, // The public API URL
                 event_consumer,
                 bind_version,
                 MarketplaceConfig::<SeqTypes, Node<network::Memory, P::Persistence>> {
@@ -1074,9 +1074,10 @@ mod test {
     use hotshot::types::EventType::Decide;
     use hotshot_example_types::node_types::TestVersions;
     use hotshot_types::{
+        data::vid_commitment,
         event::LeafInfo,
         traits::block_contents::{
-            vid_commitment, BlockHeader, BlockPayload, EncodeBytes, GENESIS_VID_NUM_STORAGE_NODES,
+            BlockHeader, BlockPayload, EncodeBytes, GENESIS_VID_NUM_STORAGE_NODES,
         },
     };
     use sequencer_utils::{test_utils::setup_test, AnvilOptions};
@@ -1164,6 +1165,7 @@ mod test {
                 let payload_bytes = genesis_payload.encode();
                 vid_commitment::<TestVersions>(
                     &payload_bytes,
+                    &genesis_ns_table.encode(),
                     GENESIS_VID_NUM_STORAGE_NODES,
                     <TestVersions as Versions>::Base::VERSION,
                 )

@@ -22,8 +22,9 @@ use async_trait::async_trait;
 use committable::Committable;
 use futures::try_join;
 use hotshot_types::{
+    data::VidCommitment,
     traits::{node_implementation::NodeType, EncodeBytes},
-    vid::{advz_scheme, VidSchemeType},
+    vid::advz::{advz_scheme, ADVZScheme},
 };
 use jf_vid::VidScheme;
 use surf_disco::{Client, Url};
@@ -68,20 +69,25 @@ where
         );
         match res {
             Ok((payload, common)) => {
-                // Verify that the data we retrieved is consistent with the request we made.
-                let num_storage_nodes =
-                    VidSchemeType::get_num_storage_nodes(common.common()) as usize;
-                let bytes = payload.data().encode();
-                let commit = match advz_scheme(num_storage_nodes).commit_only(bytes) {
-                    Ok(commit) => commit,
-                    Err(err) => {
-                        tracing::error!(%err, "unable to compute VID commitment");
+                if let Some(common) = common.common() {
+                    // Verify that the data we retrieved is consistent with the request we made.
+                    let num_storage_nodes = ADVZScheme::get_num_storage_nodes(common) as usize;
+                    let bytes = payload.data().encode();
+                    let commit = VidCommitment::V0(
+                        match advz_scheme(num_storage_nodes).commit_only(bytes) {
+                            Ok(commit) => commit,
+                            Err(err) => {
+                                tracing::error!(%err, "unable to compute VID commitment");
+                                return None;
+                            }
+                        },
+                    );
+                    if commit != req.0 {
+                        tracing::error!(?req, ?commit, "received inconsistent payload");
                         return None;
                     }
-                };
-                if commit != req.0 {
-                    tracing::error!(?req, ?commit, "received inconsistent payload");
-                    return None;
+                    // } else {
+                    // TODO(Chengyu): should we check AVIDM?
                 }
 
                 Some(payload.data)
@@ -142,7 +148,7 @@ impl<Types, Ver: StaticVersionType> Provider<Types, VidCommonRequest> for QueryS
 where
     Types: NodeType,
 {
-    async fn fetch(&self, req: VidCommonRequest) -> Option<VidCommon> {
+    async fn fetch(&self, req: VidCommonRequest) -> VidCommon {
         match self
             .client
             .get::<VidCommonQueryData<Types>>(&format!(
@@ -152,13 +158,27 @@ where
             .send()
             .await
         {
-            Ok(res) if VidSchemeType::is_consistent(&req.0, &res.common).is_ok() => {
-                Some(res.common)
-            }
-            Ok(res) => {
-                tracing::error!(?req, ?res, "fetched inconsistent VID common data");
-                None
-            }
+            Ok(res) => match req.0 {
+                VidCommitment::V0(commit) => {
+                    if let Some(common) = res.common {
+                        if ADVZScheme::is_consistent(&commit, &common).is_ok() {
+                            Some(common)
+                        } else {
+                            tracing::error!(?req, ?common, "fetched inconsistent VID common data");
+                            None
+                        }
+                    } else {
+                        tracing::error!(?req, ?res, "Expect VID common data but found None");
+                        None
+                    }
+                }
+                VidCommitment::V1(_) => {
+                    if res.common.is_some() {
+                        tracing::warn!(?req, ?res, "Expect no VID common data but found some.")
+                    }
+                    None
+                }
+            },
             Err(err) => {
                 tracing::error!("failed to fetch VID common {req:?}: {err}");
                 None
@@ -197,7 +217,7 @@ mod test {
             setup_test, sleep,
         },
         types::HeightIndexed,
-        ApiState, VidCommitment,
+        ApiState,
     };
     use committable::Committable;
     use futures::{
@@ -875,7 +895,7 @@ mod test {
     fn random_vid_commit() -> VidCommitment {
         let mut bytes = [0; 32];
         rand::thread_rng().fill_bytes(&mut bytes);
-        VidCommitment::from(GenericArray::from(bytes))
+        VidCommitment::V0(GenericArray::from(bytes).into())
     }
 
     async fn malicious_server(port: u16) {

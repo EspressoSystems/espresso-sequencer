@@ -14,22 +14,21 @@ use std::collections::BTreeMap;
 use anyhow::Result;
 use async_trait::async_trait;
 use committable::Commitment;
-use jf_vid::VidScheme;
 
 use super::node_implementation::NodeType;
 use crate::{
     consensus::{CommitmentMap, View},
+    data::VidCommitment,
     data::{
         vid_disperse::{ADVZDisperseShare, VidDisperseShare2},
         DaProposal, DaProposal2, Leaf, Leaf2, QuorumProposal, QuorumProposal2,
-        QuorumProposalWrapper,
+        QuorumProposalWrapper, VidDisperseShare,
     },
     event::HotShotAction,
     message::{convert_proposal, Proposal},
     simple_certificate::{
         NextEpochQuorumCertificate2, QuorumCertificate, QuorumCertificate2, UpgradeCertificate,
     },
-    vid::VidSchemeType,
 };
 
 /// Abstraction for storing a variety of consensus payload datum.
@@ -38,24 +37,45 @@ pub trait Storage<TYPES: NodeType>: Send + Sync + Clone {
     /// Add a proposal to the stored VID proposals.
     async fn append_vid(&self, proposal: &Proposal<TYPES, ADVZDisperseShare<TYPES>>) -> Result<()>;
     /// Add a proposal to the stored VID proposals.
-    /// TODO(Chengyu): change here because in the future disperse share types might not be convertible.
-    async fn append_vid2(
+    /// TODO(Chengyu): fix this
+    async fn append_vid2(&self, proposal: &Proposal<TYPES, VidDisperseShare2<TYPES>>)
+        -> Result<()>;
+
+    async fn append_vid_general(
         &self,
-        proposal: &Proposal<TYPES, VidDisperseShare2<TYPES>>,
+        proposal: &Proposal<TYPES, VidDisperseShare<TYPES>>,
     ) -> Result<()> {
-        self.append_vid(&convert_proposal(proposal.clone())).await
+        let signature = proposal.signature.clone();
+        match &proposal.data {
+            VidDisperseShare::V0(share) => {
+                self.append_vid(&Proposal {
+                    data: share.clone(),
+                    signature,
+                    _pd: std::marker::PhantomData,
+                })
+                .await
+            }
+            VidDisperseShare::V1(share) => {
+                self.append_vid2(&Proposal {
+                    data: share.clone(),
+                    signature,
+                    _pd: std::marker::PhantomData,
+                })
+                .await
+            }
+        }
     }
     /// Add a proposal to the stored DA proposals.
     async fn append_da(
         &self,
         proposal: &Proposal<TYPES, DaProposal<TYPES>>,
-        vid_commit: <VidSchemeType as VidScheme>::Commit,
+        vid_commit: VidCommitment,
     ) -> Result<()>;
     /// Add a proposal to the stored DA proposals.
     async fn append_da2(
         &self,
         proposal: &Proposal<TYPES, DaProposal2<TYPES>>,
-        vid_commit: <VidSchemeType as VidScheme>::Commit,
+        vid_commit: VidCommitment,
     ) -> Result<()> {
         self.append_da(&convert_proposal(proposal.clone()), vid_commit)
             .await
@@ -135,13 +155,7 @@ pub trait Storage<TYPES: NodeType>: Send + Sync + Clone {
         decided_upgrade_certificate: Option<UpgradeCertificate<TYPES>>,
     ) -> Result<()>;
     /// Migrate leaves from `Leaf` to `Leaf2`, and proposals from `QuorumProposal` to `QuorumProposal2`
-    async fn migrate_consensus(
-        &self,
-        _convert_leaf: fn(Leaf<TYPES>) -> Leaf2<TYPES>,
-        _convert_proposal: fn(
-            Proposal<TYPES, QuorumProposal<TYPES>>,
-        ) -> Proposal<TYPES, QuorumProposal2<TYPES>>,
-    ) -> Result<()> {
+    async fn migrate_consensus(&self) -> Result<()> {
         Ok(())
     }
 }

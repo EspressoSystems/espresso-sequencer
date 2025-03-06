@@ -246,6 +246,8 @@ async fn init_consensus(
                     HotShotInitializer::from_genesis::<MockVersions>(
                         TestInstanceState::default(),
                         0,
+                        0,
+                        vec![],
                     )
                     .await
                     .unwrap(),

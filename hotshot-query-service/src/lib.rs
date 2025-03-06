@@ -446,11 +446,9 @@ use task::BackgroundTask;
 use tide_disco::{method::ReadState, App, StatusCode};
 use vbs::version::StaticVersionType;
 
-pub use hotshot_types::{
-    data::Leaf2,
-    simple_certificate::QuorumCertificate,
-    vid::{VidCommitment, VidCommon, VidShare},
-};
+pub use hotshot_types::{data::Leaf2, simple_certificate::QuorumCertificate};
+
+pub type VidCommon = Option<hotshot_types::vid::advz::ADVZCommon>;
 
 pub type Payload<Types> = <Types as NodeType>::BlockPayload;
 pub type Header<Types> = <Types as NodeType>::BlockHeader;
@@ -610,7 +608,7 @@ mod test {
     use async_trait::async_trait;
     use atomic_store::{load_store::BincodeLoadStore, AtomicStore, AtomicStoreLoader, RollingLog};
     use futures::future::FutureExt;
-    use hotshot_types::simple_certificate::QuorumCertificate2;
+    use hotshot_types::{data::VidShare, simple_certificate::QuorumCertificate2};
     use portpicker::pick_unused_port;
     use std::ops::{Bound, RangeBounds};
     use std::time::Duration;

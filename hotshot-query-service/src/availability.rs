@@ -193,12 +193,10 @@ fn downgrade_leaf<Types: NodeType>(leaf2: Leaf2<Types>) -> Leaf<Types> {
     leaf
 }
 
-impl<Types: NodeType> From<LeafQueryData<Types>> for Leaf1QueryData<Types> {
-    fn from(value: LeafQueryData<Types>) -> Self {
-        Self {
-            leaf: downgrade_leaf(value.leaf),
-            qc: value.qc.to_qc(),
-        }
+fn downgrade_leaf_query_data<Types: NodeType>(leaf: LeafQueryData<Types>) -> Leaf1QueryData<Types> {
+    Leaf1QueryData {
+        leaf: downgrade_leaf(leaf.leaf),
+        qc: leaf.qc.to_qc(),
     }
 }
 
@@ -284,7 +282,7 @@ where
     if api_ver.major == 0 {
         api.at("get_leaf", move |req, state| {
             get_leaf_handler(req, state, timeout)
-                .map(|res| res.map(Leaf1QueryData::from))
+                .map(|res| res.map(downgrade_leaf_query_data))
                 .boxed()
         })?;
 
@@ -293,7 +291,7 @@ where
                 .map(|res| {
                     res.map(|r| {
                         r.into_iter()
-                            .map(Into::into)
+                            .map(downgrade_leaf_query_data)
                             .collect::<Vec<Leaf1QueryData<_>>>()
                     })
                 })
@@ -309,7 +307,7 @@ where
                             Ok(state
                                 .subscribe_leaves(height)
                                 .await
-                                .map(|leaf| Ok(Leaf1QueryData::from(leaf))))
+                                .map(|leaf| Ok(downgrade_leaf_query_data(leaf))))
                         }
                         .boxed()
                     })
@@ -340,6 +338,7 @@ where
             .boxed()
         })?;
     }
+
     api.at("get_header", move |req, state| {
         async move {
             let id = if let Some(height) = req.opt_integer_param("height")? {

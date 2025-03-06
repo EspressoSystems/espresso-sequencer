@@ -10,6 +10,7 @@ use async_broadcast::Sender;
 use either::Either;
 use hotshot_task::task::TaskEvent;
 use hotshot_types::{
+    data::VidCommitment,
     data::{
         DaProposal2, Leaf2, PackedBundle, QuorumProposal2, QuorumProposalWrapper, UpgradeProposal,
         VidDisperse, VidDisperseShare,
@@ -30,7 +31,6 @@ use hotshot_types::{
         signature_key::SignatureKey, BlockPayload,
     },
     utils::BuilderCommitment,
-    vid::VidCommitment,
     vote::HasViewNumber,
 };
 use vec1::Vec1;
@@ -135,6 +135,8 @@ pub enum HotShotEvent<TYPES: NodeType> {
     Qc2Formed(Either<QuorumCertificate2<TYPES>, TimeoutCertificate2<TYPES>>),
     /// The next leader has collected enough votes from the next epoch nodes to form a QC; emitted by the next leader in the consensus task; an internal event only
     NextEpochQc2Formed(Either<NextEpochQuorumCertificate2<TYPES>, TimeoutCertificate<TYPES>>),
+    /// A validator formed both a current epoch eQC and a next epoch eQC
+    ExtendedQc2Formed(QuorumCertificate2<TYPES>),
     /// The DA leader has collected enough votes to form a DAC; emitted by the DA leader in the DA task; sent to the entire network via the networking task
     DacSend(DaCertificate2<TYPES>, TYPES::SignatureKey),
     /// The current view has changed; emitted by the replica in the consensus task or replica in the view sync task; received by almost all other tasks
@@ -258,6 +260,20 @@ pub enum HotShotEvent<TYPES: NodeType> {
         TYPES::SignatureKey,
         TYPES::SignatureKey,
     ),
+
+    /// A replica sent us an extended QuorumCertificate and NextEpochQuorumCertificate
+    ExtendedQcRecv(
+        QuorumCertificate2<TYPES>,
+        NextEpochQuorumCertificate2<TYPES>,
+        TYPES::SignatureKey,
+    ),
+
+    /// Send our extended QuorumCertificate and NextEpochQuorumCertificate to all nodes in the old and new epoch
+    ExtendedQcSend(
+        QuorumCertificate2<TYPES>,
+        NextEpochQuorumCertificate2<TYPES>,
+        TYPES::SignatureKey,
+    ),
 }
 
 impl<TYPES: NodeType> HotShotEvent<TYPES> {
@@ -298,6 +314,7 @@ impl<TYPES: NodeType> HotShotEvent<TYPES> {
                 either::Left(qc) => Some(qc.view_number()),
                 either::Right(tc) => Some(tc.view_number()),
             },
+            HotShotEvent::ExtendedQc2Formed(cert) => Some(cert.view_number()),
             HotShotEvent::ViewSyncCommitVoteSend(vote)
             | HotShotEvent::ViewSyncCommitVoteRecv(vote) => Some(vote.view_number()),
             HotShotEvent::ViewSyncPreCommitVoteRecv(vote)
@@ -341,9 +358,10 @@ impl<TYPES: NodeType> HotShotEvent<TYPES> {
             | HotShotEvent::VidRequestRecv(request, _) => Some(request.view),
             HotShotEvent::VidResponseSend(_, _, proposal)
             | HotShotEvent::VidResponseRecv(_, proposal) => Some(proposal.data.view_number()),
-            HotShotEvent::HighQcRecv(qc, _) | HotShotEvent::HighQcSend(qc, ..) => {
-                Some(qc.view_number())
-            }
+            HotShotEvent::HighQcRecv(qc, _)
+            | HotShotEvent::HighQcSend(qc, ..)
+            | HotShotEvent::ExtendedQcRecv(qc, _, _)
+            | HotShotEvent::ExtendedQcSend(qc, _, _) => Some(qc.view_number()),
         }
     }
 }
@@ -432,6 +450,9 @@ impl<TYPES: NodeType> Display for HotShotEvent<TYPES> {
                     write!(f, "NextEpochQc2Formed(view_number={:?})", tc.view_number())
                 }
             },
+            HotShotEvent::ExtendedQc2Formed(cert) => {
+                write!(f, "ExtendedQc2Formed(view_number={:?})", cert.view_number())
+            }
             HotShotEvent::DacSend(cert, _) => {
                 write!(f, "DacSend(view_number={:?})", cert.view_number())
             }
@@ -621,6 +642,12 @@ impl<TYPES: NodeType> Display for HotShotEvent<TYPES> {
             }
             HotShotEvent::HighQcSend(qc, ..) => {
                 write!(f, "HighQcSend(view_number={:?}", qc.view_number())
+            }
+            HotShotEvent::ExtendedQcRecv(qc, ..) => {
+                write!(f, "ExtendedQcRecv(view_number={:?}", qc.view_number())
+            }
+            HotShotEvent::ExtendedQcSend(qc, ..) => {
+                write!(f, "ExtendedQcSend(view_number={:?}", qc.view_number())
             }
         }
     }

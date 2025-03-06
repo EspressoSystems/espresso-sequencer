@@ -22,12 +22,15 @@ use crate::{
     },
     node::{BlockId, SyncStatus, TimeWindowQueryData, WindowStart},
     types::HeightIndexed,
-    Header, MissingSnafu, NotFoundSnafu, QueryError, QueryResult, VidShare,
+    Header, MissingSnafu, NotFoundSnafu, QueryError, QueryResult,
 };
 use anyhow::anyhow;
 use async_trait::async_trait;
 use futures::stream::{StreamExt, TryStreamExt};
-use hotshot_types::traits::{block_contents::BlockHeader, node_implementation::NodeType};
+use hotshot_types::{
+    data::VidShare,
+    traits::{block_contents::BlockHeader, node_implementation::NodeType},
+};
 use snafu::OptionExt;
 use sqlx::Row;
 use std::ops::{Bound, RangeBounds};
@@ -115,7 +118,7 @@ where
         // ORDER BY h.height ASC ensures that if there are duplicate blocks (this can happen when
         // selecting by payload ID, as payloads are not unique), we return the first one.
         let sql = format!(
-            "SELECT v.share AS share FROM vid AS v
+            "SELECT v.share AS share FROM vid2 AS v
                JOIN header AS h ON v.height = h.height
               WHERE {where_clause}
               ORDER BY h.height
@@ -157,8 +160,8 @@ where
         let sql = "SELECT l.max_height, l.total_leaves, p.null_payloads, v.total_vid, vn.null_vid, pruned_height FROM
                 (SELECT max(leaf2.height) AS max_height, count(*) AS total_leaves FROM leaf2) AS l,
                 (SELECT count(*) AS null_payloads FROM payload WHERE data IS NULL) AS p,
-                (SELECT count(*) AS total_vid FROM vid) AS v,
-                (SELECT count(*) AS null_vid FROM vid WHERE share IS NULL) AS vn,
+                (SELECT count(*) AS total_vid FROM vid2) AS v,
+                (SELECT count(*) AS null_vid FROM vid2 WHERE share IS NULL) AS vn,
                 (SELECT(SELECT last_height FROM pruned_height ORDER BY id DESC LIMIT 1) as pruned_height)
             ";
         let row = query(sql)

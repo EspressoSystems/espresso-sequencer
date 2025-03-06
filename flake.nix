@@ -120,13 +120,6 @@
               types_or = [ "toml" ];
               pass_filenames = false;
             };
-            cargo-clippy = {
-              enable = true;
-              description = "Run clippy";
-              entry = "just clippy";
-              types_or = [ "rust" "toml" ];
-              pass_filenames = false;
-            };
             cargo-lock = {
               enable = true;
               description = "Ensure Cargo.lock is compatible with Cargo.toml";
@@ -193,7 +186,7 @@
           buildInputs = [
             # Rust dependencies
             pkg-config
-            openssl
+            openssl_3 # match ubuntu 24.04 that we use on CI and as base image in docker
             curl
             protobuf # to compile libp2p-autonat
             stableToolchain
@@ -279,7 +272,7 @@
           buildInputs = [
             # Rust dependencies
             pkg-config
-            openssl
+            openssl_3
             curl
             protobuf # to compile libp2p-autonat
             toolchain
@@ -293,7 +286,7 @@
           buildInputs = [
             # Rust dependencies
             pkg-config
-            openssl
+            openssl_3
             curl
             protobuf # to compile libp2p-autonat
             toolchain
@@ -316,7 +309,7 @@
           buildInputs = [
             # Rust dependencies
             pkg-config
-            openssl
+            openssl_3
             curl
             protobuf # to compile libp2p-autonat
             stableToolchain

@@ -6,9 +6,9 @@ use committable::Commitment;
 use data_source::{CatchupDataSource, StakeTableDataSource, SubmitDataSource};
 use derivative::Derivative;
 use espresso_types::{
-    retain_accounts, v0::traits::SequencerPersistence, v0_99::ChainConfig, AccountQueryData,
-    BlockMerkleTree, FeeAccount, FeeAccountProof, FeeMerkleTree, NodeState, PubKey,
-    PublicNetworkConfig, Transaction, ValidatedState,
+    config::PublicNetworkConfig, retain_accounts, v0::traits::SequencerPersistence,
+    v0_99::ChainConfig, AccountQueryData, BlockMerkleTree, FeeAccount, FeeAccountProof,
+    FeeMerkleTree, NodeState, PubKey, Transaction, ValidatedState,
 };
 use futures::{
     future::{BoxFuture, Future, FutureExt},
@@ -18,6 +18,7 @@ use hotshot_events_service::events_source::{
     EventFilterSet, EventsSource, EventsStreamer, StartupInfo,
 };
 use hotshot_query_service::data_source::ExtensibleDataSource;
+use hotshot_types::traits::election::Membership;
 use hotshot_types::{
     data::ViewNumber,
     event::Event,
@@ -29,8 +30,8 @@ use hotshot_types::{
         ValidatedState as _,
     },
     utils::{View, ViewInner},
+    PeerConfig,
 };
-use hotshot_types::{stake_table::StakeTableEntry, traits::election::Membership};
 use jf_merkle_tree::MerkleTreeScheme;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -165,7 +166,7 @@ impl<N: ConnectedNetwork<PubKey>, D: Sync, V: Versions, P: SequencerPersistence>
     async fn get_stake_table(
         &self,
         epoch: Option<<SeqTypes as NodeType>::Epoch>,
-    ) -> Vec<StakeTableEntry<<SeqTypes as NodeType>::SignatureKey>> {
+    ) -> Vec<PeerConfig<<SeqTypes as NodeType>::SignatureKey>> {
         self.as_ref().get_stake_table(epoch).await
     }
 
@@ -180,7 +181,7 @@ impl<N: ConnectedNetwork<PubKey>, D: Sync, V: Versions, P: SequencerPersistence>
     /// Get the stake table for the current epoch if not provided
     async fn get_stake_table_current(
         &self,
-    ) -> Vec<StakeTableEntry<<SeqTypes as NodeType>::SignatureKey>> {
+    ) -> Vec<PeerConfig<<SeqTypes as NodeType>::SignatureKey>> {
         self.as_ref().get_stake_table_current().await
     }
 
@@ -196,7 +197,6 @@ impl<N: ConnectedNetwork<PubKey>, D: Sync, V: Versions, P: SequencerPersistence>
         self.as_ref().get_current_epoch().await
     }
 }
-
 impl<N: ConnectedNetwork<PubKey>, V: Versions, P: SequencerPersistence>
     StakeTableDataSource<SeqTypes> for ApiState<N, P, V>
 {
@@ -204,7 +204,7 @@ impl<N: ConnectedNetwork<PubKey>, V: Versions, P: SequencerPersistence>
     async fn get_stake_table(
         &self,
         epoch: Option<<SeqTypes as NodeType>::Epoch>,
-    ) -> Vec<StakeTableEntry<<SeqTypes as NodeType>::SignatureKey>> {
+    ) -> Vec<PeerConfig<<SeqTypes as NodeType>::SignatureKey>> {
         self.consensus()
             .await
             .read()
@@ -218,7 +218,7 @@ impl<N: ConnectedNetwork<PubKey>, V: Versions, P: SequencerPersistence>
     /// Get the stake table for the current epoch if not provided
     async fn get_stake_table_current(
         &self,
-    ) -> Vec<StakeTableEntry<<SeqTypes as NodeType>::SignatureKey>> {
+    ) -> Vec<PeerConfig<<SeqTypes as NodeType>::SignatureKey>> {
         let epoch = self.consensus().await.read().await.cur_epoch().await;
 
         self.get_stake_table(epoch).await
@@ -1151,10 +1151,12 @@ mod api_tests {
         AvailabilityDataSource, BlockQueryData, VidCommonQueryData,
     };
 
+    use hotshot_types::data::ns_table::parse_ns_table;
     use hotshot_types::data::vid_disperse::VidDisperseShare2;
-    use hotshot_types::data::{DaProposal2, EpochNumber, VidDisperseShare};
+    use hotshot_types::data::{DaProposal2, EpochNumber, VidCommitment};
     use hotshot_types::simple_certificate::QuorumCertificate2;
-    use hotshot_types::vid::advz_scheme;
+
+    use hotshot_types::vid::avidm::{init_avidm_param, AvidMScheme};
     use hotshot_types::{
         data::{QuorumProposal2, QuorumProposalWrapper},
         event::LeafInfo,
@@ -1162,7 +1164,6 @@ mod api_tests {
         traits::{node_implementation::ConsensusTime, signature_key::SignatureKey, EncodeBytes},
     };
 
-    use jf_vid::VidScheme;
     use portpicker::pick_unused_port;
     use sequencer_utils::test_utils::setup_test;
     use std::fmt::Debug;
@@ -1275,7 +1276,7 @@ mod api_tests {
                     .verify(
                         header.ns_table(),
                         &header.payload_commitment(),
-                        vid_common.common(),
+                        &vid_common.common().clone().unwrap(),
                     )
                     .unwrap();
             } else {
@@ -1337,8 +1338,14 @@ mod api_tests {
         let genesis = Leaf2::genesis::<TestVersions>(&Default::default(), &NodeState::mock()).await;
         let payload = genesis.block_payload().unwrap();
         let payload_bytes_arc = payload.encode();
-        let disperse = advz_scheme(2).disperse(payload_bytes_arc.clone()).unwrap();
-        let payload_commitment = disperse.commit;
+
+        let avidm_param = init_avidm_param(2).unwrap();
+        let weights = vec![1u32; 2];
+
+        let ns_table = parse_ns_table(payload.byte_len().as_usize(), &payload.encode());
+        let (payload_commitment, shares) =
+            AvidMScheme::ns_disperse(&avidm_param, &weights, &payload_bytes_arc, ns_table).unwrap();
+
         let mut quorum_proposal = QuorumProposalWrapper::<SeqTypes> {
             proposal: QuorumProposal2::<SeqTypes> {
                 block_header: genesis.block_header().clone(),
@@ -1386,16 +1393,14 @@ mod api_tests {
                 .unwrap();
 
             // Include VID information for each leaf.
-            let share = VidDisperseShare::V1(VidDisperseShare2::<SeqTypes> {
+            let share = VidDisperseShare2::<SeqTypes> {
                 view_number: leaf.view_number(),
                 payload_commitment,
-                share: disperse.shares[0].clone(),
-                common: disperse.common.clone(),
+                share: shares[0].clone(),
                 recipient_key: pubkey,
                 epoch: Some(EpochNumber::new(0)),
                 target_epoch: Some(EpochNumber::new(0)),
-                data_epoch_payload_commitment: None,
-            });
+            };
             persistence
                 .append_vid2(&share.to_proposal(&privkey).unwrap())
                 .await
@@ -1416,7 +1421,7 @@ mod api_tests {
                 _pd: Default::default(),
             };
             persistence
-                .append_da2(&da_proposal, payload_commitment)
+                .append_da2(&da_proposal, VidCommitment::V1(payload_commitment))
                 .await
                 .unwrap();
         }
@@ -1610,6 +1615,7 @@ mod test {
     use tokio::time::sleep;
 
     use espresso_types::{
+        config::PublicHotShotConfig,
         traits::NullEventConsumer,
         v0_1::{UpgradeMode, ViewBasedUpgrade},
         BackoffParams, FeeAccount, FeeAmount, Header, MarketplaceVersion, MockSequencerVersions,

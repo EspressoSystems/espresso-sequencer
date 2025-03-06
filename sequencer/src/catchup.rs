@@ -5,6 +5,7 @@ use async_lock::RwLock;
 use async_trait::async_trait;
 use committable::Commitment;
 use committable::Committable;
+use espresso_types::config::PublicNetworkConfig;
 use espresso_types::traits::SequencerPersistence;
 use espresso_types::PublicNetworkConfig;
 use espresso_types::{

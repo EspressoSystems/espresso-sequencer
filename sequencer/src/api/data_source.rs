@@ -2,6 +2,7 @@ use anyhow::Context;
 use async_trait::async_trait;
 use committable::Commitment;
 use espresso_types::{
+    config::PublicNetworkConfig,
     v0::traits::{PersistenceOptions, SequencerPersistence},
     v0_99::ChainConfig,
     FeeAccount, FeeAccountProof, FeeMerkleTree, NodeState, PubKey, PublicNetworkConfig,
@@ -19,10 +20,9 @@ use hotshot_types::traits::node_implementation::NodeType;
 use hotshot_types::{
     data::ViewNumber,
     light_client::StateSignatureRequestBody,
-    stake_table::StakeTableEntry,
     traits::{network::ConnectedNetwork, node_implementation::Versions},
+    PeerConfig,
 };
-
 use tide_disco::Url;
 
 use super::{
@@ -114,7 +114,7 @@ pub(crate) trait StakeTableDataSource<T: NodeType> {
     fn get_stake_table(
         &self,
         epoch: Option<<T as NodeType>::Epoch>,
-    ) -> impl Send + Future<Output = Vec<StakeTableEntry<T::SignatureKey>>>;
+    ) -> impl Send + Future<Output = Vec<PeerConfig<T::SignatureKey>>>;
 
     /// Get the stake table for  the current epoch if not provided
     fn get_stake_table_current(

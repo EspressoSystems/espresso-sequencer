@@ -27,12 +27,14 @@ use hotshot_query_service::{
         Provider,
     },
     merklized_state::MerklizedState,
+    VidCommon,
 };
 use hotshot_types::{
     consensus::CommitmentMap,
     data::{
-        vid_disperse::ADVZDisperseShare, DaProposal, DaProposal2, EpochNumber, QuorumProposal,
-        QuorumProposalWrapper, VidDisperseShare,
+        vid_disperse::{ADVZDisperseShare, VidDisperseShare2},
+        DaProposal, DaProposal2, EpochNumber, QuorumProposal, QuorumProposalWrapper, VidCommitment,
+        VidDisperseShare,
     },
     event::{Event, EventType, HotShotAction, LeafInfo},
     message::{convert_proposal, Proposal},
@@ -44,7 +46,6 @@ use hotshot_types::{
         node_implementation::ConsensusTime,
     },
     utils::View,
-    vid::{VidCommitment, VidCommon, VidSchemeType},
     vote::HasViewNumber,
 };
 use itertools::Itertools;
@@ -191,6 +192,7 @@ pub struct Options {
     #[clap(
         long,
         env = "ESPRESSO_SEQUENCER_LIGHTWEIGHT",
+        default_value_t = false,
         conflicts_with = "archive"
     )]
     pub(crate) lightweight: bool,
@@ -1180,6 +1182,27 @@ impl SequencerPersistence for Persistence {
         tx.commit().await
     }
 
+    async fn append_vid2(
+        &self,
+        proposal: &Proposal<SeqTypes, VidDisperseShare2<SeqTypes>>,
+    ) -> anyhow::Result<()> {
+        let view = proposal.data.view_number.u64();
+        let payload_hash = proposal.data.payload_commitment;
+        let proposal: Proposal<SeqTypes, VidDisperseShare<SeqTypes>> =
+            convert_proposal(proposal.clone());
+        let data_bytes = bincode::serialize(&proposal).unwrap();
+
+        let mut tx = self.db.write().await?;
+        tx.upsert(
+            "vid_share2",
+            ["view", "data", "payload_hash"],
+            ["view"],
+            [(view as i64, data_bytes, payload_hash.to_string())],
+        )
+        .await?;
+        tx.commit().await
+    }
+
     async fn append_da(
         &self,
         proposal: &Proposal<SeqTypes, DaProposal<SeqTypes>>,
@@ -1296,7 +1319,7 @@ impl SequencerPersistence for Persistence {
     }
 
     async fn migrate_anchor_leaf(&self) -> anyhow::Result<()> {
-        let batch_size: i64 = 1000;
+        let batch_size: i64 = 10000;
         let mut offset: i64 = 0;
         let mut tx = self.db.read().await?;
 
@@ -1307,10 +1330,11 @@ impl SequencerPersistence for Persistence {
         .await?;
 
         if is_completed {
-            tracing::info!("anchor leaf migration already done");
-
+            tracing::info!("decided leaves already migrated");
             return Ok(());
         }
+
+        tracing::warn!("migrating decided leaves..");
         loop {
             let mut tx = self.db.read().await?;
             let rows =
@@ -1349,18 +1373,20 @@ impl SequencerPersistence for Persistence {
                 b.push_bind(view).push_bind(leaf).push_bind(qc);
             });
 
-            offset += batch_size;
-
             let query = query_builder.build();
 
             let mut tx = self.db.write().await?;
             query.execute(tx.as_mut()).await?;
             tx.commit().await?;
+            offset += batch_size;
+            tracing::info!("anchor leaf migration progress: {} rows", offset);
 
             if rows.len() < batch_size as usize {
                 break;
             }
         }
+
+        tracing::warn!("migrated decided leaves");
 
         let mut tx = self.db.write().await?;
         tx.upsert(
@@ -1372,11 +1398,13 @@ impl SequencerPersistence for Persistence {
         .await?;
         tx.commit().await?;
 
+        tracing::info!("updated epoch_migration table for anchor_leaf");
+
         Ok(())
     }
 
     async fn migrate_da_proposals(&self) -> anyhow::Result<()> {
-        let batch_size: i64 = 1000;
+        let batch_size: i64 = 10000;
         let mut offset: i64 = 0;
         let mut tx = self.db.read().await?;
 
@@ -1388,9 +1416,10 @@ impl SequencerPersistence for Persistence {
 
         if is_completed {
             tracing::info!("da proposals migration already done");
-
             return Ok(());
         }
+
+        tracing::warn!("migrating da proposals..");
 
         loop {
             let mut tx = self.db.read().await?;
@@ -1428,8 +1457,6 @@ impl SequencerPersistence for Persistence {
                 b.push_bind(view).push_bind(payload_hash).push_bind(data);
             });
 
-            offset += batch_size;
-
             let query = query_builder.build();
 
             let mut tx = self.db.write().await?;
@@ -1437,10 +1464,15 @@ impl SequencerPersistence for Persistence {
 
             tx.commit().await?;
 
+            tracing::info!("DA proposals migration progress: {} rows", offset);
+            offset += batch_size;
+
             if rows.len() < batch_size as usize {
                 break;
             }
         }
+
+        tracing::warn!("migrated da proposals");
 
         let mut tx = self.db.write().await?;
         tx.upsert(
@@ -1452,11 +1484,13 @@ impl SequencerPersistence for Persistence {
         .await?;
         tx.commit().await?;
 
+        tracing::info!("updated epoch_migration table for da_proposal");
+
         Ok(())
     }
 
     async fn migrate_vid_shares(&self) -> anyhow::Result<()> {
-        let batch_size: i64 = 1000;
+        let batch_size: i64 = 10000;
         let mut offset: i64 = 0;
         let mut tx = self.db.read().await?;
 
@@ -1468,9 +1502,10 @@ impl SequencerPersistence for Persistence {
 
         if is_completed {
             tracing::info!("vid_share migration already done");
-
             return Ok(());
         }
+
+        tracing::warn!("migrating vid shares..");
         loop {
             let mut tx = self.db.read().await?;
             let rows =
@@ -1506,17 +1541,20 @@ impl SequencerPersistence for Persistence {
                 b.push_bind(view).push_bind(payload_hash).push_bind(data);
             });
 
-            offset += batch_size;
-
             let query = query_builder.build();
 
             let mut tx = self.db.write().await?;
             query.execute(tx.as_mut()).await?;
             tx.commit().await?;
+            tracing::info!("VID shares migration progress: {} rows", offset);
+            offset += batch_size;
+
             if rows.len() < batch_size as usize {
                 break;
             }
         }
+
+        tracing::warn!("migrated vid shares");
 
         let mut tx = self.db.write().await?;
         tx.upsert(
@@ -1527,6 +1565,8 @@ impl SequencerPersistence for Persistence {
         )
         .await?;
         tx.commit().await?;
+
+        tracing::info!("updated epoch_migration table for vid_share");
 
         Ok(())
     }
@@ -1550,6 +1590,8 @@ impl SequencerPersistence for Persistence {
             return Ok(());
         }
 
+        tracing::warn!("migrating undecided state..");
+
         if let Some(row) = row {
             let leaves_bytes: Vec<u8> = row.try_get("leaves")?;
             let leaves: CommitmentMap<Leaf> = bincode::deserialize(&leaves_bytes)?;
@@ -1566,7 +1608,10 @@ impl SequencerPersistence for Persistence {
                 [(0_i32, leaves2_bytes, state_bytes)],
             )
             .await?;
+            tx.commit().await?;
         };
+
+        tracing::warn!("migrated undecided state");
 
         let mut tx = self.db.write().await?;
         tx.upsert(
@@ -1578,11 +1623,13 @@ impl SequencerPersistence for Persistence {
         .await?;
         tx.commit().await?;
 
+        tracing::info!("updated epoch_migration table for undecided_state");
+
         Ok(())
     }
 
     async fn migrate_quorum_proposals(&self) -> anyhow::Result<()> {
-        let batch_size: i64 = 1000;
+        let batch_size: i64 = 10000;
         let mut offset: i64 = 0;
         let mut tx = self.db.read().await?;
 
@@ -1594,9 +1641,11 @@ impl SequencerPersistence for Persistence {
 
         if is_completed {
             tracing::info!("quorum proposals migration already done");
-
             return Ok(());
         }
+
+        tracing::warn!("migrating quorum proposals..");
+
         loop {
             let mut tx = self.db.read().await?;
             let rows =
@@ -1636,17 +1685,21 @@ impl SequencerPersistence for Persistence {
                 b.push_bind(view).push_bind(leaf_hash).push_bind(data);
             });
 
-            offset += batch_size;
-
             let query = query_builder.build();
 
             let mut tx = self.db.write().await?;
             query.execute(tx.as_mut()).await?;
             tx.commit().await?;
+
+            offset += batch_size;
+            tracing::info!("quorum proposals migration progress: {} rows", offset);
+
             if rows.len() < batch_size as usize {
                 break;
             }
         }
+
+        tracing::warn!("migrated quorum proposals");
 
         let mut tx = self.db.write().await?;
         tx.upsert(
@@ -1658,11 +1711,13 @@ impl SequencerPersistence for Persistence {
         .await?;
         tx.commit().await?;
 
+        tracing::info!("updated epoch_migration table for quorum_proposals");
+
         Ok(())
     }
 
     async fn migrate_quorum_certificates(&self) -> anyhow::Result<()> {
-        let batch_size: i64 = 1000;
+        let batch_size: i64 = 10000;
         let mut offset: i64 = 0;
         let mut tx = self.db.read().await?;
 
@@ -1673,10 +1728,11 @@ impl SequencerPersistence for Persistence {
         .await?;
 
         if is_completed {
-            tracing::info!(" quorum certificates migration already done");
-
+            tracing::info!("quorum certificates migration already done");
             return Ok(());
         }
+
+        tracing::warn!("migrating quorum certificates..");
         loop {
             let mut tx = self.db.read().await?;
             let rows =
@@ -1712,17 +1768,21 @@ impl SequencerPersistence for Persistence {
                 b.push_bind(view).push_bind(leaf_hash).push_bind(data);
             });
 
-            offset += batch_size;
-
             let query = query_builder.build();
 
             let mut tx = self.db.write().await?;
             query.execute(tx.as_mut()).await?;
             tx.commit().await?;
+            offset += batch_size;
+
+            tracing::info!("Quorum certificates migration progress: {} rows", offset);
+
             if rows.len() < batch_size as usize {
                 break;
             }
         }
+
+        tracing::warn!("migrated quorum certificates");
 
         let mut tx = self.db.write().await?;
         tx.upsert(
@@ -1733,6 +1793,7 @@ impl SequencerPersistence for Persistence {
         )
         .await?;
         tx.commit().await?;
+        tracing::info!("updated epoch_migration table for quorum_certificate");
 
         Ok(())
     }
@@ -1771,30 +1832,10 @@ impl SequencerPersistence for Persistence {
             .transpose()
     }
 
-    async fn append_vid2(
-        &self,
-        proposal: &Proposal<SeqTypes, VidDisperseShare<SeqTypes>>,
-    ) -> anyhow::Result<()> {
-        let view = proposal.data.view_number().u64();
-
-        let payload_hash = proposal.data.payload_commitment();
-        let data_bytes = bincode::serialize(proposal).unwrap();
-
-        let mut tx = self.db.write().await?;
-        tx.upsert(
-            "vid_share2",
-            ["view", "data", "payload_hash"],
-            ["view"],
-            [(view as i64, data_bytes, payload_hash.to_string())],
-        )
-        .await?;
-        tx.commit().await
-    }
-
     async fn append_da2(
         &self,
         proposal: &Proposal<SeqTypes, DaProposal2<SeqTypes>>,
-        vid_commit: <VidSchemeType as VidScheme>::Commit,
+        vid_commit: VidCommitment,
     ) -> anyhow::Result<()> {
         let data = &proposal.data;
         let view = data.view_number().u64();
@@ -1838,7 +1879,7 @@ impl SequencerPersistence for Persistence {
 #[async_trait]
 impl Provider<SeqTypes, VidCommonRequest> for Persistence {
     #[tracing::instrument(skip(self))]
-    async fn fetch(&self, req: VidCommonRequest) -> Option<VidCommon> {
+    async fn fetch(&self, req: VidCommonRequest) -> VidCommon {
         let mut tx = match self.db.read().await {
             Ok(tx) => tx,
             Err(err) => {
@@ -1871,7 +1912,11 @@ impl Provider<SeqTypes, VidCommonRequest> for Persistence {
                 }
             };
 
-        Some(share.data.vid_common_ref().clone())
+        match share.data {
+            VidDisperseShare::V0(vid) => Some(vid.common),
+            // TODO (abdul): V1 VID does not have common field
+            _ => None,
+        }
     }
 }
 
@@ -2042,15 +2087,21 @@ mod test {
     use futures::stream::TryStreamExt;
     use hotshot_example_types::node_types::TestVersions;
     use hotshot_types::{
-        data::{vid_disperse::VidDisperseShare2, EpochNumber, QuorumProposal2},
+        data::{
+            ns_table::parse_ns_table, vid_commitment, vid_disperse::VidDisperseShare2, EpochNumber,
+            QuorumProposal2,
+        },
         message::convert_proposal,
         simple_certificate::QuorumCertificate,
         simple_vote::QuorumData,
         traits::{
-            block_contents::vid_commitment, node_implementation::Versions,
+            block_contents::BlockHeader, node_implementation::Versions,
             signature_key::SignatureKey, EncodeBytes,
         },
-        vid::advz_scheme,
+        vid::{
+            advz::advz_scheme,
+            avidm::{init_avidm_param, AvidMScheme},
+        },
     };
     use jf_vid::VidScheme;
     use sequencer_utils::test_utils::setup_test;
@@ -2148,20 +2199,22 @@ mod test {
             Leaf2::genesis::<TestVersions>(&ValidatedState::default(), &NodeState::mock()).await;
         let leaf_payload = leaf.block_payload().unwrap();
         let leaf_payload_bytes_arc = leaf_payload.encode();
-        let disperse = advz_scheme(2)
-            .disperse(leaf_payload_bytes_arc.clone())
-            .unwrap();
-        let payload_commitment = disperse.commit;
+
+        let avidm_param = init_avidm_param(2).unwrap();
+        let weights = vec![1u32; 2];
+
+        let ns_table = parse_ns_table(leaf_payload.byte_len().as_usize(), &leaf_payload.encode());
+        let (payload_commitment, shares) =
+            AvidMScheme::ns_disperse(&avidm_param, &weights, &leaf_payload_bytes_arc, ns_table)
+                .unwrap();
         let (pubkey, privkey) = BLSPubKey::generated_from_seed_indexed([0; 32], 1);
         let vid_share = VidDisperseShare2::<SeqTypes> {
             view_number: ViewNumber::new(0),
             payload_commitment,
-            share: disperse.shares[0].clone(),
-            common: disperse.common,
+            share: shares[0].clone(),
             recipient_key: pubkey,
             epoch: None,
             target_epoch: None,
-            data_epoch_payload_commitment: None,
         }
         .to_proposal(&privkey)
         .unwrap()
@@ -2214,7 +2267,7 @@ mod test {
 
         // Add to database.
         storage
-            .append_da2(&da_proposal, payload_commitment)
+            .append_da2(&da_proposal, VidCommitment::V1(payload_commitment))
             .await
             .unwrap();
         storage
@@ -2234,16 +2287,19 @@ mod test {
 
         // Fetch it as if we were rebuilding an archive.
         assert_eq!(
-            vid_share.data.common,
+            None,
             storage
-                .fetch(VidCommonRequest(vid_share.data.payload_commitment))
+                .fetch(VidCommonRequest(VidCommitment::V1(
+                    vid_share.data.payload_commitment
+                )))
                 .await
-                .unwrap()
         );
         assert_eq!(
             leaf_payload,
             storage
-                .fetch(PayloadRequest(vid_share.data.payload_commitment))
+                .fetch(PayloadRequest(VidCommitment::V1(
+                    vid_share.data.payload_commitment
+                )))
                 .await
                 .unwrap()
         );
@@ -2283,25 +2339,23 @@ mod test {
         let leaf_payload = leaf.block_payload().unwrap();
         let leaf_payload_bytes_arc = leaf_payload.encode();
 
-        let disperse = advz_scheme(2)
-            .disperse(leaf_payload_bytes_arc.clone())
-            .unwrap();
-        let payload_commitment = vid_commitment::<TestVersions>(
-            &leaf_payload_bytes_arc,
-            2,
-            <TestVersions as Versions>::Base::VERSION,
-        );
+        let avidm_param = init_avidm_param(2).unwrap();
+        let weights = vec![1u32; 2];
+
+        let ns_table = parse_ns_table(leaf_payload.byte_len().as_usize(), &leaf_payload.encode());
+        let (payload_commitment, shares) =
+            AvidMScheme::ns_disperse(&avidm_param, &weights, &leaf_payload_bytes_arc, ns_table)
+                .unwrap();
+
         let (pubkey, privkey) = BLSPubKey::generated_from_seed_indexed([0; 32], 1);
-        let vid = VidDisperseShare::V1(VidDisperseShare2::<SeqTypes> {
+        let vid = VidDisperseShare2::<SeqTypes> {
             view_number: data_view,
             payload_commitment,
-            share: disperse.shares[0].clone(),
-            common: disperse.common,
+            share: shares[0].clone(),
             recipient_key: pubkey,
             epoch: None,
             target_epoch: None,
-            data_epoch_payload_commitment: None,
-        })
+        }
         .to_proposal(&privkey)
         .unwrap()
         .clone();
@@ -2346,7 +2400,7 @@ mod test {
         tracing::info!(?vid, ?da_proposal, ?quorum_proposal, "append data");
         storage.append_vid2(&vid).await.unwrap();
         storage
-            .append_da2(&da_proposal, payload_commitment)
+            .append_da2(&da_proposal, VidCommitment::V1(payload_commitment))
             .await
             .unwrap();
         storage
@@ -2363,7 +2417,7 @@ mod test {
             .unwrap();
         assert_eq!(
             storage.load_vid_share(data_view).await.unwrap().unwrap(),
-            vid
+            convert_proposal(vid)
         );
         assert_eq!(
             storage.load_da_proposal(data_view).await.unwrap().unwrap(),
@@ -2440,6 +2494,7 @@ mod test {
 
             let payload_commitment = vid_commitment::<TestVersions>(
                 &payload_bytes,
+                &metadata.encode(),
                 4,
                 <TestVersions as Versions>::Base::VERSION,
             );
@@ -2543,7 +2598,7 @@ mod test {
                 .await
                 .unwrap();
             storage
-                .append_da(&da_proposal, disperse.commit)
+                .append_da(&da_proposal, VidCommitment::V0(disperse.commit))
                 .await
                 .unwrap();
 
@@ -2578,19 +2633,7 @@ mod test {
             tx.commit().await.expect("failed to commit");
         }
 
-        let qp_fn = |v: Proposal<SeqTypes, QuorumProposal<SeqTypes>>| {
-            let qc = v.data;
-
-            let qc2 = qc.into();
-
-            Proposal {
-                data: qc2,
-                signature: v.signature,
-                _pd: std::marker::PhantomData,
-            }
-        };
-
-        storage.migrate_consensus(Leaf2::from, qp_fn).await.unwrap();
+        storage.migrate_consensus().await.unwrap();
 
         let mut tx = storage.db.read().await.unwrap();
         let (anchor_leaf2_count,) = query_as::<(i64,)>("SELECT COUNT(*) from anchor_leaf2")

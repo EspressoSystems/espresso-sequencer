@@ -17,20 +17,18 @@ use hotshot_types::{
     data::{
         vid_disperse::{ADVZDisperseShare, VidDisperseShare2},
         DaProposal, DaProposal2, Leaf, Leaf2, QuorumProposal, QuorumProposal2,
-        QuorumProposalWrapper,
+        QuorumProposalWrapper, VidCommitment,
     },
     event::HotShotAction,
-    message::Proposal,
+    message::{convert_proposal, Proposal},
     simple_certificate::{NextEpochQuorumCertificate2, QuorumCertificate2, UpgradeCertificate},
     traits::{
         node_implementation::{ConsensusTime, NodeType},
         storage::Storage,
     },
     utils::View,
-    vid::VidSchemeType,
     vote::HasViewNumber,
 };
-use jf_vid::VidScheme;
 
 use crate::testable_delay::{DelayConfig, SupportedTraitTypesForAsyncDelay, TestableDelay};
 
@@ -176,7 +174,7 @@ impl<TYPES: NodeType> Storage<TYPES> for TestStorage<TYPES> {
     async fn append_da(
         &self,
         proposal: &Proposal<TYPES, DaProposal<TYPES>>,
-        _vid_commit: <VidSchemeType as VidScheme>::Commit,
+        _vid_commit: VidCommitment,
     ) -> Result<()> {
         if self.should_return_err {
             bail!("Failed to append DA proposal to storage");
@@ -192,7 +190,7 @@ impl<TYPES: NodeType> Storage<TYPES> for TestStorage<TYPES> {
     async fn append_da2(
         &self,
         proposal: &Proposal<TYPES, DaProposal2<TYPES>>,
-        _vid_commit: <VidSchemeType as VidScheme>::Commit,
+        _vid_commit: VidCommitment,
     ) -> Result<()> {
         if self.should_return_err {
             bail!("Failed to append DA proposal (2) to storage");
@@ -364,13 +362,7 @@ impl<TYPES: NodeType> Storage<TYPES> for TestStorage<TYPES> {
         Ok(())
     }
 
-    async fn migrate_consensus(
-        &self,
-        _convert_leaf: fn(Leaf<TYPES>) -> Leaf2<TYPES>,
-        convert_proposal: fn(
-            Proposal<TYPES, QuorumProposal<TYPES>>,
-        ) -> Proposal<TYPES, QuorumProposal2<TYPES>>,
-    ) -> Result<()> {
+    async fn migrate_consensus(&self) -> Result<()> {
         let mut storage_writer = self.inner.write().await;
 
         for (view, proposal) in storage_writer.proposals.clone().iter() {

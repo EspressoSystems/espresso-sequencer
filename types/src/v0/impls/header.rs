@@ -4,6 +4,7 @@ use committable::{Commitment, Committable, RawCommitmentBuilder};
 use ethers_conv::ToAlloy;
 use hotshot_query_service::{availability::QueryableHeader, explorer::ExplorerHeader};
 use hotshot_types::{
+    data::VidCommitment,
     traits::{
         block_contents::{BlockHeader, BuilderFee},
         node_implementation::NodeType,
@@ -11,10 +12,8 @@ use hotshot_types::{
         BlockPayload, ValidatedState as _,
     },
     utils::BuilderCommitment,
-    vid::{VidCommitment, VidCommon, VidSchemeType},
 };
 use jf_merkle_tree::{AppendableMerkleTreeScheme, MerkleTreeScheme};
-use jf_vid::VidScheme;
 use serde::{
     de::{self, MapAccess, SeqAccess, Visitor},
     Deserialize, Deserializer, Serialize, Serializer,
@@ -56,7 +55,7 @@ impl v0_1::Header {
             .u64_field("l1_head", self.l1_head)
             .optional("l1_finalized", &self.l1_finalized)
             .constant_str("payload_commitment")
-            .fixed_size_bytes(self.payload_commitment.as_ref().as_ref())
+            .fixed_size_bytes(self.payload_commitment.as_ref())
             .constant_str("builder_commitment")
             .fixed_size_bytes(self.builder_commitment.as_ref())
             .field("ns_table", self.ns_table.commit())
@@ -808,7 +807,6 @@ impl BlockHeader<SeqTypes> for Header {
             height = parent_leaf.block_header().block_number() + 1,
             parent_view = ?parent_leaf.view_number(),
             payload_commitment,
-            payload_size = VidSchemeType::get_payload_byte_len(&_vid_common),
             ?auction_results,
             version,
         )
@@ -822,7 +820,6 @@ impl BlockHeader<SeqTypes> for Header {
         metadata: <<SeqTypes as NodeType>::BlockPayload as BlockPayload<SeqTypes>>::Metadata,
         builder_fee: Vec<BuilderFee<SeqTypes>>,
         view_number: u64,
-        _vid_common: VidCommon,
         auction_results: Option<SolverAuctionResults>,
         version: Version,
     ) -> Result<Self, Self::Error> {
@@ -947,7 +944,6 @@ impl BlockHeader<SeqTypes> for Header {
             height = parent_leaf.block_header().block_number() + 1,
             parent_view = ?parent_leaf.view_number(),
             payload_commitment,
-            payload_size = VidSchemeType::get_payload_byte_len(&_vid_common),
             version,
         )
     )]
@@ -959,7 +955,6 @@ impl BlockHeader<SeqTypes> for Header {
         builder_commitment: BuilderCommitment,
         metadata: <<SeqTypes as NodeType>::BlockPayload as BlockPayload<SeqTypes>>::Metadata,
         builder_fee: BuilderFee<SeqTypes>,
-        _vid_common: VidCommon,
         version: Version,
     ) -> Result<Self, Self::Error> {
         tracing::info!("preparing to propose legacy header");
@@ -1173,7 +1168,7 @@ mod test_headers {
 
     use ethers::{types::Address, utils::Anvil};
     use hotshot_query_service::testing::mocks::MockVersions;
-    use hotshot_types::{traits::signature_key::BuilderSignatureKey, vid::advz_scheme};
+    use hotshot_types::traits::signature_key::BuilderSignatureKey;
 
     use sequencer_utils::test_utils::setup_test;
     use v0_1::{BlockMerkleTree, FeeMerkleTree, L1Client};
@@ -1479,7 +1474,6 @@ mod test_headers {
             .with_current_version(StaticVersion::<0, 1>::version());
 
         let genesis = GenesisForTest::default().await;
-        let vid_common = advz_scheme(1).disperse([]).unwrap().common;
 
         let mut parent_state = genesis.validated_state.clone();
 
@@ -1529,7 +1523,6 @@ mod test_headers {
             builder_commitment.clone(),
             ns_table,
             builder_fee,
-            vid_common.clone(),
             StaticVersion::<0, 1>::version(),
         )
         .await
@@ -1562,7 +1555,7 @@ mod test_headers {
         // ValidatedTransition::new(
         //     proposal_state.clone(),
         //     &parent_leaf.block_header(),
-        //     Proposal::new(&proposal, VidSchemeType::get_payload_byte_len(&vid_common)),
+        //     Proposal::new(&proposal, ADVZScheme::get_payload_byte_len(&vid_common)),
         // )
         // .validate()
         // .unwrap();

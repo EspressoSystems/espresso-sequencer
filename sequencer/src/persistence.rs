@@ -58,30 +58,27 @@ mod persistence_tests {
     use hotshot_query_service::testing::mocks::MockVersions;
     use hotshot_types::{
         data::{
-            vid_disperse::VidDisperseShare2, DaProposal2, EpochNumber, QuorumProposal2,
-            QuorumProposalWrapper, VidDisperseShare, ViewNumber,
+            ns_table::parse_ns_table, vid_commitment, vid_disperse::VidDisperseShare2, DaProposal2,
+            EpochNumber, QuorumProposal2, QuorumProposalWrapper, VidCommitment, VidDisperseShare,
+            ViewNumber,
         },
         event::{EventType, HotShotAction, LeafInfo},
-        message::{Proposal, UpgradeLock},
+        message::{convert_proposal, Proposal, UpgradeLock},
         simple_certificate::{
             NextEpochQuorumCertificate2, QuorumCertificate, QuorumCertificate2, UpgradeCertificate,
         },
         simple_vote::{NextEpochQuorumData2, QuorumData2, UpgradeProposalData, VersionedVoteData},
         traits::{
-            block_contents::vid_commitment,
+            block_contents::BlockHeader,
             node_implementation::{ConsensusTime, Versions},
             EncodeBytes,
         },
-        vid::advz_scheme,
+        vid::avidm::{init_avidm_param, AvidMScheme},
         vote::HasViewNumber,
     };
-    use jf_vid::VidScheme;
-    use sequencer_utils::test_utils::setup_test;
-    use std::sync::Arc;
-    use testing::TestablePersistence;
-    use vbs::version::Version;
 
     use super::*;
+    use vbs::version::Version;
 
     #[derive(Clone, Debug, Default)]
     struct EventCollector {
@@ -181,22 +178,25 @@ mod persistence_tests {
             Leaf2::genesis::<TestVersions>(&ValidatedState::default(), &NodeState::mock()).await;
         let leaf_payload = leaf.block_payload().unwrap();
         let leaf_payload_bytes_arc = leaf_payload.encode();
-        let disperse = advz_scheme(2)
-            .disperse(leaf_payload_bytes_arc.clone())
-            .unwrap();
+
+        let avidm_param = init_avidm_param(2).unwrap();
+        let weights = vec![1u32; 2];
+
+        let ns_table = parse_ns_table(leaf_payload.byte_len().as_usize(), &leaf_payload.encode());
+        let (payload_commitment, shares) =
+            AvidMScheme::ns_disperse(&avidm_param, &weights, &leaf_payload_bytes_arc, ns_table)
+                .unwrap();
+
         let (pubkey, privkey) = BLSPubKey::generated_from_seed_indexed([0; 32], 1);
         let signature = PubKey::sign(&privkey, &[]).unwrap();
-        let mut vid: VidDisperseShare<_> = VidDisperseShare2::<SeqTypes> {
+        let mut vid = VidDisperseShare2::<SeqTypes> {
             view_number: ViewNumber::new(0),
-            payload_commitment: Default::default(),
-            share: disperse.shares[0].clone(),
-            common: disperse.common,
+            payload_commitment,
+            share: shares[0].clone(),
             recipient_key: pubkey,
             epoch: Some(EpochNumber::new(0)),
             target_epoch: Some(EpochNumber::new(0)),
-            data_epoch_payload_commitment: None,
-        }
-        .into();
+        };
         let mut quorum_proposal = Proposal {
             data: QuorumProposalWrapper::<SeqTypes> {
                 proposal: QuorumProposal2::<SeqTypes> {
@@ -224,7 +224,7 @@ mod persistence_tests {
 
         assert_eq!(
             storage.load_vid_share(ViewNumber::new(0)).await.unwrap(),
-            Some(vid_share0.clone())
+            Some(convert_proposal(vid_share0.clone()))
         );
 
         vid.set_view_number(ViewNumber::new(1));
@@ -234,7 +234,7 @@ mod persistence_tests {
 
         assert_eq!(
             storage.load_vid_share(vid.view_number()).await.unwrap(),
-            Some(vid_share1.clone())
+            Some(convert_proposal(vid_share1.clone()))
         );
 
         vid.set_view_number(ViewNumber::new(2));
@@ -244,7 +244,7 @@ mod persistence_tests {
 
         assert_eq!(
             storage.load_vid_share(vid.view_number()).await.unwrap(),
-            Some(vid_share2.clone())
+            Some(convert_proposal(vid_share2.clone()))
         );
 
         vid.set_view_number(ViewNumber::new(3));
@@ -254,7 +254,7 @@ mod persistence_tests {
 
         assert_eq!(
             storage.load_vid_share(vid.view_number()).await.unwrap(),
-            Some(vid_share3.clone())
+            Some(convert_proposal(vid_share3.clone()))
         );
 
         let block_payload_signature = BLSPubKey::sign(&privkey, &leaf_payload_bytes_arc)
@@ -275,6 +275,7 @@ mod persistence_tests {
 
         let vid_commitment = vid_commitment::<TestVersions>(
             &leaf_payload_bytes_arc,
+            &leaf.block_header().metadata().encode(),
             2,
             <TestVersions as Versions>::Base::VERSION,
         );
@@ -461,7 +462,7 @@ mod persistence_tests {
 
         assert_eq!(
             storage.load_vid_share(ViewNumber::new(3)).await.unwrap(),
-            Some(vid_share3.clone())
+            Some(convert_proposal(vid_share3.clone()))
         );
 
         let proposals = storage.load_quorum_proposals().await.unwrap();
@@ -674,20 +675,22 @@ mod persistence_tests {
                 .into();
         let leaf_payload = leaf.block_payload().unwrap();
         let leaf_payload_bytes_arc = leaf_payload.encode();
-        let disperse = advz_scheme(2)
-            .disperse(leaf_payload_bytes_arc.clone())
-            .unwrap();
+        let avidm_param = init_avidm_param(2).unwrap();
+        let weights = vec![1u32; 2];
+        let ns_table = parse_ns_table(leaf_payload.byte_len().as_usize(), &leaf_payload.encode());
+        let (payload_commitment, shares) =
+            AvidMScheme::ns_disperse(&avidm_param, &weights, &leaf_payload_bytes_arc, ns_table)
+                .unwrap();
+
         let (pubkey, privkey) = BLSPubKey::generated_from_seed_indexed([0; 32], 1);
-        let mut vid = VidDisperseShare::V1(VidDisperseShare2::<SeqTypes> {
+        let mut vid = VidDisperseShare2::<SeqTypes> {
             view_number: ViewNumber::new(0),
-            payload_commitment: Default::default(),
-            share: disperse.shares[0].clone(),
-            common: disperse.common,
+            payload_commitment,
+            share: shares[0].clone(),
             recipient_key: pubkey,
             epoch: Some(EpochNumber::new(0)),
             target_epoch: Some(EpochNumber::new(0)),
-            data_epoch_payload_commitment: None,
-        })
+        }
         .to_proposal(&privkey)
         .unwrap()
         .clone();
@@ -729,6 +732,7 @@ mod persistence_tests {
 
         let vid_commitment = vid_commitment::<TestVersions>(
             &leaf_payload_bytes_arc,
+            &leaf.block_header().metadata().encode(),
             2,
             <TestVersions as Versions>::Base::VERSION,
         );
@@ -873,21 +877,23 @@ mod persistence_tests {
             Leaf::genesis::<MockVersions>(&ValidatedState::default(), &NodeState::mock()).await;
         let leaf_payload = leaf.block_payload().unwrap();
         let leaf_payload_bytes_arc = leaf_payload.encode();
-        let disperse = advz_scheme(2)
-            .disperse(leaf_payload_bytes_arc.clone())
-            .unwrap();
-        let payload_commitment = disperse.commit;
+        let avidm_param = init_avidm_param(2).unwrap();
+        let weights = vec![1u32; 2];
+
+        let ns_table = parse_ns_table(leaf_payload.byte_len().as_usize(), &leaf_payload.encode());
+        let (payload_commitment, shares) =
+            AvidMScheme::ns_disperse(&avidm_param, &weights, &leaf_payload_bytes_arc, ns_table)
+                .unwrap();
+
         let (pubkey, privkey) = BLSPubKey::generated_from_seed_indexed([0; 32], 1);
-        let vid_share = VidDisperseShare::V1(VidDisperseShare2::<SeqTypes> {
+        let vid_share = VidDisperseShare2::<SeqTypes> {
             view_number: ViewNumber::new(0),
             payload_commitment,
-            share: disperse.shares[0].clone(),
-            common: disperse.common,
+            share: shares[0].clone(),
             recipient_key: pubkey,
             epoch: None,
             target_epoch: None,
-            data_epoch_payload_commitment: None,
-        })
+        }
         .to_proposal(&privkey)
         .unwrap()
         .clone();
@@ -932,7 +938,7 @@ mod persistence_tests {
         };
 
         storage
-            .append_da2(&da_proposal, payload_commitment)
+            .append_da2(&da_proposal, VidCommitment::V1(payload_commitment))
             .await
             .unwrap();
         storage.append_vid2(&vid_share).await.unwrap();
@@ -963,7 +969,7 @@ mod persistence_tests {
                 .await
                 .unwrap()
                 .unwrap(),
-            vid_share
+            convert_proposal(vid_share)
         );
         assert_eq!(
             storage

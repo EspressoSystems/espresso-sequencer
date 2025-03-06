@@ -13,9 +13,9 @@ use committable::Committable;
 use hotshot_types::{
     consensus::OuterConsensus,
     data::{Leaf2, QuorumProposalWrapper, VidDisperseShare},
-    drb::{compute_drb_result, DrbResult},
+    drb::{compute_drb_result, DrbResult, INITIAL_DRB_RESULT},
     event::{Event, EventType},
-    message::{convert_proposal, Proposal, UpgradeLock},
+    message::{Proposal, UpgradeLock},
     simple_vote::{HasEpoch, QuorumData2, QuorumVote2},
     traits::{
         block_contents::BlockHeader,
@@ -51,6 +51,7 @@ async fn notify_membership_of_drb_result<TYPES: NodeType>(
     epoch: <TYPES as NodeType>::Epoch,
     drb_result: DrbResult,
 ) {
+    tracing::debug!("Calling add_drb_result for epoch {:?}", epoch);
     membership.write().await.add_drb_result(epoch, drb_result);
 }
 
@@ -379,7 +380,7 @@ pub(crate) async fn handle_quorum_proposal_validated<
         )
         .await
     } else {
-        decide_from_proposal(
+        decide_from_proposal::<TYPES, V>(
             proposal,
             OuterConsensus::new(Arc::clone(&task_state.consensus.inner_consensus)),
             Arc::clone(&task_state.upgrade_lock.decided_upgrade_certificate),
@@ -390,21 +391,58 @@ pub(crate) async fn handle_quorum_proposal_validated<
         .await
     };
 
-    if let Some(cert) = decided_upgrade_cert.clone() {
-        let mut decided_certificate_lock = task_state
-            .upgrade_lock
-            .decided_upgrade_certificate
-            .write()
-            .await;
-        *decided_certificate_lock = Some(cert.clone());
-        drop(decided_certificate_lock);
+    if let Some(cert) = &task_state.staged_epoch_upgrade_certificate {
+        if leaf_views.last().unwrap().leaf.height() >= task_state.epoch_upgrade_block_height {
+            let mut decided_certificate_lock = task_state
+                .upgrade_lock
+                .decided_upgrade_certificate
+                .write()
+                .await;
+            *decided_certificate_lock = Some(cert.clone());
+            drop(decided_certificate_lock);
 
-        let _ = task_state
-            .storage
-            .write()
-            .await
-            .update_decided_upgrade_certificate(Some(cert.clone()))
-            .await;
+            let _ = task_state
+                .storage
+                .write()
+                .await
+                .update_decided_upgrade_certificate(Some(cert.clone()))
+                .await;
+
+            task_state.staged_epoch_upgrade_certificate = None;
+        }
+    };
+
+    if let Some(cert) = decided_upgrade_cert.clone() {
+        if cert.data.new_version == V::Epochs::VERSION {
+            task_state.staged_epoch_upgrade_certificate = Some(cert);
+
+            let epoch_height = task_state.consensus.read().await.epoch_height;
+            let first_epoch_number = TYPES::Epoch::new(epoch_from_block_number(
+                task_state.epoch_upgrade_block_height,
+                epoch_height,
+            ));
+            tracing::debug!("Calling set_first_epoch for epoch {:?}", first_epoch_number);
+            task_state
+                .membership
+                .write()
+                .await
+                .set_first_epoch(first_epoch_number, INITIAL_DRB_RESULT);
+        } else {
+            let mut decided_certificate_lock = task_state
+                .upgrade_lock
+                .decided_upgrade_certificate
+                .write()
+                .await;
+            *decided_certificate_lock = Some(cert.clone());
+            drop(decided_certificate_lock);
+
+            let _ = task_state
+                .storage
+                .write()
+                .await
+                .update_decided_upgrade_certificate(Some(cert.clone()))
+                .await;
+        }
     }
 
     let mut consensus_writer = task_state.consensus.write().await;
@@ -574,7 +612,7 @@ pub(crate) async fn update_shared_state<
                 &instance_state,
                 &parent,
                 &proposed_leaf.block_header().clone(),
-                vid_share.data.vid_common_ref().clone(),
+                vid_share.data.payload_byte_len(),
                 version,
                 *view_number,
             )
@@ -670,7 +708,7 @@ pub(crate) async fn submit_vote<TYPES: NodeType, I: NodeImplementation<TYPES>, V
     storage
         .write()
         .await
-        .append_vid2(&convert_proposal(vid_share))
+        .append_vid_general(&vid_share)
         .await
         .wrap()
         .context(error!("Failed to store VID share"))?;

@@ -159,7 +159,7 @@ async fn test_upgrade_task_with_proposal() {
                 build_payload_commitment::<TestTypes, TestVersions>(
                     &membership,
                     ViewNumber::new(1),
-                    Some(EpochNumber::new(1)),
+                    None,
                     version_1,
                 )
                 .await,
@@ -180,7 +180,7 @@ async fn test_upgrade_task_with_proposal() {
                 build_payload_commitment::<TestTypes, TestVersions>(
                     &membership,
                     ViewNumber::new(2),
-                    Some(EpochNumber::new(1)),
+                    None,
                     version_2,
                 )
                 .await,
@@ -200,7 +200,7 @@ async fn test_upgrade_task_with_proposal() {
                 build_payload_commitment::<TestTypes, TestVersions>(
                     &membership,
                     ViewNumber::new(3),
-                    Some(EpochNumber::new(1)),
+                    None,
                     version_3,
                 )
                 .await,

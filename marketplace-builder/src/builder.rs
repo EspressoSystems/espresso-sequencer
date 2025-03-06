@@ -29,7 +29,7 @@ use hotshot_events_service::{
 use hotshot_types::{
     data::{fake_commitment, Leaf, ViewNumber},
     traits::{
-        block_contents::{vid_commitment, Transaction as _, GENESIS_VID_NUM_STORAGE_NODES},
+        block_contents::{Transaction as _, GENESIS_VID_NUM_STORAGE_NODES},
         metrics::NoMetrics,
         node_implementation::{ConsensusTime, NodeType, Versions},
         EncodeBytes,
@@ -231,9 +231,10 @@ mod test {
         events::{Error as EventStreamApiError, Options as EventStreamingApiOptions},
         events_source::{EventConsumer, EventsStreamer},
     };
-    use hotshot_query_service::{availability::LeafQueryData, VidCommitment};
+    use hotshot_query_service::availability::LeafQueryData;
     use hotshot_types::{
         bundle::Bundle,
+        data::VidCommitment,
         event::LeafInfo,
         light_client::StateKeyPair,
         signature_key::BLSPubKey,
