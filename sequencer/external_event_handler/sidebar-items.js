@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["ExternalMessage","OutboundMessage"],"struct":["ExternalEventHandler","RollCallInfo"]};
+window.SIDEBAR_ITEMS = {"enum":["ExternalMessage","OutboundMessage"],"struct":["ExternalEventHandler"]};

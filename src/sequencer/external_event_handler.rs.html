@@ -148,132 +148,72 @@
 <a href="#147" id="147">147</a>
 <a href="#148" id="148">148</a>
 <a href="#149" id="149">149</a>
-<a href="#150" id="150">150</a>
-<a href="#151" id="151">151</a>
-<a href="#152" id="152">152</a>
-<a href="#153" id="153">153</a>
-<a href="#154" id="154">154</a>
-<a href="#155" id="155">155</a>
-<a href="#156" id="156">156</a>
-<a href="#157" id="157">157</a>
-<a href="#158" id="158">158</a>
-<a href="#159" id="159">159</a>
-<a href="#160" id="160">160</a>
-<a href="#161" id="161">161</a>
-<a href="#162" id="162">162</a>
-<a href="#163" id="163">163</a>
-<a href="#164" id="164">164</a>
-<a href="#165" id="165">165</a>
-<a href="#166" id="166">166</a>
-<a href="#167" id="167">167</a>
-<a href="#168" id="168">168</a>
-<a href="#169" id="169">169</a>
-<a href="#170" id="170">170</a>
-<a href="#171" id="171">171</a>
-<a href="#172" id="172">172</a>
-<a href="#173" id="173">173</a>
-<a href="#174" id="174">174</a>
-<a href="#175" id="175">175</a>
-<a href="#176" id="176">176</a>
-<a href="#177" id="177">177</a>
-<a href="#178" id="178">178</a>
-<a href="#179" id="179">179</a>
-<a href="#180" id="180">180</a>
-<a href="#181" id="181">181</a>
-<a href="#182" id="182">182</a>
-<a href="#183" id="183">183</a></pre></div><pre class="rust"><code><span class="doccomment">//! Should probably rename this to "external" or something
+<a href="#150" id="150">150</a></pre></div><pre class="rust"><code><span class="doccomment">//! Should probably rename this to "external" or something
 
 </span><span class="kw">use </span><span class="kw">crate</span>::context::TaskList;
 <span class="kw">use </span>anyhow::{Context, <span class="prelude-ty">Result</span>};
 <span class="kw">use </span>espresso_types::{PubKey, SeqTypes};
-<span class="kw">use </span>hotshot::types::{BLSPubKey, Message};
+<span class="kw">use </span>hotshot::types::Message;
 <span class="kw">use </span>hotshot_types::{
-    message::MessageKind,
+    message::{MessageKind, UpgradeLock},
     traits::{
         network::{BroadcastDelay, ConnectedNetwork, Topic},
         node_implementation::Versions,
     },
 };
+<span class="kw">use </span>request_response::network::Bytes;
 <span class="kw">use </span>serde::{Deserialize, Serialize};
 <span class="kw">use </span>std::{marker::PhantomData, sync::Arc};
-<span class="kw">use </span>tokio::sync::mpsc::channel;
 <span class="kw">use </span>tokio::sync::mpsc::{Receiver, Sender};
-<span class="kw">use </span>url::Url;
 
 <span class="doccomment">/// An external message that can be sent to or received from a node
 </span><span class="attr">#[derive(Debug, Serialize, Deserialize, Clone)]
 </span><span class="kw">pub enum </span>ExternalMessage {
-    <span class="doccomment">/// A request for a node to respond with its identifier
-    /// Contains the public key of the node that is requesting the roll call
-    </span>RollCallRequest(BLSPubKey),
-
-    <span class="doccomment">/// A response to a roll call request
-    /// Contains the identifier of the node
-    </span>RollCallResponse(RollCallInfo),
+    RequestResponse(Vec&lt;u8&gt;),
 }
 
-<span class="doccomment">/// Information about a node that is used in a roll call response
-</span><span class="attr">#[derive(Debug, Serialize, Deserialize, Clone)]
-</span><span class="kw">pub struct </span>RollCallInfo {
-    <span class="comment">// The public API URL of the node
-    </span><span class="kw">pub </span>public_api_url: <span class="prelude-ty">Option</span>&lt;Url&gt;,
-}
-
-<span class="doccomment">/// The external event handler state
+<span class="doccomment">/// The external event handler
+</span><span class="attr">#[derive(Clone)]
 </span><span class="kw">pub struct </span>ExternalEventHandler&lt;V: Versions&gt; {
-    <span class="comment">// The `RollCallInfo` of the node (used in the roll call response)
-    </span><span class="kw">pub </span>roll_call_info: RollCallInfo,
+    <span class="doccomment">/// The sender to the request-response protocol
+    </span>request_response_sender: Sender&lt;Bytes&gt;,
 
-    <span class="comment">// The public key of the node
-    </span><span class="kw">pub </span>public_key: BLSPubKey,
-
-    <span class="comment">// The outbound message queue
-    </span><span class="kw">pub </span>outbound_message_sender: Sender&lt;OutboundMessage&gt;,
-
-    _pd: PhantomData&lt;V&gt;,
+    <span class="doccomment">/// The type phantom
+    </span>phantom: PhantomData&lt;V&gt;,
 }
 
 <span class="comment">// The different types of outbound messages (broadcast or direct)
 </span><span class="attr">#[derive(Debug)]
+#[allow(dead_code)]
 </span><span class="kw">pub enum </span>OutboundMessage {
-    Direct(Vec&lt;u8&gt;, PubKey),
-    Broadcast(Vec&lt;u8&gt;),
+    Direct(MessageKind&lt;SeqTypes&gt;, PubKey),
+    Broadcast(MessageKind&lt;SeqTypes&gt;),
 }
 
 <span class="kw">impl</span>&lt;V: Versions&gt; ExternalEventHandler&lt;V&gt; {
-    <span class="doccomment">/// Creates a new `ExternalEventHandler` with the given network and roll call info
+    <span class="doccomment">/// Creates a new `ExternalEventHandler` with the given network
     </span><span class="kw">pub async fn </span>new&lt;N: ConnectedNetwork&lt;PubKey&gt;&gt;(
         tasks: <span class="kw-2">&amp;mut </span>TaskList,
+        request_response_sender: Sender&lt;Bytes&gt;,
+        outbound_message_receiver: Receiver&lt;OutboundMessage&gt;,
         network: Arc&lt;N&gt;,
-        roll_call_info: RollCallInfo,
-        public_key: BLSPubKey,
+        public_key: PubKey,
+        hotshot_upgrade_lock: UpgradeLock&lt;SeqTypes, V&gt;,
     ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>&gt; {
-        <span class="comment">// Create the outbound message queue
-        </span><span class="kw">let </span>(outbound_message_sender, outbound_message_receiver) = channel(<span class="number">10</span>);
-
         <span class="comment">// Spawn the outbound message handling loop
         </span>tasks.spawn(
-            <span class="string">"ExternalEventHandler (RollCall)"</span>,
-            <span class="self">Self</span>::outbound_message_loop(outbound_message_receiver, network),
+            <span class="string">"ExternalEventHandler"</span>,
+            <span class="self">Self</span>::outbound_message_loop(
+                outbound_message_receiver,
+                network,
+                public_key,
+                hotshot_upgrade_lock,
+            ),
         );
 
-        <span class="comment">// We just started, so queue an outbound RollCall message (if we have a public API URL)
-        </span><span class="kw">if </span>roll_call_info.public_api_url.is_some() {
-            <span class="kw">let </span>roll_call_message_bytes =
-                <span class="self">Self</span>::create_roll_call_response(<span class="kw-2">&amp;</span>public_key, <span class="kw-2">&amp;</span>roll_call_info)
-                    .<span class="kw">await
-                    </span>.with_context(|| <span class="string">"Failed to create roll call response for initial broadcast"</span>)<span class="question-mark">?</span>;
-
-            outbound_message_sender
-                .try_send(OutboundMessage::Broadcast(roll_call_message_bytes))
-                .with_context(|| <span class="string">"External outbound message queue is somehow full"</span>)<span class="question-mark">?</span>;
-        }
-
         <span class="prelude-val">Ok</span>(<span class="self">Self </span>{
-            roll_call_info,
-            public_key,
-            outbound_message_sender,
-            _pd: Default::default(),
+            request_response_sender,
+            phantom: PhantomData,
         })
     }
 
@@ -288,73 +228,67 @@
 
         <span class="comment">// Match the type
         </span><span class="kw">match </span>external_message {
-            ExternalMessage::RollCallRequest(pub_key) =&gt; {
-                <span class="kw">if </span><span class="self">self</span>.roll_call_info.public_api_url.is_none() {
-                    <span class="comment">// We don't have a public API URL, so we can't respond to the roll call
-                    </span><span class="kw">return </span><span class="prelude-val">Ok</span>(());
-                }
-
-                <span class="kw">let </span>response_bytes =
-                    <span class="self">Self</span>::create_roll_call_response(<span class="kw-2">&amp;</span><span class="self">self</span>.public_key, <span class="kw-2">&amp;</span><span class="self">self</span>.roll_call_info)
-                        .<span class="kw">await
-                        </span>.with_context(|| {
-                            <span class="string">"Failed to serialize roll call response for RollCallRequest"
-                        </span>})<span class="question-mark">?</span>;
-
-                <span class="comment">// Send the response
-                </span><span class="self">self</span>.outbound_message_sender
-                    .try_send(OutboundMessage::Direct(response_bytes, pub_key))
-                    .with_context(|| <span class="string">"External outbound message queue is full"</span>)<span class="question-mark">?</span>;
-            }
-
-            <span class="kw">_ </span>=&gt; {
-                <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="macro">anyhow::anyhow!</span>(<span class="string">"Unknown external message type"</span>));
+            ExternalMessage::RequestResponse(request_response) =&gt; {
+                <span class="comment">// Send the inner message to the request-response protocol
+                </span><span class="self">self</span>.request_response_sender
+                    .send(request_response.into())
+                    .<span class="kw">await</span><span class="question-mark">?</span>;
             }
         }
         <span class="prelude-val">Ok</span>(())
-    }
-
-    <span class="doccomment">/// Creates a roll call response message
-    </span><span class="kw">async fn </span>create_roll_call_response(
-        public_key: <span class="kw-2">&amp;</span>BLSPubKey,
-        roll_call_info: <span class="kw-2">&amp;</span>RollCallInfo,
-    ) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;u8&gt;&gt; {
-        <span class="kw">let </span>response = ExternalMessage::RollCallResponse(roll_call_info.clone());
-
-        <span class="comment">// Serialize the response
-        </span><span class="kw">let </span>response_bytes = bincode::serialize(<span class="kw-2">&amp;</span>response)
-            .with_context(|| <span class="string">"Failed to serialize roll call response"</span>)<span class="question-mark">?</span>;
-
-        <span class="kw">let </span>message = Message::&lt;SeqTypes&gt; {
-            sender: <span class="kw-2">*</span>public_key,
-            kind: MessageKind::&lt;SeqTypes&gt;::External(response_bytes),
-        };
-
-        <span class="kw">let </span>response_bytes = bincode::serialize(<span class="kw-2">&amp;</span>message)
-            .with_context(|| <span class="string">"Failed to serialize roll call response"</span>)<span class="question-mark">?</span>;
-
-        <span class="prelude-val">Ok</span>(response_bytes)
     }
 
     <span class="doccomment">/// The main loop for sending outbound messages.
     </span><span class="kw">async fn </span>outbound_message_loop&lt;N: ConnectedNetwork&lt;PubKey&gt;&gt;(
         <span class="kw-2">mut </span>receiver: Receiver&lt;OutboundMessage&gt;,
         network: Arc&lt;N&gt;,
+        public_key: PubKey,
+        hotshot_upgrade_lock: UpgradeLock&lt;SeqTypes, V&gt;,
     ) {
         <span class="kw">while let </span><span class="prelude-val">Some</span>(message) = receiver.recv().<span class="kw">await </span>{
             <span class="comment">// Match the message type
             </span><span class="kw">match </span>message {
                 OutboundMessage::Direct(message, recipient) =&gt; {
-                    <span class="comment">// Send the message directly to the recipient
-                    </span><span class="kw">if let </span><span class="prelude-val">Err</span>(err) = network.direct_message(message, recipient).<span class="kw">await </span>{
+                    <span class="comment">// Wrap it in the real message type
+                    </span><span class="kw">let </span>message_inner = Message {
+                        sender: public_key,
+                        kind: message,
+                    };
+
+                    <span class="comment">// Serialize it
+                    </span><span class="kw">let </span>message_bytes = <span class="kw">match </span>hotshot_upgrade_lock.serialize(<span class="kw-2">&amp;</span>message_inner).<span class="kw">await </span>{
+                        <span class="prelude-val">Ok</span>(message_bytes) =&gt; message_bytes,
+                        <span class="prelude-val">Err</span>(err) =&gt; {
+                            <span class="macro">tracing::warn!</span>(<span class="string">"Failed to serialize direct message: {}"</span>, err);
+                            <span class="kw">continue</span>;
+                        }
+                    };
+
+                    <span class="comment">// Send the message to the recipient
+                    </span><span class="kw">if let </span><span class="prelude-val">Err</span>(err) = network.direct_message(message_bytes, recipient).<span class="kw">await </span>{
                         <span class="macro">tracing::error!</span>(<span class="string">"Failed to send message: {:?}"</span>, err);
                     };
                 }
 
                 OutboundMessage::Broadcast(message) =&gt; {
+                    <span class="comment">// Wrap it in the real message type
+                    </span><span class="kw">let </span>message_inner = Message {
+                        sender: public_key,
+                        kind: message,
+                    };
+
+                    <span class="comment">// Serialize it
+                    </span><span class="kw">let </span>message_bytes = <span class="kw">match </span>hotshot_upgrade_lock.serialize(<span class="kw-2">&amp;</span>message_inner).<span class="kw">await </span>{
+                        <span class="prelude-val">Ok</span>(message_bytes) =&gt; message_bytes,
+                        <span class="prelude-val">Err</span>(err) =&gt; {
+                            <span class="macro">tracing::warn!</span>(<span class="string">"Failed to serialize broadcast message: {}"</span>, err);
+                            <span class="kw">continue</span>;
+                        }
+                    };
+
                     <span class="comment">// Broadcast the message to the global topic
                     </span><span class="kw">if let </span><span class="prelude-val">Err</span>(err) = network
-                        .broadcast_message(message, Topic::Global, BroadcastDelay::None)
+                        .broadcast_message(message_bytes, Topic::Global, BroadcastDelay::None)
                         .<span class="kw">await
                     </span>{
                         <span class="macro">tracing::error!</span>(<span class="string">"Failed to broadcast message: {:?}"</span>, err);

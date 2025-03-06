@@ -961,7 +961,24 @@
 <a href="#960" id="960">960</a>
 <a href="#961" id="961">961</a>
 <a href="#962" id="962">962</a>
-<a href="#963" id="963">963</a></pre></div><pre class="rust"><code><span class="doccomment">//! This crate contains a general request-response protocol. It is used to send requests to
+<a href="#963" id="963">963</a>
+<a href="#964" id="964">964</a>
+<a href="#965" id="965">965</a>
+<a href="#966" id="966">966</a>
+<a href="#967" id="967">967</a>
+<a href="#968" id="968">968</a>
+<a href="#969" id="969">969</a>
+<a href="#970" id="970">970</a>
+<a href="#971" id="971">971</a>
+<a href="#972" id="972">972</a>
+<a href="#973" id="973">973</a>
+<a href="#974" id="974">974</a>
+<a href="#975" id="975">975</a>
+<a href="#976" id="976">976</a>
+<a href="#977" id="977">977</a>
+<a href="#978" id="978">978</a>
+<a href="#979" id="979">979</a>
+<a href="#980" id="980">980</a></pre></div><pre class="rust"><code><span class="doccomment">//! This crate contains a general request-response protocol. It is used to send requests to
 //! a set of recipients and wait for responses.
 
 </span><span class="kw">use </span>std::{
@@ -973,7 +990,6 @@
 
 <span class="kw">use </span>anyhow::{anyhow, Context, <span class="prelude-ty">Result</span>};
 <span class="kw">use </span>data_source::DataSource;
-<span class="kw">use </span>derive_builder::Builder;
 <span class="kw">use </span>derive_more::derive::Deref;
 <span class="kw">use </span>hotshot_types::traits::signature_key::SignatureKey;
 <span class="kw">use </span>message::{Message, RequestMessage, ResponseMessage};
@@ -1050,39 +1066,39 @@
 }
 
 <span class="doccomment">/// The underlying configuration for the request-response protocol
-</span><span class="attr">#[derive(Clone, Builder)]
+</span><span class="attr">#[derive(Clone)]
 </span><span class="kw">pub struct </span>RequestResponseConfig {
     <span class="doccomment">/// The timeout for incoming requests. Do not respond to a request after this threshold
     /// has passed.
-    </span>incoming_request_ttl: Duration,
+    </span><span class="kw">pub </span>incoming_request_ttl: Duration,
     <span class="doccomment">/// The maximum amount of time we will spend trying to both derive a response for a request and
     /// send the response over the wire.
-    </span>response_send_timeout: Duration,
+    </span><span class="kw">pub </span>response_send_timeout: Duration,
     <span class="doccomment">/// The maximum amount of time we will spend trying to validate a response. This is used to prevent
     /// an attack where a malicious participant sends us a bunch of requests that take a long time to
     /// validate.
-    </span>response_validate_timeout: Duration,
+    </span><span class="kw">pub </span>response_validate_timeout: Duration,
     <span class="doccomment">/// The batch size for outgoing requests. This is the number of request messages that we will
     /// send out at a time for a single request before waiting for the [`request_batch_interval`].
-    </span>request_batch_size: usize,
+    </span><span class="kw">pub </span>request_batch_size: usize,
     <span class="doccomment">/// The time to wait (per request) between sending out batches of request messages
-    </span>request_batch_interval: Duration,
+    </span><span class="kw">pub </span>request_batch_interval: Duration,
     <span class="doccomment">/// The maximum (global) number of outgoing responses that can be in flight at any given time
-    </span>max_outgoing_responses: usize,
+    </span><span class="kw">pub </span>max_outgoing_responses: usize,
     <span class="doccomment">/// The maximum (global) number of incoming responses that can be processed at any given time.
     /// We need this because responses coming in need to be validated [asynchronously] that they
     /// satisfy the request they are responding to
-    </span>max_incoming_responses: usize,
+    </span><span class="kw">pub </span>max_incoming_responses: usize,
 }
 
 <span class="doccomment">/// A protocol that allows for request-response communication. Is cheaply cloneable, so there is no
 /// need to wrap it in an `Arc`
-</span><span class="attr">#[derive(Clone, Deref)]
+</span><span class="attr">#[derive(Deref)]
 </span><span class="kw">pub struct </span>RequestResponse&lt;
     S: Sender&lt;K&gt;,
     R: Receiver,
     Req: Request,
-    RS: RecipientSource&lt;K&gt;,
+    RS: RecipientSource&lt;Req, K&gt;,
     DS: DataSource&lt;Req&gt;,
     K: SignatureKey + <span class="lifetime">'static</span>,
 &gt; {
@@ -1093,11 +1109,30 @@
     </span>_receiving_task_handle: Arc&lt;AbortOnDropHandle&lt;()&gt;&gt;,
 }
 
+<span class="doccomment">/// We need to manually implement the `Clone` trait for this type because deriving
+/// `Deref` will cause an issue where it tries to clone the inner field instead
+</span><span class="kw">impl</span>&lt;
+        S: Sender&lt;K&gt;,
+        R: Receiver,
+        Req: Request,
+        RS: RecipientSource&lt;Req, K&gt;,
+        DS: DataSource&lt;Req&gt;,
+        K: SignatureKey + <span class="lifetime">'static</span>,
+    &gt; Clone <span class="kw">for </span>RequestResponse&lt;S, R, Req, RS, DS, K&gt;
+{
+    <span class="kw">fn </span>clone(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="self">Self </span>{
+        <span class="self">Self </span>{
+            inner: Arc::clone(<span class="kw-2">&amp;</span><span class="self">self</span>.inner),
+            _receiving_task_handle: Arc::clone(<span class="kw-2">&amp;</span><span class="self">self</span>._receiving_task_handle),
+        }
+    }
+}
+
 <span class="kw">impl</span>&lt;
         S: Sender&lt;K&gt;,
         R: Receiver,
         Req: Request,
-        RS: RecipientSource&lt;K&gt;,
+        RS: RecipientSource&lt;Req, K&gt;,
         DS: DataSource&lt;Req&gt;,
         K: SignatureKey + <span class="lifetime">'static</span>,
     &gt; RequestResponse&lt;S, R, Req, RS, DS, K&gt;
@@ -1149,14 +1184,14 @@
     S: Sender&lt;K&gt;,
     R: Receiver,
     Req: Request,
-    RS: RecipientSource&lt;K&gt;,
+    RS: RecipientSource&lt;Req, K&gt;,
     DS: DataSource&lt;Req&gt;,
     K: SignatureKey + <span class="lifetime">'static</span>,
 &gt; {
     <span class="doccomment">/// The configuration of the protocol
     </span>config: RequestResponseConfig,
     <span class="doccomment">/// The sender to use for the protocol
-    </span>sender: S,
+    </span><span class="kw">pub </span>sender: S,
     <span class="doccomment">/// The recipient source to use for the protocol
     </span>recipient_source: RS,
     <span class="doccomment">/// The data source to use for the protocol
@@ -1170,7 +1205,7 @@
         S: Sender&lt;K&gt;,
         R: Receiver,
         Req: Request,
-        RS: RecipientSource&lt;K&gt;,
+        RS: RecipientSource&lt;Req, K&gt;,
         DS: DataSource&lt;Req&gt;,
         K: SignatureKey + <span class="lifetime">'static</span>,
     &gt; RequestResponseInner&lt;S, R, Req, RS, DS, K&gt;
@@ -1266,7 +1301,7 @@
             // that we don't always send to the same recipients in the same order
             </span><span class="kw">let </span><span class="kw-2">mut </span>recipients = <span class="self">self
                 </span>.recipient_source
-                .get_recipients_for(<span class="kw-2">&amp;</span>request_message.request)
+                .get_expected_responders(<span class="kw-2">&amp;</span>request_message.request)
                 .<span class="kw">await</span>;
             recipients.shuffle(<span class="kw-2">&amp;mut </span>rand::thread_rng());
 
@@ -1580,8 +1615,8 @@
 
     <span class="comment">// Implement the [`RecipientSource`] trait for the [`TestSender`] type
     </span><span class="attr">#[async_trait]
-    </span><span class="kw">impl </span>RecipientSource&lt;BLSPubKey&gt; <span class="kw">for </span>TestSender {
-        <span class="kw">async fn </span>get_recipients_for&lt;R: Request&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, _request: <span class="kw-2">&amp;</span>R) -&gt; Vec&lt;BLSPubKey&gt; {
+    </span><span class="kw">impl </span>RecipientSource&lt;TestRequest, BLSPubKey&gt; <span class="kw">for </span>TestSender {
+        <span class="kw">async fn </span>get_expected_responders(<span class="kw-2">&amp;</span><span class="self">self</span>, _request: <span class="kw-2">&amp;</span>TestRequest) -&gt; Vec&lt;BLSPubKey&gt; {
             <span class="comment">// Get all the participants in the network
             </span><span class="self">self</span>.network.keys().copied().collect()
         }
@@ -1634,14 +1669,14 @@
     }
 
     <span class="attr">#[async_trait]
-    </span><span class="kw">impl </span>DataSource&lt;Vec&lt;u8&gt;&gt; <span class="kw">for </span>TestDataSource {
-        <span class="kw">async fn </span>derive_response_for(<span class="kw-2">&amp;</span><span class="self">self</span>, request: <span class="kw-2">&amp;</span>Vec&lt;u8&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;u8&gt;&gt; {
+    </span><span class="kw">impl </span>DataSource&lt;TestRequest&gt; <span class="kw">for </span>TestDataSource {
+        <span class="kw">async fn </span>derive_response_for(<span class="kw-2">&amp;</span><span class="self">self</span>, request: <span class="kw-2">&amp;</span>TestRequest) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;u8&gt;&gt; {
             <span class="comment">// Return a response if we hit the hit rate
             </span><span class="kw">if </span><span class="self">self</span>.has_data &amp;&amp; Instant::now() &gt;= <span class="self">self</span>.data_available_time {
                 <span class="kw">if </span><span class="self">self</span>.take_data &amp;&amp; !<span class="self">self</span>.taken.swap(<span class="bool-val">true</span>, std::sync::atomic::Ordering::Relaxed) {
                     <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="macro">anyhow::anyhow!</span>(<span class="string">"data already taken"</span>));
                 }
-                <span class="prelude-val">Ok</span>(blake3::hash(request).as_bytes().to_vec())
+                <span class="prelude-val">Ok</span>(blake3::hash(<span class="kw-2">&amp;</span>request.<span class="number">0</span>).as_bytes().to_vec())
             } <span class="kw">else </span>{
                 <span class="prelude-val">Err</span>(<span class="macro">anyhow::anyhow!</span>(<span class="string">"did not have the data"</span>))
             }
@@ -1650,16 +1685,15 @@
 
     <span class="doccomment">/// Create and return a default protocol configuration
     </span><span class="kw">fn </span>default_protocol_config() -&gt; RequestResponseConfig {
-        RequestResponseConfigBuilder::create_empty()
-            .incoming_request_ttl(Duration::from_secs(<span class="number">40</span>))
-            .response_send_timeout(Duration::from_secs(<span class="number">40</span>))
-            .request_batch_size(<span class="number">10</span>)
-            .request_batch_interval(Duration::from_millis(<span class="number">100</span>))
-            .max_outgoing_responses(<span class="number">10</span>)
-            .response_validate_timeout(Duration::from_secs(<span class="number">1</span>))
-            .max_incoming_responses(<span class="number">5</span>)
-            .build()
-            .expect(<span class="string">"failed to build config"</span>)
+        RequestResponseConfig {
+            incoming_request_ttl: Duration::from_secs(<span class="number">40</span>),
+            response_send_timeout: Duration::from_secs(<span class="number">40</span>),
+            request_batch_size: <span class="number">10</span>,
+            request_batch_interval: Duration::from_millis(<span class="number">100</span>),
+            max_outgoing_responses: <span class="number">10</span>,
+            response_validate_timeout: Duration::from_secs(<span class="number">1</span>),
+            max_incoming_responses: <span class="number">5</span>,
+        }
     }
 
     <span class="doccomment">/// Create fully connected test networks with `num_participants` participants
@@ -1768,10 +1802,10 @@
                     .push(Arc::clone(<span class="kw-2">&amp;</span>protocol._receiving_task_handle));
 
                 <span class="comment">// Create a random request
-                </span><span class="kw">let </span>request = <span class="macro">vec!</span>[rand::thread_rng().gen(); <span class="number">100</span>];
+                </span><span class="kw">let </span>request = TestRequest(<span class="macro">vec!</span>[rand::thread_rng().gen(); <span class="number">100</span>]);
 
                 <span class="comment">// Get the hash of the request
-                </span><span class="kw">let </span>request_hash = blake3::hash(<span class="kw-2">&amp;</span>request).as_bytes().to_vec();
+                </span><span class="kw">let </span>request_hash = blake3::hash(<span class="kw-2">&amp;</span>request.<span class="number">0</span>).as_bytes().to_vec();
 
                 <span class="comment">// Create a new request message
                 </span><span class="kw">let </span>request = RequestMessage::new_signed(<span class="kw-2">&amp;</span>public_key, <span class="kw-2">&amp;</span>private_key, <span class="kw-2">&amp;</span>request)
@@ -1887,7 +1921,7 @@
         </span><span class="kw">let </span>one = Arc::new(participants.remove(<span class="number">0</span>));
 
         <span class="comment">// Create the request that they should all be able to join on
-        </span><span class="kw">let </span>request = <span class="macro">vec!</span>[rand::thread_rng().gen(); <span class="number">100</span>];
+        </span><span class="kw">let </span>request = TestRequest(<span class="macro">vec!</span>[rand::thread_rng().gen(); <span class="number">100</span>]);
 
         <span class="comment">// Create a join set to wait for all the tasks to finish
         </span><span class="kw">let </span><span class="kw-2">mut </span>join_set = JoinSet::new();

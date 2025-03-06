@@ -20,8 +20,8 @@
 /// expect responses from. In `HotShot` this would go on top of the [`Membership`] trait and determine
 /// which nodes are able (quorum/DA) to respond to which requests
 </span><span class="attr">#[async_trait]
-</span><span class="kw">pub trait </span>RecipientSource&lt;K: SignatureKey + <span class="lifetime">'static</span>&gt;: Send + Sync + <span class="lifetime">'static </span>{
+</span><span class="kw">pub trait </span>RecipientSource&lt;R: Request, K: SignatureKey + <span class="lifetime">'static</span>&gt;: Send + Sync + <span class="lifetime">'static </span>{
     <span class="doccomment">/// Get all the recipients that the specific request should expect responses from
-    </span><span class="kw">async fn </span>get_recipients_for&lt;R: Request&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, request: <span class="kw-2">&amp;</span>R) -&gt; Vec&lt;K&gt;;
+    </span><span class="kw">async fn </span>get_expected_responders(<span class="kw-2">&amp;</span><span class="self">self</span>, request: <span class="kw-2">&amp;</span>R) -&gt; Vec&lt;K&gt;;
 }
 </code></pre></div></section></main></body></html>
