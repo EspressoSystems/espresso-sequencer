@@ -1552,12 +1552,12 @@ mod test {
     use hotshot_types::data::EpochNumber;
     use hotshot_types::data::Leaf2;
     use hotshot_types::data::{QuorumProposal2, QuorumProposalWrapper};
+    use hotshot_types::simple_certificate::QuorumCertificate2;
     use hotshot_types::traits::block_contents::Transaction;
     use hotshot_types::traits::node_implementation::Versions;
     use hotshot_types::{
         data::{vid_commitment, Leaf, ViewNumber},
         message::Proposal,
-        simple_certificate::QuorumCertificate,
         traits::{node_implementation::ConsensusTime, signature_key::BuilderSignatureKey},
         utils::BuilderCommitment,
     };
@@ -4099,12 +4099,11 @@ mod test {
                 proposal: QuorumProposal2::<TestTypes> {
                     block_header: leaf.block_header().clone(),
                     view_number,
-                    justify_qc: QuorumCertificate::genesis::<TestVersions>(
+                    justify_qc: QuorumCertificate2::genesis::<TestVersions>(
                         &TestValidatedState::default(),
                         &TestInstanceState::default(),
                     )
-                    .await
-                    .to_qc2(),
+                    .await,
                     upgrade_certificate: None,
                     view_change_evidence: None,
                     next_epoch_justify_qc: None,
@@ -4175,12 +4174,11 @@ mod test {
                 proposal: QuorumProposal2::<TestTypes> {
                     block_header: leaf.block_header().clone(),
                     view_number,
-                    justify_qc: QuorumCertificate::genesis::<TestVersions>(
+                    justify_qc: QuorumCertificate2::genesis::<TestVersions>(
                         &TestValidatedState::default(),
                         &TestInstanceState::default(),
                     )
-                    .await
-                    .to_qc2(),
+                    .await,
                     upgrade_certificate: None,
                     view_change_evidence: None,
                     next_epoch_justify_qc: None,
@@ -4242,12 +4240,11 @@ mod test {
                 proposal: QuorumProposal2::<TestTypes> {
                     block_header: leaf.block_header().clone(),
                     view_number,
-                    justify_qc: QuorumCertificate::genesis::<TestVersions>(
+                    justify_qc: QuorumCertificate2::genesis::<TestVersions>(
                         &TestValidatedState::default(),
                         &TestInstanceState::default(),
                     )
-                    .await
-                    .to_qc2(),
+                    .await,
                     upgrade_certificate: None,
                     view_change_evidence: None,
                     next_epoch_justify_qc: None,
