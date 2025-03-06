@@ -972,7 +972,7 @@ impl L1Client {
                 match contract
                     .StakersUpdated_filter()
                     .from_block(start)
-                    .to_block(start)
+                    .to_block(end)
                     .query()
                     .await
                 {
