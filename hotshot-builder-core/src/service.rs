@@ -8,6 +8,7 @@ use hotshot_builder_api::{
     v0_2::builder::TransactionStatus,
 };
 use hotshot_types::{
+    data::VidCommitment,
     data::{DaProposal2, Leaf2, QuorumProposalWrapper},
     event::EventType,
     message::Proposal,
@@ -17,7 +18,6 @@ use hotshot_types::{
         signature_key::{BuilderSignatureKey, SignatureKey},
     },
     utils::BuilderCommitment,
-    vid::VidCommitment,
 };
 use lru::LruCache;
 use vbs::version::StaticVersionType;
@@ -1555,13 +1555,10 @@ mod test {
     use hotshot_types::traits::block_contents::Transaction;
     use hotshot_types::traits::node_implementation::Versions;
     use hotshot_types::{
-        data::{Leaf, ViewNumber},
+        data::{vid_commitment, Leaf, ViewNumber},
         message::Proposal,
         simple_certificate::QuorumCertificate,
-        traits::{
-            block_contents::vid_commitment, node_implementation::ConsensusTime,
-            signature_key::BuilderSignatureKey,
-        },
+        traits::{node_implementation::ConsensusTime, signature_key::BuilderSignatureKey},
         utils::BuilderCommitment,
     };
     use marketplace_builder_shared::{
@@ -1611,6 +1608,7 @@ mod test {
         let (bootstrap_sender, _) = async_broadcast::broadcast(10);
         let (tx_sender, _) = async_broadcast::broadcast(10);
         let parent_commit = vid_commitment::<TestVersions>(
+            &[],
             &[],
             TEST_NUM_NODES_IN_VID_COMPUTATION,
             <TestVersions as Versions>::Base::VERSION,
@@ -1688,6 +1686,7 @@ mod test {
         let (bootstrap_sender, _) = async_broadcast::broadcast(10);
         let (tx_sender, _) = async_broadcast::broadcast(10);
         let parent_commit = vid_commitment::<TestVersions>(
+            &[],
             &[],
             TEST_NUM_NODES_IN_VID_COMPUTATION,
             <TestVersions as Versions>::Base::VERSION,
@@ -1788,6 +1787,7 @@ mod test {
         let (bootstrap_sender, _) = async_broadcast::broadcast(10);
         let (tx_sender, _) = async_broadcast::broadcast(10);
         let parent_commit = vid_commitment::<TestVersions>(
+            &[],
             &[],
             TEST_NUM_NODES_IN_VID_COMPUTATION,
             <TestVersions as Versions>::Base::VERSION,
@@ -1916,6 +1916,7 @@ mod test {
         let (tx_sender, _) = async_broadcast::broadcast(10);
         let parent_commit = vid_commitment::<TestVersions>(
             &[],
+            &[],
             TEST_NUM_NODES_IN_VID_COMPUTATION,
             <TestVersions as Versions>::Base::VERSION,
         );
@@ -2022,6 +2023,7 @@ mod test {
         let (tx_sender, _) = async_broadcast::broadcast(10);
         let parent_commit = vid_commitment::<TestVersions>(
             &[],
+            &[],
             TEST_NUM_NODES_IN_VID_COMPUTATION,
             <TestVersions as Versions>::Base::VERSION,
         );
@@ -2038,7 +2040,7 @@ mod test {
         );
 
         let new_parent_commit =
-            vid_commitment::<TestVersions>(&[], 9, <TestVersions as Versions>::Base::VERSION);
+            vid_commitment::<TestVersions>(&[], &[], 9, <TestVersions as Versions>::Base::VERSION);
         let new_view_num = ViewNumber::new(1);
         let builder_state_id = BuilderStateId {
             parent_commitment: new_parent_commit,
@@ -2196,6 +2198,7 @@ mod test {
         let (tx_sender, _) = async_broadcast::broadcast(10);
         let parent_commit = vid_commitment::<TestVersions>(
             &[],
+            &[],
             TEST_NUM_NODES_IN_VID_COMPUTATION,
             <TestVersions as Versions>::Base::VERSION,
         );
@@ -2212,7 +2215,7 @@ mod test {
         );
 
         let new_parent_commit =
-            vid_commitment::<TestVersions>(&[], 9, <TestVersions as Versions>::Base::VERSION);
+            vid_commitment::<TestVersions>(&[], &[], 9, <TestVersions as Versions>::Base::VERSION);
         let new_view_num = ViewNumber::new(1);
         let builder_state_id = BuilderStateId {
             parent_commitment: new_parent_commit,
@@ -2432,6 +2435,7 @@ mod test {
         let (tx_sender, _) = async_broadcast::broadcast(10);
         let parent_commit = vid_commitment::<TestVersions>(
             &[0],
+            &[],
             TEST_NUM_NODES_IN_VID_COMPUTATION,
             <TestVersions as Versions>::Base::VERSION,
         );
@@ -2451,6 +2455,7 @@ mod test {
         for i in 1..=10 {
             let vid_commit = vid_commitment::<TestVersions>(
                 &[i],
+                &[],
                 TEST_NUM_NODES_IN_VID_COMPUTATION,
                 <TestVersions as Versions>::Base::VERSION,
             );
@@ -2495,6 +2500,7 @@ mod test {
         let builder_state_id = BuilderStateId {
             parent_commitment: vid_commitment::<TestVersions>(
                 &[10],
+                &[],
                 TEST_NUM_NODES_IN_VID_COMPUTATION,
                 <TestVersions as Versions>::Base::VERSION,
             ),
@@ -2515,6 +2521,7 @@ mod test {
             state.spawned_builder_states.contains_key(&BuilderStateId {
                 parent_commitment: vid_commitment::<TestVersions>(
                     &[10],
+                    &[],
                     TEST_NUM_NODES_IN_VID_COMPUTATION,
                     <TestVersions as Versions>::Base::VERSION
                 ),
@@ -2546,6 +2553,7 @@ mod test {
         let (tx_sender, _) = async_broadcast::broadcast(10);
         let parent_commit = vid_commitment::<TestVersions>(
             &[0],
+            &[],
             TEST_NUM_NODES_IN_VID_COMPUTATION,
             <TestVersions as Versions>::Base::VERSION,
         );
@@ -2565,6 +2573,7 @@ mod test {
         for i in 1..=10 {
             let vid_commit = vid_commitment::<TestVersions>(
                 &[i],
+                &[],
                 TEST_NUM_NODES_IN_VID_COMPUTATION,
                 <TestVersions as Versions>::Base::VERSION,
             );
@@ -2593,6 +2602,7 @@ mod test {
             BuilderStateId {
                 parent_commitment: vid_commitment::<TestVersions>(
                     &[10],
+                    &[],
                     TEST_NUM_NODES_IN_VID_COMPUTATION,
                     <TestVersions as Versions>::Base::VERSION
                 ),
@@ -2641,6 +2651,7 @@ mod test {
         let (tx_sender, _) = async_broadcast::broadcast(10);
         let parent_commit = vid_commitment::<TestVersions>(
             &[0],
+            &[],
             TEST_NUM_NODES_IN_VID_COMPUTATION,
             <TestVersions as Versions>::Base::VERSION,
         );
@@ -2660,6 +2671,7 @@ mod test {
         for i in 1..=10 {
             let vid_commit = vid_commitment::<TestVersions>(
                 &[i],
+                &[],
                 TEST_NUM_NODES_IN_VID_COMPUTATION,
                 <TestVersions as Versions>::Base::VERSION,
             );
@@ -2688,6 +2700,7 @@ mod test {
             BuilderStateId {
                 parent_commitment: vid_commitment::<TestVersions>(
                     &[10],
+                    &[],
                     TEST_NUM_NODES_IN_VID_COMPUTATION,
                     <TestVersions as Versions>::Base::VERSION
                 ),
@@ -2712,6 +2725,7 @@ mod test {
         for i in 1..10 {
             let vid_commit = vid_commitment::<TestVersions>(
                 &[i],
+                &[],
                 TEST_NUM_NODES_IN_VID_COMPUTATION,
                 <TestVersions as Versions>::Base::VERSION,
             );
@@ -2763,6 +2777,7 @@ mod test {
         let (tx_sender, _) = async_broadcast::broadcast(10);
         let parent_commit = vid_commitment::<TestVersions>(
             &[0],
+            &[],
             TEST_NUM_NODES_IN_VID_COMPUTATION,
             <TestVersions as Versions>::Base::VERSION,
         );
@@ -2782,6 +2797,7 @@ mod test {
         for i in 1..=10 {
             let vid_commit = vid_commitment::<TestVersions>(
                 &[i],
+                &[],
                 TEST_NUM_NODES_IN_VID_COMPUTATION,
                 <TestVersions as Versions>::Base::VERSION,
             );
@@ -2816,6 +2832,7 @@ mod test {
             BuilderStateId {
                 parent_commitment: vid_commitment::<TestVersions>(
                     &[10],
+                    &[],
                     TEST_NUM_NODES_IN_VID_COMPUTATION,
                     <TestVersions as Versions>::Base::VERSION
                 ),
@@ -2851,6 +2868,7 @@ mod test {
             let builder_state_id = BuilderStateId {
                 parent_commitment: vid_commitment::<TestVersions>(
                     &[i],
+                    &[],
                     TEST_NUM_NODES_IN_VID_COMPUTATION,
                     <TestVersions as Versions>::Base::VERSION,
                 ),
@@ -2866,6 +2884,7 @@ mod test {
             let builder_state_id = BuilderStateId {
                 parent_commitment: vid_commitment::<TestVersions>(
                     &[i],
+                    &[],
                     TEST_NUM_NODES_IN_VID_COMPUTATION,
                     <TestVersions as Versions>::Base::VERSION,
                 ),
@@ -2898,6 +2917,7 @@ mod test {
             <BLSPubKey as SignatureKey>::generated_from_seed_indexed([0; 32], 1);
         let parent_commit = vid_commitment::<TestVersions>(
             &[],
+            &[],
             TEST_NUM_NODES_IN_VID_COMPUTATION,
             <TestVersions as Versions>::Base::VERSION,
         );
@@ -2925,6 +2945,7 @@ mod test {
         let result = state
             .available_blocks_implementation(
                 &vid_commitment::<TestVersions>(
+                    &[],
                     &[],
                     TEST_NUM_NODES_IN_VID_COMPUTATION,
                     <TestVersions as Versions>::Base::VERSION,
@@ -2967,6 +2988,7 @@ mod test {
             <BLSPubKey as SignatureKey>::generated_from_seed_indexed([0; 32], 1);
         let parent_commit = vid_commitment::<TestVersions>(
             &[],
+            &[],
             TEST_NUM_NODES_IN_VID_COMPUTATION,
             <TestVersions as Versions>::Base::VERSION,
         );
@@ -2994,6 +3016,7 @@ mod test {
         let result = state
             .available_blocks_implementation(
                 &vid_commitment::<TestVersions>(
+                    &[],
                     &[],
                     TEST_NUM_NODES_IN_VID_COMPUTATION,
                     <TestVersions as Versions>::Base::VERSION,
@@ -3036,6 +3059,7 @@ mod test {
             <BLSPubKey as SignatureKey>::generated_from_seed_indexed([0; 32], 1);
         let parent_commit = vid_commitment::<TestVersions>(
             &[],
+            &[],
             TEST_NUM_NODES_IN_VID_COMPUTATION,
             <TestVersions as Versions>::Base::VERSION,
         );
@@ -3063,6 +3087,7 @@ mod test {
         let result = state
             .available_blocks_implementation(
                 &vid_commitment::<TestVersions>(
+                    &[],
                     &[],
                     TEST_NUM_NODES_IN_VID_COMPUTATION,
                     <TestVersions as Versions>::Base::VERSION,
@@ -3105,6 +3130,7 @@ mod test {
         let (leader_public_key, leader_private_key) =
             <BLSPubKey as SignatureKey>::generated_from_seed_indexed([0; 32], 1);
         let parent_commit = vid_commitment::<TestVersions>(
+            &[],
             &[],
             TEST_NUM_NODES_IN_VID_COMPUTATION,
             <TestVersions as Versions>::Base::VERSION,
@@ -3180,6 +3206,7 @@ mod test {
         let (leader_public_key, leader_private_key) =
             <BLSPubKey as SignatureKey>::generated_from_seed_indexed([0; 32], 1);
         let parent_commit = vid_commitment::<TestVersions>(
+            &[],
             &[],
             TEST_NUM_NODES_IN_VID_COMPUTATION,
             <TestVersions as Versions>::Base::VERSION,
@@ -3325,6 +3352,7 @@ mod test {
         let (leader_public_key, leader_private_key) =
             <BLSPubKey as SignatureKey>::generated_from_seed_indexed([0; 32], 1);
         let parent_commit = vid_commitment::<TestVersions>(
+            &[],
             &[],
             TEST_NUM_NODES_IN_VID_COMPUTATION,
             <TestVersions as Versions>::Base::VERSION,
@@ -3478,6 +3506,7 @@ mod test {
             <BLSPubKey as SignatureKey>::generated_from_seed_indexed([0; 32], 1);
         let parent_commit = vid_commitment::<TestVersions>(
             &[],
+            &[],
             TEST_NUM_NODES_IN_VID_COMPUTATION,
             <TestVersions as Versions>::Base::VERSION,
         );
@@ -3538,6 +3567,7 @@ mod test {
             <BLSPubKey as SignatureKey>::generated_from_seed_indexed([0; 32], 1);
         let parent_commit = vid_commitment::<TestVersions>(
             &[],
+            &[],
             TEST_NUM_NODES_IN_VID_COMPUTATION,
             <TestVersions as Versions>::Base::VERSION,
         );
@@ -3590,6 +3620,7 @@ mod test {
         let (leader_public_key, leader_private_key) =
             <BLSPubKey as SignatureKey>::generated_from_seed_indexed([0; 32], 1);
         let parent_commit = vid_commitment::<TestVersions>(
+            &[],
             &[],
             TEST_NUM_NODES_IN_VID_COMPUTATION,
             <TestVersions as Versions>::Base::VERSION,
@@ -3694,6 +3725,7 @@ mod test {
             <BLSPubKey as SignatureKey>::generated_from_seed_indexed([0; 32], 1);
         let parent_commit = vid_commitment::<TestVersions>(
             &[],
+            &[],
             TEST_NUM_NODES_IN_VID_COMPUTATION,
             <TestVersions as Versions>::Base::VERSION,
         );
@@ -3755,6 +3787,7 @@ mod test {
             <BLSPubKey as SignatureKey>::generated_from_seed_indexed([0; 32], 1);
         let parent_commit = vid_commitment::<TestVersions>(
             &[],
+            &[],
             TEST_NUM_NODES_IN_VID_COMPUTATION,
             <TestVersions as Versions>::Base::VERSION,
         );
@@ -3808,6 +3841,7 @@ mod test {
         let (leader_public_key, leader_private_key) =
             <BLSPubKey as SignatureKey>::generated_from_seed_indexed([0; 32], 1);
         let parent_commit = vid_commitment::<TestVersions>(
+            &[],
             &[],
             TEST_NUM_NODES_IN_VID_COMPUTATION,
             <TestVersions as Versions>::Base::VERSION,
@@ -4472,6 +4506,7 @@ mod test {
         let mut round = 0;
         let mut current_builder_state_id = BuilderStateId::<TestTypes> {
             parent_commitment: vid_commitment::<TestVersions>(
+                &[],
                 &[],
                 8,
                 <TestVersions as Versions>::Base::VERSION,

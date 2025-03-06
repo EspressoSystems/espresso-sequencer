@@ -43,7 +43,8 @@ members = [
     "sequencer",
     "tests",
     "types",
-    "utils"
+    "utils",
+    "vid"
 ]
 
 exclude = ["sequencer-sqlite"]
@@ -150,6 +151,9 @@ hotshot-contract-adapter = { path = "contracts/rust/adapter" }
 # Temporary, used to pull in the mock auction results provider
 hotshot-example-types = { path = "hotshot-example-types" }
 
+# VID import
+vid = { path = "vid", features = [ "parallel", "keccak256" ] }
+
 jf-plonk = { git = "https://github.com/EspressoSystems/jellyfish", tag = "jf-plonk-v0.5.1", features = [
     "test-apis",
 ] }
@@ -225,12 +229,18 @@ time = "0.3"
 trait-set = "0.3.0"
 
 [profile.dev]
-# No optimizations
-opt-level = 0
-# Skip compiling the debug information.
-debug = false
-# Skip linking symbols.
-strip = true
+# Probably the least demanding setting in terms of compilation time and memory
+# that still provide tracebacks with line numbers.
+strip = "none"
+debug = "line-tables-only"
+
+[profile.dev-debug]
+# This profile should allow connecting debuggers. Compiles more slowly and
+# requires significantly more memory to compile.
+inherits = "dev"
+strip = "none"
+debug = "full"
+
 [profile.test]
 opt-level = 1
 [profile.test.package.tests]

@@ -812,6 +812,7 @@ pub mod testing {
                 stop_proposing_time: 0,
                 stop_voting_time: 0,
                 epoch_height: 0,
+                epoch_start_block: 0,
             };
 
             Self {
@@ -1066,9 +1067,10 @@ mod test {
     use hotshot::types::EventType::Decide;
     use hotshot_example_types::node_types::TestVersions;
     use hotshot_types::{
+        data::vid_commitment,
         event::LeafInfo,
         traits::block_contents::{
-            vid_commitment, BlockHeader, BlockPayload, EncodeBytes, GENESIS_VID_NUM_STORAGE_NODES,
+            BlockHeader, BlockPayload, EncodeBytes, GENESIS_VID_NUM_STORAGE_NODES,
         },
     };
     use sequencer_utils::{test_utils::setup_test, AnvilOptions};
@@ -1156,6 +1158,7 @@ mod test {
                 let payload_bytes = genesis_payload.encode();
                 vid_commitment::<TestVersions>(
                     &payload_bytes,
+                    &genesis_ns_table.encode(),
                     GENESIS_VID_NUM_STORAGE_NODES,
                     <TestVersions as Versions>::Base::VERSION,
                 )

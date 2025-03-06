@@ -27,7 +27,7 @@ env:
 jobs:
   build-test-artifacts-postgres:
     name: Build test artifacts (postgres)
-    runs-on: buildjet-8vcpu-ubuntu-2204
+    runs-on: ubuntu-latest
     steps:
       - uses: rui314/setup-mold@v1
 
@@ -42,6 +42,14 @@ jobs:
           cache-all-crates: true
           cache-provider: buildjet
 
+      - name: Show memory
+        run: free -h
+
+      - name: Collect Workflow Telemetry
+        uses: catchpoint/workflow-telemetry-action@v2
+        with:
+          comment_on_pr: false
+
       - name: Build and archive tests
         run: cargo nextest archive --locked --workspace --archive-file nextest-archive-postgres.tar.zst
 
@@ -53,7 +61,7 @@ jobs:
 
   build-test-artifacts-sqlite:
     name: Build test artifacts (sqlite)
-    runs-on: buildjet-8vcpu-ubuntu-2204
+    runs-on: ubuntu-latest
     steps:
       - uses: rui314/setup-mold@v1
 
@@ -69,6 +77,14 @@ jobs:
           cache-all-crates: true
           cache-provider: buildjet
 
+      - name: Show memory
+        run: free -h
+
+      - name: Collect Workflow Telemetry
+        uses: catchpoint/workflow-telemetry-action@v2
+        with:
+          comment_on_pr: false
+
       - name: Build and archive tests
         run: cargo nextest archive --locked --features "embedded-db testing" --workspace --archive-file nextest-archive-sqlite.tar.zst
 
@@ -80,7 +96,7 @@ jobs:
 
   build-test-bins:
     name: Build test binaries
-    runs-on: buildjet-8vcpu-ubuntu-2204
+    runs-on: ubuntu-latest
     steps:
       - uses: rui314/setup-mold@v1
 

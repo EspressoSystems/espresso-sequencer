@@ -15,6 +15,7 @@ use hotshot_task::{
     dependency_task::DependencyTask,
     task::TaskState,
 };
+use hotshot_types::StakeTableEntries;
 use hotshot_types::{
     consensus::OuterConsensus,
     message::UpgradeLock,
@@ -479,7 +480,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
 
                 certificate
                     .is_valid_cert(
-                        membership_stake_table,
+                        StakeTableEntries::<TYPES>::from(membership_stake_table).0,
                         membership_success_threshold,
                         &self.upgrade_lock,
                     )
@@ -552,7 +553,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                 let keep_view = TYPES::View::new(view.saturating_sub(1));
                 self.cancel_tasks(keep_view);
             }
-            HotShotEvent::HighQcSend(qc, ..) => {
+            HotShotEvent::HighQcSend(qc, ..) | HotShotEvent::ExtendedQcSend(qc, ..) => {
                 ensure!(qc.view_number() > self.highest_qc.view_number());
                 let cert_epoch_number = qc.data.epoch;
 
@@ -563,7 +564,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                 drop(membership_reader);
 
                 qc.is_valid_cert(
-                    membership_stake_table,
+                    StakeTableEntries::<TYPES>::from(membership_stake_table).0,
                     membership_success_threshold,
                     &self.upgrade_lock,
                 )

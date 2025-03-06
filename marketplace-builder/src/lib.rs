@@ -47,9 +47,7 @@ use hotshot_types::{
     light_client::StateKeyPair,
     signature_key::{BLSPrivKey, BLSPubKey},
     traits::{
-        block_contents::{
-            vid_commitment, BlockHeader, BlockPayload, EncodeBytes, GENESIS_VID_NUM_STORAGE_NODES,
-        },
+        block_contents::{BlockHeader, BlockPayload, EncodeBytes, GENESIS_VID_NUM_STORAGE_NODES},
         election::Membership,
         metrics::Metrics,
         node_implementation::{ConsensusTime, NodeType, Versions},

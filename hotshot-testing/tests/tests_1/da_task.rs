@@ -45,8 +45,9 @@ async fn test_da_task() {
     // later calls. We need the VID commitment to be able to propose later.
     let transactions = vec![TestTransaction::new(vec![0])];
     let encoded_transactions: Arc<[u8]> = Arc::from(TestTransaction::encode(&transactions));
-    let payload_commit = hotshot_types::traits::block_contents::vid_commitment::<TestVersions>(
+    let payload_commit = hotshot_types::data::vid_commitment::<TestVersions>(
         &encoded_transactions,
+        &[],
         handle.hotshot.memberships.read().await.total_nodes(None),
         default_version,
     );
@@ -67,6 +68,7 @@ async fn test_da_task() {
             view.create_da_vote(
                 DaData2 {
                     payload_commit,
+                    next_epoch_payload_commit: None,
                     epoch: view.da_proposal.data.epoch,
                 },
                 &handle,
@@ -86,6 +88,7 @@ async fn test_da_task() {
             view.create_da_vote(
                 DaData2 {
                     payload_commit,
+                    next_epoch_payload_commit: None,
                     epoch: view.da_proposal.data.epoch,
                 },
                 &handle,
@@ -153,8 +156,9 @@ async fn test_da_task_storage_failure() {
     // later calls. We need the VID commitment to be able to propose later.
     let transactions = vec![TestTransaction::new(vec![0])];
     let encoded_transactions: Arc<[u8]> = Arc::from(TestTransaction::encode(&transactions));
-    let payload_commit = hotshot_types::traits::block_contents::vid_commitment::<TestVersions>(
+    let payload_commit = hotshot_types::data::vid_commitment::<TestVersions>(
         &encoded_transactions,
+        &[],
         handle.hotshot.memberships.read().await.total_nodes(None),
         default_version,
     );
@@ -175,6 +179,7 @@ async fn test_da_task_storage_failure() {
             view.create_da_vote(
                 DaData2 {
                     payload_commit,
+                    next_epoch_payload_commit: None,
                     epoch: view.da_proposal.data.epoch,
                 },
                 &handle,
@@ -194,6 +199,7 @@ async fn test_da_task_storage_failure() {
             view.create_da_vote(
                 DaData2 {
                     payload_commit,
+                    next_epoch_payload_commit: None,
                     epoch: view.da_proposal.data.epoch,
                 },
                 &handle,

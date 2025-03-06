@@ -7,9 +7,9 @@
 use async_trait::async_trait;
 use committable::Commitment;
 use hotshot_types::{
+    data::VidCommitment,
     traits::{node_implementation::NodeType, signature_key::SignatureKey},
     utils::BuilderCommitment,
-    vid::VidCommitment,
 };
 
 use super::{

@@ -6,9 +6,9 @@ use committable::Commitment;
 use data_source::{CatchupDataSource, StakeTableDataSource, SubmitDataSource};
 use derivative::Derivative;
 use espresso_types::{
-    retain_accounts, v0::traits::SequencerPersistence, v0_99::ChainConfig, AccountQueryData,
-    BlockMerkleTree, FeeAccount, FeeAccountProof, FeeMerkleTree, NodeState, PubKey, Transaction,
-    ValidatedState,
+    config::PublicNetworkConfig, retain_accounts, v0::traits::SequencerPersistence,
+    v0_99::ChainConfig, AccountQueryData, BlockMerkleTree, FeeAccount, FeeAccountProof,
+    FeeMerkleTree, NodeState, PubKey, Transaction, ValidatedState,
 };
 use futures::{
     future::{BoxFuture, Future, FutureExt},
@@ -18,6 +18,7 @@ use hotshot_events_service::events_source::{
     EventFilterSet, EventsSource, EventsStreamer, StartupInfo,
 };
 use hotshot_query_service::data_source::ExtensibleDataSource;
+use hotshot_types::traits::election::Membership;
 use hotshot_types::{
     data::ViewNumber,
     event::Event,
@@ -29,15 +30,13 @@ use hotshot_types::{
         ValidatedState as _,
     },
     utils::{View, ViewInner},
+    PeerConfig,
 };
-use hotshot_types::{stake_table::StakeTableEntry, traits::election::Membership};
 use jf_merkle_tree::MerkleTreeScheme;
 use std::pin::Pin;
 use std::sync::Arc;
 
-use self::data_source::{
-    HotShotConfigDataSource, NodeStateDataSource, PublicNetworkConfig, StateSignatureDataSource,
-};
+use self::data_source::{HotShotConfigDataSource, NodeStateDataSource, StateSignatureDataSource};
 use crate::{
     catchup::CatchupStorage, context::Consensus, state_signature::StateSigner, SeqTypes,
     SequencerApiVersion, SequencerContext,
@@ -167,18 +166,17 @@ impl<N: ConnectedNetwork<PubKey>, D: Sync, V: Versions, P: SequencerPersistence>
     async fn get_stake_table(
         &self,
         epoch: Option<<SeqTypes as NodeType>::Epoch>,
-    ) -> Vec<StakeTableEntry<<SeqTypes as NodeType>::SignatureKey>> {
+    ) -> Vec<PeerConfig<<SeqTypes as NodeType>::SignatureKey>> {
         self.as_ref().get_stake_table(epoch).await
     }
 
     /// Get the stake table for the current epoch if not provided
     async fn get_stake_table_current(
         &self,
-    ) -> Vec<StakeTableEntry<<SeqTypes as NodeType>::SignatureKey>> {
+    ) -> Vec<PeerConfig<<SeqTypes as NodeType>::SignatureKey>> {
         self.as_ref().get_stake_table_current().await
     }
 }
-
 impl<N: ConnectedNetwork<PubKey>, V: Versions, P: SequencerPersistence>
     StakeTableDataSource<SeqTypes> for ApiState<N, P, V>
 {
@@ -186,7 +184,7 @@ impl<N: ConnectedNetwork<PubKey>, V: Versions, P: SequencerPersistence>
     async fn get_stake_table(
         &self,
         epoch: Option<<SeqTypes as NodeType>::Epoch>,
-    ) -> Vec<StakeTableEntry<<SeqTypes as NodeType>::SignatureKey>> {
+    ) -> Vec<PeerConfig<<SeqTypes as NodeType>::SignatureKey>> {
         self.consensus()
             .await
             .read()
@@ -200,7 +198,7 @@ impl<N: ConnectedNetwork<PubKey>, V: Versions, P: SequencerPersistence>
     /// Get the stake table for the current epoch if not provided
     async fn get_stake_table_current(
         &self,
-    ) -> Vec<StakeTableEntry<<SeqTypes as NodeType>::SignatureKey>> {
+    ) -> Vec<PeerConfig<<SeqTypes as NodeType>::SignatureKey>> {
         let epoch = self.consensus().await.read().await.cur_epoch().await;
 
         self.get_stake_table(epoch).await
@@ -1106,8 +1104,9 @@ mod api_tests {
         AvailabilityDataSource, BlockQueryData, VidCommonQueryData,
     };
 
+    use hotshot_query_service::VidCommitment;
     use hotshot_types::data::vid_disperse::ADVZDisperseShare;
-    use hotshot_types::vid::advz_scheme;
+    use hotshot_types::vid::advz::advz_scheme;
     use hotshot_types::{
         data::{DaProposal, QuorumProposal2, QuorumProposalWrapper},
         event::LeafInfo,
@@ -1229,7 +1228,7 @@ mod api_tests {
                     .verify(
                         header.ns_table(),
                         &header.payload_commitment(),
-                        vid_common.common(),
+                        &vid_common.common().clone().unwrap(),
                     )
                     .unwrap();
             } else {
@@ -1368,7 +1367,7 @@ mod api_tests {
                 _pd: Default::default(),
             };
             persistence
-                .append_da(&da_proposal, payload_commitment)
+                .append_da(&da_proposal, VidCommitment::V0(payload_commitment))
                 .await
                 .unwrap();
         }
@@ -1564,6 +1563,7 @@ mod test {
     use tokio::time::sleep;
 
     use espresso_types::{
+        config::PublicHotShotConfig,
         traits::NullEventConsumer,
         v0_1::{UpgradeMode, ViewBasedUpgrade},
         BackoffParams, FeeAccount, FeeAmount, FeeVersion, Header, MarketplaceVersion,
@@ -1598,8 +1598,7 @@ mod test {
     use vbs::version::{StaticVersion, StaticVersionType, Version};
 
     use self::{
-        data_source::{testing::TestableSequencerDataSource, PublicHotShotConfig},
-        options::HotshotEvents,
+        data_source::testing::TestableSequencerDataSource, options::HotshotEvents,
         sql::DataSource as SqlDataSource,
     };
     use super::*;
@@ -2341,7 +2340,7 @@ mod test {
             // ChainConfigs will eventually be resolved
             if let Some(configs) = configs {
                 tracing::info!(?configs, "configs");
-                if height > new_version_first_view {
+                if height > new_version_first_view + 10 {
                     for config in configs {
                         assert_eq!(config, chain_config_upgrade);
                     }

@@ -1611,14 +1611,7 @@ mod test {
             .unwrap();
 
         let result = nodes.stake_table.0[0].clone();
-        assert_eq!(result.stake_amount.as_u64(), 1);
-
-        // ensure state is updated
-        let mut lock = l1_client.state.lock().await;
-        let nodes = lock.stake.get(&block.header.inner.number).unwrap();
-        let result = nodes.stake_table.0[0].clone();
-        assert_eq!(result.stake_amount.as_u64(), 1);
-
+        assert_eq!(result.stake_table_entry.stake_amount.as_u64(), 1);
         Ok(())
     }
 
@@ -1856,7 +1849,7 @@ mod test {
             let block = receipt.block_number.unwrap().as_u64();
             let nodes = lock.stake.get(&block).unwrap();
             let result = nodes.stake_table.0[0].clone();
-            assert_eq!(result.stake_amount.as_u64(), 1);
+            assert_eq!(result.stake_table_entry.stake_amount.as_u64(), 1);
         }
         Ok(())
     }
