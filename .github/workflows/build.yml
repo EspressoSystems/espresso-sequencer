@@ -46,9 +46,9 @@ jobs:
         # Build in release without `testing` feature, this should work without `hotshot_example` config.
         run: |
           cargo build --locked --release --workspace
-      
-      - name: Build sequencer-sqlite 
-        run: cargo build --locked --release --manifest-path ./sequencer-sqlite/Cargo.toml --target-dir ./target
+
+      - name: Build sequencer-sqlite
+        run: cargo build --release --manifest-path ./sequencer-sqlite/Cargo.toml --target-dir ./target
 
       - name: Build Espresso Dev Node
         # Espresso Dev Node currently requires testing feature, so it is built separately.
@@ -104,8 +104,8 @@ jobs:
         run: |
           cargo build --locked --release --workspace
 
-      - name: Build sequencer-sqlite 
-        run: cargo build --locked --release --manifest-path ./sequencer-sqlite/Cargo.toml --target-dir ./target
+      - name: Build sequencer-sqlite
+        run: cargo build --release --manifest-path ./sequencer-sqlite/Cargo.toml --target-dir ./target
 
       - name: Build Espresso Dev Node
         # Espresso Dev Node currently requires testing feature, so it is built separately.
@@ -500,7 +500,7 @@ jobs:
           docker pull ${{ needs.build-dockers.outputs.marketplace-builder-tag }}
           docker pull ${{ needs.build-dockers.outputs.node-validator-tag }}
           docker pull ${{ needs.build-dockers.outputs.dev-rollup-tag }}
-          
+
       - name: Tag new docker images
         run: |
           docker tag ${{ needs.build-dockers.outputs.sequencer-tag }} ghcr.io/espressosystems/espresso-sequencer/sequencer:main

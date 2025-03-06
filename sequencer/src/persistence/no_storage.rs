@@ -7,6 +7,9 @@ use espresso_types::{
     v0::traits::{EventConsumer, PersistenceOptions, SequencerPersistence},
     Leaf, Leaf2, NetworkConfig,
 };
+use hotshot_libp2p_networking::network::behaviours::dht::store::persistent::{
+    DhtPersistentStorage, SerializableRecord,
+};
 use hotshot_query_service::VidCommitment;
 use hotshot_types::{
     consensus::CommitmentMap,
@@ -196,5 +199,18 @@ impl SequencerPersistence for NoStorage {
         &self,
     ) -> anyhow::Result<Option<NextEpochQuorumCertificate2<SeqTypes>>> {
         Ok(None)
+    }
+}
+
+#[async_trait]
+impl DhtPersistentStorage for NoStorage {
+    /// Don't do anything
+    async fn save(&self, _records: Vec<SerializableRecord>) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    /// Don't do anything
+    async fn load(&self) -> anyhow::Result<Vec<SerializableRecord>> {
+        Ok(vec![])
     }
 }

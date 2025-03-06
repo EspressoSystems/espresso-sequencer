@@ -7,6 +7,7 @@ use async_trait::async_trait;
 use committable::{Commitment, Committable};
 use futures::{FutureExt, TryFutureExt};
 use hotshot::{types::EventType, HotShotInitializer};
+use hotshot_libp2p_networking::network::behaviours::dht::store::persistent::DhtPersistentStorage;
 use hotshot_types::{
     consensus::CommitmentMap,
     data::{
@@ -421,7 +422,9 @@ pub trait PersistenceOptions: Clone + Send + Sync + 'static {
 }
 
 #[async_trait]
-pub trait SequencerPersistence: Sized + Send + Sync + Clone + 'static {
+pub trait SequencerPersistence:
+    Sized + Send + Sync + Clone + 'static + DhtPersistentStorage
+{
     /// Use this storage as a state catchup backend, if supported.
     fn into_catchup_provider(
         self,

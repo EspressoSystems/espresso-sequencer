@@ -3829,6 +3829,7 @@ dependencies = [
  "futures",
  "hotshot",
  "hotshot-contract-adapter",
+ "hotshot-libp2p-networking",
  "hotshot-query-service",
  "hotshot-types",
  "itertools 0.12.1",
