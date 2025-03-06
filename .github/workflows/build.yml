@@ -24,7 +24,7 @@ env:
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     steps:
       - uses: rui314/setup-mold@v1
 
@@ -143,7 +143,7 @@ jobs:
             target/release/sequencer-sqlite
 
   build-dockers:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     needs: [build, build-arm]
     # if build_arm is skipped, run this job anyway
     if: ${{ !(failure() || cancelled()) }}
