@@ -38,9 +38,6 @@ contract StakeTable is AbstractStakeTable, Ownable, InitializedAt {
     // Error raised when the staker does not have the sufficient stake balance to withdraw
     error NothingToWithdraw();
 
-    // Error raised when the staker provides a zero BlsVK
-    error InvalidBlsVK();
-
     // Error raised when the staker provides a zero SchnorrVK
     error InvalidSchnorrVK();
 
@@ -139,21 +136,9 @@ contract StakeTable is AbstractStakeTable, Ownable, InitializedAt {
         }
     }
 
-    function ensureNonZeroConsensusKeys(
-        BN254.G2Point memory blsVK,
-        EdOnBN254.EdOnBN254Point memory schnorrVK
-    ) internal pure {
-        BN254.G2Point memory zeroBlsKey = BN254.G2Point(
-            BN254.BaseField.wrap(0),
-            BN254.BaseField.wrap(0),
-            BN254.BaseField.wrap(0),
-            BN254.BaseField.wrap(0)
-        );
-
-        if (_isEqualBlsKey(blsVK, zeroBlsKey)) {
-            revert InvalidBlsVK();
-        }
-
+    // @dev We don't check the validity of the schnorr verifying key but providing a zero key is
+    // definitely a mistake by the caller, therefore we revert.
+    function ensureNonZeroSchnorrKey(EdOnBN254.EdOnBN254Point memory schnorrVK) internal pure {
         EdOnBN254.EdOnBN254Point memory zeroSchnorrKey = EdOnBN254.EdOnBN254Point(0, 0);
 
         if (schnorrVK.isEqual(zeroSchnorrKey)) {
@@ -181,7 +166,7 @@ contract StakeTable is AbstractStakeTable, Ownable, InitializedAt {
         uint16 commission
     ) external virtual override {
         ensureValidatorNotRegistered(msg.sender);
-        ensureNonZeroConsensusKeys(blsVK, schnorrVK);
+        ensureNonZeroSchnorrKey(schnorrVK);
 
         // Verify that the validator can sign for that blsVK.
         // This prevents rogue public-key attacks.
@@ -308,7 +293,7 @@ contract StakeTable is AbstractStakeTable, Ownable, InitializedAt {
     ) external virtual override {
         ensureValidatorRegistered(msg.sender);
         ensureValidatorNotExited(msg.sender);
-        ensureNonZeroConsensusKeys(newBlsVK, newSchnorrVK);
+        ensureNonZeroSchnorrKey(newSchnorrVK);
 
         // Verify that the validator can sign for that newBlsVK, otherwise it
         // inner reverts with BLSSigVerificationFailed
