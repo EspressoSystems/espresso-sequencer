@@ -135,6 +135,8 @@ pub enum HotShotEvent<TYPES: NodeType> {
     Qc2Formed(Either<QuorumCertificate2<TYPES>, TimeoutCertificate2<TYPES>>),
     /// The next leader has collected enough votes from the next epoch nodes to form a QC; emitted by the next leader in the consensus task; an internal event only
     NextEpochQc2Formed(Either<NextEpochQuorumCertificate2<TYPES>, TimeoutCertificate<TYPES>>),
+    /// A validator formed both a current epoch eQC and a next epoch eQC
+    ExtendedQc2Formed(QuorumCertificate2<TYPES>),
     /// The DA leader has collected enough votes to form a DAC; emitted by the DA leader in the DA task; sent to the entire network via the networking task
     DacSend(DaCertificate2<TYPES>, TYPES::SignatureKey),
     /// The current view has changed; emitted by the replica in the consensus task or replica in the view sync task; received by almost all other tasks
@@ -312,6 +314,7 @@ impl<TYPES: NodeType> HotShotEvent<TYPES> {
                 either::Left(qc) => Some(qc.view_number()),
                 either::Right(tc) => Some(tc.view_number()),
             },
+            HotShotEvent::ExtendedQc2Formed(cert) => Some(cert.view_number()),
             HotShotEvent::ViewSyncCommitVoteSend(vote)
             | HotShotEvent::ViewSyncCommitVoteRecv(vote) => Some(vote.view_number()),
             HotShotEvent::ViewSyncPreCommitVoteRecv(vote)
@@ -447,6 +450,9 @@ impl<TYPES: NodeType> Display for HotShotEvent<TYPES> {
                     write!(f, "NextEpochQc2Formed(view_number={:?})", tc.view_number())
                 }
             },
+            HotShotEvent::ExtendedQc2Formed(cert) => {
+                write!(f, "ExtendedQc2Formed(view_number={:?})", cert.view_number())
+            }
             HotShotEvent::DacSend(cert, _) => {
                 write!(f, "DacSend(view_number={:?})", cert.view_number())
             }
