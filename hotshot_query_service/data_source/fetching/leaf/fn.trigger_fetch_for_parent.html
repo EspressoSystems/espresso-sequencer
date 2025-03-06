@@ -2,7 +2,7 @@
     fetcher: &amp;<a class="struct" href="https://doc.rust-lang.org/1.85.0/alloc/sync/struct.Arc.html" title="struct alloc::sync::Arc">Arc</a>&lt;<a class="struct" href="../struct.Fetcher.html" title="struct hotshot_query_service::data_source::fetching::Fetcher">Fetcher</a>&lt;Types, S, P&gt;&gt;,
     leaf: &amp;<a class="struct" href="../../../availability/struct.LeafQueryData.html" title="struct hotshot_query_service::availability::LeafQueryData">LeafQueryData</a>&lt;Types&gt;,
 )<div class="where">where
-    Types: NodeType,
+    Types: <a class="trait" href="../../../../hotshot_types/traits/node_implementation/trait.NodeType.html" title="trait hotshot_types::traits::node_implementation::NodeType">NodeType</a>,
     <a class="type" href="../../../type.Payload.html" title="type hotshot_query_service::Payload">Payload</a>&lt;Types&gt;: <a class="trait" href="../../../availability/trait.QueryablePayload.html" title="trait hotshot_query_service::availability::QueryablePayload">QueryablePayload</a>&lt;Types&gt;,
     S: <a class="trait" href="../../trait.VersionedDataSource.html" title="trait hotshot_query_service::data_source::VersionedDataSource">VersionedDataSource</a> + 'static,
     for&lt;'a&gt; S::<a class="associatedtype" href="../../trait.VersionedDataSource.html#associatedtype.Transaction" title="type hotshot_query_service::data_source::VersionedDataSource::Transaction">Transaction</a>&lt;'a&gt;: <a class="trait" href="../../storage/trait.UpdateAvailabilityStorage.html" title="trait hotshot_query_service::data_source::storage::UpdateAvailabilityStorage">UpdateAvailabilityStorage</a>&lt;Types&gt;,

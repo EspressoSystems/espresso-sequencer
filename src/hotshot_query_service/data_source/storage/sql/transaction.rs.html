@@ -831,7 +831,12 @@
 <a href="#830" id="830">830</a>
 <a href="#831" id="831">831</a>
 <a href="#832" id="832">832</a>
-<a href="#833" id="833">833</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2022 Espresso Systems (espressosys.com)
+<a href="#833" id="833">833</a>
+<a href="#834" id="834">834</a>
+<a href="#835" id="835">835</a>
+<a href="#836" id="836">836</a>
+<a href="#837" id="837">837</a>
+<a href="#838" id="838">838</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2022 Espresso Systems (espressosys.com)
 // This file is part of the HotShot Query Service library.
 //
 // This program is free software: you can redistribute it and/or modify it under the terms of the GNU
@@ -1329,8 +1334,13 @@
         <span class="comment">// Similarly, we can initialize the payload table with a null payload, which can help us
         // distinguish between blocks that haven't been produced yet and blocks we haven't received
         // yet when answering queries.
-        </span><span class="self">self</span>.upsert(<span class="string">"payload"</span>, [<span class="string">"height"</span>], [<span class="string">"height"</span>], [(height <span class="kw">as </span>i64,)])
-            .<span class="kw">await</span><span class="question-mark">?</span>;
+        // We don't overwrite the payload if it already exists.
+        // During epoch transition in PoS, the same height block is sent multiple times.
+        // The first block may have the payload, but subsequent blocks might be missing it.
+        // Overwriting would cause the payload to be lost since the block height is the same
+        </span><span class="kw">let </span>query = query(<span class="string">"INSERT INTO payload (height) VALUES ($1) ON CONFLICT DO NOTHING"</span>)
+            .bind(height <span class="kw">as </span>i64);
+        query.execute(<span class="self">self</span>.as_mut()).<span class="kw">await</span><span class="question-mark">?</span>;
 
         <span class="comment">// Finally, we insert the leaf itself, which references the header row we created.
         // Serialize the full leaf and QC to JSON for easy storage.

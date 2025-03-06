@@ -4,7 +4,7 @@
     req: <a class="enum" href="../../../availability/enum.LeafId.html" title="enum hotshot_query_service::availability::LeafId">LeafId</a>&lt;Types&gt;,
     callbacks: I,
 ) -&gt; <a class="type" href="https://docs.rs/anyhow/1.0.97/anyhow/type.Result.html" title="type anyhow::Result">Result</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/1.85.0/std/primitive.unit.html">()</a>&gt;<div class="where">where
-    Types: NodeType,
+    Types: <a class="trait" href="../../../../hotshot_types/traits/node_implementation/trait.NodeType.html" title="trait hotshot_types::traits::node_implementation::NodeType">NodeType</a>,
     <a class="type" href="../../../type.Payload.html" title="type hotshot_query_service::Payload">Payload</a>&lt;Types&gt;: <a class="trait" href="../../../availability/trait.QueryablePayload.html" title="trait hotshot_query_service::availability::QueryablePayload">QueryablePayload</a>&lt;Types&gt;,
     S: <a class="trait" href="../../trait.VersionedDataSource.html" title="trait hotshot_query_service::data_source::VersionedDataSource">VersionedDataSource</a> + 'static,
     for&lt;'a&gt; S::<a class="associatedtype" href="../../trait.VersionedDataSource.html#associatedtype.Transaction" title="type hotshot_query_service::data_source::VersionedDataSource::Transaction">Transaction</a>&lt;'a&gt;: <a class="trait" href="../../storage/trait.UpdateAvailabilityStorage.html" title="trait hotshot_query_service::data_source::storage::UpdateAvailabilityStorage">UpdateAvailabilityStorage</a>&lt;Types&gt;,
