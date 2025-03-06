@@ -24,7 +24,7 @@ env:
 
 jobs:
   build:
-    runs-on: buildjet-8vcpu-ubuntu-2204
+    runs-on: ubuntu-latest
     steps:
       - uses: rui314/setup-mold@v1
 
@@ -86,7 +86,8 @@ jobs:
 
   build-arm:
     if: github.event_name != 'pull_request'
-    runs-on: buildjet-8vcpu-ubuntu-2204-arm
+    runs-on:
+      group: BigArmRunners
     env:
       CARGO_BUILD_JOBS: '6'
     steps:

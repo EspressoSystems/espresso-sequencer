@@ -27,7 +27,7 @@ env:
 jobs:
   build-test-artifacts-postgres:
     name: Build test artifacts (postgres)
-    runs-on: buildjet-8vcpu-ubuntu-2204
+    runs-on: ubuntu-latest
     steps:
       - uses: rui314/setup-mold@v1
 
@@ -61,7 +61,7 @@ jobs:
 
   build-test-artifacts-sqlite:
     name: Build test artifacts (sqlite)
-    runs-on: buildjet-8vcpu-ubuntu-2204
+    runs-on: ubuntu-latest
     steps:
       - uses: rui314/setup-mold@v1
 
@@ -96,7 +96,7 @@ jobs:
 
   build-test-bins:
     name: Build test binaries
-    runs-on: buildjet-8vcpu-ubuntu-2204
+    runs-on: ubuntu-latest
     steps:
       - uses: rui314/setup-mold@v1
 
