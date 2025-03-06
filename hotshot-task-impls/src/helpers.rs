@@ -190,7 +190,7 @@ async fn decide_epoch_root<TYPES: NodeType>(
     // Skip if this is not the expected block.
     if epoch_height != 0 && is_epoch_root(decided_block_number, epoch_height) {
         let next_epoch_number =
-            TYPES::Epoch::new(epoch_from_block_number(decided_block_number, epoch_height) + 1);
+            TYPES::Epoch::new(epoch_from_block_number(decided_block_number, epoch_height) + 2);
 
         let write_callback = {
             tracing::debug!("Calling add_epoch_root for epoch {:?}", next_epoch_number);

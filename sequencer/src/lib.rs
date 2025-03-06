@@ -745,6 +745,11 @@ pub mod testing {
             self
         }
 
+        pub fn epoch_height(mut self, epoch_height: u64) -> Self {
+            self.config.epoch_height = epoch_height;
+            self
+        }
+
         pub fn build(self) -> TestConfig<NUM_NODES> {
             TestConfig {
                 config: self.config,

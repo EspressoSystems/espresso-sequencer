@@ -20,7 +20,11 @@ impl<TYPES: NodeType> DummyCatchupCommittee<TYPES> {
         let Some(epoch) = epoch else {
             return;
         };
-        assert!(self.epochs.contains(&epoch) && self.drbs.contains(&epoch));
+        let pass = self.epochs.contains(&epoch) && self.drbs.contains(&epoch);
+        if !pass {
+            tracing::error!("FAILEAD EPOCH CHECK {epoch}");
+        }
+        assert!(pass);
     }
 }
 
@@ -55,6 +59,7 @@ where
         &self,
         epoch: Option<TYPES::Epoch>,
     ) -> Vec<hotshot_types::PeerConfig<TYPES::SignatureKey>> {
+        self.assert_has_epoch(epoch);
         self.inner.da_stake_table(epoch)
     }
 
@@ -63,6 +68,7 @@ where
         view_number: TYPES::View,
         epoch: Option<TYPES::Epoch>,
     ) -> std::collections::BTreeSet<TYPES::SignatureKey> {
+        self.assert_has_epoch(epoch);
         self.inner.committee_members(view_number, epoch)
     }
 
@@ -71,6 +77,7 @@ where
         view_number: TYPES::View,
         epoch: Option<TYPES::Epoch>,
     ) -> std::collections::BTreeSet<TYPES::SignatureKey> {
+        self.assert_has_epoch(epoch);
         self.inner.da_committee_members(view_number, epoch)
     }
 
@@ -79,6 +86,7 @@ where
         view_number: TYPES::View,
         epoch: Option<TYPES::Epoch>,
     ) -> std::collections::BTreeSet<TYPES::SignatureKey> {
+        self.assert_has_epoch(epoch);
         self.inner.committee_leaders(view_number, epoch)
     }
 
@@ -87,6 +95,7 @@ where
         pub_key: &TYPES::SignatureKey,
         epoch: Option<TYPES::Epoch>,
     ) -> Option<hotshot_types::PeerConfig<TYPES::SignatureKey>> {
+        self.assert_has_epoch(epoch);
         self.inner.stake(pub_key, epoch)
     }
 
@@ -95,14 +104,17 @@ where
         pub_key: &TYPES::SignatureKey,
         epoch: Option<TYPES::Epoch>,
     ) -> Option<hotshot_types::PeerConfig<TYPES::SignatureKey>> {
+        self.assert_has_epoch(epoch);
         self.inner.da_stake(pub_key, epoch)
     }
 
     fn has_stake(&self, pub_key: &TYPES::SignatureKey, epoch: Option<TYPES::Epoch>) -> bool {
+        self.assert_has_epoch(epoch);
         self.inner.has_stake(pub_key, epoch)
     }
 
     fn has_da_stake(&self, pub_key: &TYPES::SignatureKey, epoch: Option<TYPES::Epoch>) -> bool {
+        self.assert_has_epoch(epoch);
         self.inner.has_da_stake(pub_key, epoch)
     }
 
@@ -111,34 +123,42 @@ where
         view: TYPES::View,
         epoch: Option<TYPES::Epoch>,
     ) -> std::result::Result<TYPES::SignatureKey, Self::Error> {
+        self.assert_has_epoch(epoch);
         self.inner.lookup_leader(view, epoch)
     }
 
     fn total_nodes(&self, epoch: Option<TYPES::Epoch>) -> usize {
+        self.assert_has_epoch(epoch);
         self.inner.total_nodes(epoch)
     }
 
     fn da_total_nodes(&self, epoch: Option<TYPES::Epoch>) -> usize {
+        self.assert_has_epoch(epoch);
         self.inner.da_total_nodes(epoch)
     }
 
     fn success_threshold(&self, epoch: Option<TYPES::Epoch>) -> std::num::NonZeroU64 {
+        self.assert_has_epoch(epoch);
         self.inner.success_threshold(epoch)
     }
 
     fn da_success_threshold(&self, epoch: Option<TYPES::Epoch>) -> std::num::NonZeroU64 {
+        self.assert_has_epoch(epoch);
         self.inner.da_success_threshold(epoch)
     }
 
     fn failure_threshold(&self, epoch: Option<TYPES::Epoch>) -> std::num::NonZeroU64 {
+        self.assert_has_epoch(epoch);
         self.inner.failure_threshold(epoch)
     }
 
     fn upgrade_threshold(&self, epoch: Option<TYPES::Epoch>) -> std::num::NonZeroU64 {
+        self.assert_has_epoch(epoch);
         self.inner.upgrade_threshold(epoch)
     }
 
     fn has_epoch(&self, epoch: TYPES::Epoch) -> bool {
+        self.assert_has_epoch(Some(epoch));
         self.epochs.contains(&epoch)
     }
 
@@ -152,18 +172,32 @@ where
         Ok((epoch, TYPES::BlockHeader::default()))
     }
 
-    fn add_drb_result(&mut self, epoch: TYPES::Epoch, _drb_result: hotshot_types::drb::DrbResult) {
+    fn add_drb_result(&mut self, epoch: TYPES::Epoch, drb_result: hotshot_types::drb::DrbResult) {
         self.drbs.insert(epoch);
+        self.inner.add_drb_result(epoch, drb_result);
     }
 
     fn set_first_epoch(
         &mut self,
         epoch: TYPES::Epoch,
-        _initial_drb_result: hotshot_types::drb::DrbResult,
+        initial_drb_result: hotshot_types::drb::DrbResult,
     ) {
         self.epochs.insert(epoch);
         self.epochs.insert(epoch + 1);
         self.drbs.insert(epoch);
         self.drbs.insert(epoch + 1);
+        self.inner.set_first_epoch(epoch, initial_drb_result);
+    }
+
+    #[allow(refining_impl_trait)]
+    async fn add_epoch_root(
+            &self,
+            epoch: TYPES::Epoch,
+            _block_header: TYPES::BlockHeader,
+        ) -> Option<Box<dyn FnOnce(&mut Self) + Send>>{
+        Some(Box::new(move |mem: &mut Self| {
+            tracing::error!("Adding epoch root for {epoch}");
+            mem.epochs.insert(epoch);
+        }))
     }
 }
