@@ -27,9 +27,10 @@ use crate::{
     metrics::PrometheusMetrics,
     node::{NodeDataSource, SyncStatus, TimeWindowQueryData, WindowStart},
     status::{HasMetrics, StatusDataSource},
-    Header, Payload, QueryResult, Transaction, VidShare,
+    Header, Payload, QueryResult, Transaction,
 };
 use async_trait::async_trait;
+use hotshot_types::data::VidShare;
 use hotshot_types::traits::node_implementation::NodeType;
 use jf_merkle_tree::prelude::MerkleProof;
 use std::ops::{Bound, RangeBounds};

@@ -28,13 +28,16 @@ use crate::{
     },
     fetching::{self, request, Callback},
     types::HeightIndexed,
-    Header, Payload, QueryResult, VidShare,
+    Header, Payload, QueryResult,
 };
 use async_trait::async_trait;
 use derivative::Derivative;
 use derive_more::From;
 use futures::future::{BoxFuture, FutureExt};
-use hotshot_types::traits::{block_contents::BlockHeader, node_implementation::NodeType};
+use hotshot_types::{
+    data::VidShare,
+    traits::{block_contents::BlockHeader, node_implementation::NodeType},
+};
 use std::sync::Arc;
 use std::{cmp::Ordering, future::IntoFuture, iter::once, ops::RangeBounds};
 
