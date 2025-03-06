@@ -17,6 +17,7 @@ use hotshot_task::task::TaskState;
 use hotshot_types::{
     consensus::OuterConsensus,
     data::{VidDisperse, VidDisperseShare},
+    epoch_membership::EpochMembershipCoordinator,
     event::{Event, EventType, HotShotAction},
     message::{
         convert_proposal, DaConsensusMessage, DataMessage, GeneralConsensusMessage, Message,
@@ -24,7 +25,6 @@ use hotshot_types::{
     },
     simple_vote::HasEpoch,
     traits::{
-        election::Membership,
         network::{
             BroadcastDelay, ConnectedNetwork, RequestKind, ResponseMessage, Topic, TransmitType,
             ViewMessage,
@@ -481,7 +481,7 @@ pub struct NetworkEventTaskState<
     pub epoch: Option<TYPES::Epoch>,
 
     /// network memberships
-    pub membership: Arc<RwLock<TYPES::Membership>>,
+    pub membership_coordinator: EpochMembershipCoordinator<TYPES>,
 
     /// Storage to store actionable events
     pub storage: Arc<RwLock<S>>,
@@ -725,10 +725,12 @@ impl<
                 *maybe_action = Some(HotShotAction::Vote);
                 let view_number = vote.view_number() + 1;
                 let leader = match self
-                    .membership
-                    .read()
+                    .membership_coordinator
+                    .membership_for_epoch(vote.epoch())
                     .await
-                    .leader(view_number, vote.epoch())
+                    .ok()?
+                    .leader(view_number)
+                    .await
                 {
                     Ok(l) => l,
                     Err(e) => {
@@ -821,8 +823,14 @@ impl<
             HotShotEvent::DaVoteSend(vote) => {
                 *maybe_action = Some(HotShotAction::DaVote);
                 let view_number = vote.view_number();
-                let epoch = vote.data.epoch;
-                let leader = match self.membership.read().await.leader(view_number, epoch) {
+                let leader = match self
+                    .membership_coordinator
+                    .membership_for_epoch(vote.epoch())
+                    .await
+                    .ok()?
+                    .leader(view_number)
+                    .await
+                {
                     Ok(l) => l,
                     Err(e) => {
                         tracing::warn!(
@@ -866,7 +874,14 @@ impl<
             }
             HotShotEvent::ViewSyncPreCommitVoteSend(vote) => {
                 let view_number = vote.view_number() + vote.date().relay;
-                let leader = match self.membership.read().await.leader(view_number, self.epoch) {
+                let leader = match self
+                    .membership_coordinator
+                    .membership_for_epoch(self.epoch)
+                    .await
+                    .ok()?
+                    .leader(view_number)
+                    .await
+                {
                     Ok(l) => l,
                     Err(e) => {
                         tracing::warn!(
@@ -892,7 +907,14 @@ impl<
             HotShotEvent::ViewSyncCommitVoteSend(vote) => {
                 *maybe_action = Some(HotShotAction::ViewSyncVote);
                 let view_number = vote.view_number() + vote.date().relay;
-                let leader = match self.membership.read().await.leader(view_number, self.epoch) {
+                let leader = match self
+                    .membership_coordinator
+                    .membership_for_epoch(self.epoch)
+                    .await
+                    .ok()?
+                    .leader(view_number)
+                    .await
+                {
                     Ok(l) => l,
                     Err(e) => {
                         tracing::warn!(
@@ -918,7 +940,14 @@ impl<
             HotShotEvent::ViewSyncFinalizeVoteSend(vote) => {
                 *maybe_action = Some(HotShotAction::ViewSyncVote);
                 let view_number = vote.view_number() + vote.date().relay;
-                let leader = match self.membership.read().await.leader(view_number, self.epoch) {
+                let leader = match self
+                    .membership_coordinator
+                    .membership_for_epoch(self.epoch)
+                    .await
+                    .ok()?
+                    .leader(view_number)
+                    .await
+                {
                     Ok(l) => l,
                     Err(e) => {
                         tracing::warn!(
@@ -986,7 +1015,14 @@ impl<
             HotShotEvent::TimeoutVoteSend(vote) => {
                 *maybe_action = Some(HotShotAction::Vote);
                 let view_number = vote.view_number() + 1;
-                let leader = match self.membership.read().await.leader(view_number, self.epoch) {
+                let leader = match self
+                    .membership_coordinator
+                    .membership_for_epoch(self.epoch)
+                    .await
+                    .ok()?
+                    .leader(view_number)
+                    .await
+                {
                     Ok(l) => l,
                     Err(e) => {
                         tracing::warn!(
@@ -1019,7 +1055,14 @@ impl<
             HotShotEvent::UpgradeVoteSend(vote) => {
                 tracing::error!("Sending upgrade vote!");
                 let view_number = vote.view_number();
-                let leader = match self.membership.read().await.leader(view_number, self.epoch) {
+                let leader = match self
+                    .membership_coordinator
+                    .membership_for_epoch(self.epoch)
+                    .await
+                    .ok()?
+                    .leader(view_number)
+                    .await
+                {
                     Ok(l) => l,
                     Err(e) => {
                         tracing::warn!(
@@ -1047,9 +1090,10 @@ impl<
                 self.cancel_tasks(keep_view);
                 let net = Arc::clone(&self.network);
                 let epoch = self.epoch.map(|x| x.u64());
-                let mem = Arc::clone(&self.membership);
+                let membership_coordinator = self.membership_coordinator.clone();
                 spawn(async move {
-                    net.update_view::<TYPES>(*keep_view, epoch, mem).await;
+                    net.update_view::<TYPES>(*keep_view, epoch, membership_coordinator)
+                        .await;
                 });
                 None
             }
@@ -1145,11 +1189,14 @@ impl<
         let view_number = message.kind.view_number();
         let epoch = message.kind.epoch();
         let committee_topic = Topic::Global;
-        let da_committee = self
-            .membership
-            .read()
+        let Ok(mem) = self
+            .membership_coordinator
+            .membership_for_epoch(self.epoch)
             .await
-            .da_committee_members(view_number, self.epoch);
+        else {
+            return;
+        };
+        let da_committee = mem.da_committee_members(view_number).await;
         let network = Arc::clone(&self.network);
         let storage = Arc::clone(&self.storage);
         let consensus = OuterConsensus::new(Arc::clone(&self.consensus.inner_consensus));
@@ -1271,14 +1318,12 @@ pub mod test {
                 self.parse_event(event, &mut maybe_action).await
             {
                 // Modify the values acquired by parsing the event.
-                let membership_reader = self.membership.read().await;
                 (self.modifier)(
                     &mut sender,
                     &mut message_kind,
                     &mut transmit,
-                    &membership_reader,
+                    &*self.membership_coordinator.membership().read().await,
                 );
-                drop(membership_reader);
 
                 self.spawn_transmit_task(message_kind, maybe_action, transmit, sender)
                     .await;
