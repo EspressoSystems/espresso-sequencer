@@ -1129,7 +1129,7 @@ pub mod test_helpers {
             async move {
                 Result::<Vec<Leaf2>, _>::Err(hotshot_query_service::Error::catch_all(
                     StatusCode::BAD_REQUEST,
-                    "no block found".to_string(),
+                    "No leafchain found".to_string(),
                 ))
             }
             .boxed()

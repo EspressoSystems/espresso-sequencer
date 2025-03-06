@@ -377,13 +377,13 @@ impl<T: StateCatchup> StateCatchup for Vec<T> {
                 Err(err) => {
                     tracing::info!(
                         provider = provider.name(),
-                        "failed to fetch frontier: {err:#}"
+                        "failed to fetch leaves: {err:#}"
                     );
                 }
             }
         }
 
-        bail!("could not fetch account from any provider");
+        bail!("could not fetch leaves from any provider");
     }
     #[tracing::instrument(skip(self, instance))]
     async fn try_fetch_accounts(
