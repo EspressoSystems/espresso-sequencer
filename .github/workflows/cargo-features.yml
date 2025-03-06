@@ -28,6 +28,14 @@ jobs:
 
       - name: Free Disk Space (Ubuntu)
         uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: false
+          docker-images: false
+          swap-storage: false
 
       # Note: this job doesn't use a cache on purpose because it mostly compiles
       # the crates in this repo over and over again with different feature
