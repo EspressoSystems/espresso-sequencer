@@ -125,7 +125,7 @@ where
             .get_epoch_root(root_block_in_epoch(*root_epoch, self.epoch_height))
             .await
         else {
-            anytrace::bail!("get epoch root failed");
+            anytrace::bail!("get epoch root failed for epoch {:?}", root_epoch);
         };
         let updater = self
             .membership
