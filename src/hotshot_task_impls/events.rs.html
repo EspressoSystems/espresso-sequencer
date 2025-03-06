@@ -646,7 +646,13 @@
 <a href="#645" id="645">645</a>
 <a href="#646" id="646">646</a>
 <a href="#647" id="647">647</a>
-<a href="#648" id="648">648</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
+<a href="#648" id="648">648</a>
+<a href="#649" id="649">649</a>
+<a href="#650" id="650">650</a>
+<a href="#651" id="651">651</a>
+<a href="#652" id="652">652</a>
+<a href="#653" id="653">653</a>
+<a href="#654" id="654">654</a></pre></div><pre class="rust"><code><span class="comment">// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
 // This file is part of the HotShot repository.
 
 // You should have received a copy of the MIT License
@@ -783,6 +789,8 @@
     </span>Qc2Formed(Either&lt;QuorumCertificate2&lt;TYPES&gt;, TimeoutCertificate2&lt;TYPES&gt;&gt;),
     <span class="doccomment">/// The next leader has collected enough votes from the next epoch nodes to form a QC; emitted by the next leader in the consensus task; an internal event only
     </span>NextEpochQc2Formed(Either&lt;NextEpochQuorumCertificate2&lt;TYPES&gt;, TimeoutCertificate&lt;TYPES&gt;&gt;),
+    <span class="doccomment">/// A validator formed both a current epoch eQC and a next epoch eQC
+    </span>ExtendedQc2Formed(QuorumCertificate2&lt;TYPES&gt;),
     <span class="doccomment">/// The DA leader has collected enough votes to form a DAC; emitted by the DA leader in the DA task; sent to the entire network via the networking task
     </span>DacSend(DaCertificate2&lt;TYPES&gt;, TYPES::SignatureKey),
     <span class="doccomment">/// The current view has changed; emitted by the replica in the consensus task or replica in the view sync task; received by almost all other tasks
@@ -960,6 +968,7 @@
                 either::Left(qc) =&gt; <span class="prelude-val">Some</span>(qc.view_number()),
                 either::Right(tc) =&gt; <span class="prelude-val">Some</span>(tc.view_number()),
             },
+            HotShotEvent::ExtendedQc2Formed(cert) =&gt; <span class="prelude-val">Some</span>(cert.view_number()),
             HotShotEvent::ViewSyncCommitVoteSend(vote)
             | HotShotEvent::ViewSyncCommitVoteRecv(vote) =&gt; <span class="prelude-val">Some</span>(vote.view_number()),
             HotShotEvent::ViewSyncPreCommitVoteRecv(vote)
@@ -1095,6 +1104,9 @@
                     <span class="macro">write!</span>(f, <span class="string">"NextEpochQc2Formed(view_number={:?})"</span>, tc.view_number())
                 }
             },
+            HotShotEvent::ExtendedQc2Formed(cert) =&gt; {
+                <span class="macro">write!</span>(f, <span class="string">"ExtendedQc2Formed(view_number={:?})"</span>, cert.view_number())
+            }
             HotShotEvent::DacSend(cert, <span class="kw">_</span>) =&gt; {
                 <span class="macro">write!</span>(f, <span class="string">"DacSend(view_number={:?})"</span>, cert.view_number())
             }

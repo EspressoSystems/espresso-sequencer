@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["ProposalDependency"],"struct":["ProposalDependencyHandle"]};
+window.SIDEBAR_ITEMS = {"enum":["ProposalDependency"],"fn":["handle_eqc_formed"],"struct":["ProposalDependencyHandle"]};
