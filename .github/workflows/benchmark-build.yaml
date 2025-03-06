@@ -65,8 +65,7 @@ jobs:
             target/release/espresso-bridge
 
   build-arm:
-    runs-on:
-      group: BigArmRunners
+    runs-on: buildjet-16vcpu-ubuntu-2204-arm
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
