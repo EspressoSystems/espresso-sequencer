@@ -133,7 +133,7 @@ pub mod availability_tests {
     };
     use committable::Committable;
     use futures::stream::StreamExt;
-    use hotshot_types::data::Leaf;
+    use hotshot_types::data::Leaf2;
     use std::collections::HashMap;
     use std::fmt::Debug;
     use std::ops::{Bound, RangeBounds};
@@ -148,7 +148,7 @@ pub mod availability_tests {
             assert_eq!(leaf.height(), i as u64);
             assert_eq!(
                 leaf.hash(),
-                <Leaf<MockTypes> as Committable>::commit(&leaf.leaf)
+                <Leaf2<MockTypes> as Committable>::commit(&leaf.leaf)
             );
 
             // Check indices.
@@ -550,11 +550,11 @@ pub mod persistence_tests {
             setup_test,
         },
         types::HeightIndexed,
-        Leaf,
+        Leaf2,
     };
     use committable::Committable;
     use hotshot_example_types::state_types::{TestInstanceState, TestValidatedState};
-    use hotshot_types::simple_certificate::QuorumCertificate;
+    use hotshot_types::simple_certificate::QuorumCertificate2;
 
     #[tokio::test(flavor = "multi_thread")]
     pub async fn test_revert<D: TestableDataSource>()
@@ -571,12 +571,12 @@ pub mod persistence_tests {
         let ds = D::connect(&storage).await;
 
         // Mock up some consensus data.
-        let mut qc = QuorumCertificate::<MockTypes>::genesis::<TestVersions>(
+        let mut qc = QuorumCertificate2::<MockTypes>::genesis::<TestVersions>(
             &TestValidatedState::default(),
             &TestInstanceState::default(),
         )
         .await;
-        let mut leaf = Leaf::<MockTypes>::genesis::<TestVersions>(
+        let mut leaf = Leaf2::<MockTypes>::genesis::<TestVersions>(
             &TestValidatedState::default(),
             &TestInstanceState::default(),
         )
@@ -584,7 +584,7 @@ pub mod persistence_tests {
         // Increment the block number, to distinguish this block from the genesis block, which
         // already exists.
         leaf.block_header_mut().block_number += 1;
-        qc.data.leaf_commit = <Leaf<MockTypes> as Committable>::commit(&leaf);
+        qc.data.leaf_commit = <Leaf2<MockTypes> as Committable>::commit(&leaf);
 
         let block = BlockQueryData::new(leaf.block_header().clone(), MockPayload::genesis());
         let leaf = LeafQueryData::new(leaf, qc).unwrap();
@@ -623,12 +623,12 @@ pub mod persistence_tests {
         let ds = D::connect(&storage).await;
 
         // Mock up some consensus data.
-        let mut qc = QuorumCertificate::<MockTypes>::genesis::<TestVersions>(
+        let mut qc = QuorumCertificate2::<MockTypes>::genesis::<TestVersions>(
             &TestValidatedState::default(),
             &TestInstanceState::default(),
         )
         .await;
-        let mut leaf = Leaf::<MockTypes>::genesis::<TestVersions>(
+        let mut leaf = Leaf2::<MockTypes>::genesis::<TestVersions>(
             &TestValidatedState::default(),
             &TestInstanceState::default(),
         )
@@ -636,7 +636,7 @@ pub mod persistence_tests {
         // Increment the block number, to distinguish this block from the genesis block, which
         // already exists.
         leaf.block_header_mut().block_number += 1;
-        qc.data.leaf_commit = <Leaf<MockTypes> as Committable>::commit(&leaf);
+        qc.data.leaf_commit = <Leaf2<MockTypes> as Committable>::commit(&leaf);
 
         let block = BlockQueryData::new(leaf.block_header().clone(), MockPayload::genesis());
         let leaf = LeafQueryData::new(leaf, qc).unwrap();
@@ -686,12 +686,12 @@ pub mod persistence_tests {
         let ds = D::connect(&storage).await;
 
         // Mock up some consensus data.
-        let mut mock_qc = QuorumCertificate::<MockTypes>::genesis::<TestVersions>(
+        let mut mock_qc = QuorumCertificate2::<MockTypes>::genesis::<TestVersions>(
             &TestValidatedState::default(),
             &TestInstanceState::default(),
         )
         .await;
-        let mut mock_leaf = Leaf::<MockTypes>::genesis::<TestVersions>(
+        let mut mock_leaf = Leaf2::<MockTypes>::genesis::<TestVersions>(
             &TestValidatedState::default(),
             &TestInstanceState::default(),
         )
@@ -699,7 +699,7 @@ pub mod persistence_tests {
         // Increment the block number, to distinguish this block from the genesis block, which
         // already exists.
         mock_leaf.block_header_mut().block_number += 1;
-        mock_qc.data.leaf_commit = <Leaf<MockTypes> as Committable>::commit(&mock_leaf);
+        mock_qc.data.leaf_commit = <Leaf2<MockTypes> as Committable>::commit(&mock_leaf);
 
         let block = BlockQueryData::new(mock_leaf.block_header().clone(), MockPayload::genesis());
         let leaf = LeafQueryData::new(mock_leaf.clone(), mock_qc.clone()).unwrap();
@@ -725,7 +725,7 @@ pub mod persistence_tests {
 
         // Get a mutable transaction again, insert different data.
         mock_leaf.block_header_mut().block_number += 1;
-        mock_qc.data.leaf_commit = <Leaf<MockTypes> as Committable>::commit(&mock_leaf);
+        mock_qc.data.leaf_commit = <Leaf2<MockTypes> as Committable>::commit(&mock_leaf);
         let block = BlockQueryData::new(mock_leaf.block_header().clone(), MockPayload::genesis());
         let leaf = LeafQueryData::new(mock_leaf, mock_qc).unwrap();
 
@@ -771,7 +771,7 @@ pub mod node_tests {
             setup_test, sleep,
         },
         types::HeightIndexed,
-        Header, VidCommitment, VidShare,
+        Header,
     };
     use committable::Committable;
     use futures::{future::join_all, stream::StreamExt};
@@ -784,7 +784,7 @@ pub mod node_tests {
         state_types::TestInstanceState,
     };
     use hotshot_types::{
-        data::vid_commitment,
+        data::{vid_commitment, VidCommitment, VidShare},
         traits::{block_contents::EncodeBytes, node_implementation::Versions},
         vid::advz::{advz_scheme, ADVZScheme},
     };
