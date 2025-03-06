@@ -12,7 +12,7 @@
 
 The Espresso Network is the global confirmation layer for rollups in the Ethereum ecosystem. Espresso's [global confirmation layer(GCL)](https://docs.espressosys.com/network) provides agreement on inputs to a collection of composable blockchains, providing a high trust, fast, and verifiable way to process inputs on any chain, providing fast confirmations in return.
 
-[Official Documentation](https://docs.espressosys.com/network/learn/the-espresso-network/system-overview)
+[Official Documentation](https://docs.espressosys.com/network/)
 
 ### Architecture
 
