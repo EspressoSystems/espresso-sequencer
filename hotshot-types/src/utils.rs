@@ -284,7 +284,7 @@ pub enum Terminator<T> {
 type Sha256Digest = [u8; <sha2::Sha256 as OutputSizeUser>::OutputSize::USIZE];
 
 #[tagged("BUILDER_COMMITMENT")]
-#[derive(Clone, Debug, Hash, PartialEq, Eq, CanonicalSerialize, CanonicalDeserialize)]
+#[derive(Clone, Debug, Default, Hash, PartialEq, Eq, CanonicalSerialize, CanonicalDeserialize)]
 /// Commitment that builders use to sign block options.
 /// A thin wrapper around a Sha256 digest.
 pub struct BuilderCommitment(Sha256Digest);
