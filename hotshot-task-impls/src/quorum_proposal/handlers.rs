@@ -13,10 +13,15 @@ use std::{
     time::{Duration, Instant},
 };
 
+use crate::{
+    events::HotShotEvent,
+    helpers::{broadcast_event, parent_leaf_and_state, wait_for_next_epoch_qc},
+    quorum_proposal::{QuorumProposalTaskState, UpgradeLock, Versions},
+};
 use anyhow::{ensure, Context, Result};
 use async_broadcast::{Receiver, Sender};
 use async_lock::RwLock;
-use committable::Committable;
+use committable::{Commitment, Committable};
 use hotshot_task::dependency_task::HandleDepOutput;
 use hotshot_types::{
     consensus::{CommitmentAndMetadata, OuterConsensus},
@@ -25,7 +30,9 @@ use hotshot_types::{
     message::Proposal,
     simple_certificate::{QuorumCertificate2, UpgradeCertificate},
     traits::{
-        block_contents::BlockHeader, node_implementation::NodeType, signature_key::SignatureKey,
+        block_contents::BlockHeader,
+        node_implementation::{NodeImplementation, NodeType},
+        signature_key::SignatureKey,
     },
     utils::{is_last_block_in_epoch, option_epoch_from_block_number},
     vote::{Certificate, HasViewNumber},
@@ -34,12 +41,6 @@ use hotshot_types::{
 use hotshot_utils::anytrace::*;
 use tracing::instrument;
 use vbs::version::StaticVersionType;
-
-use crate::{
-    events::HotShotEvent,
-    helpers::{broadcast_event, parent_leaf_and_state, wait_for_next_epoch_qc},
-    quorum_proposal::{UpgradeLock, Versions},
-};
 
 /// Proposal dependency types. These types represent events that precipitate a proposal.
 #[derive(PartialEq, Debug)]
@@ -497,4 +498,52 @@ impl<TYPES: NodeType, V: Versions> HandleDepOutput for ProposalDependencyHandle<
             tracing::error!("Failed to publish proposal; error = {e:#}");
         }
     }
+}
+
+pub(super) async fn handle_eqc_formed<
+    TYPES: NodeType,
+    I: NodeImplementation<TYPES>,
+    V: Versions,
+>(
+    cert_view: TYPES::View,
+    leaf_commit: Commitment<Leaf2<TYPES>>,
+    task_state: &QuorumProposalTaskState<TYPES, I, V>,
+    event_sender: &Sender<Arc<HotShotEvent<TYPES>>>,
+) {
+    if !task_state.upgrade_lock.epochs_enabled(cert_view).await {
+        tracing::debug!("QC2 formed but epochs not enabled. Do nothing");
+        return;
+    }
+    if !task_state
+        .consensus
+        .read()
+        .await
+        .is_leaf_extended(leaf_commit)
+    {
+        tracing::debug!("We formed QC but not eQC. Do nothing");
+        return;
+    }
+
+    let consensus_reader = task_state.consensus.read().await;
+    let current_epoch_qc = consensus_reader.high_qc();
+    let Some(next_epoch_qc) = consensus_reader.next_epoch_high_qc() else {
+        tracing::debug!("We formed the eQC but we don't have the next epoch eQC at all.");
+        return;
+    };
+    if current_epoch_qc.view_number() != next_epoch_qc.view_number()
+        || current_epoch_qc.data != *next_epoch_qc.data
+    {
+        tracing::debug!(
+            "We formed the eQC but the current and next epoch QCs do not correspond to each other."
+        );
+        return;
+    }
+    let current_epoch_qc_clone = current_epoch_qc.clone();
+    drop(consensus_reader);
+
+    broadcast_event(
+        Arc::new(HotShotEvent::ExtendedQc2Formed(current_epoch_qc_clone)),
+        event_sender,
+    )
+    .await;
 }
