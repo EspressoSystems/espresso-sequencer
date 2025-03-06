@@ -373,7 +373,7 @@ impl From<AvidMShare> for VidShare {
     }
 }
 
-mod ns_table;
+pub mod ns_table;
 pub mod vid_disperse;
 
 /// VID dispersal data

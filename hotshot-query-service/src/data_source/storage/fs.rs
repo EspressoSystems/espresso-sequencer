@@ -15,6 +15,7 @@
 use super::{
     ledger_log::{Iter, LedgerLog},
     pruning::{PruneStorage, PrunedHeightStorage, PrunerConfig},
+    sql::MigrateTypes,
     Aggregate, AggregatesStorage, AvailabilityStorage, NodeStorage, PayloadMetadata,
     UpdateAggregatesStorage, UpdateAvailabilityStorage, VidCommonMetadata,
 };
@@ -33,14 +34,16 @@ use crate::{
     status::HasMetrics,
     types::HeightIndexed,
     ErrorSnafu, Header, MissingSnafu, NotFoundSnafu, Payload, QueryError, QueryResult,
-    VidCommitment, VidShare,
 };
 use async_lock::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 use async_trait::async_trait;
 use atomic_store::{AtomicStore, AtomicStoreLoader, PersistenceError};
 use committable::Committable;
 use futures::future::Future;
-use hotshot_types::traits::{block_contents::BlockHeader, node_implementation::NodeType};
+use hotshot_types::{
+    data::{VidCommitment, VidShare},
+    traits::{block_contents::BlockHeader, node_implementation::NodeType},
+};
 use serde::{de::DeserializeOwned, Serialize};
 use snafu::OptionExt;
 use std::collections::{
@@ -131,6 +134,16 @@ where
     Payload<Types>: QueryablePayload<Types>,
 {
     type Pruner = ();
+}
+
+#[async_trait]
+impl<Types: NodeType> MigrateTypes<Types> for FileSystemStorage<Types>
+where
+    Payload<Types>: QueryablePayload<Types>,
+{
+    async fn migrate_types(&self) -> anyhow::Result<()> {
+        Ok(())
+    }
 }
 
 impl<Types: NodeType> FileSystemStorage<Types>

@@ -196,7 +196,7 @@ where
                 .context("timed out fetching proposal")?
                 .context("error fetching proposal")?;
             self.persistence
-                .append_quorum_proposal(&proposal)
+                .append_quorum_proposal2(&proposal)
                 .await
                 .context("error saving fetched proposal")?;
 

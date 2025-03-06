@@ -19,12 +19,23 @@ concurrency:
 
 jobs:
   cargo-features:
-    runs-on: buildjet-8vcpu-ubuntu-2204
+    runs-on: ubuntu-latest
     steps:
       - uses: taiki-e/install-action@cargo-hack
 
       - name: Checkout Repository
         uses: actions/checkout@v4
+
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: false
+          docker-images: false
+          swap-storage: false
 
       # Note: this job doesn't use a cache on purpose because it mostly compiles
       # the crates in this repo over and over again with different feature
