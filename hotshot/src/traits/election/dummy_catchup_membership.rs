@@ -1,10 +1,7 @@
 use std::{collections::HashSet, time::Duration};
 
 use anyhow::Ok;
-use hotshot_types::traits::{
-    election::Membership,
-    node_implementation::NodeType,
-};
+use hotshot_types::traits::{election::Membership, node_implementation::NodeType};
 
 use super::static_committee::StaticCommittee;
 
@@ -192,10 +189,10 @@ where
 
     #[allow(refining_impl_trait)]
     async fn add_epoch_root(
-            &self,
-            epoch: TYPES::Epoch,
-            _block_header: TYPES::BlockHeader,
-        ) -> Option<Box<dyn FnOnce(&mut Self) + Send>>{
+        &self,
+        epoch: TYPES::Epoch,
+        _block_header: TYPES::BlockHeader,
+    ) -> Option<Box<dyn FnOnce(&mut Self) + Send>> {
         Some(Box::new(move |mem: &mut Self| {
             tracing::error!("Adding epoch root for {epoch}");
             mem.epochs.insert(epoch);

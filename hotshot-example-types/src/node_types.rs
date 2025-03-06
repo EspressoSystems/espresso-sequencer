@@ -11,7 +11,11 @@ pub use hotshot::traits::election::helpers::{
 };
 use hotshot::traits::{
     election::{
-        dummy_catchup_membership::DummyCatchupCommittee, helpers::QuorumFilterConfig, randomized_committee::Committee, randomized_committee_members::RandomizedCommitteeMembers, static_committee::StaticCommittee, static_committee_leader_two_views::StaticCommitteeLeaderForTwoViews, two_static_committees::TwoStaticCommittees
+        dummy_catchup_membership::DummyCatchupCommittee, helpers::QuorumFilterConfig,
+        randomized_committee::Committee, randomized_committee_members::RandomizedCommitteeMembers,
+        static_committee::StaticCommittee,
+        static_committee_leader_two_views::StaticCommitteeLeaderForTwoViews,
+        two_static_committees::TwoStaticCommittees,
     },
     implementations::{CombinedNetworks, Libp2pNetwork, MemoryNetwork, PushCdnNetwork},
     NodeImplementation,
@@ -126,7 +130,6 @@ impl NodeType for TestTypesEpochCatchupTypes {
     type Membership = DummyCatchupCommittee<TestTypesEpochCatchupTypes>;
     type BuilderSignatureKey = BuilderKey;
 }
-
 
 #[derive(
     Copy,

@@ -1631,7 +1631,12 @@ mod test {
     use tokio::time::sleep;
 
     use espresso_types::{
-        config::PublicHotShotConfig, traits::NullEventConsumer, v0_1::{UpgradeMode, ViewBasedUpgrade}, BackoffParams, EpochVersion, FeeAccount, FeeAmount, FeeVersion, Header, MarketplaceVersion, MockSequencerVersions, SequencerVersions, TimeBasedUpgrade, Timestamp, Upgrade, UpgradeType, ValidatedState
+        config::PublicHotShotConfig,
+        traits::NullEventConsumer,
+        v0_1::{UpgradeMode, ViewBasedUpgrade},
+        BackoffParams, EpochVersion, FeeAccount, FeeAmount, FeeVersion, Header, MarketplaceVersion,
+        MockSequencerVersions, SequencerVersions, TimeBasedUpgrade, Timestamp, Upgrade,
+        UpgradeType, ValidatedState,
     };
     use ethers::utils::Anvil;
     use futures::{
@@ -1993,7 +1998,10 @@ mod test {
         let anvil = Anvil::new().spawn();
         let l1 = anvil.endpoint().parse().unwrap();
         const EPOCH_HEIGHT: u64 = 5;
-        let network_config = TestConfigBuilder::default().l1_url(l1).epoch_height(EPOCH_HEIGHT).build();
+        let network_config = TestConfigBuilder::default()
+            .l1_url(l1)
+            .epoch_height(EPOCH_HEIGHT)
+            .build();
         const NUM_NODES: usize = 5;
         let config = TestNetworkConfigBuilder::<NUM_NODES, _, _>::with_num_nodes()
             .api_config(Options::with_port(port))
@@ -2006,7 +2014,11 @@ mod test {
                 )
             }))
             .build();
-        let mut network = TestNetwork::new(config, SequencerVersions::<EpochVersion, EpochVersion>::new()).await;
+        let mut network = TestNetwork::new(
+            config,
+            SequencerVersions::<EpochVersion, EpochVersion>::new(),
+        )
+        .await;
 
         // Wait for replica 0 to decide in the third epoch.
         let mut events = network.peers[0].event_stream().await;
@@ -2015,7 +2027,7 @@ mod test {
             let EventType::Decide { leaf_chain, .. } = event.event else {
                 continue;
             };
-            if leaf_chain[0].leaf.height() > EPOCH_HEIGHT*3 {
+            if leaf_chain[0].leaf.height() > EPOCH_HEIGHT * 3 {
                 break;
             }
         }

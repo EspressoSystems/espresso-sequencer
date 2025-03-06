@@ -166,7 +166,10 @@ impl CatchupStorage for SqlStorage {
             .await
             .context(format!("opening transaction to fetch leaf at {height}"))?;
         let h = usize::try_from(height)?;
-        let query_leaf_chain = tx.get_leaf_range(h..=(h + 2)).await.context(format!("leaf chain {height} not available"))?;
+        let query_leaf_chain = tx
+            .get_leaf_range(h..=(h + 2))
+            .await
+            .context(format!("leaf chain {height} not available"))?;
         let mut chain = vec![];
 
         for query_result in query_leaf_chain {
