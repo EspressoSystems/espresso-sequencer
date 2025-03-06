@@ -18,7 +18,6 @@ use hotshot_events_service::events_source::{
     EventFilterSet, EventsSource, EventsStreamer, StartupInfo,
 };
 use hotshot_query_service::data_source::ExtensibleDataSource;
-use hotshot_types::traits::election::Membership;
 use hotshot_types::{
     data::ViewNumber,
     event::Event,
@@ -185,14 +184,18 @@ impl<N: ConnectedNetwork<PubKey>, V: Versions, P: SequencerPersistence>
         &self,
         epoch: Option<<SeqTypes as NodeType>::Epoch>,
     ) -> Vec<PeerConfig<<SeqTypes as NodeType>::SignatureKey>> {
-        self.consensus()
+        let Ok(mem) = self
+            .consensus()
             .await
             .read()
             .await
-            .memberships
-            .read()
+            .membership_coordinator
+            .membership_for_epoch(epoch)
             .await
-            .stake_table(epoch)
+        else {
+            return vec![];
+        };
+        mem.stake_table().await
     }
 
     /// Get the stake table for the current epoch if not provided

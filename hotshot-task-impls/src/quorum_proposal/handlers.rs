@@ -26,11 +26,11 @@ use hotshot_task::dependency_task::HandleDepOutput;
 use hotshot_types::{
     consensus::{CommitmentAndMetadata, OuterConsensus},
     data::{Leaf2, QuorumProposal2, QuorumProposalWrapper, VidDisperse, ViewChangeEvidence2},
+    epoch_membership::EpochMembership,
     message::Proposal,
     simple_certificate::{QuorumCertificate2, UpgradeCertificate},
     traits::{
         block_contents::BlockHeader,
-        election::Membership,
         node_implementation::{NodeImplementation, NodeType},
         signature_key::SignatureKey,
     },
@@ -82,7 +82,7 @@ pub struct ProposalDependencyHandle<TYPES: NodeType, V: Versions> {
     pub instance_state: Arc<TYPES::InstanceState>,
 
     /// Membership for Quorum Certs/votes
-    pub membership: Arc<RwLock<TYPES::Membership>>,
+    pub membership: EpochMembership<TYPES>,
 
     /// Our public key
     pub public_key: TYPES::SignatureKey,
@@ -128,11 +128,10 @@ impl<TYPES: NodeType, V: Versions> ProposalDependencyHandle<TYPES, V> {
     ) -> Option<QuorumCertificate2<TYPES>> {
         while let Ok(event) = rx.recv_direct().await {
             if let HotShotEvent::HighQcRecv(qc, _sender) = event.as_ref() {
-                let membership_reader = self.membership.read().await;
-                let membership_stake_table = membership_reader.stake_table(qc.data.epoch);
-                let membership_success_threshold =
-                    membership_reader.success_threshold(qc.data.epoch);
-                drop(membership_reader);
+                let prev_epoch = qc.data.epoch;
+                let epoch_membership = self.membership.get_new_epoch(prev_epoch).await.ok()?;
+                let membership_stake_table = epoch_membership.stake_table().await;
+                let membership_success_threshold = epoch_membership.success_threshold().await;
 
                 if qc
                     .is_valid_cert(
@@ -208,7 +207,7 @@ impl<TYPES: NodeType, V: Versions> ProposalDependencyHandle<TYPES, V> {
         let (parent_leaf, state) = parent_leaf_and_state(
             &self.sender,
             &self.receiver,
-            Arc::clone(&self.membership),
+            self.membership.coordinator.clone(),
             self.public_key.clone(),
             self.private_key.clone(),
             OuterConsensus::new(Arc::clone(&self.consensus.inner_consensus)),
@@ -309,16 +308,15 @@ impl<TYPES: NodeType, V: Versions> ProposalDependencyHandle<TYPES, V> {
             self.epoch_height,
         );
 
+        let epoch_membership = self
+            .membership
+            .coordinator
+            .membership_for_epoch(epoch)
+            .await?;
         // Make sure we are the leader for the view and epoch.
         // We might have ended up here because we were in the epoch transition.
-        if self
-            .membership
-            .read()
-            .await
-            .leader(self.view_number, epoch)?
-            != self.public_key
-        {
-            tracing::debug!(
+        if epoch_membership.leader(self.view_number).await? != self.public_key {
+            tracing::warn!(
                 "We are not the leader in the epoch for which we are about to propose. Do not send the quorum proposal."
             );
             return Ok(());

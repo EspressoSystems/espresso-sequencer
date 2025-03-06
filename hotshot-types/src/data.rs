@@ -31,6 +31,7 @@ use vid_disperse::{ADVZDisperse, ADVZDisperseShare, AvidMDisperse, VidDisperseSh
 
 use crate::{
     drb::DrbResult,
+    epoch_membership::EpochMembershipCoordinator,
     impl_has_epoch, impl_has_none_epoch,
     message::{convert_proposal, Proposal, UpgradeLock},
     simple_certificate::{
@@ -428,7 +429,7 @@ impl<TYPES: NodeType> VidDisperse<TYPES> {
     #[allow(clippy::panic)]
     pub async fn calculate_vid_disperse<V: Versions>(
         payload: &TYPES::BlockPayload,
-        membership: &Arc<RwLock<TYPES::Membership>>,
+        membership: &EpochMembershipCoordinator<TYPES>,
         view: TYPES::View,
         target_epoch: Option<TYPES::Epoch>,
         data_epoch: Option<TYPES::Epoch>,

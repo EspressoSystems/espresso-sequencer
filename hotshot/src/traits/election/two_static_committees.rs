@@ -427,6 +427,16 @@ impl<TYPES: NodeType> Membership<TYPES> for TwoStaticCommittees<TYPES> {
             .unwrap()
         }
     }
+    fn has_epoch(&self, _epoch: TYPES::Epoch) -> bool {
+        true
+    }
+
+    async fn get_epoch_root(
+        &self,
+        _block_height: u64,
+    ) -> Option<(TYPES::Epoch, TYPES::BlockHeader)> {
+        None
+    }
 
     fn add_drb_result(&mut self, _epoch: <TYPES as NodeType>::Epoch, _drb_result: DrbResult) {}
 

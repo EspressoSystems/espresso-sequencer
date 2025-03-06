@@ -19,6 +19,7 @@ use hotshot_types::traits::node_implementation::ConsensusTime;
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
     drb::INITIAL_DRB_RESULT,
+    epoch_membership::EpochMembershipCoordinator,
     traits::node_implementation::{NodeType, Versions},
     HotShotConfig, PeerConfig, ValidatorConfig,
 };
@@ -260,6 +261,7 @@ pub async fn create_test_handle<
     // Get key pair for certificate aggregation
     let private_key = validator_config.private_key.clone();
     let public_key = validator_config.public_key.clone();
+    let membership_coordinator = EpochMembershipCoordinator::new(memberships, config.epoch_height);
 
     let behaviour = (metadata.behaviour)(node_id);
     match behaviour {
@@ -271,7 +273,7 @@ pub async fn create_test_handle<
                     private_key,
                     node_id,
                     config,
-                    memberships,
+                    membership_coordinator,
                     network,
                     initializer,
                     ConsensusMetricsValue::default(),
@@ -290,7 +292,7 @@ pub async fn create_test_handle<
                     private_key,
                     node_id,
                     config,
-                    memberships,
+                    membership_coordinator,
                     network,
                     initializer,
                     ConsensusMetricsValue::default(),
@@ -305,7 +307,7 @@ pub async fn create_test_handle<
                 private_key,
                 node_id,
                 config,
-                memberships,
+                membership_coordinator,
                 network,
                 initializer,
                 ConsensusMetricsValue::default(),

@@ -18,6 +18,7 @@ use hotshot_orchestrator::client::OrchestratorClient;
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
     data::{Leaf2, ViewNumber},
+    epoch_membership::EpochMembershipCoordinator,
     network::NetworkConfig,
     traits::{
         metrics::Metrics,
@@ -144,14 +145,16 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> Sequence
         )));
 
         let persistence = Arc::new(persistence);
-        let memberships = Arc::new(async_lock::RwLock::new(membership));
+        let coordinator =
+            EpochMembershipCoordinator::new(Arc::new(RwLock::new(membership)), config.epoch_height);
+        let membership = coordinator.membership().clone();
 
         let handle = SystemContext::init(
             validator_config.public_key,
             validator_config.private_key.clone(),
             instance_state.node_id,
             config.clone(),
-            memberships.clone(),
+            coordinator,
             network.clone(),
             initializer,
             ConsensusMetricsValue::new(metrics),
@@ -186,7 +189,9 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> Sequence
             request_response_config,
             RequestResponseSender::new(outbound_message_sender),
             request_response_receiver,
-            RecipientSource { memberships },
+            RecipientSource {
+                memberships: membership,
+            },
             DataSource {},
         );
 

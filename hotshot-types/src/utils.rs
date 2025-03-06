@@ -6,12 +6,6 @@
 
 //! Utility functions, type aliases, helper structs and enum definitions.
 
-use std::{
-    hash::{Hash, Hasher},
-    ops::Deref,
-    sync::Arc,
-};
-
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use bincode::{
     config::{
@@ -24,6 +18,11 @@ use committable::Commitment;
 use digest::OutputSizeUser;
 use serde::{Deserialize, Serialize};
 use sha2::Digest;
+use std::{
+    hash::{Hash, Hasher},
+    ops::Deref,
+    sync::Arc,
+};
 use tagged_base64::tagged;
 use typenum::Unsigned;
 use vbs::version::StaticVersionType;

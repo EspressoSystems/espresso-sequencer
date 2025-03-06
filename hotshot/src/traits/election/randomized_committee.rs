@@ -217,11 +217,6 @@ impl<TYPES: NodeType> Membership<TYPES> for Committee<TYPES> {
             .is_some_and(|x| x.stake_table_entry.stake() > U256::zero())
     }
 
-    // /// Get the network topic for the committee
-    // fn committee_topic(&self) -> Topic {
-    //     self.committee_topic.clone()
-    // }
-
     /// Index the vector of public keys with the current view number
     fn lookup_leader(
         &self,
@@ -265,6 +260,16 @@ impl<TYPES: NodeType> Membership<TYPES> for Committee<TYPES> {
         .unwrap()
     }
 
+    fn has_epoch(&self, _epoch: TYPES::Epoch) -> bool {
+        true
+    }
+
+    async fn get_epoch_root(
+        &self,
+        _block_height: u64,
+    ) -> Option<(TYPES::Epoch, TYPES::BlockHeader)> {
+        None
+    }
     fn add_drb_result(&mut self, _epoch: <TYPES as NodeType>::Epoch, _drb_result: DrbResult) {}
 
     fn set_first_epoch(&mut self, _epoch: TYPES::Epoch, _initial_drb_result: DrbResult) {}

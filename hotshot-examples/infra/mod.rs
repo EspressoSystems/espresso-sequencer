@@ -54,6 +54,7 @@ use hotshot_testing::block_builder::{
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
     data::{Leaf, TestableLeaf},
+    epoch_membership::EpochMembershipCoordinator,
     event::{Event, EventType},
     network::{BuilderType, NetworkConfig, NetworkConfigFile, NetworkConfigSource},
     traits::{
@@ -388,13 +389,14 @@ pub trait RunDa<
             // TODO: we need to pass a valid fallback builder url here somehow
             fallback_builder_url: config.config.builder_urls.first().clone(),
         };
+        let epoch_height = config.config.epoch_height;
 
         SystemContext::init(
             pk,
             sk,
             config.node_index,
             config.config,
-            membership,
+            EpochMembershipCoordinator::new(membership, epoch_height),
             Arc::from(network),
             initializer,
             ConsensusMetricsValue::default(),
@@ -524,15 +526,15 @@ pub trait RunDa<
                 }
             }
         }
+        // Panic if we don't have the genesis epoch, there is no recovery from that
         let num_eligible_leaders = context
             .hotshot
-            .memberships
-            .read()
+            .membership_coordinator
+            .membership_for_epoch(genesis_epoch_from_version::<V, TYPES>())
             .await
-            .committee_leaders(
-                TYPES::View::genesis(),
-                genesis_epoch_from_version::<V, TYPES>(),
-            )
+            .unwrap()
+            .committee_leaders(TYPES::View::genesis())
+            .await
             .len();
         let consensus_lock = context.hotshot.consensus();
         let consensus_reader = consensus_lock.read().await;
