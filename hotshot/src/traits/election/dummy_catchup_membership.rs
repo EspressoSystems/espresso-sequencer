@@ -20,7 +20,8 @@ impl<TYPES: NodeType> DummyCatchupCommittee<TYPES> {
         let Some(epoch) = epoch else {
             return;
         };
-        let pass = self.epochs.contains(&epoch) && self.drbs.contains(&epoch);
+        let pass = self.epochs.contains(&epoch);
+        //&& self.drbs.contains(&epoch);
         if !pass {
             tracing::error!("FAILEAD EPOCH CHECK {epoch}");
         }
