@@ -6,7 +6,6 @@
 
 use async_broadcast::{Receiver, Sender};
 use async_trait::async_trait;
-use either::Either;
 use hotshot_task::task::TaskState;
 use hotshot_types::{
     consensus::OuterConsensus,
@@ -30,8 +29,11 @@ use tracing::instrument;
 use self::handlers::{
     handle_quorum_vote_recv, handle_timeout, handle_timeout_vote_recv, handle_view_change,
 };
-use crate::helpers::{validate_qc_and_next_epoch_qc, wait_for_next_epoch_qc};
-use crate::{events::HotShotEvent, helpers::broadcast_event, vote_collection::VoteCollectorsMap};
+use crate::{
+    events::HotShotEvent,
+    helpers::{broadcast_event, validate_qc_and_next_epoch_qc},
+    vote_collection::VoteCollectorsMap,
+};
 
 /// Event handlers for use in the `handle` method.
 mod handlers;
@@ -140,40 +142,14 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> ConsensusTaskSt
                     tracing::debug!("Failed to handle Timeout event; error = {e}");
                 }
             }
-            HotShotEvent::Qc2Formed(Either::Left(quorum_cert)) => {
-                let cert_view = quorum_cert.view_number();
-                if !self.upgrade_lock.epochs_enabled(cert_view).await {
-                    tracing::debug!("QC2 formed but epochs not enabled. Do nothing");
-                    return Ok(());
-                }
-                if !self
-                    .consensus
-                    .read()
-                    .await
-                    .is_leaf_extended(quorum_cert.data.leaf_commit)
-                {
-                    tracing::debug!("We formed QC but not eQC. Do nothing");
-                    return Ok(());
-                }
-                if wait_for_next_epoch_qc(
-                    quorum_cert,
-                    &self.consensus,
-                    self.timeout,
-                    self.view_start_time,
-                    &receiver,
-                )
-                .await
-                .is_none()
-                {
-                    tracing::warn!("We formed eQC but we don't have corresponding next epoch eQC.");
-                    return Ok(());
-                }
+            HotShotEvent::ExtendedQc2Formed(eqc) => {
+                let cert_view = eqc.view_number();
                 let cert_block_number = self
                     .consensus
                     .read()
                     .await
                     .saved_leaves()
-                    .get(&quorum_cert.data.leaf_commit)
+                    .get(&eqc.data.leaf_commit)
                     .context(error!(
                         "Could not find the leaf for the eQC. It shouldn't happen."
                     ))?

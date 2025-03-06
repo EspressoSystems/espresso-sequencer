@@ -3,6 +3,7 @@ pub mod catchup;
 pub mod context;
 pub mod genesis;
 mod proposal_fetcher;
+mod request_response;
 
 mod external_event_handler;
 pub mod options;
@@ -542,7 +543,6 @@ pub async fn init_node<P: SequencerPersistence, V: Versions>(
         Some(network_params.state_relay_server_url),
         metrics,
         genesis.stake_table.capacity,
-        network_params.public_api_url,
         event_consumer,
         seq_versions,
         marketplace_config,
@@ -1011,7 +1011,6 @@ pub mod testing {
                 self.state_relay_url.clone(),
                 metrics,
                 stake_table_capacity,
-                None, // The public API URL
                 event_consumer,
                 bind_version,
                 MarketplaceConfig::<SeqTypes, Node<network::Memory, P::Persistence>> {
