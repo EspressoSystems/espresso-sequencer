@@ -5,6 +5,7 @@ use alloy::{
 use async_broadcast::{InactiveReceiver, Sender};
 use clap::Parser;
 use derive_more::Deref;
+use futures::future::Future;
 use hotshot_types::traits::metrics::{Counter, Gauge, Metrics, NoMetrics};
 use lru::LruCache;
 use parking_lot::RwLock;
@@ -15,12 +16,13 @@ use std::{
     time::{Duration, Instant},
 };
 use tokio::{
+    spawn,
     sync::{Mutex, Notify},
     task::JoinHandle,
 };
 use url::Url;
 
-use crate::v0::utils::parse_duration;
+use crate::{v0::utils::parse_duration, v0_3::StakeTables};
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, Hash, PartialEq, Eq)]
 pub struct L1BlockInfo {
@@ -169,6 +171,10 @@ pub struct L1Client {
 pub(crate) struct L1State {
     pub(crate) snapshot: L1Snapshot,
     pub(crate) finalized: LruCache<u64, L1BlockInfo>,
+    /// StakeTables indexed by finalized block
+    pub(crate) stake: LruCache<u64, StakeTables>,
+    /// Block number stake table contract was deployed at.
+    pub(crate) stake_table_initial_block: Option<u64>,
 }
 
 #[derive(Clone, Debug)]
@@ -177,8 +183,54 @@ pub(crate) enum L1Event {
     NewFinalized { finalized: L1BlockInfo },
 }
 
+#[derive(Debug)]
+/// Wrapper for `JoinHandles` to enable access by name.
+pub struct InnerUpdateTasks {
+    blocks: JoinHandle<()>,
+    stake: Option<JoinHandle<()>>,
+}
+
+impl InnerUpdateTasks {
+    /// Spawn the task responsible for updating `L1State`.
+    pub fn spawn_blocks<F>(task: F) -> Self
+    where
+        F: Future<Output = ()> + Send + 'static,
+    {
+        Self {
+            blocks: spawn(task),
+            stake: None,
+        }
+    }
+
+    pub fn abort_all(self) {
+        self.blocks.abort();
+        if let Some(task) = self.stake {
+            task.abort();
+        }
+    }
+
+    ////Should be called upon upgrade to v3 to initialize
+    /// `stake_table_update_loop`.
+    pub fn v3<F, G>(blocks: F, stake: G) -> Self
+    where
+        F: Future<Output = ()> + Send + 'static,
+        G: Future<Output = ()> + Send + 'static,
+    {
+        tracing::warn!("Upgrading `L1Client` background tasks for v3 (Proof of Stake)!");
+
+        Self {
+            blocks: spawn(blocks),
+            stake: Some(spawn(stake)),
+        }
+    }
+
+    pub fn upgraded_v3(&self) -> bool {
+        self.stake.is_some()
+    }
+}
+
 #[derive(Debug, Default)]
-pub(crate) struct L1UpdateTask(pub(crate) Mutex<Option<JoinHandle<()>>>);
+pub(crate) struct L1UpdateTask(pub(crate) Mutex<Option<InnerUpdateTasks>>);
 
 #[derive(Clone, Debug)]
 pub(crate) struct L1ClientMetrics {

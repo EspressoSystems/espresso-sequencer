@@ -485,7 +485,6 @@ impl Membership<SeqTypes> for EpochCommittees {
         self.l1_client
             .get_stake_table(address.to_alloy(), block_header.height())
             .await
-            .ok()
             .map(|stake_table| -> Box<dyn FnOnce(&mut Self) + Send> {
                 Box::new(move |committee: &mut Self| {
                     let _ = committee.update_stake_table(epoch, stake_table);
