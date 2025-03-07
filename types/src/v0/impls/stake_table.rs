@@ -224,14 +224,9 @@ impl EpochCommittees {
         };
 
         self.state.insert(epoch, committee.clone());
-        self.state.insert(epoch + 1, committee.clone());
-        self.state.insert(epoch + 2, committee.clone());
+
         self.randomized_committees
             .insert(epoch, randomized_committee.clone());
-        self.randomized_committees
-            .insert(epoch + 1, randomized_committee.clone());
-        self.randomized_committees
-            .insert(epoch + 2, randomized_committee.clone());
     }
 
     // We need a constructor to match our concrete type.
@@ -306,7 +301,7 @@ impl EpochCommittees {
 
         // TODO: remove this, workaround for hotshot asking for stake tables from epoch 1 and 2
         let mut map = HashMap::new();
-        for epoch in Epoch::genesis().u64()..=50 {
+        for epoch in Epoch::genesis().u64()..=2 {
             map.insert(Epoch::new(epoch), members.clone());
             randomized_committees.insert(Epoch::new(epoch), randomized_committee.clone());
         }
