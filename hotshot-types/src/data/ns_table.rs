@@ -34,7 +34,7 @@ pub fn parse_ns_table(payload_byte_len: usize, bytes: &[u8]) -> Vec<Range<usize>
         tracing::warn!("Failed to parse the metadata as namespace table. Use a single namespace table instead.");
         return vec![(0..payload_byte_len)];
     }
-    // Early breaks for empty payload and namespae table
+    // Early breaks for empty payload and namespace table
     if num_entries == 0 {
         return vec![(0..payload_byte_len)];
     }
