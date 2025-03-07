@@ -123,6 +123,7 @@ pub mod ERC1967Proxy {
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct AddressEmptyCode {
+        #[allow(missing_docs)]
         pub target: alloy::sol_types::private::Address,
     }
     #[allow(
@@ -189,6 +190,7 @@ pub mod ERC1967Proxy {
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct ERC1967InvalidImplementation {
+        #[allow(missing_docs)]
         pub implementation: alloy::sol_types::private::Address,
     }
     #[allow(
@@ -479,7 +481,9 @@ pub mod ERC1967Proxy {
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct constructorCall {
+        #[allow(missing_docs)]
         pub implementation: alloy::sol_types::private::Address,
+        #[allow(missing_docs)]
         pub _data: alloy::sol_types::private::Bytes,
     }
     const _: () = {
@@ -550,9 +554,13 @@ pub mod ERC1967Proxy {
     };
     ///Container for all the [`ERC1967Proxy`](self) custom errors.
     pub enum ERC1967ProxyErrors {
+        #[allow(missing_docs)]
         AddressEmptyCode(AddressEmptyCode),
+        #[allow(missing_docs)]
         ERC1967InvalidImplementation(ERC1967InvalidImplementation),
+        #[allow(missing_docs)]
         ERC1967NonPayable(ERC1967NonPayable),
+        #[allow(missing_docs)]
         FailedInnerCall(FailedInnerCall),
     }
     #[automatically_derived]
@@ -710,6 +718,7 @@ pub mod ERC1967Proxy {
     }
     ///Container for all the [`ERC1967Proxy`](self) events.
     pub enum ERC1967ProxyEvents {
+        #[allow(missing_docs)]
         Upgraded(Upgraded),
     }
     #[automatically_derived]
