@@ -85,9 +85,11 @@ async fn test_upgrade_task_with_proposal() {
     let membership = handle.hotshot.membership_coordinator.clone();
     let epoch_1_mem = membership
         .membership_for_epoch(Some(EpochNumber::new(1)))
-        .await.unwrap();
+        .await
+        .unwrap();
 
-    let mut generator = TestViewGenerator::<TestVersions>::generate(membership.clone(), node_key_map);
+    let mut generator =
+        TestViewGenerator::<TestVersions>::generate(membership.clone(), node_key_map);
 
     for view in (&mut generator).take(1).collect::<Vec<_>>().await {
         proposals.push(view.quorum_proposal.clone());
