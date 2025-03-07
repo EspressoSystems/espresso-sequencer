@@ -191,12 +191,13 @@ fn genesis_vid<Types: NodeType>(
         }
         VidCommitment::V1(commit) => {
             let avidm_param = init_avidm_param(GENESIS_VID_NUM_STORAGE_NODES)?;
-            let weights = vec![];
-            let ns_table = parse_ns_table(bytes.len(), &bytes);
-
+            let weights = vec![1; GENESIS_VID_NUM_STORAGE_NODES];
+            let ns_table = parse_ns_table(bytes.len(), &leaf.block_header().metadata().encode());
+        
             let (calculated_commit, mut shares) =
                 AvidMScheme::ns_disperse(&avidm_param, &weights, &bytes, ns_table).unwrap();
 
+            tracing::error!(">>>1 {shares:?}");
             ensure!(
                 calculated_commit == commit,
                 "computed VID commit {} for genesis block does not match header commit {}",
