@@ -427,6 +427,9 @@ impl<TYPES: NodeType> Membership<TYPES> for TwoStaticCommittees<TYPES> {
             .unwrap()
         }
     }
+    fn has_epoch(&self, _epoch: TYPES::Epoch) -> bool {
+        true
+    }
 
     fn add_drb_result(&mut self, _epoch: <TYPES as NodeType>::Epoch, _drb_result: DrbResult) {}
 

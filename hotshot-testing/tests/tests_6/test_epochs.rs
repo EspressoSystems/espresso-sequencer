@@ -9,7 +9,7 @@ use hotshot_example_types::{
         CombinedImpl, EpochUpgradeTestVersions, EpochsTestVersions, Libp2pImpl, MemoryImpl,
         PushCdnImpl, RandomOverlapQuorumFilterConfig, StableQuorumFilterConfig,
         TestConsecutiveLeaderTypes, TestTwoStakeTablesTypes, TestTypes,
-        TestTypesRandomizedCommitteeMembers, TestTypesRandomizedLeader,
+        TestTypesRandomizedCommitteeMembers, TestTypesRandomizedLeader, TestTypesEpochCatchupTypes
     },
     testable_delay::{DelayConfig, DelayOptions, DelaySettings, SupportedTraitTypesForAsyncDelay},
 };
@@ -52,6 +52,7 @@ cross_tests!(
     Impls: [MemoryImpl, Libp2pImpl, PushCdnImpl],
     Types: [
         TestTypes,
+        TestTypesEpochCatchupTypes,
         TestTypesRandomizedLeader,
         TestTypesRandomizedCommitteeMembers<StableQuorumFilterConfig<123, 2>>,                 // Overlap =  F
         TestTypesRandomizedCommitteeMembers<StableQuorumFilterConfig<123, 3>>,                 // Overlap =  F+1
