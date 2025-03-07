@@ -193,7 +193,7 @@
           buildInputs = [
             # Rust dependencies
             pkg-config
-            openssl_3 # match ubuntu 24.04 that we use on CI and as base image in docker
+            openssl
             curl
             protobuf # to compile libp2p-autonat
             stableToolchain
@@ -276,7 +276,7 @@
           buildInputs = [
             # Rust dependencies
             pkg-config
-            openssl_3
+            openssl
             curl
             protobuf # to compile libp2p-autonat
             toolchain
@@ -290,7 +290,7 @@
           buildInputs = [
             # Rust dependencies
             pkg-config
-            openssl_3
+            openssl
             curl
             protobuf # to compile libp2p-autonat
             toolchain
@@ -313,7 +313,7 @@
           buildInputs = [
             # Rust dependencies
             pkg-config
-            openssl_3
+            openssl
             curl
             protobuf # to compile libp2p-autonat
             stableToolchain
