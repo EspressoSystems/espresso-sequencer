@@ -141,7 +141,7 @@ gen-bindings:
     git submodule update --init --recursive
 
     # Generate the ethers bindings
-    forge bind --contracts ./contracts/src/ --ethers --crate-name contract-bindings-ethers --bindings-path contract-bindings-ethers --select "{{REGEXP}}" --overwrite --force
+    nix develop .#legacyFoundry -c forge bind --contracts ./contracts/src/ --ethers --crate-name contract-bindings-ethers --bindings-path contract-bindings-ethers --select "{{REGEXP}}" --overwrite --force
 
     # Foundry doesn't include bytecode in the bindings for LightClient.sol, since it links with
     # libraries. However, this bytecode is still needed to link and deploy the contract. Copy it to
