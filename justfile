@@ -89,6 +89,31 @@ clippy:
 check-features *args:
     cargo hack check --each-feature {{args}}
 
+check-features-ci *args:
+    # check each pair of features plus `default` and `--no-default-features`
+    cargo hack check --feature-powerset \
+        --depth 2 \
+        --exclude contract-bindings-alloy \
+        --exclude contract-bindings-ethers \
+        --exclude hotshot \
+        --exclude hotshot-builder-api \
+        --exclude hotshot-contract-adapter \
+        --exclude hotshot-events-service \
+        --exclude hotshot-example-types \
+        --exclude hotshot-libp2p-networking \
+        --exclude hotshot-macros \
+        --exclude hotshot-orchestrator \
+        --exclude hotshot-query-service \
+        --exclude hotshot-stake-table \
+        --exclude hotshot-state-prover \
+        --exclude hotshot-task \
+        --exclude hotshot-task-impls \
+        --exclude hotshot-testing \
+        --exclude hotshot-types \
+        --exclude hotshot-utils \
+        --exclude vid \
+        {{args}}
+
 # Helpful shortcuts for local development
 dev-orchestrator:
     target/release/orchestrator -p 8080 -n 1
