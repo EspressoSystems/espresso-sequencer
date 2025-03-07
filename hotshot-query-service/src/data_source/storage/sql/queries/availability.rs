@@ -50,7 +50,7 @@ where
         };
         let row = query
             .query(&format!(
-                "SELECT {LEAF_COLUMNS} FROM leaf WHERE {where_clause}"
+                "SELECT {LEAF_COLUMNS} FROM leaf2 WHERE {where_clause}"
             ))
             .fetch_one(self.as_mut())
             .await?;
@@ -134,7 +134,7 @@ where
         let sql = format!(
             "SELECT {VID_COMMON_COLUMNS}
               FROM header AS h
-              JOIN vid AS v ON h.height = v.height
+              JOIN vid2 AS v ON h.height = v.height
               WHERE {where_clause}
               ORDER BY h.height
               LIMIT 1"
@@ -155,7 +155,7 @@ where
         let sql = format!(
             "SELECT {VID_COMMON_METADATA_COLUMNS}
               FROM header AS h
-              JOIN vid AS v ON h.height = v.height
+              JOIN vid2 AS v ON h.height = v.height
               WHERE {where_clause}
               ORDER BY h.height ASC
               LIMIT 1"
@@ -174,7 +174,7 @@ where
     {
         let mut query = QueryBuilder::default();
         let where_clause = query.bounds_to_where_clause(range, "height")?;
-        let sql = format!("SELECT {LEAF_COLUMNS} FROM leaf {where_clause} ORDER BY height");
+        let sql = format!("SELECT {LEAF_COLUMNS} FROM leaf2 {where_clause} ORDER BY height");
         Ok(query
             .query(&sql)
             .fetch(self.as_mut())
@@ -296,7 +296,7 @@ where
         let sql = format!(
             "SELECT {VID_COMMON_COLUMNS}
               FROM header AS h
-              JOIN vid AS v ON h.height = v.height
+              JOIN vid2 AS v ON h.height = v.height
               {where_clause}
               ORDER BY h.height"
         );
@@ -321,7 +321,7 @@ where
         let sql = format!(
             "SELECT {VID_COMMON_METADATA_COLUMNS}
               FROM header AS h
-              JOIN vid AS v ON h.height = v.height
+              JOIN vid2 AS v ON h.height = v.height
               {where_clause}
               ORDER BY h.height ASC"
         );
@@ -367,7 +367,7 @@ where
 
     async fn first_available_leaf(&mut self, from: u64) -> QueryResult<LeafQueryData<Types>> {
         let row = query(&format!(
-            "SELECT {LEAF_COLUMNS} FROM leaf WHERE height >= $1 ORDER BY height LIMIT 1"
+            "SELECT {LEAF_COLUMNS} FROM leaf2 WHERE height >= $1 ORDER BY height LIMIT 1"
         ))
         .bind(from as i64)
         .fetch_one(self.as_mut())

@@ -91,6 +91,7 @@ type AvailabilityApi<N, P, D, V, ApiVer> = Api<AvailState<N, P, D, V>, availabil
 // Snafu has been replaced by `this_error` everywhere.
 // However, the query service still uses snafu
 pub(super) fn availability<N, P, D, V: Versions>(
+    api_ver: semver::Version,
 ) -> Result<AvailabilityApi<N, P, D, V, SequencerApiVersion>>
 where
     N: ConnectedNetwork<PubKey>,
@@ -105,6 +106,7 @@ where
     let mut api = availability::define_api::<AvailState<N, P, D, _>, SeqTypes, _>(
         &options,
         SequencerApiVersion::instance(),
+        api_ver,
     )?;
 
     api.get("getnamespaceproof", move |req, state| {

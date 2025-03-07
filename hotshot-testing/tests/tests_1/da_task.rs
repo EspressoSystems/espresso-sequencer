@@ -173,9 +173,6 @@ async fn test_da_task_storage_failure() {
     let mut generator =
         TestViewGenerator::<TestVersions>::generate(membership.clone(), node_key_map);
 
-    let mut proposals = Vec::new();
-    let mut leaders = Vec::new();
-    let mut votes = Vec::new();
     let mut dacs = Vec::new();
     let mut vids = Vec::new();
 

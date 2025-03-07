@@ -210,13 +210,13 @@ mod test {
             mocks::{mock_transaction, MockBase, MockTypes},
             setup_test,
         },
-        ApiState, Error, Header, VidShare,
+        ApiState, Error, Header,
     };
     use async_lock::RwLock;
     use committable::Committable;
     use futures::{FutureExt, StreamExt};
     use hotshot_types::{
-        data::VidDisperseShare,
+        data::{VidDisperseShare, VidShare},
         event::{EventType, LeafInfo},
         traits::{
             block_contents::{BlockHeader, BlockPayload},

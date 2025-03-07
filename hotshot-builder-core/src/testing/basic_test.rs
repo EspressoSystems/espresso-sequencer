@@ -5,7 +5,7 @@ pub use hotshot_types::{
     data::{EpochNumber, Leaf, ViewNumber},
     message::Proposal,
     signature_key::BLSPubKey,
-    simple_certificate::{QuorumCertificate, SimpleCertificate, SuccessThreshold},
+    simple_certificate::{QuorumCertificate2, SimpleCertificate, SuccessThreshold},
     traits::{
         block_contents::BlockPayload,
         node_implementation::{ConsensusTime, NodeType},
@@ -172,12 +172,11 @@ mod tests {
         let mut previous_commitment = initial_commitment;
         let mut previous_view = ViewNumber::new(0);
         let mut previous_quorum_proposal = {
-            let previous_jc = QuorumCertificate::<TestTypes>::genesis::<TestVersions>(
+            let previous_jc = QuorumCertificate2::<TestTypes>::genesis::<TestVersions>(
                 &TestValidatedState::default(),
                 &TestInstanceState::default(),
             )
-            .await
-            .to_qc2();
+            .await;
 
             QuorumProposalWrapper::<TestTypes> {
                 proposal: QuorumProposal2::<TestTypes> {

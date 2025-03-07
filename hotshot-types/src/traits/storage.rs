@@ -155,13 +155,7 @@ pub trait Storage<TYPES: NodeType>: Send + Sync + Clone {
         decided_upgrade_certificate: Option<UpgradeCertificate<TYPES>>,
     ) -> Result<()>;
     /// Migrate leaves from `Leaf` to `Leaf2`, and proposals from `QuorumProposal` to `QuorumProposal2`
-    async fn migrate_consensus(
-        &self,
-        _convert_leaf: fn(Leaf<TYPES>) -> Leaf2<TYPES>,
-        _convert_proposal: fn(
-            Proposal<TYPES, QuorumProposal<TYPES>>,
-        ) -> Proposal<TYPES, QuorumProposal2<TYPES>>,
-    ) -> Result<()> {
+    async fn migrate_consensus(&self) -> Result<()> {
         Ok(())
     }
 }
