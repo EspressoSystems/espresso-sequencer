@@ -49,4 +49,4 @@ jobs:
       # would not speed it up much and further contribute to our cache usage.
       - name: Check compilation feature combinations
         run: |
-          ${{ maxtrix.command }}
+          ${{ matrix.command }}
