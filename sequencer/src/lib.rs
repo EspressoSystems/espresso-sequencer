@@ -3,6 +3,7 @@ pub mod catchup;
 pub mod context;
 pub mod genesis;
 mod proposal_fetcher;
+mod request_response;
 
 mod external_event_handler;
 pub mod options;
@@ -26,8 +27,8 @@ use proposal_fetcher::ProposalFetcherConfig;
 use std::sync::Arc;
 use tokio::select;
 // Should move `STAKE_TABLE_CAPACITY` in the sequencer repo when we have variate stake table support
+use hotshot_libp2p_networking::network::behaviours::dht::store::persistent::DhtNoPersistence;
 use libp2p::Multiaddr;
-use libp2p_networking::network::behaviours::dht::store::persistent::DhtNoPersistence;
 use network::libp2p::split_off_peer_id;
 use options::Identity;
 use state_signature::static_stake_table_commitment;
@@ -542,7 +543,6 @@ pub async fn init_node<P: SequencerPersistence, V: Versions>(
         Some(network_params.state_relay_server_url),
         metrics,
         genesis.stake_table.capacity,
-        network_params.public_api_url,
         event_consumer,
         seq_versions,
         marketplace_config,
@@ -745,6 +745,11 @@ pub mod testing {
             self
         }
 
+        pub fn epoch_height(mut self, epoch_height: u64) -> Self {
+            self.config.epoch_height = epoch_height;
+            self
+        }
+
         pub fn build(self) -> TestConfig<NUM_NODES> {
             TestConfig {
                 config: self.config,
@@ -812,6 +817,7 @@ pub mod testing {
                 stop_proposing_time: 0,
                 stop_voting_time: 0,
                 epoch_height: 0,
+                epoch_start_block: 0,
             };
 
             Self {
@@ -1005,7 +1011,6 @@ pub mod testing {
                 self.state_relay_url.clone(),
                 metrics,
                 stake_table_capacity,
-                None, // The public API URL
                 event_consumer,
                 bind_version,
                 MarketplaceConfig::<SeqTypes, Node<network::Memory, P::Persistence>> {
@@ -1064,10 +1069,12 @@ mod test {
     use espresso_types::{Header, MockSequencerVersions, NamespaceId, Payload, Transaction};
     use futures::StreamExt;
     use hotshot::types::EventType::Decide;
+    use hotshot_example_types::node_types::TestVersions;
     use hotshot_types::{
+        data::vid_commitment,
         event::LeafInfo,
         traits::block_contents::{
-            vid_commitment, BlockHeader, BlockPayload, EncodeBytes, GENESIS_VID_NUM_STORAGE_NODES,
+            BlockHeader, BlockPayload, EncodeBytes, GENESIS_VID_NUM_STORAGE_NODES,
         },
     };
     use sequencer_utils::{test_utils::setup_test, AnvilOptions};
@@ -1153,7 +1160,12 @@ mod test {
             let genesis_commitment = {
                 // TODO we should not need to collect payload bytes just to compute vid_commitment
                 let payload_bytes = genesis_payload.encode();
-                vid_commitment(&payload_bytes, GENESIS_VID_NUM_STORAGE_NODES)
+                vid_commitment::<TestVersions>(
+                    &payload_bytes,
+                    &genesis_ns_table.encode(),
+                    GENESIS_VID_NUM_STORAGE_NODES,
+                    <TestVersions as Versions>::Base::VERSION,
+                )
             };
             let genesis_state = NodeState::mock();
             Header::genesis(

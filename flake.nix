@@ -66,6 +66,14 @@
           solhint =
             solhintPkg { inherit (prev) buildNpmPackage fetchFromGitHub; };
         })
+
+        # The mold linker is around 50% faster on Linux than the default linker.
+        # This overlays a mkShell that is configured to use mold on Linux.
+        (final: prev: prev.lib.optionalAttrs prev.stdenv.isLinux {
+          mkShell = prev.mkShell.override {
+            stdenv = prev.stdenvAdapters.useMoldLinker prev.clangStdenv;
+          };
+        })
       ];
       pkgs = import nixpkgs { inherit system overlays; };
       crossShell = { config }:
@@ -110,13 +118,6 @@
               description = "Ensure Cargo.toml are sorted";
               entry = "cargo sort -g -w";
               types_or = [ "toml" ];
-              pass_filenames = false;
-            };
-            cargo-clippy = {
-              enable = true;
-              description = "Run clippy";
-              entry = "just clippy";
-              types_or = [ "rust" "toml" ];
               pass_filenames = false;
             };
             cargo-lock = {
@@ -185,7 +186,7 @@
           buildInputs = [
             # Rust dependencies
             pkg-config
-            openssl
+            openssl_3 # match ubuntu 24.04 that we use on CI and as base image in docker
             curl
             protobuf # to compile libp2p-autonat
             stableToolchain
@@ -271,7 +272,7 @@
           buildInputs = [
             # Rust dependencies
             pkg-config
-            openssl
+            openssl_3
             curl
             protobuf # to compile libp2p-autonat
             toolchain
@@ -285,7 +286,7 @@
           buildInputs = [
             # Rust dependencies
             pkg-config
-            openssl
+            openssl_3
             curl
             protobuf # to compile libp2p-autonat
             toolchain
@@ -308,7 +309,7 @@
           buildInputs = [
             # Rust dependencies
             pkg-config
-            openssl
+            openssl_3
             curl
             protobuf # to compile libp2p-autonat
             stableToolchain

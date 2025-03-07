@@ -4,7 +4,7 @@ use committable::{Commitment, Committable};
 use espresso_types::{
     get_l1_deposits,
     v0_99::{ChainConfig, IterableFeeInfo},
-    BlockMerkleTree, FeeAccount, FeeMerkleTree, Leaf, Leaf2, NodeState, ValidatedState,
+    BlockMerkleTree, FeeAccount, FeeMerkleTree, Leaf2, NodeState, ValidatedState,
 };
 use hotshot::traits::ValidatedState as _;
 use hotshot_query_service::{
@@ -21,7 +21,7 @@ use hotshot_query_service::{
     Resolvable,
 };
 use hotshot_types::{
-    data::{QuorumProposal, ViewNumber},
+    data::{QuorumProposalWrapper, ViewNumber},
     message::Proposal,
     traits::node_implementation::ConsensusTime,
 };
@@ -66,6 +66,7 @@ impl SequencerDataSource for DataSource {
         }
 
         if opt.lightweight {
+            tracing::warn!("enabling light weight mode..");
             builder = builder.leaf_only();
         }
 
@@ -158,6 +159,27 @@ impl CatchupStorage for SqlStorage {
         ))?;
         load_chain_config(&mut tx, commitment).await
     }
+
+    async fn get_leaf_chain(&self, height: u64) -> anyhow::Result<Vec<Leaf2>> {
+        let mut tx = self
+            .read()
+            .await
+            .context(format!("opening transaction to fetch leaf at {height}"))?;
+        let h = usize::try_from(height)?;
+        let query_leaf_chain = tx
+            .get_leaf_range(h..=(h + 2))
+            .await
+            .context(format!("leaf chain {height} not available"))?;
+        let mut chain = vec![];
+
+        for query_result in query_leaf_chain {
+            let Ok(leaf_query) = query_result else {
+                bail!(format!("leaf chain {height} not available"));
+            };
+            chain.push(leaf_query.leaf().clone());
+        }
+        Ok(chain)
+    }
 }
 
 impl CatchupStorage for DataSource {
@@ -188,6 +210,9 @@ impl CatchupStorage for DataSource {
     ) -> anyhow::Result<ChainConfig> {
         self.as_ref().get_chain_config(commitment).await
     }
+    async fn get_leaf_chain(&self, height: u64) -> anyhow::Result<Vec<Leaf2>> {
+        self.as_ref().get_leaf_chain(height).await
+    }
 }
 
 #[async_trait]
@@ -202,7 +227,6 @@ impl ChainConfigPersistence for Transaction<Write> {
             [(commitment.to_string(), data)],
         )
         .await
-        .map_err(Into::into)
     }
 }
 
@@ -261,7 +285,7 @@ async fn load_accounts<Mode: TransactionMode>(
         }
     }
 
-    Ok((snapshot, leaf.leaf().clone().into()))
+    Ok((snapshot, leaf.leaf().clone()))
 }
 
 async fn load_chain_config<Mode: TransactionMode>(
@@ -290,7 +314,7 @@ async fn reconstruct_state<Mode: TransactionMode>(
         .get_leaf((from_height as usize).into())
         .await
         .context(format!("leaf {from_height} not available"))?;
-    let from_leaf: Leaf2 = from_leaf.leaf().clone().into();
+    let from_leaf: Leaf2 = from_leaf.leaf().clone();
     ensure!(
         from_leaf.view_number() < to_view,
         "state reconstruction: starting state {:?} must be before ending state {to_view:?}",
@@ -444,13 +468,14 @@ where
     P: Type<Db> + for<'q> Encode<'q, Db>,
 {
     let (data,) = query_as::<(Vec<u8>,)>(&format!(
-        "SELECT data FROM quorum_proposals WHERE {where_clause} LIMIT 1",
+        "SELECT data FROM quorum_proposals2 WHERE {where_clause} LIMIT 1",
     ))
     .bind(param)
     .fetch_one(tx.as_mut())
     .await?;
-    let proposal: Proposal<SeqTypes, QuorumProposal<SeqTypes>> = bincode::deserialize(&data)?;
-    Ok(Leaf::from_quorum_proposal(&proposal.data).into())
+    let proposal: Proposal<SeqTypes, QuorumProposalWrapper<SeqTypes>> =
+        bincode::deserialize(&data)?;
+    Ok(Leaf2::from_quorum_proposal(&proposal.data))
 }
 
 #[cfg(any(test, feature = "testing"))]

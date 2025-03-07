@@ -36,7 +36,7 @@ use crate::{
     },
     merklized_state::{MerklizedState, UpdateStateData},
     types::HeightIndexed,
-    Header, Payload, QueryError, QueryResult, VidShare,
+    Header, Payload, QueryError, QueryResult,
 };
 use anyhow::{bail, Context};
 use ark_serialize::CanonicalSerialize;
@@ -44,11 +44,14 @@ use async_trait::async_trait;
 use committable::Committable;
 use derive_more::{Deref, DerefMut};
 use futures::{future::Future, stream::TryStreamExt};
-use hotshot_types::traits::{
-    block_contents::BlockHeader,
-    metrics::{Counter, Gauge, Histogram, Metrics},
-    node_implementation::NodeType,
-    EncodeBytes,
+use hotshot_types::{
+    data::VidShare,
+    traits::{
+        block_contents::BlockHeader,
+        metrics::{Counter, Gauge, Histogram, Metrics},
+        node_implementation::NodeType,
+        EncodeBytes,
+    },
 };
 use itertools::Itertools;
 use jf_merkle_tree::prelude::{MerkleNode, MerkleProof};
@@ -124,7 +127,7 @@ impl TransactionMode for Write {
         // statement that has no actual effect on the database is suitable for this purpose, hence
         // the `WHERE false`.
         #[cfg(feature = "embedded-db")]
-        conn.execute("UPDATE header SET height = height WHERE false")
+        conn.execute("UPDATE pruned_height SET id = id WHERE false")
             .await?;
 
         // With Postgres things are much more straightforward: just tell Postgres we want a write
@@ -496,15 +499,20 @@ where
         // Similarly, we can initialize the payload table with a null payload, which can help us
         // distinguish between blocks that haven't been produced yet and blocks we haven't received
         // yet when answering queries.
-        self.upsert("payload", ["height"], ["height"], [(height as i64,)])
-            .await?;
+        // We don't overwrite the payload if it already exists.
+        // During epoch transition in PoS, the same height block is sent multiple times.
+        // The first block may have the payload, but subsequent blocks might be missing it.
+        // Overwriting would cause the payload to be lost since the block height is the same
+        let query = query("INSERT INTO payload (height) VALUES ($1) ON CONFLICT DO NOTHING")
+            .bind(height as i64);
+        query.execute(self.as_mut()).await?;
 
         // Finally, we insert the leaf itself, which references the header row we created.
         // Serialize the full leaf and QC to JSON for easy storage.
         let leaf_json = serde_json::to_value(leaf.leaf()).context("failed to serialize leaf")?;
         let qc_json = serde_json::to_value(leaf.qc()).context("failed to serialize QC")?;
         self.upsert(
-            "leaf",
+            "leaf2",
             ["height", "hash", "block_hash", "leaf", "qc"],
             ["height"],
             [(
@@ -598,7 +606,7 @@ where
         if let Some(share) = share {
             let share_data = bincode::serialize(&share).context("failed to serialize VID share")?;
             self.upsert(
-                "vid",
+                "vid2",
                 ["height", "common", "share"],
                 ["height"],
                 [(height as i64, common_data, share_data)],
@@ -609,7 +617,7 @@ where
             // possible that this column already exists, and we are just upserting the common data,
             // in which case we don't want to overwrite the share with NULL.
             self.upsert(
-                "vid",
+                "vid2",
                 ["height", "common"],
                 ["height"],
                 [(height as i64, common_data)],

@@ -38,6 +38,7 @@ use hotshot_example_types::{
 use hotshot_testing::block_builder::{SimpleBuilderImplementation, TestBuilderImplementation};
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
+    epoch_membership::EpochMembershipCoordinator,
     light_client::StateKeyPair,
     signature_key::BLSPubKey,
     traits::{election::Membership, network::Topic, signature_key::SignatureKey as _},
@@ -149,6 +150,7 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
             start_voting_time: 0,
             stop_voting_time: 0,
             epoch_height: 0,
+            epoch_start_block: 0,
         };
         update_config(&mut config);
 
@@ -180,17 +182,21 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
                         ));
 
                         let hs_storage: TestStorage<MockTypes> = TestStorage::default();
+                        let memberships =
+                            EpochMembershipCoordinator::new(membership, config.epoch_height);
 
                         let hotshot = SystemContext::init(
                             pub_keys[node_id],
                             priv_key,
                             node_id as u64,
                             config,
-                            membership,
+                            memberships,
                             network,
                             HotShotInitializer::from_genesis::<MockVersions>(
                                 TestInstanceState::default(),
                                 0,
+                                0,
+                                vec![],
                             )
                             .await
                             .unwrap(),

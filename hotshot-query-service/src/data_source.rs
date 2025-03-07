@@ -133,7 +133,7 @@ pub mod availability_tests {
     };
     use committable::Committable;
     use futures::stream::StreamExt;
-    use hotshot_types::data::Leaf;
+    use hotshot_types::data::Leaf2;
     use std::collections::HashMap;
     use std::fmt::Debug;
     use std::ops::{Bound, RangeBounds};
@@ -148,7 +148,7 @@ pub mod availability_tests {
             assert_eq!(leaf.height(), i as u64);
             assert_eq!(
                 leaf.hash(),
-                <Leaf<MockTypes> as Committable>::commit(&leaf.leaf)
+                <Leaf2<MockTypes> as Committable>::commit(&leaf.leaf)
             );
 
             // Check indices.
@@ -550,11 +550,11 @@ pub mod persistence_tests {
             setup_test,
         },
         types::HeightIndexed,
-        Leaf,
+        Leaf2,
     };
     use committable::Committable;
     use hotshot_example_types::state_types::{TestInstanceState, TestValidatedState};
-    use hotshot_types::simple_certificate::QuorumCertificate;
+    use hotshot_types::simple_certificate::QuorumCertificate2;
 
     #[tokio::test(flavor = "multi_thread")]
     pub async fn test_revert<D: TestableDataSource>()
@@ -571,12 +571,12 @@ pub mod persistence_tests {
         let ds = D::connect(&storage).await;
 
         // Mock up some consensus data.
-        let mut qc = QuorumCertificate::<MockTypes>::genesis::<TestVersions>(
+        let mut qc = QuorumCertificate2::<MockTypes>::genesis::<TestVersions>(
             &TestValidatedState::default(),
             &TestInstanceState::default(),
         )
         .await;
-        let mut leaf = Leaf::<MockTypes>::genesis(
+        let mut leaf = Leaf2::<MockTypes>::genesis::<TestVersions>(
             &TestValidatedState::default(),
             &TestInstanceState::default(),
         )
@@ -584,7 +584,7 @@ pub mod persistence_tests {
         // Increment the block number, to distinguish this block from the genesis block, which
         // already exists.
         leaf.block_header_mut().block_number += 1;
-        qc.data.leaf_commit = <Leaf<MockTypes> as Committable>::commit(&leaf);
+        qc.data.leaf_commit = <Leaf2<MockTypes> as Committable>::commit(&leaf);
 
         let block = BlockQueryData::new(leaf.block_header().clone(), MockPayload::genesis());
         let leaf = LeafQueryData::new(leaf, qc).unwrap();
@@ -623,12 +623,12 @@ pub mod persistence_tests {
         let ds = D::connect(&storage).await;
 
         // Mock up some consensus data.
-        let mut qc = QuorumCertificate::<MockTypes>::genesis::<TestVersions>(
+        let mut qc = QuorumCertificate2::<MockTypes>::genesis::<TestVersions>(
             &TestValidatedState::default(),
             &TestInstanceState::default(),
         )
         .await;
-        let mut leaf = Leaf::<MockTypes>::genesis(
+        let mut leaf = Leaf2::<MockTypes>::genesis::<TestVersions>(
             &TestValidatedState::default(),
             &TestInstanceState::default(),
         )
@@ -636,7 +636,7 @@ pub mod persistence_tests {
         // Increment the block number, to distinguish this block from the genesis block, which
         // already exists.
         leaf.block_header_mut().block_number += 1;
-        qc.data.leaf_commit = <Leaf<MockTypes> as Committable>::commit(&leaf);
+        qc.data.leaf_commit = <Leaf2<MockTypes> as Committable>::commit(&leaf);
 
         let block = BlockQueryData::new(leaf.block_header().clone(), MockPayload::genesis());
         let leaf = LeafQueryData::new(leaf, qc).unwrap();
@@ -686,12 +686,12 @@ pub mod persistence_tests {
         let ds = D::connect(&storage).await;
 
         // Mock up some consensus data.
-        let mut mock_qc = QuorumCertificate::<MockTypes>::genesis::<TestVersions>(
+        let mut mock_qc = QuorumCertificate2::<MockTypes>::genesis::<TestVersions>(
             &TestValidatedState::default(),
             &TestInstanceState::default(),
         )
         .await;
-        let mut mock_leaf = Leaf::<MockTypes>::genesis(
+        let mut mock_leaf = Leaf2::<MockTypes>::genesis::<TestVersions>(
             &TestValidatedState::default(),
             &TestInstanceState::default(),
         )
@@ -699,7 +699,7 @@ pub mod persistence_tests {
         // Increment the block number, to distinguish this block from the genesis block, which
         // already exists.
         mock_leaf.block_header_mut().block_number += 1;
-        mock_qc.data.leaf_commit = <Leaf<MockTypes> as Committable>::commit(&mock_leaf);
+        mock_qc.data.leaf_commit = <Leaf2<MockTypes> as Committable>::commit(&mock_leaf);
 
         let block = BlockQueryData::new(mock_leaf.block_header().clone(), MockPayload::genesis());
         let leaf = LeafQueryData::new(mock_leaf.clone(), mock_qc.clone()).unwrap();
@@ -725,7 +725,7 @@ pub mod persistence_tests {
 
         // Get a mutable transaction again, insert different data.
         mock_leaf.block_header_mut().block_number += 1;
-        mock_qc.data.leaf_commit = <Leaf<MockTypes> as Committable>::commit(&mock_leaf);
+        mock_qc.data.leaf_commit = <Leaf2<MockTypes> as Committable>::commit(&mock_leaf);
         let block = BlockQueryData::new(mock_leaf.block_header().clone(), MockPayload::genesis());
         let leaf = LeafQueryData::new(mock_leaf, mock_qc).unwrap();
 
@@ -771,7 +771,7 @@ pub mod node_tests {
             setup_test, sleep,
         },
         types::HeightIndexed,
-        Header, VidShare,
+        Header,
     };
     use committable::Committable;
     use futures::{future::join_all, stream::StreamExt};
@@ -784,11 +784,13 @@ pub mod node_tests {
         state_types::TestInstanceState,
     };
     use hotshot_types::{
-        traits::block_contents::{vid_commitment, EncodeBytes},
-        vid::{vid_scheme, VidSchemeType},
+        data::{vid_commitment, VidCommitment, VidShare},
+        traits::{block_contents::EncodeBytes, node_implementation::Versions},
+        vid::advz::{advz_scheme, ADVZScheme},
     };
     use jf_vid::VidScheme;
     use std::time::Duration;
+    use vbs::version::StaticVersionType;
 
     #[tokio::test(flavor = "multi_thread")]
     pub async fn test_sync_status<D: TestableDataSource>()
@@ -803,7 +805,7 @@ pub mod node_tests {
         let ds = D::connect(&storage).await;
 
         // Set up a mock VID scheme to use for generating test data.
-        let mut vid = vid_scheme(2);
+        let mut vid = advz_scheme(2);
 
         // Generate some mock leaves and blocks to insert.
         let mut leaves = vec![
@@ -814,7 +816,7 @@ pub mod node_tests {
             .await,
         ];
         let mut blocks = vec![
-            BlockQueryData::<MockTypes>::genesis(
+            BlockQueryData::<MockTypes>::genesis::<TestVersions>(
                 &TestValidatedState::default(),
                 &TestInstanceState::default(),
             )
@@ -836,7 +838,7 @@ pub mod node_tests {
             .iter()
             .map(|leaf| {
                 (
-                    VidCommonQueryData::new(leaf.header().clone(), disperse.common.clone()),
+                    VidCommonQueryData::new(leaf.header().clone(), Some(disperse.common.clone())),
                     disperse.shares[0].clone(),
                 )
             })
@@ -894,16 +896,16 @@ pub mod node_tests {
         {
             let mut tx = ds.write().await.unwrap();
             tx.insert_block(blocks[0].clone()).await.unwrap();
-            tx.insert_vid(vid[0].0.clone(), Some(vid[0].1.clone()))
+            tx.insert_vid(vid[0].0.clone(), Some(VidShare::V0(vid[0].1.clone())))
                 .await
                 .unwrap();
             tx.insert_leaf(leaves[1].clone()).await.unwrap();
             tx.insert_block(blocks[1].clone()).await.unwrap();
-            tx.insert_vid(vid[1].0.clone(), Some(vid[1].1.clone()))
+            tx.insert_vid(vid[1].0.clone(), Some(VidShare::V0(vid[1].1.clone())))
                 .await
                 .unwrap();
             tx.insert_block(blocks[2].clone()).await.unwrap();
-            tx.insert_vid(vid[2].0.clone(), Some(vid[2].1.clone()))
+            tx.insert_vid(vid[2].0.clone(), Some(VidShare::V0(vid[2].1.clone())))
                 .await
                 .unwrap();
             tx.commit().await.unwrap();
@@ -969,7 +971,12 @@ pub mod node_tests {
                 .await
                 .unwrap();
             let encoded = payload.encode();
-            let payload_commitment = vid_commitment(&encoded, 1);
+            let payload_commitment = vid_commitment::<TestVersions>(
+                &encoded,
+                &metadata.encode(),
+                1,
+                <TestVersions as Versions>::Base::VERSION,
+            );
             let header = TestBlockHeader {
                 block_number: i,
                 payload_commitment,
@@ -1069,7 +1076,7 @@ pub mod node_tests {
         let ds = D::connect(&storage).await;
 
         // Generate some test VID data.
-        let mut vid = vid_scheme(2);
+        let mut vid = advz_scheme(2);
         let disperse = vid.disperse([]).unwrap();
 
         // Insert test data with VID common and a share.
@@ -1078,19 +1085,22 @@ pub mod node_tests {
             &TestInstanceState::default(),
         )
         .await;
-        let common = VidCommonQueryData::new(leaf.header().clone(), disperse.common);
+        let common = VidCommonQueryData::new(leaf.header().clone(), Some(disperse.common));
         ds.append(BlockInfo::new(
             leaf,
             None,
             Some(common.clone()),
-            Some(disperse.shares[0].clone()),
+            Some(VidShare::V0(disperse.shares[0].clone())),
         ))
         .await
         .unwrap();
 
         {
             assert_eq!(ds.get_vid_common(0).await.await, common);
-            assert_eq!(ds.vid_share(0).await.unwrap(), disperse.shares[0]);
+            assert_eq!(
+                ds.vid_share(0).await.unwrap(),
+                VidShare::V0(disperse.shares[0].clone())
+            );
         }
 
         // Re-insert the common data, without a share. This should not overwrite the share we
@@ -1102,7 +1112,10 @@ pub mod node_tests {
         }
         {
             assert_eq!(ds.get_vid_common(0).await.await, common);
-            assert_eq!(ds.vid_share(0).await.unwrap(), disperse.shares[0]);
+            assert_eq!(
+                ds.vid_share(0).await.unwrap(),
+                VidShare::V0(disperse.shares[0].clone())
+            );
         }
     }
 
@@ -1134,22 +1147,26 @@ pub mod node_tests {
             tracing::info!(height = block.height(), "empty block");
         };
         let height = block.height() as usize;
-        let commit = block.payload_hash();
+        let commit = if let VidCommitment::V0(commit) = block.payload_hash() {
+            commit
+        } else {
+            panic!("expect ADVZ commitment")
+        };
 
         // Set up a test VID scheme.
-        let vid = vid_scheme(network.num_nodes());
+        let vid = advz_scheme(network.num_nodes());
 
         // Get VID common data and verify it.
         tracing::info!("fetching common data");
         let common = ds.get_vid_common(height).await.await;
-        let common = common.common();
-        VidSchemeType::is_consistent(&commit, common).unwrap();
+        let common = &common.common().clone().unwrap();
+        ADVZScheme::is_consistent(&commit, common).unwrap();
 
         // Collect shares from each node.
         tracing::info!("fetching shares");
         let network = &network;
         let vid = &vid;
-        let shares: Vec<VidShare> = join_all((0..network.num_nodes()).map(|i| async move {
+        let shares: Vec<_> = join_all((0..network.num_nodes()).map(|i| async move {
             let ds = network.data_source_index(i);
 
             // Wait until the node has processed up to the desired block; since we have thus far
@@ -1157,9 +1174,13 @@ pub mod node_tests {
             let mut leaves = ds.subscribe_leaves(height).await;
             let leaf = leaves.next().await.unwrap();
             assert_eq!(leaf.height(), height as u64);
-            assert_eq!(leaf.payload_hash(), commit);
+            assert_eq!(leaf.payload_hash(), VidCommitment::V0(commit));
 
-            let share = ds.vid_share(height).await.unwrap();
+            let share = if let VidShare::V0(share) = ds.vid_share(height).await.unwrap() {
+                share
+            } else {
+                panic!("expect ADVZ share")
+            };
             vid.verify_share(&share, common, &commit).unwrap().unwrap();
             share
         }))

@@ -8,6 +8,7 @@ use super::{
     persistence, Genesis, L1Params, NetworkParams,
 };
 use clap::Parser;
+#[allow(unused_imports)]
 use espresso_types::{
     traits::NullEventConsumer, FeeVersion, MarketplaceVersion, SequencerVersions,
     SolverAuctionResultsProvider, V0_0,
@@ -38,6 +39,7 @@ pub async fn main() -> anyhow::Result<()> {
     let upgrade = genesis.upgrade_version;
 
     match (base, upgrade) {
+        #[cfg(all(feature = "fee", feature = "marketplace"))]
         (FeeVersion::VERSION, MarketplaceVersion::VERSION) => {
             run(
                 genesis,
@@ -47,6 +49,7 @@ pub async fn main() -> anyhow::Result<()> {
             )
             .await
         }
+        #[cfg(feature = "fee")]
         (FeeVersion::VERSION, _) => {
             run(
                 genesis,
@@ -56,6 +59,7 @@ pub async fn main() -> anyhow::Result<()> {
             )
             .await
         }
+        #[cfg(feature = "marketplace")]
         (MarketplaceVersion::VERSION, _) => {
             run(
                 genesis,
@@ -195,7 +199,13 @@ where
             if let Some(submit) = modules.submit {
                 http_opt = http_opt.submit(submit);
             }
+            if let Some(status) = modules.status {
+                http_opt = http_opt.status(status);
+            }
 
+            if let Some(catchup) = modules.catchup {
+                http_opt = http_opt.catchup(catchup);
+            }
             if let Some(hotshot_events) = modules.hotshot_events {
                 http_opt = http_opt.hotshot_events(hotshot_events);
             }

@@ -27,8 +27,9 @@ processes:
     # The contract addresses are implicitly inherited from .env. We need to unset these or else the
     # script will think they're already deployed.
     command:
-      unset ESPRESSO_SEQUENCER_HOTSHOT_ADDRESS ESPRESSO_SEQUENCER_LIGHT_CLIENT_PROXY_ADDRESS && deploy --only
-      fee-contract,permissioned-stake-table
+      unset ESPRESSO_SEQUENCER_PERMISSIONED_STAKE_TABLE_ADDRESS
+      ESPRESSO_SEQUENCER_FEE_CONTRACT_PROXY_ADDRESS
+      && deploy --only fee-contract,permissioned-stake-table
     namespace: setup
     depends_on:
       demo-l1-network:
@@ -38,8 +39,8 @@ processes:
     # The contract addresses are implicitly inherited from .env. We need to unset these or else the
     # script will think they're already deployed.
     command:
-      unset ESPRESSO_SEQUENCER_HOTSHOT_ADDRESS ESPRESSO_SEQUENCER_LIGHT_CLIENT_PROXY_ADDRESS && deploy
-      --use-mock-contract --only light-client
+      unset ESPRESSO_SEQUENCER_LIGHT_CLIENT_PROXY_ADDRESS
+      && deploy --use-mock-contract --only light-client
     namespace: setup
     depends_on:
       demo-l1-network:
@@ -224,7 +225,7 @@ processes:
       restart: exit_on_failure
 
   sequencer2:
-    command: sequencer -- http -- query -- storage-fs
+    command: sequencer -- http
     environment:
       - ESPRESSO_SEQUENCER_API_PORT=$ESPRESSO_SEQUENCER2_API_PORT
       - ESPRESSO_SEQUENCER_LIBP2P_BIND_ADDRESS=0.0.0.0:$ESPRESSO_DEMO_SEQUENCER_LIBP2P_PORT_2

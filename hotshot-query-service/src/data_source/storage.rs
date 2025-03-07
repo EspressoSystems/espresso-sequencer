@@ -74,11 +74,11 @@ use crate::{
     },
     merklized_state::{MerklizedState, Snapshot},
     node::{SyncStatus, TimeWindowQueryData, WindowStart},
-    Header, Payload, QueryResult, Transaction, VidShare,
+    Header, Payload, QueryResult, Transaction,
 };
 use async_trait::async_trait;
 use futures::future::Future;
-use hotshot_types::traits::node_implementation::NodeType;
+use hotshot_types::{data::VidShare, traits::node_implementation::NodeType};
 use jf_merkle_tree::prelude::MerkleProof;
 use std::ops::RangeBounds;
 use tagged_base64::TaggedBase64;

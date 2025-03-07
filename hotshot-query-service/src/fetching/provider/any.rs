@@ -121,7 +121,7 @@ impl<Types> Provider<Types, VidCommonRequest> for AnyProvider<Types>
 where
     Types: NodeType,
 {
-    async fn fetch(&self, req: VidCommonRequest) -> Option<VidCommon> {
+    async fn fetch(&self, req: VidCommonRequest) -> VidCommon {
         any_fetch(&self.vid_common_providers, req).await
     }
 }
@@ -234,7 +234,12 @@ mod test {
         let mut app = App::<_, Error>::with_state(ApiState::from(network.data_source()));
         app.register_module(
             "availability",
-            define_api(&Default::default(), MockBase::instance()).unwrap(),
+            define_api(
+                &Default::default(),
+                MockBase::instance(),
+                "1.0.0".parse().unwrap(),
+            )
+            .unwrap(),
         )
         .unwrap();
         let _server = BackgroundTask::spawn(

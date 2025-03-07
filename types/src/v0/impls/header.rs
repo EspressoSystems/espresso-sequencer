@@ -4,6 +4,7 @@ use committable::{Commitment, Committable, RawCommitmentBuilder};
 use ethers_conv::ToAlloy;
 use hotshot_query_service::{availability::QueryableHeader, explorer::ExplorerHeader};
 use hotshot_types::{
+    data::VidCommitment,
     traits::{
         block_contents::{BlockHeader, BuilderFee},
         node_implementation::NodeType,
@@ -11,10 +12,8 @@ use hotshot_types::{
         BlockPayload, ValidatedState as _,
     },
     utils::BuilderCommitment,
-    vid::{VidCommitment, VidCommon, VidSchemeType},
 };
 use jf_merkle_tree::{AppendableMerkleTreeScheme, MerkleTreeScheme};
-use jf_vid::VidScheme;
 use serde::{
     de::{self, MapAccess, SeqAccess, Visitor},
     Deserialize, Deserializer, Serialize, Serializer,
@@ -56,7 +55,7 @@ impl v0_1::Header {
             .u64_field("l1_head", self.l1_head)
             .optional("l1_finalized", &self.l1_finalized)
             .constant_str("payload_commitment")
-            .fixed_size_bytes(self.payload_commitment.as_ref().as_ref())
+            .fixed_size_bytes(self.payload_commitment.as_ref())
             .constant_str("builder_commitment")
             .fixed_size_bytes(self.builder_commitment.as_ref())
             .field("ns_table", self.ns_table.commit())
@@ -481,12 +480,7 @@ impl Header {
         {
             if version < MarketplaceVersion::version() {
                 ensure!(
-                    fee_account.validate_fee_signature(
-                        fee_signature,
-                        *fee_amount,
-                        &ns_table,
-                        &payload_commitment,
-                    ),
+                    fee_account.validate_fee_signature(fee_signature, *fee_amount, &ns_table,),
                     "invalid builder signature"
                 );
             } else {
@@ -813,7 +807,6 @@ impl BlockHeader<SeqTypes> for Header {
             height = parent_leaf.block_header().block_number() + 1,
             parent_view = ?parent_leaf.view_number(),
             payload_commitment,
-            payload_size = VidSchemeType::get_payload_byte_len(&_vid_common),
             ?auction_results,
             version,
         )
@@ -827,7 +820,6 @@ impl BlockHeader<SeqTypes> for Header {
         metadata: <<SeqTypes as NodeType>::BlockPayload as BlockPayload<SeqTypes>>::Metadata,
         builder_fee: Vec<BuilderFee<SeqTypes>>,
         view_number: u64,
-        _vid_common: VidCommon,
         auction_results: Option<SolverAuctionResults>,
         version: Version,
     ) -> Result<Self, Self::Error> {
@@ -952,7 +944,6 @@ impl BlockHeader<SeqTypes> for Header {
             height = parent_leaf.block_header().block_number() + 1,
             parent_view = ?parent_leaf.view_number(),
             payload_commitment,
-            payload_size = VidSchemeType::get_payload_byte_len(&_vid_common),
             version,
         )
     )]
@@ -964,7 +955,6 @@ impl BlockHeader<SeqTypes> for Header {
         builder_commitment: BuilderCommitment,
         metadata: <<SeqTypes as NodeType>::BlockPayload as BlockPayload<SeqTypes>>::Metadata,
         builder_fee: BuilderFee<SeqTypes>,
-        _vid_common: VidCommon,
         version: Version,
     ) -> Result<Self, Self::Error> {
         tracing::info!("preparing to propose legacy header");
@@ -1184,7 +1174,8 @@ mod test_headers {
     use std::sync::Arc;
 
     use ethers::{types::Address, utils::Anvil};
-    use hotshot_types::{traits::signature_key::BuilderSignatureKey, vid::vid_scheme};
+    use hotshot_query_service::testing::mocks::MockVersions;
+    use hotshot_types::traits::signature_key::BuilderSignatureKey;
 
     use sequencer_utils::test_utils::setup_test;
     use v0_1::{BlockMerkleTree, FeeMerkleTree, L1Client};
@@ -1249,13 +1240,8 @@ mod test_headers {
 
             let (fee_account, fee_key) = FeeAccount::generated_from_seed_indexed([0; 32], 0);
             let fee_amount = 0;
-            let fee_signature = FeeAccount::sign_fee(
-                &fee_key,
-                fee_amount,
-                &genesis.ns_table,
-                &genesis.header.payload_commitment(),
-            )
-            .unwrap();
+            let fee_signature =
+                FeeAccount::sign_fee(&fee_key, fee_amount, &genesis.ns_table).unwrap();
 
             let header = Header::from_info(
                 genesis.header.payload_commitment(),
@@ -1467,7 +1453,7 @@ mod test_headers {
         async fn default() -> Self {
             let instance_state = NodeState::mock();
             let validated_state = ValidatedState::genesis(&instance_state).0;
-            let leaf: Leaf2 = Leaf::genesis(&validated_state, &instance_state)
+            let leaf: Leaf2 = Leaf::genesis::<MockVersions>(&validated_state, &instance_state)
                 .await
                 .into();
             let header = leaf.block_header().clone();
@@ -1495,7 +1481,6 @@ mod test_headers {
             .with_current_version(StaticVersion::<0, 1>::version());
 
         let genesis = GenesisForTest::default().await;
-        let vid_common = vid_scheme(1).disperse([]).unwrap().common;
 
         let mut parent_state = genesis.validated_state.clone();
 
@@ -1531,8 +1516,7 @@ mod test_headers {
         let payload_commitment = parent_header.payload_commitment();
         let builder_commitment = parent_header.builder_commitment();
         let ns_table = genesis.ns_table;
-        let fee_signature =
-            FeeAccount::sign_fee(&key_pair, fee_amount, &ns_table, &payload_commitment).unwrap();
+        let fee_signature = FeeAccount::sign_fee(&key_pair, fee_amount, &ns_table).unwrap();
         let builder_fee = BuilderFee {
             fee_amount,
             fee_account: key_pair.fee_account(),
@@ -1546,7 +1530,6 @@ mod test_headers {
             builder_commitment.clone(),
             ns_table,
             builder_fee,
-            vid_common.clone(),
             StaticVersion::<0, 1>::version(),
         )
         .await
@@ -1579,7 +1562,7 @@ mod test_headers {
         // ValidatedTransition::new(
         //     proposal_state.clone(),
         //     &parent_leaf.block_header(),
-        //     Proposal::new(&proposal, VidSchemeType::get_payload_byte_len(&vid_common)),
+        //     Proposal::new(&proposal, ADVZScheme::get_payload_byte_len(&vid_common)),
         // )
         // .validate()
         // .unwrap();

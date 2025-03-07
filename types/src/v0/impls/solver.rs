@@ -1,11 +1,10 @@
 use committable::{Commitment, Committable};
 use hotshot::types::SignatureKey;
 
-use super::{
-    v0_99::{RollupRegistrationBody, RollupUpdatebody},
-    Update,
-};
-use crate::Update::Set;
+use crate::v0::utils::Update;
+
+use super::v0_99::{RollupRegistrationBody, RollupUpdatebody};
+use crate::v0::utils::Update::Set;
 
 impl Committable for RollupRegistrationBody {
     fn tag() -> String {

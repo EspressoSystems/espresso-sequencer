@@ -1,3 +1,5 @@
+mod hotshot
+
 default:
     just --list
 
@@ -9,6 +11,10 @@ demo *args:
 
 demo-native *args: build
     scripts/demo-native {{args}}
+
+fmt:
+    cargo fmt --all
+    cargo fmt -- hotshot-testing/tests/**/*.rs
 
 lint:
     #!/usr/bin/env bash
@@ -104,7 +110,7 @@ build-docker-images:
     scripts/build-docker-images-native
 
 # generate rust bindings for contracts
-REGEXP := "^LightClient$|^LightClientArbitrum$|^LightClientStateUpdateVK$|^FeeContract$|PlonkVerifier$|^ERC1967Proxy$|^LightClientMock$|^LightClientStateUpdateVKMock$|^PlonkVerifier2$|^PermissionedStakeTable$"
+REGEXP := "^LightClient$|^LightClientArbitrum$|^FeeContract$|PlonkVerifier$|^ERC1967Proxy$|^LightClientMock$|^PlonkVerifier2$|^PermissionedStakeTable$"
 gen-bindings:
     # Update the git submodules
     git submodule update --init --recursive
