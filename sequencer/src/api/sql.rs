@@ -159,6 +159,27 @@ impl CatchupStorage for SqlStorage {
         ))?;
         load_chain_config(&mut tx, commitment).await
     }
+
+    async fn get_leaf_chain(&self, height: u64) -> anyhow::Result<Vec<Leaf2>> {
+        let mut tx = self
+            .read()
+            .await
+            .context(format!("opening transaction to fetch leaf at {height}"))?;
+        let h = usize::try_from(height)?;
+        let query_leaf_chain = tx
+            .get_leaf_range(h..=(h + 2))
+            .await
+            .context(format!("leaf chain {height} not available"))?;
+        let mut chain = vec![];
+
+        for query_result in query_leaf_chain {
+            let Ok(leaf_query) = query_result else {
+                bail!(format!("leaf chain {height} not available"));
+            };
+            chain.push(leaf_query.leaf().clone());
+        }
+        Ok(chain)
+    }
 }
 
 impl CatchupStorage for DataSource {
@@ -188,6 +209,9 @@ impl CatchupStorage for DataSource {
         commitment: Commitment<ChainConfig>,
     ) -> anyhow::Result<ChainConfig> {
         self.as_ref().get_chain_config(commitment).await
+    }
+    async fn get_leaf_chain(&self, height: u64) -> anyhow::Result<Vec<Leaf2>> {
+        self.as_ref().get_leaf_chain(height).await
     }
 }
 

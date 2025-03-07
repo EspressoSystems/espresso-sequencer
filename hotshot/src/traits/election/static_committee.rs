@@ -274,13 +274,6 @@ impl<TYPES: NodeType> Membership<TYPES> for StaticCommittee<TYPES> {
         true
     }
 
-    async fn get_epoch_root(
-        &self,
-        _block_height: u64,
-    ) -> Option<(TYPES::Epoch, TYPES::BlockHeader)> {
-        None
-    }
-
     fn add_drb_result(&mut self, _epoch: <TYPES as NodeType>::Epoch, _drb_result: DrbResult) {}
 
     fn set_first_epoch(&mut self, epoch: TYPES::Epoch, _initial_drb_result: DrbResult) {
