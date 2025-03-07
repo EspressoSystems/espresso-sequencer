@@ -18,8 +18,11 @@ contract CallNewFinalizedState is Script {
         cmds[2] = vm.toString(numInitValidators);
 
         bytes memory result = vm.ffi(cmds);
-        (LC.LightClientState[] memory states, V.PlonkProof[] memory proofs,) =
-            abi.decode(result, (LC.LightClientState[], V.PlonkProof[], LC.StakeTableState[]));
+        (
+            LC.LightClientState[] memory states,
+            LC.StakeTableState[] memory nextStakeTables,
+            V.PlonkProof[] memory proofs
+        ) = abi.decode(result, (LC.LightClientState[], LC.StakeTableState[], V.PlonkProof[]));
 
         address admin;
         string memory seedPhrase = vm.envString("MNEMONIC");
@@ -28,7 +31,7 @@ contract CallNewFinalizedState is Script {
 
         LCMock lc = LCMock(lcContractAddress);
 
-        lc.newFinalizedState(states[0], proofs[0]);
+        lc.newFinalizedState(states[0], nextStakeTables[0], proofs[0]);
 
         vm.stopBroadcast();
     }
