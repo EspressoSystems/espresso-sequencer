@@ -176,7 +176,7 @@ impl CatchupStorage for SqlStorage {
             let Ok(leaf_query) = query_result else {
                 bail!(format!("leaf chain {height} not available"));
             };
-            chain.push(leaf_query.leaf().clone().into());
+            chain.push(leaf_query.leaf().clone());
         }
         Ok(chain)
     }
