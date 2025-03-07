@@ -5,7 +5,7 @@ use std::{
     sync::Arc,
 };
 
-use async_trait::async_trait;
+use anyhow::Context;
 use committable::Committable;
 use contract_bindings_alloy::permissionedstaketable::PermissionedStakeTable::StakersUpdated;
 use ethers::types::U256;
@@ -33,7 +33,7 @@ use super::{
     traits::StateCatchup,
     v0_3::{DAMembers, StakeTable, StakeTables},
     v0_99::ChainConfig,
-    Header, L1Client, NodeState, PubKey, SeqTypes,
+    Header, L1Client, Leaf2, NodeState, PubKey, SeqTypes,
 };
 
 type Epoch = <SeqTypes as NodeType>::Epoch;
@@ -91,7 +91,7 @@ impl StakeTables {
     }
 }
 
-#[derive(derive_more::Debug, Clone)]
+#[derive(Clone, derive_more::derive::Debug)]
 /// Type to describe DA and Stake memberships
 pub struct EpochCommittees {
     /// Committee used when we're in pre-epoch state
@@ -336,7 +336,7 @@ impl EpochCommittees {
 #[error("Could not lookup leader")] // TODO error variants? message?
 pub struct LeaderLookupError;
 
-#[async_trait]
+// #[async_trait]
 impl Membership<SeqTypes> for EpochCommittees {
     type Error = LeaderLookupError;
     // DO NOT USE. Dummy constructor to comply w/ trait.
@@ -505,6 +505,7 @@ impl Membership<SeqTypes> for EpochCommittees {
         .unwrap()
     }
 
+    #[allow(refining_impl_trait)]
     async fn add_epoch_root(
         &self,
         epoch: Epoch,
@@ -531,6 +532,36 @@ impl Membership<SeqTypes> for EpochCommittees {
                     committee.update_stake_table(epoch, stake_table);
                 })
             })
+    }
+
+    fn has_epoch(&self, epoch: Epoch) -> bool {
+        self.state.contains_key(&epoch)
+    }
+
+    async fn get_epoch_root_and_drb(
+        &self,
+        block_height: u64,
+        epoch_height: u64,
+        epoch: Epoch,
+    ) -> anyhow::Result<(Header, DrbResult)> {
+        // Fetch leaves from peers
+
+        let peers = self.peers.clone();
+        let leaf: Leaf2 = peers
+            .fetch_leaf(block_height, self, epoch, epoch_height)
+            .await?;
+        //DRB height is decided in the next epoch's last block
+        let drb_height = block_height + epoch_height + 3;
+        let drb_leaf = peers
+            .fetch_leaf(drb_height, self, epoch, epoch_height)
+            .await?;
+
+        Ok((
+            leaf.block_header().clone(),
+            drb_leaf
+                .next_drb_result
+                .context(format!("No DRB result on decided leaf at {drb_height}"))?,
+        ))
     }
 
     fn add_drb_result(&mut self, epoch: Epoch, drb: DrbResult) {

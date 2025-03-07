@@ -10,7 +10,6 @@ use std::{
 };
 
 use async_broadcast::{Receiver, Sender};
-use async_lock::RwLock;
 use async_trait::async_trait;
 use futures::{future::join_all, stream::FuturesUnordered, StreamExt};
 use hotshot_builder_api::v0_1::block_info::AvailableBlockInfo;
@@ -19,12 +18,12 @@ use hotshot_types::{
     consensus::OuterConsensus,
     data::VidCommitment,
     data::{null_block, PackedBundle},
+    epoch_membership::EpochMembershipCoordinator,
     event::{Event, EventType},
     message::UpgradeLock,
     traits::{
         auction_results_provider::AuctionResultsProvider,
         block_contents::{BuilderFee, EncodeBytes},
-        election::Membership,
         node_implementation::{ConsensusTime, HasUrls, NodeImplementation, NodeType, Versions},
         signature_key::{BuilderSignatureKey, SignatureKey},
         BlockPayload,
@@ -92,7 +91,7 @@ pub struct TransactionTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>, V
     pub consensus: OuterConsensus<TYPES>,
 
     /// Membership for the quorum
-    pub membership: Arc<RwLock<TYPES::Membership>>,
+    pub membership_coordinator: EpochMembershipCoordinator<TYPES>,
 
     /// Builder 0.1 API clients
     pub builder_clients: Vec<BuilderClientBase<TYPES>>,
@@ -482,7 +481,12 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
                 self.cur_view = view;
                 self.cur_epoch = epoch;
 
-                let leader = self.membership.read().await.leader(view, epoch)?;
+                let leader = self
+                    .membership_coordinator
+                    .membership_for_epoch(epoch)
+                    .await?
+                    .leader(view)
+                    .await?;
                 if leader == self.public_key {
                     self.handle_view_change(&event_stream, view, epoch).await;
                     return Ok(());

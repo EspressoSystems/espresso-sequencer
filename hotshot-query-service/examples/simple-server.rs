@@ -42,6 +42,7 @@ use hotshot_query_service::{
 use hotshot_testing::block_builder::{SimpleBuilderImplementation, TestBuilderImplementation};
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
+    epoch_membership::EpochMembershipCoordinator,
     light_client::StateKeyPair,
     signature_key::BLSPubKey,
     traits::{election::Membership, network::Topic},
@@ -236,13 +237,17 @@ async fn init_consensus(
                 ));
 
                 let storage: TestStorage<MockTypes> = TestStorage::default();
+                let coordinator = EpochMembershipCoordinator::new(
+                    Arc::new(RwLock::new(membership)),
+                    config.epoch_height,
+                );
 
                 SystemContext::init(
                     pub_keys[node_id],
                     priv_key,
                     node_id as u64,
                     config,
-                    Arc::new(RwLock::new(membership)),
+                    coordinator,
                     network,
                     HotShotInitializer::from_genesis::<MockVersions>(
                         TestInstanceState::default(),

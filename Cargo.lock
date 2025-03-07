@@ -5597,6 +5597,7 @@ dependencies = [
  "ark-serialize 0.4.2",
  "ark-srs",
  "ark-std 0.4.0",
+ "async-broadcast",
  "async-lock 3.4.0",
  "async-trait",
  "bincode",

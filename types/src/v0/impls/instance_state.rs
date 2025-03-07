@@ -225,7 +225,7 @@ pub mod mock {
     use super::*;
     use crate::{
         retain_accounts, BackoffParams, BlockMerkleTree, FeeAccount, FeeMerkleCommitment,
-        FeeMerkleTree,
+        FeeMerkleTree, Leaf2,
     };
 
     #[derive(Debug, Clone, Default)]
@@ -245,6 +245,14 @@ pub mod mock {
 
     #[async_trait]
     impl StateCatchup for MockStateCatchup {
+        async fn try_fetch_leaves(
+            &self,
+            _retry: usize,
+            _height: u64,
+        ) -> anyhow::Result<Vec<Leaf2>> {
+            Err(anyhow::anyhow!("todo"))
+        }
+
         async fn try_fetch_accounts(
             &self,
             _retry: usize,
