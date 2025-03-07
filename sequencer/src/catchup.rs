@@ -327,6 +327,16 @@ impl<ApiVer: StaticVersionType> StateCatchup for StatePeers<ApiVer> {
         })
         .await
     }
+    async fn try_fetch_leaves(&self, retry: usize, height: u64) -> anyhow::Result<Vec<Leaf2>> {
+        self.fetch(retry, |client| async move {
+            let leaf = client
+                .get::<Vec<Leaf2>>(&format!("catchup/leaf-chain/{}", height))
+                .send()
+                .await?;
+            anyhow::Ok(leaf)
+        })
+        .await
+    }
 
     fn backoff(&self) -> &BackoffParams {
         &self.backoff
@@ -399,6 +409,15 @@ pub(crate) trait CatchupStorage: Sync {
             bail!("chain config catchup is not supported for this data source");
         }
     }
+
+    fn get_leaf_chain(
+        &self,
+        _height: u64,
+    ) -> impl Send + Future<Output = anyhow::Result<Vec<Leaf2>>> {
+        async {
+            bail!("leaf chain catchup is not supported for this data source");
+        }
+    }
 }
 
 impl CatchupStorage for hotshot_query_service::data_source::MetricsDataSource {}
@@ -435,6 +454,9 @@ where
     ) -> anyhow::Result<ChainConfig> {
         self.inner().get_chain_config(commitment).await
     }
+    async fn get_leaf_chain(&self, height: u64) -> anyhow::Result<Vec<Leaf2>> {
+        self.inner().get_leaf_chain(height).await
+    }
 }
 
 #[derive(Debug)]
@@ -454,6 +476,9 @@ impl<T> StateCatchup for SqlStateCatchup<T>
 where
     T: CatchupStorage + Send + Sync,
 {
+    async fn try_fetch_leaves(&self, _retry: usize, height: u64) -> anyhow::Result<Vec<Leaf2>> {
+        self.db.get_leaf_chain(height).await
+    }
     // TODO: add a test for the account proof validation
     // issue # 2102 (https://github.com/EspressoSystems/espresso-sequencer/issues/2102)
     #[tracing::instrument(skip(self, _retry, instance))]
@@ -560,6 +585,9 @@ impl NullStateCatchup {
 
 #[async_trait]
 impl StateCatchup for NullStateCatchup {
+    async fn try_fetch_leaves(&self, _retry: usize, _height: u64) -> anyhow::Result<Vec<Leaf2>> {
+        bail!("state catchup is didabled")
+    }
     async fn try_fetch_accounts(
         &self,
         _retry: usize,
