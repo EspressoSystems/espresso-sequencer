@@ -103,21 +103,6 @@ contract StakeTable is AbstractStakeTable, Ownable, InitializedAt {
         return keccak256(abi.encode(blsVK.x0, blsVK.x1, blsVK.y0, blsVK.y1));
     }
 
-    /// @dev Compares two BLS keys for equality
-    /// @param a First BLS key
-    /// @param b Second BLS key
-    /// @return True if the keys are equal, false otherwise
-    function _isEqualBlsKey(BN254.G2Point memory a, BN254.G2Point memory b)
-        public
-        pure
-        returns (bool)
-    {
-        return BN254.BaseField.unwrap(a.x0) == BN254.BaseField.unwrap(b.x0)
-            && BN254.BaseField.unwrap(a.x1) == BN254.BaseField.unwrap(b.x1)
-            && BN254.BaseField.unwrap(a.y0) == BN254.BaseField.unwrap(b.y0)
-            && BN254.BaseField.unwrap(a.y1) == BN254.BaseField.unwrap(b.y1);
-    }
-
     function ensureValidatorRegistered(address validator) internal view {
         if (!validators[validator].isRegistered) {
             revert UnknownValidator();
