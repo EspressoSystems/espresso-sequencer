@@ -2213,7 +2213,7 @@ mod test {
             recipient_key: pubkey,
             epoch: None,
             target_epoch: None,
-            common: avidm_param,
+            common: avidm_param.clone(),
         }
         .to_proposal(&privkey)
         .unwrap()
@@ -2286,7 +2286,7 @@ mod test {
 
         // Fetch it as if we were rebuilding an archive.
         assert_eq!(
-            None,
+            Some(VidCommon::V1(avidm_param)),
             storage
                 .fetch(VidCommonRequest(VidCommitment::V1(
                     vid_share.data.payload_commitment
