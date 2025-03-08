@@ -47,6 +47,9 @@ contract StakeTable is AbstractStakeTable, Ownable, InitializedAt {
     /// The commission is invalid
     error InvalidCommission();
 
+    /// Error raised when the light client address is invalid
+    error InvalidAddress();
+
     struct Validator {
         bool isRegistered;
         ValidatorStatus status;
@@ -62,6 +65,9 @@ contract StakeTable is AbstractStakeTable, Ownable, InitializedAt {
         Active,
         Exited
     }
+
+    /// Reference to the light client contract.
+    LightClient public lightClient;
 
     /// Currently active validators
     mapping(address validator => Validator) public validators;
@@ -96,11 +102,16 @@ contract StakeTable is AbstractStakeTable, Ownable, InitializedAt {
     address public admin;
 
     /// TODO change constructor to initialize function when we make the contract upgradeable
-    constructor(address _tokenAddress, uint256 _exitEscrowPeriod, address _initialOwner)
-        Ownable(_initialOwner)
-        InitializedAt()
-    {
+    constructor(
+        address _tokenAddress,
+        address _lightClientAddress,
+        uint256 _exitEscrowPeriod,
+        address _initialOwner
+    ) Ownable(_initialOwner) InitializedAt() {
+        // TODO ensure address not zero
         tokenAddress = _tokenAddress;
+        // TODO ensure address not zero
+        lightClient = LightClient(_lightClientAddress);
         exitEscrowPeriod = _exitEscrowPeriod;
         admin = msg.sender;
     }
