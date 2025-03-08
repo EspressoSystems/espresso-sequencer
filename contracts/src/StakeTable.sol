@@ -41,6 +41,9 @@ contract StakeTable is AbstractStakeTable, Ownable, InitializedAt {
     // Error raised when the staker provides a zero SchnorrVK
     error InvalidSchnorrVK();
 
+    /// The BLS key has been previously registered in the contract
+    error BlsKeyAlreadyUsed();
+
     /// The commission is invalid
     error InvalidCommission();
 
@@ -62,6 +65,12 @@ contract StakeTable is AbstractStakeTable, Ownable, InitializedAt {
 
     /// Currently active validators
     mapping(address validator => Validator) public validators;
+
+    /// BLS keys that have been seen by the contract
+    ///
+    /// @dev to simplify the reasoning about what keys and prevent some errors due to
+    /// misconfiguration of validators we mark keys as used and only allow them to be used once.
+    mapping(bytes32 blsKeyHash => bool) public blsKeys;
 
     /// Validators that have exited
     mapping(address validator => uint256 unlocksAt) public validatorExits;
@@ -121,6 +130,12 @@ contract StakeTable is AbstractStakeTable, Ownable, InitializedAt {
         }
     }
 
+    function ensureNewKey(BN254.G2Point memory blsVK) internal view {
+        if (blsKeys[_hashBlsKey(blsVK)]) {
+            revert BlsKeyAlreadyUsed();
+        }
+    }
+
     // @dev We don't check the validity of the schnorr verifying key but providing a zero key is
     // definitely a mistake by the caller, therefore we revert.
     function ensureNonZeroSchnorrKey(EdOnBN254.EdOnBN254Point memory schnorrVK) internal pure {
@@ -152,6 +167,7 @@ contract StakeTable is AbstractStakeTable, Ownable, InitializedAt {
     ) external virtual override {
         ensureValidatorNotRegistered(msg.sender);
         ensureNonZeroSchnorrKey(schnorrVK);
+        ensureNewKey(blsVK);
 
         // Verify that the validator can sign for that blsVK.
         // This prevents rogue public-key attacks.
@@ -163,6 +179,7 @@ contract StakeTable is AbstractStakeTable, Ownable, InitializedAt {
             revert InvalidCommission();
         }
 
+        blsKeys[_hashBlsKey(blsVK)] = true;
         validators[msg.sender] =
             Validator({ isRegistered: true, status: ValidatorStatus.Active, delegatedAmount: 0 });
 
@@ -279,11 +296,14 @@ contract StakeTable is AbstractStakeTable, Ownable, InitializedAt {
         ensureValidatorRegistered(msg.sender);
         ensureValidatorNotExited(msg.sender);
         ensureNonZeroSchnorrKey(newSchnorrVK);
+        ensureNewKey(newBlsVK);
 
         // Verify that the validator can sign for that newBlsVK, otherwise it
         // inner reverts with BLSSigVerificationFailed
         bytes memory message = abi.encode(msg.sender);
         BLSSig.verifyBlsSig(message, newBlsSig, newBlsVK);
+
+        blsKeys[_hashBlsKey(newBlsVK)] = true;
 
         emit ConsensusKeysUpdated(msg.sender, newBlsVK, newSchnorrVK);
     }
