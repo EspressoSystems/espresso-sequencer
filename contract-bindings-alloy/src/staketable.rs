@@ -140,7 +140,9 @@ pub mod BN254 {
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct G1Point {
+        #[allow(missing_docs)]
         pub x: <BaseField as alloy::sol_types::SolType>::RustType,
+        #[allow(missing_docs)]
         pub y: <BaseField as alloy::sol_types::SolType>::RustType,
     }
     #[allow(
@@ -306,9 +308,13 @@ pub mod BN254 {
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct G2Point {
+        #[allow(missing_docs)]
         pub x0: <BaseField as alloy::sol_types::SolType>::RustType,
+        #[allow(missing_docs)]
         pub x1: <BaseField as alloy::sol_types::SolType>::RustType,
+        #[allow(missing_docs)]
         pub y0: <BaseField as alloy::sol_types::SolType>::RustType,
+        #[allow(missing_docs)]
         pub y1: <BaseField as alloy::sol_types::SolType>::RustType,
     }
     #[allow(
@@ -634,7 +640,9 @@ pub mod EdOnBN254 {
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct EdOnBN254Point {
+        #[allow(missing_docs)]
         pub x: alloy::sol_types::private::primitives::aliases::U256,
+        #[allow(missing_docs)]
         pub y: alloy::sol_types::private::primitives::aliases::U256,
     }
     #[allow(
@@ -2074,7 +2082,9 @@ pub mod StakeTable {
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct InsufficientAllowance {
+        #[allow(missing_docs)]
         pub _0: alloy::sol_types::private::primitives::aliases::U256,
+        #[allow(missing_docs)]
         pub _1: alloy::sol_types::private::primitives::aliases::U256,
     }
     #[allow(
@@ -2153,6 +2163,7 @@ pub mod StakeTable {
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct InsufficientBalance {
+        #[allow(missing_docs)]
         pub _0: alloy::sol_types::private::primitives::aliases::U256,
     }
     #[allow(
@@ -2519,6 +2530,7 @@ pub mod StakeTable {
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct OwnableInvalidOwner {
+        #[allow(missing_docs)]
         pub owner: alloy::sol_types::private::Address,
     }
     #[allow(
@@ -2585,6 +2597,7 @@ pub mod StakeTable {
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct OwnableUnauthorizedAccount {
+        #[allow(missing_docs)]
         pub account: alloy::sol_types::private::Address,
     }
     #[allow(
@@ -3837,8 +3850,11 @@ pub mod StakeTable {
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct constructorCall {
+        #[allow(missing_docs)]
         pub _tokenAddress: alloy::sol_types::private::Address,
+        #[allow(missing_docs)]
         pub _exitEscrowPeriod: alloy::sol_types::private::primitives::aliases::U256,
+        #[allow(missing_docs)]
         pub _initialOwner: alloy::sol_types::private::Address,
     }
     const _: () = {
@@ -3925,12 +3941,14 @@ pub mod StakeTable {
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct _hashBlsKeyCall {
+        #[allow(missing_docs)]
         pub blsVK: <BN254::G2Point as alloy::sol_types::SolType>::RustType,
     }
     ///Container type for the return parameters of the [`_hashBlsKey((uint256,uint256,uint256,uint256))`](_hashBlsKeyCall) function.
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct _hashBlsKeyReturn {
+        #[allow(missing_docs)]
         pub _0: alloy::sol_types::private::FixedBytes<32>,
     }
     #[allow(
@@ -4044,6 +4062,7 @@ pub mod StakeTable {
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct adminReturn {
+        #[allow(missing_docs)]
         pub _0: alloy::sol_types::private::Address,
     }
     #[allow(
@@ -4150,12 +4169,14 @@ pub mod StakeTable {
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct blsKeysCall {
+        #[allow(missing_docs)]
         pub blsKeyHash: alloy::sol_types::private::FixedBytes<32>,
     }
     ///Container type for the return parameters of the [`blsKeys(bytes32)`](blsKeysCall) function.
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct blsKeysReturn {
+        #[allow(missing_docs)]
         pub _0: bool,
     }
     #[allow(
@@ -4268,6 +4289,7 @@ pub mod StakeTable {
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct claimValidatorExitCall {
+        #[allow(missing_docs)]
         pub validator: alloy::sol_types::private::Address,
     }
     ///Container type for the return parameters of the [`claimValidatorExit(address)`](claimValidatorExitCall) function.
@@ -4382,6 +4404,7 @@ pub mod StakeTable {
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct claimWithdrawalCall {
+        #[allow(missing_docs)]
         pub validator: alloy::sol_types::private::Address,
     }
     ///Container type for the return parameters of the [`claimWithdrawal(address)`](claimWithdrawalCall) function.
@@ -4496,7 +4519,9 @@ pub mod StakeTable {
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct delegateCall {
+        #[allow(missing_docs)]
         pub validator: alloy::sol_types::private::Address,
+        #[allow(missing_docs)]
         pub amount: alloy::sol_types::private::primitives::aliases::U256,
     }
     ///Container type for the return parameters of the [`delegate(address,uint256)`](delegateCall) function.
@@ -4738,6 +4763,7 @@ pub mod StakeTable {
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct exitEscrowPeriodReturn {
+        #[allow(missing_docs)]
         pub _0: alloy::sol_types::private::primitives::aliases::U256,
     }
     #[allow(
@@ -4956,6 +4982,7 @@ pub mod StakeTable {
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct initializedAtBlockReturn {
+        #[allow(missing_docs)]
         pub _0: alloy::sol_types::private::primitives::aliases::U256,
     }
     #[allow(
@@ -5066,6 +5093,7 @@ pub mod StakeTable {
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct ownerReturn {
+        #[allow(missing_docs)]
         pub _0: alloy::sol_types::private::Address,
     }
     #[allow(
@@ -5172,9 +5200,13 @@ pub mod StakeTable {
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct registerValidatorCall {
+        #[allow(missing_docs)]
         pub blsVK: <BN254::G2Point as alloy::sol_types::SolType>::RustType,
+        #[allow(missing_docs)]
         pub schnorrVK: <EdOnBN254::EdOnBN254Point as alloy::sol_types::SolType>::RustType,
+        #[allow(missing_docs)]
         pub blsSig: <BN254::G1Point as alloy::sol_types::SolType>::RustType,
+        #[allow(missing_docs)]
         pub commission: u16,
     }
     ///Container type for the return parameters of the [`registerValidator((uint256,uint256,uint256,uint256),(uint256,uint256),(uint256,uint256),uint16)`](registerValidatorCall) function.
@@ -5426,6 +5458,7 @@ pub mod StakeTable {
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct tokenAddressReturn {
+        #[allow(missing_docs)]
         pub _0: alloy::sol_types::private::Address,
     }
     #[allow(
@@ -5532,6 +5565,7 @@ pub mod StakeTable {
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct transferOwnershipCall {
+        #[allow(missing_docs)]
         pub newOwner: alloy::sol_types::private::Address,
     }
     ///Container type for the return parameters of the [`transferOwnership(address)`](transferOwnershipCall) function.
@@ -5646,7 +5680,9 @@ pub mod StakeTable {
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct undelegateCall {
+        #[allow(missing_docs)]
         pub validator: alloy::sol_types::private::Address,
+        #[allow(missing_docs)]
         pub amount: alloy::sol_types::private::primitives::aliases::U256,
     }
     ///Container type for the return parameters of the [`undelegate(address,uint256)`](undelegateCall) function.
@@ -5776,8 +5812,11 @@ pub mod StakeTable {
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct updateConsensusKeysCall {
+        #[allow(missing_docs)]
         pub newBlsVK: <BN254::G2Point as alloy::sol_types::SolType>::RustType,
+        #[allow(missing_docs)]
         pub newSchnorrVK: <EdOnBN254::EdOnBN254Point as alloy::sol_types::SolType>::RustType,
+        #[allow(missing_docs)]
         pub newBlsSig: <BN254::G1Point as alloy::sol_types::SolType>::RustType,
     }
     ///Container type for the return parameters of the [`updateConsensusKeys((uint256,uint256,uint256,uint256),(uint256,uint256),(uint256,uint256))`](updateConsensusKeysCall) function.
@@ -5903,12 +5942,14 @@ pub mod StakeTable {
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct validatorExitsCall {
+        #[allow(missing_docs)]
         pub validator: alloy::sol_types::private::Address,
     }
     ///Container type for the return parameters of the [`validatorExits(address)`](validatorExitsCall) function.
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct validatorExitsReturn {
+        #[allow(missing_docs)]
         pub unlocksAt: alloy::sol_types::private::primitives::aliases::U256,
     }
     #[allow(
@@ -6019,14 +6060,18 @@ pub mod StakeTable {
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct validatorsCall {
+        #[allow(missing_docs)]
         pub validator: alloy::sol_types::private::Address,
     }
     ///Container type for the return parameters of the [`validators(address)`](validatorsCall) function.
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct validatorsReturn {
+        #[allow(missing_docs)]
         pub isRegistered: bool,
+        #[allow(missing_docs)]
         pub status: <ValidatorStatus as alloy::sol_types::SolType>::RustType,
+        #[allow(missing_docs)]
         pub delegatedAmount: alloy::sol_types::private::primitives::aliases::U256,
     }
     #[allow(
@@ -6148,24 +6193,43 @@ pub mod StakeTable {
     };
     ///Container for all the [`StakeTable`](self) function calls.
     pub enum StakeTableCalls {
+        #[allow(missing_docs)]
         _hashBlsKey(_hashBlsKeyCall),
+        #[allow(missing_docs)]
         admin(adminCall),
+        #[allow(missing_docs)]
         blsKeys(blsKeysCall),
+        #[allow(missing_docs)]
         claimValidatorExit(claimValidatorExitCall),
+        #[allow(missing_docs)]
         claimWithdrawal(claimWithdrawalCall),
+        #[allow(missing_docs)]
         delegate(delegateCall),
+        #[allow(missing_docs)]
         deregisterValidator(deregisterValidatorCall),
+        #[allow(missing_docs)]
         exitEscrowPeriod(exitEscrowPeriodCall),
+        #[allow(missing_docs)]
         initialize(initializeCall),
+        #[allow(missing_docs)]
         initializedAtBlock(initializedAtBlockCall),
+        #[allow(missing_docs)]
         owner(ownerCall),
+        #[allow(missing_docs)]
         registerValidator(registerValidatorCall),
+        #[allow(missing_docs)]
         renounceOwnership(renounceOwnershipCall),
+        #[allow(missing_docs)]
         tokenAddress(tokenAddressCall),
+        #[allow(missing_docs)]
         transferOwnership(transferOwnershipCall),
+        #[allow(missing_docs)]
         undelegate(undelegateCall),
+        #[allow(missing_docs)]
         updateConsensusKeys(updateConsensusKeysCall),
+        #[allow(missing_docs)]
         validatorExits(validatorExitsCall),
+        #[allow(missing_docs)]
         validators(validatorsCall),
     }
     #[automatically_derived]
@@ -6617,21 +6681,37 @@ pub mod StakeTable {
     }
     ///Container for all the [`StakeTable`](self) custom errors.
     pub enum StakeTableErrors {
+        #[allow(missing_docs)]
         BLSSigVerificationFailed(BLSSigVerificationFailed),
+        #[allow(missing_docs)]
         BlsKeyAlreadyUsed(BlsKeyAlreadyUsed),
+        #[allow(missing_docs)]
         InsufficientAllowance(InsufficientAllowance),
+        #[allow(missing_docs)]
         InsufficientBalance(InsufficientBalance),
+        #[allow(missing_docs)]
         InvalidCommission(InvalidCommission),
+        #[allow(missing_docs)]
         InvalidInitialization(InvalidInitialization),
+        #[allow(missing_docs)]
         InvalidSchnorrVK(InvalidSchnorrVK),
+        #[allow(missing_docs)]
         NotInitializing(NotInitializing),
+        #[allow(missing_docs)]
         NothingToWithdraw(NothingToWithdraw),
+        #[allow(missing_docs)]
         OwnableInvalidOwner(OwnableInvalidOwner),
+        #[allow(missing_docs)]
         OwnableUnauthorizedAccount(OwnableUnauthorizedAccount),
+        #[allow(missing_docs)]
         PrematureWithdrawal(PrematureWithdrawal),
+        #[allow(missing_docs)]
         UnknownValidator(UnknownValidator),
+        #[allow(missing_docs)]
         ValidatorAlreadyExited(ValidatorAlreadyExited),
+        #[allow(missing_docs)]
         ValidatorAlreadyRegistered(ValidatorAlreadyRegistered),
+        #[allow(missing_docs)]
         ValidatorNotExited(ValidatorNotExited),
     }
     #[automatically_derived]
@@ -7060,13 +7140,21 @@ pub mod StakeTable {
     }
     ///Container for all the [`StakeTable`](self) events.
     pub enum StakeTableEvents {
+        #[allow(missing_docs)]
         ConsensusKeysUpdated(ConsensusKeysUpdated),
+        #[allow(missing_docs)]
         Delegated(Delegated),
+        #[allow(missing_docs)]
         Initialized(Initialized),
+        #[allow(missing_docs)]
         OwnershipTransferred(OwnershipTransferred),
+        #[allow(missing_docs)]
         Undelegated(Undelegated),
+        #[allow(missing_docs)]
         ValidatorExit(ValidatorExit),
+        #[allow(missing_docs)]
         ValidatorRegistered(ValidatorRegistered),
+        #[allow(missing_docs)]
         Withdrawal(Withdrawal),
     }
     #[automatically_derived]
