@@ -1,4 +1,5 @@
-use anyhow::Context;
+use crate::{catchup::SqlStateCatchup, NodeType, SeqTypes, ViewNumber};
+use anyhow::{bail, Context};
 use async_trait::async_trait;
 use clap::Parser;
 use committable::Committable;
@@ -10,6 +11,7 @@ use espresso_types::{
     BackoffParams, BlockMerkleTree, FeeMerkleTree, Leaf, Leaf2, NetworkConfig, Payload,
 };
 use futures::stream::StreamExt;
+use hotshot::InitializerEpochInfo;
 use hotshot_query_service::{
     availability::LeafQueryData,
     data_source::{
@@ -29,6 +31,7 @@ use hotshot_query_service::{
     merklized_state::MerklizedState,
     VidCommon,
 };
+use hotshot_types::drb::DrbResult;
 use hotshot_types::{
     consensus::CommitmentMap,
     data::{
@@ -52,8 +55,6 @@ use itertools::Itertools;
 use sqlx::Row;
 use sqlx::{query, Executor};
 use std::{collections::BTreeMap, path::PathBuf, str::FromStr, sync::Arc, time::Duration};
-
-use crate::{catchup::SqlStateCatchup, SeqTypes, ViewNumber};
 
 /// Options for Postgres-backed persistence.
 #[derive(Parser, Clone, Derivative)]
@@ -1872,6 +1873,81 @@ impl SequencerPersistence for Persistence {
         )
         .await?;
         tx.commit().await
+    }
+
+    async fn add_drb_result(
+        &self,
+        epoch: EpochNumber,
+        drb_result: DrbResult,
+    ) -> anyhow::Result<()> {
+        let drb_result_vec = Vec::from(drb_result);
+        let mut tx = self.db.write().await?;
+        tx.upsert(
+            "epoch_drb_and_root",
+            ["epoch", "drb_result"],
+            ["epoch"],
+            [(epoch.u64() as i64, drb_result_vec)],
+        )
+        .await?;
+        tx.commit().await
+    }
+
+    async fn add_epoch_root(
+        &self,
+        epoch: EpochNumber,
+        block_header: <SeqTypes as NodeType>::BlockHeader,
+    ) -> anyhow::Result<()> {
+        let block_header_bytes =
+            bincode::serialize(&block_header).context("serializing block header")?;
+
+        let mut tx = self.db.write().await?;
+        tx.upsert(
+            "epoch_drb_and_root",
+            ["epoch", "block_header"],
+            ["epoch"],
+            [(epoch.u64() as i64, block_header_bytes)],
+        )
+        .await?;
+        tx.commit().await
+    }
+
+    async fn load_start_epoch_info(&self) -> anyhow::Result<Vec<InitializerEpochInfo<SeqTypes>>> {
+        let rows = self
+            .db
+            .read()
+            .await?
+            .fetch_all("SELECT * from epoch_drb_and_root ORDER BY epoch ASC")
+            .await?;
+
+        rows.into_iter()
+            .map(|row| {
+                let epoch: i64 = row.get("epoch");
+                let drb_result: Option<Vec<u8>> = row.get("drb_result");
+                let block_header: Option<Vec<u8>> = row.get("block_header");
+                if let Some(drb_result) = drb_result {
+                    let drb_result_array = drb_result
+                        .try_into()
+                        .or_else(|_| bail!("invalid drb result"))?;
+                    let block_header: Option<<SeqTypes as NodeType>::BlockHeader> = block_header
+                        .map(|data| bincode::deserialize(&data))
+                        .transpose()?;
+                    Ok(Some(InitializerEpochInfo::<SeqTypes> {
+                        epoch: <SeqTypes as NodeType>::Epoch::new(epoch as u64),
+                        drb_result: drb_result_array,
+                        block_header,
+                    }))
+                } else {
+                    // Right now we skip the epoch_drb_and_root row if there is no drb result.
+                    // This seems reasonable based on the expected order of events, but please double check!
+                    Ok(None)
+                }
+            })
+            .filter_map(|e| match e {
+                Err(v) => Some(Err(v)),
+                Ok(Some(v)) => Some(Ok(v)),
+                Ok(None) => None,
+            })
+            .collect()
     }
 }
 

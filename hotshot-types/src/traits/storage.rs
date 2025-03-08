@@ -24,6 +24,7 @@ use crate::{
         DaProposal, DaProposal2, Leaf, Leaf2, QuorumProposal, QuorumProposal2,
         QuorumProposalWrapper, VidDisperseShare,
     },
+    drb::DrbResult,
     event::HotShotAction,
     message::{convert_proposal, Proposal},
     simple_certificate::{
@@ -158,4 +159,12 @@ pub trait Storage<TYPES: NodeType>: Send + Sync + Clone {
     async fn migrate_consensus(&self) -> Result<()> {
         Ok(())
     }
+    /// Add a drb result
+    async fn add_drb_result(&self, epoch: TYPES::Epoch, drb_result: DrbResult) -> Result<()>;
+    /// Add an epoch block header
+    async fn add_epoch_root(
+        &self,
+        epoch: TYPES::Epoch,
+        block_header: TYPES::BlockHeader,
+    ) -> Result<()>;
 }
