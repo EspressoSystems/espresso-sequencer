@@ -298,6 +298,22 @@ impl TestBlockHeader {
     }
 }
 
+impl Default for TestBlockHeader {
+    fn default() -> Self {
+        let metadata = TestMetadata {
+            num_transactions: 0,
+        };
+        Self {
+            block_number: 0,
+            payload_commitment: Default::default(),
+            builder_commitment: Default::default(),
+            metadata,
+            timestamp: 0,
+            random: 0,
+        }
+    }
+}
+
 impl<
         TYPES: NodeType<
             BlockHeader = Self,

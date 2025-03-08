@@ -155,8 +155,8 @@ where
         parent_state,
         instance,
         peers,
-        &parent_leaf.leaf().clone().into(),
-        &proposed_leaf.leaf().clone().into(),
+        &parent_leaf.leaf().clone(),
+        &proposed_leaf.leaf().clone(),
     )
     .await
     .context("computing state update")?;

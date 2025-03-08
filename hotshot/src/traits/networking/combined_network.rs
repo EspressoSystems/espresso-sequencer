@@ -32,6 +32,7 @@ use hotshot_types::{
         COMBINED_NETWORK_MIN_PRIMARY_FAILURES, COMBINED_NETWORK_PRIMARY_CHECK_INTERVAL,
     },
     data::ViewNumber,
+    epoch_membership::EpochMembershipCoordinator,
     traits::{
         network::{BroadcastDelay, ConnectedNetwork, Topic},
         node_implementation::NodeType,
@@ -471,7 +472,7 @@ impl<TYPES: NodeType> ConnectedNetwork<TYPES::SignatureKey> for CombinedNetworks
         &'a self,
         view: u64,
         epoch: Option<u64>,
-        membership: Arc<RwLock<T::Membership>>,
+        membership: EpochMembershipCoordinator<T>,
     ) where
         T: NodeType<SignatureKey = TYPES::SignatureKey> + 'a,
     {
