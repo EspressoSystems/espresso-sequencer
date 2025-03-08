@@ -257,14 +257,15 @@ pub mod i_plonk_verifier {
         ) -> ::ethers::contract::builders::ContractCall<M, bool> {
             self.0
                 .method_hash([100, 228, 197, 158], (verifying_key, public_input, proof))
-                .expect("method not found (this should never happen)")
+                .map_err(|e| log::error!("Method not found: {:?}", e))
+                .unwrap()
         }
     }
     impl<M: ::ethers::providers::Middleware> From<::ethers::contract::Contract<M>>
         for IPlonkVerifier<M>
     {
         fn from(contract: ::ethers::contract::Contract<M>) -> Self {
-            Self::new(contract.address(), contract.client())
+            Self(contract)
         }
     }
     ///Container type for all input parameters for the `verify` function with signature `verify((uint256,uint256,(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),bytes32,bytes32),uint256[8],((uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256))` and selector `0x64e4c59e`
