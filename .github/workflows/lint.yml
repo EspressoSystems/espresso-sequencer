@@ -30,7 +30,7 @@ jobs:
         name: Enable Rust Caching
 
       - name: Format Check
-        run: cargo fmt -- --check
+        run: cargo +nightly fmt -- --check
 
       - name: Check (embedded-db)
         run: |
