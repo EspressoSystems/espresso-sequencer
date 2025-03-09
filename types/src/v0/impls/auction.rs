@@ -1,5 +1,9 @@
-use std::str::FromStr;
-
+use super::{state::ValidatedState, MarketplaceVersion};
+use crate::{
+    eth_signature_key::{EthKeyPair, SigningError},
+    v0_99::{BidTx, BidTxBody, FullNetworkTx, SolverAuctionResults},
+    FeeAccount, FeeAmount, FeeError, FeeInfo, NamespaceId,
+};
 use anyhow::Context;
 use async_trait::async_trait;
 use committable::{Commitment, Committable};
@@ -11,16 +15,10 @@ use hotshot_types::{
         signature_key::BuilderSignatureKey,
     },
 };
+use std::str::FromStr;
 use thiserror::Error;
 use tide_disco::error::ServerError;
 use url::Url;
-
-use super::{state::ValidatedState, MarketplaceVersion};
-use crate::{
-    eth_signature_key::{EthKeyPair, SigningError},
-    v0_99::{BidTx, BidTxBody, FullNetworkTx, SolverAuctionResults},
-    FeeAccount, FeeAmount, FeeError, FeeInfo, NamespaceId,
-};
 
 impl FullNetworkTx {
     /// Proxy for `execute` method of each transaction variant.

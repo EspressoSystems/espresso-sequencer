@@ -4,8 +4,6 @@
 // You should have received a copy of the MIT License
 // along with the HotShot repository. If not, see <https://mit-license.org/>.
 
-use std::time::Duration;
-
 use hotshot_example_types::{
     node_types::{
         CombinedImpl, EpochUpgradeTestVersions, EpochsTestVersions, Libp2pImpl, MemoryImpl,
@@ -24,6 +22,7 @@ use hotshot_testing::{
     test_builder::{TestDescription, TimingData},
     view_sync_task::ViewSyncTaskDescription,
 };
+use std::time::Duration;
 
 cross_tests!(
     TestName: test_success_with_epochs,

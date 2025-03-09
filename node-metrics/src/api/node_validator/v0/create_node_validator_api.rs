@@ -1,17 +1,5 @@
 use std::sync::Arc;
 
-use async_lock::RwLock;
-use espresso_types::{PubKey, SeqTypes};
-use futures::{
-    channel::mpsc::{self, Receiver, SendError, Sender},
-    Sink, SinkExt, Stream, StreamExt,
-};
-use hotshot_query_service::Leaf2;
-use hotshot_types::event::{Event, EventType};
-use serde::{Deserialize, Serialize};
-use tokio::{spawn, task::JoinHandle};
-use url::Url;
-
 use super::{get_stake_table_from_sequencer, ProcessNodeIdentityUrlStreamTask};
 use crate::service::{
     client_id::ClientId,
@@ -24,6 +12,17 @@ use crate::service::{
     data_state::{DataState, ProcessLeafStreamTask, ProcessNodeIdentityStreamTask},
     server_message::ServerMessage,
 };
+use async_lock::RwLock;
+use espresso_types::{PubKey, SeqTypes};
+use futures::{
+    channel::mpsc::{self, Receiver, SendError, Sender},
+    Sink, SinkExt, Stream, StreamExt,
+};
+use hotshot_query_service::Leaf2;
+use hotshot_types::event::{Event, EventType};
+use serde::{Deserialize, Serialize};
+use tokio::{spawn, task::JoinHandle};
+use url::Url;
 
 pub struct NodeValidatorAPI<K> {
     pub process_internal_client_message_handle: Option<InternalClientMessageProcessingTask>,
@@ -120,7 +119,7 @@ impl HotShotEventProcessingTask {
                 None => {
                     tracing::info!("event stream closed");
                     break;
-                },
+                }
             };
 
             let Event { event, .. } = event;
@@ -136,7 +135,7 @@ impl HotShotEventProcessingTask {
                             panic!("HotShotEventProcessingTask leaf sender is closed, unrecoverable, the block state will stagnate.");
                         }
                     }
-                },
+                }
 
                 EventType::ExternalMessageReceived { data, .. } => {
                     let roll_call_info = match bincode::deserialize(&data) {
@@ -148,12 +147,12 @@ impl HotShotEventProcessingTask {
                                 err
                             );
                             continue;
-                        },
+                        }
 
                         _ => {
                             // Ignore any other potentially recognized messages
                             continue;
-                        },
+                        }
                     };
 
                     let public_api_url = roll_call_info.public_api_url;
@@ -164,11 +163,11 @@ impl HotShotEventProcessingTask {
                         tracing::error!("url sender closed: {}", err);
                         panic!("HotShotEventProcessingTask url sender is closed, unrecoverable, the node state will stagnate.");
                     }
-                },
+                }
                 _ => {
                     // Ignore all other events
                     continue;
-                },
+                }
             }
         }
     }
@@ -237,7 +236,7 @@ impl ProcessExternalMessageHandlingTask {
                 None => {
                     tracing::error!("external message receiver closed");
                     break;
-                },
+                }
             };
 
             match external_message {
@@ -249,12 +248,12 @@ impl ProcessExternalMessageHandlingTask {
                         tracing::error!("url sender closed: {}", err);
                         break;
                     }
-                },
+                }
 
                 _ => {
                     // Ignore all other messages
                     continue;
-                },
+                }
             }
         }
     }
@@ -369,10 +368,6 @@ pub async fn create_node_validator_processing(
 
 #[cfg(test)]
 mod test {
-    use futures::channel::mpsc::{self, Sender};
-    use tide_disco::App;
-    use tokio::spawn;
-
     use crate::{
         api::node_validator::v0::{
             HotshotQueryServiceLeafStreamRetriever, ProcessProduceLeafStreamTask,
@@ -380,6 +375,9 @@ mod test {
         },
         service::{client_message::InternalClientMessage, server_message::ServerMessage},
     };
+    use futures::channel::mpsc::{self, Sender};
+    use tide_disco::App;
+    use tokio::spawn;
 
     struct TestState(Sender<InternalClientMessage<Sender<ServerMessage>>>);
 
@@ -401,14 +399,14 @@ mod test {
             Ok(node_validator_api) => node_validator_api,
             Err(err) => {
                 panic!("error defining node validator api: {:?}", err);
-            },
+            }
         };
 
         match app.register_module("node-validator", node_validator_api) {
-            Ok(_) => {},
+            Ok(_) => {}
             Err(err) => {
                 panic!("error registering node validator api: {:?}", err);
-            },
+            }
         }
 
         let (leaf_sender, leaf_receiver) = mpsc::channel(10);
@@ -451,7 +449,7 @@ mod test {
 
             Err(err) => {
                 panic!("error defining node validator api: {:?}", err);
-            },
+            }
         };
 
         // We would like to wait until being signaled

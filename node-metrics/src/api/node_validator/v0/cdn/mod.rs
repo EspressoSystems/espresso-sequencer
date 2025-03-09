@@ -1,3 +1,4 @@
+use crate::api::node_validator::v0::create_node_validator_api::ExternalMessage;
 use espresso_types::{PubKey, SeqTypes};
 use futures::{channel::mpsc::SendError, Sink, SinkExt};
 use hotshot::{
@@ -13,8 +14,6 @@ use hotshot_types::{
 };
 use tokio::{spawn, task::JoinHandle};
 use url::Url;
-
-use crate::api::node_validator::v0::create_node_validator_api::ExternalMessage;
 
 /// ConnectedNetworkConsumer represents a trait that splits up a portion of
 /// the ConnectedNetwork trait, so that the consumer only needs to be aware of
@@ -96,7 +95,7 @@ impl CdnReceiveMessagesTask {
                 Err(err) => {
                     tracing::error!("error receiving message: {:?}", err);
                     continue;
-                },
+                }
             };
 
             // We want to try and decode this message.
@@ -107,17 +106,17 @@ impl CdnReceiveMessagesTask {
                 Err(err) => {
                     tracing::error!("error deserializing message: {:?}", err);
                     continue;
-                },
+                }
             };
 
             let external_message_deserialize_result = match message.kind {
                 MessageKind::External(external_message) => {
                     bincode::deserialize::<ExternalMessage>(&external_message)
-                },
+                }
                 _ => {
                     tracing::error!("unexpected message kind: {:?}", message);
                     continue;
-                },
+                }
             };
 
             let external_message = match external_message_deserialize_result {
@@ -125,7 +124,7 @@ impl CdnReceiveMessagesTask {
                 Err(err) => {
                     tracing::error!("error deserializing message: {:?}", err);
                     continue;
-                },
+                }
             };
 
             match external_message {
@@ -138,11 +137,11 @@ impl CdnReceiveMessagesTask {
                         tracing::error!("error sending public api url: {:?}", err);
                         return;
                     }
-                },
+                }
 
                 _ => {
                     // We're not concerned about other message types
-                },
+                }
             }
         }
     }
@@ -238,7 +237,7 @@ impl BroadcastRollCallTask {
             Err(err) => {
                 tracing::error!("error serializing rollcall request: {:?}", err);
                 return;
-            },
+            }
         };
 
         let hotshot_message = Message::<SeqTypes> {
@@ -251,7 +250,7 @@ impl BroadcastRollCallTask {
             Err(err) => {
                 tracing::error!("error serializing hotshot message: {:?}", err);
                 return;
-            },
+            }
         };
 
         let broadcast_result = network
@@ -279,32 +278,30 @@ impl Drop for BroadcastRollCallTask {
 
 #[cfg(test)]
 mod test {
-    use core::panic;
-    use std::time::Duration;
-
-    use espresso_types::SeqTypes;
-    use futures::{
-        channel::mpsc::{
-            Sender, {self},
-        },
-        SinkExt, StreamExt,
+    use super::{BroadcastRollCallTask, ConnectedNetworkConsumer, ConnectedNetworkPublisher};
+    use crate::api::node_validator::v0::create_node_validator_api::ExternalMessage;
+    use crate::api::node_validator::v0::{
+        cdn::CdnReceiveMessagesTask, create_node_validator_api::RollCallInfo,
     };
+    use core::panic;
+    use espresso_types::SeqTypes;
+    use futures::channel::mpsc::Sender;
+    use futures::SinkExt;
+    use futures::{
+        channel::mpsc::{self},
+        StreamExt,
+    };
+    use hotshot::types::SignatureKey;
     use hotshot::{
         traits::NetworkError,
-        types::{BLSPubKey, Message, SignatureKey},
+        types::{BLSPubKey, Message},
     };
-    use hotshot_types::{
-        message::{DataMessage, MessageKind},
-        traits::network::{BroadcastDelay, ResponseMessage},
-    };
-    use tokio::time::{error::Elapsed, sleep, timeout};
+    use hotshot_types::message::{DataMessage, MessageKind};
+    use hotshot_types::traits::network::{BroadcastDelay, ResponseMessage};
+    use std::time::Duration;
+    use tokio::time::error::Elapsed;
+    use tokio::time::{sleep, timeout};
     use url::Url;
-
-    use super::{BroadcastRollCallTask, ConnectedNetworkConsumer, ConnectedNetworkPublisher};
-    use crate::api::node_validator::v0::{
-        cdn::CdnReceiveMessagesTask,
-        create_node_validator_api::{ExternalMessage, RollCallInfo},
-    };
 
     /// [TestConnectedNetworkConsumer] is a test implementation of the
     /// [ConnectedNetworkConsumer] trait that allows for the simulation of
@@ -567,7 +564,7 @@ mod test {
                     public_key,
                     BLSPubKey::generated_from_seed_indexed([0; 32], 0).0
                 );
-            },
+            }
             _ => panic!("unexpected external message"),
         }
 

@@ -70,21 +70,16 @@
 //! spawned to fetch missing resources and send them through the [`Notifier`], but these should be
 //! relatively few and rare.
 
-use std::{
-    future::IntoFuture,
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
-    },
-};
-
 use async_lock::Mutex;
 use derivative::Derivative;
 use futures::future::{BoxFuture, FutureExt};
-use tokio::sync::{
-    mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
-    oneshot,
+use std::sync::Arc;
+use std::{
+    future::IntoFuture,
+    sync::atomic::{AtomicBool, Ordering},
 };
+use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
+use tokio::sync::oneshot;
 use tracing::warn;
 
 /// A predicate on a type `<T>`.
@@ -291,12 +286,11 @@ where
 
 #[cfg(test)]
 mod test {
-    use std::time::Duration;
-
     use tokio::time::timeout;
 
     use super::*;
     use crate::testing::setup_test;
+    use std::time::Duration;
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_notify_drop() {

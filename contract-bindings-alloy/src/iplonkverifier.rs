@@ -16,9 +16,8 @@ library BN254 {
     clippy::empty_structs_with_brackets
 )]
 pub mod BN254 {
-    use alloy::sol_types as alloy_sol_types;
-
     use super::*;
+    use alloy::sol_types as alloy_sol_types;
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct BaseField(alloy::sol_types::private::primitives::aliases::U256);
@@ -283,7 +282,7 @@ pub mod BN254 {
             match _t {
                 alloy_sol_types::private::AssertTypeEq::<
                     <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                >(_) => {},
+                >(_) => {}
             }
         }
         #[automatically_derived]
@@ -1258,9 +1257,8 @@ interface IPlonkVerifier {
     clippy::empty_structs_with_brackets
 )]
 pub mod IPlonkVerifier {
-    use alloy::sol_types as alloy_sol_types;
-
     use super::*;
+    use alloy::sol_types as alloy_sol_types;
     /// The creation / init bytecode of the contract.
     ///
     /// ```text
@@ -1400,7 +1398,7 @@ pub mod IPlonkVerifier {
             match _t {
                 alloy_sol_types::private::AssertTypeEq::<
                     <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                >(_) => {},
+                >(_) => {}
             }
         }
         #[automatically_derived]
@@ -1966,7 +1964,7 @@ pub mod IPlonkVerifier {
             match _t {
                 alloy_sol_types::private::AssertTypeEq::<
                     <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                >(_) => {},
+                >(_) => {}
             }
         }
         #[automatically_derived]
@@ -2512,7 +2510,7 @@ pub mod IPlonkVerifier {
                 match _t {
                     alloy_sol_types::private::AssertTypeEq::<
                         <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                    >(_) => {},
+                    >(_) => {}
                 }
             }
             #[automatically_derived]
@@ -2545,7 +2543,7 @@ pub mod IPlonkVerifier {
                 match _t {
                     alloy_sol_types::private::AssertTypeEq::<
                         <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                    >(_) => {},
+                    >(_) => {}
                 }
             }
             #[automatically_derived]
@@ -2676,7 +2674,7 @@ pub mod IPlonkVerifier {
             match self {
                 Self::verify(inner) => {
                     <verifyCall as alloy_sol_types::SolCall>::abi_encoded_size(inner)
-                },
+                }
             }
         }
         #[inline]
@@ -2684,7 +2682,7 @@ pub mod IPlonkVerifier {
             match self {
                 Self::verify(inner) => {
                     <verifyCall as alloy_sol_types::SolCall>::abi_encode_raw(inner, out)
-                },
+                }
             }
         }
     }

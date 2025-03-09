@@ -10,14 +10,12 @@
 // You should have received a copy of the GNU General Public License along with this program. If not,
 // see <https://www.gnu.org/licenses/>.
 
-use std::fmt::Display;
-
+use crate::{availability, explorer, merklized_state, node, status};
 use derive_more::From;
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
+use std::fmt::Display;
 use tide_disco::StatusCode;
-
-use crate::{availability, explorer, merklized_state, node, status};
 
 #[derive(Clone, Debug, From, Snafu, Deserialize, Serialize)]
 pub enum Error {

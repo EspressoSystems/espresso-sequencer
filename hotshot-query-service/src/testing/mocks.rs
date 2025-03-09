@@ -10,8 +10,12 @@
 // You should have received a copy of the GNU General Public License along with this program. If not,
 // see <https://www.gnu.org/licenses/>.
 
-use std::ops::Range;
-
+use crate::explorer::traits::{ExplorerHeader, ExplorerTransaction};
+use crate::merklized_state::MerklizedState;
+use crate::{
+    availability::{QueryableHeader, QueryablePayload},
+    types::HeightIndexed,
+};
 use hotshot::traits::{
     election::static_committee::StaticCommittee, implementations::MemoryNetwork, NodeImplementation,
 };
@@ -21,25 +25,21 @@ use hotshot_example_types::{
     state_types::{TestInstanceState, TestValidatedState},
     storage_types::TestStorage,
 };
+use hotshot_types::traits::node_implementation::Versions;
 use hotshot_types::{
     data::{QuorumProposal, ViewNumber},
     signature_key::BLSPubKey,
-    traits::node_implementation::{NodeType, Versions},
+    traits::node_implementation::NodeType,
 };
+
 use jf_merkle_tree::{
     prelude::{MerkleProof, Sha3Digest, Sha3Node},
     universal_merkle_tree::UniversalMerkleTree,
     ForgetableMerkleTreeScheme, ForgetableUniversalMerkleTreeScheme,
 };
 use serde::{Deserialize, Serialize};
+use std::ops::Range;
 use vbs::version::StaticVersion;
-
-use crate::{
-    availability::{QueryableHeader, QueryablePayload},
-    explorer::traits::{ExplorerHeader, ExplorerTransaction},
-    merklized_state::MerklizedState,
-    types::HeightIndexed,
-};
 
 pub type MockHeader = TestBlockHeader;
 pub type MockPayload = TestBlockPayload;

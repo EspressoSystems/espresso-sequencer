@@ -12,13 +12,12 @@
 
 #![cfg(feature = "metrics-data-source")]
 
-use async_trait::async_trait;
-
 use crate::{
     metrics::PrometheusMetrics,
     status::{HasMetrics, StatusDataSource},
     QueryError, QueryResult,
 };
+use async_trait::async_trait;
 
 /// A minimal data source for the status API provided in this crate, with no persistent storage.
 ///
@@ -83,10 +82,9 @@ impl StatusDataSource for MetricsDataSource {
 
 #[cfg(any(test, feature = "testing"))]
 mod impl_testable_data_source {
-    use hotshot::types::Event;
-
     use super::*;
     use crate::testing::{consensus::DataSourceLifeCycle, mocks::MockTypes};
+    use hotshot::types::Event;
 
     #[async_trait]
     impl DataSourceLifeCycle for MetricsDataSource {
@@ -114,7 +112,9 @@ mod impl_testable_data_source {
 
 #[cfg(test)]
 mod test {
-    use super::{super::status_tests, MetricsDataSource};
+    use super::super::status_tests;
+    use super::MetricsDataSource;
+
     // For some reason this is the only way to import the macro defined in another module of this
     // crate.
     use crate::*;

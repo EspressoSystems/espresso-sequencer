@@ -4,7 +4,9 @@ use ark_ff::PrimeField;
 use ark_std::str::FromStr;
 use diff_test_bn254::{field_to_u256, u256_to_field};
 use ethers::{
-    abi::{AbiDecode, Token, Tokenize},
+    abi::AbiDecode,
+    abi::Token,
+    abi::Tokenize,
     prelude::{AbiError, EthAbiCodec, EthAbiType},
     types::U256,
 };

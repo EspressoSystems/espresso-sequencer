@@ -1,21 +1,3 @@
-use std::{
-    fmt::Display,
-    sync::{
-        atomic::{AtomicUsize, Ordering},
-        Arc,
-    },
-    time::{Duration, Instant},
-};
-
-pub use async_broadcast::{broadcast, RecvError, TryRecvError};
-use async_lock::RwLock;
-use async_trait::async_trait;
-use committable::Commitment;
-use futures::{
-    future::BoxFuture,
-    stream::{FuturesOrdered, FuturesUnordered, StreamExt},
-    Stream, TryStreamExt,
-};
 use hotshot::types::Event;
 use hotshot_builder_api::{
     v0_1::{
@@ -27,38 +9,51 @@ use hotshot_builder_api::{
     },
     v0_2::block_info::AvailableBlockHeaderInputV1,
 };
+use hotshot_types::traits::block_contents::Transaction;
+use hotshot_types::traits::EncodeBytes;
 use hotshot_types::{
     data::VidCommitment,
     event::EventType,
     traits::{
-        block_contents::{BlockPayload, Transaction},
+        block_contents::BlockPayload,
         node_implementation::{ConsensusTime, NodeType},
         signature_key::{BuilderSignatureKey, SignatureKey},
-        EncodeBytes,
     },
     utils::BuilderCommitment,
 };
+use marketplace_builder_shared::coordinator::BuilderStateLookup;
+use marketplace_builder_shared::error::Error;
+use marketplace_builder_shared::state::BuilderState;
+use marketplace_builder_shared::utils::BuilderKeys;
 use marketplace_builder_shared::{
     block::{BlockId, BuilderStateId, ReceivedTransaction, TransactionSource},
-    coordinator::{BuilderStateCoordinator, BuilderStateLookup},
-    error::Error,
-    state::BuilderState,
-    utils::BuilderKeys,
+    coordinator::BuilderStateCoordinator,
 };
-use tagged_base64::TaggedBase64;
-use tide_disco::{app::AppError, method::ReadState, App};
-use tokio::{
-    spawn,
-    task::JoinHandle,
-    time::{sleep, timeout},
-};
+use tide_disco::app::AppError;
+use tokio::spawn;
+use tokio::time::{sleep, timeout};
 use tracing::{error, info, instrument, trace, warn};
 use vbs::version::StaticVersion;
 
-use crate::{
-    block_size_limits::BlockSizeLimits,
-    block_store::{BlockInfo, BlockStore},
+use crate::block_size_limits::BlockSizeLimits;
+use crate::block_store::{BlockInfo, BlockStore};
+pub use async_broadcast::{broadcast, RecvError, TryRecvError};
+use async_lock::RwLock;
+use async_trait::async_trait;
+use committable::Commitment;
+use futures::{future::BoxFuture, Stream};
+use futures::{
+    stream::{FuturesOrdered, FuturesUnordered, StreamExt},
+    TryStreamExt,
 };
+use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::Ordering;
+use std::sync::Arc;
+use std::time::Duration;
+use std::{fmt::Display, time::Instant};
+use tagged_base64::TaggedBase64;
+use tide_disco::{method::ReadState, App};
+use tokio::task::JoinHandle;
 
 /// Proportion of overall allotted time to wait for optimal builder state
 /// to appear before resorting to highest view builder state
@@ -206,7 +201,7 @@ where
             match event.event {
                 EventType::Error { error } => {
                     error!("Error event in HotShot: {:?}", error);
-                },
+                }
                 EventType::Transactions { transactions } => {
                     let this = Arc::clone(&self);
                     spawn(async move {
@@ -222,7 +217,7 @@ where
                             .collect::<Vec<_>>()
                             .await;
                     });
-                },
+                }
                 EventType::Decide { leaf_chain, .. } => {
                     let prune_cutoff = leaf_chain[0].leaf.view_number();
 
@@ -231,16 +226,16 @@ where
 
                     let this = Arc::clone(&self);
                     spawn(async move { this.block_store.write().await.prune(prune_cutoff) });
-                },
+                }
                 EventType::DaProposal { proposal, .. } => {
                     let coordinator = Arc::clone(&self.coordinator);
                     spawn(async move { coordinator.handle_da_proposal(proposal.data).await });
-                },
+                }
                 EventType::QuorumProposal { proposal, .. } => {
                     let coordinator = Arc::clone(&self.coordinator);
                     spawn(async move { coordinator.handle_quorum_proposal(proposal.data).await });
-                },
-                _ => {},
+                }
+                _ => {}
             }
         }
     }
@@ -292,10 +287,10 @@ where
                 BuilderStateLookup::Found(builder) => break Ok(builder),
                 BuilderStateLookup::Decided => {
                     return Err(Error::AlreadyDecided);
-                },
+                }
                 BuilderStateLookup::NotFound => {
                     sleep(check_period).await;
-                },
+                }
             };
         }
     }
@@ -379,7 +374,7 @@ where
                 Err(error) => {
                     warn!(?error, "Failed to build block payload");
                     return Err(Error::BuildBlock(error));
-                },
+                }
             };
 
         // count the number of txns
@@ -447,7 +442,7 @@ where
                 // Timeout waiting for ideal state, get the highest view builder instead
                 warn!("Couldn't find the ideal builder state");
                 self.coordinator.highest_view_builder().await
-            },
+            }
             Ok(Err(e)) => {
                 // State already decided
                 let lowest_view = self.coordinator.lowest_view().await;
@@ -456,7 +451,7 @@ where
                     "get_available_blocks request for decided view"
                 );
                 return Err(e);
-            },
+            }
         };
 
         let Some(builder) = builder else {
@@ -490,7 +485,7 @@ where
                 }
 
                 Ok(vec![response])
-            },
+            }
             // Success, but no block: we don't have transactions and aren't prioritizing finalization
             Ok(Ok(None)) => Ok(vec![]),
             // Error building block, try to respond with a cached one as last-ditch attempt
@@ -500,7 +495,7 @@ where
                 } else {
                     Err(e)
                 }
-            },
+            }
         }
     }
 

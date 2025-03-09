@@ -15,13 +15,11 @@ use hotshot_query_service::{
     node::NodeDataSource,
     status::StatusDataSource,
 };
+use hotshot_types::traits::node_implementation::NodeType;
 use hotshot_types::{
     data::ViewNumber,
     light_client::StateSignatureRequestBody,
-    traits::{
-        network::ConnectedNetwork,
-        node_implementation::{NodeType, Versions},
-    },
+    traits::{network::ConnectedNetwork, node_implementation::Versions},
     PeerConfig,
 };
 use tide_disco::Url;

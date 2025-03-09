@@ -3,8 +3,9 @@ use hotshot_query_service::explorer::ExplorerTransaction;
 use hotshot_types::traits::block_contents::Transaction as HotShotTransaction;
 use serde::{de::Error, Deserialize, Deserializer};
 
-use super::{NsPayloadBuilder, NsTableBuilder};
 use crate::{NamespaceId, Transaction};
+
+use super::{NsPayloadBuilder, NsTableBuilder};
 
 impl From<u32> for NamespaceId {
     fn from(value: u32) -> Self {

@@ -12,14 +12,6 @@
 
 //! [`Fetchable`] implementation for [`BlockQueryData`] and [`PayloadQueryData`].
 
-use std::{cmp::Ordering, future::IntoFuture, iter::once, ops::RangeBounds, sync::Arc};
-
-use async_trait::async_trait;
-use derivative::Derivative;
-use derive_more::From;
-use futures::future::{BoxFuture, FutureExt};
-use hotshot_types::traits::{block_contents::BlockHeader, node_implementation::NodeType};
-
 use super::{
     header::{fetch_header_and_then, HeaderCallback},
     AvailabilityProvider, FetchRequest, Fetchable, Fetcher, Heights, Notifiers, RangedFetchable,
@@ -42,6 +34,12 @@ use crate::{
     types::HeightIndexed,
     Header, Payload, QueryResult,
 };
+use async_trait::async_trait;
+use derivative::Derivative;
+use derive_more::From;
+use futures::future::{BoxFuture, FutureExt};
+use hotshot_types::traits::{block_contents::BlockHeader, node_implementation::NodeType};
+use std::{cmp::Ordering, future::IntoFuture, iter::once, ops::RangeBounds, sync::Arc};
 pub(super) type PayloadFetcher<Types, S, P> =
     fetching::Fetcher<request::PayloadRequest, PayloadCallback<Types, S, P>>;
 

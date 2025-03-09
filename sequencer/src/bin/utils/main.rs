@@ -1,6 +1,7 @@
 //! sequencer utility programs
 
 use clap::{Parser, Subcommand};
+
 use sequencer_utils::logging;
 mod keygen;
 mod pubkey;
@@ -33,7 +34,7 @@ async fn main() -> anyhow::Result<()> {
         Command::Pubkey(opt) => {
             pubkey::run(opt);
             Ok(())
-        },
+        }
         Command::ResetStorage(opt) => reset_storage::run(opt).await,
     }
 }

@@ -13,6 +13,11 @@ use std::{
     time::{Duration, Instant},
 };
 
+use crate::{
+    events::HotShotEvent,
+    helpers::{broadcast_event, parent_leaf_and_state, wait_for_next_epoch_qc},
+    quorum_proposal::{QuorumProposalTaskState, UpgradeLock, Versions},
+};
 use anyhow::{ensure, Context, Result};
 use async_broadcast::{Receiver, Sender};
 use async_lock::RwLock;
@@ -36,12 +41,6 @@ use hotshot_types::{
 use hotshot_utils::anytrace::*;
 use tracing::instrument;
 use vbs::version::StaticVersionType;
-
-use crate::{
-    events::HotShotEvent,
-    helpers::{broadcast_event, parent_leaf_and_state, wait_for_next_epoch_qc},
-    quorum_proposal::{QuorumProposalTaskState, UpgradeLock, Versions},
-};
 
 /// Proposal dependency types. These types represent events that precipitate a proposal.
 #[derive(PartialEq, Debug)]
@@ -432,22 +431,22 @@ impl<TYPES: NodeType, V: Versions> HandleDepOutput for ProposalDependencyHandle<
                         block_view: *view,
                         auction_result: auction_result.clone(),
                     });
-                },
+                }
                 HotShotEvent::Qc2Formed(cert) => match cert {
                     either::Right(timeout) => {
                         timeout_certificate = Some(timeout.clone());
-                    },
+                    }
                     either::Left(qc) => {
                         parent_qc = Some(qc.clone());
-                    },
+                    }
                 },
                 HotShotEvent::ViewSyncFinalizeCertificateRecv(cert) => {
                     view_sync_finalize_cert = Some(cert.clone());
-                },
+                }
                 HotShotEvent::VidDisperseSend(share, _) => {
                     vid_share = Some(share.clone());
-                },
-                _ => {},
+                }
+                _ => {}
             }
         }
 

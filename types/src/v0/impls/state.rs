@@ -1,5 +1,3 @@
-use std::ops::Add;
-
 use anyhow::bail;
 use committable::{Commitment, Committable};
 use ethers::types::Address;
@@ -21,6 +19,7 @@ use jf_merkle_tree::{
 };
 use num_traits::CheckedSub;
 use serde::{Deserialize, Serialize};
+use std::ops::Add;
 use thiserror::Error;
 use time::OffsetDateTime;
 use vbs::version::Version;
@@ -1119,7 +1118,7 @@ mod test {
                 }),
                 Header::V99(_) => {
                     panic!("You called `Header.next()` on unimplemented version (v3)")
-                },
+                }
             }
         }
         /// Replaces builder signature w/ invalid one.
@@ -1148,7 +1147,7 @@ mod test {
                 }),
                 Header::V99(_) => {
                     panic!("You called `Header.sign()` on unimplemented version (v3)")
-                },
+                }
             }
         }
 

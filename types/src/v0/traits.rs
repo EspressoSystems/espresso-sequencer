@@ -7,6 +7,8 @@ use async_trait::async_trait;
 use committable::{Commitment, Committable};
 use futures::{FutureExt, TryFutureExt};
 use hotshot::{types::EventType, HotShotInitializer, InitializerEpochInfo};
+use hotshot_types::drb::DrbResult;
+use hotshot_types::traits::node_implementation::NodeType;
 use hotshot_types::{
     consensus::CommitmentMap,
     data::{
@@ -14,14 +16,13 @@ use hotshot_types::{
         DaProposal, DaProposal2, EpochNumber, QuorumProposal, QuorumProposal2,
         QuorumProposalWrapper, VidCommitment, VidDisperseShare, ViewNumber,
     },
-    drb::DrbResult,
     event::{HotShotAction, LeafInfo},
     message::{convert_proposal, Proposal, UpgradeLock},
     simple_certificate::{
         NextEpochQuorumCertificate2, QuorumCertificate, QuorumCertificate2, UpgradeCertificate,
     },
     traits::{
-        node_implementation::{ConsensusTime, NodeType, Versions},
+        node_implementation::{ConsensusTime, Versions},
         storage::Storage,
         ValidatedState as HotShotState,
     },
@@ -30,12 +31,13 @@ use hotshot_types::{
 use itertools::Itertools;
 use serde::{de::DeserializeOwned, Serialize};
 
-use super::{
-    impls::NodeState, utils::BackoffParams, EpochCommittees, EpochVersion, Leaf, SequencerVersions,
-};
 use crate::{
     v0::impls::ValidatedState, v0_99::ChainConfig, BlockMerkleTree, Event, FeeAccount,
     FeeAccountProof, FeeMerkleCommitment, FeeMerkleTree, Leaf2, NetworkConfig, SeqTypes,
+};
+
+use super::{
+    impls::NodeState, utils::BackoffParams, EpochCommittees, EpochVersion, Leaf, SequencerVersions,
 };
 
 #[async_trait]
@@ -379,7 +381,7 @@ impl<T: StateCatchup> StateCatchup for Vec<T> {
                         provider = provider.name(),
                         "failed to fetch leaves: {err:#}"
                     );
-                },
+                }
             }
         }
 
@@ -414,7 +416,7 @@ impl<T: StateCatchup> StateCatchup for Vec<T> {
                         provider = provider.name(),
                         "failed to fetch accounts: {err:#}"
                     );
-                },
+                }
             }
         }
 
@@ -441,7 +443,7 @@ impl<T: StateCatchup> StateCatchup for Vec<T> {
                         provider = provider.name(),
                         "failed to fetch frontier: {err:#}"
                     );
-                },
+                }
             }
         }
 
@@ -461,7 +463,7 @@ impl<T: StateCatchup> StateCatchup for Vec<T> {
                         provider = provider.name(),
                         "failed to fetch chain config: {err:#}"
                     );
-                },
+                }
             }
         }
 
@@ -559,11 +561,11 @@ pub trait SequencerPersistence: Sized + Send + Sync + Clone + 'static {
             Some(view) => {
                 tracing::info!(?view, "starting from saved view");
                 view
-            },
+            }
             None => {
                 tracing::info!("no saved view, starting from genesis");
                 ViewNumber::genesis()
-            },
+            }
         };
 
         let next_epoch_high_qc = self
@@ -588,7 +590,7 @@ pub trait SequencerPersistence: Sized + Send + Sync + Clone + 'static {
 
                 let anchor_view = leaf.view_number();
                 (leaf, high_qc, Some(anchor_view))
-            },
+            }
             None => {
                 tracing::info!("no saved leaf, starting from genesis leaf");
                 (
@@ -597,7 +599,7 @@ pub trait SequencerPersistence: Sized + Send + Sync + Clone + 'static {
                     QuorumCertificate2::genesis::<V>(&genesis_validated_state, &state).await,
                     None,
                 )
-            },
+            }
         };
         let validated_state = if leaf.block_header().height() == 0 {
             // If we are starting from genesis, we can provide the full state.

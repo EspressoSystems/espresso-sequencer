@@ -1,8 +1,7 @@
+use super::LocationDetails;
 use hotshot_types::signature_key::BLSPubKey;
 use serde::{Deserialize, Serialize};
 use surf_disco::Url;
-
-use super::LocationDetails;
 
 /// [NodeIdentity] represents the identity of the node that is participating
 /// in the network.
@@ -127,9 +126,10 @@ impl NodeIdentity {
 
 #[cfg(test)]
 pub mod tests {
-    use hotshot_types::{signature_key::BLSPubKey, traits::signature_key::SignatureKey};
-
-    use super::{LocationDetails, NodeIdentity};
+    use super::LocationDetails;
+    use super::NodeIdentity;
+    use hotshot_types::signature_key::BLSPubKey;
+    use hotshot_types::traits::signature_key::SignatureKey;
 
     pub fn create_test_node(index: u64) -> NodeIdentity {
         let (pub_key, _) = BLSPubKey::generated_from_seed_indexed([0; 32], index);

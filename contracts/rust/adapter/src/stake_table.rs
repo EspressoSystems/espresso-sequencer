@@ -1,5 +1,4 @@
-use std::str::FromStr;
-
+use crate::jellyfish::u256_to_field;
 use ark_ec::{
     short_weierstrass,
     twisted_edwards::{self, Affine, TECurveConfig},
@@ -30,8 +29,7 @@ use hotshot_types::{
     PeerConfig,
 };
 use serde::{Deserialize, Serialize};
-
-use crate::jellyfish::u256_to_field;
+use std::str::FromStr;
 
 // TODO: (alex) maybe move these commonly shared util to a crate
 /// convert a field element to U256, panic if field size is larger than 256 bit

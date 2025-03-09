@@ -26,10 +26,10 @@
 //! chain which is tabulated by this specific node and not subject to full consensus agreement, try
 //! the [node](crate::node) API.
 
-use std::{fmt::Display, path::PathBuf, time::Duration};
-
+use crate::{api::load_api, Payload, QueryError};
 use derive_more::From;
 use futures::{FutureExt, StreamExt, TryFutureExt, TryStreamExt};
+
 use hotshot_types::{
     data::{Leaf, Leaf2, QuorumProposal},
     simple_certificate::QuorumCertificate,
@@ -37,10 +37,9 @@ use hotshot_types::{
 };
 use serde::{Deserialize, Serialize};
 use snafu::{OptionExt, Snafu};
+use std::{fmt::Display, path::PathBuf, time::Duration};
 use tide_disco::{api::ApiError, method::ReadState, Api, RequestError, StatusCode};
 use vbs::version::StaticVersionType;
-
-use crate::{api::load_api, Payload, QueryError};
 
 pub(crate) mod data_source;
 mod fetch;
@@ -528,7 +527,7 @@ where
                         .context(FetchTransactionSnafu {
                             resource: hash.to_string(),
                         })
-                },
+                }
                 None => {
                     let height: u64 = req.integer_param("height")?;
                     let fetch = state
@@ -544,7 +543,7 @@ where
                         .context(InvalidTransactionIndexSnafu { height, index: i })?;
                     TransactionQueryData::new(&block, index, i)
                         .context(InvalidTransactionIndexSnafu { height, index: i })
-                },
+                }
             }
         }
         .boxed()
@@ -609,32 +608,34 @@ fn enforce_range_limit(from: usize, until: usize, limit: usize) -> Result<(), Er
 
 #[cfg(test)]
 mod test {
-    use std::{fmt::Debug, time::Duration};
-
-    use async_lock::RwLock;
-    use committable::Committable;
-    use futures::future::FutureExt;
-    use hotshot_types::{data::Leaf2, simple_certificate::QuorumCertificate2};
-    use portpicker::pick_unused_port;
-    use serde::de::DeserializeOwned;
-    use surf_disco::{Client, Error as _};
-    use tempfile::TempDir;
-    use tide_disco::App;
-    use toml::toml;
-
     use super::*;
+    use crate::data_source::storage::AvailabilityStorage;
+    use crate::data_source::VersionedDataSource;
+    use crate::testing::mocks::MockVersions;
     use crate::{
-        data_source::{storage::AvailabilityStorage, ExtensibleDataSource, VersionedDataSource},
+        data_source::ExtensibleDataSource,
         status::StatusDataSource,
         task::BackgroundTask,
         testing::{
             consensus::{MockDataSource, MockNetwork, MockSqlDataSource},
-            mocks::{mock_transaction, MockBase, MockHeader, MockPayload, MockTypes, MockVersions},
+            mocks::{mock_transaction, MockBase, MockHeader, MockPayload, MockTypes},
             setup_test,
         },
         types::HeightIndexed,
         ApiState, Error, Header,
     };
+    use async_lock::RwLock;
+    use committable::Committable;
+    use futures::future::FutureExt;
+    use hotshot_types::data::Leaf2;
+    use hotshot_types::simple_certificate::QuorumCertificate2;
+    use portpicker::pick_unused_port;
+    use serde::de::DeserializeOwned;
+    use std::{fmt::Debug, time::Duration};
+    use surf_disco::{Client, Error as _};
+    use tempfile::TempDir;
+    use tide_disco::App;
+    use toml::toml;
 
     /// Get the current ledger height and a list of non-empty leaf/block pairs.
     async fn get_non_empty_blocks(
@@ -656,7 +657,7 @@ mod test {
                         let leaf = client.get(&format!("leaf/{}", i)).send().await.unwrap();
                         blocks.push((leaf, block));
                     }
-                },
+                }
                 Err(Error::Availability {
                     source: super::Error::FetchBlock { .. },
                 }) => {
@@ -664,7 +665,7 @@ mod test {
                         "found end of ledger at height {i}, non-empty blocks are {blocks:?}",
                     );
                     return (i, blocks);
-                },
+                }
                 Err(err) => panic!("unexpected error {}", err),
             }
         }

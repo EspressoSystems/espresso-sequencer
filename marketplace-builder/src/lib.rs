@@ -6,7 +6,6 @@ use std::{
     marker::PhantomData,
     mem,
     net::{IpAddr, Ipv4Addr},
-    sync::Arc,
     thread::Builder,
 };
 
@@ -36,13 +35,16 @@ use hotshot_builder_api::v0_99::builder::{
     BuildError, Error as BuilderApiError, Options as HotshotBuilderApiOptions,
 };
 use hotshot_orchestrator::client::{OrchestratorClient, ValidatorArgs};
+use hotshot_types::network::NetworkConfig;
+use marketplace_builder_core::service::{GlobalState, ProxyGlobalState};
+use std::sync::Arc;
+use tokio::{spawn, task::JoinHandle};
 // Should move `STAKE_TABLE_CAPACITY` in the sequencer repo when we have variate stake table support
 use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
     event::LeafInfo,
     light_client::StateKeyPair,
-    network::NetworkConfig,
     signature_key::{BLSPrivKey, BLSPubKey},
     traits::{
         block_contents::{BlockHeader, BlockPayload, EncodeBytes, GENESIS_VID_NUM_STORAGE_NODES},
@@ -55,7 +57,6 @@ use hotshot_types::{
 };
 use jf_merkle_tree::{namespaced_merkle_tree::NamespacedMerkleTreeScheme, MerkleTreeScheme};
 use jf_signature::bls_over_bn254::VerKey;
-use marketplace_builder_core::service::{GlobalState, ProxyGlobalState};
 use sequencer::{
     catchup::StatePeers,
     context::{Consensus, SequencerContext},
@@ -65,7 +66,6 @@ use sequencer::{
 };
 use surf_disco::Client;
 use tide_disco::{app, method::ReadState, App, Url};
-use tokio::{spawn, task::JoinHandle};
 use tracing::error;
 use vbs::version::{StaticVersion, StaticVersionType};
 

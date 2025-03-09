@@ -195,7 +195,7 @@ where
                     },
                 );
                 return Err(Error::TxnSender(err));
-            },
+            }
         };
 
         self.update_txn_status(&commit, TransactionStatus::Pending);
@@ -251,15 +251,15 @@ where
                     (Either::Right(da_proposal), Either::Left(quorum_proposal))
                     | (Either::Left(quorum_proposal), Either::Right(da_proposal)) => {
                         self.spawn_builder_state(quorum_proposal, da_proposal).await
-                    },
+                    }
                     _ => {
                         unreachable!()
-                    },
+                    }
                 }
-            },
+            }
             Entry::Vacant(entry) => {
                 entry.insert(proposal);
-            },
+            }
         }
     }
 
@@ -499,10 +499,10 @@ where
                         "Not changing status of rejected/sequenced transaction",
                     );
                     return;
-                },
+                }
                 _ => {
                     tracing::debug!(?old_status, ?new_status, "Changing status of transaction",);
-                },
+                }
             }
         }
         self.tx_status.insert(*txn_hash, new_status);
@@ -525,7 +525,6 @@ mod tests {
     use hotshot_types::data::ViewNumber;
     use tracing_test::traced_test;
 
-    use super::*;
     use crate::{
         block::TransactionSource,
         testing::{
@@ -535,6 +534,8 @@ mod tests {
             mock,
         },
     };
+
+    use super::*;
 
     type BuilderStateCoordinator = super::BuilderStateCoordinator<TestTypes>;
 

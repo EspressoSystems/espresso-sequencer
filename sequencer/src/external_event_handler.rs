@@ -1,7 +1,6 @@
 //! Should probably rename this to "external" or something
 
-use std::{marker::PhantomData, sync::Arc};
-
+use crate::context::TaskList;
 use anyhow::{Context, Result};
 use espresso_types::{PubKey, SeqTypes};
 use hotshot::types::Message;
@@ -14,9 +13,8 @@ use hotshot_types::{
 };
 use request_response::network::Bytes;
 use serde::{Deserialize, Serialize};
+use std::{marker::PhantomData, sync::Arc};
 use tokio::sync::mpsc::{Receiver, Sender};
-
-use crate::context::TaskList;
 
 /// An external message that can be sent to or received from a node
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -85,7 +83,7 @@ impl<V: Versions> ExternalEventHandler<V> {
                 self.request_response_sender
                     .send(request_response.into())
                     .await?;
-            },
+            }
         }
         Ok(())
     }
@@ -113,14 +111,14 @@ impl<V: Versions> ExternalEventHandler<V> {
                         Err(err) => {
                             tracing::warn!("Failed to serialize direct message: {}", err);
                             continue;
-                        },
+                        }
                     };
 
                     // Send the message to the recipient
                     if let Err(err) = network.direct_message(message_bytes, recipient).await {
                         tracing::error!("Failed to send message: {:?}", err);
                     };
-                },
+                }
 
                 OutboundMessage::Broadcast(message) => {
                     // Wrap it in the real message type
@@ -135,7 +133,7 @@ impl<V: Versions> ExternalEventHandler<V> {
                         Err(err) => {
                             tracing::warn!("Failed to serialize broadcast message: {}", err);
                             continue;
-                        },
+                        }
                     };
 
                     // Broadcast the message to the global topic
@@ -145,7 +143,7 @@ impl<V: Versions> ExternalEventHandler<V> {
                     {
                         tracing::error!("Failed to broadcast message: {:?}", err);
                     };
-                },
+                }
             }
         }
     }

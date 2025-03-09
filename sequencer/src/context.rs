@@ -1,9 +1,3 @@
-use std::{
-    fmt::{Debug, Display},
-    sync::Arc,
-    time::Duration,
-};
-
 use anyhow::Context;
 use async_lock::RwLock;
 use derivative::Derivative;
@@ -35,6 +29,8 @@ use hotshot_types::{
 };
 use parking_lot::Mutex;
 use request_response::{network::Bytes, RequestResponse, RequestResponseConfig};
+use std::{fmt::Debug, time::Duration};
+use std::{fmt::Display, sync::Arc};
 use tokio::{
     spawn,
     sync::mpsc::{channel, Receiver},

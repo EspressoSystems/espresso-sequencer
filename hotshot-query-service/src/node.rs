@@ -20,17 +20,15 @@
 //! fully synced with the entire history of the chain. However, the node will _eventually_ sync and
 //! return the expected counts.
 
-use std::{fmt::Display, ops::Bound, path::PathBuf};
-
+use crate::{api::load_api, QueryError};
 use derive_more::From;
 use futures::FutureExt;
 use hotshot_types::traits::node_implementation::NodeType;
 use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, Snafu};
+use std::{fmt::Display, ops::Bound, path::PathBuf};
 use tide_disco::{api::ApiError, method::ReadState, Api, RequestError, StatusCode};
 use vbs::version::StaticVersionType;
-
-use crate::{api::load_api, QueryError};
 
 pub(crate) mod data_source;
 pub(crate) mod query_data;
@@ -203,8 +201,17 @@ where
 
 #[cfg(test)]
 mod test {
-    use std::time::Duration;
-
+    use super::*;
+    use crate::{
+        data_source::ExtensibleDataSource,
+        task::BackgroundTask,
+        testing::{
+            consensus::{MockDataSource, MockNetwork, MockSqlDataSource},
+            mocks::{mock_transaction, MockBase, MockTypes},
+            setup_test,
+        },
+        ApiState, Error, Header,
+    };
     use async_lock::RwLock;
     use committable::Committable;
     use futures::{FutureExt, StreamExt};
@@ -217,23 +224,12 @@ mod test {
         },
     };
     use portpicker::pick_unused_port;
+    use std::time::Duration;
     use surf_disco::Client;
     use tempfile::TempDir;
     use tide_disco::{App, Error as _};
     use tokio::time::sleep;
     use toml::toml;
-
-    use super::*;
-    use crate::{
-        data_source::ExtensibleDataSource,
-        task::BackgroundTask,
-        testing::{
-            consensus::{MockDataSource, MockNetwork, MockSqlDataSource},
-            mocks::{mock_transaction, MockBase, MockTypes},
-            setup_test,
-        },
-        ApiState, Error, Header,
-    };
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_api() {

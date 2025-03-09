@@ -10,15 +10,14 @@
 // You should have received a copy of the GNU General Public License along with this program. If not,
 // see <https://www.gnu.org/licenses/>.
 
-use std::{
-    fmt::{Debug, Display},
-    ops::{Add, Sub},
-};
-
+use super::currency::{CurrencyCode, CurrencyMismatchError};
 use itertools::Itertools;
 use serde::{Deserialize, Serialize, Serializer};
-
-use super::currency::{CurrencyCode, CurrencyMismatchError};
+use std::fmt::Display;
+use std::{
+    fmt::Debug,
+    ops::{Add, Sub},
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 /// [MonetaryValue]s is a struct that paris a [CurrencyCode] with a value.
@@ -196,7 +195,7 @@ where
             return Err(E::custom(
                 "no non-breaking space found in expected MonetaryValue",
             ))
-        },
+        }
     };
 
     let first: String = value.chars().take(index).collect();
@@ -245,7 +244,7 @@ fn determine_pre_and_post_decimal_strings(value: &str) -> (String, Option<String
                 .collect();
 
             (pre_decimal_string, Some(post_decimal_string))
-        },
+        }
     }
 }
 
@@ -290,7 +289,7 @@ where
                     + 10i128.pow(significant_digits - num_digits) * post_decimal_value);
 
             Ok(value)
-        },
+        }
     }
 }
 
@@ -407,7 +406,7 @@ mod test {
                 let result = match result {
                     Err(err) => {
                         panic!("{} failed to parse: {}", value, err);
-                    },
+                    }
                     Ok(result) => result,
                 };
 
@@ -437,7 +436,7 @@ mod test {
                 let result = match result {
                     Err(err) => {
                         panic!("{} failed to parse: {}", value, err);
-                    },
+                    }
                     Ok(result) => result,
                 };
 

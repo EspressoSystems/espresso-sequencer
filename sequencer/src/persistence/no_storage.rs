@@ -1,8 +1,6 @@
 //! Mock implementation of persistence, for testing.
 #![cfg(any(test, feature = "testing"))]
 
-use std::{collections::BTreeMap, sync::Arc};
-
 use anyhow::bail;
 use async_trait::async_trait;
 use espresso_types::{
@@ -23,6 +21,8 @@ use hotshot_types::{
     simple_certificate::{NextEpochQuorumCertificate2, QuorumCertificate2, UpgradeCertificate},
     utils::View,
 };
+use std::collections::BTreeMap;
+use std::sync::Arc;
 
 use crate::{NodeType, SeqTypes, ViewNumber};
 

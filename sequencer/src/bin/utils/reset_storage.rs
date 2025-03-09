@@ -1,8 +1,9 @@
-use clap::Subcommand;
 use sequencer::{
     api::data_source::{DataSourceOptions, SequencerDataSource},
     persistence,
 };
+
+use clap::Subcommand;
 
 /// Options for resetting persistent storage.
 ///
@@ -31,11 +32,11 @@ pub async fn run(opt: Commands) -> anyhow::Result<()> {
             SequencerStorage::Fs(opt) => {
                 tracing::warn!("resetting sequencer file system storage {opt:?}");
                 reset_storage(opt).await
-            },
+            }
             SequencerStorage::Sql(opt) => {
                 tracing::warn!("resetting sequencer SQL storage {opt:?}");
                 reset_storage(*opt).await
-            },
+            }
         },
 
         Commands::Solver(opt) => {
@@ -44,7 +45,7 @@ pub async fn run(opt: Commands) -> anyhow::Result<()> {
             opts.connect().await?;
 
             Ok(())
-        },
+        }
     }
 }
 

@@ -1,9 +1,7 @@
-use std::time::Instant;
-
+use crate::common::TestConfig;
 use anyhow::Result;
 use futures::StreamExt;
-
-use crate::common::TestConfig;
+use std::time::Instant;
 
 /// We allow for no change in state across this many consecutive iterations.
 const MAX_STATE_NOT_INCREMENTING: u8 = 1;

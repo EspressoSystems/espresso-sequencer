@@ -35,11 +35,9 @@
 //! * [`TestProvider`]
 //!
 
-use std::sync::Arc;
-
-use async_trait::async_trait;
-
 use super::Request;
+use async_trait::async_trait;
+use std::sync::Arc;
 
 mod any;
 mod query_service;

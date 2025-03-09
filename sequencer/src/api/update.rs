@@ -1,7 +1,5 @@
 //! Update loop for query API state.
 
-use std::{fmt::Debug, sync::Arc};
-
 use anyhow::bail;
 use async_trait::async_trait;
 use derivative::Derivative;
@@ -10,6 +8,8 @@ use espresso_types::{v0::traits::SequencerPersistence, PubKey};
 use hotshot::types::Event;
 use hotshot_query_service::data_source::UpdateDataSource;
 use hotshot_types::traits::{network::ConnectedNetwork, node_implementation::Versions};
+use std::fmt::Debug;
+use std::sync::Arc;
 
 use super::{data_source::SequencerDataSource, StorageState};
 use crate::{EventConsumer, SeqTypes};
