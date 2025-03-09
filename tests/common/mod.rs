@@ -1,4 +1,12 @@
-use std::{fmt, str::FromStr, time::Duration};
+use std::{
+    fmt,
+    fs::File,
+    io::{stderr, stdout},
+    path::Path,
+    process::{Child, Command},
+    str::FromStr,
+    time::Duration,
+};
 
 use anyhow::{anyhow, Result};
 use client::SequencerClient;
@@ -277,4 +285,57 @@ async fn wait_for_service(url: Url, interval: u64, timeout_duration: u64) -> Res
     })
     .await
     .map_err(|e| anyhow!("Wait for service, timeout: ({}) {}", url, e))?
+}
+
+pub struct NativeDemo {
+    _child: Child,
+}
+
+impl Drop for NativeDemo {
+    fn drop(&mut self) {
+        println!("Terminating process compose");
+        let res = Command::new("process-compose")
+            .arg("down")
+            .stdout(stdout())
+            .stderr(stderr())
+            .spawn()
+            .expect("process-compose runs")
+            .wait()
+            .unwrap();
+        println!("process-compose down exited with: {}", res);
+    }
+}
+
+impl NativeDemo {
+    pub(crate) fn run(process_compose_extra_args: Option<String>) -> anyhow::Result<Self> {
+        let workspace_dir = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+        let mut cmd = Command::new("bash");
+        cmd.arg("scripts/demo-native")
+            .current_dir(workspace_dir)
+            .arg("--tui=false");
+
+        if let Some(args) = process_compose_extra_args {
+            cmd.args(args.split(' '));
+        }
+
+        println!("Running: {:?}", cmd);
+
+        // Save output to file if PC_LOGS if that's set.
+        let log_path = std::env::var("PC_LOGS").unwrap_or_else(|_| {
+            tempfile::NamedTempFile::new()
+                .expect("tempfile creation succeeds")
+                .into_temp_path()
+                .to_string_lossy()
+                .to_string()
+        });
+
+        println!("Writing native demo logs to file: {}", log_path);
+        let outputs = File::create(log_path)?;
+        let errors = outputs.try_clone()?;
+        cmd.stdout(outputs) // Redirect stdout to log file
+            .stderr(errors); // Redirect stderr to log file
+        Ok(Self {
+            _child: cmd.spawn()?,
+        })
+    }
 }
