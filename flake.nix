@@ -116,7 +116,7 @@
             cargo-fmt = {
               enable = true;
               description = "Enforce rustfmt";
-              entry = "cargo fmt --all";
+              entry = "just fmt";
               types_or = [ "rust" "toml" ];
               pass_filenames = false;
             };
@@ -185,7 +185,7 @@
         let
           stableToolchain = pkgs.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml;
           nightlyToolchain = pkgs.rust-bin.selectLatestNightlyWith (toolchain: toolchain.minimal.override {
-            extensions = [ "rust-analyzer" ];
+            extensions = [ "rust-analyzer" "rustfmt" ];
           });
           solc = pkgs.solc-bin."0.8.23";
         in
@@ -208,6 +208,7 @@
             typos
             just
             nightlyToolchain.passthru.availableComponents.rust-analyzer
+            nightlyToolchain.passthru.availableComponents.rustfmt
 
             # Tools
             nixpkgs-fmt
