@@ -318,8 +318,6 @@ impl NativeDemo {
             cmd.args(args.split(' '));
         }
 
-        println!("Running: {:?}", cmd);
-
         // Save output to file if PC_LOGS if that's set.
         let log_path = std::env::var("PC_LOGS").unwrap_or_else(|_| {
             tempfile::NamedTempFile::new()
@@ -331,12 +329,10 @@ impl NativeDemo {
 
         println!("Writing native demo logs to file: {}", log_path);
         let outputs = File::create(log_path).context("unable to create log file")?;
-        let errors = outputs
-            .try_clone()
-            .context("unable to clone log file handle")?;
-        cmd.stdout(outputs).stderr(errors);
+        cmd.stdout(outputs);
 
-        let mut child = cmd.spawn()?;
+        println!("Spawning: {:?}", cmd);
+        let mut child = cmd.spawn().context("failed to spawn command")?;
 
         // Wait for three seconds and check if process has already exited so we don't waste time
         // waiting for results later.
