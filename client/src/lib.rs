@@ -55,7 +55,7 @@ impl SequencerClient {
         height: u64,
     ) -> anyhow::Result<BoxStream<'static, Result<Header, ClientError>>> {
         self.0
-            .socket(&format!("v0/availability/stream/headers/{height}"))
+            .socket(&format!("availability/stream/headers/{height}"))
             .subscribe::<Header>()
             .await
             .context("subscribing to Espresso headers")
