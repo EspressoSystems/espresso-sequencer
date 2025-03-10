@@ -10,6 +10,7 @@ use std::{collections::BTreeMap, fmt::Debug, hash::Hash, marker::PhantomData};
 
 use hotshot_utils::anytrace::*;
 use jf_vid::{VidDisperse as JfVidDisperse, VidScheme};
+use primitive_types::U256;
 use serde::{Deserialize, Serialize};
 use tokio::task::spawn_blocking;
 
@@ -20,7 +21,9 @@ use crate::{
     message::Proposal,
     simple_vote::HasEpoch,
     traits::{
-        block_contents::EncodeBytes, node_implementation::NodeType, signature_key::SignatureKey,
+        block_contents::EncodeBytes,
+        node_implementation::NodeType,
+        signature_key::{SignatureKey, StakeTableEntryType},
         BlockPayload,
     },
     vid::{
@@ -28,6 +31,7 @@ use crate::{
         avidm::{init_avidm_param, AvidMCommitment, AvidMScheme, AvidMShare},
     },
     vote::HasViewNumber,
+    PeerConfig,
 };
 
 impl_has_epoch!(
@@ -74,9 +78,10 @@ impl<TYPES: NodeType> ADVZDisperse<TYPES> {
             .membership_for_epoch(target_epoch)
             .await
             .unwrap()
-            .committee_members(view_number)
+            .stake_table()
             .await
             .iter()
+            .map(|entry| entry.stake_table_entry.public_key())
             .map(|node| (node.clone(), vid_disperse.shares.remove(0)))
             .collect();
 
@@ -272,6 +277,31 @@ impl<TYPES: NodeType> HasViewNumber<TYPES> for AvidMDisperse<TYPES> {
     }
 }
 
+/// The target total stake to scale to for VID.
+pub const VID_TARGET_TOTAL_STAKE: u32 = 10000;
+
+pub fn approximate_weights<TYPES: NodeType>(
+    stake_table: Vec<PeerConfig<TYPES::SignatureKey>>,
+) -> Vec<u32> {
+    let total_stake = stake_table.iter().fold(U256::zero(), |acc, entry| {
+        acc + entry.stake_table_entry.stake()
+    });
+
+    stake_table
+        .iter()
+        .map(|entry| {
+            let weight: U256 = ((entry.stake_table_entry.stake()
+                * U256::from(VID_TARGET_TOTAL_STAKE))
+                / total_stake)
+                + 1;
+
+            // Note: this panics if `weight` exceeds `u32::MAX`, but this shouldn't happen
+            // and would likely cause a stack overflow in the VID calculation anyway
+            weight.as_u32()
+        })
+        .collect()
+}
+
 impl<TYPES: NodeType> AvidMDisperse<TYPES> {
     /// Create VID dispersal from a specified membership for the target epoch.
     /// Uses the specified function to calculate share dispersal
@@ -325,8 +355,10 @@ impl<TYPES: NodeType> AvidMDisperse<TYPES> {
         let num_txns = txns.len();
 
         let avidm_param = init_avidm_param(num_nodes)?;
-        // TODO: get weight distribution
-        let weights = vec![1u32; num_nodes];
+
+        let stake_table = target_mem.stake_table().await;
+        let weights = approximate_weights::<TYPES>(stake_table);
+
         let ns_table = parse_ns_table(num_txns, &metadata.encode());
         let ns_table_clone = ns_table.clone();
         let (commit, shares) = spawn_blocking(move || {
