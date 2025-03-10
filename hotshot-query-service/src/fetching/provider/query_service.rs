@@ -14,8 +14,7 @@ use async_trait::async_trait;
 use committable::Committable;
 use futures::try_join;
 use hotshot_types::{
-    data::ns_table,
-    data::VidCommitment,
+    data::{ns_table, VidCommitment},
     traits::{block_contents::BlockHeader, node_implementation::NodeType, EncodeBytes},
     vid::{
         advz::{advz_scheme, ADVZScheme},
