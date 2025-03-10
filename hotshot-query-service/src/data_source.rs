@@ -763,7 +763,6 @@ pub mod persistence_tests {
 #[cfg(any(test, feature = "testing"))]
 #[espresso_macros::generic_tests]
 pub mod node_tests {
-    use crate::VidCommon;
     use std::time::Duration;
 
     use committable::Committable;
@@ -797,7 +796,7 @@ pub mod node_tests {
             setup_test, sleep,
         },
         types::HeightIndexed,
-        Header,
+        Header, VidCommon,
     };
 
     #[tokio::test(flavor = "multi_thread")]
