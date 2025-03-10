@@ -15,27 +15,26 @@ use hotshot_task::{
     dependency_task::DependencyTask,
     task::TaskState,
 };
-use hotshot_types::StakeTableEntries;
 use hotshot_types::{
     consensus::OuterConsensus,
+    epoch_membership::EpochMembershipCoordinator,
     message::UpgradeLock,
     simple_certificate::{QuorumCertificate2, UpgradeCertificate},
     traits::{
-        election::Membership,
         node_implementation::{ConsensusTime, NodeImplementation, NodeType, Versions},
         signature_key::SignatureKey,
         storage::Storage,
     },
     utils::EpochTransitionIndicator,
     vote::{Certificate, HasViewNumber},
+    StakeTableEntries,
 };
 use hotshot_utils::anytrace::*;
 use tokio::task::JoinHandle;
 use tracing::instrument;
 
 use self::handlers::{ProposalDependency, ProposalDependencyHandle};
-use crate::events::HotShotEvent;
-use crate::quorum_proposal::handlers::handle_eqc_formed;
+use crate::{events::HotShotEvent, quorum_proposal::handlers::handle_eqc_formed};
 
 mod handlers;
 
@@ -54,7 +53,7 @@ pub struct QuorumProposalTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>
     pub instance_state: Arc<TYPES::InstanceState>,
 
     /// Membership for Quorum Certs/votes
-    pub membership: Arc<RwLock<TYPES::Membership>>,
+    pub membership_coordinator: EpochMembershipCoordinator<TYPES>,
 
     /// Our public key
     pub public_key: TYPES::SignatureKey,
@@ -115,14 +114,14 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                         } else {
                             return false;
                         }
-                    }
+                    },
                     ProposalDependency::TimeoutCert => {
                         if let HotShotEvent::Qc2Formed(either::Right(timeout)) = event {
                             timeout.view_number() + 1
                         } else {
                             return false;
                         }
-                    }
+                    },
                     ProposalDependency::ViewSyncCert => {
                         if let HotShotEvent::ViewSyncFinalizeCertificateRecv(view_sync_cert) = event
                         {
@@ -130,7 +129,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                         } else {
                             return false;
                         }
-                    }
+                    },
                     ProposalDependency::Proposal => {
                         if let HotShotEvent::QuorumProposalPreliminarilyValidated(proposal) = event
                         {
@@ -138,7 +137,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                         } else {
                             return false;
                         }
-                    }
+                    },
                     ProposalDependency::PayloadAndMetadata => {
                         if let HotShotEvent::SendPayloadCommitmentAndMetadata(
                             _payload_commitment,
@@ -153,14 +152,14 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                         } else {
                             return false;
                         }
-                    }
+                    },
                     ProposalDependency::VidShare => {
                         if let HotShotEvent::VidDisperseSend(vid_disperse, _) = event {
                             vid_disperse.data.view_number()
                         } else {
                             return false;
                         }
-                    }
+                    },
                 };
                 let valid = event_view == view_number;
                 if valid {
@@ -219,25 +218,25 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
         match event.as_ref() {
             HotShotEvent::SendPayloadCommitmentAndMetadata(..) => {
                 payload_commitment_dependency.mark_as_completed(Arc::clone(&event));
-            }
+            },
             HotShotEvent::QuorumProposalPreliminarilyValidated(..) => {
                 proposal_dependency.mark_as_completed(event);
-            }
+            },
             HotShotEvent::Qc2Formed(quorum_certificate) => match quorum_certificate {
                 Either::Right(_) => {
                     timeout_dependency.mark_as_completed(event);
-                }
+                },
                 Either::Left(_) => {
                     qc_dependency.mark_as_completed(event);
-                }
+                },
             },
             HotShotEvent::ViewSyncFinalizeCertificateRecv(_) => {
                 view_sync_dependency.mark_as_completed(event);
-            }
-            HotShotEvent::VidDisperseSend(_, _) => {
+            },
+            HotShotEvent::VidDisperseSend(..) => {
                 vid_share_dependency.mark_as_completed(event);
-            }
-            _ => {}
+            },
+            _ => {},
         };
 
         // We have three cases to consider:
@@ -282,9 +281,12 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
         event: Arc<HotShotEvent<TYPES>>,
         epoch_transition_indicator: EpochTransitionIndicator,
     ) -> Result<()> {
-        let membership_reader = self.membership.read().await;
+        let epoch_membership = self
+            .membership_coordinator
+            .membership_for_epoch(epoch_number)
+            .await?;
         let leader_in_current_epoch =
-            membership_reader.leader(view_number, epoch_number)? == self.public_key;
+            epoch_membership.leader(view_number).await? == self.public_key;
         // If we are in the epoch transition and we are the leader in the next epoch,
         // we might want to start collecting dependencies for our next epoch proposal.
 
@@ -293,9 +295,16 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                 epoch_transition_indicator,
                 EpochTransitionIndicator::InTransition
             )
-            && membership_reader.leader(view_number, epoch_number.map(|x| x + 1))?
+            && epoch_membership
+                .next_epoch()
+                .await
+                .context(warn!(
+                    "No Stake Table for Epoch = {:?}",
+                    epoch_number.unwrap() + 1
+                ))?
+                .leader(view_number)
+                .await?
                 == self.public_key;
-        drop(membership_reader);
 
         // Don't even bother making the task if we are not entitled to propose anyway.
         ensure!(
@@ -328,7 +337,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                 view_number,
                 sender: event_sender,
                 receiver: event_receiver,
-                membership: Arc::clone(&self.membership),
+                membership: epoch_membership,
                 public_key: self.public_key.clone(),
                 private_key: self.private_key.clone(),
                 instance_state: Arc::clone(&self.instance_state),
@@ -400,7 +409,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
 
                     self.formed_upgrade_certificate = Some(cert.clone());
                 }
-            }
+            },
             HotShotEvent::Qc2Formed(cert) => match cert.clone() {
                 either::Right(timeout_cert) => {
                     let view_number = timeout_cert.view_number + 1;
@@ -413,7 +422,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                         epoch_transition_indicator,
                     )
                     .await?;
-                }
+                },
                 either::Left(qc) => {
                     // Only update if the qc is from a newer view
                     if qc.view_number <= self.consensus.read().await.high_qc().view_number {
@@ -452,7 +461,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                         epoch_transition_indicator,
                     )
                     .await?;
-                }
+                },
             },
             HotShotEvent::SendPayloadCommitmentAndMetadata(
                 _payload_commitment,
@@ -473,15 +482,17 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                     EpochTransitionIndicator::NotInTransition,
                 )
                 .await?;
-            }
+            },
             HotShotEvent::ViewSyncFinalizeCertificateRecv(certificate) => {
                 let epoch_number = certificate.data.epoch;
+                let epoch_membership = self
+                    .membership_coordinator
+                    .membership_for_epoch(epoch_number)
+                    .await
+                    .context(warn!("No Stake Table for Epoch = {:?}", epoch_number))?;
 
-                let membership_reader = self.membership.read().await;
-                let membership_stake_table = membership_reader.stake_table(epoch_number);
-                let membership_success_threshold =
-                    membership_reader.success_threshold(epoch_number);
-                drop(membership_reader);
+                let membership_stake_table = epoch_membership.stake_table().await;
+                let membership_success_threshold = epoch_membership.success_threshold().await;
 
                 certificate
                     .is_valid_cert(
@@ -509,7 +520,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                     EpochTransitionIndicator::NotInTransition,
                 )
                 .await?;
-            }
+            },
             HotShotEvent::QuorumProposalPreliminarilyValidated(proposal) => {
                 let view_number = proposal.data.view_number();
                 // All nodes get the latest proposed view as a proxy of `cur_view` of old.
@@ -526,7 +537,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                     epoch_transition_indicator,
                 )
                 .await?;
-            }
+            },
             HotShotEvent::QuorumProposalSend(proposal, _) => {
                 let view = proposal.data.view_number();
 
@@ -534,7 +545,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                     self.update_latest_proposed_view(view).await,
                     "Failed to update latest proposed view"
                 );
-            }
+            },
             HotShotEvent::VidDisperseSend(vid_disperse, _) => {
                 let view_number = vid_disperse.data.view_number();
                 self.create_dependency_task_if_new(
@@ -546,27 +557,28 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                     EpochTransitionIndicator::NotInTransition,
                 )
                 .await?;
-            }
+            },
             HotShotEvent::ViewChange(view, epoch) => {
                 if epoch > &self.cur_epoch {
                     self.cur_epoch = *epoch;
                 }
                 let keep_view = TYPES::View::new(view.saturating_sub(1));
                 self.cancel_tasks(keep_view);
-            }
+            },
             HotShotEvent::Timeout(view, ..) => {
                 let keep_view = TYPES::View::new(view.saturating_sub(1));
                 self.cancel_tasks(keep_view);
-            }
+            },
             HotShotEvent::HighQcSend(qc, ..) | HotShotEvent::ExtendedQcSend(qc, ..) => {
                 ensure!(qc.view_number() > self.highest_qc.view_number());
                 let cert_epoch_number = qc.data.epoch;
 
-                let membership_reader = self.membership.read().await;
-                let membership_stake_table = membership_reader.stake_table(cert_epoch_number);
-                let membership_success_threshold =
-                    membership_reader.success_threshold(cert_epoch_number);
-                drop(membership_reader);
+                let epoch_membership = self
+                    .membership_coordinator
+                    .membership_for_epoch(cert_epoch_number)
+                    .await?;
+                let membership_stake_table = epoch_membership.stake_table().await;
+                let membership_success_threshold = epoch_membership.success_threshold().await;
 
                 qc.is_valid_cert(
                     StakeTableEntries::<TYPES>::from(membership_stake_table).0,
@@ -577,7 +589,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                 .context(|e| warn!("Quorum certificate {:?} was invalid: {}", qc.data(), e))?;
 
                 self.highest_qc = qc.clone();
-            }
+            },
             HotShotEvent::NextEpochQc2Formed(Either::Left(next_epoch_qc)) => {
                 // Only update if the qc is from a newer view
                 let current_next_epoch_qc =
@@ -611,8 +623,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                     &event_sender,
                 )
                 .await;
-            }
-            _ => {}
+            },
+            _ => {},
         }
         Ok(())
     }

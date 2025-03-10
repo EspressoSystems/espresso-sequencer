@@ -1,3 +1,9 @@
+use std::{
+    fmt::{Debug, Display},
+    sync::Arc,
+    time::Duration,
+};
+
 use anyhow::Context;
 use async_lock::RwLock;
 use derivative::Derivative;
@@ -18,6 +24,7 @@ use hotshot_orchestrator::client::OrchestratorClient;
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
     data::{Leaf2, ViewNumber},
+    epoch_membership::EpochMembershipCoordinator,
     network::NetworkConfig,
     traits::{
         metrics::Metrics,
@@ -28,8 +35,6 @@ use hotshot_types::{
 };
 use parking_lot::Mutex;
 use request_response::{network::Bytes, RequestResponse, RequestResponseConfig};
-use std::{fmt::Debug, time::Duration};
-use std::{fmt::Display, sync::Arc};
 use tokio::{
     spawn,
     sync::mpsc::{channel, Receiver},
@@ -144,14 +149,16 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> Sequence
         )));
 
         let persistence = Arc::new(persistence);
-        let memberships = Arc::new(async_lock::RwLock::new(membership));
+        let coordinator =
+            EpochMembershipCoordinator::new(Arc::new(RwLock::new(membership)), config.epoch_height);
+        let membership = coordinator.membership().clone();
 
         let handle = SystemContext::init(
             validator_config.public_key,
             validator_config.private_key.clone(),
             instance_state.node_id,
             config.clone(),
-            memberships.clone(),
+            coordinator,
             network.clone(),
             initializer,
             ConsensusMetricsValue::new(metrics),
@@ -186,7 +193,9 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> Sequence
             request_response_config,
             RequestResponseSender::new(outbound_message_sender),
             request_response_receiver,
-            RecipientSource { memberships },
+            RecipientSource {
+                memberships: membership,
+            },
             DataSource {},
         );
 

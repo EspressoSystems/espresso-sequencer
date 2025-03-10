@@ -212,10 +212,10 @@ jobs:
         version: [02,99]
         include:
           - version: 02
-            compose: "-f process-compose.yaml -D"
+            compose: "-f process-compose.yaml"
 
           - version: 99
-            compose: "-f process-compose.yaml -f process-compose-mp.yml -D"
+            compose: "-f process-compose.yaml -f process-compose-mp.yml"
       fail-fast: false
     runs-on: ubuntu-latest
     steps:
@@ -255,12 +255,18 @@ jobs:
           --workspace-remap $PWD $(if [ "${{ matrix.version }}" == "2" ]; then echo " smoke"; fi)
         timeout-minutes: 10
 
+      - name: Show end of logs
+        if: always()
+        run: |
+          tail -n 1000 ${{ env.PC_LOGS }}
+
       - name: Upload process compose logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: process-compose-logs-integration-v${{ matrix.version  }}
           path: ${{ env.PC_LOGS }}
+
 
   demo-native:
     needs: build-test-bins

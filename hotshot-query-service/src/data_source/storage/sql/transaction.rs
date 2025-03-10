@@ -18,6 +18,34 @@
 //! database connection, so that the updated state of the database can be queried midway through a
 //! transaction.
 
+use std::{
+    collections::{HashMap, HashSet},
+    marker::PhantomData,
+    time::Instant,
+};
+
+use anyhow::{bail, Context};
+use ark_serialize::CanonicalSerialize;
+use async_trait::async_trait;
+use committable::Committable;
+use derive_more::{Deref, DerefMut};
+use futures::{future::Future, stream::TryStreamExt};
+use hotshot_types::{
+    data::VidShare,
+    traits::{
+        block_contents::BlockHeader,
+        metrics::{Counter, Gauge, Histogram, Metrics},
+        node_implementation::NodeType,
+        EncodeBytes,
+    },
+};
+use itertools::Itertools;
+use jf_merkle_tree::prelude::{MerkleNode, MerkleProof};
+pub use sqlx::Executor;
+use sqlx::{
+    pool::Pool, query_builder::Separated, types::BitVec, Encode, FromRow, QueryBuilder, Type,
+};
+
 use super::{
     queries::{
         self,
@@ -36,29 +64,7 @@ use crate::{
     },
     merklized_state::{MerklizedState, UpdateStateData},
     types::HeightIndexed,
-    Header, Payload, QueryError, QueryResult, VidShare,
-};
-use anyhow::{bail, Context};
-use ark_serialize::CanonicalSerialize;
-use async_trait::async_trait;
-use committable::Committable;
-use derive_more::{Deref, DerefMut};
-use futures::{future::Future, stream::TryStreamExt};
-use hotshot_types::traits::{
-    block_contents::BlockHeader,
-    metrics::{Counter, Gauge, Histogram, Metrics},
-    node_implementation::NodeType,
-    EncodeBytes,
-};
-use itertools::Itertools;
-use jf_merkle_tree::prelude::{MerkleNode, MerkleProof};
-use sqlx::types::BitVec;
-pub use sqlx::Executor;
-use sqlx::{pool::Pool, query_builder::Separated, Encode, FromRow, QueryBuilder, Type};
-use std::{
-    collections::{HashMap, HashSet},
-    marker::PhantomData,
-    time::Instant,
+    Header, Payload, QueryError, QueryResult,
 };
 
 pub type Query<'q> = sqlx::query::Query<'q, Db, <Db as Database>::Arguments<'q>>;
@@ -509,7 +515,7 @@ where
         let leaf_json = serde_json::to_value(leaf.leaf()).context("failed to serialize leaf")?;
         let qc_json = serde_json::to_value(leaf.qc()).context("failed to serialize QC")?;
         self.upsert(
-            "leaf",
+            "leaf2",
             ["height", "hash", "block_hash", "leaf", "qc"],
             ["height"],
             [(
@@ -603,7 +609,7 @@ where
         if let Some(share) = share {
             let share_data = bincode::serialize(&share).context("failed to serialize VID share")?;
             self.upsert(
-                "vid",
+                "vid2",
                 ["height", "common", "share"],
                 ["height"],
                 [(height as i64, common_data, share_data)],
@@ -614,7 +620,7 @@ where
             // possible that this column already exists, and we are just upserting the common data,
             // in which case we don't want to overwrite the share with NULL.
             self.upsert(
-                "vid",
+                "vid2",
                 ["height", "common"],
                 ["height"],
                 [(height as i64, common_data)],
@@ -678,10 +684,10 @@ impl<Types: NodeType, State: MerklizedState<Types, ARITY>, const ARITY: usize>
                         [0_u8; 32].to_vec(),
                     ));
                     hashset.insert([0_u8; 32].to_vec());
-                }
+                },
                 MerkleNode::ForgettenSubtree { .. } => {
                     bail!("Node in the Merkle path contains a forgetten subtree");
-                }
+                },
                 MerkleNode::Leaf { value, pos, elem } => {
                     let mut leaf_commit = Vec::new();
                     // Serialize the leaf node hash value into a vector
@@ -708,7 +714,7 @@ impl<Types: NodeType, State: MerklizedState<Types, ARITY>, const ARITY: usize>
                     ));
 
                     hashset.insert(leaf_commit);
-                }
+                },
                 MerkleNode::Branch { value, children } => {
                     // Get hash
                     let mut branch_hash = Vec::new();
@@ -725,7 +731,7 @@ impl<Types: NodeType, State: MerklizedState<Types, ARITY>, const ARITY: usize>
                         match child {
                             MerkleNode::Empty => {
                                 children_bitvec.push(false);
-                            }
+                            },
                             MerkleNode::Branch { value, .. }
                             | MerkleNode::Leaf { value, .. }
                             | MerkleNode::ForgettenSubtree { value } => {
@@ -737,7 +743,7 @@ impl<Types: NodeType, State: MerklizedState<Types, ARITY>, const ARITY: usize>
                                 children_values.push(hash);
                                 // Mark the entry as 1 in bitvec to indicate a non-empty child
                                 children_bitvec.push(true);
-                            }
+                            },
                         }
                     }
 
@@ -755,7 +761,7 @@ impl<Types: NodeType, State: MerklizedState<Types, ARITY>, const ARITY: usize>
                     ));
                     hashset.insert(branch_hash);
                     hashset.extend(children_values);
-                }
+                },
             }
 
             // advance the traversal path for the internal nodes at each iteration
@@ -795,7 +801,7 @@ impl<Types: NodeType, State: MerklizedState<Types, ARITY>, const ARITY: usize>
             }
         }
 
-        Node::upsert(name, nodes.into_iter().map(|(n, _, _)| n), self).await?;
+        Node::upsert(name, nodes.into_iter().map(|(n, ..)| n), self).await?;
 
         Ok(())
     }
