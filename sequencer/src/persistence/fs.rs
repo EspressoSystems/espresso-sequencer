@@ -1,11 +1,22 @@
+use std::{
+    collections::{BTreeMap, HashSet},
+    fs::{self, File, OpenOptions},
+    io::{Read, Seek, SeekFrom, Write},
+    ops::RangeInclusive,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
+
 use anyhow::{anyhow, Context};
 use async_lock::RwLock;
 use async_trait::async_trait;
 use clap::Parser;
 use espresso_types::{
+    upgrade_commitment_map,
     v0::traits::{EventConsumer, PersistenceOptions, SequencerPersistence},
     Leaf, Leaf2, NetworkConfig, Payload, SeqTypes,
 };
+use hotshot::InitializerEpochInfo;
 use hotshot_types::{
     consensus::CommitmentMap,
     data::{
@@ -13,6 +24,7 @@ use hotshot_types::{
         DaProposal, DaProposal2, EpochNumber, QuorumProposal, QuorumProposal2,
         QuorumProposalWrapper, VidCommitment, VidDisperseShare,
     },
+    drb::DrbResult,
     event::{Event, EventType, HotShotAction, LeafInfo},
     message::{convert_proposal, Proposal},
     simple_certificate::{
@@ -20,23 +32,13 @@ use hotshot_types::{
     },
     traits::{
         block_contents::{BlockHeader, BlockPayload},
-        node_implementation::ConsensusTime,
+        node_implementation::{ConsensusTime, NodeType},
     },
     utils::View,
     vote::HasViewNumber,
 };
-use std::sync::Arc;
-use std::{
-    collections::{BTreeMap, HashSet},
-    fs::{self, File, OpenOptions},
-    io::{Read, Seek, SeekFrom, Write},
-    ops::RangeInclusive,
-    path::{Path, PathBuf},
-};
 
 use crate::ViewNumber;
-
-use espresso_types::upgrade_commitment_map;
 
 /// Options for file system backed persistence.
 #[derive(Parser, Clone, Debug)]
@@ -207,6 +209,14 @@ impl Inner {
 
     fn next_epoch_qc(&self) -> PathBuf {
         self.path.join("next_epoch_quorum_certificate")
+    }
+
+    fn epoch_drb_result_dir_path(&self) -> PathBuf {
+        self.path.join("epoch_drb_result")
+    }
+
+    fn epoch_root_block_header_dir_path(&self) -> PathBuf {
+        self.path.join("epoch_root_block_header")
     }
 
     fn update_migration(&mut self) -> anyhow::Result<()> {
@@ -596,7 +606,7 @@ impl SequencerPersistence for Persistence {
                 // managed to persist the decided leaves successfully, and the event processing will
                 // just run again at the next decide.
                 tracing::warn!(?view, "event processing failed: {err:#}");
-            }
+            },
             Ok(intervals) => {
                 if let Err(err) = inner.collect_garbage(view, &intervals) {
                     // Similarly, garbage collection is not an error. We have done everything we
@@ -604,7 +614,7 @@ impl SequencerPersistence for Persistence {
                     // error but do not return it.
                     tracing::warn!(?view, "GC failed: {err:#}");
                 }
-            }
+            },
         }
 
         Ok(())
@@ -836,7 +846,7 @@ impl SequencerPersistence for Persistence {
                         // some unintended file whose name happened to match the naming convention.
                         tracing::warn!(?view, "ignoring malformed quorum proposal file: {err:#}");
                         continue;
-                    }
+                    },
                 };
             let proposal2 = convert_proposal(proposal);
 
@@ -1268,6 +1278,91 @@ impl SequencerPersistence for Persistence {
     async fn migrate_quorum_certificates(&self) -> anyhow::Result<()> {
         Ok(())
     }
+
+    async fn add_drb_result(
+        &self,
+        epoch: EpochNumber,
+        drb_result: DrbResult,
+    ) -> anyhow::Result<()> {
+        let inner = self.inner.write().await;
+        let dir_path = inner.epoch_drb_result_dir_path();
+
+        fs::create_dir_all(dir_path.clone()).context("failed to create epoch drb result dir")?;
+
+        let drb_result_bytes = bincode::serialize(&drb_result).context("serialize drb result")?;
+
+        let file_path = dir_path.join(epoch.to_string()).with_extension("txt");
+        fs::write(file_path, drb_result_bytes)
+            .context(format!("writing epoch drb result file for epoch {epoch:?}"))?;
+
+        Ok(())
+    }
+
+    async fn add_epoch_root(
+        &self,
+        epoch: EpochNumber,
+        block_header: <SeqTypes as NodeType>::BlockHeader,
+    ) -> anyhow::Result<()> {
+        let inner = self.inner.write().await;
+        let dir_path = inner.epoch_root_block_header_dir_path();
+
+        fs::create_dir_all(dir_path.clone())
+            .context("failed to create epoch root block header dir")?;
+
+        let block_header_bytes =
+            bincode::serialize(&block_header).context("serialize block header")?;
+
+        let file_path = dir_path.join(epoch.to_string()).with_extension("txt");
+        fs::write(file_path, block_header_bytes).context(format!(
+            "writing epoch root block header file for epoch {epoch:?}"
+        ))?;
+
+        Ok(())
+    }
+
+    async fn load_start_epoch_info(&self) -> anyhow::Result<Vec<InitializerEpochInfo<SeqTypes>>> {
+        let inner = self.inner.read().await;
+        let drb_dir_path = inner.epoch_drb_result_dir_path();
+        let block_header_dir_path = inner.epoch_root_block_header_dir_path();
+
+        let mut result = Vec::new();
+
+        if drb_dir_path.is_dir() {
+            for (epoch, path) in epoch_files(drb_dir_path)? {
+                let bytes = fs::read(&path)
+                    .context(format!("reading epoch drb result {}", path.display()))?;
+                let drb_result = bincode::deserialize::<DrbResult>(&bytes)
+                    .context(format!("parsing epoch drb result {}", path.display()))?;
+
+                let block_header_path = block_header_dir_path
+                    .join(epoch.to_string())
+                    .with_extension("txt");
+                let block_header = if block_header_path.is_file() {
+                    let bytes = fs::read(&path).context(format!(
+                        "reading epoch root block header {}",
+                        path.display()
+                    ))?;
+                    Some(
+                        bincode::deserialize::<<SeqTypes as NodeType>::BlockHeader>(&bytes)
+                            .context(format!(
+                                "parsing epoch root block header {}",
+                                path.display()
+                            ))?,
+                    )
+                } else {
+                    None
+                };
+
+                result.push(InitializerEpochInfo::<SeqTypes> {
+                    epoch,
+                    drb_result,
+                    block_header,
+                });
+            }
+        }
+
+        Ok(result)
+    }
 }
 
 /// Update a `NetworkConfig` that may have originally been persisted with an old version.
@@ -1355,6 +1450,32 @@ fn view_files(
     }))
 }
 
+/// Get all paths under `dir` whose name is of the form <epoch number>.txt.
+/// Should probably be made generic and merged with view_files.
+fn epoch_files(
+    dir: impl AsRef<Path>,
+) -> anyhow::Result<impl Iterator<Item = (EpochNumber, PathBuf)>> {
+    Ok(fs::read_dir(dir.as_ref())?.filter_map(move |entry| {
+        let dir = dir.as_ref().display();
+        let entry = entry.ok()?;
+        if !entry.file_type().ok()?.is_file() {
+            tracing::debug!(%dir, ?entry, "ignoring non-file in data directory");
+            return None;
+        }
+        let path = entry.path();
+        if path.extension()? != "txt" {
+            tracing::debug!(%dir, ?entry, "ignoring non-text file in data directory");
+            return None;
+        }
+        let file_name = path.file_stem()?;
+        let Ok(epoch_number) = file_name.to_string_lossy().parse::<u64>() else {
+            tracing::debug!(%dir, ?file_name, "ignoring extraneous file in data directory");
+            return None;
+        };
+        Some((EpochNumber::new(epoch_number), entry.path().to_owned()))
+    }))
+}
+
 #[cfg(test)]
 mod testing {
     use tempfile::TempDir;
@@ -1387,32 +1508,27 @@ mod generic_tests {
 
 #[cfg(test)]
 mod test {
-    use espresso_types::{NodeState, PubKey};
+    use std::marker::PhantomData;
+
+    use committable::{Commitment, CommitmentBoundsArkless, Committable};
+    use espresso_types::{Header, Leaf, NodeState, PubKey, ValidatedState};
     use hotshot::types::SignatureKey;
     use hotshot_example_types::node_types::TestVersions;
     use hotshot_query_service::testing::mocks::MockVersions;
-    use hotshot_types::data::{vid_commitment, QuorumProposal2};
-    use hotshot_types::traits::node_implementation::Versions;
-
-    use hotshot_types::vid::advz::advz_scheme;
-    use sequencer_utils::test_utils::setup_test;
-    use vbs::version::StaticVersionType;
-
-    use serde_json::json;
-    use std::marker::PhantomData;
-
-    use super::*;
-    use crate::persistence::testing::TestablePersistence;
-
-    use crate::BLSPubKey;
-    use committable::Committable;
-    use committable::{Commitment, CommitmentBoundsArkless};
-    use espresso_types::{Header, Leaf, ValidatedState};
-
     use hotshot_types::{
-        simple_certificate::QuorumCertificate, simple_vote::QuorumData, traits::EncodeBytes,
+        data::{vid_commitment, QuorumProposal2},
+        simple_certificate::QuorumCertificate,
+        simple_vote::QuorumData,
+        traits::{node_implementation::Versions, EncodeBytes},
+        vid::advz::advz_scheme,
     };
     use jf_vid::VidScheme;
+    use sequencer_utils::test_utils::setup_test;
+    use serde_json::json;
+    use vbs::version::StaticVersionType;
+
+    use super::*;
+    use crate::{persistence::testing::TestablePersistence, BLSPubKey};
 
     #[test]
     fn test_config_migrations_add_builder_urls() {
