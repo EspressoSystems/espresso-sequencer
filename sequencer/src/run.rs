@@ -65,7 +65,7 @@ pub async fn main() -> anyhow::Result<()> {
                 genesis,
                 modules,
                 opt,
-                SequencerVersions::<FeeVersion, MarketplaceVersion>::new(),
+                SequencerVersions::<espresso_types::FeeVersion, espresso_types::MarketplaceVersion>::new(),
             )
             .await
         },
@@ -75,7 +75,7 @@ pub async fn main() -> anyhow::Result<()> {
                 genesis,
                 modules,
                 opt,
-                SequencerVersions::<FeeVersion, V0_0>::new(),
+                SequencerVersions::<espresso_types::FeeVersion, espresso_types::V0_0>::new(),
             )
             .await
         },
@@ -85,7 +85,7 @@ pub async fn main() -> anyhow::Result<()> {
                 genesis,
                 modules,
                 opt,
-                SequencerVersions::<MarketplaceVersion, V0_0>::new(),
+                SequencerVersions::<espresso_types::MarketplaceVersion, espresso_types::V0_0>::new(),
             )
             .await
         },
