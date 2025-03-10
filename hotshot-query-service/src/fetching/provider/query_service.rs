@@ -27,10 +27,10 @@ use vbs::version::StaticVersionType;
 
 use super::Provider;
 use crate::{
-    availability::{BlockQueryData, LeafQueryData, PayloadQueryData, VidCommonQueryData},
+    availability::{LeafQueryData, PayloadQueryData, VidCommonQueryData},
     fetching::request::{LeafRequest, PayloadRequest, VidCommonRequest},
     types::HeightIndexed,
-    Error, Payload, VidCommon,
+    Error, Header, Payload, VidCommon,
 };
 
 /// Data availability provider backed by another instance of this query service.
@@ -61,7 +61,7 @@ where
         // requested.
         let res = try_join!(
             self.client
-                .get::<BlockQueryData<Types>>(&format!("availability/block/hash/{}", req.0))
+                .get::<PayloadQueryData<Types>>(&format!("availability/payload/hash/{}", req.0))
                 .send(),
             self.client
                 .get::<VidCommonQueryData<Types>>(&format!(
@@ -72,9 +72,7 @@ where
         );
 
         match res {
-            Ok((block, common)) => {
-                let metadata = block.header.metadata().encode();
-                let payload: PayloadQueryData<Types> = block.into();
+            Ok((payload, common)) => {
                 match common.common() {
                     VidCommon::V0(common) => {
                         // Verify that the data we retrieved is consistent with the request we made.
@@ -95,8 +93,17 @@ where
                         }
                     },
                     VidCommon::V1(common) => {
+                        let header = self
+                            .client
+                            .get::<Header<Types>>(&format!(
+                                "availability/header/{}",
+                                payload.height()
+                            ))
+                            .send()
+                            .await
+                            .ok()?;
                         let bytes = payload.data().encode();
-
+                        let metadata = header.metadata().encode();
                         // Initialize AVIDM parameters
                         let avidm_param = match init_avidm_param(common.total_weights) {
                             Ok(param) => param,
