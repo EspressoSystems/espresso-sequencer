@@ -104,6 +104,11 @@ where
                             .ok()?;
                         let bytes = payload.data().encode();
                         let metadata = header.metadata().encode();
+
+                        if header.payload_commitment() != req.0 {
+                            tracing::error!(?req, ?header, "received inconsistent payload");
+                            return None;
+                        }
                         // Initialize AVIDM parameters
                         let avidm_param = match init_avidm_param(common.total_weights) {
                             Ok(param) => param,
