@@ -75,7 +75,7 @@ test-all:
     cargo nextest run --locked --release --workspace --verbose --profile all
 
 test-integration:
-	INTEGRATION_TEST_SEQUENCER_VERSION=2 cargo nextest run -p tests --nocapture --profile integration test_native_demo
+	INTEGRATION_TEST_SEQUENCER_VERSION=2 cargo nextest run -p tests --nocapture --profile integration test_native_demo_basic
 
 test-integration-mp:
     INTEGRATION_TEST_SEQUENCER_VERSION=99 cargo nextest run -p tests --nocapture --profile integration test_native_demo_upgrade

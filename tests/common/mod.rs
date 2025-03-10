@@ -8,7 +8,7 @@ use std::{
     time::Duration,
 };
 
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use client::SequencerClient;
 use espresso_types::{FeeAmount, FeeVersion, MarketplaceVersion};
 use ethers::prelude::*;
@@ -330,12 +330,23 @@ impl NativeDemo {
         });
 
         println!("Writing native demo logs to file: {}", log_path);
-        let outputs = File::create(log_path)?;
-        let errors = outputs.try_clone()?;
-        cmd.stdout(outputs) // Redirect stdout to log file
-            .stderr(errors); // Redirect stderr to log file
-        Ok(Self {
-            _child: cmd.spawn()?,
-        })
+        let outputs = File::create(log_path).context("unable to create log file")?;
+        let errors = outputs
+            .try_clone()
+            .context("unable to clone log file handle")?;
+        cmd.stdout(outputs).stderr(errors);
+
+        let mut child = cmd.spawn()?;
+
+        // Wait for three seconds and check if process has already exited so we don't waste time
+        // waiting for results later.
+        std::thread::sleep(Duration::from_secs(3));
+        if let Some(exit_code) = child.try_wait()? {
+            return Err(anyhow!("process-compose exited early with: {}", exit_code));
+        }
+
+        println!("process-compose started ...");
+
+        Ok(Self { _child: child })
     }
 }

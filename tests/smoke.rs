@@ -84,7 +84,7 @@ pub async fn assert_native_demo_works() -> Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn test_native_demo() -> Result<()> {
+async fn test_native_demo_basic() -> Result<()> {
     let _child = NativeDemo::run(None);
     assert_native_demo_works().await
 }
