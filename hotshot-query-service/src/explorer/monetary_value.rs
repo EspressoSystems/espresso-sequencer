@@ -10,14 +10,15 @@
 // You should have received a copy of the GNU General Public License along with this program. If not,
 // see <https://www.gnu.org/licenses/>.
 
-use super::currency::{CurrencyCode, CurrencyMismatchError};
-use itertools::Itertools;
-use serde::{Deserialize, Serialize, Serializer};
-use std::fmt::Display;
 use std::{
-    fmt::Debug,
+    fmt::{Debug, Display},
     ops::{Add, Sub},
 };
+
+use itertools::Itertools;
+use serde::{Deserialize, Serialize, Serializer};
+
+use super::currency::{CurrencyCode, CurrencyMismatchError};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 /// [MonetaryValue]s is a struct that paris a [CurrencyCode] with a value.

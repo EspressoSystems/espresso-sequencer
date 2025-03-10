@@ -1,3 +1,17 @@
+use std::{
+    collections::HashMap,
+    fmt::Display,
+    num::NonZeroUsize,
+    sync::Arc,
+    time::{Duration, Instant},
+};
+
+pub use async_broadcast::{broadcast, RecvError, TryRecvError};
+use async_broadcast::{Sender as BroadcastSender, TrySendError};
+use async_lock::RwLock;
+use async_trait::async_trait;
+use committable::{Commitment, Committable};
+use futures::{future::BoxFuture, stream::StreamExt, Stream};
 use hotshot::types::Event;
 use hotshot_builder_api::{
     v0_1::{
@@ -8,8 +22,7 @@ use hotshot_builder_api::{
     v0_2::builder::TransactionStatus,
 };
 use hotshot_types::{
-    data::VidCommitment,
-    data::{DaProposal2, Leaf2, QuorumProposalWrapper},
+    data::{DaProposal2, Leaf2, QuorumProposalWrapper, VidCommitment},
     event::EventType,
     message::Proposal,
     traits::{
@@ -20,32 +33,19 @@ use hotshot_types::{
     utils::BuilderCommitment,
 };
 use lru::LruCache;
-use vbs::version::StaticVersionType;
-
-use crate::builder_state::{
-    BuildBlockInfo, DaProposalMessage, DecideMessage, QuorumProposalMessage, TransactionSource,
-    TriggerStatus,
-};
-use crate::builder_state::{MessageType, RequestMessage, ResponseMessage};
-pub use async_broadcast::{broadcast, RecvError, TryRecvError};
-use async_broadcast::{Sender as BroadcastSender, TrySendError};
-use async_lock::RwLock;
-use async_trait::async_trait;
-use committable::{Commitment, Committable};
-use futures::stream::StreamExt;
-use futures::{future::BoxFuture, Stream};
 use marketplace_builder_shared::block::{BlockId, BuilderStateId, ParentBlockReferences};
 use sha2::{Digest, Sha256};
-use std::collections::HashMap;
-use std::num::NonZeroUsize;
-use std::sync::Arc;
-use std::time::Duration;
-use std::{fmt::Display, time::Instant};
 use tagged_base64::TaggedBase64;
 use tide_disco::method::ReadState;
 use tokio::{
     sync::{mpsc::unbounded_channel, oneshot},
     time::{sleep, timeout},
+};
+use vbs::version::StaticVersionType;
+
+use crate::builder_state::{
+    BuildBlockInfo, DaProposalMessage, DecideMessage, MessageType, QuorumProposalMessage,
+    RequestMessage, ResponseMessage, TransactionSource, TriggerStatus,
 };
 
 // It holds all the necessary information for a block
@@ -1533,32 +1533,33 @@ mod test {
     use std::{sync::Arc, time::Duration};
 
     use async_lock::RwLock;
-    use committable::Commitment;
-    use committable::Committable;
+    use committable::{Commitment, Committable};
     use futures::StreamExt;
     use hotshot::{
         traits::BlockPayload,
         types::{BLSPubKey, SignatureKey},
     };
-    use hotshot_builder_api::v0_1::data_source::AcceptsTxnSubmits;
-    use hotshot_builder_api::v0_2::block_info::AvailableBlockInfo;
-    use hotshot_builder_api::v0_2::builder::TransactionStatus;
+    use hotshot_builder_api::{
+        v0_1::data_source::AcceptsTxnSubmits,
+        v0_2::{block_info::AvailableBlockInfo, builder::TransactionStatus},
+    };
     use hotshot_example_types::{
         block_types::{TestBlockPayload, TestMetadata, TestTransaction},
         node_types::{TestTypes, TestVersions},
         state_types::{TestInstanceState, TestValidatedState},
     };
-    use hotshot_types::data::DaProposal2;
-    use hotshot_types::data::EpochNumber;
-    use hotshot_types::data::Leaf2;
-    use hotshot_types::data::{QuorumProposal2, QuorumProposalWrapper};
-    use hotshot_types::simple_certificate::QuorumCertificate2;
-    use hotshot_types::traits::block_contents::Transaction;
-    use hotshot_types::traits::node_implementation::Versions;
     use hotshot_types::{
-        data::{vid_commitment, Leaf, ViewNumber},
+        data::{
+            vid_commitment, DaProposal2, EpochNumber, Leaf, Leaf2, QuorumProposal2,
+            QuorumProposalWrapper, ViewNumber,
+        },
         message::Proposal,
-        traits::{node_implementation::ConsensusTime, signature_key::BuilderSignatureKey},
+        simple_certificate::QuorumCertificate2,
+        traits::{
+            block_contents::Transaction,
+            node_implementation::{ConsensusTime, Versions},
+            signature_key::BuilderSignatureKey,
+        },
         utils::BuilderCommitment,
     };
     use marketplace_builder_shared::{
@@ -1575,6 +1576,11 @@ mod test {
     };
     use vbs::version::StaticVersionType;
 
+    use super::{
+        handle_da_event_implementation, handle_quorum_event_implementation, AvailableBlocksError,
+        BlockInfo, ClaimBlockError, ClaimBlockHeaderInputError, GlobalState, HandleDaEventError,
+        HandleQuorumEventError, HandleReceivedTxns, ProxyGlobalState,
+    };
     use crate::{
         builder_state::{
             BuildBlockInfo, MessageType, RequestMessage, ResponseMessage, TransactionSource,
@@ -1585,12 +1591,6 @@ mod test {
             process_available_blocks_round, progress_round_with_available_block_info,
             progress_round_without_available_block_info, setup_builder_for_test,
         },
-    };
-
-    use super::{
-        handle_da_event_implementation, handle_quorum_event_implementation, AvailableBlocksError,
-        BlockInfo, ClaimBlockError, ClaimBlockHeaderInputError, GlobalState, HandleDaEventError,
-        HandleQuorumEventError, HandleReceivedTxns, ProxyGlobalState,
     };
 
     /// A const number on `max_tx_len` to be used consistently spanning all the tests

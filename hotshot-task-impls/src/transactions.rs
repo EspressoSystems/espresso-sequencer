@@ -16,8 +16,7 @@ use hotshot_builder_api::v0_1::block_info::AvailableBlockInfo;
 use hotshot_task::task::TaskState;
 use hotshot_types::{
     consensus::OuterConsensus,
-    data::VidCommitment,
-    data::{null_block, PackedBundle},
+    data::{null_block, PackedBundle, VidCommitment},
     epoch_membership::EpochMembershipCoordinator,
     event::{Event, EventType},
     message::UpgradeLock,

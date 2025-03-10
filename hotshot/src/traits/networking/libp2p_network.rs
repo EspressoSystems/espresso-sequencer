@@ -7,7 +7,21 @@
 //! Libp2p based/production networking implementation
 //! This module provides a libp2p based networking implementation where each node in the
 //! network forms a tcp or udp connection to a subset of other nodes in the network
-use crate::EpochMembershipCoordinator;
+#[cfg(feature = "hotshot-testing")]
+use std::str::FromStr;
+use std::{
+    cmp::min,
+    collections::{BTreeSet, HashSet},
+    fmt::Debug,
+    net::{IpAddr, ToSocketAddrs},
+    num::NonZeroUsize,
+    sync::{
+        atomic::{AtomicBool, AtomicU64, Ordering},
+        Arc,
+    },
+    time::Duration,
+};
+
 use anyhow::{anyhow, Context};
 use async_lock::RwLock;
 use async_trait::async_trait;
@@ -51,20 +65,6 @@ use libp2p_identity::{
 };
 use rand::{rngs::StdRng, seq::IteratorRandom, SeedableRng};
 use serde::Serialize;
-#[cfg(feature = "hotshot-testing")]
-use std::str::FromStr;
-use std::{
-    cmp::min,
-    collections::{BTreeSet, HashSet},
-    fmt::Debug,
-    net::{IpAddr, ToSocketAddrs},
-    num::NonZeroUsize,
-    sync::{
-        atomic::{AtomicBool, AtomicU64, Ordering},
-        Arc,
-    },
-    time::Duration,
-};
 use tokio::{
     select, spawn,
     sync::{
@@ -75,7 +75,7 @@ use tokio::{
 };
 use tracing::{error, info, instrument, trace, warn};
 
-use crate::BroadcastDelay;
+use crate::{BroadcastDelay, EpochMembershipCoordinator};
 
 /// Libp2p-specific metrics
 #[derive(Clone, Debug)]

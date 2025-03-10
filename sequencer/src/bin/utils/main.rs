@@ -1,7 +1,6 @@
 //! sequencer utility programs
 
 use clap::{Parser, Subcommand};
-
 use sequencer_utils::logging;
 mod keygen;
 mod pubkey;

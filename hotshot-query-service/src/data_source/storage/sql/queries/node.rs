@@ -12,6 +12,18 @@
 
 //! Node storage implementation for a database query engine.
 
+use std::ops::{Bound, RangeBounds};
+
+use anyhow::anyhow;
+use async_trait::async_trait;
+use futures::stream::{StreamExt, TryStreamExt};
+use hotshot_types::{
+    data::VidShare,
+    traits::{block_contents::BlockHeader, node_implementation::NodeType},
+};
+use snafu::OptionExt;
+use sqlx::Row;
+
 use super::{
     super::transaction::{query, query_as, Transaction, TransactionMode, Write},
     parse_header, DecodeError, QueryBuilder, HEADER_COLUMNS,
@@ -24,16 +36,6 @@ use crate::{
     types::HeightIndexed,
     Header, MissingSnafu, NotFoundSnafu, QueryError, QueryResult,
 };
-use anyhow::anyhow;
-use async_trait::async_trait;
-use futures::stream::{StreamExt, TryStreamExt};
-use hotshot_types::{
-    data::VidShare,
-    traits::{block_contents::BlockHeader, node_implementation::NodeType},
-};
-use snafu::OptionExt;
-use sqlx::Row;
-use std::ops::{Bound, RangeBounds};
 
 #[async_trait]
 impl<Mode, Types> NodeStorage<Types> for Transaction<Mode>

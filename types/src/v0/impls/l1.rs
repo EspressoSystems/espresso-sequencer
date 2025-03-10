@@ -1,3 +1,12 @@
+use std::{
+    cmp::{min, Ordering},
+    num::NonZeroUsize,
+    pin::Pin,
+    result::Result as StdResult,
+    sync::Arc,
+    time::Instant,
+};
+
 use alloy::{
     eips::BlockId,
     hex,
@@ -28,14 +37,6 @@ use futures::{
 use hotshot_types::traits::metrics::Metrics;
 use lru::LruCache;
 use parking_lot::RwLock;
-use std::result::Result as StdResult;
-use std::{
-    cmp::{min, Ordering},
-    num::NonZeroUsize,
-    pin::Pin,
-    sync::Arc,
-    time::Instant,
-};
 use tokio::{
     spawn,
     sync::{Mutex, MutexGuard, Notify},
@@ -935,7 +936,7 @@ async fn get_finalized_block(
 
 #[cfg(test)]
 mod test {
-    use std::ops::Add;
+    use std::{ops::Add, time::Duration};
 
     use ethers::{
         middleware::SignerMiddleware,
@@ -948,7 +949,6 @@ mod test {
     use hotshot_contract_adapter::stake_table::NodeInfoJf;
     use portpicker::pick_unused_port;
     use sequencer_utils::test_utils::setup_test;
-    use std::time::Duration;
     use time::OffsetDateTime;
 
     use super::*;

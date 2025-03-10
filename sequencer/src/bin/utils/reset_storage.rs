@@ -1,9 +1,8 @@
+use clap::Subcommand;
 use sequencer::{
     api::data_source::{DataSourceOptions, SequencerDataSource},
     persistence,
 };
-
-use clap::Subcommand;
 
 /// Options for resetting persistent storage.
 ///

@@ -993,7 +993,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> ConsensusApi<TY
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct InitializerEpochInfo<TYPES: NodeType> {
     pub epoch: TYPES::Epoch,
     pub drb_result: DrbResult,

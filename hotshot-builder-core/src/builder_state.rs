@@ -1,3 +1,17 @@
+use core::panic;
+use std::{
+    cmp::PartialEq,
+    collections::{hash_map::Entry, HashMap, HashSet, VecDeque},
+    fmt::Debug,
+    marker::PhantomData,
+    sync::Arc,
+    time::{Duration, Instant},
+};
+
+use async_broadcast::{broadcast, Receiver as BroadcastReceiver, Sender as BroadcastSender};
+use async_lock::RwLock;
+use committable::{Commitment, Committable};
+use futures::StreamExt;
 use hotshot_types::{
     data::{DaProposal2, Leaf2, QuorumProposalWrapper},
     message::Proposal,
@@ -9,29 +23,13 @@ use hotshot_types::{
     utils::BuilderCommitment,
 };
 use marketplace_builder_shared::block::{BlockId, BuilderStateId, ParentBlockReferences};
-
-use committable::{Commitment, Committable};
-
-use crate::service::{GlobalState, ReceivedTransaction};
-use async_broadcast::broadcast;
-use async_broadcast::Receiver as BroadcastReceiver;
-use async_broadcast::Sender as BroadcastSender;
-use async_lock::RwLock;
-use core::panic;
-use futures::StreamExt;
-
 use tokio::{
     spawn,
     sync::{mpsc::UnboundedSender, oneshot},
     time::sleep,
 };
 
-use std::collections::{HashMap, HashSet, VecDeque};
-use std::fmt::Debug;
-use std::sync::Arc;
-use std::time::Instant;
-use std::{cmp::PartialEq, marker::PhantomData};
-use std::{collections::hash_map::Entry, time::Duration};
+use crate::service::{GlobalState, ReceivedTransaction};
 
 pub type TxTimeStamp = u128;
 
@@ -1122,20 +1120,19 @@ mod test {
 
     use async_broadcast::broadcast;
     use committable::RawCommitmentBuilder;
-    use hotshot_example_types::block_types::TestTransaction;
-    use hotshot_example_types::node_types::TestTypes;
-    use hotshot_example_types::node_types::TestVersions;
-    use hotshot_types::data::Leaf2;
-    use hotshot_types::data::QuorumProposalWrapper;
-    use hotshot_types::data::ViewNumber;
-    use hotshot_types::traits::node_implementation::{ConsensusTime, NodeType};
-    use hotshot_types::utils::BuilderCommitment;
+    use hotshot_example_types::{
+        block_types::TestTransaction,
+        node_types::{TestTypes, TestVersions},
+    };
+    use hotshot_types::{
+        data::{Leaf2, QuorumProposalWrapper, ViewNumber},
+        traits::node_implementation::{ConsensusTime, NodeType},
+        utils::BuilderCommitment,
+    };
     use marketplace_builder_shared::testing::constants::TEST_NUM_NODES_IN_VID_COMPUTATION;
     use tracing_subscriber::EnvFilter;
 
-    use super::DAProposalInfo;
-    use super::MessageType;
-    use super::ParentBlockReferences;
+    use super::{DAProposalInfo, MessageType, ParentBlockReferences};
     use crate::testing::{calc_builder_commitment, calc_proposal_msg, create_builder_state};
 
     /// This test the function `process_da_proposal`.

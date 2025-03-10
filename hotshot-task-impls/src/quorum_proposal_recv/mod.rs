@@ -22,8 +22,8 @@ use hotshot_types::{
     message::UpgradeLock,
     simple_certificate::UpgradeCertificate,
     simple_vote::HasEpoch,
-    traits::block_contents::BlockHeader,
     traits::{
+        block_contents::BlockHeader,
         node_implementation::{ConsensusTime, NodeImplementation, NodeType, Versions},
         signature_key::SignatureKey,
     },

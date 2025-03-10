@@ -291,7 +291,7 @@ impl<TYPES: NodeType, V: Versions> ViewSyncTaskState<TYPES, V> {
                 self.send_to_or_create_replica(event, view, &event_stream)
                     .await;
             },
-            HotShotEvent::ViewSyncTimeout(view, _, _) => {
+            HotShotEvent::ViewSyncTimeout(view, ..) => {
                 tracing::debug!("view sync timeout in main task {:?}", view);
                 let view = *view;
                 self.send_to_or_create_replica(event, view, &event_stream)

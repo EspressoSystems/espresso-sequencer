@@ -1,5 +1,12 @@
 use std::sync::Arc;
 
+use clap::Parser;
+use espresso_types::{traits::NullEventConsumer, SequencerVersions, SolverAuctionResultsProvider};
+use futures::future::FutureExt;
+use hotshot::MarketplaceConfig;
+use hotshot_types::traits::{metrics::NoMetrics, node_implementation::Versions};
+use vbs::version::StaticVersionType;
+
 use super::{
     api::{self, data_source::DataSourceOptions},
     context::SequencerContext,
@@ -7,12 +14,6 @@ use super::{
     options::{Modules, Options},
     persistence, Genesis, L1Params, NetworkParams,
 };
-use clap::Parser;
-use espresso_types::{traits::NullEventConsumer, SequencerVersions, SolverAuctionResultsProvider};
-use futures::future::FutureExt;
-use hotshot::MarketplaceConfig;
-use hotshot_types::traits::{metrics::NoMetrics, node_implementation::Versions};
-use vbs::version::StaticVersionType;
 
 pub async fn main() -> anyhow::Result<()> {
     let opt = Options::parse();
@@ -41,10 +42,11 @@ pub async fn main() -> anyhow::Result<()> {
                 genesis,
                 modules,
                 opt,
-                SequencerVersions::<espresso_types::FeeVersion, espresso_types::EpochVersion>::new(),
+                SequencerVersions::<espresso_types::FeeVersion, espresso_types::EpochVersion>::new(
+                ),
             )
             .await
-        }
+        },
         #[cfg(feature = "pos")]
         (espresso_types::EpochVersion::VERSION, _) => {
             run(
@@ -55,7 +57,7 @@ pub async fn main() -> anyhow::Result<()> {
                 SequencerVersions::<espresso_types::EpochVersion, espresso_types::V0_0>::new(),
             )
             .await
-        }
+        },
         // TODO change `fee` to `pos`
         #[cfg(all(feature = "fee", feature = "marketplace"))]
         (espresso_types::FeeVersion::VERSION, espresso_types::MarketplaceVersion::VERSION) => {
@@ -63,10 +65,30 @@ pub async fn main() -> anyhow::Result<()> {
                 genesis,
                 modules,
                 opt,
-                SequencerVersions::<espresso_types::FeeVersion, espresso_types::MarketplaceVersion>::new(),
+                SequencerVersions::<FeeVersion, MarketplaceVersion>::new(),
             )
             .await
-        }
+        },
+        #[cfg(feature = "fee")]
+        (FeeVersion::VERSION, _) => {
+            run(
+                genesis,
+                modules,
+                opt,
+                SequencerVersions::<FeeVersion, V0_0>::new(),
+            )
+            .await
+        },
+        #[cfg(feature = "marketplace")]
+        (MarketplaceVersion::VERSION, _) => {
+            run(
+                genesis,
+                modules,
+                opt,
+                SequencerVersions::<MarketplaceVersion, V0_0>::new(),
+            )
+            .await
+        },
         _ => panic!(
             "Invalid base ({base}) and upgrade ({upgrade}) versions specified in the toml file."
         ),
@@ -261,23 +283,22 @@ where
 mod test {
     use std::time::Duration;
 
-    use tokio::spawn;
-
-    use crate::{
-        api::options::Http,
-        genesis::{L1Finalized, StakeTableConfig},
-        persistence::fs,
-        SequencerApiVersion,
-    };
     use espresso_types::{MockSequencerVersions, PubKey};
     use hotshot_types::{light_client::StateKeyPair, traits::signature_key::SignatureKey};
     use portpicker::pick_unused_port;
     use sequencer_utils::test_utils::setup_test;
     use surf_disco::{error::ClientError, Client, Url};
     use tempfile::TempDir;
+    use tokio::spawn;
     use vbs::version::Version;
 
     use super::*;
+    use crate::{
+        api::options::Http,
+        genesis::{L1Finalized, StakeTableConfig},
+        persistence::fs,
+        SequencerApiVersion,
+    };
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_startup_before_orchestrator() {

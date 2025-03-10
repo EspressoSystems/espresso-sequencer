@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use anyhow::Context;
 use espresso_types::{
     config::PublicNetworkConfig, FeeAccount, FeeAmount, FeeMerkleTree, Header, PubKey,
@@ -9,7 +11,6 @@ use jf_merkle_tree::{
     prelude::{MerkleProof, Sha3Node},
     MerkleTreeScheme,
 };
-use std::time::Duration;
 use surf_disco::{
     error::ClientError,
     socket::{Connection, Unsupported},

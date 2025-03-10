@@ -3,10 +3,11 @@ use std::str::FromStr;
 use anyhow::bail;
 use clap::Parser;
 use espresso_types::{PrivKey, PubKey};
-use hotshot::traits::implementations::derive_libp2p_peer_id;
-use hotshot::types::SignatureKey;
-use hotshot_types::light_client::StateSignKey;
-use hotshot_types::{light_client::StateKeyPair, signature_key::BLSPubKey};
+use hotshot::{traits::implementations::derive_libp2p_peer_id, types::SignatureKey};
+use hotshot_types::{
+    light_client::{StateKeyPair, StateSignKey},
+    signature_key::BLSPubKey,
+};
 use tagged_base64::TaggedBase64;
 
 #[derive(Clone, Debug)]

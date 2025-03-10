@@ -1,3 +1,21 @@
+use std::{
+    fmt::Display,
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    },
+    time::{Duration, Instant},
+};
+
+pub use async_broadcast::{broadcast, RecvError, TryRecvError};
+use async_lock::RwLock;
+use async_trait::async_trait;
+use committable::Commitment;
+use futures::{
+    future::BoxFuture,
+    stream::{FuturesOrdered, FuturesUnordered, StreamExt},
+    Stream, TryStreamExt,
+};
 use hotshot::types::Event;
 use hotshot_builder_api::{
     v0_1::{
@@ -9,51 +27,38 @@ use hotshot_builder_api::{
     },
     v0_2::block_info::AvailableBlockHeaderInputV1,
 };
-use hotshot_types::traits::block_contents::Transaction;
-use hotshot_types::traits::EncodeBytes;
 use hotshot_types::{
     data::VidCommitment,
     event::EventType,
     traits::{
-        block_contents::BlockPayload,
+        block_contents::{BlockPayload, Transaction},
         node_implementation::{ConsensusTime, NodeType},
         signature_key::{BuilderSignatureKey, SignatureKey},
+        EncodeBytes,
     },
     utils::BuilderCommitment,
 };
-use marketplace_builder_shared::coordinator::BuilderStateLookup;
-use marketplace_builder_shared::error::Error;
-use marketplace_builder_shared::state::BuilderState;
-use marketplace_builder_shared::utils::BuilderKeys;
 use marketplace_builder_shared::{
     block::{BlockId, BuilderStateId, ReceivedTransaction, TransactionSource},
-    coordinator::BuilderStateCoordinator,
+    coordinator::{BuilderStateCoordinator, BuilderStateLookup},
+    error::Error,
+    state::BuilderState,
+    utils::BuilderKeys,
 };
-use tide_disco::app::AppError;
-use tokio::spawn;
-use tokio::time::{sleep, timeout};
+use tagged_base64::TaggedBase64;
+use tide_disco::{app::AppError, method::ReadState, App};
+use tokio::{
+    spawn,
+    task::JoinHandle,
+    time::{sleep, timeout},
+};
 use tracing::{error, info, instrument, trace, warn};
 use vbs::version::StaticVersion;
 
-use crate::block_size_limits::BlockSizeLimits;
-use crate::block_store::{BlockInfo, BlockStore};
-pub use async_broadcast::{broadcast, RecvError, TryRecvError};
-use async_lock::RwLock;
-use async_trait::async_trait;
-use committable::Commitment;
-use futures::{future::BoxFuture, Stream};
-use futures::{
-    stream::{FuturesOrdered, FuturesUnordered, StreamExt},
-    TryStreamExt,
+use crate::{
+    block_size_limits::BlockSizeLimits,
+    block_store::{BlockInfo, BlockStore},
 };
-use std::sync::atomic::AtomicUsize;
-use std::sync::atomic::Ordering;
-use std::sync::Arc;
-use std::time::Duration;
-use std::{fmt::Display, time::Instant};
-use tagged_base64::TaggedBase64;
-use tide_disco::{method::ReadState, App};
-use tokio::task::JoinHandle;
 
 /// Proportion of overall allotted time to wait for optimal builder state
 /// to appear before resorting to highest view builder state

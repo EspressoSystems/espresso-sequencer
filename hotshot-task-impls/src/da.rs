@@ -10,10 +10,10 @@ use async_broadcast::{Receiver, Sender};
 use async_lock::RwLock;
 use async_trait::async_trait;
 use hotshot_task::task::TaskState;
-use hotshot_types::epoch_membership::EpochMembershipCoordinator;
 use hotshot_types::{
     consensus::{Consensus, OuterConsensus, PayloadWithMetadata},
     data::{vid_commitment, DaProposal2, PackedBundle},
+    epoch_membership::EpochMembershipCoordinator,
     event::{Event, EventType},
     message::{Proposal, UpgradeLock},
     simple_certificate::DaCertificate2,

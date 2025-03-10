@@ -10,10 +10,9 @@ use async_broadcast::Sender;
 use either::Either;
 use hotshot_task::task::TaskEvent;
 use hotshot_types::{
-    data::VidCommitment,
     data::{
         DaProposal2, Leaf2, PackedBundle, QuorumProposal2, QuorumProposalWrapper, UpgradeProposal,
-        VidDisperse, VidDisperseShare,
+        VidCommitment, VidDisperse, VidDisperseShare,
     },
     message::Proposal,
     request_response::ProposalRequestPayload,
@@ -327,12 +326,12 @@ impl<TYPES: NodeType> HotShotEvent<TYPES> {
             | HotShotEvent::ViewSyncCommitCertificateSend(cert, _) => Some(cert.view_number()),
             HotShotEvent::ViewSyncFinalizeCertificateRecv(cert)
             | HotShotEvent::ViewSyncFinalizeCertificateSend(cert, _) => Some(cert.view_number()),
-            HotShotEvent::SendPayloadCommitmentAndMetadata(_, _, _, view_number, _, _) => {
+            HotShotEvent::SendPayloadCommitmentAndMetadata(_, _, _, view_number, ..) => {
                 Some(*view_number)
             },
             HotShotEvent::BlockRecv(packed_bundle) => Some(packed_bundle.view_number),
             HotShotEvent::Shutdown
-            | HotShotEvent::TransactionSend(_, _)
+            | HotShotEvent::TransactionSend(..)
             | HotShotEvent::TransactionsRecv(_) => None,
             HotShotEvent::VidDisperseSend(proposal, _) => Some(proposal.data.view_number()),
             HotShotEvent::VidShareRecv(_, proposal) | HotShotEvent::VidShareValidated(proposal) => {
@@ -346,7 +345,7 @@ impl<TYPES: NodeType> HotShotEvent<TYPES> {
             HotShotEvent::QuorumProposalRequestSend(req, _)
             | HotShotEvent::QuorumProposalRequestRecv(req, _) => Some(req.view_number),
             HotShotEvent::ViewChange(view_number, _)
-            | HotShotEvent::ViewSyncTimeout(view_number, _, _)
+            | HotShotEvent::ViewSyncTimeout(view_number, ..)
             | HotShotEvent::ViewSyncTrigger(view_number)
             | HotShotEvent::Timeout(view_number, ..) => Some(*view_number),
             HotShotEvent::DaCertificateRecv(cert) | HotShotEvent::DacSend(cert, _) => {
@@ -354,14 +353,14 @@ impl<TYPES: NodeType> HotShotEvent<TYPES> {
             },
             HotShotEvent::DaCertificateValidated(cert) => Some(cert.view_number),
             HotShotEvent::UpgradeCertificateFormed(cert) => Some(cert.view_number()),
-            HotShotEvent::VidRequestSend(request, _, _)
+            HotShotEvent::VidRequestSend(request, ..)
             | HotShotEvent::VidRequestRecv(request, _) => Some(request.view),
             HotShotEvent::VidResponseSend(_, _, proposal)
             | HotShotEvent::VidResponseRecv(_, proposal) => Some(proposal.data.view_number()),
             HotShotEvent::HighQcRecv(qc, _)
             | HotShotEvent::HighQcSend(qc, ..)
-            | HotShotEvent::ExtendedQcRecv(qc, _, _)
-            | HotShotEvent::ExtendedQcSend(qc, _, _) => Some(qc.view_number()),
+            | HotShotEvent::ExtendedQcRecv(qc, ..)
+            | HotShotEvent::ExtendedQcSend(qc, ..) => Some(qc.view_number()),
         }
     }
 }
@@ -544,8 +543,8 @@ impl<TYPES: NodeType> Display for HotShotEvent<TYPES> {
                 write!(f, "Timeout(view_number={view_number:?}, epoch={epoch:?})")
             },
             HotShotEvent::TransactionsRecv(_) => write!(f, "TransactionsRecv"),
-            HotShotEvent::TransactionSend(_, _) => write!(f, "TransactionSend"),
-            HotShotEvent::SendPayloadCommitmentAndMetadata(_, _, _, view_number, _, _) => {
+            HotShotEvent::TransactionSend(..) => write!(f, "TransactionSend"),
+            HotShotEvent::SendPayloadCommitmentAndMetadata(_, _, _, view_number, ..) => {
                 write!(
                     f,
                     "SendPayloadCommitmentAndMetadata(view_number={view_number:?})"

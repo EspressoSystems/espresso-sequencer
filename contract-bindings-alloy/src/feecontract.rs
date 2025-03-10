@@ -445,8 +445,9 @@ interface FeeContract {
     clippy::empty_structs_with_brackets
 )]
 pub mod FeeContract {
-    use super::*;
     use alloy::sol_types as alloy_sol_types;
+
+    use super::*;
     /// The creation / init bytecode of the contract.
     ///
     /// ```text
@@ -474,6 +475,7 @@ pub mod FeeContract {
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct AddressEmptyCode {
+        #[allow(missing_docs)]
         pub target: alloy::sol_types::private::Address,
     }
     #[allow(
@@ -660,6 +662,7 @@ pub mod FeeContract {
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct ERC1967InvalidImplementation {
+        #[allow(missing_docs)]
         pub implementation: alloy::sol_types::private::Address,
     }
     #[allow(
@@ -1148,6 +1151,7 @@ pub mod FeeContract {
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct OwnableInvalidOwner {
+        #[allow(missing_docs)]
         pub owner: alloy::sol_types::private::Address,
     }
     #[allow(
@@ -1214,6 +1218,7 @@ pub mod FeeContract {
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct OwnableUnauthorizedAccount {
+        #[allow(missing_docs)]
         pub account: alloy::sol_types::private::Address,
     }
     #[allow(
@@ -1340,6 +1345,7 @@ pub mod FeeContract {
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct UUPSUnsupportedProxiableUUID {
+        #[allow(missing_docs)]
         pub slot: alloy::sol_types::private::FixedBytes<32>,
     }
     #[allow(
@@ -2095,6 +2101,7 @@ pub mod FeeContract {
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct UPGRADE_INTERFACE_VERSIONReturn {
+        #[allow(missing_docs)]
         pub _0: alloy::sol_types::private::String,
     }
     #[allow(
@@ -2201,12 +2208,14 @@ pub mod FeeContract {
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct balancesCall {
+        #[allow(missing_docs)]
         pub user: alloy::sol_types::private::Address,
     }
     ///Container type for the return parameters of the [`balances(address)`](balancesCall) function.
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct balancesReturn {
+        #[allow(missing_docs)]
         pub amount: alloy::sol_types::private::primitives::aliases::U256,
     }
     #[allow(
@@ -2317,6 +2326,7 @@ pub mod FeeContract {
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct depositCall {
+        #[allow(missing_docs)]
         pub user: alloy::sol_types::private::Address,
     }
     ///Container type for the return parameters of the [`deposit(address)`](depositCall) function.
@@ -2435,8 +2445,11 @@ pub mod FeeContract {
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct getVersionReturn {
+        #[allow(missing_docs)]
         pub majorVersion: u8,
+        #[allow(missing_docs)]
         pub minorVersion: u8,
+        #[allow(missing_docs)]
         pub patchVersion: u8,
     }
     #[allow(
@@ -2555,6 +2568,7 @@ pub mod FeeContract {
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct initializeCall {
+        #[allow(missing_docs)]
         pub multisig: alloy::sol_types::private::Address,
     }
     ///Container type for the return parameters of the [`initialize(address)`](initializeCall) function.
@@ -2673,6 +2687,7 @@ pub mod FeeContract {
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct maxDepositAmountReturn {
+        #[allow(missing_docs)]
         pub _0: alloy::sol_types::private::primitives::aliases::U256,
     }
     #[allow(
@@ -2783,6 +2798,7 @@ pub mod FeeContract {
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct minDepositAmountReturn {
+        #[allow(missing_docs)]
         pub _0: alloy::sol_types::private::primitives::aliases::U256,
     }
     #[allow(
@@ -2893,6 +2909,7 @@ pub mod FeeContract {
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct ownerReturn {
+        #[allow(missing_docs)]
         pub _0: alloy::sol_types::private::Address,
     }
     #[allow(
@@ -3003,6 +3020,7 @@ pub mod FeeContract {
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct proxiableUUIDReturn {
+        #[allow(missing_docs)]
         pub _0: alloy::sol_types::private::FixedBytes<32>,
     }
     #[allow(
@@ -3217,6 +3235,7 @@ pub mod FeeContract {
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct transferOwnershipCall {
+        #[allow(missing_docs)]
         pub newOwner: alloy::sol_types::private::Address,
     }
     ///Container type for the return parameters of the [`transferOwnership(address)`](transferOwnershipCall) function.
@@ -3331,7 +3350,9 @@ pub mod FeeContract {
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct upgradeToAndCallCall {
+        #[allow(missing_docs)]
         pub newImplementation: alloy::sol_types::private::Address,
+        #[allow(missing_docs)]
         pub data: alloy::sol_types::private::Bytes,
     }
     ///Container type for the return parameters of the [`upgradeToAndCall(address,bytes)`](upgradeToAndCallCall) function.
@@ -3456,17 +3477,29 @@ pub mod FeeContract {
     };
     ///Container for all the [`FeeContract`](self) function calls.
     pub enum FeeContractCalls {
+        #[allow(missing_docs)]
         UPGRADE_INTERFACE_VERSION(UPGRADE_INTERFACE_VERSIONCall),
+        #[allow(missing_docs)]
         balances(balancesCall),
+        #[allow(missing_docs)]
         deposit(depositCall),
+        #[allow(missing_docs)]
         getVersion(getVersionCall),
+        #[allow(missing_docs)]
         initialize(initializeCall),
+        #[allow(missing_docs)]
         maxDepositAmount(maxDepositAmountCall),
+        #[allow(missing_docs)]
         minDepositAmount(minDepositAmountCall),
+        #[allow(missing_docs)]
         owner(ownerCall),
+        #[allow(missing_docs)]
         proxiableUUID(proxiableUUIDCall),
+        #[allow(missing_docs)]
         renounceOwnership(renounceOwnershipCall),
+        #[allow(missing_docs)]
         transferOwnership(transferOwnershipCall),
+        #[allow(missing_docs)]
         upgradeToAndCall(upgradeToAndCallCall),
     }
     #[automatically_derived]
@@ -3784,20 +3817,35 @@ pub mod FeeContract {
     }
     ///Container for all the [`FeeContract`](self) custom errors.
     pub enum FeeContractErrors {
+        #[allow(missing_docs)]
         AddressEmptyCode(AddressEmptyCode),
+        #[allow(missing_docs)]
         DepositTooLarge(DepositTooLarge),
+        #[allow(missing_docs)]
         DepositTooSmall(DepositTooSmall),
+        #[allow(missing_docs)]
         ERC1967InvalidImplementation(ERC1967InvalidImplementation),
+        #[allow(missing_docs)]
         ERC1967NonPayable(ERC1967NonPayable),
+        #[allow(missing_docs)]
         FailedInnerCall(FailedInnerCall),
+        #[allow(missing_docs)]
         FunctionDoesNotExist(FunctionDoesNotExist),
+        #[allow(missing_docs)]
         InvalidInitialization(InvalidInitialization),
+        #[allow(missing_docs)]
         InvalidUserAddress(InvalidUserAddress),
+        #[allow(missing_docs)]
         NoFunctionCalled(NoFunctionCalled),
+        #[allow(missing_docs)]
         NotInitializing(NotInitializing),
+        #[allow(missing_docs)]
         OwnableInvalidOwner(OwnableInvalidOwner),
+        #[allow(missing_docs)]
         OwnableUnauthorizedAccount(OwnableUnauthorizedAccount),
+        #[allow(missing_docs)]
         UUPSUnauthorizedCallContext(UUPSUnauthorizedCallContext),
+        #[allow(missing_docs)]
         UUPSUnsupportedProxiableUUID(UUPSUnsupportedProxiableUUID),
     }
     #[automatically_derived]
@@ -4209,11 +4257,17 @@ pub mod FeeContract {
     }
     ///Container for all the [`FeeContract`](self) events.
     pub enum FeeContractEvents {
+        #[allow(missing_docs)]
         Deposit(Deposit),
+        #[allow(missing_docs)]
         Initialized(Initialized),
+        #[allow(missing_docs)]
         Log(Log),
+        #[allow(missing_docs)]
         OwnershipTransferred(OwnershipTransferred),
+        #[allow(missing_docs)]
         Upgrade(Upgrade),
+        #[allow(missing_docs)]
         Upgraded(Upgraded),
     }
     #[automatically_derived]

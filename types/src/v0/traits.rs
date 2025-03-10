@@ -6,7 +6,7 @@ use anyhow::{bail, ensure, Context};
 use async_trait::async_trait;
 use committable::{Commitment, Committable};
 use futures::{FutureExt, TryFutureExt};
-use hotshot::{types::EventType, HotShotInitializer};
+use hotshot::{types::EventType, HotShotInitializer, InitializerEpochInfo};
 use hotshot_types::{
     consensus::CommitmentMap,
     data::{
@@ -14,13 +14,14 @@ use hotshot_types::{
         DaProposal, DaProposal2, EpochNumber, QuorumProposal, QuorumProposal2,
         QuorumProposalWrapper, VidCommitment, VidDisperseShare, ViewNumber,
     },
+    drb::DrbResult,
     event::{HotShotAction, LeafInfo},
     message::{convert_proposal, Proposal, UpgradeLock},
     simple_certificate::{
         NextEpochQuorumCertificate2, QuorumCertificate, QuorumCertificate2, UpgradeCertificate,
     },
     traits::{
-        node_implementation::{ConsensusTime, Versions},
+        node_implementation::{ConsensusTime, NodeType, Versions},
         storage::Storage,
         ValidatedState as HotShotState,
     },
@@ -29,13 +30,12 @@ use hotshot_types::{
 use itertools::Itertools;
 use serde::{de::DeserializeOwned, Serialize};
 
+use super::{
+    impls::NodeState, utils::BackoffParams, EpochCommittees, EpochVersion, Leaf, SequencerVersions,
+};
 use crate::{
     v0::impls::ValidatedState, v0_99::ChainConfig, BlockMerkleTree, Event, FeeAccount,
     FeeAccountProof, FeeMerkleCommitment, FeeMerkleTree, Leaf2, NetworkConfig, SeqTypes,
-};
-
-use super::{
-    impls::NodeState, utils::BackoffParams, EpochCommittees, EpochVersion, Leaf, SequencerVersions,
 };
 
 #[async_trait]
@@ -538,6 +538,7 @@ pub trait SequencerPersistence: Sized + Send + Sync + Clone + 'static {
     async fn load_upgrade_certificate(
         &self,
     ) -> anyhow::Result<Option<UpgradeCertificate<SeqTypes>>>;
+    async fn load_start_epoch_info(&self) -> anyhow::Result<Vec<InitializerEpochInfo<SeqTypes>>>;
 
     /// Load the latest known consensus state.
     ///
@@ -615,6 +616,16 @@ pub trait SequencerPersistence: Sized + Send + Sync + Clone + 'static {
         // TODO:
         let epoch = genesis_epoch_from_version::<V, SeqTypes>();
 
+        let config = self.load_config().await.context("loading config")?;
+        let epoch_height = config
+            .as_ref()
+            .map(|c| c.config.epoch_height)
+            .unwrap_or_default();
+        let epoch_start_block = config
+            .as_ref()
+            .map(|c| c.config.epoch_start_block)
+            .unwrap_or_default();
+
         let (undecided_leaves, undecided_state) = self
             .load_undecided_state()
             .await
@@ -630,6 +641,11 @@ pub trait SequencerPersistence: Sized + Send + Sync + Clone + 'static {
             .load_upgrade_certificate()
             .await
             .context("loading upgrade certificate")?;
+
+        let start_epoch_info = self
+            .load_start_epoch_info()
+            .await
+            .context("loading start epoch info")?;
 
         tracing::info!(
             ?leaf,
@@ -647,8 +663,8 @@ pub trait SequencerPersistence: Sized + Send + Sync + Clone + 'static {
         Ok((
             HotShotInitializer {
                 instance_state: state,
-                epoch_height: 150,
-                epoch_start_block: 0,
+                epoch_height,
+                epoch_start_block,
                 anchor_leaf: leaf,
                 anchor_state: validated_state.unwrap_or_default(),
                 anchor_state_delta: None,
@@ -665,7 +681,7 @@ pub trait SequencerPersistence: Sized + Send + Sync + Clone + 'static {
                     .collect(),
                 undecided_state,
                 saved_vid_shares: Default::default(), // TODO: implement saved_vid_shares
-                start_epoch_info: Default::default(), // TODO: implement start_epoch_info
+                start_epoch_info,
             },
             anchor_view,
         ))
@@ -819,6 +835,17 @@ pub trait SequencerPersistence: Sized + Send + Sync + Clone + 'static {
     ) -> anyhow::Result<()> {
         self.append_quorum_proposal2(proposal).await
     }
+
+    async fn add_drb_result(
+        &self,
+        epoch: <SeqTypes as NodeType>::Epoch,
+        drb_result: DrbResult,
+    ) -> anyhow::Result<()>;
+    async fn add_epoch_root(
+        &self,
+        epoch: <SeqTypes as NodeType>::Epoch,
+        block_header: <SeqTypes as NodeType>::BlockHeader,
+    ) -> anyhow::Result<()>;
 }
 
 #[async_trait]
@@ -946,6 +973,22 @@ impl<P: SequencerPersistence> Storage<SeqTypes> for Arc<P> {
         state: BTreeMap<ViewNumber, View<SeqTypes>>,
     ) -> anyhow::Result<()> {
         (**self).update_undecided_state2(leaves, state).await
+    }
+
+    async fn add_drb_result(
+        &self,
+        epoch: <SeqTypes as NodeType>::Epoch,
+        drb_result: DrbResult,
+    ) -> anyhow::Result<()> {
+        (**self).add_drb_result(epoch, drb_result).await
+    }
+
+    async fn add_epoch_root(
+        &self,
+        epoch: <SeqTypes as NodeType>::Epoch,
+        block_header: <SeqTypes as NodeType>::BlockHeader,
+    ) -> anyhow::Result<()> {
+        (**self).add_epoch_root(epoch, block_header).await
     }
 }
 

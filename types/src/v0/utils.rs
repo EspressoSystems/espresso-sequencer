@@ -1,3 +1,11 @@
+use std::{
+    cmp::{min, Ordering},
+    fmt::{self, Debug, Display, Formatter},
+    num::ParseIntError,
+    str::FromStr,
+    time::Duration,
+};
+
 use anyhow::Context;
 use bytesize::ByteSize;
 use clap::Parser;
@@ -12,13 +20,6 @@ use hotshot_types::{
 use rand::Rng;
 use sequencer_utils::{impl_serde_from_string_or_integer, ser::FromStringOrInteger};
 use serde::{Deserialize, Serialize};
-use std::{
-    cmp::{min, Ordering},
-    fmt::{self, Debug, Display, Formatter},
-    num::ParseIntError,
-    str::FromStr,
-    time::Duration,
-};
 use thiserror::Error;
 use time::{
     format_description::well_known::Rfc3339 as TimestampFormat, macros::time, Date, OffsetDateTime,

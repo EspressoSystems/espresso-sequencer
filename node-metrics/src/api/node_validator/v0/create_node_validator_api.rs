@@ -1,5 +1,17 @@
 use std::sync::Arc;
 
+use async_lock::RwLock;
+use espresso_types::{PubKey, SeqTypes};
+use futures::{
+    channel::mpsc::{self, Receiver, SendError, Sender},
+    Sink, SinkExt, Stream, StreamExt,
+};
+use hotshot_query_service::Leaf2;
+use hotshot_types::event::{Event, EventType};
+use serde::{Deserialize, Serialize};
+use tokio::{spawn, task::JoinHandle};
+use url::Url;
+
 use super::{get_stake_table_from_sequencer, ProcessNodeIdentityUrlStreamTask};
 use crate::service::{
     client_id::ClientId,
@@ -12,17 +24,6 @@ use crate::service::{
     data_state::{DataState, ProcessLeafStreamTask, ProcessNodeIdentityStreamTask},
     server_message::ServerMessage,
 };
-use async_lock::RwLock;
-use espresso_types::{PubKey, SeqTypes};
-use futures::{
-    channel::mpsc::{self, Receiver, SendError, Sender},
-    Sink, SinkExt, Stream, StreamExt,
-};
-use hotshot_query_service::Leaf2;
-use hotshot_types::event::{Event, EventType};
-use serde::{Deserialize, Serialize};
-use tokio::{spawn, task::JoinHandle};
-use url::Url;
 
 pub struct NodeValidatorAPI<K> {
     pub process_internal_client_message_handle: Option<InternalClientMessageProcessingTask>,
@@ -368,6 +369,10 @@ pub async fn create_node_validator_processing(
 
 #[cfg(test)]
 mod test {
+    use futures::channel::mpsc::{self, Sender};
+    use tide_disco::App;
+    use tokio::spawn;
+
     use crate::{
         api::node_validator::v0::{
             HotshotQueryServiceLeafStreamRetriever, ProcessProduceLeafStreamTask,
@@ -375,9 +380,6 @@ mod test {
         },
         service::{client_message::InternalClientMessage, server_message::ServerMessage},
     };
-    use futures::channel::mpsc::{self, Sender};
-    use tide_disco::App;
-    use tokio::spawn;
 
     struct TestState(Sender<InternalClientMessage<Sender<ServerMessage>>>);
 

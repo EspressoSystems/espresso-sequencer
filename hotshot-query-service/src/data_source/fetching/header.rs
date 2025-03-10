@@ -12,36 +12,31 @@
 
 //! Header fetching.
 
+use std::{cmp::Ordering, future::IntoFuture, sync::Arc};
+
+use anyhow::bail;
+use async_trait::async_trait;
+use committable::Committable;
+use derivative::Derivative;
+use futures::{future::BoxFuture, FutureExt};
+use hotshot_types::traits::{block_contents::BlockHeader, node_implementation::NodeType};
+
 use super::{
     block::fetch_block_with_header, leaf::fetch_leaf_with_callbacks,
     vid::fetch_vid_common_with_header, AvailabilityProvider, Fetcher,
 };
-use crate::data_source::fetching::Fetchable;
-use crate::data_source::fetching::HeaderQueryData;
-use crate::data_source::fetching::LeafQueryData;
-use crate::data_source::fetching::Notifiers;
-use crate::QueryResult;
 use crate::{
     availability::{BlockId, QueryablePayload},
     data_source::{
+        fetching::{Fetchable, HeaderQueryData, LeafQueryData, Notifiers},
         storage::{
             pruning::PrunedHeightStorage, AvailabilityStorage, NodeStorage,
             UpdateAvailabilityStorage,
         },
         update::VersionedDataSource,
     },
-    Header, Payload, QueryError,
+    Header, Payload, QueryError, QueryResult,
 };
-use anyhow::bail;
-use async_trait::async_trait;
-use committable::Committable;
-use derivative::Derivative;
-use futures::future::BoxFuture;
-use futures::FutureExt;
-use hotshot_types::traits::{block_contents::BlockHeader, node_implementation::NodeType};
-use std::cmp::Ordering;
-use std::future::IntoFuture;
-use std::sync::Arc;
 
 impl<Types: NodeType> From<LeafQueryData<Types>> for HeaderQueryData<Types> {
     fn from(leaf: LeafQueryData<Types>) -> Self {

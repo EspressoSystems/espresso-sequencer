@@ -10,9 +10,9 @@
 // You should have received a copy of the GNU General Public License along with this program. If not,
 // see <https://www.gnu.org/licenses/>.
 
-use serde::ser::SerializeStruct;
-use serde::{Deserialize, Serialize, Serializer};
 use std::fmt::{Debug, Display};
+
+use serde::{ser::SerializeStruct, Deserialize, Serialize, Serializer};
 use tide_disco::StatusCode;
 
 /// [ExplorerAPIError] is a trait that represents an error that can be returned

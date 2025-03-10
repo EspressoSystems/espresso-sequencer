@@ -10,14 +10,6 @@
 // You should have received a copy of the GNU General Public License along with this program. If not,
 // see <https://www.gnu.org/licenses/>.
 
-use super::Provider;
-
-use crate::{
-    availability::{LeafQueryData, PayloadQueryData, VidCommonQueryData},
-    fetching::request::{LeafRequest, PayloadRequest, VidCommonRequest},
-    types::HeightIndexed,
-    Error, Payload, VidCommon,
-};
 use async_trait::async_trait;
 use committable::Committable;
 use futures::try_join;
@@ -29,6 +21,14 @@ use hotshot_types::{
 use jf_vid::VidScheme;
 use surf_disco::{Client, Url};
 use vbs::version::StaticVersionType;
+
+use super::Provider;
+use crate::{
+    availability::{LeafQueryData, PayloadQueryData, VidCommonQueryData},
+    fetching::request::{LeafRequest, PayloadRequest, VidCommonRequest},
+    types::HeightIndexed,
+    Error, Payload, VidCommon,
+};
 
 /// Data availability provider backed by another instance of this query service.
 ///
@@ -190,8 +190,20 @@ where
 // These tests run the `postgres` Docker image, which doesn't work on Windows.
 #[cfg(all(test, not(target_os = "windows")))]
 mod test {
-    use super::*;
+    use std::{future::IntoFuture, time::Duration};
 
+    use committable::Committable;
+    use futures::{
+        future::{join, FutureExt},
+        stream::StreamExt,
+    };
+    use generic_array::GenericArray;
+    use hotshot_example_types::node_types::TestVersions;
+    use portpicker::pick_unused_port;
+    use rand::RngCore;
+    use tide_disco::{error::ServerError, App};
+
+    use super::*;
     use crate::{
         api::load_api,
         availability::{
@@ -219,17 +231,6 @@ mod test {
         types::HeightIndexed,
         ApiState,
     };
-    use committable::Committable;
-    use futures::{
-        future::{join, FutureExt},
-        stream::StreamExt,
-    };
-    use generic_array::GenericArray;
-    use hotshot_example_types::node_types::TestVersions;
-    use portpicker::pick_unused_port;
-    use rand::RngCore;
-    use std::{future::IntoFuture, time::Duration};
-    use tide_disco::{error::ServerError, App};
 
     type Provider = TestProvider<QueryServiceProvider<MockBase>>;
 

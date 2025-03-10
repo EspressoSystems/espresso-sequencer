@@ -525,6 +525,7 @@ mod tests {
     use hotshot_types::data::ViewNumber;
     use tracing_test::traced_test;
 
+    use super::*;
     use crate::{
         block::TransactionSource,
         testing::{
@@ -534,8 +535,6 @@ mod tests {
             mock,
         },
     };
-
-    use super::*;
 
     type BuilderStateCoordinator = super::BuilderStateCoordinator<TestTypes>;
 

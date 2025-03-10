@@ -4,10 +4,6 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::{
-    block::{BuilderStateId, ParentBlockReferences, ReceivedTransaction},
-    utils::RotatingSet,
-};
 use async_broadcast::Receiver;
 use async_lock::{Mutex, RwLock};
 use committable::{Commitment, Committable};
@@ -15,6 +11,11 @@ use hotshot::traits::{BlockPayload, ValidatedState};
 use hotshot_types::{
     data::{DaProposal2, Leaf2, QuorumProposalWrapper},
     traits::{block_contents::BlockHeader, node_implementation::NodeType},
+};
+
+use crate::{
+    block::{BuilderStateId, ParentBlockReferences, ReceivedTransaction},
+    utils::RotatingSet,
 };
 
 #[derive(derive_more::Debug, Clone)]

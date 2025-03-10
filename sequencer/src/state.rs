@@ -6,8 +6,7 @@ use espresso_types::{
     traits::StateCatchup, v0_99::ChainConfig, BlockMerkleTree, Delta, FeeAccount, FeeMerkleTree,
     Leaf2, ValidatedState,
 };
-use futures::future::Future;
-use futures::StreamExt;
+use futures::{future::Future, StreamExt};
 use hotshot::traits::ValidatedState as HotShotState;
 use hotshot_query_service::{
     availability::{AvailabilityDataSource, LeafQueryData},

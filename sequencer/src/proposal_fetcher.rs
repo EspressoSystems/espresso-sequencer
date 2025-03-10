@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 use anyhow::Context;
 use async_channel::{Receiver, Sender};
@@ -19,7 +19,6 @@ use hotshot_types::{
     },
     utils::{View, ViewInner},
 };
-use std::time::Duration;
 use tokio::time::{sleep, timeout};
 use tracing::Instrument;
 

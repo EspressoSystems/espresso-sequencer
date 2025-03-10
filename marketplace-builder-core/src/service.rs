@@ -1,19 +1,16 @@
-use std::time::Duration;
-
-use marketplace_builder_shared::{
-    block::{BuilderStateId, ReceivedTransaction, TransactionSource},
-    coordinator::{BuilderStateCoordinator, BuilderStateLookup},
-    state::BuilderState,
-    utils::BuilderKeys,
+use std::{
+    fmt::Display,
+    sync::Arc,
+    time::{Duration, Instant},
 };
 
 pub use async_broadcast::{broadcast, RecvError, TryRecvError};
 use async_trait::async_trait;
 use committable::{Commitment, Committable};
-use futures::{future::BoxFuture, stream::FuturesUnordered, Stream};
 use futures::{
-    stream::{FuturesOrdered, StreamExt},
-    TryStreamExt,
+    future::BoxFuture,
+    stream::{FuturesOrdered, FuturesUnordered, StreamExt},
+    Stream, TryStreamExt,
 };
 use hotshot::types::Event;
 use hotshot_builder_api::{
@@ -23,25 +20,28 @@ use hotshot_builder_api::{
         data_source::{AcceptsTxnSubmits, BuilderDataSource},
     },
 };
-use hotshot_types::bundle::Bundle;
-use hotshot_types::traits::block_contents::{BuilderFee, Transaction};
 use hotshot_types::{
+    bundle::Bundle,
     data::VidCommitment,
     event::EventType,
     traits::{
+        block_contents::{BuilderFee, Transaction},
         node_implementation::{ConsensusTime, NodeType},
         signature_key::{BuilderSignatureKey, SignatureKey},
     },
 };
-use std::sync::Arc;
-use std::{fmt::Display, time::Instant};
+pub use marketplace_builder_shared::utils::EventServiceStream;
+use marketplace_builder_shared::{
+    block::{BuilderStateId, ReceivedTransaction, TransactionSource},
+    coordinator::{BuilderStateCoordinator, BuilderStateLookup},
+    state::BuilderState,
+    utils::BuilderKeys,
+};
 use tagged_base64::TaggedBase64;
 use tide_disco::{app::AppError, method::ReadState, App};
 use tokio::{spawn, task::JoinHandle, time::sleep};
 use tracing::Level;
 use vbs::version::StaticVersion;
-
-pub use marketplace_builder_shared::utils::EventServiceStream;
 
 use crate::hooks::BuilderHooks;
 

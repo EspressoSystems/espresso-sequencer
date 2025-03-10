@@ -6,6 +6,8 @@
 
 //! Provides an event-streaming handle for a [`SystemContext`] running in the background
 
+use std::sync::Arc;
+
 use anyhow::{anyhow, Context, Ok, Result};
 use async_broadcast::{InactiveReceiver, Receiver, Sender};
 use async_lock::RwLock;
@@ -32,7 +34,6 @@ use hotshot_types::{
     },
     utils::option_epoch_from_block_number,
 };
-use std::sync::Arc;
 use tracing::instrument;
 
 use crate::{traits::NodeImplementation, types::Event, SystemContext, Versions};

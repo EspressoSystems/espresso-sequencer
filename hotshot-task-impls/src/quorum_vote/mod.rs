@@ -15,7 +15,6 @@ use hotshot_task::{
     dependency_task::{DependencyTask, HandleDepOutput},
     task::TaskState,
 };
-use hotshot_types::StakeTableEntries;
 use hotshot_types::{
     consensus::{ConsensusMetricsValue, OuterConsensus},
     data::{Leaf2, QuorumProposalWrapper},
@@ -33,6 +32,7 @@ use hotshot_types::{
     },
     utils::{epoch_from_block_number, option_epoch_from_block_number},
     vote::{Certificate, HasViewNumber},
+    StakeTableEntries,
 };
 use hotshot_utils::anytrace::*;
 use tokio::task::JoinHandle;

@@ -13,11 +13,6 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::{
-    events::HotShotEvent,
-    helpers::{broadcast_event, parent_leaf_and_state, wait_for_next_epoch_qc},
-    quorum_proposal::{QuorumProposalTaskState, UpgradeLock, Versions},
-};
 use anyhow::{ensure, Context, Result};
 use async_broadcast::{Receiver, Sender};
 use async_lock::RwLock;
@@ -41,6 +36,12 @@ use hotshot_types::{
 use hotshot_utils::anytrace::*;
 use tracing::instrument;
 use vbs::version::StaticVersionType;
+
+use crate::{
+    events::HotShotEvent,
+    helpers::{broadcast_event, parent_leaf_and_state, wait_for_next_epoch_qc},
+    quorum_proposal::{QuorumProposalTaskState, UpgradeLock, Versions},
+};
 
 /// Proposal dependency types. These types represent events that precipitate a proposal.
 #[derive(PartialEq, Debug)]

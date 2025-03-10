@@ -1,16 +1,12 @@
-use std::{future::Future, pin::Pin};
-
-use std::time::Duration;
+use std::{future::Future, pin::Pin, time::Duration};
 
 use anyhow::Context;
 use either::Either::{self, Left, Right};
-use futures::stream::unfold;
-use futures::{Stream, StreamExt};
+use futures::{stream::unfold, Stream, StreamExt};
 use hotshot::types::Event;
 use hotshot_events_service::events::Error as EventStreamError;
 use hotshot_types::traits::node_implementation::NodeType;
-use surf_disco::client::HealthStatus;
-use surf_disco::Client;
+use surf_disco::{client::HealthStatus, Client};
 use tokio::time::{sleep, timeout};
 use tracing::{error, warn};
 use url::Url;

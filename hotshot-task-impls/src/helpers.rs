@@ -4,6 +4,12 @@
 // You should have received a copy of the MIT License
 // along with the HotShot repository. If not, see <https://mit-license.org/>.
 
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+    time::{Duration, Instant},
+};
+
 use async_broadcast::{Receiver, SendError, Sender};
 use async_lock::RwLock;
 use committable::{Commitment, Committable};
@@ -23,6 +29,7 @@ use hotshot_types::{
         election::Membership,
         node_implementation::{ConsensusTime, NodeImplementation, NodeType, Versions},
         signature_key::SignatureKey,
+        storage::Storage,
         BlockPayload, ValidatedState,
     },
     utils::{
@@ -33,11 +40,6 @@ use hotshot_types::{
     StakeTableEntries,
 };
 use hotshot_utils::anytrace::*;
-use std::{
-    collections::{HashMap, HashSet},
-    sync::Arc,
-    time::{Duration, Instant},
-};
 use tokio::time::timeout;
 use tracing::instrument;
 
@@ -180,10 +182,11 @@ pub(crate) async fn fetch_proposal<TYPES: NodeType, V: Versions>(
 }
 
 /// Handles calling add_epoch_root and sync_l1 on Membership if necessary.
-async fn decide_epoch_root<TYPES: NodeType>(
+async fn decide_epoch_root<TYPES: NodeType, I: NodeImplementation<TYPES>>(
     decided_leaf: &Leaf2<TYPES>,
     epoch_height: u64,
     membership: &Arc<RwLock<TYPES::Membership>>,
+    storage: &Arc<RwLock<I::Storage>>,
 ) {
     let decided_block_number = decided_leaf.block_header().block_number();
 
@@ -191,6 +194,19 @@ async fn decide_epoch_root<TYPES: NodeType>(
     if epoch_height != 0 && is_epoch_root(decided_block_number, epoch_height) {
         let next_epoch_number =
             TYPES::Epoch::new(epoch_from_block_number(decided_block_number, epoch_height) + 2);
+
+        if let Err(e) = storage
+            .write()
+            .await
+            .add_epoch_root(next_epoch_number, decided_leaf.block_header().clone())
+            .await
+        {
+            tracing::error!(
+                "Failed to store epoch root for epoch {:?}: {}",
+                next_epoch_number,
+                e
+            );
+        }
 
         let write_callback = {
             tracing::debug!("Calling add_epoch_root for epoch {:?}", next_epoch_number);
@@ -251,13 +267,14 @@ impl<TYPES: NodeType + Default> Default for LeafChainTraversalOutcome<TYPES> {
 /// # Panics
 /// If the leaf chain contains no decided leaf while reaching a decided view, which should be
 /// impossible.
-pub async fn decide_from_proposal_2<TYPES: NodeType>(
+pub async fn decide_from_proposal_2<TYPES: NodeType, I: NodeImplementation<TYPES>>(
     proposal: &QuorumProposalWrapper<TYPES>,
     consensus: OuterConsensus<TYPES>,
     existing_upgrade_cert: Arc<RwLock<Option<UpgradeCertificate<TYPES>>>>,
     public_key: &TYPES::SignatureKey,
     with_epochs: bool,
     membership: &Arc<RwLock<TYPES::Membership>>,
+    storage: &Arc<RwLock<I::Storage>>,
 ) -> LeafChainTraversalOutcome<TYPES> {
     let mut res = LeafChainTraversalOutcome::default();
     let consensus_reader = consensus.read().await;
@@ -331,10 +348,14 @@ pub async fn decide_from_proposal_2<TYPES: NodeType>(
         let epoch_height = consensus_reader.epoch_height;
         drop(consensus_reader);
 
-        if let Some(decided_leaf_info) = res.leaf_views.last() {
-            decide_epoch_root(&decided_leaf_info.leaf, epoch_height, membership).await;
-        } else {
-            tracing::info!("No decided leaf while a view has been decided.");
+        for decided_leaf_info in &res.leaf_views {
+            decide_epoch_root::<TYPES, I>(
+                &decided_leaf_info.leaf,
+                epoch_height,
+                membership,
+                storage,
+            )
+            .await;
         }
     }
 
@@ -372,13 +393,14 @@ pub async fn decide_from_proposal_2<TYPES: NodeType>(
 /// # Panics
 /// If the leaf chain contains no decided leaf while reaching a decided view, which should be
 /// impossible.
-pub async fn decide_from_proposal<TYPES: NodeType, V: Versions>(
+pub async fn decide_from_proposal<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>(
     proposal: &QuorumProposalWrapper<TYPES>,
     consensus: OuterConsensus<TYPES>,
     existing_upgrade_cert: Arc<RwLock<Option<UpgradeCertificate<TYPES>>>>,
     public_key: &TYPES::SignatureKey,
     with_epochs: bool,
     membership: &Arc<RwLock<TYPES::Membership>>,
+    storage: &Arc<RwLock<I::Storage>>,
 ) -> LeafChainTraversalOutcome<TYPES> {
     let consensus_reader = consensus.read().await;
     let existing_upgrade_cert_reader = existing_upgrade_cert.read().await;
@@ -489,10 +511,14 @@ pub async fn decide_from_proposal<TYPES: NodeType, V: Versions>(
     drop(consensus_reader);
 
     if with_epochs && res.new_decided_view_number.is_some() {
-        if let Some(decided_leaf_info) = res.leaf_views.last() {
-            decide_epoch_root(&decided_leaf_info.leaf, epoch_height, membership).await;
-        } else {
-            tracing::info!("No decided leaf while a view has been decided.");
+        for decided_leaf_info in &res.leaf_views {
+            decide_epoch_root::<TYPES, I>(
+                &decided_leaf_info.leaf,
+                epoch_height,
+                membership,
+                storage,
+            )
+            .await;
         }
     }
 

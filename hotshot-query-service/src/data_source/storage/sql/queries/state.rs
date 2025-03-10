@@ -12,17 +12,11 @@
 
 //! Merklized state storage implementation for a database query engine.
 
-use super::{
-    super::transaction::{query_as, Transaction, TransactionMode, Write},
-    DecodeError, QueryBuilder,
+use std::{
+    collections::{HashMap, HashSet, VecDeque},
+    sync::Arc,
 };
-use crate::data_source::storage::sql::sqlx::Row;
-use crate::data_source::storage::{pruning::PrunedHeightStorage, sql::build_where_in};
-use crate::{
-    data_source::storage::{MerklizedStateHeightStorage, MerklizedStateStorage},
-    merklized_state::{MerklizedState, Snapshot},
-    QueryError, QueryResult,
-};
+
 use ark_serialize::CanonicalDeserialize;
 use async_trait::async_trait;
 use futures::stream::TryStreamExt;
@@ -31,10 +25,21 @@ use jf_merkle_tree::{
     prelude::{MerkleNode, MerkleProof},
     DigestAlgorithm, MerkleCommitment, ToTraversalPath,
 };
-use sqlx::types::BitVec;
-use sqlx::types::JsonValue;
-use std::collections::{HashMap, HashSet, VecDeque};
-use std::sync::Arc;
+use sqlx::types::{BitVec, JsonValue};
+
+use super::{
+    super::transaction::{query_as, Transaction, TransactionMode, Write},
+    DecodeError, QueryBuilder,
+};
+use crate::{
+    data_source::storage::{
+        pruning::PrunedHeightStorage,
+        sql::{build_where_in, sqlx::Row},
+        MerklizedStateHeightStorage, MerklizedStateStorage,
+    },
+    merklized_state::{MerklizedState, Snapshot},
+    QueryError, QueryResult,
+};
 
 #[async_trait]
 impl<Mode, Types, State, const ARITY: usize> MerklizedStateStorage<Types, State, ARITY>

@@ -12,6 +12,16 @@
 
 //! Explorer storage implementation for a database query engine.
 
+use std::{collections::VecDeque, num::NonZeroUsize};
+
+use async_trait::async_trait;
+use committable::{Commitment, Committable};
+use futures::stream::{self, StreamExt, TryStreamExt};
+use hotshot_types::traits::node_implementation::NodeType;
+use itertools::Itertools;
+use sqlx::{types::Json, FromRow, Row};
+use tagged_base64::{Tagged, TaggedBase64};
+
 use super::{
     super::transaction::{query, Transaction, TransactionMode},
     Database, Db, DecodeError, BLOCK_COLUMNS,
@@ -33,14 +43,6 @@ use crate::{
     },
     Header, Payload, QueryError, QueryResult, Transaction as HotshotTransaction,
 };
-use async_trait::async_trait;
-use committable::{Commitment, Committable};
-use futures::stream::{self, StreamExt, TryStreamExt};
-use hotshot_types::traits::node_implementation::NodeType;
-use itertools::Itertools;
-use sqlx::{types::Json, FromRow, Row};
-use std::{collections::VecDeque, num::NonZeroUsize};
-use tagged_base64::{Tagged, TaggedBase64};
 
 impl From<sqlx::Error> for GetExplorerSummaryError {
     fn from(err: sqlx::Error) -> Self {

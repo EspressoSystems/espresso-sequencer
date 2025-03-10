@@ -1,3 +1,5 @@
+use std::ops::Add;
+
 use anyhow::bail;
 use committable::{Commitment, Committable};
 use ethers::types::Address;
@@ -19,7 +21,6 @@ use jf_merkle_tree::{
 };
 use num_traits::CheckedSub;
 use serde::{Deserialize, Serialize};
-use std::ops::Add;
 use thiserror::Error;
 use time::OffsetDateTime;
 use vbs::version::{StaticVersionType, Version};

@@ -2,8 +2,6 @@
 
 use std::marker::PhantomData;
 
-use crate::block::BuilderStateId;
-use crate::testing::constants::TEST_NUM_NODES_IN_VID_COMPUTATION;
 use async_broadcast::Sender;
 use committable::Committable;
 use hotshot::{
@@ -17,8 +15,10 @@ use hotshot_example_types::{
     state_types::{TestInstanceState, TestValidatedState},
 };
 use hotshot_types::{
-    data::vid_commitment,
-    data::{DaProposal2, EpochNumber, Leaf2, QuorumProposal2, QuorumProposalWrapper, ViewNumber},
+    data::{
+        vid_commitment, DaProposal2, EpochNumber, Leaf2, QuorumProposal2, QuorumProposalWrapper,
+        ViewNumber,
+    },
     message::Proposal,
     simple_certificate::{QuorumCertificate2, SimpleCertificate, SuccessThreshold},
     simple_vote::QuorumData2,
@@ -29,6 +29,8 @@ use hotshot_types::{
 };
 use sha2::{Digest, Sha256};
 use vbs::version::StaticVersionType;
+
+use crate::{block::BuilderStateId, testing::constants::TEST_NUM_NODES_IN_VID_COMPUTATION};
 
 pub struct SimulatedChainState {
     epoch: Option<EpochNumber>,

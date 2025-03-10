@@ -1,3 +1,5 @@
+use std::collections::{HashSet, VecDeque};
+
 use anyhow::{bail, ensure, Context};
 use async_trait::async_trait;
 use committable::{Commitment, Committable};
@@ -30,7 +32,6 @@ use jf_merkle_tree::{
     LookupResult, MerkleTreeScheme,
 };
 use sqlx::{Encode, Type};
-use std::collections::{HashSet, VecDeque};
 
 use super::{
     data_source::{Provider, SequencerDataSource},

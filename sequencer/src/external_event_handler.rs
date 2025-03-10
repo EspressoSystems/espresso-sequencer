@@ -1,6 +1,7 @@
 //! Should probably rename this to "external" or something
 
-use crate::context::TaskList;
+use std::{marker::PhantomData, sync::Arc};
+
 use anyhow::{Context, Result};
 use espresso_types::{PubKey, SeqTypes};
 use hotshot::types::Message;
@@ -13,8 +14,9 @@ use hotshot_types::{
 };
 use request_response::network::Bytes;
 use serde::{Deserialize, Serialize};
-use std::{marker::PhantomData, sync::Arc};
 use tokio::sync::mpsc::{Receiver, Sender};
+
+use crate::context::TaskList;
 
 /// An external message that can be sent to or received from a node
 #[derive(Debug, Serialize, Deserialize, Clone)]

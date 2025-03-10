@@ -173,9 +173,7 @@ impl<TYPES: NodeType> HasEpoch<TYPES> for MessageKind<TYPES> {
     fn epoch(&self) -> Option<TYPES::Epoch> {
         match &self {
             MessageKind::Consensus(message) => message.epoch_number(),
-            MessageKind::Data(
-                DataMessage::SubmitTransaction(_, _) | DataMessage::RequestData(_),
-            )
+            MessageKind::Data(DataMessage::SubmitTransaction(..) | DataMessage::RequestData(_))
             | MessageKind::External(_) => None,
             MessageKind::Data(DataMessage::DataResponse(msg)) => match msg {
                 ResponseMessage::Found(m) => m.epoch_number(),
@@ -416,7 +414,7 @@ impl<TYPES: NodeType> SequencingMessage<TYPES> {
                         // this should match replica upon receipt
                         p.data.epoch()
                     },
-                    GeneralConsensusMessage::ProposalRequested(_, _) => None,
+                    GeneralConsensusMessage::ProposalRequested(..) => None,
                     GeneralConsensusMessage::ProposalResponse(proposal) => proposal.data.epoch(),
                     GeneralConsensusMessage::ProposalResponse2(proposal) => proposal.data.epoch(),
                     GeneralConsensusMessage::Vote(vote_message) => vote_message.epoch(),

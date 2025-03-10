@@ -12,6 +12,13 @@
 
 #![cfg(any(test, feature = "testing"))]
 
+use std::{ops::RangeBounds, sync::Arc};
+
+use async_lock::Mutex;
+use async_trait::async_trait;
+use futures::future::Future;
+use hotshot_types::{data::VidShare, traits::node_implementation::NodeType};
+
 use super::{
     pruning::{PruneStorage, PrunedHeightStorage, PrunerCfg, PrunerConfig},
     sql::MigrateTypes,
@@ -32,12 +39,6 @@ use crate::{
     status::HasMetrics,
     Header, Payload, QueryError, QueryResult,
 };
-use async_lock::Mutex;
-use async_trait::async_trait;
-use futures::future::Future;
-use hotshot_types::{data::VidShare, traits::node_implementation::NodeType};
-use std::ops::RangeBounds;
-use std::sync::Arc;
 
 /// A specific action that can be targeted to inject an error.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

@@ -12,6 +12,18 @@
 
 //! [`Fetchable`] implementation for [`LeafQueryData`].
 
+use std::{cmp::Ordering, future::IntoFuture, iter::once, ops::RangeBounds, sync::Arc};
+
+use anyhow::bail;
+use async_trait::async_trait;
+use committable::Committable;
+use derivative::Derivative;
+use derive_more::From;
+use futures::future::{BoxFuture, FutureExt};
+use hotshot_types::traits::node_implementation::NodeType;
+use tokio::spawn;
+use tracing::Instrument;
+
 use super::{
     header::HeaderCallback, AvailabilityProvider, FetchRequest, Fetchable, Fetcher, Heights,
     Notifiers, RangedFetchable, Storable,
@@ -29,17 +41,6 @@ use crate::{
     types::HeightIndexed,
     Payload, QueryError, QueryResult,
 };
-use anyhow::bail;
-use async_trait::async_trait;
-use committable::Committable;
-use derivative::Derivative;
-use derive_more::From;
-use futures::future::{BoxFuture, FutureExt};
-use hotshot_types::traits::node_implementation::NodeType;
-use std::sync::Arc;
-use std::{cmp::Ordering, future::IntoFuture, iter::once, ops::RangeBounds};
-use tokio::spawn;
-use tracing::Instrument;
 
 pub(super) type LeafFetcher<Types, S, P> =
     fetching::Fetcher<request::LeafRequest<Types>, LeafCallback<Types, S, P>>;

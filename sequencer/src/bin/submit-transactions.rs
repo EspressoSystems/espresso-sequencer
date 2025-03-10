@@ -1,5 +1,9 @@
 //! Utility program to submit random transactions to an Espresso Sequencer.
 
+#[cfg(feature = "benchmarking")]
+use std::fs::OpenOptions;
+#[cfg(feature = "benchmarking")]
+use std::num::NonZeroUsize;
 use std::{
     collections::HashMap,
     time::{Duration, Instant},
@@ -7,6 +11,8 @@ use std::{
 
 use clap::Parser;
 use committable::{Commitment, Committable};
+#[cfg(feature = "benchmarking")]
+use csv::Writer;
 use espresso_types::{parse_duration, parse_size, SeqTypes, Transaction};
 use futures::{
     channel::mpsc::{self, Sender},
@@ -23,13 +29,6 @@ use surf_disco::{Client, Url};
 use tide_disco::{error::ServerError, App};
 use tokio::{task::spawn, time::sleep};
 use vbs::version::StaticVersionType;
-
-#[cfg(feature = "benchmarking")]
-use csv::Writer;
-#[cfg(feature = "benchmarking")]
-use std::fs::OpenOptions;
-#[cfg(feature = "benchmarking")]
-use std::num::NonZeroUsize;
 
 /// Submit random transactions to an Espresso Sequencer.
 #[derive(Clone, Debug, Parser)]

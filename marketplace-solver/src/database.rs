@@ -149,8 +149,9 @@ pub mod mock {
 
 #[cfg(all(test, not(target_os = "windows"), not(feature = "embedded-db")))]
 mod test {
-    use crate::database::mock::setup_mock_database;
     use hotshot::helpers::initialize_logging;
+
+    use crate::database::mock::setup_mock_database;
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_database_connection() {

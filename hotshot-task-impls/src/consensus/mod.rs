@@ -4,6 +4,8 @@
 // You should have received a copy of the MIT License
 // along with the HotShot repository. If not, see <https://mit-license.org/>.
 
+use std::{sync::Arc, time::Instant};
+
 use async_broadcast::{Receiver, Sender};
 use async_trait::async_trait;
 use hotshot_task::task::TaskState;
@@ -22,7 +24,6 @@ use hotshot_types::{
     vote::HasViewNumber,
 };
 use hotshot_utils::anytrace::*;
-use std::{sync::Arc, time::Instant};
 use tokio::task::JoinHandle;
 use tracing::instrument;
 

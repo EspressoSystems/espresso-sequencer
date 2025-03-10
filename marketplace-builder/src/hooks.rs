@@ -1,39 +1,21 @@
-use std::collections::HashSet;
-use std::sync::Arc;
-use std::time::Duration;
+use std::{collections::HashSet, sync::Arc, time::Duration};
 
 use async_lock::RwLock;
 use async_trait::async_trait;
-use espresso_types::v0_99::BidTxBody;
-use tokio::{spawn, time::sleep};
-
-use espresso_types::v0_99::RollupRegistration;
-
-use espresso_types::MarketplaceVersion;
-use espresso_types::SeqTypes;
-use hotshot::types::EventType;
-
-use hotshot::types::Event;
-
-use hotshot_types::traits::node_implementation::Versions;
+use espresso_types::{
+    eth_signature_key::EthKeyPair,
+    v0_99::{BidTxBody, RollupRegistration},
+    FeeAmount, MarketplaceVersion, NamespaceId, SeqTypes,
+};
+use hotshot::types::{Event, EventType};
+use hotshot_types::traits::node_implementation::{NodeType, Versions};
 use marketplace_builder_core::hooks::BuilderHooks;
-
-use espresso_types::FeeAmount;
-
-use espresso_types::eth_signature_key::EthKeyPair;
-
-use espresso_types::NamespaceId;
-
-use hotshot_types::traits::node_implementation::NodeType;
-
-use marketplace_solver::SolverError;
-use marketplace_solver::SOLVER_API_PATH;
+use marketplace_solver::{SolverError, SOLVER_API_PATH};
 use sequencer::SequencerApiVersion;
 use surf_disco::Client;
-
 use tide_disco::Url;
-use tracing::error;
-use tracing::info;
+use tokio::{spawn, time::sleep};
+use tracing::{error, info};
 
 /// Configurations for bid submission.
 pub struct BidConfig {

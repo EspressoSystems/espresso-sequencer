@@ -15,7 +15,6 @@ use hotshot_task::{
     dependency_task::DependencyTask,
     task::TaskState,
 };
-use hotshot_types::StakeTableEntries;
 use hotshot_types::{
     consensus::OuterConsensus,
     epoch_membership::EpochMembershipCoordinator,
@@ -28,14 +27,14 @@ use hotshot_types::{
     },
     utils::EpochTransitionIndicator,
     vote::{Certificate, HasViewNumber},
+    StakeTableEntries,
 };
 use hotshot_utils::anytrace::*;
 use tokio::task::JoinHandle;
 use tracing::instrument;
 
 use self::handlers::{ProposalDependency, ProposalDependencyHandle};
-use crate::events::HotShotEvent;
-use crate::quorum_proposal::handlers::handle_eqc_formed;
+use crate::{events::HotShotEvent, quorum_proposal::handlers::handle_eqc_formed};
 
 mod handlers;
 
@@ -234,7 +233,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
             HotShotEvent::ViewSyncFinalizeCertificateRecv(_) => {
                 view_sync_dependency.mark_as_completed(event);
             },
-            HotShotEvent::VidDisperseSend(_, _) => {
+            HotShotEvent::VidDisperseSend(..) => {
                 vid_share_dependency.mark_as_completed(event);
             },
             _ => {},

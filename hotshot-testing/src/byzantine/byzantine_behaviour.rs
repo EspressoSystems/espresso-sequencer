@@ -94,7 +94,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> EventTransforme
         _consensus: Arc<RwLock<Consensus<TYPES>>>,
     ) -> Vec<HotShotEvent<TYPES>> {
         match event {
-            HotShotEvent::QuorumProposalSend(_, _) | HotShotEvent::QuorumVoteSend(_) => {
+            HotShotEvent::QuorumProposalSend(..) | HotShotEvent::QuorumVoteSend(_) => {
                 vec![event.clone(), event.clone()]
             },
             _ => vec![event.clone()],

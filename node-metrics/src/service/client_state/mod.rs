@@ -1,20 +1,21 @@
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
+
+use async_lock::{RwLock, RwLockWriteGuard};
+use bitvec::vec::BitVec;
+use espresso_types::SeqTypes;
+use futures::{channel::mpsc::SendError, Sink, SinkExt, Stream, StreamExt};
+use hotshot_query_service::explorer::{BlockDetail, ExplorerHistograms};
+use tokio::{spawn, task::JoinHandle};
+
 use super::{
     client_id::ClientId,
     client_message::{ClientMessage, InternalClientMessage},
     data_state::{DataState, NodeIdentity},
     server_message::ServerMessage,
 };
-use bitvec::vec::BitVec;
-use espresso_types::SeqTypes;
-use futures::{channel::mpsc::SendError, Sink, SinkExt, Stream, StreamExt};
-use hotshot_query_service::explorer::{BlockDetail, ExplorerHistograms};
-use std::{
-    collections::{HashMap, HashSet},
-    sync::Arc,
-};
-use tokio::{spawn, task::JoinHandle};
-
-use async_lock::{RwLock, RwLockWriteGuard};
 
 /// ClientState represents the service state of the connected clients.
 /// It maintains and represents the connected clients, and their subscriptions.
@@ -1180,6 +1181,22 @@ impl Drop for ProcessDistributeVotersHandlingTask {
 
 #[cfg(test)]
 pub mod tests {
+    use std::{sync::Arc, time::Duration};
+
+    use async_lock::RwLock;
+    use bitvec::vec::BitVec;
+    use espresso_types::{Leaf2, NodeState, ValidatedState};
+    use futures::{
+        channel::mpsc::{self, Sender},
+        SinkExt, StreamExt,
+    };
+    use hotshot_example_types::node_types::TestVersions;
+    use hotshot_types::{signature_key::BLSPubKey, traits::signature_key::SignatureKey};
+    use tokio::{
+        spawn,
+        time::{sleep, timeout},
+    };
+
     use super::{ClientThreadState, InternalClientMessageProcessingTask};
     use crate::service::{
         client_id::ClientId,
@@ -1193,20 +1210,6 @@ pub mod tests {
             ProcessLeafStreamTask,
         },
         server_message::ServerMessage,
-    };
-    use async_lock::RwLock;
-    use bitvec::vec::BitVec;
-    use espresso_types::{Leaf2, NodeState, ValidatedState};
-    use futures::{
-        channel::mpsc::{self, Sender},
-        SinkExt, StreamExt,
-    };
-    use hotshot_example_types::node_types::TestVersions;
-    use hotshot_types::{signature_key::BLSPubKey, traits::signature_key::SignatureKey};
-    use std::{sync::Arc, time::Duration};
-    use tokio::{
-        spawn,
-        time::{sleep, timeout},
     };
 
     pub fn create_test_client_thread_state() -> ClientThreadState<Sender<ServerMessage>> {

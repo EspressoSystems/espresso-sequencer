@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use anyhow::{bail, ensure, Context};
 use ark_serialize::{
     CanonicalDeserialize, CanonicalSerialize, Compress, Read, SerializationError, Valid, Validate,
@@ -22,7 +24,6 @@ use num_traits::CheckedSub;
 use sequencer_utils::{
     impl_serde_from_string_or_integer, impl_to_fixed_bytes, ser::FromStringOrInteger,
 };
-use std::str::FromStr;
 use thiserror::Error;
 
 use crate::{
@@ -460,9 +461,8 @@ pub fn retain_accounts(
 mod test {
     use ethers::abi::Address;
 
-    use crate::{FeeAccount, FeeAmount, FeeInfo};
-
     use super::IterableFeeInfo;
+    use crate::{FeeAccount, FeeAmount, FeeInfo};
 
     #[test]
     fn test_iterable_fee_info() {

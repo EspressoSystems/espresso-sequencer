@@ -1,3 +1,5 @@
+use std::{path::PathBuf, time::Duration};
+
 use anyhow::{Context, Result};
 use clap::Parser;
 use client::SequencerClient;
@@ -9,8 +11,6 @@ use sequencer_utils::{
     logging,
     stake_table::{update_stake_table, PermissionedStakeTableUpdate},
 };
-use std::{path::PathBuf, time::Duration};
-
 use url::Url;
 
 #[derive(Debug, Clone, Parser)]

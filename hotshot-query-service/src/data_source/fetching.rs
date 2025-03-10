@@ -73,37 +73,16 @@
 //! different request for the same object, one that permitted an active fetch. Or it may have been
 //! fetched [proactively](#proactive-fetching).
 
-use super::{
-    notifier::Notifier,
-    storage::{
-        pruning::{PruneStorage, PrunedHeightDataSource, PrunedHeightStorage},
-        sql::MigrateTypes,
-        Aggregate, AggregatesStorage, AvailabilityStorage, ExplorerStorage,
-        MerklizedStateHeightStorage, MerklizedStateStorage, NodeStorage, UpdateAggregatesStorage,
-        UpdateAvailabilityStorage,
-    },
-    Transaction, VersionedDataSource,
+use std::{
+    cmp::{max, min},
+    fmt::{Debug, Display},
+    iter::repeat_with,
+    marker::PhantomData,
+    ops::{Bound, Range, RangeBounds},
+    sync::Arc,
+    time::Duration,
 };
-use crate::availability::HeaderQueryData;
-use crate::{
-    availability::{
-        AvailabilityDataSource, BlockId, BlockInfo, BlockQueryData, Fetch, FetchStream, LeafId,
-        LeafQueryData, PayloadMetadata, PayloadQueryData, QueryableHeader, QueryablePayload,
-        TransactionHash, TransactionQueryData, UpdateAvailabilityData, VidCommonMetadata,
-        VidCommonQueryData,
-    },
-    explorer::{self, ExplorerDataSource},
-    fetching::{self, request, Provider},
-    merklized_state::{
-        MerklizedState, MerklizedStateDataSource, MerklizedStateHeightPersistence, Snapshot,
-    },
-    metrics::PrometheusMetrics,
-    node::{NodeDataSource, SyncStatus, TimeWindowQueryData, WindowStart},
-    status::{HasMetrics, StatusDataSource},
-    task::BackgroundTask,
-    types::HeightIndexed,
-    Header, Payload, QueryError, QueryResult,
-};
+
 use anyhow::{bail, Context};
 use async_lock::Semaphore;
 use async_trait::async_trait;
@@ -122,18 +101,40 @@ use hotshot_types::{
     },
 };
 use jf_merkle_tree::{prelude::MerkleProof, MerkleTreeScheme};
-use std::sync::Arc;
-use std::{
-    cmp::{max, min},
-    fmt::{Debug, Display},
-    iter::repeat_with,
-    marker::PhantomData,
-    ops::{Bound, Range, RangeBounds},
-    time::Duration,
-};
 use tagged_base64::TaggedBase64;
 use tokio::{spawn, time::sleep};
 use tracing::Instrument;
+
+use super::{
+    notifier::Notifier,
+    storage::{
+        pruning::{PruneStorage, PrunedHeightDataSource, PrunedHeightStorage},
+        sql::MigrateTypes,
+        Aggregate, AggregatesStorage, AvailabilityStorage, ExplorerStorage,
+        MerklizedStateHeightStorage, MerklizedStateStorage, NodeStorage, UpdateAggregatesStorage,
+        UpdateAvailabilityStorage,
+    },
+    Transaction, VersionedDataSource,
+};
+use crate::{
+    availability::{
+        AvailabilityDataSource, BlockId, BlockInfo, BlockQueryData, Fetch, FetchStream,
+        HeaderQueryData, LeafId, LeafQueryData, PayloadMetadata, PayloadQueryData, QueryableHeader,
+        QueryablePayload, TransactionHash, TransactionQueryData, UpdateAvailabilityData,
+        VidCommonMetadata, VidCommonQueryData,
+    },
+    explorer::{self, ExplorerDataSource},
+    fetching::{self, request, Provider},
+    merklized_state::{
+        MerklizedState, MerklizedStateDataSource, MerklizedStateHeightPersistence, Snapshot,
+    },
+    metrics::PrometheusMetrics,
+    node::{NodeDataSource, SyncStatus, TimeWindowQueryData, WindowStart},
+    status::{HasMetrics, StatusDataSource},
+    task::BackgroundTask,
+    types::HeightIndexed,
+    Header, Payload, QueryError, QueryResult,
+};
 
 mod block;
 mod header;

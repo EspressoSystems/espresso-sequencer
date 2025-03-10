@@ -13,45 +13,44 @@ mod restart_tests;
 
 mod message_compat_tests;
 
+use std::sync::Arc;
+
 use anyhow::Context;
 use catchup::StatePeers;
 use context::SequencerContext;
-use espresso_types::EpochCommittees;
 use espresso_types::{
-    traits::EventConsumer, BackoffParams, L1ClientOptions, NodeState, PubKey, SeqTypes,
-    SolverAuctionResultsProvider, ValidatedState,
+    traits::EventConsumer, BackoffParams, EpochCommittees, L1ClientOptions, NodeState, PubKey,
+    SeqTypes, SolverAuctionResultsProvider, ValidatedState,
 };
 use ethers_conv::ToAlloy;
 use genesis::L1Finalized;
-use proposal_fetcher::ProposalFetcherConfig;
-use std::sync::Arc;
-use tokio::select;
 // Should move `STAKE_TABLE_CAPACITY` in the sequencer repo when we have variate stake table support
 use hotshot_libp2p_networking::network::behaviours::dht::store::persistent::DhtNoPersistence;
 use libp2p::Multiaddr;
 use network::libp2p::split_off_peer_id;
 use options::Identity;
+use proposal_fetcher::ProposalFetcherConfig;
 use state_signature::static_stake_table_commitment;
+use tokio::select;
 use tracing::info;
 use url::Url;
 pub mod persistence;
 pub mod state;
+use std::{fmt::Debug, marker::PhantomData, time::Duration};
+
 use derivative::Derivative;
 use espresso_types::v0::traits::SequencerPersistence;
 pub use genesis::Genesis;
-use hotshot::traits::implementations::{
-    derive_libp2p_multiaddr, CombinedNetworks, GossipConfig, Libp2pNetwork, RequestResponseConfig,
-};
 use hotshot::{
     traits::implementations::{
-        derive_libp2p_peer_id, CdnMetricsValue, CdnTopic, KeyPair, MemoryNetwork, PushCdnNetwork,
-        WrappedSignatureKey,
+        derive_libp2p_multiaddr, derive_libp2p_peer_id, CdnMetricsValue, CdnTopic,
+        CombinedNetworks, GossipConfig, KeyPair, Libp2pNetwork, MemoryNetwork, PushCdnNetwork,
+        RequestResponseConfig, WrappedSignatureKey,
     },
     types::SignatureKey,
     MarketplaceConfig,
 };
-use hotshot_orchestrator::client::get_complete_config;
-use hotshot_orchestrator::client::OrchestratorClient;
+use hotshot_orchestrator::client::{get_complete_config, OrchestratorClient};
 use hotshot_types::{
     data::ViewNumber,
     light_client::{StateKeyPair, StateSignKey},
@@ -66,8 +65,6 @@ use hotshot_types::{
 };
 pub use options::Options;
 use serde::{Deserialize, Serialize};
-use std::time::Duration;
-use std::{fmt::Debug, marker::PhantomData};
 use vbs::version::{StaticVersion, StaticVersionType};
 pub mod network;
 
@@ -594,20 +591,22 @@ pub mod testing {
     use hotshot_testing::block_builder::{
         BuilderTask, SimpleBuilderImplementation, TestBuilderImplementation,
     };
-    use hotshot_types::traits::network::Topic;
-    use hotshot_types::traits::signature_key::StakeTableEntryType;
     use hotshot_types::{
         event::LeafInfo,
         light_client::{CircuitField, StateKeyPair, StateVerKey},
-        traits::signature_key::BuilderSignatureKey,
-        traits::{block_contents::BlockHeader, metrics::NoMetrics, stake_table::StakeTableScheme},
+        traits::{
+            block_contents::BlockHeader,
+            metrics::NoMetrics,
+            network::Topic,
+            signature_key::{BuilderSignatureKey, StakeTableEntryType},
+            stake_table::StakeTableScheme,
+        },
         HotShotConfig, PeerConfig,
     };
     use marketplace_builder_core::{
         hooks::NoHooks,
         service::{BuilderConfig, GlobalState},
     };
-
     use portpicker::pick_unused_port;
     use tokio::spawn;
     use vbs::version::Version;

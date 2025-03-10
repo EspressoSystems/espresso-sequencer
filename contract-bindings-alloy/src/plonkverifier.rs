@@ -16,8 +16,9 @@ library BN254 {
     clippy::empty_structs_with_brackets
 )]
 pub mod BN254 {
-    use super::*;
     use alloy::sol_types as alloy_sol_types;
+
+    use super::*;
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct BaseField(alloy::sol_types::private::primitives::aliases::U256);
@@ -256,7 +257,9 @@ pub mod BN254 {
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct G1Point {
+        #[allow(missing_docs)]
         pub x: <BaseField as alloy::sol_types::SolType>::RustType,
+        #[allow(missing_docs)]
         pub y: <BaseField as alloy::sol_types::SolType>::RustType,
     }
     #[allow(
@@ -561,36 +564,60 @@ library IPlonkVerifier {
     clippy::empty_structs_with_brackets
 )]
 pub mod IPlonkVerifier {
-    use super::*;
     use alloy::sol_types as alloy_sol_types;
+
+    use super::*;
     /**```solidity
     struct PlonkProof { BN254.G1Point wire0; BN254.G1Point wire1; BN254.G1Point wire2; BN254.G1Point wire3; BN254.G1Point wire4; BN254.G1Point prodPerm; BN254.G1Point split0; BN254.G1Point split1; BN254.G1Point split2; BN254.G1Point split3; BN254.G1Point split4; BN254.G1Point zeta; BN254.G1Point zetaOmega; BN254.ScalarField wireEval0; BN254.ScalarField wireEval1; BN254.ScalarField wireEval2; BN254.ScalarField wireEval3; BN254.ScalarField wireEval4; BN254.ScalarField sigmaEval0; BN254.ScalarField sigmaEval1; BN254.ScalarField sigmaEval2; BN254.ScalarField sigmaEval3; BN254.ScalarField prodPermZetaOmegaEval; }
     ```*/
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct PlonkProof {
+        #[allow(missing_docs)]
         pub wire0: <BN254::G1Point as alloy::sol_types::SolType>::RustType,
+        #[allow(missing_docs)]
         pub wire1: <BN254::G1Point as alloy::sol_types::SolType>::RustType,
+        #[allow(missing_docs)]
         pub wire2: <BN254::G1Point as alloy::sol_types::SolType>::RustType,
+        #[allow(missing_docs)]
         pub wire3: <BN254::G1Point as alloy::sol_types::SolType>::RustType,
+        #[allow(missing_docs)]
         pub wire4: <BN254::G1Point as alloy::sol_types::SolType>::RustType,
+        #[allow(missing_docs)]
         pub prodPerm: <BN254::G1Point as alloy::sol_types::SolType>::RustType,
+        #[allow(missing_docs)]
         pub split0: <BN254::G1Point as alloy::sol_types::SolType>::RustType,
+        #[allow(missing_docs)]
         pub split1: <BN254::G1Point as alloy::sol_types::SolType>::RustType,
+        #[allow(missing_docs)]
         pub split2: <BN254::G1Point as alloy::sol_types::SolType>::RustType,
+        #[allow(missing_docs)]
         pub split3: <BN254::G1Point as alloy::sol_types::SolType>::RustType,
+        #[allow(missing_docs)]
         pub split4: <BN254::G1Point as alloy::sol_types::SolType>::RustType,
+        #[allow(missing_docs)]
         pub zeta: <BN254::G1Point as alloy::sol_types::SolType>::RustType,
+        #[allow(missing_docs)]
         pub zetaOmega: <BN254::G1Point as alloy::sol_types::SolType>::RustType,
+        #[allow(missing_docs)]
         pub wireEval0: <BN254::ScalarField as alloy::sol_types::SolType>::RustType,
+        #[allow(missing_docs)]
         pub wireEval1: <BN254::ScalarField as alloy::sol_types::SolType>::RustType,
+        #[allow(missing_docs)]
         pub wireEval2: <BN254::ScalarField as alloy::sol_types::SolType>::RustType,
+        #[allow(missing_docs)]
         pub wireEval3: <BN254::ScalarField as alloy::sol_types::SolType>::RustType,
+        #[allow(missing_docs)]
         pub wireEval4: <BN254::ScalarField as alloy::sol_types::SolType>::RustType,
+        #[allow(missing_docs)]
         pub sigmaEval0: <BN254::ScalarField as alloy::sol_types::SolType>::RustType,
+        #[allow(missing_docs)]
         pub sigmaEval1: <BN254::ScalarField as alloy::sol_types::SolType>::RustType,
+        #[allow(missing_docs)]
         pub sigmaEval2: <BN254::ScalarField as alloy::sol_types::SolType>::RustType,
+        #[allow(missing_docs)]
         pub sigmaEval3: <BN254::ScalarField as alloy::sol_types::SolType>::RustType,
+        #[allow(missing_docs)]
         pub prodPermZetaOmegaEval: <BN254::ScalarField as alloy::sol_types::SolType>::RustType,
     }
     #[allow(
@@ -1116,27 +1143,49 @@ pub mod IPlonkVerifier {
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct VerifyingKey {
+        #[allow(missing_docs)]
         pub domainSize: alloy::sol_types::private::primitives::aliases::U256,
+        #[allow(missing_docs)]
         pub numInputs: alloy::sol_types::private::primitives::aliases::U256,
+        #[allow(missing_docs)]
         pub sigma0: <BN254::G1Point as alloy::sol_types::SolType>::RustType,
+        #[allow(missing_docs)]
         pub sigma1: <BN254::G1Point as alloy::sol_types::SolType>::RustType,
+        #[allow(missing_docs)]
         pub sigma2: <BN254::G1Point as alloy::sol_types::SolType>::RustType,
+        #[allow(missing_docs)]
         pub sigma3: <BN254::G1Point as alloy::sol_types::SolType>::RustType,
+        #[allow(missing_docs)]
         pub sigma4: <BN254::G1Point as alloy::sol_types::SolType>::RustType,
+        #[allow(missing_docs)]
         pub q1: <BN254::G1Point as alloy::sol_types::SolType>::RustType,
+        #[allow(missing_docs)]
         pub q2: <BN254::G1Point as alloy::sol_types::SolType>::RustType,
+        #[allow(missing_docs)]
         pub q3: <BN254::G1Point as alloy::sol_types::SolType>::RustType,
+        #[allow(missing_docs)]
         pub q4: <BN254::G1Point as alloy::sol_types::SolType>::RustType,
+        #[allow(missing_docs)]
         pub qM12: <BN254::G1Point as alloy::sol_types::SolType>::RustType,
+        #[allow(missing_docs)]
         pub qM34: <BN254::G1Point as alloy::sol_types::SolType>::RustType,
+        #[allow(missing_docs)]
         pub qO: <BN254::G1Point as alloy::sol_types::SolType>::RustType,
+        #[allow(missing_docs)]
         pub qC: <BN254::G1Point as alloy::sol_types::SolType>::RustType,
+        #[allow(missing_docs)]
         pub qH1: <BN254::G1Point as alloy::sol_types::SolType>::RustType,
+        #[allow(missing_docs)]
         pub qH2: <BN254::G1Point as alloy::sol_types::SolType>::RustType,
+        #[allow(missing_docs)]
         pub qH3: <BN254::G1Point as alloy::sol_types::SolType>::RustType,
+        #[allow(missing_docs)]
         pub qH4: <BN254::G1Point as alloy::sol_types::SolType>::RustType,
+        #[allow(missing_docs)]
         pub qEcc: <BN254::G1Point as alloy::sol_types::SolType>::RustType,
+        #[allow(missing_docs)]
         pub g2LSB: alloy::sol_types::private::FixedBytes<32>,
+        #[allow(missing_docs)]
         pub g2MSB: alloy::sol_types::private::FixedBytes<32>,
     }
     #[allow(
@@ -2560,8 +2609,9 @@ interface PlonkVerifier {
     clippy::empty_structs_with_brackets
 )]
 pub mod PlonkVerifier {
-    use super::*;
     use alloy::sol_types as alloy_sol_types;
+
+    use super::*;
     /// The creation / init bytecode of the contract.
     ///
     /// ```text
@@ -2769,14 +2819,18 @@ pub mod PlonkVerifier {
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct verifyCall {
+        #[allow(missing_docs)]
         pub verifyingKey: <IPlonkVerifier::VerifyingKey as alloy::sol_types::SolType>::RustType,
+        #[allow(missing_docs)]
         pub publicInput: [alloy::sol_types::private::primitives::aliases::U256; 7usize],
+        #[allow(missing_docs)]
         pub proof: <IPlonkVerifier::PlonkProof as alloy::sol_types::SolType>::RustType,
     }
     ///Container type for the return parameters of the [`verify((uint256,uint256,(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),bytes32,bytes32),uint256[7],((uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256))`](verifyCall) function.
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct verifyReturn {
+        #[allow(missing_docs)]
         pub _0: bool,
     }
     #[allow(
@@ -2909,6 +2963,7 @@ pub mod PlonkVerifier {
     };
     ///Container for all the [`PlonkVerifier`](self) function calls.
     pub enum PlonkVerifierCalls {
+        #[allow(missing_docs)]
         verify(verifyCall),
     }
     #[automatically_derived]
@@ -2988,8 +3043,11 @@ pub mod PlonkVerifier {
     }
     ///Container for all the [`PlonkVerifier`](self) custom errors.
     pub enum PlonkVerifierErrors {
+        #[allow(missing_docs)]
         InvalidPlonkArgs(InvalidPlonkArgs),
+        #[allow(missing_docs)]
         UnsupportedDegree(UnsupportedDegree),
+        #[allow(missing_docs)]
         WrongPlonkVK(WrongPlonkVK),
     }
     #[automatically_derived]

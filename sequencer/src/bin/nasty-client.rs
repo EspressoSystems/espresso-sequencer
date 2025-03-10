@@ -12,6 +12,16 @@
 //! provides a healthcheck endpoint as well as a prometheus endpoint which provides metrics like the
 //! count of various types of actions performed and the number of open streams.
 
+use std::{
+    borrow::Cow,
+    cmp::max,
+    collections::{BTreeMap, HashMap},
+    fmt::Debug,
+    pin::Pin,
+    sync::Arc,
+    time::{Duration, Instant},
+};
+
 use anyhow::{bail, ensure, Context};
 use async_lock::RwLock;
 use clap::Parser;
@@ -41,15 +51,6 @@ use rand::{seq::SliceRandom, RngCore};
 use sequencer::{api::endpoints::NamespaceProofQueryData, SequencerApiVersion};
 use sequencer_utils::logging;
 use serde::de::DeserializeOwned;
-use std::{
-    borrow::Cow,
-    cmp::max,
-    collections::{BTreeMap, HashMap},
-    fmt::Debug,
-    pin::Pin,
-    sync::Arc,
-    time::{Duration, Instant},
-};
 use strum::{EnumDiscriminants, VariantArray};
 use surf_disco::{error::ClientError, socket, Error, StatusCode, Url};
 use tide_disco::{error::ServerError, App};

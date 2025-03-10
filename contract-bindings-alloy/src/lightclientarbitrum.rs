@@ -16,8 +16,9 @@ library BN254 {
     clippy::empty_structs_with_brackets
 )]
 pub mod BN254 {
-    use super::*;
     use alloy::sol_types as alloy_sol_types;
+
+    use super::*;
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct BaseField(alloy::sol_types::private::primitives::aliases::U256);
@@ -256,7 +257,9 @@ pub mod BN254 {
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct G1Point {
+        #[allow(missing_docs)]
         pub x: <BaseField as alloy::sol_types::SolType>::RustType,
+        #[allow(missing_docs)]
         pub y: <BaseField as alloy::sol_types::SolType>::RustType,
     }
     #[allow(
@@ -560,36 +563,60 @@ library IPlonkVerifier {
     clippy::empty_structs_with_brackets
 )]
 pub mod IPlonkVerifier {
-    use super::*;
     use alloy::sol_types as alloy_sol_types;
+
+    use super::*;
     /**```solidity
     struct PlonkProof { BN254.G1Point wire0; BN254.G1Point wire1; BN254.G1Point wire2; BN254.G1Point wire3; BN254.G1Point wire4; BN254.G1Point prodPerm; BN254.G1Point split0; BN254.G1Point split1; BN254.G1Point split2; BN254.G1Point split3; BN254.G1Point split4; BN254.G1Point zeta; BN254.G1Point zetaOmega; BN254.ScalarField wireEval0; BN254.ScalarField wireEval1; BN254.ScalarField wireEval2; BN254.ScalarField wireEval3; BN254.ScalarField wireEval4; BN254.ScalarField sigmaEval0; BN254.ScalarField sigmaEval1; BN254.ScalarField sigmaEval2; BN254.ScalarField sigmaEval3; BN254.ScalarField prodPermZetaOmegaEval; }
     ```*/
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct PlonkProof {
+        #[allow(missing_docs)]
         pub wire0: <BN254::G1Point as alloy::sol_types::SolType>::RustType,
+        #[allow(missing_docs)]
         pub wire1: <BN254::G1Point as alloy::sol_types::SolType>::RustType,
+        #[allow(missing_docs)]
         pub wire2: <BN254::G1Point as alloy::sol_types::SolType>::RustType,
+        #[allow(missing_docs)]
         pub wire3: <BN254::G1Point as alloy::sol_types::SolType>::RustType,
+        #[allow(missing_docs)]
         pub wire4: <BN254::G1Point as alloy::sol_types::SolType>::RustType,
+        #[allow(missing_docs)]
         pub prodPerm: <BN254::G1Point as alloy::sol_types::SolType>::RustType,
+        #[allow(missing_docs)]
         pub split0: <BN254::G1Point as alloy::sol_types::SolType>::RustType,
+        #[allow(missing_docs)]
         pub split1: <BN254::G1Point as alloy::sol_types::SolType>::RustType,
+        #[allow(missing_docs)]
         pub split2: <BN254::G1Point as alloy::sol_types::SolType>::RustType,
+        #[allow(missing_docs)]
         pub split3: <BN254::G1Point as alloy::sol_types::SolType>::RustType,
+        #[allow(missing_docs)]
         pub split4: <BN254::G1Point as alloy::sol_types::SolType>::RustType,
+        #[allow(missing_docs)]
         pub zeta: <BN254::G1Point as alloy::sol_types::SolType>::RustType,
+        #[allow(missing_docs)]
         pub zetaOmega: <BN254::G1Point as alloy::sol_types::SolType>::RustType,
+        #[allow(missing_docs)]
         pub wireEval0: <BN254::ScalarField as alloy::sol_types::SolType>::RustType,
+        #[allow(missing_docs)]
         pub wireEval1: <BN254::ScalarField as alloy::sol_types::SolType>::RustType,
+        #[allow(missing_docs)]
         pub wireEval2: <BN254::ScalarField as alloy::sol_types::SolType>::RustType,
+        #[allow(missing_docs)]
         pub wireEval3: <BN254::ScalarField as alloy::sol_types::SolType>::RustType,
+        #[allow(missing_docs)]
         pub wireEval4: <BN254::ScalarField as alloy::sol_types::SolType>::RustType,
+        #[allow(missing_docs)]
         pub sigmaEval0: <BN254::ScalarField as alloy::sol_types::SolType>::RustType,
+        #[allow(missing_docs)]
         pub sigmaEval1: <BN254::ScalarField as alloy::sol_types::SolType>::RustType,
+        #[allow(missing_docs)]
         pub sigmaEval2: <BN254::ScalarField as alloy::sol_types::SolType>::RustType,
+        #[allow(missing_docs)]
         pub sigmaEval3: <BN254::ScalarField as alloy::sol_types::SolType>::RustType,
+        #[allow(missing_docs)]
         pub prodPermZetaOmegaEval: <BN254::ScalarField as alloy::sol_types::SolType>::RustType,
     }
     #[allow(
@@ -1256,16 +1283,20 @@ library LightClient {
     clippy::empty_structs_with_brackets
 )]
 pub mod LightClient {
-    use super::*;
     use alloy::sol_types as alloy_sol_types;
+
+    use super::*;
     /**```solidity
     struct LightClientState { uint64 viewNum; uint64 blockHeight; BN254.ScalarField blockCommRoot; }
     ```*/
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct LightClientState {
+        #[allow(missing_docs)]
         pub viewNum: u64,
+        #[allow(missing_docs)]
         pub blockHeight: u64,
+        #[allow(missing_docs)]
         pub blockCommRoot: <BN254::ScalarField as alloy::sol_types::SolType>::RustType,
     }
     #[allow(
@@ -1479,9 +1510,13 @@ pub mod LightClient {
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct StakeTableState {
+        #[allow(missing_docs)]
         pub threshold: alloy::sol_types::private::primitives::aliases::U256,
+        #[allow(missing_docs)]
         pub blsKeyComm: <BN254::ScalarField as alloy::sol_types::SolType>::RustType,
+        #[allow(missing_docs)]
         pub schnorrKeyComm: <BN254::ScalarField as alloy::sol_types::SolType>::RustType,
+        #[allow(missing_docs)]
         pub amountComm: <BN254::ScalarField as alloy::sol_types::SolType>::RustType,
     }
     #[allow(
@@ -2934,8 +2969,9 @@ interface LightClientArbitrum {
     clippy::empty_structs_with_brackets
 )]
 pub mod LightClientArbitrum {
-    use super::*;
     use alloy::sol_types as alloy_sol_types;
+
+    use super::*;
     /// The creation / init bytecode of the contract.
     ///
     /// ```text
@@ -2963,6 +2999,7 @@ pub mod LightClientArbitrum {
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct AddressEmptyCode {
+        #[allow(missing_docs)]
         pub target: alloy::sol_types::private::Address,
     }
     #[allow(
@@ -3029,6 +3066,7 @@ pub mod LightClientArbitrum {
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct ERC1967InvalidImplementation {
+        #[allow(missing_docs)]
         pub implementation: alloy::sol_types::private::Address,
     }
     #[allow(
@@ -3817,6 +3855,7 @@ pub mod LightClientArbitrum {
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct OwnableInvalidOwner {
+        #[allow(missing_docs)]
         pub owner: alloy::sol_types::private::Address,
     }
     #[allow(
@@ -3883,6 +3922,7 @@ pub mod LightClientArbitrum {
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct OwnableUnauthorizedAccount {
+        #[allow(missing_docs)]
         pub account: alloy::sol_types::private::Address,
     }
     #[allow(
@@ -4069,6 +4109,7 @@ pub mod LightClientArbitrum {
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct UUPSUnsupportedProxiableUUID {
+        #[allow(missing_docs)]
         pub slot: alloy::sol_types::private::FixedBytes<32>,
     }
     #[allow(
@@ -4921,6 +4962,7 @@ pub mod LightClientArbitrum {
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct UPGRADE_INTERFACE_VERSIONReturn {
+        #[allow(missing_docs)]
         pub _0: alloy::sol_types::private::String,
     }
     #[allow(
@@ -5031,6 +5073,7 @@ pub mod LightClientArbitrum {
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct currentBlockNumberReturn {
+        #[allow(missing_docs)]
         pub _0: alloy::sol_types::private::primitives::aliases::U256,
     }
     #[allow(
@@ -5249,8 +5292,11 @@ pub mod LightClientArbitrum {
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct finalizedStateReturn {
+        #[allow(missing_docs)]
         pub viewNum: u64,
+        #[allow(missing_docs)]
         pub blockHeight: u64,
+        #[allow(missing_docs)]
         pub blockCommRoot: <BN254::ScalarField as alloy::sol_types::SolType>::RustType,
     }
     #[allow(
@@ -5377,9 +5423,13 @@ pub mod LightClientArbitrum {
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct genesisStakeTableStateReturn {
+        #[allow(missing_docs)]
         pub threshold: alloy::sol_types::private::primitives::aliases::U256,
+        #[allow(missing_docs)]
         pub blsKeyComm: <BN254::ScalarField as alloy::sol_types::SolType>::RustType,
+        #[allow(missing_docs)]
         pub schnorrKeyComm: <BN254::ScalarField as alloy::sol_types::SolType>::RustType,
+        #[allow(missing_docs)]
         pub amountComm: <BN254::ScalarField as alloy::sol_types::SolType>::RustType,
     }
     #[allow(
@@ -5515,8 +5565,11 @@ pub mod LightClientArbitrum {
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct genesisStateReturn {
+        #[allow(missing_docs)]
         pub viewNum: u64,
+        #[allow(missing_docs)]
         pub blockHeight: u64,
+        #[allow(missing_docs)]
         pub blockCommRoot: <BN254::ScalarField as alloy::sol_types::SolType>::RustType,
     }
     #[allow(
@@ -5639,13 +5692,16 @@ pub mod LightClientArbitrum {
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct getHotShotCommitmentCall {
+        #[allow(missing_docs)]
         pub hotShotBlockHeight: alloy::sol_types::private::primitives::aliases::U256,
     }
     ///Container type for the return parameters of the [`getHotShotCommitment(uint256)`](getHotShotCommitmentCall) function.
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct getHotShotCommitmentReturn {
+        #[allow(missing_docs)]
         pub hotShotBlockCommRoot: <BN254::ScalarField as alloy::sol_types::SolType>::RustType,
+        #[allow(missing_docs)]
         pub hotshotBlockHeight: u64,
     }
     #[allow(
@@ -5769,6 +5825,7 @@ pub mod LightClientArbitrum {
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct getStateHistoryCountReturn {
+        #[allow(missing_docs)]
         pub _0: alloy::sol_types::private::primitives::aliases::U256,
     }
     #[allow(
@@ -5879,8 +5936,11 @@ pub mod LightClientArbitrum {
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct getVersionReturn {
+        #[allow(missing_docs)]
         pub majorVersion: u8,
+        #[allow(missing_docs)]
         pub minorVersion: u8,
+        #[allow(missing_docs)]
         pub patchVersion: u8,
     }
     #[allow(
@@ -5999,10 +6059,14 @@ pub mod LightClientArbitrum {
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct initializeCall {
+        #[allow(missing_docs)]
         pub _genesis: <LightClient::LightClientState as alloy::sol_types::SolType>::RustType,
+        #[allow(missing_docs)]
         pub _genesisStakeTableState:
             <LightClient::StakeTableState as alloy::sol_types::SolType>::RustType,
+        #[allow(missing_docs)]
         pub _stateHistoryRetentionPeriod: u32,
+        #[allow(missing_docs)]
         pub owner: alloy::sol_types::private::Address,
     }
     ///Container type for the return parameters of the [`initialize((uint64,uint64,uint256),(uint256,uint256,uint256,uint256),uint32,address)`](initializeCall) function.
@@ -6155,6 +6219,7 @@ pub mod LightClientArbitrum {
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct isPermissionedProverEnabledReturn {
+        #[allow(missing_docs)]
         pub _0: bool,
     }
     #[allow(
@@ -6261,13 +6326,16 @@ pub mod LightClientArbitrum {
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct lagOverEscapeHatchThresholdCall {
+        #[allow(missing_docs)]
         pub blockNumber: alloy::sol_types::private::primitives::aliases::U256,
+        #[allow(missing_docs)]
         pub blockThreshold: alloy::sol_types::private::primitives::aliases::U256,
     }
     ///Container type for the return parameters of the [`lagOverEscapeHatchThreshold(uint256,uint256)`](lagOverEscapeHatchThresholdCall) function.
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct lagOverEscapeHatchThresholdReturn {
+        #[allow(missing_docs)]
         pub _0: bool,
     }
     #[allow(
@@ -6393,7 +6461,9 @@ pub mod LightClientArbitrum {
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct newFinalizedStateCall {
+        #[allow(missing_docs)]
         pub newState: <LightClient::LightClientState as alloy::sol_types::SolType>::RustType,
+        #[allow(missing_docs)]
         pub proof: <IPlonkVerifier::PlonkProof as alloy::sol_types::SolType>::RustType,
     }
     ///Container type for the return parameters of the [`newFinalizedState((uint64,uint64,uint256),((uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256))`](newFinalizedStateCall) function.
@@ -6520,6 +6590,7 @@ pub mod LightClientArbitrum {
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct ownerReturn {
+        #[allow(missing_docs)]
         pub _0: alloy::sol_types::private::Address,
     }
     #[allow(
@@ -6630,6 +6701,7 @@ pub mod LightClientArbitrum {
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct permissionedProverReturn {
+        #[allow(missing_docs)]
         pub _0: alloy::sol_types::private::Address,
     }
     #[allow(
@@ -6740,6 +6812,7 @@ pub mod LightClientArbitrum {
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct proxiableUUIDReturn {
+        #[allow(missing_docs)]
         pub _0: alloy::sol_types::private::FixedBytes<32>,
     }
     #[allow(
@@ -6954,6 +7027,7 @@ pub mod LightClientArbitrum {
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct setPermissionedProverCall {
+        #[allow(missing_docs)]
         pub prover: alloy::sol_types::private::Address,
     }
     ///Container type for the return parameters of the [`setPermissionedProver(address)`](setPermissionedProverCall) function.
@@ -7068,6 +7142,7 @@ pub mod LightClientArbitrum {
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct setstateHistoryRetentionPeriodCall {
+        #[allow(missing_docs)]
         pub historySeconds: u32,
     }
     ///Container type for the return parameters of the [`setstateHistoryRetentionPeriod(uint32)`](setstateHistoryRetentionPeriodCall) function.
@@ -7184,15 +7259,20 @@ pub mod LightClientArbitrum {
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct stateHistoryCommitmentsCall {
+        #[allow(missing_docs)]
         pub _0: alloy::sol_types::private::primitives::aliases::U256,
     }
     ///Container type for the return parameters of the [`stateHistoryCommitments(uint256)`](stateHistoryCommitmentsCall) function.
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct stateHistoryCommitmentsReturn {
+        #[allow(missing_docs)]
         pub l1BlockHeight: u64,
+        #[allow(missing_docs)]
         pub l1BlockTimestamp: u64,
+        #[allow(missing_docs)]
         pub hotShotBlockHeight: u64,
+        #[allow(missing_docs)]
         pub hotShotBlockCommRoot: <BN254::ScalarField as alloy::sol_types::SolType>::RustType,
     }
     #[allow(
@@ -7332,6 +7412,7 @@ pub mod LightClientArbitrum {
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct stateHistoryFirstIndexReturn {
+        #[allow(missing_docs)]
         pub _0: u64,
     }
     #[allow(
@@ -7442,6 +7523,7 @@ pub mod LightClientArbitrum {
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct stateHistoryRetentionPeriodReturn {
+        #[allow(missing_docs)]
         pub _0: u32,
     }
     #[allow(
@@ -7548,6 +7630,7 @@ pub mod LightClientArbitrum {
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct transferOwnershipCall {
+        #[allow(missing_docs)]
         pub newOwner: alloy::sol_types::private::Address,
     }
     ///Container type for the return parameters of the [`transferOwnership(address)`](transferOwnershipCall) function.
@@ -7662,7 +7745,9 @@ pub mod LightClientArbitrum {
     #[allow(non_camel_case_types, non_snake_case, clippy::pub_underscore_fields)]
     #[derive(Clone)]
     pub struct upgradeToAndCallCall {
+        #[allow(missing_docs)]
         pub newImplementation: alloy::sol_types::private::Address,
+        #[allow(missing_docs)]
         pub data: alloy::sol_types::private::Bytes,
     }
     ///Container type for the return parameters of the [`upgradeToAndCall(address,bytes)`](upgradeToAndCallCall) function.
@@ -7787,29 +7872,53 @@ pub mod LightClientArbitrum {
     };
     ///Container for all the [`LightClientArbitrum`](self) function calls.
     pub enum LightClientArbitrumCalls {
+        #[allow(missing_docs)]
         UPGRADE_INTERFACE_VERSION(UPGRADE_INTERFACE_VERSIONCall),
+        #[allow(missing_docs)]
         currentBlockNumber(currentBlockNumberCall),
+        #[allow(missing_docs)]
         disablePermissionedProverMode(disablePermissionedProverModeCall),
+        #[allow(missing_docs)]
         finalizedState(finalizedStateCall),
+        #[allow(missing_docs)]
         genesisStakeTableState(genesisStakeTableStateCall),
+        #[allow(missing_docs)]
         genesisState(genesisStateCall),
+        #[allow(missing_docs)]
         getHotShotCommitment(getHotShotCommitmentCall),
+        #[allow(missing_docs)]
         getStateHistoryCount(getStateHistoryCountCall),
+        #[allow(missing_docs)]
         getVersion(getVersionCall),
+        #[allow(missing_docs)]
         initialize(initializeCall),
+        #[allow(missing_docs)]
         isPermissionedProverEnabled(isPermissionedProverEnabledCall),
+        #[allow(missing_docs)]
         lagOverEscapeHatchThreshold(lagOverEscapeHatchThresholdCall),
+        #[allow(missing_docs)]
         newFinalizedState(newFinalizedStateCall),
+        #[allow(missing_docs)]
         owner(ownerCall),
+        #[allow(missing_docs)]
         permissionedProver(permissionedProverCall),
+        #[allow(missing_docs)]
         proxiableUUID(proxiableUUIDCall),
+        #[allow(missing_docs)]
         renounceOwnership(renounceOwnershipCall),
+        #[allow(missing_docs)]
         setPermissionedProver(setPermissionedProverCall),
+        #[allow(missing_docs)]
         setstateHistoryRetentionPeriod(setstateHistoryRetentionPeriodCall),
+        #[allow(missing_docs)]
         stateHistoryCommitments(stateHistoryCommitmentsCall),
+        #[allow(missing_docs)]
         stateHistoryFirstIndex(stateHistoryFirstIndexCall),
+        #[allow(missing_docs)]
         stateHistoryRetentionPeriod(stateHistoryRetentionPeriodCall),
+        #[allow(missing_docs)]
         transferOwnership(transferOwnershipCall),
+        #[allow(missing_docs)]
         upgradeToAndCall(upgradeToAndCallCall),
     }
     #[automatically_derived]
@@ -8460,25 +8569,45 @@ pub mod LightClientArbitrum {
     }
     ///Container for all the [`LightClientArbitrum`](self) custom errors.
     pub enum LightClientArbitrumErrors {
+        #[allow(missing_docs)]
         AddressEmptyCode(AddressEmptyCode),
+        #[allow(missing_docs)]
         ERC1967InvalidImplementation(ERC1967InvalidImplementation),
+        #[allow(missing_docs)]
         ERC1967NonPayable(ERC1967NonPayable),
+        #[allow(missing_docs)]
         FailedInnerCall(FailedInnerCall),
+        #[allow(missing_docs)]
         InsufficientSnapshotHistory(InsufficientSnapshotHistory),
+        #[allow(missing_docs)]
         InvalidAddress(InvalidAddress),
+        #[allow(missing_docs)]
         InvalidArgs(InvalidArgs),
+        #[allow(missing_docs)]
         InvalidHotShotBlockForCommitmentCheck(InvalidHotShotBlockForCommitmentCheck),
+        #[allow(missing_docs)]
         InvalidInitialization(InvalidInitialization),
+        #[allow(missing_docs)]
         InvalidMaxStateHistory(InvalidMaxStateHistory),
+        #[allow(missing_docs)]
         InvalidProof(InvalidProof),
+        #[allow(missing_docs)]
         NoChangeRequired(NoChangeRequired),
+        #[allow(missing_docs)]
         NotInitializing(NotInitializing),
+        #[allow(missing_docs)]
         OutdatedState(OutdatedState),
+        #[allow(missing_docs)]
         OwnableInvalidOwner(OwnableInvalidOwner),
+        #[allow(missing_docs)]
         OwnableUnauthorizedAccount(OwnableUnauthorizedAccount),
+        #[allow(missing_docs)]
         ProverNotPermissioned(ProverNotPermissioned),
+        #[allow(missing_docs)]
         UUPSUnauthorizedCallContext(UUPSUnauthorizedCallContext),
+        #[allow(missing_docs)]
         UUPSUnsupportedProxiableUUID(UUPSUnsupportedProxiableUUID),
+        #[allow(missing_docs)]
         WrongStakeTableUsed(WrongStakeTableUsed),
     }
     #[automatically_derived]
@@ -9067,12 +9196,19 @@ pub mod LightClientArbitrum {
     }
     ///Container for all the [`LightClientArbitrum`](self) events.
     pub enum LightClientArbitrumEvents {
+        #[allow(missing_docs)]
         Initialized(Initialized),
+        #[allow(missing_docs)]
         NewState(NewState),
+        #[allow(missing_docs)]
         OwnershipTransferred(OwnershipTransferred),
+        #[allow(missing_docs)]
         PermissionedProverNotRequired(PermissionedProverNotRequired),
+        #[allow(missing_docs)]
         PermissionedProverRequired(PermissionedProverRequired),
+        #[allow(missing_docs)]
         Upgrade(Upgrade),
+        #[allow(missing_docs)]
         Upgraded(Upgraded),
     }
     #[automatically_derived]
