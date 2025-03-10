@@ -324,9 +324,14 @@ impl<TYPES: NodeType> AvidMDisperse<TYPES> {
     ) -> Self {
         let payload_byte_len = shares[0].payload_byte_len();
         let shares = membership
-            .committee_members(view_number)
+            .coordinator
+            .membership_for_epoch(target_epoch)
+            .await
+            .unwrap()
+            .stake_table()
             .await
             .iter()
+            .map(|entry| entry.stake_table_entry.public_key())
             .zip(shares)
             .map(|(node, share)| (node.clone(), share.clone()))
             .collect();
