@@ -293,6 +293,12 @@ pub struct NativeDemo {
 
 impl Drop for NativeDemo {
     fn drop(&mut self) {
+        // It would be preferable to send a SIGINT or similar to the process that we started
+        // originally but despite quite some effort this never worked for the process-compose
+        // process started from within the scripts/demo-native script.
+        //
+        // Using `process-compose down` seems to pretty reliably stop the process-compose process
+        // and all the services it started.
         println!("Terminating process compose");
         let res = Command::new("process-compose")
             .arg("down")
