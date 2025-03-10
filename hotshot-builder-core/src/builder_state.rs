@@ -295,7 +295,7 @@ async fn best_builder_states_to_extend<Types: NodeType>(
                 Some(parent_block_references) => {
                     parent_block_references.leaf_commit == justify_qc.data.leaf_commit
                         && parent_block_references.view_number == justify_qc.view_number
-                }
+                },
             },
         )
         .map(|(builder_state_id, _)| builder_state_id.clone())
@@ -1102,15 +1102,15 @@ impl<Types: NodeType, V: Versions> BuilderState<Types, V> {
                     }
                     self.txns_in_queue.insert(tx.commit);
                     self.tx_queue.push_back(tx);
-                }
+                },
                 Err(async_broadcast::TryRecvError::Empty)
                 | Err(async_broadcast::TryRecvError::Closed) => {
                     break;
-                }
+                },
                 Err(async_broadcast::TryRecvError::Overflowed(lost)) => {
                     tracing::warn!("Missed {lost} transactions due to backlog");
                     continue;
-                }
+                },
             }
         }
     }

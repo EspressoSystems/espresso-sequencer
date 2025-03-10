@@ -83,7 +83,7 @@ impl<V: Versions> ExternalEventHandler<V> {
                 self.request_response_sender
                     .send(request_response.into())
                     .await?;
-            }
+            },
         }
         Ok(())
     }
@@ -111,14 +111,14 @@ impl<V: Versions> ExternalEventHandler<V> {
                         Err(err) => {
                             tracing::warn!("Failed to serialize direct message: {}", err);
                             continue;
-                        }
+                        },
                     };
 
                     // Send the message to the recipient
                     if let Err(err) = network.direct_message(message_bytes, recipient).await {
                         tracing::error!("Failed to send message: {:?}", err);
                     };
-                }
+                },
 
                 OutboundMessage::Broadcast(message) => {
                     // Wrap it in the real message type
@@ -133,7 +133,7 @@ impl<V: Versions> ExternalEventHandler<V> {
                         Err(err) => {
                             tracing::warn!("Failed to serialize broadcast message: {}", err);
                             continue;
-                        }
+                        },
                     };
 
                     // Broadcast the message to the global topic
@@ -143,7 +143,7 @@ impl<V: Versions> ExternalEventHandler<V> {
                     {
                         tracing::error!("Failed to broadcast message: {:?}", err);
                     };
-                }
+                },
             }
         }
     }

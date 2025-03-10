@@ -116,17 +116,17 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static, V: Versions>
                 self.network
                     .broadcast_message(serialized_message, Topic::Global, BroadcastDelay::None)
                     .await?;
-            }
+            },
             RecipientList::Direct(recipient) => {
                 self.network
                     .direct_message(serialized_message, recipient)
                     .await?;
-            }
+            },
             RecipientList::Many(recipients) => {
                 self.network
                     .da_broadcast_message(serialized_message, recipients, BroadcastDelay::None)
                     .await?;
-            }
+            },
         }
         Ok(())
     }
@@ -199,7 +199,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static, V: Versions>
                         Err(e) => {
                             tracing::warn!(e.message);
                             continue;
-                        }
+                        },
                     };
                     // Make sure that the quorum_proposal is valid
                     if let Err(err) = quorum_proposal.validate_signature(&membership).await {

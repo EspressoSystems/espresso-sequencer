@@ -88,10 +88,10 @@ where
             BlockId::Number(n) => Ok(n),
             BlockId::Hash(h) => {
                 Ok(*self.index_by_block_hash.get(&h).context(NotFoundSnafu)? as usize)
-            }
+            },
             BlockId::PayloadHash(h) => {
                 Ok(*self.index_by_payload_hash.get(&h).context(NotFoundSnafu)? as usize)
-            }
+            },
         }
     }
 
@@ -405,11 +405,11 @@ where
                 iter.nth(n - 1);
             }
             n
-        }
+        },
         Bound::Excluded(n) => {
             iter.nth(n);
             n + 1
-        }
+        },
         Bound::Unbounded => 0,
     };
 
@@ -662,10 +662,10 @@ fn update_index_by_hash<H: Eq + Hash, P: Ord>(index: &mut HashMap<H, P>, hash: H
                 // Overwrite the existing entry if the new object was sequenced first.
                 e.insert(pos);
             }
-        }
+        },
         Entry::Vacant(e) => {
             e.insert(pos);
-        }
+        },
     }
 }
 
@@ -772,7 +772,7 @@ where
                 // entry in `index_by_time` has a non-empty list associated with it, so this
                 // indexing is safe.
                 blocks[0]
-            }
+            },
         } as usize;
 
         let mut res = TimeWindowQueryData::default();

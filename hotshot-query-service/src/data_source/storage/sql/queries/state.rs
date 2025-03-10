@@ -148,7 +148,7 @@ where
                                 .decode_error("malformed merkle node value")?,
                             children: child_nodes,
                         });
-                    }
+                    },
                     // If it has an entry, it's a leaf
                     (None, None, Some(index), Some(entry)) => {
                         proof_path.push_back(MerkleNode::Leaf {
@@ -159,16 +159,16 @@ where
                             elem: serde_json::from_value(entry.clone())
                                 .decode_error("malformed merkle element")?,
                         });
-                    }
+                    },
                     // Otherwise, it's empty.
                     (None, None, Some(_), None) => {
                         proof_path.push_back(MerkleNode::Empty);
-                    }
+                    },
                     _ => {
                         return Err(QueryError::Error {
                             message: "Invalid type of merkle node found".to_string(),
                         });
-                    }
+                    },
                 }
             }
         }
@@ -223,7 +223,7 @@ where
                         State::Digest::digest(&data).map_err(|err| QueryError::Error {
                             message: format!("failed to update digest: {err:#}"),
                         })
-                    }
+                    },
                     MerkleNode::Empty => Ok(init),
                     _ => Err(QueryError::Error {
                         message: "Invalid type of Node in the proof".to_string(),
@@ -292,7 +292,7 @@ impl<Mode: TransactionMode> Transaction<Mode> {
                 .await?;
 
                 (height, commit)
-            }
+            },
             Snapshot::Index(created) => {
                 let created = created as i64;
                 let (commit,) = query_as::<(String,)>(&format!(
@@ -307,7 +307,7 @@ impl<Mode: TransactionMode> Transaction<Mode> {
                 let commit = serde_json::from_value(commit.into())
                     .decode_error("malformed state commitment")?;
                 (created, commit)
-            }
+            },
         };
 
         // Make sure the requested snapshot is up to date.

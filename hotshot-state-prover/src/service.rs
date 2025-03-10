@@ -155,12 +155,12 @@ async fn init_stake_table_from_sequencer(
                 Err(e) => {
                     tracing::error!("Failed to parse the network config: {e}");
                     sleep(Duration::from_secs(5)).await;
-                }
+                },
             },
             Err(e) => {
                 tracing::error!("Failed to fetch the network config: {e}");
                 sleep(Duration::from_secs(5)).await;
-            }
+            },
         }
     };
 
@@ -288,7 +288,7 @@ pub async fn read_contract_state(
         Err(e) => {
             tracing::error!("unable to read finalized_state from contract: {}", e);
             return Err(ProverError::ContractError(e.into()));
-        }
+        },
     };
     let st_state: ParsedStakeTableState = match contract.genesis_stake_table_state().call().await {
         Ok(s) => s.into(),
@@ -298,7 +298,7 @@ pub async fn read_contract_state(
                 e
             );
             return Err(ProverError::ContractError(e.into()));
-        }
+        },
     };
 
     Ok((state.into(), st_state.into()))
@@ -330,10 +330,10 @@ pub async fn submit_state_and_proof(
                         priority_fee
                     );
                 }
-            }
+            },
             Err(e) => {
                 tracing::warn!("!! BlockNative Price Oracle failed: {}", e);
-            }
+            },
         }
     }
 

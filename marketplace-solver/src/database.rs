@@ -60,7 +60,7 @@ impl PostgresClient {
                 }
 
                 connect_opts.to_url_lossy()
-            }
+            },
         };
 
         if let Some(max_connections) = max_connections {

@@ -431,22 +431,22 @@ impl<TYPES: NodeType, V: Versions> HandleDepOutput for ProposalDependencyHandle<
                         block_view: *view,
                         auction_result: auction_result.clone(),
                     });
-                }
+                },
                 HotShotEvent::Qc2Formed(cert) => match cert {
                     either::Right(timeout) => {
                         timeout_certificate = Some(timeout.clone());
-                    }
+                    },
                     either::Left(qc) => {
                         parent_qc = Some(qc.clone());
-                    }
+                    },
                 },
                 HotShotEvent::ViewSyncFinalizeCertificateRecv(cert) => {
                     view_sync_finalize_cert = Some(cert.clone());
-                }
+                },
                 HotShotEvent::VidDisperseSend(share, _) => {
                     vid_share = Some(share.clone());
-                }
-                _ => {}
+                },
+                _ => {},
             }
         }
 

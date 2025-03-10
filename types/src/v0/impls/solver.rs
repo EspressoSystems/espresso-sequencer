@@ -54,7 +54,7 @@ impl Committable for RollupUpdatebody {
                 comm = comm
                     .u64_field("reserve_url", 2)
                     .var_size_bytes(url.as_str().as_ref())
-            }
+            },
             Set(None) => comm = comm.u64_field("reserve_url", 1),
             Update::Skip => comm = comm.u64_field("reserve_url", 0),
         }

@@ -1118,7 +1118,7 @@ mod test {
                 }),
                 Header::V99(_) => {
                     panic!("You called `Header.next()` on unimplemented version (v3)")
-                }
+                },
             }
         }
         /// Replaces builder signature w/ invalid one.
@@ -1147,7 +1147,7 @@ mod test {
                 }),
                 Header::V99(_) => {
                     panic!("You called `Header.sign()` on unimplemented version (v3)")
-                }
+                },
             }
         }
 

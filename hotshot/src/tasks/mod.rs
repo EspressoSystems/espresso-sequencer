@@ -280,13 +280,13 @@ pub fn create_shutdown_event_monitor<TYPES: NodeType, I: NodeImplementation<TYPE
                     if matches!(event.as_ref(), HotShotEvent::Shutdown) {
                         return;
                     }
-                }
+                },
                 Err(RecvError::Closed) => {
                     return;
-                }
+                },
                 Err(e) => {
                     tracing::error!("Shutdown event monitor channel recv error: {}", e);
-                }
+                },
             }
         }
     }

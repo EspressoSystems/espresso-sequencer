@@ -137,20 +137,20 @@ impl QueryBuilder<'_> {
         match range.start_bound() {
             Bound::Included(n) => {
                 bounds.push(format!("{column} >= {}", self.bind(*n as i64)?));
-            }
+            },
             Bound::Excluded(n) => {
                 bounds.push(format!("{column} > {}", self.bind(*n as i64)?));
-            }
-            Bound::Unbounded => {}
+            },
+            Bound::Unbounded => {},
         }
         match range.end_bound() {
             Bound::Included(n) => {
                 bounds.push(format!("{column} <= {}", self.bind(*n as i64)?));
-            }
+            },
             Bound::Excluded(n) => {
                 bounds.push(format!("{column} < {}", self.bind(*n as i64)?));
-            }
-            Bound::Unbounded => {}
+            },
+            Bound::Unbounded => {},
         }
 
         let mut where_clause = bounds.join(" AND ");

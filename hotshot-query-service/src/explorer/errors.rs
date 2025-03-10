@@ -417,7 +417,7 @@ mod test {
             let want = query_error;
 
             match &have.error {
-                crate::QueryError::NotFound => {}
+                crate::QueryError::NotFound => {},
                 _ => panic!("deserialized QueryError mismatch: have: {have}, want: {want}"),
             }
         }

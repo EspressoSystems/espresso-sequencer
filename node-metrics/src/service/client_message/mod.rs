@@ -141,7 +141,7 @@ mod tests {
                 match internal_client_message {
                     InternalClientMessage::Request(id, _) => {
                         assert_eq!(id, client_id);
-                    }
+                    },
                     _ => panic!("Unexpected InternalClientMessage"),
                 }
             }

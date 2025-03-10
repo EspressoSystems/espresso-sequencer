@@ -143,10 +143,10 @@ where
         match self.0.entry(*key.view()) {
             Entry::Vacant(entry) => {
                 entry.insert(nem![key.into_subkey() => value]);
-            }
+            },
             Entry::Occupied(mut entry) => {
                 entry.get_mut().insert(key.into_subkey(), value);
-            }
+            },
         }
     }
 

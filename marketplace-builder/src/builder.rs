@@ -608,7 +608,7 @@ mod test {
                     get_bundle(builder_client, parent_view_number, parent_commitment).await,
                     parent_view_number,
                 )
-            }
+            },
             Mempool::Private => {
                 submit_and_get_bundle_with_private_mempool(
                     builder_client,
@@ -616,7 +616,7 @@ mod test {
                     urls,
                 )
                 .await
-            }
+            },
         };
 
         assert_eq!(bundle.transactions, vec![registered_transaction.clone()]);
@@ -728,7 +728,7 @@ mod test {
                     get_bundle(builder_client, parent_view_number, parent_commitment).await,
                     parent_view_number,
                 )
-            }
+            },
             Mempool::Private => {
                 submit_and_get_bundle_with_private_mempool(
                     builder_client,
@@ -736,7 +736,7 @@ mod test {
                     urls,
                 )
                 .await
-            }
+            },
         };
 
         assert_eq!(bundle.transactions, vec![unregistered_transaction.clone()]);

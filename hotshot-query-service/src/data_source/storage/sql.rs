@@ -577,11 +577,11 @@ impl SqlStorage {
             match runner.run_async(&mut Migrator::from(&mut conn)).await {
                 Ok(report) => {
                     tracing::info!("ran DB migrations: {report:?}");
-                }
+                },
                 Err(err) => {
                     tracing::error!("DB migrations failed: {:?}", err.report());
                     Err(err)?;
-                }
+                },
             }
         }
 
@@ -709,7 +709,7 @@ impl PruneStorage for SqlStorage {
                 };
 
                 height
-            }
+            },
         };
 
         // Prune data exceeding target retention in batches

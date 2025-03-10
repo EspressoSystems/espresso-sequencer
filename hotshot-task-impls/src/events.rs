@@ -284,7 +284,7 @@ impl<TYPES: NodeType> HotShotEvent<TYPES> {
             HotShotEvent::QuorumVoteRecv(v) => Some(v.view_number()),
             HotShotEvent::TimeoutVoteRecv(v) | HotShotEvent::TimeoutVoteSend(v) => {
                 Some(v.view_number())
-            }
+            },
             HotShotEvent::QuorumProposalRecv(proposal, _)
             | HotShotEvent::QuorumProposalSend(proposal, _)
             | HotShotEvent::QuorumProposalValidated(proposal, _)
@@ -292,16 +292,16 @@ impl<TYPES: NodeType> HotShotEvent<TYPES> {
             | HotShotEvent::QuorumProposalResponseSend(_, proposal)
             | HotShotEvent::QuorumProposalPreliminarilyValidated(proposal) => {
                 Some(proposal.data.view_number())
-            }
+            },
             HotShotEvent::QuorumVoteSend(vote) | HotShotEvent::ExtendedQuorumVoteSend(vote) => {
                 Some(vote.view_number())
-            }
+            },
             HotShotEvent::DaProposalRecv(proposal, _)
             | HotShotEvent::DaProposalValidated(proposal, _)
             | HotShotEvent::DaProposalSend(proposal, _) => Some(proposal.data.view_number()),
             HotShotEvent::DaVoteRecv(vote) | HotShotEvent::DaVoteSend(vote) => {
                 Some(vote.view_number())
-            }
+            },
             HotShotEvent::QcFormed(cert) => match cert {
                 either::Left(qc) => Some(qc.view_number()),
                 either::Right(tc) => Some(tc.view_number()),
@@ -329,7 +329,7 @@ impl<TYPES: NodeType> HotShotEvent<TYPES> {
             | HotShotEvent::ViewSyncFinalizeCertificateSend(cert, _) => Some(cert.view_number()),
             HotShotEvent::SendPayloadCommitmentAndMetadata(_, _, _, view_number, _, _) => {
                 Some(*view_number)
-            }
+            },
             HotShotEvent::BlockRecv(packed_bundle) => Some(packed_bundle.view_number),
             HotShotEvent::Shutdown
             | HotShotEvent::TransactionSend(_, _)
@@ -337,12 +337,12 @@ impl<TYPES: NodeType> HotShotEvent<TYPES> {
             HotShotEvent::VidDisperseSend(proposal, _) => Some(proposal.data.view_number()),
             HotShotEvent::VidShareRecv(_, proposal) | HotShotEvent::VidShareValidated(proposal) => {
                 Some(proposal.data.view_number())
-            }
+            },
             HotShotEvent::UpgradeProposalRecv(proposal, _)
             | HotShotEvent::UpgradeProposalSend(proposal, _) => Some(proposal.data.view_number()),
             HotShotEvent::UpgradeVoteRecv(vote) | HotShotEvent::UpgradeVoteSend(vote) => {
                 Some(vote.view_number())
-            }
+            },
             HotShotEvent::QuorumProposalRequestSend(req, _)
             | HotShotEvent::QuorumProposalRequestRecv(req, _) => Some(req.view_number),
             HotShotEvent::ViewChange(view_number, _)
@@ -351,7 +351,7 @@ impl<TYPES: NodeType> HotShotEvent<TYPES> {
             | HotShotEvent::Timeout(view_number, ..) => Some(*view_number),
             HotShotEvent::DaCertificateRecv(cert) | HotShotEvent::DacSend(cert, _) => {
                 Some(cert.view_number())
-            }
+            },
             HotShotEvent::DaCertificateValidated(cert) => Some(cert.view_number),
             HotShotEvent::UpgradeCertificateFormed(cert) => Some(cert.view_number()),
             HotShotEvent::VidRequestSend(request, _, _)
@@ -378,20 +378,20 @@ impl<TYPES: NodeType> Display for HotShotEvent<TYPES> {
             ),
             HotShotEvent::QuorumVoteRecv(v) => {
                 write!(f, "QuorumVoteRecv(view_number={:?})", v.view_number())
-            }
+            },
             HotShotEvent::ExtendedQuorumVoteSend(v) => {
                 write!(
                     f,
                     "ExtendedQuorumVoteSend(view_number={:?})",
                     v.view_number()
                 )
-            }
+            },
             HotShotEvent::TimeoutVoteRecv(v) => {
                 write!(f, "TimeoutVoteRecv(view_number={:?})", v.view_number())
-            }
+            },
             HotShotEvent::TimeoutVoteSend(v) => {
                 write!(f, "TimeoutVoteSend(view_number={:?})", v.view_number())
-            }
+            },
             HotShotEvent::DaProposalRecv(proposal, _) => write!(
                 f,
                 "DaProposalRecv(view_number={:?})",
@@ -404,10 +404,10 @@ impl<TYPES: NodeType> Display for HotShotEvent<TYPES> {
             ),
             HotShotEvent::DaVoteRecv(vote) => {
                 write!(f, "DaVoteRecv(view_number={:?})", vote.view_number())
-            }
+            },
             HotShotEvent::DaCertificateRecv(cert) => {
                 write!(f, "DaCertificateRecv(view_number={:?})", cert.view_number())
-            }
+            },
             HotShotEvent::DaCertificateValidated(cert) => write!(
                 f,
                 "DaCertificateValidated(view_number={:?})",
@@ -420,7 +420,7 @@ impl<TYPES: NodeType> Display for HotShotEvent<TYPES> {
             ),
             HotShotEvent::QuorumVoteSend(vote) => {
                 write!(f, "QuorumVoteSend(view_number={:?})", vote.view_number())
-            }
+            },
             HotShotEvent::QuorumProposalValidated(proposal, _) => write!(
                 f,
                 "QuorumProposalValidated(view_number={:?})",
@@ -433,7 +433,7 @@ impl<TYPES: NodeType> Display for HotShotEvent<TYPES> {
             ),
             HotShotEvent::DaVoteSend(vote) => {
                 write!(f, "DaVoteSend(view_number={:?})", vote.view_number())
-            }
+            },
             HotShotEvent::QcFormed(cert) => match cert {
                 either::Left(qc) => write!(f, "QcFormed(view_number={:?})", qc.view_number()),
                 either::Right(tc) => write!(f, "QcFormed(view_number={:?})", tc.view_number()),
@@ -445,26 +445,26 @@ impl<TYPES: NodeType> Display for HotShotEvent<TYPES> {
             HotShotEvent::NextEpochQc2Formed(cert) => match cert {
                 either::Left(qc) => {
                     write!(f, "NextEpochQc2Formed(view_number={:?})", qc.view_number())
-                }
+                },
                 either::Right(tc) => {
                     write!(f, "NextEpochQc2Formed(view_number={:?})", tc.view_number())
-                }
+                },
             },
             HotShotEvent::ExtendedQc2Formed(cert) => {
                 write!(f, "ExtendedQc2Formed(view_number={:?})", cert.view_number())
-            }
+            },
             HotShotEvent::DacSend(cert, _) => {
                 write!(f, "DacSend(view_number={:?})", cert.view_number())
-            }
+            },
             HotShotEvent::ViewChange(view_number, epoch_number) => {
                 write!(
                     f,
                     "ViewChange(view_number={view_number:?}, epoch_number={epoch_number:?})"
                 )
-            }
+            },
             HotShotEvent::ViewSyncTimeout(view_number, _, _) => {
                 write!(f, "ViewSyncTimeout(view_number={view_number:?})")
-            }
+            },
             HotShotEvent::ViewSyncPreCommitVoteRecv(vote) => write!(
                 f,
                 "ViewSyncPreCommitVoteRecv(view_number={:?})",
@@ -501,48 +501,48 @@ impl<TYPES: NodeType> Display for HotShotEvent<TYPES> {
                     "ViewSyncPreCommitCertificateRecv(view_number={:?})",
                     cert.view_number()
                 )
-            }
+            },
             HotShotEvent::ViewSyncCommitCertificateRecv(cert) => {
                 write!(
                     f,
                     "ViewSyncCommitCertificateRecv(view_number={:?})",
                     cert.view_number()
                 )
-            }
+            },
             HotShotEvent::ViewSyncFinalizeCertificateRecv(cert) => {
                 write!(
                     f,
                     "ViewSyncFinalizeCertificateRecv(view_number={:?})",
                     cert.view_number()
                 )
-            }
+            },
             HotShotEvent::ViewSyncPreCommitCertificateSend(cert, _) => {
                 write!(
                     f,
                     "ViewSyncPreCommitCertificateSend(view_number={:?})",
                     cert.view_number()
                 )
-            }
+            },
             HotShotEvent::ViewSyncCommitCertificateSend(cert, _) => {
                 write!(
                     f,
                     "ViewSyncCommitCertificateSend(view_number={:?})",
                     cert.view_number()
                 )
-            }
+            },
             HotShotEvent::ViewSyncFinalizeCertificateSend(cert, _) => {
                 write!(
                     f,
                     "ViewSyncFinalizeCertificateSend(view_number={:?})",
                     cert.view_number()
                 )
-            }
+            },
             HotShotEvent::ViewSyncTrigger(view_number) => {
                 write!(f, "ViewSyncTrigger(view_number={view_number:?})")
-            }
+            },
             HotShotEvent::Timeout(view_number, epoch) => {
                 write!(f, "Timeout(view_number={view_number:?}, epoch={epoch:?})")
-            }
+            },
             HotShotEvent::TransactionsRecv(_) => write!(f, "TransactionsRecv"),
             HotShotEvent::TransactionSend(_, _) => write!(f, "TransactionSend"),
             HotShotEvent::SendPayloadCommitmentAndMetadata(_, _, _, view_number, _, _) => {
@@ -550,10 +550,10 @@ impl<TYPES: NodeType> Display for HotShotEvent<TYPES> {
                     f,
                     "SendPayloadCommitmentAndMetadata(view_number={view_number:?})"
                 )
-            }
+            },
             HotShotEvent::BlockRecv(packed_bundle) => {
                 write!(f, "BlockRecv(view_number={:?})", packed_bundle.view_number)
-            }
+            },
             HotShotEvent::VidDisperseSend(proposal, _) => write!(
                 f,
                 "VidDisperseSend(view_number={:?})",
@@ -581,10 +581,10 @@ impl<TYPES: NodeType> Display for HotShotEvent<TYPES> {
             ),
             HotShotEvent::UpgradeVoteRecv(vote) => {
                 write!(f, "UpgradeVoteRecv(view_number={:?})", vote.view_number())
-            }
+            },
             HotShotEvent::UpgradeVoteSend(vote) => {
                 write!(f, "UpgradeVoteSend(view_number={:?})", vote.view_number())
-            }
+            },
             HotShotEvent::UpgradeCertificateFormed(cert) => write!(
                 f,
                 "UpgradeCertificateFormed(view_number={:?})",
@@ -592,63 +592,63 @@ impl<TYPES: NodeType> Display for HotShotEvent<TYPES> {
             ),
             HotShotEvent::QuorumProposalRequestSend(view_number, _) => {
                 write!(f, "QuorumProposalRequestSend(view_number={view_number:?})")
-            }
+            },
             HotShotEvent::QuorumProposalRequestRecv(view_number, _) => {
                 write!(f, "QuorumProposalRequestRecv(view_number={view_number:?})")
-            }
+            },
             HotShotEvent::QuorumProposalResponseSend(_, proposal) => {
                 write!(
                     f,
                     "QuorumProposalResponseSend(view_number={:?})",
                     proposal.data.view_number()
                 )
-            }
+            },
             HotShotEvent::QuorumProposalResponseRecv(proposal) => {
                 write!(
                     f,
                     "QuorumProposalResponseRecv(view_number={:?})",
                     proposal.data.view_number()
                 )
-            }
+            },
             HotShotEvent::QuorumProposalPreliminarilyValidated(proposal) => {
                 write!(
                     f,
                     "QuorumProposalPreliminarilyValidated(view_number={:?}",
                     proposal.data.view_number()
                 )
-            }
+            },
             HotShotEvent::VidRequestSend(request, _, _) => {
                 write!(f, "VidRequestSend(view_number={:?}", request.view)
-            }
+            },
             HotShotEvent::VidRequestRecv(request, _) => {
                 write!(f, "VidRequestRecv(view_number={:?}", request.view)
-            }
+            },
             HotShotEvent::VidResponseSend(_, _, proposal) => {
                 write!(
                     f,
                     "VidResponseSend(view_number={:?}",
                     proposal.data.view_number()
                 )
-            }
+            },
             HotShotEvent::VidResponseRecv(_, proposal) => {
                 write!(
                     f,
                     "VidResponseRecv(view_number={:?}",
                     proposal.data.view_number()
                 )
-            }
+            },
             HotShotEvent::HighQcRecv(qc, _) => {
                 write!(f, "HighQcRecv(view_number={:?}", qc.view_number())
-            }
+            },
             HotShotEvent::HighQcSend(qc, ..) => {
                 write!(f, "HighQcSend(view_number={:?}", qc.view_number())
-            }
+            },
             HotShotEvent::ExtendedQcRecv(qc, ..) => {
                 write!(f, "ExtendedQcRecv(view_number={:?}", qc.view_number())
-            }
+            },
             HotShotEvent::ExtendedQcSend(qc, ..) => {
                 write!(f, "ExtendedQcSend(view_number={:?}", qc.view_number())
-            }
+            },
         }
     }
 }

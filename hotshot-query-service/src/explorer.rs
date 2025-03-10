@@ -308,7 +308,7 @@ where
                         ) {
                             (Ok(Some(height)), Ok(Some(offset)), _) => {
                                 TransactionIdentifier::HeightAndOffset(height, offset)
-                            }
+                            },
                             (_, _, Ok(Some(hash))) => TransactionIdentifier::Hash(hash),
                             _ => TransactionIdentifier::Latest,
                         },
@@ -341,7 +341,7 @@ where
                 ) {
                     (Ok(Some(height)), Ok(Some(offset)), _) => {
                         TransactionIdentifier::HeightAndOffset(height, offset)
-                    }
+                    },
                     (_, _, Ok(Some(hash))) => TransactionIdentifier::Hash(hash),
                     _ => TransactionIdentifier::Latest,
                 };

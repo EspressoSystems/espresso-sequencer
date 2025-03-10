@@ -461,7 +461,7 @@ mod tests {
                                 )
                                 .unwrap();
                             current_leaf
-                        }
+                        },
                     };
 
                     DecideMessage::<TestTypes> {

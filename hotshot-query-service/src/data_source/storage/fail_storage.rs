@@ -87,8 +87,8 @@ impl FailureMode {
         match self {
             Self::Once(fail_action) if fail_action.matches(action) => {
                 *self = Self::Never;
-            }
-            Self::Always(fail_action) if fail_action.matches(action) => {}
+            },
+            Self::Always(fail_action) if fail_action.matches(action) => {},
             _ => return Ok(()),
         }
 

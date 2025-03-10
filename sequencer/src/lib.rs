@@ -312,7 +312,7 @@ pub async fn init_node<P: SequencerPersistence, V: Versions>(
         (Some(config), _) => {
             tracing::info!("loaded network config from storage, rejoining existing network");
             (config, false)
-        }
+        },
         // If we were told to fetch the config from an already-started peer, do so.
         (None, Some(peers)) => {
             tracing::info!(?peers, "loading network config from peers");
@@ -330,7 +330,7 @@ pub async fn init_node<P: SequencerPersistence, V: Versions>(
             );
             persistence.save_config(&config).await?;
             (config, false)
-        }
+        },
         // Otherwise, this is a fresh network; load from the orchestrator.
         (None, None) => {
             tracing::info!("loading network config from orchestrator");
@@ -356,7 +356,7 @@ pub async fn init_node<P: SequencerPersistence, V: Versions>(
             persistence.save_config(&config).await?;
             tracing::error!("all nodes connected");
             (config, true)
-        }
+        },
     };
 
     if let Some(upgrade) = genesis.upgrades.get(&V::Upgrade::VERSION) {
@@ -455,7 +455,7 @@ pub async fn init_node<P: SequencerPersistence, V: Versions>(
                     ethers::types::U256::from(timestamp.unix_timestamp()).to_alloy(),
                 )
                 .await
-        }
+        },
     };
 
     let mut genesis_state = ValidatedState {

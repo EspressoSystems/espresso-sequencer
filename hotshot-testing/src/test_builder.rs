@@ -283,7 +283,7 @@ pub async fn create_test_handle<
                 .await;
 
             left_handle
-        }
+        },
         Behaviour::Byzantine(state) => {
             let state = Box::leak(state);
             state
@@ -300,7 +300,7 @@ pub async fn create_test_handle<
                     marketplace_config,
                 )
                 .await
-        }
+        },
         Behaviour::Standard => {
             let hotshot = SystemContext::<TYPES, I, V>::new(
                 public_key,
@@ -317,7 +317,7 @@ pub async fn create_test_handle<
             .await;
 
             hotshot.run_tasks().await
-        }
+        },
     }
 }
 

@@ -79,7 +79,7 @@ impl<Types: NodeType> Display for TransactionIdentifier<Types> {
             TransactionIdentifier::Latest => write!(f, "latest"),
             TransactionIdentifier::HeightAndOffset(height, offset) => {
                 write!(f, "{} {}", height, offset)
-            }
+            },
             TransactionIdentifier::Hash(hash) => write!(f, "{}", hash),
         }
     }

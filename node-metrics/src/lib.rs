@@ -233,10 +233,10 @@ pub async fn run_standalone_service(options: Options) {
         api::node_validator::v0::define_api().expect("error defining node validator api");
 
     match app.register_module("node-validator", node_validator_api) {
-        Ok(_) => {}
+        Ok(_) => {},
         Err(err) => {
             panic!("error registering node validator api: {:?}", err);
-        }
+        },
     }
 
     let (leaf_sender, leaf_receiver) = mpsc::channel(10);
@@ -260,7 +260,7 @@ pub async fn run_standalone_service(options: Options) {
 
         Err(err) => {
             panic!("error defining node validator api: {:?}", err);
-        }
+        },
     };
 
     let _cdn_tasks = if let Some(cdn_broker_url_string) = options.cdn_marshal_endpoint() {
@@ -278,7 +278,7 @@ pub async fn run_standalone_service(options: Options) {
             Ok(cdn_network) => cdn_network,
             Err(err) => {
                 panic!("error creating cdn network: {:?}", err);
-            }
+            },
         };
 
         let url_sender = node_validator_task_state.url_sender.clone();

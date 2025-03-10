@@ -312,7 +312,7 @@ impl Service<RequestPacket> for SwitchingTransport {
                     // If it's okay, log the success to the status
                     current_transport.status.write().log_success();
                     Ok(res)
-                }
+                },
                 Err(err) => {
                     // Increment the failure metric
                     if let Some(f) = self_clone
@@ -364,7 +364,7 @@ impl Service<RequestPacket> for SwitchingTransport {
                     }
 
                     Err(err)
-                }
+                },
             }
         })
     }
@@ -737,12 +737,12 @@ impl L1Client {
                     );
                     self.retry_delay().await;
                     continue;
-                }
+                },
                 Err(err) => {
                     tracing::warn!(number, "failed to get finalized L1 block: {err:#}");
                     self.retry_delay().await;
                     continue;
-                }
+                },
             };
             break L1BlockInfo {
                 number: block.header.number,
@@ -815,7 +815,7 @@ impl L1Client {
                         Err(err) => {
                             tracing::warn!(from, to, %err, "Fee L1Event Error");
                             sleep(retry_delay).await;
-                        }
+                        },
                     }
                 }
             }

@@ -192,7 +192,7 @@ pub async fn calc_proposal_msg<V: Versions>(
                 &TestInstanceState::default(),
             )
             .await
-        }
+        },
         Some(prev_proposal) => {
             let prev_justify_qc = prev_proposal.justify_qc();
             let quorum_data = QuorumData2::<TestTypes> {
@@ -208,7 +208,7 @@ pub async fn calc_proposal_msg<V: Versions>(
                 prev_justify_qc.signatures.clone(),
                 PhantomData,
             )
-        }
+        },
     };
 
     tracing::debug!("Iteration: {} justify_qc: {:?}", round, justify_qc);

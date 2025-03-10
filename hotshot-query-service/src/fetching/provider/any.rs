@@ -191,7 +191,7 @@ where
                     providers.len()
                 );
                 continue;
-            }
+            },
         }
     }
 

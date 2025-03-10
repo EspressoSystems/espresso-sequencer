@@ -109,7 +109,7 @@ where
                             "inconsistent leaf; cannot append leaf information: {err:#}"
                         );
                         return Err(leaf2.block_header().block_number());
-                    }
+                    },
                 };
                 let block_data = leaf2
                     .block_payload()
@@ -141,12 +141,12 @@ where
                                 Err(err) => {
                                     tracing::warn!("failed to compute genesis VID: {err:#}");
                                     (None, None)
-                                }
+                                },
                             }
                         } else {
                             (None, None)
                         }
-                    }
+                    },
                 };
 
                 if vid_common.is_none() {
@@ -188,13 +188,11 @@ fn genesis_vid<Types: NodeType>(
                 VidCommonQueryData::new(leaf.block_header().clone(), Some(disperse.common)),
                 VidShare::V0(disperse.shares.remove(0)),
             ))
-        }
+        },
         VidCommitment::V1(commit) => {
             let avidm_param = init_avidm_param(GENESIS_VID_NUM_STORAGE_NODES)?;
             let weights = vec![1; GENESIS_VID_NUM_STORAGE_NODES];
-            tracing::error!(">>>0");
             let ns_table = parse_ns_table(bytes.len(), &leaf.block_header().metadata().encode());
-            tracing::error!(">>>1");
             let (calculated_commit, mut shares) =
                 AvidMScheme::ns_disperse(&avidm_param, &weights, &bytes, ns_table).unwrap();
 
@@ -209,7 +207,7 @@ fn genesis_vid<Types: NodeType>(
                 VidCommonQueryData::new(leaf.block_header().clone(), None),
                 VidShare::V1(shares.remove(0)),
             ))
-        }
+        },
     }
 }
 

@@ -335,7 +335,7 @@ impl<
             Ok(accounts) => return Ok(accounts),
             Err(err) => {
                 tracing::info!("accounts not in memory, trying storage: {err:#}");
-            }
+            },
         }
 
         // Try storage.
@@ -372,7 +372,7 @@ impl<
                 }
 
                 (Arc::new(state), delta.clone())
-            }
+            },
             _ => {
                 // If we don't already have a leaf for this view, or if we don't have the view
                 // at all, we can create a new view based on the recovered leaf and add it to
@@ -381,7 +381,7 @@ impl<
                 let mut state = ValidatedState::from_header(leaf.block_header());
                 state.fee_merkle_tree = tree.clone();
                 (Arc::new(state), None)
-            }
+            },
         };
         if let Err(err) = consensus.update_leaf(leaf, Arc::clone(&state), delta) {
             tracing::warn!(?view, "cannot update fetched account state: {err:#}");
@@ -403,7 +403,7 @@ impl<
             Ok(frontier) => return Ok(frontier),
             Err(err) => {
                 tracing::info!("frontier is not in memory, trying storage: {err:#}");
-            }
+            },
         }
 
         // Try storage.
@@ -419,7 +419,7 @@ impl<
             Ok(cf) => return Ok(cf),
             Err(err) => {
                 tracing::info!("chain config is not in memory, trying storage: {err:#}");
-            }
+            },
         }
 
         // Try storage.
@@ -431,7 +431,7 @@ impl<
             Ok(cf) => return Ok(cf),
             Err(err) => {
                 tracing::info!("chain config is not in memory, trying storage: {err:#}");
-            }
+            },
         }
 
         // Try storage.
@@ -2503,7 +2503,7 @@ mod test {
                     let new_version = upgrade.new_version;
                     assert_eq!(new_version, <MockSeqVersions as Versions>::Upgrade::VERSION);
                     break upgrade.new_version_first_view;
-                }
+                },
                 _ => continue,
             }
         };

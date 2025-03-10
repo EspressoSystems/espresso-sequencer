@@ -414,10 +414,10 @@ pub mod testing {
         {
             Ok(response) => {
                 tracing::info!("Received txn submitted response : {:?}", response);
-            }
+            },
             Err(e) => {
                 panic!("Error submitting private transaction {:?}", e);
-            }
+            },
         }
 
         let seed = [207_u8; 32];
@@ -514,10 +514,10 @@ pub mod testing {
             Ok(response) => {
                 tracing::info!("Received Builder Key : {:?}", response);
                 assert_eq!(response, builder_pub_key);
-            }
+            },
             Err(e) => {
                 panic!("Error getting builder key {:?}", e);
-            }
+            },
         }
     }
 }

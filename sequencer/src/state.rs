@@ -300,12 +300,12 @@ where
                     parent_leaf = leaf;
                     parent_state = state;
                     break;
-                }
+                },
                 Err(err) => {
                     tracing::error!(height = leaf.height(), "failed to updated state: {err:#}");
                     // If we fail, delay for a second and retry.
                     sleep(Duration::from_secs(1)).await;
-                }
+                },
             }
         }
     }

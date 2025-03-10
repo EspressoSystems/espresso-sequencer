@@ -47,7 +47,7 @@ pub fn run(opt: Options) {
         (false, PrivateKey::Bls(key)) => println!("{}", PubKey::from_private(&key)),
         (false, PrivateKey::Schnorr(key)) => {
             println!("{}", StateKeyPair::from_sign_key(key).ver_key())
-        }
+        },
 
         // Libp2p
         (true, PrivateKey::Bls(key)) => {
@@ -55,9 +55,9 @@ pub fn run(opt: Options) {
                 "{}",
                 derive_libp2p_peer_id::<BLSPubKey>(&key).expect("Failed to derive libp2p peer ID")
             );
-        }
+        },
         (true, _) => {
             eprintln!("Key type unsupported for libp2p peer ID derivation");
-        }
+        },
     }
 }

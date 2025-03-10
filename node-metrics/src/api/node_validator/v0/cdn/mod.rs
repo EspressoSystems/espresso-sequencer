@@ -95,7 +95,7 @@ impl CdnReceiveMessagesTask {
                 Err(err) => {
                     tracing::error!("error receiving message: {:?}", err);
                     continue;
-                }
+                },
             };
 
             // We want to try and decode this message.
@@ -106,17 +106,17 @@ impl CdnReceiveMessagesTask {
                 Err(err) => {
                     tracing::error!("error deserializing message: {:?}", err);
                     continue;
-                }
+                },
             };
 
             let external_message_deserialize_result = match message.kind {
                 MessageKind::External(external_message) => {
                     bincode::deserialize::<ExternalMessage>(&external_message)
-                }
+                },
                 _ => {
                     tracing::error!("unexpected message kind: {:?}", message);
                     continue;
-                }
+                },
             };
 
             let external_message = match external_message_deserialize_result {
@@ -124,7 +124,7 @@ impl CdnReceiveMessagesTask {
                 Err(err) => {
                     tracing::error!("error deserializing message: {:?}", err);
                     continue;
-                }
+                },
             };
 
             match external_message {
@@ -137,11 +137,11 @@ impl CdnReceiveMessagesTask {
                         tracing::error!("error sending public api url: {:?}", err);
                         return;
                     }
-                }
+                },
 
                 _ => {
                     // We're not concerned about other message types
-                }
+                },
             }
         }
     }
@@ -237,7 +237,7 @@ impl BroadcastRollCallTask {
             Err(err) => {
                 tracing::error!("error serializing rollcall request: {:?}", err);
                 return;
-            }
+            },
         };
 
         let hotshot_message = Message::<SeqTypes> {
@@ -250,7 +250,7 @@ impl BroadcastRollCallTask {
             Err(err) => {
                 tracing::error!("error serializing hotshot message: {:?}", err);
                 return;
-            }
+            },
         };
 
         let broadcast_result = network
@@ -564,7 +564,7 @@ mod test {
                     public_key,
                     BLSPubKey::generated_from_seed_indexed([0; 32], 0).0
                 );
-            }
+            },
             _ => panic!("unexpected external message"),
         }
 

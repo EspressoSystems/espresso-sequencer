@@ -257,12 +257,12 @@ mod upgrade_ser {
                             return Err(de::Error::custom(
                                 "both view and time mode parameters are set",
                             ))
-                        }
+                        },
                         (None, None) => {
                             return Err(de::Error::custom(
                                 "no view or time mode parameters provided",
                             ))
-                        }
+                        },
                         (None, Some(v)) => {
                             if v.start_proposing_view > v.stop_proposing_view {
                                 return Err(de::Error::custom(
@@ -277,7 +277,7 @@ mod upgrade_ser {
                                     upgrade_type: fields.upgrade_type,
                                 },
                             );
-                        }
+                        },
                         (Some(t), None) => {
                             if t.start_proposing_time.unix_timestamp()
                                 > t.stop_proposing_time.unix_timestamp()
@@ -294,7 +294,7 @@ mod upgrade_ser {
                                     upgrade_type: fields.upgrade_type.clone(),
                                 },
                             );
-                        }
+                        },
                     }
                 }
 

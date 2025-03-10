@@ -57,7 +57,7 @@ impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> TestTaskState
             | HotShotEvent::ViewSyncFinalizeCertificateSend(_, _)
             | HotShotEvent::ViewSyncTrigger(_) => {
                 self.hit_view_sync.insert(id);
-            }
+            },
             _ => (),
         }
 
@@ -75,7 +75,7 @@ impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> TestTaskState
                         hit_view_sync: self.hit_view_sync.clone(),
                     }))
                 }
-            }
+            },
         }
     }
 }

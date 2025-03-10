@@ -200,10 +200,10 @@ impl std::fmt::Display for ProcessLeafError {
         match self {
             ProcessLeafError::BlockSendError(err) => {
                 write!(f, "error sending block detail to sender: {}", err)
-            }
+            },
             ProcessLeafError::VotersSendError(err) => {
                 write!(f, "error sending voters to sender: {}", err)
-            }
+            },
         }
     }
 }
@@ -396,10 +396,10 @@ impl ProcessLeafStreamTask {
                 match err {
                     ProcessLeafError::BlockSendError(_) => {
                         panic!("ProcessLeafStreamTask: process_incoming_leaf failed, underlying sink is closed, blocks will stagnate: {}", err)
-                    }
+                    },
                     ProcessLeafError::VotersSendError(_) => {
                         panic!("ProcessLeafStreamTask: process_incoming_leaf failed, underlying sink is closed, voters will stagnate: {}", err)
-                    }
+                    },
                 }
             }
         }
@@ -429,7 +429,7 @@ impl std::fmt::Display for ProcessNodeIdentityError {
         match self {
             ProcessNodeIdentityError::SendError(err) => {
                 write!(f, "error sending node identity to sender: {}", err)
-            }
+            },
         }
     }
 }

@@ -268,7 +268,7 @@ mod test {
         // Ensure the error indicates an invalid signature
         match err {
             SolverError::InvalidSignature(signature)
-                if reg_ns_2.signature.to_string() == signature => {}
+                if reg_ns_2.signature.to_string() == signature => {},
             _ => panic!("err {err:?}"),
         }
     }
@@ -375,7 +375,7 @@ mod test {
             .unwrap_err();
 
         match err {
-            SolverError::Database(_) => {}
+            SolverError::Database(_) => {},
             _ => panic!("err {err:?}"),
         }
     }

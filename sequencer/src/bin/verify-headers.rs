@@ -134,7 +134,7 @@ async fn get_header<ApiVer: StaticVersionType>(
 
                 // Back off a bit and then retry.
                 sleep(Duration::from_millis(100)).await;
-            }
+            },
         }
     }
 }
@@ -147,12 +147,12 @@ async fn get_l1_block(l1: &Provider<Http>, height: u64) -> L1BlockInfo {
                 tracing::warn!("L1 block {height} not yet available");
                 sleep(Duration::from_secs(1)).await;
                 continue;
-            }
+            },
             Err(err) => {
                 tracing::warn!("error fetching L1 block {height}: {err}");
                 sleep(Duration::from_millis(100)).await;
                 continue;
-            }
+            },
         };
 
         let Some(hash) = block.hash else {

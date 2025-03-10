@@ -527,7 +527,7 @@ where
                         .context(FetchTransactionSnafu {
                             resource: hash.to_string(),
                         })
-                }
+                },
                 None => {
                     let height: u64 = req.integer_param("height")?;
                     let fetch = state
@@ -543,7 +543,7 @@ where
                         .context(InvalidTransactionIndexSnafu { height, index: i })?;
                     TransactionQueryData::new(&block, index, i)
                         .context(InvalidTransactionIndexSnafu { height, index: i })
-                }
+                },
             }
         }
         .boxed()
@@ -657,7 +657,7 @@ mod test {
                         let leaf = client.get(&format!("leaf/{}", i)).send().await.unwrap();
                         blocks.push((leaf, block));
                     }
-                }
+                },
                 Err(Error::Availability {
                     source: super::Error::FetchBlock { .. },
                 }) => {
@@ -665,7 +665,7 @@ mod test {
                         "found end of ledger at height {i}, non-empty blocks are {blocks:?}",
                     );
                     return (i, blocks);
-                }
+                },
                 Err(err) => panic!("unexpected error {}", err),
             }
         }

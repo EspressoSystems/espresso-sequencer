@@ -235,7 +235,7 @@ where
                     .boxed()
                 })
                 .await?
-        }
+        },
         None => {
             init_node(
                 genesis,
@@ -251,7 +251,7 @@ where
                 proposal_fetcher_config,
             )
             .await?
-        }
+        },
     };
 
     Ok(ctx)

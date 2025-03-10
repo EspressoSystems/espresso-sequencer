@@ -201,7 +201,7 @@ where
             match event.event {
                 EventType::Error { error } => {
                     error!("Error event in HotShot: {:?}", error);
-                }
+                },
                 EventType::Transactions { transactions } => {
                     let this = Arc::clone(&self);
                     spawn(async move {
@@ -217,7 +217,7 @@ where
                             .collect::<Vec<_>>()
                             .await;
                     });
-                }
+                },
                 EventType::Decide { leaf_chain, .. } => {
                     let prune_cutoff = leaf_chain[0].leaf.view_number();
 
@@ -226,16 +226,16 @@ where
 
                     let this = Arc::clone(&self);
                     spawn(async move { this.block_store.write().await.prune(prune_cutoff) });
-                }
+                },
                 EventType::DaProposal { proposal, .. } => {
                     let coordinator = Arc::clone(&self.coordinator);
                     spawn(async move { coordinator.handle_da_proposal(proposal.data).await });
-                }
+                },
                 EventType::QuorumProposal { proposal, .. } => {
                     let coordinator = Arc::clone(&self.coordinator);
                     spawn(async move { coordinator.handle_quorum_proposal(proposal.data).await });
-                }
-                _ => {}
+                },
+                _ => {},
             }
         }
     }
@@ -287,10 +287,10 @@ where
                 BuilderStateLookup::Found(builder) => break Ok(builder),
                 BuilderStateLookup::Decided => {
                     return Err(Error::AlreadyDecided);
-                }
+                },
                 BuilderStateLookup::NotFound => {
                     sleep(check_period).await;
-                }
+                },
             };
         }
     }
@@ -374,7 +374,7 @@ where
                 Err(error) => {
                     warn!(?error, "Failed to build block payload");
                     return Err(Error::BuildBlock(error));
-                }
+                },
             };
 
         // count the number of txns
@@ -442,7 +442,7 @@ where
                 // Timeout waiting for ideal state, get the highest view builder instead
                 warn!("Couldn't find the ideal builder state");
                 self.coordinator.highest_view_builder().await
-            }
+            },
             Ok(Err(e)) => {
                 // State already decided
                 let lowest_view = self.coordinator.lowest_view().await;
@@ -451,7 +451,7 @@ where
                     "get_available_blocks request for decided view"
                 );
                 return Err(e);
-            }
+            },
         };
 
         let Some(builder) = builder else {
@@ -485,7 +485,7 @@ where
                 }
 
                 Ok(vec![response])
-            }
+            },
             // Success, but no block: we don't have transactions and aren't prioritizing finalization
             Ok(Ok(None)) => Ok(vec![]),
             // Error building block, try to respond with a cached one as last-ditch attempt
@@ -495,7 +495,7 @@ where
                 } else {
                     Err(e)
                 }
-            }
+            },
         }
     }
 

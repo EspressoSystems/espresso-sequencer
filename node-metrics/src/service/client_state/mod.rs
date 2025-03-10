@@ -112,7 +112,7 @@ impl std::fmt::Display for HandleConnectedError {
         match self {
             HandleConnectedError::ClientSendError(err) => {
                 write!(f, "handle connected error: client send error: {}", err)
-            }
+            },
         }
     }
 }
@@ -235,7 +235,7 @@ impl std::fmt::Display for HandleRequestBlocksSnapshotsError {
                     "handle request blocks snapshot error: client send error:: {}",
                     err
                 )
-            }
+            },
         }
     }
 }
@@ -306,7 +306,7 @@ impl std::fmt::Display for HandleRequestNodeIdentitySnapshotError {
                     "handle request node identity snapshot error: client send error: {}",
                     err
                 )
-            }
+            },
         }
     }
 }
@@ -374,7 +374,7 @@ impl std::fmt::Display for HandleRequestHistogramSnapshotError {
                     "handle request histogram snapshot error: client send error: {}",
                     err
                 )
-            }
+            },
         }
     }
 }
@@ -461,7 +461,7 @@ impl std::fmt::Display for HandleRequestVotersSnapshotError {
                     "handle request voters snapshot error: client send error: {}",
                     err
                 )
-            }
+            },
         }
     }
 }
@@ -557,27 +557,27 @@ impl std::fmt::Display for ProcessClientMessageError {
         match self {
             ProcessClientMessageError::Connected(err) => {
                 write!(f, "process client message error: connected: {}", err)
-            }
+            },
             ProcessClientMessageError::BlocksSnapshot(err) => {
                 write!(f, "process client message error: blocks snapshot: {}", err)
-            }
+            },
             ProcessClientMessageError::NodeIdentitySnapshot(err) => {
                 write!(
                     f,
                     "process client message error: node identity snapshot: {}",
                     err
                 )
-            }
+            },
             ProcessClientMessageError::HistogramSnapshot(err) => {
                 write!(
                     f,
                     "process client message error: histogram snapshot: {}",
                     err
                 )
-            }
+            },
             ProcessClientMessageError::VotersSnapshot(err) => {
                 write!(f, "process client message error: voters snapshot: {}", err)
-            }
+            },
         }
     }
 }
@@ -615,27 +615,27 @@ where
         InternalClientMessage::Connected(sender) => {
             handle_client_message_connected(sender, client_thread_state).await?;
             Ok(())
-        }
+        },
 
         InternalClientMessage::Disconnected(client_id) => {
             handle_client_message_disconnected(client_id, client_thread_state).await;
             Ok(())
-        }
+        },
 
         InternalClientMessage::Request(client_id, ClientMessage::SubscribeLatestBlock) => {
             handle_client_message_subscribe_latest_block(client_id, client_thread_state).await;
             Ok(())
-        }
+        },
 
         InternalClientMessage::Request(client_id, ClientMessage::SubscribeNodeIdentity) => {
             handle_client_message_subscribe_node_identity(client_id, client_thread_state).await;
             Ok(())
-        }
+        },
 
         InternalClientMessage::Request(client_id, ClientMessage::SubscribeVoters) => {
             handle_client_message_subscribe_voters(client_id, client_thread_state).await;
             Ok(())
-        }
+        },
 
         InternalClientMessage::Request(client_id, ClientMessage::RequestBlocksSnapshot) => {
             handle_client_message_request_blocks_snapshot(
@@ -645,7 +645,7 @@ where
             )
             .await?;
             Ok(())
-        }
+        },
 
         InternalClientMessage::Request(client_id, ClientMessage::RequestNodeIdentitySnapshot) => {
             handle_client_message_request_node_identity_snapshot(
@@ -655,7 +655,7 @@ where
             )
             .await?;
             Ok(())
-        }
+        },
 
         InternalClientMessage::Request(client_id, ClientMessage::RequestHistogramSnapshot) => {
             handle_client_message_request_histogram_snapshot(
@@ -665,7 +665,7 @@ where
             )
             .await?;
             Ok(())
-        }
+        },
 
         InternalClientMessage::Request(client_id, ClientMessage::RequestVotersSnapshot) => {
             handle_client_message_request_voters_snapshot(
@@ -675,7 +675,7 @@ where
             )
             .await?;
             Ok(())
-        }
+        },
     }
 }
 

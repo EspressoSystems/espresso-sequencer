@@ -59,7 +59,7 @@ pub async fn handle_events(
         match event.event {
             hotshot::types::EventType::ViewFinished { view_number } => {
                 tracing::debug!("received view finished event {view_number:?}")
-            }
+            },
             _ => (),
         }
     }

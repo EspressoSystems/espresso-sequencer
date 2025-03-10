@@ -281,7 +281,7 @@ impl PayloadByteLen {
                     ADVZScheme::get_payload_byte_len(common)
                 );
                 return false;
-            }
+            },
         };
 
         self.0 == expected

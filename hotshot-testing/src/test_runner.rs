@@ -281,12 +281,12 @@ where
                 Ok(res) => match res {
                     TestResult::Pass => {
                         info!("Task shut down successfully");
-                    }
+                    },
                     TestResult::Fail(e) => error_list.push(e),
                 },
                 Err(e) => {
                     tracing::error!("Error Joining the test task {:?}", e);
-                }
+                },
             }
         }
 
@@ -560,14 +560,14 @@ where
                     if let Some(task) = builder_tasks.pop() {
                         task.start(Box::new(handle.event_stream()))
                     }
-                }
+                },
                 std::cmp::Ordering::Equal => {
                     // If we have more builder tasks than DA nodes, pin them all on the last node.
                     while let Some(task) = builder_tasks.pop() {
                         task.start(Box::new(handle.event_stream()))
                     }
-                }
-                std::cmp::Ordering::Greater => {}
+                },
+                std::cmp::Ordering::Greater => {},
             }
 
             self.nodes.push(Node {

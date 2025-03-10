@@ -213,7 +213,7 @@ async fn deposit(opt: Deposit) -> anyhow::Result<()> {
             Err(err) => {
                 tracing::warn!("error in header stream: {err:#}");
                 continue;
-            }
+            },
         };
         let Some(l1_finalized) = header.l1_finalized() else {
             continue;

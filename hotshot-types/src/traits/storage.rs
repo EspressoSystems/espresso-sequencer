@@ -54,7 +54,7 @@ pub trait Storage<TYPES: NodeType>: Send + Sync + Clone {
                     _pd: std::marker::PhantomData,
                 })
                 .await
-            }
+            },
             VidDisperseShare::V1(share) => {
                 self.append_vid2(&Proposal {
                     data: share.clone(),
@@ -62,7 +62,7 @@ pub trait Storage<TYPES: NodeType>: Send + Sync + Clone {
                     _pd: std::marker::PhantomData,
                 })
                 .await
-            }
+            },
         }
     }
     /// Add a proposal to the stored DA proposals.

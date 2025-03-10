@@ -75,7 +75,7 @@ pub(crate) async fn local_and_remote(
         Err(err) => {
             tracing::warn!("not using local catchup: {err:#}");
             Arc::new(remote)
-        }
+        },
     }
 }
 
@@ -164,15 +164,15 @@ impl<ApiVer: StaticVersionType> StatePeers<ApiVer> {
                     requests.insert(id, true);
                     res = Ok(t);
                     break;
-                }
+                },
                 Ok(Err(err)) => {
                     tracing::warn!(id, ?score, peer = %client.url, "error from peer: {err:#}");
                     requests.insert(id, false);
-                }
+                },
                 Err(_) => {
                     tracing::warn!(id, ?score, peer = %client.url, ?timeout_dur, "request timed out");
                     requests.insert(id, false);
-                }
+                },
             }
         }
 

@@ -64,11 +64,11 @@ impl fmt::Display for Error {
         match self {
             Self::UnhandledSurfDisco(status, msg) => {
                 write!(f, "Unhandled Surf Disco Error: {} - {}", status, msg)
-            }
+            },
 
             Self::UnhandledTideDisco(status, msg) => {
                 write!(f, "Unhandled Tide Disco Error: {} - {}", status, msg)
-            }
+            },
         }
     }
 }
@@ -255,7 +255,7 @@ where
                             // let's queue up the next client message to receive
                             next_client_message = socket_stream.next();
                             next_server_message = remaining_server_message;
-                        }
+                        },
                         Either::Right((server_message, remaining_client_message)) => {
                             // Alright, we have a server message, we want to forward it
                             // to the down-stream client.
@@ -277,7 +277,7 @@ where
                             // let's queue up the next server message to receive
                             next_server_message = server_message_receiver.next();
                             next_client_message = remaining_client_message;
-                        }
+                        },
                     }
                 }
 
@@ -327,7 +327,7 @@ pub async fn get_stake_table_from_sequencer(
         Err(err) => {
             tracing::info!("retrieve stake table request failed: {}", err);
             return Err(err);
-        }
+        },
     };
 
     let public_hot_shot_config = sequencer_config.config;
@@ -481,7 +481,7 @@ impl LeafStreamRetriever for HotshotQueryServiceLeafStreamRetriever {
                 Err(err) => {
                     tracing::info!("retrieve block height request failed: {}", err);
                     return Err(err);
-                }
+                },
             };
 
             let latest_block_start = block_height.saturating_sub(50);
@@ -504,7 +504,7 @@ impl LeafStreamRetriever for HotshotQueryServiceLeafStreamRetriever {
                 Err(err) => {
                     tracing::info!("retrieve leaves stream failed: {}", err);
                     return Err(err);
-                }
+                },
             };
 
             Ok(leaves_stream)
@@ -621,7 +621,7 @@ impl ProcessProduceLeafStreamTask {
                     delay = backoff_params.backoff(delay);
                     sleep(delay).await;
                     continue;
-                }
+                },
 
                 Ok(leaves_stream) => leaves_stream,
             };
@@ -795,7 +795,7 @@ pub fn populate_node_identity_from_scrape(node_identity: &mut NodeIdentity, scra
                     // We couldn't parse the public key, so we can't create a NodeIdentity.
                     tracing::info!("parsing public key failed: {}", err);
                     return;
-                }
+                },
             }
         } else {
             // We were unable to find the public key in the scrape result.
@@ -878,7 +878,7 @@ pub fn node_identity_from_scrape(scrape: Scrape) -> Option<NodeIdentity> {
         Err(err) => {
             tracing::info!("parsing public key failed: {}", err);
             return None;
-        }
+        },
     };
 
     let mut node_identity = NodeIdentity::from_public_key(public_key);
@@ -937,7 +937,7 @@ impl ProcessNodeIdentityUrlStreamTask {
                 None => {
                     tracing::info!("node identity url stream closed");
                     return;
-                }
+                },
             };
 
             // Alright we have a new Url to try and scrape for a Node Identity.
@@ -949,7 +949,7 @@ impl ProcessNodeIdentityUrlStreamTask {
                 Err(err) => {
                     tracing::warn!("get node identity from url failed.  bad base url?: {}", err);
                     continue;
-                }
+                },
             };
 
             let send_result = node_identity_sender.send(node_identity).await;

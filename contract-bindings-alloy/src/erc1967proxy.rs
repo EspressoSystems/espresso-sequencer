@@ -143,7 +143,7 @@ pub mod ERC1967Proxy {
             match _t {
                 alloy_sol_types::private::AssertTypeEq::<
                     <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                >(_) => {}
+                >(_) => {},
             }
         }
         #[automatically_derived]
@@ -209,7 +209,7 @@ pub mod ERC1967Proxy {
             match _t {
                 alloy_sol_types::private::AssertTypeEq::<
                     <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                >(_) => {}
+                >(_) => {},
             }
         }
         #[automatically_derived]
@@ -275,7 +275,7 @@ pub mod ERC1967Proxy {
             match _t {
                 alloy_sol_types::private::AssertTypeEq::<
                     <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                >(_) => {}
+                >(_) => {},
             }
         }
         #[automatically_derived]
@@ -335,7 +335,7 @@ pub mod ERC1967Proxy {
             match _t {
                 alloy_sol_types::private::AssertTypeEq::<
                     <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                >(_) => {}
+                >(_) => {},
             }
         }
         #[automatically_derived]
@@ -501,7 +501,7 @@ pub mod ERC1967Proxy {
                 match _t {
                     alloy_sol_types::private::AssertTypeEq::<
                         <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                    >(_) => {}
+                    >(_) => {},
                 }
             }
             #[automatically_derived]
@@ -580,16 +580,16 @@ pub mod ERC1967Proxy {
             match self {
                 Self::AddressEmptyCode(_) => {
                     <AddressEmptyCode as alloy_sol_types::SolError>::SELECTOR
-                }
+                },
                 Self::ERC1967InvalidImplementation(_) => {
                     <ERC1967InvalidImplementation as alloy_sol_types::SolError>::SELECTOR
-                }
+                },
                 Self::ERC1967NonPayable(_) => {
                     <ERC1967NonPayable as alloy_sol_types::SolError>::SELECTOR
-                }
+                },
                 Self::FailedInnerCall(_) => {
                     <FailedInnerCall as alloy_sol_types::SolError>::SELECTOR
-                }
+                },
             }
         }
         #[inline]
@@ -674,18 +674,18 @@ pub mod ERC1967Proxy {
             match self {
                 Self::AddressEmptyCode(inner) => {
                     <AddressEmptyCode as alloy_sol_types::SolError>::abi_encoded_size(inner)
-                }
+                },
                 Self::ERC1967InvalidImplementation(inner) => {
                     <ERC1967InvalidImplementation as alloy_sol_types::SolError>::abi_encoded_size(
                         inner,
                     )
-                }
+                },
                 Self::ERC1967NonPayable(inner) => {
                     <ERC1967NonPayable as alloy_sol_types::SolError>::abi_encoded_size(inner)
-                }
+                },
                 Self::FailedInnerCall(inner) => {
                     <FailedInnerCall as alloy_sol_types::SolError>::abi_encoded_size(inner)
-                }
+                },
             }
         }
         #[inline]
@@ -693,18 +693,18 @@ pub mod ERC1967Proxy {
             match self {
                 Self::AddressEmptyCode(inner) => {
                     <AddressEmptyCode as alloy_sol_types::SolError>::abi_encode_raw(inner, out)
-                }
+                },
                 Self::ERC1967InvalidImplementation(inner) => {
                     <ERC1967InvalidImplementation as alloy_sol_types::SolError>::abi_encode_raw(
                         inner, out,
                     )
-                }
+                },
                 Self::ERC1967NonPayable(inner) => {
                     <ERC1967NonPayable as alloy_sol_types::SolError>::abi_encode_raw(inner, out)
-                }
+                },
                 Self::FailedInnerCall(inner) => {
                     <FailedInnerCall as alloy_sol_types::SolError>::abi_encode_raw(inner, out)
-                }
+                },
             }
         }
     }
@@ -739,7 +739,7 @@ pub mod ERC1967Proxy {
                 Some(<Upgraded as alloy_sol_types::SolEvent>::SIGNATURE_HASH) => {
                     <Upgraded as alloy_sol_types::SolEvent>::decode_raw_log(topics, data, validate)
                         .map(Self::Upgraded)
-                }
+                },
                 _ => alloy_sol_types::private::Err(alloy_sol_types::Error::InvalidLog {
                     name: <Self as alloy_sol_types::SolEventInterface>::NAME,
                     log: alloy_sol_types::private::Box::new(
@@ -763,7 +763,7 @@ pub mod ERC1967Proxy {
             match self {
                 Self::Upgraded(inner) => {
                     alloy_sol_types::private::IntoLogData::into_log_data(inner)
-                }
+                },
             }
         }
     }

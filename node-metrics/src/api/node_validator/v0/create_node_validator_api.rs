@@ -119,7 +119,7 @@ impl HotShotEventProcessingTask {
                 None => {
                     tracing::info!("event stream closed");
                     break;
-                }
+                },
             };
 
             let Event { event, .. } = event;
@@ -135,7 +135,7 @@ impl HotShotEventProcessingTask {
                             panic!("HotShotEventProcessingTask leaf sender is closed, unrecoverable, the block state will stagnate.");
                         }
                     }
-                }
+                },
 
                 EventType::ExternalMessageReceived { data, .. } => {
                     let roll_call_info = match bincode::deserialize(&data) {
@@ -147,12 +147,12 @@ impl HotShotEventProcessingTask {
                                 err
                             );
                             continue;
-                        }
+                        },
 
                         _ => {
                             // Ignore any other potentially recognized messages
                             continue;
-                        }
+                        },
                     };
 
                     let public_api_url = roll_call_info.public_api_url;
@@ -163,11 +163,11 @@ impl HotShotEventProcessingTask {
                         tracing::error!("url sender closed: {}", err);
                         panic!("HotShotEventProcessingTask url sender is closed, unrecoverable, the node state will stagnate.");
                     }
-                }
+                },
                 _ => {
                     // Ignore all other events
                     continue;
-                }
+                },
             }
         }
     }
@@ -236,7 +236,7 @@ impl ProcessExternalMessageHandlingTask {
                 None => {
                     tracing::error!("external message receiver closed");
                     break;
-                }
+                },
             };
 
             match external_message {
@@ -248,12 +248,12 @@ impl ProcessExternalMessageHandlingTask {
                         tracing::error!("url sender closed: {}", err);
                         break;
                     }
-                }
+                },
 
                 _ => {
                     // Ignore all other messages
                     continue;
-                }
+                },
             }
         }
     }
@@ -399,14 +399,14 @@ mod test {
             Ok(node_validator_api) => node_validator_api,
             Err(err) => {
                 panic!("error defining node validator api: {:?}", err);
-            }
+            },
         };
 
         match app.register_module("node-validator", node_validator_api) {
-            Ok(_) => {}
+            Ok(_) => {},
             Err(err) => {
                 panic!("error registering node validator api: {:?}", err);
-            }
+            },
         }
 
         let (leaf_sender, leaf_receiver) = mpsc::channel(10);
@@ -449,7 +449,7 @@ mod test {
 
             Err(err) => {
                 panic!("error defining node validator api: {:?}", err);
-            }
+            },
         };
 
         // We would like to wait until being signaled

@@ -280,7 +280,7 @@ pub mod BN254 {
             match _t {
                 alloy_sol_types::private::AssertTypeEq::<
                     <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                >(_) => {}
+                >(_) => {},
             }
         }
         #[automatically_derived]
@@ -658,7 +658,7 @@ pub mod IPlonkVerifier {
             match _t {
                 alloy_sol_types::private::AssertTypeEq::<
                     <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                >(_) => {}
+                >(_) => {},
             }
         }
         #[automatically_derived]
@@ -2401,7 +2401,7 @@ pub mod LightClient {
             match _t {
                 alloy_sol_types::private::AssertTypeEq::<
                     <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                >(_) => {}
+                >(_) => {},
             }
         }
         #[automatically_derived]
@@ -2619,7 +2619,7 @@ pub mod LightClient {
             match _t {
                 alloy_sol_types::private::AssertTypeEq::<
                     <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                >(_) => {}
+                >(_) => {},
             }
         }
         #[automatically_derived]
@@ -2839,7 +2839,7 @@ pub mod LightClient {
             match _t {
                 alloy_sol_types::private::AssertTypeEq::<
                     <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                >(_) => {}
+                >(_) => {},
             }
         }
         #[automatically_derived]
@@ -2905,7 +2905,7 @@ pub mod LightClient {
             match _t {
                 alloy_sol_types::private::AssertTypeEq::<
                     <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                >(_) => {}
+                >(_) => {},
             }
         }
         #[automatically_derived]
@@ -2971,7 +2971,7 @@ pub mod LightClient {
             match _t {
                 alloy_sol_types::private::AssertTypeEq::<
                     <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                >(_) => {}
+                >(_) => {},
             }
         }
         #[automatically_derived]
@@ -3031,7 +3031,7 @@ pub mod LightClient {
             match _t {
                 alloy_sol_types::private::AssertTypeEq::<
                     <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                >(_) => {}
+                >(_) => {},
             }
         }
         #[automatically_derived]
@@ -3091,7 +3091,7 @@ pub mod LightClient {
             match _t {
                 alloy_sol_types::private::AssertTypeEq::<
                     <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                >(_) => {}
+                >(_) => {},
             }
         }
         #[automatically_derived]
@@ -3151,7 +3151,7 @@ pub mod LightClient {
             match _t {
                 alloy_sol_types::private::AssertTypeEq::<
                     <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                >(_) => {}
+                >(_) => {},
             }
         }
         #[automatically_derived]
@@ -3211,7 +3211,7 @@ pub mod LightClient {
             match _t {
                 alloy_sol_types::private::AssertTypeEq::<
                     <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                >(_) => {}
+                >(_) => {},
             }
         }
         #[automatically_derived]
@@ -3271,7 +3271,7 @@ pub mod LightClient {
             match _t {
                 alloy_sol_types::private::AssertTypeEq::<
                     <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                >(_) => {}
+                >(_) => {},
             }
         }
         #[automatically_derived]
@@ -3331,7 +3331,7 @@ pub mod LightClient {
             match _t {
                 alloy_sol_types::private::AssertTypeEq::<
                     <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                >(_) => {}
+                >(_) => {},
             }
         }
         #[automatically_derived]
@@ -3391,7 +3391,7 @@ pub mod LightClient {
             match _t {
                 alloy_sol_types::private::AssertTypeEq::<
                     <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                >(_) => {}
+                >(_) => {},
             }
         }
         #[automatically_derived]
@@ -3451,7 +3451,7 @@ pub mod LightClient {
             match _t {
                 alloy_sol_types::private::AssertTypeEq::<
                     <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                >(_) => {}
+                >(_) => {},
             }
         }
         #[automatically_derived]
@@ -3511,7 +3511,7 @@ pub mod LightClient {
             match _t {
                 alloy_sol_types::private::AssertTypeEq::<
                     <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                >(_) => {}
+                >(_) => {},
             }
         }
         #[automatically_derived]
@@ -3571,7 +3571,7 @@ pub mod LightClient {
             match _t {
                 alloy_sol_types::private::AssertTypeEq::<
                     <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                >(_) => {}
+                >(_) => {},
             }
         }
         #[automatically_derived]
@@ -3631,7 +3631,7 @@ pub mod LightClient {
             match _t {
                 alloy_sol_types::private::AssertTypeEq::<
                     <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                >(_) => {}
+                >(_) => {},
             }
         }
         #[automatically_derived]
@@ -3693,7 +3693,7 @@ pub mod LightClient {
             match _t {
                 alloy_sol_types::private::AssertTypeEq::<
                     <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                >(_) => {}
+                >(_) => {},
             }
         }
         #[automatically_derived]
@@ -3759,7 +3759,7 @@ pub mod LightClient {
             match _t {
                 alloy_sol_types::private::AssertTypeEq::<
                     <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                >(_) => {}
+                >(_) => {},
             }
         }
         #[automatically_derived]
@@ -3823,7 +3823,7 @@ pub mod LightClient {
             match _t {
                 alloy_sol_types::private::AssertTypeEq::<
                     <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                >(_) => {}
+                >(_) => {},
             }
         }
         #[automatically_derived]
@@ -3883,7 +3883,7 @@ pub mod LightClient {
             match _t {
                 alloy_sol_types::private::AssertTypeEq::<
                     <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                >(_) => {}
+                >(_) => {},
             }
         }
         #[automatically_derived]
@@ -3945,7 +3945,7 @@ pub mod LightClient {
             match _t {
                 alloy_sol_types::private::AssertTypeEq::<
                     <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                >(_) => {}
+                >(_) => {},
             }
         }
         #[automatically_derived]
@@ -4009,7 +4009,7 @@ pub mod LightClient {
             match _t {
                 alloy_sol_types::private::AssertTypeEq::<
                     <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                >(_) => {}
+                >(_) => {},
             }
         }
         #[automatically_derived]
@@ -4786,7 +4786,7 @@ pub mod LightClient {
                 match _t {
                     alloy_sol_types::private::AssertTypeEq::<
                         <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                    >(_) => {}
+                    >(_) => {},
                 }
             }
             #[automatically_derived]
@@ -4852,7 +4852,7 @@ pub mod LightClient {
                 match _t {
                     alloy_sol_types::private::AssertTypeEq::<
                         <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                    >(_) => {}
+                    >(_) => {},
                 }
             }
             #[automatically_derived]
@@ -4881,7 +4881,7 @@ pub mod LightClient {
                 match _t {
                     alloy_sol_types::private::AssertTypeEq::<
                         <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                    >(_) => {}
+                    >(_) => {},
                 }
             }
             #[automatically_derived]
@@ -4962,7 +4962,7 @@ pub mod LightClient {
                 match _t {
                     alloy_sol_types::private::AssertTypeEq::<
                         <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                    >(_) => {}
+                    >(_) => {},
                 }
             }
             #[automatically_derived]
@@ -4991,7 +4991,7 @@ pub mod LightClient {
                 match _t {
                     alloy_sol_types::private::AssertTypeEq::<
                         <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                    >(_) => {}
+                    >(_) => {},
                 }
             }
             #[automatically_derived]
@@ -5070,7 +5070,7 @@ pub mod LightClient {
                 match _t {
                     alloy_sol_types::private::AssertTypeEq::<
                         <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                    >(_) => {}
+                    >(_) => {},
                 }
             }
             #[automatically_derived]
@@ -5099,7 +5099,7 @@ pub mod LightClient {
                 match _t {
                     alloy_sol_types::private::AssertTypeEq::<
                         <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                    >(_) => {}
+                    >(_) => {},
                 }
             }
             #[automatically_derived]
@@ -5182,7 +5182,7 @@ pub mod LightClient {
                 match _t {
                     alloy_sol_types::private::AssertTypeEq::<
                         <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                    >(_) => {}
+                    >(_) => {},
                 }
             }
             #[automatically_derived]
@@ -5219,7 +5219,7 @@ pub mod LightClient {
                 match _t {
                     alloy_sol_types::private::AssertTypeEq::<
                         <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                    >(_) => {}
+                    >(_) => {},
                 }
             }
             #[automatically_derived]
@@ -5311,7 +5311,7 @@ pub mod LightClient {
                 match _t {
                     alloy_sol_types::private::AssertTypeEq::<
                         <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                    >(_) => {}
+                    >(_) => {},
                 }
             }
             #[automatically_derived]
@@ -5350,7 +5350,7 @@ pub mod LightClient {
                 match _t {
                     alloy_sol_types::private::AssertTypeEq::<
                         <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                    >(_) => {}
+                    >(_) => {},
                 }
             }
             #[automatically_derived]
@@ -5448,7 +5448,7 @@ pub mod LightClient {
                 match _t {
                     alloy_sol_types::private::AssertTypeEq::<
                         <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                    >(_) => {}
+                    >(_) => {},
                 }
             }
             #[automatically_derived]
@@ -5485,7 +5485,7 @@ pub mod LightClient {
                 match _t {
                     alloy_sol_types::private::AssertTypeEq::<
                         <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                    >(_) => {}
+                    >(_) => {},
                 }
             }
             #[automatically_derived]
@@ -5577,7 +5577,7 @@ pub mod LightClient {
                 match _t {
                     alloy_sol_types::private::AssertTypeEq::<
                         <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                    >(_) => {}
+                    >(_) => {},
                 }
             }
             #[automatically_derived]
@@ -5612,7 +5612,7 @@ pub mod LightClient {
                 match _t {
                     alloy_sol_types::private::AssertTypeEq::<
                         <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                    >(_) => {}
+                    >(_) => {},
                 }
             }
             #[automatically_derived]
@@ -5700,7 +5700,7 @@ pub mod LightClient {
                 match _t {
                     alloy_sol_types::private::AssertTypeEq::<
                         <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                    >(_) => {}
+                    >(_) => {},
                 }
             }
             #[automatically_derived]
@@ -5729,7 +5729,7 @@ pub mod LightClient {
                 match _t {
                     alloy_sol_types::private::AssertTypeEq::<
                         <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                    >(_) => {}
+                    >(_) => {},
                 }
             }
             #[automatically_derived]
@@ -5812,7 +5812,7 @@ pub mod LightClient {
                 match _t {
                     alloy_sol_types::private::AssertTypeEq::<
                         <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                    >(_) => {}
+                    >(_) => {},
                 }
             }
             #[automatically_derived]
@@ -5845,7 +5845,7 @@ pub mod LightClient {
                 match _t {
                     alloy_sol_types::private::AssertTypeEq::<
                         <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                    >(_) => {}
+                    >(_) => {},
                 }
             }
             #[automatically_derived]
@@ -5947,7 +5947,7 @@ pub mod LightClient {
                 match _t {
                     alloy_sol_types::private::AssertTypeEq::<
                         <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                    >(_) => {}
+                    >(_) => {},
                 }
             }
             #[automatically_derived]
@@ -5986,7 +5986,7 @@ pub mod LightClient {
                 match _t {
                     alloy_sol_types::private::AssertTypeEq::<
                         <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                    >(_) => {}
+                    >(_) => {},
                 }
             }
             #[automatically_derived]
@@ -6083,7 +6083,7 @@ pub mod LightClient {
                 match _t {
                     alloy_sol_types::private::AssertTypeEq::<
                         <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                    >(_) => {}
+                    >(_) => {},
                 }
             }
             #[automatically_derived]
@@ -6112,7 +6112,7 @@ pub mod LightClient {
                 match _t {
                     alloy_sol_types::private::AssertTypeEq::<
                         <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                    >(_) => {}
+                    >(_) => {},
                 }
             }
             #[automatically_derived]
@@ -6202,7 +6202,7 @@ pub mod LightClient {
                 match _t {
                     alloy_sol_types::private::AssertTypeEq::<
                         <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                    >(_) => {}
+                    >(_) => {},
                 }
             }
             #[automatically_derived]
@@ -6234,7 +6234,7 @@ pub mod LightClient {
                 match _t {
                     alloy_sol_types::private::AssertTypeEq::<
                         <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                    >(_) => {}
+                    >(_) => {},
                 }
             }
             #[automatically_derived]
@@ -6329,7 +6329,7 @@ pub mod LightClient {
                 match _t {
                     alloy_sol_types::private::AssertTypeEq::<
                         <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                    >(_) => {}
+                    >(_) => {},
                 }
             }
             #[automatically_derived]
@@ -6361,7 +6361,7 @@ pub mod LightClient {
                 match _t {
                     alloy_sol_types::private::AssertTypeEq::<
                         <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                    >(_) => {}
+                    >(_) => {},
                 }
             }
             #[automatically_derived]
@@ -6445,7 +6445,7 @@ pub mod LightClient {
                 match _t {
                     alloy_sol_types::private::AssertTypeEq::<
                         <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                    >(_) => {}
+                    >(_) => {},
                 }
             }
             #[automatically_derived]
@@ -6474,7 +6474,7 @@ pub mod LightClient {
                 match _t {
                     alloy_sol_types::private::AssertTypeEq::<
                         <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                    >(_) => {}
+                    >(_) => {},
                 }
             }
             #[automatically_derived]
@@ -6555,7 +6555,7 @@ pub mod LightClient {
                 match _t {
                     alloy_sol_types::private::AssertTypeEq::<
                         <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                    >(_) => {}
+                    >(_) => {},
                 }
             }
             #[automatically_derived]
@@ -6584,7 +6584,7 @@ pub mod LightClient {
                 match _t {
                     alloy_sol_types::private::AssertTypeEq::<
                         <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                    >(_) => {}
+                    >(_) => {},
                 }
             }
             #[automatically_derived]
@@ -6665,7 +6665,7 @@ pub mod LightClient {
                 match _t {
                     alloy_sol_types::private::AssertTypeEq::<
                         <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                    >(_) => {}
+                    >(_) => {},
                 }
             }
             #[automatically_derived]
@@ -6694,7 +6694,7 @@ pub mod LightClient {
                 match _t {
                     alloy_sol_types::private::AssertTypeEq::<
                         <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                    >(_) => {}
+                    >(_) => {},
                 }
             }
             #[automatically_derived]
@@ -6773,7 +6773,7 @@ pub mod LightClient {
                 match _t {
                     alloy_sol_types::private::AssertTypeEq::<
                         <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                    >(_) => {}
+                    >(_) => {},
                 }
             }
             #[automatically_derived]
@@ -6802,7 +6802,7 @@ pub mod LightClient {
                 match _t {
                     alloy_sol_types::private::AssertTypeEq::<
                         <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                    >(_) => {}
+                    >(_) => {},
                 }
             }
             #[automatically_derived]
@@ -6883,7 +6883,7 @@ pub mod LightClient {
                 match _t {
                     alloy_sol_types::private::AssertTypeEq::<
                         <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                    >(_) => {}
+                    >(_) => {},
                 }
             }
             #[automatically_derived]
@@ -6912,7 +6912,7 @@ pub mod LightClient {
                 match _t {
                     alloy_sol_types::private::AssertTypeEq::<
                         <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                    >(_) => {}
+                    >(_) => {},
                 }
             }
             #[automatically_derived]
@@ -6997,7 +6997,7 @@ pub mod LightClient {
                 match _t {
                     alloy_sol_types::private::AssertTypeEq::<
                         <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                    >(_) => {}
+                    >(_) => {},
                 }
             }
             #[automatically_derived]
@@ -7028,7 +7028,7 @@ pub mod LightClient {
                 match _t {
                     alloy_sol_types::private::AssertTypeEq::<
                         <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                    >(_) => {}
+                    >(_) => {},
                 }
             }
             #[automatically_derived]
@@ -7118,7 +7118,7 @@ pub mod LightClient {
                 match _t {
                     alloy_sol_types::private::AssertTypeEq::<
                         <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                    >(_) => {}
+                    >(_) => {},
                 }
             }
             #[automatically_derived]
@@ -7157,7 +7157,7 @@ pub mod LightClient {
                 match _t {
                     alloy_sol_types::private::AssertTypeEq::<
                         <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                    >(_) => {}
+                    >(_) => {},
                 }
             }
             #[automatically_derived]
@@ -7257,7 +7257,7 @@ pub mod LightClient {
                 match _t {
                     alloy_sol_types::private::AssertTypeEq::<
                         <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                    >(_) => {}
+                    >(_) => {},
                 }
             }
             #[automatically_derived]
@@ -7286,7 +7286,7 @@ pub mod LightClient {
                 match _t {
                     alloy_sol_types::private::AssertTypeEq::<
                         <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                    >(_) => {}
+                    >(_) => {},
                 }
             }
             #[automatically_derived]
@@ -7367,7 +7367,7 @@ pub mod LightClient {
                 match _t {
                     alloy_sol_types::private::AssertTypeEq::<
                         <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                    >(_) => {}
+                    >(_) => {},
                 }
             }
             #[automatically_derived]
@@ -7396,7 +7396,7 @@ pub mod LightClient {
                 match _t {
                     alloy_sol_types::private::AssertTypeEq::<
                         <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                    >(_) => {}
+                    >(_) => {},
                 }
             }
             #[automatically_derived]
@@ -7477,7 +7477,7 @@ pub mod LightClient {
                 match _t {
                     alloy_sol_types::private::AssertTypeEq::<
                         <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                    >(_) => {}
+                    >(_) => {},
                 }
             }
             #[automatically_derived]
@@ -7506,7 +7506,7 @@ pub mod LightClient {
                 match _t {
                     alloy_sol_types::private::AssertTypeEq::<
                         <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                    >(_) => {}
+                    >(_) => {},
                 }
             }
             #[automatically_derived]
@@ -7598,7 +7598,7 @@ pub mod LightClient {
                 match _t {
                     alloy_sol_types::private::AssertTypeEq::<
                         <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                    >(_) => {}
+                    >(_) => {},
                 }
             }
             #[automatically_derived]
@@ -7630,7 +7630,7 @@ pub mod LightClient {
                 match _t {
                     alloy_sol_types::private::AssertTypeEq::<
                         <UnderlyingSolTuple as alloy_sol_types::SolType>::RustType,
-                    >(_) => {}
+                    >(_) => {},
                 }
             }
             #[automatically_derived]
@@ -7761,66 +7761,66 @@ pub mod LightClient {
             match self {
                 Self::UPGRADE_INTERFACE_VERSION(_) => {
                     <UPGRADE_INTERFACE_VERSIONCall as alloy_sol_types::SolCall>::SELECTOR
-                }
+                },
                 Self::currentBlockNumber(_) => {
                     <currentBlockNumberCall as alloy_sol_types::SolCall>::SELECTOR
-                }
+                },
                 Self::disablePermissionedProverMode(_) => {
                     <disablePermissionedProverModeCall as alloy_sol_types::SolCall>::SELECTOR
-                }
+                },
                 Self::finalizedState(_) => {
                     <finalizedStateCall as alloy_sol_types::SolCall>::SELECTOR
-                }
+                },
                 Self::genesisStakeTableState(_) => {
                     <genesisStakeTableStateCall as alloy_sol_types::SolCall>::SELECTOR
-                }
+                },
                 Self::genesisState(_) => <genesisStateCall as alloy_sol_types::SolCall>::SELECTOR,
                 Self::getHotShotCommitment(_) => {
                     <getHotShotCommitmentCall as alloy_sol_types::SolCall>::SELECTOR
-                }
+                },
                 Self::getStateHistoryCount(_) => {
                     <getStateHistoryCountCall as alloy_sol_types::SolCall>::SELECTOR
-                }
+                },
                 Self::getVersion(_) => <getVersionCall as alloy_sol_types::SolCall>::SELECTOR,
                 Self::initialize(_) => <initializeCall as alloy_sol_types::SolCall>::SELECTOR,
                 Self::isPermissionedProverEnabled(_) => {
                     <isPermissionedProverEnabledCall as alloy_sol_types::SolCall>::SELECTOR
-                }
+                },
                 Self::lagOverEscapeHatchThreshold(_) => {
                     <lagOverEscapeHatchThresholdCall as alloy_sol_types::SolCall>::SELECTOR
-                }
+                },
                 Self::newFinalizedState(_) => {
                     <newFinalizedStateCall as alloy_sol_types::SolCall>::SELECTOR
-                }
+                },
                 Self::owner(_) => <ownerCall as alloy_sol_types::SolCall>::SELECTOR,
                 Self::permissionedProver(_) => {
                     <permissionedProverCall as alloy_sol_types::SolCall>::SELECTOR
-                }
+                },
                 Self::proxiableUUID(_) => <proxiableUUIDCall as alloy_sol_types::SolCall>::SELECTOR,
                 Self::renounceOwnership(_) => {
                     <renounceOwnershipCall as alloy_sol_types::SolCall>::SELECTOR
-                }
+                },
                 Self::setPermissionedProver(_) => {
                     <setPermissionedProverCall as alloy_sol_types::SolCall>::SELECTOR
-                }
+                },
                 Self::setstateHistoryRetentionPeriod(_) => {
                     <setstateHistoryRetentionPeriodCall as alloy_sol_types::SolCall>::SELECTOR
-                }
+                },
                 Self::stateHistoryCommitments(_) => {
                     <stateHistoryCommitmentsCall as alloy_sol_types::SolCall>::SELECTOR
-                }
+                },
                 Self::stateHistoryFirstIndex(_) => {
                     <stateHistoryFirstIndexCall as alloy_sol_types::SolCall>::SELECTOR
-                }
+                },
                 Self::stateHistoryRetentionPeriod(_) => {
                     <stateHistoryRetentionPeriodCall as alloy_sol_types::SolCall>::SELECTOR
-                }
+                },
                 Self::transferOwnership(_) => {
                     <transferOwnershipCall as alloy_sol_types::SolCall>::SELECTOR
-                }
+                },
                 Self::upgradeToAndCall(_) => {
                     <upgradeToAndCallCall as alloy_sol_types::SolCall>::SELECTOR
-                }
+                },
             }
         }
         #[inline]
@@ -8270,98 +8270,98 @@ pub mod LightClient {
                     <UPGRADE_INTERFACE_VERSIONCall as alloy_sol_types::SolCall>::abi_encode_raw(
                         inner, out,
                     )
-                }
+                },
                 Self::currentBlockNumber(inner) => {
                     <currentBlockNumberCall as alloy_sol_types::SolCall>::abi_encode_raw(inner, out)
-                }
+                },
                 Self::disablePermissionedProverMode(inner) => {
                     <disablePermissionedProverModeCall as alloy_sol_types::SolCall>::abi_encode_raw(
                         inner, out,
                     )
-                }
+                },
                 Self::finalizedState(inner) => {
                     <finalizedStateCall as alloy_sol_types::SolCall>::abi_encode_raw(inner, out)
-                }
+                },
                 Self::genesisStakeTableState(inner) => {
                     <genesisStakeTableStateCall as alloy_sol_types::SolCall>::abi_encode_raw(
                         inner, out,
                     )
-                }
+                },
                 Self::genesisState(inner) => {
                     <genesisStateCall as alloy_sol_types::SolCall>::abi_encode_raw(inner, out)
-                }
+                },
                 Self::getHotShotCommitment(inner) => {
                     <getHotShotCommitmentCall as alloy_sol_types::SolCall>::abi_encode_raw(
                         inner, out,
                     )
-                }
+                },
                 Self::getStateHistoryCount(inner) => {
                     <getStateHistoryCountCall as alloy_sol_types::SolCall>::abi_encode_raw(
                         inner, out,
                     )
-                }
+                },
                 Self::getVersion(inner) => {
                     <getVersionCall as alloy_sol_types::SolCall>::abi_encode_raw(inner, out)
-                }
+                },
                 Self::initialize(inner) => {
                     <initializeCall as alloy_sol_types::SolCall>::abi_encode_raw(inner, out)
-                }
+                },
                 Self::isPermissionedProverEnabled(inner) => {
                     <isPermissionedProverEnabledCall as alloy_sol_types::SolCall>::abi_encode_raw(
                         inner, out,
                     )
-                }
+                },
                 Self::lagOverEscapeHatchThreshold(inner) => {
                     <lagOverEscapeHatchThresholdCall as alloy_sol_types::SolCall>::abi_encode_raw(
                         inner, out,
                     )
-                }
+                },
                 Self::newFinalizedState(inner) => {
                     <newFinalizedStateCall as alloy_sol_types::SolCall>::abi_encode_raw(inner, out)
-                }
+                },
                 Self::owner(inner) => {
                     <ownerCall as alloy_sol_types::SolCall>::abi_encode_raw(inner, out)
-                }
+                },
                 Self::permissionedProver(inner) => {
                     <permissionedProverCall as alloy_sol_types::SolCall>::abi_encode_raw(inner, out)
-                }
+                },
                 Self::proxiableUUID(inner) => {
                     <proxiableUUIDCall as alloy_sol_types::SolCall>::abi_encode_raw(inner, out)
-                }
+                },
                 Self::renounceOwnership(inner) => {
                     <renounceOwnershipCall as alloy_sol_types::SolCall>::abi_encode_raw(inner, out)
-                }
+                },
                 Self::setPermissionedProver(inner) => {
                     <setPermissionedProverCall as alloy_sol_types::SolCall>::abi_encode_raw(
                         inner, out,
                     )
-                }
+                },
                 Self::setstateHistoryRetentionPeriod(inner) => {
                     <setstateHistoryRetentionPeriodCall as alloy_sol_types::SolCall>::abi_encode_raw(
                         inner, out,
                     )
-                }
+                },
                 Self::stateHistoryCommitments(inner) => {
                     <stateHistoryCommitmentsCall as alloy_sol_types::SolCall>::abi_encode_raw(
                         inner, out,
                     )
-                }
+                },
                 Self::stateHistoryFirstIndex(inner) => {
                     <stateHistoryFirstIndexCall as alloy_sol_types::SolCall>::abi_encode_raw(
                         inner, out,
                     )
-                }
+                },
                 Self::stateHistoryRetentionPeriod(inner) => {
                     <stateHistoryRetentionPeriodCall as alloy_sol_types::SolCall>::abi_encode_raw(
                         inner, out,
                     )
-                }
+                },
                 Self::transferOwnership(inner) => {
                     <transferOwnershipCall as alloy_sol_types::SolCall>::abi_encode_raw(inner, out)
-                }
+                },
                 Self::upgradeToAndCall(inner) => {
                     <upgradeToAndCallCall as alloy_sol_types::SolCall>::abi_encode_raw(inner, out)
-                }
+                },
             }
         }
     }
@@ -8429,56 +8429,56 @@ pub mod LightClient {
             match self {
                 Self::AddressEmptyCode(_) => {
                     <AddressEmptyCode as alloy_sol_types::SolError>::SELECTOR
-                }
+                },
                 Self::ERC1967InvalidImplementation(_) => {
                     <ERC1967InvalidImplementation as alloy_sol_types::SolError>::SELECTOR
-                }
+                },
                 Self::ERC1967NonPayable(_) => {
                     <ERC1967NonPayable as alloy_sol_types::SolError>::SELECTOR
-                }
+                },
                 Self::FailedInnerCall(_) => {
                     <FailedInnerCall as alloy_sol_types::SolError>::SELECTOR
-                }
+                },
                 Self::InsufficientSnapshotHistory(_) => {
                     <InsufficientSnapshotHistory as alloy_sol_types::SolError>::SELECTOR
-                }
+                },
                 Self::InvalidAddress(_) => <InvalidAddress as alloy_sol_types::SolError>::SELECTOR,
                 Self::InvalidArgs(_) => <InvalidArgs as alloy_sol_types::SolError>::SELECTOR,
                 Self::InvalidHotShotBlockForCommitmentCheck(_) => {
                     <InvalidHotShotBlockForCommitmentCheck as alloy_sol_types::SolError>::SELECTOR
-                }
+                },
                 Self::InvalidInitialization(_) => {
                     <InvalidInitialization as alloy_sol_types::SolError>::SELECTOR
-                }
+                },
                 Self::InvalidMaxStateHistory(_) => {
                     <InvalidMaxStateHistory as alloy_sol_types::SolError>::SELECTOR
-                }
+                },
                 Self::InvalidProof(_) => <InvalidProof as alloy_sol_types::SolError>::SELECTOR,
                 Self::NoChangeRequired(_) => {
                     <NoChangeRequired as alloy_sol_types::SolError>::SELECTOR
-                }
+                },
                 Self::NotInitializing(_) => {
                     <NotInitializing as alloy_sol_types::SolError>::SELECTOR
-                }
+                },
                 Self::OutdatedState(_) => <OutdatedState as alloy_sol_types::SolError>::SELECTOR,
                 Self::OwnableInvalidOwner(_) => {
                     <OwnableInvalidOwner as alloy_sol_types::SolError>::SELECTOR
-                }
+                },
                 Self::OwnableUnauthorizedAccount(_) => {
                     <OwnableUnauthorizedAccount as alloy_sol_types::SolError>::SELECTOR
-                }
+                },
                 Self::ProverNotPermissioned(_) => {
                     <ProverNotPermissioned as alloy_sol_types::SolError>::SELECTOR
-                }
+                },
                 Self::UUPSUnauthorizedCallContext(_) => {
                     <UUPSUnauthorizedCallContext as alloy_sol_types::SolError>::SELECTOR
-                }
+                },
                 Self::UUPSUnsupportedProxiableUUID(_) => {
                     <UUPSUnsupportedProxiableUUID as alloy_sol_types::SolError>::SELECTOR
-                }
+                },
                 Self::WrongStakeTableUsed(_) => {
                     <WrongStakeTableUsed as alloy_sol_types::SolError>::SELECTOR
-                }
+                },
             }
         }
         #[inline]
@@ -9043,17 +9043,17 @@ pub mod LightClient {
                         topics, data, validate,
                     )
                     .map(Self::Initialized)
-                }
+                },
                 Some(<NewState as alloy_sol_types::SolEvent>::SIGNATURE_HASH) => {
                     <NewState as alloy_sol_types::SolEvent>::decode_raw_log(topics, data, validate)
                         .map(Self::NewState)
-                }
+                },
                 Some(<OwnershipTransferred as alloy_sol_types::SolEvent>::SIGNATURE_HASH) => {
                     <OwnershipTransferred as alloy_sol_types::SolEvent>::decode_raw_log(
                         topics, data, validate,
                     )
                     .map(Self::OwnershipTransferred)
-                }
+                },
                 Some(
                     <PermissionedProverNotRequired as alloy_sol_types::SolEvent>::SIGNATURE_HASH,
                 ) => <PermissionedProverNotRequired as alloy_sol_types::SolEvent>::decode_raw_log(
@@ -9065,15 +9065,15 @@ pub mod LightClient {
                         topics, data, validate,
                     )
                     .map(Self::PermissionedProverRequired)
-                }
+                },
                 Some(<Upgrade as alloy_sol_types::SolEvent>::SIGNATURE_HASH) => {
                     <Upgrade as alloy_sol_types::SolEvent>::decode_raw_log(topics, data, validate)
                         .map(Self::Upgrade)
-                }
+                },
                 Some(<Upgraded as alloy_sol_types::SolEvent>::SIGNATURE_HASH) => {
                     <Upgraded as alloy_sol_types::SolEvent>::decode_raw_log(topics, data, validate)
                         .map(Self::Upgraded)
-                }
+                },
                 _ => alloy_sol_types::private::Err(alloy_sol_types::Error::InvalidLog {
                     name: <Self as alloy_sol_types::SolEventInterface>::NAME,
                     log: alloy_sol_types::private::Box::new(
@@ -9092,17 +9092,17 @@ pub mod LightClient {
             match self {
                 Self::Initialized(inner) => {
                     alloy_sol_types::private::IntoLogData::to_log_data(inner)
-                }
+                },
                 Self::NewState(inner) => alloy_sol_types::private::IntoLogData::to_log_data(inner),
                 Self::OwnershipTransferred(inner) => {
                     alloy_sol_types::private::IntoLogData::to_log_data(inner)
-                }
+                },
                 Self::PermissionedProverNotRequired(inner) => {
                     alloy_sol_types::private::IntoLogData::to_log_data(inner)
-                }
+                },
                 Self::PermissionedProverRequired(inner) => {
                     alloy_sol_types::private::IntoLogData::to_log_data(inner)
-                }
+                },
                 Self::Upgrade(inner) => alloy_sol_types::private::IntoLogData::to_log_data(inner),
                 Self::Upgraded(inner) => alloy_sol_types::private::IntoLogData::to_log_data(inner),
             }
@@ -9111,23 +9111,23 @@ pub mod LightClient {
             match self {
                 Self::Initialized(inner) => {
                     alloy_sol_types::private::IntoLogData::into_log_data(inner)
-                }
+                },
                 Self::NewState(inner) => {
                     alloy_sol_types::private::IntoLogData::into_log_data(inner)
-                }
+                },
                 Self::OwnershipTransferred(inner) => {
                     alloy_sol_types::private::IntoLogData::into_log_data(inner)
-                }
+                },
                 Self::PermissionedProverNotRequired(inner) => {
                     alloy_sol_types::private::IntoLogData::into_log_data(inner)
-                }
+                },
                 Self::PermissionedProverRequired(inner) => {
                     alloy_sol_types::private::IntoLogData::into_log_data(inner)
-                }
+                },
                 Self::Upgrade(inner) => alloy_sol_types::private::IntoLogData::into_log_data(inner),
                 Self::Upgraded(inner) => {
                     alloy_sol_types::private::IntoLogData::into_log_data(inner)
-                }
+                },
             }
         }
     }

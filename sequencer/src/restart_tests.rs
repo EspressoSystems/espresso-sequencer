@@ -358,7 +358,7 @@ impl<S: TestableSequencerDataSource> TestNode<S> {
                         sleep(delay).await;
                         delay *= 2;
                         retries -= 1;
-                    }
+                    },
                 }
             };
 

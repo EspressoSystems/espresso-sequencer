@@ -67,11 +67,11 @@ pub async fn fetch_namespaces_to_skip(solver_base_url: Url) -> Option<HashSet<Na
                 }
             }
             Some(namespaces_to_skip)
-        }
+        },
         Err(e) => {
             error!("Failed to get the registered rollups: {:?}.", e);
             None
-        }
+        },
     }
 }
 
@@ -130,7 +130,7 @@ impl BuilderHooks<SeqTypes> for EspressoReserveHooks {
                 Err(e) => {
                     error!("Failed to sign the bid txn: {:?}.", e);
                     return;
-                }
+                },
             };
 
             let solver_client = connect_to_solver(solver_base_url);
@@ -172,12 +172,12 @@ impl BuilderHooks<SeqTypes> for EspressoFallbackHooks {
             Some(namespaces_to_skip) => {
                 transactions.retain(|txn| !namespaces_to_skip.contains(&txn.namespace()));
                 transactions
-            }
+            },
             // Solver connection has failed and we don't have up-to-date information on this
             None => {
                 error!("Not accepting transactions due to outdated information");
                 Vec::new()
-            }
+            },
         }
     }
 

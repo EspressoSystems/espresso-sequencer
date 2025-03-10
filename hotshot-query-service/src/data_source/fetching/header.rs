@@ -188,14 +188,14 @@ where
                     header.block_number()
                 );
                 fetch_block_with_header(fetcher, header);
-            }
+            },
             Self::VidCommon { fetcher } => {
                 tracing::info!(
                     "fetched leaf {}, will now fetch VID common",
                     header.block_number()
                 );
                 fetch_vid_common_with_header(fetcher, header);
-            }
+            },
         }
     }
 }
@@ -225,17 +225,17 @@ where
         Ok(header) => {
             callback.run(header);
             return Ok(());
-        }
+        },
         Err(QueryError::Missing | QueryError::NotFound) => {
             // We successfully queried the database, but the header wasn't there. Fall through to
             // fetching it.
             tracing::debug!(?req, "header not available locally; trying fetch");
-        }
+        },
         Err(QueryError::Error { message }) => {
             // An error occurred while querying the database. We don't know if we need to fetch the
             // header or not. Return an error so we can try again.
             bail!("failed to fetch header for block {req:?}: {message}");
-        }
+        },
     }
 
     // If the header is _not_ present, we may still be able to fetch the request, but we need to
@@ -245,16 +245,16 @@ where
     match req {
         BlockId::Number(n) => {
             fetch_leaf_with_callbacks(tx, callback.fetcher(), n.into(), [callback.into()]).await?;
-        }
+        },
         BlockId::Hash(h) => {
             // Given only the hash, we cannot tell if the corresponding leaf actually exists, since
             // we don't have a corresponding header. Therefore, we will not spawn an active fetch.
             tracing::debug!("not fetching unknown block {h}");
-        }
+        },
         BlockId::PayloadHash(h) => {
             // Same as above, we don't fetch a block with a payload that is not known to exist.
             tracing::debug!("not fetching block with unknown payload {h}");
-        }
+        },
     }
 
     Ok(())
