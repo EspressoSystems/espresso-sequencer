@@ -2,7 +2,7 @@ use std::{
     fmt,
     fs::File,
     io::{stderr, stdout},
-    path::Path,
+    path::PathBuf,
     process::{Child, Command},
     str::FromStr,
     time::Duration,
@@ -308,7 +308,15 @@ impl Drop for NativeDemo {
 
 impl NativeDemo {
     pub(crate) fn run(process_compose_extra_args: Option<String>) -> anyhow::Result<Self> {
-        let workspace_dir = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+        // Because we use nextest with the archive feature on CI we need to use the **runtime**
+        // value of CARGO_MANIFEST_DIR.
+        let crate_dir = PathBuf::from(
+            std::env::var("CARGO_MANIFEST_DIR")
+                .expect("CARGO_MANIFEST_DIR is set")
+                .clone(),
+        );
+        let workspace_dir = crate_dir.parent().expect("crate_dir has a parent");
+
         let mut cmd = Command::new("bash");
         cmd.arg("scripts/demo-native")
             .current_dir(workspace_dir)
