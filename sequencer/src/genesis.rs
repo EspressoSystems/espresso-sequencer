@@ -103,8 +103,7 @@ impl Genesis {
         // now iterate over each upgrade type and validate the fee contract if it exists
         for (version, upgrade) in &self.upgrades {
             let chain_config = &upgrade.upgrade_type.chain_config();
-            // Is this not an error case? Isn't a chain config a
-            // requirement? At least for most versions?
+
             if chain_config.is_none() {
                 continue;
             }

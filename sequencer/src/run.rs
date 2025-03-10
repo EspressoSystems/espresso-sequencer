@@ -58,7 +58,6 @@ pub async fn main() -> anyhow::Result<()> {
             )
             .await
         },
-        // TODO change `fee` to `pos`
         #[cfg(all(feature = "fee", feature = "marketplace"))]
         (espresso_types::FeeVersion::VERSION, espresso_types::MarketplaceVersion::VERSION) => {
             run(
@@ -70,7 +69,7 @@ pub async fn main() -> anyhow::Result<()> {
             .await
         },
         #[cfg(feature = "fee")]
-        (FeeVersion::VERSION, _) => {
+        (espresso_types::FeeVersion::VERSION, _) => {
             run(
                 genesis,
                 modules,
@@ -80,7 +79,7 @@ pub async fn main() -> anyhow::Result<()> {
             .await
         },
         #[cfg(feature = "marketplace")]
-        (MarketplaceVersion::VERSION, _) => {
+        (espresso_types::MarketplaceVersion::VERSION, _) => {
             run(
                 genesis,
                 modules,

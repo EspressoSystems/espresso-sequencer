@@ -130,7 +130,6 @@ async fn main() -> anyhow::Result<()> {
             )
             .await
         }
-        // TODO change `fee` to `pos`
         (espresso_types::FeeVersion::VERSION, espresso_types::MarketplaceVersion::VERSION) => {
             run::<SequencerVersions<espresso_types::FeeVersion, espresso_types::MarketplaceVersion>>(
                 genesis, opt
