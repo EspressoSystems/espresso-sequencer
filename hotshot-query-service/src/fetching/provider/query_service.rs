@@ -83,14 +83,14 @@ where
                                 Err(err) => {
                                     tracing::error!(%err, "unable to compute VID commitment");
                                     return None;
-                                }
+                                },
                             },
                         );
                         if commit != req.0 {
                             tracing::error!(?req, ?commit, "received inconsistent payload");
                             return None;
                         }
-                    }
+                    },
                     VidCommon::V1(common) => {
                         let bytes = payload.data().encode();
 
@@ -100,7 +100,7 @@ where
                             Err(err) => {
                                 tracing::error!(%err, "unable to initialize AVIDM parameters");
                                 return None;
-                            }
+                            },
                         };
 
                         // Calculate AVIDM commitment
@@ -114,7 +114,7 @@ where
                             Err(err) => {
                                 tracing::error!(%err, "unable to compute AVIDM commitment");
                                 return None;
-                            }
+                            },
                         };
 
                         // Compare calculated commitment with requested commitment
@@ -122,7 +122,7 @@ where
                             tracing::error!("commitment type mismatch for AVIDM check");
                             return None;
                         }
-                    }
+                    },
                 }
 
                 Some(payload.data)
@@ -214,7 +214,7 @@ where
                         tracing::error!(?req, ?res, "Expect VID common data but found None");
                         None
                     }
-                }
+                },
             },
             Err(err) => {
                 tracing::error!("failed to fetch VID common {req:?}: {err}");
