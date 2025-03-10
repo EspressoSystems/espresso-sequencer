@@ -212,12 +212,15 @@ jobs:
         version: [02,03,99]
         include:
           - version: 02
+            genesis: "data/genesis/demo.toml"
             compose: "-f process-compose.yaml"
           
           - version: 03
+            genesis: "data/genesis/demo-pos.toml"
             compose: "-f process-compose.yaml"
 
           - version: 99
+            genesis: "data/genesis/demo-marketplace.toml"
             compose: "-f process-compose.yaml -f process-compose-mp.yml"
       fail-fast: false
     runs-on: ubuntu-latest
@@ -246,7 +249,7 @@ jobs:
         run: nix profile install nixpkgs#process-compose
 
       - name: Run Demo-Native ${{matrix.version}}
-        run: bash -x scripts/demo-native ${{matrix.compose}} --tui=false > ${{ env.PC_LOGS }} 2>&1 &
+        run: bash -x ESPRESSO_SEQUENCER_GENESIS_FILE=${{matrix.genesis}} scripts/demo-native ${{matrix.compose}} --tui=false > ${{ env.PC_LOGS }} 2>&1 &
 
       - name: Test Integration
         env:
