@@ -4,12 +4,13 @@ use crate::v0::{
 };
 use hotshot_types::traits::states::InstanceState;
 use hotshot_types::HotShotConfig;
+use parking_lot::RwLock;
 use std::{collections::BTreeMap, sync::Arc};
 use vbs::version::Version;
 #[cfg(any(test, feature = "testing"))]
 use vbs::version::{StaticVersion, StaticVersionType};
 
-use super::state::ValidatedState;
+use super::{state::ValidatedState, EpochCommittees};
 
 /// Represents the immutable state of a node.
 ///
@@ -24,6 +25,7 @@ pub struct NodeState {
     pub genesis_header: GenesisHeader,
     pub genesis_state: ValidatedState,
     pub l1_genesis: Option<L1BlockInfo>,
+    pub membership: Arc<RwLock<EpochCommittees>>,
     pub epoch_height: Option<u64>,
 
     /// Map containing all planned and executed upgrades.

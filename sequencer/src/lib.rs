@@ -488,7 +488,6 @@ pub async fn init_node<P: SequencerPersistence, V: Versions>(
         network_config.config.known_nodes_with_stake.clone(),
         network_config.config.known_da_nodes.clone(),
         &instance_state,
-        network_config.config.epoch_height,
     );
 
     // Initialize the Libp2p network
@@ -980,7 +979,6 @@ pub mod testing {
                 config.known_nodes_with_stake.clone(),
                 config.known_da_nodes.clone(),
                 &node_state,
-                100,
             );
 
             tracing::info!(
