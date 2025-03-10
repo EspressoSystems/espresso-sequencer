@@ -12,3 +12,4 @@ pub mod r#lightclientmock;
 pub mod r#permissionedstaketable;
 pub mod r#plonkverifier;
 pub mod r#plonkverifier2;
+pub mod r#staketable;
