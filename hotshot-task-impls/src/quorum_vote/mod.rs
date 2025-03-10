@@ -4,11 +4,8 @@
 // You should have received a copy of the MIT License
 // along with the HotShot repository. If not, see <https://mit-license.org/>.
 
-use crate::{
-    events::HotShotEvent,
-    helpers::{broadcast_event, wait_for_second_vid_share},
-    quorum_vote::handlers::{handle_quorum_proposal_validated, submit_vote, update_shared_state},
-};
+use std::{collections::BTreeMap, sync::Arc, time::Instant};
+
 use async_broadcast::{InactiveReceiver, Receiver, Sender};
 use async_lock::RwLock;
 use async_trait::async_trait;
@@ -39,11 +36,15 @@ use hotshot_types::{
     StakeTableEntries,
 };
 use hotshot_utils::anytrace::*;
-use std::time::Instant;
-use std::{collections::BTreeMap, sync::Arc};
 use tokio::task::JoinHandle;
 use tracing::instrument;
 use vbs::version::StaticVersionType;
+
+use crate::{
+    events::HotShotEvent,
+    helpers::{broadcast_event, wait_for_second_vid_share},
+    quorum_vote::handlers::{handle_quorum_proposal_validated, submit_vote, update_shared_state},
+};
 
 /// Event handlers for `QuorumProposalValidated`.
 mod handlers;

@@ -6,19 +6,19 @@
 
 //! Provides the core consensus types
 
-use async_lock::{RwLock, RwLockReadGuard, RwLockUpgradableReadGuard, RwLockWriteGuard};
-use committable::{Commitment, Committable};
-use hotshot_utils::anytrace::*;
 use std::{
     collections::{BTreeMap, HashMap},
     mem::ManuallyDrop,
     ops::{Deref, DerefMut},
     sync::Arc,
 };
+
+use async_lock::{RwLock, RwLockReadGuard, RwLockUpgradableReadGuard, RwLockWriteGuard};
+use committable::{Commitment, Committable};
+use hotshot_utils::anytrace::*;
 use tracing::instrument;
 use vec1::Vec1;
 
-use crate::simple_vote::HasEpoch;
 pub use crate::utils::{View, ViewInner};
 use crate::{
     data::{Leaf2, QuorumProposalWrapper, VidCommitment, VidDisperse, VidDisperseShare},
@@ -28,6 +28,7 @@ use crate::{
     event::{HotShotAction, LeafInfo},
     message::{Proposal, UpgradeLock},
     simple_certificate::{DaCertificate2, NextEpochQuorumCertificate2, QuorumCertificate2},
+    simple_vote::HasEpoch,
     traits::{
         block_contents::BuilderFee,
         metrics::{Counter, Gauge, Histogram, Metrics, NoMetrics},
