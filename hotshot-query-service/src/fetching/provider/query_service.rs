@@ -10,14 +10,6 @@
 // You should have received a copy of the GNU General Public License along with this program. If not,
 // see <https://www.gnu.org/licenses/>.
 
-use super::Provider;
-
-use crate::{
-    availability::{LeafQueryData, PayloadQueryData, VidCommonQueryData},
-    fetching::request::{LeafRequest, PayloadRequest, VidCommonRequest},
-    types::HeightIndexed,
-    Error, Payload, VidCommon,
-};
 use async_trait::async_trait;
 use committable::Committable;
 use futures::try_join;
@@ -32,6 +24,14 @@ use hotshot_types::{
 use jf_vid::VidScheme;
 use surf_disco::{Client, Url};
 use vbs::version::StaticVersionType;
+
+use super::Provider;
+use crate::{
+    availability::{LeafQueryData, PayloadQueryData, VidCommonQueryData},
+    fetching::request::{LeafRequest, PayloadRequest, VidCommonRequest},
+    types::HeightIndexed,
+    Error, Payload, VidCommon,
+};
 
 /// Data availability provider backed by another instance of this query service.
 ///
@@ -126,11 +126,11 @@ where
                 }
 
                 Some(payload.data)
-            }
+            },
             Err(err) => {
                 tracing::error!("failed to fetch payload {req:?}: {err}");
                 None
-            }
+            },
         }
     }
 }
@@ -169,11 +169,11 @@ where
                 leaf.leaf.unfill_block_payload();
 
                 Some(leaf)
-            }
+            },
             Err(err) => {
                 tracing::error!("failed to fetch leaf {req:?}: {err}");
                 None
-            }
+            },
         }
     }
 }
@@ -206,7 +206,7 @@ where
                         tracing::error!(?req, ?res, "Expect VID common data but found None");
                         None
                     }
-                }
+                },
                 VidCommitment::V1(_) => {
                     if let VidCommon::V1(common) = res.common {
                         Some(VidCommon::V1(common))
@@ -219,7 +219,7 @@ where
             Err(err) => {
                 tracing::error!("failed to fetch VID common {req:?}: {err}");
                 None
-            }
+            },
         }
     }
 }
@@ -227,8 +227,20 @@ where
 // These tests run the `postgres` Docker image, which doesn't work on Windows.
 #[cfg(all(test, not(target_os = "windows")))]
 mod test {
-    use super::*;
+    use std::{future::IntoFuture, time::Duration};
 
+    use committable::Committable;
+    use futures::{
+        future::{join, FutureExt},
+        stream::StreamExt,
+    };
+    use generic_array::GenericArray;
+    use hotshot_example_types::node_types::TestVersions;
+    use portpicker::pick_unused_port;
+    use rand::RngCore;
+    use tide_disco::{error::ServerError, App};
+
+    use super::*;
     use crate::{
         api::load_api,
         availability::{
@@ -256,17 +268,6 @@ mod test {
         types::HeightIndexed,
         ApiState,
     };
-    use committable::Committable;
-    use futures::{
-        future::{join, FutureExt},
-        stream::StreamExt,
-    };
-    use generic_array::GenericArray;
-    use hotshot_example_types::node_types::TestVersions;
-    use portpicker::pick_unused_port;
-    use rand::RngCore;
-    use std::{future::IntoFuture, time::Duration};
-    use tide_disco::{error::ServerError, App};
 
     type Provider = TestProvider<QueryServiceProvider<MockBase>>;
 
@@ -1238,7 +1239,7 @@ mod test {
                     .as_ref()
                     .fail_begins_writable(FailableAction::Any)
                     .await
-            }
+            },
             FailureType::Write => data_source.as_ref().fail_writes(FailableAction::Any).await,
             FailureType::Commit => data_source.as_ref().fail_commits(FailableAction::Any).await,
         }
@@ -1341,19 +1342,19 @@ mod test {
                     .as_ref()
                     .fail_one_begin_writable(FailableAction::Any)
                     .await
-            }
+            },
             FailureType::Write => {
                 data_source
                     .as_ref()
                     .fail_one_write(FailableAction::Any)
                     .await
-            }
+            },
             FailureType::Commit => {
                 data_source
                     .as_ref()
                     .fail_one_commit(FailableAction::Any)
                     .await
-            }
+            },
         }
         assert_eq!(leaves[0], data_source.get_leaf(1).await.await);
 
@@ -1919,7 +1920,7 @@ mod test {
                 for (leaf, payload) in leaves.iter().zip(payloads) {
                     assert_eq!(payload.block_hash, leaf.block_hash());
                 }
-            }
+            },
             MetadataType::Vid => {
                 let vids = data_source.subscribe_vid_common_metadata(1).await.take(3);
 
@@ -1932,7 +1933,7 @@ mod test {
                 for (leaf, vid) in leaves.iter().zip(vids) {
                     assert_eq!(vid.block_hash, leaf.block_hash());
                 }
-            }
+            },
         }
     }
 

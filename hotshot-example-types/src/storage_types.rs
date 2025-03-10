@@ -19,6 +19,7 @@ use hotshot_types::{
         DaProposal, DaProposal2, Leaf, Leaf2, QuorumProposal, QuorumProposal2,
         QuorumProposalWrapper, VidCommitment,
     },
+    drb::DrbResult,
     event::HotShotAction,
     message::{convert_proposal, Proposal},
     simple_certificate::{NextEpochQuorumCertificate2, QuorumCertificate2, UpgradeCertificate},
@@ -56,6 +57,8 @@ pub struct TestStorageState<TYPES: NodeType> {
         Option<hotshot_types::simple_certificate::NextEpochQuorumCertificate2<TYPES>>,
     action: TYPES::View,
     epoch: Option<TYPES::Epoch>,
+    drb_results: BTreeMap<TYPES::Epoch, DrbResult>,
+    epoch_roots: BTreeMap<TYPES::Epoch, TYPES::BlockHeader>,
 }
 
 impl<TYPES: NodeType> Default for TestStorageState<TYPES> {
@@ -73,6 +76,8 @@ impl<TYPES: NodeType> Default for TestStorageState<TYPES> {
             high_qc2: None,
             action: TYPES::View::genesis(),
             epoch: None,
+            drb_results: BTreeMap::new(),
+            epoch_roots: BTreeMap::new(),
         }
     }
 }
@@ -370,6 +375,26 @@ impl<TYPES: NodeType> Storage<TYPES> for TestStorage<TYPES> {
                 .proposals2
                 .insert(*view, convert_proposal(proposal.clone()));
         }
+
+        Ok(())
+    }
+
+    async fn add_drb_result(&self, epoch: TYPES::Epoch, drb_result: DrbResult) -> Result<()> {
+        let mut inner = self.inner.write().await;
+
+        inner.drb_results.insert(epoch, drb_result);
+
+        Ok(())
+    }
+
+    async fn add_epoch_root(
+        &self,
+        epoch: TYPES::Epoch,
+        block_header: TYPES::BlockHeader,
+    ) -> Result<()> {
+        let mut inner = self.inner.write().await;
+
+        inner.epoch_roots.insert(epoch, block_header);
 
         Ok(())
     }

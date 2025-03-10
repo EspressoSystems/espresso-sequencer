@@ -1,4 +1,6 @@
-use anyhow::Context;
+use std::{collections::BTreeMap, path::PathBuf, str::FromStr, sync::Arc, time::Duration};
+
+use anyhow::{bail, Context};
 use async_trait::async_trait;
 use clap::Parser;
 use committable::Committable;
@@ -10,6 +12,7 @@ use espresso_types::{
     BackoffParams, BlockMerkleTree, FeeMerkleTree, Leaf, Leaf2, NetworkConfig, Payload,
 };
 use futures::stream::StreamExt;
+use hotshot::InitializerEpochInfo;
 use hotshot_query_service::{
     availability::LeafQueryData,
     data_source::{
@@ -36,6 +39,7 @@ use hotshot_types::{
         DaProposal, DaProposal2, EpochNumber, QuorumProposal, QuorumProposalWrapper, VidCommitment,
         VidDisperseShare,
     },
+    drb::DrbResult,
     event::{Event, EventType, HotShotAction, LeafInfo},
     message::{convert_proposal, Proposal},
     simple_certificate::{
@@ -49,11 +53,9 @@ use hotshot_types::{
     vote::HasViewNumber,
 };
 use itertools::Itertools;
-use sqlx::Row;
-use sqlx::{query, Executor};
-use std::{collections::BTreeMap, path::PathBuf, str::FromStr, sync::Arc, time::Duration};
+use sqlx::{query, Executor, Row};
 
-use crate::{catchup::SqlStateCatchup, SeqTypes, ViewNumber};
+use crate::{catchup::SqlStateCatchup, NodeType, SeqTypes, ViewNumber};
 
 /// Options for Postgres-backed persistence.
 #[derive(Parser, Clone, Derivative)]
@@ -661,7 +663,7 @@ impl Persistence {
                         // we do have.
                         tracing::warn!("error loading row: {err:#}");
                         break;
-                    }
+                    },
                 };
 
                 let leaf_data: Vec<u8> = row.get("leaf");
@@ -1873,6 +1875,81 @@ impl SequencerPersistence for Persistence {
         .await?;
         tx.commit().await
     }
+
+    async fn add_drb_result(
+        &self,
+        epoch: EpochNumber,
+        drb_result: DrbResult,
+    ) -> anyhow::Result<()> {
+        let drb_result_vec = Vec::from(drb_result);
+        let mut tx = self.db.write().await?;
+        tx.upsert(
+            "epoch_drb_and_root",
+            ["epoch", "drb_result"],
+            ["epoch"],
+            [(epoch.u64() as i64, drb_result_vec)],
+        )
+        .await?;
+        tx.commit().await
+    }
+
+    async fn add_epoch_root(
+        &self,
+        epoch: EpochNumber,
+        block_header: <SeqTypes as NodeType>::BlockHeader,
+    ) -> anyhow::Result<()> {
+        let block_header_bytes =
+            bincode::serialize(&block_header).context("serializing block header")?;
+
+        let mut tx = self.db.write().await?;
+        tx.upsert(
+            "epoch_drb_and_root",
+            ["epoch", "block_header"],
+            ["epoch"],
+            [(epoch.u64() as i64, block_header_bytes)],
+        )
+        .await?;
+        tx.commit().await
+    }
+
+    async fn load_start_epoch_info(&self) -> anyhow::Result<Vec<InitializerEpochInfo<SeqTypes>>> {
+        let rows = self
+            .db
+            .read()
+            .await?
+            .fetch_all("SELECT * from epoch_drb_and_root ORDER BY epoch ASC")
+            .await?;
+
+        rows.into_iter()
+            .map(|row| {
+                let epoch: i64 = row.get("epoch");
+                let drb_result: Option<Vec<u8>> = row.get("drb_result");
+                let block_header: Option<Vec<u8>> = row.get("block_header");
+                if let Some(drb_result) = drb_result {
+                    let drb_result_array = drb_result
+                        .try_into()
+                        .or_else(|_| bail!("invalid drb result"))?;
+                    let block_header: Option<<SeqTypes as NodeType>::BlockHeader> = block_header
+                        .map(|data| bincode::deserialize(&data))
+                        .transpose()?;
+                    Ok(Some(InitializerEpochInfo::<SeqTypes> {
+                        epoch: <SeqTypes as NodeType>::Epoch::new(epoch as u64),
+                        drb_result: drb_result_array,
+                        block_header,
+                    }))
+                } else {
+                    // Right now we skip the epoch_drb_and_root row if there is no drb result.
+                    // This seems reasonable based on the expected order of events, but please double check!
+                    Ok(None)
+                }
+            })
+            .filter_map(|e| match e {
+                Err(v) => Some(Err(v)),
+                Ok(Some(v)) => Some(Ok(v)),
+                Ok(None) => None,
+            })
+            .collect()
+    }
 }
 
 #[async_trait]
@@ -1884,7 +1961,7 @@ impl Provider<SeqTypes, VidCommonRequest> for Persistence {
             Err(err) => {
                 tracing::warn!("could not open transaction: {err:#}");
                 return None;
-            }
+            },
         };
 
         let bytes = match query_as::<(Vec<u8>,)>(
@@ -1899,7 +1976,7 @@ impl Provider<SeqTypes, VidCommonRequest> for Persistence {
             Err(err) => {
                 tracing::error!("error loading VID share: {err:#}");
                 return None;
-            }
+            },
         };
 
         let share: Proposal<SeqTypes, VidDisperseShare<SeqTypes>> =
@@ -1908,7 +1985,7 @@ impl Provider<SeqTypes, VidCommonRequest> for Persistence {
                 Err(err) => {
                     tracing::warn!("error decoding VID share: {err:#}");
                     return None;
-                }
+                },
             };
 
         match share.data {
@@ -1927,7 +2004,7 @@ impl Provider<SeqTypes, PayloadRequest> for Persistence {
             Err(err) => {
                 tracing::warn!("could not open transaction: {err:#}");
                 return None;
-            }
+            },
         };
 
         let bytes = match query_as::<(Vec<u8>,)>(
@@ -1942,7 +2019,7 @@ impl Provider<SeqTypes, PayloadRequest> for Persistence {
             Err(err) => {
                 tracing::warn!("error loading DA proposal: {err:#}");
                 return None;
-            }
+            },
         };
 
         let proposal: Proposal<SeqTypes, DaProposal2<SeqTypes>> = match bincode::deserialize(&bytes)
@@ -1951,7 +2028,7 @@ impl Provider<SeqTypes, PayloadRequest> for Persistence {
             Err(err) => {
                 tracing::error!("error decoding DA proposal: {err:#}");
                 return None;
-            }
+            },
         };
 
         Some(Payload::from_bytes(
@@ -1970,7 +2047,7 @@ impl Provider<SeqTypes, LeafRequest<SeqTypes>> for Persistence {
             Err(err) => {
                 tracing::warn!("could not open transaction: {err:#}");
                 return None;
-            }
+            },
         };
 
         let (leaf, qc) = match fetch_leaf_from_proposals(&mut tx, req).await {
@@ -1978,7 +2055,7 @@ impl Provider<SeqTypes, LeafRequest<SeqTypes>> for Persistence {
             Err(err) => {
                 tracing::info!("requested leaf not found in undecided proposals: {err:#}");
                 return None;
-            }
+            },
         };
 
         match LeafQueryData::new(leaf, qc) {
@@ -1986,7 +2063,7 @@ impl Provider<SeqTypes, LeafRequest<SeqTypes>> for Persistence {
             Err(err) => {
                 tracing::warn!("fetched invalid leaf: {err:#}");
                 None
-            }
+            },
         }
     }
 }
@@ -2078,8 +2155,6 @@ mod generic_tests {
 #[cfg(test)]
 mod test {
 
-    use super::*;
-    use crate::{persistence::testing::TestablePersistence, BLSPubKey, PubKey};
     use committable::{Commitment, CommitmentBoundsArkless};
     use espresso_types::{traits::NullEventConsumer, Header, Leaf, NodeState, ValidatedState};
     use futures::stream::TryStreamExt;
@@ -2104,6 +2179,9 @@ mod test {
     use jf_vid::VidScheme;
     use sequencer_utils::test_utils::setup_test;
     use vbs::version::StaticVersionType;
+
+    use super::*;
+    use crate::{persistence::testing::TestablePersistence, BLSPubKey, PubKey};
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_quorum_proposals_leaf_hash_migration() {
