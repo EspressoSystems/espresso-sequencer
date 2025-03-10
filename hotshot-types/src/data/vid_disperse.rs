@@ -287,19 +287,27 @@ pub fn approximate_weights<TYPES: NodeType>(
         acc + entry.stake_table_entry.stake()
     });
 
-    stake_table
-        .iter()
-        .map(|entry| {
-            let weight: U256 = ((entry.stake_table_entry.stake()
-                * U256::from(VID_TARGET_TOTAL_STAKE))
-                / total_stake)
-                + 1;
+    // don't attempt to scale if the total stake is small enough
+    if total_stake <= U256::from(VID_TARGET_TOTAL_STAKE) {
+        stake_table
+            .iter()
+            .map(|entry| entry.stake_table_entry.stake().as_u32())
+            .collect()
+    } else {
+        stake_table
+            .iter()
+            .map(|entry| {
+                let weight: U256 = ((entry.stake_table_entry.stake()
+                    * U256::from(VID_TARGET_TOTAL_STAKE))
+                    / total_stake)
+                    + 1;
 
-            // Note: this panics if `weight` exceeds `u32::MAX`, but this shouldn't happen
-            // and would likely cause a stack overflow in the VID calculation anyway
-            weight.as_u32()
-        })
-        .collect()
+                // Note: this panics if `weight` exceeds `u32::MAX`, but this shouldn't happen
+                // and would likely cause a stack overflow in the VID calculation anyway
+                weight.as_u32()
+            })
+            .collect()
+    }
 }
 
 impl<TYPES: NodeType> AvidMDisperse<TYPES> {
