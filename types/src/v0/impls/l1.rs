@@ -24,13 +24,7 @@ use async_trait::async_trait;
 use clap::Parser;
 use committable::{Commitment, Committable, RawCommitmentBuilder};
 use contract_bindings_alloy::{
-    feecontract::FeeContract::FeeContractInstance,
-    permissionedstaketable::PermissionedStakeTable::{
-        PermissionedStakeTableInstance, StakersUpdated,
-    },
-    staketable::StakeTable::{
-        Delegated, StakeTableInstance, Undelegated, ValidatorExit, ValidatorRegistered,
-    },
+    feecontract::FeeContract::FeeContractInstance, staketable::StakeTable::StakeTableInstance,
 };
 use ethers_conv::ToEthers;
 use futures::{
@@ -42,15 +36,6 @@ use hotshot_types::traits::metrics::Metrics;
 use indexmap::IndexMap;
 use lru::LruCache;
 use parking_lot::RwLock;
-use std::{
-    cmp::{min, Ordering},
-    collections::BTreeMap,
-    num::NonZeroUsize,
-    pin::Pin,
-    sync::Arc,
-    time::Instant,
-};
-use std::{collections::BTreeSet, result::Result as StdResult};
 use tokio::{
     spawn,
     sync::{Mutex, MutexGuard, Notify},

@@ -2,15 +2,14 @@ use crate::v0::{
     traits::StateCatchup, v0_99::ChainConfig, GenesisHeader, L1BlockInfo, L1Client, PubKey,
     Timestamp, Upgrade, UpgradeMode,
 };
+use async_lock::RwLock;
 use hotshot_types::traits::states::InstanceState;
 use hotshot_types::HotShotConfig;
-use parking_lot::RwLock;
 use std::{collections::BTreeMap, sync::Arc};
 
-use hotshot_types::{traits::states::InstanceState, HotShotConfig};
-use vbs::version::Version;
 #[cfg(any(test, feature = "testing"))]
-use vbs::version::{StaticVersion, StaticVersionType};
+use vbs::version::StaticVersionType;
+use vbs::version::Version;
 
 use super::{state::ValidatedState, EpochCommittees};
 
@@ -55,6 +54,7 @@ impl NodeState {
         l1_client: L1Client,
         catchup: impl StateCatchup + 'static,
         current_version: Version,
+        membership: Arc<RwLock<EpochCommittees>>,
     ) -> Self {
         Self {
             node_id,
@@ -70,48 +70,84 @@ impl NodeState {
             upgrades: Default::default(),
             current_version,
             epoch_height: None,
+            membership,
         }
     }
 
     #[cfg(any(test, feature = "testing"))]
     pub fn mock() -> Self {
+        use ethers_conv::ToAlloy;
         use vbs::version::StaticVersion;
 
+        let chain_config = ChainConfig::default();
+        let l1 = L1Client::new(vec!["http://localhost:3331".parse().unwrap()])
+            .expect("Failed to create L1 client");
+
+        let membership = Arc::new(RwLock::new(EpochCommittees::new_stake(
+            vec![],
+            vec![],
+            l1.clone(),
+            chain_config.stake_table_contract.map(|a| a.to_alloy()),
+            Arc::new(mock::MockStateCatchup::default()),
+        )));
         Self::new(
             0,
-            ChainConfig::default(),
-            L1Client::new(vec!["http://localhost:3331".parse().unwrap()])
-                .expect("Failed to create L1 client"),
-            mock::MockStateCatchup::default(),
+            chain_config,
+            l1,
+            Arc::new(mock::MockStateCatchup::default()),
             StaticVersion::<0, 1>::version(),
+            membership,
         )
     }
 
     #[cfg(any(test, feature = "testing"))]
     pub fn mock_v2() -> Self {
+        use ethers_conv::ToAlloy;
         use vbs::version::StaticVersion;
 
+        let chain_config = ChainConfig::default();
+        let l1 = L1Client::new(vec!["http://localhost:3331".parse().unwrap()])
+            .expect("Failed to create L1 client");
+
+        let membership = Arc::new(RwLock::new(EpochCommittees::new_stake(
+            vec![],
+            vec![],
+            l1.clone(),
+            chain_config.stake_table_contract.map(|a| a.to_alloy()),
+            Arc::new(mock::MockStateCatchup::default()),
+        )));
         Self::new(
             0,
-            ChainConfig::default(),
-            L1Client::new(vec!["http://localhost:3331".parse().unwrap()])
-                .expect("Failed to create L1 client"),
-            mock::MockStateCatchup::default(),
+            chain_config,
+            l1,
+            Arc::new(mock::MockStateCatchup::default()),
             StaticVersion::<0, 2>::version(),
+            membership,
         )
     }
 
     #[cfg(any(test, feature = "testing"))]
     pub fn mock_v99() -> Self {
+        use ethers_conv::ToAlloy;
         use vbs::version::StaticVersion;
+        let chain_config = ChainConfig::default();
+        let l1 = L1Client::new(vec!["http://localhost:3331".parse().unwrap()])
+            .expect("Failed to create L1 client");
 
+        let membership = Arc::new(RwLock::new(EpochCommittees::new_stake(
+            vec![],
+            vec![],
+            l1.clone(),
+            chain_config.stake_table_contract.map(|a| a.to_alloy()),
+            Arc::new(mock::MockStateCatchup::default()),
+        )));
         Self::new(
             0,
-            ChainConfig::default(),
-            L1Client::new(vec!["http://localhost:3331".parse().unwrap()])
-                .expect("Failed to create L1 client"),
-            mock::MockStateCatchup::default(),
+            chain_config,
+            l1,
+            Arc::new(mock::MockStateCatchup::default()),
             StaticVersion::<0, 99>::version(),
+            membership,
         )
     }
 
@@ -153,13 +189,26 @@ impl NodeState {
 #[cfg(any(test, feature = "testing"))]
 impl Default for NodeState {
     fn default() -> Self {
+        use ethers_conv::ToAlloy;
+        use vbs::version::StaticVersion;
+        let chain_config = ChainConfig::default();
+        let l1 = L1Client::new(vec!["http://localhost:3331".parse().unwrap()])
+            .expect("Failed to create L1 client");
+
+        let membership = Arc::new(RwLock::new(EpochCommittees::new_stake(
+            vec![],
+            vec![],
+            l1.clone(),
+            chain_config.stake_table_contract.map(|a| a.to_alloy()),
+            Arc::new(mock::MockStateCatchup::default()),
+        )));
         Self::new(
             1u64,
-            ChainConfig::default(),
-            L1Client::new(vec!["http://localhost:3331".parse().unwrap()])
-                .expect("Failed to create L1 client"),
-            mock::MockStateCatchup::default(),
+            chain_config,
+            l1,
+            Arc::new(mock::MockStateCatchup::default()),
             StaticVersion::<0, 1>::version(),
+            membership,
         )
     }
 }

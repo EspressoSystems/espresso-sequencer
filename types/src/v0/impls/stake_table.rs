@@ -37,8 +37,7 @@ use itertools::Itertools;
 use thiserror::Error;
 
 use super::{
-    v0_3::{DAMembers, Delegator, StakeTable, StakerConfig},
-    Header, L1Client, NodeState, PubKey, SeqTypes,
+    traits::StateCatchup, v0_3::{DAMembers, Delegator, StakeTable, StakerConfig}, Header, L1Client, Leaf2, NodeState, PubKey, SeqTypes
 };
 
 type Epoch = <SeqTypes as NodeType>::Epoch;
@@ -350,7 +349,9 @@ impl EpochCommittees {
         // https://github.com/EspressoSystems/HotShot/commit/fcb7d54a4443e29d643b3bbc53761856aef4de8b
         committee_members: Vec<PeerConfig<PubKey>>,
         da_members: Vec<PeerConfig<PubKey>>,
-        instance_state: &NodeState,
+        l1_client: L1Client,
+        contract_address: Option<Address>,
+        peers: Arc<dyn StateCatchup>,
     ) -> Self {
         // For each eligible leader, get the stake table entry
         let eligible_leaders: Vec<_> = committee_members
@@ -420,13 +421,10 @@ impl EpochCommittees {
         Self {
             non_epoch_committee: members,
             state: map,
-            l1_client: instance_state.l1_client.clone(),
-            contract_address: instance_state
-                .chain_config
-                .stake_table_contract
-                .map(|a| a.to_alloy()),
+            l1_client,
+            contract_address,
             randomized_committees: BTreeMap::new(),
-            peers: Some(instance_state.peers.clone()),
+            peers: Some(peers),
             initial_drb_result: None,
         }
     }
