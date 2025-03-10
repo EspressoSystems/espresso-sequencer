@@ -1673,19 +1673,19 @@ mod api_tests {
 
 #[cfg(test)]
 mod test {
-    use committable::{Commitment, Committable};
     use std::{
         collections::{BTreeMap, HashSet},
         time::Duration,
     };
-    use tokio::time::sleep;
 
+    use committable::{Commitment, Committable};
     use espresso_types::{
         config::PublicHotShotConfig,
         traits::NullEventConsumer,
         v0_1::{UpgradeMode, ViewBasedUpgrade},
-        BackoffParams, FeeAccount, FeeAmount, Header, MarketplaceVersion, MockSequencerVersions,
-        SequencerVersions, TimeBasedUpgrade, Timestamp, Upgrade, UpgradeType, ValidatedState,
+        BackoffParams, EpochVersion, FeeAccount, FeeAmount, Header, MarketplaceVersion,
+        MockSequencerVersions, SequencerVersions, TimeBasedUpgrade, Timestamp, Upgrade,
+        UpgradeType, ValidatedState,
     };
     use ethers::utils::Anvil;
     use futures::{
@@ -1712,7 +1712,7 @@ mod test {
     };
     use tide_disco::{app::AppHealth, error::ServerError, healthcheck::HealthStatus};
     use time::OffsetDateTime;
-
+    use tokio::time::sleep;
     use vbs::version::{StaticVersion, StaticVersionType, Version};
 
     use self::{
@@ -1725,7 +1725,6 @@ mod test {
         persistence::no_storage,
         testing::{TestConfig, TestConfigBuilder},
     };
-    use espresso_types::EpochVersion;
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_healthcheck() {

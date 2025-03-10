@@ -1,21 +1,21 @@
+use std::{fmt, str::FromStr, time::Duration};
+
 use anyhow::{anyhow, Context, Result};
 use client::SequencerClient;
+use dotenvy::var;
 use espresso_types::{FeeAmount, FeeVersion, MarketplaceVersion};
 use ethers::prelude::*;
-use futures::future::{join_all, BoxFuture};
-use futures::FutureExt;
-use hotshot_types::network::PeerConfigKeys;
-use hotshot_types::traits::signature_key::StakeTableEntryType;
-
-use std::{fmt, str::FromStr, time::Duration};
-use surf_disco::Url;
-use tokio::time::{sleep, timeout};
-use vbs::version::StaticVersionType;
-
-use dotenvy::var;
+use futures::{
+    future::{join_all, BoxFuture},
+    FutureExt,
+};
+use hotshot_types::{network::PeerConfigKeys, traits::signature_key::StakeTableEntryType};
 use sequencer_utils::stake_table::{
     update_stake_table, PermissionedStakeTableUpdate, StakerIdentity,
 };
+use surf_disco::Url;
+use tokio::time::{sleep, timeout};
+use vbs::version::StaticVersionType;
 
 const L1_PROVIDER_RETRY_INTERVAL: Duration = Duration::from_secs(1);
 // TODO add to .env

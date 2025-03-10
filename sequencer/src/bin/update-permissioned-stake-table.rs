@@ -6,7 +6,6 @@ use client::SequencerClient;
 use espresso_types::parse_duration;
 use ethers::types::Address;
 use hotshot_types::{network::PeerConfigKeys, traits::signature_key::StakeTableEntryType};
-
 use sequencer_utils::{
     logging,
     stake_table::{update_stake_table, PermissionedStakeTableUpdate},

@@ -461,7 +461,7 @@ impl<TYPES: NodeType> Display for HotShotEvent<TYPES> {
                     "ViewChange(view_number={view_number:?}, epoch_number={epoch_number:?})"
                 )
             },
-            HotShotEvent::ViewSyncTimeout(view_number, _, _) => {
+            HotShotEvent::ViewSyncTimeout(view_number, ..) => {
                 write!(f, "ViewSyncTimeout(view_number={view_number:?})")
             },
             HotShotEvent::ViewSyncPreCommitVoteRecv(vote) => write!(
@@ -616,7 +616,7 @@ impl<TYPES: NodeType> Display for HotShotEvent<TYPES> {
                     proposal.data.view_number()
                 )
             },
-            HotShotEvent::VidRequestSend(request, _, _) => {
+            HotShotEvent::VidRequestSend(request, ..) => {
                 write!(f, "VidRequestSend(view_number={:?}", request.view)
             },
             HotShotEvent::VidRequestRecv(request, _) => {

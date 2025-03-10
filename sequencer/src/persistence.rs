@@ -43,9 +43,7 @@ mod testing {
 #[cfg(test)]
 #[espresso_macros::generic_tests]
 mod persistence_tests {
-    use sequencer_utils::test_utils::setup_test;
     use std::{collections::BTreeMap, marker::PhantomData, sync::Arc};
-    use vbs::version::StaticVersionType;
 
     use anyhow::bail;
     use async_lock::RwLock;
@@ -80,9 +78,10 @@ mod persistence_tests {
         vid::avidm::{init_avidm_param, AvidMScheme},
         vote::HasViewNumber,
     };
+    use sequencer_utils::test_utils::setup_test;
+    use vbs::version::{StaticVersionType, Version};
 
     use super::{testing::TestablePersistence, *};
-    use vbs::version::Version;
 
     #[derive(Clone, Debug, Default)]
     struct EventCollector {

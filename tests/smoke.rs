@@ -1,8 +1,10 @@
-use crate::common::{test_stake_table_update, TestConfig};
+use std::time::Instant;
+
 use anyhow::{Context, Result};
 use futures::StreamExt;
 use sequencer_utils::test_utils::setup_test;
-use std::time::Instant;
+
+use crate::common::{test_stake_table_update, TestConfig};
 
 /// We allow for no change in state across this many consecutive iterations.
 const MAX_STATE_NOT_INCREMENTING: u8 = 1;

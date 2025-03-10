@@ -1,9 +1,10 @@
-use crate::common::{test_stake_table_update, TestConfig};
 use anyhow::Result;
 use client::SequencerClient;
 use espresso_types::{EpochVersion, FeeVersion, MarketplaceVersion};
 use futures::{future::join_all, StreamExt};
 use vbs::version::{StaticVersionType, Version};
+
+use crate::common::{test_stake_table_update, TestConfig};
 
 const SEQUENCER_BLOCKS_TIMEOUT: u64 = 200;
 

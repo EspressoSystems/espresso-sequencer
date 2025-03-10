@@ -314,10 +314,8 @@ pub mod mock {
 #[cfg(test)]
 mod test {
 
-    use crate::v0::Versions;
-    use crate::{EpochVersion, FeeVersion, SequencerVersions, ViewBasedUpgrade};
-
     use super::*;
+    use crate::{v0::Versions, EpochVersion, FeeVersion, SequencerVersions, ViewBasedUpgrade};
 
     #[test]
     fn test_upgrade_chain_config_version_02() {
