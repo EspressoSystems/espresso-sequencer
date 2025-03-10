@@ -1,3 +1,12 @@
+use std::{
+    cmp::{min, Ordering},
+    num::NonZeroUsize,
+    pin::Pin,
+    result::Result as StdResult,
+    sync::Arc,
+    time::Instant,
+};
+
 use alloy::{
     eips::BlockId,
     hex,
@@ -319,7 +328,7 @@ impl Service<RequestPacket> for SwitchingTransport {
                     // If it's okay, log the success to the status
                     current_transport.status.write().log_success();
                     Ok(res)
-                }
+                },
                 Err(err) => {
                     // Increment the failure metric
                     if let Some(f) = self_clone
@@ -371,7 +380,7 @@ impl Service<RequestPacket> for SwitchingTransport {
                     }
 
                     Err(err)
-                }
+                },
             }
         })
     }
@@ -744,12 +753,12 @@ impl L1Client {
                     );
                     self.retry_delay().await;
                     continue;
-                }
+                },
                 Err(err) => {
                     tracing::warn!(number, "failed to get finalized L1 block: {err:#}");
                     self.retry_delay().await;
                     continue;
-                }
+                },
             };
             break L1BlockInfo {
                 number: block.header.number,
@@ -822,7 +831,7 @@ impl L1Client {
                         Err(err) => {
                             tracing::warn!(from, to, %err, "Fee L1Event Error");
                             sleep(retry_delay).await;
-                        }
+                        },
                     }
                 }
             }
@@ -964,7 +973,7 @@ async fn get_finalized_block(
 
 #[cfg(test)]
 mod test {
-    use std::ops::Add;
+    use std::{ops::Add, time::Duration};
 
     use ethers::{
         middleware::SignerMiddleware,
@@ -977,7 +986,6 @@ mod test {
     use hotshot_contract_adapter::stake_table::NodeInfoJf;
     use portpicker::pick_unused_port;
     use sequencer_utils::test_utils::setup_test;
-    use std::time::Duration;
     use time::OffsetDateTime;
 
     use super::*;

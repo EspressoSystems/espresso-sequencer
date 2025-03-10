@@ -109,7 +109,7 @@
             cargo-fmt = {
               enable = true;
               description = "Enforce rustfmt";
-              entry = "cargo fmt --all";
+              entry = "just fmt";
               types_or = [ "rust" "toml" ];
               pass_filenames = false;
             };
@@ -178,7 +178,7 @@
         let
           stableToolchain = pkgs.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml;
           nightlyToolchain = pkgs.rust-bin.selectLatestNightlyWith (toolchain: toolchain.minimal.override {
-            extensions = [ "rust-analyzer" ];
+            extensions = [ "rust-analyzer" "rustfmt" ];
           });
           solc = pkgs.solc-bin."0.8.23";
         in
@@ -186,7 +186,7 @@
           buildInputs = [
             # Rust dependencies
             pkg-config
-            openssl
+            openssl_3 # match ubuntu 24.04 that we use on CI and as base image in docker
             curl
             protobuf # to compile libp2p-autonat
             stableToolchain
@@ -201,6 +201,7 @@
             typos
             just
             nightlyToolchain.passthru.availableComponents.rust-analyzer
+            nightlyToolchain.passthru.availableComponents.rustfmt
 
             # Tools
             nixpkgs-fmt
@@ -272,7 +273,7 @@
           buildInputs = [
             # Rust dependencies
             pkg-config
-            openssl
+            openssl_3
             curl
             protobuf # to compile libp2p-autonat
             toolchain
@@ -286,7 +287,7 @@
           buildInputs = [
             # Rust dependencies
             pkg-config
-            openssl
+            openssl_3
             curl
             protobuf # to compile libp2p-autonat
             toolchain
@@ -309,7 +310,7 @@
           buildInputs = [
             # Rust dependencies
             pkg-config
-            openssl
+            openssl_3
             curl
             protobuf # to compile libp2p-autonat
             stableToolchain

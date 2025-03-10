@@ -2,6 +2,7 @@ use std::{
     cmp::max,
     collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     num::NonZeroU64,
+    sync::Arc,
 };
 
 use alloy::{primitives::Address, rpc::types::Log};
@@ -124,14 +125,14 @@ pub fn from_l1_events(
                         stake_table_key: staker,
                         state_ver_key,
                         stake: 0,
-                        commission: commission,
+                        commission,
                         delegators: HashMap::default(),
                     },
                 );
-            }
+            },
             StakeTableChange::Remove(staker) => {
                 validators.shift_remove(&staker.validator);
-            }
+            },
         }
     }
 
@@ -151,7 +152,7 @@ pub fn from_l1_events(
                         .delegators
                         .insert((account, validator), amount);
                 }
-            }
+            },
             DelegationChange::Remove(undelegated) => {
                 // decrease stake
 
@@ -182,14 +183,14 @@ pub fn from_l1_events(
                             .remove(&(undelegated.delegator, undelegated.validator));
                     }
                 }
-            }
+            },
         }
     }
 
     validators
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, derive_more::derive::Debug)]
 /// Type to describe DA and Stake memberships
 pub struct EpochCommittees {
     /// Committee used when we're in pre-epoch state
@@ -207,6 +208,9 @@ pub struct EpochCommittees {
     /// Randomized committees, filled when we receive the DrbResult
     randomized_committees: BTreeMap<Epoch, RandomizedCommittee<StakeTableEntry<PubKey>>>,
 
+    /// Peers for catching up the stake table
+    #[debug(skip)]
+    peers: Option<Arc<dyn StateCatchup>>,
     /// Contains the epoch after which initial_drb_result will not be used (set_first_epoch.epoch + 2)
     /// And the DrbResult to use before that epoch
     initial_drb_result: Option<(Epoch, DrbResult)>,
@@ -224,7 +228,7 @@ impl PartialEq for StakeTableChange {
             (StakeTableChange::Add(a), StakeTableChange::Add(b)) => a.account == b.account,
             (StakeTableChange::Remove(a), StakeTableChange::Remove(b)) => {
                 a.validator == b.validator
-            }
+            },
             _ => false,
         }
     }
@@ -241,10 +245,10 @@ impl PartialEq for DelegationChange {
         match (self, other) {
             (DelegationChange::Add(a), DelegationChange::Add(b)) => {
                 a.validator == b.validator && a.amount == b.amount && a.delegator == b.delegator
-            }
+            },
             (DelegationChange::Remove(a), DelegationChange::Remove(b)) => {
                 a.delegator == b.delegator && a.validator == b.validator && a.amount == b.amount
-            }
+            },
             _ => false,
         }
     }
@@ -422,6 +426,7 @@ impl EpochCommittees {
                 .stake_table_contract
                 .map(|a| a.to_alloy()),
             randomized_committees: BTreeMap::new(),
+            peers: Some(instance_state.peers.clone()),
             initial_drb_result: None,
         }
     }
@@ -450,7 +455,7 @@ impl EpochCommittees {
 #[error("Could not lookup leader")] // TODO error variants? message?
 pub struct LeaderLookupError;
 
-#[async_trait]
+// #[async_trait]
 impl Membership<SeqTypes> for EpochCommittees {
     type Error = LeaderLookupError;
     // DO NOT USE. Dummy constructor to comply w/ trait.
@@ -618,6 +623,7 @@ impl Membership<SeqTypes> for EpochCommittees {
         .unwrap()
     }
 
+    #[allow(refining_impl_trait)]
     async fn add_epoch_root(
         &self,
         epoch: Epoch,
@@ -633,6 +639,37 @@ impl Membership<SeqTypes> for EpochCommittees {
                     let _ = committee.update_stake_table(epoch, stake_table);
                 })
             })
+    }
+
+    fn has_epoch(&self, epoch: Epoch) -> bool {
+        self.state.contains_key(&epoch)
+    }
+
+    async fn get_epoch_root_and_drb(
+        &self,
+        block_height: u64,
+        epoch_height: u64,
+        epoch: Epoch,
+    ) -> anyhow::Result<(Header, DrbResult)> {
+        let Some(ref peers) = self.peers else {
+            anyhow::bail!("No Peers Configured for Catchup");
+        };
+        // Fetch leaves from peers
+        let leaf: Leaf2 = peers
+            .fetch_leaf(block_height, self, epoch, epoch_height)
+            .await?;
+        //DRB height is decided in the next epoch's last block
+        let drb_height = block_height + epoch_height + 3;
+        let drb_leaf = peers
+            .fetch_leaf(drb_height, self, epoch, epoch_height)
+            .await?;
+
+        Ok((
+            leaf.block_header().clone(),
+            drb_leaf
+                .next_drb_result
+                .context(format!("No DRB result on decided leaf at {drb_height}"))?,
+        ))
     }
 
     fn add_drb_result(&mut self, epoch: Epoch, drb: DrbResult) {

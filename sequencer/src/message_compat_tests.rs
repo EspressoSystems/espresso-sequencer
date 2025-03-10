@@ -48,6 +48,7 @@ async fn test_message_compat<Ver: StaticVersionType>(_ver: Ver) {
     use hotshot_example_types::node_types::TestVersions;
     use hotshot_types::{
         data::vid_disperse::{ADVZDisperse, ADVZDisperseShare},
+        epoch_membership::EpochMembershipCoordinator,
         simple_certificate::{
             TimeoutCertificate, ViewSyncCommitCertificate, ViewSyncFinalizeCertificate,
             ViewSyncPreCommitCertificate,

@@ -38,14 +38,17 @@ contract StakeTable is AbstractStakeTable, Ownable, InitializedAt {
     // Error raised when the staker does not have the sufficient stake balance to withdraw
     error NothingToWithdraw();
 
-    // Error raised when the staker provides a zero BlsVK
-    error InvalidBlsVK();
-
     // Error raised when the staker provides a zero SchnorrVK
     error InvalidSchnorrVK();
 
+    /// The BLS key has been previously registered in the contract
+    error BlsKeyAlreadyUsed();
+
     /// The commission is invalid
     error InvalidCommission();
+
+    /// Error raised when the light client address is invalid
+    error InvalidAddress();
 
     struct Validator {
         bool isRegistered;
@@ -63,8 +66,17 @@ contract StakeTable is AbstractStakeTable, Ownable, InitializedAt {
         Exited
     }
 
+    /// Reference to the light client contract.
+    LightClient public lightClient;
+
     /// Currently active validators
     mapping(address validator => Validator) public validators;
+
+    /// BLS keys that have been seen by the contract
+    ///
+    /// @dev to simplify the reasoning about what keys and prevent some errors due to
+    /// misconfiguration of validators we mark keys as used and only allow them to be used once.
+    mapping(bytes32 blsKeyHash => bool) public blsKeys;
 
     /// Validators that have exited
     mapping(address validator => uint256 unlocksAt) public validatorExits;
@@ -90,11 +102,16 @@ contract StakeTable is AbstractStakeTable, Ownable, InitializedAt {
     address public admin;
 
     /// TODO change constructor to initialize function when we make the contract upgradeable
-    constructor(address _tokenAddress, uint256 _exitEscrowPeriod, address _initialOwner)
-        Ownable(_initialOwner)
-        InitializedAt()
-    {
+    constructor(
+        address _tokenAddress,
+        address _lightClientAddress,
+        uint256 _exitEscrowPeriod,
+        address _initialOwner
+    ) Ownable(_initialOwner) InitializedAt() {
+        // TODO ensure address not zero
         tokenAddress = _tokenAddress;
+        // TODO ensure address not zero
+        lightClient = LightClient(_lightClientAddress);
         exitEscrowPeriod = _exitEscrowPeriod;
         admin = msg.sender;
     }
@@ -104,21 +121,6 @@ contract StakeTable is AbstractStakeTable, Ownable, InitializedAt {
     /// @return keccak256(blsVK)
     function _hashBlsKey(BN254.G2Point memory blsVK) public pure returns (bytes32) {
         return keccak256(abi.encode(blsVK.x0, blsVK.x1, blsVK.y0, blsVK.y1));
-    }
-
-    /// @dev Compares two BLS keys for equality
-    /// @param a First BLS key
-    /// @param b Second BLS key
-    /// @return True if the keys are equal, false otherwise
-    function _isEqualBlsKey(BN254.G2Point memory a, BN254.G2Point memory b)
-        public
-        pure
-        returns (bool)
-    {
-        return BN254.BaseField.unwrap(a.x0) == BN254.BaseField.unwrap(b.x0)
-            && BN254.BaseField.unwrap(a.x1) == BN254.BaseField.unwrap(b.x1)
-            && BN254.BaseField.unwrap(a.y0) == BN254.BaseField.unwrap(b.y0)
-            && BN254.BaseField.unwrap(a.y1) == BN254.BaseField.unwrap(b.y1);
     }
 
     function ensureValidatorRegistered(address validator) internal view {
@@ -139,21 +141,15 @@ contract StakeTable is AbstractStakeTable, Ownable, InitializedAt {
         }
     }
 
-    function ensureNonZeroConsensusKeys(
-        BN254.G2Point memory blsVK,
-        EdOnBN254.EdOnBN254Point memory schnorrVK
-    ) internal pure {
-        BN254.G2Point memory zeroBlsKey = BN254.G2Point(
-            BN254.BaseField.wrap(0),
-            BN254.BaseField.wrap(0),
-            BN254.BaseField.wrap(0),
-            BN254.BaseField.wrap(0)
-        );
-
-        if (_isEqualBlsKey(blsVK, zeroBlsKey)) {
-            revert InvalidBlsVK();
+    function ensureNewKey(BN254.G2Point memory blsVK) internal view {
+        if (blsKeys[_hashBlsKey(blsVK)]) {
+            revert BlsKeyAlreadyUsed();
         }
+    }
 
+    // @dev We don't check the validity of the schnorr verifying key but providing a zero key is
+    // definitely a mistake by the caller, therefore we revert.
+    function ensureNonZeroSchnorrKey(EdOnBN254.EdOnBN254Point memory schnorrVK) internal pure {
         EdOnBN254.EdOnBN254Point memory zeroSchnorrKey = EdOnBN254.EdOnBN254Point(0, 0);
 
         if (schnorrVK.isEqual(zeroSchnorrKey)) {
@@ -181,10 +177,11 @@ contract StakeTable is AbstractStakeTable, Ownable, InitializedAt {
         uint16 commission
     ) external virtual override {
         ensureValidatorNotRegistered(msg.sender);
-        ensureNonZeroConsensusKeys(blsVK, schnorrVK);
+        ensureNonZeroSchnorrKey(schnorrVK);
+        ensureNewKey(blsVK);
 
-        // Verify that the validator can sign for that blsVK.
-        // This prevents rogue public-key attacks.
+        // Verify that the validator can sign for that blsVK. This prevents rogue public-key
+        // attacks.
         bytes memory message = abi.encode(msg.sender);
         BLSSig.verifyBlsSig(message, blsSig, blsVK);
 
@@ -193,6 +190,7 @@ contract StakeTable is AbstractStakeTable, Ownable, InitializedAt {
             revert InvalidCommission();
         }
 
+        blsKeys[_hashBlsKey(blsVK)] = true;
         validators[msg.sender] =
             Validator({ isRegistered: true, status: ValidatorStatus.Active, delegatedAmount: 0 });
 
@@ -212,6 +210,7 @@ contract StakeTable is AbstractStakeTable, Ownable, InitializedAt {
         }
 
         validators[validator].delegatedAmount += amount;
+        delegations[validator][msg.sender] += amount;
 
         SafeTransferLib.safeTransferFrom(ERC20(tokenAddress), msg.sender, address(this), amount);
 
@@ -228,7 +227,7 @@ contract StakeTable is AbstractStakeTable, Ownable, InitializedAt {
 
         uint256 balance = delegations[validator][msg.sender];
         if (balance < amount) {
-            revert InsufficientBalance(amount);
+            revert InsufficientBalance(balance);
         }
 
         delegations[validator][msg.sender] -= amount;
@@ -293,14 +292,21 @@ contract StakeTable is AbstractStakeTable, Ownable, InitializedAt {
 
     /// @notice Update the consensus keys for a validator
     /// @dev This function is used to update the consensus keys for a validator
-    /// @dev This function can only be called by the validator itself when it's not in the exit
-    /// queue
+    /// @dev This function can only be called by the validator itself when it hasn't exited
+    ///      TODO: MA: is this a good idea? Why should key rotation be blocked for an exiting
+    ///      validator?
     /// @dev The validator will need to give up either its old BLS key and/or old Schnorr key
     /// @dev The validator will need to provide a BLS signature to prove that the account owns the
     /// new BLS key
     /// @param newBlsVK The new BLS verification key
     /// @param newSchnorrVK The new Schnorr verification key
     /// @param newBlsSig The BLS signature that the account owns the new BLS key
+    ///
+    /// TODO: MA: I think this function should be reworked. Is it fine to always force updating both
+    /// keys? If not we should probably rather have two functions for updating the keys. But this
+    /// would also mean two separate events, or storing the keys in the contract only for this
+    /// update function to remit the old keys, or throw errors if the keys are not changed. None of
+    /// that seems useful enough to warrant the extra complexity in the contract and GCL.
     function updateConsensusKeys(
         BN254.G2Point memory newBlsVK,
         EdOnBN254.EdOnBN254Point memory newSchnorrVK,
@@ -308,12 +314,15 @@ contract StakeTable is AbstractStakeTable, Ownable, InitializedAt {
     ) external virtual override {
         ensureValidatorRegistered(msg.sender);
         ensureValidatorNotExited(msg.sender);
-        ensureNonZeroConsensusKeys(newBlsVK, newSchnorrVK);
+        ensureNonZeroSchnorrKey(newSchnorrVK);
+        ensureNewKey(newBlsVK);
 
-        // Verify that the validator can sign for that newBlsVK, otherwise it
-        // inner reverts with BLSSigVerificationFailed
+        // Verify that the validator can sign for that blsVK. This prevents rogue public-key
+        // attacks.
         bytes memory message = abi.encode(msg.sender);
         BLSSig.verifyBlsSig(message, newBlsSig, newBlsVK);
+
+        blsKeys[_hashBlsKey(newBlsVK)] = true;
 
         emit ConsensusKeysUpdated(msg.sender, newBlsVK, newSchnorrVK);
     }
