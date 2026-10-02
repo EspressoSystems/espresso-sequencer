@@ -22,7 +22,7 @@ pub mod state_cert;
 pub mod state_signature;
 pub mod util;
 
-use std::{fmt::Debug, marker::PhantomData, sync::Arc, time::Duration};
+use std::{fmt::Debug, marker::PhantomData, path::PathBuf, sync::Arc, time::Duration};
 
 use alloy::primitives::U256;
 use anyhow::Context;
@@ -183,6 +183,7 @@ pub async fn init_node<P>(
     identity: Identity,
     proposal_fetcher_config: ProposalFetcherConfig,
     empty_block_delay: Duration,
+    leader_trace_dir: Option<PathBuf>,
 ) -> anyhow::Result<SequencerContext<P>>
 where
     P: SequencerPersistence + MembershipPersistence,
@@ -469,6 +470,7 @@ where
         network_params.bootstrap_epoch_catchup_timeout,
         empty_block_delay,
         block_sizes,
+        leader_trace_dir,
     )
     .await?;
 
@@ -1655,6 +1657,7 @@ pub mod testing {
                 Duration::from_secs(2),
                 Duration::from_millis(500),
                 BTreeMap::from([(upgrade.base, max_block_size)]),
+                None,
             )
             .await
             .unwrap()
