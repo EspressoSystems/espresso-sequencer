@@ -232,6 +232,10 @@ where
             .load_high_qc2()
             .await
             .context("loading persisted locked QC")?;
+        let anchor_cert2 = persistence
+            .load_cert2(initializer_for_coordinator.anchor_leaf().view_number())
+            .await
+            .context("loading the anchor's cert2")?;
 
         let (external_tx, external_rx) = unbounded_channel();
         let coordinator = Coordinator::maker()
@@ -249,7 +253,14 @@ where
             .metrics(metrics)
             .consensus_metrics(consensus_metrics)
             .maybe_locked_qc(locked_qc)
-            .external_tx(external_tx)
+<<<<<<< HEAD
+            .external_tx(anchor_cert2)
+||||||| parent of 80ca7951a (restore the anchor's cert2 on restart (#5122))
+            .upgrade_config(anchor_cert2)
+=======
+            .maybe_anchor_cert2(anchor_cert2)
+>>>>>>> 80ca7951a (restore the anchor's cert2 on restart (#5122))
+            .upgrade_config(external_tx)
             .make();
 
         let legacy_event_rx = handle.event_stream_known_impl().deactivate();
