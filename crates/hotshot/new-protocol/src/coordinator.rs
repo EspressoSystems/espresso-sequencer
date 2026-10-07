@@ -687,7 +687,13 @@ where
                     .push_back(ConsensusOutput::BlockPayloadReconstructed {
                         view: out.view,
                         header: proposal.block_header.clone(),
+<<<<<<< HEAD
                         payload: out.payload,
+||||||| parent of fa9c12647 (fix(new-protocol): carry an obtained payload in the decide (#5129))
+                        payload: Arc::new(out.payload),
+=======
+                        payload: Arc::new(out.payload.clone()),
+>>>>>>> fa9c12647 (fix(new-protocol): carry an obtained payload in the decide (#5129))
                     });
             } else {
                 warn!(
@@ -698,7 +704,11 @@ where
                 );
             }
         }
-        ConsensusInput::BlockReconstructed(out.view, out.payload_commitment)
+        ConsensusInput::BlockReconstructed {
+            view: out.view,
+            payload_commitment: out.payload_commitment,
+            payload: out.payload,
+        }
     }
 
     pub fn apply_consensus(&mut self, input: ConsensusInput<T>) {
