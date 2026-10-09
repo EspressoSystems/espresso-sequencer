@@ -3595,14 +3595,17 @@ mod test {
         network_config::light_client_genesis_from_stake_table,
     };
     use espresso_types::{
-        FeeAmount, Header, L1ClientOptions, NamespaceId, NamespaceProofQueryData, NsProof,
-        RegisteredValidatorMap, RewardDistributor, StakeTableState, StateCertQueryDataV1,
-        StateCertQueryDataV2, TEST_UPGRADE, ValidatedState, ValidatorLeaderCounts,
+        BackoffParams, FeeAccountProof, FeeAmount, FeeMerkleCommitment, Header, L1ClientOptions,
+        NamespaceId, NamespaceProofQueryData, NsProof, RegisteredValidatorMap, RewardDistributor,
+        StakeTableState, StateCertQueryDataV1, StateCertQueryDataV2, TEST_UPGRADE, ValidatedState,
+        ValidatorLeaderCounts,
         config::PublicHotShotConfig,
-        mock::FailingLeafCatchup,
         traits::{NullEventConsumer, PersistenceOptions},
-        v0_3::{COMMISSION_BASIS_POINTS, Fetcher, RewardAmount},
-        v0_4::{RewardAccountV2, RewardMerkleProofV2},
+        v0_3::{
+            COMMISSION_BASIS_POINTS, Fetcher, RewardAccountProofV1, RewardAmount,
+            RewardMerkleCommitmentV1,
+        },
+        v0_4::{RewardAccountV2, RewardMerkleCommitmentV2, RewardMerkleProofV2},
         validators_from_l1_events,
     };
     use futures::{
@@ -3639,6 +3642,7 @@ mod test {
         ValidatorConfig,
         addr::NetAddr,
         data::{EpochNumber, ViewNumber},
+        epoch_membership::EpochMembershipCoordinator,
         event::LeafInfo,
         new_protocol::CoordinatorEvent,
         traits::{
@@ -5490,7 +5494,7 @@ mod test {
                 step_timeout: Duration::from_secs(30),
                 deadline: Duration::from_secs(900),
                 skip: SkipMode::Auto,
-                announce: true,
+                boot: true,
             },
             options: FollowerOptions {
                 poll_interval: Duration::from_millis(500),
@@ -6192,6 +6196,135 @@ mod test {
         tracing::info!(proposed, "restarted node proposed a decided block");
 
         Ok(())
+    }
+
+    /// Forwards to `inner`, except that it cannot serve the leaf at one height, like a peer that
+    /// fails for a single epoch root.
+    #[derive(Debug)]
+    struct FailingLeafCatchup<T> {
+        inner: T,
+        height: u64,
+    }
+
+    impl<T> FailingLeafCatchup<T> {
+        fn new(inner: T, height: u64) -> Self {
+            Self { inner, height }
+        }
+    }
+
+    #[async_trait]
+    impl<T: StateCatchup> StateCatchup for FailingLeafCatchup<T> {
+        async fn try_fetch_leaf(
+            &self,
+            retry: usize,
+            coordinator: EpochMembershipCoordinator<SeqTypes>,
+            height: u64,
+        ) -> anyhow::Result<Leaf2> {
+            anyhow::ensure!(height != self.height, "injected failure for leaf {height}");
+            self.inner.try_fetch_leaf(retry, coordinator, height).await
+        }
+
+        async fn try_fetch_accounts(
+            &self,
+            retry: usize,
+            instance: &NodeState,
+            height: u64,
+            view: ViewNumber,
+            fee_merkle_tree_root: FeeMerkleCommitment,
+            accounts: &[FeeAccount],
+        ) -> anyhow::Result<Vec<FeeAccountProof>> {
+            self.inner
+                .try_fetch_accounts(
+                    retry,
+                    instance,
+                    height,
+                    view,
+                    fee_merkle_tree_root,
+                    accounts,
+                )
+                .await
+        }
+
+        async fn try_remember_blocks_merkle_tree(
+            &self,
+            retry: usize,
+            instance: &NodeState,
+            height: u64,
+            view: ViewNumber,
+            mt: &mut BlockMerkleTree,
+        ) -> anyhow::Result<()> {
+            self.inner
+                .try_remember_blocks_merkle_tree(retry, instance, height, view, mt)
+                .await
+        }
+
+        async fn try_fetch_chain_config(
+            &self,
+            retry: usize,
+            commitment: Commitment<ChainConfig>,
+        ) -> anyhow::Result<ChainConfig> {
+            self.inner.try_fetch_chain_config(retry, commitment).await
+        }
+
+        async fn try_fetch_reward_merkle_tree_v2(
+            &self,
+            retry: usize,
+            height: u64,
+            view: ViewNumber,
+            reward_merkle_tree_root: RewardMerkleCommitmentV2,
+            accounts: Arc<Vec<RewardAccountV2>>,
+        ) -> anyhow::Result<PermittedRewardMerkleTreeV2> {
+            self.inner
+                .try_fetch_reward_merkle_tree_v2(
+                    retry,
+                    height,
+                    view,
+                    reward_merkle_tree_root,
+                    accounts,
+                )
+                .await
+        }
+
+        async fn try_fetch_reward_accounts_v1(
+            &self,
+            retry: usize,
+            instance: &NodeState,
+            height: u64,
+            view: ViewNumber,
+            reward_merkle_tree_root: RewardMerkleCommitmentV1,
+            accounts: &[RewardAccountV1],
+        ) -> anyhow::Result<Vec<RewardAccountProofV1>> {
+            self.inner
+                .try_fetch_reward_accounts_v1(
+                    retry,
+                    instance,
+                    height,
+                    view,
+                    reward_merkle_tree_root,
+                    accounts,
+                )
+                .await
+        }
+
+        async fn try_fetch_state_cert(
+            &self,
+            retry: usize,
+            epoch: u64,
+        ) -> anyhow::Result<LightClientStateUpdateCertificateV2<SeqTypes>> {
+            self.inner.try_fetch_state_cert(retry, epoch).await
+        }
+
+        fn backoff(&self) -> &BackoffParams {
+            self.inner.backoff()
+        }
+
+        fn name(&self) -> String {
+            format!("FailingLeafCatchup({})", self.inner.name())
+        }
+
+        fn is_local(&self) -> bool {
+            self.inner.is_local()
+        }
     }
 
     /// A validator that restarts on an empty database installs its stake-table window from the L1
