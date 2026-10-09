@@ -47,7 +47,7 @@ const MAX_BACKOFF: Duration = Duration::from_secs(60);
 /// one.
 macro_rules! milestone {
     ($params:expr, $($arg:tt)+) => {
-        if $params.announce {
+        if $params.boot {
             tracing::info!(target: TARGET, $($arg)+)
         } else {
             tracing::debug!($($arg)+)
@@ -71,8 +71,8 @@ pub struct BootstrapParams {
     /// before startup gives up.
     pub deadline: Duration,
     pub skip: SkipMode,
-    /// Whether milestones log at INFO on the announce target. Set for the call at boot only.
-    pub announce: bool,
+    /// Set for the call at boot only: milestones log at INFO on the announce target.
+    pub boot: bool,
 }
 
 /// A finalized HotShot block that the node trusts without asking the peers: the L1 light-client
@@ -224,15 +224,15 @@ async fn skip_to_anchor<C: Client>(
     metrics.anchor_epoch.set(anchor_epoch as usize);
 
     let range = match plan_skip(anchor, epoch_height, first_epoch, resume) {
-        SkipPlan::Run(range) => range,
-        SkipPlan::Walk(reason) => return Ok(SkipOutcome::Walk(reason.into())),
+        Ok(range) => range,
+        Err(reason) => return Ok(SkipOutcome::Walk(reason.into())),
     };
     milestone!(
         params,
         finalized_height = anchor.height,
         epochs = ?(range.start().u64()..=range.end().u64()),
         highest_known = ?known.map(|e| e.u64()),
-        "skipping to L1 anchor",
+        "skipping to anchor",
     );
 
     let fetch = fetch_epoch_roots(peers, anchor, &range, epoch_height, params.deadline);
@@ -251,27 +251,21 @@ async fn skip_to_anchor<C: Client>(
     Ok(SkipOutcome::Installed)
 }
 
-#[derive(Debug, PartialEq, Eq)]
-enum SkipPlan {
-    Run(RangeInclusive<EpochNumber>),
-    Walk(&'static str),
-}
-
-/// Skip only when the stake tables on hand fall short of the install range. `resume` is the highest
-/// epoch that has its predecessor too.
+/// The epochs to install, or the reason to walk instead. The skip runs only when the stake tables
+/// on hand fall short of the install range. `resume` is the highest epoch that has its predecessor
+/// too.
 fn plan_skip(
     anchor: &TrustedAnchor,
     epoch_height: u64,
     first_epoch: EpochNumber,
     resume: Option<EpochNumber>,
-) -> SkipPlan {
-    let Some(range) = install_range(anchor.height, epoch_height, first_epoch) else {
-        return SkipPlan::Walk("anchor too early for epochs");
-    };
+) -> Result<RangeInclusive<EpochNumber>, &'static str> {
+    let range = install_range(anchor.height, epoch_height, first_epoch)
+        .ok_or("anchor too early for epochs")?;
     if resume.is_some_and(|resume| resume >= *range.start()) {
-        return SkipPlan::Walk("near tip");
+        return Err("near tip");
     }
-    SkipPlan::Run(range)
+    Ok(range)
 }
 
 /// The epochs whose stake tables the skip installs: `n-3 ..= n+1` for `n = epoch(F)`.
@@ -318,7 +312,7 @@ async fn fetch_epoch_roots<C: Client>(
             return Ok(None);
         } else if remaining.is_zero() {
             tracing::error!(attempt, "bootstrap: deadline exceeded");
-            bail!("bootstrap deadline exceeded while skipping to the L1 anchor");
+            bail!("bootstrap deadline exceeded while skipping to the anchor");
         }
 
         let (url, peer) = &peers[attempt % peers.len()];
@@ -432,7 +426,8 @@ async fn walk_to_tip(
     // rather than having to be found here.
     let mut highest = membership.highest_known_epoch().unwrap_or(first_epoch + 1);
 
-    tracing::info!(
+    milestone!(
+        params,
         %first_epoch,
         starting_from = %highest,
         target = ?target.map(|e| e.u64()),
@@ -445,18 +440,15 @@ async fn walk_to_tip(
     loop {
         let next = highest + 1;
         let step = timeout(params.step_timeout, coordinator.wait_for_stake_table(next)).await;
-        let mut timed_out = false;
+        let timed_out = step.is_err();
         let err = match step {
             Ok(Ok(_)) => {
                 tracing::info!(%next, "bootstrap: derived stake table");
                 highest = next;
                 continue;
             },
-            Ok(Err(err)) => err.to_string(),
-            Err(_) => {
-                timed_out = true;
-                format!("timed out after {}s", params.step_timeout.as_secs())
-            },
+            Ok(Err(err)) => format!("{err:#}"),
+            Err(_) => format!("timed out after {}s", params.step_timeout.as_secs()),
         };
 
         if target.is_none_or(|target| highest >= target) {
@@ -555,7 +547,7 @@ mod tests {
         step_timeout: Duration::from_secs(5),
         deadline: Duration::from_secs(30),
         skip: SkipMode::Auto,
-        announce: true,
+        boot: true,
     };
 
     fn epochs(range: RangeInclusive<EpochNumber>) -> RangeInclusive<u64> {
@@ -619,14 +611,7 @@ mod tests {
             resume.map(EpochNumber::new),
         );
         let range = EpochNumber::new(N - 3)..=EpochNumber::new(N + 1);
-        assert_eq!(
-            plan,
-            if runs {
-                SkipPlan::Run(range)
-            } else {
-                SkipPlan::Walk("near tip")
-            }
-        );
+        assert_eq!(plan, if runs { Ok(range) } else { Err("near tip") });
     }
 
     #[test]
@@ -638,7 +623,7 @@ mod tests {
         let first = EpochNumber::new(FIRST_EPOCH);
         assert_eq!(
             plan_skip(&anchor, EPOCH_HEIGHT, first, None),
-            SkipPlan::Walk("anchor too early for epochs")
+            Err("anchor too early for epochs")
         );
     }
 

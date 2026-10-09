@@ -274,7 +274,7 @@ where
         // deadline. A failure is retried by the next poll.
         bootstrap: BootstrapParams {
             deadline: params.bootstrap.step_timeout,
-            announce: false,
+            boot: false,
             ..params.bootstrap
         },
         bootstrap_metrics,
@@ -734,7 +734,16 @@ impl<P: SequencerPersistence> Follower<P> {
         let current_epoch = bootstrap_epoch_window(
             &self.coordinator,
             self.epoch_height,
-            async || self.light_client_anchor(tip).await,
+            async || {
+                // The latest block the light client has verified, so the skip needs no L1.
+                let height = tip.checked_sub(1).context("the chain is empty")?;
+                let header = self
+                    .light_client
+                    .fetch_header(BlockId::Number(height as usize))
+                    .await
+                    .context("fetching the latest verified header")?;
+                TrustedAnchor::from_header(&header)
+            },
             &self.peers,
             &self.bootstrap,
             &self.bootstrap_metrics,
@@ -743,17 +752,6 @@ impl<P: SequencerPersistence> Follower<P> {
         .context("stake-table catchup after skipping ahead")?;
         tracing::info!(%current_epoch, "stake-table catchup complete");
         Ok(())
-    }
-
-    /// The latest block the light client has verified, so the skip needs no L1.
-    async fn light_client_anchor(&self, tip: u64) -> anyhow::Result<TrustedAnchor> {
-        let height = tip.checked_sub(1).context("the chain is empty")?;
-        let header = self
-            .light_client
-            .fetch_header(BlockId::Number(height as usize))
-            .await
-            .context("fetching the latest verified header")?;
-        TrustedAnchor::from_header(&header)
     }
 
     fn has_stake_table(&self, epoch: EpochNumber) -> bool {

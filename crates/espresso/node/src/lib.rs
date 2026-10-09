@@ -2022,7 +2022,7 @@ pub mod testing {
                     step_timeout: Duration::from_secs(2),
                     deadline: Duration::from_secs(15),
                     skip: self.bootstrap_skip,
-                    announce: true,
+                    boot: true,
                 },
                 self.bootstrap_peers.clone(),
                 Duration::from_millis(500),
