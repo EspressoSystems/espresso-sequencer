@@ -69,7 +69,7 @@ where
     } else if new_protocol {
         get_leaf_proof_with_cert2(state, requested_leaf, fetch_timeout, chain_limit).await
     } else {
-        get_leaf_proof_with_qc_chain(state, requested_leaf, fetch_timeout, chain_limit).await
+        get_leaf_proof_with_leaf_chain(state, requested_leaf, fetch_timeout, chain_limit).await
     }
 }
 
@@ -90,7 +90,11 @@ where
     Some(cert2.data.block_number)
 }
 
-pub(crate) async fn get_leaf_proof_with_qc_chain<State>(
+/// Build a leaf proof for a legacy leaf from the leaves that follow it.
+///
+/// Their justify QCs close a HotStuff or HotStuff2 chain for the requested leaf. The walk switches
+/// to cert2 at the first new-protocol leaf, since the HotStuff commit rules cannot terminate there.
+pub(crate) async fn get_leaf_proof_with_leaf_chain<State>(
     state: &State,
     requested_leaf: LeafQueryData<SeqTypes>,
     fetch_timeout: Duration,
@@ -827,7 +831,7 @@ mod test {
 
         // Ask for the first leaf; it is proved finalized by the chain formed along with the second.
         let proof =
-            get_leaf_proof_with_qc_chain(&ds, leaves[0].clone(), Duration::MAX, CHAIN_LIMIT)
+            get_leaf_proof_with_leaf_chain(&ds, leaves[0].clone(), Duration::MAX, CHAIN_LIMIT)
                 .await
                 .unwrap();
         assert_eq!(
@@ -1148,12 +1152,12 @@ mod test {
             tx.commit().await.unwrap();
         }
 
-        let err = get_leaf_proof_with_qc_chain(&ds, leaves[0].clone(), Duration::MAX, 1)
+        let err = get_leaf_proof_with_leaf_chain(&ds, leaves[0].clone(), Duration::MAX, 1)
             .await
             .unwrap_err();
         assert_eq!(err.status(), StatusCode::NOT_FOUND);
 
-        let proof = get_leaf_proof_with_qc_chain(&ds, leaves[0].clone(), Duration::MAX, 2)
+        let proof = get_leaf_proof_with_leaf_chain(&ds, leaves[0].clone(), Duration::MAX, 2)
             .await
             .unwrap();
         assert_eq!(
@@ -1232,7 +1236,7 @@ mod test {
         }
 
         let proof =
-            get_leaf_proof_with_qc_chain(&ds, leaves[0].clone(), Duration::MAX, CHAIN_LIMIT)
+            get_leaf_proof_with_leaf_chain(&ds, leaves[0].clone(), Duration::MAX, CHAIN_LIMIT)
                 .await
                 .unwrap();
         assert!(matches!(proof.proof(), FinalityProof::NewProtocol { .. }));
@@ -1276,7 +1280,7 @@ mod test {
         }
 
         let proof =
-            get_leaf_proof_with_qc_chain(&ds, leaves[0].clone(), Duration::MAX, CHAIN_LIMIT)
+            get_leaf_proof_with_leaf_chain(&ds, leaves[0].clone(), Duration::MAX, CHAIN_LIMIT)
                 .await
                 .unwrap();
         assert!(matches!(proof.proof(), FinalityProof::HotStuff2 { .. }));
@@ -1326,7 +1330,7 @@ mod test {
         }
 
         let proof =
-            get_leaf_proof_with_qc_chain(&ds, leaves[0].clone(), Duration::MAX, CHAIN_LIMIT)
+            get_leaf_proof_with_leaf_chain(&ds, leaves[0].clone(), Duration::MAX, CHAIN_LIMIT)
                 .await
                 .unwrap();
         assert!(matches!(proof.proof(), FinalityProof::NewProtocol { .. }));
@@ -1375,7 +1379,7 @@ mod test {
         }
 
         let proof =
-            get_leaf_proof_with_qc_chain(&ds, leaves[1].clone(), Duration::MAX, CHAIN_LIMIT)
+            get_leaf_proof_with_leaf_chain(&ds, leaves[1].clone(), Duration::MAX, CHAIN_LIMIT)
                 .await
                 .unwrap();
         assert!(matches!(proof.proof(), FinalityProof::HotStuff2 { .. }));
@@ -1432,7 +1436,7 @@ mod test {
         }
 
         let proof =
-            get_leaf_proof_with_qc_chain(&ds, leaves[1].clone(), Duration::MAX, CHAIN_LIMIT)
+            get_leaf_proof_with_leaf_chain(&ds, leaves[1].clone(), Duration::MAX, CHAIN_LIMIT)
                 .await
                 .unwrap();
         assert!(matches!(proof.proof(), FinalityProof::NewProtocol { .. }));
@@ -1606,7 +1610,7 @@ mod test {
             tx.commit().await.unwrap();
         }
 
-        let err = get_leaf_proof_with_qc_chain(
+        let err = get_leaf_proof_with_leaf_chain(
             &ds,
             leaves[0].clone(),
             Duration::from_secs(1),
@@ -1653,7 +1657,7 @@ mod test {
             tx.commit().await.unwrap();
         }
 
-        let err = get_leaf_proof_with_qc_chain(
+        let err = get_leaf_proof_with_leaf_chain(
             &ds,
             leaves[0].clone(),
             Duration::from_secs(1),
@@ -1674,7 +1678,7 @@ mod test {
             tx.commit().await.unwrap();
         }
         let proof =
-            get_leaf_proof_with_qc_chain(&ds, leaves[0].clone(), Duration::MAX, CHAIN_LIMIT)
+            get_leaf_proof_with_leaf_chain(&ds, leaves[0].clone(), Duration::MAX, CHAIN_LIMIT)
                 .await
                 .unwrap();
         assert_eq!(
