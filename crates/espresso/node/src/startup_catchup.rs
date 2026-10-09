@@ -10,14 +10,16 @@
 //!
 //! 1. Skip: the L1 light-client contract vouches for a finalized header `F`. The epoch roots below `F` are
 //!    fetched with Merkle proofs against `F` and installed directly.
-//! 2. Walk: from the highest known epoch, one epoch at a time, until peers can no longer serve
-//!    the next epoch root leaf, which is where the live network currently is.
+//! 2. Walk: from the highest known epoch, one epoch at a time, up to the epoch the peers' chain tip
+//!    needs. A failure below that target is retried until the deadline. Without a target, or past
+//!    it, the first failure marks the live tip.
 
 use std::{ops::RangeInclusive, time::Duration};
 
 use anyhow::{Context, anyhow, bail, ensure};
 use clap::ValueEnum;
 use espresso_types::{Header, SeqTypes};
+use futures::future::join_all;
 use hotshot_contract_adapter::{sol_types::LightClientStateSol, u256_to_field};
 use hotshot_query_service::node::BlockId;
 use hotshot_types::{
@@ -53,7 +55,8 @@ pub enum SkipMode {
 pub struct BootstrapParams {
     /// Bound on a single `wait_for_stake_table` call during the walk.
     pub step_timeout: Duration,
-    /// How long the skip may keep retrying before startup gives up.
+    /// How long the skip, and separately the walk toward the peers' chain tip, may keep retrying
+    /// before startup gives up.
     pub deadline: Duration,
     pub skip: SkipMode,
 }
@@ -154,7 +157,8 @@ pub(crate) async fn bootstrap_epoch_window<C: Client>(
     };
     metrics.skipped.set(skipped as usize);
 
-    let current = walk_to_tip(coordinator, first_epoch, params.step_timeout).await?;
+    let target = target_epoch(peers, epoch_height).await;
+    let current = walk_to_tip(coordinator, first_epoch, target, params).await?;
     metrics.window_epoch.set(current.u64() as usize);
     tracing::info!(
         target: TARGET,
@@ -375,13 +379,26 @@ fn verify_anchor_header(header: &Header, anchor: &L1Anchor) -> anyhow::Result<()
     Ok(())
 }
 
-/// Walk forward from the highest known epoch until peers can no longer serve the next epoch root
-/// leaf. Each step drives `add_epoch_root` through the existing catchup machinery, persisting the
-/// new stake table.
+/// The epoch whose stake table the window needs for the highest chain tip any peer reports:
+/// `epoch(tip) + 1`, which the epoch root of `epoch(tip) - 1` derives. `None` when no peer answers.
+async fn target_epoch<C: Client>(peers: &[(Url, C)], epoch_height: u64) -> Option<EpochNumber> {
+    let heights = join_all(peers.iter().map(|(_, peer)| peer.block_height())).await;
+    let tip = heights.into_iter().flatten().max()?.checked_sub(1)?;
+    Some(EpochNumber::new(
+        epoch_from_block_number(tip, epoch_height) + 1,
+    ))
+}
+
+/// Walk forward from the highest known epoch. Each step drives `add_epoch_root` through the
+/// existing catchup machinery, persisting the new stake table.
+///
+/// Steps below the `target` are retried until the deadline. From the target up, the first step
+/// that peers cannot serve marks the live tip.
 async fn walk_to_tip(
     coordinator: &EpochMembershipCoordinator<SeqTypes>,
     first_epoch: EpochNumber,
-    step_timeout: Duration,
+    target: Option<EpochNumber>,
+    params: &BootstrapParams,
 ) -> anyhow::Result<EpochNumber> {
     let membership = coordinator.membership();
     // Catchup resumes from the latest consecutive pair of stake tables we
@@ -392,34 +409,49 @@ async fn walk_to_tip(
     tracing::info!(
         %first_epoch,
         starting_from = %highest,
+        target = ?target.map(|e| e.u64()),
         "bootstrap: walking forward",
     );
 
+    let deadline = Instant::now() + params.deadline;
+    let mut backoff = INITIAL_BACKOFF;
+    let mut failures = 0usize;
     loop {
-        let target = highest + 1;
-        match timeout(step_timeout, coordinator.wait_for_stake_table(target)).await {
+        let next = highest + 1;
+        let step = timeout(params.step_timeout, coordinator.wait_for_stake_table(next)).await;
+        let mut timed_out = false;
+        let err = match step {
             Ok(Ok(_)) => {
-                tracing::info!(%target, "bootstrap: derived stake table");
-                highest = target;
+                tracing::info!(%next, "bootstrap: derived stake table");
+                highest = next;
+                continue;
             },
-            Ok(Err(err)) => {
-                tracing::info!(
-                    target: TARGET,
-                    %target,
-                    %err,
-                    "bootstrap: catchup failed; treating as live tip",
-                );
-                break;
-            },
+            Ok(Err(err)) => err.to_string(),
             Err(_) => {
-                tracing::warn!(
-                    %target,
-                    timeout_secs = step_timeout.as_secs(),
-                    "bootstrap: catchup timed out; proceeding with a possibly stale epoch window",
-                );
-                break;
+                timed_out = true;
+                format!("timed out after {}s", params.step_timeout.as_secs())
             },
+        };
+
+        if target.is_none_or(|target| highest >= target) {
+            if timed_out {
+                tracing::warn!(%next, %err, "bootstrap: catchup timed out; proceeding with a possibly stale epoch window");
+            } else {
+                tracing::info!(target: TARGET, %next, %err, "bootstrap: no further epoch to derive; at the live tip");
+            }
+            break;
         }
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            tracing::error!(%next, %err, "bootstrap: deadline exceeded");
+            bail!("bootstrap deadline exceeded below the chain tip's epoch");
+        }
+        failures += 1;
+        if failures.is_power_of_two() {
+            tracing::warn!(%next, failures, %err, "bootstrap: catchup below the chain tip failed; retrying");
+        }
+        sleep(backoff.min(remaining)).await;
+        backoff = (backoff * 2).min(MAX_BACKOFF);
     }
 
     // `highest` corresponds to N+1 (the leaf at root_block_in_epoch(N-1) is
@@ -435,7 +467,7 @@ async fn walk_to_tip(
         "missing stake table for next epoch {highest} after bootstrap"
     );
     for epoch in [current, highest] {
-        prepare_drb(coordinator, epoch, step_timeout).await;
+        prepare_drb(coordinator, epoch, params.step_timeout).await;
     }
     Ok(current)
 }
@@ -584,6 +616,9 @@ mod tests {
     }
 
     /// Test chain of `ANCHOR_HEIGHT + 1` blocks and the anchor over it.
+    ///
+    /// Peers report that height, so the walk targets epoch `N + 1`. `mock_block_height(0)` leaves
+    /// the walk without a target.
     async fn chain() -> (TestClient, L1Anchor) {
         let client = TestClient::with_epoch_height(EPOCH_HEIGHT);
         let header = client.header(ANCHOR_HEIGHT).await.unwrap();
@@ -619,10 +654,10 @@ mod tests {
         assert!(format!("{err:#}").contains("height"), "{err:#}");
     }
 
-    /// Stands in for the node's database: it holds a stake table for each epoch the test lets it
-    /// answer for, with the hash a verified epoch root header commits to.
-    #[derive(Debug, Default)]
-    struct SeededStore(HashMap<u64, StakeTuple>);
+    /// Stands in for the node's database: it holds a stake table and DRB result for each epoch the
+    /// test lets it answer for, with the hash a verified epoch root header commits to.
+    #[derive(Clone, Debug, Default)]
+    struct SeededStore(Arc<std::sync::Mutex<HashMap<u64, StakeTuple>>>);
 
     impl SeededStore {
         async fn for_chain(client: &TestClient, epochs: RangeInclusive<u64>) -> Self {
@@ -640,14 +675,14 @@ mod tests {
                     (validators.clone(), Some(RewardAmount::default()), hash),
                 );
             }
-            Self(tables)
+            Self(Arc::new(std::sync::Mutex::new(tables)))
         }
     }
 
     #[async_trait]
     impl MembershipPersistence for SeededStore {
         async fn load_stake(&self, epoch: EpochNumber) -> anyhow::Result<Option<StakeTuple>> {
-            Ok(self.0.get(&epoch.u64()).cloned())
+            Ok(self.0.lock().unwrap().get(&epoch.u64()).cloned())
         }
 
         async fn load_latest_stake(
@@ -657,8 +692,13 @@ mod tests {
             Ok(None)
         }
 
-        async fn load_drb_result(&self, _epoch: EpochNumber) -> anyhow::Result<Option<DrbResult>> {
-            Ok(None)
+        async fn load_drb_result(&self, epoch: EpochNumber) -> anyhow::Result<Option<DrbResult>> {
+            Ok(self
+                .0
+                .lock()
+                .unwrap()
+                .contains_key(&epoch.u64())
+                .then_some([0; 32]))
         }
 
         async fn load_epoch_root(&self, _epoch: EpochNumber) -> anyhow::Result<Option<Header>> {
@@ -933,20 +973,70 @@ mod tests {
                     .await
             );
         }
-        client.forget_leaf(ANCHOR_HEIGHT as usize).await;
 
         let current = bootstrap(&coordinator, Some(anchor), &[client], PARAMS)
             .await
             .unwrap();
 
-        assert_eq!(current, EpochNumber::new(N - 4));
-        assert!(!has_table(&coordinator, N + 1));
+        assert_eq!(current, EpochNumber::new(N));
+        assert!(has_table(&coordinator, N + 1));
+    }
+
+    /// A failure below the epoch the peers' chain tip needs is retried, not read as the tip.
+    #[test_log::test(tokio::test)]
+    async fn walk_retries_failures_below_the_target() {
+        let (client, _) = chain().await;
+        let store = SeededStore::for_chain(&client, (N - 4)..=(N + 1)).await;
+        let withheld = store.0.lock().unwrap().remove(&(N - 1)).unwrap();
+        let coordinator = coordinator(store.clone());
+        for epoch in [N - 4, N - 3] {
+            coordinator
+                .membership()
+                .load_stake_table(EpochNumber::new(epoch))
+                .await;
+        }
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(100)).await;
+            store.0.lock().unwrap().insert(N - 1, withheld);
+        });
+
+        let current = bootstrap(&coordinator, None, &[client], PARAMS)
+            .await
+            .unwrap();
+
+        assert_eq!(current, EpochNumber::new(N));
+        assert!(has_table(&coordinator, N + 1));
+    }
+
+    #[test_log::test(tokio::test)]
+    async fn walk_below_the_target_fails_at_the_deadline() {
+        let (client, _) = chain().await;
+        let store = SeededStore::for_chain(&client, (N - 4)..=(N + 1)).await;
+        store.0.lock().unwrap().remove(&(N - 1));
+        let coordinator = coordinator(store);
+        for epoch in [N - 4, N - 3] {
+            coordinator
+                .membership()
+                .load_stake_table(EpochNumber::new(epoch))
+                .await;
+        }
+        let params = BootstrapParams {
+            deadline: Duration::from_millis(300),
+            ..PARAMS
+        };
+
+        let err = bootstrap(&coordinator, None, &[client], params)
+            .await
+            .unwrap_err();
+
+        assert!(format!("{err:#}").contains("deadline exceeded"), "{err:#}");
     }
 
     /// `Off` walks without fetching the anchor, so it makes no L1 calls.
     #[test_log::test(tokio::test)]
     async fn skip_off_fetches_no_anchor() {
         let (client, _) = chain().await;
+        client.mock_block_height(0).await;
         let coordinator = fresh_coordinator(&client).await;
         let params = BootstrapParams {
             skip: SkipMode::Off,
@@ -972,6 +1062,7 @@ mod tests {
     #[test_log::test(tokio::test)]
     async fn no_anchor_walks() {
         let (client, _) = chain().await;
+        client.mock_block_height(0).await;
         let coordinator = fresh_coordinator(&client).await;
 
         let current = bootstrap(&coordinator, None, &[client], PARAMS)
@@ -987,6 +1078,7 @@ mod tests {
     #[test_log::test(tokio::test)]
     async fn peers_without_light_client_walk() {
         let (client, anchor) = chain().await;
+        client.mock_block_height(0).await;
         let coordinator = fresh_coordinator(&client).await;
         client.return_header_not_found().await;
 
@@ -1031,6 +1123,7 @@ mod tests {
     #[test_log::test(tokio::test)]
     async fn pre_pos_anchor_walks() {
         let (client, _) = chain().await;
+        client.mock_block_height(0).await;
         let coordinator = fresh_coordinator(&client).await;
         let early = client.header(EPOCH_HEIGHT).await.unwrap();
         let anchor = L1Anchor {
