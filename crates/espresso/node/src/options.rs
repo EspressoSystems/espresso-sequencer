@@ -406,6 +406,7 @@ impl Options {
             step_timeout: self.bootstrap_epoch_catchup_timeout,
             deadline: self.bootstrap_deadline,
             skip: self.bootstrap_skip,
+            announce: true,
         }
     }
 

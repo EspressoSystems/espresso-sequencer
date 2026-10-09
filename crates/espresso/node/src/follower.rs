@@ -32,6 +32,7 @@ use espresso_types::{
 use futures::{FutureExt, future::BoxFuture};
 use hotshot_query_service::{
     availability::{BlockInfo, BlockQueryData, LeafQueryData, VidCommonQueryData},
+    node::BlockId,
     types::HeightIndexed,
 };
 use hotshot_types::{
@@ -69,7 +70,7 @@ use crate::{
     context::TaskList,
     init_node_state, load_or_fetch_network_config,
     startup_catchup::{
-        BootstrapMetrics, BootstrapParams, SkipMode, bootstrap_epoch_window, query_clients,
+        BootstrapMetrics, BootstrapParams, TrustedAnchor, bootstrap_epoch_window, query_clients,
     },
     state_signature::StateSignatureMemStorage,
 };
@@ -270,12 +271,15 @@ where
         upgrade_lock,
         epoch_height,
         options: params.options,
-        // Mid-run catchup keeps the plain walk: the skip can block for its whole deadline.
+        // Mid-run, the poll loop waits for the catchup, so it gets a step's time, not the boot
+        // deadline. A failure is retried by the next poll.
         bootstrap: BootstrapParams {
-            skip: SkipMode::Off,
+            deadline: params.bootstrap.step_timeout,
+            announce: false,
             ..params.bootstrap
         },
         bootstrap_metrics,
+        peers,
         next,
     };
     let mut tasks = TaskList::default();
@@ -518,8 +522,6 @@ impl ConsensusSource for FollowerConsensus {
     }
 }
 
-const NO_PEERS: [(Url, QueryServiceClient); 0] = [];
-
 struct Follower<P> {
     light_client: Arc<NodeLightClient>,
     sink: Arc<dyn DecideSink>,
@@ -533,6 +535,7 @@ struct Follower<P> {
     options: FollowerOptions,
     bootstrap: BootstrapParams,
     bootstrap_metrics: BootstrapMetrics,
+    peers: Vec<(Url, QueryServiceClient)>,
     next: u64,
 }
 
@@ -577,7 +580,7 @@ impl<P: SequencerPersistence> Follower<P> {
                 tip,
                 "skipping ahead; the query service backfills the gap"
             );
-            self.catch_up_skipped_epochs(self.next..from).await?;
+            self.catch_up_skipped_epochs(self.next..from, tip).await?;
             self.next = from;
         }
         for block in self.fetch_range(from, tip).await? {
@@ -706,7 +709,7 @@ impl<P: SequencerPersistence> Follower<P> {
     /// Skipping an epoch root skips the stake table it derives, which later roots build on. DRBs
     /// the skipped transition blocks carried are left to the coordinator, which fetches them on
     /// demand.
-    async fn catch_up_skipped_epochs(&self, skipped: Range<u64>) -> anyhow::Result<()> {
+    async fn catch_up_skipped_epochs(&self, skipped: Range<u64>, tip: u64) -> anyhow::Result<()> {
         if skipped.is_empty() {
             return Ok(());
         }
@@ -732,8 +735,8 @@ impl<P: SequencerPersistence> Follower<P> {
         let current_epoch = bootstrap_epoch_window(
             &self.coordinator,
             self.epoch_height,
-            async || bail!("mid-run catchup walks"),
-            &NO_PEERS,
+            async || self.light_client_anchor(tip).await,
+            &self.peers,
             &self.bootstrap,
             &self.bootstrap_metrics,
         )
@@ -741,6 +744,17 @@ impl<P: SequencerPersistence> Follower<P> {
         .context("stake-table catchup after skipping ahead")?;
         tracing::info!(%current_epoch, "stake-table catchup complete");
         Ok(())
+    }
+
+    /// The latest block the light client has verified, so the skip needs no L1.
+    async fn light_client_anchor(&self, tip: u64) -> anyhow::Result<TrustedAnchor> {
+        let height = tip.checked_sub(1).context("the chain is empty")?;
+        let header = self
+            .light_client
+            .fetch_header(BlockId::Number(height as usize))
+            .await
+            .context("fetching the latest verified header")?;
+        TrustedAnchor::from_header(&header)
     }
 
     fn has_stake_table(&self, epoch: EpochNumber) -> bool {

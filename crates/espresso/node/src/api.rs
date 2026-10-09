@@ -5489,6 +5489,7 @@ mod test {
                 step_timeout: Duration::from_secs(30),
                 deadline: Duration::from_secs(900),
                 skip: SkipMode::Auto,
+                announce: true,
             },
             options: FollowerOptions {
                 poll_interval: Duration::from_millis(500),

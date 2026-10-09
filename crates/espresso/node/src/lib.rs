@@ -2016,6 +2016,7 @@ pub mod testing {
                     step_timeout: Duration::from_secs(2),
                     deadline: Duration::from_secs(15),
                     skip: SkipMode::Auto,
+                    announce: true,
                 },
                 self.bootstrap_peers.clone(),
                 Duration::from_millis(500),
