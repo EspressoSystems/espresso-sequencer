@@ -69,8 +69,7 @@ use crate::{
     context::TaskList,
     init_node_state, load_or_fetch_network_config,
     startup_catchup::{
-        BootstrapMetrics, BootstrapParams, SkipMode, bootstrap_epoch_window, fetch_l1_anchor,
-        query_clients,
+        BootstrapMetrics, BootstrapParams, SkipMode, bootstrap_epoch_window, query_clients,
     },
     state_signature::StateSignatureMemStorage,
 };
@@ -220,7 +219,7 @@ where
     let current_epoch = bootstrap_epoch_window(
         &coordinator,
         epoch_height,
-        async || fetch_l1_anchor(&node_state).await,
+        async || Ok(node_state.finalized_light_client_state().await?.into()),
         &peers,
         &params.bootstrap,
         &bootstrap_metrics,
@@ -733,7 +732,7 @@ impl<P: SequencerPersistence> Follower<P> {
         let current_epoch = bootstrap_epoch_window(
             &self.coordinator,
             self.epoch_height,
-            async || None,
+            async || bail!("mid-run catchup walks"),
             &NO_PEERS,
             &self.bootstrap,
             &self.bootstrap_metrics,

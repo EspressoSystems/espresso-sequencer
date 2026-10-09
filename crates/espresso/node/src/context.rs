@@ -64,9 +64,7 @@ use crate::{
         network::Sender as RequestResponseSender,
         recipient_source::RecipientSource,
     },
-    startup_catchup::{
-        BootstrapMetrics, BootstrapParams, bootstrap_epoch_window, fetch_l1_anchor, query_clients,
-    },
+    startup_catchup::{BootstrapMetrics, BootstrapParams, bootstrap_epoch_window, query_clients},
     state_signature::{self, DecidedLeaf, StateSignatureMemStorage, StateSigner},
 };
 pub(crate) type ConsensusNode<N, P> = Node<N, P>;
@@ -209,7 +207,7 @@ where
             let current_epoch = bootstrap_epoch_window(
                 &membership_coordinator,
                 epoch_height,
-                async || fetch_l1_anchor(&instance_state).await,
+                async || Ok(instance_state.finalized_light_client_state().await?.into()),
                 &peers,
                 &bootstrap_params,
                 &BootstrapMetrics::new(metrics),

@@ -172,19 +172,19 @@ impl NodeState {
         }
     }
 
-    /// The light client contract's finalized state, read at the L1 finalized block, or `None` when
-    /// there is no contract or L1 finality is not yet known. Not cached: it advances with every
-    /// prover update.
+    /// The light client contract's finalized state, read at the L1 finalized block. Not cached: it
+    /// advances with every prover update.
+    ///
+    /// Fails when there is no contract, L1 finality is not yet known, or the read fails.
     #[cfg(feature = "node")]
-    pub async fn finalized_light_client_state(
-        &self,
-    ) -> anyhow::Result<Option<LightClientStateSol>> {
+    pub async fn finalized_light_client_state(&self) -> anyhow::Result<LightClientStateSol> {
         if self.chain_config.stake_table_contract.is_none() {
-            return Ok(None);
+            bail!("no light client contract");
         }
-        let Some(finalized) = self.l1_finalized_block().await else {
-            return Ok(None);
-        };
+        let finalized = self
+            .l1_finalized_block()
+            .await
+            .context("L1 finality is not yet known")?;
         let light_client_contract = LightClientV3::new(
             self.light_client_contract_address().await?,
             self.l1_client.provider.clone(),
@@ -193,8 +193,9 @@ impl NodeState {
             .finalizedState()
             .block(BlockId::number(finalized))
             .call()
-            .await?;
-        Ok(Some(state.into()))
+            .await
+            .context("reading the light client state")?;
+        Ok(state.into())
     }
 
     /// The L1 finalized block number. The L1 client learns it asynchronously after start, so this
