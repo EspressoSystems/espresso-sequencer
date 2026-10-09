@@ -994,12 +994,22 @@ mod tests {
             );
         }
 
-        let current = bootstrap(&coordinator, Some(anchor), &[client], PARAMS)
-            .await
-            .unwrap();
+        let before = client.header_requests().await;
+
+        let current = bootstrap(
+            &coordinator,
+            Some(anchor),
+            std::slice::from_ref(&client),
+            PARAMS,
+        )
+        .await
+        .unwrap();
 
         assert_eq!(current, EpochNumber::new(N));
-        assert!(has_table(&coordinator, N + 1));
+        for epoch in (N - 4)..=(N + 1) {
+            assert!(has_table(&coordinator, epoch), "epoch {epoch}");
+        }
+        assert_eq!(client.header_requests().await, before);
     }
 
     /// A failure below the epoch the peers' chain tip needs is retried, not read as the tip.
@@ -1050,6 +1060,77 @@ mod tests {
             .unwrap_err();
 
         assert!(format!("{err:#}").contains("deadline exceeded"), "{err:#}");
+    }
+
+    /// A bad proof after the first good ones fails the whole fetch, so nothing is installed.
+    #[test_log::test(tokio::test)]
+    async fn invalid_proof_mid_range_installs_nothing() {
+        let (client, anchor) = chain().await;
+        let coordinator = fresh_coordinator(&client).await;
+        let range = install_range(anchor.height, EPOCH_HEIGHT, EpochNumber::new(FIRST_EPOCH));
+        let range = range.unwrap();
+        client
+            .return_invalid_proof(root_block_in_epoch(N - 3, EPOCH_HEIGHT) as usize)
+            .await;
+
+        let err = fetch_roots_from(&client, &anchor, &range, EPOCH_HEIGHT)
+            .await
+            .unwrap_err();
+
+        assert!(
+            format!("{err:#}").contains("verifying the epoch root"),
+            "{err:#}"
+        );
+        for epoch in range.start().u64()..=range.end().u64() {
+            assert!(!has_table(&coordinator, epoch), "epoch {epoch}");
+        }
+    }
+
+    /// A restart after an interrupted install holds a lone table at the start of the range. That is
+    /// not near the tip, because catchup needs a consecutive pair, so the skip runs again.
+    #[test_log::test(tokio::test)]
+    async fn partial_install_reruns_the_skip() {
+        let (client, anchor) = chain().await;
+        let coordinator = fresh_coordinator(&client).await;
+        let first_root = client
+            .header(root_block_in_epoch(N - 5, EPOCH_HEIGHT))
+            .await;
+        coordinator
+            .add_epoch_root(first_root.unwrap())
+            .await
+            .unwrap();
+        assert!(has_table(&coordinator, N - 3));
+        assert!(!has_table(&coordinator, N - 4));
+        let before = client.header_requests().await;
+
+        let current = bootstrap(
+            &coordinator,
+            Some(anchor),
+            std::slice::from_ref(&client),
+            PARAMS,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(current, EpochNumber::new(N));
+        for epoch in (N - 3)..=(N + 1) {
+            assert!(has_table(&coordinator, epoch), "epoch {epoch}");
+        }
+        assert!(client.header_requests().await > before);
+    }
+
+    /// When the prover lags, the chain runs past the anchor's window and the walk continues there.
+    #[test_log::test(tokio::test)]
+    async fn walk_continues_above_the_window() {
+        let (client, anchor) = chain().await;
+        let coordinator = coordinator(SeededStore::for_chain(&client, (N - 3)..=(N + 2)).await);
+
+        let current = bootstrap(&coordinator, Some(anchor), &[client], PARAMS)
+            .await
+            .unwrap();
+
+        assert_eq!(current, EpochNumber::new(N + 1));
+        assert!(has_table(&coordinator, N + 2));
     }
 
     /// `Off` walks without fetching the anchor, so it makes no L1 calls.

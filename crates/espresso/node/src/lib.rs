@@ -1527,6 +1527,7 @@ pub mod testing {
                 contracts: self.contracts,
                 genesis_chain_config: None,
                 bootstrap_peers: Vec::new(),
+                bootstrap_skip: SkipMode::Auto,
             }
         }
 
@@ -1670,6 +1671,7 @@ pub mod testing {
         genesis_chain_config: Option<ChainConfig>,
         /// State peers the startup stake-table skip fetches from. Empty disables the skip.
         bootstrap_peers: Vec<Url>,
+        bootstrap_skip: SkipMode,
     }
 
     impl<const NUM_NODES: usize> TestConfig<NUM_NODES> {
@@ -1773,6 +1775,10 @@ pub mod testing {
 
         pub fn set_bootstrap_peers(&mut self, peers: Vec<Url>) {
             self.bootstrap_peers = peers;
+        }
+
+        pub fn set_bootstrap_skip(&mut self, skip: SkipMode) {
+            self.bootstrap_skip = skip;
         }
 
         /// Contracts deployed by [`TestConfigBuilder::set_upgrades_with`], if
@@ -2015,7 +2021,7 @@ pub mod testing {
                 BootstrapParams {
                     step_timeout: Duration::from_secs(2),
                     deadline: Duration::from_secs(15),
-                    skip: SkipMode::Auto,
+                    skip: self.bootstrap_skip,
                     announce: true,
                 },
                 self.bootstrap_peers.clone(),

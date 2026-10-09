@@ -3599,6 +3599,7 @@ mod test {
         RegisteredValidatorMap, RewardDistributor, StakeTableState, StateCertQueryDataV1,
         StateCertQueryDataV2, TEST_UPGRADE, ValidatedState, ValidatorLeaderCounts,
         config::PublicHotShotConfig,
+        mock::FailingLeafCatchup,
         traits::{NullEventConsumer, PersistenceOptions},
         v0_3::{COMMISSION_BASIS_POINTS, Fetcher, RewardAmount},
         v0_4::{RewardAccountV2, RewardMerkleProofV2},
@@ -3645,7 +3646,7 @@ mod test {
             election::Membership,
             metrics::{Metrics as _, NoMetrics},
         },
-        utils::epoch_from_block_number,
+        utils::{epoch_from_block_number, root_block_in_epoch},
         x25519,
     };
     use http_client::{
@@ -6198,9 +6199,17 @@ mod test {
     ///
     /// Six nodes run the new protocol. Once the network is past epoch twelve, the light client
     /// mock is pointed at a recent decided block, node 5 is stopped, and it restarts on an empty
-    /// database with node 0 as its only state peer.
+    /// database with node 0 as its only state peer. That peer cannot serve the epoch root of
+    /// epoch 3, which stalls a walk at epoch 3, the way one failed fetch left a decaf validator
+    /// stuck far below the tip. With the skip off, and without the peer height that bounds the
+    /// walk, the window stays below the anchor.
+    #[rstest]
+    #[case::off(SkipMode::Off)]
+    #[case::auto(SkipMode::Auto)]
     #[test_log::test(tokio::test(flavor = "multi_thread"))]
-    async fn test_new_protocol_fresh_validator_skips_epoch_walk() -> anyhow::Result<()> {
+    async fn test_new_protocol_fresh_validator_skips_epoch_walk(
+        #[case] skip: SkipMode,
+    ) -> anyhow::Result<()> {
         const NUM_NODES: usize = 6;
         const NODE: usize = 5;
         const EPOCH_HEIGHT: u64 = 10;
@@ -6321,17 +6330,24 @@ mod test {
         let fresh_storage = SqlDataSource::create_storage().await;
         let metrics = PrometheusMetrics::default();
         let mut cfg = network.cfg.clone();
-        cfg.set_bootstrap_peers(vec![api_url.clone()]);
+        cfg.set_bootstrap_skip(skip);
+        if skip == SkipMode::Auto {
+            cfg.set_bootstrap_peers(vec![api_url.clone()]);
+        }
+        let failing_root = root_block_in_epoch(3, EPOCH_HEIGHT);
         let node = cfg
             .init_node(
                 NODE,
                 genesis_state,
                 tmp_options(&fresh_storage),
-                Some(StatePeers::<SequencerApiVersion>::from_urls(
-                    vec![api_url],
-                    Default::default(),
-                    Duration::from_secs(2),
-                    &NoMetrics,
+                Some(FailingLeafCatchup::new(
+                    StatePeers::<SequencerApiVersion>::from_urls(
+                        vec![api_url],
+                        Default::default(),
+                        Duration::from_secs(2),
+                        &NoMetrics,
+                    ),
+                    failing_root,
                 )),
                 None,
                 &*metrics.subgroup("consensus".into()),
@@ -6342,7 +6358,26 @@ mod test {
             )
             .await;
 
+        let exported = metrics.export()?;
+        let window_epoch: u64 = exported
+            .lines()
+            .find_map(|line| line.strip_prefix("consensus_bootstrap_window_epoch "))
+            .context("window epoch gauge not exported")?
+            .parse()?;
+        if skip == SkipMode::Off {
+            assert!(
+                exported.contains("consensus_bootstrap_skipped 0"),
+                "{exported}"
+            );
+            assert!(window_epoch < anchor_epoch, "{exported}");
+            return Ok(());
+        }
+
         // The window is the anchor's, with nothing below it walked.
+        assert!(
+            exported.contains("consensus_bootstrap_skipped 1"),
+            "{exported}"
+        );
         let membership = node.node_state().coordinator.membership().clone();
         for epoch in (anchor_epoch - 3)..=(anchor_epoch + 1) {
             assert!(
@@ -6350,10 +6385,6 @@ mod test {
                 "stake table for epoch {epoch} was not installed"
             );
         }
-        assert!(
-            membership.snapshot(EpochNumber::new(3)).is_none(),
-            "epoch 3 was walked despite the anchor"
-        );
         for epoch in [anchor_epoch, anchor_epoch + 1] {
             assert!(
                 membership
@@ -6362,7 +6393,6 @@ mod test {
                 "no block reward for epoch {epoch}"
             );
         }
-        let exported = metrics.export()?;
         assert!(
             exported.contains(&format!(
                 "consensus_bootstrap_l1_anchor_epoch {anchor_epoch}"
@@ -6370,11 +6400,6 @@ mod test {
             "{exported}"
         );
         // The walk above the anchor may advance the window past it.
-        let window_epoch: u64 = exported
-            .lines()
-            .find_map(|line| line.strip_prefix("consensus_bootstrap_window_epoch "))
-            .context("window epoch gauge not exported")?
-            .parse()?;
         assert!(window_epoch >= anchor_epoch, "{exported}");
 
         node.start_consensus().await;

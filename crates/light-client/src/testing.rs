@@ -401,6 +401,8 @@ struct InnerTestClient {
     fail_payload_proof_ranges: bool,
     /// If set, answer header requests with NOT_FOUND, like a node without the light-client module.
     header_not_found: bool,
+    /// Number of header and header proof requests served.
+    header_requests: usize,
 }
 
 impl InnerTestClient {
@@ -855,6 +857,11 @@ impl TestClient {
         inner.fail_leaf_ranges = true;
     }
 
+    /// Number of header and header proof requests so far.
+    pub async fn header_requests(&self) -> usize {
+        self.inner.lock().await.header_requests
+    }
+
     /// Answer header and header proof requests with NOT_FOUND.
     pub async fn return_header_not_found(&self) {
         self.inner.lock().await.header_not_found = true;
@@ -956,6 +963,7 @@ impl Client for TestClient {
 
     async fn header(&self, height: u64) -> Result<Header> {
         let mut inner = self.inner.lock().await;
+        inner.header_requests += 1;
         ensure!(!inner.header_not_found, inner.not_found());
         ensure!(
             !inner.missing_leaves.contains(&(height as usize)),
@@ -970,6 +978,7 @@ impl Client for TestClient {
 
     async fn header_proof(&self, root: u64, id: BlockId<SeqTypes>) -> Result<HeaderProof> {
         let mut inner = self.inner.lock().await;
+        inner.header_requests += 1;
         ensure!(!inner.header_not_found, inner.not_found());
 
         let root = root as usize;
