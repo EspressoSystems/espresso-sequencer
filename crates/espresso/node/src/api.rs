@@ -6334,10 +6334,11 @@ mod test {
     /// mock is pointed at a recent decided block, node 5 is stopped, and it restarts on an empty
     /// database with node 0 as its only state peer. That peer cannot serve the epoch root of
     /// epoch 3, which stalls a walk at epoch 3, the way one failed fetch left a decaf validator
-    /// stuck far below the tip. With the skip off, and without the peer height that bounds the
-    /// walk, the window stays below the anchor.
+    /// stuck far below the tip. With the skip off and no state peers, nothing reports a chain tip
+    /// to retry toward, so the first failure ends the walk and the window stays below the anchor.
+    /// With peers, the walk would retry until the deadline instead, which the unit tests cover.
     #[rstest]
-    #[case::off(SkipMode::Off)]
+    #[case::off_without_peers(SkipMode::Off)]
     #[case::auto(SkipMode::Auto)]
     #[test_log::test(tokio::test(flavor = "multi_thread"))]
     async fn test_new_protocol_fresh_validator_skips_epoch_walk(
@@ -6527,9 +6528,7 @@ mod test {
             );
         }
         assert!(
-            exported.contains(&format!(
-                "consensus_bootstrap_l1_anchor_epoch {anchor_epoch}"
-            )),
+            exported.contains(&format!("consensus_bootstrap_anchor_epoch {anchor_epoch}")),
             "{exported}"
         );
         // The walk above the anchor may advance the window past it.

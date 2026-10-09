@@ -366,7 +366,9 @@ pub struct Options {
 
     /// Whether startup skips the stake-table walk using the L1 light-client anchor.
     ///
-    /// `off` always walks from the highest known epoch.
+    /// `off` reads no anchor and walks from the highest known epoch. The walk still targets the
+    /// chain tip the state peers report, retries below it, and exits with an error at the
+    /// deadline.
     #[clap(
         long,
         env = "ESPRESSO_NODE_BOOTSTRAP_SKIP",
@@ -378,8 +380,9 @@ pub struct Options {
     /// How long startup retries before giving up, for the skip and again for the walk toward the
     /// chain tip the state peers report.
     ///
-    /// At the deadline the node exits with an error. The exception is a skip that only ever met
-    /// NOT_FOUND from peers without the light-client module: it falls back to the walk.
+    /// At the deadline the node exits with an error. The exception is a skip that met only NOT_FOUND
+    /// from peers without the light-client module for 3 passes over the peers: it falls back to the
+    /// walk.
     #[clap(long, env = "ESPRESSO_NODE_BOOTSTRAP_DEADLINE", default_value = "15m", value_parser = parse_duration)]
     pub bootstrap_deadline: Duration,
 

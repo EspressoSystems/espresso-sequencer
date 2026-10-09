@@ -10,9 +10,9 @@
 //!
 //! 1. Skip: the L1 light-client contract vouches for a finalized header `F`. The epoch roots below `F` are
 //!    fetched with Merkle proofs against `F` and installed directly.
-//! 2. Walk: from the highest known epoch, one epoch at a time, up to the epoch the peers' chain tip
-//!    needs. A failure below that target is retried until the deadline. Without a target, or past
-//!    it, the first failure marks the live tip.
+//! 2. Walk: from the highest known epoch, one epoch at a time. At boot, the walk targets the epoch
+//!    the peers' chain tip needs, and a failure below it is retried until the deadline. Without a
+//!    target, or past it, the first failure marks the live tip.
 
 use std::{ops::RangeInclusive, time::Duration};
 
@@ -42,6 +42,10 @@ const TARGET: &str = "announce::bootstrap";
 
 const INITIAL_BACKOFF: Duration = Duration::from_secs(1);
 const MAX_BACKOFF: Duration = Duration::from_secs(60);
+/// Passes over the peers that must all answer NOT_FOUND before the skip gives way to the walk.
+const NOT_FOUND_PASSES: usize = 3;
+/// Epochs past the anchor's window that the walk target may reach.
+const TARGET_SLACK: u64 = 2;
 
 /// A once-per-boot milestone: INFO on the announce target, or debug when the call is not the boot
 /// one.
@@ -71,7 +75,8 @@ pub struct BootstrapParams {
     /// before startup gives up.
     pub deadline: Duration,
     pub skip: SkipMode,
-    /// Set for the call at boot only: milestones log at INFO on the announce target.
+    /// Set for the call at boot only. Mid-run, milestones log at debug, the gauges stay, and the
+    /// walk has no target: the first failure marks the tip and the next poll advances it.
     pub boot: bool,
 }
 
@@ -113,7 +118,7 @@ impl BootstrapMetrics {
     pub fn new(metrics: &dyn Metrics) -> Self {
         Self {
             window_epoch: metrics.create_gauge("bootstrap_window_epoch".into(), None),
-            anchor_epoch: metrics.create_gauge("bootstrap_l1_anchor_epoch".into(), None),
+            anchor_epoch: metrics.create_gauge("bootstrap_anchor_epoch".into(), None),
             skipped: metrics.create_gauge("bootstrap_skipped".into(), None),
         }
     }
@@ -153,26 +158,28 @@ pub(crate) async fn bootstrap_epoch_window<C: Client>(
         .first_epoch()
         .context("first_epoch not seeded; genesis stake table missing")?;
 
-    let outcome = if params.skip == SkipMode::Off {
-        SkipOutcome::Walk("off".into())
-    } else if peers.is_empty() {
-        SkipOutcome::Walk("no state peers".into())
-    } else {
-        match fetch_anchor().await {
-            Ok(anchor) => {
-                let skip = skip_to_anchor(
-                    coordinator,
-                    peers,
-                    &anchor,
-                    epoch_height,
-                    first_epoch,
-                    params,
-                    metrics,
-                );
-                skip.await?
-            },
-            Err(err) => SkipOutcome::Walk(format!("{err:#}")),
-        }
+    let anchor = match (params.skip, peers.is_empty()) {
+        (SkipMode::Off, _) => Err("off".to_string()),
+        (_, true) => Err("no state peers".to_string()),
+        _ => match timeout(params.step_timeout, fetch_anchor()).await {
+            Ok(anchor) => anchor.map_err(|err| format!("{err:#}")),
+            Err(_) => Err("anchor fetch timed out".to_string()),
+        },
+    };
+    let outcome = match &anchor {
+        Ok(anchor) => {
+            let skip = skip_to_anchor(
+                coordinator,
+                peers,
+                anchor,
+                epoch_height,
+                first_epoch,
+                params,
+                metrics,
+            );
+            skip.await?
+        },
+        Err(reason) => SkipOutcome::Walk(reason.clone()),
     };
     let skipped = match outcome {
         SkipOutcome::Installed => true,
@@ -181,11 +188,23 @@ pub(crate) async fn bootstrap_epoch_window<C: Client>(
             false
         },
     };
-    metrics.skipped.set(skipped as usize);
 
-    let target = target_epoch(peers, epoch_height).await;
+    let target = if params.boot {
+        walk_target(
+            peers,
+            anchor.ok().as_ref(),
+            epoch_height,
+            params.step_timeout,
+        )
+        .await
+    } else {
+        None
+    };
     let current = walk_to_tip(coordinator, first_epoch, target, params).await?;
-    metrics.window_epoch.set(current.u64() as usize);
+    if params.boot {
+        metrics.skipped.set(skipped as usize);
+        metrics.window_epoch.set(current.u64() as usize);
+    }
     milestone!(
         params,
         current_epoch = %current,
@@ -221,7 +240,9 @@ async fn skip_to_anchor<C: Client>(
             .is_some()
     });
     let anchor_epoch = epoch_from_block_number(anchor.height, epoch_height);
-    metrics.anchor_epoch.set(anchor_epoch as usize);
+    if params.boot {
+        metrics.anchor_epoch.set(anchor_epoch as usize);
+    }
 
     let range = match plan_skip(anchor, epoch_height, first_epoch, resume) {
         Ok(range) => range,
@@ -289,8 +310,9 @@ fn install_range(
 /// Fetch and verify the epoch roots of `range` from the peers in rotation, backing off after each
 /// full pass, until `limit` has passed.
 ///
-/// `None` when every failure up to the deadline was NOT_FOUND: peers without the opt-in
-/// light-client module cannot serve the skip, and the walk works without it.
+/// `None` after `NOT_FOUND_PASSES` consecutive passes in which every peer answered NOT_FOUND:
+/// peers without the opt-in light-client module cannot serve the skip, and the walk works without
+/// it.
 async fn fetch_epoch_roots<C: Client>(
     peers: &[(Url, C)],
     anchor: &TrustedAnchor,
@@ -301,19 +323,16 @@ async fn fetch_epoch_roots<C: Client>(
     let deadline = Instant::now() + limit;
     let mut backoff = INITIAL_BACKOFF;
     let mut attempt = 0usize;
-    let mut all_not_found = true;
+    let mut pass_not_found = true;
+    let mut not_found_passes = 0;
+    let mut last_err = String::from("none");
     loop {
         let remaining = deadline.saturating_duration_since(Instant::now());
-        if remaining.is_zero() && all_not_found {
-            tracing::warn!(
-                attempt,
-                "bootstrap: peers do not serve light-client proofs; walking"
-            );
-            return Ok(None);
-        } else if remaining.is_zero() {
-            tracing::error!(attempt, "bootstrap: deadline exceeded");
-            bail!("bootstrap deadline exceeded while skipping to the anchor");
-        }
+        ensure!(
+            !remaining.is_zero(),
+            "bootstrap deadline exceeded after {attempt} attempts while skipping to the anchor, \
+             last error: {last_err}"
+        );
 
         let (url, peer) = &peers[attempt % peers.len()];
         let fetch = fetch_roots_from(peer, anchor, range, epoch_height);
@@ -322,18 +341,23 @@ async fn fetch_epoch_roots<C: Client>(
             Ok(Err(err)) => err,
             Err(_) => anyhow!("attempt timed out"),
         };
-        all_not_found &= is_not_found(&err);
+        pass_not_found &= is_not_found(&err);
+        last_err = format!("{err:#}");
         attempt += 1;
         if attempt.is_power_of_two() {
-            tracing::warn!(
-                attempt,
-                %url,
-                err = %format!("{err:#}"),
-                "bootstrap: skip attempt failed; retrying"
-            );
+            tracing::warn!(attempt, %url, err = last_err, "bootstrap: skip attempt failed; retrying");
         }
 
         if attempt.is_multiple_of(peers.len()) {
+            not_found_passes = if pass_not_found {
+                not_found_passes + 1
+            } else {
+                0
+            };
+            if not_found_passes == NOT_FOUND_PASSES {
+                return Ok(None);
+            }
+            pass_not_found = true;
             let remaining = deadline.saturating_duration_since(Instant::now());
             sleep(backoff.min(remaining)).await;
             backoff = (backoff * 2).min(MAX_BACKOFF);
@@ -399,14 +423,40 @@ fn verify_anchor_header(header: &Header, anchor: &TrustedAnchor) -> anyhow::Resu
     Ok(())
 }
 
-/// The epoch whose stake table the window needs for the highest chain tip any peer reports:
-/// `epoch(tip) + 1`, which the epoch root of `epoch(tip) - 1` derives. `None` when no peer answers.
-async fn target_epoch<C: Client>(peers: &[(Url, C)], epoch_height: u64) -> Option<EpochNumber> {
-    let heights = join_all(peers.iter().map(|(_, peer)| peer.block_height())).await;
-    let tip = heights.into_iter().flatten().max()?.checked_sub(1)?;
-    Some(EpochNumber::new(
-        epoch_from_block_number(tip, epoch_height) + 1,
-    ))
+/// The epoch whose stake table the window needs for the chain tip the peers report, or `None` when
+/// no peer answers within `step_timeout`.
+async fn walk_target<C: Client>(
+    peers: &[(Url, C)],
+    anchor: Option<&TrustedAnchor>,
+    epoch_height: u64,
+    step_timeout: Duration,
+) -> Option<EpochNumber> {
+    let heights = join_all(
+        peers
+            .iter()
+            .map(|(_, peer)| timeout(step_timeout, peer.block_height())),
+    )
+    .await;
+    let heights = heights.into_iter().filter_map(|height| height.ok()?.ok());
+    target_epoch(heights.collect(), anchor, epoch_height)
+}
+
+/// `epoch(tip) + 1` for the median of the reported chain heights, which the epoch root of
+/// `epoch(tip) - 1` derives. With an anchor, at most `TARGET_SLACK` epochs past its window, so a
+/// few lying peers cannot hold the walk. The median of an even count is the lower one.
+fn target_epoch(
+    mut heights: Vec<u64>,
+    anchor: Option<&TrustedAnchor>,
+    epoch_height: u64,
+) -> Option<EpochNumber> {
+    heights.sort_unstable();
+    let tip = heights
+        .get(heights.len().checked_sub(1)? / 2)?
+        .checked_sub(1)?;
+    let target = epoch_from_block_number(tip, epoch_height) + 1;
+    let cap = anchor
+        .map(|anchor| epoch_from_block_number(anchor.height, epoch_height) + 1 + TARGET_SLACK);
+    Some(EpochNumber::new(cap.map_or(target, |cap| target.min(cap))))
 }
 
 /// Walk forward from the highest known epoch. Each step drives `add_epoch_root` through the
@@ -461,8 +511,10 @@ async fn walk_to_tip(
         }
         let remaining = deadline.saturating_duration_since(Instant::now());
         if remaining.is_zero() {
-            tracing::error!(%next, %err, "bootstrap: deadline exceeded");
-            bail!("bootstrap deadline exceeded below the chain tip's epoch");
+            bail!(
+                "bootstrap deadline exceeded below the chain tip's epoch, deriving epoch {next} \
+                 failed: {err}"
+            );
         }
         failures += 1;
         if failures.is_power_of_two() {
@@ -1161,8 +1213,8 @@ mod tests {
         assert!(!has_table(&coordinator, N - 3));
     }
 
-    /// Peers without the light-client module answer NOT_FOUND until the deadline; the node then
-    /// walks instead of aborting.
+    /// Peers without the light-client module answer NOT_FOUND for three passes; the node then
+    /// walks instead of waiting for the deadline.
     #[test_log::test(tokio::test)]
     async fn peers_without_light_client_walk() {
         let (client, anchor) = chain().await;
@@ -1170,21 +1222,35 @@ mod tests {
         let coordinator = fresh_coordinator(&client).await;
         client.return_header_not_found().await;
 
-        let params = BootstrapParams {
-            deadline: Duration::from_millis(300),
-            ..PARAMS
-        };
         let current = bootstrap(
             &coordinator,
             Some(anchor),
             &[client.clone(), client],
-            params,
+            PARAMS,
         )
         .await
         .unwrap();
 
         assert_eq!(current, EpochNumber::new(FIRST_EPOCH));
         assert!(!has_table(&coordinator, N - 3));
+    }
+
+    /// A deadline before the third pass ends is fatal even if every answer was NOT_FOUND.
+    #[test_log::test(tokio::test)]
+    async fn not_found_before_three_passes_aborts_at_the_deadline() {
+        let (client, anchor) = chain().await;
+        let coordinator = fresh_coordinator(&client).await;
+        client.return_header_not_found().await;
+
+        let params = BootstrapParams {
+            deadline: Duration::from_millis(300),
+            ..PARAMS
+        };
+        let err = bootstrap(&coordinator, Some(anchor), &[client], params)
+            .await
+            .unwrap_err();
+
+        assert!(format!("{err:#}").contains("deadline exceeded"), "{err:#}");
     }
 
     /// One peer failing for another reason than NOT_FOUND keeps the deadline fatal.
@@ -1228,5 +1294,89 @@ mod tests {
 
         assert_eq!(current, EpochNumber::new(FIRST_EPOCH));
         assert!(!has_table(&coordinator, N - 3));
+    }
+
+    #[rstest]
+    #[case::one_peer(&[78], false, Some(9))]
+    #[case::no_peer(&[], false, None)]
+    #[case::empty_chain(&[0], false, None)]
+    #[case::median_ignores_one_liar(&[78, 78, 10_000], false, Some(9))]
+    #[case::even_takes_the_lower(&[78, 10_000], false, Some(9))]
+    #[case::unanchored_liar_alone(&[10_000], false, Some(1001))]
+    #[case::anchored_liar_alone(&[10_000], true, Some(N + 1 + TARGET_SLACK))]
+    #[case::anchored_liars_in_majority(&[78, 10_000, 10_000], true, Some(N + 1 + TARGET_SLACK))]
+    #[case::anchored_honest(&[78], true, Some(9))]
+    fn target_epoch_cases(
+        #[case] heights: &[u64],
+        #[case] anchored: bool,
+        #[case] expected: Option<u64>,
+    ) {
+        let anchor = TrustedAnchor {
+            height: ANCHOR_HEIGHT,
+            block_comm_root: CircuitField::from(0u64),
+        };
+        let target = target_epoch(heights.to_vec(), anchored.then_some(&anchor), EPOCH_HEIGHT);
+        assert_eq!(target.map(|e| e.u64()), expected);
+    }
+
+    /// A peer that reports a huge chain cannot hold the walk past the anchor's slack.
+    #[test_log::test(tokio::test)]
+    async fn huge_peer_height_is_clamped_by_the_anchor() {
+        let (client, anchor) = chain().await;
+        client.mock_block_height(10_000).await;
+        let coordinator =
+            coordinator(SeededStore::for_chain(&client, (N - 3)..=(N + 1 + TARGET_SLACK)).await);
+
+        let current = bootstrap(&coordinator, Some(anchor), &[client], PARAMS)
+            .await
+            .unwrap();
+
+        assert_eq!(current, EpochNumber::new(N + TARGET_SLACK));
+    }
+
+    /// `Off` skips only the anchor: the walk keeps its target and fails at the deadline when the
+    /// peers report a chain the stake tables cannot reach.
+    #[test_log::test(tokio::test)]
+    async fn skip_off_walk_fails_at_the_deadline() {
+        let (client, _) = chain().await;
+        let coordinator = fresh_coordinator(&client).await;
+        let params = BootstrapParams {
+            skip: SkipMode::Off,
+            deadline: Duration::from_millis(300),
+            ..PARAMS
+        };
+
+        let err = bootstrap(&coordinator, None, &[client], params)
+            .await
+            .unwrap_err();
+
+        assert!(format!("{err:#}").contains("deadline exceeded"), "{err:#}");
+    }
+
+    /// Mid-run there is no target: the first failing step marks the tip, however far the peers'
+    /// chain is.
+    #[test_log::test(tokio::test)]
+    async fn mid_run_walk_stops_at_the_first_failure() {
+        let (client, _) = chain().await;
+        let store = SeededStore::for_chain(&client, (N - 4)..=(N + 1)).await;
+        store.0.lock().unwrap().remove(&(N - 1));
+        let coordinator = coordinator(store);
+        for epoch in [N - 4, N - 3] {
+            coordinator
+                .membership()
+                .load_stake_table(EpochNumber::new(epoch))
+                .await;
+        }
+        let params = BootstrapParams {
+            boot: false,
+            ..PARAMS
+        };
+
+        let current = bootstrap(&coordinator, None, &[client], params)
+            .await
+            .unwrap();
+
+        assert_eq!(current, EpochNumber::new(N - 3));
+        assert!(!has_table(&coordinator, N - 1));
     }
 }
