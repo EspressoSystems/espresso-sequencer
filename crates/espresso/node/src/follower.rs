@@ -217,7 +217,7 @@ where
     );
     let peers = query_clients(&params.upstreams);
     let bootstrap_metrics = BootstrapMetrics::new(&*metrics);
-    let current_epoch = bootstrap_epoch_window(
+    bootstrap_epoch_window(
         &coordinator,
         epoch_height,
         async || Ok(node_state.finalized_light_client_state().await?.into()),
@@ -227,7 +227,6 @@ where
     )
     .await
     .context("startup stake-table catchup failed")?;
-    tracing::info!(%current_epoch, "startup catchup complete");
 
     let light_client = Arc::new(
         connect_light_client(

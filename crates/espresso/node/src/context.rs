@@ -214,7 +214,6 @@ where
             )
             .await
             .context("startup stake-table catchup failed")?;
-            tracing::info!(%current_epoch, "Startup catchup complete");
 
             // Push the resolved peer window into the coordinator network. For
             // cliquenet this dials the N-1/N/N+1 sliding window for the current
