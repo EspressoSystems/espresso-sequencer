@@ -1173,9 +1173,6 @@ pub mod testing {
         types::EventType,
     };
     use hotshot_contract_adapter::stake_table::StakeTableContractVersion;
-    use hotshot_testing::block_builder::{
-        BuilderTask, SimpleBuilderImplementation, TestBuilderImplementation,
-    };
     use hotshot_types::{
         HotShotConfig, PeerConfig, PeerConnectInfo,
         data::EpochNumber,
@@ -1212,33 +1209,6 @@ pub mod testing {
         >,
     >;
 
-    pub async fn run_test_builder<const NUM_NODES: usize>(
-        port: Option<u16>,
-    ) -> (Box<dyn BuilderTask<SeqTypes>>, Url) {
-        let port = match port {
-            Some(p) => p,
-            None => reserve_tcp_port().expect("OS should have ephemeral ports available"),
-        };
-
-        // This should never fail.
-        let url: Url = format!("http://localhost:{port}")
-            .parse()
-            .expect("Failed to parse builder URL");
-        tracing::info!("Starting test builder on {url}");
-
-        let task = <SimpleBuilderImplementation as TestBuilderImplementation<SeqTypes>>::start(
-            NUM_NODES,
-            format!("http://0.0.0.0:{port}")
-                .parse()
-                .expect("Failed to parse builder listener"),
-            (),
-            HashMap::new(),
-        )
-        .await;
-
-        (task, url)
-    }
-
     pub struct TestConfigBuilder<const NUM_NODES: usize> {
         config: HotShotConfig<SeqTypes>,
         priv_keys: Vec<BLSPrivKey>,
@@ -1249,7 +1219,6 @@ pub mod testing {
         anvil_provider: Option<AnvilFillProvider>,
         signer: LocalSigner<SigningKey>,
         state_relay_url: Option<Url>,
-        builder_port: Option<u16>,
         upgrades: BTreeMap<Version, Upgrade>,
         coordinator_addrs: Vec<NetAddr>,
         contracts: Option<Contracts>,
@@ -1317,11 +1286,6 @@ pub mod testing {
     }
 
     impl<const NUM_NODES: usize> TestConfigBuilder<NUM_NODES> {
-        pub fn builder_port(mut self, builder_port: Option<u16>) -> Self {
-            self.builder_port = builder_port;
-            self
-        }
-
         pub fn state_relay_url(mut self, url: Url) -> Self {
             self.state_relay_url = Some(url);
             self
@@ -1525,7 +1489,6 @@ pub mod testing {
                 l1_opt: self.l1_opt,
                 signer: self.signer,
                 state_relay_url: self.state_relay_url,
-                builder_port: self.builder_port,
                 upgrades: self.upgrades,
                 anvil_provider: self.anvil_provider,
                 coordinator_addrs: self.coordinator_addrs,
@@ -1645,7 +1608,6 @@ pub mod testing {
                 anvil_provider: Some(anvil_provider),
                 signer,
                 state_relay_url: None,
-                builder_port: None,
                 upgrades: Default::default(),
                 coordinator_addrs,
                 contracts: None,
@@ -1664,7 +1626,6 @@ pub mod testing {
         anvil_provider: Option<AnvilFillProvider>,
         signer: LocalSigner<SigningKey>,
         state_relay_url: Option<Url>,
-        builder_port: Option<u16>,
         upgrades: BTreeMap<Version, Upgrade>,
         /// Per-node cliquenet coordinator bind addresses, indexed by node.
         coordinator_addrs: Vec<NetAddr>,
@@ -1681,14 +1642,6 @@ pub mod testing {
 
         pub fn hotshot_config(&self) -> &HotShotConfig<SeqTypes> {
             &self.config
-        }
-
-        pub fn set_builder_urls(&mut self, builder_urls: vec1::Vec1<Url>) {
-            self.config.builder_urls = builder_urls;
-        }
-
-        pub fn builder_port(&self) -> Option<u16> {
-            self.builder_port
         }
 
         pub fn signer(&self) -> LocalSigner<SigningKey> {

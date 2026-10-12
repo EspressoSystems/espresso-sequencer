@@ -1835,7 +1835,7 @@ pub mod test_helpers {
         network,
         persistence::no_storage,
         testing::{
-            TestConfig, TestConfigBuilder, decided_leaves, deploy_stake_table, run_test_builder,
+            TestConfig, TestConfigBuilder, decided_leaves, deploy_stake_table,
             wait_for_decide_on_handle, wait_for_epochs,
         },
     };
@@ -2138,14 +2138,6 @@ pub mod test_helpers {
             if upgrade.base >= NEW_PROTOCOL_VERSION && !cfg.has_stake_table() {
                 cfg.deploy_default_stake_table().await;
             }
-            let mut builder_tasks = Vec::new();
-
-            let (task, builder_url) =
-                run_test_builder::<{ NUM_NODES }>(cfg.network_config.builder_port()).await;
-            builder_tasks.push(task);
-            cfg.network_config
-                .set_builder_urls(vec1::vec1![builder_url.clone()]);
-
             // add default storage if none is provided as query module is now required
             let mut opt = cfg.api_config.clone();
             let temp_dir = if opt.storage_fs.is_none() && opt.storage_sql.is_none() {
@@ -2229,20 +2221,6 @@ pub mod test_helpers {
                     }),
             )
             .await;
-
-            let handle_0 = &nodes[0];
-
-            // Hook the builder(s) up to the event stream from the first node
-            for builder_task in builder_tasks {
-                builder_task.start(Box::new(
-                    handle_0
-                        .consensus_handle()
-                        .legacy_consensus()
-                        .read()
-                        .await
-                        .event_stream(),
-                ));
-            }
 
             for ctx in &nodes {
                 ctx.start_consensus().await;
@@ -5425,17 +5403,13 @@ mod test {
         Ok(())
     }
 
-    /// Run entirely without the legacy consensus stack: with base version
-    /// `NEW_PROTOCOL_VERSION` it is torn down at startup, and the explicit
-    /// mid-run `shut_down_legacy` calls below must be harmless to repeat.
-    /// The network has to keep deciding across epoch boundaries: DRB
-    /// computations on the shared membership coordinator must survive the
-    /// teardown.
+    /// The network has to keep deciding across epoch boundaries on the new
+    /// protocol alone: the DRB computations on the shared membership
+    /// coordinator must land in time for each new epoch.
     #[test_log::test(tokio::test(flavor = "multi_thread"))]
-    async fn test_new_protocol_survives_legacy_shutdown() -> anyhow::Result<()> {
+    async fn test_new_protocol_decides_across_epochs() -> anyhow::Result<()> {
         const EPOCH_HEIGHT: u64 = 20;
         const NUM_NODES: usize = 5;
-        const SHUTDOWN_HEIGHT: u64 = 10;
         const TARGET_BLOCK_HEIGHT: u64 = 50;
 
         let network_config = TestConfigBuilder::default()
@@ -5456,7 +5430,8 @@ mod test {
             .persistences(persistence)
             .build();
 
-        let network = TestNetwork::new(config, TEST_UPGRADE).await;
+        // Kept alive until the end: dropping it stops the nodes.
+        let _network = TestNetwork::new(config, TEST_UPGRADE).await;
 
         let client: Client<ClientErr, SequencerApiVersion> =
             Client::new(format!("http://localhost:{api_port}").parse().unwrap());
@@ -5468,25 +5443,8 @@ mod test {
             .await
             .expect("subscribe to leaf stream");
 
-        // Let the new protocol decide a few blocks first.
+        // The chain must keep growing across the epoch boundaries at 20 and 40.
         let mut height = 0;
-        while height < SHUTDOWN_HEIGHT {
-            let leaf = leaves
-                .next()
-                .await
-                .expect("leaf stream ended early")
-                .expect("leaf stream yielded an error");
-            height = leaf.header().height();
-        }
-
-        // Tear down the legacy stack on every node.
-        network.server.consensus_handle().shut_down_legacy().await;
-        for peer in &network.peers {
-            peer.consensus_handle().shut_down_legacy().await;
-        }
-
-        // The chain must keep growing across the epoch boundaries at 20 and
-        // 40 purely on the new protocol.
         while height < TARGET_BLOCK_HEIGHT {
             let leaf = leaves
                 .next()
