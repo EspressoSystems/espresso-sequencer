@@ -44,7 +44,10 @@ use parking_lot::Mutex;
 use request_response::RequestResponseConfig;
 use tokio::{
     spawn,
-    sync::{mpsc::channel, watch},
+    sync::{
+        mpsc::{channel, unbounded_channel},
+        watch,
+    },
     task::JoinHandle,
 };
 use tracing::{Instrument, Level, info};
@@ -230,6 +233,7 @@ where
             .await
             .context("loading persisted locked QC")?;
 
+        let (external_tx, external_rx) = unbounded_channel();
         let coordinator = Coordinator::maker()
             .membership_coordinator(membership_coordinator.clone())
             .network(coordinator_network)
@@ -245,6 +249,7 @@ where
             .metrics(metrics)
             .consensus_metrics(consensus_metrics)
             .maybe_locked_qc(locked_qc)
+            .external_tx(external_tx)
             .make();
 
         let legacy_event_rx = handle.event_stream_known_impl().deactivate();
@@ -254,6 +259,7 @@ where
             let handle = ConsensusHandle::new(
                 hotshot_handle.clone(),
                 coordinator,
+                external_rx,
                 epoch_height.into(),
                 legacy_event_rx,
                 EXTERNAL_EVENT_CHANNEL_SIZE,
