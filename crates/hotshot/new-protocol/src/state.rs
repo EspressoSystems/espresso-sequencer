@@ -17,7 +17,7 @@ use hotshot_types::{
     vote::HasViewNumber,
 };
 use tokio::task::{AbortHandle, JoinSet};
-use tracing::{error, warn};
+use tracing::{debug, error, warn};
 
 use crate::{
     coordinator::metrics::{Measurement, finish_measurement, ignore_measurement},
@@ -407,6 +407,9 @@ impl<T: NodeType> StateManager<T> {
     }
 
     /// Provide an externally-obtained validated state.
+    ///
+    /// An update without a delta only enriches an existing entry and is
+    /// otherwise dropped.
     pub fn update_state(&mut self, update: UpdateLeaf<T>) {
         let UpdateLeaf {
             view,
@@ -419,6 +422,8 @@ impl<T: NodeType> StateManager<T> {
             // Enrichment only: never abort a validation or start work on a stub.
             if self.validated_states.contains_key(&commitment) {
                 self.insert_state(view, state, delta, leaf);
+            } else {
+                debug!(%view, %commitment, "dropping delta-less update for unknown leaf");
             }
             return;
         }
@@ -462,7 +467,9 @@ impl<T: NodeType> StateManager<T> {
                                 validated: true,
                             });
                         } else {
-                            if let Some(leaf) = decided {
+                            if self.validated_states.contains_key(&response.commitment) {
+                                self.start_pending(response.commitment);
+                            } else if let Some(leaf) = decided {
                                 self.seed_decided(leaf);
                             }
                             return Some(StateManagerOutput::State {
@@ -492,6 +499,9 @@ impl<T: NodeType> StateManager<T> {
         }
     }
 
+    /// Retained states are looked up by view, so a state from an undecided fork
+    /// inside the margin may be served; requesters verify proofs against their own header.
+    ///
     /// The decided view's own validation, or a header this node needs to
     /// propose, may be queued behind a validation aborted here. A stub for the
     /// aborted proposal lets them proceed via catchup instead of hanging.

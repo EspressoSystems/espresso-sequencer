@@ -386,6 +386,33 @@ async fn test_seed_decided_reseeds_after_validation_failure() {
     assert_eq!(count_header_created(&outputs), 1);
 }
 
+/// A stub seeded from a header while the leaf validates is not displaced by the
+/// leaf's failed validation, which still releases the work queued on it.
+#[tokio::test]
+async fn test_seed_from_header_during_failed_validation_releases_queue() {
+    let mut manager = new_manager().await;
+    let test_data = TestData::new(4).await;
+    let (bad_request, _) = invalid_leaf_with_queued_work(&mut manager, &test_data);
+
+    manager.seed_from_header(bad_request.proposal);
+
+    let first = manager.next().await.expect("failure is reported");
+    assert!(matches!(
+        first,
+        StateManagerOutput::State {
+            validated: false,
+            ..
+        }
+    ));
+    let mut outputs = vec![first];
+    while let Some(output) = manager.next().await {
+        outputs.push(output);
+    }
+    assert_eq!(outputs.len(), 3);
+    assert_eq!(count_state_verified(&outputs), 1);
+    assert_eq!(count_header_created(&outputs), 1);
+}
+
 /// An older in-flight leaf does not displace a newer one, so the newer leaf's
 /// failed validation still releases its queued work.
 #[tokio::test]
