@@ -15,16 +15,19 @@ reference vectors.
 
 ## Chains
 
-Every chain has 5 nodes, epochs of 10 blocks, and transactions alternating between namespaces 101
-and 102.
+Every chain has transactions alternating between namespaces 101 and 102. All but `v2-v3` have 5
+nodes and epochs of 10 blocks.
 
 | Chain | Protocol | Stake table contract | Blocks | Epochs | State certs | Size |
 |-------|----------|----------------------|-------:|-------:|------------:|-----:|
 | `v3`  | 0.3 from genesis | V2 | 81 | 8 | 8 | 0.7 MB |
 | `v4`  | 0.4 from genesis | V1, upgraded to V2 after epoch 2 with every commission raised by 1%, then to V3 after epoch 4 with a network config registered for one validator | 152 | 15 | 15 | 1.0 MB |
 | `v5`  | 0.5 from genesis | V2 | 81 | 8 | 8 | 0.8 MB |
+| `v2-v3` | 0.2 from genesis, upgraded to 0.3 at block 321 as mainnet was, with epochs of 200 blocks | V2, deployed with the upgrade | 1001 (332 at 0.2) | 5 | 4 (epochs 2 to 5) | 4.3 MB |
 
-The `v4` chain's contract history is what mainnet's contract went through. The network config it
+The `v2-v3` chain is a single node: legacy consensus decides the 0.3 upgrade only on one node, and
+only with epochs longer than the upgrade takes. It covers data from before epochs and from across
+the upgrade. The `v4` chain's contract history is what mainnet's contract went through. The network config it
 registered is in `network-config-update.json`, so a test can look for that validator, key and
 address in the stake table the replayed node derives.
 
