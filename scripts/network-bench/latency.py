@@ -5,7 +5,7 @@
 and `rtt_p50_ms` are read.
 
 Delays are one-way: half the directed RTT on each egress. Node indices are 0-based positions in
-the assignment.
+the assignment. With `netem="full"` every egress also gets jitter and loss per direction.
 """
 
 import csv
@@ -14,13 +14,23 @@ import io
 import json
 import math
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 MS_PER_KM = 0.0157
 SAME_CITY_RTT_MS = 1.0
 INTRA_REGION_RTT_MS = 10.0
 NETEM_LIMIT = 300000
+NETEMS = ("delay", "full")
+# Jitter and loss floors of `netem="full"`. The matrix measured quiet links: jitter at most 1.8 ms,
+# no loss. The jitter ratio is the largest rtt_stdev_ms / rtt_p50_ms of the matrix.
+JITTER_RATIO = 0.05
+LOSS_FLOOR_PCT = 0.01
+# netem with jitter sorts packets by their random send time, so one TCP flow arrives reordered, which
+# real paths rarely do and which triggers spurious retransmits. A `rate` makes netem queue each
+# packet behind the previous one: jitter then varies the delay and keeps the order. 100gbit exceeds
+# any instance's bandwidth.
+NETEM_ORDER_RATE = "100gbit"
 TC_IFACE = "IFACE=$(ip -o -4 route show to default | awk '{print $5}' | head -1)"
 # Congestion control of the shaped nodes. cubic, the Linux default, sends a burst as fast as its
 # window allows. bbr paces at its bandwidth estimate: bursty validator traffic keeps it in
@@ -108,12 +118,25 @@ PING_SUMMARY = re.compile(r"rtt min/avg/max/mdev = [\d.]+/([\d.]+)/[\d.]+/[\d.]+
 
 
 @dataclass(frozen=True)
+class Noise:
+    """Per direction: uniform jitter of +-`jitter_ms` and loss of `loss_pct` percent."""
+
+    jitter_ms: float
+    loss_pct: float
+
+
+QUIET = Noise(0.0, 0.0)
+
+
+@dataclass(frozen=True)
 class Profile:
     name: str
     labels: tuple[str, ...]
     weights: dict[str, int]
     cross_ms: dict[tuple[str, str], float]
     intra_ms: dict[str, float]
+    # Measured noise of location pairs; a pair without an entry was not measured.
+    cross_noise: dict[tuple[str, str], Noise] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -126,6 +149,8 @@ class Shaping:
     intra: bool
     tcp_cc: str
     mtu: int
+    # Empty for `netem="delay"`.
+    noise: dict[tuple[int, int], Noise] = field(default_factory=dict)
 
     def meta(self) -> dict:
         return {
@@ -139,7 +164,8 @@ class Shaping:
             "assignment": {
                 f"node{i}": label for i, label in enumerate(self.assignment)
             },
-            "matrix_sha256": matrix_sha256(self.delays),
+            "netem": "full" if self.noise else "delay",
+            "matrix_sha256": matrix_sha256(self.delays, self.noise),
             "sysctls": dict(tcp_sysctls(self.tcp_cc)),
             "mtu": self.mtu,
             "probes": [],
@@ -156,17 +182,23 @@ class Probe:
 
 def load_profile(name: str) -> Profile:
     if name == "decaf-2025":
-        return decaf_profile(read_matrix(MATRIX_CSV.read_text()))
+        text = MATRIX_CSV.read_text()
+        return decaf_profile(read_matrix(text), read_noise(text))
     if name in LOCATIONS_JSON:
         return locations_profile(name, json.loads(LOCATIONS_JSON[name].read_text()))
     raise ValueError(f"no latency profile {name!r}; expected one of {PROFILES[1:]}")
 
 
-def shaping(name: str, n: int, intra: bool, tcp_cc: str, mtu: int) -> Shaping:
+def shaping(
+    name: str, n: int, intra: bool, tcp_cc: str, mtu: int, netem: str = "delay"
+) -> Shaping:
+    if netem not in NETEMS:
+        raise ValueError(f"netem {netem!r}; expected one of {NETEMS}")
     profile = load_profile(name)
     assignment = assign(n, profile)
     delays = delays_ms(assignment, profile, intra)
-    return Shaping(profile, assignment, delays, intra, tcp_cc, mtu)
+    noise = noise_for(assignment, profile, delays) if netem == "full" else {}
+    return Shaping(profile, assignment, delays, intra, tcp_cc, mtu, noise)
 
 
 def read_matrix(text: str) -> dict[tuple[str, str], float]:
@@ -181,7 +213,21 @@ def read_matrix(text: str) -> dict[tuple[str, str], float]:
     return matrix
 
 
-def decaf_profile(matrix: dict[tuple[str, str], float]) -> Profile:
+def read_noise(text: str) -> dict[tuple[str, str], Noise]:
+    """`netem_jitter_ms` is already one-way. `loss_pct` is of ping round trips, so half of it
+    (`p / 2` for small p) falls on each direction."""
+    return {
+        (row["src"], row["dst"]): Noise(
+            float(row["netem_jitter_ms"]), float(row["loss_pct"]) / 2
+        )
+        for row in csv.DictReader(io.StringIO(text))
+    }
+
+
+def decaf_profile(
+    matrix: dict[tuple[str, str], float],
+    noise: dict[tuple[str, str], Noise] | None = None,
+) -> Profile:
     labels = tuple(label for label, _ in DECAF_SPLIT)
     cross = {}
     for src in labels:
@@ -194,6 +240,7 @@ def decaf_profile(matrix: dict[tuple[str, str], float]) -> Profile:
         weights=dict(DECAF_SPLIT),
         cross_ms=cross,
         intra_ms={label: INTRA_REGION_RTT_MS for label in labels},
+        cross_noise={pair: noise[pair] for pair in cross} if noise else {},
     )
 
 
@@ -266,8 +313,33 @@ def delays_ms(
     return delays
 
 
-def matrix_sha256(delays: dict[tuple[int, int], float]) -> str:
-    triples = [[i, j, round(ms, 1)] for (i, j), ms in sorted(delays.items())]
+def noise_for(
+    assignment: list[str], profile: Profile, delays: dict[tuple[int, int], float]
+) -> dict[tuple[int, int], Noise]:
+    """The measured noise of the location pair, raised to the floors of `netem="full"`."""
+    noise = {}
+    for (i, j), delay in delays.items():
+        pair = (assignment[i], assignment[j])
+        measured = profile.cross_noise.get(pair, QUIET)
+        noise[(i, j)] = Noise(
+            max(measured.jitter_ms, JITTER_RATIO * delay),
+            max(measured.loss_pct, LOSS_FLOOR_PCT),
+        )
+    return noise
+
+
+def matrix_sha256(
+    delays: dict[tuple[int, int], float],
+    noise: dict[tuple[int, int], Noise] | None = None,
+) -> str:
+    triples: list[list] = [
+        [i, j, round(ms, 1)] for (i, j), ms in sorted(delays.items())
+    ]
+    if noise:
+        triples += [
+            [i, j, round(n.jitter_ms, 2), n.loss_pct]
+            for (i, j), n in sorted(noise.items())
+        ]
     return hashlib.sha256(
         json.dumps(triples, separators=(",", ":")).encode()
     ).hexdigest()
@@ -295,6 +367,7 @@ def tc_script(
     delays: dict[tuple[int, int], float],
     tcp_cc: str,
     mtu: int,
+    noise: dict[tuple[int, int], Noise] | None = None,
 ) -> str:
     lines = [
         "set -eu",
@@ -322,7 +395,8 @@ def tc_script(
             f'tc class add dev "$IFACE" parent 1: classid 1:{minor} htb rate 100gbit',
             (
                 f'tc qdisc add dev "$IFACE" parent 1:{minor} netem'
-                f" delay {delays[(node, peer)]:g}ms limit {NETEM_LIMIT}"
+                f"{netem_args(delays[(node, peer)], noise[(node, peer)] if noise else None)}"
+                f" limit {NETEM_LIMIT}"
             ),
             (
                 'tc filter add dev "$IFACE" protocol ip parent 1: prio 1 u32'
@@ -330,6 +404,15 @@ def tc_script(
             ),
         ]
     return "\n".join(lines) + "\n"
+
+
+def netem_args(delay_ms: float, noise: Noise | None) -> str:
+    if noise is None:
+        return f" delay {delay_ms:g}ms"
+    return (
+        f" delay {delay_ms:g}ms {noise.jitter_ms:.3g}ms rate {NETEM_ORDER_RATE}"
+        f" loss {noise.loss_pct:g}%"
+    )
 
 
 def probe_pairs(

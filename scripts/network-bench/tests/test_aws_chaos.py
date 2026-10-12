@@ -736,3 +736,18 @@ def test_interrupt_mid_chaos_restores_killed_nodes(run_harness: RunHarness):
     assert runner.ran("tofu", "destroy")
     assert all(m.running for m in cluster.members.values())
     assert "restored" in {e["event"] for e in ch.read_events(run_harness.run_dir)}
+
+
+def test_netem_is_full_under_chaos_only_by_default():
+    assert awsb.config_from_args(parse("--chaos")).netem == "full"
+    assert awsb.config_from_args(parse("--chaos", "--netem", "delay")).netem == "delay"
+    assert awsb.config_from_args(parse("--latency", "mainnet")).netem == "delay"
+    assert (
+        awsb.config_from_args(parse("--latency", "mainnet", "--netem", "full")).netem
+        == "full"
+    )
+
+
+def test_netem_needs_a_latency_profile():
+    with pytest.raises(awsb.Refused, match="--netem"):
+        awsb.config_from_args(parse("--netem", "full"))

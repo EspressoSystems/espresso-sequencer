@@ -333,6 +333,7 @@ def test_shaping_meta_shape():
             "node3": "ap-southeast-1",
             "node4": "us-east-1",
         },
+        "netem": "delay",
         "matrix_sha256": DECAF5_SHA256,
         "sysctls": dict(latency.tcp_sysctls("cubic")),
         "mtu": 1500,
@@ -351,6 +352,79 @@ def test_tc_script_bbr3_uses_bbr_of_the_xanmod_kernel():
     assert script.index("grep -q xanmod /proc/version") < script.index(
         'tcp_congestion_control="bbr"'
     )
+
+
+MATRIX_NOISE = (
+    "src,dst,loss_pct,rtt_p50_ms,rtt_stdev_ms,netem_jitter_ms\n"
+    "eu-central-1,ap-southeast-1,0.4,158.0,0.2,1.5\n"
+    "ap-southeast-1,eu-central-1,0.0,158.0,0.2,0.0\n"
+)
+
+
+def test_read_noise_halves_loss_and_keeps_one_way_jitter():
+    noise = latency.read_noise(MATRIX_NOISE)
+    assert noise[("eu-central-1", "ap-southeast-1")] == latency.Noise(1.5, 0.2)
+    assert noise[("ap-southeast-1", "eu-central-1")] == latency.Noise(0.0, 0.0)
+
+
+def test_shipped_matrix_noise_covers_every_pair():
+    text = latency.MATRIX_CSV.read_text()
+    assert latency.read_noise(text).keys() == latency.read_matrix(text).keys()
+
+
+def test_noise_is_raised_to_the_floors():
+    profile = Profile(
+        name="p",
+        labels=("a", "b"),
+        weights={"a": 1, "b": 1},
+        cross_ms={("a", "b"): 100.0, ("b", "a"): 100.0},
+        intra_ms={"a": 10.0, "b": 10.0},
+        cross_noise={("a", "b"): latency.Noise(9.0, 0.5)},
+    )
+    assignment = ["a", "a", "b"]
+    delays = latency.delays_ms(assignment, profile, intra=True)
+    noise = latency.noise_for(assignment, profile, delays)
+    assert noise[(0, 2)] == latency.Noise(9.0, 0.5)
+    assert noise[(2, 0)] == latency.Noise(
+        latency.JITTER_RATIO * 50, latency.LOSS_FLOOR_PCT
+    )
+    assert noise[(0, 1)].jitter_ms == pytest.approx(latency.JITTER_RATIO * 5)
+    assert noise.keys() == delays.keys()
+
+
+def test_netem_full_script_keeps_order_and_adds_jitter_and_loss():
+    shaping = latency.shaping("decaf-2026", 4, True, "bbr", 1500, netem="full")
+    peers = {i: f"10.0.0.{i + 10}" for i in range(4)}
+    script = latency.tc_script(0, peers, shaping.delays, "bbr", 1500, shaping.noise)
+    netems = [line for line in script.splitlines() if " netem " in line]
+    assert len(netems) == 3
+    for line in netems:
+        assert re.search(
+            r"delay [\d.]+ms [\d.e+-]+ms rate 100gbit loss [\d.e+-]+% limit 300000$",
+            line,
+        )
+
+
+def test_netem_delay_script_is_unchanged():
+    shaping = latency.shaping("decaf-2025", 5, True, "bbr", 1500)
+    assert shaping.noise == {} and shaping.meta()["netem"] == "delay"
+    script = latency.tc_script(
+        0, {i: f"10.0.0.{i}" for i in range(5)}, shaping.delays, "bbr", 1500
+    )
+    netems = [line for line in script.splitlines() if " netem " in line]
+    assert netems and all("rate" not in line and "loss" not in line for line in netems)
+
+
+def test_netem_changes_the_matrix_sha256():
+    delay = latency.shaping("decaf-2025", 5, True, "bbr", 1500)
+    full = latency.shaping("decaf-2025", 5, True, "bbr", 1500, netem="full")
+    assert delay.meta()["matrix_sha256"] == DECAF5_SHA256
+    assert full.meta()["matrix_sha256"] != DECAF5_SHA256
+
+
+def test_unknown_netem_fails():
+    with pytest.raises(ValueError, match="netem"):
+        latency.shaping("decaf-2025", 5, True, "bbr", 1500, netem="jitter")
 
 
 def test_shipped_decaf_locations_profile():

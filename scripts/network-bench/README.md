@@ -203,6 +203,7 @@ just bench aws run --tag release-x --nodes 5 --latency decaf-2025
 just bench aws run --tag release-x --nodes 5 --latency decaf-2025 --no-intra-latency   # cross-region delay only
 just bench aws run --fleet --latency mainnet
 just bench aws run --tag release-x --latency decaf-2025 --tcp-cc cubic   # cubic instead of bbr
+just bench aws run --tag release-x --latency decaf-2026 --netem full     # per-pair jitter and loss
 ```
 
 - Shaped: node-to-node traffic, including catchup on 8080.
@@ -216,6 +217,8 @@ just bench aws run --tag release-x --latency decaf-2025 --tcp-cc cubic   # cubic
 - `--mtu` (default 1500): interface MTU of the nodes. Traffic between AWS regions or over the internet carries at most
   1500 bytes; only one VPC gets jumbo frames (9001). Checked on every node after shaping.
   [AWS: network MTU](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/network_mtu.html).
+- `--netem` (default `delay`; `full` with `--chaos`): `full` adds per-pair jitter and loss to the delay. Model:
+  [Latency model](#latency-model).
 - Never shaped: `ctl` traffic (orchestrator, L1, relay, submit, metrics), RDS, ssh.
 - Model and profiles: [Latency model](#latency-model).
 
@@ -224,15 +227,15 @@ just bench aws run --tag release-x --latency decaf-2025 --tcp-cc cubic   # cubic
 ```
 just bench aws run --tag release-x --chaos
 just bench aws run --tag release-x --chaos --chaos-min 10 --chaos-rate 4 --chaos-seed 7 --chaos-kinds restart,kill
-just bench aws run --tag release-x --chaos --chaos-kinds none --chaos-rate 0.1 # fault-free baseline of the shape
+just bench aws run --tag release-x --chaos --chaos-kinds none --chaos-rate 0.1   # fault-free baseline of the shape
 just bench aws up --tag release-x --nodes 22 --query-nodes 22 --node-type c8g.large --ctl-type c8g.xlarge --ttl-min 180
 just bench aws run --fleet --chaos --query-engine sqlite
 ```
 
 - `--chaos` restarts, kills and wipes nodes, any node, while the load runs at a constant rate. Flags not given take the
   chaos shape: 22 nodes, every node a query node, `sqlite` colocated, `c8g.large` nodes, `c8g.xlarge` `ctl`,
-  `--latency decaf-2025`, `--chaos-min` steps of 60 s at `--chaos-rate` MB/s, `--keep-going`. `--nodes`,
-  `--query-nodes`, `--node-type`, `--ctl-type`, `--latency` (`off`, `mainnet`, `decaf-2025` or `decaf-2026`),
+  `--latency decaf-2025`, `--netem full`, `--chaos-min` steps of 60 s at `--chaos-rate` MB/s, `--keep-going`. `--nodes`,
+  `--query-nodes`, `--node-type`, `--ctl-type`, `--latency` (`off`, `mainnet`, `decaf-2025` or `decaf-2026`), `--netem`,
   `--submit-nodes` and `--query-engine` given on the command line are kept; `--latency` is per run, `up` does not take
   it; `--nodes N` alone gives N query nodes.
 - Refused: `--steps`, `--step-s`, `--search`, `--keep-going` and `--warmup-s` (set by the chaos config); fewer than 7
@@ -335,7 +338,8 @@ just bench aws run --fleet --chaos --query-engine sqlite
 - Stake table changes: no delegation, undelegation, validator registration or exit during the run.
 - Epoch transitions under faults: runs do not span a stake table epoch change.
 - L1 faults: anvil on ctl never stalls, reorgs or drops RPC.
-- Network faults: no partitions, packet loss or latency spikes; `--latency` shaping is static.
+- Network faults: no partitions or latency spikes; `--latency` shaping is static, with `--netem full` a steady jitter
+  and loss floor.
 - ctl services: orchestrator, state-relay-server, anvil and the load driver are never faulted.
 - Host faults: no instance reboot, disk full, disk stalls or clock skew.
 - Byzantine behaviour: faulted nodes stop or lose state, they never equivocate or send bad data.
@@ -519,6 +523,7 @@ Where:
 | `--no-intra-latency`                  | off                            | per run      | with `--latency`: no same-location delay                                                      |
 | `--tcp-cc`                            | bbr                            | per run      | with `--latency`: TCP congestion control, `bbr`, `cubic`, `bbr_hold` or `bbr3`                |
 | `--mtu`                               | 1500                           | per run      | with `--latency`: interface MTU of the nodes                                                  |
+| `--netem`                             | `delay`; `full` with `--chaos` | per run      | with `--latency`: `full` adds per-pair jitter and loss to the delay                           |
 | `--consensus-storage`                 | `fs`                           | per run      | `fs`, `journal` (experimental, not in `main` images); query node uses `storage-sql` with `fs` |
 | `--prune [RETENTION]`                 | off; bare `1m`                 | per run      | node0 prunes data and state older than RETENTION every 30 s; part of the config hash          |
 | `--fleet [FLEET]`                     | none                           | run          | measure on a fleet from `up`                                                                  |
@@ -771,6 +776,16 @@ real-world RTT. Without it, nodes see about 0.1 ms (one AZ).
   `uv run --script scripts/network-bench/network-locations mainnet`, which sends validator IPs to ip-api.com. The file
   holds only city, country, lat/lon, node count and stake share. Stake shares are recorded but placement uses node
   counts; every node has equal stake.
+- `--netem full`: netem `delay D J rate 100gbit loss P`, per direction. Jitter J is the larger of the matrix
+  `netem_jitter_ms` and 5 % of the one-way delay (5 % is the largest `rtt_stdev_ms / rtt_p50_ms` of the matrix). Loss P
+  is the larger of half the matrix `loss_pct` and 0.01 %. The matrix measured quiet links (jitter at most 1.8 ms, no
+  loss), so the floors dominate; `mainnet`, `decaf-2026` and intra-location links have no measurement and use the
+  floors.
+- netem with jitter reorders packets inside one TCP flow, which real paths rarely do and which causes spurious
+  retransmits. `rate 100gbit` (above any instance's bandwidth) makes netem queue each packet behind the previous one:
+  jitter varies the delay and keeps the order. Checked on loopback, 2000 UDP packets with `delay 20ms 15ms`: 119
+  inversions without `rate`, 0 with it. Packets of different connections still reorder against each other.
+- The probe after shaping pings with 5 samples; jitter and loss average out inside its tolerance.
 - 0.0157 ms/km: least-squares fit through the origin over the 56 measured AWS pairs (RMSE 33 ms). Fibre at 2/3 c is
   0.0100 ms/km, so 1.57x path stretch. Measured pairs take precedence over the model. The model covers city pairs only.
 - Intra RTT applies between nodes sharing a location. 10 ms is the low end of the 5 to 45 ms band measured between
