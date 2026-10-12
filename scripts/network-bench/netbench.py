@@ -115,7 +115,7 @@ BODY_POOL_TXS = 256
 # once; schedule lost beyond that stays lost, so a long stall does not become a burst.
 CATCHUP_S = 1.0
 HEIGHT_POLL_S = 0.1
-COUNTER_POLL_S = 1.0
+COUNTER_POLL_S = ch.COUNTER_POLL_S
 METRICS_EVERY_S = 1.0
 KEEP_UP_RATIO = 0.8
 # A step stops early once decided stays under KEEP_UP_RATIO of submitted over this long.

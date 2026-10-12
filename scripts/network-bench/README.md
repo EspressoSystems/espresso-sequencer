@@ -304,10 +304,14 @@ just bench aws run --fleet --chaos --query-engine sqlite
   one. Without counter samples that line is omitted.
 - View timeout floor (`### View timeout floor`): view timeouts and views split into during and outside faults, with the
   timeout rate in % and the seconds of each. Here a fault counts from its start until its node `rejoined` (query
-  catch-up not included); a stuck node stays faulty to the end, an interrupted fault ends at `interrupted`. Timeouts are
-  `consensus_number_of_timeouts` and views `consensus_current_view` (`timeouts` and `views` of `consensus.jsonl`, the
-  highest over the nodes), over the sample intervals within the steps; an interval overlapping a fault counts as during.
-  Runs from before `views` read it from `metrics.jsonl`.
+  catch-up not included) plus a tail of 13 s (`FLOOR_TAIL_S`: the 12 s `next_view_timeout` of the nodes and one sample),
+  as views that began under the fault time out after it. A stuck node stays faulty to the end; an interrupted fault ends
+  at `interrupted` plus the tail. Timeouts are `consensus_number_of_timeouts` and views `consensus_current_view`
+  (`timeouts` and `views` of `consensus.jsonl`, the highest over the nodes), over the sample intervals within the steps;
+  an interval overlapping a fault counts as during. Each series is diffed as its running maximum: a drop of the highest
+  value (the leading node restarted, or its sample is missing) adds nothing and the rise back is not counted. Runs from
+  before `views` read it from `metrics.jsonl` (a second holds the nodes scraped in it); both series are then clipped to
+  the time both have samples. Decided MB/s above uses the same diff.
 - Node log counters, one table row per event and `missing` set: `stub`
   (`parent state unavailable; ... from_header stub inserted`), `no-propose[missing]`, `no-vote1[missing]`,
   `header-failed`, `frontier`, `unsafe`, `parent-fetch`, `cert2-fetch`; patterns in `LOG_PATTERNS` of `chaos.py`,

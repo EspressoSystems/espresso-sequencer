@@ -26,6 +26,13 @@ RECOVERY_ALLOWANCE_S = 120.0
 LAG_BLOCKS = 2
 LAG_VIEWS = 3
 GATE_TICKS = 2
+# Seconds between counter samples of the load driver.
+COUNTER_POLL_S = 1.0
+# `next_view_timeout` of the nodes (12000 ms, `crates/espresso/types/src/v0/config.rs`). A view
+# that began before a fault ended times out up to this long after it.
+VIEW_TIMEOUT_S = 12.0
+# A fault's effect on the views outlasts its `rejoined` by a view timeout and a sample.
+FLOOR_TAIL_S = VIEW_TIMEOUT_S + COUNTER_POLL_S
 SYNC_STATUS_TTL_S = 5.0
 SYNC_SETTLE_S = 2 * SYNC_STATUS_TTL_S
 
@@ -760,11 +767,12 @@ def fault_table(rows: list[FaultRow], t0: float) -> list[str]:
 
 def floor_span(row: FaultRow, end: float) -> tuple[float, float]:
     """(start, stop) of `row` for the floor: from the fault until its node `rejoined`, so a
-    query node's catch-up does not count. A timed out node stays faulty until `end`, an
-    interrupted fault ends at `interrupted`."""
-    if row.timeout is not None:
+    query node's catch-up does not count, plus `FLOOR_TAIL_S`. A timed out node stays faulty
+    until `end`, an interrupted fault ends at `interrupted` plus the tail."""
+    over = row.rejoined if row.rejoined is not None else row.interrupted
+    if row.timeout is not None or over is None:
         return row.fault, end
-    return row.fault, _first(row.rejoined, row.interrupted, end)
+    return row.fault, over + FLOOR_TAIL_S
 
 
 class CounterSplit(NamedTuple):

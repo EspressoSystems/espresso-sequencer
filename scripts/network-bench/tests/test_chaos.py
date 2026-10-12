@@ -968,9 +968,9 @@ def test_a_kill_stuck_while_down_recovers_from_its_timeout():
     ]
 
 
-def test_floor_span_ends_at_rejoin_not_at_catch_up():
+def test_floor_span_ends_a_tail_after_rejoin_not_at_catch_up():
     rows = ch.fault_rows(EVENTS)
-    assert ch.floor_span(rows[0], T0 + 240) == (T0 + 10, T0 + 25)
+    assert ch.floor_span(rows[0], T0 + 240) == (T0 + 10, T0 + 25 + ch.FLOOR_TAIL_S)
     assert ch.fault_span(rows[0], T0 + 240) == (T0 + 10, T0 + 40)
 
 
@@ -985,7 +985,7 @@ def test_floor_span_of_stuck_and_interrupted_faults():
     cut = ch.fault_rows(
         [ev(10, "fault", "node5", "kill"), ev(30, "interrupted", "node5", "kill")]
     )
-    assert ch.floor_span(cut[0], T0 + 240) == (T0 + 10, T0 + 30)
+    assert ch.floor_span(cut[0], T0 + 240) == (T0 + 10, T0 + 30 + ch.FLOOR_TAIL_S)
 
 
 def test_counter_split_by_overlap_holds_the_peak_over_drops():

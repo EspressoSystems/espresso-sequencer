@@ -495,9 +495,9 @@ def test_floor_section_counts_timeouts_views_and_logs_outside_faults(tmp_path: P
     out = awsb.floor_section(
         tmp_path, manifest, ch.read_consensus(tmp_path), rows, steps, T0 + 240
     )
-    # node0 faulty 10-25 s, node5 70-150 s: the intervals 0-10 and 25-60 are outside.
+    # node0 faulty 10-38 s (rejoin at 25 s plus the tail), node5 70-163 s: only 0-10 is outside.
     assert (
-        "- View timeouts: outside faults 0 timeouts in 40 views (0.00 %) over 45 s; during faults 3 timeouts in 50 views (6.00 %) over 75 s"
+        "- View timeouts: outside faults 0 timeouts in 10 views (0.00 %) over 10 s; during faults 3 timeouts in 80 views (3.75 %) over 110 s"
         in out
     )
     assert "| header-failed | 1 | 1 | 0 | 1 |" in out
