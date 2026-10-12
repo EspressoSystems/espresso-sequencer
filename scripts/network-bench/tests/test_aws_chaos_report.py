@@ -72,14 +72,13 @@ def write_counters(run_dir: Path) -> None:
 def test_decided_with_and_without_a_fault_comes_from_the_counters(tmp_path: Path):
     steps = steps_of([4.0, 2.0, 3.0, 4.0])
     rows = ch.fault_rows(EVENTS)
-    assert awsb.fault_throughput_lines(tmp_path, rows, steps, T0 + 240) == []
-    (tmp_path / "consensus.jsonl").write_text("")
-    assert awsb.fault_throughput_lines(tmp_path, rows, steps, T0 + 240) == []
+    assert awsb.fault_throughput_lines([], rows, steps, T0 + 240) == []
     write_counters(tmp_path)
-    assert awsb.fault_throughput_lines(tmp_path, rows, steps, T0 + 240) == [
+    consensus = ch.read_consensus(tmp_path)
+    assert awsb.fault_throughput_lines(consensus, rows, steps, T0 + 240) == [
         "- Decided with an active fault 2 MB/s over 110 s, without 4 MB/s over 130 s"
     ]
-    assert awsb.fault_throughput_lines(tmp_path, [], steps, T0 + 240) == [
+    assert awsb.fault_throughput_lines(consensus, [], steps, T0 + 240) == [
         "- Decided with an active fault - over 0 s, without 3.08 MB/s over 240 s"
     ]
 
@@ -493,14 +492,15 @@ def test_floor_section_counts_timeouts_views_and_logs_outside_faults(tmp_path: P
                 + "\n"
             )
     manifest = {"latency": {"assignment": {"node0": "eu", "node1": "us"}}}
-    out = awsb.floor_section(tmp_path, manifest, rows, steps, T0 + 240)
+    out = awsb.floor_section(
+        tmp_path, manifest, ch.read_consensus(tmp_path), rows, steps, T0 + 240
+    )
     # node0 faulty 10-25 s, node5 70-150 s: the intervals 0-10 and 25-60 are outside.
     assert (
         "- View timeouts: outside faults 0 timeouts in 40 views (0.00 %) over 45 s; during faults 3 timeouts in 50 views (6.00 %) over 75 s"
         in out
     )
-    assert "| header-failed | 1 | 1 | 1 | 0 |" not in out
     assert "| header-failed | 1 | 1 | 0 | 1 |" in out
     floor = json.loads((tmp_path / "floor.json").read_text())
     assert floor["nodes"]["node0"]["during"] == {"header-failed": 1}
-    assert awsb.floor_section(tmp_path, manifest, rows, [], T0 + 240) == []
+    assert awsb.floor_section(tmp_path, manifest, [], rows, [], T0 + 240) == []

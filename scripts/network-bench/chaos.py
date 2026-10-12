@@ -15,7 +15,7 @@ from collections import Counter
 from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from itertools import pairwise
+from itertools import accumulate, pairwise
 from pathlib import Path
 from typing import Literal, NamedTuple, NotRequired, TypedDict
 
@@ -610,29 +610,6 @@ def phase_segments(row: FaultRow, end: float) -> list[tuple[Phase, float, float]
     return segments
 
 
-# (MB, seconds) decided.
-Decided = tuple[float, float]
-
-
-def decided_by_fault(
-    counters: Sequence[tuple[float, float]],
-    spans: Sequence[tuple[float, float]],
-    start: float,
-    stop: float,
-) -> tuple[Decided, Decided]:
-    """Decided over the intervals between consecutive `counters` samples, (ts, decided bytes),
-    within [`start`, `stop`]: (with a fault, without one). An interval overlapping any of the
-    fault `spans` counts as with a fault."""
-    faulty = [0.0, 0.0]
-    quiet = [0.0, 0.0]
-    inside = [c for c in counters if start <= c[0] <= stop]
-    for (a, bytes_a), (b, bytes_b) in pairwise(inside):
-        into = faulty if any(s < b and e > a for s, e in spans) else quiet
-        into[0] += (bytes_b - bytes_a) / 1e6
-        into[1] += b - a
-    return (faulty[0], faulty[1]), (quiet[0], quiet[1])
-
-
 def _first(*times: float | None) -> float:
     """The first time that is not `None`; the last one never is."""
     return next(t for t in times if t is not None)
@@ -807,16 +784,29 @@ def counter_split(
 ) -> CounterSplit:
     """Increase of a counter over the intervals between consecutive `samples`, (ts, value),
     within [`start`, `stop`]. An interval overlapping any of the fault `spans` counts as
-    during. The highest value over several nodes drops when the leading node restarts: a
-    negative increase counts as 0."""
+    during. `samples` are the highest value over the nodes that answered: it drops when the
+    leading node restarts or a sample lacks it. The running maximum over all `samples` is
+    diffed, so a drop adds nothing and the rise back to the old value is not counted."""
     during = [0.0, 0.0]
     outside = [0.0, 0.0]
-    inside = [c for c in samples if start <= c[0] <= stop]
+    peak = list(accumulate((v for _, v in samples), max))
+    series = [(ts, p) for (ts, _), p in zip(samples, peak, strict=True)]
+    inside = [c for c in series if start <= c[0] <= stop]
     for (a, value_a), (b, value_b) in pairwise(inside):
         into = during if any(s < b and e > a for s, e in spans) else outside
-        into[0] += max(0.0, value_b - value_a)
+        into[0] += value_b - value_a
         into[1] += b - a
     return CounterSplit(*during, *outside)
+
+
+def common_window(
+    series: Sequence[Sequence[tuple[float, float]]], start: float, stop: float
+) -> tuple[float, float]:
+    """[`start`, `stop`] clipped to the time every non-empty series has samples in, so counters
+    sampled on different grids cover the same interval."""
+    firsts = [s[0][0] for s in series if s]
+    lasts = [s[-1][0] for s in series if s]
+    return max([start, *firsts]), min([stop, *lasts])
 
 
 _VIEW_SAMPLE = re.compile(
@@ -824,14 +814,22 @@ _VIEW_SAMPLE = re.compile(
 )
 
 
-def view_samples(run_dir: Path) -> list[tuple[float, float]]:
-    """(ts, highest view over the nodes) per second: the `views` of `consensus.jsonl`, else
-    the scrapes of `metrics.jsonl` (runs from before `views`); empty without either."""
+def read_consensus(run_dir: Path) -> list[dict[str, float]]:
+    """The samples of `consensus.jsonl`; empty without the file."""
     path = run_dir / "consensus.jsonl"
-    if path.exists():
-        rows = [json.loads(line) for line in path.read_text().splitlines()]
-        if rows and all("views" in r for r in rows):
-            return [(r["ts"], r["views"]) for r in rows]
+    if not path.exists():
+        return []
+    return [json.loads(line) for line in path.read_text().splitlines()]
+
+
+def view_samples(
+    run_dir: Path, consensus: Sequence[Mapping[str, float]]
+) -> list[tuple[float, float]]:
+    """(ts, highest view over the nodes): the `views` of the `consensus` samples, else the
+    scrapes of `metrics.jsonl` per second (runs from before `views`; a second holds only the
+    nodes scraped in it); empty without either."""
+    if consensus and all("views" in r for r in consensus):
+        return [(r["ts"], r["views"]) for r in consensus]
     path = run_dir / "metrics.jsonl"
     if not path.exists():
         return []
@@ -844,14 +842,11 @@ def view_samples(run_dir: Path) -> list[tuple[float, float]]:
     return [(float(t), v) for t, v in sorted(best.items())]
 
 
-def timeout_samples(run_dir: Path) -> list[tuple[float, float]]:
-    """(ts, highest `consensus_number_of_timeouts` over the nodes); empty without samples."""
-    path = run_dir / "consensus.jsonl"
-    if not path.exists():
-        return []
-    return [
-        (r["ts"], r["timeouts"]) for r in map(json.loads, path.read_text().splitlines())
-    ]
+def counter_samples(
+    consensus: Sequence[Mapping[str, float]], key: str
+) -> list[tuple[float, float]]:
+    """(ts, highest `key` over the nodes) of the `consensus` samples."""
+    return [(r["ts"], r[key]) for r in consensus]
 
 
 def floor_lines(timeouts: CounterSplit, views: CounterSplit) -> list[str]:

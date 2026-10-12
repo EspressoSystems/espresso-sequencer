@@ -7443,9 +7443,10 @@ def chaos_view(
     spans = [(s["t_start"], s["t_end"]) for s in steps]
     chaos_steps = ch.step_chaos(spans, rows, t0, end)
     meta_path = run_dir / "load-meta.json"
+    consensus = ch.read_consensus(run_dir)
     throughput = [
         *throughput_lines(steps),
-        *fault_throughput_lines(run_dir, rows, steps, end),
+        *fault_throughput_lines(consensus, rows, steps, end),
     ]
     lead = [
         "## Chaos test",
@@ -7465,7 +7466,7 @@ def chaos_view(
         "",
         *(ch.recovery_table(rows, config["chaos"]["kinds"]) if rows else []),
         *([""] + throughput if throughput else []),
-        *floor_section(run_dir, manifest, rows, steps, end),
+        *floor_section(run_dir, manifest, consensus, rows, steps, end),
     ]
     return {"lead": lead, "faults": ch.fault_table(rows, t0), "steps": chaos_steps}
 
@@ -7473,18 +7474,23 @@ def chaos_view(
 def floor_section(
     run_dir: Path,
     manifest: Manifest,
+    consensus: Sequence[Mapping[str, float]],
     rows: list[ch.FaultRow],
     steps: Sequence[nb.StepResult],
     end: float,
 ) -> list[str]:
-    """The view timeout floor and the node log counters, from `consensus.jsonl` and the node
-    logs of `run_dir`, over the steps; also written to `floor.json`. Empty without steps."""
+    """The view timeout floor and the node log counters, from the `consensus` samples and the
+    node logs of `run_dir`, over the steps; also written to `floor.json`. Empty without steps."""
     if not steps:
         return []
-    start, stop = steps[0]["t_start"], steps[-1]["t_end"]
     spans = [ch.floor_span(r, end) for r in rows]
-    timeouts = ch.counter_split(ch.timeout_samples(run_dir), spans, start, stop)
-    views = ch.counter_split(ch.view_samples(run_dir), spans, start, stop)
+    timeout_series = ch.counter_samples(consensus, "timeouts")
+    view_series = ch.view_samples(run_dir, consensus)
+    start, stop = ch.common_window(
+        [timeout_series, view_series], steps[0]["t_start"], steps[-1]["t_end"]
+    )
+    timeouts = ch.counter_split(timeout_series, spans, start, stop)
+    views = ch.counter_split(view_series, spans, start, stop)
     assignment = manifest["latency"]["assignment"] if "latency" in manifest else {}
     nodes = sorted(
         (p.name for p in (run_dir / "hosts").glob("node*")),
@@ -7613,22 +7619,24 @@ def throughput_lines(steps: Sequence[nb.StepResult]) -> list[str]:
 
 
 def fault_throughput_lines(
-    run_dir: Path, rows: list[ch.FaultRow], steps: Sequence[nb.StepResult], end: float
+    consensus: Sequence[Mapping[str, float]],
+    rows: list[ch.FaultRow],
+    steps: Sequence[nb.StepResult],
+    end: float,
 ) -> list[str]:
-    """Decided MB/s from `consensus.jsonl` over the steps, with a fault active and without;
-    empty without counter samples."""
-    path = run_dir / "consensus.jsonl"
-    if not steps or not path.exists():
-        return []
-    with path.open() as f:
-        counters = [(c["ts"], c["decided_bytes"]) for c in map(json.loads, f)]
-    if not counters:
+    """Decided MB/s from the `consensus` samples over the steps, with a fault active and
+    without; empty without counter samples."""
+    if not steps or not consensus:
         return []
     spans = [ch.fault_span(r, end) for r in rows]
-    split = ch.decided_by_fault(
-        counters, spans, steps[0]["t_start"], steps[-1]["t_end"]
+    split = ch.counter_split(
+        ch.counter_samples(consensus, "decided_bytes"),
+        spans,
+        steps[0]["t_start"],
+        steps[-1]["t_end"],
     )
-    (faulty_mb, faulty_s), (quiet_mb, quiet_s) = split
+    faulty_mb, faulty_s = split.during / 1e6, split.during_s
+    quiet_mb, quiet_s = split.outside / 1e6, split.outside_s
 
     def rate(mb: float, s: float) -> str:
         return f"{nb.fmt_num(mb / s)} MB/s" if s else "-"
