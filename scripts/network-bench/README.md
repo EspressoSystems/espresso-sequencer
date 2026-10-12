@@ -328,6 +328,8 @@ just bench aws run --fleet --chaos --query-engine sqlite
 - `throughput.png` has a top panel with one lane per faulted node: down, recovering and catching up in distinct colors,
   a marker per event, a red x at a timeout. A kill aborted before its node started stays down. The other panels shade
   each fault while it is active.
+- A run with `chaos.jsonl` (also with `--chaos-kinds none`) has bottom panels of view timeouts, `stub`, `no-propose` and
+  `no-vote1` log events per 10 s, the events stacked by latency region (the 6 largest, the rest as `other`).
 - A run that ends early (an error or Ctrl-C) is collected and reported the same way from the files it has: no
   `result.json` or `run.json`, so the load starts at the first step; consensus counters and steps run up to the end. The
   log section shows, per node that timed out, its last 30 WARN and ERROR lines before the timeout, else its last lines;

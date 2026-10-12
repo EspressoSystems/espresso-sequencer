@@ -1159,3 +1159,17 @@ def test_no_kinds_issues_no_fault():
     cfg = ch.ChaosConfig(kinds=())
     assert faults(run(CFG, seconds=600.0))
     assert faults(run(cfg, seconds=600.0)) == []
+
+
+def test_log_events_carry_timestamps_within_the_window():
+    def line(ts: str, message: str) -> str:
+        return json.dumps({"timestamp": ts, "fields": {"message": message}})
+
+    stub = "parent state unavailable; queued on parent for retry (from_header stub inserted)"
+    lines = [
+        line("1970-01-01T00:00:05+00:00", stub),
+        line("1970-01-01T00:00:50+00:00", stub),
+        line("1970-01-01T00:00:06+00:00", "unrelated"),
+        "container output",
+    ]
+    assert ch.log_events(lines, 0.0, 10.0) == [(5.0, "stub")]

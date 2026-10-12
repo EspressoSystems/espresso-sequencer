@@ -18,7 +18,10 @@
   block the light-client readers held it over the last SMOOTH_S (left, log scale) and the MB/s
   they fetched (right).
 
-A run with `chaos.jsonl` gets a panel on top with one lane per faulted node: a bar for each phase
+A run with `chaos.jsonl` (also an empty one, `--chaos-kinds none`) gets a view timeout floor panel
+at the bottom: view timeouts per FLOOR_BIN_S, then the `stub`, `no-propose` and `no-vote1` node
+log events per FLOOR_BIN_S, stacked by latency region (the FLOOR_GROUPS largest, the rest as
+`other`). A run with faults also gets a panel on top with one lane per faulted node: a bar for each phase
 of a fault (down, recovering, catching up) with a marker per event, ending in a red x when the
 node did not recover. The other panels shade each fault until its node recovered. A run
 without `consensus.jsonl` samples (it failed) has no decided, block or timeout series, and its
@@ -31,6 +34,7 @@ import argparse
 import json
 import math
 import re
+from collections import Counter
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -44,6 +48,11 @@ import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 
 SMOOTH_S = 10
+FLOOR_BIN_S = 10
+FLOOR_GROUPS = 6
+FLOOR_EVENTS = ("stub", "no-propose", "no-vote1")
+GROUP_COLORS = ("#2a78d6", "#eb6834", "#2a9d8f", "#6b4fa0", "#e8a317", "#c8352c")
+OTHER_COLOR = "#b9b7b1"
 SURFACE = "#fcfcfb"
 INK = "#52514e"
 MUTED = "#898781"
@@ -157,6 +166,57 @@ def timeout_times(counters: list[dict]) -> np.ndarray:
     return ts[1:][np.diff(timeouts) > 0]
 
 
+def timeout_increments(counters: list[dict]) -> tuple[np.ndarray, np.ndarray]:
+    """Sample times and the growth of the running maximum of the timeout count at each, as the
+    floor diffs it."""
+    ts = np.array([c["ts"] for c in counters])
+    peak = np.maximum.accumulate([c["timeouts"] for c in counters])
+    return ts[1:], np.diff(peak)
+
+
+def bin_counts(
+    times: np.ndarray, weights: np.ndarray, t0: float, t1: float, bin_s: float
+) -> tuple[np.ndarray, np.ndarray]:
+    """Bin starts and the summed `weights` of the `times` within each `bin_s` bin of
+    `[t0, t1]`."""
+    bins = math.ceil((t1 - t0) / bin_s)
+    edges = np.linspace(t0, t0 + bins * bin_s, bins + 1)
+    total, _ = np.histogram(times, edges, weights=weights)
+    return edges[:-1], total
+
+
+def region_groups(regions: dict[str, str], top: int = FLOOR_GROUPS) -> dict[str, str]:
+    """Node to group: its region when among the `top` regions by node count (ties by name),
+    else `other`."""
+    sizes = Counter(regions.values())
+    kept = {r for r, _ in sorted(sizes.items(), key=lambda kv: (-kv[1], kv[0]))[:top]}
+    if len(sizes) <= top:
+        return dict(regions)
+    return {n: r if r in kept else "other" for n, r in regions.items()}
+
+
+def binned_by_group(
+    events: list[tuple[float, str, str]],
+    groups: dict[str, str],
+    label: str,
+    t0: float,
+    t1: float,
+) -> tuple[np.ndarray, dict[str, np.ndarray]]:
+    """Bin starts and per group the FLOOR_BIN_S counts of the `events` (ts, node, label) whose
+    label name (before `[`) is `label`."""
+    times: dict[str, list[float]] = {g: [] for g in dict.fromkeys(groups.values())}
+    for ts, node, name in events:
+        if name.partition("[")[0] == label:
+            times[groups[node]].append(ts)
+    binned = {
+        g: bin_counts(np.array(ts), np.ones(len(ts)), t0, t1, FLOOR_BIN_S)
+        for g, ts in times.items()
+    }
+    return bin_counts(np.array([]), np.array([]), t0, t1, FLOOR_BIN_S)[0], {
+        g: counts for g, (_, counts) in binned.items()
+    }
+
+
 def max_block_mb(genesis: Path) -> float:
     """Genesis `chain_config.max_block_size` in MB, as the node parses it (decimal units)."""
     text = tomllib.loads(genesis.read_text())["chain_config"]["max_block_size"]
@@ -219,6 +279,70 @@ def draw_lanes(
         frameon=False,
         labelcolor=INK,
     )
+
+
+def draw_floor(
+    axes: Sequence[plt.Axes],
+    counters: list[dict],
+    events: list[tuple[float, str, str]],
+    groups: dict[str, str],
+    t0: float,
+    t1: float,
+    minutes,
+) -> None:
+    """Timeouts per bin on the first axis, then one stacked-by-group axis per `FLOOR_EVENTS`."""
+    width = FLOOR_BIN_S / 60
+    ts, grown = timeout_increments(counters) if len(counters) > 1 else (np.array([]),) * 2
+    starts, total = bin_counts(ts, grown, t0, t1, FLOOR_BIN_S)
+    axes[0].bar(
+        minutes(starts), total, width, align="edge", color=BAND_FAILED_INK, lw=0
+    )
+    axes[0].set_ylabel(f"view timeouts\nper {FLOOR_BIN_S} s", color=INK, fontsize=8)
+    names = sorted(set(groups.values()), key=lambda g: (g == "other", g))
+    colors = {
+        g: OTHER_COLOR if g == "other" else GROUP_COLORS[i % len(GROUP_COLORS)]
+        for i, g in enumerate(names)
+    }
+    for ax, label in zip(axes[1:], FLOOR_EVENTS):
+        starts, counts = binned_by_group(events, groups, label, t0, t1)
+        bottom = np.zeros(len(starts))
+        for group in names:
+            ax.bar(
+                minutes(starts),
+                counts[group],
+                width,
+                bottom=bottom,
+                align="edge",
+                color=colors[group],
+                lw=0,
+                label=group,
+            )
+            bottom += counts[group]
+        ax.set_ylabel(f"{label}\nper {FLOOR_BIN_S} s", color=INK, fontsize=8)
+    if names:
+        axes[1].legend(
+            loc="lower left",
+            bbox_to_anchor=(0, 1),
+            ncol=FLOOR_GROUPS + 1,
+            fontsize=7,
+            frameon=False,
+            labelcolor=INK,
+        )
+    for ax in axes:
+        ax.set_ylim(0, max(1, ax.get_ylim()[1]))
+        ax.spines[["top", "right"]].set_visible(False)
+
+
+def read_log_events(
+    run_dir: Path, nodes: list[str], t0: float, t1: float
+) -> list[tuple[float, str, str]]:
+    """(ts, node, label) of the `FLOOR_EVENTS` in the logs of `nodes`."""
+    return [
+        (ts, node, label)
+        for node in nodes
+        for ts, label in ch.node_log_events(run_dir, node, t0, t1)
+        if label.partition("[")[0] in FLOOR_EVENTS
+    ]
 
 
 def last_time(
@@ -293,17 +417,26 @@ def main(argv: list[str] | None = None) -> None:
     lane_count = len({r.node for r in rows})
     lane_ratio = (max(1.0, 0.3 * lane_count),) if rows else ()
     client_ratio = (1,) if clients else ()
+    floor_ratio = (0.6, 0.8, 0.8, 0.8) if (run_dir / "chaos.jsonl").exists() else ()
     fig, panels = plt.subplots(
-        len(lane_ratio) + 3 + len(client_ratio),
+        len(lane_ratio) + 3 + len(client_ratio) + len(floor_ratio),
         1,
-        figsize=(13, 3.3 * (3 + len(client_ratio)) + 0.4 * lane_count),
+        figsize=(
+            13,
+            3.3 * (3 + len(client_ratio))
+            + 0.4 * lane_count
+            + 1.6 * sum(floor_ratio) ** 0.5 * bool(floor_ratio),
+        ),
         sharex=True,
-        height_ratios=(*lane_ratio, 2, 1, 1, *client_ratio),
+        height_ratios=(*lane_ratio, 2, 1, 1, *client_ratio, *floor_ratio),
         facecolor=SURFACE,
     )
     lane_panel = panels[: len(lane_ratio)]
-    ax, blk_ax, lat_ax, *client_panel = panels[len(lane_ratio) :]
-    data_panels = (ax, blk_ax, lat_ax, *client_panel)
+    floor_panels = panels[len(panels) - len(floor_ratio) :]
+    ax, blk_ax, lat_ax, *client_panel = panels[
+        len(lane_ratio) : len(panels) - len(floor_ratio)
+    ]
+    data_panels = (ax, blk_ax, lat_ax, *client_panel, *floor_panels)
     for panel in panels:
         panel.set_facecolor(SURFACE)
         panel.tick_params(colors=INK)
@@ -471,6 +604,20 @@ def main(argv: list[str] | None = None) -> None:
         fetch_ax.set_ylabel("MB/s", color=QUERY)
         fetch_ax.tick_params(colors=INK)
         twin_legend(cli_ax, fetch_ax)
+    if len(floor_panels):
+        manifest_path = run_dir / "manifest.json"
+        assignment = (
+            json.loads(manifest_path.read_text()).get("latency", {}).get("assignment", {})
+            if manifest_path.exists()
+            else {}
+        )
+        nodes = sorted(
+            (p.name for p in (run_dir / "hosts").glob("node*")),
+            key=lambda name: int(name.removeprefix("node")),
+        )
+        groups = region_groups({n: assignment.get(n, "-") for n in nodes})
+        log = read_log_events(run_dir, nodes, t0, t1)
+        draw_floor(floor_panels, counters, log, groups, t0, t1, minutes)
     panels[-1].set_xlabel("minutes since run start", color=INK)
 
     run = run_dir.resolve()

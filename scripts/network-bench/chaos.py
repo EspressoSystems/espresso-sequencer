@@ -939,6 +939,25 @@ def count_log(
     return during, outside
 
 
+def log_events(
+    lines: Iterable[str], start: float, stop: float
+) -> list[tuple[float, str]]:
+    """(epoch seconds, label) of the `LOG_PATTERNS` lines within [`start`, `stop`]."""
+    hits = (hit for line in lines if (hit := log_label(line)) is not None)
+    return [(ts, label) for label, ts in hits if start <= ts <= stop]
+
+
+def node_log_events(
+    run_dir: Path, node: str, start: float, stop: float
+) -> list[tuple[float, str]]:
+    """`log_events` of the logs of `node`."""
+    events: list[tuple[float, str]] = []
+    for path in node_log_files(run_dir, node):
+        with gzip.open(path, "rt", errors="replace") as f:
+            events += log_events(f, start, stop)
+    return events
+
+
 class NodeCounts(TypedDict):
     region: str
     during: dict[str, int]

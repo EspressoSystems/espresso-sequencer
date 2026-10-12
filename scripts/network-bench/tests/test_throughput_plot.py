@@ -227,3 +227,43 @@ def test_main_draws_the_chaos_lanes_and_the_clients_panel_together(tmp_path: Pat
     both = (run_dir / "throughput.png").read_bytes()
     assert both.startswith(b"\x89PNG")
     assert both != chaos_only
+
+
+def test_timeout_increments_diff_the_running_maximum():
+    counters = [{"ts": t, "timeouts": v} for t, v in enumerate([1, 3, 2, 3, 4])]
+    ts, grown = plot.timeout_increments(counters)
+    assert list(ts) == [1, 2, 3, 4]
+    assert list(grown) == [2, 0, 0, 1]
+
+
+def test_bin_counts_sums_weights_per_bin():
+    starts, total = plot.bin_counts(
+        np.array([0.5, 9.9, 10.0, 25.0]), np.array([1, 1, 2, 3]), 0.0, 30.0, 10
+    )
+    assert list(starts) == [0.0, 10.0, 20.0]
+    assert list(total) == [2, 2, 3]
+
+
+def test_region_groups_keep_the_largest_regions_and_pool_the_rest():
+    regions = {"n0": "a", "n1": "a", "n2": "b", "n3": "c", "n4": "d"}
+    assert plot.region_groups(regions, top=3) == {
+        "n0": "a",
+        "n1": "a",
+        "n2": "b",
+        "n3": "c",
+        "n4": "other",
+    }
+    assert plot.region_groups(regions, top=4) == regions
+
+
+def test_binned_by_group_counts_one_label_name_per_group():
+    groups = {"n0": "a", "n1": "b"}
+    events = [
+        (1.0, "n0", "no-propose[missing]"),
+        (2.0, "n1", "no-propose[missing]"),
+        (12.0, "n1", "no-propose[missing]"),
+        (3.0, "n0", "stub"),
+    ]
+    starts, counts = plot.binned_by_group(events, groups, "no-propose", 0.0, 20.0)
+    assert list(starts) == [0.0, 10.0]
+    assert {g: list(c) for g, c in counts.items()} == {"a": [1, 0], "b": [1, 1]}
