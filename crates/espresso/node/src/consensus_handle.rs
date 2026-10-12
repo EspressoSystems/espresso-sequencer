@@ -14,6 +14,7 @@ use hotshot_new_protocol::{
         Coordinator,
         error::{CoordinatorError, Severity},
     },
+    message::OpaqueMessage,
     state::UpdateLeaf,
     storage::NewProtocolStorage,
 };
@@ -32,7 +33,7 @@ use hotshot_types::{
     utils::StateAndDelta,
 };
 use parking_lot::RwLock;
-use tokio::{join, select, spawn};
+use tokio::{join, select, spawn, sync::mpsc::UnboundedReceiver};
 use tokio_util::{sync::CancellationToken, task::AbortOnDropHandle};
 use tracing::{error, warn};
 
@@ -61,6 +62,7 @@ enum NewProtocol<T: NodeType, S> {
     Empty,
     Init {
         coordinator: Coordinator<T, S>,
+        external_rx: UnboundedReceiver<OpaqueMessage<T::SignatureKey>>,
         event_tx: Sender<CoordinatorEvent<T>>,
         queue_len: Option<Arc<dyn Gauge>>,
     },
@@ -85,6 +87,7 @@ where
 {
     pub fn new(
         coordinator: Coordinator<T, I::Storage>,
+        external_rx: UnboundedReceiver<OpaqueMessage<T::SignatureKey>>,
         upgrade_lock: UpgradeLock<T>,
         membership_coordinator: EpochMembershipCoordinator<T>,
         initializer: &HotShotInitializer<T>,
@@ -103,6 +106,7 @@ where
 
         let new_proto = Arc::new(RwLock::new(NewProtocol::Init {
             coordinator,
+            external_rx,
             event_tx,
             queue_len: coordinator_event_queue_len,
         }));
@@ -131,6 +135,7 @@ where
         match new_proto.take() {
             NewProtocol::Init {
                 coordinator,
+                external_rx,
                 event_tx,
                 queue_len,
             } => {
@@ -139,6 +144,7 @@ where
                 *new_proto = NewProtocol::Running {
                     coordinator: AbortOnDropHandle::new(spawn(run_coordinator(
                         coordinator,
+                        external_rx,
                         event_tx,
                         queue_len,
                         shutdown.clone(),
@@ -424,6 +430,7 @@ where
 
 async fn run_coordinator<T, S>(
     mut coord: Coordinator<T, S>,
+    mut external_rx: UnboundedReceiver<OpaqueMessage<T::SignatureKey>>,
     tx: Sender<CoordinatorEvent<T>>,
     queue_len: Option<Arc<dyn Gauge>>,
     shutdown: CancellationToken,
@@ -432,6 +439,18 @@ async fn run_coordinator<T, S>(
     S: NewProtocolStorage<T>,
 {
     coord.start();
+    let _forward = AbortOnDropHandle::new(spawn({
+        let tx = tx.clone();
+        async move {
+            while let Some(m) = external_rx.recv().await {
+                let e = CoordinatorEvent::ExternalMessageReceived {
+                    sender: m.sender,
+                    data: m.data,
+                };
+                broadcast_event(&tx, e).await;
+            }
+        }
+    }));
 
     loop {
         select! {
@@ -480,14 +499,6 @@ where
             }
             warn!(%err, "coordinator: error processing output");
         }
-    }
-
-    while let Some(m) = coord.coordinator_outbox_mut().pop_front() {
-        let e = CoordinatorEvent::ExternalMessageReceived {
-            sender: m.sender,
-            data: m.data,
-        };
-        broadcast_event(tx, e).await;
     }
 
     Ok(())

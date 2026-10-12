@@ -46,7 +46,11 @@ use parking_lot::Mutex;
 use request_response::RequestResponseConfig;
 use tokio::{
     spawn,
-    sync::{broadcast, mpsc::channel, watch},
+    sync::{
+        broadcast,
+        mpsc::{channel, unbounded_channel},
+        watch,
+    },
     task::JoinHandle,
 };
 use tracing::{Instrument, Level, info};
@@ -216,6 +220,7 @@ where
             .await
             .context("loading the anchor's cert2")?;
 
+        let (external_tx, external_rx) = unbounded_channel();
         let coordinator = Coordinator::maker()
             .membership_coordinator(membership_coordinator.clone())
             .network(coordinator_network)
@@ -243,10 +248,12 @@ where
                 start_voting_time: config.start_voting_time,
                 stop_voting_time: config.stop_voting_time,
             })
+            .external_tx(external_tx)
             .make();
 
         let consensus_handle = Arc::new(ConsensusHandle::new(
             coordinator,
+            external_rx,
             upgrade_lock,
             membership_coordinator.clone(),
             &initializer,
