@@ -406,7 +406,7 @@ def test_noise_is_raised_to_the_floors():
     assert noise.keys() == delays.keys()
 
 
-def test_netem_full_script_keeps_order_and_adds_jitter_and_loss():
+def test_netem_full_script_has_delay_jitter_rate_and_loss_on_every_peer_leaf():
     shaping = latency.shaping("decaf-2026", 4, True, "bbr", 1500, netem="full")
     peers = {i: f"10.0.0.{i + 10}" for i in range(4)}
     script = latency.tc_script(0, peers, shaping.delays, "bbr", 1500, shaping.noise)

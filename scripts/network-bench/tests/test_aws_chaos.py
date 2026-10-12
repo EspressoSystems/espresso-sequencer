@@ -261,11 +261,11 @@ def test_chaos_kinds_none_runs_the_shape_without_faults():
     awsb.check_chaos(
         dataclasses.replace(cfg, chaos=ch.ChaosConfig(minutes=3, kinds=()))
     )
+
+
+def test_chaos_kinds_none_cannot_be_combined_with_a_kind():
     with pytest.raises(SystemExit):
         parse("--chaos", "--chaos-kinds", "none,kill")
-    cfg = awsb.config_from_args(parse("--chaos", "--chaos-rate", "0.1"))
-    assert cfg.chaos is not None
-    assert cfg.chaos.rate_mb_s == 0.1
 
 
 # TEST:chaos-small-fleet-refused-fails

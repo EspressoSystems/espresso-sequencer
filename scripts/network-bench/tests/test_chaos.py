@@ -1090,6 +1090,18 @@ def test_count_log_splits_by_the_nodes_windows_and_clips_to_the_load():
     assert outside == {"header-failed": 2}
 
 
+def test_node_counts_read_every_wipe_appended_to_the_wiped_log(tmp_path):
+    """The wipe script appends one gzip member per wipe to one file."""
+    host = tmp_path / "hosts" / "node0"
+    host.mkdir(parents=True)
+    line = log_line("header creation failed", 15) + "\n"
+    (host / "espresso-node.wiped.log.gz").write_bytes(
+        gzip.compress(line.encode()) + gzip.compress(line.encode())
+    )
+    counts = ch.node_counts(tmp_path, {"node0": "eu"}, [], T0, T0 + 100, T0 + 100)
+    assert counts["node0"]["outside"] == {"header-failed": 2}
+
+
 def test_node_counts_read_current_and_wiped_logs_by_region(tmp_path):
     for node, name in [
         ("node0", "espresso-node.log.gz"),
