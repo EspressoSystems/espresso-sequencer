@@ -543,51 +543,55 @@ where
     where
         Q: Send + Quorum,
     {
-        if let Some(leaf) = self.db.leaf_upper_bound(id).await? {
-            if leaf_matches_id(&leaf, id) {
-                // If we have the leaf for the requested header in our database already, we can just
-                // extract the header.
-                return Ok(leaf.header().clone());
-            } else {
-                // Otherwise, if we have a leaf that is known to be greater than the requested
-                // header, we can ask the server for an inclusion proof for the requested header
-                // relative to the Merkle root in the upper bound leaf.
-                match self.server.header_proof(leaf.height(), id).await {
-                    Ok(proof) => {
-                        let header = proof
-                            .verify(leaf.header().block_merkle_tree_root())
-                            .context("invalid header proof")?;
+        let Some(upper_bound) = self.db.leaf_upper_bound(id).await? else {
+            // We have neither the requested header nor an upper bound for it. All we can do is fetch
+            // the corresponding leaf from the server (verifying a leaf proof) and then extract the
+            // header from there.
+            let leaf = self.fetch_leaf_from_server(id, None, quorum).await?;
+            return Ok(leaf.header().clone());
+        };
 
-                        // The server has given us a header and correctly proved it finalized, but
-                        // we still need to verify that it actually gave us the header we requested.
-                        ensure!(
-                            header_matches_id(&header, id),
-                            "server returned a valid header proof for the wrong header (requested \
-                             header {id}, got header {} with hash {})",
-                            header.height(),
-                            header.commit(),
-                        );
-
-                        return Ok(header);
-                    },
-                    // Archive nodes prune the merklized state behind old roots, so a proof
-                    // against an old cached leaf can fail forever. A leaf proof needs no
-                    // merklized state.
-                    Err(err) => tracing::info!(
-                        %id,
-                        root = leaf.height(),
-                        err = %format_args!("{err:#}"),
-                        "header proof fetch failed, fetching a leaf proof instead"
-                    ),
-                }
-            }
+        // If we have the leaf for the requested header in our database already, we can just
+        // extract the header.
+        if leaf_matches_id(&upper_bound, id) {
+            return Ok(upper_bound.header().clone());
         }
 
-        // Without the requested header, or a header proof from an upper bound, all we can do is
-        // fetch the corresponding leaf from the server (verifying a leaf proof) and then extract
-        // the header from there.
-        let leaf = self.fetch_leaf_from_server(id, None, quorum).await?;
-        Ok(leaf.header().clone())
+        // Otherwise, if we have a leaf that is known to be greater than the requested
+        // header, we can ask the server for an inclusion proof for the requested header
+        // relative to the Merkle root in the upper bound leaf.
+        let proof = match self.server.header_proof(upper_bound.height(), id).await {
+            Ok(proof) => proof,
+            // Archive nodes prune old merklized state, which a leaf proof doesn't need.
+            Err(err) => {
+                tracing::info!(
+                    %id,
+                    root = upper_bound.height(),
+                    err = %format_args!("{err:#}"),
+                    "header proof fetch failed, fetching a leaf proof instead"
+                );
+                let leaf = self
+                    .fetch_leaf_from_server(id, None, quorum)
+                    .await
+                    .with_context(|| format!("header proof also failed: {err:#}"))?;
+                return Ok(leaf.header().clone());
+            },
+        };
+        let header = proof
+            .verify(upper_bound.header().block_merkle_tree_root())
+            .context("invalid header proof")?;
+
+        // The server has given us a header and correctly proved it finalized, but we still
+        // need to verify that it actually gave us the header we requested.
+        ensure!(
+            header_matches_id(&header, id),
+            "server returned a valid header proof for the wrong header (requested header {id}, \
+             got header {} with hash {})",
+            header.height(),
+            header.commit(),
+        );
+
+        Ok(header)
     }
 
     /// Fetch and verify the requested payload.
@@ -1311,6 +1315,24 @@ mod test {
         assert_eq!(
             lc.fetch_header(BlockId::Number(1)).await.unwrap(),
             *client.leaf(1).await.header(),
+        );
+    }
+
+    #[tokio::test]
+    #[test_log::test]
+    async fn test_fetch_header_reports_header_proof_error_when_fallback_fails() {
+        let client = TestClient::default();
+
+        let db = SqliteStorage::default().await.unwrap();
+        db.insert_leaf(client.leaf(2).await).await.unwrap();
+        client.fail_header_proofs().await;
+        client.forget_leaf(1).await;
+
+        let lc = LightClient::from_genesis(db, client.clone(), client.genesis().await);
+        let err = lc.fetch_header(BlockId::Number(1)).await.unwrap_err();
+        assert!(
+            format!("{err:#}").contains("header proof also failed: no merklized state at root 2"),
+            "{err:#}"
         );
     }
 

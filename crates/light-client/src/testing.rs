@@ -398,8 +398,7 @@ struct InnerTestClient {
     fail_leaf_ranges: bool,
     /// If set, fail payload proof ranges requests, like a server that predates the endpoint.
     fail_payload_proof_ranges: bool,
-    /// If set, fail header proof requests, like a server that pruned the merklized state at the
-    /// requested root.
+    /// If set, fail header proofs, like a server that pruned the root's merklized state.
     fail_header_proofs: bool,
 }
 
@@ -857,8 +856,7 @@ impl TestClient {
         inner.fail_payload_proof_ranges = true;
     }
 
-    /// Fail header proof requests, like a server that pruned the merklized state at the requested
-    /// root.
+    /// Fail header proofs, like a server that pruned the root's merklized state.
     pub async fn fail_header_proofs(&self) {
         let mut inner = self.inner.lock().await;
         inner.fail_header_proofs = true;
