@@ -4910,10 +4910,8 @@ mod test {
         }
     }
 
-    /// From 0.3 to 0.5 every block paid its leader's commission and delegators. Only legacy
-    /// consensus produced such blocks, so the replayed v4 chain is what checks mainnet's: each
-    /// header's `total_reward_distributed`, and every staker's balance in the reward tree, match
-    /// what the block's leader was owed. Its commissions change in epoch 2.
+    /// From 0.3 to 0.5 every block paid its leader's commission and delegators, which only legacy
+    /// consensus produced; the v4 chain's commissions change in epoch 2.
     #[test_log::test(tokio::test(flavor = "multi_thread"))]
     async fn test_legacy_block_rewards() -> anyhow::Result<()> {
         let chain = LegacyChain::load("v4")?;
@@ -5030,9 +5028,7 @@ mod test {
         Ok(())
     }
 
-    /// Stakers claim rewards earned before 0.5 with proofs against those blocks' v2 reward
-    /// roots. On the replayed v4 chain every staker's proof, claim input and page entry must
-    /// agree with the header, and each epoch's block reward with the stake table.
+    /// Stakers claim rewards earned before 0.5 with proofs against those blocks' v2 reward roots.
     #[test_log::test(tokio::test(flavor = "multi_thread"))]
     async fn test_legacy_reward_queries() -> anyhow::Result<()> {
         let chain = LegacyChain::load("v4")?;
@@ -6551,9 +6547,8 @@ mod test {
         Ok(())
     }
 
-    /// Checks `total_reward_distributed` in every header up to `last`: nothing is distributed in
-    /// the first three epochs, and each later epoch's last block adds the previous epoch's block
-    /// reward for every block of an epoch.
+    /// Checks `total_reward_distributed` in every header up to `last` against the epoch block
+    /// rewards.
     async fn assert_epoch_reward_totals(
         client: &Client<ClientErr, SequencerApiVersion>,
         coordinator: &EpochMembershipCoordinator<SeqTypes>,
@@ -6595,8 +6590,8 @@ mod test {
         }
     }
 
-    /// Checks that each header's `leader_counts` up to `last`, from the third epoch on, counts the
-    /// leaders of the epoch's blocks so far.
+    /// Checks each header's `leader_counts` up to `last` against the leaders of the epoch's blocks
+    /// so far.
     async fn assert_epoch_leader_counts(
         client: &Client<ClientErr, SequencerApiVersion>,
         coordinator: &EpochMembershipCoordinator<SeqTypes>,
@@ -11042,13 +11037,9 @@ mod test {
         }
     }
 
-    /// Before 0.4 rewards accrue in the v1 tree and from 0.4 on in the v2 tree. A node rebuilding
-    /// mainnet's state replays headers from both eras. The replay derives each block's trees and
-    /// checks their roots against its header, so reaching the tip shows every header's tree was
-    /// rebuilt exactly; the v2 tree's balances show that each era filled the tree it should.
-    ///
-    /// The v1 tree's balances are not queryable: the state loop has stored no v1 paths since
-    /// #4325, so only its root can be checked.
+    /// Rewards accrue in the v1 tree before 0.4 and in the v2 tree from 0.4 on. The replay checks
+    /// every derived root against its header, so this only checks which tree each era filled. The
+    /// v1 balances are not queryable: the state loop stores no v1 paths since #4325.
     #[rstest]
     #[case::v3("v3", false)]
     #[case::v4("v4", true)]
@@ -11240,8 +11231,8 @@ mod test {
         Ok(())
     }
 
-    /// Checks the v1 and v2 state certificates of `epochs` agree, and that each certifies the
-    /// block halfway through the epoch before it, with that block's auth root.
+    /// Checks the v1 and v2 state certificates of `epochs` agree, and that each certifies its
+    /// epoch root block.
     async fn assert_state_certs(
         client: &Client<ClientErr, StaticVersion<0, 1>>,
         epochs: std::ops::RangeInclusive<u64>,
@@ -11615,8 +11606,7 @@ mod test {
     }
 
     /// Mainnet's validators set their x25519 keys and p2p addresses with the V3 stake table
-    /// contract, after epochs run on V1 and V2. On the replayed v4 chain, whose contract did the
-    /// same, the indexer shows no network config before the upgrade and the update after it.
+    /// contract, after epochs run on V1 and V2.
     #[test_log::test(tokio::test(flavor = "multi_thread"))]
     async fn test_legacy_network_config_update() -> anyhow::Result<()> {
         let chain = LegacyChain::load("v4")?;
@@ -11637,10 +11627,8 @@ mod test {
         };
 
         // The update reaches the stake table a few epochs after the V3 upgrade in epoch 4.
-        // Until then no validator has a network config; from then on exactly the recorded
-        // validator has exactly the recorded one.
         let mut first_seen = None;
-        // The stake table takes effect in epoch 3; before that the chain has no validators.
+        // The stake table takes effect in epoch 3.
         for epoch in 3..=last_epoch {
             let validators = validators(epoch).await?;
             ensure!(!validators.is_empty(), "epoch {epoch} has validators");
@@ -13163,8 +13151,7 @@ mod test {
     }
 
     /// Rollups still fetch their namespaces from mainnet blocks before 0.6, proven with ADVZ
-    /// before 0.3 and AvidM after. The first blocks of each version of a replayed chain must
-    /// prove each namespace's transactions, and no legacy block has a cert2.
+    /// before 0.3 and AvidM after.
     #[rstest]
     #[case::v2_v3("v2-v3")]
     #[case::v4("v4")]
@@ -13177,8 +13164,7 @@ mod test {
             .iter()
             .map(|block| block.leaf.header().version())
             .collect::<HashSet<_>>();
-        // Proving every block of the long upgrade chain takes too long; the first blocks of each
-        // version cover each scheme.
+        // Proving every block of the 1001-block upgrade chain takes too long.
         let sampled = versions.iter().flat_map(|version| {
             chain
                 .blocks
@@ -13500,9 +13486,8 @@ mod test {
         check_light_client_stake_table(&client, &*network.server.persistence(), first_epoch).await;
     }
 
-    /// Mainnet ran without epochs until it upgraded to 0.3. Light clients still prove its leaves
-    /// from before the upgrade, across it and across the epoch that first used the stake table,
-    /// all produced by legacy consensus.
+    /// Light clients still prove mainnet's leaves from before its 0.3 upgrade, across it and across
+    /// the first epoch on the stake table, all produced by legacy consensus.
     #[test_log::test(tokio::test(flavor = "multi_thread"))]
     async fn test_legacy_light_client_completeness() -> anyhow::Result<()> {
         let chain = LegacyChain::load("v2-v3")?;
