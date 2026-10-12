@@ -10,11 +10,12 @@ use std::{
 
 use bon::{Builder, bon};
 use committable::Commitment;
-use hotshot::{HotShotInitializer, traits::BlockPayload, types::SignatureKey};
+use hotshot::{traits::BlockPayload, types::SignatureKey};
 use hotshot_types::{
     consensus::{ConsensusMetricsValue, ParticipationTracker},
     data::{EpochNumber, Leaf2, VidCommitment, VidCommitment2, ViewChangeEvidence2, ViewNumber},
     epoch_membership::EpochMembershipCoordinator,
+    initializer::HotShotInitializer,
     message::{Proposal as SignedProposal, UpgradeLock},
     simple_certificate::{
         OneHonestThreshold, SuccessThreshold, TimeoutCertificate2, TimeoutCertificate3,

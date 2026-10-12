@@ -18,7 +18,6 @@ use futures::{
     future::join_all,
     stream::{BoxStream, Stream, StreamExt},
 };
-use hotshot::{HotShotInitializer, load_start_epoch_info};
 use hotshot_new_protocol::{
     coordinator::Coordinator,
     network::{Cliquenet, NetworkError},
@@ -31,6 +30,7 @@ use hotshot_types::{
     data::{Leaf2, ViewNumber},
     drb::drb_difficulty_selector,
     epoch_membership::EpochMembershipCoordinator,
+    initializer::{HotShotInitializer, load_start_epoch_info},
     message::UpgradeLock,
     network::NetworkConfig,
     new_protocol::CoordinatorEvent,

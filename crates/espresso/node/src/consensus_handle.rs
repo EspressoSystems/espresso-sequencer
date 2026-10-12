@@ -5,7 +5,7 @@ use async_broadcast::{InactiveReceiver, Sender, broadcast};
 use committable::Commitment;
 use espresso_api::error::SubmitError;
 use futures::{FutureExt, StreamExt, future::BoxFuture, stream::BoxStream};
-use hotshot::{HotShotInitializer, traits::NodeImplementation};
+use hotshot::traits::NodeImplementation;
 use hotshot_new_protocol::{
     block,
     client::{ClientApi, QueryError},
@@ -22,6 +22,7 @@ use hotshot_types::{
     data::{BlockNumber, EpochNumber, Leaf2, QuorumProposalWrapper, VidDisperseShare, ViewNumber},
     epoch_membership::EpochMembershipCoordinator,
     event::LeafInfo,
+    initializer::HotShotInitializer,
     message::{Proposal as SignedProposal, UpgradeLock, convert_proposal},
     new_protocol::CoordinatorEvent,
     traits::{

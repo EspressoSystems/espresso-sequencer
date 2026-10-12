@@ -223,10 +223,7 @@ mod tests {
         v0_3::{AuthenticatedValidator, EventKey, Fetcher, RegisteredValidator, StakeTableEvent},
     };
     use futures::{StreamExt, TryStreamExt, future::join_all};
-    use hotshot::{
-        InitializerEpochInfo,
-        types::{BLSPubKey, SignatureKey},
-    };
+    use hotshot::types::{BLSPubKey, SignatureKey};
     use hotshot_contract_adapter::{
         sol_types::StakeTableV3::Delegated, stake_table::StakeTableContractVersion,
     };
@@ -239,6 +236,7 @@ mod tests {
             ViewNumber, ns_table::parse_ns_table, vid_commitment, vid_disperse::AvidMDisperseShare,
         },
         event::{EventType, HotShotAction, LeafInfo},
+        initializer::InitializerEpochInfo,
         light_client::{LightClientState, StakeTableState, StateKeyPair},
         message::{Proposal, UpgradeLock, convert_proposal},
         new_protocol::CoordinatorEvent,

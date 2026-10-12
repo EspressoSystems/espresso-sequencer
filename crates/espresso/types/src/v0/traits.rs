@@ -11,7 +11,7 @@ use async_trait::async_trait;
 use committable::Commitment;
 use futures::{FutureExt, TryFutureExt};
 #[cfg(feature = "node")]
-use hotshot::{HotShotInitializer, InitializerEpochInfo, types::EventType};
+use hotshot::types::EventType;
 #[cfg(feature = "node")]
 use hotshot_libp2p_networking::network::behaviours::dht::store::persistent::DhtPersistentStorage;
 #[cfg(feature = "node")]
@@ -26,6 +26,7 @@ use hotshot_types::{
     },
     drb::DrbInput,
     event::{HotShotAction, LeafInfo},
+    initializer::{HotShotInitializer, InitializerEpochInfo},
     message::{Proposal, convert_proposal},
     simple_certificate::{
         CertificatePair, NextEpochQuorumCertificate2, QuorumCertificate, QuorumCertificate2,
