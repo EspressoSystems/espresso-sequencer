@@ -10,9 +10,9 @@
 
 ## Transaction and block flow
 
-- **Submission:** Client POSTs `/v1/submit/submit`. Node validates size, broadcasts to DA committee. Builders accumulate
-  transactions.
-- **Proposal (leader):** queries builder URLs, selects best block by fee, creates `QuorumProposal`, broadcasts.
+- **Submission:** Client POSTs `/v1/submit/submit`. `BlockBuilder::on_submit_transaction`
+  (`crates/hotshot/new-protocol/src/block.rs`) forwards it to the leaders of upcoming views.
+- **Proposal (leader):** `BlockBuilder::request_block` builds the block from the leader's pool; the leader proposes it.
 - **Validation (all validators):** `ValidatedState::validate_and_apply_header()`
   (`crates/espresso/types/src/v0/impls/state.rs`) computes the state transition (fees, L1 deposits, rewards); validates
   timestamps, builder signature, height, chain config, size, fees; validates merkle roots (fee, block, reward);

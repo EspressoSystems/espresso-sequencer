@@ -3006,7 +3006,8 @@ where
             SeqTypes,
             espresso_types::BlockMerkleTree,
             3,
-        > + NodeStateDataSource
+        > + hotshot_query_service::merklized_state::MerklizedStateHeightPersistence
+        + NodeStateDataSource
         + StakeTableDataSource<SeqTypes>
         + hotshot_query_service::data_source::VersionedDataSource
         + Sized
