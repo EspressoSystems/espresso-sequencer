@@ -41,13 +41,15 @@ address in the stake table the replayed node derives.
 
 ## Recording
 
-`record_legacy_chains` in `crates/espresso/node/src/legacy_chain/record.rs` recorded them. It runs
-a `TestNetwork` on legacy consensus against an anvil that mines a block a second, drives the
-contract upgrades from the test, reads the chain back through the query API and the first node's
-persistence, and exports the L1 block by block with `eth_getBlockByNumber` and
-`eth_getRawTransactionByHash`. It is `#[ignore]`d:
+`record_legacy_chains` recorded them. It runs a `TestNetwork` on legacy consensus against an anvil
+that mines a block a second, drives the contract upgrades from the test, reads the chain back
+through the query API and the first node's persistence, and exports the L1 block by block with
+`eth_getBlockByNumber` and `eth_getRawTransactionByHash`. It needs legacy consensus, which is being
+deleted, so it is kept off `main`: it is `crates/espresso/node/src/legacy_chain/record.rs` on the
+`legacy-chain-recorder` branch (commit `319dfd916d5`), `#[ignore]`d:
 
 ```sh
+git switch legacy-chain-recorder
 cargo test -p espresso-node --features embedded-db --lib record_legacy_chains -- --ignored
 ```
 

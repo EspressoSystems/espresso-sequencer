@@ -3,8 +3,9 @@
 //!
 //! Mainnet and decaf still serve data from before 0.6: old headers, VID schemes, reward trees,
 //! state certificates and the stake table contract's V1 and V2 event history. Once legacy
-//! consensus is gone no test network can produce that data, so `record_legacy_chains` recorded
-//! it while it still could, and [`LegacyChain::replay`] serves it again. A replayed node is a
+//! consensus is gone no test network can produce that data, so `record_legacy_chains` (kept on
+//! the `legacy-chain-recorder` branch) recorded it while it still could, and
+//! [`LegacyChain::replay`] serves it again. A replayed node is a
 //! follower fed the recorded blocks instead of a light client, on an anvil that mined the
 //! recorded L1 transactions again, so the stake table, rewards and merklized state are derived
 //! by the same code that derives them on a live node.
@@ -404,6 +405,3 @@ impl ChainSource for ReplaySource {
         Ok(None)
     }
 }
-
-#[cfg(test)]
-mod record;
