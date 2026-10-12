@@ -993,7 +993,6 @@ struct DecidedLeaf {
 fn decide_event_from_chain(
     chain: Vec<DecidedLeaf>,
     cert2: Option<Certificate2<SeqTypes>>,
-    _deciding_qc: Option<Arc<CertificatePair<SeqTypes>>>,
 ) -> Option<CoordinatorEvent<SeqTypes>> {
     let Some(newest) = chain.first() else {
         if cert2.is_some() {
@@ -1072,11 +1071,7 @@ impl Persistence {
             .map(|row| ViewNumber::new(row.get::<i64, _>("last_processed_view") as u64)))
     }
 
-    async fn generate_decide_events(
-        &self,
-        deciding_qc: Option<Arc<CertificatePair<SeqTypes>>>,
-        consumer: &impl EventConsumer,
-    ) -> anyhow::Result<()> {
+    async fn generate_decide_events(&self, consumer: &impl EventConsumer) -> anyhow::Result<()> {
         let mut last_processed_view: Option<i64> = serializable_retry!(self, || async {
             Ok(self
                 .db
@@ -1375,7 +1370,7 @@ impl Persistence {
                 "generating decide event"
             );
 
-            if let Some(event) = decide_event_from_chain(chain, cert2, deciding_qc.clone()) {
+            if let Some(event) = decide_event_from_chain(chain, cert2) {
                 consumer.handle_event(&event).await?;
             }
 
@@ -1697,7 +1692,6 @@ impl SequencerPersistence for Persistence {
         &self,
         _view: ViewNumber,
         leaf_chain: impl IntoIterator<Item = (&LeafInfo<SeqTypes>, CertificatePair<SeqTypes>)> + Send,
-        _deciding_qc: Option<Arc<CertificatePair<SeqTypes>>>,
         _consumer: &(impl EventConsumer + 'static),
     ) -> anyhow::Result<()> {
         let values = leaf_chain
@@ -1742,7 +1736,6 @@ impl SequencerPersistence for Persistence {
     async fn process_decided_events(
         &self,
         view: ViewNumber,
-        deciding_qc: Option<Arc<CertificatePair<SeqTypes>>>,
         consumer: &(impl EventConsumer + 'static),
     ) -> anyhow::Result<Option<ViewNumber>> {
         let now = Instant::now();
@@ -1751,7 +1744,7 @@ impl SequencerPersistence for Persistence {
         } else {
             // Generate events for the new leaves, then GC. On error `last_processed_view` is not
             // advanced past the failure point, so no data is lost and the range is retried.
-            self.generate_decide_events(deciding_qc, consumer).await?;
+            self.generate_decide_events(consumer).await?;
 
             // Best-effort GC of data not included in any decide event; runs again at the next
             // decide.
@@ -3838,7 +3831,7 @@ mod test {
         // the target, because of the minimum retention.
         tracing::info!("decide view 1");
         storage
-            .append_decided_leaves(data_view + 1, [], None, &NullEventConsumer)
+            .append_decided_leaves(data_view + 1, [], &NullEventConsumer)
             .await
             .unwrap();
         assert_eq!(
@@ -3860,7 +3853,7 @@ mod test {
         // retention) so it gets pruned.
         tracing::info!("decide view 2");
         storage
-            .append_decided_leaves(data_view + 2, [], None, &NullEventConsumer)
+            .append_decided_leaves(data_view + 2, [], &NullEventConsumer)
             .await
             .unwrap();
         assert!(storage.load_vid_share(data_view).await.unwrap().is_none(),);
@@ -3967,7 +3960,7 @@ mod test {
 
         for view in [10, 5] {
             storage
-                .append_decided_leaves(ViewNumber::new(view), [], None, &NullEventConsumer)
+                .append_decided_leaves(ViewNumber::new(view), [], &NullEventConsumer)
                 .await
                 .unwrap();
         }

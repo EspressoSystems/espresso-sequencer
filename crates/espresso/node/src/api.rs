@@ -3340,7 +3340,6 @@ mod api_tests {
             .append_decided_leaves(
                 ViewNumber::new(1),
                 leaf_chain.iter().map(|(leaf, qc)| (leaf, qc.clone())),
-                None,
                 &FailConsumer,
             )
             .await
@@ -3358,7 +3357,6 @@ mod api_tests {
             .append_decided_leaves(
                 ViewNumber::new(chain_len - 1),
                 leaf_chain.iter().map(|(leaf, qc)| (leaf, qc.clone())),
-                None,
                 &consumer,
             )
             .await
@@ -3466,7 +3464,6 @@ mod api_tests {
                     &leaf_info(leaf.clone()),
                     CertificatePair::non_epoch_change(qc.clone()),
                 )],
-                None,
                 &consumer,
             )
             .await
@@ -3507,7 +3504,6 @@ mod api_tests {
                     &leaf_info(leaf.clone()),
                     CertificatePair::non_epoch_change(qc),
                 )],
-                None,
                 &consumer,
             )
             .await

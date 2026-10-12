@@ -34,7 +34,6 @@ use hotshot_types::{
     message::UpgradeLock,
     network::NetworkConfig,
     new_protocol::CoordinatorEvent,
-    simple_certificate::CertificatePair,
     traits::{
         election::Membership,
         metrics::{Counter, Gauge, Histogram, Metrics},
@@ -659,7 +658,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence> Drop for SequencerCon
 
 /// Latest decided view and its (optional) deciding QC, sent from the event loop to the background
 /// decide processor. `None` is the initial/no-op value of the `watch` channel.
-type DecideSignal = Option<(ViewNumber, Option<Arc<CertificatePair<SeqTypes>>>)>;
+type DecideSignal = Option<ViewNumber>;
 
 /// Metrics for the background decide processor. `backlog` (decided - processed) is the key signal:
 /// sustained growth means staging tables accumulate (no data lost, but disk grows).
@@ -738,7 +737,7 @@ async fn handle_events<P, C>(
             // Keep the max view: a gap-fill decide signals an *older* view
             // and must not hide a newer, unconsumed tip signal.
             decide_tx.send_modify(|current| match current {
-                Some((view, _)) if *view > signal.0 => {},
+                Some(view) if *view > signal => {},
                 _ => *current = Some(signal),
             });
         }
@@ -798,7 +797,7 @@ async fn process_decided_events_task<P, C>(
     // Process leaves persisted before a previous shutdown but not yet handled.
     if let Some(view) = anchor_view {
         match persistence
-            .process_decided_events(view, None, consumer.as_ref())
+            .process_decided_events(view, consumer.as_ref())
             .await
         {
             Ok(processed) => {
@@ -818,7 +817,7 @@ async fn process_decided_events_task<P, C>(
     loop {
         // Wait for the next decide, retrying the most recent one if none arrives within the timeout.
         match tokio::time::timeout(PROCESS_RETRY_INTERVAL, decide_rx.changed()).await {
-            Ok(Ok(())) => latest = decide_rx.borrow_and_update().clone(),
+            Ok(Ok(())) => latest = *decide_rx.borrow_and_update(),
             Ok(Err(_)) => {
                 tracing::info!("decide signal channel closed, stopping decide processor");
                 return;
@@ -826,7 +825,7 @@ async fn process_decided_events_task<P, C>(
             Err(_) => {}, // Timed out; fall through to retry `latest`.
         }
 
-        let Some((view, deciding_qc)) = latest.clone() else {
+        let Some(view) = latest else {
             continue;
         };
         let decided = view.u64();
@@ -837,7 +836,7 @@ async fn process_decided_events_task<P, C>(
 
         let start = Instant::now();
         let result = persistence
-            .process_decided_events(view, deciding_qc, consumer.as_ref())
+            .process_decided_events(view, consumer.as_ref())
             .await;
         metrics.duration.add_point(start.elapsed().as_secs_f64());
 
@@ -849,7 +848,7 @@ async fn process_decided_events_task<P, C>(
                     last_processed = last_processed.max(v.u64());
                 }
                 // reset latest if we have processed all the decided leaves
-                if let Some((view, _)) = latest.clone()
+                if let Some(view) = latest
                     && last_processed >= view.u64()
                 {
                     latest = None;

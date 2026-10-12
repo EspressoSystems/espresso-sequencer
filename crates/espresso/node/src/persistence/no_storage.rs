@@ -1,5 +1,5 @@
 //! Mock implementation of persistence, for testing.
-use std::{collections::BTreeMap, sync::Arc};
+use std::collections::BTreeMap;
 
 use anyhow::bail;
 use async_trait::async_trait;
@@ -69,7 +69,6 @@ impl SequencerPersistence for NoStorage {
         &self,
         _view_number: ViewNumber,
         leaves: impl IntoIterator<Item = (&LeafInfo<SeqTypes>, CertificatePair<SeqTypes>)> + Send,
-        _deciding_qc: Option<Arc<CertificatePair<SeqTypes>>>,
         consumer: &(impl EventConsumer + 'static),
     ) -> anyhow::Result<()> {
         // Nothing is stored, so the decide goes straight to the consumer. `leaves` is newest

@@ -838,7 +838,7 @@ pub trait SequencerPersistence:
     }
 
     /// Decode a consensus decide event and persist its leaves, for the consensus event loop.
-    /// Returns `Some((decided_view, deciding_qc))` on a decide so the caller can wake a background
+    /// Returns the decided view on a decide so the caller can wake a background
     /// task to run [`process_decided_events`](Self::process_decided_events); `None` otherwise.
     ///
     /// This is the persist-only half of a decide: query-service ingestion and GC are deferred to
@@ -848,7 +848,7 @@ pub trait SequencerPersistence:
         &self,
         event: &CoordinatorEvent<SeqTypes>,
         consumer: &(impl EventConsumer + 'static),
-    ) -> Option<(ViewNumber, Option<Arc<CertificatePair<SeqTypes>>>)> {
+    ) -> Option<ViewNumber> {
         match event {
             CoordinatorEvent::NewDecide {
                 leaf_infos, cert1, ..
@@ -867,7 +867,6 @@ pub trait SequencerPersistence:
                     .persist_decided_leaves(
                         decided_view,
                         leaf_infos.iter().zip(certifying_qcs),
-                        None,
                         consumer,
                     )
                     .await
@@ -878,7 +877,7 @@ pub trait SequencerPersistence:
                     );
                     return None;
                 }
-                Some((decided_view, None))
+                Some(decided_view)
             },
             _ => None,
         }
@@ -917,16 +916,12 @@ pub trait SequencerPersistence:
         &self,
         decided_view: ViewNumber,
         leaf_chain: impl IntoIterator<Item = (&LeafInfo<SeqTypes>, CertificatePair<SeqTypes>)> + Send,
-        deciding_qc: Option<Arc<CertificatePair<SeqTypes>>>,
         consumer: &(impl EventConsumer + 'static),
     ) -> anyhow::Result<()> {
-        self.persist_decided_leaves(decided_view, leaf_chain, deciding_qc.clone(), consumer)
+        self.persist_decided_leaves(decided_view, leaf_chain, consumer)
             .await?;
         // Leaves are persisted; processing failures are non-fatal here and retried in production.
-        if let Err(err) = self
-            .process_decided_events(decided_view, deciding_qc, consumer)
-            .await
-        {
+        if let Err(err) = self.process_decided_events(decided_view, consumer).await {
             tracing::warn!(?decided_view, "decide event processing failed: {err:#}");
         }
         Ok(())
@@ -940,7 +935,6 @@ pub trait SequencerPersistence:
         &self,
         decided_view: ViewNumber,
         leaf_chain: impl IntoIterator<Item = (&LeafInfo<SeqTypes>, CertificatePair<SeqTypes>)> + Send,
-        deciding_qc: Option<Arc<CertificatePair<SeqTypes>>>,
         consumer: &(impl EventConsumer + 'static),
     ) -> anyhow::Result<()>;
 
@@ -957,7 +951,6 @@ pub trait SequencerPersistence:
     async fn process_decided_events(
         &self,
         decided_view: ViewNumber,
-        _deciding_qc: Option<Arc<CertificatePair<SeqTypes>>>,
         _consumer: &(impl EventConsumer + 'static),
     ) -> anyhow::Result<Option<ViewNumber>> {
         Ok(Some(decided_view))

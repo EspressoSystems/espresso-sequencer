@@ -471,7 +471,6 @@ impl Inner {
     async fn generate_decide_events(
         &mut self,
         view: ViewNumber,
-        _deciding_qc: Option<Arc<CertificatePair<SeqTypes>>>,
         consumer: &impl EventConsumer,
     ) -> anyhow::Result<Vec<RangeInclusive<ViewNumber>>> {
         // Generate a decide event for each leaf, to be processed by the event consumer. We make a
@@ -775,7 +774,6 @@ impl SequencerPersistence for Persistence {
         &self,
         _view: ViewNumber,
         leaf_chain: impl IntoIterator<Item = (&LeafInfo<SeqTypes>, CertificatePair<SeqTypes>)> + Send,
-        _deciding_qc: Option<Arc<CertificatePair<SeqTypes>>>,
         _consumer: &(impl EventConsumer + 'static),
     ) -> anyhow::Result<()> {
         let mut inner = self.inner.write().await;
@@ -837,7 +835,6 @@ impl SequencerPersistence for Persistence {
     async fn process_decided_events(
         &self,
         view: ViewNumber,
-        deciding_qc: Option<Arc<CertificatePair<SeqTypes>>>,
         consumer: &(impl EventConsumer + 'static),
     ) -> anyhow::Result<Option<ViewNumber>> {
         // Started before the lock acquisition: this pass holds the exclusive write lock, so the
@@ -849,9 +846,7 @@ impl SequencerPersistence for Persistence {
         let intervals = if self.consensus_only {
             inner.skip_decide_events(view)?
         } else {
-            inner
-                .generate_decide_events(view, deciding_qc, consumer)
-                .await?
+            inner.generate_decide_events(view, consumer).await?
         };
         drop(inner);
 
