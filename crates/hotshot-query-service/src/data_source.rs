@@ -409,14 +409,9 @@ pub mod availability_tests {
         let mut node = ChainNode::<D>::new().await;
         node.push_empty(3).await;
         let ds = node.data_source();
-
-        // Wait for there to be at least 3 blocks.
-        let block_height = loop {
+        let block_height = {
             let mut tx = ds.read().await.unwrap();
-            let block_height = tx.block_height().await.unwrap();
-            if block_height >= 3 {
-                break block_height as u64;
-            }
+            tx.block_height().await.unwrap() as u64
         };
 
         // Query for a variety of ranges testing all cases of included, excluded, and unbounded
@@ -505,9 +500,6 @@ pub mod availability_tests {
         let mut node = ChainNode::<D>::new().await;
         node.push_empty(5).await;
         let ds = node.data_source();
-
-        // Wait for there to be at least 5 blocks.
-        ds.subscribe_leaves(5).await.next().await.unwrap();
 
         // Test inclusive, exclusive and unbounded lower bound.
         do_range_rev_test(&ds, Bound::Included(1), 5, 1..=5).await;

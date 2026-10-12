@@ -50,7 +50,7 @@ mod test {
         Header, QueryError,
         availability::BlockId,
         testing::{
-            chain::{ChainNode, NUM_NODES},
+            chain::ChainNode,
             consensus::{MockDataSource, MockSqlDataSource},
             mocks::{MockTypes, mock_transaction},
         },
@@ -61,7 +61,7 @@ mod test {
         let window_limit = 78;
 
         let mut node = ChainNode::<MockDataSource>::new().await;
-        node.push_empty(NUM_NODES + 2).await;
+        node.push_empty(4).await;
 
         let ds = node.data_source();
         let block_height = ds.block_height().await.unwrap();

@@ -156,6 +156,7 @@ mod test {
 
     use super::*;
     use crate::{
+        QueryError,
         node::NodeDataSource,
         testing::{
             chain::ChainNode,
@@ -580,8 +581,14 @@ mod test {
         // The explorer's totals come from the aggregator, which catches up in the background.
         let ds = node.data_source();
         tokio::time::timeout(Duration::from_secs(60), async {
-            while ds.count_transactions().await.unwrap_or(0) < n_blocks * n_txns {
-                sleep(Duration::from_millis(100)).await;
+            loop {
+                match ds.count_transactions().await {
+                    Ok(n) if n >= n_blocks * n_txns => break,
+                    Ok(_) | Err(QueryError::NotFound | QueryError::Missing) => {
+                        sleep(Duration::from_millis(100)).await
+                    },
+                    Err(err) => panic!("unexpected error: {err:#}"),
+                }
             }
         })
         .await

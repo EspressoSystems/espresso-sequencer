@@ -19,8 +19,7 @@ use committable::Committable;
 use hotshot_types::{
     data::{
         EpochNumber, Leaf2, QuorumProposal2, QuorumProposalWrapper, VidCommitment, VidCommon,
-        VidDisperseShare, VidShare, ViewNumber, ns_table::parse_ns_table,
-        vid_disperse::AvidmGf2DisperseShare,
+        VidDisperseShare, VidShare, ns_table::parse_ns_table, vid_disperse::AvidmGf2DisperseShare,
     },
     event::LeafInfo,
     new_protocol::CoordinatorEvent,
@@ -51,7 +50,7 @@ pub struct MockBlock {
     pub leaf: LeafQueryData<MockTypes>,
     pub block: BlockQueryData<MockTypes>,
     pub vid_common: VidCommonQueryData<MockTypes>,
-    /// One share per storage node.
+    /// One share per storage node; genesis has `GENESIS_VID_NUM_STORAGE_NODES` shares.
     pub vid_shares: Vec<VidShare>,
 }
 
@@ -144,7 +143,7 @@ impl MockChain {
                 block_header: header.clone(),
                 view_number: parent.view_number() + 1,
                 epoch: Some(self.epoch(height)),
-                justify_qc: self.qc_for(parent),
+                justify_qc: qc_for(parent, self.epoch_height),
                 next_epoch_justify_qc: None,
                 upgrade_certificate: None,
                 view_change_evidence: None,
@@ -152,7 +151,7 @@ impl MockChain {
                 state_cert: None,
             },
         });
-        let qc = self.qc_for(&leaf);
+        let qc = qc_for(&leaf, self.epoch_height);
 
         self.blocks.push(MockBlock {
             leaf: LeafQueryData::new(leaf, qc).unwrap(),
@@ -239,16 +238,6 @@ impl MockChain {
     fn epoch(&self, height: u64) -> EpochNumber {
         EpochNumber::new(epoch_from_block_number(height, self.epoch_height))
     }
-
-    fn qc_for(&self, leaf: &Leaf2<MockTypes>) -> QuorumCertificate2<MockTypes> {
-        let height = leaf.block_header().block_number;
-        let data = QuorumData2 {
-            leaf_commit: leaf.commit(),
-            epoch: Some(self.epoch(height)),
-            block_number: Some(height),
-        };
-        QuorumCertificate2::new(data, data.commit(), leaf.view_number(), None, PhantomData)
-    }
 }
 
 /// Storage nodes the chain disperses VID to.
@@ -262,7 +251,8 @@ pub const EPOCH_HEIGHT: u64 = 10;
 pub struct ChainNode<D: DataSourceLifeCycle> {
     chain: MockChain,
     data_source: D,
-    storage: D::Storage,
+    // Dropping the storage (a temp dir or database) would tear it down under the data source.
+    _storage: D::Storage,
 }
 
 impl<D: DataSourceLifeCycle + UpdateAvailabilityData<MockTypes>> ChainNode<D> {
@@ -282,10 +272,6 @@ impl<D: DataSourceLifeCycle + UpdateAvailabilityData<MockTypes>> ChainNode<D> {
 
     pub fn data_source(&self) -> D {
         self.data_source.clone()
-    }
-
-    pub fn storage(&self) -> &D::Storage {
-        &self.storage
     }
 
     pub fn chain(&self) -> &MockChain {
@@ -324,7 +310,7 @@ impl<D: DataSourceLifeCycle + UpdateAvailabilityData<MockTypes>> ChainNode<D> {
         let mut node = Self {
             chain: MockChain::new(NUM_NODES, EPOCH_HEIGHT).await,
             data_source,
-            storage,
+            _storage: storage,
         };
         let genesis = node.chain.tip().clone();
         node.decide(&genesis).await;
@@ -356,25 +342,27 @@ async fn genesis(epoch_height: u64) -> MockBlock {
         disperse(&payload, &header.metadata, GENESIS_VID_NUM_STORAGE_NODES);
     assert_eq!(payload_commitment, header.payload_commitment);
 
-    let data = QuorumData2 {
-        leaf_commit: leaf.commit(),
-        epoch: Some(EpochNumber::new(epoch_from_block_number(0, epoch_height))),
-        block_number: Some(0),
-    };
-    let qc = QuorumCertificate2::new(
-        data,
-        data.commit(),
-        ViewNumber::genesis(),
-        None,
-        PhantomData,
-    );
-
+    let qc = qc_for(&leaf, epoch_height);
     MockBlock {
         leaf: LeafQueryData::new(leaf, qc).unwrap(),
         block: BlockQueryData::new(header.clone(), payload),
         vid_common: VidCommonQueryData::new(header, vid_common),
         vid_shares,
     }
+}
+
+/// A QC certifying `leaf`, with the epoch its height falls in under `epoch_height`.
+fn qc_for(leaf: &Leaf2<MockTypes>, epoch_height: u64) -> QuorumCertificate2<MockTypes> {
+    let height = leaf.block_header().block_number;
+    let data = QuorumData2 {
+        leaf_commit: leaf.commit(),
+        epoch: Some(EpochNumber::new(epoch_from_block_number(
+            height,
+            epoch_height,
+        ))),
+        block_number: Some(height),
+    };
+    QuorumCertificate2::new(data, data.commit(), leaf.view_number(), None, PhantomData)
 }
 
 /// AvidmGf2 dispersal of `payload` over `num_nodes` equally weighted nodes.
