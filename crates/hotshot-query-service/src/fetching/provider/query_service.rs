@@ -482,7 +482,13 @@ where
 // These tests run the `postgres` Docker image, which doesn't work on Windows.
 #[cfg(all(test, not(target_os = "windows")))]
 mod test {
-    use std::{future::IntoFuture, marker::PhantomData, time::Duration};
+    use std::{
+        any,
+        future::IntoFuture,
+        marker::PhantomData,
+        sync::{Arc, Mutex},
+        time::Duration,
+    };
 
     use axum::{Router, extract::Path, http::HeaderMap, response::Response, routing::get};
     use committable::Committable;
@@ -511,8 +517,11 @@ mod test {
                 sql::testing::TmpDb,
             },
         },
-        fetching::provider::{
-            AnyProvider, NoFetching, Provider as ProviderTrait, TestProvider, test_fixtures,
+        fetching::{
+            Request,
+            provider::{
+                AnyProvider, NoFetching, Provider as ProviderTrait, TestProvider, test_fixtures,
+            },
         },
         node::data_source::NodeDataSource,
         testing::{
@@ -887,67 +896,175 @@ mod test {
         assert_eq!(leaf.header(), block.header());
     }
 
-    /// Blocks fetched in height order, as the aggregator does after a storage loss, store each
-    /// parent leaf before the child asks for it, so the parent fetch never requests VID common.
+    /// Forwards requests to a peer and records the type of each one.
+    #[derive(Clone, Debug)]
+    struct Recorder {
+        inner: TrustedQueryServiceProvider,
+        requests: Arc<Mutex<Vec<&'static str>>>,
+    }
+
+    #[async_trait]
+    impl<T> ProviderTrait<MockTypes, T> for Recorder
+    where
+        T: Request<MockTypes> + 'static,
+        TrustedQueryServiceProvider: ProviderTrait<MockTypes, T>,
+    {
+        async fn fetch(&self, req: T) -> Option<T::Response> {
+            self.requests.lock().unwrap().push(any::type_name::<T>());
+            self.inner.fetch(req).await
+        }
+    }
+
+    /// A node that knows the chain height but stores none of the leaves below it.
+    struct MissingBlocks {
+        network: MockNetwork<MockDataSource>,
+        _server: JoinHandle<()>,
+        _db: TmpDb,
+        provider: Recorder,
+        data_source: SqlDataSource<MockTypes, Recorder>,
+        tx_heights: Vec<u64>,
+        end: u64,
+    }
+
+    impl MissingBlocks {
+        async fn init() -> Self {
+            let mut network = MockNetwork::<MockDataSource>::init().await;
+            let (port, server) = serve_availability(network.data_source()).await;
+            let db = TmpDb::init().await;
+            let provider = Recorder {
+                inner: trusted_provider(port),
+                requests: Default::default(),
+            };
+            // No aggregator, whose block fetches would mask what each test requests.
+            let data_source = builder(&db, &provider)
+                .await
+                .disable_aggregator()
+                .build()
+                .await
+                .unwrap();
+
+            network.start().await;
+
+            // Distinct payloads, so one VID common row cannot cover several heights.
+            let mut tx_heights = Vec::new();
+            for i in 0..3u8 {
+                let tx = mock_transaction(vec![i; 3]);
+                network.submit_transaction(tx.clone()).await;
+                let height = network
+                    .data_source()
+                    .get_block_containing_transaction(tx.commit())
+                    .await
+                    .await
+                    .block
+                    .height();
+                tracing::info!(height, "transaction sequenced");
+                tx_heights.push(height);
+            }
+            let end = tx_heights.last().unwrap() + 1;
+
+            let node = Self {
+                network,
+                _server: server,
+                _db: db,
+                provider,
+                data_source,
+                tx_heights,
+                end,
+            };
+            // Learn the block height without `append`, whose parent fetch would walk back the chain.
+            node.insert_leaf(end).await;
+            node
+        }
+
+        async fn insert_leaf(&self, height: u64) {
+            let leaf = self
+                .network
+                .data_source()
+                .get_leaf(height as usize)
+                .await
+                .await;
+            let mut tx = self.data_source.write().await.unwrap();
+            tx.insert_leaf(&leaf).await.unwrap();
+            tx.commit().await.unwrap();
+        }
+
+        /// Wait until the VID common of every block in `tx_heights` is stored.
+        async fn wait_for_vid_common(&self) {
+            // Polls storage, since `get_vid_common` would trigger its own fetch.
+            for &h in &self.tx_heights {
+                timeout(Duration::from_secs(10), async {
+                    loop {
+                        let mut tx = self.data_source.read().await.unwrap();
+                        let id = BlockId::<MockTypes>::Number(h as usize);
+                        if tx.get_vid_common(id).await.is_ok() {
+                            break;
+                        }
+                        drop(tx);
+                        sleep(Duration::from_millis(100)).await;
+                    }
+                })
+                .await
+                .unwrap_or_else(|_| panic!("VID common for block {h} was never fetched"));
+            }
+        }
+    }
+
+    /// Blocks fetched in height order, each with a missing leaf, also get their VID common.
     #[test_log::test(tokio::test(flavor = "multi_thread"))]
     async fn test_fetch_block_backfills_vid_common() {
-        let mut network = MockNetwork::<MockDataSource>::init().await;
-        let (port, _server) = serve_availability(network.data_source()).await;
-        let db = TmpDb::init().await;
-        let provider = Provider::new(trusted_provider(port));
-        let data_source = data_source(&db, &provider).await;
-
-        network.start().await;
-
-        // Distinct payloads, so one VID common row cannot cover several heights.
-        let mut heights = Vec::new();
-        for i in 0..3u8 {
-            let tx = mock_transaction(vec![i; 3]);
-            network.submit_transaction(tx.clone()).await;
-            let height = network
-                .data_source()
-                .get_block_containing_transaction(tx.commit())
-                .await
-                .await
-                .block
-                .height();
-            tracing::info!(height, "transaction sequenced");
-            heights.push(height);
+        let node = MissingBlocks::init().await;
+        for h in 1..node.end {
+            node.data_source.get_block(h as usize).await.await;
         }
-        let end = heights.last().unwrap() + 1;
-        let truth = network.data_source();
+        node.wait_for_vid_common().await;
+    }
 
-        // Learn the block height without `append`, whose parent fetch would walk back the chain.
-        let mut tx = data_source.write().await.unwrap();
-        tx.insert_leaf(&truth.get_leaf(end as usize).await.await)
+    /// Leaves fetched first, as a leaf stream does, then their blocks: the block fetch finds the
+    /// header present and must still request VID common.
+    #[test_log::test(tokio::test(flavor = "multi_thread"))]
+    async fn test_fetch_block_after_leaf_backfills_vid_common() {
+        let node = MissingBlocks::init().await;
+        node.data_source
+            .get_leaf_range(1..node.end as usize)
             .await
-            .unwrap();
-        tx.commit().await.unwrap();
-
-        for h in 1..end {
-            data_source.get_block(h as usize).await.await;
+            .then(Fetch::resolve)
+            .collect::<Vec<_>>()
+            .await;
+        for &h in &node.tx_heights {
+            node.data_source.get_block(h as usize).await.await;
         }
-        let later = truth.get_leaf(end as usize + 1).await.await;
-        data_source.append(later.into()).await.unwrap();
+        node.wait_for_vid_common().await;
+    }
 
-        for h in heights {
-            timeout(Duration::from_secs(10), async {
-                loop {
-                    let mut tx = data_source.read().await.unwrap();
-                    if tx
-                        .get_vid_common(BlockId::<MockTypes>::Number(h as usize))
-                        .await
-                        .is_ok()
-                    {
-                        break;
-                    }
-                    drop(tx);
-                    sleep(Duration::from_millis(100)).await;
-                }
-            })
+    #[test_log::test(tokio::test(flavor = "multi_thread"))]
+    async fn test_fetch_block_range_backfills_vid_common() {
+        let node = MissingBlocks::init().await;
+        node.data_source
+            .get_block_range(1..node.end as usize)
             .await
-            .unwrap_or_else(|_| panic!("VID common for block {h} was never fetched"));
-        }
+            .then(Fetch::resolve)
+            .collect::<Vec<_>>()
+            .await;
+        node.wait_for_vid_common().await;
+    }
+
+    #[test_log::test(tokio::test(flavor = "multi_thread"))]
+    async fn test_fetch_leaf_fetches_only_leaf() {
+        let node = MissingBlocks::init().await;
+        let h = node.tx_heights[0];
+        // A stored parent leaves nothing for the parent recovery to fetch.
+        node.insert_leaf(h - 1).await;
+        node.data_source.get_leaf(h as usize).await.await;
+        // Derived fetches would be spawned by the leaf's callbacks, right after it is stored.
+        sleep(Duration::from_secs(1)).await;
+        let requests = node.provider.requests.lock().unwrap().clone();
+        assert!(
+            !requests.is_empty()
+                && requests
+                    .iter()
+                    .all(|&req| req == any::type_name::<LeafRequest>()),
+            "{requests:?}"
+        );
     }
 
     #[test_log::test(tokio::test(flavor = "multi_thread"))]
