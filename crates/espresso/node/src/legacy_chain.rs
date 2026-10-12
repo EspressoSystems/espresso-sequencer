@@ -414,6 +414,3 @@ impl ChainSource for ReplaySource {
         Ok(None)
     }
 }
-
-#[cfg(test)]
-mod record;

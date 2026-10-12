@@ -2,16 +2,16 @@
 
 Chains recorded from legacy consensus, the protocol before 0.6. Mainnet and decaf still serve data
 from before 0.6: old headers, VID schemes, reward trees, state certificates and the stake table
-contract's V1 and V2 event history. Once legacy consensus is deleted no test network can produce
-that data, so these recordings keep it testable. `LegacyChain::replay` in
+contract's V1 and V2 event history. The node runs only the new protocol, so no test network can
+produce that data any more; these recordings keep it testable. `LegacyChain::replay` in
 `crates/espresso/node/src/legacy_chain.rs` starts a query node with no consensus on one of them: a
 follower fed the recorded blocks, on an anvil that has mined the recorded L1 transactions again. The
 node then derives the stake table, rewards and merklized state with the code a live node uses,
 checking every derived root against its header.
 
-**These recordings cannot be regenerated once legacy consensus is deleted.** A change to how any
-recorded type deserializes has to keep reading them, as it has to keep reading the `data/v*`
-reference vectors.
+**These recordings cannot be regenerated: the node no longer runs legacy consensus.** A change to
+how any recorded type deserializes has to keep reading them, as it has to keep reading the
+`data/v*` reference vectors.
 
 ## Chains
 
@@ -44,17 +44,12 @@ address in the stake table the replayed node derives.
 
 ## Recording
 
-`record_legacy_chains` in `crates/espresso/node/src/legacy_chain/record.rs` recorded them. It runs
-a `TestNetwork` on legacy consensus against an anvil that mines a block a second, drives the
-contract upgrades from the test, reads the chain back through the query API and the first node's
-persistence, and exports the L1 block by block with `eth_getBlockByNumber` and
-`eth_getRawTransactionByHash`. It is `#[ignore]`d:
-
-```sh
-cargo test -p espresso-node --features embedded-db --lib record_legacy_chains -- --ignored
-```
-
-`LEGACY_CHAINS=v4,v5` records only the chains named.
+`record_legacy_chains` in `crates/espresso/node/src/legacy_chain/record.rs` recorded them. It was
+deleted with the legacy consensus it needed; `git log --full-history --
+crates/espresso/node/src/legacy_chain/record.rs` finds it. It ran a `TestNetwork` on legacy
+consensus against an anvil that mines a block a second, drove the contract upgrades from the test,
+read the chain back through the query API and the first node's persistence, and exported the L1
+block by block with `eth_getBlockByNumber` and `eth_getRawTransactionByHash`.
 
 The L1 recording is standard signed transactions and timestamps, replayed into a fresh anvil, so no
 tool version is baked into the fixtures.
