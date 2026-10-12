@@ -4730,9 +4730,9 @@ mod tests {
         );
     }
 
-    // A test network only disperses with AvidmGf2, so the ADVZ and AvidM arms of the shares
-    // mainnet still serves from before 0.6 run only here, against the namespaced wrappers the
-    // node stores rather than the inner per-namespace shares.
+    // A test network only disperses with AvidmGf2, so the ADVZ and AvidM arms, which mainnet
+    // still serves for blocks from before 0.6, run only here, against the namespaced wrappers
+    // the node stores rather than the inner per-namespace shares.
     #[test]
     fn every_vid_share_arm_maps_to_its_own_shape() {
         let payload = b"two namespaces worth of payload bytes, dispersed";
