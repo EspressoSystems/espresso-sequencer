@@ -7,7 +7,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use anyhow::Context;
+use anyhow::{Context, ensure};
 use async_lock::RwLock;
 use derivative::Derivative;
 use espresso_types::{
@@ -18,24 +18,25 @@ use futures::{
     future::join_all,
     stream::{BoxStream, Stream, StreamExt},
 };
-use hotshot::{HotShotInitializer, SystemContext};
+use hotshot::{HotShotInitializer, load_start_epoch_info};
 use hotshot_new_protocol::{
     coordinator::Coordinator,
     network::{Cliquenet, NetworkError},
 };
 use hotshot_orchestrator::client::OrchestratorClient;
 use hotshot_types::{
-    PeerConfig, ValidatorConfig,
+    HotShotConfig, PeerConfig, ValidatorConfig,
     consensus::ConsensusMetricsValue,
     constants::EXTERNAL_EVENT_CHANNEL_SIZE,
     data::{Leaf2, ViewNumber},
+    drb::drb_difficulty_selector,
     epoch_membership::EpochMembershipCoordinator,
     message::UpgradeLock,
     network::NetworkConfig,
     new_protocol::CoordinatorEvent,
     simple_certificate::CertificatePair,
-    storage_metrics::StorageMetricsValue,
     traits::{
+        election::Membership,
         metrics::{Counter, Gauge, Histogram, Metrics},
         network::ConnectedNetwork,
     },
@@ -113,6 +114,11 @@ pub struct SequencerContext<N: ConnectedNetwork<PubKey>, P: SequencerPersistence
 
     #[derivative(Debug = "ignore")]
     validator_config: ValidatorConfig<SeqTypes>,
+
+    /// The pre-0.6 network. Nothing is received on it any more; it is torn down once consensus
+    /// starts.
+    #[derivative(Debug = "ignore")]
+    legacy_network: Arc<N>,
 }
 
 impl<N, P> SequencerContext<N, P>
@@ -149,6 +155,12 @@ where
         let config = &network_config.config;
         let pub_key = validator_config.public_key;
         tracing::info!(%pub_key, "initializing consensus");
+        ensure!(
+            upgrade.base >= NEW_PROTOCOL_VERSION,
+            "base version {} predates the new protocol ({NEW_PROTOCOL_VERSION}), the only \
+             consensus this node runs",
+            upgrade.base
+        );
 
         let instance_state = initializer.instance_state().clone();
 
@@ -170,55 +182,28 @@ where
 
         let epoch_height = initializer.epoch_height();
 
-        let initializer_for_coordinator = initializer.clone();
+        let upgrade_lock = restored_upgrade_lock(upgrade, &initializer);
+        seed_membership(&membership_coordinator, config, &upgrade_lock, &initializer).await;
 
-        let consensus_metrics = ConsensusMetricsValue::new(metrics);
+        let mut coordinator_network = coordinator_network(upgrade_lock.clone()).await?;
 
-        let handle = SystemContext::init(
-            validator_config.public_key,
-            validator_config.private_key.clone(),
-            validator_config.state_private_key.clone(),
-            instance_state.node_id,
-            config.clone(),
-            upgrade,
-            membership_coordinator.clone(),
-            network.clone(),
-            initializer,
-            consensus_metrics.clone(),
-            Arc::clone(&persistence),
-            StorageMetricsValue::new(metrics),
+        // `seed_membership` set the first epoch and whatever epoch roots and DRB results
+        // persistence held. Walk the catchup chain forward to populate the stake-table window
+        // for the current epoch.
+        let current_epoch = bootstrap_epoch_window(
+            &membership_coordinator,
+            epoch_height,
+            bootstrap_epoch_catchup_timeout,
         )
-        .await?
-        .0;
+        .await
+        .context("startup stake-table catchup failed")?;
+        tracing::info!(%current_epoch, "Startup catchup complete");
 
-        let mut coordinator_network =
-            coordinator_network(handle.hotshot.upgrade_lock.clone()).await?;
-
-        // `load_start_epoch_info` ran inside `SystemContext::init`, so
-        // `first_epoch` is now seeded on the shared membership. Walk the
-        // catchup chain forward to populate the stake-table window for the
-        // current epoch.
-        //
-        // Only the new protocol (cliquenet) needs this
-        let max_configured_version = std::cmp::max(upgrade.base, upgrade.target);
-        if max_configured_version >= NEW_PROTOCOL_VERSION {
-            let current_epoch = bootstrap_epoch_window(
-                &membership_coordinator,
-                epoch_height,
-                bootstrap_epoch_catchup_timeout,
-            )
-            .await
-            .context("startup stake-table catchup failed")?;
-            tracing::info!(%current_epoch, "Startup catchup complete");
-
-            // Push the resolved peer window into the coordinator network. For
-            // cliquenet this dials the N-1/N/N+1 sliding window for the current
-            // epoch before consensus starts.
-            if let Err(err) =
-                coordinator_network.apply_epoch(current_epoch, &membership_coordinator)
-            {
-                tracing::warn!(%current_epoch, %err, "coordinator network apply_epoch failed at startup");
-            }
+        // Push the resolved peer window into the coordinator network. For
+        // cliquenet this dials the N-1/N/N+1 sliding window for the current
+        // epoch before consensus starts.
+        if let Err(err) = coordinator_network.apply_epoch(current_epoch, &membership_coordinator) {
+            tracing::warn!(%current_epoch, %err, "coordinator network apply_epoch failed at startup");
         }
 
         // Restore the persisted lock so the new protocol resumes with the lock
@@ -228,15 +213,15 @@ where
             .await
             .context("loading persisted locked QC")?;
         let anchor_cert2 = persistence
-            .load_cert2(initializer_for_coordinator.anchor_leaf().view_number())
+            .load_cert2(initializer.anchor_leaf().view_number())
             .await
             .context("loading the anchor's cert2")?;
 
         let coordinator = Coordinator::maker()
             .membership_coordinator(membership_coordinator.clone())
             .network(coordinator_network)
-            .initializer(&initializer_for_coordinator)
-            .upgrade_lock(handle.hotshot.upgrade_lock.clone())
+            .initializer(&initializer)
+            .upgrade_lock(upgrade_lock.clone())
             .public_key(validator_config.public_key)
             .private_key(validator_config.private_key.clone())
             .state_private_key(validator_config.state_private_key.clone())
@@ -246,7 +231,7 @@ where
             .block_sizes(block_sizes)
             .storage(Arc::clone(&persistence))
             .metrics(metrics)
-            .consensus_metrics(consensus_metrics)
+            .consensus_metrics(ConsensusMetricsValue::new(metrics))
             .maybe_locked_qc(locked_qc)
             .maybe_anchor_cert2(anchor_cert2)
             .upgrade_config(UpgradeConfig {
@@ -261,21 +246,14 @@ where
             })
             .make();
 
-        let legacy_event_rx = handle.event_stream_known_impl().deactivate();
-        let hotshot_handle = Arc::new(RwLock::new(handle));
-
-        let consensus_handle = {
-            let handle = ConsensusHandle::new(
-                hotshot_handle.clone(),
-                coordinator,
-                epoch_height.into(),
-                legacy_event_rx,
-                EXTERNAL_EVENT_CHANNEL_SIZE,
-                metrics,
-            )
-            .await;
-            Arc::new(handle)
-        };
+        let consensus_handle = Arc::new(ConsensusHandle::new(
+            coordinator,
+            upgrade_lock,
+            membership_coordinator.clone(),
+            &initializer,
+            EXTERNAL_EVENT_CHANNEL_SIZE,
+            metrics,
+        ));
 
         let mut state_signer = StateSigner::new(
             validator_config.state_private_key.clone(),
@@ -340,7 +318,7 @@ where
             request_response_sender,
             outbound_message_receiver,
             consensus_handle.clone(),
-            network,
+            network.clone(),
             pub_key,
             metrics
                 .subgroup("request_response".into())
@@ -359,6 +337,7 @@ where
             instance_state,
             network_config,
             validator_config,
+            network,
             event_consumer,
             anchor_view,
             proposal_fetcher_cfg,
@@ -378,6 +357,7 @@ where
         node_state: NodeState,
         network_config: NetworkConfig<SeqTypes>,
         validator_config: ValidatorConfig<SeqTypes>,
+        legacy_network: Arc<N>,
         event_consumer: impl PersistenceEventConsumer + 'static,
         anchor_view: Option<ViewNumber>,
         proposal_fetcher_cfg: ProposalFetcherConfig,
@@ -397,6 +377,7 @@ where
             node_state,
             network_config,
             validator_config,
+            legacy_network,
         };
 
         // Spawn proposal fetching tasks.
@@ -538,6 +519,8 @@ where
         }
         tracing::warn!("starting consensus");
         self.consensus_handle.start_consensus().await;
+        // Consensus runs on cliquenet; nothing has listened on the pre-0.6 network since startup.
+        self.legacy_network.shut_down().await;
     }
 
     /// Spawn a background task attached to this context.
@@ -567,6 +550,7 @@ where
     pub async fn shut_down(&mut self) {
         tracing::info!("shutting down SequencerContext");
         self.consensus_handle.shut_down().await;
+        self.legacy_network.shut_down().await;
         self.tasks.shut_down();
         self.node_state.l1_client.shut_down_tasks().await;
 
@@ -595,17 +579,68 @@ where
     }
 }
 
+/// The upgrade lock consensus resumes with: the configured versions and the decided upgrade
+/// certificate persistence holds. A certificate at or below the configured base is from a
+/// completed upgrade; kept, it would make `UpgradeLock::version` fail once the target moves on.
+fn restored_upgrade_lock(
+    upgrade: versions::Upgrade,
+    initializer: &HotShotInitializer<SeqTypes>,
+) -> UpgradeLock<SeqTypes> {
+    let decided_upgrade_certificate = initializer
+        .decided_upgrade_certificate()
+        .filter(|cert| cert.data.new_version > upgrade.base)
+        .cloned();
+    tracing::info!(?upgrade, ?decided_upgrade_certificate, "resuming consensus");
+    UpgradeLock::from_certificate(upgrade, &decided_upgrade_certificate)
+}
+
+/// Seed the shared membership with what consensus needs before its first view: the DRB
+/// difficulty of each version, the DA committees the running version has reached, the first
+/// epoch, and the epoch roots and DRB results persistence holds.
+async fn seed_membership(
+    membership_coordinator: &EpochMembershipCoordinator<SeqTypes>,
+    config: &HotShotConfig<SeqTypes>,
+    upgrade_lock: &UpgradeLock<SeqTypes>,
+    initializer: &HotShotInitializer<SeqTypes>,
+) {
+    membership_coordinator.set_drb_difficulty_selector(drb_difficulty_selector(config));
+
+    let running_version = upgrade_lock
+        .decided_upgrade_cert()
+        .map(|cert| cert.data.new_version)
+        .unwrap_or(upgrade_lock.upgrade().base);
+    let membership = membership_coordinator.membership();
+    for da_committee in &config.da_committees {
+        if running_version >= da_committee.start_version {
+            membership.add_da_committee(
+                da_committee.start_epoch.into(),
+                da_committee.committee.clone(),
+            );
+        }
+    }
+
+    load_start_epoch_info(
+        membership_coordinator,
+        initializer.start_epoch_info(),
+        config.epoch_height,
+        config.epoch_start_block,
+    )
+    .await;
+}
+
 impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence> Drop for SequencerContext<N, P> {
     fn drop(&mut self) {
         if !self.detached {
             // Spawn a task to shut down the context
             let consensus_handle = self.consensus_handle.clone();
+            let legacy_network = self.legacy_network.clone();
             let tasks_clone = self.tasks.clone();
             let node_state_clone = self.node_state.clone();
 
             spawn(async move {
                 tracing::info!("shutting down SequencerContext");
                 consensus_handle.shut_down().await;
+                legacy_network.shut_down().await;
                 tasks_clone.shut_down();
                 node_state_clone.l1_client.shut_down_tasks().await;
             });

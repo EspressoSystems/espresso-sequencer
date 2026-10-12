@@ -7181,8 +7181,7 @@ mod test {
             }
         }
 
-        // Read before shutting consensus down: once the coordinator stops, these fall back to the
-        // legacy handle, which never ran at 0.6.
+        // Read while the coordinator still answers.
         let decided_leaf = node_0.decided_leaf().await;
         let state = node_0.decided_state().await.unwrap();
         node_0.shutdown_consensus().await;
