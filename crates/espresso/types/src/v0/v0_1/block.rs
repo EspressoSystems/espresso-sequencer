@@ -220,7 +220,8 @@ impl<'de> Visitor<'de> for SharedBytesVisitor {
     }
 
     fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<Self::Value, A::Error> {
-        let mut bytes = Vec::with_capacity(seq.size_hint().unwrap_or(0));
+        // Bound the up-front allocation like serde's `size_hint::cautious`.
+        let mut bytes = Vec::with_capacity(seq.size_hint().unwrap_or(0).min(1 << 20));
         while let Some(b) = seq.next_element()? {
             bytes.push(b);
         }
