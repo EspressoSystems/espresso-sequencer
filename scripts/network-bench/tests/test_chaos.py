@@ -1,6 +1,8 @@
+import gzip
 import json
 import shlex
 import subprocess
+from datetime import UTC, datetime
 from itertools import pairwise
 from typing import Any
 
@@ -962,3 +964,142 @@ def test_a_kill_stuck_while_down_recovers_from_its_timeout():
         ("down", 1005.0, 1305.0),
         ("recovering", 1305.0, 1400.0),
     ]
+
+
+def test_floor_span_ends_at_rejoin_not_at_catch_up():
+    rows = ch.fault_rows(EVENTS)
+    assert ch.floor_span(rows[0], T0 + 240) == (T0 + 10, T0 + 25)
+    assert ch.fault_span(rows[0], T0 + 240) == (T0 + 10, T0 + 40)
+
+
+def test_floor_span_of_stuck_and_interrupted_faults():
+    stuck = ch.fault_rows(
+        [ev(10, "fault", "node5", "kill"), ev(60, "rejoined", "node5", "kill")]
+        + [ev(70, "timeout", "node5", "kill")]
+    )
+    assert ch.floor_span(stuck[0], T0 + 240) == (T0 + 10, T0 + 240)
+    open_ = ch.fault_rows([ev(10, "fault", "node5", "kill")])
+    assert ch.floor_span(open_[0], T0 + 240) == (T0 + 10, T0 + 240)
+    cut = ch.fault_rows(
+        [ev(10, "fault", "node5", "kill"), ev(30, "interrupted", "node5", "kill")]
+    )
+    assert ch.floor_span(cut[0], T0 + 240) == (T0 + 10, T0 + 30)
+
+
+def test_counter_split_by_overlap_clamps_drops():
+    samples = [(T0 + t, v) for t, v in [(0, 0), (10, 1), (20, 3), (30, 2), (40, 5)]]
+    split = ch.counter_split(samples, [(T0 + 15, T0 + 25)], T0, T0 + 40)
+    # (10, 20] and (20, 30] overlap the span; (30, 2) is a drop.
+    assert split == ch.CounterSplit(
+        during=2.0, during_s=20.0, outside=1.0 + 3.0, outside_s=20.0
+    )
+    assert ch.counter_split(samples, [], T0 + 10, T0 + 20) == ch.CounterSplit(
+        0.0, 0.0, 2.0, 10.0
+    )
+
+
+def test_floor_lines_show_rates_and_dash_without_views():
+    zero = ch.CounterSplit(0, 0, 0, 0)
+    split = ch.CounterSplit(4, 100, 2, 200)
+    views = ch.CounterSplit(900, 100, 100, 200)
+    assert ch.floor_lines(split, views) == [
+        (
+            "- View timeouts: outside faults 2 timeouts in 100 views (2.00 %) over 200 s; "
+            "during faults 4 timeouts in 900 views (0.44 %) over 100 s"
+        )
+    ]
+    assert "(-)" in ch.floor_lines(zero, zero)[0]
+
+
+def log_line(message: str, at: float, **fields: str) -> str:
+    stamp = datetime.fromtimestamp(T0 + at, UTC).isoformat()
+    record = {
+        "timestamp": stamp,
+        "level": "WARN",
+        "fields": {"message": message, **fields},
+        "target": "x",
+    }
+    return json.dumps(record)
+
+
+def test_log_label_matches_prefix_and_breaks_down_by_field():
+    stub = log_line(
+        "parent state unavailable; queued on parent for retry (from_header stub inserted). If",
+        5,
+    )
+    assert ch.log_label(stub) == ("stub", T0 + 5)
+    propose = log_line(
+        "timeout: we were the leader but did not propose", 6, missing="parent_proposal"
+    )
+    assert ch.log_label(propose) == ("no-propose[parent_proposal]", T0 + 6)
+    did = log_line("timeout: we were the leader and did propose for this view", 6)
+    assert ch.log_label(did) is None
+    assert ch.log_label("Starting Espresso node with sqlite...") is None
+    assert ch.log_label(log_line("unrelated", 1)) is None
+
+
+def test_count_log_splits_by_the_nodes_windows_and_clips_to_the_load():
+    lines = [log_line("header creation failed", at) for at in (-5, 5, 15, 25, 500)] + [
+        log_line("timeout: we did not vote1 for this view", 15, missing="proposal")
+    ]
+    during, outside = ch.count_log(lines, [(T0 + 10, T0 + 20)], T0, T0 + 100)
+    assert during == {"header-failed": 1, "no-vote1[proposal]": 1}
+    assert outside == {"header-failed": 2}
+
+
+def test_node_counts_read_current_and_wiped_logs_by_region(tmp_path):
+    for node, name in [
+        ("node0", "espresso-node.log.gz"),
+        ("node0", "espresso-node.wiped.log.gz"),
+        ("node1", "espresso-node.log.gz"),
+    ]:
+        host = tmp_path / "hosts" / node
+        host.mkdir(parents=True, exist_ok=True)
+        with gzip.open(host / name, "wt") as f:
+            f.write("plain line\n" + log_line("header creation failed", 15) + "\n")
+    (tmp_path / "hosts" / "node2").mkdir()
+    rows = ch.fault_rows(
+        [ev(10, "fault", "node0", "restart"), ev(20, "rejoined", "node0", "restart")]
+    )
+    counts = ch.node_counts(
+        tmp_path,
+        {"node0": "eu", "node1": "us", "node2": "us"},
+        rows,
+        T0,
+        T0 + 100,
+        T0 + 100,
+    )
+    assert counts == {
+        "node0": {"region": "eu", "during": {"header-failed": 2}, "outside": {}},
+        "node1": {"region": "us", "during": {}, "outside": {"header-failed": 1}},
+    }
+    assert ch.log_table(counts) == [
+        "| log event | during fault | outside fault | eu (1) | us (1) |",
+        "|---|---:|---:|---:|---:|",
+        "| header-failed | 2 | 1 | 0 | 1 |",
+    ]
+    assert ch.log_table({}) == []
+
+
+def test_views_come_from_consensus_else_metrics(tmp_path):
+    assert ch.view_samples(tmp_path) == []
+    (tmp_path / "consensus.jsonl").write_text(
+        '{"ts": 1.5, "decided_bytes": 0, "timeouts": 2}\n'
+    )
+    (tmp_path / "metrics.jsonl").write_text(
+        '{"ts": 1.1, "node": "node0", "ok": true, "m": {"a": 1, "consensus_current_view": 5.0}}\n'
+        '{"ts": 1.7, "node": "node1", "ok": true, "m": {"consensus_current_view": 7.0}}\n'
+        '{"ts": 2.1, "node": "node1", "ok": false}\n'
+    )
+    assert ch.view_samples(tmp_path) == [(1.0, 7.0)]
+    assert ch.timeout_samples(tmp_path) == [(1.5, 2)]
+    (tmp_path / "consensus.jsonl").write_text(
+        '{"ts": 1.5, "decided_bytes": 0, "timeouts": 2, "views": 9}\n'
+    )
+    assert ch.view_samples(tmp_path) == [(1.5, 9)]
+
+
+def test_no_kinds_issues_no_fault():
+    cfg = ch.ChaosConfig(kinds=())
+    assert faults(run(CFG, seconds=600.0))
+    assert faults(run(cfg, seconds=600.0)) == []

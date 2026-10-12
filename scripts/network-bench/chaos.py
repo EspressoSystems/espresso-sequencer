@@ -5,16 +5,19 @@ Stdlib only: `aws-bench`, `netbench.py` and `throughput-plot` import it, and the
 next to them.
 """
 
+import gzip
 import json
 import random
+import re
 import shlex
 import statistics
+from collections import Counter
 from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from itertools import pairwise
 from pathlib import Path
-from typing import Literal, NotRequired, TypedDict
+from typing import Literal, NamedTuple, NotRequired, TypedDict
 
 # Up query nodes kept at every fault: one serves scans and heights while another catches up.
 QUERY_FLOOR = 2
@@ -323,6 +326,7 @@ def chaos_step(
     )
     if (
         tip is not None
+        and cfg.kinds
         and next_fault_at <= now < state["stop_at"]
         and (
             i := _fault_target(
@@ -774,4 +778,243 @@ def fault_table(rows: list[FaultRow], t0: float) -> list[str]:
             for r in rows
         ),
         "",
+    ]
+
+
+def floor_span(row: FaultRow, end: float) -> tuple[float, float]:
+    """(start, stop) of `row` for the floor: from the fault until its node `rejoined`, so a
+    query node's catch-up does not count. A timed out node stays faulty until `end`, an
+    interrupted fault ends at `interrupted`."""
+    if row.timeout is not None:
+        return row.fault, end
+    return row.fault, _first(row.rejoined, row.interrupted, end)
+
+
+class CounterSplit(NamedTuple):
+    """Counter increase and seconds of the sample intervals within a fault and outside."""
+
+    during: float
+    during_s: float
+    outside: float
+    outside_s: float
+
+
+def counter_split(
+    samples: Sequence[tuple[float, float]],
+    spans: Sequence[tuple[float, float]],
+    start: float,
+    stop: float,
+) -> CounterSplit:
+    """Increase of a counter over the intervals between consecutive `samples`, (ts, value),
+    within [`start`, `stop`]. An interval overlapping any of the fault `spans` counts as
+    during. The highest value over several nodes drops when the leading node restarts: a
+    negative increase counts as 0."""
+    during = [0.0, 0.0]
+    outside = [0.0, 0.0]
+    inside = [c for c in samples if start <= c[0] <= stop]
+    for (a, value_a), (b, value_b) in pairwise(inside):
+        into = during if any(s < b and e > a for s, e in spans) else outside
+        into[0] += max(0.0, value_b - value_a)
+        into[1] += b - a
+    return CounterSplit(*during, *outside)
+
+
+_VIEW_SAMPLE = re.compile(
+    r'"ts": ([\d.]+), "node".*?"consensus_current_view": ([\d.]+)'
+)
+
+
+def view_samples(run_dir: Path) -> list[tuple[float, float]]:
+    """(ts, highest view over the nodes) per second: the `views` of `consensus.jsonl`, else
+    the scrapes of `metrics.jsonl` (runs from before `views`); empty without either."""
+    path = run_dir / "consensus.jsonl"
+    if path.exists():
+        rows = [json.loads(line) for line in path.read_text().splitlines()]
+        if rows and all("views" in r for r in rows):
+            return [(r["ts"], r["views"]) for r in rows]
+    path = run_dir / "metrics.jsonl"
+    if not path.exists():
+        return []
+    best: dict[int, float] = {}
+    with path.open() as f:
+        for line in f:
+            if m := _VIEW_SAMPLE.search(line):
+                second = int(float(m[1]))
+                best[second] = max(best.get(second, 0.0), float(m[2]))
+    return [(float(t), v) for t, v in sorted(best.items())]
+
+
+def timeout_samples(run_dir: Path) -> list[tuple[float, float]]:
+    """(ts, highest `consensus_number_of_timeouts` over the nodes); empty without samples."""
+    path = run_dir / "consensus.jsonl"
+    if not path.exists():
+        return []
+    return [
+        (r["ts"], r["timeouts"]) for r in map(json.loads, path.read_text().splitlines())
+    ]
+
+
+def floor_lines(timeouts: CounterSplit, views: CounterSplit) -> list[str]:
+    """The view timeout floor: timeouts and views outside any fault, and with one."""
+
+    def part(name: str, timed_out: float, views: float, seconds: float) -> str:
+        rate = f"{100 * timed_out / views:.2f} %" if views else "-"
+        return f"{name} {timed_out:.0f} timeouts in {views:.0f} views ({rate}) over {seconds:.0f} s"
+
+    return [
+        "- View timeouts: "
+        + part("outside faults", timeouts.outside, views.outside, views.outside_s)
+        + "; "
+        + part("during faults", timeouts.during, views.during, views.during_s)
+    ]
+
+
+class LogPattern(NamedTuple):
+    """A node log message counted under `name`; `prefix` is matched against `fields.message`
+    (messages carry suffixes). With `field`, one count per value of that field, as
+    `name[value]`."""
+
+    name: str
+    prefix: str
+    field: str | None = None
+
+
+LOG_PATTERNS: tuple[LogPattern, ...] = (
+    LogPattern(
+        "stub",
+        "parent state unavailable; queued on parent for retry (from_header stub inserted)",
+    ),
+    LogPattern(
+        "no-propose", "timeout: we were the leader but did not propose", "missing"
+    ),
+    LogPattern("no-vote1", "timeout: we did not vote1", "missing"),
+    LogPattern("header-failed", "header creation failed"),
+    LogPattern("frontier", "fetching block frontier from peers"),
+    LogPattern("unsafe", "proposal no longer safe against the current lock"),
+    LogPattern("parent-fetch", "parent proposal missing; requesting fetch"),
+    LogPattern("cert2-fetch", "have certificate2 but no proposal; requesting fetch"),
+)
+
+
+def log_label(line: str) -> tuple[str, float] | None:
+    """(label, epoch seconds) of a node log line matching a `LOG_PATTERNS` entry, else
+    `None`. Lines that are not JSON (the container's own output) match nothing."""
+    if not line.startswith("{"):
+        return None
+    for pattern in LOG_PATTERNS:
+        if pattern.prefix not in line:
+            continue
+        record = json.loads(line)
+        fields = record["fields"]
+        if not fields["message"].startswith(pattern.prefix):
+            continue
+        label = pattern.name
+        if pattern.field is not None:
+            label += f"[{fields[pattern.field]}]"
+        return label, datetime.fromisoformat(record["timestamp"]).timestamp()
+    return None
+
+
+def count_log(
+    lines: Iterable[str],
+    windows: Sequence[tuple[float, float]],
+    start: float,
+    stop: float,
+) -> tuple[Counter[str], Counter[str]]:
+    """(during, outside) counts per label of the matching lines within [`start`, `stop`];
+    during: inside one of the fault `windows` of the node."""
+    during: Counter[str] = Counter()
+    outside: Counter[str] = Counter()
+    for line in lines:
+        if (hit := log_label(line)) is None or not start <= hit[1] <= stop:
+            continue
+        label, ts = hit
+        into = during if any(a <= ts <= b for a, b in windows) else outside
+        into[label] += 1
+    return during, outside
+
+
+class NodeCounts(TypedDict):
+    region: str
+    during: dict[str, int]
+    outside: dict[str, int]
+
+
+def node_log_files(run_dir: Path, node: str) -> list[Path]:
+    """The logs of `node` that exist: the one a wipe saved, then the current one."""
+    host = run_dir / "hosts" / node
+    names = ("espresso-node.wiped.log.gz", "espresso-node.log.gz")
+    return [host / n for n in names if (host / n).exists()]
+
+
+def node_counts(
+    run_dir: Path,
+    regions: Mapping[str, str],
+    rows: Sequence[FaultRow],
+    start: float,
+    stop: float,
+    end: float,
+) -> dict[str, NodeCounts]:
+    """Log counters of every node of `regions` that has a log, split by its own `floor_span`
+    windows."""
+    out: dict[str, NodeCounts] = {}
+    for node, region in regions.items():
+        files = node_log_files(run_dir, node)
+        if not files:
+            continue
+        windows = [floor_span(r, end) for r in rows if r.node == node]
+        during: Counter[str] = Counter()
+        outside: Counter[str] = Counter()
+        for path in files:
+            with gzip.open(path, "rt", errors="replace") as f:
+                d, o = count_log(f, windows, start, stop)
+            during += d
+            outside += o
+        out[node] = NodeCounts(
+            region=region, during=dict(during), outside=dict(outside)
+        )
+    return out
+
+
+def _label_order(label: str) -> tuple[int, str]:
+    name = label.partition("[")[0]
+    names = [p.name for p in LOG_PATTERNS]
+    return names.index(name), label
+
+
+def log_table(counts: Mapping[str, NodeCounts]) -> list[str]:
+    """One row per label seen: during faults and outside them in total, then outside per
+    region with its node count in the header."""
+    labels = sorted(
+        {
+            label
+            for c in counts.values()
+            for d in (c["during"], c["outside"])
+            for label in d
+        },
+        key=_label_order,
+    )
+    if not labels:
+        return []
+    regions = sorted({c["region"] for c in counts.values()})
+    sizes = Counter(c["region"] for c in counts.values())
+
+    def total(label: str, key: Literal["during", "outside"], region: str | None) -> int:
+        return sum(
+            c[key].get(label, 0)
+            for c in counts.values()
+            if region is None or c["region"] == region
+        )
+
+    return [
+        "| log event | during fault | outside fault | "
+        + " | ".join(f"{r} ({sizes[r]})" for r in regions)
+        + " |",
+        "|---|" + "---:|" * (2 + len(regions)),
+        *(
+            f"| {label} | {total(label, 'during', None)} | {total(label, 'outside', None)} | "
+            + " | ".join(str(total(label, "outside", r)) for r in regions)
+            + " |"
+            for label in labels
+        ),
     ]

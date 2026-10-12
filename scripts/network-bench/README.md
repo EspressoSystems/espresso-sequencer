@@ -224,6 +224,7 @@ just bench aws run --tag release-x --latency decaf-2025 --tcp-cc cubic   # cubic
 ```
 just bench aws run --tag release-x --chaos
 just bench aws run --tag release-x --chaos --chaos-min 10 --chaos-rate 4 --chaos-seed 7 --chaos-kinds restart,kill
+just bench aws run --tag release-x --chaos --chaos-kinds none --chaos-rate 0.1 # fault-free baseline of the shape
 just bench aws up --tag release-x --nodes 22 --query-nodes 22 --node-type c8g.large --ctl-type c8g.xlarge --ttl-min 180
 just bench aws run --fleet --chaos --query-engine sqlite
 ```
@@ -235,11 +236,13 @@ just bench aws run --fleet --chaos --query-engine sqlite
   `--query-engine` given on the command line are kept; `--latency` is per run, `up` does not take it; `--nodes N` alone
   gives N query nodes.
 - Refused: `--steps`, `--step-s`, `--search`, `--keep-going` and `--warmup-s` (set by the chaos config); fewer than 7
-  nodes; 2 or fewer query nodes; a `--chaos-min` that gives no faults; `--query-engine postgres`; `--query-db` other
-  than `colocated`.
+  nodes; 2 or fewer query nodes; a `--chaos-min` that gives no faults (not with `--chaos-kinds none`);
+  `--query-engine postgres`; `--query-db` other than `colocated`.
 - Faults start after the warmup, one per 45 s, and stop the kill down time plus 120 s (180 s) before the load ends, so a
   late kill recovers under load; `--chaos-min 3` or less is refused, as it gives no faults. Kinds are used in turn from
-  `--chaos-kinds` (default `restart,kill,wipe`) on nodes in the order `--chaos-seed` shuffles them to.
+  `--chaos-kinds` (default `restart,kill,wipe`) on nodes in the order `--chaos-seed` shuffles them to. `none` alone
+  issues no faults: the chaos shape and report as a baseline for the view timeout floor. `--chaos-rate` takes any
+  positive value; the heartbeat (50 tx/s of 12 B) does not depend on it.
   - `restart`: `docker restart`. `kill`: `docker kill`, `docker start` after 60 s. `wipe`: container logs saved to
     `/opt/bench/espresso-node.wiped.log.gz`, container removed, journal and payload dir emptied, container recreated
     from `node-rejoin.env` (`recreate.sh`), started.
@@ -296,6 +299,19 @@ just bench aws run --fleet --chaos --query-engine sqlite
 - Throughput: mean decided against offered and the lowest step; then decided MB/s from `consensus.jsonl` over the steps,
   with an active fault against without: an interval between two counter samples that overlaps a fault counts as with
   one. Without counter samples that line is omitted.
+- View timeout floor (`### View timeout floor`): view timeouts and views split into during and outside faults, with the
+  timeout rate in % and the seconds of each. Here a fault counts from its start until its node `rejoined` (query
+  catch-up not included); a stuck node stays faulty to the end, an interrupted fault ends at `interrupted`. Timeouts are
+  `consensus_number_of_timeouts` and views `consensus_current_view` (`timeouts` and `views` of `consensus.jsonl`, the
+  highest over the nodes), over the sample intervals within the steps; an interval overlapping a fault counts as during.
+  Runs from before `views` read it from `metrics.jsonl`.
+- Node log counters, one table row per event and `missing` set: `stub`
+  (`parent state unavailable; ... from_header stub inserted`), `no-propose[missing]`, `no-vote1[missing]`,
+  `header-failed`, `frontier`, `unsafe`, `parent-fetch`, `cert2-fetch`; patterns in `LOG_PATTERNS` of `chaos.py`,
+  matched as message prefix. Columns: total during and outside the node's own fault windows, then outside per latency
+  region with its node count. Source: `espresso-node.log.gz` and `espresso-node.wiped.log.gz` of each node, within the
+  steps. Per node counts and the splits go to `floor.json`. A node's own windows leave other nodes' faults in `outside`,
+  so these counts exceed the timeouts outside any fault.
 - `throughput.png`, then the per-fault table (a `missing` column when a timeout carries counts), then one row per step
   with its start (s since load start), its view timeouts in place of a verdict (a faulted leader times out its view) and
   the faults active in it.
@@ -494,7 +510,7 @@ Where:
 | `--chaos-min`                         | 10                             | per run      | minutes of load, one 60 s step each                                                           |
 | `--chaos-rate`                        | 4                              | per run      | MB/s of every step                                                                            |
 | `--chaos-seed`                        | 42                             | per run      | seed of the order nodes are faulted in                                                        |
-| `--chaos-kinds`                       | `restart,kill,wipe`            | per run      | comma separated, used in turn                                                                 |
+| `--chaos-kinds`                       | `restart,kill,wipe`            | per run      | comma separated, used in turn; `none` for no faults                                           |
 | `--max-block-size`                    | `50mb`                         | per run      | genesis `max_block_size`                                                                      |
 | `--node-env KEY=VALUE`                | none                           | per run      | repeatable; node environment                                                                  |
 | `--leader-trace`, `--no-leader-trace` | off                            | per run      | leader trace CSVs and plots                                                                   |
@@ -809,6 +825,7 @@ runs/01-run/             one measurement
   load-meta.json         start_height, max_in_flight, cap_waits, submit_errors, submit_failovers, submit_duplicates, heartbeat_errors,
                          missing_payloads, drain_s, refine_skipped, stop_reason, marker
   chaos.jsonl            --chaos: one record per fault, start, rejoin, catch-up, timeout and restore
+  floor.json             --chaos: view timeout floor and node log counters, written by `render`
   stake-table.json final-<node>.prom
   run.json agent-state.json agent.log result.json summary.md throughput.png
   trace/                 trace-plots output (--leader-trace)

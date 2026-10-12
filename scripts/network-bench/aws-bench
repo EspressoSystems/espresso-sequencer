@@ -1252,7 +1252,7 @@ def check_chaos(cfg: RunConfig) -> None:
             f"faulted with {ch.QUERY_FLOOR} left serving: {cfg.query_nodes}"
         )
     quiet_s = cfg.chaos.kill_down_s + ch.RECOVERY_ALLOWANCE_S
-    if cfg.chaos.minutes * CHAOS_STEP_S <= quiet_s:
+    if cfg.chaos.kinds and cfg.chaos.minutes * CHAOS_STEP_S <= quiet_s:
         raise Refused(
             f"--chaos-min {cfg.chaos.minutes} issues no faults: they stop {quiet_s:g} s "
             "before the load ends"
@@ -1627,7 +1627,7 @@ def format_node_summary(cfg: RunConfig) -> list[str]:
 def format_chaos_summary(chaos: ch.ChaosConfig, nodes: int, latency: str) -> str:
     return (
         f"chaos: {chaos.minutes} min at {chaos.rate_mb_s:g} MB/s; latency {latency}; "
-        f"kinds {','.join(chaos.kinds)}; seed {chaos.seed}; "
+        f"kinds {','.join(chaos.kinds) or 'none'}; seed {chaos.seed}; "
         f"at most {ch.fault_budget(nodes)} faulty; gap {chaos.gap_s:g} s; "
         f"kill down {chaos.kill_down_s:g} s; recover timeout {chaos.recover_timeout_s:g} s"
     )
@@ -2826,12 +2826,15 @@ def add_search_flags(parser: argparse.ArgumentParser) -> None:
 
 
 def chaos_kinds(text: str) -> tuple[ch.ChaosKind, ...]:
+    """`none` alone gives no kinds: the chaos shape without faults."""
+    if text == "none":
+        return ()
     kinds = text.split(",")
     unknown = [kind for kind in kinds if kind not in get_args(ch.ChaosKind)]
     if unknown:
         raise argparse.ArgumentTypeError(
             f"unknown fault kind {', '.join(unknown)}; choose from "
-            f"{', '.join(get_args(ch.ChaosKind))}"
+            f"{', '.join(get_args(ch.ChaosKind))}, or none alone"
         )
     return cast(tuple[ch.ChaosKind, ...], tuple(kinds))
 
@@ -2867,7 +2870,7 @@ def add_chaos_flags(parser: argparse.ArgumentParser) -> None:
         "--chaos-kinds",
         type=chaos_kinds,
         default=chaos.kinds,
-        help="with --chaos: comma separated fault kinds, used in turn",
+        help="with --chaos: comma separated fault kinds, used in turn; `none` for no faults",
     )
 
 
@@ -7414,10 +7417,54 @@ def chaos_view(
         ),
         "",
         "",
-        *ch.recovery_table(rows, config["chaos"]["kinds"]),
+        *(ch.recovery_table(rows, config["chaos"]["kinds"]) if rows else []),
         *([""] + throughput if throughput else []),
+        *floor_section(run_dir, manifest, rows, steps, end),
     ]
     return {"lead": lead, "faults": ch.fault_table(rows, t0), "steps": chaos_steps}
+
+
+def floor_section(
+    run_dir: Path,
+    manifest: Manifest,
+    rows: list[ch.FaultRow],
+    steps: Sequence[nb.StepResult],
+    end: float,
+) -> list[str]:
+    """The view timeout floor and the node log counters, from `consensus.jsonl` and the node
+    logs of `run_dir`, over the steps; also written to `floor.json`. Empty without steps."""
+    if not steps:
+        return []
+    start, stop = steps[0]["t_start"], steps[-1]["t_end"]
+    spans = [ch.floor_span(r, end) for r in rows]
+    timeouts = ch.counter_split(ch.timeout_samples(run_dir), spans, start, stop)
+    views = ch.counter_split(ch.view_samples(run_dir), spans, start, stop)
+    assignment = manifest["latency"]["assignment"] if "latency" in manifest else {}
+    nodes = sorted(
+        (p.name for p in (run_dir / "hosts").glob("node*")),
+        key=lambda name: int(name.removeprefix("node")),
+    )
+    regions = {n: assignment.get(n, "-") for n in nodes}
+    counts = ch.node_counts(run_dir, regions, rows, start, stop, end)
+    nb.write_json(
+        run_dir / "floor.json",
+        {
+            "window": [start, stop],
+            "timeouts": timeouts._asdict(),
+            "views": views._asdict(),
+            "nodes": counts,
+        },
+    )
+    table = ch.log_table(counts)
+    return [
+        "",
+        "### View timeout floor",
+        "",
+        "A fault counts from its start until its node rejoined; a stuck node to the end.",
+        "",
+        *ch.floor_lines(timeouts, views),
+        *(["", *table] if table else []),
+    ]
 
 
 def load_t0(
@@ -7459,7 +7506,7 @@ def setup_line(config: dict[str, Any]) -> str:
     return (
         f"- Setup: {config['nodes']} nodes ({config['query_nodes']} query), "
         f"{config['node_type']}, latency {latency_cell(config)}, {chaos['minutes']} min at "
-        f"{chaos['rate_mb_s']:g} MB/s, seed {chaos['seed']}, kinds {','.join(chaos['kinds'])}"
+        f"{chaos['rate_mb_s']:g} MB/s, seed {chaos['seed']}, kinds {','.join(chaos['kinds']) or 'none'}"
     )
 
 

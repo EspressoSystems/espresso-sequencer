@@ -467,3 +467,40 @@ def test_write_report_shows_the_warnings_of_a_timed_out_node(tmp_path: Path):
     assert "WARN espresso: fetch failed err=timeout" in tail
     assert "after the timeout" not in summary
     assert "lines of node0" not in summary
+
+
+def test_floor_section_counts_timeouts_views_and_logs_outside_faults(tmp_path: Path):
+    steps = steps_of([4.0, 4.0, 4.0, 4.0])
+    rows = ch.fault_rows(EVENTS)
+    lines = [
+        {"ts": T0 + at, "decided_bytes": 0.0, "timeouts": t, "views": v}
+        for at, t, v in [(0, 0, 0), (10, 0, 10), (25, 2, 20), (60, 2, 50), (120, 3, 90)]
+    ]
+    (tmp_path / "consensus.jsonl").write_text(
+        "".join(f"{json.dumps(x)}\n" for x in lines)
+    )
+    for node in ("node0", "node1"):
+        host = tmp_path / "hosts" / node
+        host.mkdir(parents=True)
+        with gzip.open(host / "espresso-node.log.gz", "wt") as f:
+            f.write(
+                json.dumps(
+                    {
+                        "timestamp": datetime.fromtimestamp(T0 + 15, UTC).isoformat(),
+                        "fields": {"message": "header creation failed"},
+                    }
+                )
+                + "\n"
+            )
+    manifest = {"latency": {"assignment": {"node0": "eu", "node1": "us"}}}
+    out = awsb.floor_section(tmp_path, manifest, rows, steps, T0 + 240)
+    # node0 faulty 10-25 s, node5 70-150 s: the intervals 0-10 and 25-60 are outside.
+    assert (
+        "- View timeouts: outside faults 0 timeouts in 40 views (0.00 %) over 45 s; during faults 3 timeouts in 50 views (6.00 %) over 75 s"
+        in out
+    )
+    assert "| header-failed | 1 | 1 | 1 | 0 |" not in out
+    assert "| header-failed | 1 | 1 | 0 | 1 |" in out
+    floor = json.loads((tmp_path / "floor.json").read_text())
+    assert floor["nodes"]["node0"]["during"] == {"header-failed": 1}
+    assert awsb.floor_section(tmp_path, manifest, rows, [], T0 + 240) == []

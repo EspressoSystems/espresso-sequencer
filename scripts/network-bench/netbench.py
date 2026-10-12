@@ -2088,7 +2088,7 @@ async def poll_heights(
 async def poll_counters(
     client: Client, urls: Sequence[str], counters: list[dict[str, Any]], clock: Clock
 ) -> None:
-    """Every COUNTER_POLL_S, decided payload bytes and view timeouts: the highest over the
+    """Every COUNTER_POLL_S, decided payload bytes, view timeouts and the current view: the highest over the
     validators that answer. A restarted validator's counters start from 0 and fall under
     the others'. A sweep nobody answers writes no sample."""
     while True:
@@ -2100,7 +2100,7 @@ async def poll_counters(
                 {"ts": clock.time()}
                 | {
                     key: max(m[key] for m in ms)
-                    for key in ("decided_bytes", "timeouts")
+                    for key in ("decided_bytes", "timeouts", "views")
                 }
             )
         await clock.asleep(COUNTER_POLL_S)
@@ -2119,6 +2119,7 @@ def try_counters(pool: Http, url: str) -> dict[str, float] | None:
     return {
         "decided_bytes": m.get("consensus_finalized_bytes_sum", 0.0),
         "timeouts": m.get("consensus_number_of_timeouts", 0.0),
+        "views": m.get("consensus_current_view", 0.0),
     }
 
 
