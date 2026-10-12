@@ -336,7 +336,8 @@ just bench aws run --fleet --chaos --query-engine sqlite
 #### Not covered
 
 - Stake table changes: no delegation, undelegation, validator registration or exit during the run.
-- Epoch transitions under faults: runs do not span a stake table epoch change.
+- Epoch transitions under faults: runs do not span a stake table epoch change. `--epoch-height 3000` (decaf's value) is
+  accepted but not exercised by a chaos run; the default is the template's 1000000.
 - L1 faults: anvil on ctl never stalls, reorgs or drops RPC.
 - Network faults: no partitions or latency spikes; `--latency` shaping is static, with `--netem full` a steady jitter
   and loss floor.
@@ -524,6 +525,7 @@ Where:
 | `--tcp-cc`                            | bbr                            | per run      | with `--latency`: TCP congestion control, `bbr`, `cubic`, `bbr_hold` or `bbr3`                |
 | `--mtu`                               | 1500                           | per run      | with `--latency`: interface MTU of the nodes                                                  |
 | `--netem`                             | `delay`; `full` with `--chaos` | per run      | with `--latency`: `full` adds per-pair jitter and loss to the delay                           |
+| `--epoch-height`                      | template (1000000)             | per run      | genesis `epoch_height`, in blocks                                                             |
 | `--consensus-storage`                 | `fs`                           | per run      | `fs`, `journal` (experimental, not in `main` images); query node uses `storage-sql` with `fs` |
 | `--prune [RETENTION]`                 | off; bare `1m`                 | per run      | node0 prunes data and state older than RETENTION every 30 s; part of the config hash          |
 | `--fleet [FLEET]`                     | none                           | run          | measure on a fleet from `up`                                                                  |

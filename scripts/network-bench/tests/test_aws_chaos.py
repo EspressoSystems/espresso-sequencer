@@ -751,3 +751,8 @@ def test_netem_is_full_under_chaos_only_by_default():
 def test_netem_needs_a_latency_profile():
     with pytest.raises(awsb.Refused, match="--netem"):
         awsb.config_from_args(parse("--netem", "full"))
+
+
+def test_epoch_height_flag_defaults_to_the_template():
+    assert awsb.config_from_args(parse("--chaos")).epoch_height is None
+    assert awsb.config_from_args(parse("--epoch-height", "3000")).epoch_height == 3000

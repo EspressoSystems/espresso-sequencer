@@ -980,6 +980,8 @@ class RunConfig:
     mtu: int = INTERNET_MTU
     # `latency.NETEMS` name: `full` adds jitter and loss to the delay.
     netem: str = "delay"
+    # Genesis `epoch_height`; None keeps the template's.
+    epoch_height: int | None = None
     ttl_min: str = "auto"
     fleet: Path | None = None
     force: bool = False
@@ -2224,10 +2226,12 @@ def write_private_json(path: Path, data: Any) -> None:
     nb.write_json(path, data)
 
 
-def render_genesis(template: bytes, n: int, max_block_size: str) -> bytes:
+def render_genesis(
+    template: bytes, n: int, max_block_size: str, epoch_height: int | None = None
+) -> bytes:
     """`n` validators need a stake table at least as large; contract addresses stay as the
     template's, since they are deterministic from the deployer nonce. `max_block_size` goes
-    into both chain configs."""
+    into both chain configs; `epoch_height` replaces the template's when given."""
     capacity = max(10, n)
     text = template.decode()
     text, size_n = re.subn(
@@ -2245,6 +2249,14 @@ def render_genesis(template: bytes, n: int, max_block_size: str) -> bytes:
         raise ValueError(
             f"expected 2 capacity fields in genesis template, replaced {stake_n + cap_n}"
         )
+    if epoch_height is not None:
+        text, epoch_n = re.subn(
+            r"(?m)^epoch_height = \d+$", f"epoch_height = {epoch_height}", text
+        )
+        if epoch_n != 1:
+            raise ValueError(
+                f"expected 1 epoch_height field in genesis template, replaced {epoch_n}"
+            )
     return text.encode()
 
 
@@ -2976,6 +2988,12 @@ def add_block_size_flag(parser: argparse.ArgumentParser) -> None:
         default=RunConfig(tag="").max_block_size,
         help="genesis max_block_size of both chain configs, e.g. 30mb",
     )
+    parser.add_argument(
+        "--epoch-height",
+        type=positive_int,
+        default=RunConfig.epoch_height,
+        help="genesis epoch_height in blocks (default: the template's 1000000)",
+    )
 
 
 def add_leader_trace_flag(parser: argparse.ArgumentParser) -> None:
@@ -3089,6 +3107,7 @@ def config_from_args(args: argparse.Namespace) -> RunConfig:
         tcp_cc=args.tcp_cc,
         mtu=args.mtu,
         netem=netem,
+        epoch_height=args.epoch_height,
         consensus_storage=args.consensus_storage,
         prune=args.prune,
         root_gb=args.root_gb,
@@ -3276,6 +3295,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         tcp_cc=defaults.tcp_cc,
         mtu=defaults.mtu,
         netem=defaults.netem,
+        epoch_height=defaults.epoch_height,
         consensus_storage=defaults.consensus_storage,
         prune=defaults.prune,
         submit_nodes=None,
@@ -4551,6 +4571,7 @@ def fleet_run_config(args: argparse.Namespace, saved: FleetManifest) -> RunConfi
         tcp_cc=cli.tcp_cc,
         mtu=cli.mtu,
         netem=cli.netem,
+        epoch_height=cli.epoch_height,
         consensus_storage=cli.consensus_storage,
         prune=cli.prune,
         fleet=cli.fleet,
@@ -5099,7 +5120,10 @@ def render_run(
     """`runs/<nn>-<name>/` with its manifest, genesis and load config. Without a
     `run_estimate` this is the run of a single shot, which also provisions."""
     genesis = render_genesis(
-        (SCRIPT_DIR / "genesis.toml").read_bytes(), cfg.nodes, cfg.max_block_size
+        (SCRIPT_DIR / "genesis.toml").read_bytes(),
+        cfg.nodes,
+        cfg.max_block_size,
+        cfg.epoch_height,
     )
     run_dir = new_run_dir(fleet_dir, name)
     meta = latency_meta(cfg, fleet["hosts"]) if cfg.latency != "off" else None

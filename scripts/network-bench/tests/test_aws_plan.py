@@ -2000,3 +2000,17 @@ def test_search_node0_journal_holds_the_offer_below_the_noisy_mark(db_modes, nod
     host = {"role": "query", "root_gb": awsb.node_root_gb(cfg, query=True)}
     stored = awsb.payload_factor(nodes) * 150 * 1_000_000_000
     assert stored <= awsb.JOURNAL_NOISY_FRACTION * awsb._journal_max_bytes(host)
+
+
+def test_genesis_epoch_height_replaces_the_template_value():
+    template = (HERE / "genesis.toml").read_bytes()
+    assert b"epoch_height = 1000000\n" in awsb.render_genesis(template, 5, "50mb")
+    rendered = awsb.render_genesis(template, 5, "50mb", epoch_height=3000)
+    assert b"epoch_height = 3000\n" in rendered
+    with pytest.raises(ValueError, match="1 epoch_height"):
+        awsb.render_genesis(
+            b'capacity = 1\nstake_table_capacity = 1\nmax_block_size = "1"\nmax_block_size = "1"\n',
+            5,
+            "30mb",
+            3000,
+        )
