@@ -15,6 +15,8 @@ set_option verso.code.warnLineLength 90
 set_option maxHeartbeats 1000000
 set_option maxRecDepth 100000
 
+set_option pp.proofs true
+
 #doc (Manual) "New protocol: consensus specification" =>
 
 %%%
