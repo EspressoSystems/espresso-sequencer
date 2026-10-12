@@ -19,7 +19,6 @@ use hotshot_types::{traits::metrics::NoMetrics, utils::epoch_from_block_number, 
 use staking_cli::{
     demo::DelegationConfig, fetch_commission, update_commission, update_network_config,
 };
-use tempfile::TempDir;
 use tokio::task::JoinHandle;
 use versions::{DRB_AND_HEADER_UPGRADE_VERSION, EPOCH_REWARD_VERSION, EPOCH_VERSION, Upgrade};
 
@@ -92,16 +91,11 @@ async fn record_legacy_chains() -> anyhow::Result<()> {
 
 async fn record(scenario: Scenario) -> anyhow::Result<()> {
     tracing::warn!(name = scenario.name, "recording legacy chain");
-    let l1_dir = TempDir::new()?;
-    let l1_state = l1_dir.path().join(L1_STATE);
     let anvil = Anvil::new()
-        .args(["--slots-in-an-epoch", "0", "--balance", "1000000"])
+        .args(L1_ANVIL_ARGS)
         // Mine on a clock, as Ethereum does, so headers keep finalizing new L1 blocks and every
         // stake table change reaches an epoch.
         .args(["--block-time", "1"])
-        .args(["--state-interval", "1"])
-        .arg("--dump-state")
-        .arg(&l1_state)
         .spawn();
     let network_config = TestConfigBuilder::default()
         .epoch_height(scenario.epoch_height)
@@ -193,6 +187,7 @@ async fn record(scenario: Scenario) -> anyhow::Result<()> {
         }
     }
     let genesis_state = network.server.node_state().genesis_state.clone();
+    let l1_blocks = export_l1(network.cfg.anvil().context("the network ran on anvil")?).await?;
     let chain = LegacyChain {
         name: scenario.name.into(),
         genesis: genesis(&network.cfg, &genesis_state, scenario.upgrade),
@@ -200,22 +195,48 @@ async fn record(scenario: Scenario) -> anyhow::Result<()> {
         blocks,
         state_certs,
         network_config_update,
+        l1_blocks,
     };
 
-    // Anvil dumps its state every second; let one more dump cover the last L1 block.
-    sleep(Duration::from_secs(3)).await;
-    chain.save(&l1_state)?;
+    chain.save()?;
     tracing::warn!(
         name = scenario.name,
         blocks = chain.blocks.len(),
         state_certs = chain.state_certs.len(),
+        l1_blocks = chain.l1_blocks.len(),
         "recorded legacy chain"
     );
     Ok(())
 }
 
+/// Every L1 block up to the latest, as the timestamps and signed transactions a replay mines
+/// them from again.
+async fn export_l1(provider: &impl Provider) -> anyhow::Result<Vec<RecordedL1Block>> {
+    let latest = provider.get_block_number().await?;
+    let mut blocks = vec![];
+    for number in 0..=latest {
+        let block = provider
+            .get_block_by_number(number.into())
+            .await?
+            .with_context(|| format!("L1 block {number} is missing"))?;
+        let mut transactions = vec![];
+        for hash in block.transactions.hashes() {
+            let raw = provider
+                .get_raw_transaction_by_hash(hash)
+                .await?
+                .with_context(|| format!("L1 transaction {hash} is missing"))?;
+            transactions.push(raw);
+        }
+        blocks.push(RecordedL1Block {
+            timestamp: block.header.timestamp,
+            transactions,
+        });
+    }
+    Ok(blocks)
+}
+
 impl LegacyChain {
-    fn save(&self, l1_state: &Path) -> anyhow::Result<()> {
+    fn save(&self) -> anyhow::Result<()> {
         let dir = chain_dir(&self.name);
         fs::create_dir_all(&dir)?;
         self.genesis.to_file(dir.join(GENESIS))?;
@@ -234,7 +255,10 @@ impl LegacyChain {
                 serde_json::to_string_pretty(update)?,
             )?;
         }
-        fs::copy(l1_state, dir.join(L1_STATE))?;
+        fs::write(
+            dir.join(L1_BLOCKS),
+            serde_json::to_string_pretty(&self.l1_blocks)?,
+        )?;
         Ok(())
     }
 }

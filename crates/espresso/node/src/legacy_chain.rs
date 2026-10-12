@@ -5,9 +5,9 @@
 //! state certificates and the stake table contract's V1 and V2 event history. Once legacy
 //! consensus is gone no test network can produce that data, so `record_legacy_chains` recorded
 //! it while it still could, and [`LegacyChain::replay`] serves it again. A replayed node is a
-//! follower fed the recorded blocks instead of a light client, on an L1 restored from the
-//! recording, so the stake table, rewards and merklized state are derived by the same code that
-//! derives them on a live node.
+//! follower fed the recorded blocks instead of a light client, on an anvil that mined the
+//! recorded L1 transactions again, so the stake table, rewards and merklized state are derived
+//! by the same code that derives them on a live node.
 //!
 //! The recordings cannot be regenerated once legacy consensus is deleted. A change to how any
 //! recorded type deserializes has to keep reading them, as the `data/v*` reference vectors do.
@@ -21,7 +21,9 @@ use std::{
 
 use alloy::{
     node_bindings::{Anvil, AnvilInstance},
-    primitives::Address,
+    primitives::{Address, Bytes},
+    providers::{Provider, ProviderBuilder, ext::AnvilApi},
+    rpc::types::Block,
 };
 use anyhow::{Context, bail, ensure};
 use async_trait::async_trait;
@@ -69,6 +71,9 @@ pub struct LegacyChain {
     pub state_certs: Vec<(u64, LightClientStateUpdateCertificateV2<SeqTypes>)>,
     /// The network config registered on the stake table's V3 contract, if the recording did.
     pub network_config_update: Option<RecordedNetworkConfigUpdate>,
+    /// Every L1 block the recorded network ran against, indexed by block number. Block 0 is
+    /// anvil's genesis block, with no transactions.
+    pub l1_blocks: Vec<RecordedL1Block>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -76,6 +81,16 @@ pub struct RecordedBlock {
     pub leaf: LeafQueryData<SeqTypes>,
     pub block: BlockQueryData<SeqTypes>,
     pub vid_common: VidCommonQueryData<SeqTypes>,
+}
+
+/// An L1 block as its timestamp and signed transactions, which is all a replay needs to mine it
+/// again: contract addresses, logs and block numbers depend only on the transactions and their
+/// order. Block hashes do not survive a replay, and nothing the node runs compares them.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RecordedL1Block {
+    pub timestamp: u64,
+    /// The signed transactions in the order mined, each as `eth_sendRawTransaction` takes it.
+    pub transactions: Vec<Bytes>,
 }
 
 /// What `update_network_config` registered for a validator, for tests to look for in the stake
@@ -114,6 +129,7 @@ impl LegacyChain {
             blocks: serde_json::from_str(&read(BLOCKS)?)?,
             state_certs: serde_json::from_str(&read(STATE_CERTS)?)?,
             network_config_update,
+            l1_blocks: serde_json::from_str(&read(L1_BLOCKS)?)?,
         })
     }
 
@@ -129,11 +145,9 @@ impl LegacyChain {
     /// Starts a query node on this chain and returns once it has stored every block and derived
     /// the merklized state up to the tip.
     pub async fn replay(&self) -> anyhow::Result<ReplayNode> {
-        let l1 = Anvil::new()
-            .args(["--slots-in-an-epoch", "0"])
-            .arg("--load-state")
-            .arg(chain_dir(&self.name).join(L1_STATE))
-            .spawn();
+        let l1 = replay_l1(&self.l1_blocks)
+            .await
+            .with_context(|| format!("replaying the {} chain's L1", self.name))?;
 
         let storage = SqlDataSource::create_storage().await;
         let mut db = tmp_options(&storage);
@@ -199,12 +213,85 @@ const NETWORK_CONFIG: &str = "network-config.json";
 const BLOCKS: &str = "blocks.json";
 const STATE_CERTS: &str = "state-certs.json";
 const NETWORK_CONFIG_UPDATE: &str = "network-config-update.json";
-const L1_STATE: &str = "l1-state.json";
+const L1_BLOCKS: &str = "l1-blocks.json";
+
+/// Anvil as the recorder ran it, which a replay has to match for the recorded transactions to
+/// execute as they did: every block finalizes at once, and the accounts hold enough to fund the
+/// validators.
+const L1_ANVIL_ARGS: [&str; 4] = ["--slots-in-an-epoch", "0", "--balance", "1000000"];
 
 fn chain_dir(name: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../../data/legacy-chains")
         .join(name)
+}
+
+/// Starts an anvil at the recorded genesis and mines the recorded L1 blocks into it, one block
+/// per recorded block.
+async fn replay_l1(blocks: &[RecordedL1Block]) -> anyhow::Result<AnvilInstance> {
+    let (genesis, rest) = blocks
+        .split_first()
+        .context("the recorded L1 has a genesis block")?;
+    let anvil = Anvil::new()
+        .args(L1_ANVIL_ARGS)
+        .arg("--no-mining")
+        .args(["--timestamp", &genesis.timestamp.to_string()])
+        .spawn();
+    let provider = ProviderBuilder::new().connect_http(anvil.endpoint_url());
+    let mined = l1_block(&provider, 0).await?;
+    ensure!(
+        mined.header.timestamp == genesis.timestamp,
+        "anvil's genesis block has timestamp {} instead of the recorded {}",
+        mined.header.timestamp,
+        genesis.timestamp
+    );
+    for (number, block) in (1u64..).zip(rest) {
+        mine_l1_block(&provider, number, block).await?;
+    }
+    Ok(anvil)
+}
+
+/// Mines the recorded transactions as L1 block `number` and checks the block holds them in
+/// order, at the recorded timestamp.
+async fn mine_l1_block(
+    provider: &impl Provider,
+    number: u64,
+    block: &RecordedL1Block,
+) -> anyhow::Result<()> {
+    provider
+        .anvil_set_next_block_timestamp(block.timestamp)
+        .await
+        .with_context(|| format!("setting the timestamp of L1 block {number}"))?;
+    let mut sent = vec![];
+    for (i, tx) in block.transactions.iter().enumerate() {
+        // Not awaited: with mining off a pending transaction never confirms.
+        let pending = provider
+            .send_raw_transaction(tx)
+            .await
+            .with_context(|| format!("sending transaction {i} of L1 block {number}"))?;
+        sent.push(*pending.tx_hash());
+    }
+    provider.anvil_mine(Some(1), None).await?;
+    let mined = l1_block(provider, number).await?;
+    ensure!(
+        mined.header.timestamp == block.timestamp,
+        "L1 block {number} was mined at {} instead of the recorded {}",
+        mined.header.timestamp,
+        block.timestamp
+    );
+    let hashes: Vec<_> = mined.transactions.hashes().collect();
+    ensure!(
+        hashes == sent,
+        "L1 block {number} holds transactions {hashes:?} instead of the recorded {sent:?}"
+    );
+    Ok(())
+}
+
+async fn l1_block(provider: &impl Provider, number: u64) -> anyhow::Result<Block> {
+    provider
+        .get_block_by_number(number.into())
+        .await?
+        .with_context(|| format!("anvil has no L1 block {number}"))
 }
 
 /// The node is its own only peer: it serves catchup from the state it derived itself.
