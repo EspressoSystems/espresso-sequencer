@@ -6205,10 +6205,18 @@ class ChaosRunner:
         self._advance(ts)
 
     def expected_down(self) -> frozenset[str]:
+        """Nodes `check_nodes` skips: killed or stuck ones, and those whose mass restart ssh
+        failed and may have stopped. A restarted node is running once its action returned, so
+        it is inspected."""
         if self.state is None:
             return frozenset()
         return frozenset(
-            name for name, s in self.state["nodes"].items() if s["health"] != "up"
+            {
+                name
+                for name, s in self.state["nodes"].items()
+                if s["health"] in ("down", "stuck")
+            }
+            | self.state["mass_retry"].keys()
         )
 
     def stuck(self) -> list[str]:
@@ -6216,7 +6224,9 @@ class ChaosRunner:
 
     def drain(self, interrupts: Interrupts) -> None:
         """Ticks until every fault recovered or got stuck."""
-        while self.state is not None and ch.open_faults(self.state):
+        while self.state is not None and (
+            ch.open_faults(self.state) or self.state["mass_retry"]
+        ):
             interrupts.sleep(AGENT_POLL_S)
             self._advance(self.clock.time() + self.offset)
 
@@ -6297,7 +6307,8 @@ class ChaosRunner:
                     obs["query_height"][name],
                     s["last_missing"],
                 )
-        self._record(step["events"])
+        restarted = ch.restarted_events(step, self.clock.time() + self.offset)
+        self._record([*step["events"], *restarted])
         if failed:
             self._failed(
                 "; ".join(

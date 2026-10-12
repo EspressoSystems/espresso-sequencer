@@ -415,6 +415,15 @@ def test_restore_leaves_stuck_nodes_alone(isolated: Path):
     assert ch.read_events(isolated) == []
 
 
+def test_expected_down_is_the_killed_stuck_and_unrestarted_nodes(isolated: Path):
+    ctrl, _ = scripted_controller(isolated)
+    state = ch.chaos_init(ch.ChaosConfig(), list(ctrl.topo["nodes"]), 0.0, 60.0, 600.0)
+    state = with_health(state, node1="recovering", node2="down", node3="stuck")
+    state = with_health(state, node4="catching_up")
+    ctrl.state = {**state, "mass_retry": {"node5": 1.0}}
+    assert ctrl.expected_down() == frozenset({"node2", "node3", "node5"})
+
+
 # TEST:tick-waiting-noop-ok
 @pytest.mark.parametrize("agent", [None, {"phase": "waiting", "detail": "x"}])
 def test_tick_before_loading_does_nothing(isolated: Path, agent):
@@ -507,6 +516,32 @@ def test_failed_fault_is_retried_on_the_next_tick(isolated: Path):
     clock.sleep(awsb.AGENT_POLL_S)
     ctrl.tick(LOADING)
     assert [e["event"] for e in ch.read_events(isolated)] == ["fault"]
+
+
+def test_a_partly_failed_mass_restart_records_started_and_retries(isolated: Path):
+    ctrl, cluster, clock = cluster_controller(
+        isolated, restarts=1, kinds=("mass-restart",)
+    )
+    cluster.start("node4")
+    ctrl.state = ch.chaos_init(
+        ctrl.chaos, list(ctrl.topo["nodes"]), clock.time(), 0.0, 3600.0
+    )
+    ctrl.state["next_fault_at"] = 0.0
+    ctrl.tick(LOADING)
+    events = ch.read_events(isolated)
+    assert [e["event"] for e in events].count("fault") == 6
+    assert [e["event"] for e in events].count("started") == 6
+    assert len(ctrl.state["mass_retry"]) == 1
+    (retry,) = ctrl.state["mass_retry"]
+    assert retry in ctrl.expected_down()
+    clock.sleep(awsb.AGENT_POLL_S)
+    ctrl.tick(LOADING)
+    events = ch.read_events(isolated)
+    assert [(e["event"], e["node"]) for e in events[-2:]] == [
+        ("fault", retry),
+        ("started", retry),
+    ]
+    assert ctrl.state["mass_retry"] == {}
 
 
 # TEST:timeout-event-invalid-ok
@@ -636,11 +671,14 @@ def seed_faulting_a_query_node() -> int:
 
 
 class NoStart(ClusterRunner):
-    """`docker start` answers 0 without starting the node: a killed node never comes back."""
+    """`docker start` runs the node but its height never climbs: a killed node never rejoins."""
 
     def default(self, argv: list[str]) -> Any:
         if argv[0] == "ssh" and argv[-1] == awsb.DOCKER_NODE_COMMANDS["start"]:
-            return completed()
+            result = super().default(argv)
+            member = self.cluster.members[self.names[argv[-2].partition("@")[2]]]
+            member.started_at = self.cluster.clock.time() + 1e9
+            return result
         return super().default(argv)
 
 

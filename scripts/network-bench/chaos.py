@@ -169,8 +169,11 @@ class ChaosState(TypedDict):
     faults: int
     next_fault_at: float
     stop_at: float
-    # Highest height at the last mass restart: the network progressed once it is exceeded.
+    # Progress threshold of the last mass restart: the highest height at it, raised by the first
+    # answer of each restarted node. The network decided anew once the tip exceeds it.
     mass_height: int | None
+    # Nodes whose mass restart ssh failed -> time of that restart, issued again by the next tick.
+    mass_retry: dict[str, float]
 
 
 class ChaosObservation(TypedDict):
@@ -234,6 +237,7 @@ def chaos_init(
         next_fault_at=(first + stop_at) / 2 if mass_restart_only(cfg) else first,
         stop_at=stop_at,
         mass_height=None,
+        mass_retry={},
     )
 
 
@@ -248,7 +252,7 @@ def stuck_nodes(state: ChaosState) -> list[str]:
 
 class _Reference(NamedTuple):
     """What a recovering node is compared to. `progressed`: always true, except after a mass
-    restart until the network decided past the height it restarted at."""
+    restart until the tip exceeds the progress threshold `ChaosState.mass_height`."""
 
     tip: int | None
     view: int | None
@@ -301,7 +305,11 @@ def chaos_step(
         _tip(obs["query_height"], [name for name in up if name in queries]),
         True,
     )
-    mass = _mass_reference(nodes, obs, queries, state["mass_height"])
+    # A restarted node reports the height it stored, which can be above the height probed
+    # before the restart: its first answer raises the threshold. The tip then only exceeds it
+    # through a block decided after the restart, which a lone node cannot produce.
+    mass_height = _raised(state["mass_height"], nodes, obs)
+    mass = _mass_reference(nodes, obs, queries, mass_height)
     for name, s in nodes.items():
         ref = mass if s["kind"] == MASS_RESTART else normal
         if ref.tip is None:
@@ -360,7 +368,6 @@ def chaos_step(
         state["faults"],
         state["next_fault_at"],
     )
-    mass_height = state["mass_height"]
     kind = cfg.kinds[faults % len(cfg.kinds)] if cfg.kinds else None
     due = (
         tip is not None
@@ -368,22 +375,22 @@ def chaos_step(
         and next_fault_at <= now < state["stop_at"]
         and not (mass_restart_only(cfg) and faults)
         and not _mass_open(nodes)
+        and not state["mass_retry"]
     )
-    if due and kind == MASS_RESTART:
+    if state["mass_retry"]:
+        for name, at in state["mass_retry"].items():
+            _restart(nodes[name], MASS_RESTART, at)
+            actions.append({"node": name, "op": "restart"})
+            emit("fault", name, ts=at)
+    elif due and kind == MASS_RESTART:
         if not any(s["health"] in OPEN for s in nodes.values()):
-            # Every node at once: no budget, query floor or peer rule applies.
+            # Every node at once: no budget, query floor or peer rule applies. A stuck node is
+            # restarted too, and stays stuck: it never counts as recovered.
             for name, s in nodes.items():
-                s.update(
-                    health="recovering",
-                    kind=kind,
-                    since=now,
-                    started=now,
-                    up_at=None,
-                    streak=0,
-                    last_missing=None,
-                )
                 actions.append({"node": name, "op": "restart"})
-                emit("fault", name)
+                if s["health"] != "stuck":
+                    _restart(s, kind, now)
+                    emit("fault", name)
             mass_height = _tip(obs["height"], nodes)
             faults, next_fault_at = faults + 1, now + cfg.gap_s
     elif (
@@ -424,6 +431,7 @@ def chaos_step(
             next_fault_at=next_fault_at,
             stop_at=state["stop_at"],
             mass_height=mass_height,
+            mass_retry={},
         ),
         actions=actions,
         events=events,
@@ -434,14 +442,20 @@ def revert_failed(
     prev: ChaosState, step: ChaosStep, failed: Collection[str]
 ) -> ChaosStep:
     """`step` without the actions of the `failed` nodes: their state and events as before it,
-    and the schedule too when a fault failed, so that the next tick retries them."""
+    so that the next tick retries them. A failed fault also keeps the schedule as before. A
+    failed node of a mass restart is restarted again alone at the time of the restart; the
+    other nodes keep their state and events."""
     if not failed:
         return step
-    if any(e["event"] == "fault" and e["kind"] == MASS_RESTART for e in step["events"]):
-        # Some nodes restarted, some did not: the whole restart is issued again.
-        return ChaosStep(state=prev, actions=[], events=[])
     state = step["state"]
-    faulted = any(a["node"] in failed and a["op"] != "start" for a in step["actions"])
+    mass_at = {
+        e["node"]: e["ts"]
+        for e in step["events"]
+        if e["event"] == "fault" and e["kind"] == MASS_RESTART
+    }
+    faulted = not mass_at and any(
+        a["node"] in failed and a["op"] != "start" for a in step["actions"]
+    )
     schedule = prev if faulted else state
     return ChaosStep(
         state=ChaosState(
@@ -455,9 +469,32 @@ def revert_failed(
             next_fault_at=schedule["next_fault_at"],
             stop_at=state["stop_at"],
             mass_height=state["mass_height"],
+            mass_retry={name: at for name, at in mass_at.items() if name in failed},
         ),
         actions=[a for a in step["actions"] if a["node"] not in failed],
         events=[e for e in step["events"] if e["node"] not in failed],
+    )
+
+
+def restarted_events(step: ChaosStep, ts: float) -> list[ChaosEvent]:
+    """A `started` event at `ts`, when the restarts of `step` finished, for each node of a mass
+    restart that was restarted."""
+    return [
+        chaos_event(ts, "started", e["node"], e["query"], e["kind"], None, ts - e["ts"])
+        for e in step["events"]
+        if e["event"] == "fault" and e["kind"] == MASS_RESTART
+    ]
+
+
+def _restart(s: NodeState, kind: ChaosKind, now: float) -> None:
+    s.update(
+        health="recovering",
+        kind=kind,
+        since=now,
+        started=now,
+        up_at=None,
+        streak=0,
+        last_missing=None,
     )
 
 
@@ -483,18 +520,37 @@ def _mass_open(nodes: Mapping[str, NodeState]) -> bool:
     )
 
 
+def _raised(
+    mass_height: int | None, nodes: Mapping[str, NodeState], obs: ChaosObservation
+) -> int | None:
+    """`mass_height` or the height of the first answer after a mass restart of a node, if higher."""
+    first = [
+        name
+        for name, s in nodes.items()
+        if s["kind"] == MASS_RESTART
+        and s["health"] == "recovering"
+        and s["up_at"] is None
+    ]
+    return max(
+        (h for h in (mass_height, _tip(obs["height"], first)) if h is not None),
+        default=None,
+    )
+
+
 def _mass_reference(
     nodes: Mapping[str, NodeState],
     obs: ChaosObservation,
     queries: Collection[str],
     mass_height: int | None,
 ) -> _Reference:
-    """After a mass restart no node is up: the reference is the highest answer of any node."""
-    tip = _tip(obs["height"], nodes)
+    """After a mass restart no node is up: the reference is the highest answer of any node but
+    a stuck one."""
+    names = [name for name, s in nodes.items() if s["health"] != "stuck"]
+    tip = _tip(obs["height"], names)
     return _Reference(
         tip,
-        _tip(obs["voted_view"], nodes),
-        _tip(obs["query_height"], [name for name in nodes if name in queries]),
+        _tip(obs["voted_view"], names),
+        _tip(obs["query_height"], [name for name in names if name in queries]),
         tip is not None and mass_height is not None and tip > mass_height,
     )
 
@@ -853,8 +909,8 @@ def fault_table(rows: list[FaultRow], t0: float) -> list[str]:
 
 
 def read_heights(run_dir: Path) -> list[tuple[float, int]]:
-    """(time a validator first showed the height, height) of `heights.jsonl`, polled about
-    every 0.5 s over all validators; empty without the file."""
+    """(time a validator first showed the height, height) of `heights.jsonl`, one poller per
+    validator at `HEIGHT_POLL_S` (0.1 s); empty without the file."""
     path = run_dir / "heights.jsonl"
     if not path.exists():
         return []
@@ -868,20 +924,27 @@ def mass_restart_lines(
     rows: Sequence[FaultRow], heights: Iterable[tuple[float, int]], t0: float
 ) -> list[str]:
     """One line per mass restart (the rows of that kind with one fault time): its time since
-    `t0`, seconds to the first height past the one it restarted at, to the last `rejoined` and
+    `t0`, seconds from the end of its restarts (the last `started`, else the fault) to the first
+    height above any shown until then, then seconds from the fault to the last `rejoined` and
     to the last `caught_up`. `never` for a step that did not happen."""
     heights = list(heights)
     lines = []
     for at in dict.fromkeys(r.fault for r in rows if r.kind == MASS_RESTART):
         group = [r for r in rows if r.kind == MASS_RESTART and r.fault == at]
-        restarted = max(r.height for r in group if r.height is not None)
+        restarted = max((r.started for r in group if r.started is not None), default=at)
+        before = max((h for ts, h in heights if ts <= restarted), default=None)
         decide = min(
-            (ts for ts, h in heights if h > restarted and ts >= at), default=None
+            (
+                ts
+                for ts, h in heights
+                if ts > restarted and (before is None or h > before)
+            ),
+            default=None,
         )
         queries = [r.caught_up for r in group if r.query]
         lines.append(
             f"- Mass restart: all {len(group)} nodes at {at - t0:.0f} s, "
-            f"first decide after {_after(decide, at)}, "
+            f"first decide after {_after(decide, restarted)}, "
             f"all rejoined after {_after_all([r.rejoined for r in group], at)} "
             f"(all caught up after {_after_all(queries, at)})"
         )

@@ -256,8 +256,13 @@ just bench aws run --fleet --chaos --query-engine sqlite
 - Mass restart scheduling: bypasses the fault budget, query floor and peer rules. Issued only when no fault is open; no
   other fault is issued until every node recovered from it. Alone, one mass restart midway between the first fault time
   and the stop time (`stop_at`). In a rotation it takes its turn like the other kinds (so again each time the rotation
-  returns to it) and delays the faults behind it until it can be issued. A failed ssh of any node repeats the whole
-  restart on the next tick.
+  returns to it) and delays the faults behind it until it can be issued. A failed ssh of a node restarts that node alone
+  again on the next tick (its fault is recorded at the time of the restart); the nodes whose restart succeeded keep
+  recovering. A stuck node is restarted too and stays stuck: it gets no fault event, never counts as recovered and is
+  not a target of other faults. Each node whose restart succeeded gets a `started` event at the time the last restart
+  ssh returned.
+- `check_nodes` skips killed nodes, stuck nodes and nodes of a mass restart whose ssh failed; a node that was restarted
+  is inspected, so a container that crash-loops after a restart fails the run.
 - A fault is issued only while faulty nodes stay at most `(n-1)//3 - 1` (6 of 22), at least 2 query nodes are up and the
   target and every faulty node keep 2 up peers; otherwise it waits for a recovery. Faulty counts stuck nodes and up
   nodes whose probe failed or is more than 2 blocks behind the tip; those are never targets.
@@ -268,9 +273,12 @@ just bench aws run --fleet --chaos --query-engine sqlite
   (`missing` of blocks, leaves and vid_common all 0), counted only from 10 s after the node first answered after its
   fault or start. `rejoined` and `caught_up` carry the time of the first tick of the 2.
 - Recovery gates of a mass restart (no node is up): the reference is the highest height, voted view and query height
-  among all answering nodes; a node rejoins when it answers, is near those maxima (same lags) and the highest height is
-  strictly above the highest height at the restart. Query nodes then need `caught_up` as above. The 300 s timeout
-  applies per node.
+  among all answering nodes except stuck ones; a node rejoins when it answers, is near those maxima (same lags) and the
+  highest height is strictly above the progress threshold. The threshold starts as the highest height probed at the
+  restart and is raised, on every tick, to the height of each node's first answer after the restart (blocks decided
+  between the probe and the stop are stored and reported again). It is only exceeded by a block decided after the
+  restart, which one node alone cannot produce. A node that first answers late at the current tip delays the rejoin by
+  one more block. Query nodes then need `caught_up` as above. The 300 s timeout applies per node.
 - `summary.md` and `driver.log` omit the capacity verdict, the search line and the baseline under `--chaos`: steps with
   a dead leader do not measure capacity.
 - The load driver submits to the next node when one is down; `submit_failovers` in `load-meta.json` counts the switches,
@@ -310,10 +318,10 @@ just bench aws run --fleet --chaos --query-engine sqlite
   written before it get it from the roles in `topology.json`.
 - Mass restart line, one per mass restart:
   `Mass restart: all N nodes at <s>, first decide after X s, all rejoined after Y s (all caught up after Z s)`. First
-  decide: the first height above the maximum height of the `fault` events that a validator showed after the restart
-  (`heights.jsonl`, polled about every 0.5 s over all validators). `never` for a step that did not happen. The recovery
-  table has a `mass-restart` row (one fault per node). Its per-node spans count as during fault for the floor and the
-  other panels.
+  decide: seconds from the time the last restart ssh returned (the last `started` event of the restart) to the first
+  height above every height shown until then (`heights.jsonl`: one poller per validator, every 0.1 s). Without `started`
+  events (older runs) the time of the fault. `never` for a step that did not happen. The recovery table has a
+  `mass-restart` row (one fault per node). Its per-node spans count as during fault for the floor and the other panels.
 - Setup, and totals: faults per kind, max concurrent faulty against the fault budget, timeouts, lost payloads, submit
   failovers, txs submitted, included and timed out.
 - Recovery table per kind: count, rejoin p50 and max, caught-up p50 and max (seconds from the fault, from the start for
