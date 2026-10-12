@@ -10,8 +10,7 @@ use crate::{
     traits::node_implementation::NodeType,
 };
 
-/// What the coordinator reports to the node: decides, proposals, external messages and
-/// reconstructed payloads.
+/// What the coordinator reports to the node.
 #[derive(Clone, Debug)]
 pub enum CoordinatorEvent<TYPES: NodeType> {
     NewDecide {

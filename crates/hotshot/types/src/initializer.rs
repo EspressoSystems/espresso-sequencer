@@ -258,7 +258,7 @@ impl<TYPES: NodeType> HotShotInitializer<TYPES> {
         &self.anchor_state
     }
 
-    /// ValidatedState::Delta for the anchor leaf, if the caller supplied one.
+    /// ValidatedState::Delta for the anchor leaf.
     pub fn anchor_state_delta(
         &self,
     ) -> Option<&Arc<<TYPES::ValidatedState as ValidatedState<TYPES>>::Delta>> {
@@ -297,12 +297,11 @@ impl<TYPES: NodeType> HotShotInitializer<TYPES> {
         &self.saved_proposals
     }
 
-    /// Saved VID shares.
     pub fn saved_vid_shares(&self) -> &VidShares<TYPES> {
         &self.saved_vid_shares
     }
 
-    /// Undecided leaves rebuilt from the saved proposals, keyed by view.
+    /// Undecided leaves rebuilt from the saved proposals.
     pub fn undecided_leaves(&self) -> &BTreeMap<ViewNumber, Leaf2<TYPES>> {
         &self.undecided_leaves
     }

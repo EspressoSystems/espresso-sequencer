@@ -838,8 +838,8 @@ pub trait SequencerPersistence:
     }
 
     /// Decode a consensus decide event and persist its leaves, for the consensus event loop.
-    /// Returns the decided view on a decide so the caller can wake a background
-    /// task to run [`process_decided_events`](Self::process_decided_events); `None` otherwise.
+    /// Returns the decided view on a decide so the caller can wake a background task to run
+    /// [`process_decided_events`](Self::process_decided_events); `None` otherwise.
     ///
     /// This is the persist-only half of a decide: query-service ingestion and GC are deferred to
     /// [`process_decided_events`](Self::process_decided_events). Tests that want the synchronous

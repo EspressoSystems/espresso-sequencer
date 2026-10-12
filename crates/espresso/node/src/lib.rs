@@ -1981,8 +1981,7 @@ pub mod testing {
         }
     }
 
-    /// Wait for the submitted transaction to be sequenced in a decided block. Return the block
-    /// number containing the transaction and the block payload size.
+    /// Wait for `submitted_txn` to be decided; returns its block number and payload size.
     pub async fn wait_for_decide_on_handle(
         events: &mut (impl Stream<Item = CoordinatorEvent<SeqTypes>> + Unpin),
         submitted_txn: &Transaction,

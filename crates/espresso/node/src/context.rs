@@ -656,8 +656,8 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence> Drop for SequencerCon
     }
 }
 
-/// Latest decided view and its (optional) deciding QC, sent from the event loop to the background
-/// decide processor. `None` is the initial/no-op value of the `watch` channel.
+/// Latest decided view, sent from the event loop to the background decide processor. `None` is
+/// the initial/no-op value of the `watch` channel.
 type DecideSignal = Option<ViewNumber>;
 
 /// Metrics for the background decide processor. `backlog` (decided - processed) is the key signal:

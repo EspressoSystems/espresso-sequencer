@@ -536,9 +536,8 @@ impl Inner {
         for (view, (leaf, cert)) in leaves {
             let height = leaf.leaf.block_header().block_number();
 
-            // One event per view. cert2 is only stored for the directly finalized view;
-            // ancestors get `cert2: None`, which is what update() expects for indirectly
-            // decided leaves.
+            // cert2 is stored only for the directly finalized view; ancestors get `None`, which
+            // is what update() expects for indirectly decided leaves.
             let event = CoordinatorEvent::NewDecide {
                 leaf_infos: vec![leaf],
                 cert1: cert.qc().clone(),

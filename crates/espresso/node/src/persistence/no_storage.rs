@@ -71,9 +71,7 @@ impl SequencerPersistence for NoStorage {
         leaves: impl IntoIterator<Item = (&LeafInfo<SeqTypes>, CertificatePair<SeqTypes>)> + Send,
         consumer: &(impl EventConsumer + 'static),
     ) -> anyhow::Result<()> {
-        // Nothing is stored, so the decide goes straight to the consumer. `leaves` is newest
-        // first and its first certificate is the newest leaf's; with no storage there is no
-        // cert2 to attach. The iterator is not `Send`, so build the event before awaiting.
+        // The iterator is not `Send`, so build the event before awaiting.
         let event = {
             let mut leaves = leaves.into_iter();
             let Some((newest, cert)) = leaves.next() else {

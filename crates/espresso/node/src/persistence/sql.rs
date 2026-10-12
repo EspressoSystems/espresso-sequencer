@@ -987,9 +987,7 @@ struct DecidedLeaf {
     cert: CertificatePair<SeqTypes>,
 }
 
-/// The decide for `chain`, newest leaf first. `cert1` certifies the newest leaf, each older
-/// leaf is certified by the next newer leaf's `justify_qc`, and `cert2` finalizes the newest
-/// leaf; `update()` builds `LeafQueryData` from `cert1` and attaches `cert2` to that leaf only.
+/// The decide for `chain`, newest leaf first; `cert2`, if any, finalizes the newest leaf only.
 fn decide_event_from_chain(
     chain: Vec<DecidedLeaf>,
     cert2: Option<Certificate2<SeqTypes>>,

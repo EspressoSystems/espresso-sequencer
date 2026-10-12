@@ -70,13 +70,10 @@ pub trait UpdateDataSource<Types: NodeType>: UpdateAvailabilityData<Types> {
     ///
     /// For each decided leaf the query service stores a `BlockInfo` containing the leaf paired
     /// with a QC that certifies it (`LeafQueryData`), the block payload and VID data when
-    /// available, and, only on the **newest** leaf in the batch, the `cert2` that finalizes it,
-    /// set via `BlockInfo::with_cert2`.
+    /// available, and, only on the **newest** leaf in the batch, the `cert2` that finalizes it.
     ///
-    /// Leaves arrive in **newest → oldest** order (`leaf_infos[0]` is the leaf being finalized;
-    /// each subsequent leaf is its ancestor reached via `justify_qc`). The newest leaf is
-    /// certified by `cert1`; each older leaf is certified by the next-newer leaf's
-    /// `justify_qc`. The handler iterates in reverse so heights are appended ascending.
+    /// Leaves arrive newest first; the handler iterates in reverse so heights are appended
+    /// ascending.
     ///
     /// # Returns
     ///
