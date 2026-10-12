@@ -232,9 +232,9 @@ just bench aws run --fleet --chaos --query-engine sqlite
 - `--chaos` restarts, kills and wipes nodes, any node, while the load runs at a constant rate. Flags not given take the
   chaos shape: 22 nodes, every node a query node, `sqlite` colocated, `c8g.large` nodes, `c8g.xlarge` `ctl`,
   `--latency decaf-2025`, `--chaos-min` steps of 60 s at `--chaos-rate` MB/s, `--keep-going`. `--nodes`,
-  `--query-nodes`, `--node-type`, `--ctl-type`, `--latency` (`off`, `mainnet` or `decaf-2025`), `--submit-nodes` and
-  `--query-engine` given on the command line are kept; `--latency` is per run, `up` does not take it; `--nodes N` alone
-  gives N query nodes.
+  `--query-nodes`, `--node-type`, `--ctl-type`, `--latency` (`off`, `mainnet`, `decaf-2025` or `decaf-2026`),
+  `--submit-nodes` and `--query-engine` given on the command line are kept; `--latency` is per run, `up` does not take
+  it; `--nodes N` alone gives N query nodes.
 - Refused: `--steps`, `--step-s`, `--search`, `--keep-going` and `--warmup-s` (set by the chaos config); fewer than 7
   nodes; 2 or fewer query nodes; a `--chaos-min` that gives no faults (not with `--chaos-kinds none`);
   `--query-engine postgres`; `--query-db` other than `colocated`.
@@ -515,7 +515,7 @@ Where:
 | `--node-env KEY=VALUE`                | none                           | per run      | repeatable; node environment                                                                  |
 | `--leader-trace`, `--no-leader-trace` | off                            | per run      | leader trace CSVs and plots                                                                   |
 | `--submit-nodes`                      | nodes                          | per run      | nodes receiving txs, 1..nodes                                                                 |
-| `--latency`                           | `off`                          | per run      | `off`, `decaf-2025`, `mainnet`; `decaf-2025` with `--chaos`                                   |
+| `--latency`                           | `off`                          | per run      | `off`, `decaf-2025`, `decaf-2026`, `mainnet`; `decaf-2025` with `--chaos`                     |
 | `--no-intra-latency`                  | off                            | per run      | with `--latency`: no same-location delay                                                      |
 | `--tcp-cc`                            | bbr                            | per run      | with `--latency`: TCP congestion control, `bbr`, `cubic`, `bbr_hold` or `bbr3`                |
 | `--mtu`                               | 1500                           | per run      | with `--latency`: interface MTU of the nodes                                                  |
@@ -756,15 +756,21 @@ real-world RTT. Without it, nodes see about 0.1 ms (one AZ).
 | ------------ | ------------------------------------------------------------------------------------ | ------------------------------------ | --------- |
 | `off`        | none                                                                                 |                                      |           |
 | `decaf-2025` | 38:28:22:8:4 over eu-central-1, ap-southeast-1, us-east-1, ap-southeast-2, sa-east-1 | measured, `latency-matrix.csv`       | 10 ms     |
+| `decaf-2026` | decaf validator cities by node count, `decaf-locations.json`                         | `max(1 ms, 0.0157 ms/km x distance)` | 1 ms      |
 | `mainnet`    | mainnet validator cities by node count, `mainnet-locations.json`                     | `max(1 ms, 0.0157 ms/km x distance)` | 1 ms      |
 
 - Shaping: HTB root with an unshaped default class; per peer one class, netem leaf and u32 filter keyed on the peer's
   private IP; half the directed RTT on each side.
 - `decaf-2025`: the split of the 2025 benchmark network that emulated Decaf (robnet, espresso-deploy, gitbook benchmarks
   page). The derivation of the counts is not recorded. Decaf in 2026 is 69 % Europe.
+- `decaf-2026`: 32 validators on 2026-10-12 (stake table epoch 6084, `intentionally-bad.decaf.espresso.network` excluded
+  as unresolvable); Europe 22 nodes (62 % stake), North America 3, Asia 4 (Singapore 2, Incheon, Tokyo), Sydney 1,
+  Buenos Aires 1, Johannesburg 1. Regenerate with
+  `uv run --script scripts/network-bench/network-locations decaf --exclude-host intentionally-bad.decaf.espresso.network`.
 - `mainnet`: 92 validators on 2026-10-05; Europe 74 nodes (70 % stake), North America 15, Asia 3. Regenerate with
-  `uv run --script scripts/network-bench/mainnet-locations`, which sends validator IPs to ip-api.com. The file holds
-  only city, country, lat/lon, node count and stake share.
+  `uv run --script scripts/network-bench/network-locations mainnet`, which sends validator IPs to ip-api.com. The file
+  holds only city, country, lat/lon, node count and stake share. Stake shares are recorded but placement uses node
+  counts; every node has equal stake.
 - 0.0157 ms/km: least-squares fit through the origin over the 56 measured AWS pairs (RMSE 33 ms). Fibre at 2/3 c is
   0.0100 ms/km, so 1.57x path stretch. Measured pairs take precedence over the model. The model covers city pairs only.
 - Intra RTT applies between nodes sharing a location. 10 ms is the low end of the 5 to 45 ms band measured between
@@ -875,8 +881,9 @@ scripts/network-bench/
   nullserver.py          null node for `selftest`
   latency.py             --latency profiles: node placement, RTT matrix, per-node tc script, probes
   latency-matrix.csv     56 measured AWS region pairs (espresso-deploy 34b35f6)
-  mainnet-locations      regenerates mainnet-locations.json from the mainnet stake table
+  network-locations      regenerates <network>-locations.json from the mainnet or decaf stake table
   mainnet-locations.json mainnet validator cities: nodes, stake share, lat/lon (no IPs)
+  decaf-locations.json   decaf validator cities, same fields
   throughput-plot        throughput.png of a run dir (uv script)
   trace-plots            leader trace plots of a run dir (uv script)
   leadertrace.py         leader critical-path breakdown used by trace-plots

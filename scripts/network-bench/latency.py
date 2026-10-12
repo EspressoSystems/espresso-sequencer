@@ -87,7 +87,7 @@ RESTORE_BASELINE = (
     f"if [ -e {BASELINE} ]; then rm -f {NETWORKD_DIR}/*.d/{MTU_DROPIN}; networkctl reload; "
     f"bash {BASELINE}; rm {BASELINE}; fi"
 )
-PROFILES = ("off", "decaf-2025", "mainnet")
+PROFILES = ("off", "decaf-2025", "decaf-2026", "mainnet")
 DECAF_SPLIT: tuple[tuple[str, int], ...] = (
     ("eu-central-1", 38),
     ("ap-southeast-1", 28),
@@ -96,7 +96,10 @@ DECAF_SPLIT: tuple[tuple[str, int], ...] = (
     ("sa-east-1", 4),
 )
 MATRIX_CSV = Path(__file__).with_name("latency-matrix.csv")
-MAINNET_JSON = Path(__file__).with_name("mainnet-locations.json")
+LOCATIONS_JSON = {
+    "decaf-2026": Path(__file__).with_name("decaf-locations.json"),
+    "mainnet": Path(__file__).with_name("mainnet-locations.json"),
+}
 
 EARTH_RADIUS_KM = 6371.0
 PROBE_ABS_TOL_MS = 2.0
@@ -154,8 +157,8 @@ class Probe:
 def load_profile(name: str) -> Profile:
     if name == "decaf-2025":
         return decaf_profile(read_matrix(MATRIX_CSV.read_text()))
-    if name == "mainnet":
-        return mainnet_profile(json.loads(MAINNET_JSON.read_text()))
+    if name in LOCATIONS_JSON:
+        return locations_profile(name, json.loads(LOCATIONS_JSON[name].read_text()))
     raise ValueError(f"no latency profile {name!r}; expected one of {PROFILES[1:]}")
 
 
@@ -207,7 +210,7 @@ def estimate_rtt_ms(km: float) -> float:
     return max(SAME_CITY_RTT_MS, MS_PER_KM * km)
 
 
-def mainnet_profile(data: dict) -> Profile:
+def locations_profile(name: str, data: dict) -> Profile:
     places = data["locations"]
     labels = tuple(p["label"] for p in places)
     if len(set(labels)) != len(labels):
@@ -220,7 +223,7 @@ def mainnet_profile(data: dict) -> Profile:
         if src != dst
     }
     return Profile(
-        name="mainnet",
+        name=name,
         labels=labels,
         weights={p["label"]: p["nodes"] for p in places},
         cross_ms=cross,

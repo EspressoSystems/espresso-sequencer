@@ -1,3 +1,4 @@
+import json
 import math
 import re
 
@@ -140,7 +141,7 @@ def test_load_profile_unknown_fails():
 
 # TEST:mainnet-profile-estimate-ok
 def test_mainnet_profile_estimate():
-    profile = latency.mainnet_profile(two_cities())
+    profile = latency.locations_profile("mainnet", two_cities())
     km = latency.great_circle_km(COORDS["eu-central-1"], COORDS["eu-west-1"])
     assert 1080 < km < 1100
     expected = 0.0157 * km
@@ -168,14 +169,14 @@ def test_mainnet_json_missing_key_fails():
     data = two_cities()
     del data["locations"][1]["lat"]
     with pytest.raises(KeyError, match="lat"):
-        latency.mainnet_profile(data)
+        latency.locations_profile("mainnet", data)
 
 
 def test_mainnet_duplicate_label_fails():
     data = two_cities()
     data["locations"][1]["label"] = "frankfurt-de"
     with pytest.raises(ValueError, match="duplicate"):
-        latency.mainnet_profile(data)
+        latency.locations_profile("mainnet", data)
 
 
 # TEST:fit-constant-ok
@@ -350,3 +351,14 @@ def test_tc_script_bbr3_uses_bbr_of_the_xanmod_kernel():
     assert script.index("grep -q xanmod /proc/version") < script.index(
         'tcp_congestion_control="bbr"'
     )
+
+
+def test_shipped_decaf_locations_profile():
+    data = json.loads(latency.LOCATIONS_JSON["decaf-2026"].read_text())
+    assert data["validators"] == sum(p["nodes"] for p in data["locations"])
+    assert sum(p["stake_share"] for p in data["locations"]) == pytest.approx(
+        1, abs=1e-6
+    )
+    profile = latency.load_profile("decaf-2026")
+    assert profile.name == "decaf-2026"
+    assert {"sydney-au", "singapore-sg", "incheon-kr"} <= set(profile.labels)
