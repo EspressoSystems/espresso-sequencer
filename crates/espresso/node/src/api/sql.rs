@@ -120,8 +120,8 @@ impl SequencerDataSource for DataSource {
     }
 }
 
-/// Prune archive state older than the light client contract's retained history. The deletion is
-/// permanent: nothing rebuilds merklized state below the marker.
+/// Prune archive state older than the light client contract's retained history. Block merkle paths
+/// below the marker are rebuilt on request from newer snapshots; fee and reward state is gone.
 ///
 /// TODO: the `hash` rows these deletes orphan are never collected.
 #[derive(Clone, Debug)]
