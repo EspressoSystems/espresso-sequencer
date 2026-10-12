@@ -120,8 +120,8 @@
 <a href=#120 id=120 data-nosnippet>120</a>    </span>}
 <a href=#121 id=121 data-nosnippet>121</a>}
 <a href=#122 id=122 data-nosnippet>122</a>
-<a href=#123 id=123 data-nosnippet>123</a><span class="doccomment">/// Prune archive state older than the light client contract's retained history. The deletion is
-<a href=#124 id=124 data-nosnippet>124</a>/// permanent: nothing rebuilds merklized state below the marker.
+<a href=#123 id=123 data-nosnippet>123</a><span class="doccomment">/// Prune archive state older than the light client contract's retained history. Block merkle paths
+<a href=#124 id=124 data-nosnippet>124</a>/// below the marker are rebuilt on request from newer snapshots; fee and reward state is gone.
 <a href=#125 id=125 data-nosnippet>125</a>///
 <a href=#126 id=126 data-nosnippet>126</a>/// TODO: the `hash` rows these deletes orphan are never collected.
 <a href=#127 id=127 data-nosnippet>127</a></span><span class="attr">#[derive(Clone, Debug)]
