@@ -1173,3 +1173,214 @@ def test_log_events_carry_timestamps_within_the_window():
         "container output",
     ]
     assert ch.log_events(lines, 0.0, 10.0) == [(5.0, "stub")]
+
+
+MASS = ch.ChaosConfig(kinds=("mass-restart",))
+ROTATION = ch.ChaosConfig(kinds=("restart", "mass-restart"))
+
+
+def rising(topo, now, **override) -> Any:
+    """Every node answers a tip that grows with `now`."""
+    return observe(topo, tip=100 + int(now), view=100 + int(now), **override)
+
+
+def run_mass(cfg, seconds=1500.0, load_s=600.0, tick=5.0, n=10, k=3):
+    topo, peers = topo_of(n, k), peers_of(n, k)
+    state = init(cfg, topo, load_s)
+    now, steps = 0.0, []
+    while now < seconds:
+        now += tick
+        result = step(state, rising(topo, now), now, cfg, topo, peers)
+        state = result["state"]
+        steps.append(result)
+    return steps
+
+
+def mass_events(steps) -> list[dict]:
+    return [e for e in faults(steps) if e["kind"] == "mass-restart"]
+
+
+# TEST:mass-restart-alone-once-midway
+def test_a_lone_mass_restart_is_issued_once_midway():
+    steps = run_mass(MASS)
+    first, stop_at = 60.0, 60.0 + 600.0 - CFG.kill_down_s - ch.RECOVERY_ALLOWANCE_S
+    (at,) = {e["ts"] for e in mass_events(steps)}
+    assert at == pytest.approx((first + stop_at) / 2, abs=5.0)
+    assert len(mass_events(steps)) == 10
+    (issued,) = [s for s in steps if s["actions"]]
+    assert {a["node"]: a["op"] for a in issued["actions"]} == {
+        f"node{i}": "restart" for i in range(10)
+    }
+
+
+def test_a_mass_restart_ignores_budget_floor_and_peers():
+    topo = topo_of()
+    state = init(MASS, topo)
+    state["next_fault_at"] = 0.0
+    state["nodes"]["node1"].update(health="stuck")
+    out = step(state, observe(topo), 10.0, MASS, topo)
+    assert len(out["actions"]) == 10
+    assert all(s["health"] == "recovering" for s in out["state"]["nodes"].values())
+    assert out["state"]["mass_height"] == 100
+
+
+def test_a_mass_restart_waits_for_open_faults():
+    topo = topo_of()
+    state = with_health(init(MASS, topo), node2="recovering")
+    state["next_fault_at"] = 0.0
+    waiting = step(state, observe(topo), 10.0, MASS, topo)
+    assert waiting["actions"] == []
+    state = with_health(waiting["state"], node2="up")
+    assert len(step(state, observe(topo), 15.0, MASS, topo)["actions"]) == 10
+
+
+def test_a_rotation_waits_on_the_mass_restart_and_blocks_others_until_recovered():
+    topo = topo_of()
+    state = init(ROTATION, topo)
+    state["faults"], state["next_fault_at"] = 1, 0.0
+    flat = observe(topo)
+    issued = step(state, flat, 10.0, ROTATION, topo)
+    assert len(issued["actions"]) == 10
+    state = issued["state"]
+    state["next_fault_at"] = 0.0
+    state["faults"] = 2  # rotation back at `restart`
+    for now in (15.0, 20.0, 25.0):
+        # no progress past the restart height: nobody rejoins, nothing else is issued
+        blocked = step(state, flat, now, ROTATION, topo)
+        assert blocked["actions"] == [] and blocked["events"] == []
+        state = blocked["state"]
+    state = with_health(state, **{f"node{i}": "up" for i in range(10)})
+    assert len(step(state, flat, 30.0, ROTATION, topo)["actions"]) == 1
+
+
+# TEST:mass-restart-rejoin-needs-progress
+def test_mass_rejoin_needs_progress_past_the_restart_height():
+    topo = topo_of()
+    state = init(MASS, topo)
+    state["next_fault_at"] = 0.0
+    state = step(state, observe(topo), 10.0, MASS, topo)["state"]
+    for now in (15.0, 20.0, 25.0):
+        out = step(state, observe(topo, tip=100), now, MASS, topo)
+        assert out["events"] == []
+        state = out["state"]
+    first = step(state, observe(topo, tip=101), 30.0, MASS, topo)
+    done = step(first["state"], observe(topo, tip=101), 35.0, MASS, topo)
+    rejoined = [e for e in done["events"] if e["event"] == "rejoined"]
+    assert len(rejoined) == 10
+    assert {e["ts"] for e in rejoined} == {30.0}
+    assert all(
+        s["health"] == ("catching_up" if name in queries_of(topo) else "up")
+        for name, s in done["state"]["nodes"].items()
+    )
+
+
+def test_mass_rejoin_compares_to_the_highest_answer_and_needs_an_answer():
+    topo = topo_of()
+    state = init(MASS, topo)
+    state["next_fault_at"] = 0.0
+    state = step(state, observe(topo), 10.0, MASS, topo)["state"]
+    obs = observe(
+        topo,
+        tip=110,
+        view=110,
+        node1=None,
+        node2=(105, 110, 105, (0, 0, 0)),
+        node3=(110, 100, 110, (0, 0, 0)),
+    )
+    first = step(state, obs, 15.0, MASS, topo)
+    out = step(first["state"], obs, 20.0, MASS, topo)
+    health = {n: s["health"] for n, s in out["state"]["nodes"].items()}
+    assert health["node1"] == health["node2"] == health["node3"] == "recovering"
+    assert health["node0"] == "catching_up" and health["node4"] == "up"
+
+
+def test_mass_restart_query_nodes_need_caught_up():
+    topo = topo_of()
+    queries = queries_of(topo)
+    state = init(MASS, topo)
+    state["next_fault_at"] = 0.0
+    state = step(state, observe(topo), 10.0, MASS, topo)["state"]
+    unsynced = {q: (110, 110, 110, (3, 0, 0)) for q in queries}
+    now = 15.0
+    for _ in range(8):
+        out = step(state, observe(topo, tip=110, view=110, **unsynced), now, MASS, topo)
+        state, now = out["state"], now + 5.0
+    assert {
+        n for n, s in state["nodes"].items() if s["health"] == "catching_up"
+    } == queries
+    for _ in range(3):
+        out = step(state, observe(topo, tip=110, view=110), now, MASS, topo)
+        state, now = out["state"], now + 5.0
+    assert all(s["health"] == "up" for s in state["nodes"].values())
+
+
+def test_mass_restart_times_out_per_node():
+    topo = topo_of()
+    state = init(MASS, topo)
+    state["next_fault_at"] = 0.0
+    state = step(state, observe(topo), 10.0, MASS, topo)["state"]
+    silent = {"node4": None}
+    out = step(
+        state, observe(topo, tip=110, view=110, **silent), 10.0 + 300.0, MASS, topo
+    )
+    timeouts = [e for e in out["events"] if e["event"] == "timeout"]
+    assert {e["node"] for e in timeouts} == {f"node{i}" for i in range(10)}
+
+
+def test_a_failed_mass_restart_ssh_issues_the_whole_restart_again():
+    topo = topo_of()
+    state = init(MASS, topo)
+    state["next_fault_at"] = 0.0
+    issued = step(state, observe(topo), 10.0, MASS, topo)
+    reverted = ch.revert_failed(state, issued, {"node3"})
+    assert reverted["state"] == state
+    assert reverted["actions"] == [] and reverted["events"] == []
+
+
+def test_a_mass_restart_counts_as_during_fault_for_the_floor():
+    events = [
+        ch.chaos_event(100.0, "fault", f"node{i}", False, "mass-restart", 50, None)
+        for i in range(3)
+    ] + [
+        ch.chaos_event(
+            110.0 + i, "rejoined", f"node{i}", False, "mass-restart", 60, 10.0
+        )
+        for i in range(3)
+    ]
+    spans = [ch.floor_span(r, 500.0) for r in ch.fault_rows(events)]
+    assert spans == [(100.0, 123.0 + i) for i in range(3)]
+
+
+def test_mass_restart_line_from_synthetic_data():
+    ev = ch.chaos_event
+    events = [
+        *(
+            ev(1000.0, "fault", f"node{i}", i < 2, "mass-restart", 500 + i, None)
+            for i in range(4)
+        ),
+        *(
+            ev(1010.0 + i, "rejoined", f"node{i}", i < 2, "mass-restart", 600, 10.0)
+            for i in range(4)
+        ),
+        ev(1025.0, "caught_up", "node0", True, "mass-restart", 600, 25.0),
+        ev(1030.0, "caught_up", "node1", True, "mass-restart", 600, 30.0),
+    ]
+    heights = [(999.0, 504), (1000.5, 503), (1007.2, 504), (1007.9, 505), (1008.5, 506)]
+    lines = ch.mass_restart_lines(ch.fault_rows(events), heights, t0=900.0)
+    assert lines == [
+        (
+            "- Mass restart: all 4 nodes at 100 s, first decide after 7 s, "
+            "all rejoined after 13 s (all caught up after 30 s)"
+        )
+    ]
+
+
+def test_mass_restart_line_names_what_did_not_happen():
+    ev = ch.chaos_event
+    events = [ev(1000.0, "fault", "node0", True, "mass-restart", 500, None)]
+    (line,) = ch.mass_restart_lines(ch.fault_rows(events), [], t0=1000.0)
+    assert line == (
+        "- Mass restart: all 1 nodes at 0 s, first decide after never, "
+        "all rejoined after never (all caught up after never)"
+    )
+    assert ch.mass_restart_lines([], [], 0.0) == []

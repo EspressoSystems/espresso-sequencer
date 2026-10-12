@@ -250,7 +250,14 @@ just bench aws run --fleet --chaos --query-engine sqlite
   positive value; the heartbeat (50 tx/s of 12 B) does not depend on it.
   - `restart`: `docker restart`. `kill`: `docker kill`, `docker start` after 60 s. `wipe`: container logs saved to
     `/opt/bench/espresso-node.wiped.log.gz`, container removed, journal and payload dir emptied, container recreated
-    from `node-rejoin.env` (`recreate.sh`), started.
+    from `node-rejoin.env` (`recreate.sh`), started. `mass-restart` (opt-in, e.g.
+    `--chaos-kinds restart,kill,wipe,mass-restart` or alone): `docker restart` of every node in one tick, all ssh in
+    parallel, to test recovery from storage.
+- Mass restart scheduling: bypasses the fault budget, query floor and peer rules. Issued only when no fault is open; no
+  other fault is issued until every node recovered from it. Alone, one mass restart midway between the first fault time
+  and the stop time (`stop_at`). In a rotation it takes its turn like the other kinds (so again each time the rotation
+  returns to it) and delays the faults behind it until it can be issued. A failed ssh of any node repeats the whole
+  restart on the next tick.
 - A fault is issued only while faulty nodes stay at most `(n-1)//3 - 1` (6 of 22), at least 2 query nodes are up and the
   target and every faulty node keep 2 up peers; otherwise it waits for a recovery. Faulty counts stuck nodes and up
   nodes whose probe failed or is more than 2 blocks behind the tip; those are never targets.
@@ -260,6 +267,10 @@ just bench aws run --fleet --chaos --query-engine sqlite
   nodes; a query node then caught up when its height is near the up query nodes' tip and `sync-status` is fully synced
   (`missing` of blocks, leaves and vid_common all 0), counted only from 10 s after the node first answered after its
   fault or start. `rejoined` and `caught_up` carry the time of the first tick of the 2.
+- Recovery gates of a mass restart (no node is up): the reference is the highest height, voted view and query height
+  among all answering nodes; a node rejoins when it answers, is near those maxima (same lags) and the highest height is
+  strictly above the highest height at the restart. Query nodes then need `caught_up` as above. The 300 s timeout
+  applies per node.
 - `summary.md` and `driver.log` omit the capacity verdict, the search line and the baseline under `--chaos`: steps with
   a dead leader do not measure capacity.
 - The load driver submits to the next node when one is down; `submit_failovers` in `load-meta.json` counts the switches,
@@ -277,11 +288,11 @@ just bench aws run --fleet --chaos --query-engine sqlite
 - Ctrl-C or an error ends the faults still open with an `interrupted` event; the verdict names them, it does not count
   them as failures.
 - Output: `chaos.jsonl` (`fault`, `started`, `rejoined`, `caught_up`, `timeout`, `restored`, `interrupted`; `ts` on
-  ctl's clock; `query` when the node serves the query API; `after_s` from the fault, from `started` for a kill;
-  `caught_up` carries `missing` as [blocks, leaves, vid_common]; a query node's `timeout` carries `missing` when
-  sync-status answered since the fault), a chaos report leading `summary.md` (see [Chaos report](#chaos-report)),
-  `chaos:` lines in `driver.log` (a timeout line lists the last `missing` counts). Faulted nodes are exempt from the
-  per-node scrape coverage and decided-blocks rules.
+  ctl's clock; a mass restart writes one `fault` event per node with kind `mass-restart`; `query` when the node serves
+  the query API; `after_s` from the fault, from `started` for a kill; `caught_up` carries `missing` as [blocks, leaves,
+  vid_common]; a query node's `timeout` carries `missing` when sync-status answered since the fault), a chaos report
+  leading `summary.md` (see [Chaos report](#chaos-report)), `chaos:` lines in `driver.log` (a timeout line lists the
+  last `missing` counts). Faulted nodes are exempt from the per-node scrape coverage and decided-blocks rules.
 - Cost: about $4.4/h for the default fleet, about 40 min per single shot. `render` recomputes the chaos report offline,
   also for a run that failed.
 - `c8g.large` has 4 GiB; a chaos run peaked at 2.2 GiB used on node0 (`MemAvailable` in `hosts/<node>/host.jsonl`).
@@ -297,6 +308,12 @@ just bench aws run --fleet --chaos --query-engine sqlite
   timed out node stays faulty until the end of the run, an interrupted fault ends at `interrupted`. Max concurrent
   faulty, the faults per step, the decided split and the plot all use this span; every event carries `query`, events
   written before it get it from the roles in `topology.json`.
+- Mass restart line, one per mass restart:
+  `Mass restart: all N nodes at <s>, first decide after X s, all rejoined after Y s (all caught up after Z s)`. First
+  decide: the first height above the maximum height of the `fault` events that a validator showed after the restart
+  (`heights.jsonl`, polled about every 0.5 s over all validators). `never` for a step that did not happen. The recovery
+  table has a `mass-restart` row (one fault per node). Its per-node spans count as during fault for the floor and the
+  other panels.
 - Setup, and totals: faults per kind, max concurrent faulty against the fault budget, timeouts, lost payloads, submit
   failovers, txs submitted, included and timed out.
 - Recovery table per kind: count, rejoin p50 and max, caught-up p50 and max (seconds from the fault, from the start for
@@ -326,8 +343,8 @@ just bench aws run --fleet --chaos --query-engine sqlite
   the faults active in it.
 - In the step details a node restarted during the step shows `-` for its CPU, as its counter reset.
 - `throughput.png` has a top panel with one lane per faulted node: down, recovering and catching up in distinct colors,
-  a marker per event, a red x at a timeout. A kill aborted before its node started stays down. The other panels shade
-  each fault while it is active.
+  a marker per event, a red x at a timeout. A kill aborted before its node started stays down. A mass restart is a
+  dotted vertical line across the lanes. The other panels shade each fault while it is active.
 - A run with `chaos.jsonl` (also with `--chaos-kinds none`) has bottom panels of view timeouts, `stub`, `no-propose` and
   `no-vote1` log events per 10 s, the events stacked by latency region (the 6 largest, the rest as `other`).
 - A run that ends early (an error or Ctrl-C) is collected and reported the same way from the files it has: no

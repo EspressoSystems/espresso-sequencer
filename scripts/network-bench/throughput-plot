@@ -23,7 +23,7 @@ at the bottom: view timeouts per FLOOR_BIN_S, then the `stub`, `no-propose` and 
 log events per FLOOR_BIN_S, stacked by latency region (the FLOOR_GROUPS largest, the rest as
 `other`). A run with faults also gets a panel on top with one lane per faulted node: a bar for each phase
 of a fault (down, recovering, catching up) with a marker per event, ending in a red x when the
-node did not recover. The other panels shade each fault until its node recovered. A run
+node did not recover; a mass restart is a dotted vertical line across the lanes. The other panels shade each fault until its node recovered. A run
 without `consensus.jsonl` samples (it failed) has no decided, block or timeout series, and its
 `run.json` is missing: the load starts at the first step.
 
@@ -252,13 +252,19 @@ def draw_lanes(
                 mew=2,
                 clip_on=False,
             )
+        if row.kind != ch.MASS_RESTART:
+            lanes_ax.text(
+                minutes(row.fault),
+                y - 0.45,
+                row.kind,
+                fontsize=6,
+                color=MUTED,
+                va="bottom",
+            )
+    for at in dict.fromkeys(r.fault for r in rows if r.kind == ch.MASS_RESTART):
+        lanes_ax.axvline(minutes(at), color=MUTED, ls=":", lw=1, zorder=1)
         lanes_ax.text(
-            minutes(row.fault),
-            y - 0.45,
-            row.kind,
-            fontsize=6,
-            color=MUTED,
-            va="bottom",
+            minutes(at), -0.6, "mass-restart", fontsize=6, color=MUTED, va="bottom"
         )
     lanes_ax.set_yticks(range(len(nodes)), nodes, color=INK, fontsize=7)
     lanes_ax.set_ylim(len(nodes) - 0.4, -0.7)

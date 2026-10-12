@@ -2887,7 +2887,8 @@ def add_chaos_flags(parser: argparse.ArgumentParser) -> None:
         "--chaos-kinds",
         type=chaos_kinds,
         default=chaos.kinds,
-        help="with --chaos: comma separated fault kinds, used in turn; `none` for no faults",
+        help="with --chaos: comma separated fault kinds, used in turn; `mass-restart` restarts every "
+        "node at once; `none` for no faults",
     )
 
 
@@ -6283,7 +6284,8 @@ class ChaosRunner:
                 script = DOCKER_NODE_COMMANDS[actions[name]]
             return self.remote.ssh(name, script, check=False)
 
-        done = self.remote.parallel(act, actions)
+        # One worker per action: a mass restart goes out at once, not in pool-sized batches.
+        done = self.remote.parallel(act, actions, workers=max(1, len(actions)))
         failed = {name for name, out in done.items() if out.returncode != 0}
         step = ch.revert_failed(prev, step, failed)
         self.state = step["state"]
@@ -7479,6 +7481,7 @@ def chaos_view(
             nb.read_json(meta_path) if meta_path.exists() else None,
             tx_counts(run_dir),
         ),
+        *ch.mass_restart_lines(rows, ch.read_heights(run_dir), t0),
         "",
         "",
         *(ch.recovery_table(rows, config["chaos"]["kinds"]) if rows else []),

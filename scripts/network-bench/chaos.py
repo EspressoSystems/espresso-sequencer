@@ -36,7 +36,8 @@ FLOOR_TAIL_S = VIEW_TIMEOUT_S + COUNTER_POLL_S
 SYNC_STATUS_TTL_S = 5.0
 SYNC_SETTLE_S = 2 * SYNC_STATUS_TTL_S
 
-ChaosKind = Literal["restart", "kill", "wipe"]
+ChaosKind = Literal["restart", "kill", "wipe", "mass-restart"]
+MASS_RESTART: ChaosKind = "mass-restart"
 
 # Missing blocks, leaves and vid_common of a query node's `sync-status`.
 Missing = tuple[int, int, int]
@@ -168,6 +169,8 @@ class ChaosState(TypedDict):
     faults: int
     next_fault_at: float
     stop_at: float
+    # Highest height at the last mass restart: the network progressed once it is exceeded.
+    mass_height: int | None
 
 
 class ChaosObservation(TypedDict):
@@ -195,6 +198,10 @@ def fault_budget(n: int) -> int:
     return max(0, (n - 1) // 3 - 1)
 
 
+def mass_restart_only(cfg: ChaosConfig) -> bool:
+    return cfg.kinds == (MASS_RESTART,)
+
+
 def chaos_init(
     cfg: ChaosConfig,
     nodes: Sequence[str],
@@ -205,6 +212,7 @@ def chaos_init(
     order = list(nodes)
     random.Random(cfg.seed).shuffle(order)
     first = t_load + warmup_s
+    stop_at = first + load_s - cfg.kill_down_s - RECOVERY_ALLOWANCE_S
     return ChaosState(
         nodes={
             name: NodeState(
@@ -222,8 +230,10 @@ def chaos_init(
         order=order,
         cursor=0,
         faults=0,
-        next_fault_at=first,
-        stop_at=first + load_s - cfg.kill_down_s - RECOVERY_ALLOWANCE_S,
+        # A lone mass restart is issued once, midway between the first fault time and `stop_at`.
+        next_fault_at=(first + stop_at) / 2 if mass_restart_only(cfg) else first,
+        stop_at=stop_at,
+        mass_height=None,
     )
 
 
@@ -234,6 +244,16 @@ def open_faults(state: ChaosState) -> list[str]:
 
 def stuck_nodes(state: ChaosState) -> list[str]:
     return [name for name, s in state["nodes"].items() if s["health"] == "stuck"]
+
+
+class _Reference(NamedTuple):
+    """What a recovering node is compared to. `progressed`: always true, except after a mass
+    restart until the network decided past the height it restarted at."""
+
+    tip: int | None
+    view: int | None
+    query_tip: int | None
+    progressed: bool
 
 
 def chaos_step(
@@ -275,48 +295,57 @@ def chaos_step(
 
     up = [name for name, s in nodes.items() if s["health"] == "up"]
     tip = _tip(obs["height"], up)
-    tip_view = _tip(obs["voted_view"], up)
-    query_tip = _tip(obs["query_height"], [name for name in up if name in queries])
-    if tip is not None:
-        for name, s in nodes.items():
-            if s["health"] == "down" and now >= s["since"] + cfg.kill_down_s:
-                actions.append({"node": name, "op": "start"})
-                s.update(health="recovering", started=now, streak=0)
-                emit("started", name, now - s["since"])
-            elif s["health"] == "recovering":
-                # The fault or start action ran before this tick: the answer is the new process.
-                if s["up_at"] is None and obs["height"][name] is not None:
-                    s["up_at"] = now
-                good = _near(obs["height"][name], tip, LAG_BLOCKS) and _near(
-                    obs["voted_view"][name], tip_view, LAG_VIEWS
+    normal = _Reference(
+        tip,
+        _tip(obs["voted_view"], up),
+        _tip(obs["query_height"], [name for name in up if name in queries]),
+        True,
+    )
+    mass = _mass_reference(nodes, obs, queries, state["mass_height"])
+    for name, s in nodes.items():
+        ref = mass if s["kind"] == MASS_RESTART else normal
+        if ref.tip is None:
+            continue
+        if s["health"] == "down" and now >= s["since"] + cfg.kill_down_s:
+            actions.append({"node": name, "op": "start"})
+            s.update(health="recovering", started=now, streak=0)
+            emit("started", name, now - s["since"])
+        elif s["health"] == "recovering":
+            # The fault or start action ran before this tick: the answer is the new process.
+            if s["up_at"] is None and obs["height"][name] is not None:
+                s["up_at"] = now
+            good = (
+                ref.progressed
+                and _near(obs["height"][name], ref.tip, LAG_BLOCKS)
+                and _near(obs["voted_view"][name], ref.view, LAG_VIEWS)
+            )
+            if _passed(s, good, now):
+                nxt: NodeHealth = "catching_up" if name in queries else "up"
+                emit(
+                    "rejoined",
+                    name,
+                    s["streak_at"] - s["started"],
+                    ts=s["streak_at"],
                 )
-                if _passed(s, good, now):
-                    nxt: NodeHealth = "catching_up" if name in queries else "up"
-                    emit(
-                        "rejoined",
-                        name,
-                        s["streak_at"] - s["started"],
-                        ts=s["streak_at"],
-                    )
-                    s.update(health=nxt, kind=None if nxt == "up" else s["kind"])
-            elif s["health"] == "catching_up" and query_tip is not None:
-                # SYNC_SETTLE_S > SYNC_STATUS_TTL_S after the node came up: a sync-status
-                # cached from its empty database has expired.
-                good = (
-                    s["up_at"] is not None
-                    and now >= s["up_at"] + SYNC_SETTLE_S
-                    and _near(obs["query_height"][name], query_tip, LAG_BLOCKS)
-                    and obs["missing"][name] == (0, 0, 0)
+                s.update(health=nxt, kind=None if nxt == "up" else s["kind"])
+        elif s["health"] == "catching_up" and ref.query_tip is not None:
+            # SYNC_SETTLE_S > SYNC_STATUS_TTL_S after the node came up: a sync-status
+            # cached from its empty database has expired.
+            good = (
+                s["up_at"] is not None
+                and now >= s["up_at"] + SYNC_SETTLE_S
+                and _near(obs["query_height"][name], ref.query_tip, LAG_BLOCKS)
+                and obs["missing"][name] == (0, 0, 0)
+            )
+            if _passed(s, good, now):
+                emit(
+                    "caught_up",
+                    name,
+                    s["streak_at"] - s["started"],
+                    obs["missing"][name],
+                    ts=s["streak_at"],
                 )
-                if _passed(s, good, now):
-                    emit(
-                        "caught_up",
-                        name,
-                        s["streak_at"] - s["started"],
-                        obs["missing"][name],
-                        ts=s["streak_at"],
-                    )
-                    s.update(health="up", kind=None)
+                s.update(health="up", kind=None)
 
     for name, s in nodes.items():
         if s["health"] in OPEN and now >= s["since"] + cfg.recover_timeout_s:
@@ -331,10 +360,36 @@ def chaos_step(
         state["faults"],
         state["next_fault_at"],
     )
-    if (
+    mass_height = state["mass_height"]
+    kind = cfg.kinds[faults % len(cfg.kinds)] if cfg.kinds else None
+    due = (
         tip is not None
-        and cfg.kinds
+        and kind is not None
         and next_fault_at <= now < state["stop_at"]
+        and not (mass_restart_only(cfg) and faults)
+        and not _mass_open(nodes)
+    )
+    if due and kind == MASS_RESTART:
+        if not any(s["health"] in OPEN for s in nodes.values()):
+            # Every node at once: no budget, query floor or peer rule applies.
+            for name, s in nodes.items():
+                s.update(
+                    health="recovering",
+                    kind=kind,
+                    since=now,
+                    started=now,
+                    up_at=None,
+                    streak=0,
+                    last_missing=None,
+                )
+                actions.append({"node": name, "op": "restart"})
+                emit("fault", name)
+            mass_height = _tip(obs["height"], nodes)
+            faults, next_fault_at = faults + 1, now + cfg.gap_s
+    elif (
+        due
+        and tip is not None
+        and kind is not None
         and (
             i := _fault_target(
                 state["order"], cursor, nodes, _lagging(nodes, obs, tip), queries, peers
@@ -343,7 +398,6 @@ def chaos_step(
         is not None
     ):
         name = state["order"][i]
-        kind = cfg.kinds[faults % len(cfg.kinds)]
         nodes[name].update(
             health="down" if kind == "kill" else "recovering",
             kind=kind,
@@ -369,6 +423,7 @@ def chaos_step(
             faults=faults,
             next_fault_at=next_fault_at,
             stop_at=state["stop_at"],
+            mass_height=mass_height,
         ),
         actions=actions,
         events=events,
@@ -382,6 +437,9 @@ def revert_failed(
     and the schedule too when a fault failed, so that the next tick retries them."""
     if not failed:
         return step
+    if any(e["event"] == "fault" and e["kind"] == MASS_RESTART for e in step["events"]):
+        # Some nodes restarted, some did not: the whole restart is issued again.
+        return ChaosStep(state=prev, actions=[], events=[])
     state = step["state"]
     faulted = any(a["node"] in failed and a["op"] != "start" for a in step["actions"])
     schedule = prev if faulted else state
@@ -396,6 +454,7 @@ def revert_failed(
             faults=schedule["faults"],
             next_fault_at=schedule["next_fault_at"],
             stop_at=state["stop_at"],
+            mass_height=state["mass_height"],
         ),
         actions=[a for a in step["actions"] if a["node"] not in failed],
         events=[e for e in step["events"] if e["node"] not in failed],
@@ -415,6 +474,29 @@ def _passed(s: NodeState, good: bool, now: float) -> bool:
         return False
     s["streak"] = 0
     return True
+
+
+def _mass_open(nodes: Mapping[str, NodeState]) -> bool:
+    """A mass restart has nodes that did not recover yet; no other fault is issued."""
+    return any(
+        s["kind"] == MASS_RESTART and s["health"] in OPEN for s in nodes.values()
+    )
+
+
+def _mass_reference(
+    nodes: Mapping[str, NodeState],
+    obs: ChaosObservation,
+    queries: Collection[str],
+    mass_height: int | None,
+) -> _Reference:
+    """After a mass restart no node is up: the reference is the highest answer of any node."""
+    tip = _tip(obs["height"], nodes)
+    return _Reference(
+        tip,
+        _tip(obs["voted_view"], nodes),
+        _tip(obs["query_height"], [name for name in nodes if name in queries]),
+        tip is not None and mass_height is not None and tip > mass_height,
+    )
 
 
 def _lagging(
@@ -552,6 +634,7 @@ class FaultRow:
     restored: float | None = None
     interrupted: float | None = None
     missing: Missing | None = None
+    height: int | None = None
 
 
 def fault_rows(events: Iterable[ChaosEvent]) -> list[FaultRow]:
@@ -562,7 +645,9 @@ def fault_rows(events: Iterable[ChaosEvent]) -> list[FaultRow]:
         if e["event"] == "fault":
             if e["kind"] is None:
                 raise ValueError(f"fault event without a kind: {e}")
-            latest[e["node"]] = FaultRow(e["node"], e["query"], e["kind"], e["ts"])
+            latest[e["node"]] = FaultRow(
+                e["node"], e["query"], e["kind"], e["ts"], height=e["height"]
+            )
             rows.append(latest[e["node"]])
             continue
         row, ts = latest[e["node"]], e["ts"]
@@ -765,6 +850,52 @@ def fault_table(rows: list[FaultRow], t0: float) -> list[str]:
         ),
         "",
     ]
+
+
+def read_heights(run_dir: Path) -> list[tuple[float, int]]:
+    """(time a validator first showed the height, height) of `heights.jsonl`, polled about
+    every 0.5 s over all validators; empty without the file."""
+    path = run_dir / "heights.jsonl"
+    if not path.exists():
+        return []
+    records = (json.loads(line) for line in path.read_text().splitlines())
+    return [
+        (r["validator"], r["height"]) for r in records if r["validator"] is not None
+    ]
+
+
+def mass_restart_lines(
+    rows: Sequence[FaultRow], heights: Iterable[tuple[float, int]], t0: float
+) -> list[str]:
+    """One line per mass restart (the rows of that kind with one fault time): its time since
+    `t0`, seconds to the first height past the one it restarted at, to the last `rejoined` and
+    to the last `caught_up`. `never` for a step that did not happen."""
+    heights = list(heights)
+    lines = []
+    for at in dict.fromkeys(r.fault for r in rows if r.kind == MASS_RESTART):
+        group = [r for r in rows if r.kind == MASS_RESTART and r.fault == at]
+        restarted = max(r.height for r in group if r.height is not None)
+        decide = min(
+            (ts for ts, h in heights if h > restarted and ts >= at), default=None
+        )
+        queries = [r.caught_up for r in group if r.query]
+        lines.append(
+            f"- Mass restart: all {len(group)} nodes at {at - t0:.0f} s, "
+            f"first decide after {_after(decide, at)}, "
+            f"all rejoined after {_after_all([r.rejoined for r in group], at)} "
+            f"(all caught up after {_after_all(queries, at)})"
+        )
+    return lines
+
+
+def _after(ts: float | None, at: float) -> str:
+    return "never" if ts is None else f"{ts - at:.0f} s"
+
+
+def _after_all(times: Sequence[float | None], at: float) -> str:
+    """The last of `times`; `never` unless all happened."""
+    seen = [t for t in times if t is not None]
+    return _after(max(seen) if len(seen) == len(times) and seen else None, at)
 
 
 def floor_span(row: FaultRow, end: float) -> tuple[float, float]:
