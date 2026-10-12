@@ -30,7 +30,10 @@ use hotshot_types::{
     vote::{HasViewNumber, Vote},
 };
 use time::OffsetDateTime;
-use tokio::{select, sync::oneshot};
+use tokio::{
+    select,
+    sync::{mpsc, oneshot},
+};
 use tracing::{debug, error, info, warn};
 use versions::Version;
 
@@ -129,8 +132,8 @@ pub struct Coordinator<T: NodeType, S> {
     storage: Storage<T, S>,
     #[builder(default)]
     outbox: Outbox<ConsensusOutput<T>>,
-    #[builder(default)]
-    coordinator_outbox: Outbox<OpaqueMessage<T::SignatureKey>>,
+    #[builder(skip)]
+    external_tx: Option<mpsc::UnboundedSender<OpaqueMessage<T::SignatureKey>>>,
     public_key: T::SignatureKey,
     #[builder(default = KeyPrefix::from(&public_key))]
     node_id: KeyPrefix,
@@ -1178,12 +1181,12 @@ where
         &mut self.outbox
     }
 
-    pub fn coordinator_outbox(&self) -> &Outbox<OpaqueMessage<T::SignatureKey>> {
-        &self.coordinator_outbox
-    }
-
-    pub fn coordinator_outbox_mut(&mut self) -> &mut Outbox<OpaqueMessage<T::SignatureKey>> {
-        &mut self.coordinator_outbox
+    /// External messages, delivered on arrival rather than with the next
+    /// consensus input. Messages arriving before this call are dropped.
+    pub fn external_messages(&mut self) -> mpsc::UnboundedReceiver<OpaqueMessage<T::SignatureKey>> {
+        let (tx, rx) = mpsc::unbounded_channel();
+        self.external_tx = Some(tx);
+        rx
     }
 
     pub fn current_view(&self) -> ViewNumber {
@@ -1688,10 +1691,12 @@ where
             },
             MessageType::External(data) => {
                 debug!(%node, %sender, bytes = data.len(), "recv external message");
-                self.coordinator_outbox.push_back(OpaqueMessage {
-                    sender: message.sender,
-                    data,
-                });
+                if let Some(tx) = &self.external_tx {
+                    let _ = tx.send(OpaqueMessage {
+                        sender: message.sender,
+                        data,
+                    });
+                }
                 None
             },
         }

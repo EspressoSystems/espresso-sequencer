@@ -34,6 +34,7 @@ use tokio::{
     task::JoinHandle,
     time::{Instant, sleep, timeout},
 };
+use tokio_util::task::AbortOnDropHandle;
 use tracing::{debug, info};
 
 use crate::{
@@ -933,6 +934,20 @@ async fn run_node(
 ) {
     let mut commits: BTreeMap<ViewNumber, [u8; 32]> = BTreeMap::new();
     let mut last_view = ViewNumber::genesis();
+    let mut external = coord.external_messages();
+    let _forward = AbortOnDropHandle::new(tokio::spawn(async move {
+        while let Some(m) = external.recv().await {
+            let _ = external_events_tx
+                .broadcast_direct(Event {
+                    view_number: ViewNumber::genesis(),
+                    event: EventType::ExternalMessageReceived {
+                        sender: m.sender,
+                        data: m.data,
+                    },
+                })
+                .await;
+        }
+    }));
     let send = |event: NodeEvent| {
         let _ = output_tx.send(TaggedEvent {
             idx,
@@ -1013,18 +1028,6 @@ async fn run_node(
             {
                 tracing::error!(%err, node = %coord.node_id(), "critical error processing output");
                 return;
-            }
-
-            while let Some(output) = coord.coordinator_outbox_mut().pop_front() {
-                let _ = external_events_tx
-                    .broadcast_direct(Event {
-                        view_number: coord.current_view(),
-                        event: EventType::ExternalMessageReceived {
-                            sender: output.sender,
-                            data: output.data,
-                        },
-                    })
-                    .await;
             }
         }
     }

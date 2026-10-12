@@ -526,6 +526,17 @@ async fn run_coordinator<T, S>(
     S: NewProtocolStorage<T>,
 {
     coord.start();
+    let mut external = coord.external_messages();
+    let ext_tx = tx.clone();
+    let _forward = AbortOnDropHandle::new(spawn(async move {
+        while let Some(m) = external.recv().await {
+            let e = CoordinatorEvent::ExternalMessageReceived {
+                sender: m.sender,
+                data: m.data,
+            };
+            broadcast_event(&ext_tx, e).await;
+        }
+    }));
 
     loop {
         select! {
@@ -574,14 +585,6 @@ where
             }
             warn!(%err, "coordinator: error processing output");
         }
-    }
-
-    while let Some(m) = coord.coordinator_outbox_mut().pop_front() {
-        let e = CoordinatorEvent::ExternalMessageReceived {
-            sender: m.sender,
-            data: m.data,
-        };
-        broadcast_event(tx, e).await;
     }
 
     Ok(())
