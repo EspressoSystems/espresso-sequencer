@@ -101,7 +101,7 @@ run_meta (checkFields `NewProtocol.OwedVote2
 
 run_meta (checkFields `NewProtocol.OwedDecide [`holds])
 
-/-! What is assumed of stake. -/
+/-! What is assumed of committees. -/
 run_meta (checkFields `NewProtocol.Committee
   [`honest, `members, `Quorum, `intersect, `honestFinite])
 

@@ -56,7 +56,7 @@ What a vote1 signs: the block, the epoch whose committee certifies it, and its
 height.
 
 The epoch is signed because a verifier needs it before it has the block: a
-certificate is checked against the stake table of the epoch it names. The height
+certificate is checked against the committee of the epoch it names. The height
 is signed because a certificate is often all a node has of a block, and the
 epoch arithmetic is about heights.
 -/

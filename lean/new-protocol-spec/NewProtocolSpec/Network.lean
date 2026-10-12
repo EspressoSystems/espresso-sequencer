@@ -27,8 +27,8 @@ namespace NewProtocol
 /--
 The committees, one per epoch, as quorum systems.
 
-`Committee.intersect` is what safety takes from stake: two quorums of one epoch
-share a member honest in that epoch. `Committee.honestFinite` is for liveness.
+`Committee.intersect` is what safety requires: two quorums of one epoch share a
+node honest in that epoch. `Committee.honestFinite` is for liveness.
 
 Honesty is per epoch. A node honest in epoch `e` signs every message of `e` by
 the rules, whenever it sends it; what it signs for an epoch it is not honest in
@@ -127,7 +127,11 @@ promised to decide in the others.
 -/
 def Committee.Steady (C : Committee) (k : PubKey) : Prop := ∀ e, C.honest e k
 
-/-- A node's steps, one per index, for ever. -/
+/--
+A node's steps, one per index, for ever.
+
+A `History` is a finite prefix of a `Trace` (cf. `Trace.history`).
+-/
 abbrev Trace := Nat → Step
 
 /-- The first `n` steps of a trace. -/
