@@ -552,28 +552,40 @@ where
                 // Otherwise, if we have a leaf that is known to be greater than the requested
                 // header, we can ask the server for an inclusion proof for the requested header
                 // relative to the Merkle root in the upper bound leaf.
-                let proof = self.server.header_proof(leaf.height(), id).await?;
-                let header = proof
-                    .verify(leaf.header().block_merkle_tree_root())
-                    .context("invalid header proof")?;
+                match self.server.header_proof(leaf.height(), id).await {
+                    Ok(proof) => {
+                        let header = proof
+                            .verify(leaf.header().block_merkle_tree_root())
+                            .context("invalid header proof")?;
 
-                // The server has given us a header and correctly proved it finalized, but we still
-                // need to verify that it actually gave us the header we requested.
-                ensure!(
-                    header_matches_id(&header, id),
-                    "server returned a valid header proof for the wrong header (requested header \
-                     {id}, got header {} with hash {})",
-                    header.height(),
-                    header.commit(),
-                );
+                        // The server has given us a header and correctly proved it finalized, but
+                        // we still need to verify that it actually gave us the header we requested.
+                        ensure!(
+                            header_matches_id(&header, id),
+                            "server returned a valid header proof for the wrong header (requested \
+                             header {id}, got header {} with hash {})",
+                            header.height(),
+                            header.commit(),
+                        );
 
-                return Ok(header);
+                        return Ok(header);
+                    },
+                    // Archive nodes prune the merklized state behind old roots, so a proof
+                    // against an old cached leaf can fail forever. A leaf proof needs no
+                    // merklized state.
+                    Err(err) => tracing::info!(
+                        %id,
+                        root = leaf.height(),
+                        err = %format_args!("{err:#}"),
+                        "header proof fetch failed, fetching a leaf proof instead"
+                    ),
+                }
             }
         }
 
-        // We have neither the requested header nor an upper bound for it. All we can do is fetch
-        // the corresponding leaf from the server (verifying a leaf proof) and then extract the
-        // header from there.
+        // Without the requested header, or a header proof from an upper bound, all we can do is
+        // fetch the corresponding leaf from the server (verifying a leaf proof) and then extract
+        // the header from there.
         let leaf = self.fetch_leaf_from_server(id, None, quorum).await?;
         Ok(leaf.header().clone())
     }
@@ -1288,6 +1300,22 @@ mod test {
 
     #[tokio::test]
     #[test_log::test]
+    async fn test_fetch_header_falls_back_to_leaf_proof_when_header_proof_fails() {
+        let client = TestClient::default();
+
+        let db = SqliteStorage::default().await.unwrap();
+        db.insert_leaf(client.leaf(2).await).await.unwrap();
+        client.fail_header_proofs().await;
+
+        let lc = LightClient::from_genesis(db, client.clone(), client.genesis().await);
+        assert_eq!(
+            lc.fetch_header(BlockId::Number(1)).await.unwrap(),
+            *client.leaf(1).await.header(),
+        );
+    }
+
+    #[tokio::test]
+    #[test_log::test]
     async fn test_fetch_header_invalid_proof() {
         let client = TestClient::default();
         let db = SqliteStorage::default().await.unwrap();
@@ -1627,6 +1655,25 @@ mod test {
         // Fetch a future stake table, catching up from the saved lower bound.
         let expected = client.quorum_for_epoch(epoch + 5).await.into();
         assert_eq!(*lc.quorum_for_epoch(epoch + 5).await.unwrap(), expected);
+    }
+
+    #[tokio::test]
+    #[test_log::test]
+    async fn test_fetch_stake_table_catchup_without_header_proofs() {
+        let client = TestClient::with_epoch_height(10);
+        let genesis = client.genesis().await;
+        let epoch = genesis.first_epoch_with_dynamic_stake_table + 5;
+
+        let db = SqliteStorage::default().await.unwrap();
+        let above_every_root = root_block_in_epoch(*epoch + 1, 10) as usize;
+        db.insert_leaf(client.leaf(above_every_root).await)
+            .await
+            .unwrap();
+        client.fail_header_proofs().await;
+
+        let lc = LightClient::from_genesis(db, client.clone(), genesis);
+        let expected = client.quorum_for_epoch(epoch).await.into();
+        assert_eq!(*lc.quorum_for_epoch(epoch).await.unwrap(), expected);
     }
 
     #[tokio::test]
