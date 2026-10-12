@@ -90,10 +90,7 @@ where
     Some(cert2.data.block_number)
 }
 
-/// Build a leaf proof for a legacy leaf from the leaves that follow it.
-///
-/// Their justify QCs close a HotStuff or HotStuff2 chain for the requested leaf. The walk switches
-/// to cert2 at the first new-protocol leaf, since the HotStuff commit rules cannot terminate there.
+/// Build a leaf proof for a legacy leaf from the justify QCs of the leaves that follow it.
 pub(crate) async fn get_leaf_proof_with_leaf_chain<State>(
     state: &State,
     requested_leaf: LeafQueryData<SeqTypes>,
@@ -144,8 +141,8 @@ where
         }
     }
 
-    // Every legacy leaf is followed by a HotStuff chain or, at the cutover, a cert2. Running out of
-    // leaves first means the chain here does not yet reach either.
+    // The stored legacy QC chain is no longer read: it could only close a chain whose tip was
+    // legacy, and every network is past the 0.6 cutover, so running out of leaves is a 404.
     Err(not_found("not enough leaves to prove finality"))
 }
 
@@ -1449,9 +1446,8 @@ mod test {
         );
     }
 
-    /// A proof requested today, for a leaf anywhere in history. The tip is past the new-protocol
-    /// cutover and no legacy QC chain is stored, so every proof must close on stored leaves and
-    /// cert2s alone.
+    /// Every leaf of a history whose tip is past the 0.6 cutover is proved from stored leaves and
+    /// cert2s alone, with no legacy QC chain stored.
     #[test_log::test(tokio::test(flavor = "multi_thread"))]
     async fn test_leaf_proofs_across_history() {
         // Every protocol version from mainnet's 0.2 genesis on, with the height it took effect.
@@ -1646,9 +1642,8 @@ mod test {
         .await
         .unwrap();
 
-        // A legacy chain whose tip is legacy too: the leaf after the requested one chains onto it,
-        // but no deciding QC has arrived and no cert2 ever will. Replayed pre-0.6 chains end like
-        // this, and so did every node before the 0.6 cutover.
+        // A legacy tip, as every replayed pre-0.6 chain has: the next leaf chains onto the
+        // requested one, but no deciding QC has arrived and no cert2 ever will.
         let leaves = leaf_chain(1..=3, EPOCH_REWARD_VERSION).await;
         {
             let mut tx = ds.write().await.unwrap();

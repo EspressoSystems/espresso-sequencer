@@ -122,9 +122,7 @@ pub async fn custom_leaf_chain_with_upgrade(
 }
 
 /// Construct a customized leaf chain which starts at `base` and takes each `(height, version)`
-/// upgrade in turn, as a live network's history does.
-///
-/// Every leaf before an upgrade carries the certificate announcing it.
+/// upgrade in turn, every leaf before an upgrade carrying the certificate announcing it.
 pub async fn custom_leaf_chain_with_upgrades(
     range: impl IntoIterator<Item = u64>,
     base: Version,
@@ -140,12 +138,10 @@ pub async fn custom_leaf_chain_with_upgrades(
 
     custom_leaf_chain(Upgrade::new(base, old_version), range, |proposal| {
         let height = proposal.block_header.height();
-        // After an upgrade takes effect we use the upgraded header version.
         if let Some(step) = steps.iter().rfind(|step| step.height <= height) {
             proposal.block_header = step.header.clone();
             *proposal.block_header.height_mut() = height;
         }
-        // All views leading up to an upgrade get a certificate indicating the coming upgrade.
         proposal.upgrade_certificate = steps
             .iter()
             .find(|step| height < step.height)
