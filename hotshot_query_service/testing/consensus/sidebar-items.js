@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["DIFFICULTY_LEVEL","EPOCH_HEIGHT","NUM_NODES"],"struct":["MockNetwork","MockNode"],"trait":["DataSourceLifeCycle","TestableDataSource"],"type":["MockDataSource","MockSqlDataSource"]};
+window.SIDEBAR_ITEMS = {"trait":["DataSourceLifeCycle","TestableDataSource"],"type":["MockDataSource","MockSqlDataSource"]};
