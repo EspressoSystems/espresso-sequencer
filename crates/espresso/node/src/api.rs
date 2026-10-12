@@ -4048,11 +4048,12 @@ mod test {
         run_catchup_test("/v1").await;
     }
 
-    /// With no source of state, a node restarted from genesis still follows the network, since a
-    /// decide takes nothing it has to compute. But it cannot catch up: its first proposal has no
-    /// parent state, so it validates the next one from a `from_header` stub, which needs the
-    /// block merkle frontier from a peer, and its first decide garbage-collects everything older,
-    /// so it can't replay from genesis either. Every state it reports stays a stub.
+    /// A node restarted from genesis with no state peers still follows the network: a decide takes
+    /// a proposal and its certificates, all broadcast, and never a state the node computed. It can
+    /// still rebuild some states, because every node answers frontier and account requests over
+    /// the request-response protocol for the views it holds, so whether a decide carries a
+    /// validated state is a race between that catchup and the next certificate. The test asserts
+    /// only that the node keeps deciding.
     #[test_log::test(tokio::test(flavor = "multi_thread"))]
     async fn test_restart_no_state_peers_decides_without_catchup() {
         let port = reserve_tcp_port().expect("OS should have ephemeral ports available");
@@ -4063,13 +4064,7 @@ mod test {
             .without_api_catchup()
             .build();
         let mut network = TestNetwork::new(config, TEST_UPGRADE).await;
-        let decided =
-            restart_from_genesis_and_decide(&mut network, NullStateCatchup::default(), |_| true)
-                .await;
-        assert!(
-            decided.iter().all(|info| info.delta.is_none()),
-            "a node without state peers validated a state it had no way to rebuild"
-        );
+        restart_from_genesis_and_decide(&mut network, NullStateCatchup::default(), |_| true).await;
     }
 
     /// A query node with a gap must fill it from a peer over the path production runs: the
