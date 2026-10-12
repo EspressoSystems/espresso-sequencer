@@ -1809,7 +1809,6 @@ pub mod test_helpers {
         future::{FutureExt, join_all},
         stream::{Stream, StreamExt},
     };
-    use hotshot::types::{Event, EventType};
     use hotshot_contract_adapter::stake_table::StakeTableContractVersion;
     use hotshot_types::{
         event::LeafInfo, light_client::LCV3StateSignatureRequestBody,
@@ -2681,10 +2680,6 @@ pub mod test_helpers {
         tokio::time::timeout(Duration::from_secs(120), async {
             loop {
                 let leaf = match events.next().await.unwrap() {
-                    CoordinatorEvent::LegacyEvent(Event {
-                        event: EventType::Decide { leaf_chain, .. },
-                        ..
-                    }) => leaf_chain[0].leaf.clone(),
                     CoordinatorEvent::NewDecide { leaf_infos, .. } => leaf_infos[0].leaf.clone(),
                     _ => continue,
                 };
@@ -3577,7 +3572,6 @@ mod test {
         stream::{StreamExt, TryStreamExt},
         try_join,
     };
-    use hotshot::types::{Event, EventType};
     use hotshot_contract_adapter::{
         reward::{RewardAuthData, RewardClaimInput, RewardProofSiblings},
         sol_types::{EspToken, StakeTableV3},
@@ -4098,10 +4092,6 @@ mod test {
         let namespace = NamespaceId::from(7_u32);
         let mut decided = network.server.event_stream().filter_map(|event| {
             future::ready(match event {
-                CoordinatorEvent::LegacyEvent(Event {
-                    event: EventType::Decide { leaf_chain, .. },
-                    ..
-                }) => Some(leaf_chain[0].leaf.clone()),
                 CoordinatorEvent::NewDecide { leaf_infos, .. } => Some(leaf_infos[0].leaf.clone()),
                 _ => None,
             })

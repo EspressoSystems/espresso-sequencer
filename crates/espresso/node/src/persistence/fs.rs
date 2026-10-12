@@ -33,7 +33,7 @@ use hotshot_types::{
         VidCommitment, VidDisperseShare,
     },
     drb::{DrbInput, DrbResult},
-    event::{Event, EventType, HotShotAction, LeafInfo},
+    event::{HotShotAction, LeafInfo},
     initializer::InitializerEpochInfo,
     message::{Proposal, convert_proposal},
     new_protocol::CoordinatorEvent,
@@ -471,7 +471,7 @@ impl Inner {
     async fn generate_decide_events(
         &mut self,
         view: ViewNumber,
-        deciding_qc: Option<Arc<CertificatePair<SeqTypes>>>,
+        _deciding_qc: Option<Arc<CertificatePair<SeqTypes>>>,
         consumer: &impl EventConsumer,
     ) -> anyhow::Result<Vec<RangeInclusive<ViewNumber>>> {
         // Generate a decide event for each leaf, to be processed by the event consumer. We make a
@@ -537,31 +537,13 @@ impl Inner {
         for (view, (leaf, cert)) in leaves {
             let height = leaf.leaf.block_header().block_number();
 
-            let event = if leaf.leaf.block_header().version() >= versions::NEW_PROTOCOL_VERSION {
-                let cert2 = self.load_cert2(view)?;
-                // One event per view. cert2 is only stored for the
-                // directly finalized view
-                // ancestors get `cert2: None`,
-                // which is what update() expects for indirectly decided leaves.
-                CoordinatorEvent::NewDecide {
-                    leaf_infos: vec![leaf],
-                    cert1: cert.qc().clone(),
-                    cert2,
-                }
-            } else {
-                let deciding_qc = deciding_qc
-                    .as_ref()
-                    .filter(|qc| qc.view_number() == cert.view_number() + 1)
-                    .cloned();
-                CoordinatorEvent::LegacyEvent(Event {
-                    view_number: view,
-                    event: EventType::Decide {
-                        committing_qc: Arc::new(cert),
-                        deciding_qc,
-                        leaf_chain: Arc::new(vec![leaf]),
-                        block_size: None,
-                    },
-                })
+            // One event per view. cert2 is only stored for the directly finalized view;
+            // ancestors get `cert2: None`, which is what update() expects for indirectly
+            // decided leaves.
+            let event = CoordinatorEvent::NewDecide {
+                leaf_infos: vec![leaf],
+                cert1: cert.qc().clone(),
+                cert2: self.load_cert2(view)?,
             };
             consumer.handle_event(&event).await?;
 

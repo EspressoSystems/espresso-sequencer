@@ -58,7 +58,7 @@ use hotshot_types::{
         QuorumProposalWrapperLegacy, VidCommitment, VidCommon, VidDisperseShare,
     },
     drb::{DrbInput, DrbResult},
-    event::{Event, EventType, HotShotAction, LeafInfo},
+    event::{HotShotAction, LeafInfo},
     initializer::InitializerEpochInfo,
     message::{Proposal, convert_proposal},
     new_protocol::CoordinatorEvent,
@@ -987,67 +987,29 @@ struct DecidedLeaf {
     cert: CertificatePair<SeqTypes>,
 }
 
-fn decide_events_from_chain(
-    mut chain: Vec<DecidedLeaf>,
+/// The decide for `chain`, newest leaf first. `cert1` certifies the newest leaf, each older
+/// leaf is certified by the next newer leaf's `justify_qc`, and `cert2` finalizes the newest
+/// leaf; `update()` builds `LeafQueryData` from `cert1` and attaches `cert2` to that leaf only.
+fn decide_event_from_chain(
+    chain: Vec<DecidedLeaf>,
     cert2: Option<Certificate2<SeqTypes>>,
-    deciding_qc: Option<Arc<CertificatePair<SeqTypes>>>,
-) -> Vec<CoordinatorEvent<SeqTypes>> {
-    let split_idx = chain
-        .iter()
-        .position(|leaf| leaf.info.leaf.block_header().version() < versions::NEW_PROTOCOL_VERSION)
-        .unwrap_or(chain.len());
-    let legacy_leaves = chain.split_off(split_idx);
-    let new_leaves = chain;
-
-    let mut events = Vec::with_capacity(2);
-    if !legacy_leaves.is_empty() {
-        let committing_qc = legacy_leaves[0].cert.clone();
-        let deciding_qc = new_leaves
-            .is_empty()
-            .then_some(deciding_qc)
-            .flatten()
-            .filter(|qc| qc.view_number() == committing_qc.view_number() + 1);
-        let view_number = legacy_leaves[0].info.leaf.view_number();
-        let leaf_chain = legacy_leaves
-            .into_iter()
-            .map(|leaf| leaf.info)
-            .collect::<Vec<_>>();
-
-        events.push(CoordinatorEvent::LegacyEvent(Event {
-            view_number,
-            event: EventType::Decide {
-                leaf_chain: Arc::new(leaf_chain),
-                committing_qc: Arc::new(committing_qc),
-                deciding_qc,
-                block_size: None,
-            },
-        }));
-    }
-
-    if new_leaves.is_empty() && cert2.is_some() {
-        tracing::warn!(
-            "decide_events_from_chain called with cert2 but no new-protocol leaves; cert2 will be \
-             dropped"
-        );
-    }
-
-    if !new_leaves.is_empty() {
-        // cert1 is the QC for the newest leaf
-        // ancestors are certified by
-        // their successor's justify_qc. cert2 finalizes the newest leaf.
-        // update() uses cert1 to build LeafQueryData for
-        // the newest leaf and only attaches cert2 to it.
-        let cert1 = new_leaves[0].cert.qc().clone();
-        let leaf_infos = new_leaves.into_iter().map(|leaf| leaf.info).collect();
-
-        events.push(CoordinatorEvent::NewDecide {
-            leaf_infos,
-            cert1,
-            cert2,
-        });
-    }
-
-    events
+    _deciding_qc: Option<Arc<CertificatePair<SeqTypes>>>,
+) -> Option<CoordinatorEvent<SeqTypes>> {
+    let Some(newest) = chain.first() else {
+        if cert2.is_some() {
+            tracing::warn!(
+                "decide_event_from_chain called with cert2 but no leaves; cert2 will be dropped"
+            );
+        }
+        return None;
+    };
+    let cert1 = newest.cert.qc().clone();
+    let leaf_infos = chain.into_iter().map(|leaf| leaf.info).collect();
+    Some(CoordinatorEvent::NewDecide {
+        leaf_infos,
+        cert1,
+        cert2,
+    })
 }
 
 impl Persistence {
@@ -1413,7 +1375,7 @@ impl Persistence {
                 "generating decide event"
             );
 
-            for event in decide_events_from_chain(chain, cert2, deciding_qc.clone()) {
+            if let Some(event) = decide_event_from_chain(chain, cert2, deciding_qc.clone()) {
                 consumer.handle_event(&event).await?;
             }
 

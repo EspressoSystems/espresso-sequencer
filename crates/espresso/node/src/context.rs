@@ -709,14 +709,6 @@ async fn handle_events<P, C>(
         tracing::debug!(node_id, ?event, "consensus event");
 
         match &event {
-            CoordinatorEvent::LegacyEvent(hotshot_event) => {
-                if let hotshot_types::event::EventType::ExternalMessageReceived { ref data, .. } =
-                    hotshot_event.event
-                    && let Err(err) = external_event_handler.handle_event(data).await
-                {
-                    tracing::warn!(%err, "Failed to handle legacy external message");
-                }
-            },
             CoordinatorEvent::ExternalMessageReceived { data, .. } => {
                 if let Err(err) = external_event_handler.handle_event(data).await {
                     tracing::warn!("Failed to handle external message: {:?}", err);

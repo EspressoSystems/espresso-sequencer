@@ -552,7 +552,7 @@ where
         },
         ConsensusOutput::ProposalValidated { proposal, sender } => {
             Some(CoordinatorEvent::QuorumProposal {
-                proposal: proposal.clone(),
+                proposal: Box::new(proposal.clone()),
                 sender: sender.clone(),
             })
         },

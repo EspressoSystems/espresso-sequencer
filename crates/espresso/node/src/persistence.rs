@@ -214,7 +214,7 @@ mod tests {
         network_config::light_client_genesis_from_stake_table,
     };
     use espresso_types::{
-        Event, L1Client, L1ClientOptions, Leaf, Leaf2, NodeState, PubKey, SeqTypes, TEST_UPGRADE,
+        L1Client, L1ClientOptions, Leaf, Leaf2, NodeState, PubKey, SeqTypes, TEST_UPGRADE,
         ValidatedState,
         traits::{
             EventConsumer, EventsPersistenceRead, MembershipPersistence, NullEventConsumer,
@@ -238,7 +238,7 @@ mod tests {
             vid_commitment,
             vid_disperse::{AvidMDisperseShare, AvidmGf2DisperseShare},
         },
-        event::{EventType, HotShotAction, LeafInfo},
+        event::{HotShotAction, LeafInfo},
         initializer::InitializerEpochInfo,
         light_client::{LightClientState, StakeTableState, StateKeyPair},
         message::{Proposal, UpgradeLock, convert_proposal},
@@ -1937,25 +1937,14 @@ mod tests {
     #[async_trait]
     impl EventConsumer for DecideViewCollector {
         async fn handle_event(&self, event: &CoordinatorEvent<SeqTypes>) -> anyhow::Result<()> {
-            let mut views = self.views.write().await;
-            match event {
-                // Decide events carry their leaves newest first.
-                CoordinatorEvent::NewDecide { leaf_infos, .. } => views.extend(
+            // Decide events carry their leaves newest first.
+            if let CoordinatorEvent::NewDecide { leaf_infos, .. } = event {
+                self.views.write().await.extend(
                     leaf_infos
                         .iter()
                         .rev()
                         .map(|info| info.leaf.view_number().u64()),
-                ),
-                CoordinatorEvent::LegacyEvent(Event {
-                    event: EventType::Decide { leaf_chain, .. },
-                    ..
-                }) => views.extend(
-                    leaf_chain
-                        .iter()
-                        .rev()
-                        .map(|info| info.leaf.view_number().u64()),
-                ),
-                _ => {},
+                );
             }
             Ok(())
         }
