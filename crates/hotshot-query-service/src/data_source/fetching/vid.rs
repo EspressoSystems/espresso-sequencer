@@ -22,6 +22,7 @@ use hotshot_types::{
     data::{VidCommon, VidShare},
     traits::{block_contents::BlockHeader, node_implementation::NodeType},
 };
+use tokio::spawn;
 
 use super::{
     AvailabilityProvider, FetchRequest, Fetchable, Fetcher, Heights, Notifiers, RangedFetchable,
@@ -188,6 +189,72 @@ where
     ) -> anyhow::Result<()> {
         storage.insert_vid(&self.0, self.1.as_ref()).await
     }
+}
+
+/// Fetch the VID common for `header` unless it is already stored.
+///
+/// Payload fetches also recover VID common; leaf streams store headers without it.
+pub(super) fn fetch_missing_vid_common<Types, S, P>(
+    fetcher: Arc<Fetcher<Types, S, P>>,
+    header: Header<Types>,
+) where
+    Types: NodeType,
+    Header<Types>: QueryableHeader<Types>,
+    Payload<Types>: QueryablePayload<Types>,
+    S: VersionedDataSource + 'static,
+    for<'a> S::Transaction<'a>: UpdateAvailabilityStorage<Types>,
+    for<'a> S::ReadOnly<'a>: AvailabilityStorage<Types>,
+    P: AvailabilityProvider<Types>,
+{
+    if fetcher.leaf_only {
+        return;
+    }
+    spawn(async move {
+        let height = header.block_number();
+        match fetcher.storage.read().await {
+            Ok(mut tx) => match tx
+                .get_vid_common_metadata(BlockId::Number(height as usize))
+                .await
+            {
+                Ok(_) => return,
+                Err(QueryError::Missing | QueryError::NotFound) => {},
+                Err(err) => tracing::warn!(height, "error checking for VID common: {err:#}"),
+            },
+            Err(err) => tracing::warn!(height, "error opening transaction: {err:#}"),
+        }
+        fetch_vid_common_with_header(fetcher, header);
+    });
+}
+
+/// Fetch the VID common for blocks `start..end` unless all of it is already stored.
+pub(super) fn fetch_missing_vid_common_range<Types, S, P>(
+    fetcher: Arc<Fetcher<Types, S, P>>,
+    start: u64,
+    end: u64,
+) where
+    Types: NodeType,
+    Header<Types>: QueryableHeader<Types>,
+    Payload<Types>: QueryablePayload<Types>,
+    S: VersionedDataSource + 'static,
+    for<'a> S::Transaction<'a>: UpdateAvailabilityStorage<Types>,
+    for<'a> S::ReadOnly<'a>: AvailabilityStorage<Types>,
+    P: AvailabilityProvider<Types>,
+{
+    if fetcher.leaf_only {
+        return;
+    }
+    spawn(async move {
+        let range = start as usize..end as usize;
+        match fetcher.storage.read().await {
+            Ok(mut tx) => match tx.get_vid_common_metadata_range(range.clone()).await {
+                Ok(common) if common.iter().filter(|c| c.is_ok()).count() == range.len() => return,
+                Ok(_) => {},
+                Err(err) => tracing::warn!(start, end, "error checking for VID common: {err:#}"),
+            },
+            Err(err) => tracing::warn!(start, end, "error opening transaction: {err:#}"),
+        }
+        fetch_vid_common_range(fetcher, start, end);
+    });
 }
 
 pub(super) fn fetch_vid_common_with_header<Types, S, P>(

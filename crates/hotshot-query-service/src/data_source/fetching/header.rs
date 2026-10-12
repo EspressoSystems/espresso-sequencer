@@ -22,8 +22,11 @@ use futures::{FutureExt, future::BoxFuture};
 use hotshot_types::traits::{block_contents::BlockHeader, node_implementation::NodeType};
 
 use super::{
-    AvailabilityProvider, Fetcher, block::fetch_block_with_header, cert2::fetch_cert2_with_header,
-    leaf::fetch_leaf_with_callbacks, vid::fetch_vid_common_with_header,
+    AvailabilityProvider, Fetcher,
+    block::fetch_block_with_header,
+    cert2::fetch_cert2_with_header,
+    leaf::fetch_leaf_with_callbacks,
+    vid::{fetch_missing_vid_common, fetch_missing_vid_common_range, fetch_vid_common_with_header},
 };
 use crate::{
     Header, Payload, QueryError, QueryResult,
@@ -193,6 +196,7 @@ where
                     "fetched leaf {}, will now fetch payload",
                     header.block_number()
                 );
+                fetch_missing_vid_common(fetcher.clone(), header.clone());
                 fetch_block_with_header(fetcher, header);
             },
             Self::VidCommon { fetcher } => {
@@ -213,6 +217,7 @@ where
         match self {
             Self::Payload { fetcher } => {
                 tracing::info!("fetched leaves {start}..{end}, will now fetch payload",);
+                fetch_missing_vid_common_range(fetcher.clone(), start, end);
                 fetch_block_range(fetcher, start, end);
             },
             Self::VidCommon { fetcher } => {
@@ -287,7 +292,6 @@ where
     // header and leaf.
     match req {
         BlockId::Number(n) => {
-            let callbacks = callbacks.chain(leaf_derived(&fetcher));
             fetch_leaf_with_callbacks(
                 fetcher,
                 n.into(),
@@ -357,26 +361,8 @@ where
     }
 
     // Fetch the headers (in fact, the entire leaves) first, then fetch the remaining payload data.
-    let callbacks = callbacks.chain(leaf_derived(&fetcher));
     fetch_leaf_range_with_callbacks(fetcher, req, callbacks.map(Into::into).collect::<Vec<_>>())
         .await?;
 
     Ok(())
-}
-
-/// Callbacks for the data derived from a leaf, which is missing whenever the leaf is.
-fn leaf_derived<Types, S, P>(
-    fetcher: &Arc<Fetcher<Types, S, P>>,
-) -> [HeaderCallback<Types, S, P>; 2]
-where
-    Types: NodeType,
-{
-    [
-        HeaderCallback::Payload {
-            fetcher: fetcher.clone(),
-        },
-        HeaderCallback::VidCommon {
-            fetcher: fetcher.clone(),
-        },
-    ]
 }
