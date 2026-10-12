@@ -34,6 +34,7 @@ use tokio::{
     task::JoinHandle,
     time::{Instant, sleep, timeout},
 };
+use tokio_util::task::AbortOnDropHandle;
 use tracing::{debug, info};
 
 use crate::{
@@ -42,7 +43,7 @@ use crate::{
     consensus::{ConsensusInput, ConsensusOutput, PreCutoverSeed},
     coordinator::{Coordinator, error::Severity},
     helpers::test_upgrade_lock,
-    message::{ConsensusMessage, MessageType},
+    message::{ConsensusMessage, MessageType, OpaqueMessage},
     network::Cliquenet,
     tests::common::{
         coordinator_builder::build_test_coordinator,
@@ -488,6 +489,7 @@ impl TestRunner {
                 self.make_membership(*public_key, self.node_storages[i].clone(), &connect_infos);
             clients.push(client.handle().clone());
 
+            let (external_tx, external_rx) = mpsc::unbounded_channel();
             let mut coord = build_test_coordinator(
                 i as u64,
                 network,
@@ -496,7 +498,20 @@ impl TestRunner {
                 client,
                 self.epoch_height,
                 self.view_timeout,
+<<<<<<< HEAD
                 self.pre_cutover_seed.clone(),
+||||||| parent of 3ef65431572 (fix(new-protocol): deliver external messages on arrival (#5173))
+                UpgradeSetup {
+                    lock: upgrade_lock,
+                    config: self.upgrade_config.clone(),
+                },
+=======
+                UpgradeSetup {
+                    lock: upgrade_lock,
+                    config: self.upgrade_config.clone(),
+                },
+                external_tx,
+>>>>>>> 3ef65431572 (fix(new-protocol): deliver external messages on arrival (#5173))
             )
             .await;
 
@@ -534,6 +549,7 @@ impl TestRunner {
             }
             node_handles.push(Some(tokio::spawn(run_node(
                 coord,
+                external_rx,
                 self.node_storages[i].clone(),
                 tx,
                 i,
@@ -645,6 +661,7 @@ impl TestRunner {
                                         self.node_storages[change.idx].clone(),
                                         &connect_infos,
                                     );
+                                let (external_tx, external_rx) = mpsc::unbounded_channel();
                                 let coord = build_test_coordinator(
                                     change.idx as u64,
                                     net,
@@ -653,7 +670,20 @@ impl TestRunner {
                                     client,
                                     self.epoch_height,
                                     self.view_timeout,
+<<<<<<< HEAD
                                     self.pre_cutover_seed.clone(),
+||||||| parent of 3ef65431572 (fix(new-protocol): deliver external messages on arrival (#5173))
+                                    UpgradeSetup {
+                                        lock: upgrade_lock,
+                                        config: self.upgrade_config.clone(),
+                                    },
+=======
+                                    UpgradeSetup {
+                                        lock: upgrade_lock,
+                                        config: self.upgrade_config.clone(),
+                                    },
+                                    external_tx,
+>>>>>>> 3ef65431572 (fix(new-protocol): deliver external messages on arrival (#5173))
                                 )
                                 .await;
                                 // Bump the generation so stale events queued
@@ -668,6 +698,7 @@ impl TestRunner {
                                 let initial_commits = BTreeMap::new();
                                 node_handles[change.idx] = Some(tokio::spawn(run_node(
                                     coord,
+                                    external_rx,
                                     self.node_storages[change.idx].clone(),
                                     tx,
                                     change.idx,
@@ -889,6 +920,7 @@ async fn submit_transactions(clients: Vec<ClientApi<TestTypes>>, count: usize) {
 #[allow(clippy::too_many_arguments)]
 async fn run_node(
     mut coord: Coordinator<TestTypes, TestStorage<TestTypes>>,
+    mut external_rx: mpsc::UnboundedReceiver<OpaqueMessage<BLSPubKey>>,
     storage: TestStorage<TestTypes>,
     output_tx: UnboundedSender<TaggedEvent>,
     idx: usize,
@@ -899,6 +931,20 @@ async fn run_node(
 ) {
     let mut commits: BTreeMap<ViewNumber, [u8; 32]> = initial_commits;
     let mut last_view = ViewNumber::genesis();
+    let _forward = AbortOnDropHandle::new(tokio::spawn(async move {
+        while let Some(m) = external_rx.recv().await {
+            let _ = external_events_tx
+                .broadcast_direct(Event {
+                    // The test leaf fetcher ignores the view.
+                    view_number: ViewNumber::genesis(),
+                    event: EventType::ExternalMessageReceived {
+                        sender: m.sender,
+                        data: m.data,
+                    },
+                })
+                .await;
+        }
+    }));
     let send = |event: NodeEvent| {
         let _ = output_tx.send(TaggedEvent {
             idx,
@@ -979,18 +1025,6 @@ async fn run_node(
             {
                 tracing::error!(%err, node = %coord.node_id(), "critical error processing output");
                 return;
-            }
-
-            while let Some(output) = coord.coordinator_outbox_mut().pop_front() {
-                let _ = external_events_tx
-                    .broadcast_direct(Event {
-                        view_number: coord.current_view(),
-                        event: EventType::ExternalMessageReceived {
-                            sender: output.sender,
-                            data: output.data,
-                        },
-                    })
-                    .await;
             }
         }
     }

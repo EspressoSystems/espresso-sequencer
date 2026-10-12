@@ -9,6 +9,7 @@ use hotshot_types::{
     data::{EpochNumber, Leaf2, ViewNumber},
     traits::{metrics::NoMetrics, signature_key::SignatureKey},
 };
+use tokio::sync::mpsc;
 
 use super::utils::{mock_membership_with_num_nodes, record_leader};
 use crate::{
@@ -160,6 +161,7 @@ impl TestHarness {
             .client(client)
             .membership_coordinator(membership)
             .outbox(Outbox::new())
+            .external_tx(mpsc::unbounded_channel().0)
             .timer(Timer::new(
                 timer_duration,
                 ViewNumber::genesis(),

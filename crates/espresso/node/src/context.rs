@@ -44,7 +44,7 @@ use parking_lot::Mutex;
 use request_response::RequestResponseConfig;
 use tokio::{
     spawn,
-    sync::{mpsc::channel, watch},
+    sync::{ watch, mpsc::{channel, unbounded_channel}, },
     task::JoinHandle,
 };
 use tracing::{Instrument, Level, info};
@@ -230,6 +230,7 @@ where
             .await
             .context("loading persisted locked QC")?;
 
+        let (external_tx, external_rx) = unbounded_channel();
         let coordinator = Coordinator::maker()
             .membership_coordinator(membership_coordinator.clone())
             .network(coordinator_network)
@@ -245,6 +246,33 @@ where
             .metrics(metrics)
             .consensus_metrics(consensus_metrics)
             .maybe_locked_qc(locked_qc)
+<<<<<<< HEAD
+||||||| parent of 3ef65431572 (fix(new-protocol): deliver external messages on arrival (#5173))
+            .maybe_anchor_cert2(anchor_cert2)
+            .upgrade_config(UpgradeConfig {
+                start_proposing_view: config.start_proposing_view,
+                stop_proposing_view: config.stop_proposing_view,
+                start_voting_view: config.start_voting_view,
+                stop_voting_view: config.stop_voting_view,
+                start_proposing_time: config.start_proposing_time,
+                stop_proposing_time: config.stop_proposing_time,
+                start_voting_time: config.start_voting_time,
+                stop_voting_time: config.stop_voting_time,
+            })
+=======
+            .maybe_anchor_cert2(anchor_cert2)
+            .upgrade_config(UpgradeConfig {
+                start_proposing_view: config.start_proposing_view,
+                stop_proposing_view: config.stop_proposing_view,
+                start_voting_view: config.start_voting_view,
+                stop_voting_view: config.stop_voting_view,
+                start_proposing_time: config.start_proposing_time,
+                stop_proposing_time: config.stop_proposing_time,
+                start_voting_time: config.start_voting_time,
+                stop_voting_time: config.stop_voting_time,
+            })
+            .external_tx(external_tx)
+>>>>>>> 3ef65431572 (fix(new-protocol): deliver external messages on arrival (#5173))
             .make();
 
         let legacy_event_rx = handle.event_stream_known_impl().deactivate();
@@ -254,6 +282,7 @@ where
             let handle = ConsensusHandle::new(
                 hotshot_handle.clone(),
                 coordinator,
+                external_rx,
                 epoch_height.into(),
                 legacy_event_rx,
                 EXTERNAL_EVENT_CHANNEL_SIZE,

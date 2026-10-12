@@ -26,7 +26,10 @@ use hotshot_types::{
     vote::{HasViewNumber, Vote},
 };
 use time::OffsetDateTime;
-use tokio::{select, sync::oneshot};
+use tokio::{
+    select,
+    sync::{mpsc, oneshot},
+};
 use tracing::{debug, error, info, warn};
 
 use crate::{
@@ -128,8 +131,8 @@ pub struct Coordinator<T: NodeType, S> {
     storage: Storage<T, S>,
     #[builder(default)]
     outbox: Outbox<ConsensusOutput<T>>,
-    #[builder(default)]
-    coordinator_outbox: Outbox<OpaqueMessage<T::SignatureKey>>,
+    /// Forwards external messages on arrival, independent of consensus inputs.
+    external_tx: mpsc::UnboundedSender<OpaqueMessage<T::SignatureKey>>,
     public_key: T::SignatureKey,
     #[builder(default = KeyPrefix::from(&public_key))]
     node_id: KeyPrefix,
@@ -188,6 +191,17 @@ where
         consensus_metrics: ConsensusMetricsValue,
         /// Locked QC persisted on a prior run; restored so the lock survives restart.
         locked_qc: Option<Certificate1<T>>,
+<<<<<<< HEAD
+||||||| parent of 3ef65431572 (fix(new-protocol): deliver external messages on arrival (#5173))
+        /// The anchor's cert2 persisted on a prior run.
+        anchor_cert2: Option<Certificate2<T>>,
+        upgrade_config: UpgradeConfig,
+=======
+        /// The anchor's cert2 persisted on a prior run.
+        anchor_cert2: Option<Certificate2<T>>,
+        upgrade_config: UpgradeConfig,
+        external_tx: mpsc::UnboundedSender<OpaqueMessage<T::SignatureKey>>,
+>>>>>>> 3ef65431572 (fix(new-protocol): deliver external messages on arrival (#5173))
     ) -> Self {
         let mut consensus = Consensus::new(
             membership_coordinator.clone(),
@@ -367,6 +381,7 @@ where
             .public_key(public_key)
             .maybe_metrics(coordinator_metrics)
             .participation(participation)
+            .external_tx(external_tx)
             .build()
     }
 
@@ -1073,14 +1088,6 @@ where
         &mut self.outbox
     }
 
-    pub fn coordinator_outbox(&self) -> &Outbox<OpaqueMessage<T::SignatureKey>> {
-        &self.coordinator_outbox
-    }
-
-    pub fn coordinator_outbox_mut(&mut self) -> &mut Outbox<OpaqueMessage<T::SignatureKey>> {
-        &mut self.coordinator_outbox
-    }
-
     pub fn current_view(&self) -> ViewNumber {
         self.consensus.current_view()
     }
@@ -1532,7 +1539,7 @@ where
             },
             MessageType::External(data) => {
                 debug!(%node, %sender, bytes = data.len(), "recv external message");
-                self.coordinator_outbox.push_back(OpaqueMessage {
+                let _ = self.external_tx.send(OpaqueMessage {
                     sender: message.sender,
                     data,
                 });
