@@ -132,8 +132,8 @@ pub struct Coordinator<T: NodeType, S> {
     storage: Storage<T, S>,
     #[builder(default)]
     outbox: Outbox<ConsensusOutput<T>>,
-    #[builder(skip)]
-    external_tx: Option<mpsc::UnboundedSender<OpaqueMessage<T::SignatureKey>>>,
+    /// Forwards external messages on arrival, independent of consensus inputs.
+    external_tx: mpsc::UnboundedSender<OpaqueMessage<T::SignatureKey>>,
     public_key: T::SignatureKey,
     #[builder(default = KeyPrefix::from(&public_key))]
     node_id: KeyPrefix,
@@ -196,6 +196,7 @@ where
         /// The anchor's cert2 persisted on a prior run.
         anchor_cert2: Option<Certificate2<T>>,
         upgrade_config: UpgradeConfig,
+        external_tx: mpsc::UnboundedSender<OpaqueMessage<T::SignatureKey>>,
     ) -> Self {
         let mut consensus = Consensus::new(
             membership_coordinator.clone(),
@@ -415,6 +416,7 @@ where
             .public_key(public_key)
             .maybe_metrics(coordinator_metrics)
             .participation(participation)
+            .external_tx(external_tx)
             .build()
     }
 
@@ -1181,14 +1183,6 @@ where
         &mut self.outbox
     }
 
-    /// External messages, delivered on arrival rather than with the next
-    /// consensus input. Messages arriving before this call are dropped.
-    pub fn external_messages(&mut self) -> mpsc::UnboundedReceiver<OpaqueMessage<T::SignatureKey>> {
-        let (tx, rx) = mpsc::unbounded_channel();
-        self.external_tx = Some(tx);
-        rx
-    }
-
     pub fn current_view(&self) -> ViewNumber {
         self.consensus.current_view()
     }
@@ -1691,12 +1685,10 @@ where
             },
             MessageType::External(data) => {
                 debug!(%node, %sender, bytes = data.len(), "recv external message");
-                if let Some(tx) = &self.external_tx {
-                    let _ = tx.send(OpaqueMessage {
-                        sender: message.sender,
-                        data,
-                    });
-                }
+                let _ = self.external_tx.send(OpaqueMessage {
+                    sender: message.sender,
+                    data,
+                });
                 None
             },
         }

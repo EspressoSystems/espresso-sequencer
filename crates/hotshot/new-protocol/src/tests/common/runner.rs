@@ -42,7 +42,7 @@ use crate::{
     client::{ClientApi, CoordinatorClient},
     consensus::{ConsensusInput, ConsensusOutput},
     coordinator::{Coordinator, error::Severity},
-    message::{ConsensusMessage, Message, MessageType, Unchecked},
+    message::{ConsensusMessage, Message, MessageType, OpaqueMessage, Unchecked},
     network::Cliquenet,
     tests::common::{
         coordinator_builder::{UpgradeSetup, build_test_coordinator},
@@ -532,6 +532,7 @@ impl TestRunner {
                 self.make_membership(public_key, self.node_storages[i].clone(), &connect_infos);
             clients.push(client.handle().clone());
 
+            let (external_tx, external_rx) = mpsc::unbounded_channel();
             let mut coord = build_test_coordinator(
                 i as u64,
                 network,
@@ -544,6 +545,7 @@ impl TestRunner {
                     lock: upgrade_lock,
                     config: self.upgrade_config.clone(),
                 },
+                external_tx,
             )
             .await;
 
@@ -569,6 +571,7 @@ impl TestRunner {
             cancels.insert(i, cancel_tx);
             node_handles.push(Some(tokio::spawn(run_node(
                 coord,
+                external_rx,
                 self.node_storages[i].clone(),
                 tx,
                 i,
@@ -666,6 +669,7 @@ impl TestRunner {
                                         self.node_storages[change.idx].clone(),
                                         &connect_infos,
                                     );
+                                let (external_tx, external_rx) = mpsc::unbounded_channel();
                                 let coord = build_test_coordinator(
                                     change.idx as u64,
                                     net,
@@ -678,6 +682,7 @@ impl TestRunner {
                                         lock: upgrade_lock,
                                         config: self.upgrade_config.clone(),
                                     },
+                                    external_tx,
                                 )
                                 .await;
                                 // Bump the generation so stale events queued
@@ -689,6 +694,7 @@ impl TestRunner {
                                 cancels.insert(change.idx, cancel_tx);
                                 node_handles[change.idx] = Some(tokio::spawn(run_node(
                                     coord,
+                                    external_rx,
                                     self.node_storages[change.idx].clone(),
                                     tx,
                                     change.idx,
@@ -925,6 +931,7 @@ async fn submit_transactions(clients: Vec<ClientApi<TestTypes>>, count: usize) {
 #[allow(clippy::too_many_arguments)]
 async fn run_node(
     mut coord: Coordinator<TestTypes, TestStorage<TestTypes>>,
+    mut external_rx: mpsc::UnboundedReceiver<OpaqueMessage<BLSPubKey>>,
     storage: TestStorage<TestTypes>,
     output_tx: UnboundedSender<TaggedEvent>,
     idx: usize,
@@ -934,11 +941,11 @@ async fn run_node(
 ) {
     let mut commits: BTreeMap<ViewNumber, [u8; 32]> = BTreeMap::new();
     let mut last_view = ViewNumber::genesis();
-    let mut external = coord.external_messages();
     let _forward = AbortOnDropHandle::new(tokio::spawn(async move {
-        while let Some(m) = external.recv().await {
+        while let Some(m) = external_rx.recv().await {
             let _ = external_events_tx
                 .broadcast_direct(Event {
+                    // The test leaf fetcher ignores the view.
                     view_number: ViewNumber::genesis(),
                     event: EventType::ExternalMessageReceived {
                         sender: m.sender,
