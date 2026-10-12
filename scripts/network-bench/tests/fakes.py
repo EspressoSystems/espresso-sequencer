@@ -1541,6 +1541,7 @@ def fake_images() -> dict:
 
 # `MemoryInfo.SizeInMiB` of `describe-instance-types` for every type of the fake price table.
 MEMORY_MIB = {
+    "c8g.large": 4096,
     "c8g.xlarge": 8192,
     "c8g.2xlarge": 16384,
     "c8g.4xlarge": 32768,
@@ -1556,6 +1557,7 @@ MEMORY_MIB = {
 
 # On-demand Linux USD per hour in eu-west-1, as the Pricing API listed them.
 INSTANCE_PRICES = {
+    "c8g.large": 0.08528,
     "c8g.xlarge": 0.17056,
     "c8g.2xlarge": 0.34112,
     "c8g.4xlarge": 0.68224,

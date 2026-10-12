@@ -102,7 +102,7 @@ def parse(*argv: str) -> Any:
 def test_chaos_shape_defaults():
     cfg = awsb.config_from_args(parse("--chaos"))
     assert (cfg.nodes, cfg.query_nodes) == (22, 22)
-    assert (cfg.node_type, cfg.ctl_type) == ("c8g.xlarge", "c8g.xlarge")
+    assert (cfg.node_type, cfg.ctl_type) == ("c8g.large", "c8g.xlarge")
     assert cfg.query_engine == "sqlite"
     assert cfg.chaos == ch.ChaosConfig()
     assert cfg.load.steps == (4.0,) * 10
@@ -205,7 +205,7 @@ def test_chaos_overrides_kept():
     cfg = awsb.config_from_args(args)
     assert cfg.nodes == 7 and cfg.ctl_type == "c8g.2xlarge"
     assert cfg.load.submit_nodes == 3 and cfg.load.steps == (2.0,) * 10
-    assert cfg.query_nodes == 7 and cfg.node_type == "c8g.xlarge"
+    assert cfg.query_nodes == 7 and cfg.node_type == "c8g.large"
 
 
 # REQ:awsbench-chaos-refusals

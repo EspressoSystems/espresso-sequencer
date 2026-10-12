@@ -224,12 +224,12 @@ just bench aws run --tag release-x --latency decaf-2025 --tcp-cc cubic   # cubic
 ```
 just bench aws run --tag release-x --chaos
 just bench aws run --tag release-x --chaos --chaos-min 10 --chaos-rate 4 --chaos-seed 7 --chaos-kinds restart,kill
-just bench aws up --tag release-x --nodes 22 --query-nodes 22 --node-type c8g.xlarge --ctl-type c8g.xlarge --ttl-min 180
+just bench aws up --tag release-x --nodes 22 --query-nodes 22 --node-type c8g.large --ctl-type c8g.xlarge --ttl-min 180
 just bench aws run --fleet --chaos --query-engine sqlite
 ```
 
 - `--chaos` restarts, kills and wipes nodes, any node, while the load runs at a constant rate. Flags not given take the
-  chaos shape: 22 nodes, every node a query node, `sqlite` colocated, `c8g.xlarge` nodes and `ctl`,
+  chaos shape: 22 nodes, every node a query node, `sqlite` colocated, `c8g.large` nodes, `c8g.xlarge` `ctl`,
   `--latency decaf-2025`, `--chaos-min` steps of 60 s at `--chaos-rate` MB/s, `--keep-going`. `--nodes`,
   `--query-nodes`, `--node-type`, `--ctl-type`, `--latency` (`off`, `mainnet` or `decaf-2025`), `--submit-nodes` and
   `--query-engine` given on the command line are kept; `--latency` is per run, `up` does not take it; `--nodes N` alone
@@ -274,9 +274,9 @@ just bench aws run --fleet --chaos --query-engine sqlite
   sync-status answered since the fault), a chaos report leading `summary.md` (see [Chaos report](#chaos-report)),
   `chaos:` lines in `driver.log` (a timeout line lists the last `missing` counts). Faulted nodes are exempt from the
   per-node scrape coverage and decided-blocks rules.
-- Cost: about $5.4/h for the default fleet, about 40 min per single shot. `render` recomputes the chaos report offline,
+- Cost: about $4.4/h for the default fleet, about 40 min per single shot. `render` recomputes the chaos report offline,
   also for a run that failed.
-- Check `rss_peak_bytes` in `result.json` after the first run: `c8g.xlarge` has 8 GiB.
+- `c8g.large` has 4 GiB; a chaos run peaked at 2.2 GiB used on node0 (`MemAvailable` in `hosts/<node>/host.jsonl`).
 
 #### Chaos report
 
