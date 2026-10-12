@@ -4048,12 +4048,9 @@ mod test {
         run_catchup_test("/v1").await;
     }
 
-    /// A node restarted from genesis with no state peers still follows the network: a decide takes
-    /// a proposal and its certificates, all broadcast, and never a state the node computed. It can
-    /// still rebuild some states, because every node answers frontier and account requests over
-    /// the request-response protocol for the views it holds, so whether a decide carries a
-    /// validated state is a race between that catchup and the next certificate. The test asserts
-    /// only that the node keeps deciding.
+    /// A node restarted from genesis with no state peers keeps deciding: a decide needs only the
+    /// broadcast proposal and certificates. Whether it also carries a validated state is a race
+    /// against request-response catchup from peers, so nothing is asserted about it.
     #[test_log::test(tokio::test(flavor = "multi_thread"))]
     async fn test_restart_no_state_peers_decides_without_catchup() {
         let port = reserve_tcp_port().expect("OS should have ephemeral ports available");
