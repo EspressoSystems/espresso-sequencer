@@ -7285,12 +7285,12 @@ mod test {
             .pos_hook(
                 DelegationConfig::MultipleDelegators,
                 StakeTableContractVersion::V3,
-                POS_V4,
+                TEST_UPGRADE,
             )
             .await?
             .build();
         let genesis_state = config.states()[0].clone();
-        let mut network = TestNetwork::new(config, POS_V4).await;
+        let mut network = TestNetwork::new(config, TEST_UPGRADE).await;
 
         // Replace peer 0 with a query node. Its availability fetcher gets the given peers: the
         // API node, except when the loop has to be left waiting for a leaf that never arrives.
@@ -7335,7 +7335,7 @@ mod test {
                                         &*metrics,
                                         STAKE_TABLE_CAPACITY_FOR_TEST,
                                         consumer,
-                                        POS_V4,
+                                        TEST_UPGRADE,
                                         Default::default(),
                                     )
                                     .await)
