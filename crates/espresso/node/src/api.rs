@@ -5405,9 +5405,8 @@ mod test {
         Ok(())
     }
 
-    /// The network has to keep deciding across epoch boundaries on the new
-    /// protocol alone: the DRB computations on the shared membership
-    /// coordinator must land in time for each new epoch.
+    /// The DRB computations on the shared membership coordinator must land in time for each new
+    /// epoch.
     #[test_log::test(tokio::test(flavor = "multi_thread"))]
     async fn test_new_protocol_decides_across_epochs() -> anyhow::Result<()> {
         const EPOCH_HEIGHT: u64 = 20;
@@ -5432,7 +5431,7 @@ mod test {
             .persistences(persistence)
             .build();
 
-        // Kept alive until the end: dropping it stops the nodes.
+        // Dropping it stops the nodes.
         let _network = TestNetwork::new(config, TEST_UPGRADE).await;
 
         let client: Client<ClientErr, SequencerApiVersion> =
@@ -5445,7 +5444,6 @@ mod test {
             .await
             .expect("subscribe to leaf stream");
 
-        // The chain must keep growing across the epoch boundaries at 20 and 40.
         let mut height = 0;
         while height < TARGET_BLOCK_HEIGHT {
             let leaf = leaves
@@ -7183,7 +7181,6 @@ mod test {
             }
         }
 
-        // Read while the coordinator still answers.
         let decided_leaf = node_0.decided_leaf().await;
         let state = node_0.decided_state().await.unwrap();
         node_0.shutdown_consensus().await;

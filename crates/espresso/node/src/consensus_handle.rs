@@ -48,9 +48,9 @@ pub struct ConsensusHandle<T: NodeType, I: NodeImplementation<T>> {
     new_proto: Arc<RwLock<NewProtocol<T, I::Storage>>>,
 }
 
-/// What consensus reports while the coordinator is not running: the anchor it resumes from until
-/// it starts, and the last state it reported once it has stopped. The legacy consensus state
-/// stayed readable after its tasks shut down, and tests read it that way.
+/// What consensus reports while the coordinator is not running: the anchor until it starts, and
+/// its last report once it has stopped, which tests read after shutdown as they did from legacy
+/// consensus.
 struct Resting<T: NodeType> {
     view: ViewNumber,
     leaf: Leaf2<T>,
