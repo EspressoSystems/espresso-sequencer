@@ -298,7 +298,9 @@ def draw_floor(
 ) -> None:
     """Timeouts per bin on the first axis, then one stacked-by-group axis per `FLOOR_EVENTS`."""
     width = FLOOR_BIN_S / 60
-    ts, grown = timeout_increments(counters) if len(counters) > 1 else (np.array([]),) * 2
+    ts, grown = (
+        timeout_increments(counters) if len(counters) > 1 else (np.array([]),) * 2
+    )
     starts, total = bin_counts(ts, grown, t0, t1, FLOOR_BIN_S)
     axes[0].bar(
         minutes(starts), total, width, align="edge", color=BAND_FAILED_INK, lw=0
@@ -613,7 +615,9 @@ def main(argv: list[str] | None = None) -> None:
     if len(floor_panels):
         manifest_path = run_dir / "manifest.json"
         assignment = (
-            json.loads(manifest_path.read_text()).get("latency", {}).get("assignment", {})
+            json.loads(manifest_path.read_text())
+            .get("latency", {})
+            .get("assignment", {})
             if manifest_path.exists()
             else {}
         )
