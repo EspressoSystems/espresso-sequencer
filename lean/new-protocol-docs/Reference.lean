@@ -5,7 +5,7 @@ import Style
 
 open Verso.Genre
 -- The specification's `Config` and `Block` are the ones reproduced definitions mean.
-open Verso.Genre.Manual hiding Config Block
+open Verso.Genre.Manual hiding Config Block Output
 open Verso.Genre.Manual.InlineLean
 open NewProtocol
 
@@ -587,7 +587,23 @@ facts about what it has seen.
 
 A rule reads what the node knew when it acted by cutting the history at a step.
 
-{docstring NewProtocol.History.upTo}
+```lean -show
+namespace Spec.History_upTo
+open NewProtocol.History
+```
+
+:::spec NewProtocol.History.upTo
+  ```lean
+  def History.upTo (h : History) (n : Nat) : History := h.take n
+  ```
+:::
+
+```lean -show
+example : @Spec.History_upTo.History.upTo = @NewProtocol.History.upTo := rfl
+end Spec.History_upTo
+```
+
+{includeDocstring NewProtocol.History.upTo}
 
 ## What arrived and what went out
 
@@ -1284,9 +1300,57 @@ end Spec.Owed
 What a node owes is read for the epochs it is honest in. What it signs for another
 epoch is unconstrained, so it does not count against what it owes in these.
 
-{docstring NewProtocol.Output.SignedIn}
+```lean -show
+namespace Spec.Output_SignedIn
+open NewProtocol.History
+```
 
-{docstring NewProtocol.History.restrict}
+:::spec NewProtocol.Output.SignedIn
+  ```lean
+  def Output.SignedIn (honestIn : EpochNumber → Prop) : Output → Prop
+    | .send (.proposal p) => honestIn p.epoch
+    | .send (.revote r) => honestIn r.cert.data.epoch
+    | .send (.vote1 v) => honestIn v.data.epoch
+    | .send (.vote2 v) => honestIn v.data.epoch
+    | .send (.timeoutVote v) => honestIn v.data.epoch
+    | .send _ => True
+    | .decided _ _ c2 => honestIn c2.data.epoch
+  ```
+:::
+
+```lean -show
+example : @Spec.Output_SignedIn.Output.SignedIn = @NewProtocol.Output.SignedIn := rfl
+end Spec.Output_SignedIn
+```
+
+{includeDocstring NewProtocol.Output.SignedIn}
+
+```lean -show
+namespace Spec.History_restrict
+open NewProtocol.History
+```
+
+:::spec NewProtocol.History.restrict
+  ```lean
+  open Classical in
+  noncomputable def History.restrict (honestIn : EpochNumber → Prop) (h : History) :
+      History :=
+    h.map fun st =>
+      ⟨st.input, st.output.filter fun o => decide (o.SignedIn honestIn)⟩
+  ```
+:::
+
+```lean -show
+example : @Spec.History_restrict.History.restrict = @NewProtocol.History.restrict := rfl
+end Spec.History_restrict
+```
+
+{includeDocstring NewProtocol.History.restrict}
+
+`honestIn` is an arbitrary proposition, so the filter decides it by classical logic
+(`open Classical`); it is either true or false, but there is no general procedure
+to compute which. That is why the definition is `noncomputable`: it is reasoned about,
+never run.
 
 {docstring NewProtocol.Obligation.epoch}
 
@@ -1325,13 +1389,78 @@ they are aggregated into certificates that travel to nodes that never saw the vo
 
 {docstring NewProtocol.Committee}
 
-{docstring NewProtocol.Committee.Honest}
+```lean -show
+namespace Spec.Committee_Honest
+open NewProtocol.History
+```
 
-{docstring NewProtocol.Committee.HonestFrom}
+:::spec NewProtocol.Committee.Honest
+  ```lean
+  def Committee.Honest (C : Committee) (k : PubKey) : Prop := ∃ e, C.honest e k
+  ```
+:::
 
-{docstring NewProtocol.Committee.HonestOften}
+```lean -show
+example : @Spec.Committee_Honest.Committee.Honest = @NewProtocol.Committee.Honest := rfl
+end Spec.Committee_Honest
+```
 
-{docstring NewProtocol.Committee.Steady}
+{includeDocstring NewProtocol.Committee.Honest}
+
+```lean -show
+namespace Spec.Committee_HonestFrom
+open NewProtocol.History
+```
+
+:::spec NewProtocol.Committee.HonestFrom
+  ```lean
+  def Committee.HonestFrom (C : Committee) (e : EpochNumber) (k : PubKey) : Prop :=
+    ∃ e', e.toNat ≤ e'.toNat ∧ C.honest e' k
+  ```
+:::
+
+```lean -show
+example : @Spec.Committee_HonestFrom.Committee.HonestFrom = @NewProtocol.Committee.HonestFrom := rfl
+end Spec.Committee_HonestFrom
+```
+
+{includeDocstring NewProtocol.Committee.HonestFrom}
+
+```lean -show
+namespace Spec.Committee_HonestOften
+open NewProtocol.History
+```
+
+:::spec NewProtocol.Committee.HonestOften
+  ```lean
+  def Committee.HonestOften (C : Committee) (k : PubKey) : Prop := ∀ e, C.HonestFrom e k
+  ```
+:::
+
+```lean -show
+example : @Spec.Committee_HonestOften.Committee.HonestOften = @NewProtocol.Committee.HonestOften := rfl
+end Spec.Committee_HonestOften
+```
+
+{includeDocstring NewProtocol.Committee.HonestOften}
+
+```lean -show
+namespace Spec.Committee_Steady
+open NewProtocol.History
+```
+
+:::spec NewProtocol.Committee.Steady
+  ```lean
+  def Committee.Steady (C : Committee) (k : PubKey) : Prop := ∀ e, C.honest e k
+  ```
+:::
+
+```lean -show
+example : @Spec.Committee_Steady.Committee.Steady = @NewProtocol.Committee.Steady := rfl
+end Spec.Committee_Steady
+```
+
+{includeDocstring NewProtocol.Committee.Steady}
 
 {docstring NewProtocol.Trace}
 
@@ -1509,11 +1638,69 @@ traces.
 Liveness speaks of what a node's history satisfies by a time, and of what spreads
 from one honest node to the others.
 
-{docstring NewProtocol.TimedNetwork.By}
+```lean -show
+namespace Spec.By
+open NewProtocol.History
+variable {cfg : Config} {leader : EpochNumber → ViewNumber → Option PubKey} {C : Committee}
+```
 
-{docstring NewProtocol.TimedNetwork.SentByTime}
+:::spec NewProtocol.TimedNetwork.By
+  ```lean
+  def By (N : TimedNetwork cfg leader C) (k : PubKey) (h : C.Honest k) (t : Nat)
+      (P : History → Prop) : Prop :=
+    ∃ n, (∀ i, i < n → N.time k h i ≤ t) ∧ P ((N.trace k h).history n)
+  ```
+:::
 
-{docstring NewProtocol.TimedNetwork.Propagates}
+```lean -show
+example : @Spec.By.By = @NewProtocol.TimedNetwork.By := rfl
+end Spec.By
+```
+
+{includeDocstring NewProtocol.TimedNetwork.By}
+
+```lean -show
+namespace Spec.SentByTime
+open NewProtocol.History
+variable {cfg : Config} {leader : EpochNumber → ViewNumber → Option PubKey} {C : Committee}
+```
+
+:::spec NewProtocol.TimedNetwork.SentByTime
+  ```lean
+  def SentByTime (N : TimedNetwork cfg leader C) (k : PubKey) (h : C.Honest k) (t : Nat)
+      (m : Message) : Prop :=
+    N.By k h t fun hist => hist.Sent m
+  ```
+:::
+
+```lean -show
+example : @Spec.SentByTime.SentByTime = @NewProtocol.TimedNetwork.SentByTime := rfl
+end Spec.SentByTime
+```
+
+{includeDocstring NewProtocol.TimedNetwork.SentByTime}
+
+```lean -show
+namespace Spec.Propagates
+open NewProtocol.History
+variable {cfg : Config} {leader : EpochNumber → ViewNumber → Option PubKey} {C : Committee}
+```
+
+:::spec NewProtocol.TimedNetwork.Propagates
+  ```lean
+  def Propagates (N : TimedNetwork cfg leader C) (GST Δ : Nat) (e : EpochNumber)
+      (P Q : History → Prop) : Prop :=
+    ∀ k h n, P ((N.trace k h).history (n + 1)) →
+      ∀ k' h', C.HonestFrom e k' → N.By k' h' (max (N.time k h n) GST + Δ) Q
+  ```
+:::
+
+```lean -show
+example : @Spec.Propagates.Propagates = @NewProtocol.TimedNetwork.Propagates := rfl
+end Spec.Propagates
+```
+
+{includeDocstring NewProtocol.TimedNetwork.Propagates}
 
 {docstring NewProtocol.TimedNetwork.Spreads}
 

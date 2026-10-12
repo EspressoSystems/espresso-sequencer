@@ -17,6 +17,11 @@ these is missing from that set:
   reader has to read to judge what is claimed;
 * a main result.
 
+A definition must be reproduced with `:::spec`, not only described by its
+docstring: the rules, premises and results read it, so a reader has to see what it
+says. Abbreviations are exempt, since `{expansion …}` prints them, and so are the
+accessors (`accessors`), whose docstring is the whole definition.
+
     coverage
 
 Theorems of the contract modules are not required: they are lemmas about the
@@ -69,6 +74,25 @@ def isDefinition (env : Environment) (name : Name) : IO Bool := do
   if info matches .ctorInfo _ then return false
   return (← findDocString? env name).isSome
 
+/--
+Definitions that only name a field or pick a constructor's argument, shown by
+their docstring alone.
+-/
+def accessors : List Name :=
+  [`NewProtocol.Input.cert1, `NewProtocol.Input.cert2, `NewProtocol.Input.timeoutCert,
+   `NewProtocol.Input.sentBy, `NewProtocol.Message.leaderView,
+   `NewProtocol.Message.leaderEpoch, `NewProtocol.Proposal.payloadCommit,
+   `NewProtocol.Vote1Data.toVote2, `NewProtocol.ViewNumber.genesis,
+   `NewProtocol.Config.anchorCert2, `NewProtocol.Config.startEpoch,
+   `NewProtocol.Obligation.epoch]
+
+/-- Whether the document must reproduce `name` with `:::spec`. -/
+def needsSpec (env : Environment) (name : Name) : Bool :=
+  match env.find? name with
+  | some (.defnInfo _) =>
+    !(getReducibilityStatusCore env name matches .reducible) && !accessors.contains name
+  | _ => false
+
 /-- The declarations a reader must find in the document. -/
 def required (env : Environment) : IO (Array Name) := do
   let mut out := #[]
@@ -78,10 +102,12 @@ def required (env : Environment) : IO (Array Name) := do
     if ← isDefinition env name then out := out.push name
   return out ++ mainResults.toArray
 
-/-- The declarations the document shows, by name. -/
-def shown (text : String) : NameSet := Id.run do
+/-- The declarations the document shows, by name, through any of `roles`. -/
+def shown (text : String)
+    (roles : List String := ["{docstring ", "{includeDocstring ", ":::spec "]) :
+    NameSet := Id.run do
   let mut out := {}
-  for role in ["{docstring ", "{includeDocstring ", ":::spec "] do
+  for role in roles do
     for part in (text.splitOn role).drop 1 do
       let name := part.takeWhile fun (c : Char) =>
         c.isAlphanum || c == '_' || c == '.' || c == '\''
@@ -97,12 +123,21 @@ unsafe def main : IO UInt32 := do
   enableInitializersExecution
   let env ← importModules #[Import.mk `NewProtocolSpec false true false] Options.empty
     (loadExts := true)
-  let seen := shown (← IO.FS.readFile "Reference.lean")
-  let missing := (← required env).filter (!seen.contains ·)
-  if missing.isEmpty then
+  let text ← IO.FS.readFile "Reference.lean"
+  let seen := shown text
+  let reproduced := shown text [":::spec "]
+  let required ← required env
+  let missing := required.filter (!seen.contains ·)
+  let unreproduced := required.filter fun n => needsSpec env n && !reproduced.contains n
+  if missing.isEmpty && unreproduced.isEmpty then
     IO.println "every definition of the contract and every main result reaches the reference"
     return 0
-  IO.eprintln s!"{missing.size} declaration(s) are never shown in Reference.lean:"
-  for n in missing.qsort (·.toString < ·.toString) do
-    IO.eprintln s!"  {n}"
+  unless missing.isEmpty do
+    IO.eprintln s!"{missing.size} declaration(s) are never shown in Reference.lean:"
+    for n in missing.qsort (·.toString < ·.toString) do
+      IO.eprintln s!"  {n}"
+  unless unreproduced.isEmpty do
+    IO.eprintln s!"{unreproduced.size} definition(s) are shown but not reproduced with `:::spec`:"
+    for n in unreproduced.qsort (·.toString < ·.toString) do
+      IO.eprintln s!"  {n}"
   return 1
