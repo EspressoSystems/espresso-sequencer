@@ -3044,9 +3044,6 @@ mod tests {
         quorum_proposal.proposal.justify_qc.view_number = ViewNumber::new(1);
         let leaf2 = Leaf2::from_quorum_proposal(&quorum_proposal);
 
-        // The newest decide. Leaves behind a height gap are held back for a late gap-fill decide
-        // until the newest decide is `DECIDE_GAP_FILL_HORIZON` views past the gap; this leaf puts
-        // the gap below `leaf2` out of reach, so `leaf2` is delivered without it.
         let newest_view = ViewNumber::new(2 + DECIDE_GAP_FILL_HORIZON);
         quorum_proposal.proposal.view_number = newest_view;
         *quorum_proposal.proposal.block_header.height_mut() = newest_view.u64();
@@ -3091,10 +3088,8 @@ mod tests {
             .await
             .unwrap();
 
-        // Later, decide a new leaf, but skipping some leaf in the middle. This should generate
-        // decide events for both the leaves, correctly separating into two events since the leaves
-        // are non-consecutive, and correctly attaching `cert2` only to the event of the leaf it
-        // finalizes.
+        // Far enough ahead that the gap below `leaf2` falls outside `DECIDE_GAP_FILL_HORIZON`, so
+        // `leaf2` is delivered rather than held for a gap-fill decide.
         storage
             .persist_decided_leaves(
                 newest_view,

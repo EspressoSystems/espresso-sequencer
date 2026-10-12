@@ -3260,9 +3260,8 @@ mod api_tests {
             QuorumCertificate2::genesis(&ValidatedState::default(), &node_state, TEST_UPGRADE)
                 .await;
 
-        // Leaves behind a height gap are held back for a late gap-fill decide until the newest
-        // decide is `DECIDE_GAP_FILL_HORIZON` views past the gap. A chain this long makes the gap
-        // at view 2 permanent, so the leaves behind it are delivered right away.
+        // Long enough that the gap at view 2 falls outside `DECIDE_GAP_FILL_HORIZON` of the newest
+        // decide, so the leaves after it are delivered rather than held for a gap-fill decide.
         let chain_len = 3 + DECIDE_GAP_FILL_HORIZON;
         let mut justify_qc = qc.clone();
         for i in 0..chain_len {
