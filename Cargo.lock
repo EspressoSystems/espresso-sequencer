@@ -4640,7 +4640,6 @@ dependencies = [
  "itertools 0.14.0",
  "jf-merkle-tree-compat",
  "rand 0.8.6",
- "rstest",
  "serde",
  "serde_json",
  "staking-cli",

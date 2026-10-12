@@ -5,6 +5,9 @@ a complete Espresso network, such as `sequencer`, `state_prover` etc. Additional
 light client contracts on alternative chains and running a separate prover for each which can be useful for testing
 involving L3s. Developers can use dev node for development and testing.
 
+The dev node runs the current protocol version, 0.6, and deploys the stake table contract at V3. There is no switch for
+earlier protocol versions.
+
 ## Running the Dev Node
 
 We highly recommend you to use our Docker image. You can run it from the command line:
