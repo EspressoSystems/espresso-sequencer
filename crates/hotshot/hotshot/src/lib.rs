@@ -256,8 +256,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
 
         let consensus_metrics = Arc::new(consensus_metrics);
         let storage_metrics = Arc::new(storage_metrics);
-        let anchored_leaf = initializer.anchor_leaf;
-        let instance_state = initializer.instance_state;
+        let anchored_leaf = initializer.anchor_leaf().clone();
+        let instance_state = initializer.instance_state().clone();
 
         let (internal_tx, internal_rx) = internal_channel;
         let (mut external_tx, external_rx) = external_channel;
@@ -279,15 +279,15 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
         );
         tracing::warn!(
             "Loading previously decided upgrade certificate from storage: {:?}",
-            initializer.decided_upgrade_certificate
+            initializer.decided_upgrade_certificate()
         );
 
         // A certificate at or below the configured base is from a completed
         // upgrade; kept, it would make `UpgradeLock::version` fail once the
         // target moves on.
         let decided_upgrade_certificate = initializer
-            .decided_upgrade_certificate
-            .clone()
+            .decided_upgrade_certificate()
+            .cloned()
             .filter(|cert| cert.data.new_version > upgrade.base);
 
         let upgrade_lock =
@@ -315,18 +315,18 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
 
         // Get the validated state from the initializer or construct an incomplete one from the
         // block header.
-        let validated_state = initializer.anchor_state;
+        let validated_state = Arc::clone(initializer.anchor_state());
 
         load_start_epoch_info(
             &membership_coordinator,
-            &initializer.start_epoch_info,
+            initializer.start_epoch_info(),
             config.epoch_height,
             config.epoch_start_block,
         )
         .await;
 
         // #3967 REVIEW NOTE: Should this actually be Some()? How do we know?
-        let epoch = initializer.high_qc.data.block_number.map(|block_number| {
+        let epoch = initializer.high_qc().data.block_number.map(|block_number| {
             EpochNumber::new(epoch_from_block_number(
                 block_number + 1,
                 config.epoch_height,
@@ -341,20 +341,20 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
                 view_inner: ViewInner::Leaf {
                     leaf: anchored_leaf.commit(),
                     state: Arc::clone(&validated_state),
-                    delta: initializer.anchor_state_delta,
+                    delta: initializer.anchor_state_delta().cloned(),
                     epoch,
                 },
             },
         );
-        for (view_num, inner) in initializer.undecided_state {
-            validated_state_map.insert(view_num, inner);
+        for (view_num, inner) in initializer.undecided_state() {
+            validated_state_map.insert(*view_num, inner.clone());
         }
 
         let mut saved_leaves = HashMap::new();
         let mut saved_payloads = BTreeMap::new();
         saved_leaves.insert(anchored_leaf.commit(), anchored_leaf.clone());
 
-        for (_, leaf) in initializer.undecided_leaves {
+        for leaf in initializer.undecided_leaves().values() {
             saved_leaves.insert(leaf.commit(), leaf.clone());
         }
         if let Some(payload) = anchored_leaf.block_payload() {
@@ -364,7 +364,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
                 Arc::new(PayloadWithMetadata { payload, metadata }),
             );
         }
-        let high_qc_block_number = initializer.high_qc.data.block_number;
+        let high_qc_block_number = initializer.high_qc().data.block_number;
         let (stake_table, success_threshold) =
             if let Ok(epoch_membership) = membership_coordinator.stake_table_for_epoch(epoch) {
                 (
@@ -380,25 +380,25 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
             };
 
         let recovered_locked_view = initializer
-            .high_qc
+            .high_qc()
             .view_number
             .max(anchored_leaf.view_number());
         let consensus = Consensus::new(
             validated_state_map,
-            Some(initializer.saved_vid_shares),
+            Some(initializer.saved_vid_shares().clone()),
             anchored_leaf.view_number(),
             epoch,
             recovered_locked_view,
             anchored_leaf.view_number(),
-            initializer.last_actioned_view,
-            initializer.saved_proposals,
+            initializer.last_actioned_view(),
+            initializer.saved_proposals().clone(),
             saved_leaves,
             saved_payloads,
-            initializer.high_qc,
-            initializer.next_epoch_high_qc,
+            initializer.high_qc().clone(),
+            initializer.next_epoch_high_qc().cloned(),
             Arc::clone(&consensus_metrics),
             config.epoch_height,
-            initializer.state_cert,
+            initializer.state_cert().cloned(),
             config.drb_difficulty,
             config.drb_upgrade_difficulty,
             stake_table,
@@ -444,8 +444,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
             private_key,
             state_private_key,
             config,
-            start_view: initializer.start_view,
-            start_epoch: initializer.start_epoch,
+            start_view: initializer.start_view(),
+            start_epoch: initializer.start_epoch(),
             network,
             membership_coordinator,
             metrics: Arc::clone(&consensus_metrics),
@@ -1045,9 +1045,21 @@ impl<TYPES: NodeType> HotShotInitializer<TYPES> {
         &self.anchor_state
     }
 
+    /// ValidatedState::Delta for the anchor leaf, if the caller supplied one.
+    pub fn anchor_state_delta(
+        &self,
+    ) -> Option<&Arc<<TYPES::ValidatedState as ValidatedState<TYPES>>::Delta>> {
+        self.anchor_state_delta.as_ref()
+    }
+
     /// The view to start consensus from.
     pub fn start_view(&self) -> ViewNumber {
         self.start_view
+    }
+
+    /// The epoch to start consensus from.
+    pub fn start_epoch(&self) -> Option<EpochNumber> {
+        self.start_epoch
     }
 
     /// The view we last proposed or voted in.
@@ -1070,6 +1082,21 @@ impl<TYPES: NodeType> HotShotInitializer<TYPES> {
         &self,
     ) -> &BTreeMap<ViewNumber, Proposal<TYPES, QuorumProposalWrapper<TYPES>>> {
         &self.saved_proposals
+    }
+
+    /// Saved VID shares.
+    pub fn saved_vid_shares(&self) -> &VidShares<TYPES> {
+        &self.saved_vid_shares
+    }
+
+    /// Undecided leaves rebuilt from the saved proposals, keyed by view.
+    pub fn undecided_leaves(&self) -> &BTreeMap<ViewNumber, Leaf2<TYPES>> {
+        &self.undecided_leaves
+    }
+
+    /// Undecided views rebuilt from the saved proposals.
+    pub fn undecided_state(&self) -> &BTreeMap<ViewNumber, View<TYPES>> {
+        &self.undecided_state
     }
 
     /// The upgrade certificate consensus has decided, if there is one.
