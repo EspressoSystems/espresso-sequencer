@@ -117,8 +117,7 @@ pub struct SequencerContext<N: ConnectedNetwork<PubKey>, P: SequencerPersistence
     #[derivative(Debug = "ignore")]
     validator_config: ValidatorConfig<SeqTypes>,
 
-    /// The pre-0.6 network. Nothing is received on it any more; it is torn down once consensus
-    /// starts.
+    /// The pre-0.6 network, torn down once consensus starts; nothing receives on it any more.
     #[derivative(Debug = "ignore")]
     legacy_network: Arc<N>,
 }
@@ -189,9 +188,6 @@ where
 
         let mut coordinator_network = coordinator_network(upgrade_lock.clone()).await?;
 
-        // `seed_membership` set the first epoch and whatever epoch roots and DRB results
-        // persistence held. Walk the catchup chain forward to populate the stake-table window
-        // for the current epoch.
         let current_epoch = bootstrap_epoch_window(
             &membership_coordinator,
             epoch_height,
@@ -201,9 +197,7 @@ where
         .context("startup stake-table catchup failed")?;
         tracing::info!(%current_epoch, "Startup catchup complete");
 
-        // Push the resolved peer window into the coordinator network. For
-        // cliquenet this dials the N-1/N/N+1 sliding window for the current
-        // epoch before consensus starts.
+        // For cliquenet this dials the N-1/N/N+1 epoch window before consensus starts.
         if let Err(err) = coordinator_network.apply_epoch(current_epoch, &membership_coordinator) {
             tracing::warn!(%current_epoch, %err, "coordinator network apply_epoch failed at startup");
         }
@@ -524,7 +518,6 @@ where
         }
         tracing::warn!("starting consensus");
         self.consensus_handle.start_consensus().await;
-        // Consensus runs on cliquenet; nothing has listened on the pre-0.6 network since startup.
         self.legacy_network.shut_down().await;
     }
 
@@ -584,9 +577,8 @@ where
     }
 }
 
-/// The upgrade lock consensus resumes with: the configured versions and the decided upgrade
-/// certificate persistence holds. A certificate at or below the configured base is from a
-/// completed upgrade; kept, it would make `UpgradeLock::version` fail once the target moves on.
+/// A decided certificate at or below the configured base is from a completed upgrade; kept, it
+/// would make `UpgradeLock::version` fail once the target moves on.
 fn restored_upgrade_lock(
     upgrade: versions::Upgrade,
     initializer: &HotShotInitializer<SeqTypes>,
@@ -599,9 +591,6 @@ fn restored_upgrade_lock(
     UpgradeLock::from_certificate(upgrade, &decided_upgrade_certificate)
 }
 
-/// Seed the shared membership with what consensus needs before its first view: the DRB
-/// difficulty of each version, the DA committees the running version has reached, the first
-/// epoch, and the epoch roots and DRB results persistence holds.
 async fn seed_membership(
     membership_coordinator: &EpochMembershipCoordinator<SeqTypes>,
     config: &HotShotConfig<SeqTypes>,

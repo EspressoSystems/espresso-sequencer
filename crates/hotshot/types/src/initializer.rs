@@ -321,7 +321,7 @@ impl<TYPES: NodeType> HotShotInitializer<TYPES> {
         self.state_cert.as_ref()
     }
 
-    /// Saved epoch information, sorted ascending by epoch.
+    /// The epoch roots and DRB results persistence holds.
     pub fn start_epoch_info(&self) -> &[InitializerEpochInfo<TYPES>] {
         &self.start_epoch_info
     }

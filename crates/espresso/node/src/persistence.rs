@@ -2364,9 +2364,8 @@ mod tests {
         Ok(())
     }
 
-    /// Mainnet's stake table contract went from V1 to V2 to V3 and nodes still read its whole
-    /// event history. On the replayed v4 chain, whose contract did the same, the events a node
-    /// stored must be the contract's.
+    /// Nodes still read the whole event history of mainnet's stake table contract, which went from
+    /// V1 to V2 to V3 as the v4 chain's did.
     #[test_log::test(tokio::test(flavor = "multi_thread"))]
     async fn test_legacy_stake_table_events() -> anyhow::Result<()> {
         let chain = LegacyChain::load("v4")?;

@@ -26,10 +26,9 @@ nodes and epochs of 10 blocks.
 | `v2-v3` | 0.2 from genesis, upgraded to 0.3 at block 321 as mainnet was, with epochs of 200 blocks | V2, deployed with the upgrade | 1001 (332 at 0.2) | 5 | 4 (epochs 2 to 5) | 4.3 MB |
 
 The `v2-v3` chain is a single node: legacy consensus decides the 0.3 upgrade only on one node, and
-only with epochs longer than the upgrade takes. It covers data from before epochs and from across
-the upgrade. The `v4` chain's contract history is what mainnet's contract went through. The network config it
-registered is in `network-config-update.json`, so a test can look for that validator, key and
-address in the stake table the replayed node derives.
+only with epochs longer than the upgrade takes. The `v4` chain's contract history is what mainnet's
+contract went through. The network config it registered is in `network-config-update.json`, so a
+test can look for that validator, key and address in the stake table the replayed node derives.
 
 ## Files
 

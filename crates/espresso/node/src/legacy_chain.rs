@@ -1,17 +1,12 @@
-//! Chains recorded from legacy consensus (before 0.6), replayed into a query node that runs no
-//! consensus.
+//! Chains recorded from legacy consensus (before 0.6), replayed through a query node that runs
+//! no consensus: a follower fed the recorded blocks, on an anvil that mines the recorded L1
+//! transactions again, so the stake table, rewards and merklized state are derived by the code a
+//! live node runs. Mainnet and decaf still serve pre-0.6 data, and once legacy consensus is gone
+//! nothing else can produce it; `data/legacy-chains/README.md` describes the chains.
 //!
-//! Mainnet and decaf still serve data from before 0.6: old headers, VID schemes, reward trees,
-//! state certificates and the stake table contract's V1 and V2 event history. Once legacy
-//! consensus is gone no test network can produce that data, so `record_legacy_chains` (kept on
-//! the `legacy-chain-recorder` branch) recorded it while it still could, and
-//! [`LegacyChain::replay`] serves it again. A replayed node is a
-//! follower fed the recorded blocks instead of a light client, on an anvil that mined the
-//! recorded L1 transactions again, so the stake table, rewards and merklized state are derived
-//! by the same code that derives them on a live node.
-//!
-//! The recordings cannot be regenerated once legacy consensus is deleted. A change to how any
-//! recorded type deserializes has to keep reading them, as the `data/v*` reference vectors do.
+//! The recordings cannot be regenerated once legacy consensus is deleted; the recorder is kept on
+//! the `legacy-chain-recorder` branch. A change to how any recorded type deserializes has to keep
+//! reading them, as the `data/v*` reference vectors do.
 
 use std::{
     fs,
@@ -68,12 +63,11 @@ pub struct LegacyChain {
     pub genesis: Genesis,
     pub network_config: NetworkConfig<SeqTypes>,
     pub blocks: Vec<RecordedBlock>,
-    /// Every epoch's light client state certificate the recorded network produced.
+    /// One per finished epoch, keyed by epoch.
     pub state_certs: Vec<(u64, LightClientStateUpdateCertificateV2<SeqTypes>)>,
     /// The network config registered on the stake table's V3 contract, if the recording did.
     pub network_config_update: Option<RecordedNetworkConfigUpdate>,
-    /// Every L1 block the recorded network ran against, indexed by block number. Block 0 is
-    /// anvil's genesis block, with no transactions.
+    /// Indexed by block number; block 0 is anvil's genesis and has no transactions.
     pub l1_blocks: Vec<RecordedL1Block>,
 }
 
@@ -90,12 +84,11 @@ pub struct RecordedBlock {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RecordedL1Block {
     pub timestamp: u64,
-    /// The signed transactions in the order mined, each as `eth_sendRawTransaction` takes it.
+    /// In the order mined, as `eth_sendRawTransaction` takes them.
     pub transactions: Vec<Bytes>,
 }
 
-/// What `update_network_config` registered for a validator, for tests to look for in the stake
-/// table the replayed node derives.
+/// What `update_network_config` registered, for tests to find in the derived stake table.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RecordedNetworkConfigUpdate {
     pub validator: Address,
@@ -108,7 +101,6 @@ pub struct ReplayNode {
     pub node: FollowerContext<persistence::sql::Persistence>,
     pub client: Client<ClientErr, SequencerApiVersion>,
     pub url: url::Url,
-    /// The recorded L1, which the node reads the stake table and rewards from.
     pub l1: AnvilInstance,
     storage: TmpDb,
 }
@@ -154,7 +146,7 @@ impl LegacyChain {
         let storage = SqlDataSource::create_storage().await;
         let mut db = tmp_options(&storage);
         let persistence = db.create().await?;
-        // There are no peers to fetch either from.
+        // There are no peers to fetch the config or state certs from.
         persistence.save_config(&self.network_config).await?;
         for (epoch, cert) in &self.state_certs {
             persistence.insert_state_cert(*epoch, cert.clone()).await?;
@@ -226,9 +218,8 @@ const STATE_CERTS: &str = "state-certs.json";
 const NETWORK_CONFIG_UPDATE: &str = "network-config-update.json";
 const L1_BLOCKS: &str = "l1-blocks.json";
 
-/// Anvil as the recorder ran it, which a replay has to match for the recorded transactions to
-/// execute as they did: every block finalizes at once, and the accounts hold enough to fund the
-/// validators.
+/// As the recorder ran anvil: every block is finalized at once, and the default accounts hold
+/// enough to fund the recorded transactions.
 const L1_ANVIL_ARGS: [&str; 4] = ["--slots-in-an-epoch", "0", "--balance", "1000000"];
 
 fn chain_dir(name: &str) -> PathBuf {
@@ -237,8 +228,7 @@ fn chain_dir(name: &str) -> PathBuf {
         .join(name)
 }
 
-/// Starts an anvil at the recorded genesis and mines the recorded L1 blocks into it, one block
-/// per recorded block.
+/// Starts an anvil at the recorded genesis timestamp and mines the recorded blocks one by one.
 async fn replay_l1(blocks: &[RecordedL1Block]) -> anyhow::Result<AnvilInstance> {
     let (genesis, rest) = blocks
         .split_first()
@@ -262,8 +252,6 @@ async fn replay_l1(blocks: &[RecordedL1Block]) -> anyhow::Result<AnvilInstance> 
     Ok(anvil)
 }
 
-/// Mines the recorded transactions as L1 block `number` and checks the block holds them in
-/// order, at the recorded timestamp.
 async fn mine_l1_block(
     provider: &impl Provider,
     number: u64,
@@ -328,10 +316,6 @@ fn replay_params(own_url: url::Url) -> FollowerParams {
     }
 }
 
-/// Until the node has stored every block and its merklized state has caught up with them.
-///
-/// The stages stall separately: the follower on a block it cannot store, the state loop on the
-/// first header whose derived roots do not match, which it logs as an error and retries.
 async fn wait_for_replay(
     client: &Client<ClientErr, SequencerApiVersion>,
     tip: u64,
