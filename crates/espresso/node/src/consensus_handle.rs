@@ -126,10 +126,6 @@ where
             return;
         }
 
-        if self.upgrade_lock.upgrade().base < versions::NEW_PROTOCOL_VERSION {
-            return;
-        }
-
         let mut new_proto = self.new_proto.write();
 
         match new_proto.take() {
@@ -193,9 +189,6 @@ where
     }
 
     pub async fn state(&self, view: ViewNumber) -> Option<Arc<T::ValidatedState>> {
-        if !self.upgrade_lock.new_protocol_active(view) {
-            return None;
-        }
         match self.client_api().await?.state(view).await {
             Ok(state) => state,
             Err(err) => {
@@ -206,9 +199,6 @@ where
     }
 
     pub async fn state_and_delta(&self, view: ViewNumber) -> StateAndDelta<T> {
-        if !self.upgrade_lock.new_protocol_active(view) {
-            return (None, None);
-        }
         let Some(client_api) = self.client_api().await else {
             return (None, None);
         };
@@ -326,9 +316,6 @@ where
     ) -> anyhow::Result<
         BoxFuture<'static, anyhow::Result<SignedProposal<T, QuorumProposalWrapper<T>>>>,
     > {
-        if !self.upgrade_lock.new_protocol_active(view) {
-            bail!("view {view} predates the new protocol");
-        }
         let Some(client_api) = self.client_api().await else {
             bail!("consensus is not running");
         };
@@ -367,9 +354,6 @@ where
         delta: Option<Arc<<T::ValidatedState as ValidatedState<T>>::Delta>>,
     ) -> anyhow::Result<()> {
         let view = leaf.view_number();
-        if !self.upgrade_lock.new_protocol_active(view) {
-            bail!("view {view} predates the new protocol");
-        }
         let Some(client_api) = self.client_api().await else {
             bail!("consensus is not running");
         };

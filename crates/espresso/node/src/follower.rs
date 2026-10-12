@@ -849,7 +849,7 @@ impl ChainSource for NodeLightClient {
     }
 }
 
-/// As `SystemContext::init` does for a validator.
+/// As `SequencerContext::init` does for a validator.
 fn seed_first_epoch(
     coordinator: &EpochMembershipCoordinator<SeqTypes>,
     epoch_height: u64,

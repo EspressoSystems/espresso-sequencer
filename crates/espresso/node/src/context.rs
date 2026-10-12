@@ -69,7 +69,6 @@ use crate::{
     state_signature::{self, DecidedLeaf, StateSignatureMemStorage, StateSigner},
 };
 pub(crate) type ConsensusNode<N, P> = Node<N, P>;
-pub type Consensus<N, P> = hotshot::types::SystemContextHandle<SeqTypes, ConsensusNode<N, P>>;
 
 /// Inbound request-response messages are dropped (not queued) when this channel is full. A node
 /// catching up has many batched requests in flight, each answered by up to `request_batch_size`
