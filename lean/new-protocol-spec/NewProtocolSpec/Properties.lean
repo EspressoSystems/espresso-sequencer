@@ -157,7 +157,7 @@ the members have the proposal and its validity report by `6Δ + δ` and vote1 by
 has passed since it entered.
 -/
 def ChainGrows (leader : EpochNumber → ViewNumber → Option PubKey) (C : Committee) : Prop :=
-  ∀ (N : TimedNetwork cfg leader C) (GST Δ δ τ : Nat), ConfigCoherent cfg → CollisionFree →
+  ∀ (N : TimedNetwork cfg leader C) (GST : Time) (Δ δ τ : Duration), ConfigCoherent cfg → CollisionFree →
     Synchrony N GST Δ τ → Prompt N δ → 8 * Δ + 3 * δ < τ → LeaderRotation C leader →
     (∀ t, ∃ k, ∃ h : C.Honest k, N.DecidesAfter k h t)
       ∧ ∀ t k (h : C.Honest k),

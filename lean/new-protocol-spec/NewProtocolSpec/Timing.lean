@@ -27,6 +27,17 @@ open History
 variable {cfg : Config} {leader : EpochNumber → ViewNumber → Option PubKey} {C : Committee}
 
 /--
+A point in time, in the units of the delay bounds (`Synchrony`).
+
+Step indices are numbers, not times: `TimedNetwork.time` maps a step to when it
+happens. Its values are `Nat`, not `Time`.
+-/
+abbrev Time := Nat
+
+/-- A length of time, such as a delay bound or the view timer, in the units of `Time`. -/
+abbrev Duration := Nat
+
+/--
 A network whose steps carry times, and whose nodes obey the whole protocol in the
 epochs they are honest in.
 
@@ -84,11 +95,11 @@ namespace TimedNetwork
 variable (N : TimedNetwork cfg leader C)
 
 /-- By time `t`, node `k`'s history satisfies `P`: some prefix of steps no later than `t` does. -/
-def By (k : PubKey) (h : C.Honest k) (t : Nat) (P : History → Prop) : Prop :=
+def By (k : PubKey) (h : C.Honest k) (t : Time) (P : History → Prop) : Prop :=
   ∃ n, (∀ i, i < n → N.time k h i ≤ t) ∧ P ((N.trace k h).history n)
 
 /-- Node `k` sent `m` by time `t`. -/
-def SentByTime (k : PubKey) (h : C.Honest k) (t : Nat) (m : Message) : Prop :=
+def SentByTime (k : PubKey) (h : C.Honest k) (t : Time) (m : Message) : Prop :=
   N.By k h t fun hist => hist.Sent m
 
 /--
@@ -98,7 +109,7 @@ After time `t`, node `k` decides a view later than every view it had decided by
 Decides on `Cert2`s of other epochs are not the node's own (`History.restrict`). A
 node honest in every epoch makes only its own.
 -/
-def DecidesAfter (k : PubKey) (h : C.Honest k) (t : Nat) : Prop :=
+def DecidesAfter (k : PubKey) (h : C.Honest k) (t : Time) : Prop :=
   ∃ v, (∃ n, (((N.trace k h).history n).restrict (C.honest · k)).DecidedView v)
     ∧ ∀ n, (∀ i, i < n → N.time k h i ≤ t) →
       ∀ w, (((N.trace k h).history n).restrict (C.honest · k)).DecidedView w → w < v
@@ -107,12 +118,12 @@ def DecidesAfter (k : PubKey) (h : C.Honest k) (t : Nat) : Prop :=
 Once an honest node's history satisfies `P`, the history of every node honest in
 epoch `e` or later satisfies `Q` within `Δ`, counted from GST if that is later.
 -/
-def Propagates (GST Δ : Nat) (e : EpochNumber) (P Q : History → Prop) : Prop :=
+def Propagates (GST : Time) (Δ : Duration) (e : EpochNumber) (P Q : History → Prop) : Prop :=
   ∀ k h n, P ((N.trace k h).history (n + 1)) →
     ∀ k' h', C.HonestFrom e k' → N.By k' h' (max (N.time k h n) GST + Δ) Q
 
 /-- What one honest node holds of epoch `e`, every node honest in `e` or later holds within `Δ`. -/
-abbrev Spreads (GST Δ : Nat) (e : EpochNumber) (P : History → Prop) : Prop := N.Propagates GST Δ e P P
+abbrev Spreads (GST : Time) (Δ : Duration) (e : EpochNumber) (P : History → Prop) : Prop := N.Propagates GST Δ e P P
 
 end TimedNetwork
 
@@ -124,7 +135,7 @@ owing, by some step at most `δ` later. A node that acts in the step that create
 the obligation meets this with nothing to spare; one that batches or defers meets
 it as long as it does not defer for longer than `δ`.
 -/
-def Prompt (N : TimedNetwork cfg leader C) (δ : Nat) : Prop :=
+def Prompt (N : TimedNetwork cfg leader C) (δ : Duration) : Prop :=
   ∀ k h n (o : Obligation), OwedIn cfg leader k (C.honest · k) ((N.trace k h).history (n + 1)) o →
     ∃ m, n ≤ m ∧ N.time k h m ≤ N.time k h n + δ
       ∧ ¬ OwedIn cfg leader k (C.honest · k) ((N.trace k h).history (m + 1)) o
@@ -151,7 +162,7 @@ fields are of these kinds:
 * time, and the view timer of length `τ` (`timeUnbounded`, `timerNotEarly`,
   `timerFires`).
 -/
-structure Synchrony (N : TimedNetwork cfg leader C) (GST Δ τ : Nat) : Prop where
+structure Synchrony (N : TimedNetwork cfg leader C) (GST : Time) (Δ τ : Duration) : Prop where
   /--
   A proposal from a leader honest in its epoch reaches every member of the epoch's
   committee honest in it or later, with that member's share.

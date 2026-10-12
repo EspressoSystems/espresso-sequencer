@@ -1633,6 +1633,14 @@ what a history records. Each assumption says what arrives, not how: an
 implementation meets it however it likes, and that it does can be checked on its
 traces.
 
+{docstring NewProtocol.Time}
+
+{expansion NewProtocol.Time}
+
+{docstring NewProtocol.Duration}
+
+{expansion NewProtocol.Duration}
+
 {docstring NewProtocol.TimedNetwork}
 
 Liveness speaks of what a node's history satisfies by a time, and of what spreads
@@ -1646,7 +1654,7 @@ variable {cfg : Config} {leader : EpochNumber → ViewNumber → Option PubKey} 
 
 :::spec NewProtocol.TimedNetwork.By
   ```lean
-  def By (N : TimedNetwork cfg leader C) (k : PubKey) (h : C.Honest k) (t : Nat)
+  def By (N : TimedNetwork cfg leader C) (k : PubKey) (h : C.Honest k) (t : Time)
       (P : History → Prop) : Prop :=
     ∃ n, (∀ i, i < n → N.time k h i ≤ t) ∧ P ((N.trace k h).history n)
   ```
@@ -1667,7 +1675,7 @@ variable {cfg : Config} {leader : EpochNumber → ViewNumber → Option PubKey} 
 
 :::spec NewProtocol.TimedNetwork.SentByTime
   ```lean
-  def SentByTime (N : TimedNetwork cfg leader C) (k : PubKey) (h : C.Honest k) (t : Nat)
+  def SentByTime (N : TimedNetwork cfg leader C) (k : PubKey) (h : C.Honest k) (t : Time)
       (m : Message) : Prop :=
     N.By k h t fun hist => hist.Sent m
   ```
@@ -1688,8 +1696,8 @@ variable {cfg : Config} {leader : EpochNumber → ViewNumber → Option PubKey} 
 
 :::spec NewProtocol.TimedNetwork.Propagates
   ```lean
-  def Propagates (N : TimedNetwork cfg leader C) (GST Δ : Nat) (e : EpochNumber)
-      (P Q : History → Prop) : Prop :=
+  def Propagates (N : TimedNetwork cfg leader C) (GST : Time) (Δ : Duration)
+      (e : EpochNumber) (P Q : History → Prop) : Prop :=
     ∀ k h n, P ((N.trace k h).history (n + 1)) →
       ∀ k' h', C.HonestFrom e k' → N.By k' h' (max (N.time k h n) GST + Δ) Q
   ```
@@ -1714,7 +1722,7 @@ open NewProtocol.History
 :::spec NewProtocol.Prompt
   ```lean
   def Prompt {cfg : Config} {leader : EpochNumber → ViewNumber → Option PubKey}
-      {C : Committee} (N : TimedNetwork cfg leader C) (δ : Nat) : Prop :=
+      {C : Committee} (N : TimedNetwork cfg leader C) (δ : Duration) : Prop :=
     ∀ k h n (o : Obligation),
       OwedIn cfg leader k (C.honest · k) ((N.trace k h).history (n + 1)) o →
       ∃ m, n ≤ m ∧ N.time k h m ≤ N.time k h n + δ
@@ -2045,7 +2053,7 @@ variable {cfg : Config} {leader : EpochNumber → ViewNumber → Option PubKey} 
 :::spec NewProtocol.TimedNetwork.DecidesAfter
   ```lean
   def DecidesAfter (N : TimedNetwork cfg leader C) (k : PubKey) (h : C.Honest k)
-      (t : Nat) : Prop :=
+      (t : Time) : Prop :=
     ∃ v, (∃ n, (((N.trace k h).history n).restrict (C.honest · k)).DecidedView v)
       ∧ ∀ n, (∀ i, i < n → N.time k h i ≤ t) →
         ∀ w, (((N.trace k h).history n).restrict (C.honest · k)).DecidedView w → w < v
@@ -2066,7 +2074,7 @@ open NewProtocol.History
   ```lean
   def ChainGrows (cfg : Config)
       (leader : EpochNumber → ViewNumber → Option PubKey) (C : Committee) : Prop :=
-    ∀ (N : TimedNetwork cfg leader C) (GST Δ δ τ : Nat), ConfigCoherent cfg →
+    ∀ (N : TimedNetwork cfg leader C) (GST : Time) (Δ δ τ : Duration), ConfigCoherent cfg →
       CollisionFree → Synchrony N GST Δ τ → Prompt N δ → 8 * Δ + 3 * δ < τ →
       LeaderRotation C leader →
       (∀ t, ∃ k, ∃ h : C.Honest k, N.DecidesAfter k h t)
