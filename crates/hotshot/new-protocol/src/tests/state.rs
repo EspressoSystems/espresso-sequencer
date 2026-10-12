@@ -386,15 +386,28 @@ async fn test_seed_decided_reseeds_after_validation_failure() {
     assert_eq!(count_header_created(&outputs), 1);
 }
 
-/// A stub seeded from a header while the leaf validates is not displaced by the
-/// leaf's failed validation, which still releases the work queued on it.
+/// A stub seeded from a header while the leaf validates releases the queued work
+/// when that validation fails.
 #[tokio::test]
 async fn test_seed_from_header_during_failed_validation_releases_queue() {
+    assert_stub_releases_queue_on_failure(false).await;
+}
+
+/// Same, with the leaf also decided while it validates.
+#[tokio::test]
+async fn test_seed_from_header_and_decide_during_failed_validation_releases_queue() {
+    assert_stub_releases_queue_on_failure(true).await;
+}
+
+async fn assert_stub_releases_queue_on_failure(decide: bool) {
     let mut manager = new_manager().await;
     let test_data = TestData::new(4).await;
-    let (bad_request, _) = invalid_leaf_with_queued_work(&mut manager, &test_data);
+    let (bad_request, bad_leaf) = invalid_leaf_with_queued_work(&mut manager, &test_data);
 
     manager.seed_from_header(bad_request.proposal);
+    if decide {
+        manager.seed_decided(bad_leaf);
+    }
 
     let first = manager.next().await.expect("failure is reported");
     assert!(matches!(

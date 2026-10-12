@@ -168,6 +168,8 @@ impl<T: NodeType> StateManager<T> {
     }
 
     /// Get the validated state for a given view.
+    ///
+    /// Lookup is by view, so below the decided view this may return a state from an undecided fork.
     pub fn get_state(&self, view: ViewNumber) -> Option<&StateEntry<T>> {
         self.validated_states
             .iter()
@@ -191,7 +193,8 @@ impl<T: NodeType> StateManager<T> {
     /// validated against this leaf via catchup instead of being dropped.
     ///
     /// A real (validated) state for the leaf is never displaced, and any
-    /// header/state requests already queued on this leaf are restarted.
+    /// header/state requests queued on this leaf are restarted, or re-queued while
+    /// its validation is in flight.
     pub(crate) fn seed_from_header(&mut self, proposal: Proposal<T>) {
         let commitment = proposal_commitment(&proposal);
         if !self.validated_states.contains_key(&commitment) {
@@ -419,11 +422,10 @@ impl<T: NodeType> StateManager<T> {
         } = update;
         let commitment = leaf.commit();
         if delta.is_none() {
-            // Enrichment only: never abort a validation or start work on a stub.
             if self.validated_states.contains_key(&commitment) {
                 self.insert_state(view, state, delta, leaf);
             } else {
-                debug!(%view, %commitment, "dropping delta-less update for unknown leaf");
+                debug!(%view, %commitment, "dropping delta-less update: no entry for leaf");
             }
             return;
         }
@@ -499,9 +501,6 @@ impl<T: NodeType> StateManager<T> {
         }
     }
 
-    /// Retained states are looked up by view, so a state from an undecided fork
-    /// inside the margin may be served; requesters verify proofs against their own header.
-    ///
     /// The decided view's own validation, or a header this node needs to
     /// propose, may be queued behind a validation aborted here. A stub for the
     /// aborted proposal lets them proceed via catchup instead of hanging.
