@@ -1,7 +1,7 @@
 # Espresso Dev Node
 
 Espresso dev node is a node specifically designed for development and testing. It includes various nodes required to run
-a complete Espresso network, such as `builder`, `sequencer`, `state_prover` etc. Additionally, it supports deploying
+a complete Espresso network, such as `sequencer`, `state_prover` etc. Additionally, it supports deploying
 light client contracts on alternative chains and running a separate prover for each which can be useful for testing
 involving L3s. Developers can use dev node for development and testing.
 
@@ -30,7 +30,6 @@ customizing the node, depending on what type of testing you are trying to do.
 | `account_index`                 | `u32`           | `ESPRESSO_DEPLOYER_ACCOUNT_INDEX`            | `0`                                                           | Account index of the L1 wallet generated from`MNEMONIC`. Used when deploying contracts.                                                                                                        |
 | `sequencer_api_port`            | `u16`           | `ESPRESSO_NODE_API_PORT`                | Required                                                      | Port that the HTTP API will use.                                                                                                                                                               |
 | `sequencer_api_max_connections` | `Option<usize>` | `ESPRESSO_NODE_API_MAX_CONNECTIONS`         | None                                                          | Maximum concurrent connections allowed by the HTTP API server.                                                                                                                                 |
-| `builder_port`                  | `Option<u16>`   | `ESPRESSO_BUILDER_PORT`                      | An unused port                                                | Port for connecting to the builder.                                                                                                                                                            |
 | `prover_port`                   | `Option<u16>`   | `ESPRESSO_PROVER_PORT`                       | An unused port                                                | Port for connecting to the prover. If this is not provided, an available port will be selected.                                                                                                |
 | `dev_node_port`                 | `u16`           | `ESPRESSO_DEV_NODE_PORT`                     | `20000`                                                       | Port for the dev node. This is used to provide tools and information to facilitate developers debugging.                                                                                       |
 | `update_interval`               | `Duration`      | `ESPRESSO_STATE_PROVER_UPDATE_INTERVAL`      | `20s`                                                         | The frequency of updating the light client state                                                                                                                                               |
@@ -44,7 +43,6 @@ customizing the node, depending on what type of testing you are trying to do.
 ## APIs
 
 Once you have successfully run the dev node, you can access the corresponding ports to call the APIs of the
-[`builder`](https://docs.espressosys.com/network/api-reference/builder-api),
 [`espresso node`](https://docs.espressosys.com/network/api-reference/espresso-api), and `prover`.
 
 In addition, you can access the `dev_node_port` to retrieve debugging information. Here are the details of the dev node
