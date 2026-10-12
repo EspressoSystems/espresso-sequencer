@@ -761,6 +761,12 @@ def test_fault_table_adds_the_missing_column_only_for_a_timeout_with_counts():
     assert ch.fault_table([], T0) == []
 
 
+def test_verdict_of_a_run_without_faults_says_none_issued():
+    assert ch.chaos_verdict([], [], None, False) == (
+        "- Verdict: **pass**: no fault issued, no timeout"
+    )
+
+
 def test_verdict_fails_only_on_timeouts():
     rows = ch.fault_rows(EVENTS)
     assert ch.chaos_verdict(rows, EVENTS, None, False).startswith("- Verdict: **pass**")

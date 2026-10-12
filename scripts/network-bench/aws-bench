@@ -7575,7 +7575,7 @@ def chaos_totals(
     timeouts = sum(e["event"] == "timeout" for e in events)
     lines = [
         (
-            f"- Faults: {len(rows)} ({per_kind}); max concurrent faulty "
+            f"- Faults: {len(rows)}{f' ({per_kind})' if per_kind else ''}; max concurrent faulty "
             f"{ch.max_concurrent_faulty(rows, end)} of budget {ch.fault_budget(config['nodes'])}"
         ),
         f"- Timeouts: {timeouts}",

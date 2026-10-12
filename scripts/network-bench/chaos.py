@@ -694,6 +694,8 @@ def chaos_verdict(
         return f"- Verdict: **fail**: {'; '.join(reasons)}{tail}"
     if interrupted:
         return f"- Verdict: **pass**: no timeout{tail}"
+    if not rows:
+        return "- Verdict: **pass**: no fault issued, no timeout"
     return "- Verdict: **pass**: every fault recovered, no timeout"
 
 
