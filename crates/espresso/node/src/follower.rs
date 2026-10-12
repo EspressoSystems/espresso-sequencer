@@ -117,7 +117,6 @@ pub struct FollowerParams {
 pub struct FollowerHandle<P: SequencerPersistence> {
     #[derivative(Debug = "ignore")]
     consensus: Arc<FollowerConsensus>,
-    /// `None` when replaying a recorded chain.
     #[derivative(Debug = "ignore")]
     light_client: Option<Arc<NodeLightClient>>,
     node_state: NodeState,
@@ -167,8 +166,8 @@ where
     .await
 }
 
-/// A follower that reads `source` instead of a light client, for tests that replay a recorded
-/// chain. Its network config must already be persisted, as there are no peers to fetch it from.
+/// For tests that replay a recorded chain; the network config must already be persisted, as there
+/// are no peers to fetch it from.
 #[cfg(any(test, feature = "testing"))]
 pub(crate) async fn init_replay_node<P>(
     genesis: Genesis,

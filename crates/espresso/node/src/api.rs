@@ -10851,13 +10851,9 @@ mod test {
         }
     }
 
-    /// Before 0.4 rewards accrue in the v1 tree and from 0.4 on in the v2 tree. A node rebuilding
-    /// mainnet's state replays headers from both eras. The replay derives each block's trees and
-    /// checks their roots against its header, so reaching the tip shows every header's tree was
-    /// rebuilt exactly; the v2 tree's balances show that each era filled the tree it should.
-    ///
-    /// The v1 tree's balances are not queryable: the state loop has stored no v1 paths since
-    /// #4325, so only its root can be checked.
+    /// Rewards accrue in the v1 tree before 0.4 and in the v2 tree from 0.4 on. The replay checks
+    /// every derived root against its header, so this only checks which tree each era filled. The
+    /// v1 balances are not queryable: the state loop stores no v1 paths since #4325.
     #[rstest]
     #[case::v3("v3", false)]
     #[case::v4("v4", true)]
