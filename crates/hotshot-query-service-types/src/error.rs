@@ -79,6 +79,11 @@ pub enum QueryError {
     ///
     /// In most cases a missing resource can be recovered from DA.
     Missing,
+    /// The requested state was pruned, so this query service can never serve it again.
+    #[snafu(display(
+        "state at height {height} was pruned (pruned through height {pruned_height})"
+    ))]
+    Pruned { height: u64, pruned_height: u64 },
     /// There was an error while trying to fetch the requested resource.
     #[snafu(display("Failed to fetch requested resource: {message}"))]
     #[snafu(context(suffix(ErrorSnafu)))]
@@ -89,6 +94,7 @@ impl QueryError {
     pub fn status(&self) -> StatusCode {
         match self {
             Self::NotFound | Self::Missing => StatusCode::NOT_FOUND,
+            Self::Pruned { .. } => StatusCode::GONE,
             Self::Error { .. } => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }

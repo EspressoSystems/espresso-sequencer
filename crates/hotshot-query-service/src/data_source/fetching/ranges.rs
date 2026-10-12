@@ -448,11 +448,13 @@ where
                 }
                 fetch_block_ranges(fetcher, req)
             },
-            Err(QueryError::Missing | QueryError::NotFound) => fetch_leaf_ranges_and_then(
-                fetcher.clone(),
-                req.clone(),
-                Some(LeafRangesCallback::Blocks { fetcher, req }),
-            ),
+            Err(QueryError::Missing | QueryError::NotFound | QueryError::Pruned { .. }) => {
+                fetch_leaf_ranges_and_then(
+                    fetcher.clone(),
+                    req.clone(),
+                    Some(LeafRangesCallback::Blocks { fetcher, req }),
+                )
+            },
             Err(QueryError::Error { message }) => {
                 anyhow::bail!("failed to load leaves for ranges {req:?}: {message}")
             },
@@ -528,11 +530,13 @@ where
                 }
                 fetch_vid_common_ranges(fetcher, req)
             },
-            Err(QueryError::Missing | QueryError::NotFound) => fetch_leaf_ranges_and_then(
-                fetcher.clone(),
-                req.clone(),
-                Some(LeafRangesCallback::VidCommon { fetcher, req }),
-            ),
+            Err(QueryError::Missing | QueryError::NotFound | QueryError::Pruned { .. }) => {
+                fetch_leaf_ranges_and_then(
+                    fetcher.clone(),
+                    req.clone(),
+                    Some(LeafRangesCallback::VidCommon { fetcher, req }),
+                )
+            },
             Err(QueryError::Error { message }) => {
                 anyhow::bail!("failed to load leaves for ranges {req:?}: {message}")
             },

@@ -269,7 +269,7 @@ where
             }
             return Ok(());
         },
-        Err(QueryError::Missing | QueryError::NotFound) => {
+        Err(QueryError::Missing | QueryError::NotFound | QueryError::Pruned { .. }) => {
             // We successfully queried the database, but the header wasn't there. Fall through to
             // fetching it.
             tracing::debug!(?req, "header not available locally; trying fetch");
@@ -343,7 +343,7 @@ where
             }
             return Ok(());
         },
-        Err(QueryError::Missing | QueryError::NotFound) => {
+        Err(QueryError::Missing | QueryError::NotFound | QueryError::Pruned { .. }) => {
             // We successfully queried the database, but at least one header wasn't there. Fall
             // through to fetching it.
             tracing::debug!(?req, "headers not available locally; trying fetch");
