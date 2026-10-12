@@ -269,7 +269,7 @@ where
             }
             return Ok(());
         },
-        Err(QueryError::Missing | QueryError::NotFound | QueryError::Pruned { .. }) => {
+        Err(QueryError::Missing | QueryError::NotFound) => {
             // We successfully queried the database, but the header wasn't there. Fall through to
             // fetching it.
             tracing::debug!(?req, "header not available locally; trying fetch");
@@ -278,6 +278,9 @@ where
             // An error occurred while querying the database. We don't know if we need to fetch the
             // header or not. Return an error so we can try again.
             bail!("failed to fetch header for block {req:?}: {message}");
+        },
+        Err(err @ QueryError::Pruned { .. }) => {
+            bail!("failed to fetch header for block {req:?}: {err}")
         },
     }
 
@@ -343,7 +346,7 @@ where
             }
             return Ok(());
         },
-        Err(QueryError::Missing | QueryError::NotFound | QueryError::Pruned { .. }) => {
+        Err(QueryError::Missing | QueryError::NotFound) => {
             // We successfully queried the database, but at least one header wasn't there. Fall
             // through to fetching it.
             tracing::debug!(?req, "headers not available locally; trying fetch");
@@ -352,6 +355,9 @@ where
             // An error occurred while querying the database. We don't know if we need to fetch the
             // headers or not. Return an error so we can try again.
             bail!("failed to fetch headers for range {req:?}: {message}");
+        },
+        Err(err @ QueryError::Pruned { .. }) => {
+            bail!("failed to fetch headers for range {req:?}: {err}")
         },
     }
 

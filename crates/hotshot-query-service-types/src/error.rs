@@ -70,6 +70,8 @@ impl ClientError for Error {
 }
 
 /// An internal error that arises when querying a database.
+///
+/// Serialized by variant index, so add new variants at the end.
 #[derive(Clone, Debug, Snafu, Deserialize, Serialize)]
 #[snafu(visibility(pub))]
 pub enum QueryError {
@@ -79,15 +81,15 @@ pub enum QueryError {
     ///
     /// In most cases a missing resource can be recovered from DA.
     Missing,
-    /// The requested state was pruned, so this query service can never serve it again.
-    #[snafu(display(
-        "state at height {height} was pruned (pruned through height {pruned_height})"
-    ))]
-    Pruned { height: u64, pruned_height: u64 },
     /// There was an error while trying to fetch the requested resource.
     #[snafu(display("Failed to fetch requested resource: {message}"))]
     #[snafu(context(suffix(ErrorSnafu)))]
     Error { message: String },
+    /// The requested state was pruned.
+    #[snafu(display(
+        "state at height {height} was pruned (pruned through height {pruned_height})"
+    ))]
+    Pruned { height: u64, pruned_height: u64 },
 }
 
 impl QueryError {
