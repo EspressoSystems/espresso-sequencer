@@ -50,6 +50,7 @@ use tokio::{
     task::AbortHandle,
     time::sleep,
 };
+use tokio_util::task::AbortOnDropHandle;
 use url::Url;
 use versions::{NEW_PROTOCOL_VERSION, Upgrade, version};
 
@@ -58,6 +59,7 @@ use crate::{
     coordinator::{Coordinator, error::Severity, timer::Timer},
     cutover::{extract_pre_cutover_seed, forward_legacy_high_qc, forward_legacy_timeout_votes},
     helpers::test_upgrade_lock,
+    message::OpaqueMessage,
     network::Cliquenet,
     outbox::Outbox,
     tests::common::{utils::mock_membership_with_client, views},
@@ -229,6 +231,7 @@ async fn build_cutover_coordinator(
     client: crate::client::CoordinatorClient<TestTypes>,
     epoch_height: u64,
     view_timeout: Duration,
+    external_tx: UnboundedSender<OpaqueMessage<BLSPubKey>>,
 ) -> Coordinator<TestTypes, TestStorage<TestTypes>> {
     use hotshot_example_types::{node_types::TEST_VERSIONS, state_types::TestValidatedState};
     use hotshot_types::{data::Leaf2, light_client::StateKeyPair};
@@ -336,6 +339,7 @@ async fn build_cutover_coordinator(
             hotshot_types::data::EpochNumber::genesis(),
         ))
         .public_key(public_key)
+        .external_tx(external_tx)
         .build()
 }
 
@@ -347,11 +351,26 @@ struct DecisionEvent {
 
 async fn run_cutover_node(
     mut coord: Coordinator<TestTypes, TestStorage<TestTypes>>,
+    mut external_rx: mpsc::UnboundedReceiver<OpaqueMessage<BLSPubKey>>,
     decision_tx: UnboundedSender<DecisionEvent>,
     external_events_tx: async_broadcast::Sender<Event<TestTypes>>,
     legacy: Arc<RwLock<SystemContextHandle<TestTypes, MemoryImpl>>>,
     new_proto_view: Arc<AtomicU64>,
 ) {
+    let _forward = AbortOnDropHandle::new(tokio::spawn(async move {
+        while let Some(m) = external_rx.recv().await {
+            let _ = external_events_tx
+                .broadcast_direct(Event {
+                    // The test leaf fetcher ignores the view.
+                    view_number: ViewNumber::genesis(),
+                    event: EventType::ExternalMessageReceived {
+                        sender: m.sender,
+                        data: m.data,
+                    },
+                })
+                .await;
+        }
+    }));
     // Mirror production (`ConsensusHandle::activate`): the coordinator
     // stays parked until legacy crosses the upgrade boundary; only then
     // is the seed extracted and the coordinator started.
@@ -400,18 +419,6 @@ async fn run_cutover_node(
                 return;
             }
         }
-
-        while let Some(output) = coord.coordinator_outbox_mut().pop_front() {
-            let _ = external_events_tx
-                .broadcast_direct(Event {
-                    view_number: coord.current_view(),
-                    event: EventType::ExternalMessageReceived {
-                        sender: output.sender,
-                        data: output.data,
-                    },
-                })
-                .await;
-        }
     }
 }
 
@@ -428,6 +435,7 @@ async fn spawn_node(
     let (membership, storage, client, external_events_tx) =
         mock_membership_with_client(num_nodes, EPOCH_HEIGHT, parties[i].1, Default::default());
 
+    let (external_tx, external_rx) = mpsc::unbounded_channel();
     let coord = build_cutover_coordinator(
         i as u64,
         network,
@@ -436,6 +444,7 @@ async fn spawn_node(
         client,
         EPOCH_HEIGHT,
         view_timeout,
+        external_tx,
     )
     .await;
 
@@ -467,6 +476,7 @@ async fn spawn_node(
     let new_proto_view = Arc::new(AtomicU64::new(0));
     let runner_abort = tokio::spawn(run_cutover_node(
         coord,
+        external_rx,
         decision_tx,
         external_events_tx,
         legacy,

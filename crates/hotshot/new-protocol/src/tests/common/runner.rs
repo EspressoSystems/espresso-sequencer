@@ -498,20 +498,8 @@ impl TestRunner {
                 client,
                 self.epoch_height,
                 self.view_timeout,
-<<<<<<< HEAD
                 self.pre_cutover_seed.clone(),
-||||||| parent of 3ef65431572 (fix(new-protocol): deliver external messages on arrival (#5173))
-                UpgradeSetup {
-                    lock: upgrade_lock,
-                    config: self.upgrade_config.clone(),
-                },
-=======
-                UpgradeSetup {
-                    lock: upgrade_lock,
-                    config: self.upgrade_config.clone(),
-                },
                 external_tx,
->>>>>>> 3ef65431572 (fix(new-protocol): deliver external messages on arrival (#5173))
             )
             .await;
 
@@ -670,20 +658,8 @@ impl TestRunner {
                                     client,
                                     self.epoch_height,
                                     self.view_timeout,
-<<<<<<< HEAD
                                     self.pre_cutover_seed.clone(),
-||||||| parent of 3ef65431572 (fix(new-protocol): deliver external messages on arrival (#5173))
-                                    UpgradeSetup {
-                                        lock: upgrade_lock,
-                                        config: self.upgrade_config.clone(),
-                                    },
-=======
-                                    UpgradeSetup {
-                                        lock: upgrade_lock,
-                                        config: self.upgrade_config.clone(),
-                                    },
                                     external_tx,
->>>>>>> 3ef65431572 (fix(new-protocol): deliver external messages on arrival (#5173))
                                 )
                                 .await;
                                 // Bump the generation so stale events queued

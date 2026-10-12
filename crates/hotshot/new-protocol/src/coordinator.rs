@@ -191,17 +191,7 @@ where
         consensus_metrics: ConsensusMetricsValue,
         /// Locked QC persisted on a prior run; restored so the lock survives restart.
         locked_qc: Option<Certificate1<T>>,
-<<<<<<< HEAD
-||||||| parent of 3ef65431572 (fix(new-protocol): deliver external messages on arrival (#5173))
-        /// The anchor's cert2 persisted on a prior run.
-        anchor_cert2: Option<Certificate2<T>>,
-        upgrade_config: UpgradeConfig,
-=======
-        /// The anchor's cert2 persisted on a prior run.
-        anchor_cert2: Option<Certificate2<T>>,
-        upgrade_config: UpgradeConfig,
         external_tx: mpsc::UnboundedSender<OpaqueMessage<T::SignatureKey>>,
->>>>>>> 3ef65431572 (fix(new-protocol): deliver external messages on arrival (#5173))
     ) -> Self {
         let mut consensus = Consensus::new(
             membership_coordinator.clone(),
