@@ -23,8 +23,11 @@ INTRA_REGION_RTT_MS = 10.0
 NETEM_LIMIT = 300000
 NETEMS = ("delay", "full")
 # Jitter and loss floors of `netem="full"`. The matrix measured quiet links: jitter at most 1.8 ms,
-# no loss. The jitter ratio is the largest rtt_stdev_ms / rtt_p50_ms of the matrix.
-JITTER_RATIO = 0.05
+# no loss. The jitter ratio is the median over the matrix of sqrt(6) * rtt_stdev_ms / rtt_p50_ms
+# (0.65 %): uniform one-way jitter of +-J has stdev J / sqrt(3), a round trip of two independent
+# directions sqrt(2) times that, and the one-way delay is half the RTT. The p95 and p50 RTT of the
+# matrix coincide, so a percentile spread gives 0. Pinned by a test.
+JITTER_RATIO = 0.0065
 LOSS_FLOOR_PCT = 0.01
 # netem with jitter sorts packets by their random send time, so one TCP flow arrives reordered, which
 # real paths rarely do and which triggers spurious retransmits. A `rate` makes netem queue each
@@ -151,6 +154,7 @@ class Shaping:
     mtu: int
     # Empty for `netem="delay"`.
     noise: dict[tuple[int, int], Noise] = field(default_factory=dict)
+    netem: str = "delay"
 
     def meta(self) -> dict:
         return {
@@ -164,7 +168,7 @@ class Shaping:
             "assignment": {
                 f"node{i}": label for i, label in enumerate(self.assignment)
             },
-            "netem": "full" if self.noise else "delay",
+            "netem": self.netem,
             "matrix_sha256": matrix_sha256(self.delays, self.noise),
             "sysctls": dict(tcp_sysctls(self.tcp_cc)),
             "mtu": self.mtu,
@@ -190,15 +194,23 @@ def load_profile(name: str) -> Profile:
 
 
 def shaping(
-    name: str, n: int, intra: bool, tcp_cc: str, mtu: int, netem: str = "delay"
+    name: str,
+    n: int,
+    intra: bool,
+    tcp_cc: str,
+    mtu: int,
+    netem: str = "delay",
+    jitter_ratio: float = JITTER_RATIO,
 ) -> Shaping:
     if netem not in NETEMS:
         raise ValueError(f"netem {netem!r}; expected one of {NETEMS}")
     profile = load_profile(name)
     assignment = assign(n, profile)
     delays = delays_ms(assignment, profile, intra)
-    noise = noise_for(assignment, profile, delays) if netem == "full" else {}
-    return Shaping(profile, assignment, delays, intra, tcp_cc, mtu, noise)
+    noise = (
+        noise_for(assignment, profile, delays, jitter_ratio) if netem == "full" else {}
+    )
+    return Shaping(profile, assignment, delays, intra, tcp_cc, mtu, noise, netem)
 
 
 def read_matrix(text: str) -> dict[tuple[str, str], float]:
@@ -314,15 +326,19 @@ def delays_ms(
 
 
 def noise_for(
-    assignment: list[str], profile: Profile, delays: dict[tuple[int, int], float]
+    assignment: list[str],
+    profile: Profile,
+    delays: dict[tuple[int, int], float],
+    jitter_ratio: float = JITTER_RATIO,
 ) -> dict[tuple[int, int], Noise]:
-    """The measured noise of the location pair, raised to the floors of `netem="full"`."""
+    """The measured noise of the location pair, raised to the floors of `netem="full"`:
+    `jitter_ratio` of the one-way delay as jitter, `LOSS_FLOOR_PCT` as loss."""
     noise = {}
     for (i, j), delay in delays.items():
         pair = (assignment[i], assignment[j])
         measured = profile.cross_noise.get(pair, QUIET)
         noise[(i, j)] = Noise(
-            max(measured.jitter_ms, JITTER_RATIO * delay),
+            max(measured.jitter_ms, jitter_ratio * delay),
             max(measured.loss_pct, LOSS_FLOOR_PCT),
         )
     return noise

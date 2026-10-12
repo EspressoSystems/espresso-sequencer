@@ -946,6 +946,7 @@ class Ec2Balance(TypedDict):
 
 # The class body's `latency` field shadows the module inside it.
 INTERNET_MTU = latency.INTERNET_MTU
+JITTER_RATIO = latency.JITTER_RATIO
 
 
 @dataclass(frozen=True)
@@ -980,6 +981,8 @@ class RunConfig:
     mtu: int = INTERNET_MTU
     # `latency.NETEMS` name: `full` adds jitter and loss to the delay.
     netem: str = "delay"
+    # With `netem` full: the jitter floor as a ratio of the one-way delay.
+    jitter_ratio: float = JITTER_RATIO
     # Genesis `epoch_height`; None keeps the template's.
     epoch_height: int | None = None
     ttl_min: str = "auto"
@@ -2923,6 +2926,12 @@ def add_latency_flags(parser: argparse.ArgumentParser) -> None:
         default=RunConfig.netem,
         help="with --latency: `full` adds per-pair jitter and loss to the delay; `full` with --chaos",
     )
+    parser.add_argument(
+        "--jitter-ratio",
+        type=positive_float,
+        default=RunConfig.jitter_ratio,
+        help="with --netem full: floor of the jitter half-width as a ratio of the one-way delay",
+    )
 
 
 def add_consensus_storage_flag(parser: argparse.ArgumentParser) -> None:
@@ -2935,7 +2944,7 @@ def add_consensus_storage_flag(parser: argparse.ArgumentParser) -> None:
 
 
 def check_latency_flags(
-    profile: str, intra: bool, tcp_cc: str, mtu: int, netem: str
+    profile: str, intra: bool, tcp_cc: str, mtu: int, netem: str, jitter_ratio: float
 ) -> None:
     if profile == "off" and not intra:
         raise Refused("--no-intra-latency needs --latency decaf-2025 or mainnet")
@@ -2945,6 +2954,8 @@ def check_latency_flags(
         raise Refused("--mtu needs --latency decaf-2025 or mainnet")
     if profile == "off" and netem != RunConfig.netem:
         raise Refused("--netem needs --latency decaf-2025 or mainnet")
+    if netem != "full" and jitter_ratio != RunConfig.jitter_ratio:
+        raise Refused("--jitter-ratio needs --netem full")
 
 
 def retention(text: str) -> int:
@@ -3083,7 +3094,9 @@ def config_from_args(args: argparse.Namespace) -> RunConfig:
             raise Refused(f"--node-env repeats {key}")
     profile = chaos_default(args, "--latency", CHAOS_LATENCY)
     netem = args.netem if profile == "off" else chaos_default(args, "--netem", "full")
-    check_latency_flags(profile, args.intra_latency, args.tcp_cc, args.mtu, netem)
+    check_latency_flags(
+        profile, args.intra_latency, args.tcp_cc, args.mtu, netem, args.jitter_ratio
+    )
     chaos = chaos_from_args(args)
     nodes = chaos_default(args, "--nodes", CHAOS_NODES)
     search = search_from_args(args)
@@ -3107,6 +3120,7 @@ def config_from_args(args: argparse.Namespace) -> RunConfig:
         tcp_cc=args.tcp_cc,
         mtu=args.mtu,
         netem=netem,
+        jitter_ratio=args.jitter_ratio,
         epoch_height=args.epoch_height,
         consensus_storage=args.consensus_storage,
         prune=args.prune,
@@ -3295,6 +3309,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         tcp_cc=defaults.tcp_cc,
         mtu=defaults.mtu,
         netem=defaults.netem,
+        jitter_ratio=defaults.jitter_ratio,
         epoch_height=defaults.epoch_height,
         consensus_storage=defaults.consensus_storage,
         prune=defaults.prune,
@@ -4571,6 +4586,7 @@ def fleet_run_config(args: argparse.Namespace, saved: FleetManifest) -> RunConfi
         tcp_cc=cli.tcp_cc,
         mtu=cli.mtu,
         netem=cli.netem,
+        jitter_ratio=cli.jitter_ratio,
         epoch_height=cli.epoch_height,
         consensus_storage=cli.consensus_storage,
         prune=cli.prune,
@@ -5155,6 +5171,7 @@ def latency_shaping(cfg: RunConfig, node_count: int) -> latency.Shaping:
             cfg.tcp_cc,
             cfg.mtu,
             cfg.netem,
+            cfg.jitter_ratio,
         )
     except (KeyError, ValueError, OSError) as exc:
         raise Refused(f"latency {cfg.latency}: {type(exc).__name__}: {exc}") from exc

@@ -1,6 +1,9 @@
+import csv
+import io
 import json
 import math
 import re
+import statistics
 
 import latency
 import pytest
@@ -372,6 +375,16 @@ def test_shipped_matrix_noise_covers_every_pair():
     assert latency.read_noise(text).keys() == latency.read_matrix(text).keys()
 
 
+def test_jitter_ratio_is_the_median_uniform_jitter_of_the_matrix():
+    """Uniform one-way jitter +-J: an RTT of two independent directions has stdev
+    sqrt(2) * J / sqrt(3); the one-way delay is half the RTT."""
+    rows = list(csv.DictReader(io.StringIO(latency.MATRIX_CSV.read_text())))
+    ratios = [
+        math.sqrt(6) * float(r["rtt_stdev_ms"]) / float(r["rtt_p50_ms"]) for r in rows
+    ]
+    assert latency.JITTER_RATIO == pytest.approx(statistics.median(ratios), abs=5e-5)
+
+
 def test_noise_is_raised_to_the_floors():
     profile = Profile(
         name="p",
@@ -384,6 +397,7 @@ def test_noise_is_raised_to_the_floors():
     assignment = ["a", "a", "b"]
     delays = latency.delays_ms(assignment, profile, intra=True)
     noise = latency.noise_for(assignment, profile, delays)
+    assert latency.noise_for(assignment, profile, delays, 0.2)[(0, 1)].jitter_ms == 1.0
     assert noise[(0, 2)] == latency.Noise(9.0, 0.5)
     assert noise[(2, 0)] == latency.Noise(
         latency.JITTER_RATIO * 50, latency.LOSS_FLOOR_PCT
@@ -403,6 +417,13 @@ def test_netem_full_script_keeps_order_and_adds_jitter_and_loss():
             r"delay [\d.]+ms [\d.e+-]+ms rate 100gbit loss [\d.e+-]+% limit 300000$",
             line,
         )
+
+
+def test_netem_name_is_stored_on_the_shaping():
+    delay = latency.shaping("decaf-2025", 5, True, "bbr", 1500)
+    full = latency.shaping("decaf-2025", 5, True, "bbr", 1500, netem="full")
+    assert (delay.netem, full.netem) == ("delay", "full")
+    assert full.meta()["netem"] == "full"
 
 
 def test_netem_delay_script_is_unchanged():

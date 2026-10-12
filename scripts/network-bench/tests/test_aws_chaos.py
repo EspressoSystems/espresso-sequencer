@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 import chaos as ch
+import latency
 import netbench
 import pytest
 from fakes import (
@@ -751,6 +752,14 @@ def test_netem_is_full_under_chaos_only_by_default():
 def test_netem_needs_a_latency_profile():
     with pytest.raises(awsb.Refused, match="--netem"):
         awsb.config_from_args(parse("--netem", "full"))
+
+
+def test_jitter_ratio_flag_needs_netem_full():
+    assert awsb.config_from_args(parse("--chaos")).jitter_ratio == latency.JITTER_RATIO
+    cfg = awsb.config_from_args(parse("--chaos", "--jitter-ratio", "0.1"))
+    assert cfg.jitter_ratio == 0.1
+    with pytest.raises(awsb.Refused, match="--jitter-ratio"):
+        awsb.config_from_args(parse("--latency", "mainnet", "--jitter-ratio", "0.1"))
 
 
 def test_epoch_height_flag_defaults_to_the_template():

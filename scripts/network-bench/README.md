@@ -219,6 +219,8 @@ just bench aws run --tag release-x --latency decaf-2026 --netem full     # per-p
   [AWS: network MTU](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/network_mtu.html).
 - `--netem` (default `delay`; `full` with `--chaos`): `full` adds per-pair jitter and loss to the delay. Model:
   [Latency model](#latency-model).
+- `--jitter-ratio` (default 0.0065): with `--netem full`, the floor of the jitter half-width as a ratio of the one-way
+  delay.
 - Never shaped: `ctl` traffic (orchestrator, L1, relay, submit, metrics), RDS, ssh.
 - Model and profiles: [Latency model](#latency-model).
 
@@ -529,6 +531,7 @@ Where:
 | `--tcp-cc`                            | bbr                            | per run      | with `--latency`: TCP congestion control, `bbr`, `cubic`, `bbr_hold` or `bbr3`                |
 | `--mtu`                               | 1500                           | per run      | with `--latency`: interface MTU of the nodes                                                  |
 | `--netem`                             | `delay`; `full` with `--chaos` | per run      | with `--latency`: `full` adds per-pair jitter and loss to the delay                           |
+| `--jitter-ratio`                      | 0.0065                         | per run      | with `--netem full`: floor of the jitter half-width as a ratio of the one-way delay           |
 | `--epoch-height`                      | template (1000000)             | per run      | genesis `epoch_height`, in blocks                                                             |
 | `--consensus-storage`                 | `fs`                           | per run      | `fs`, `journal` (experimental, not in `main` images); query node uses `storage-sql` with `fs` |
 | `--prune [RETENTION]`                 | off; bare `1m`                 | per run      | node0 prunes data and state older than RETENTION every 30 s; part of the config hash          |
@@ -782,15 +785,22 @@ real-world RTT. Without it, nodes see about 0.1 ms (one AZ).
   `uv run --script scripts/network-bench/network-locations mainnet`, which sends validator IPs to ip-api.com. The file
   holds only city, country, lat/lon, node count and stake share. Stake shares are recorded but placement uses node
   counts; every node has equal stake.
-- `--netem full`: netem `delay D J rate 100gbit loss P`, per direction. Jitter J is the larger of the matrix
-  `netem_jitter_ms` and 5 % of the one-way delay (5 % is the largest `rtt_stdev_ms / rtt_p50_ms` of the matrix). Loss P
-  is the larger of half the matrix `loss_pct` and 0.01 %. The matrix measured quiet links (jitter at most 1.8 ms, no
-  loss), so the floors dominate; `mainnet`, `decaf-2026` and intra-location links have no measurement and use the
-  floors.
+- `--netem full`: netem `delay D J rate 100gbit loss P`, per direction. Jitter J is uniform in D +- J and is the larger
+  of the matrix `netem_jitter_ms` and `--jitter-ratio` times the one-way delay. The default ratio is 0.0065
+  (`JITTER_RATIO` in `latency.py`): the median over the matrix of `sqrt(6) * rtt_stdev_ms / rtt_p50_ms`. Uniform jitter
+  of +-J has stdev J / sqrt(3), a round trip of two independent directions sqrt(2) times that, and D is half the RTT.
+  The matrix p95 and p50 RTT coincide, so a percentile spread gives 0; the largest stdev ratio (5 %) is one outlier and
+  is not used. Loss P is the larger of half the matrix `loss_pct` and 0.01 %. The matrix measured quiet links (jitter at
+  most 1.8 ms, no loss), so the floors dominate; `mainnet`, `decaf-2026` and intra-location links have no measurement
+  and use the floors.
+- With `rate`, netem releases each packet no earlier than the previous one, so on a busy link the delay trends to D + J
+  instead of averaging D: the mean one-way delay under load is up to J above the idle value. The ping probe after
+  shaping runs idle and does not see this.
 - netem with jitter reorders packets inside one TCP flow, which real paths rarely do and which causes spurious
   retransmits. `rate 100gbit` (above any instance's bandwidth) makes netem queue each packet behind the previous one:
   jitter varies the delay and keeps the order. Checked on loopback, 2000 UDP packets with `delay 20ms 15ms`: 119
-  inversions without `rate`, 0 with it. Packets of different connections still reorder against each other.
+  inversions without `rate`, 0 with it. Each peer has its own netem leaf, so connections to the same peer stay in order;
+  packets to different peers reorder against each other.
 - The probe after shaping pings with 5 samples; jitter and loss average out inside its tolerance.
 - 0.0157 ms/km: least-squares fit through the origin over the 56 measured AWS pairs (RMSE 33 ms). Fibre at 2/3 c is
   0.0100 ms/km, so 1.57x path stretch. Measured pairs take precedence over the model. The model covers city pairs only.
