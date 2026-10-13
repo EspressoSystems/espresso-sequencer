@@ -1482,7 +1482,7 @@
 <a href=#1482 id=1482 data-nosnippet>1482</a>                )
 <a href=#1483 id=1483 data-nosnippet>1483</a>                .<span class="kw">await</span><span class="question-mark">?</span>;
 <a href=#1484 id=1484 data-nosnippet>1484</a>                tx.execute(
-<a href=#1485 id=1485 data-nosnippet>1485</a>                    query(<span class="string">"DELETE FROM decided_cert2 where view &gt;= $1 AND view &lt;= $2"</span>)
+<a href=#1485 id=1485 data-nosnippet>1485</a>                    query(<span class="string">"DELETE FROM decided_cert2 where view &gt;= $1 AND view &lt; $2"</span>)
 <a href=#1486 id=1486 data-nosnippet>1486</a>                        .bind(from_view_i64)
 <a href=#1487 id=1487 data-nosnippet>1487</a>                        .bind(to_view_i64),
 <a href=#1488 id=1488 data-nosnippet>1488</a>                )
