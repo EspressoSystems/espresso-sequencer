@@ -110,7 +110,7 @@ mod tests {
         let test = ValidTest::from_tx_lengths(vec![vec![5, 8, 8]], &mut rng);
         let num_txs = test.all_txs().len();
         let block =
-            Payload::from_transactions(test.all_txs(), &Default::default(), &Default::default())
+            Payload::from_transactions(&test.all_txs(), &Default::default(), &Default::default())
                 .await
                 .unwrap()
                 .0;
