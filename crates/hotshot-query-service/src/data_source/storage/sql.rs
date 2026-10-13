@@ -3550,7 +3550,7 @@ mod test {
             )
             .await
             .unwrap_err();
-        assert!(matches!(err, QueryError::NotFound), "{err:?}");
+        assert!(matches!(err, QueryError::Pruned { .. }), "{err:?}");
     }
 
     /// State up to `head`, then pruned past it by a run from before the state pruner was bounded:
