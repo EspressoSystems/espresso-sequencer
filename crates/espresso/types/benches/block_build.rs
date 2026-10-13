@@ -67,9 +67,7 @@ fn bench_block_build(c: &mut Criterion) {
 
 /// The leader's build task after the transactions are taken; outputs are returned so their drop
 /// is untimed.
-fn request_block(
-    txs: &[Transaction],
-) -> (PayloadWithMetadata<SeqTypes>, BlockCommitments<SeqTypes>) {
+fn request_block(txs: &[Transaction]) -> (PayloadWithMetadata<SeqTypes>, BlockCommitments) {
     let _span = tracing::debug_span!("request_block").entered();
     let (payload, metadata): (Payload, NsTable) =
         Payload::from_transactions_sync(txs, chain_config()).expect("payload construction");

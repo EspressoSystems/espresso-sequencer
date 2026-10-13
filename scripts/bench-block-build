@@ -50,10 +50,11 @@ LANES = {
     "from_transactions": "#2a78d6",
     "block_commitments": "#c3c2b7",
     "encode": "#e87ba4",
-    "transaction_commitments": "#eb6834",
+    "transaction_digests": "#eb6834",
     "vid_commitment": "#1baf7a",
     "builder_commitment": "#eda100",
 }
+RENAMED = {"transaction_commitments": "transaction_digests"}
 
 log = logging.getLogger("bench-block-build")
 
@@ -264,7 +265,12 @@ def run_one(binary: Path, name: str, env: dict[str, str], home: Path) -> pd.Data
     # Steps start with criterion's warm-up iterations; keep one per measured iteration.
     measured = int(sum(json.loads(sample_file.read_text())["iters"]))
     steps = json.loads(steps_file.read_text())
-    rows = [(step, s, d) for step, spans in steps.items() for s, d in spans[-measured:]]
+    # Refs before the blake3 digest switch name the same step transaction_commitments.
+    rows = [
+        (RENAMED.get(step, step), s, d)
+        for step, spans in steps.items()
+        for s, d in spans[-measured:]
+    ]
     return pd.DataFrame(rows, columns=["step", "start", "duration"])
 
 

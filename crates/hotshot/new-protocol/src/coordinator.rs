@@ -22,7 +22,9 @@ use hotshot_types::{
     },
     simple_vote::{HasEpoch, QuorumVote2, TimeoutVote2, TimeoutVote3},
     traits::{
-        block_contents::BlockHeader, metrics::Metrics, node_implementation::NodeType,
+        block_contents::{BlockHeader, TxDigest},
+        metrics::Metrics,
+        node_implementation::NodeType,
         signature_key::StateSignatureKey,
     },
     upgrade_config::UpgradeConfig,
@@ -748,7 +750,7 @@ where
         self.payload_txn_bytes
             .insert(out.view, out.payload.txn_bytes());
         self.block_builder
-            .on_block_reconstructed(out.view, out.tx_commitments);
+            .on_block_reconstructed(out.view, out.tx_digests);
         self.storage.append_da(
             out.view,
             out.epoch,
@@ -2353,7 +2355,7 @@ struct PendingDa<T: NodeType> {
     epoch: EpochNumber,
     payload: T::BlockPayload,
     metadata: <T::BlockPayload as BlockPayload<T>>::Metadata,
-    hashes: Vec<Commitment<T::Transaction>>,
+    hashes: Vec<TxDigest>,
 }
 
 type ProposalFetchResponseSender<T> =

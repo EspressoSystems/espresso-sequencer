@@ -6,7 +6,7 @@ use std::{
     time::Duration,
 };
 
-use committable::{Commitment, Committable};
+use committable::Commitment;
 use hotshot::traits::{BlockPayload, ValidatedState as _};
 use hotshot_types::{
     consensus::PayloadWithMetadata,
@@ -18,7 +18,7 @@ use hotshot_types::{
     message::UpgradeLock,
     traits::{
         EncodeBytes,
-        block_contents::{BuilderFee, Transaction},
+        block_contents::{BuilderFee, Transaction, TxDigest},
         node_implementation::NodeType,
         signature_key::BuilderSignatureKey,
     },
@@ -80,15 +80,15 @@ pub struct BlockBuilderOutput<T: NodeType> {
     pub builder_commitment: BuilderCommitment,
     pub builder_fee: BuilderFee<T>,
     pub payload_commitment: VidCommitment,
-    pub manifest: DedupManifest<T>,
+    pub manifest: DedupManifest,
 }
 
 /// Commitments the leader computes for a block it built.
-pub struct BlockCommitments<T: NodeType> {
+pub struct BlockCommitments {
     pub block_size: u64,
     pub payload_commitment: VidCommitment,
     pub builder_commitment: BuilderCommitment,
-    pub hashes: Vec<Commitment<T::Transaction>>,
+    pub hashes: Vec<TxDigest>,
 }
 
 /// The leader's commitment work for a built block, on the proposal's critical path. The
@@ -97,7 +97,7 @@ pub fn block_commitments<T: NodeType>(
     payload: &PayloadWithMetadata<T>,
     total_weight: usize,
     version: Version,
-) -> BlockCommitments<T> {
+) -> BlockCommitments {
     let _span = debug_span!("block_commitments").entered();
     let (payload_bytes, metadata_bytes) =
         debug_span!("encode").in_scope(|| (payload.payload.encode(), payload.metadata.encode()));
@@ -105,8 +105,8 @@ pub fn block_commitments<T: NodeType>(
     // path.
     let (hashes, (payload_commitment, builder_commitment)) = rayon::join(
         || {
-            debug_span!("transaction_commitments")
-                .in_scope(|| payload.payload.transaction_commitments(&payload.metadata))
+            debug_span!("transaction_digests")
+                .in_scope(|| payload.payload.transaction_digests(&payload.metadata))
         },
         || {
             rayon::join(
@@ -201,21 +201,21 @@ struct PoolEntry<T: NodeType> {
 /// Memory charged per retry entry on top of its block size, so tiny
 /// transactions cannot outgrow `max_retry_bytes`. Doubled for table slack.
 const fn retry_entry_overhead<T: NodeType>() -> u64 {
-    let map = size_of::<(Commitment<T::Transaction>, RetryEntry<T>)>();
-    let order = size_of::<(ViewNumber, Commitment<T::Transaction>)>();
+    let map = size_of::<(TxDigest, RetryEntry<T>)>();
+    let order = size_of::<(ViewNumber, TxDigest)>();
     2 * (map + order) as u64
 }
 
 pub struct BlockBuilder<T: NodeType> {
     instance: Arc<T::InstanceState>,
     membership: EpochMembershipCoordinator<T>,
-    retry_pending: HashMap<Commitment<T::Transaction>, RetryEntry<T>>,
-    retry_order: BTreeSet<(ViewNumber, Commitment<T::Transaction>)>,
+    retry_pending: HashMap<TxDigest, RetryEntry<T>>,
+    retry_order: BTreeSet<(ViewNumber, TxDigest)>,
     retry_total_bytes: u64,
-    leader_buffer: HashMap<Commitment<T::Transaction>, PoolEntry<T>>,
-    leader_order: BTreeSet<(ViewNumber, Commitment<T::Transaction>)>,
+    leader_buffer: HashMap<TxDigest, PoolEntry<T>>,
+    leader_order: BTreeSet<(ViewNumber, TxDigest)>,
     leader_total_bytes: u64,
-    dedups: BTreeMap<ViewNumber, HashSet<Commitment<T::Transaction>>>,
+    dedups: BTreeMap<ViewNumber, HashSet<TxDigest>>,
     config: BlockBuilderConfig,
     upgrade_lock: UpgradeLock<T>,
     current_view: ViewNumber,
@@ -379,7 +379,7 @@ impl<T: NodeType> BlockBuilder<T> {
             .collect()
     }
 
-    fn remove_pooled(&mut self, hash: &Commitment<T::Transaction>) -> Option<T::Transaction> {
+    fn remove_pooled(&mut self, hash: &TxDigest) -> Option<T::Transaction> {
         let entry = self.leader_buffer.remove(hash)?;
         self.leader_order.remove(&(entry.view, *hash));
         self.leader_total_bytes -= entry.tx.minimum_block_size();
@@ -434,7 +434,7 @@ impl<T: NodeType> BlockBuilder<T> {
         &mut self,
         tx: T::Transaction,
     ) -> Result<Option<TransactionMessage<T>>, SubmitError> {
-        let hash = tx.commit();
+        let hash = tx.digest();
 
         if self.retry_pending.contains_key(&hash) {
             return Ok(None);
@@ -495,7 +495,7 @@ impl<T: NodeType> BlockBuilder<T> {
         let block_size = self.block_size(view);
         let max_bytes = block_size.saturating_mul(self.config.fanout.get() + 1);
         for tx in msg.transactions {
-            let hash = tx.commit();
+            let hash = tx.digest();
 
             if self.dedups.values().any(|hs| hs.contains(&hash)) {
                 continue;
@@ -520,7 +520,7 @@ impl<T: NodeType> BlockBuilder<T> {
         }
     }
 
-    pub fn on_dedup_manifest(&mut self, manifest: DedupManifest<T>) {
+    pub fn on_dedup_manifest(&mut self, manifest: DedupManifest) {
         let DedupManifest { view, hashes, .. } = manifest;
         self.mark_included(view, hashes);
     }
@@ -603,7 +603,7 @@ impl<T: NodeType> BlockBuilder<T> {
         }
     }
 
-    fn remove_pending(&mut self, hash: &Commitment<T::Transaction>) {
+    fn remove_pending(&mut self, hash: &TxDigest) {
         if let Some(entry) = self.retry_pending.remove(hash) {
             self.retry_order.remove(&(entry.valid_until, *hash));
             self.retry_total_bytes -= entry.size + retry_entry_overhead::<T>();
@@ -624,18 +624,14 @@ impl<T: NodeType> BlockBuilder<T> {
 
     /// Call for every block this node proposes or reconstructs, so it stops forwarding the
     /// block's transactions and drops copies that reach it later.
-    pub fn on_block_reconstructed(
-        &mut self,
-        view: ViewNumber,
-        tx_commitments: Vec<Commitment<T::Transaction>>,
-    ) {
-        for hash in &tx_commitments {
+    pub fn on_block_reconstructed(&mut self, view: ViewNumber, tx_digests: Vec<TxDigest>) {
+        for hash in &tx_digests {
             self.remove_pending(hash);
         }
-        self.mark_included(view, tx_commitments);
+        self.mark_included(view, tx_digests);
     }
 
-    fn mark_included(&mut self, view: ViewNumber, hashes: Vec<Commitment<T::Transaction>>) {
+    fn mark_included(&mut self, view: ViewNumber, hashes: Vec<TxDigest>) {
         for hash in &hashes {
             self.remove_pooled(hash);
         }
