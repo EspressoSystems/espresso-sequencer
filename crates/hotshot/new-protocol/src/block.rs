@@ -105,7 +105,7 @@ pub fn block_commitments<T: NodeType>(
     // path.
     let (hashes, (payload_commitment, builder_commitment)) = rayon::join(
         || {
-            debug_span!("transaction_digests")
+            debug_span!("transaction_hashes")
                 .in_scope(|| payload.payload.transaction_digests(&payload.metadata))
         },
         || {
