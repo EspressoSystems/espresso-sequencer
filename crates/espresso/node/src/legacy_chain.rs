@@ -24,7 +24,7 @@ use alloy::{
 use anyhow::{Context, bail, ensure};
 use async_trait::async_trait;
 use espresso_types::{
-    Header, SeqTypes,
+    Certificate2, Header, SeqTypes,
     traits::{PersistenceOptions, SequencerPersistence},
 };
 use futures::FutureExt;
@@ -208,10 +208,6 @@ const STATE_CERTS: &str = "state-certs.json";
 const NETWORK_CONFIG_UPDATE: &str = "network-config-update.json";
 const L1_BLOCKS: &str = "l1-blocks.json";
 
-/// As the recorder ran anvil: every block is finalized at once, and the default accounts hold
-/// enough to fund the recorded transactions.
-const L1_ANVIL_ARGS: [&str; 4] = ["--slots-in-an-epoch", "0", "--balance", "1000000"];
-
 fn chain_dir(name: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../../data/legacy-chains")
@@ -223,9 +219,16 @@ async fn replay_l1(blocks: &[RecordedL1Block]) -> anyhow::Result<AnvilInstance> 
     let (genesis, rest) = blocks
         .split_first()
         .context("the recorded L1 has a genesis block")?;
+    // As the recorder ran anvil: every block is finalized at once, and the default accounts hold
+    // enough to fund the recorded transactions.
     let anvil = Anvil::new()
-        .args(L1_ANVIL_ARGS)
-        .arg("--no-mining")
+        .args([
+            "--slots-in-an-epoch",
+            "0",
+            "--balance",
+            "1000000",
+            "--no-mining",
+        ])
         .args(["--timestamp", &genesis.timestamp.to_string()])
         .spawn();
     let provider = ProviderBuilder::new().connect_http(anvil.endpoint_url());
@@ -385,7 +388,7 @@ impl ChainSource for ReplaySource {
     async fn fetch_cert2(
         &self,
         _header: &Header,
-    ) -> anyhow::Result<Option<espresso_types::Certificate2<SeqTypes>>> {
+    ) -> anyhow::Result<Option<Certificate2<SeqTypes>>> {
         Ok(None)
     }
 }
