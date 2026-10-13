@@ -496,6 +496,8 @@ mod test {
                 .to_string(),
             "--cliquenet-bind-address",
             &format!("127.0.0.1:{port2}"),
+            "--cliquenet-advertise-address",
+            &format!("127.0.0.1:{port2}"),
             // Never bound: this test blocks at orchestrator before libp2p starts. Port 0 is a
             // placeholder to satisfy the orchestrator-bootstrap requirement on the advertise
             // address.
