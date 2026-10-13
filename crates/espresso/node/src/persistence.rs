@@ -2085,9 +2085,8 @@ mod tests {
         }
     }
 
-    /// Consensus writes a decide's cert2 on its own task, which can lose the race against the
-    /// decide replay. The cert2 handed to `persist_decided_leaves` must reach the consumer
-    /// regardless.
+    /// A decide's cert2 must reach the replayed `NewDecide`, since a single node has no peer to
+    /// fetch it from.
     #[rstest_reuse::apply(persistence_types)]
     pub async fn test_decide_event_carries_cert2_persisted_with_leaves<P: TestablePersistence>(
         _p: PhantomData<P>,
@@ -2110,22 +2109,19 @@ mod tests {
             PhantomData,
         );
 
-        let leaf_chain = chain
-            .iter()
-            .map(|(leaf, qc)| (leaf_info(leaf.clone()), qc.clone()))
-            .collect::<Vec<_>>();
+        let decide = CoordinatorEvent::NewDecide {
+            leaf_infos: chain
+                .iter()
+                .rev()
+                .map(|(leaf, _)| leaf_info(leaf.clone()))
+                .collect(),
+            cert1: chain[1].1.clone(),
+            cert2: Some(cert2.clone()),
+        };
         storage
-            .persist_decided_leaves(
-                newest.view_number(),
-                leaf_chain
-                    .iter()
-                    .map(|(leaf, qc)| (leaf, CertificatePair::non_epoch_change(qc.clone()))),
-                Some(&cert2),
-                None,
-                &NullEventConsumer,
-            )
+            .persist_event(&decide, &NullEventConsumer)
             .await
-            .unwrap();
+            .expect("a new-protocol decide is persisted");
 
         let consumer = Cert2Collector::default();
         storage
