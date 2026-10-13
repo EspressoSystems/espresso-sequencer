@@ -3,7 +3,8 @@ pub(crate) mod metrics;
 pub mod timer;
 
 use std::{
-    collections::{BTreeMap, HashMap},
+    collections::{BTreeMap, HashMap, hash_map::Entry},
+    hash::Hash,
     sync::Arc,
     time::{Duration, Instant},
 };
@@ -139,6 +140,8 @@ pub struct Coordinator<T: NodeType, S> {
     #[builder(skip)]
     /// Proposals asked for, with the view this node was in when it last asked.
     requested_missing_proposals: HashMap<ProposalFetchKey<T>, ViewNumber>,
+    #[builder(skip)]
+    epoch_change_replies: EpochChangeReplies<T::SignatureKey>,
     #[builder(default = Fetcher::new(public_key.clone()))]
     fetcher: Fetcher<T>,
     #[builder(default = Server::new(public_key.clone()))]
@@ -2178,6 +2181,7 @@ where
                 self.block_builder.gc(view);
                 self.vid_disperser.gc(view);
                 self.vid_fragment_accumulator.gc(view);
+                self.epoch_change_replies.gc(view);
                 self.network.gc(view)?;
                 self.timeout_collector.gc(view);
                 self.timeout_one_honest_collector.gc(view);
@@ -2448,6 +2452,10 @@ where
         let Some(epoch_change) = self.consensus.epoch_change_ending(epoch) else {
             return;
         };
+        let view = self.consensus.current_view();
+        if !self.epoch_change_replies.admit(peer, epoch, view) {
+            return;
+        }
         let message = Message {
             sender: self.public_key.clone(),
             message_type: MessageType::Consensus(ConsensusMessage::EpochChange(epoch_change)),
@@ -2522,6 +2530,46 @@ impl<T: NodeType> ProposalFetchKey<T> {
             view,
             leaf_commitment,
         }
+    }
+}
+
+/// The view this node last answered a peer's timeout vote of an ended epoch
+/// in, with that epoch's epoch change, by peer and epoch.
+///
+/// A lagging peer re-sends its timeout vote on every re-arm of its timer, and
+/// this node's view moves on in between, so each is answered, and a reply lost
+/// before GST is sent again. A peer sending more gets no more: at most one
+/// reply per epoch in each view of this node.
+struct EpochChangeReplies<K> {
+    replied: HashMap<(K, EpochNumber), ViewNumber>,
+}
+
+impl<K> Default for EpochChangeReplies<K> {
+    fn default() -> Self {
+        Self {
+            replied: HashMap::new(),
+        }
+    }
+}
+
+impl<K: Clone + Eq + Hash> EpochChangeReplies<K> {
+    /// Whether to answer `peer` for `epoch` in `view`; if so, it is recorded.
+    fn admit(&mut self, peer: &K, epoch: EpochNumber, view: ViewNumber) -> bool {
+        match self.replied.entry((peer.clone(), epoch)) {
+            Entry::Occupied(entry) if *entry.get() >= view => false,
+            Entry::Occupied(mut entry) => {
+                entry.insert(view);
+                true
+            },
+            Entry::Vacant(entry) => {
+                entry.insert(view);
+                true
+            },
+        }
+    }
+
+    fn gc(&mut self, view: ViewNumber) {
+        self.replied.retain(|_, replied| *replied >= view);
     }
 }
 
