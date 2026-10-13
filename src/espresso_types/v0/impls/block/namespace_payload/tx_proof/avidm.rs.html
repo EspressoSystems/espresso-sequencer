@@ -110,7 +110,7 @@
 <a href=#110 id=110 data-nosnippet>110</a>        <span class="kw">let </span>test = ValidTest::from_tx_lengths(<span class="macro">vec!</span>[<span class="macro">vec!</span>[<span class="number">5</span>, <span class="number">8</span>, <span class="number">8</span>]], <span class="kw-2">&amp;mut </span>rng);
 <a href=#111 id=111 data-nosnippet>111</a>        <span class="kw">let </span>num_txs = test.all_txs().len();
 <a href=#112 id=112 data-nosnippet>112</a>        <span class="kw">let </span>block =
-<a href=#113 id=113 data-nosnippet>113</a>            Payload::from_transactions(test.all_txs(), <span class="kw-2">&amp;</span>Default::default(), <span class="kw-2">&amp;</span>Default::default())
+<a href=#113 id=113 data-nosnippet>113</a>            Payload::from_transactions(<span class="kw-2">&amp;</span>test.all_txs(), <span class="kw-2">&amp;</span>Default::default(), <span class="kw-2">&amp;</span>Default::default())
 <a href=#114 id=114 data-nosnippet>114</a>                .<span class="kw">await
 <a href=#115 id=115 data-nosnippet>115</a>                </span>.unwrap()
 <a href=#116 id=116 data-nosnippet>116</a>                .<span class="number">0</span>;
