@@ -353,9 +353,12 @@ def backport_index(
         if match is None:
             continue
         source_pr = int(match.group(1))
-        index[source_pr] = BackportPr(
+        pr = BackportPr(
             cast(int, item["number"]), cast(str, item["state"]), cast(str, item["url"])
         )
+        # A retried backport reuses the head branch; the newest PR wins.
+        if source_pr not in index or pr.number > index[source_pr].number:
+            index[source_pr] = pr
     return index
 
 

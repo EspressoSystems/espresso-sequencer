@@ -456,6 +456,16 @@ class BackportIndex(unittest.TestCase):
             index, {10: rel.BackportPr(20, "MERGED", "https://example/pr/20")}
         )
 
+    def test_release_backport_index_retried(self):
+        head = "backport-10-to-release-0.6.0"
+        items = [
+            {"number": 30, "state": "MERGED", "url": "u30", "headRefName": head},
+            {"number": 20, "state": "CLOSED", "url": "u20", "headRefName": head},
+        ]
+        for order in (items, items[::-1]):
+            index = rel.backport_index(order, "release-0.6.0")
+            self.assertEqual(index, {10: rel.BackportPr(30, "MERGED", "u30")})
+
 
 # REQ:release-refresh-targets
 
