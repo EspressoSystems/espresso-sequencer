@@ -67,7 +67,6 @@ impl SequencerPersistence for NoStorage {
 
     async fn persist_decided_leaves(
         &self,
-        _view_number: ViewNumber,
         leaves: impl IntoIterator<Item = (&LeafInfo<SeqTypes>, CertificatePair<SeqTypes>)> + Send,
         consumer: &(impl EventConsumer + 'static),
     ) -> anyhow::Result<()> {

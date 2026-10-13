@@ -864,11 +864,7 @@ pub trait SequencerPersistence:
                     .map(CertificatePair::non_epoch_change);
 
                 if let Err(err) = self
-                    .persist_decided_leaves(
-                        decided_view,
-                        leaf_infos.iter().zip(certifying_qcs),
-                        consumer,
-                    )
+                    .persist_decided_leaves(leaf_infos.iter().zip(certifying_qcs), consumer)
                     .await
                 {
                     tracing::error!(
@@ -918,8 +914,7 @@ pub trait SequencerPersistence:
         leaf_chain: impl IntoIterator<Item = (&LeafInfo<SeqTypes>, CertificatePair<SeqTypes>)> + Send,
         consumer: &(impl EventConsumer + 'static),
     ) -> anyhow::Result<()> {
-        self.persist_decided_leaves(decided_view, leaf_chain, consumer)
-            .await?;
+        self.persist_decided_leaves(leaf_chain, consumer).await?;
         // Leaves are persisted; processing failures are non-fatal here and retried in production.
         if let Err(err) = self.process_decided_events(decided_view, consumer).await {
             tracing::warn!(?decided_view, "decide event processing failed: {err:#}");
@@ -933,7 +928,6 @@ pub trait SequencerPersistence:
     /// (e.g. `NoStorage`) may instead forward decide events to `consumer` here.
     async fn persist_decided_leaves(
         &self,
-        decided_view: ViewNumber,
         leaf_chain: impl IntoIterator<Item = (&LeafInfo<SeqTypes>, CertificatePair<SeqTypes>)> + Send,
         consumer: &(impl EventConsumer + 'static),
     ) -> anyhow::Result<()>;

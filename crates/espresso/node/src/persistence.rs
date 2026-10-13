@@ -1728,7 +1728,7 @@ mod tests {
         let consumer = EventCollector::default();
 
         // Two decides with no processing in between (a lagging/coalescing processor): {0,1}, {2,3}.
-        for (from, to, view) in [(0usize, 2usize, 1u64), (2, 4, 3)] {
+        for (from, to) in [(0usize, 2usize), (2, 4)] {
             let leaf_chain = chain
                 .iter()
                 .take(to)
@@ -1737,7 +1737,6 @@ mod tests {
                 .collect::<Vec<_>>();
             storage
                 .persist_decided_leaves(
-                    ViewNumber::new(view),
                     leaf_chain
                         .iter()
                         .map(|(leaf, qc)| (leaf, CertificatePair::non_epoch_change(qc.clone()))),
@@ -3092,7 +3091,6 @@ mod tests {
         // `leaf2` is delivered rather than held for a gap-fill decide.
         storage
             .persist_decided_leaves(
-                newest_view,
                 [(
                     &leaf_info(newest_leaf),
                     CertificatePair::non_epoch_change(newest_qc),

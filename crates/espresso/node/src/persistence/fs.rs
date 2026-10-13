@@ -771,7 +771,6 @@ impl SequencerPersistence for Persistence {
 
     async fn persist_decided_leaves(
         &self,
-        _view: ViewNumber,
         leaf_chain: impl IntoIterator<Item = (&LeafInfo<SeqTypes>, CertificatePair<SeqTypes>)> + Send,
         _consumer: &(impl EventConsumer + 'static),
     ) -> anyhow::Result<()> {
