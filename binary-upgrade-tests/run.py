@@ -209,44 +209,48 @@ SCENARIOS: dict[str, list[Action]] = {
 }
 
 
-def release_tags() -> list[str]:
-    """Return release tags strictly before HEAD, oldest-first by creation date.
+def default_base_tag() -> str:
+    """Pick the base tag from the repo's release tags relative to HEAD."""
+    return pick_base_tag(
+        release_tags(),
+        release_tags("--merged", "HEAD"),
+        release_tags("--contains", "HEAD"),
+    )
 
-    Reachability keeps parallel release lines apart: a release branch only sees its
-    own line's tags, main sees the tags it was branched at.
+
+def pick_base_tag(tags: set[str], reachable: set[str], containing: set[str]) -> str:
+    """Pick the newest tag by version that does not contain HEAD.
+
+    On a release line (newest reachable tag is not an `X.Y.Z.0` cut) only reachable
+    tags count, so other lines are ignored. Elsewhere (main, PRs into main, a fresh
+    cut) patch tags are not ancestors, so all tags count.
     """
+    newest = max(reachable, key=tag_order, default=None)
+    on_line = newest is not None and not newest.endswith(".0")
+    pool = (reachable if on_line else tags) - containing
+    if not pool:
+        raise RuntimeError(
+            f"No tags matching {RELEASE_TAG_GLOB} or {LEGACY_TAG_GLOB} outside HEAD;"
+            " fetch full history with tags."
+        )
+    return max(pool, key=tag_order)
+
+
+def tag_order(tag: str) -> tuple[int, ...]:
+    """Sort key: legacy date tags below all `X.Y.Z.N` tags."""
+    if RELEASE_TAG_RE.match(tag):
+        return (1, *map(int, tag.split(".")))
+    return (0, int(tag))
+
+
+def release_tags(*filters: str) -> set[str]:
+    """Return release tags matching the `git tag` filters."""
     out = subprocess.check_output(
-        [
-            "git",
-            "tag",
-            "--list",
-            LEGACY_TAG_GLOB,
-            RELEASE_TAG_GLOB,
-            "--merged",
-            "HEAD",
-            "--no-contains",
-            "HEAD",
-            "--sort=creatordate",
-        ],
+        ["git", "tag", "--list", LEGACY_TAG_GLOB, RELEASE_TAG_GLOB, *filters],
         cwd=REPO_ROOT,
         text=True,
     )
-    return [
-        t
-        for t in out.strip().splitlines()
-        if RELEASE_TAG_RE.match(t) or LEGACY_TAG_RE.match(t)
-    ]
-
-
-def default_base_tag() -> str:
-    """Pick the newest release tag strictly before HEAD."""
-    tags = release_tags()
-    if not tags:
-        raise RuntimeError(
-            f"No tags matching {RELEASE_TAG_GLOB} or {LEGACY_TAG_GLOB} before HEAD;"
-            " fetch full history with tags."
-        )
-    return tags[-1]
+    return {t for t in out.split() if RELEASE_TAG_RE.match(t) or LEGACY_TAG_RE.match(t)}
 
 
 @dataclass(frozen=True)

@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       base_tag:
-        description: "Base docker tag to start from (empty = newest release tag before the dispatched ref)"
+        description: "Base docker tag to start from (empty = newest release tag by version not containing the ref; release branches use their own line)"
         required: false
         default: ""
       upgrade_tag:
