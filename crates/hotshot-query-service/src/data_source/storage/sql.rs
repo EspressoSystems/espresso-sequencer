@@ -738,6 +738,23 @@ impl SqlStorage {
             }
             .boxed()
         });
+        // TODO(abdul): remove once a sqlx release includes launchbadge/sqlx#4394.
+        // In sqlx 0.8.6, if `begin()` is cancelled, the connection can go back to the pool with a
+        // transaction still open, and sqlx does not know about it. Ask Postgres and drop it.
+        // Keep `raw_sql`: with a normal query the two timestamps are always different.
+        #[cfg(not(feature = "embedded-db"))]
+        let pool = pool.after_release(|conn, _| {
+            async move {
+                let row = conn
+                    .fetch_one(sqlx::raw_sql(
+                        "SELECT transaction_timestamp() <> statement_timestamp()",
+                    ))
+                    .await?;
+                let in_transaction: bool = row.try_get(0)?;
+                Ok(!in_transaction)
+            }
+            .boxed()
+        });
 
         #[cfg(feature = "embedded-db")]
         if config.reset {
