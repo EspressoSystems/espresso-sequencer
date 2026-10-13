@@ -22,11 +22,8 @@ use futures::{FutureExt, future::BoxFuture};
 use hotshot_types::traits::{block_contents::BlockHeader, node_implementation::NodeType};
 
 use super::{
-    AvailabilityProvider, Fetcher,
-    block::fetch_block_with_header,
-    cert2::fetch_cert2_with_header,
-    leaf::fetch_leaf_with_callbacks,
-    vid::{fetch_missing_vid_common, fetch_missing_vid_common_range, fetch_vid_common_with_header},
+    AvailabilityProvider, Fetcher, block::fetch_block_with_header, cert2::fetch_cert2_with_header,
+    leaf::fetch_leaf_with_callbacks, vid::fetch_vid_common_with_header,
 };
 use crate::{
     Header, Payload, QueryError, QueryResult,
@@ -105,9 +102,14 @@ where
         fetch_header_and_then(
             tx,
             req,
-            [HeaderCallback::Payload {
-                fetcher: fetcher.clone(),
-            }],
+            [
+                HeaderCallback::Payload {
+                    fetcher: fetcher.clone(),
+                },
+                HeaderCallback::VidCommon {
+                    fetcher: fetcher.clone(),
+                },
+            ],
         )
         .await
     }
@@ -196,7 +198,6 @@ where
                     "fetched leaf {}, will now fetch payload",
                     header.block_number()
                 );
-                fetch_missing_vid_common(fetcher.clone(), header.clone());
                 fetch_block_with_header(fetcher, header);
             },
             Self::VidCommon { fetcher } => {
@@ -217,7 +218,6 @@ where
         match self {
             Self::Payload { fetcher } => {
                 tracing::info!("fetched leaves {start}..{end}, will now fetch payload",);
-                fetch_missing_vid_common_range(fetcher.clone(), start, end);
                 fetch_block_range(fetcher, start, end);
             },
             Self::VidCommon { fetcher } => {
@@ -270,6 +270,13 @@ where
     match tx.get_header(req).await {
         Ok(header) => {
             for callback in callbacks {
+                // Only a stored header can have stored VID common, as when just its payload is
+                // missing, so this is the one branch that can skip fetching it.
+                if matches!(callback, HeaderCallback::VidCommon { .. })
+                    && tx.get_vid_common_metadata(req).await.is_ok()
+                {
+                    continue;
+                }
                 callback.run(header.clone());
             }
             return Ok(());
@@ -343,7 +350,18 @@ where
     // payload data.
     match <NonEmptyRange<LeafQueryData<Types>>>::load(tx, req).await {
         Ok(leaves) => {
+            let range = req.start as usize..req.end as usize;
             for callback in callbacks {
+                if matches!(callback, HeaderCallback::VidCommon { .. })
+                    && tx
+                        .get_vid_common_metadata_range(range.clone())
+                        .await
+                        .is_ok_and(|common| {
+                            common.iter().filter(|c| c.is_ok()).count() == range.len()
+                        })
+                {
+                    continue;
+                }
                 callback.run_range(&leaves);
             }
             return Ok(());
