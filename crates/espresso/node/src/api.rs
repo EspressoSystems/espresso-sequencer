@@ -3863,7 +3863,7 @@ mod test {
             .api_config(options)
             .network_config(TestConfigBuilder::default().build())
             .build();
-        let _network = TestNetwork::new(config, TEST_UPGRADE).await;
+        let _network = TestNetwork::new(config, MOCK_SEQUENCER_VERSIONS).await;
         let url = format!("http://localhost:{port}").parse().unwrap();
         let client: Client<ClientErr, SequencerApiVersion> = Client::new(url);
         client.connect(Some(Duration::from_secs(15))).await;
