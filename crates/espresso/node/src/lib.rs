@@ -1475,11 +1475,6 @@ pub mod testing {
             self
         }
 
-        /// The upgrades set so far, to adjust before [`Self::build`].
-        pub fn upgrades_mut(&mut self) -> &mut BTreeMap<Version, Upgrade> {
-            &mut self.upgrades
-        }
-
         pub fn epoch_height(mut self, epoch_height: u64) -> Self {
             self.config.epoch_height = epoch_height;
             self
