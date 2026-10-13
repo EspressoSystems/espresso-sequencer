@@ -21,7 +21,7 @@ use hotshot_types::{
         BlockPayload, ValidatedState,
         block_contents::{
             BlockHeader, BuilderFee, EncodeBytes, GENESIS_VID_NUM_STORAGE_NODES, TestableBlock,
-            Transaction,
+            Transaction, TxDigest,
         },
         node_implementation::NodeType,
     },
@@ -127,6 +127,10 @@ impl Committable for TestTransaction {
 }
 
 impl Transaction for TestTransaction {
+    fn digest(&self) -> TxDigest {
+        blake3::hash(&self.0).into()
+    }
+
     fn minimum_block_size(&self) -> u64 {
         // the estimation on transaction size is the length of the transaction
         self.0.len() as u64

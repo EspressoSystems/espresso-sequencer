@@ -18,6 +18,7 @@ async-broadcast = { workspace = true }
 async-lock = { workspace = true }
 async-trait = { workspace = true }
 bincode = { workspace = true }
+blake3 = { workspace = true }
 committable = { workspace = true }
 derive_more = { workspace = true }
 hotshot = { workspace = true }

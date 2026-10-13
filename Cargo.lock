@@ -6083,6 +6083,7 @@ dependencies = [
  "async-lock 3.4.2",
  "async-trait",
  "bincode",
+ "blake3",
  "committable",
  "derive_more 2.1.1",
  "hotshot",

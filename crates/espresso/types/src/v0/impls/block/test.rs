@@ -6,14 +6,15 @@ use hotshot::traits::BlockPayload;
 use hotshot_query_service::availability::{QueryablePayload, VerifiableInclusion};
 use hotshot_types::{
     data::{VidCommitment, VidCommon},
-    traits::EncodeBytes,
+    traits::{EncodeBytes, block_contents::Transaction as _},
     vid::advz::advz_scheme,
 };
 use jf_advz::VidScheme;
 use rand::RngCore;
 
 use crate::{
-    BlockSize, NamespaceId, NodeState, NsProof, Payload, Transaction, TxProof, ValidatedState,
+    BlockSize, NamespaceId, NodeState, NsProof, NsTable, Payload, Transaction, TxProof,
+    ValidatedState,
     v0::impls::block::{MAX_NAMESPACES_PER_BLOCK, MIN_PARALLEL_BYTES, MIN_PARALLEL_TRANSACTIONS},
     v0_3::ChainConfig,
 };
@@ -379,6 +380,7 @@ async fn transaction_commitments_match_serial() {
             BlockPayload::<crate::SeqTypes>::transaction_commitments(&payload, &meta),
             serial,
         );
+        assert_digests_match_serial(&payload, &meta);
     }
 }
 
@@ -406,5 +408,45 @@ fn transaction_commitments_match_serial_few_large() {
     assert_eq!(
         BlockPayload::<crate::SeqTypes>::transaction_commitments(&payload, &meta),
         serial,
+    );
+    assert_digests_match_serial(&payload, &meta);
+}
+
+fn assert_digests_match_serial(payload: &Payload, meta: &NsTable) {
+    let serial: Vec<_> = BlockPayload::<crate::SeqTypes>::transactions(payload, meta)
+        .map(|txn| txn.digest())
+        .collect();
+    assert_eq!(
+        BlockPayload::<crate::SeqTypes>::transaction_digests(payload, meta),
+        serial,
+    );
+}
+
+#[test]
+fn transaction_digests_empty_payload() {
+    let (payload, meta) = Payload::from_transactions_sync(&[], Default::default()).unwrap();
+    assert!(BlockPayload::<crate::SeqTypes>::transaction_digests(&payload, &meta).is_empty());
+}
+
+#[test]
+fn transaction_digests_depend_on_namespace() {
+    let payload = b"same payload".to_vec();
+    let txs = [
+        Transaction::new(NamespaceId::from(1u32), payload.clone()),
+        Transaction::new(NamespaceId::from(2u32), payload),
+    ];
+    let (payload, meta) = Payload::from_transactions_sync(&txs, Default::default()).unwrap();
+    let digests = BlockPayload::<crate::SeqTypes>::transaction_digests(&payload, &meta);
+    assert_eq!(digests.len(), 2);
+    assert_ne!(digests[0], digests[1]);
+}
+
+/// Vector computed independently: blake3(7u64 LE || "hello").
+#[test]
+fn tx_digest_known_vector() {
+    let tx = Transaction::new(NamespaceId::from(7u32), b"hello".to_vec());
+    assert_eq!(
+        tx.digest().to_string(),
+        "acadb7cd2d07b7e365d085da1f66729da74f89308371c1454611325287e54c7f"
     );
 }

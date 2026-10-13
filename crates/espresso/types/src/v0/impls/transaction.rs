@@ -1,6 +1,6 @@
 use committable::{Commitment, Committable};
 use hotshot_query_service_types::explorer::traits::ExplorerTransaction;
-use hotshot_types::traits::block_contents::Transaction as HotShotTransaction;
+use hotshot_types::traits::block_contents::{Transaction as HotShotTransaction, TxDigest};
 use serde::{Deserialize, Deserializer, de::Error};
 
 use super::NsPayloadBuilder;
@@ -101,7 +101,19 @@ impl Transaction {
     }
 }
 
+/// Blake3 over the little-endian namespace ID followed by the payload.
+pub(crate) fn tx_digest(ns: NamespaceId, payload: &[u8]) -> TxDigest {
+    blake3::Hasher::new()
+        .update(&ns.0.to_le_bytes())
+        .update(payload)
+        .finalize()
+        .into()
+}
+
 impl HotShotTransaction for Transaction {
+    fn digest(&self) -> TxDigest {
+        tx_digest(self.namespace, &self.payload)
+    }
     fn minimum_block_size(&self) -> u64 {
         // Any block containing this transaction will have at least:
         let len =

@@ -5,7 +5,7 @@ use committable::{Commitment, Committable};
 use hotshot_query_service_types::availability::{QueryablePayload, VidCommonQueryData};
 use hotshot_types::{
     data::ViewNumber,
-    traits::{BlockPayload, EncodeBytes},
+    traits::{BlockPayload, EncodeBytes, block_contents::TxDigest},
     utils::BuilderCommitment,
     vid::advz::{ADVZCommon, ADVZScheme},
 };
@@ -16,7 +16,7 @@ use thiserror::Error;
 use crate::{
     Index, Iter, NamespaceId, NsIndex, NsPayload, NsPayloadBuilder, NsPayloadRange, NsTable,
     NsTableBuilder, Payload, PayloadByteLen, SeqTypes, Transaction, TxIndex, TxProof,
-    v0::impls::{NodeState, ValidatedState},
+    v0::impls::{NodeState, ValidatedState, transaction::tx_digest},
     v0_3::ChainConfig,
 };
 
@@ -89,6 +89,26 @@ impl Payload {
     }
 
     // PRIVATE HELPERS START HERE
+
+    /// Apply `f` to every transaction index, in [`QueryablePayload::iter`] order.
+    ///
+    /// Indices are materialized first (far smaller than the transactions), so only `f` goes wide,
+    /// and only past [`MIN_PARALLEL_TRANSACTIONS`] or [`MIN_PARALLEL_BYTES`]. `par_iter` is
+    /// indexed, so `collect` preserves order.
+    fn map_transactions<T: Send>(
+        &self,
+        metadata: &NsTable,
+        f: impl Fn(&Index) -> T + Sync + Send,
+    ) -> Vec<T> {
+        use p3_maybe_rayon::prelude::*;
+
+        let indices: Vec<Index> = QueryablePayload::iter(self, metadata).collect();
+        if indices.len() < MIN_PARALLEL_TRANSACTIONS && self.raw_payload.len() < MIN_PARALLEL_BYTES
+        {
+            return indices.iter().map(f).collect();
+        }
+        indices.par_iter().map(f).collect()
+    }
 
     /// Need a sync version of [`BlockPayload::from_transactions`] in order to impl [`BlockPayload::empty`].
     pub fn from_transactions_sync(
@@ -272,23 +292,22 @@ impl BlockPayload<SeqTypes> for Payload {
         &self,
         metadata: &Self::Metadata,
     ) -> Vec<Commitment<Self::Transaction>> {
-        use p3_maybe_rayon::prelude::*;
-
-        // `iter` only yields in-bounds indices; the same assumption `enumerate`
-        // documents and unwraps on. Both branches resolve through this, so they
-        // cannot disagree on contents or order.
-        let commit = |index: &Index| {
+        self.map_transactions(metadata, |index| {
             self.transaction(index)
                 .expect("index yielded by iter must resolve to a transaction")
                 .commit()
-        };
+        })
+    }
 
-        let indices: Vec<Index> = QueryablePayload::iter(self, metadata).collect();
-        if indices.len() < MIN_PARALLEL_TRANSACTIONS && self.raw_payload.len() < MIN_PARALLEL_BYTES
-        {
-            return indices.iter().map(commit).collect();
-        }
-        indices.par_iter().map(commit).collect()
+    /// Same order and parallelism as [`Self::transaction_commitments`], hashing
+    /// the borrowed bytes without materializing each [`Transaction`].
+    fn transaction_digests(&self, metadata: &Self::Metadata) -> Vec<TxDigest> {
+        self.map_transactions(metadata, |index| {
+            let (ns, bytes) = self
+                .transaction_bytes(index)
+                .expect("index yielded by iter must resolve to a transaction");
+            tx_digest(ns, bytes)
+        })
     }
 
     fn txn_bytes(&self) -> usize {
