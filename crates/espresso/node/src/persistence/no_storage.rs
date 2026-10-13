@@ -24,8 +24,8 @@ use hotshot_types::{
     message::Proposal,
     new_protocol::CoordinatorEvent,
     simple_certificate::{
-        CertificatePair, LightClientStateUpdateCertificateV2, NextEpochQuorumCertificate2,
-        QuorumCertificate2, UpgradeCertificate,
+        Certificate2, CertificatePair, LightClientStateUpdateCertificateV2,
+        NextEpochQuorumCertificate2, QuorumCertificate2, UpgradeCertificate,
     },
     traits::metrics::Metrics,
 };
@@ -68,6 +68,7 @@ impl SequencerPersistence for NoStorage {
     async fn persist_decided_leaves(
         &self,
         leaves: impl IntoIterator<Item = (&LeafInfo<SeqTypes>, CertificatePair<SeqTypes>)> + Send,
+        _cert2: Option<&Certificate2<SeqTypes>>,
         consumer: &(impl EventConsumer + 'static),
     ) -> anyhow::Result<()> {
         // The iterator is not `Send`, so build the event before awaiting.
