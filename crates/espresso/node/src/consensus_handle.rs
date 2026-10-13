@@ -39,7 +39,7 @@ use tokio_util::{sync::CancellationToken, task::AbortOnDropHandle};
 use tracing::{error, warn};
 
 /// The node's handle on consensus: the [`Coordinator`], run on its own task from
-/// [`activate`](Self::activate) on, and what the rest of the node reads from it.
+/// [`start_consensus`](Self::start_consensus) on, and what the rest of the node reads from it.
 pub struct ConsensusHandle<T: NodeType, I: NodeImplementation<T>> {
     epoch_height: BlockNumber,
     event_rx: InactiveReceiver<CoordinatorEvent<T>>,
@@ -49,9 +49,8 @@ pub struct ConsensusHandle<T: NodeType, I: NodeImplementation<T>> {
     new_proto: Arc<RwLock<NewProtocol<T, I::Storage>>>,
 }
 
-/// What consensus reports while the coordinator is not running: the anchor until it starts, and
-/// its last report once it has stopped, which tests read after shutdown as they did from legacy
-/// consensus.
+/// What consensus reports once the coordinator has stopped: its last report, or the anchor if it
+/// never made one.
 struct Resting<T: NodeType> {
     view: ViewNumber,
     leaf: Leaf2<T>,
@@ -126,7 +125,7 @@ where
         }
     }
 
-    pub async fn activate(&self) {
+    pub async fn start_consensus(&self) {
         if matches!(*self.new_proto.read(), NewProtocol::Running { .. }) {
             return;
         }
@@ -375,10 +374,6 @@ where
             .map_err(|e| anyhow::anyhow!("{e}"))
     }
 
-    pub async fn start_consensus(&self) {
-        self.activate().await;
-    }
-
     pub async fn shut_down(&self) {
         self.membership_coordinator.cancel_all_drb();
         let client_api = {
@@ -420,7 +415,7 @@ where
         if let NewProtocol::Running { client_api, .. } = &*self.new_proto.read() {
             return Some(client_api.clone());
         }
-        self.activate().await;
+        self.start_consensus().await;
         if let NewProtocol::Running { client_api, .. } = &*self.new_proto.read() {
             Some(client_api.clone())
         } else {

@@ -154,16 +154,7 @@ where
     P: SequencerPersistence + MembershipPersistence,
     Arc<P>: Storage<SeqTypes>,
 {
-    init_with_source(
-        genesis,
-        params,
-        metrics,
-        persistence,
-        l1_params,
-        sink,
-        Source::LightClient,
-    )
-    .await
+    init_with_source(genesis, params, metrics, persistence, l1_params, sink, None).await
 }
 
 /// For tests that replay a recorded chain; the network config must already be persisted, as there
@@ -189,15 +180,9 @@ where
         persistence,
         l1_params,
         sink,
-        Source::Replay(source),
+        Some(source),
     )
     .await
-}
-
-enum Source {
-    LightClient,
-    #[cfg_attr(not(any(test, feature = "testing")), allow(dead_code))]
-    Replay(Arc<dyn ChainSource>),
 }
 
 async fn init_with_source<P>(
@@ -207,7 +192,7 @@ async fn init_with_source<P>(
     persistence: P,
     l1_params: L1Params,
     sink: impl DecideSink + 'static,
-    source: Source,
+    replay: Option<Arc<dyn ChainSource>>,
 ) -> anyhow::Result<FollowerHandle<P>>
 where
     P: SequencerPersistence + MembershipPersistence,
@@ -281,8 +266,9 @@ where
     .context("startup stake-table catchup failed")?;
     tracing::info!(%current_epoch, "startup catchup complete");
 
-    let (source, light_client): (Arc<dyn ChainSource>, _) = match source {
-        Source::LightClient => {
+    let (source, light_client): (Arc<dyn ChainSource>, _) = match replay {
+        Some(source) => (source, None),
+        None => {
             let light_client = Arc::new(
                 connect_light_client(
                     &params.options,
@@ -295,7 +281,6 @@ where
             );
             (light_client.clone(), Some(light_client))
         },
-        Source::Replay(source) => (source, None),
     };
 
     // Seeded like a validator's lock, so the API validates state certificates against the
