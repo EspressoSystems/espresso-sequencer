@@ -3507,6 +3507,8 @@ impl<T: NodeType> Consensus<T> {
             return;
         }
 
+        let own_boundary =
+            (block_view == view && is_last_block(block, *self.epoch_height)).then(|| cert1.clone());
         // We have a valid certificate, proposal, and reconstructed block
         // We can now update the lock, change view and vote. A node does not
         // lock on a late re-vote of an epoch it has left: its timeout votes
@@ -3530,11 +3532,18 @@ impl<T: NodeType> Consensus<T> {
                 ));
             }
             outbox.push_back(ConsensusOutput::SendCertificate1(cert1.clone()));
-            if block_view == view && is_last_block(block, *self.epoch_height) {
-                outbox.push_back(ConsensusOutput::PersistBoundaryQc(cert1.clone()));
-            }
             // Persist the new lock; `release_vote2` gates the phase-2 vote on it.
             outbox.push_back(ConsensusOutput::PersistHighQc(cert1));
+        }
+        // The block's own certificate, which opens the next epoch, also when the
+        // lock is already a re-vote's later certificate over the block.
+        if let Some(cert1) = own_boundary
+            && self
+                .locked_cert
+                .as_ref()
+                .is_some_and(|lock| lock.data.leaf_commit == cert1.data.leaf_commit)
+        {
+            outbox.push_back(ConsensusOutput::PersistBoundaryQc(cert1));
         }
 
         if self.voted_2_at(view, epoch)
