@@ -60,6 +60,16 @@ impl Payload {
         ns_payload.export_tx(&ns_id, &TxIndex(index.position as usize))
     }
 
+    /// Borrow a transaction's namespace ID and payload bytes from this payload.
+    pub fn transaction_bytes(&self, index: &Index) -> Option<(NamespaceId, &[u8])> {
+        let ns = &index.ns_index;
+        let ns_id = self.ns_table.read_ns_id(ns)?;
+        let bytes = self
+            .ns_payload(ns)
+            .tx_payload(&TxIndex(index.position as usize))?;
+        Some((ns_id, bytes))
+    }
+
     // CRATE-VISIBLE HELPERS START HERE
 
     pub(crate) fn read_ns_payload(&self, range: &NsPayloadRange) -> &NsPayload {

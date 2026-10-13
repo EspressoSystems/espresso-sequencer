@@ -46,12 +46,20 @@ impl NsPayload {
     ///
     /// Return `None` if `index` is out of bounds.
     pub fn export_tx(&self, ns_id: &NamespaceId, index: &TxIndex) -> Option<Transaction> {
+        self.tx_payload(index)
+            .map(|bytes| Transaction::new(*ns_id, bytes.to_vec()))
+    }
+
+    /// Borrow the payload bytes of a transaction from this namespace.
+    ///
+    /// Return `None` if `index` is out of bounds.
+    pub fn tx_payload(&self, index: &TxIndex) -> Option<&[u8]> {
         let num_txs_unchecked = self.read_num_txs();
         let num_txs = NumTxs::new(&num_txs_unchecked, &self.byte_len());
         if !num_txs.in_bounds(index) {
-            return None; // error: tx index out of bounds
+            return None;
         }
-        Some(self.tx_from_num_txs(ns_id, index, &num_txs_unchecked))
+        Some(self.tx_payload_from_num_txs(index, &num_txs_unchecked))
     }
 
     /// Private helper. (Could be pub if desired.)
@@ -72,13 +80,19 @@ impl NsPayload {
         index: &TxIndex,
         num_txs_unchecked: &NumTxsUnchecked,
     ) -> Transaction {
+        let bytes = self.tx_payload_from_num_txs(index, num_txs_unchecked);
+        Transaction::new(*ns_id, bytes.to_vec())
+    }
+
+    /// Private helper
+    fn tx_payload_from_num_txs(
+        &self,
+        index: &TxIndex,
+        num_txs_unchecked: &NumTxsUnchecked,
+    ) -> &[u8] {
         let tx_table_entries = self.read(&TxTableEntriesRange::new(index));
         let tx_range = TxPayloadRange::new(num_txs_unchecked, &tx_table_entries, &self.byte_len());
-
-        // TODO don't copy the tx bytes into the return value
-        // https://github.com/EspressoSystems/hotshot-query-service/issues/267
-        let tx_payload = self.read(&tx_range).to_payload_bytes().to_vec();
-        Transaction::new(*ns_id, tx_payload)
+        self.read(&tx_range).to_payload_bytes()
     }
 }
 
