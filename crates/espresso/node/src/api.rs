@@ -4971,6 +4971,7 @@ mod test {
         let mut expected = HashMap::<Address, U256>::new();
         let mut total_distributed = U256::ZERO;
         let mut validators_by_epoch = HashMap::<u64, AuthenticatedValidatorMap>::new();
+        let mut paid_commissions = HashMap::<Address, HashSet<u16>>::new();
         for recorded in &chain.blocks[1..] {
             let leaf = recorded.leaf.leaf();
             let header = leaf.block_header();
@@ -5000,6 +5001,10 @@ mod test {
                     let leader = validators.get(&account).context("leader not found")?;
                     pay_block_reward(&mut expected, leader, block_reward, header)?;
                     total_distributed += block_reward.0;
+                    paid_commissions
+                        .entry(account)
+                        .or_default()
+                        .insert(leader.commission);
                 },
             }
             ensure!(
@@ -5009,6 +5014,10 @@ mod test {
             assert_stakers_balances(client, height, validators, &expected).await?;
         }
         ensure!(!total_distributed.is_zero(), "the chain paid no rewards");
+        ensure!(
+            paid_commissions.values().any(|seen| seen.len() > 1),
+            "no leader was paid at two different commissions"
+        );
         Ok(())
     }
 
@@ -5030,8 +5039,9 @@ mod test {
         .compute_rewards()?;
         let commission =
             U256::from(leader.commission) * block_reward.0 / U256::from(COMMISSION_BASIS_POINTS);
+        // The leader also gets what flooring each delegator's share left over.
         ensure!(
-            rewards.leader_commission().0 - commission <= U256::from(10),
+            rewards.leader_commission().0 - commission <= U256::from(leader.delegators.len()),
             "commission {} is not {commission}",
             rewards.leader_commission().0
         );
