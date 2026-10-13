@@ -102,12 +102,16 @@ impl Payload {
     ) -> Vec<T> {
         use p3_maybe_rayon::prelude::*;
 
+        let leaf = |index: &Index| {
+            let _span = tracing::debug_span!("tx_leaf").entered();
+            f(index)
+        };
         let indices: Vec<Index> = QueryablePayload::iter(self, metadata).collect();
         if indices.len() < MIN_PARALLEL_TRANSACTIONS && self.raw_payload.len() < MIN_PARALLEL_BYTES
         {
-            return indices.iter().map(f).collect();
+            return indices.iter().map(leaf).collect();
         }
-        indices.par_iter().map(f).collect()
+        indices.par_iter().map(leaf).collect()
     }
 
     /// Need a sync version of [`BlockPayload::from_transactions`] in order to impl [`BlockPayload::empty`].

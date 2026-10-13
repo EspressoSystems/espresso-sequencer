@@ -4905,6 +4905,7 @@ dependencies = [
  "jf-advz",
  "jf-merkle-tree-compat",
  "jf-utils",
+ "libc",
  "lru 0.18.2",
  "moka",
  "num-traits",
