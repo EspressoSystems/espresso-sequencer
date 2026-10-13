@@ -232,6 +232,10 @@ where
             .load_high_qc2()
             .await
             .context("loading persisted locked QC")?;
+        let anchor_cert2 = persistence
+            .load_cert2(initializer_for_coordinator.anchor_leaf().view_number())
+            .await
+            .context("loading the anchor's cert2")?;
 
         let (external_tx, external_rx) = unbounded_channel();
         let coordinator = Coordinator::maker()
@@ -249,6 +253,7 @@ where
             .metrics(metrics)
             .consensus_metrics(consensus_metrics)
             .maybe_locked_qc(locked_qc)
+            .maybe_anchor_cert2(anchor_cert2)
             .external_tx(external_tx)
             .make();
 
