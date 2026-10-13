@@ -3872,6 +3872,37 @@ mod test {
         assert!(migration_status.iter().all(|m| !m.name.is_empty()));
     }
 
+    /// A namespace proof range ahead of the chain tip gives up like the other range endpoints,
+    /// instead of holding one of the server's request slots until the chain gets there.
+    #[test_log::test(tokio::test(flavor = "multi_thread"))]
+    async fn test_namespace_proof_range_ahead_of_tip_is_not_found() {
+        let port = reserve_tcp_port().expect("OS should have ephemeral ports available");
+        let storage = SqlDataSource::create_storage().await;
+        let options = SqlDataSource::options(&storage, Options::with_port(port));
+        let config = TestNetworkConfigBuilder::default()
+            .api_config(options)
+            .network_config(TestConfigBuilder::default().build())
+            .build();
+        let _network = TestNetwork::new(config, TEST_UPGRADE).await;
+        let url = format!("http://localhost:{port}").parse().unwrap();
+        let client: Client<ClientErr, SequencerApiVersion> = Client::new(url);
+        client.connect(Some(Duration::from_secs(15))).await;
+
+        for route in [
+            "availability/block/1000000/1000005/namespace/0",
+            "v2/availability/namespace-proof-range?from=1000000&until=1000005&namespace=0",
+        ] {
+            let err = tokio::time::timeout(
+                Duration::from_secs(10),
+                client.get::<serde_json::Value>(route).send(),
+            )
+            .await
+            .unwrap_or_else(|_| panic!("{route} did not answer"))
+            .expect_err(route);
+            assert_eq!(err.status, StatusCode::NOT_FOUND, "{route}");
+        }
+    }
+
     /// Typed light client errors reach the HTTP client with their own status, not as a 500.
     #[test_log::test(tokio::test(flavor = "multi_thread"))]
     async fn test_light_client_proof_errors_keep_their_status() {
