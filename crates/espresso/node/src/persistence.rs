@@ -1784,6 +1784,7 @@ mod tests {
                         .iter()
                         .map(|(leaf, qc)| (leaf, CertificatePair::non_epoch_change(qc.clone()))),
                     None,
+                    None,
                     &consumer,
                 )
                 .await
@@ -2328,6 +2329,80 @@ mod tests {
 
     /// A payload reconstructed before its view is decided goes out on the decided leaf, not as
     /// a separate event. One for a view not yet decided waits for its own decide.
+    type DecidedCert2s = BTreeMap<ViewNumber, Option<Certificate2<SeqTypes>>>;
+
+    /// Records the cert2 of each new-protocol decide event, keyed by its newest leaf's view.
+    #[derive(Clone, Debug, Default)]
+    struct Cert2Collector {
+        cert2s: Arc<RwLock<DecidedCert2s>>,
+    }
+
+    #[async_trait]
+    impl EventConsumer for Cert2Collector {
+        async fn handle_event(&self, event: &CoordinatorEvent<SeqTypes>) -> anyhow::Result<()> {
+            if let CoordinatorEvent::NewDecide {
+                leaf_infos, cert2, ..
+            } = event
+            {
+                self.cert2s
+                    .write()
+                    .await
+                    .insert(leaf_infos[0].leaf.view_number(), cert2.clone());
+            }
+            Ok(())
+        }
+    }
+
+    /// A decide's cert2 must reach the replayed `NewDecide`, since a single node has no peer to
+    /// fetch it from.
+    #[rstest_reuse::apply(persistence_types)]
+    pub async fn test_decide_event_carries_cert2_persisted_with_leaves<P: TestablePersistence>(
+        _p: PhantomData<P>,
+    ) {
+        let tmp = P::tmp_storage().await;
+        let storage = P::connect(&tmp).await;
+        let chain = consecutive_height_chain(2).await;
+        let (newest, _) = &chain[1];
+
+        let vote_data = Vote2Data {
+            leaf_commit: Committable::commit(newest),
+            epoch: EpochNumber::new(0),
+            block_number: newest.height(),
+        };
+        let cert2 = Certificate2::new(
+            vote_data.clone(),
+            vote_data.commit(),
+            newest.view_number(),
+            None,
+            PhantomData,
+        );
+
+        let decide = CoordinatorEvent::NewDecide {
+            leaf_infos: chain
+                .iter()
+                .rev()
+                .map(|(leaf, _)| leaf_info(leaf.clone()))
+                .collect(),
+            cert1: chain[1].1.clone(),
+            cert2: Some(cert2.clone()),
+        };
+        storage
+            .persist_event(&decide, &NullEventConsumer)
+            .await
+            .expect("a new-protocol decide is persisted");
+
+        let consumer = Cert2Collector::default();
+        storage
+            .process_decided_events(newest.view_number(), None, &consumer)
+            .await
+            .unwrap();
+
+        assert_eq!(
+            consumer.cert2s.read().await.get(&newest.view_number()),
+            Some(&Some(cert2))
+        );
+    }
+
     #[rstest_reuse::apply(persistence_types)]
     pub async fn test_pending_payload_attached_to_its_decided_leaf<P: TestablePersistence>(
         _p: PhantomData<P>,

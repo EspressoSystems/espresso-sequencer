@@ -1067,9 +1067,21 @@ impl SequencerPersistence for Persistence {
         &self,
         _decided_view: ViewNumber,
         leaf_chain: impl IntoIterator<Item = (&LeafInfo<SeqTypes>, CertificatePair<SeqTypes>)> + Send,
+        cert2: Option<&Certificate2<SeqTypes>>,
         _deciding_qc: Option<Arc<CertificatePair<SeqTypes>>>,
         _consumer: &(impl EventConsumer + 'static),
     ) -> anyhow::Result<()> {
+        if let Some(cert) = cert2 {
+            self.put_wal(
+                Record::Cert2 {
+                    view: cert.view_number,
+                    cert: cert.clone(),
+                },
+                Class::Enqueue,
+            )
+            .await?;
+        }
+
         // No event consumer call: a query node replays these from `process_decided_events`, off
         // the voting path, and any other node runs `NullEventConsumer`.
         let leaf_chain: Vec<_> = leaf_chain
@@ -1189,15 +1201,6 @@ impl SequencerPersistence for Persistence {
             .internal_append_quorum2_duration
             .add_point(now.elapsed().as_secs_f64());
         res
-    }
-
-    async fn append_cert2(
-        &self,
-        view: ViewNumber,
-        cert2: Certificate2<SeqTypes>,
-    ) -> anyhow::Result<()> {
-        self.put_wal(Record::Cert2 { view, cert: cert2 }, Class::Durable)
-            .await
     }
 
     async fn load_cert2(&self, view: ViewNumber) -> anyhow::Result<Option<Certificate2<SeqTypes>>> {

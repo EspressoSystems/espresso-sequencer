@@ -8,10 +8,7 @@
 use anyhow::Result;
 use async_trait::async_trait;
 use hotshot_example_types::storage_types::TestStorage;
-use hotshot_new_protocol::{
-    message::{Certificate1, Certificate2},
-    storage::NewProtocolStorage,
-};
+use hotshot_new_protocol::{message::Certificate1, storage::NewProtocolStorage};
 use hotshot_types::{
     data::{
         DaProposal, DaProposal2, EpochNumber, QuorumProposal, QuorumProposal2, VidCommitment,
@@ -117,9 +114,6 @@ impl<T: NodeType> Storage<T> for NullStorage<T> {
 
 #[async_trait]
 impl<T: NodeType> NewProtocolStorage<T> for NullStorage<T> {
-    async fn append_cert2(&self, view: ViewNumber, cert: Certificate2<T>) -> Result<()> {
-        self.0.append_cert2(view, cert).await
-    }
     async fn append_high_qc2(&self, high_qc: Certificate1<T>) -> Result<()> {
         self.0.append_high_qc2(high_qc).await
     }
