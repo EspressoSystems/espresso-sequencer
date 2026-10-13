@@ -1437,7 +1437,7 @@ impl Persistence {
                 )
                 .await?;
                 tx.execute(
-                    query("DELETE FROM decided_cert2 where view >= $1 AND view <= $2")
+                    query("DELETE FROM decided_cert2 where view >= $1 AND view < $2")
                         .bind(from_view_i64)
                         .bind(to_view_i64),
                 )
