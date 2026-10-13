@@ -219,20 +219,20 @@ def default_base_tag() -> str:
 
 
 def pick_base_tag(tags: set[str], reachable: set[str], containing: set[str]) -> str:
-    """Pick the newest tag by version that does not contain HEAD.
+    """Pick the newest tag by version that does not contain HEAD and is on HEAD's line or older.
 
-    On a release line (newest reachable tag is not an `X.Y.Z.0` cut) only reachable
-    tags count, so other lines are ignored. Elsewhere (main, PRs into main, a fresh
-    cut) patch tags are not ancestors, so all tags count.
+    HEAD's line is that of its newest reachable tag. Patch tags are not ancestors of
+    main, so they count by line rather than reachability; newer lines are excluded.
     """
-    newest = max(reachable, key=tag_order, default=None)
-    on_line = newest is not None and not newest.endswith(".0")
-    pool = (reachable if on_line else tags) - containing
-    if not pool:
+    if not reachable:
         raise RuntimeError(
-            f"No tags matching {RELEASE_TAG_GLOB} or {LEGACY_TAG_GLOB} outside HEAD;"
+            f"No tags matching {RELEASE_TAG_GLOB} or {LEGACY_TAG_GLOB} reachable from HEAD;"
             " fetch full history with tags."
         )
+    cap = line_order(max(reachable, key=tag_order))
+    pool = {t for t in tags - containing if line_order(t) <= cap}
+    if not pool:
+        raise RuntimeError(f"No base tag below HEAD's line {cap}.")
     return max(pool, key=tag_order)
 
 
@@ -241,6 +241,11 @@ def tag_order(tag: str) -> tuple[int, ...]:
     if RELEASE_TAG_RE.match(tag):
         return (1, *map(int, tag.split(".")))
     return (0, int(tag))
+
+
+def line_order(tag: str) -> tuple[int, ...]:
+    """Sort key of the tag's release line: `X.Y.Z`, or the whole legacy date tag."""
+    return tag_order(tag)[:4]
 
 
 def release_tags(*filters: str) -> set[str]:

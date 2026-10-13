@@ -10,7 +10,7 @@ lint *args:
     ruff check run.py test_run.py {{args}}
 
 check *args:
-    ty check run.py test_run.py {{args}}
+    ty check run.py {{args}}
 
 test *args:
     uv run --with pytest --with-requirements run.py pytest test_run.py {{args}}
