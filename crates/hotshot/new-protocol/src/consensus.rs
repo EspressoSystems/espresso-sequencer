@@ -1473,8 +1473,14 @@ impl<T: NodeType> Consensus<T> {
         self.vid_shares.insert(view, vid_share);
         self.adopt_certified_drb(view);
         self.adopt_proposal_upgrade_certificate(&proposal);
-        // The first block of an epoch carries its parent's commit, verified
-        // with the proposal, which decides the previous epoch's last block.
+        // The certificates a proposal carries were verified with it and count
+        // as received, at every version: a valid certificate is valid whatever
+        // message carries it, and the vote2 rules still apply to it. This is
+        // what lets a node that missed a certificate's broadcast catch up from
+        // the next proposal.
+        //
+        // The first block of an epoch carries its parent's commit, which
+        // decides the previous epoch's last block.
         if let Some(cert2) = proposal.next_epoch_justify_qc.clone() {
             let commit_view = cert2.view_number();
             if commit_view > self.decide_floor() && self.insert_cert2(cert2) {
@@ -1737,8 +1743,7 @@ impl<T: NodeType> Consensus<T> {
     /// itself, so no peer keeps one. Its certificate is the proposal's
     /// `justify_qc`, which is also the only record of it for a node that
     /// missed the view's votes and the certificate broadcast that followed
-    /// them. The QC is read, not stored, so `certs` keeps meaning
-    /// certificates that arrived as certificates.
+    /// them.
     ///
     /// Views at or earlier than the lock cannot be what blocks us: safety
     /// pins the justify_qc of any proposal we may still vote for at or later
