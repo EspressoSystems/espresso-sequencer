@@ -223,16 +223,17 @@ def pick_base_tag(tags: set[str], reachable: set[str], containing: set[str]) -> 
 
     HEAD's line is that of its newest reachable tag. Patch tags are not ancestors of
     main, so they count by line rather than reachability; newer lines are excluded.
+    Assumes every line's `X.Y.Z.0` cut is on main.
     """
     if not reachable:
         raise RuntimeError(
             f"No tags matching {RELEASE_TAG_GLOB} or {LEGACY_TAG_GLOB} reachable from HEAD;"
             " fetch full history with tags."
         )
-    cap = line_order(max(reachable, key=tag_order))
-    pool = {t for t in tags - containing if line_order(t) <= cap}
+    newest = max(reachable, key=tag_order)
+    pool = {t for t in tags - containing if line_order(t) <= line_order(newest)}
     if not pool:
-        raise RuntimeError(f"No base tag below HEAD's line {cap}.")
+        raise RuntimeError(f"No base tag up to the line of {newest} outside HEAD.")
     return max(pool, key=tag_order)
 
 

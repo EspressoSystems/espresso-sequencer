@@ -37,7 +37,7 @@ def test_pick_base_tag(reachable: set[str], containing: set[str], base: str) -> 
 
 
 def test_pick_base_tag_skips_newer_cut() -> None:
-    tags = {"0.6.3.10", "0.7.0.0", "0.8.0.0"}
+    tags = {"0.6.3.0", "0.6.3.10", "0.7.0.0", "0.8.0.0"}
     assert run.pick_base_tag(tags, {"0.6.3.0", "0.7.0.0"}, set()) == "0.7.0.0"
 
 
