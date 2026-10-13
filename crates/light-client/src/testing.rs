@@ -861,6 +861,13 @@ impl TestClient {
         let mut inner = self.inner.lock().await;
         inner.fail_header_proofs = true;
     }
+
+    /// Drop the `Certificate2` finalizing the leaf at `height`, like a server that never stored it.
+    pub async fn forget_cert2(&self, height: usize) {
+        let mut inner = self.inner.lock().await;
+        inner.leaf(height, self.epoch_height, None).await;
+        inner.cert2s.remove(&height);
+    }
 }
 
 impl Client for TestClient {

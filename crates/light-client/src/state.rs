@@ -570,8 +570,16 @@ where
                     err = %format_args!("{err:#}"),
                     "header proof fetch failed, fetching a leaf proof instead"
                 );
+                let known_finalized = match id {
+                    BlockId::Number(n) => {
+                        upper_bound.height().saturating_sub(n as u64) <= MAX_FINALIZED_HINT_DISTANCE
+                    },
+                    // Hash lookups only ever return the requested header itself, handled above.
+                    BlockId::Hash(_) | BlockId::PayloadHash(_) => true,
+                }
+                .then(|| upper_bound.leaf());
                 let leaf = self
-                    .fetch_leaf_from_server(id, None, quorum)
+                    .fetch_leaf_from_server(id, known_finalized, quorum)
                     .await
                     .with_context(|| format!("header proof also failed: {err:#}"))?;
                 return Ok(leaf.header().clone());
@@ -1310,6 +1318,24 @@ mod test {
         let db = SqliteStorage::default().await.unwrap();
         db.insert_leaf(client.leaf(2).await).await.unwrap();
         client.fail_header_proofs().await;
+
+        let lc = LightClient::from_genesis(db, client.clone(), client.genesis().await);
+        assert_eq!(
+            lc.fetch_header(BlockId::Number(1)).await.unwrap(),
+            *client.leaf(1).await.header(),
+        );
+    }
+
+    #[tokio::test]
+    #[test_log::test]
+    async fn test_fetch_header_fallback_anchors_on_cached_successor_without_cert2() {
+        let client = TestClient::default();
+        client.set_upgrade(1, NEW_PROTOCOL_VERSION).await;
+
+        let db = SqliteStorage::default().await.unwrap();
+        db.insert_leaf(client.leaf(2).await).await.unwrap();
+        client.fail_header_proofs().await;
+        client.forget_cert2(1).await;
 
         let lc = LightClient::from_genesis(db, client.clone(), client.genesis().await);
         assert_eq!(
