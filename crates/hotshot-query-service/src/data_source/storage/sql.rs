@@ -741,7 +741,10 @@ impl SqlStorage {
         // TODO(abdul): remove once a sqlx release includes launchbadge/sqlx#4394.
         // In sqlx 0.8.6, if `begin()` is cancelled, the connection can go back to the pool with a
         // transaction still open, and sqlx does not know about it. Ask Postgres and drop it.
-        // Keep `raw_sql`: with a normal query the two timestamps are always different.
+        // With no transaction open, this query starts its own, so both timestamps are the same.
+        // Inside an open transaction, the transaction started earlier, so they differ.
+        // Keep `raw_sql`. A normal query is sent in several messages and Postgres moves
+        // `statement_timestamp()` forward on each one, so the timestamps would always differ.
         #[cfg(not(feature = "embedded-db"))]
         let pool = pool.after_release(|conn, _| {
             async move {
