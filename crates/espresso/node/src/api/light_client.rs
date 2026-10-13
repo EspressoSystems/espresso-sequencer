@@ -1,21 +1,25 @@
-use std::{collections::HashMap, fmt::Display, sync::Arc, time::Duration};
+use std::{cmp::Ordering, collections::HashMap, fmt::Display, sync::Arc, time::Duration};
 
-use anyhow::Result;
-use committable::Committable;
+use anyhow::{Result, bail, ensure};
+use committable::{Commitment, Committable};
 use disco_types::status::StatusCode;
 use espresso_types::{BlockMerkleTree, Header, NsIndex, NsProof, SeqTypes};
 use futures::{TryStreamExt, future::try_join, stream::StreamExt};
 use hotshot_query_service::{
-    Error,
+    Error, QueryError,
     availability::{AvailabilityDataSource, LeafQueryData, PayloadQueryData, VidCommonQueryData},
     data_source::{VersionedDataSource, storage::NodeStorage},
-    merklized_state::{MerklizedStateDataSource, Snapshot},
+    merklized_state::{MerklizedStateDataSource, MerklizedStateHeightPersistence, Snapshot},
     node::BlockId,
     types::HeightIndexed,
 };
 use hotshot_types::simple_certificate::QuorumCertificate2;
 use itertools::izip;
-use jf_merkle_tree_compat::MerkleTreeScheme;
+use jf_merkle_tree_compat::{
+    DigestAlgorithm, MerkleTreeScheme,
+    internal::MerkleNode,
+    prelude::{Sha3Digest, Sha3Node},
+};
 use light_client::{
     client::NAMESPACES_PARAM_TAG,
     consensus::{header::HeaderProof, leaf::LeafProof, namespace::NamespaceProof},
@@ -361,6 +365,7 @@ pub(crate) async fn get_header_proof<State>(
 where
     State: AvailabilityDataSource<SeqTypes>
         + MerklizedStateDataSource<SeqTypes, BlockMerkleTree, { BlockMerkleTree::ARITY }>
+        + MerklizedStateHeightPersistence
         + VersionedDataSource,
 {
     let header = state
@@ -383,12 +388,162 @@ where
         Snapshot::Index(root),
         header.height(),
     )
-    .await
-    .map_err(|source| Error::MerklizedState {
-        source: source.into(),
-    })?;
+    .await;
+    let path = match path {
+        Ok(path) => path,
+        Err(err) if matches!(err.status(), StatusCode::NOT_FOUND | StatusCode::GONE) => {
+            // No usable snapshot at `root` (pruned or missing): rebuild from the newest one.
+            let head = state.get_last_state_height().await.map_err(merkle_error)? as u64;
+            if head <= root {
+                return Err(merkle_error(err));
+            }
+            return rebuild_header_path(state, root, header, head, fetch_timeout).await;
+        },
+        Err(err) => return Err(merkle_error(err)),
+    };
 
     Ok(HeaderProof::new(header, path))
+}
+
+fn merkle_error(source: QueryError) -> Error {
+    Error::MerklizedState {
+        source: source.into(),
+    }
+}
+
+/// Prove `header` against `root` using the snapshot at `head`, when the state at `root` is pruned.
+///
+/// The result is verified against the commitment in header `root`.
+async fn rebuild_header_path<State>(
+    state: &State,
+    root: u64,
+    header: Header,
+    head: u64,
+    fetch_timeout: Duration,
+) -> Result<HeaderProof, Error>
+where
+    State: AvailabilityDataSource<SeqTypes>
+        + MerklizedStateDataSource<SeqTypes, BlockMerkleTree, { BlockMerkleTree::ARITY }>,
+{
+    let get_path = |height| {
+        MerklizedStateDataSource::<SeqTypes, BlockMerkleTree, _>::get_path(
+            state,
+            Snapshot::Index(head),
+            height,
+        )
+    };
+    let frontier = get_path(root - 1).await.map_err(merkle_error)?;
+    let target = get_path(header.height()).await.map_err(merkle_error)?;
+    let root_header = state
+        .get_header(BlockId::Number(root as usize))
+        .await
+        .with_timeout(fetch_timeout)
+        .await
+        .ok_or_else(|| not_found(format!("unknown header {root}")))?;
+
+    let proof = rebuild_block_proof(root, &frontier, &target).map_err(internal)?;
+    let proof = HeaderProof::new(header, proof);
+    proof
+        .verify_ref(root_header.block_merkle_tree_root())
+        .map_err(|err| {
+            internal(format!(
+                "rebuilt block merkle path does not match root {root}: {err:#}"
+            ))
+        })?;
+    Ok(proof)
+}
+
+type BlockMerkleProof = <BlockMerkleTree as MerkleTreeScheme>::MembershipProof;
+type BlockMerkleNode = MerkleNode<Commitment<Header>, u64, Sha3Node>;
+
+/// The path to `target.pos` in the block tree of the first `num_leaves` leaves.
+///
+/// Both proofs come from one snapshot with more than `num_leaves` leaves; `frontier` is for leaf
+/// `num_leaves - 1`. Subtrees left of the frontier are full and unchanged since, subtrees right of
+/// it are empty, and the frontier nodes are recomputed.
+pub(crate) fn rebuild_block_proof(
+    num_leaves: u64,
+    frontier: &BlockMerkleProof,
+    target: &BlockMerkleProof,
+) -> Result<BlockMerkleProof> {
+    ensure!(
+        frontier.pos + 1 == num_leaves,
+        "frontier proof is for leaf {}, expected {}",
+        frontier.pos,
+        num_leaves.wrapping_sub(1),
+    );
+    ensure!(target.pos < num_leaves, "target leaf is beyond the tree");
+    ensure!(
+        frontier.proof.len() == target.proof.len(),
+        "proofs have different heights"
+    );
+
+    // Value of the frontier node at each level, starting with the leaf.
+    let mut edge_values = vec![frontier.proof[0].value()];
+    for (level, node) in frontier.proof.iter().enumerate().skip(1) {
+        let edge = frontier.pos / ARITY.pow(level as u32 - 1);
+        let data = child_values(node, edge / ARITY, edge, edge_values[level - 1])?;
+        edge_values.push(<Sha3Digest as DigestAlgorithm<
+            Commitment<Header>,
+            u64,
+            _,
+        >>::digest(&data)?);
+    }
+
+    let mut proof = vec![target.proof[0].clone()];
+    for (level, node) in target.proof.iter().enumerate().skip(1) {
+        let divisor = ARITY.pow(level as u32 - 1);
+        let edge = frontier.pos / divisor;
+        let data = child_values(
+            node,
+            target.pos / divisor / ARITY,
+            edge,
+            edge_values[level - 1],
+        )?;
+        let children = data
+            .iter()
+            .enumerate()
+            .map(|(n, value)| {
+                let index = target.pos / divisor / ARITY * ARITY + n as u64;
+                Arc::new(match index.cmp(&edge) {
+                    Ordering::Greater => BlockMerkleNode::Empty,
+                    _ => BlockMerkleNode::ForgettenSubtree { value: *value },
+                })
+            })
+            .collect();
+        proof.push(BlockMerkleNode::Branch {
+            value: Sha3Node::default(),
+            children,
+        });
+    }
+    Ok(BlockMerkleProof {
+        pos: target.pos,
+        proof,
+    })
+}
+
+const ARITY: u64 = BlockMerkleTree::ARITY as u64;
+
+/// Child values of `node`, whose children have indices `parent * ARITY + n` at their level, in the
+/// tree where the rightmost non-empty node of that level is `edge` with value `edge_value`.
+fn child_values(
+    node: &BlockMerkleNode,
+    parent: u64,
+    edge: u64,
+    edge_value: Sha3Node,
+) -> Result<Vec<Sha3Node>> {
+    let BlockMerkleNode::Branch { children, .. } = node else {
+        bail!("expected a branch node in the proof");
+    };
+    Ok(children
+        .iter()
+        .enumerate()
+        .map(|(n, child)| match (parent * ARITY + n as u64).cmp(&edge) {
+            Ordering::Less => child.value(),
+            Ordering::Equal => edge_value,
+            Ordering::Greater => Sha3Node::default(),
+        })
+        .collect())
 }
 
 pub(crate) async fn fetch_block_data_range<State>(
@@ -606,16 +761,20 @@ mod test {
         data_source::{
             Transaction,
             sql::Config,
-            storage::{AvailabilityStorage, UpdateAvailabilityStorage},
+            storage::{
+                AvailabilityStorage, SqlStorage, UpdateAvailabilityStorage, pruning::PrunerCfg,
+            },
         },
         fetching::provider::TrustedQueryServiceProvider,
-        merklized_state::UpdateStateData,
+        merklized_state::{MerklizedState, UpdateStateData},
     };
     use hotshot_types::{
         data::ViewNumber, simple_certificate::CertificatePair, simple_vote::Vote2Data,
     };
     use http_wire::{ServerError, respond};
-    use jf_merkle_tree_compat::{AppendableMerkleTreeScheme, ToTraversalPath};
+    use jf_merkle_tree_compat::{
+        AppendableMerkleTreeScheme, ToTraversalPath, prelude::SHA3MerkleTree,
+    };
     use light_client::{
         consensus::leaf::{FinalityProof, LeafProofHint},
         testing::{
@@ -1536,6 +1695,164 @@ mod test {
             .await
             .unwrap_err();
         assert_eq!(err.status(), StatusCode::BAD_REQUEST);
+    }
+
+    // The light-weight block tree forgets all but its last leaf.
+    type FullTree = SHA3MerkleTree<Commitment<Header>>;
+
+    fn fake_tree(num_leaves: u64) -> FullTree {
+        FullTree::from_elems(
+            Some(BLOCK_MERKLE_TREE_HEIGHT),
+            (0..num_leaves).map(|i| Commitment::<Header>::from_raw([i as u8 + 1; 32])),
+        )
+        .unwrap()
+    }
+
+    fn lookup(tree: &FullTree, pos: u64) -> BlockMerkleProof {
+        tree.lookup(pos).expect_ok().unwrap().1
+    }
+
+    /// Rebuilding from `head_leaves` leaves matches the tree of `r` leaves for every `r` in `rs`.
+    fn check_rebuild(head_leaves: u64, rs: impl IntoIterator<Item = u64>) {
+        let head = fake_tree(head_leaves);
+        for r in rs {
+            let tree = fake_tree(r);
+            let frontier = lookup(&head, r - 1);
+            for i in 0..r {
+                let proof = rebuild_block_proof(r, &frontier, &lookup(&head, i)).unwrap();
+                assert_eq!(proof, lookup(&tree, i), "r={r} i={i}");
+                assert!(
+                    BlockMerkleTree::verify(tree.commitment(), i, &proof)
+                        .unwrap()
+                        .is_ok()
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_rebuild_block_proof_matches_snapshot() {
+        check_rebuild(100, [2, 4, 5, 10, 26, 28, 50, 99]);
+    }
+
+    #[test]
+    fn test_rebuild_block_proof_last_leaf() {
+        let head = fake_tree(40);
+        let tree = fake_tree(13);
+        let proof = rebuild_block_proof(13, &lookup(&head, 12), &lookup(&head, 12)).unwrap();
+        assert_eq!(proof, lookup(&tree, 12));
+    }
+
+    #[test]
+    fn test_rebuild_block_proof_full_subtree() {
+        check_rebuild(100, [3, 9, 27, 81]);
+    }
+
+    #[test]
+    fn test_rebuild_block_proof_single_leaf() {
+        check_rebuild(5, [1]);
+    }
+
+    #[test]
+    fn test_rebuild_block_proof_wrong_frontier() {
+        let head = fake_tree(40);
+        let err = rebuild_block_proof(13, &lookup(&head, 11), &lookup(&head, 3)).unwrap_err();
+        assert!(err.to_string().contains("frontier"), "{err:#}");
+    }
+
+    /// A data source with `num_leaves` headers, state at every height, and state below `pruned`
+    /// collected. Returns the data source and the block tree at each height. The storage guard
+    /// keeps the database alive.
+    async fn pruned_data_source(
+        num_leaves: usize,
+        pruned: u64,
+    ) -> (impl Sized, DataSource, Vec<BlockMerkleTree>) {
+        let storage = <DataSource as TestableSequencerDataSource>::create_storage().await;
+        let ds = DataSource::create(
+            DataSource::persistence_options(&storage),
+            Default::default(),
+            false,
+        )
+        .await
+        .unwrap();
+
+        let leaves = leaf_chain(0..num_leaves as u64, EPOCH_VERSION).await;
+        let mts = leaves
+            .iter()
+            .scan(
+                BlockMerkleTree::new(BLOCK_MERKLE_TREE_HEIGHT),
+                |mt, leaf| {
+                    let item = mt.clone();
+                    mt.push(leaf.block_hash()).unwrap();
+                    Some(item)
+                },
+            )
+            .collect::<Vec<_>>();
+
+        let mut tx = ds.write().await.unwrap();
+        for (leaf, mt) in leaves.iter().zip(&mts) {
+            tx.insert_leaf(leaf).await.unwrap();
+            if leaf.height() > 0 {
+                let merkle_path = mt.lookup(leaf.height() - 1).expect_ok().unwrap().1;
+                UpdateStateData::<SeqTypes, BlockMerkleTree, _>::insert_merkle_nodes(
+                    &mut tx,
+                    merkle_path,
+                    ToTraversalPath::<{ BlockMerkleTree::ARITY }>::to_traversal_path(
+                        &(leaf.height() - 1),
+                        BLOCK_MERKLE_TREE_HEIGHT,
+                    ),
+                    leaf.height(),
+                )
+                .await
+                .unwrap();
+                UpdateStateData::<SeqTypes, BlockMerkleTree, _>::set_last_state_height(
+                    &mut tx,
+                    leaf.height() as usize,
+                )
+                .await
+                .unwrap();
+            }
+        }
+        tx.commit().await.unwrap();
+
+        let cfg =
+            PrunerCfg::default().with_state_tables(vec![BlockMerkleTree::state_type().into()]);
+        let sql: &SqlStorage = ds.as_ref();
+        sql.prune_state_below(pruned, 0, &cfg).await.unwrap();
+        (storage, ds, mts)
+    }
+
+    #[tokio::test]
+    #[test_log::test]
+    async fn test_header_proof_pruned_root() {
+        let num_leaves = 40;
+        let (_storage, ds, mts) = pruned_data_source(num_leaves, 30).await;
+
+        // Roots below the pruned height are rebuilt from the newest snapshot.
+        for root in [1, 2, 4, 10, 13, 27, 28] {
+            for height in 0..root {
+                let proof = get_header_proof(
+                    &ds,
+                    root as u64,
+                    BlockId::Number(height),
+                    Duration::from_secs(10),
+                )
+                .await
+                .unwrap();
+                proof.verify(mts[root].commitment()).unwrap();
+            }
+        }
+    }
+
+    #[tokio::test]
+    #[test_log::test]
+    async fn test_header_proof_root_beyond_head_fails() {
+        let (_storage, ds, _) = pruned_data_source(10, 5).await;
+        // The state at the head height is stored; beyond it there is no snapshot to rebuild from.
+        let err = get_header_proof(&ds, 20, BlockId::Number(3), Duration::from_secs(10))
+            .await
+            .unwrap_err();
+        assert_eq!(err.status(), StatusCode::NOT_FOUND);
     }
 
     #[tokio::test]
