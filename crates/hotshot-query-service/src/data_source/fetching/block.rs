@@ -187,7 +187,7 @@ pub(super) fn fetch_block_with_header<Types, S, P>(
     };
 
     // Now that we have the header, we only need to retrieve the payload.
-    tracing::info!(
+    tracing::debug!(
         "spawned active fetch for payload {:?} (height {})",
         header.payload_commitment(),
         header.block_number()
@@ -314,7 +314,7 @@ where
     P: AvailabilityProvider<Types>,
 {
     async fn run(self, payload: Payload<Types>) {
-        tracing::info!("fetched payload {:?}", self.header.payload_commitment());
+        tracing::debug!("fetched payload {:?}", self.header.payload_commitment());
         let block = BlockQueryData::new(self.header, payload);
         self.fetcher.store_and_notify(&block).await;
     }

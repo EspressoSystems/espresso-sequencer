@@ -194,14 +194,14 @@ where
     pub(super) fn run(self, header: Header<Types>) {
         match self {
             Self::Payload { fetcher } => {
-                tracing::info!(
+                tracing::debug!(
                     "fetched leaf {}, will now fetch payload",
                     header.block_number()
                 );
                 fetch_block_with_header(fetcher, header);
             },
             Self::VidCommon { fetcher } => {
-                tracing::info!(
+                tracing::debug!(
                     "fetched leaf {}, will now fetch VID common",
                     header.block_number()
                 );
