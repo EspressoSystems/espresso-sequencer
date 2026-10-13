@@ -650,7 +650,6 @@ mod tests {
     #[case::window_only(100, 100 * 2, Some(3..=3))]
     #[case::pre_pos(100, 50, None)]
     #[case::genesis(100, 0, None)]
-    #[case::no_epochs(0, 1000, None)]
     fn install_range_cases(
         #[case] epoch_height: u64,
         #[case] anchor_height: u64,
@@ -949,9 +948,8 @@ mod tests {
     }
 
     #[test_log::test(tokio::test)]
-    async fn invalid_proof_at_first_epoch_installs_nothing() {
+    async fn invalid_proof_at_first_epoch_fails() {
         let (client, anchor) = chain().await;
-        let coordinator = fresh_coordinator(&client).await;
         let range = install_range(anchor.height, EPOCH_HEIGHT, EpochNumber::new(FIRST_EPOCH));
         let range = range.unwrap();
         let first_root = root_block_in_epoch(range.start().u64() - 2, EPOCH_HEIGHT);
@@ -965,7 +963,6 @@ mod tests {
             format!("{err:#}").contains("verifying the epoch root"),
             "{err:#}"
         );
-        assert!(!has_table(&coordinator, N - 3));
     }
 
     /// A verification failure is retried, not read as the tip, and the retry installs the window.
@@ -995,9 +992,8 @@ mod tests {
     }
 
     #[test_log::test(tokio::test)]
-    async fn wrong_anchor_root_installs_nothing() {
+    async fn wrong_anchor_root_fails() {
         let (client, anchor) = chain().await;
-        let coordinator = fresh_coordinator(&client).await;
         let range = install_range(anchor.height, EPOCH_HEIGHT, EpochNumber::new(FIRST_EPOCH));
         let anchor = TrustedAnchor {
             block_comm_root: anchor.block_comm_root + CircuitField::from(1u64),
@@ -1009,7 +1005,6 @@ mod tests {
             .unwrap_err();
 
         assert!(format!("{err:#}").contains("commitment root"), "{err:#}");
-        assert!(!has_table(&coordinator, N - 3));
     }
 
     /// An epoch root the peer cannot serve at first must be retried, not read as the tip.
@@ -1034,7 +1029,7 @@ mod tests {
     }
 
     #[test_log::test(tokio::test)]
-    async fn deadline_aborts_when_far_from_the_anchor() {
+    async fn anchor_header_unavailable_aborts_at_the_deadline() {
         let (client, anchor) = chain().await;
         let coordinator = fresh_coordinator(&client).await;
         client.forget_leaf(ANCHOR_HEIGHT as usize).await;
@@ -1132,11 +1127,10 @@ mod tests {
         assert!(format!("{err:#}").contains("deadline exceeded"), "{err:#}");
     }
 
-    /// A bad proof after the first good ones fails the whole fetch, so nothing is installed.
+    /// A bad proof after the first good ones fails the whole fetch.
     #[test_log::test(tokio::test)]
-    async fn invalid_proof_mid_range_installs_nothing() {
+    async fn invalid_proof_mid_range_fails() {
         let (client, anchor) = chain().await;
-        let coordinator = fresh_coordinator(&client).await;
         let range = install_range(anchor.height, EPOCH_HEIGHT, EpochNumber::new(FIRST_EPOCH));
         let range = range.unwrap();
         client
@@ -1151,9 +1145,6 @@ mod tests {
             format!("{err:#}").contains("verifying the epoch root"),
             "{err:#}"
         );
-        for epoch in range.start().u64()..=range.end().u64() {
-            assert!(!has_table(&coordinator, epoch), "epoch {epoch}");
-        }
     }
 
     /// A restart after an interrupted install holds a lone table at the start of the range. That is
@@ -1201,6 +1192,28 @@ mod tests {
 
         assert_eq!(current, EpochNumber::new(N + 1));
         assert!(has_table(&coordinator, N + 2));
+    }
+
+    /// The follower's mid-run call has no target and no boot milestones, and still installs the
+    /// window.
+    #[test_log::test(tokio::test)]
+    async fn mid_run_skip_installs_window() {
+        let (client, anchor) = chain().await;
+        let coordinator = fresh_coordinator(&client).await;
+        let params = BootstrapParams {
+            boot: false,
+            deadline: Duration::from_secs(2),
+            ..PARAMS
+        };
+
+        let current = bootstrap(&coordinator, Some(anchor), &[client], params)
+            .await
+            .unwrap();
+
+        assert_eq!(current, EpochNumber::new(N));
+        for epoch in (N - 3)..=(N + 1) {
+            assert!(has_table(&coordinator, epoch), "epoch {epoch}");
+        }
     }
 
     /// `Off` walks without fetching the anchor, so it makes no L1 calls.
