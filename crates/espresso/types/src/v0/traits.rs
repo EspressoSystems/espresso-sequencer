@@ -872,7 +872,13 @@ pub trait SequencerPersistence:
                 );
 
                 if let Err(err) = self
-                    .persist_decided_leaves(decided_view, chain, deciding_qc.clone(), consumer)
+                    .persist_decided_leaves(
+                        decided_view,
+                        chain,
+                        None,
+                        deciding_qc.clone(),
+                        consumer,
+                    )
                     .await
                 {
                     tracing::error!(
@@ -883,7 +889,9 @@ pub trait SequencerPersistence:
                 Some((decided_view, deciding_qc.clone()))
             },
             CoordinatorEvent::NewDecide {
-                leaf_infos, cert1, ..
+                leaf_infos,
+                cert1,
+                cert2,
             } => {
                 let first = leaf_infos.first()?;
                 let decided_view = first.leaf.view_number();
@@ -899,6 +907,7 @@ pub trait SequencerPersistence:
                     .persist_decided_leaves(
                         decided_view,
                         leaf_infos.iter().zip(certifying_qcs),
+                        cert2.as_ref(),
                         None,
                         consumer,
                     )
@@ -952,8 +961,14 @@ pub trait SequencerPersistence:
         deciding_qc: Option<Arc<CertificatePair<SeqTypes>>>,
         consumer: &(impl EventConsumer + 'static),
     ) -> anyhow::Result<()> {
-        self.persist_decided_leaves(decided_view, leaf_chain, deciding_qc.clone(), consumer)
-            .await?;
+        self.persist_decided_leaves(
+            decided_view,
+            leaf_chain,
+            None,
+            deciding_qc.clone(),
+            consumer,
+        )
+        .await?;
         // Leaves are persisted; processing failures are non-fatal here and retried in production.
         if let Err(err) = self
             .process_decided_events(decided_view, deciding_qc, consumer)
@@ -968,10 +983,15 @@ pub trait SequencerPersistence:
     /// anchor for restart recovery). Query-service ingestion and GC are deferred to
     /// [`process_decided_events`](Self::process_decided_events). Backends with no replayable storage
     /// (e.g. `NoStorage`) may instead forward decide events to `consumer` here.
+    ///
+    /// `cert2` finalizes the newest leaf of `leaf_chain`. It is persisted atomically with the
+    /// leaves, so [`process_decided_events`](Self::process_decided_events) never sees that leaf
+    /// without it.
     async fn persist_decided_leaves(
         &self,
         decided_view: ViewNumber,
         leaf_chain: impl IntoIterator<Item = (&LeafInfo<SeqTypes>, CertificatePair<SeqTypes>)> + Send,
+        cert2: Option<&Certificate2<SeqTypes>>,
         deciding_qc: Option<Arc<CertificatePair<SeqTypes>>>,
         consumer: &(impl EventConsumer + 'static),
     ) -> anyhow::Result<()>;
@@ -1268,14 +1288,6 @@ impl<P: SequencerPersistence> Storage<SeqTypes> for Arc<P> {
 #[cfg(feature = "node")]
 #[async_trait]
 impl<P: SequencerPersistence> NewProtocolStorage<SeqTypes> for Arc<P> {
-    async fn append_cert2(
-        &self,
-        view: ViewNumber,
-        cert: Certificate2<SeqTypes>,
-    ) -> anyhow::Result<()> {
-        (**self).append_cert2(view, cert).await
-    }
-
     async fn append_high_qc2(&self, high_qc: Certificate1<SeqTypes>) -> anyhow::Result<()> {
         // Writes are spawned concurrently and retried, so a stale write can land
         // after a newer one. The backend applies a monotonic compare-and-set
