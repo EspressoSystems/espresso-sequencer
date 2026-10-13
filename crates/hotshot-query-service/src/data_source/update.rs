@@ -145,7 +145,6 @@ where
                         tracing::warn!(height, "block payload missing at decide");
                     }
 
-                    // Extract VID common data from the new protocol's VidDisperseShare2.
                     let (vid_common, vid_share) = match &info.vid_share {
                         Some(VidDisperseShare::V2(share)) => (
                             Some(VidCommonQueryData::new(
@@ -181,10 +180,7 @@ where
 
                     let mut info = BlockInfo::new(leaf_data, block_data, vid_common, vid_share);
 
-                    // Attach `cert2` only to the newest leaf in the batch (`leaves[0]`, which is
-                    // `index == 0` since we iterate in reverse). Under the new protocol a single
-                    // `cert2` finalizes that leaf directly
-                    // older leaves in the batch are finalized using indirect rule
+                    // `cert2` finalizes only the newest leaf; the older ones follow from it.
                     if index == 0
                         && let Some(cert2) = &cert2
                     {

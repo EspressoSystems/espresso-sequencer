@@ -22,7 +22,6 @@ pub enum CoordinatorEvent<TYPES: NodeType> {
         cert2: Option<SimpleCertificate<TYPES, Vote2Data<TYPES>, SuccessThreshold>>,
     },
     QuorumProposal {
-        /// Boxed: a proposal is several times the size of any other variant.
         proposal: Box<SignedProposal<TYPES, Proposal<TYPES>>>,
         sender: TYPES::SignatureKey,
     },
