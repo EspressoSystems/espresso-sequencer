@@ -16,7 +16,7 @@ use hotshot_types::{
         Certificate1, Certificate2, SimpleCertificate, Threshold, TimeoutCertificate2,
         TimeoutCertificate3,
     },
-    simple_vote::{HasEpoch, QuorumData2, TimeoutData2, Vote2Data, Voteable},
+    simple_vote::{HasEpoch, LockView, QuorumData2, TimeoutData2, Vote2Data, Voteable},
     stake_table::StakeTableEntries,
     traits::{node_implementation::NodeType, signature_key::SignatureKey},
     vote::{Certificate, HasViewNumber},
@@ -303,6 +303,9 @@ pub(crate) fn verify_timeout3<T: NodeType>(
     let Some(cert) = tc.lock_cert() else {
         return Ok(());
     };
+    if !LockView::of(cert).checked_in(tc.epoch) {
+        return Ok(());
+    }
     ensure! {
         cert.data.is_well_formed(epoch_height),
         "timeout certificate lock is not well formed"

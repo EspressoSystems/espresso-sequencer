@@ -30,7 +30,9 @@ use hotshot_types::{
         LightClientStateUpdateCertificateV2, QuorumCertificate2, SuccessThreshold, Threshold,
         TimeoutCertificate3, UpgradeThreshold,
     },
-    simple_vote::{HasEpoch, QuorumVote2, SimpleVote, UpgradeVote2, VersionedVoteData, Voteable},
+    simple_vote::{
+        HasEpoch, LockView, QuorumVote2, SimpleVote, UpgradeVote2, VersionedVoteData, Voteable,
+    },
     stake_table::StakeTableEntries,
     traits::{
         node_implementation::NodeType,
@@ -419,6 +421,9 @@ impl<T: NodeType, Th: Threshold<T>> TimeoutTally<T, Th> {
         let Some(cert) = ballot.lock() else {
             return true;
         };
+        if !LockView::of(cert).checked_in(vote.data.epoch) {
+            return true;
+        }
         if !cert
             .data
             .is_well_formed(*self.membership.coordinator.epoch_height())
@@ -739,9 +744,10 @@ mod tests {
 
     use super::{Ballot, Cert, SimpleTally, TimeoutTally, VoteCollector};
     use crate::{
+        cert_verifier::verify_timeout3,
         helpers::{test_timeout_epoch_lock, test_upgrade_lock},
         message::{TimeoutBallot, TimeoutVoteMessage3, UpgradeVoteMessage, Vote2},
-        tests::common::utils::mock_membership,
+        tests::common::utils::{build_timeout_cert3_with_lock, mock_membership},
     };
 
     /// Number of test validators.
@@ -1326,6 +1332,35 @@ mod tests {
         )
         .unwrap();
         assert!(cert.check_lock().is_err());
+    }
+
+    /// A lock more than one epoch older than its timeout certificate is not
+    /// checked, so not even a forged one is refused; one of the epoch before
+    /// is checked.
+    #[tokio::test]
+    async fn timeout_lock_older_than_the_epoch_before_is_not_checked() {
+        let lock = test_timeout_epoch_lock();
+        let coordinator = mock_membership();
+        let epoch = EpochNumber::new(2);
+        let membership = coordinator.membership_for_epoch(Some(epoch)).unwrap();
+        let entries = StakeTableEntries::<TestTypes>::from_iter(membership.stake_table()).0;
+        let with_forged_lock = |lock_epoch| {
+            let mut cert = lock_cert(ViewNumber::new(2), lock_epoch, &membership, &lock);
+            cert.signatures = None;
+            build_timeout_cert3_with_lock(ViewNumber::new(5), epoch, Some(cert), &membership)
+        };
+        let verify = |tc| {
+            verify_timeout3(
+                &tc,
+                &entries,
+                membership.success_threshold(),
+                *coordinator.epoch_height(),
+                &lock,
+                &coordinator,
+            )
+        };
+        assert!(verify(with_forged_lock(EpochNumber::new(0))).is_ok());
+        assert!(verify(with_forged_lock(EpochNumber::new(1))).is_err());
     }
 
     /// A `Certificate1` at `view` signed by every member.

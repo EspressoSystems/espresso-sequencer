@@ -2350,14 +2350,15 @@ impl<T: NodeType> Consensus<T> {
     ///
     /// The lock may be later than this node's own: a leader must build on a
     /// block no earlier than it, and this node may have to lock on it to vote.
-    /// Its block and payload are fetched if missing.
+    /// Its block and payload are fetched if missing. A lock the certificate's
+    /// verification did not check (`LockView::checked_in`) is not taken in.
     fn adopt_timeout_lock(&mut self, view: ViewNumber, outbox: &mut Outbox<ConsensusOutput<T>>) {
-        let Some((lock, cert)) = self
-            .timeout_certs
-            .get(&view)
-            .and_then(|tc| tc.lock())
-            .map(|(lock, cert)| (lock, cert.clone()))
-        else {
+        let Some((lock, cert)) = self.timeout_certs.get(&view).and_then(|tc| {
+            let (lock, cert) = tc.lock()?;
+            tc.epoch()
+                .is_some_and(|epoch| lock.checked_in(epoch))
+                .then(|| (lock, cert.clone()))
+        }) else {
             return;
         };
         if lock.view <= self.decide_floor() || self.lock_view().is_some_and(|own| own >= lock) {

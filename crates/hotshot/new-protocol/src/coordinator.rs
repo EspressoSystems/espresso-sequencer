@@ -21,7 +21,7 @@ use hotshot_types::{
         OneHonestThreshold, SuccessThreshold, TimeoutCertificate2, TimeoutCertificate3,
         TimeoutEvidence, UpgradeCertificate2,
     },
-    simple_vote::{HasEpoch, QuorumVote2, TimeoutVote2},
+    simple_vote::{HasEpoch, LockView, QuorumVote2, TimeoutVote2},
     traits::{
         block_contents::BlockHeader, metrics::Metrics, node_implementation::NodeType,
         signature_key::StateSignatureKey,
@@ -1536,7 +1536,8 @@ where
                             .revote
                             .timeout
                             .as_ref()
-                            .and_then(TimeoutCertificate3::lock_epoch),
+                            .and_then(TimeoutCertificate3::lock),
+                        epoch,
                     ) {
                         debug!(%node, %sender, %view, %lock_epoch, "re-vote request lock of an unknown epoch");
                         self.epoch_manager.request_drb_result(lock_epoch);
@@ -2363,8 +2364,8 @@ where
                 self.timeout_one_honest_collector.accumulate_vote(vote);
             },
             TimeoutVote::V3(ballot) => {
-                let lock_epoch = ballot.lock().and_then(|cert| cert.data.epoch);
-                if let Some(epoch) = self.unknown_lock_epoch(lock_epoch) {
+                let lock = ballot.lock().map(LockView::of);
+                if let Some(epoch) = self.unknown_lock_epoch(lock, ballot.vote().data.epoch) {
                     debug!(%node, %sender, %view, %epoch, "timeout vote lock of an unknown epoch");
                     self.epoch_manager.request_drb_result(epoch);
                     return;
@@ -2423,25 +2424,34 @@ where
             warn!(node = %self.node_id, %sender, %view, "inadmissible timeout certificate");
             return None;
         }
+        if view < self.consensus.decide_floor() {
+            debug!(node = %self.node_id, %sender, %view, "stale timeout certificate");
+            return None;
+        }
         if let Err(err) = tc.check_lock() {
             warn!(node = %self.node_id, %sender, %view, %err, "malformed timeout certificate");
             return None;
         }
-        if let Some(epoch) = self.unknown_lock_epoch(tc.lock_epoch()) {
+        if let Some(epoch) = self.unknown_lock_epoch(tc.lock(), tc.epoch) {
             return Some(epoch);
         }
         self.cert_verifiers.timeout3.verify(sender.clone(), tc)
     }
 
-    /// `epoch`, the epoch of a lock a timeout certificate or vote carries, if
-    /// its committee is not known yet.
+    /// The epoch of `lock`, carried by a timeout vote or certificate of
+    /// `epoch`, if the lock is checked (`LockView::checked_in`) and its
+    /// committee is not known yet.
     ///
     /// The lock certificate cannot be checked until it is, so the item is
     /// dropped instead of failing verification, and the caller drives the
     /// epoch's catchup. Timeout votes and certificates are sent again on every
     /// re-arm of the timer.
-    fn unknown_lock_epoch(&self, epoch: Option<EpochNumber>) -> Option<EpochNumber> {
-        let epoch = epoch?;
+    fn unknown_lock_epoch(
+        &self,
+        lock: Option<LockView>,
+        epoch: EpochNumber,
+    ) -> Option<EpochNumber> {
+        let epoch = lock.filter(|lock| lock.checked_in(epoch))?.epoch;
         self.membership_coordinator
             .membership_for_epoch(Some(epoch))
             .is_err()

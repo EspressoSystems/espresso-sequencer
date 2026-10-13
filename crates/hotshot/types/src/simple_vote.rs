@@ -138,6 +138,19 @@ impl LockView {
             view: cert.view_number(),
         }
     }
+
+    /// Whether this lock, carried by a timeout vote or certificate of `epoch`,
+    /// is checked: it is of that epoch or the one before.
+    ///
+    /// A proposal after a timeout certificate is of the certificate's epoch, and
+    /// a lock of an earlier epoch admits any parent, so whether an older lock is
+    /// genuine changes nothing. Its certificate is not checked, its committee
+    /// not looked up and the lock not adopted, which keeps a peer from starting
+    /// catchups for old epochs. The vote still counts: an honest node back from
+    /// several epochs away holds such a lock until it adopts a newer one.
+    pub fn checked_in(&self, epoch: EpochNumber) -> bool {
+        self.epoch.saturating_add(1) >= *epoch
+    }
 }
 
 impl std::fmt::Display for LockView {
