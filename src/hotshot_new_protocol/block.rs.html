@@ -231,7 +231,7 @@
 <a href=#231 id=231 data-nosnippet>231</a>    /// leader and view, so a second block for the view is votable only if its
 <a href=#232 id=232 data-nosnippet>232</a>    /// payload is the same. It is the same whenever the new parent does not
 <a href=#233 id=233 data-nosnippet>233</a>    /// change how the payload is built.
-<a href=#234 id=234 data-nosnippet>234</a>    </span>view_transactions: BTreeMap&lt;ViewNumber, Vec&lt;T::Transaction&gt;&gt;,
+<a href=#234 id=234 data-nosnippet>234</a>    </span>view_transactions: BTreeMap&lt;ViewNumber, Arc&lt;Vec&lt;T::Transaction&gt;&gt;&gt;,
 <a href=#235 id=235 data-nosnippet>235</a>    tasks: JoinSet&lt;<span class="prelude-ty">Result</span>&lt;BlockBuilderOutput&lt;T&gt;, BlockError&gt;&gt;,
 <a href=#236 id=236 data-nosnippet>236</a>}
 <a href=#237 id=237 data-nosnippet>237</a>
@@ -288,7 +288,7 @@
 <a href=#288 id=288 data-nosnippet>288</a>            <span class="kw">let </span>validated_state =
 <a href=#289 id=289 data-nosnippet>289</a>                T::ValidatedState::from_header(<span class="kw-2">&amp;</span>request.parent_proposal.block_header);
 <a href=#290 id=290 data-nosnippet>290</a>            <span class="kw">let </span>(payload, metadata) =
-<a href=#291 id=291 data-nosnippet>291</a>                T::BlockPayload::from_transactions(txs, <span class="kw-2">&amp;</span>validated_state, <span class="kw-2">&amp;</span>instance)
+<a href=#291 id=291 data-nosnippet>291</a>                T::BlockPayload::from_transactions(<span class="kw-2">&amp;</span>txs, <span class="kw-2">&amp;</span>validated_state, <span class="kw-2">&amp;</span>instance)
 <a href=#292 id=292 data-nosnippet>292</a>                    .<span class="kw">await
 <a href=#293 id=293 data-nosnippet>293</a>                    </span>.map_err(|e| BlockError::PayloadConstruction(e.to_string()))<span class="question-mark">?</span>;
 <a href=#294 id=294 data-nosnippet>294</a>            <span class="kw">let </span>payload: PayloadWithMetadata&lt;T&gt; = PayloadWithMetadata { payload, metadata };
@@ -348,12 +348,12 @@
 <a href=#348 id=348 data-nosnippet>348</a>        <span class="self">self</span>.calculations.insert((view, parent_commitment), handle);
 <a href=#349 id=349 data-nosnippet>349</a>    }
 <a href=#350 id=350 data-nosnippet>350</a>
-<a href=#351 id=351 data-nosnippet>351</a>    <span class="kw">fn </span>transactions_for(<span class="kw-2">&amp;mut </span><span class="self">self</span>, view: ViewNumber) -&gt; Vec&lt;T::Transaction&gt; {
+<a href=#351 id=351 data-nosnippet>351</a>    <span class="kw">fn </span>transactions_for(<span class="kw-2">&amp;mut </span><span class="self">self</span>, view: ViewNumber) -&gt; Arc&lt;Vec&lt;T::Transaction&gt;&gt; {
 <a href=#352 id=352 data-nosnippet>352</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(txs) = <span class="self">self</span>.view_transactions.get(<span class="kw-2">&amp;</span>view) {
-<a href=#353 id=353 data-nosnippet>353</a>            <span class="kw">return </span>txs.clone();
+<a href=#353 id=353 data-nosnippet>353</a>            <span class="kw">return </span>Arc::clone(txs);
 <a href=#354 id=354 data-nosnippet>354</a>        }
-<a href=#355 id=355 data-nosnippet>355</a>        <span class="kw">let </span>txs = <span class="self">self</span>.take_block(view);
-<a href=#356 id=356 data-nosnippet>356</a>        <span class="self">self</span>.view_transactions.insert(view, txs.clone());
+<a href=#355 id=355 data-nosnippet>355</a>        <span class="kw">let </span>txs = Arc::new(<span class="self">self</span>.take_block(view));
+<a href=#356 id=356 data-nosnippet>356</a>        <span class="self">self</span>.view_transactions.insert(view, Arc::clone(<span class="kw-2">&amp;</span>txs));
 <a href=#357 id=357 data-nosnippet>357</a>        txs
 <a href=#358 id=358 data-nosnippet>358</a>    }
 <a href=#359 id=359 data-nosnippet>359</a>

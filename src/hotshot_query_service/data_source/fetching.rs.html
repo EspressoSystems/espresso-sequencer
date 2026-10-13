@@ -3454,9 +3454,9 @@
 <a href=#3454 id=3454 data-nosnippet>3454</a>
 <a href=#3455 id=3455 data-nosnippet>3455</a>        <span class="kw">for </span>i <span class="kw">in </span><span class="number">0</span>..n {
 <a href=#3456 id=3456 data-nosnippet>3456</a>            <span class="comment">// Height i carries i+1 distinct transactions.
-<a href=#3457 id=3457 data-nosnippet>3457</a>            </span><span class="kw">let </span>txs = (<span class="number">0</span>..=i).map(|j| mock_transaction(<span class="macro">vec!</span>[j <span class="kw">as </span>u8]));
+<a href=#3457 id=3457 data-nosnippet>3457</a>            </span><span class="kw">let </span>txs: Vec&lt;<span class="kw">_</span>&gt; = (<span class="number">0</span>..=i).map(|j| mock_transaction(<span class="macro">vec!</span>[j <span class="kw">as </span>u8])).collect();
 <a href=#3458 id=3458 data-nosnippet>3458</a>            <span class="kw">let </span>(payload, metadata) = &lt;MockPayload <span class="kw">as </span>BlockPayload&lt;MockTypes&gt;&gt;::from_transactions(
-<a href=#3459 id=3459 data-nosnippet>3459</a>                txs,
+<a href=#3459 id=3459 data-nosnippet>3459</a>                <span class="kw-2">&amp;</span>txs,
 <a href=#3460 id=3460 data-nosnippet>3460</a>                <span class="kw-2">&amp;</span>TestValidatedState::default(),
 <a href=#3461 id=3461 data-nosnippet>3461</a>                <span class="kw-2">&amp;</span>TestInstanceState::default(),
 <a href=#3462 id=3462 data-nosnippet>3462</a>            )

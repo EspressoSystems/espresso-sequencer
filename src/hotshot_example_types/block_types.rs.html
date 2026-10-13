@@ -198,11 +198,11 @@
 <a href=#198 id=198 data-nosnippet>198</a>    <span class="kw">type </span>ValidatedState = TestValidatedState;
 <a href=#199 id=199 data-nosnippet>199</a>
 <a href=#200 id=200 data-nosnippet>200</a>    <span class="kw">async fn </span>from_transactions(
-<a href=#201 id=201 data-nosnippet>201</a>        transactions: <span class="kw">impl </span>IntoIterator&lt;Item = <span class="self">Self</span>::Transaction&gt; + Send,
+<a href=#201 id=201 data-nosnippet>201</a>        transactions: <span class="kw-2">&amp;</span>[<span class="self">Self</span>::Transaction],
 <a href=#202 id=202 data-nosnippet>202</a>        _validated_state: <span class="kw-2">&amp;</span><span class="self">Self</span>::ValidatedState,
 <a href=#203 id=203 data-nosnippet>203</a>        _instance_state: <span class="kw-2">&amp;</span><span class="self">Self</span>::Instance,
 <a href=#204 id=204 data-nosnippet>204</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;(<span class="self">Self</span>, <span class="self">Self</span>::Metadata), <span class="self">Self</span>::Error&gt; {
-<a href=#205 id=205 data-nosnippet>205</a>        <span class="kw">let </span>txns_vec: Vec&lt;TestTransaction&gt; = transactions.into_iter().collect();
+<a href=#205 id=205 data-nosnippet>205</a>        <span class="kw">let </span>txns_vec = transactions.to_vec();
 <a href=#206 id=206 data-nosnippet>206</a>        <span class="kw">let </span>metadata = TestMetadata {
 <a href=#207 id=207 data-nosnippet>207</a>            num_transactions: txns_vec.len() <span class="kw">as </span>u64,
 <a href=#208 id=208 data-nosnippet>208</a>        };

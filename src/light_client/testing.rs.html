@@ -510,7 +510,7 @@
 <a href=#510 id=510 data-nosnippet>510</a>            };
 <a href=#511 id=511 data-nosnippet>511</a>            <span class="macro">tracing::debug!</span>(<span class="question-mark">?</span>transactions, <span class="string">"generated block {i}"</span>);
 <a href=#512 id=512 data-nosnippet>512</a>            <span class="kw">let </span>(payload, ns_table) =
-<a href=#513 id=513 data-nosnippet>513</a>                Payload::from_transactions_sync(transactions, node_state.chain_config).unwrap();
+<a href=#513 id=513 data-nosnippet>513</a>                Payload::from_transactions_sync(<span class="kw-2">&amp;</span>transactions, node_state.chain_config).unwrap();
 <a href=#514 id=514 data-nosnippet>514</a>            <span class="kw">let </span>payload_comm = vid_commitment(
 <a href=#515 id=515 data-nosnippet>515</a>                <span class="kw-2">&amp;</span>payload.encode(),
 <a href=#516 id=516 data-nosnippet>516</a>                <span class="kw-2">&amp;</span>ns_table.encode(),
@@ -1109,7 +1109,7 @@
 <a href=#1109 id=1109 data-nosnippet>1109</a>            rand::thread_rng().fill_bytes(<span class="kw-2">&amp;mut </span>payload);
 <a href=#1110 id=1110 data-nosnippet>1110</a>            <span class="kw">let </span>tx = Transaction::new(namespace, payload);
 <a href=#1111 id=1111 data-nosnippet>1111</a>            <span class="kw">let </span>node_state = NodeState::mock_v3();
-<a href=#1112 id=1112 data-nosnippet>1112</a>            Payload::from_transactions_sync([tx], node_state.chain_config).unwrap()
+<a href=#1112 id=1112 data-nosnippet>1112</a>            Payload::from_transactions_sync(<span class="kw-2">&amp;</span>[tx], node_state.chain_config).unwrap()
 <a href=#1113 id=1113 data-nosnippet>1113</a>        } <span class="kw">else </span>{
 <a href=#1114 id=1114 data-nosnippet>1114</a>            (
 <a href=#1115 id=1115 data-nosnippet>1115</a>                inner.payloads[height].clone(),

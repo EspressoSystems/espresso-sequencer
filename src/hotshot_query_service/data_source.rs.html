@@ -669,7 +669,7 @@
 <a href=#669 id=669 data-nosnippet>669</a>        // `append` would back-fill it from storage by payload hash.
 <a href=#670 id=670 data-nosnippet>670</a>        </span><span class="kw">let </span>(payload2, metadata2) =
 <a href=#671 id=671 data-nosnippet>671</a>            &lt;TestBlockPayload <span class="kw">as </span>BlockPayload&lt;TestTypes&gt;&gt;::from_transactions(
-<a href=#672 id=672 data-nosnippet>672</a>                [mock_transaction(<span class="macro">vec!</span>[<span class="number">1</span>])],
+<a href=#672 id=672 data-nosnippet>672</a>                <span class="kw-2">&amp;</span>[mock_transaction(<span class="macro">vec!</span>[<span class="number">1</span>])],
 <a href=#673 id=673 data-nosnippet>673</a>                <span class="kw-2">&amp;</span>Default::default(),
 <a href=#674 id=674 data-nosnippet>674</a>                <span class="kw-2">&amp;</span>Default::default(),
 <a href=#675 id=675 data-nosnippet>675</a>            )
@@ -811,7 +811,7 @@
 <a href=#811 id=811 data-nosnippet>811</a>        <span class="kw">let </span><span class="kw-2">mut </span>tx = ds.write().<span class="kw">await</span>.unwrap();
 <a href=#812 id=812 data-nosnippet>812</a>        <span class="kw">for </span>height <span class="kw">in </span><span class="number">0</span>..<span class="number">4u64 </span>{
 <a href=#813 id=813 data-nosnippet>813</a>            <span class="kw">let </span>(payload, metadata) = &lt;MockPayload <span class="kw">as </span>BlockPayload&lt;MockTypes&gt;&gt;::from_transactions(
-<a href=#814 id=814 data-nosnippet>814</a>                [mock_transaction(<span class="macro">vec!</span>[height <span class="kw">as </span>u8])],
+<a href=#814 id=814 data-nosnippet>814</a>                <span class="kw-2">&amp;</span>[mock_transaction(<span class="macro">vec!</span>[height <span class="kw">as </span>u8])],
 <a href=#815 id=815 data-nosnippet>815</a>                <span class="kw-2">&amp;</span>Default::default(),
 <a href=#816 id=816 data-nosnippet>816</a>                <span class="kw-2">&amp;</span>Default::default(),
 <a href=#817 id=817 data-nosnippet>817</a>            )
@@ -1107,7 +1107,7 @@
 <a href=#1107 id=1107 data-nosnippet>1107</a>            <span class="comment">// Generate a unique payload and VID data, so that missing data is actually missing
 <a href=#1108 id=1108 data-nosnippet>1108</a>            // (otherwise it could be borrowed from another block).
 <a href=#1109 id=1109 data-nosnippet>1109</a>            </span><span class="kw">let </span>(payload, metadata) = &lt;MockPayload <span class="kw">as </span>BlockPayload&lt;MockTypes&gt;&gt;::from_transactions(
-<a href=#1110 id=1110 data-nosnippet>1110</a>                <span class="macro">vec!</span>[mock_transaction(<span class="macro">vec!</span>[i <span class="kw">as </span>u8])],
+<a href=#1110 id=1110 data-nosnippet>1110</a>                <span class="kw-2">&amp;</span>[mock_transaction(<span class="macro">vec!</span>[i <span class="kw">as </span>u8])],
 <a href=#1111 id=1111 data-nosnippet>1111</a>                <span class="kw-2">&amp;</span>Default::default(),
 <a href=#1112 id=1112 data-nosnippet>1112</a>                <span class="kw-2">&amp;</span>Default::default(),
 <a href=#1113 id=1113 data-nosnippet>1113</a>            )
@@ -1360,7 +1360,7 @@
 <a href=#1360 id=1360 data-nosnippet>1360</a>            // computing the total size.
 <a href=#1361 id=1361 data-nosnippet>1361</a>            </span><span class="kw">let </span>(payload, metadata) =
 <a href=#1362 id=1362 data-nosnippet>1362</a>                &lt;TestBlockPayload <span class="kw">as </span>BlockPayload&lt;TestTypes&gt;&gt;::from_transactions(
-<a href=#1363 id=1363 data-nosnippet>1363</a>                    [mock_transaction(<span class="macro">vec!</span>[i <span class="kw">as </span>u8 % <span class="number">2</span>])],
+<a href=#1363 id=1363 data-nosnippet>1363</a>                    <span class="kw-2">&amp;</span>[mock_transaction(<span class="macro">vec!</span>[i <span class="kw">as </span>u8 % <span class="number">2</span>])],
 <a href=#1364 id=1364 data-nosnippet>1364</a>                    <span class="kw-2">&amp;</span>TestValidatedState::default(),
 <a href=#1365 id=1365 data-nosnippet>1365</a>                    <span class="kw-2">&amp;</span>TestInstanceState::default(),
 <a href=#1366 id=1366 data-nosnippet>1366</a>                )

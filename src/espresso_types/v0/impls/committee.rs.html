@@ -2217,7 +2217,7 @@
 <a href=#2217 id=2217 data-nosnippet>2217</a>    </span><span class="kw">async fn </span>build_epoch_root_header() -&gt; Header {
 <a href=#2218 id=2218 data-nosnippet>2218</a>        <span class="kw">let </span>instance = NodeState::mock_v2();
 <a href=#2219 id=2219 data-nosnippet>2219</a>        <span class="kw">let </span>tx = Transaction::of_size(<span class="number">10</span>);
-<a href=#2220 id=2220 data-nosnippet>2220</a>        <span class="kw">let </span>(payload, <span class="kw">_</span>) = Payload::from_transactions([tx], <span class="kw-2">&amp;</span>instance.genesis_state, <span class="kw-2">&amp;</span>instance)
+<a href=#2220 id=2220 data-nosnippet>2220</a>        <span class="kw">let </span>(payload, <span class="kw">_</span>) = Payload::from_transactions(<span class="kw-2">&amp;</span>[tx], <span class="kw-2">&amp;</span>instance.genesis_state, <span class="kw-2">&amp;</span>instance)
 <a href=#2221 id=2221 data-nosnippet>2221</a>            .<span class="kw">await
 <a href=#2222 id=2222 data-nosnippet>2222</a>            </span>.expect(<span class="string">"payload"</span>);
 <a href=#2223 id=2223 data-nosnippet>2223</a>        <span class="kw">let </span>metadata = payload.ns_table().clone();

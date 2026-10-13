@@ -95,7 +95,7 @@
 <a href=#95 id=95 data-nosnippet>95</a>    /// # Errors
 <a href=#96 id=96 data-nosnippet>96</a>    /// If the transaction length conversion fails.
 <a href=#97 id=97 data-nosnippet>97</a>    </span><span class="kw">async fn </span>from_transactions(
-<a href=#98 id=98 data-nosnippet>98</a>        transactions: <span class="kw">impl </span>IntoIterator&lt;Item = <span class="self">Self</span>::Transaction&gt; + Send,
+<a href=#98 id=98 data-nosnippet>98</a>        transactions: <span class="kw-2">&amp;</span>[<span class="self">Self</span>::Transaction],
 <a href=#99 id=99 data-nosnippet>99</a>        validated_state: <span class="kw-2">&amp;</span><span class="self">Self</span>::ValidatedState,
 <a href=#100 id=100 data-nosnippet>100</a>        instance_state: <span class="kw-2">&amp;</span><span class="self">Self</span>::Instance,
 <a href=#101 id=101 data-nosnippet>101</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;(<span class="self">Self</span>, <span class="self">Self</span>::Metadata), <span class="self">Self</span>::Error&gt;;

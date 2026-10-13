@@ -1558,7 +1558,7 @@
 <a href=#1558 id=1558 data-nosnippet>1558</a>        <span class="kw">let </span>epoch = genesis_epoch_from_version(version);
 <a href=#1559 id=1559 data-nosnippet>1559</a>
 <a href=#1560 id=1560 data-nosnippet>1560</a>        <span class="kw">let </span>(payload, metadata) =
-<a href=#1561 id=1561 data-nosnippet>1561</a>            TYPES::BlockPayload::from_transactions([], validated_state, instance_state)
+<a href=#1561 id=1561 data-nosnippet>1561</a>            TYPES::BlockPayload::from_transactions(<span class="kw-2">&amp;</span>[], validated_state, instance_state)
 <a href=#1562 id=1562 data-nosnippet>1562</a>                .<span class="kw">await
 <a href=#1563 id=1563 data-nosnippet>1563</a>                </span>.unwrap();
 <a href=#1564 id=1564 data-nosnippet>1564</a>
@@ -1969,7 +1969,7 @@
 <a href=#1969 id=1969 data-nosnippet>1969</a>        version: Version,
 <a href=#1970 id=1970 data-nosnippet>1970</a>    ) -&gt; <span class="self">Self </span>{
 <a href=#1971 id=1971 data-nosnippet>1971</a>        <span class="kw">let </span>(payload, metadata) =
-<a href=#1972 id=1972 data-nosnippet>1972</a>            TYPES::BlockPayload::from_transactions([], validated_state, instance_state)
+<a href=#1972 id=1972 data-nosnippet>1972</a>            TYPES::BlockPayload::from_transactions(<span class="kw-2">&amp;</span>[], validated_state, instance_state)
 <a href=#1973 id=1973 data-nosnippet>1973</a>                .<span class="kw">await
 <a href=#1974 id=1974 data-nosnippet>1974</a>                </span>.unwrap();
 <a href=#1975 id=1975 data-nosnippet>1975</a>

@@ -5678,7 +5678,7 @@
 <a href=#5678 id=5678 data-nosnippet>5678</a>            .map(|byte| espresso_types::Transaction::new(namespace, <span class="macro">vec!</span>[byte; <span class="number">8</span>]))
 <a href=#5679 id=5679 data-nosnippet>5679</a>            .collect();
 <a href=#5680 id=5680 data-nosnippet>5680</a>        <span class="kw">let </span>(payload, <span class="kw">_</span>) = espresso_types::Payload::from_transactions(
-<a href=#5681 id=5681 data-nosnippet>5681</a>            transactions,
+<a href=#5681 id=5681 data-nosnippet>5681</a>            <span class="kw-2">&amp;</span>transactions,
 <a href=#5682 id=5682 data-nosnippet>5682</a>            <span class="kw-2">&amp;</span>Default::default(),
 <a href=#5683 id=5683 data-nosnippet>5683</a>            <span class="kw-2">&amp;</span>Default::default(),
 <a href=#5684 id=5684 data-nosnippet>5684</a>        )

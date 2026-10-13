@@ -1636,7 +1636,7 @@
 <a href=#1636 id=1636 data-nosnippet>1636</a>        <span class="kw">async fn </span>into_mock_header(<span class="self">self</span>) -&gt; (Header, u32) {
 <a href=#1637 id=1637 data-nosnippet>1637</a>            <span class="kw">let </span>instance = NodeState::mock_v2();
 <a href=#1638 id=1638 data-nosnippet>1638</a>            <span class="kw">let </span>(payload, metadata) =
-<a href=#1639 id=1639 data-nosnippet>1639</a>                Payload::from_transactions([<span class="self">self</span>], <span class="kw-2">&amp;</span>instance.genesis_state, <span class="kw-2">&amp;</span>instance)
+<a href=#1639 id=1639 data-nosnippet>1639</a>                Payload::from_transactions(<span class="kw-2">&amp;</span>[<span class="self">self</span>], <span class="kw-2">&amp;</span>instance.genesis_state, <span class="kw-2">&amp;</span>instance)
 <a href=#1640 id=1640 data-nosnippet>1640</a>                    .<span class="kw">await
 <a href=#1641 id=1641 data-nosnippet>1641</a>                    </span>.unwrap();
 <a href=#1642 id=1642 data-nosnippet>1642</a>
@@ -2471,7 +2471,7 @@
 <a href=#2471 id=2471 data-nosnippet>2471</a>        <span class="kw">let </span>instance = NodeState::mock().with_genesis_version(version(<span class="number">0</span>, <span class="number">4</span>));
 <a href=#2472 id=2472 data-nosnippet>2472</a>
 <a href=#2473 id=2473 data-nosnippet>2473</a>        <span class="kw">let </span>(payload, metadata) =
-<a href=#2474 id=2474 data-nosnippet>2474</a>            Payload::from_transactions([], <span class="kw-2">&amp;</span>instance.genesis_state, <span class="kw-2">&amp;</span>instance)
+<a href=#2474 id=2474 data-nosnippet>2474</a>            Payload::from_transactions(<span class="kw-2">&amp;</span>[], <span class="kw-2">&amp;</span>instance.genesis_state, <span class="kw-2">&amp;</span>instance)
 <a href=#2475 id=2475 data-nosnippet>2475</a>                .<span class="kw">await
 <a href=#2476 id=2476 data-nosnippet>2476</a>                </span>.unwrap();
 <a href=#2477 id=2477 data-nosnippet>2477</a>

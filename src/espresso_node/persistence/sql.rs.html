@@ -4105,7 +4105,7 @@
 <a href=#4105 id=4105 data-nosnippet>4105</a>            </span>.into();
 <a href=#4106 id=4106 data-nosnippet>4106</a>
 <a href=#4107 id=4107 data-nosnippet>4107</a>        <span class="kw">let </span>(payload, ns_table) =
-<a href=#4108 id=4108 data-nosnippet>4108</a>            Payload::from_transactions(txs.clone(), <span class="kw-2">&amp;</span>validated_state, <span class="kw-2">&amp;</span>instance_state)
+<a href=#4108 id=4108 data-nosnippet>4108</a>            Payload::from_transactions(<span class="kw-2">&amp;</span>txs, <span class="kw-2">&amp;</span>validated_state, <span class="kw-2">&amp;</span>instance_state)
 <a href=#4109 id=4109 data-nosnippet>4109</a>                .<span class="kw">await
 <a href=#4110 id=4110 data-nosnippet>4110</a>                </span>.unwrap();
 <a href=#4111 id=4111 data-nosnippet>4111</a>        <span class="kw">let </span>payload_bytes = payload.encode();

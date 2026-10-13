@@ -204,7 +204,7 @@
 <a href=#204 id=204 data-nosnippet>204</a>            // cannot escape `FnMut` closure body` caused by mutable variable `vid`
 <a href=#205 id=205 data-nosnippet>205</a>            // below.
 <a href=#206 id=206 data-nosnippet>206</a>            </span><span class="kw">let </span>blocks_only = future::join_all(tests.iter().map(|t| <span class="kw">async </span>{
-<a href=#207 id=207 data-nosnippet>207</a>                Payload::from_transactions(t.all_txs(), <span class="kw-2">&amp;</span>Default::default(), <span class="kw-2">&amp;</span>Default::default())
+<a href=#207 id=207 data-nosnippet>207</a>                Payload::from_transactions(<span class="kw-2">&amp;</span>t.all_txs(), <span class="kw-2">&amp;</span>Default::default(), <span class="kw-2">&amp;</span>Default::default())
 <a href=#208 id=208 data-nosnippet>208</a>                    .<span class="kw">await
 <a href=#209 id=209 data-nosnippet>209</a>                    </span>.unwrap()
 <a href=#210 id=210 data-nosnippet>210</a>                    .<span class="number">0
