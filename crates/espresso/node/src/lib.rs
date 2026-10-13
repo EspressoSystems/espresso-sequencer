@@ -94,10 +94,9 @@ pub use options::Options;
 use proposal_fetcher::ProposalFetcherConfig;
 pub use run::main;
 use serde::{Deserialize, Serialize};
-use tokio::select;
 use tracing::info;
 use url::Url;
-use vbs::version::{StaticVersion, Version};
+use vbs::version::StaticVersion;
 
 use crate::request_response::data_source::Storage as RequestResponseStorage;
 
@@ -499,7 +498,7 @@ where
                 "waiting for other nodes to connect, DO NOT RESTART until fully connected"
             );
 
-            let registration = orchestrator_registration(&validator_config, genesis.base_version)?;
+            let registration = orchestrator_registration(&validator_config)?;
 
             let bootstrap_advertise_addr = libp2p_announce_addresses.first().cloned().context(
                 "ESPRESSO_NODE_LIBP2P_ADVERTISE_ADDRESS must be set when bootstrapping a libp2p \
@@ -678,21 +677,6 @@ where
 
         info!("Libp2p network initialized");
 
-        // From `NEW_PROTOCOL_VERSION` on, all consensus traffic runs on
-        // cliquenet and the legacy stack is torn down at startup, so don't
-        // hold up boot waiting for legacy connectivity.
-        if genesis.base_version < versions::NEW_PROTOCOL_VERSION {
-            tracing::warn!("Waiting for at least one connection to be initialized");
-            select! {
-                _ = cdn_network.wait_for_ready() => {
-                    tracing::warn!("CDN connection initialized");
-                },
-                _ = p2p_network.wait_for_ready() => {
-                    tracing::warn!("P2P connection initialized");
-                },
-            };
-        }
-
         // Combine the CDN and P2P networks
         CombinedNetworks::new(cdn_network, p2p_network, Some(Duration::from_secs(1)))
     };
@@ -790,27 +774,16 @@ fn local_validator_config(
 
 /// The config this node registers with the orchestrator. Its `public_config()` is also what
 /// `/ready` posts, since the orchestrator equality-checks that against `known_nodes_with_stake`.
-///
-/// From `NEW_PROTOCOL_VERSION` on it carries the node's cliquenet `connect_info` so peers can
-/// dial us from the stake table, which requires an advertise address to be configured. Before
-/// that version the stake table has no `connect_info`, so it is left out even though the node
-/// already runs cliquenet with the identity in `validator_config`.
+/// It carries the node's cliquenet `connect_info` so peers can dial us from the stake table, which
+/// requires an advertise address to be configured.
 fn orchestrator_registration(
     validator_config: &ValidatorConfig<SeqTypes>,
-    base_version: Version,
 ) -> anyhow::Result<ValidatorConfig<SeqTypes>> {
-    let p2p_addr = if base_version >= versions::NEW_PROTOCOL_VERSION {
-        Some(validator_config.p2p_addr.clone().context(
-            "ESPRESSO_NODE_CLIQUENET_ADVERTISE_ADDRESS must be set when bootstrapping a Cliquenet \
-             network from the orchestrator",
-        )?)
-    } else {
-        None
-    };
-    Ok(ValidatorConfig {
-        p2p_addr,
-        ..validator_config.clone()
-    })
+    validator_config.p2p_addr.as_ref().context(
+        "ESPRESSO_NODE_CLIQUENET_ADVERTISE_ADDRESS must be set when bootstrapping a Cliquenet \
+         network from the orchestrator",
+    )?;
+    Ok(validator_config.clone())
 }
 
 pub(crate) async fn load_or_fetch_network_config<P: SequencerPersistence>(
@@ -2101,7 +2074,6 @@ mod test {
     };
     use test_utils::reserve_tcp_port;
     use testing::{TestConfigBuilder, decided_leaves, wait_for_decide_on_handle};
-    use versions::{EPOCH_VERSION, NEW_PROTOCOL_VERSION};
 
     use super::{local_validator_config, orchestrator_registration};
     use crate::api::{
@@ -2155,11 +2127,8 @@ mod test {
         assert!(without_addr.public_config().connect_info.is_none());
     }
 
-    /// The stake table only carries cliquenet `connect_info` from `NEW_PROTOCOL_VERSION` on. The
-    /// orchestrator registration leaves it out before that, although the node's own config has
-    /// it, and requires an advertise address after.
     #[test]
-    fn orchestrator_registration_publishes_connect_info_only_on_new_protocol() {
+    fn orchestrator_registration_publishes_connect_info() {
         let keys = test_keys();
         let advertise: NetAddr = "node.example.com:9977".parse().unwrap();
         let config = local_validator_config(
@@ -2170,12 +2139,9 @@ mod test {
             false,
         );
 
-        let legacy = orchestrator_registration(&config, EPOCH_VERSION).unwrap();
-        assert!(legacy.public_config().connect_info.is_none());
-
-        let new_protocol = orchestrator_registration(&config, NEW_PROTOCOL_VERSION).unwrap();
+        let registration = orchestrator_registration(&config).unwrap();
         assert_eq!(
-            new_protocol
+            registration
                 .public_config()
                 .connect_info
                 .map(|i| i.p2p_addr),
@@ -2184,7 +2150,7 @@ mod test {
 
         let unconfigured =
             local_validator_config(keys.staking, keys.state, &keys.x25519, None, false);
-        assert!(orchestrator_registration(&unconfigured, NEW_PROTOCOL_VERSION).is_err());
+        assert!(orchestrator_registration(&unconfigured).is_err());
     }
 
     #[test]
