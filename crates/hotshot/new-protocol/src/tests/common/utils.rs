@@ -70,6 +70,7 @@ use crate::{
     state::StateResponse,
     storage::StorageOutput,
     trace,
+    upgrade::expected_upgrade_data,
 };
 
 /// DRB result used by `TestData` for epoch transition proposals.
@@ -83,6 +84,7 @@ pub struct TestView {
     pub leader_private_key: <BLSPubKey as SignatureKey>::PrivateKey,
     pub proposal: SignedProposal<TestTypes, Proposal<TestTypes>>,
     pub leaf: Leaf2<TestTypes>,
+    pub payload: TestBlockPayload,
     pub vid_disperse: VidDisperse2<TestTypes>,
     pub vid_shares: Vec<VidDisperseShare2<TestTypes>>,
     pub cert1: Certificate1<TestTypes>,
@@ -170,7 +172,11 @@ impl TestView {
 
     /// Build an Event for block reconstructed.
     pub fn block_reconstructed_input(&self) -> ConsensusInput<TestTypes> {
-        ConsensusInput::BlockReconstructed(self.view_number, self.vid_commitment())
+        ConsensusInput::BlockReconstructed {
+            view: self.view_number,
+            payload_commitment: self.vid_commitment(),
+            payload: self.payload.clone(),
+        }
     }
 
     /// Build an Event for Certificate1.
@@ -181,6 +187,32 @@ impl TestView {
     /// Build an Event for Certificate2.
     pub fn cert2_input(&self) -> ConsensusInput<TestTypes> {
         ConsensusInput::Certificate2(ValidCert::new(self.cert2.clone(), self.epoch_number))
+    }
+
+    /// Build a network Message carrying this view's Certificate1, as a peer
+    /// sends it once the certificate forms.
+    pub fn cert1_message(&self, node_index: u64) -> Message<TestTypes, Validated> {
+        let (pub_key, _) = BLSPubKey::generated_from_seed_indexed([0u8; 32], node_index);
+        Message {
+            sender: pub_key,
+            message_type: MessageType::Consensus(ConsensusMessage::Certificate1(
+                self.cert1.clone(),
+                pub_key,
+            )),
+        }
+    }
+
+    /// Build a network Message carrying this view's Certificate2, as a peer
+    /// relays it when applying the certificate.
+    pub fn cert2_message(&self, node_index: u64) -> Message<TestTypes, Validated> {
+        let (pub_key, _) = BLSPubKey::generated_from_seed_indexed([0u8; 32], node_index);
+        Message {
+            sender: pub_key,
+            message_type: MessageType::Consensus(ConsensusMessage::Certificate2(
+                self.cert2.clone(),
+                pub_key,
+            )),
+        }
     }
 
     /// Build a Vote1 Event from a specific validator, carrying that validator's
@@ -301,6 +333,20 @@ impl TestView {
         }
     }
 
+    /// Build a network Message carrying this view's timeout certificate,
+    /// as a peer rebroadcasts it when applying the certificate.
+    pub fn timeout_cert_message(&self, node_index: u64) -> Message<TestTypes, Validated> {
+        let (pub_key, _) = BLSPubKey::generated_from_seed_indexed([0u8; 32], node_index);
+        let message = match self.timeout_cert.clone() {
+            TimeoutEvidence::V2(tc) => ConsensusMessage::TimeoutCertificate(tc),
+            TimeoutEvidence::V3(tc) => ConsensusMessage::TimeoutCertificate3(tc),
+        };
+        Message {
+            sender: pub_key,
+            message_type: MessageType::Consensus(message),
+        }
+    }
+
     /// Build an epoch binding timeout vote from a specific validator, for a
     /// node running under [`test_timeout_epoch_lock`].
     pub fn timeout_vote3_input(
@@ -336,6 +382,31 @@ impl TestView {
             message_type: MessageType::Consensus(ConsensusMessage::TimeoutVote3(
                 TimeoutVoteMessage3 { vote, evidence },
             )),
+        }
+    }
+
+    /// An upgrade vote from a specific validator binding `epoch`, for the
+    /// checks that bound which epochs a vote may name.
+    pub fn upgrade_vote_input_for_epoch(
+        &self,
+        node_index: u64,
+        epoch: EpochNumber,
+    ) -> Message<TestTypes, Validated> {
+        let (pub_key, priv_key) = BLSPubKey::generated_from_seed_indexed([0u8; 32], node_index);
+        let upgrade = test_upgrade_lock::<TestTypes>().upgrade();
+        let data = expected_upgrade_data(&upgrade, self.view_number, epoch)
+            .expect("test views are far from overflowing");
+        let vote = hotshot_types::simple_vote::SimpleVote::create_signed_vote(
+            data,
+            self.view_number,
+            &pub_key,
+            &priv_key,
+            &test_upgrade_lock(),
+        )
+        .expect("Failed to sign UpgradeVote2");
+        Message {
+            sender: pub_key,
+            message_type: MessageType::Consensus(ConsensusMessage::UpgradeVote(vote)),
         }
     }
 
@@ -446,6 +517,10 @@ impl TestData {
                 .expect("Leader key not found in key map");
 
             let (mut vid_disperse, mut vid_shares) = extract_vid_disperse(gen_view);
+            let payload = gen_view
+                .leaf
+                .block_payload()
+                .expect("the generator fills the leaf's payload");
             let block_number = BlockHeader::<TestTypes>::block_number(&proposal.block_header);
 
             // Compute epoch from block number (generator doesn't know about
@@ -626,6 +701,7 @@ impl TestData {
                 leader_private_key: leader_private_key.clone(),
                 proposal: signed_proposal,
                 leaf,
+                payload,
                 vid_disperse,
                 vid_shares,
                 cert1,
@@ -1089,6 +1165,8 @@ impl ConsensusHarness {
         self.trace.preamble(
             self.consensus.public_key(),
             self.consensus.last_decided_leaf(),
+            self.consensus.cert1_at(ViewNumber::genesis()),
+            *self.consensus.epoch_height,
         );
         record_leader(&mut self.trace, &self.consensus, &input);
         let before = outbox.len();
@@ -1196,6 +1274,49 @@ impl ConsensusHarness {
             defer_state_for: BTreeSet::new(),
             trace: trace::Recorder::for_current_test(),
         }
+    }
+
+    /// Place the node at `view` in `epoch`, as `Consensus::set_view` does, and
+    /// note the placement in the trace.
+    pub fn set_view(&mut self, view: ViewNumber, epoch: EpochNumber) {
+        self.trace.preamble(
+            self.consensus.public_key(),
+            self.consensus.last_decided_leaf(),
+            self.consensus.cert1_at(ViewNumber::genesis()),
+            *self.consensus.epoch_height,
+        );
+        self.trace.placed(view, epoch);
+        self.consensus.set_view(view, epoch);
+    }
+
+    /// Replace the node's proposal for `view`, as `Consensus::force_set_proposal`
+    /// does, and note the replacement in the trace.
+    pub fn force_set_proposal(&mut self, view: ViewNumber, proposal: Proposal<TestTypes>) {
+        self.trace.preamble(
+            self.consensus.public_key(),
+            self.consensus.last_decided_leaf(),
+            self.consensus.cert1_at(ViewNumber::genesis()),
+            *self.consensus.epoch_height,
+        );
+        self.trace.forced(view);
+        self.consensus.force_set_proposal(view, proposal);
+    }
+
+    /// Seed proposals the node holds without having received them, and record
+    /// each as a block it holds, so the trace does not show it deciding a block
+    /// it never had.
+    pub fn seed_proposals(&mut self, proposals: impl IntoIterator<Item = Proposal<TestTypes>>) {
+        let proposals: Vec<_> = proposals.into_iter().collect();
+        self.trace.preamble(
+            self.consensus.public_key(),
+            self.consensus.last_decided_leaf(),
+            self.consensus.cert1_at(ViewNumber::genesis()),
+            *self.consensus.epoch_height,
+        );
+        for proposal in &proposals {
+            self.trace.held(proposal);
+        }
+        self.consensus.seed_proposals(proposals);
     }
 
     /// Withhold `view`'s state-validation response until [`Self::release_state`].
@@ -1626,5 +1747,5 @@ pub(crate) fn record_leader(
         .epoch()
         .or_else(|| consensus.current_epoch())
         .unwrap_or_else(EpochNumber::genesis);
-    trace.leader::<TestTypes>(view, consensus.leader_of(view, epoch).as_ref());
+    trace.leader::<TestTypes>(view, epoch, consensus.leader_of(view, epoch).as_ref());
 }
