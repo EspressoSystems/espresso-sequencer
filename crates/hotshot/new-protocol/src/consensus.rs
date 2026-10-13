@@ -2836,6 +2836,11 @@ impl<T: NodeType> Consensus<T> {
             debug!(%block_view, "the certificate built on is not over the last block of its epoch");
             return;
         }
+        // A re-vote's `Certificate2` commits the block too, and voters refuse
+        // to vote on it again.
+        if self.cert2_over(block_view, leaf_commit).is_some() {
+            return;
+        }
         let cert1 = cert1.clone();
         if let Some(tc) = tc
             && !certificate_rule_admits(&cert1, tc, epoch)
