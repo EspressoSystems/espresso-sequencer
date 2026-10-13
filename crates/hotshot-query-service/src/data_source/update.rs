@@ -153,6 +153,8 @@ where
                             )),
                             Some(VidShare::V2(share.share.clone())),
                         ),
+                        // No node's own consensus produces pre-0.6 shares any more; pre-0.6 VID
+                        // only arrives as catchup data.
                         Some(_) => (None, None),
                         None => {
                             if leaf.view_number() == ViewNumber::genesis() {
