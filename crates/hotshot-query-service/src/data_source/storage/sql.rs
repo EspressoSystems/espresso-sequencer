@@ -3748,4 +3748,37 @@ mod test {
             .await
             .unwrap_err();
     }
+
+    #[test_log::test(tokio::test(flavor = "multi_thread"))]
+    #[cfg(not(feature = "embedded-db"))]
+    async fn test_cancelled_begin_does_not_leak_transaction() {
+        use sqlx::Connection;
+
+        let db = TmpDb::init().await;
+        let storage = SqlStorage::connect(
+            db.config().max_connections(1),
+            StorageConnectionType::Sequencer,
+        )
+        .await
+        .unwrap();
+
+        let mut conn = storage.pool.acquire().await.unwrap();
+        assert!(
+            conn.begin().now_or_never().is_none(),
+            "BEGIN finished on the first poll, so nothing was cancelled"
+        );
+        drop(conn);
+
+        let mut conn = storage.pool.acquire().await.unwrap();
+        let row = conn
+            .fetch_one(sqlx::raw_sql(
+                "SELECT transaction_timestamp() <> statement_timestamp()",
+            ))
+            .await
+            .unwrap();
+        assert!(
+            !row.get::<bool, _>(0),
+            "the connection came back from the pool inside the cancelled transaction"
+        );
+    }
 }
