@@ -37,7 +37,7 @@
 <a href=#37 id=37 data-nosnippet>37</a>    },
 <a href=#38 id=38 data-nosnippet>38</a>    stake_table::{StakeTableEntry, supermajority_threshold},
 <a href=#39 id=39 data-nosnippet>39</a>    traits::{
-<a href=#40 id=40 data-nosnippet>40</a>        block_contents::EncodeBytes,
+<a href=#40 id=40 data-nosnippet>40</a>        block_contents::{BlockPayload <span class="kw">as _</span>, EncodeBytes},
 <a href=#41 id=41 data-nosnippet>41</a>        signature_key::{SignatureKey, StateSignatureKey},
 <a href=#42 id=42 data-nosnippet>42</a>    },
 <a href=#43 id=43 data-nosnippet>43</a>    utils::{epoch_from_block_number, is_epoch_transition, is_ge_epoch_root},
@@ -1057,13 +1057,13 @@
 <a href=#1057 id=1057 data-nosnippet>1057</a>
 <a href=#1058 id=1058 data-nosnippet>1058</a>        <span class="kw">let </span>payload = <span class="kw">if </span>inner.invalid_payloads.contains(<span class="kw-2">&amp;</span>height) {
 <a href=#1059 id=1059 data-nosnippet>1059</a>            <span class="macro">tracing::info!</span>(height, <span class="string">"return mock incorrect payload proof"</span>);
-<a href=#1060 id=1060 data-nosnippet>1060</a>            Payload::from_transactions_sync(
-<a href=#1061 id=1061 data-nosnippet>1061</a>                [Transaction::random(<span class="kw-2">&amp;mut </span>rand::thread_rng())],
-<a href=#1062 id=1062 data-nosnippet>1062</a>                NodeState::mock_v3().chain_config,
-<a href=#1063 id=1063 data-nosnippet>1063</a>            )
-<a href=#1064 id=1064 data-nosnippet>1064</a>            .unwrap()
-<a href=#1065 id=1065 data-nosnippet>1065</a>            .<span class="number">0
-<a href=#1066 id=1066 data-nosnippet>1066</a>        </span>} <span class="kw">else </span>{
+<a href=#1060 id=1060 data-nosnippet>1060</a>            <span class="comment">// Keep the honest namespace table, so the proof is rejected for its commitment and
+<a href=#1061 id=1061 data-nosnippet>1061</a>            // not for the table, which is checked first.
+<a href=#1062 id=1062 data-nosnippet>1062</a>            </span><span class="kw">let </span>honest = <span class="kw-2">&amp;</span>inner.payloads[height];
+<a href=#1063 id=1063 data-nosnippet>1063</a>            <span class="kw">let </span><span class="kw-2">mut </span>bytes = honest.raw_payload().to_vec();
+<a href=#1064 id=1064 data-nosnippet>1064</a>            bytes.push(<span class="number">0</span>);
+<a href=#1065 id=1065 data-nosnippet>1065</a>            Payload::from_bytes(<span class="kw-2">&amp;</span>bytes, honest.ns_table())
+<a href=#1066 id=1066 data-nosnippet>1066</a>        } <span class="kw">else </span>{
 <a href=#1067 id=1067 data-nosnippet>1067</a>            inner.payloads[height].clone()
 <a href=#1068 id=1068 data-nosnippet>1068</a>        };
 <a href=#1069 id=1069 data-nosnippet>1069</a>
