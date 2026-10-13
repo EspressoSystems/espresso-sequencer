@@ -253,14 +253,8 @@ where
             .metrics(metrics)
             .consensus_metrics(consensus_metrics)
             .maybe_locked_qc(locked_qc)
-<<<<<<< HEAD
-            .external_tx(anchor_cert2)
-||||||| parent of 80ca7951a (restore the anchor's cert2 on restart (#5122))
-            .upgrade_config(anchor_cert2)
-=======
             .maybe_anchor_cert2(anchor_cert2)
->>>>>>> 80ca7951a (restore the anchor's cert2 on restart (#5122))
-            .upgrade_config(external_tx)
+            .external_tx(external_tx)
             .make();
 
         let legacy_event_rx = handle.event_stream_known_impl().deactivate();
