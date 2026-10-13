@@ -323,6 +323,9 @@ pub struct Options {
     pub is_da: bool,
 
     /// Peer nodes use to fetch missing state
+    ///
+    /// At least one peer must serve the light-client module (query module with SQL storage) for
+    /// the startup skip, see `ESPRESSO_NODE_BOOTSTRAP_SKIP`.
     #[clap(long, env = "ESPRESSO_NODE_STATE_PEERS", value_delimiter = ',')]
     #[derivative(Debug(format_with = "fmt_urls"))]
     pub state_peers: Vec<Url>,
@@ -369,6 +372,10 @@ pub struct Options {
     /// `off` reads no anchor and walks from the highest known epoch. The walk still targets the
     /// chain tip the state peers report, retries below it, and exits with an error at the
     /// deadline.
+    ///
+    /// `auto` needs at least one state peer that serves the light-client module (query module with
+    /// SQL storage). Without one, startup retries until the deadline and exits. `off` is the escape
+    /// hatch for state peers that lack the module.
     #[clap(
         long,
         env = "ESPRESSO_NODE_BOOTSTRAP_SKIP",
@@ -380,9 +387,7 @@ pub struct Options {
     /// How long startup retries before giving up, for the skip and again for the walk toward the
     /// chain tip the state peers report.
     ///
-    /// At the deadline the node exits with an error. The exception is a skip that met only NOT_FOUND
-    /// from peers without the light-client module for 3 passes over the peers: it falls back to the
-    /// walk.
+    /// At the deadline the node exits with an error.
     #[clap(long, env = "ESPRESSO_NODE_BOOTSTRAP_DEADLINE", default_value = "15m", value_parser = parse_duration)]
     pub bootstrap_deadline: Duration,
 

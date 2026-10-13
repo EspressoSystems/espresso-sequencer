@@ -33,7 +33,7 @@ use hotshot_types::{
     },
     utils::{epoch_from_block_number, root_block_in_epoch},
 };
-use light_client::client::{Client, QueryServiceClient, is_not_found};
+use light_client::client::{Client, QueryServiceClient};
 use serde::Serialize;
 use tokio::time::{Instant, sleep, timeout};
 use url::Url;
@@ -42,8 +42,6 @@ const TARGET: &str = "announce::bootstrap";
 
 const INITIAL_BACKOFF: Duration = Duration::from_secs(1);
 const MAX_BACKOFF: Duration = Duration::from_secs(60);
-/// Passes over the peers that must all answer NOT_FOUND before the skip gives way to the walk.
-const NOT_FOUND_PASSES: usize = 3;
 /// Epochs past the anchor's window that the walk target may reach.
 const TARGET_SLACK: u64 = 2;
 
@@ -257,12 +255,7 @@ async fn skip_to_anchor<C: Client>(
     );
 
     let fetch = fetch_epoch_roots(peers, anchor, &range, epoch_height, params.deadline);
-    let Some(headers) = fetch.await? else {
-        return Ok(SkipOutcome::Walk(
-            "peers do not serve light-client proofs".into(),
-        ));
-    };
-    for header in headers {
+    for header in fetch.await? {
         let height = header.height();
         coordinator
             .add_epoch_root(header)
@@ -310,22 +303,16 @@ fn install_range(
 
 /// Fetch and verify the epoch roots of `range` from the peers in rotation, backing off after each
 /// full pass, until `limit` has passed.
-///
-/// `None` after `NOT_FOUND_PASSES` consecutive passes in which every peer answered NOT_FOUND:
-/// peers without the opt-in light-client module cannot serve the skip, and the walk works without
-/// it.
 async fn fetch_epoch_roots<C: Client>(
     peers: &[(Url, C)],
     anchor: &TrustedAnchor,
     range: &RangeInclusive<EpochNumber>,
     epoch_height: u64,
     limit: Duration,
-) -> anyhow::Result<Option<Vec<Header>>> {
+) -> anyhow::Result<Vec<Header>> {
     let deadline = Instant::now() + limit;
     let mut backoff = INITIAL_BACKOFF;
     let mut attempt = 0usize;
-    let mut pass_not_found = true;
-    let mut not_found_passes = 0;
     let mut last_err = String::from("none");
     loop {
         let remaining = deadline.saturating_duration_since(Instant::now());
@@ -338,11 +325,10 @@ async fn fetch_epoch_roots<C: Client>(
         let (url, peer) = &peers[attempt % peers.len()];
         let fetch = fetch_roots_from(peer, anchor, range, epoch_height);
         let err = match timeout(remaining, fetch).await {
-            Ok(Ok(headers)) => return Ok(Some(headers)),
+            Ok(Ok(headers)) => return Ok(headers),
             Ok(Err(err)) => err,
             Err(_) => anyhow!("attempt timed out"),
         };
-        pass_not_found &= is_not_found(&err);
         last_err = format!("{err:#}");
         attempt += 1;
         if attempt.is_power_of_two() {
@@ -350,15 +336,6 @@ async fn fetch_epoch_roots<C: Client>(
         }
 
         if attempt.is_multiple_of(peers.len()) {
-            not_found_passes = if pass_not_found {
-                not_found_passes + 1
-            } else {
-                0
-            };
-            if not_found_passes == NOT_FOUND_PASSES {
-                return Ok(None);
-            }
-            pass_not_found = true;
             let remaining = deadline.saturating_duration_since(Instant::now());
             sleep(backoff.min(remaining)).await;
             backoff = (backoff * 2).min(MAX_BACKOFF);
@@ -1214,67 +1191,6 @@ mod tests {
 
         assert_eq!(current, EpochNumber::new(FIRST_EPOCH));
         assert!(!has_table(&coordinator, N - 3));
-    }
-
-    /// Peers without the light-client module answer NOT_FOUND for three passes; the node then
-    /// walks instead of waiting for the deadline.
-    #[test_log::test(tokio::test)]
-    async fn peers_without_light_client_walk() {
-        let (client, anchor) = chain().await;
-        client.mock_block_height(0).await;
-        let coordinator = fresh_coordinator(&client).await;
-        client.return_header_not_found().await;
-
-        let current = bootstrap(
-            &coordinator,
-            Some(anchor),
-            &[client.clone(), client],
-            PARAMS,
-        )
-        .await
-        .unwrap();
-
-        assert_eq!(current, EpochNumber::new(FIRST_EPOCH));
-        assert!(!has_table(&coordinator, N - 3));
-    }
-
-    /// A deadline before the third pass ends is fatal even if every answer was NOT_FOUND.
-    #[test_log::test(tokio::test)]
-    async fn not_found_before_three_passes_aborts_at_the_deadline() {
-        let (client, anchor) = chain().await;
-        let coordinator = fresh_coordinator(&client).await;
-        client.return_header_not_found().await;
-
-        let params = BootstrapParams {
-            deadline: Duration::from_millis(300),
-            ..PARAMS
-        };
-        let err = bootstrap(&coordinator, Some(anchor), &[client], params)
-            .await
-            .unwrap_err();
-
-        assert!(format!("{err:#}").contains("deadline exceeded"), "{err:#}");
-    }
-
-    /// One peer failing for another reason than NOT_FOUND keeps the deadline fatal.
-    #[test_log::test(tokio::test)]
-    async fn mixed_failures_abort_at_the_deadline() {
-        let (client, anchor) = chain().await;
-        let coordinator = fresh_coordinator(&client).await;
-        let not_found = client.clone();
-        not_found.return_header_not_found().await;
-        let broken = TestClient::with_epoch_height(EPOCH_HEIGHT);
-        broken.forget_leaf(ANCHOR_HEIGHT as usize).await;
-
-        let params = BootstrapParams {
-            deadline: Duration::from_millis(300),
-            ..PARAMS
-        };
-        let err = bootstrap(&coordinator, Some(anchor), &[not_found, broken], params)
-            .await
-            .unwrap_err();
-
-        assert!(format!("{err:#}").contains("deadline exceeded"), "{err:#}");
     }
 
     #[test_log::test(tokio::test)]

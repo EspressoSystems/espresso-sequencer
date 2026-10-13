@@ -187,9 +187,8 @@ impl QueryServiceClient {
     }
 }
 
-/// Whether `err` is a query service NOT_FOUND response.
 #[cfg(feature = "client")]
-pub fn is_not_found(err: &anyhow::Error) -> bool {
+fn is_not_found(err: &anyhow::Error) -> bool {
     err.chain().any(|cause| {
         cause
             .downcast_ref::<hotshot_query_service_types::Error>()

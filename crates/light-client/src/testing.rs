@@ -44,7 +44,6 @@ use hotshot_types::{
     vid::avidm::init_avidm_param,
     vote::Certificate as _,
 };
-use http_client::{StatusCode, error::ClientError as _};
 use jf_merkle_tree_compat::{
     AppendableMerkleTreeScheme, MerkleTreeScheme, prelude::SHA3MerkleTree,
 };
@@ -399,17 +398,11 @@ struct InnerTestClient {
     fail_leaf_ranges: bool,
     /// If set, fail payload proof ranges requests, like a server that predates the endpoint.
     fail_payload_proof_ranges: bool,
-    /// If set, answer header requests with NOT_FOUND, like a node without the light-client module.
-    header_not_found: bool,
     /// Number of header and header proof requests served.
     header_requests: usize,
 }
 
 impl InnerTestClient {
-    fn not_found(&self) -> hotshot_query_service_types::Error {
-        hotshot_query_service_types::Error::catch_all(StatusCode::NOT_FOUND, "not found".into())
-    }
-
     fn version_at(&self, height: u64) -> Version {
         match self.upgrade {
             Some((h, target)) if height >= h => target,
@@ -862,11 +855,6 @@ impl TestClient {
         self.inner.lock().await.header_requests
     }
 
-    /// Answer header and header proof requests with NOT_FOUND.
-    pub async fn return_header_not_found(&self) {
-        self.inner.lock().await.header_not_found = true;
-    }
-
     /// Fail payload proof ranges requests, like a server that predates the endpoint.
     pub async fn fail_payload_proof_ranges(&self) {
         let mut inner = self.inner.lock().await;
@@ -964,7 +952,6 @@ impl Client for TestClient {
     async fn header(&self, height: u64) -> Result<Header> {
         let mut inner = self.inner.lock().await;
         inner.header_requests += 1;
-        ensure!(!inner.header_not_found, inner.not_found());
         ensure!(
             !inner.missing_leaves.contains(&(height as usize)),
             "missing leaf {height}"
@@ -979,7 +966,6 @@ impl Client for TestClient {
     async fn header_proof(&self, root: u64, id: BlockId<SeqTypes>) -> Result<HeaderProof> {
         let mut inner = self.inner.lock().await;
         inner.header_requests += 1;
-        ensure!(!inner.header_not_found, inner.not_found());
 
         let root = root as usize;
         let mut height = inner.leaf_height(id.into())?;
