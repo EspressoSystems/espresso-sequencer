@@ -116,10 +116,6 @@ pub struct SequencerContext<N: ConnectedNetwork<PubKey>, P: SequencerPersistence
 
     #[derivative(Debug = "ignore")]
     validator_config: ValidatorConfig<SeqTypes>,
-
-    /// The pre-0.6 network, which nothing sends or receives on; torn down once consensus starts.
-    #[derivative(Debug = "ignore")]
-    legacy_network: Arc<N>,
 }
 
 impl<N, P> SequencerContext<N, P>
@@ -139,7 +135,6 @@ where
         storage: Option<RequestResponseStorage>,
         state_catchup: ParallelStateCatchup,
         persistence: Arc<P>,
-        network: Arc<N>,
         coordinator_network: F,
         state_relay_server: Option<Url>,
         metrics: &dyn Metrics,
@@ -335,7 +330,6 @@ where
             instance_state,
             network_config,
             validator_config,
-            network,
             event_consumer,
             anchor_view,
             proposal_fetcher_cfg,
@@ -355,7 +349,6 @@ where
         node_state: NodeState,
         network_config: NetworkConfig<SeqTypes>,
         validator_config: ValidatorConfig<SeqTypes>,
-        legacy_network: Arc<N>,
         event_consumer: impl PersistenceEventConsumer + 'static,
         anchor_view: Option<ViewNumber>,
         proposal_fetcher_cfg: ProposalFetcherConfig,
@@ -375,7 +368,6 @@ where
             node_state,
             network_config,
             validator_config,
-            legacy_network,
         };
 
         // Spawn proposal fetching tasks.
@@ -517,7 +509,6 @@ where
         }
         tracing::warn!("starting consensus");
         self.consensus_handle.start_consensus().await;
-        self.legacy_network.shut_down().await;
     }
 
     /// Spawn a background task attached to this context.
@@ -547,7 +538,6 @@ where
     pub async fn shut_down(&mut self) {
         tracing::info!("shutting down SequencerContext");
         self.consensus_handle.shut_down().await;
-        self.legacy_network.shut_down().await;
         self.tasks.shut_down();
         self.node_state.l1_client.shut_down_tasks().await;
 
@@ -626,14 +616,12 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence> Drop for SequencerCon
         if !self.detached {
             // Spawn a task to shut down the context
             let consensus_handle = self.consensus_handle.clone();
-            let legacy_network = self.legacy_network.clone();
             let tasks_clone = self.tasks.clone();
             let node_state_clone = self.node_state.clone();
 
             spawn(async move {
                 tracing::info!("shutting down SequencerContext");
                 consensus_handle.shut_down().await;
-                legacy_network.shut_down().await;
                 tasks_clone.shut_down();
                 node_state_clone.l1_client.shut_down_tasks().await;
             });
