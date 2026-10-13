@@ -356,10 +356,13 @@ def backport_index(
         pr = BackportPr(
             cast(int, item["number"]), cast(str, item["state"]), cast(str, item["url"])
         )
-        # A retried backport reuses the head branch; the newest PR wins.
-        if source_pr not in index or pr.number > index[source_pr].number:
-            index[source_pr] = pr
+        # Retries reuse the head branch: a merged PR wins, then the newest.
+        index[source_pr] = max(index.get(source_pr, pr), pr, key=_backport_rank)
     return index
+
+
+def _backport_rank(pr: BackportPr) -> tuple[bool, int]:
+    return (pr.state == "MERGED", pr.number)
 
 
 def refresh_targets(
