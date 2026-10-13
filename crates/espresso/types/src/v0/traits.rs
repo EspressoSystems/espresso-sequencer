@@ -1289,14 +1289,6 @@ impl<P: SequencerPersistence> Storage<SeqTypes> for Arc<P> {
 #[cfg(feature = "node")]
 #[async_trait]
 impl<P: SequencerPersistence> NewProtocolStorage<SeqTypes> for Arc<P> {
-    async fn append_cert2(
-        &self,
-        view: ViewNumber,
-        cert: Certificate2<SeqTypes>,
-    ) -> anyhow::Result<()> {
-        (**self).append_cert2(view, cert).await
-    }
-
     async fn append_high_qc2(&self, high_qc: Certificate1<SeqTypes>) -> anyhow::Result<()> {
         // Writes are spawned concurrently and retried, so a stale write can land
         // after a newer one. The backend applies a monotonic compare-and-set
