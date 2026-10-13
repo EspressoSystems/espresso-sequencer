@@ -4917,7 +4917,7 @@ mod test {
         let chain = LegacyChain::load("v4")?;
         let replay = chain.replay().await?;
         let client = &replay.client;
-        let epoch_height = chain.genesis.epoch_height.unwrap();
+        let epoch_height = chain.epoch_height();
         let coordinator = replay.node.node_state().coordinator;
         let membership = coordinator.membership();
 
@@ -5085,7 +5085,7 @@ mod test {
         ensure!(page == balances, "reward page {page:?}");
 
         let coordinator = replay.node.node_state().coordinator;
-        for epoch in 3..=epoch_from_block_number(tip, chain.genesis.epoch_height.unwrap()) {
+        for epoch in 3..=chain.last_epoch() {
             let reward: Option<RewardAmount> = client
                 .get(&format!("node/block-reward/epoch/{epoch}"))
                 .send()
@@ -5103,7 +5103,7 @@ mod test {
         client: &Client<ClientErr, SequencerApiVersion>,
         chain: &LegacyChain,
     ) -> anyhow::Result<HashSet<Address>> {
-        let last_epoch = epoch_from_block_number(chain.tip(), chain.genesis.epoch_height.unwrap());
+        let last_epoch = chain.last_epoch();
         let mut stakers = HashSet::new();
         for epoch in 1..=last_epoch {
             let validators: AuthenticatedValidatorMap = client
@@ -6539,7 +6539,7 @@ mod test {
     async fn test_legacy_epoch_rewards_and_leader_counts() -> anyhow::Result<()> {
         let chain = LegacyChain::load("v5")?;
         let replay = chain.replay().await?;
-        let epoch_height = chain.genesis.epoch_height.unwrap();
+        let epoch_height = chain.epoch_height();
         let coordinator = replay.node.node_state().coordinator;
 
         assert_epoch_reward_totals(&replay.client, &coordinator, epoch_height, chain.tip()).await;
@@ -11209,12 +11209,7 @@ mod test {
         let chain = LegacyChain::load(chain)?;
         let replay = chain.replay().await?;
         let (last_epoch, _) = chain.state_certs.last().unwrap();
-        assert_state_certs(
-            &replay.client,
-            3..=*last_epoch,
-            chain.genesis.epoch_height.unwrap(),
-        )
-        .await;
+        assert_state_certs(&replay.client, 3..=*last_epoch, chain.epoch_height()).await;
 
         let peers = StatePeers::<SequencerApiVersion>::from_urls(
             vec![replay.url.clone()],
@@ -11615,7 +11610,7 @@ mod test {
             .clone()
             .context("the v4 recording registered a network config")?;
         let replay = chain.replay().await?;
-        let last_epoch = epoch_from_block_number(chain.tip(), chain.genesis.epoch_height.unwrap());
+        let last_epoch = chain.last_epoch();
         let validators = |epoch: u64| {
             let client = replay.client.clone();
             async move {
@@ -13492,7 +13487,7 @@ mod test {
     async fn test_legacy_light_client_completeness() -> anyhow::Result<()> {
         let chain = LegacyChain::load("v2-v3")?;
         let replay = chain.replay().await?;
-        let epoch_height = chain.genesis.epoch_height.unwrap();
+        let epoch_height = chain.epoch_height();
         let leaves: Vec<_> = chain.blocks.iter().map(|b| b.leaf.clone()).collect();
         let blocks: Vec<_> = chain.blocks.iter().map(|b| b.block.clone()).collect();
 
