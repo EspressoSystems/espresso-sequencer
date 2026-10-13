@@ -497,8 +497,8 @@ async fn revote_and_first_block_share_a_view() {
     assert_eq!(epochs, [epoch(1), epoch(2)]);
 }
 
-/// Rule B.3: after a timeout, the parent is checked against the lock the
-/// timeout certificate carries, not against the voter's own lock.
+/// Under the certificate rule, after a timeout the parent is checked against
+/// the lock the timeout certificate carries, not against the voter's own lock.
 #[tokio::test]
 async fn certificate_rule_checks_the_timeout_certificates_lock() {
     let test_data = TestData::new_with_epoch_height(6, EPOCH_HEIGHT).await;
@@ -534,8 +534,9 @@ async fn certificate_rule_checks_the_timeout_certificates_lock() {
     ));
 }
 
-/// Rule B.1 across a restart: a node restarted after recording a timeout vote
-/// does not vote2 at that view.
+/// A node never votes2 at a view it sent a timeout vote for, across a restart
+/// too: a node restarted after recording a timeout vote does not vote2 at that
+/// view.
 #[tokio::test]
 async fn restarted_node_does_not_vote2_at_a_view_it_timed_out() {
     let test_data = TestData::new_with_epoch_height(3, EPOCH_HEIGHT).await;

@@ -2496,19 +2496,39 @@ impl<T: NodeType> Consensus<T> {
             return;
         }
 
-        let rule_b = self.upgrade_lock.certificate_rule(view);
-        // Voters refuse a timeout certificate of an epoch earlier than the
-        // proposal's, such as a late one of the outgoing committee.
+        let certificate_rule = self.upgrade_lock.certificate_rule(view);
+
         let view_change_evidence = self
             .timeout_certs
             .get(&view)
-            .filter(|tc| !(rule_b && tc.epoch() < Some(self.current_epoch)))
+            .filter(|tc| !(certificate_rule && tc.epoch() < Some(self.current_epoch)))
             .cloned();
-        let Some(parent_cert) = self.proposal_parent(view, view_change_evidence.as_ref()) else {
+        let Some(parent_cert) = self.parent_cert(view, view_change_evidence.as_ref()) else {
             debug!("no parent certificate");
             return;
         };
-        let Some((parent_view, proposal)) = self.parent_proposal(&parent_cert) else {
+        let Some((parent_view, proposal)) = self
+            .certified_proposal(
+                parent_cert.view_number(),
+                parent_cert.data.leaf_commit,
+                parent_cert.data.block_number,
+            )
+            .map(|(view, proposal)| (view, proposal.clone()))
+        else {
+            // Keyed by the certificate's leaf, not by view alone: another proposal
+            // of the same view may be held, and a header built on it would carry a
+            // wrong block number.
+            if self
+                .proposals
+                .at(parent_cert.view_number())
+                .next()
+                .is_some()
+            {
+                warn!(
+                    parent_view = %parent_cert.view_number(),
+                    "held proposal at the parent's view is not the one its certificate names"
+                );
+            }
             debug!(parent = %parent_cert.view_number(), "no proposal for parent certificate");
             return;
         };
@@ -2523,9 +2543,9 @@ impl<T: NodeType> Consensus<T> {
             && is_last_block(proposal.block_header.block_number(), *self.epoch_height)
         {
             let Some(cert2) =
-                self.boundary_commit(view, parent_view, parent_commitment, &view_change_evidence)
+                self.opening_cert2(view, parent_view, parent_commitment, &view_change_evidence)
             else {
-                if rule_b {
+                if certificate_rule {
                     self.maybe_request_revote(
                         view,
                         &parent_cert,
@@ -2563,7 +2583,7 @@ impl<T: NodeType> Consensus<T> {
         if self.proposed_at(view, proposal_epoch) {
             return;
         }
-        if rule_b {
+        if certificate_rule {
             // Voters refuse a proposal of an epoch earlier than their own, and
             // one whose parent is earlier than its timeout certificate's lock.
             if proposal_epoch < self.current_epoch {
@@ -2705,7 +2725,7 @@ impl<T: NodeType> Consensus<T> {
     /// one it is this node's lock, except under the certificate rule a leader
     /// holding a commit of an epoch's last block builds the next epoch's
     /// first block on it, even when locked on a re-vote's certificate.
-    fn proposal_parent(
+    fn parent_cert(
         &self,
         view: ViewNumber,
         evidence: Option<&TimeoutEvidence<T>>,
@@ -2717,7 +2737,7 @@ impl<T: NodeType> Consensus<T> {
         let lock = self.locked_cert.as_ref();
         if self.upgrade_lock.certificate_rule(view) {
             let epoch = lock.map_or_else(EpochNumber::genesis, |lock| LockView::of(lock).epoch);
-            if let Some(boundary) = self.committed_boundary(epoch) {
+            if let Some(boundary) = self.committed_last_block_cert1(epoch) {
                 return Some(boundary);
             }
         }
@@ -2726,7 +2746,7 @@ impl<T: NodeType> Consensus<T> {
 
     /// The own `Certificate1` of the latest last block of an epoch at or
     /// after `epoch` that this node holds a commit of.
-    fn committed_boundary(&self, epoch: EpochNumber) -> Option<Certificate1<T>> {
+    fn committed_last_block_cert1(&self, epoch: EpochNumber) -> Option<Certificate1<T>> {
         self.certs2
             .iter()
             .rev()
@@ -2747,32 +2767,13 @@ impl<T: NodeType> Consensus<T> {
             })
     }
 
-    /// The proposal `parent` certifies and the view it was proposed at.
-    fn parent_proposal(&self, parent: &Certificate1<T>) -> Option<(ViewNumber, Proposal<T>)> {
-        let view = parent.view_number();
-        // Keyed by the cert's `leaf_commit`, NOT by view alone: `self.proposals`
-        // can hold another proposal of the same view than the one the cert
-        // certified, and a header built on it carries a wrong block number.
-        let found = self
-            .certified_proposal(view, parent.data.leaf_commit, parent.data.block_number)
-            .map(|(view, p)| (view, p.clone()));
-        if found.is_none() && self.proposals.at(view).next().is_some() {
-            warn!(
-                parent_view = %view,
-                "stored proposal at parent_view does not match parent cert's leaf_commit; \
-                 refusing to propose with mismatched parent"
-            );
-        }
-        found
-    }
-
     /// The commit of the last block of an epoch, at `block_view` over
     /// `leaf_commit`, that the next epoch's first block at `view` can carry:
     /// one at the block's view or later, and before `view`.
     ///
     /// Without a timeout certificate the first block follows its parent
     /// directly, so only the block's own commit can come before it.
-    fn boundary_commit(
+    fn opening_cert2(
         &self,
         view: ViewNumber,
         block_view: ViewNumber,
@@ -3592,8 +3593,7 @@ impl<T: NodeType> Consensus<T> {
         }
     }
 
-    /// The certificate rule's checks on a vote1 (rule B), in place of the
-    /// voter's own votes:
+    /// The certificate rule's checks on a vote1, in place of the voter's own votes:
     /// - a node votes for no epoch earlier than its own;
     /// - after a timeout, the parent must be admitted by the timeout
     ///   certificate's lock ([`certificate_rule_admits`]);
