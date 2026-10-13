@@ -388,7 +388,7 @@ impl Inner {
         self.prune_files(
             self.decided_cert2_dir_path(),
             prune_view,
-            None,
+            Some(decided_view),
             prune_intervals,
         )?;
 
