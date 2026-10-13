@@ -1032,8 +1032,7 @@ pub mod node_tests {
         state_types::{TestInstanceState, TestValidatedState},
     };
     use hotshot_types::{
-        data::{VidCommitment, VidCommon, VidShare, ViewNumber, vid_commitment},
-        simple_certificate::{CertificatePair, QuorumCertificate2},
+        data::{VidCommitment, VidCommon, VidShare, vid_commitment},
         traits::{
             BlockPayload,
             block_contents::{BlockHeader, EncodeBytes},
@@ -1044,7 +1043,7 @@ pub mod node_tests {
     use pretty_assertions::assert_eq;
 
     use crate::{
-        Header, Leaf2,
+        Header,
         availability::{BlockInfo, BlockQueryData, LeafQueryData, VidCommonQueryData},
         data_source::{
             storage::{NodeStorage, UpdateAvailabilityStorage},
@@ -1736,99 +1735,6 @@ pub mod node_tests {
             .unwrap();
         assert_eq!(res.window, blocks[2..].to_vec());
         assert_eq!(res.next, Some(test_blocks[2][0].clone()));
-    }
-
-    #[test_log::test(tokio::test(flavor = "multi_thread"))]
-    pub async fn test_latest_qc_chain<D: TestableDataSource>()
-    where
-        for<'a> D::ReadOnly<'a>: NodeStorage<MockTypes>,
-        for<'a> D::Transaction<'a>: UpdateAvailabilityStorage<MockTypes>,
-    {
-        let storage = D::create(0).await;
-        let ds = D::connect(&storage).await;
-
-        {
-            let mut tx = ds.read().await.unwrap();
-            assert_eq!(tx.latest_qc_chain().await.unwrap(), None);
-        }
-
-        async fn leaf_with_qc_chain(
-            number: u64,
-        ) -> (LeafQueryData<MockTypes>, [CertificatePair<MockTypes>; 2]) {
-            let mut leaf = Leaf2::<MockTypes>::genesis(
-                &Default::default(),
-                &Default::default(),
-                TEST_VERSIONS.test.base,
-            )
-            .await;
-            leaf.block_header_mut().block_number = number;
-
-            let mut qc1 = QuorumCertificate2::<MockTypes>::genesis(
-                &Default::default(),
-                &Default::default(),
-                TEST_VERSIONS.test,
-            )
-            .await;
-            qc1.view_number = ViewNumber::new(1);
-            qc1.data.leaf_commit = Committable::commit(&leaf);
-
-            let mut qc2 = qc1.clone();
-            qc2.view_number += 1;
-
-            let leaf = LeafQueryData::new(leaf, qc1.clone()).unwrap();
-            (
-                leaf,
-                [
-                    CertificatePair::non_epoch_change(qc1),
-                    CertificatePair::non_epoch_change(qc2),
-                ],
-            )
-        }
-
-        // Insert a leaf with QC chain.
-        {
-            let (leaf, qcs) = leaf_with_qc_chain(2).await;
-            let mut tx = ds.write().await.unwrap();
-            tx.insert_leaf_with_qc_chain(&leaf, Some(qcs.clone()))
-                .await
-                .unwrap();
-            tx.commit().await.unwrap();
-
-            assert_eq!(
-                ds.read().await.unwrap().latest_qc_chain().await.unwrap(),
-                Some(qcs)
-            );
-        }
-
-        // Insert a later leaf without a QC chain. This should clear the previously saved QC chain,
-        // which is no longer up to date.
-        {
-            let (leaf, _) = leaf_with_qc_chain(3).await;
-            let mut tx = ds.write().await.unwrap();
-            tx.insert_leaf_with_qc_chain(&leaf, None).await.unwrap();
-            tx.commit().await.unwrap();
-
-            assert_eq!(
-                ds.read().await.unwrap().latest_qc_chain().await.unwrap(),
-                None
-            );
-        }
-
-        // Insert an earlier leaf with a QC chain. This should not be saved since it is not the
-        // latest leaf.
-        {
-            let (leaf, qcs) = leaf_with_qc_chain(1).await;
-            let mut tx = ds.write().await.unwrap();
-            tx.insert_leaf_with_qc_chain(&leaf, Some(qcs))
-                .await
-                .unwrap();
-            tx.commit().await.unwrap();
-
-            assert_eq!(
-                ds.read().await.unwrap().latest_qc_chain().await.unwrap(),
-                None
-            );
-        }
     }
 }
 
