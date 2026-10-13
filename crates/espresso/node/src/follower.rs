@@ -220,7 +220,7 @@ where
     bootstrap_epoch_window(
         &coordinator,
         epoch_height,
-        async || Ok(node_state.finalized_light_client_state().await?.into()),
+        || async { Ok(node_state.finalized_light_client_state().await?.into()) },
         &peers,
         &params.bootstrap,
         &bootstrap_metrics,
@@ -734,7 +734,7 @@ impl<P: SequencerPersistence> Follower<P> {
         let current_epoch = bootstrap_epoch_window(
             &self.coordinator,
             self.epoch_height,
-            async || {
+            || async {
                 // The latest block the light client has verified, so the skip needs no L1.
                 let height = tip.checked_sub(1).context("the chain is empty")?;
                 let header = self

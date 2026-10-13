@@ -37,9 +37,6 @@ use crate::{
     v0_3::{RegisteredValidator, RewardAmount},
 };
 
-#[cfg(feature = "node")]
-const L1_FINALITY_WAIT: Duration = Duration::from_secs(30);
-
 /// Represents the immutable state of a node.
 ///
 /// For mutable state, use `ValidatedState`.
@@ -181,10 +178,14 @@ impl NodeState {
         if self.chain_config.stake_table_contract.is_none() {
             bail!("no light client contract");
         }
+        // The L1 client learns the finalized block asynchronously after start.
         let finalized = self
-            .l1_finalized_block()
+            .l1_client
+            .snapshot()
             .await
-            .context("L1 finality is not yet known")?;
+            .finalized
+            .context("L1 finality is not yet known")?
+            .number;
         let light_client_contract = LightClientV3::new(
             self.light_client_contract_address().await?,
             self.l1_client.provider.clone(),
@@ -196,24 +197,6 @@ impl NodeState {
             .await
             .context("reading the light client state")?;
         Ok(state.into())
-    }
-
-    /// The L1 finalized block number. The L1 client learns it asynchronously after start, so this
-    /// waits briefly for a node that asks right at boot.
-    #[cfg(feature = "node")]
-    async fn l1_finalized_block(&self) -> Option<u64> {
-        if let Some(finalized) = self.l1_client.snapshot().await.finalized {
-            return Some(finalized.number);
-        }
-        // The returned info is for block 0, so read the snapshot it has since filled in.
-        tokio::time::timeout(L1_FINALITY_WAIT, self.l1_client.wait_for_finalized_block(0))
-            .await
-            .ok()?;
-        self.l1_client
-            .snapshot()
-            .await
-            .finalized
-            .map(|block| block.number)
     }
 
     /// The oldest HotShot block height the light client contract still holds a commitment for, or

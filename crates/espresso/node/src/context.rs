@@ -211,7 +211,7 @@ where
             let current_epoch = bootstrap_epoch_window(
                 &membership_coordinator,
                 epoch_height,
-                async || Ok(instance_state.finalized_light_client_state().await?.into()),
+                || async { Ok(instance_state.finalized_light_client_state().await?.into()) },
                 &peers,
                 &bootstrap_params,
                 &BootstrapMetrics::new(metrics),

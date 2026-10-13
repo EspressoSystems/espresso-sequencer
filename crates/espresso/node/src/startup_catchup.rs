@@ -9,7 +9,8 @@
 //! [`bootstrap_epoch_window`] populates the window in two stages:
 //!
 //! 1. Skip: the L1 light-client contract vouches for a finalized header `F`. The epoch roots below `F` are
-//!    fetched with Merkle proofs against `F` and installed directly.
+//!    fetched with Merkle proofs against `F` and installed directly. Failures to read the anchor or
+//!    fetch the roots are retried until the deadline.
 //! 2. Walk: from the highest known epoch, one epoch at a time. At boot, the walk targets the epoch
 //!    the peers' chain tip needs, and a failure below it is retried until the deadline. Without a
 //!    target, or past it, the first failure marks the live tip.
@@ -132,18 +133,21 @@ enum SkipOutcome {
 /// current epoch). Returns `N`.
 ///
 /// `fetch_anchor` runs only when the skip is enabled and there are peers, so `SkipMode::Off` makes
-/// no L1 calls.
+/// no L1 calls. Its failures are retried until the deadline, like those of the skip.
 ///
 /// Preconditions: `reload_stake` should have run before this: it populates the membership from
 /// local persistence so the walk skips epochs we already know.
-pub(crate) async fn bootstrap_epoch_window<C: Client>(
+pub(crate) async fn bootstrap_epoch_window<C: Client, Fut>(
     coordinator: &EpochMembershipCoordinator<SeqTypes>,
     epoch_height: u64,
-    fetch_anchor: impl AsyncFnOnce() -> anyhow::Result<TrustedAnchor>,
+    fetch_anchor: impl Fn() -> Fut,
     peers: &[(Url, C)],
     params: &BootstrapParams,
     metrics: &BootstrapMetrics,
-) -> anyhow::Result<EpochNumber> {
+) -> anyhow::Result<EpochNumber>
+where
+    Fut: Future<Output = anyhow::Result<TrustedAnchor>>,
+{
     if epoch_height == 0 {
         // Pre-epoch chain: epochs aren't enabled yet, the non-epoch
         // committee path is what gets used.
@@ -156,12 +160,16 @@ pub(crate) async fn bootstrap_epoch_window<C: Client>(
         .first_epoch()
         .context("first_epoch not seeded; genesis stake table missing")?;
 
+    let deadline = Instant::now() + params.deadline;
     let anchor = match (params.skip, peers.is_empty()) {
-        (SkipMode::Off, _) => Err("off".to_string()),
-        (_, true) => Err("no state peers".to_string()),
-        _ => match timeout(params.step_timeout, fetch_anchor()).await {
-            Ok(anchor) => anchor.map_err(|err| format!("{err:#}")),
-            Err(_) => Err("anchor fetch timed out".to_string()),
+        (SkipMode::Off, _) => Err("off"),
+        (_, true) => Err("no state peers"),
+        _ => {
+            let read = retry(deadline, "reading the anchor", 1, |_, remaining| {
+                let read = timeout(params.step_timeout.min(remaining), fetch_anchor());
+                async move { read.await.context("attempt timed out")? }
+            });
+            Ok(read.await?)
         },
     };
     let outcome = match &anchor {
@@ -172,12 +180,13 @@ pub(crate) async fn bootstrap_epoch_window<C: Client>(
                 anchor,
                 epoch_height,
                 first_epoch,
+                deadline,
                 params,
                 metrics,
             );
             skip.await?
         },
-        Err(reason) => SkipOutcome::Walk(reason.clone()),
+        Err(reason) => SkipOutcome::Walk(reason.to_string()),
     };
     let skipped = match outcome {
         SkipOutcome::Installed => true,
@@ -226,6 +235,7 @@ async fn skip_to_anchor<C: Client>(
     anchor: &TrustedAnchor,
     epoch_height: u64,
     first_epoch: EpochNumber,
+    deadline: Instant,
     params: &BootstrapParams,
     metrics: &BootstrapMetrics,
 ) -> anyhow::Result<SkipOutcome> {
@@ -254,7 +264,7 @@ async fn skip_to_anchor<C: Client>(
         "skipping to anchor",
     );
 
-    let fetch = fetch_epoch_roots(peers, anchor, &range, epoch_height, params.deadline);
+    let fetch = fetch_epoch_roots(peers, anchor, &range, epoch_height, deadline);
     for header in fetch.await? {
         let height = header.height();
         coordinator
@@ -302,40 +312,65 @@ fn install_range(
 }
 
 /// Fetch and verify the epoch roots of `range` from the peers in rotation, backing off after each
-/// full pass, until `limit` has passed.
+/// full pass, until `deadline`.
 async fn fetch_epoch_roots<C: Client>(
     peers: &[(Url, C)],
     anchor: &TrustedAnchor,
     range: &RangeInclusive<EpochNumber>,
     epoch_height: u64,
-    limit: Duration,
+    deadline: Instant,
 ) -> anyhow::Result<Vec<Header>> {
-    let deadline = Instant::now() + limit;
+    let what = "skipping to the anchor";
+    retry(
+        deadline,
+        what,
+        peers.len(),
+        |attempt, remaining| async move {
+            let (url, peer) = &peers[attempt % peers.len()];
+            let fetch = fetch_roots_from(peer, anchor, range, epoch_height);
+            let fetch = timeout(remaining, fetch);
+            fetch
+                .await
+                .context("attempt timed out")?
+                .with_context(|| format!("peer {url}"))
+        },
+    )
+    .await
+}
+
+/// Run `attempt` with its index and the time left until it succeeds, backing off after every
+/// `per_pass` failures. Errors at `deadline`.
+async fn retry<T, Fut: Future<Output = anyhow::Result<T>>>(
+    deadline: Instant,
+    what: &str,
+    per_pass: usize,
+    mut attempt: impl FnMut(usize, Duration) -> Fut,
+) -> anyhow::Result<T> {
     let mut backoff = INITIAL_BACKOFF;
-    let mut attempt = 0usize;
+    let mut count = 0usize;
     let mut last_err = String::from("none");
     loop {
         let remaining = deadline.saturating_duration_since(Instant::now());
         ensure!(
             !remaining.is_zero(),
-            "bootstrap deadline exceeded after {attempt} attempts while skipping to the anchor, \
-             last error: {last_err}"
+            "bootstrap deadline exceeded after {count} attempts while {what}, last error: \
+             {last_err}"
         );
 
-        let (url, peer) = &peers[attempt % peers.len()];
-        let fetch = fetch_roots_from(peer, anchor, range, epoch_height);
-        let err = match timeout(remaining, fetch).await {
-            Ok(Ok(headers)) => return Ok(headers),
-            Ok(Err(err)) => err,
-            Err(_) => anyhow!("attempt timed out"),
-        };
-        last_err = format!("{err:#}");
-        attempt += 1;
-        if attempt.is_power_of_two() {
-            tracing::warn!(attempt, %url, err = last_err, "bootstrap: skip attempt failed; retrying");
+        match attempt(count, remaining).await {
+            Ok(value) => return Ok(value),
+            Err(err) => last_err = format!("{err:#}"),
+        }
+        count += 1;
+        if count.is_power_of_two() {
+            tracing::warn!(
+                attempt = count,
+                err = last_err,
+                "bootstrap: {what} failed; retrying"
+            );
         }
 
-        if attempt.is_multiple_of(peers.len()) {
+        if count.is_multiple_of(per_pass) {
             let remaining = deadline.saturating_duration_since(Instant::now());
             sleep(backoff.min(remaining)).await;
             backoff = (backoff * 2).min(MAX_BACKOFF);
@@ -542,7 +577,13 @@ async fn prepare_drb(
 
 #[cfg(test)]
 mod tests {
-    use std::{collections::HashMap, sync::Arc};
+    use std::{
+        collections::HashMap,
+        sync::{
+            Arc,
+            atomic::{AtomicUsize, Ordering},
+        },
+    };
 
     use alloy::primitives::{Address, U256};
     use async_lock::Mutex as AsyncMutex;
@@ -578,6 +619,12 @@ mod tests {
         deadline: Duration::from_secs(30),
         skip: SkipMode::Auto,
         boot: true,
+    };
+
+    /// Walks only, so the tests need no anchor.
+    const WALK_ONLY: BootstrapParams = BootstrapParams {
+        skip: SkipMode::Off,
+        ..PARAMS
     };
 
     fn epochs(range: RangeInclusive<EpochNumber>) -> RangeInclusive<u64> {
@@ -846,7 +893,7 @@ mod tests {
         bootstrap_epoch_window(
             coordinator,
             EPOCH_HEIGHT,
-            async || anchor.context("no anchor"),
+            || async { anchor.context("no anchor") },
             &peer_list(peers),
             &params,
             &metrics,
@@ -1047,7 +1094,7 @@ mod tests {
             store.0.lock().unwrap().insert(N - 1, withheld);
         });
 
-        let current = bootstrap(&coordinator, None, &[client], PARAMS)
+        let current = bootstrap(&coordinator, None, &[client], WALK_ONLY)
             .await
             .unwrap();
 
@@ -1069,7 +1116,7 @@ mod tests {
         }
         let params = BootstrapParams {
             deadline: Duration::from_millis(300),
-            ..PARAMS
+            ..WALK_ONLY
         };
 
         let err = bootstrap(&coordinator, None, &[client], params)
@@ -1156,20 +1203,14 @@ mod tests {
         let (client, _) = chain().await;
         client.mock_block_height(0).await;
         let coordinator = fresh_coordinator(&client).await;
-        let params = BootstrapParams {
-            skip: SkipMode::Off,
-            ..PARAMS
-        };
         let metrics = BootstrapMetrics::new(&NoMetrics);
 
         let current = bootstrap_epoch_window(
             &coordinator,
             EPOCH_HEIGHT,
-            async || -> anyhow::Result<TrustedAnchor> {
-                panic!("anchor fetched with the skip off")
-            },
+            || async { panic!("anchor fetched with the skip off") },
             &peer_list(&[client]),
-            &params,
+            &WALK_ONLY,
             &metrics,
         )
         .await
@@ -1179,18 +1220,50 @@ mod tests {
         assert!(!has_table(&coordinator, N - 3));
     }
 
+    /// An anchor read that keeps failing is retried until the deadline, not read as "walk".
     #[test_log::test(tokio::test)]
-    async fn no_anchor_walks() {
+    async fn anchor_failure_aborts_at_the_deadline() {
         let (client, _) = chain().await;
-        client.mock_block_height(0).await;
         let coordinator = fresh_coordinator(&client).await;
+        let params = BootstrapParams {
+            deadline: Duration::from_millis(300),
+            ..PARAMS
+        };
 
-        let current = bootstrap(&coordinator, None, &[client], PARAMS)
+        let err = bootstrap(&coordinator, None, &[client], params)
             .await
-            .unwrap();
+            .unwrap_err();
 
-        assert_eq!(current, EpochNumber::new(FIRST_EPOCH));
-        assert!(!has_table(&coordinator, N - 3));
+        let err = format!("{err:#}");
+        assert!(err.contains("deadline exceeded"), "{err}");
+        assert!(err.contains("no anchor"), "{err}");
+    }
+
+    /// A failed anchor read is retried and the skip then runs.
+    #[test_log::test(tokio::test)]
+    async fn anchor_failure_is_retried() {
+        let (client, anchor) = chain().await;
+        let coordinator = fresh_coordinator(&client).await;
+        let reads = AtomicUsize::new(0);
+        let metrics = BootstrapMetrics::new(&NoMetrics);
+
+        let current = bootstrap_epoch_window(
+            &coordinator,
+            EPOCH_HEIGHT,
+            || async {
+                ensure!(reads.fetch_add(1, Ordering::Relaxed) > 0, "L1 not ready");
+                Ok(anchor)
+            },
+            &peer_list(&[client]),
+            &PARAMS,
+            &metrics,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(reads.load(Ordering::Relaxed), 2);
+        assert_eq!(current, EpochNumber::new(N));
+        assert!(has_table(&coordinator, N + 1));
     }
 
     #[test_log::test(tokio::test)]
@@ -1260,9 +1333,8 @@ mod tests {
         let (client, _) = chain().await;
         let coordinator = fresh_coordinator(&client).await;
         let params = BootstrapParams {
-            skip: SkipMode::Off,
             deadline: Duration::from_millis(300),
-            ..PARAMS
+            ..WALK_ONLY
         };
 
         let err = bootstrap(&coordinator, None, &[client], params)
@@ -1288,7 +1360,7 @@ mod tests {
         }
         let params = BootstrapParams {
             boot: false,
-            ..PARAMS
+            ..WALK_ONLY
         };
 
         let current = bootstrap(&coordinator, None, &[client], params)

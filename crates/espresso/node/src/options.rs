@@ -384,8 +384,8 @@ pub struct Options {
     )]
     pub bootstrap_skip: SkipMode,
 
-    /// How long startup retries before giving up, for the skip and again for the walk toward the
-    /// chain tip the state peers report.
+    /// How long startup retries before giving up, for the skip (anchor read and epoch roots) and
+    /// again for the walk toward the chain tip the state peers report.
     ///
     /// At the deadline the node exits with an error.
     #[clap(long, env = "ESPRESSO_NODE_BOOTSTRAP_DEADLINE", default_value = "15m", value_parser = parse_duration)]
