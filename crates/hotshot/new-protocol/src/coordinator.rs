@@ -1519,11 +1519,11 @@ where
                     let epoch = revote.revote.epoch;
                     debug!(%node, %sender, %view, %epoch, "recv re-vote request");
                     if self.is_view_too_far_ahead(view) {
-                        warn!(%node, %sender, %view, "re-vote request is too far ahead");
+                        warn!(%node, %sender, %view, "re-vote is too far ahead");
                         return None;
                     }
-                    if self.is_epoch_too_far_ahead(Some(epoch)) {
-                        warn!(%node, %sender, %view, %epoch, "re-vote request epoch is too far ahead");
+                    if !self.is_vote_epoch_admissible(Some(epoch)) {
+                        warn!(%node, %sender, %view, %epoch, "re-vote epoch is out of range");
                         return None;
                     }
                     // Checked before the lock's epoch can start a catchup.
@@ -1588,8 +1588,8 @@ where
                     let view = epoch_change.cert1.view_number();
                     let epoch = epoch_change.cert1.epoch();
                     debug!(%node, %sender, %view, epoch = ?epoch.map(|e| *e), "recv epoch change");
-                    if self.is_epoch_too_far_ahead(epoch) {
-                        warn!(%node, %sender, %view, ?epoch, "epoch change is too far ahead");
+                    if !epoch.is_some_and(|e| is_epoch_admissible(e, self.epoch())) {
+                        warn!(%node, %sender, %view, ?epoch, "epoch change is out of range");
                         return None;
                     }
                     if let Some(epoch) = self
@@ -2252,6 +2252,15 @@ where
         epoch.is_some_and(|e| e > current + EPOCH_CHANGE_LOOKAHEAD)
     }
 
+    /// We ignore messages more than `EPOCH_CHANGE_LOOKBEHIND` behind ours.
+    fn is_epoch_too_far_behind(&self, epoch: EpochNumber) -> bool {
+        let current = self
+            .consensus
+            .current_epoch()
+            .unwrap_or(EpochNumber::genesis());
+        epoch.u64() < current.saturating_sub(EPOCH_CHANGE_LOOKBEHIND)
+    }
+
     /// Is `epoch` close enough to the node's own to buffer a fragment naming it?
     fn is_fragment_epoch_admissible(&self, epoch: EpochNumber) -> bool {
         let current = self
@@ -2420,6 +2429,11 @@ where
         tc: TimeoutCertificate3<T>,
     ) -> Option<EpochNumber> {
         let view = tc.view_number();
+        let epoch = tc.epoch;
+        if self.is_epoch_too_far_behind(epoch) {
+            warn!(node = %self.node_id, %sender, %view, %epoch, "timeout certificate too far behind");
+            return None;
+        }
         if !self.consensus.upgrade_lock().timeout_epoch_bound(view) {
             warn!(node = %self.node_id, %sender, %view, "inadmissible timeout certificate");
             return None;
@@ -2432,7 +2446,7 @@ where
             warn!(node = %self.node_id, %sender, %view, %err, "malformed timeout certificate");
             return None;
         }
-        if let Some(epoch) = self.unknown_lock_epoch(tc.lock(), tc.epoch) {
+        if let Some(epoch) = self.unknown_lock_epoch(tc.lock(), epoch) {
             return Some(epoch);
         }
         self.cert_verifiers.timeout3.verify(sender.clone(), tc)
