@@ -67,13 +67,11 @@ impl NsPayload {
         self.read(&NumTxsRange::new(&self.byte_len()))
     }
 
-    /// Private helper
     fn iter_from_num_txs(&self, num_txs: &NumTxsUnchecked) -> TxIter {
         let num_txs = NumTxs::new(num_txs, &self.byte_len());
         TxIter::new(&num_txs)
     }
 
-    /// Private helper
     fn tx_from_num_txs(
         &self,
         ns_id: &NamespaceId,
@@ -84,7 +82,6 @@ impl NsPayload {
         Transaction::new(*ns_id, bytes.to_vec())
     }
 
-    /// Private helper
     fn tx_payload_from_num_txs(
         &self,
         index: &TxIndex,

@@ -38,7 +38,7 @@ pub trait EncodeBytes {
 }
 
 /// Blake3 key identifying a transaction for local dedup. Not the public tx hash.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct TxDigest([u8; 32]);
 
 impl From<blake3::Hash> for TxDigest {
@@ -50,6 +50,12 @@ impl From<blake3::Hash> for TxDigest {
 impl Display for TxDigest {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(blake3::Hash::from_bytes(self.0).to_hex().as_str())
+    }
+}
+
+impl Debug for TxDigest {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Display::fmt(self, f)
     }
 }
 

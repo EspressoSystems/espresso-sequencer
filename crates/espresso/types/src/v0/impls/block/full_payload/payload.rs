@@ -10,6 +10,7 @@ use hotshot_types::{
     vid::advz::{ADVZCommon, ADVZScheme},
 };
 use jf_advz::VidScheme;
+use p3_maybe_rayon::prelude::*;
 use sha2::Digest;
 use thiserror::Error;
 
@@ -61,7 +62,7 @@ impl Payload {
     }
 
     /// Borrow a transaction's namespace ID and payload bytes from this payload.
-    pub fn transaction_bytes(&self, index: &Index) -> Option<(NamespaceId, &[u8])> {
+    fn transaction_bytes(&self, index: &Index) -> Option<(NamespaceId, &[u8])> {
         let ns = &index.ns_index;
         let ns_id = self.ns_table.read_ns_id(ns)?;
         let bytes = self
@@ -100,8 +101,6 @@ impl Payload {
         metadata: &NsTable,
         f: impl Fn(&Index) -> T + Sync + Send,
     ) -> Vec<T> {
-        use p3_maybe_rayon::prelude::*;
-
         let leaf = |index: &Index| {
             let _span = tracing::debug_span!("tx_hash").entered();
             f(index)
@@ -188,19 +187,13 @@ impl Payload {
     }
 }
 
-/// Transaction count below which [`BlockPayload::transaction_commitments`] hashes
-/// serially.
+/// Transaction count below which [`Payload::map_transactions`] runs serially.
 ///
-/// Splitting and joining across the rayon pool costs more than the handful of
-/// Keccak256 rounds it would distribute, so small blocks — the common case — are
-/// better off never leaving the calling thread. The parallel path exists for
-/// recovery of large blocks, where this work is the serial tail between the
-/// erasure decode and the vote.
+/// Below this, splitting across the rayon pool costs more than the hashing it distributes.
 pub(crate) const MIN_PARALLEL_TRANSACTIONS: usize = 32;
 
-/// Payload size from which [`BlockPayload::transaction_commitments`] hashes in
-/// parallel regardless of transaction count; a few large transactions are slow to
-/// hash serially.
+/// Payload size from which [`Payload::map_transactions`] runs in parallel regardless of
+/// transaction count.
 pub(crate) const MIN_PARALLEL_BYTES: usize = 1 << 20;
 
 #[async_trait]

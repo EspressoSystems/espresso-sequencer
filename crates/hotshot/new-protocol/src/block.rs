@@ -6,7 +6,7 @@ use std::{
     time::Duration,
 };
 
-use committable::Commitment;
+use committable::{Commitment, Committable};
 use hotshot::traits::{BlockPayload, ValidatedState as _};
 use hotshot_types::{
     consensus::PayloadWithMetadata,
@@ -461,7 +461,7 @@ impl<T: NodeType> BlockBuilder<T> {
         }
         let charge = size + retry_entry_overhead::<T>();
         if self.retry_total_bytes + charge > self.config.max_retry_bytes {
-            warn!("retry buffer full, rejecting {hash}");
+            warn!(tx = %tx.commit(), "retry buffer full, rejecting");
             return Err(SubmitError::RetryBufferFull);
         }
 
@@ -575,7 +575,7 @@ impl<T: NodeType> BlockBuilder<T> {
             batch.push(*hash);
         }
         for hash in &unfit {
-            warn!(%hash, "pending transaction no longer fits a block, dropping");
+            warn!(tx = %self.retry_pending[hash].tx.commit(), "pending transaction no longer fits a block, dropping");
             self.remove_pending(hash);
         }
         let sent_until = first_target + (self.config.fanout.get() - 1);
