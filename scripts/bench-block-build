@@ -18,7 +18,8 @@ Each ref is built in a temporary git worktree into this checkout's target dir. E
 benchmark runs in its own process, since glibc's mmap threshold depends on earlier allocations,
 with base and head alternating, under glibc.malloc.hugetlb=1 by default (the AWS bench nodes).
 Changes carry one standard error from the spread of run medians and are marked as noise within
-two. Before each run the script samples CPU use while idle and warns if other work is busy.
+two. Per-step comparisons need both refs to contain the step instrumentation; steps without CPU on
+either side are marked not comparable. Before each run the script samples CPU use while idle and warns if other work is busy.
 """
 
 import json
@@ -51,9 +52,15 @@ LANES = {
     "from_transactions": "#2a78d6",
     "block_commitments": "#c3c2b7",
     "encode": "#e87ba4",
-    "transaction_commitments": "#eb6834",
+    "transaction_hashes": "#eb6834",
     "vid_commitment": "#1baf7a",
     "builder_commitment": "#eda100",
+}
+# Per-step wording of the cpu kind, see STEPS in the bench.
+CPU_NOTES = {
+    "request_block": ", process cpu {:.1f} ms",
+    "block_commitments": ", process cpu {:.1f} ms",
+    "vid_commitment": ", cpu <= {:.1f} ms (residual)",
 }
 
 log = logging.getLogger("bench-block-build")
@@ -169,7 +176,10 @@ def summarize(runs: pd.DataFrame) -> str:
     median = runs.pivot_table(
         index=keys, columns="side", values="duration", aggfunc="median"
     )
-    cpu = runs.pivot_table(index=keys, columns="side", values="cpu", aggfunc="median")
+    # pivot_table drops a side whose cpu is all NaN, i.e. a ref without the instrumentation.
+    cpu = runs.pivot_table(
+        index=keys, columns="side", values="cpu", aggfunc="median"
+    ).reindex(columns=median.columns)
     sem = per_run.sem().unstack("side")
     run_medians = per_run.agg(lambda v: " ".join(f"{x:.2f}" for x in v)).unstack("side")
     if "base" not in median:
@@ -186,11 +196,17 @@ def summarize(runs: pd.DataFrame) -> str:
         ratio = median["head"] / median["base"]
         # Delta-method standard error of head / base.
         se = (sem["head"] ** 2 + ratio**2 * sem["base"] ** 2) ** 0.5 / median["base"]
+        cpu_ratio = cpu["head"] / cpu["base"]
+        # The whole build compares by duration alone.
+        comparable = cpu_ratio.reindex(median.index).notna() | (
+            median.index.get_level_values("step") == "request_block"
+        )
         change = [
             f"{r - 1:+.1%} ± {e:.1%}{'' if abs(r - 1) > 2 * e else ' (noise)'}"
-            for r, e in zip(ratio, se.reindex(ratio.index), strict=True)
+            if ok
+            else "(not comparable)"
+            for r, e, ok in zip(ratio, se.reindex(ratio.index), comparable, strict=True)
         ]
-        cpu_ratio = cpu["head"] / cpu["base"]
         table = median.assign(
             change=change,
             base_cpu=cpu["base"],
@@ -233,12 +249,12 @@ def waterfall(runs: pd.DataFrame, path: Path) -> None:
             xerr=errors,
             error_kw={"ecolor": "#52514e", "capsize": 3},
         )
-        for lane, start, duration, cpu, error in zip(
-            lanes, bars.start, bars.duration, bars.cpu, errors, strict=True
+        for lane, step, start, duration, cpu, error in zip(
+            lanes, LANES, bars.start, bars.duration, bars.cpu, errors, strict=True
         ):
             note = "not run" if pd.isna(duration) else f"{duration:.1f} ms"
             if not pd.isna(cpu):
-                note += f", cpu {cpu:.1f} ms"
+                note += CPU_NOTES.get(step, ", cpu {:.1f} ms").format(cpu)
             x = 0 if pd.isna(start) else start + duration + error
             ax.text(x, lane, f"  {note}", va="center")
         ax.set_yticks(list(lanes), list(LANES))
