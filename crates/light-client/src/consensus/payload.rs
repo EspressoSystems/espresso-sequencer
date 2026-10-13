@@ -123,7 +123,7 @@ mod tests {
 
         // The same transaction bytes under a different namespace ID.
         let other = Payload::from_transactions_sync(
-            [Transaction::new(NamespaceId::from(2u32), tx)],
+            &[Transaction::new(NamespaceId::from(2u32), tx)],
             NodeState::mock_v3().chain_config,
         )
         .unwrap()
