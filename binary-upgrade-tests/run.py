@@ -210,10 +210,10 @@ SCENARIOS: dict[str, list[Action]] = {
 
 
 def release_tags() -> list[str]:
-    """Return release tags oldest-first by creation date.
+    """Return release tags strictly before HEAD, oldest-first by creation date.
 
-    Creation order is uniform across the legacy YYYYMMDD and the X.Y.Z.N schemes and
-    across parallel release branches, where version order is not chronological.
+    Reachability keeps parallel release lines apart: a release branch only sees its
+    own line's tags, main sees the tags it was branched at.
     """
     out = subprocess.check_output(
         [
@@ -222,6 +222,10 @@ def release_tags() -> list[str]:
             "--list",
             LEGACY_TAG_GLOB,
             RELEASE_TAG_GLOB,
+            "--merged",
+            "HEAD",
+            "--no-contains",
+            "HEAD",
             "--sort=creatordate",
         ],
         cwd=REPO_ROOT,
@@ -235,31 +239,13 @@ def release_tags() -> list[str]:
 
 
 def default_base_tag() -> str:
-    """Pick the release tag to upgrade from.
-
-    On a tagged release build (HEAD points at a known release tag), use the
-    previous tag so we test the new release against the prior one. Otherwise
-    use the latest release tag.
-    """
+    """Pick the newest release tag strictly before HEAD."""
     tags = release_tags()
     if not tags:
         raise RuntimeError(
-            f"No tags matching {RELEASE_TAG_GLOB} or {LEGACY_TAG_GLOB}; run with --tags fetched."
+            f"No tags matching {RELEASE_TAG_GLOB} or {LEGACY_TAG_GLOB} before HEAD;"
+            " fetch full history with tags."
         )
-    head_tag = subprocess.run(
-        ["git", "describe", "--tags", "--exact-match"],
-        cwd=REPO_ROOT,
-        capture_output=True,
-        text=True,
-        check=False,
-    ).stdout.strip()
-    if head_tag in tags:
-        idx = tags.index(head_tag)
-        if idx == 0:
-            raise RuntimeError(
-                f"HEAD is at {head_tag}, the oldest release tag; no previous to upgrade from."
-            )
-        return tags[idx - 1]
     return tags[-1]
 
 

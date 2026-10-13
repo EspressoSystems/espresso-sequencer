@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       base_tag:
-        description: "Base docker tag to start from (empty = latest X.Y.Z.N tag)"
+        description: "Base docker tag to start from (empty = newest release tag before the dispatched ref)"
         required: false
         default: ""
       upgrade_tag:
@@ -28,7 +28,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          fetch-tags: true
+          fetch-depth: 0
+          filter: blob:none
       - uses: taiki-e/install-action@just
       - uses: astral-sh/setup-uv@v10.0.1
 

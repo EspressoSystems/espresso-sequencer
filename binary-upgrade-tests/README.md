@@ -42,12 +42,12 @@ covers both cross-version directions plus the vanilla rolling upgrade.
 
 ## Inputs
 
-| env          | default                                                                                           |
-| ------------ | ------------------------------------------------------------------------------------------------- |
-| BASE_TAG     | latest X.Y.Z.N tag in the repo, or the previous one when HEAD is itself on an X.Y.Z.N release tag |
-| UPGRADE_TAG  | main                                                                                              |
-| KEEP_RUNNING | 0                                                                                                 |
-| UPGRADE_PULL | 0                                                                                                 |
+| env          | default                                                          |
+| ------------ | ---------------------------------------------------------------- |
+| BASE_TAG     | newest release tag strictly before HEAD (reachable, not on HEAD) |
+| UPGRADE_TAG  | main                                                             |
+| KEEP_RUNNING | 0                                                                |
+| UPGRADE_PULL | 0                                                                |
 
 ## CI
 
