@@ -160,24 +160,25 @@ where
         self.event_rx.activate_cloned().boxed()
     }
 
+    /// Falls back to the resting state when the coordinator has shut down under a reader that
+    /// cloned the client API before `shut_down` took it.
     pub async fn current_view(&self) -> ViewNumber {
-        match self.client_api().await {
-            Some(client_api) => client_api
-                .current_view()
-                .await
-                .expect("coordinator channel closed"), // FIXME
-            None => self.resting.read().view,
+        if let Some(client_api) = self.client_api().await
+            && let Ok(view) = client_api.current_view().await
+        {
+            return view;
         }
+        self.resting.read().view
     }
 
+    /// Falls back to the resting state, see [`Self::current_view`].
     pub async fn decided_leaf(&self) -> Leaf2<T> {
-        match self.client_api().await {
-            Some(client_api) => client_api
-                .decided_leaf()
-                .await
-                .expect("coordinator channel closed"), // FIXME
-            None => self.resting.read().leaf.clone(),
+        if let Some(client_api) = self.client_api().await
+            && let Ok(leaf) = client_api.decided_leaf().await
+        {
+            return leaf;
         }
+        self.resting.read().leaf.clone()
     }
 
     pub async fn decided_state(&self) -> Option<Arc<T::ValidatedState>> {
@@ -394,7 +395,9 @@ where
         let _ = coordinator.await;
     }
 
-    /// Keep what the coordinator last reported, for the readers that outlive it.
+    /// Keep what the coordinator last reported, for the readers that outlive it. This runs
+    /// before the coordinator is cancelled, so a decide that lands in between leaves the resting
+    /// state one leaf behind.
     async fn rest(&self, client_api: &ClientApi<T>) {
         let (view, leaf, state) = join!(
             client_api.current_view(),
