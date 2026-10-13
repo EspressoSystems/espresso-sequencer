@@ -738,6 +738,26 @@ impl SqlStorage {
             }
             .boxed()
         });
+        // TODO(abdul): remove once a sqlx release includes launchbadge/sqlx#4394.
+        // In sqlx 0.8.6, if `begin()` is cancelled, the connection can go back to the pool with a
+        // transaction still open, and sqlx does not know about it. Ask Postgres and drop it.
+        // With no transaction open, this query starts its own, so both timestamps are the same.
+        // Inside an open transaction, the transaction started earlier, so they differ.
+        // Keep `raw_sql`. A normal query is sent in several messages and Postgres moves
+        // `statement_timestamp()` forward on each one, so the timestamps would always differ.
+        #[cfg(not(feature = "embedded-db"))]
+        let pool = pool.after_release(|conn, _| {
+            async move {
+                let row = conn
+                    .fetch_one(sqlx::raw_sql(
+                        "SELECT transaction_timestamp() <> statement_timestamp()",
+                    ))
+                    .await?;
+                let in_transaction: bool = row.try_get(0)?;
+                Ok(!in_transaction)
+            }
+            .boxed()
+        });
 
         #[cfg(feature = "embedded-db")]
         if config.reset {
@@ -3727,5 +3747,38 @@ mod test {
         tx.upsert("does_not_exist", ["test"], ["test"], [(1_i64,)])
             .await
             .unwrap_err();
+    }
+
+    #[test_log::test(tokio::test(flavor = "multi_thread"))]
+    #[cfg(not(feature = "embedded-db"))]
+    async fn test_cancelled_begin_does_not_leak_transaction() {
+        use sqlx::Connection;
+
+        let db = TmpDb::init().await;
+        let storage = SqlStorage::connect(
+            db.config().max_connections(1),
+            StorageConnectionType::Sequencer,
+        )
+        .await
+        .unwrap();
+
+        let mut conn = storage.pool.acquire().await.unwrap();
+        assert!(
+            conn.begin().now_or_never().is_none(),
+            "BEGIN finished on the first poll, so nothing was cancelled"
+        );
+        drop(conn);
+
+        let mut conn = storage.pool.acquire().await.unwrap();
+        let row = conn
+            .fetch_one(sqlx::raw_sql(
+                "SELECT transaction_timestamp() <> statement_timestamp()",
+            ))
+            .await
+            .unwrap();
+        assert!(
+            !row.get::<bool, _>(0),
+            "the connection came back from the pool inside the cancelled transaction"
+        );
     }
 }
