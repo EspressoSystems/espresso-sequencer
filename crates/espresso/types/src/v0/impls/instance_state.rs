@@ -175,9 +175,6 @@ impl NodeState {
     /// Fails when there is no contract, L1 finality is not yet known, or the read fails.
     #[cfg(feature = "node")]
     pub async fn finalized_light_client_state(&self) -> anyhow::Result<LightClientStateSol> {
-        if self.chain_config.stake_table_contract.is_none() {
-            bail!("no light client contract");
-        }
         // The L1 client learns the finalized block asynchronously after start.
         let finalized = self
             .l1_client

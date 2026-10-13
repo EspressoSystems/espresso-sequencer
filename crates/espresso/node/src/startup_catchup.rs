@@ -17,10 +17,10 @@
 
 use std::{ops::RangeInclusive, time::Duration};
 
-use anyhow::{Context, anyhow, bail, ensure};
+use anyhow::{Context, anyhow, ensure};
 use clap::ValueEnum;
 use espresso_types::{Header, SeqTypes};
-use futures::future::join_all;
+use futures::future::{join_all, try_join_all};
 use hotshot_contract_adapter::{sol_types::LightClientStateSol, u256_to_field};
 use hotshot_query_service::node::BlockId;
 use hotshot_types::{
@@ -36,7 +36,7 @@ use hotshot_types::{
 };
 use light_client::client::{Client, QueryServiceClient};
 use serde::Serialize;
-use tokio::time::{Instant, sleep, timeout};
+use tokio::time::{Instant, error::Elapsed, sleep, timeout, timeout_at};
 use url::Url;
 
 const TARGET: &str = "announce::bootstrap";
@@ -59,9 +59,8 @@ macro_rules! milestone {
 }
 
 /// Whether to skip the walk using a trusted anchor.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum, Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum, Serialize)]
 pub enum SkipMode {
-    #[default]
     Auto,
     Off,
 }
@@ -81,7 +80,7 @@ pub struct BootstrapParams {
 
 /// A finalized HotShot block that the node trusts without asking the peers: the L1 light-client
 /// contract's finalized state, or a leaf the follower's light client has verified.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug)]
 pub(crate) struct TrustedAnchor {
     pub height: u64,
     pub block_comm_root: CircuitField,
@@ -121,12 +120,6 @@ impl BootstrapMetrics {
             skipped: metrics.create_gauge("bootstrap_skipped".into(), None),
         }
     }
-}
-
-#[derive(Debug, PartialEq, Eq)]
-enum SkipOutcome {
-    Installed,
-    Walk(String),
 }
 
 /// Populate the membership with stake tables for every epoch up through `N+1` (where `N` is the
@@ -172,7 +165,7 @@ where
             Ok(read.await?)
         },
     };
-    let outcome = match &anchor {
+    let walk_reason = match &anchor {
         Ok(anchor) => {
             let skip = skip_to_anchor(
                 coordinator,
@@ -186,15 +179,12 @@ where
             );
             skip.await?
         },
-        Err(reason) => SkipOutcome::Walk(reason.to_string()),
+        Err(reason) => Some(*reason),
     };
-    let skipped = match outcome {
-        SkipOutcome::Installed => true,
-        SkipOutcome::Walk(reason) => {
-            milestone!(params, %reason, "skip disabled or not applicable; walking");
-            false
-        },
-    };
+    let skipped = walk_reason.is_none();
+    if let Some(reason) = walk_reason {
+        milestone!(params, %reason, "skip disabled or not applicable; walking");
+    }
 
     let target = if params.boot {
         walk_target(
@@ -229,6 +219,7 @@ pub(crate) fn query_clients(urls: &[Url]) -> Vec<(Url, QueryServiceClient)> {
 }
 
 /// Install the epochs the `anchor` determines, unless the stake tables on hand already reach it.
+/// Returns the reason to walk instead, or `None` once installed.
 async fn skip_to_anchor<C: Client>(
     coordinator: &EpochMembershipCoordinator<SeqTypes>,
     peers: &[(Url, C)],
@@ -238,7 +229,7 @@ async fn skip_to_anchor<C: Client>(
     deadline: Instant,
     params: &BootstrapParams,
     metrics: &BootstrapMetrics,
-) -> anyhow::Result<SkipOutcome> {
+) -> anyhow::Result<Option<&'static str>> {
     let membership = coordinator.membership();
     let known = membership.highest_known_epoch();
     // Catchup resumes only from a consecutive pair, so a lone table does not count as near the tip.
@@ -254,7 +245,7 @@ async fn skip_to_anchor<C: Client>(
 
     let range = match plan_skip(anchor, epoch_height, first_epoch, resume) {
         Ok(range) => range,
-        Err(reason) => return Ok(SkipOutcome::Walk(reason.into())),
+        Err(reason) => return Ok(Some(reason)),
     };
     milestone!(
         params,
@@ -264,15 +255,24 @@ async fn skip_to_anchor<C: Client>(
         "skipping to anchor",
     );
 
-    let fetch = fetch_epoch_roots(peers, anchor, &range, epoch_height, deadline);
-    for header in fetch.await? {
-        let height = header.height();
-        coordinator
-            .add_epoch_root(header)
-            .await
-            .map_err(|err| anyhow!("installing the epoch root at {height}: {err}"))?;
-    }
-    Ok(SkipOutcome::Installed)
+    let fetch = fetch_epoch_roots(peers, anchor, &range, epoch_height, deadline, params);
+    let headers = fetch.await?;
+    // The install can fetch a chain config or L1 events without a bound of its own. Cancelling it
+    // leaves at most a lone stake table, which the consecutive-pair rule of `plan_skip` reruns.
+    let install = async {
+        for header in headers {
+            let height = header.height();
+            coordinator
+                .add_epoch_root(header)
+                .await
+                .map_err(|err| anyhow!("installing the epoch root at {height}: {err}"))?;
+        }
+        anyhow::Ok(())
+    };
+    timeout_at(deadline, install)
+        .await
+        .context("bootstrap deadline exceeded while installing the epoch roots")??;
+    Ok(None)
 }
 
 /// The epochs to install, or the reason to walk instead. The skip runs only when the stake tables
@@ -303,32 +303,31 @@ fn install_range(
     epoch_height: u64,
     first_epoch: EpochNumber,
 ) -> Option<RangeInclusive<EpochNumber>> {
-    if epoch_height == 0 {
-        return None;
-    }
     let n = epoch_from_block_number(anchor_height, epoch_height);
     let start = n.saturating_sub(3).max(*first_epoch + 2);
     (start <= n + 1).then(|| EpochNumber::new(start)..=EpochNumber::new(n + 1))
 }
 
 /// Fetch and verify the epoch roots of `range` from the peers in rotation, backing off after each
-/// full pass, until `deadline`.
+/// full pass, until `deadline`. One attempt is bounded by `step_timeout`, so a slow peer does not
+/// starve the others.
 async fn fetch_epoch_roots<C: Client>(
     peers: &[(Url, C)],
     anchor: &TrustedAnchor,
     range: &RangeInclusive<EpochNumber>,
     epoch_height: u64,
     deadline: Instant,
+    params: &BootstrapParams,
 ) -> anyhow::Result<Vec<Header>> {
-    let what = "skipping to the anchor";
+    debug_assert!(!peers.is_empty());
     retry(
         deadline,
-        what,
+        "skipping to the anchor",
         peers.len(),
         |attempt, remaining| async move {
             let (url, peer) = &peers[attempt % peers.len()];
             let fetch = fetch_roots_from(peer, anchor, range, epoch_height);
-            let fetch = timeout(remaining, fetch);
+            let fetch = timeout(params.step_timeout.min(remaining), fetch);
             fetch
                 .await
                 .context("attempt timed out")?
@@ -378,7 +377,8 @@ async fn retry<T, Fut: Future<Output = anyhow::Result<T>>>(
     }
 }
 
-/// Fetch the epoch roots of `range` from one `peer`, in ascending order.
+/// Fetch the epoch roots of `range` from one `peer`, in ascending order. The proofs are fetched
+/// concurrently, once the anchor header is verified.
 ///
 /// Every header is verified against header `F` of the anchor, which is itself verified against
 /// the anchor's commitment, so a lying peer fails here and nothing it cannot prove gets installed.
@@ -395,26 +395,26 @@ async fn fetch_roots_from<C: Client>(
     verify_anchor_header(&header, anchor)?;
     let root = header.block_merkle_tree_root();
 
-    let mut headers =
-        Vec::with_capacity(range.end().u64().saturating_sub(range.start().u64()) as usize + 1);
-    for epoch in range.start().u64()..=range.end().u64() {
-        // The root of epoch `e - 2` derives the stake table of epoch `e`.
-        let height = root_block_in_epoch(epoch - 2, epoch_height);
-        let proof = peer
-            .header_proof(anchor.height, BlockId::Number(height as usize))
-            .await
-            .with_context(|| format!("fetching the epoch root at height {height}"))?;
-        let header = proof
-            .verify(root)
-            .with_context(|| format!("verifying the epoch root at height {height}"))?;
-        ensure!(
-            header.height() == height,
-            "peer returned height {} for the epoch root at {height}",
-            header.height()
-        );
-        headers.push(header);
-    }
-    Ok(headers)
+    try_join_all(
+        (range.start().u64()..=range.end().u64()).map(|epoch| async move {
+            // The root of epoch `e - 2` derives the stake table of epoch `e`.
+            let height = root_block_in_epoch(epoch - 2, epoch_height);
+            let proof = peer
+                .header_proof(anchor.height, BlockId::Number(height as usize))
+                .await
+                .with_context(|| format!("fetching the epoch root at height {height}"))?;
+            let header = proof
+                .verify(root)
+                .with_context(|| format!("verifying the epoch root at height {height}"))?;
+            ensure!(
+                header.height() == height,
+                "peer returned height {} for the epoch root at {height}",
+                header.height()
+            );
+            Ok(header)
+        }),
+    )
+    .await
 }
 
 /// Accept `header` only if it is the block the anchor commits to.
@@ -450,8 +450,16 @@ async fn walk_target<C: Client>(
             .map(|(_, peer)| timeout(step_timeout, peer.block_height())),
     )
     .await;
-    let heights = heights.into_iter().filter_map(|height| height.ok()?.ok());
-    target_epoch(heights.collect(), anchor, epoch_height)
+    let heights: Vec<u64> = heights
+        .into_iter()
+        .filter_map(|height| height.ok()?.ok())
+        .collect();
+    if heights.is_empty() && !peers.is_empty() {
+        tracing::warn!(
+            "bootstrap: no state peer reported a block height; walking without a target"
+        );
+    }
+    target_epoch(heights, anchor, epoch_height)
 }
 
 /// `epoch(tip) + 1` for the median of the reported chain heights, which the epoch root of
@@ -498,43 +506,41 @@ async fn walk_to_tip(
     );
 
     let deadline = Instant::now() + params.deadline;
-    let mut backoff = INITIAL_BACKOFF;
-    let mut failures = 0usize;
+    let step_timeout = params.step_timeout;
     loop {
         let next = highest + 1;
-        let step = timeout(params.step_timeout, coordinator.wait_for_stake_table(next)).await;
-        let timed_out = step.is_err();
-        let err = match step {
-            Ok(Ok(_)) => {
-                tracing::info!(%next, "bootstrap: derived stake table");
-                highest = next;
-                continue;
-            },
-            Ok(Err(err)) => format!("{err:#}"),
-            Err(_) => format!("timed out after {}s", params.step_timeout.as_secs()),
-        };
-
-        if target.is_none_or(|target| highest >= target) {
-            if timed_out {
-                tracing::warn!(%next, %err, "bootstrap: catchup timed out; proceeding with a possibly stale epoch window");
-            } else {
-                milestone!(params, %next, %err, "bootstrap: no further epoch to derive; at the live tip");
-            }
-            break;
-        }
-        let remaining = deadline.saturating_duration_since(Instant::now());
-        if remaining.is_zero() {
-            bail!(
-                "bootstrap deadline exceeded below the chain tip's epoch, deriving epoch {next} \
-                 failed: {err}"
+        let derive = move |_, bound: Duration| async move {
+            let step = timeout(
+                step_timeout.min(bound),
+                coordinator.wait_for_stake_table(next),
             );
+            step.await
+                .context(format!("timed out after {}s", step_timeout.as_secs()))?
+                .map(drop)
+                .map_err(|err| anyhow!("{err:#}"))
+        };
+        let below_target = target.is_some_and(|target| highest < target);
+        let step = if below_target {
+            let what = format!("deriving epoch {next} below the chain tip's epoch");
+            retry(deadline, &what, 1, derive).await
+        } else {
+            derive(0, step_timeout).await
+        };
+        match step {
+            Ok(()) => {
+                tracing::debug!(%next, "bootstrap: derived stake table");
+                highest = next;
+            },
+            Err(err) if below_target => return Err(err),
+            Err(err) if err.is::<Elapsed>() => {
+                tracing::warn!(%next, %err, "bootstrap: catchup timed out; proceeding with a possibly stale epoch window");
+                break;
+            },
+            Err(err) => {
+                milestone!(params, %next, %err, "bootstrap: no further epoch to derive; at the live tip");
+                break;
+            },
         }
-        failures += 1;
-        if failures.is_power_of_two() {
-            tracing::warn!(%next, failures, %err, "bootstrap: catchup below the chain tip failed; retrying");
-        }
-        sleep(backoff.min(remaining)).await;
-        backoff = (backoff * 2).min(MAX_BACKOFF);
     }
 
     // `highest` corresponds to N+1 (the leaf at root_block_in_epoch(N-1) is

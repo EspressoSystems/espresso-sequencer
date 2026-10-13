@@ -357,13 +357,13 @@ pub struct Options {
     #[clap(long, env = "ESPRESSO_NODE_LOCAL_CATCHUP_TIMEOUT", default_value = "5s", value_parser = parse_duration)]
     pub local_catchup_timeout: Duration,
 
-    /// Per-step timeout for the startup stake-table catchup walk.
+    /// Timeout for each step of the startup stake-table catchup.
     ///
-    /// Bounds a single `wait_for_stake_table` call during `bootstrap_epoch_window`. The
-    /// underlying peer leaf fetch is bounded to 3 attempts, so exceeding this means a slow
-    /// or unresponsive peer set, not a retry loop. Exceeding it terminates the walk but
-    /// does not cancel the catchup task, which is a detached `tokio::spawn` bounded by its
-    /// own `DEFAULT_CATCHUP_TIMEOUT` watchdog.
+    /// Bounds a walk step (`wait_for_stake_table`), the anchor read, a skip attempt on one peer,
+    /// a peer height read, and DRB preparation. Below the chain tip's epoch a timed-out step is
+    /// retried until the bootstrap deadline. From there up, it ends the walk. The timeout does
+    /// not cancel the catchup task, which is a detached `tokio::spawn` bounded by its own
+    /// `DEFAULT_CATCHUP_TIMEOUT` watchdog.
     #[clap(long, env = "ESPRESSO_NODE_BOOTSTRAP_EPOCH_CATCHUP_TIMEOUT", default_value = "30s", value_parser = parse_duration)]
     pub bootstrap_epoch_catchup_timeout: Duration,
 
@@ -380,11 +380,11 @@ pub struct Options {
         long,
         env = "ESPRESSO_NODE_BOOTSTRAP_SKIP",
         value_enum,
-        default_value = "auto"
+        default_value_t = SkipMode::Auto
     )]
     pub bootstrap_skip: SkipMode,
 
-    /// How long startup retries before giving up, for the skip (anchor read and epoch roots) and
+    /// How long startup retries before giving up, for the skip (anchor read, epoch roots and their install) and
     /// again for the walk toward the chain tip the state peers report.
     ///
     /// At the deadline the node exits with an error.

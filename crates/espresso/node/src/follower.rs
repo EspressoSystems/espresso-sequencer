@@ -270,10 +270,10 @@ where
         upgrade_lock,
         epoch_height,
         options: params.options,
-        // Mid-run, the poll loop waits for the catchup, so it gets a step's time, not the boot
-        // deadline. A failure is retried by the next poll.
+        // Mid-run, the poll loop waits for the catchup, so it gets one step's time per upstream,
+        // not the boot deadline. A failure is retried by the next poll.
         bootstrap: BootstrapParams {
-            deadline: params.bootstrap.step_timeout,
+            deadline: params.bootstrap.step_timeout * peers.len() as u32,
             boot: false,
             ..params.bootstrap
         },
