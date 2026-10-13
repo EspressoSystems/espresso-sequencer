@@ -268,6 +268,7 @@ impl BlockPayload<SeqTypes> for Payload {
         // documents and unwraps on. Both branches resolve through this, so they
         // cannot disagree on contents or order.
         let commit = |index: &Index| {
+            let _span = tracing::debug_span!("tx_leaf").entered();
             self.transaction(index)
                 .expect("index yielded by iter must resolve to a transaction")
                 .commit()
