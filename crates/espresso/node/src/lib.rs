@@ -1525,7 +1525,7 @@ pub mod testing {
                 view_sync_timeout: Duration::from_secs(1),
                 data_request_delay: Duration::from_secs(1),
                 builder_urls: vec1::vec1![
-                    Url::parse(&format!("http://127.0.0.1:{builder_port}")).unwrap()
+                    Url::parse(&format!("http://localhost:{builder_port}")).unwrap()
                 ],
                 builder_timeout: Duration::from_secs(1),
                 start_threshold: (
