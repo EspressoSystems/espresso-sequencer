@@ -3204,6 +3204,7 @@ where
         let fetch_timeout = FETCH_TIMEOUT;
         let start = start as usize;
         let end = end as usize;
+        enforce_range(start, end, lc_large_object_range_limit())?;
 
         let payloads_stream = AvailabilityDataSource::get_payload_range(ds, start..end).await;
         let vid_stream = AvailabilityDataSource::get_vid_common_range(ds, start..end).await;
