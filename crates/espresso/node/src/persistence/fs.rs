@@ -330,6 +330,25 @@ impl Inner {
         ))
     }
 
+    fn append_cert2(
+        &mut self,
+        view: ViewNumber,
+        cert2: &Certificate2<SeqTypes>,
+    ) -> anyhow::Result<()> {
+        let dir_path = self.decided_cert2_dir_path();
+        fs::create_dir_all(&dir_path).context("failed to create decided_cert2 dir")?;
+        let file_path = dir_path.join(view.u64().to_string()).with_extension("bin");
+        self.replace(
+            &file_path,
+            |_| Ok(true),
+            |mut file| {
+                let bytes = bincode::serialize(cert2).context("serialize cert2")?;
+                file.write_all(&bytes)?;
+                Ok(())
+            },
+        )
+    }
+
     /// Overwrite a file if a condition is met.
     ///
     /// The file at `path`, if it exists, is opened in read mode and passed to `pred`. If `pred`
@@ -793,10 +812,16 @@ impl SequencerPersistence for Persistence {
         &self,
         _view: ViewNumber,
         leaf_chain: impl IntoIterator<Item = (&LeafInfo<SeqTypes>, CertificatePair<SeqTypes>)> + Send,
+        cert2: Option<&Certificate2<SeqTypes>>,
         _deciding_qc: Option<Arc<CertificatePair<SeqTypes>>>,
         _consumer: &(impl EventConsumer + 'static),
     ) -> anyhow::Result<()> {
         let mut inner = self.inner.write().await;
+        // Written before the leaves and under the same lock as the decide replay, so the replay
+        // can never find the newest leaf on disk without its cert2.
+        if let Some(cert2) = cert2 {
+            inner.append_cert2(cert2.view_number, cert2)?;
+        }
         let path = inner.decided_leaf2_path();
 
         // Ensure the anchor leaf directory exists.
@@ -1058,19 +1083,7 @@ impl SequencerPersistence for Persistence {
         view: ViewNumber,
         cert2: Certificate2<SeqTypes>,
     ) -> anyhow::Result<()> {
-        let mut inner = self.inner.write().await;
-        let dir_path = inner.decided_cert2_dir_path();
-        fs::create_dir_all(dir_path.clone()).context("failed to create decided_cert2 dir")?;
-        let file_path = dir_path.join(view.u64().to_string()).with_extension("bin");
-        inner.replace(
-            &file_path,
-            |_| Ok(true),
-            |mut file| {
-                let bytes = bincode::serialize(&cert2).context("serialize cert2")?;
-                file.write_all(&bytes)?;
-                Ok(())
-            },
-        )
+        self.inner.write().await.append_cert2(view, &cert2)
     }
 
     async fn load_cert2(&self, view: ViewNumber) -> anyhow::Result<Option<Certificate2<SeqTypes>>> {
