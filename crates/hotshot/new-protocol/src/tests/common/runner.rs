@@ -946,12 +946,22 @@ async fn run_node(
         }
 
         while let Some(output) = coord.outbox_mut().pop_front() {
-            if let ConsensusOutput::LeafDecided { leaves, cert1, .. } = &output {
+            if let ConsensusOutput::LeafDecided {
+                leaves,
+                cert1,
+                cert2,
+                ..
+            } = &output
+            {
                 // Persist the decided anchor the way the application's
                 // persistence layer does in production: the newest decided
-                // leaf and the QC certifying it. A node restarted with
-                // persistent storage resumes consensus from this anchor.
+                // leaf, the QC certifying it, and the cert2 finalizing it. A
+                // node restarted with persistent storage resumes consensus
+                // from this anchor.
                 if let Some(newest) = leaves.first() {
+                    if let Some(cert2) = cert2 {
+                        storage.insert_cert2(cert2.view_number, cert2.clone()).await;
+                    }
                     storage
                         .update_anchor_leaf(newest.clone(), cert1.clone())
                         .await;
