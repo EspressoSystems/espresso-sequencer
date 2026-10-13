@@ -46,10 +46,7 @@ use hotshot_types::{
     network::NetworkConfig,
     simple_certificate::LightClientStateUpdateCertificateV2,
     stake_table::HSStakeTable,
-    traits::{
-        election::{Membership, MembershipSnapshot, NonEpochMembershipSnapshot},
-        network::ConnectedNetwork,
-    },
+    traits::election::{Membership, MembershipSnapshot, NonEpochMembershipSnapshot},
     utils::epoch_from_block_number,
     vid::avidm::{AvidMScheme, init_avidm_param},
     vote::HasViewNumber,
@@ -485,14 +482,13 @@ impl<C: ApiContext> RequestResponseDataSource<SeqTypes> for ApiState<C> {
     }
 }
 
-pub(super) fn request_vid_shares<N, P>(
-    request_response_protocol: RequestResponseProtocol<ConsensusNode<N, P>, N, P>,
+pub(super) fn request_vid_shares<P>(
+    request_response_protocol: RequestResponseProtocol<ConsensusNode<P>, P>,
     block_number: u64,
     vid_common_data: VidCommonQueryData<SeqTypes>,
     duration: Duration,
 ) -> BoxFuture<'static, anyhow::Result<Vec<VidShare>>>
 where
-    N: ConnectedNetwork<PubKey>,
     P: SequencerPersistence,
 {
     async move {
@@ -1831,7 +1827,6 @@ pub mod test_helpers {
     use crate::{
         api::data_source::testing::TestableSequencerDataSource,
         catchup::{NullStateCatchup, ParallelStateCatchup, StatePeers},
-        network,
         persistence::no_storage,
         testing::{
             TestConfig, TestConfigBuilder, decided_leaves, deploy_stake_table,
@@ -1850,8 +1845,8 @@ pub mod test_helpers {
     }
 
     pub struct TestNetwork<P: PersistenceOptions, const NUM_NODES: usize> {
-        pub server: SequencerContext<network::Memory, P::Persistence>,
-        pub peers: Vec<SequencerContext<network::Memory, P::Persistence>>,
+        pub server: SequencerContext<P::Persistence>,
+        pub peers: Vec<SequencerContext<P::Persistence>>,
         pub cfg: TestConfig<{ NUM_NODES }>,
         // todo (abdul): remove this when fs storage is removed
         pub temp_dir: Option<TempDir>,
@@ -2250,7 +2245,7 @@ pub mod test_helpers {
             persistence: P,
             catchup: C,
             upgrade: versions::Upgrade,
-        ) -> &SequencerContext<network::Memory, P::Persistence> {
+        ) -> &SequencerContext<P::Persistence> {
             assert_eq!(
                 self.deferred.first(),
                 Some(&i),
@@ -2277,7 +2272,7 @@ pub mod test_helpers {
             persistence: P,
             catchup: C,
             upgrade: versions::Upgrade,
-        ) -> &SequencerContext<network::Memory, P::Persistence> {
+        ) -> &SequencerContext<P::Persistence> {
             self.stop_node(i).await;
             self.start_stopped_node(i, state, persistence, catchup, upgrade)
                 .await
@@ -2316,7 +2311,7 @@ pub mod test_helpers {
             persistence: P,
             catchup: C,
             upgrade: versions::Upgrade,
-        ) -> &SequencerContext<network::Memory, P::Persistence> {
+        ) -> &SequencerContext<P::Persistence> {
             let ctx = self
                 .init_and_start(i, state, persistence, catchup, upgrade)
                 .await;
@@ -2338,7 +2333,7 @@ pub mod test_helpers {
             persistence: P,
             catchup: C,
             upgrade: versions::Upgrade,
-        ) -> SequencerContext<network::Memory, P::Persistence> {
+        ) -> SequencerContext<P::Persistence> {
             let ctx = self
                 .cfg
                 .init_node(
@@ -2367,7 +2362,7 @@ pub mod test_helpers {
         }
 
         /// The context of the node at index `i` (node 0 is the API server).
-        pub fn node(&self, i: usize) -> &SequencerContext<network::Memory, P::Persistence> {
+        pub fn node(&self, i: usize) -> &SequencerContext<P::Persistence> {
             if i == 0 {
                 &self.server
             } else {
@@ -2649,7 +2644,7 @@ pub mod test_helpers {
     /// legacy builder stops producing non-empty blocks after roughly a
     /// hundred views, independent of any stake table activity.
     pub async fn assert_node_live<P: SequencerPersistence>(
-        node: &SequencerContext<network::Memory, P>,
+        node: &SequencerContext<P>,
         epoch_height: u64,
         epochs_ahead: u64,
     ) {
@@ -2701,7 +2696,7 @@ pub mod test_helpers {
     /// Asserts every node has decided at least `min_height`, and that nodes
     /// which have decided the same height agree on the leaf.
     pub async fn assert_nodes_agree<P: SequencerPersistence>(
-        nodes: &[&SequencerContext<network::Memory, P>],
+        nodes: &[&SequencerContext<P>],
         min_height: u64,
     ) {
         let leaves = join_all(nodes.iter().map(|node| node.decided_leaf())).await;
@@ -2998,7 +2993,6 @@ mod api_tests {
 
     use super::{update::ApiEventConsumer, *};
     use crate::{
-        network,
         persistence::{no_storage::NoStorage, sql::DECIDE_GAP_FILL_HORIZON},
         testing::{TestConfigBuilder, wait_for_decide_on_handle},
     };
@@ -3214,7 +3208,7 @@ mod api_tests {
 
         let storage = D::create_storage().await;
         let persistence = D::persistence_options(&storage).create().await.unwrap();
-        let data_source: Arc<StorageState<SequencerContext<network::Memory, NoStorage>, _>> =
+        let data_source: Arc<StorageState<SequencerContext<NoStorage>, _>> =
             Arc::new(StorageState::new(
                 D::create(D::persistence_options(&storage), Default::default(), false)
                     .await
@@ -3437,7 +3431,7 @@ mod api_tests {
 
         let storage = D::create_storage().await;
         let persistence = D::persistence_options(&storage).create().await.unwrap();
-        let data_source: Arc<StorageState<SequencerContext<network::Memory, NoStorage>, _>> =
+        let data_source: Arc<StorageState<SequencerContext<NoStorage>, _>> =
             Arc::new(StorageState::new(
                 D::create(D::persistence_options(&storage), Default::default(), false)
                     .await

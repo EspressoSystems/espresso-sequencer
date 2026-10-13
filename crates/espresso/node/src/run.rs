@@ -10,7 +10,7 @@ use super::{
     CatchupParams, Genesis, L1Params, NetworkParams,
     api::{self, data_source::DataSourceOptions},
     context::SequencerContext,
-    init_node, network,
+    init_node,
     options::{Modules, Options, PublicNodeConfig},
     persistence,
 };
@@ -21,7 +21,7 @@ use crate::{
 };
 
 pub enum NodeContext<P: SequencerPersistence> {
-    Validator(Box<SequencerContext<network::Production, P>>),
+    Validator(Box<SequencerContext<P>>),
     Follower(Box<FollowerContext<P>>),
 }
 

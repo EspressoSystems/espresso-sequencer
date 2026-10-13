@@ -59,10 +59,7 @@ pub(crate) fn default_telemetry_endpoint(chain_id: ChainId) -> Option<&'static s
 pub use espresso_types::RECENT_STAKE_TABLES_LIMIT;
 use genesis::L1Finalized;
 pub use genesis::{Genesis, GenesisSource};
-use hotshot::{
-    traits::implementations::{CombinedNetworks, MemoryNetwork},
-    types::SignatureKey,
-};
+use hotshot::{traits::implementations::MemoryNetwork, types::SignatureKey};
 use hotshot_new_protocol::network::{Cliquenet, message_limit};
 use hotshot_orchestrator::client::{OrchestratorClient, get_complete_config};
 use hotshot_types::{
@@ -75,7 +72,6 @@ use hotshot_types::{
     signature_key::{BLSPrivKey, BLSPubKey},
     traits::{
         metrics::{Metrics, NoMetrics},
-        network::ConnectedNetwork,
         node_implementation::{NodeImplementation, NodeType},
         storage::Storage,
     },
@@ -93,7 +89,7 @@ use vbs::version::StaticVersion;
 
 use crate::request_response::data_source::Storage as RequestResponseStorage;
 
-/// The Sequencer node is generic over the hotshot CommChannel.
+/// The node's `NodeImplementation`, generic over its persistence.
 #[derive(Derivative, Serialize, Deserialize)]
 #[derivative(
     Copy(bound = ""),
@@ -103,11 +99,11 @@ use crate::request_response::data_source::Storage as RequestResponseStorage;
     Eq(bound = ""),
     Hash(bound = "")
 )]
-pub struct Node<N: ConnectedNetwork<PubKey>, P: SequencerPersistence>(PhantomData<fn(&N, &P)>);
+pub struct Node<P: SequencerPersistence>(PhantomData<fn(&P)>);
 
 // Using derivative to derive Clone triggers the clippy lint
 // https://rust-lang.github.io/rust-clippy/master/index.html#/incorrect_clone_impl_on_copy_type
-impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence> Clone for Node<N, P> {
+impl<P: SequencerPersistence> Clone for Node<P> {
     fn clone(&self) -> Self {
         *self
     }
@@ -115,10 +111,10 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence> Clone for Node<N, P> 
 
 pub type SequencerApiVersion = StaticVersion<0, 1>;
 
-impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence> NodeImplementation<SeqTypes>
-    for Node<N, P>
-{
-    type Network = N;
+impl<P: SequencerPersistence> NodeImplementation<SeqTypes> for Node<P> {
+    // Never constructed: `NodeImplementation` still names a network for the legacy consensus
+    // crates.
+    type Network = MemoryNetwork<PubKey>;
     type Storage = Arc<P>;
 }
 
@@ -185,7 +181,7 @@ pub async fn init_node<P>(
     identity: Identity,
     proposal_fetcher_config: ProposalFetcherConfig,
     empty_block_delay: Duration,
-) -> anyhow::Result<SequencerContext<network::Production, P>>
+) -> anyhow::Result<SequencerContext<P>>
 where
     P: SequencerPersistence + MembershipPersistence,
     Arc<P>: Storage<SeqTypes>,
@@ -1449,7 +1445,7 @@ pub mod testing {
         pub async fn init_nodes(
             &self,
             upgrade: versions::Upgrade,
-        ) -> Vec<SequencerContext<network::Memory, NoStorage>> {
+        ) -> Vec<SequencerContext<NoStorage>> {
             join_all((0..self.num_nodes()).map(|i| async move {
                 self.init_node(
                     i,
@@ -1485,7 +1481,7 @@ pub mod testing {
             event_consumer: impl EventConsumer + 'static,
             upgrade: versions::Upgrade,
             upgrades: BTreeMap<Version, Upgrade>,
-        ) -> SequencerContext<network::Memory, P::Persistence> {
+        ) -> SequencerContext<P::Persistence> {
             let config = self.config.clone();
             let my_peer_config = &config.known_nodes_with_stake[i];
             let is_da = config.known_da_nodes.contains(my_peer_config);
