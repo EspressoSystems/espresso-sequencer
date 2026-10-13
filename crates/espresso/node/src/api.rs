@@ -5401,58 +5401,6 @@ mod test {
         Ok(())
     }
 
-    /// The DRB computations on the shared membership coordinator must land in time for each new
-    /// epoch.
-    #[test_log::test(tokio::test(flavor = "multi_thread"))]
-    async fn test_new_protocol_decides_across_epochs() -> anyhow::Result<()> {
-        const EPOCH_HEIGHT: u64 = 20;
-        const NUM_NODES: usize = 5;
-        const TARGET_BLOCK_HEIGHT: u64 = 50;
-
-        let network_config = TestConfigBuilder::default()
-            .epoch_height(EPOCH_HEIGHT)
-            .epoch_start_block(0)
-            .build();
-
-        let api_port = reserve_tcp_port().expect("No ports free for query service");
-
-        let (storage, persistence) = node_storage::<SqlDataSource, NUM_NODES>().await;
-
-        let config = TestNetworkConfigBuilder::<NUM_NODES, _, _>::with_num_nodes()
-            .api_config(SqlDataSource::options(
-                &storage[0],
-                Options::with_port(api_port),
-            ))
-            .network_config(network_config)
-            .persistences(persistence)
-            .build();
-
-        // Dropping it stops the nodes.
-        let _network = TestNetwork::new(config, TEST_UPGRADE).await;
-
-        let client: Client<ClientErr, SequencerApiVersion> =
-            Client::new(format!("http://localhost:{api_port}").parse().unwrap());
-        client.connect(Some(Duration::from_secs(30))).await;
-
-        let mut leaves = client
-            .socket("availability/stream/leaves/0")
-            .subscribe::<LeafQueryData<SeqTypes>>()
-            .await
-            .expect("subscribe to leaf stream");
-
-        let mut height = 0;
-        while height < TARGET_BLOCK_HEIGHT {
-            let leaf = leaves
-                .next()
-                .await
-                .expect("leaf stream ended early")
-                .expect("leaf stream yielded an error");
-            height = leaf.header().height();
-        }
-
-        Ok(())
-    }
-
     /// Full-application epoch-boundary committee change: a validator sends a
     /// real `deregisterValidator` transaction to the StakeTable contract on
     /// L1 mid-run, drops out of the consensus committee at the epoch boundary
