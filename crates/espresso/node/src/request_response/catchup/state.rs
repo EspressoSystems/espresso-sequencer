@@ -1,11 +1,11 @@
 use std::sync::Arc;
 
-use anyhow::Context;
+use anyhow::{Context, bail, ensure};
 use async_trait::async_trait;
 use committable::{Commitment, Committable};
 use espresso_types::{
-    BackoffParams, BlockMerkleTree, FeeAccount, FeeAccountProof, FeeMerkleCommitment, Leaf2,
-    NodeState, PubKey, SeqTypes,
+    BackoffParams, BlockMerkleTree, Certificate2, FeeAccount, FeeAccountProof, FeeMerkleCommitment,
+    Leaf2, NodeState, PubKey, SeqTypes,
     traits::{SequencerPersistence, StateCatchup},
     v0_3::{ChainConfig, RewardAccountProofV1, RewardAccountV1, RewardMerkleCommitmentV1},
     v0_4::{
@@ -14,7 +14,10 @@ use espresso_types::{
     },
 };
 use hotshot::traits::NodeImplementation;
-use hotshot_new_protocol::{storage::NewProtocolStorage, utils::verify_new_protocol_leaf_chain};
+use hotshot_new_protocol::{
+    storage::NewProtocolStorage,
+    utils::{verify_cert2, verify_new_protocol_leaf_chain},
+};
 use hotshot_types::{
     data::ViewNumber, epoch_membership::EpochMembershipCoordinator, message::UpgradeLock,
     simple_certificate::LightClientStateUpdateCertificateV2, traits::network::ConnectedNetwork,
@@ -241,64 +244,30 @@ where
     ) -> anyhow::Result<Leaf2> {
         tracing::info!("Fetching leaf for height: {height}");
 
-        // Fetch the leaf chain. For new-protocol heights the responder returns the leaf range
-        // `[height..=cert2_height]`; for legacy-protocol heights, it returns a 3-chain.
-        let leaf_chain = self
+        // Verifying inside the validator is what lets a wrong answer be skipped in favor of the
+        // next responder, instead of failing the whole fetch.
+        let protocol = self.clone();
+        let leaf = self
             .request_indefinitely(
                 Request::Leaf(height),
-                move |_request: &Request, response: Response| async move {
-                    let Response::Leaf(leaves) = response else {
-                        return Err(anyhow::anyhow!("expected leaf response"));
-                    };
-                    if leaves.is_empty() {
-                        return Err(anyhow::anyhow!(
-                            "received empty leaf chain for height {height}"
-                        ));
+                move |_request: &Request, response: Response| {
+                    let protocol = protocol.clone();
+                    let coordinator = coordinator.clone();
+                    async move {
+                        let Response::Leaf(leaf_chain) = response else {
+                            bail!("expected leaf response");
+                        };
+                        protocol
+                            .verify_leaf_chain(leaf_chain, &coordinator, height)
+                            .await
                     }
-                    Ok(leaves)
                 },
             )
             .await
             .with_context(|| "failed to request leaf chain")?;
 
-        let result = if leaf_chain[0].block_header().version() >= NEW_PROTOCOL_VERSION {
-            // New protocol: pair the leaf range with its finalizing cert2 for verification.
-            let upgrade_lock =
-                UpgradeLock::<SeqTypes>::new(versions::Upgrade::trivial(NEW_PROTOCOL_VERSION));
-            // The chain terminates at the leaf the cert2 finalizes, so request that cert2 by its
-            // exact height
-            let cert2_height = leaf_chain
-                .last()
-                .ok_or_else(|| anyhow::anyhow!("empty leaf chain for height {height}"))?
-                .height();
-            let cert2 = self
-                .request_indefinitely(
-                    Request::Cert2(cert2_height),
-                    move |_request: &Request, response: Response| async move {
-                        let Response::Cert2(cert2) = response else {
-                            return Err(anyhow::anyhow!("expected cert2 response"));
-                        };
-                        if cert2.data.block_number != cert2_height {
-                            return Err(anyhow::anyhow!(
-                                "received cert2 at height {} but expected exactly {cert2_height}",
-                                cert2.data.block_number
-                            ));
-                        }
-                        Ok(cert2)
-                    },
-                )
-                .await
-                .with_context(|| format!("failed to request cert2 at height {cert2_height}"))?;
-
-            verify_new_protocol_leaf_chain(leaf_chain, &coordinator, height, &upgrade_lock, cert2)
-                .await
-                .with_context(|| "leaf chain verification with cert2 failed")?
-        } else {
-            verify_legacy_leaf_chain(leaf_chain, &coordinator, height).await?
-        };
-
         tracing::info!("Fetched leaf for height: {height}");
-        Ok(result)
+        Ok(leaf)
     }
 
     async fn fetch_chain_config(
@@ -528,5 +497,75 @@ where
 
     fn is_local(&self) -> bool {
         false
+    }
+}
+
+impl<I: NodeImplementation<SeqTypes>, N: ConnectedNetwork<PubKey>, P: SequencerPersistence>
+    RequestResponseProtocol<I, N, P>
+where
+    I::Storage: NewProtocolStorage<SeqTypes>,
+{
+    async fn verify_leaf_chain(
+        &self,
+        leaf_chain: Vec<Leaf2>,
+        coordinator: &EpochMembershipCoordinator<SeqTypes>,
+        height: u64,
+    ) -> anyhow::Result<Leaf2> {
+        // For new-protocol heights this is the leaf range `[height..=cert2_height]`, for legacy
+        // heights a 3-chain.
+        let (Some(first), Some(last)) = (leaf_chain.first(), leaf_chain.last()) else {
+            bail!("received empty leaf chain for height {height}");
+        };
+        if first.block_header().version() < NEW_PROTOCOL_VERSION {
+            return verify_legacy_leaf_chain(leaf_chain, coordinator, height).await;
+        }
+
+        let cert2_height = last.height();
+        // A chain can name a cert2 height that no peer holds yet. Bounding the wait keeps one such
+        // answer from stalling the answers queued behind it.
+        let cert2 = timeout(
+            self.config.request_batch_interval,
+            self.fetch_cert2(coordinator, cert2_height),
+        )
+        .await
+        .with_context(|| format!("timed out fetching cert2 at height {cert2_height}"))??;
+        let upgrade_lock =
+            UpgradeLock::<SeqTypes>::new(versions::Upgrade::trivial(NEW_PROTOCOL_VERSION));
+        verify_new_protocol_leaf_chain(leaf_chain, coordinator, height, &upgrade_lock, cert2)
+            .await
+            .with_context(|| "leaf chain verification with cert2 failed")
+    }
+
+    async fn fetch_cert2(
+        &self,
+        coordinator: &EpochMembershipCoordinator<SeqTypes>,
+        cert2_height: u64,
+    ) -> anyhow::Result<Certificate2<SeqTypes>> {
+        // Checking the signature here, not only once paired with a chain, keeps a forged cert2
+        // from winning the request and failing every honest chain it is paired with.
+        let coordinator = coordinator.clone();
+        self.request_indefinitely(
+            Request::Cert2(cert2_height),
+            move |_request: &Request, response: Response| {
+                let coordinator = coordinator.clone();
+                async move {
+                    let Response::Cert2(cert2) = response else {
+                        bail!("expected cert2 response");
+                    };
+                    ensure!(
+                        cert2.data.block_number == cert2_height,
+                        "received cert2 at height {} but expected exactly {cert2_height}",
+                        cert2.data.block_number
+                    );
+                    let upgrade_lock = UpgradeLock::<SeqTypes>::new(versions::Upgrade::trivial(
+                        NEW_PROTOCOL_VERSION,
+                    ));
+                    verify_cert2(&cert2, &coordinator, &upgrade_lock)?;
+                    Ok(cert2)
+                }
+            },
+        )
+        .await
+        .with_context(|| format!("failed to request cert2 at height {cert2_height}"))
     }
 }

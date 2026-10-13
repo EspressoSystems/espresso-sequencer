@@ -290,6 +290,39 @@ pub(crate) async fn verify_legacy_leaf_chain(
         .with_context(|| format!("failed to verify leaf chain at height {height}"))
 }
 
+/// Fetches the leaf chain and its cert2 from the one `client` and verifies them before returning, so
+/// that [`StatePeers::fetch`] charges that peer for a well-formed but wrong answer and moves on.
+async fn fetch_verified_leaf<ApiVer: StaticVersionType>(
+    client: &Client<ApiVer>,
+    coordinator: &EpochMembershipCoordinator<SeqTypes>,
+    height: u64,
+) -> anyhow::Result<Leaf2> {
+    // For new-protocol heights this is the leaf range `[height..=cert2_height]`, for legacy
+    // heights a 3-chain.
+    let leaf_chain = client
+        .get::<Vec<Leaf2>>(&paths::catchup_leafchain(height))
+        .send()
+        .await?;
+    let (Some(first), Some(last)) = (leaf_chain.first(), leaf_chain.last()) else {
+        bail!("empty leaf chain returned for height {height}");
+    };
+    if first.block_header().version() < NEW_PROTOCOL_VERSION {
+        return verify_legacy_leaf_chain(leaf_chain, coordinator, height).await;
+    }
+
+    let cert2_height = last.height();
+    let cert2 = client
+        .get::<Certificate2<SeqTypes>>(&paths::catchup_cert2(cert2_height))
+        .send()
+        .await
+        .with_context(|| format!("failed to fetch cert2 for height {cert2_height}"))?;
+    let upgrade_lock =
+        UpgradeLock::<SeqTypes>::new(versions::Upgrade::trivial(NEW_PROTOCOL_VERSION));
+    verify_new_protocol_leaf_chain(leaf_chain, coordinator, height, &upgrade_lock, cert2)
+        .await
+        .with_context(|| format!("failed to verify leaf chain with cert2 at height {height}"))
+}
+
 #[async_trait]
 impl<ApiVer: StaticVersionType> StateCatchup for StatePeers<ApiVer> {
     #[tracing::instrument(skip(self, _instance))]
@@ -381,53 +414,12 @@ impl<ApiVer: StaticVersionType> StateCatchup for StatePeers<ApiVer> {
         coordinator: EpochMembershipCoordinator<SeqTypes>,
         height: u64,
     ) -> anyhow::Result<Leaf2> {
-        // Fetch the leaf chain. For new protocol heights this is a leaf range
-        // `[height..=cert2_height]`
-        // for legacy-protocol heights it's a 3-chain.
-        let leaf_chain = self
-            .fetch(retry, |client| async move {
-                let chain = client
-                    .get::<Vec<Leaf2>>(&paths::catchup_leafchain(height))
-                    .send()
-                    .await?;
-                anyhow::Ok(chain)
-            })
-            .await
-            .with_context(|| format!("failed to fetch leaf chain at height {height}"))?;
-
-        let first = leaf_chain
-            .first()
-            .ok_or_else(|| anyhow!("empty leaf chain returned for height {height}"))?;
-
-        if first.block_header().version() >= NEW_PROTOCOL_VERSION {
-            let upgrade_lock =
-                UpgradeLock::<SeqTypes>::new(versions::Upgrade::trivial(NEW_PROTOCOL_VERSION));
-
-            // The chain terminates at the leaf the cert2 finalizes, so fetch that cert2 by its
-            // exact height
-            let cert2_height = leaf_chain
-                .last()
-                .ok_or_else(|| anyhow!("empty leaf chain returned for height {height}"))?
-                .height();
-            let cert2 = self
-                .fetch(retry, |client| async move {
-                    let cert2 = client
-                        .get::<Certificate2<SeqTypes>>(&paths::catchup_cert2(cert2_height))
-                        .send()
-                        .await?;
-                    anyhow::Ok(cert2)
-                })
-                .await
-                .with_context(|| format!("failed to fetch cert2 for height {cert2_height}"))?;
-
-            verify_new_protocol_leaf_chain(leaf_chain, &coordinator, height, &upgrade_lock, cert2)
-                .await
-                .with_context(|| {
-                    format!("failed to verify leaf chain with cert2 at height {height}")
-                })
-        } else {
-            verify_legacy_leaf_chain(leaf_chain, &coordinator, height).await
-        }
+        let coordinator = &coordinator;
+        self.fetch(retry, |client| async move {
+            fetch_verified_leaf(&client, coordinator, height).await
+        })
+        .await
+        .with_context(|| format!("failed to fetch leaf at height {height}"))
     }
 
     async fn try_fetch_reward_merkle_tree_v2(
@@ -438,48 +430,43 @@ impl<ApiVer: StaticVersionType> StateCatchup for StatePeers<ApiVer> {
         reward_merkle_tree_root: RewardMerkleCommitmentV2,
         accounts: Arc<Vec<RewardAccountV2>>,
     ) -> anyhow::Result<PermittedRewardMerkleTreeV2> {
-        let result = self
-            .fetch(retry, |client| async move {
-                // Try the catchup endpoint first which returns tree from consensuss decided state
-                // if not present, then fall back to
-                // the reward-state-v2 endpoint which returns from storage decided state
-                let tree_bytes = match client
-                    .inner
-                    .get::<Vec<u8>>(&paths::catchup_reward_merkle_tree_v2(height, *view))
-                    .send()
-                    .await
-                {
-                    Ok(bytes) => bytes,
-                    Err(err) => {
-                        tracing::info!(
-                            "catchup endpoint failed, falling back to reward-state-v2: {err:#}"
-                        );
-                        client
-                            .inner
-                            .get::<Vec<u8>>(&paths::reward_merkle_tree_v2(height))
-                            .send()
-                            .await?
-                    },
-                };
+        let accounts = &accounts;
+        self.fetch(retry, |client| async move {
+            // Try the catchup endpoint first which returns tree from consensuss decided state
+            // if not present, then fall back to
+            // the reward-state-v2 endpoint which returns from storage decided state
+            let tree_bytes = match client
+                .inner
+                .get::<Vec<u8>>(&paths::catchup_reward_merkle_tree_v2(height, *view))
+                .send()
+                .await
+            {
+                Ok(bytes) => bytes,
+                Err(err) => {
+                    tracing::info!(
+                        "catchup endpoint failed, falling back to reward-state-v2: {err:#}"
+                    );
+                    client
+                        .inner
+                        .get::<Vec<u8>>(&paths::reward_merkle_tree_v2(height))
+                        .send()
+                        .await?
+                },
+            };
 
-                Ok::<Vec<u8>, anyhow::Error>(tree_bytes)
-            })
-            .await
-            .context("Fetching from peer failed")?;
-
-        let tree_data = bincode::deserialize::<RewardMerkleTreeV2Data>(&result)
-            .context("Failed to deserialize merkle tree from catchup")?;
-
-        let tree: PermittedRewardMerkleTreeV2 =
-            PermittedRewardMerkleTreeV2::try_from_kv_set(tree_data.balances).await?;
-
-        ensure!(
-            tree.tree.commitment() == reward_merkle_tree_root,
-            "RewardMerkleTreeV2 from peer failed commitment check."
-        );
-        ensure!(!forgotten_accounts_include(&tree, &accounts));
-
-        Ok(tree)
+            let tree_data = bincode::deserialize::<RewardMerkleTreeV2Data>(&tree_bytes)
+                .context("Failed to deserialize merkle tree from catchup")?;
+            let tree: PermittedRewardMerkleTreeV2 =
+                PermittedRewardMerkleTreeV2::try_from_kv_set(tree_data.balances).await?;
+            ensure!(
+                tree.tree.commitment() == reward_merkle_tree_root,
+                "RewardMerkleTreeV2 from peer failed commitment check."
+            );
+            ensure!(!forgotten_accounts_include(&tree, accounts));
+            anyhow::Ok(tree)
+        })
+        .await
+        .context("Fetching from peer failed")
     }
 
     #[tracing::instrument(skip(self, _instance))]
