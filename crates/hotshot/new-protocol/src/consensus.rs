@@ -2896,7 +2896,7 @@ impl<T: NodeType> Consensus<T> {
         // Any still-undecided view above the floor can decide, even one older
         // than the watermark (a gap).
         let floor = self.decide_floor();
-        if view <= floor || self.decided_views.contains(&view) {
+        if view <= floor {
             return;
         }
         let Some(cert2) = self.certs2.get(&key).cloned() else {
@@ -2918,6 +2918,8 @@ impl<T: NodeType> Consensus<T> {
                 self.revote_commits.insert(view, cert2.data.epoch);
                 return;
             }
+        } else if self.decided_views.contains(&view) {
+            return;
         }
         let proposal_commit = cert2.data.leaf_commit;
         // A Cert2 can arrive before its Cert1; require both before mutating any
