@@ -7813,8 +7813,6 @@ mod test {
         // Wait until at least 3 epochs have passed
         wait_for_epochs(&mut events, EPOCH_HEIGHT, 3).await;
 
-        // Read before shutting consensus down: once the coordinator stops, the decided state falls
-        // back to the legacy handle, which never ran at 0.6.
         let instance = node_0.node_state();
         // A node can decide a leaf before it has validated that leaf's state itself.
         let state = timeout(Duration::from_secs(60), async {
