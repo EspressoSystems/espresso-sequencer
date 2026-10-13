@@ -4,13 +4,12 @@ use std::{
 };
 
 use committable::Commitment;
-use hotshot::traits::BlockPayload;
 use hotshot_types::{
     data::{
         EpochNumber, VidCommitment2, VidDisperseShare2, ViewNumber,
         ns_table::{ns_table_payload_byte_len, parse_ns_table},
     },
-    traits::{block_contents::EncodeBytes, node_implementation::NodeType},
+    traits::{BlockPayload, block_contents::EncodeBytes, node_implementation::NodeType},
     vid::avidm_gf2::{AvidmGf2Common, AvidmGf2Param, AvidmGf2Scheme, AvidmGf2Share},
 };
 use tokio::task::{AbortHandle, JoinSet};
