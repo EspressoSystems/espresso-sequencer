@@ -931,7 +931,7 @@ mod test {
 
     /// A node that knows the chain height but stores none of the leaves below it.
     struct MissingBlocks {
-        network: MockNetwork<MockDataSource>,
+        network: ChainNode<MockDataSource>,
         _server: JoinHandle<()>,
         _db: TmpDb,
         provider: Recorder,
@@ -942,7 +942,15 @@ mod test {
 
     impl MissingBlocks {
         async fn init() -> Self {
-            let mut network = MockNetwork::<MockDataSource>::init().await;
+            let mut network = ChainNode::<MockDataSource>::new().await;
+            // Distinct payloads, so one VID common row cannot cover several heights.
+            let mut tx_heights = Vec::new();
+            for i in 0..3u8 {
+                network.push_empty(1).await;
+                let block = network.push([mock_transaction(vec![i; 3])]).await;
+                tx_heights.push(block.height());
+            }
+            network.push_empty(1).await;
             let (port, server) = serve_availability(network.data_source()).await;
             let db = TmpDb::init().await;
             let provider = Recorder {
@@ -957,23 +965,6 @@ mod test {
                 .await
                 .unwrap();
 
-            network.start().await;
-
-            // Distinct payloads, so one VID common row cannot cover several heights.
-            let mut tx_heights = Vec::new();
-            for i in 0..3u8 {
-                let tx = mock_transaction(vec![i; 3]);
-                network.submit_transaction(tx.clone()).await;
-                let height = network
-                    .data_source()
-                    .get_block_containing_transaction(tx.commit())
-                    .await
-                    .await
-                    .block
-                    .height();
-                tracing::info!(height, "transaction sequenced");
-                tx_heights.push(height);
-            }
             let end = tx_heights.last().unwrap() + 1;
 
             let node = Self {
@@ -1074,9 +1065,10 @@ mod test {
         let requests = node.provider.requests.lock().unwrap().clone();
         assert!(
             !requests.is_empty()
-                && requests
-                    .iter()
-                    .all(|&req| req == any::type_name::<LeafRequest>()),
+                && requests.iter().all(|&req| {
+                    req == any::type_name::<LeafRequest>()
+                        || req == any::type_name::<Certificate2Request>()
+                }),
             "{requests:?}"
         );
     }
