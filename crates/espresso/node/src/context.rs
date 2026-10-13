@@ -118,7 +118,7 @@ pub struct SequencerContext<N: ConnectedNetwork<PubKey>, P: SequencerPersistence
     #[derivative(Debug = "ignore")]
     validator_config: ValidatorConfig<SeqTypes>,
 
-    /// The pre-0.6 network, torn down once consensus starts; nothing receives on it any more.
+    /// The pre-0.6 network, which nothing sends or receives on; torn down once consensus starts.
     #[derivative(Debug = "ignore")]
     legacy_network: Arc<N>,
 }
@@ -318,7 +318,6 @@ where
             request_response_sender,
             outbound_message_receiver,
             consensus_handle.clone(),
-            network.clone(),
             pub_key,
             metrics
                 .subgroup("request_response".into())
