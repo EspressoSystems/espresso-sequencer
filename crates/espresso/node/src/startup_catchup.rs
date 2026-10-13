@@ -281,19 +281,20 @@ fn plan_skip(
     first_epoch: EpochNumber,
     resume: Option<EpochNumber>,
 ) -> Result<RangeInclusive<EpochNumber>, &'static str> {
-    let range = install_range(anchor.height, epoch_height, first_epoch)
-        .ok_or("anchor too early for epochs")?;
+    let range =
+        install_range(anchor.height, epoch_height, first_epoch).ok_or("no finalized state yet")?;
     if resume.is_some_and(|resume| resume >= *range.start()) {
         return Err("near tip");
     }
     Ok(range)
 }
 
-/// The epochs whose stake tables the skip installs: `n-3 ..= n+1` for `n = epoch(F)`.
+/// The epochs whose stake tables the skip installs: `n-3 ..= n+1` for `n = epoch(F)`, clamped to
+/// start after the two epochs seeded from genesis.
 ///
 /// `block_reward(n)` and `block_reward(n+1)` need the stake table of three epochs earlier, and the
-/// rest is the window. `None` when `n-3` is within the epochs seeded from genesis, where the walk
-/// is short anyway.
+/// rest is the window. `None` when `F` is before the first epoch's end, so there is no root to
+/// prove. Every root in the range is below `F`: the root of `e-2` lies in epoch `e-2 < n`.
 fn install_range(
     anchor_height: u64,
     epoch_height: u64,
@@ -303,8 +304,8 @@ fn install_range(
         return None;
     }
     let n = epoch_from_block_number(anchor_height, epoch_height);
-    let start = n.checked_sub(3).filter(|start| *start > *first_epoch + 1)?;
-    Some(EpochNumber::new(start)..=EpochNumber::new(n + 1))
+    let start = n.saturating_sub(3).max(*first_epoch + 2);
+    (start <= n + 1).then(|| EpochNumber::new(start)..=EpochNumber::new(n + 1))
 }
 
 /// Fetch and verify the epoch roots of `range` from the peers in rotation, backing off after each
@@ -613,8 +614,10 @@ mod tests {
     #[case::decaf_next_epoch(3000, 3000 * 1000 + 1, Some(998..=1002))]
     #[case::mainnet_anchor_at_root(40000, 40000 * 100 - 5, Some(97..=101))]
     #[case::mainnet_next_epoch(40000, 40000 * 100 + 1, Some(98..=102))]
-    #[case::start_is_seeded(100, 100 * 4, None)]
-    #[case::start_after_seeded(100, 100 * 5, Some(2..=6))]
+    #[case::start_is_seeded(100, 100 * 4, Some(3..=5))]
+    #[case::start_clamped(100, 100 * 5, Some(3..=6))]
+    #[case::start_unclamped(100, 100 * 6, Some(3..=7))]
+    #[case::window_only(100, 100 * 2, Some(3..=3))]
     #[case::pre_pos(100, 50, None)]
     #[case::genesis(100, 0, None)]
     #[case::no_epochs(0, 1000, None)]
@@ -623,8 +626,8 @@ mod tests {
         #[case] anchor_height: u64,
         #[case] expected: Option<RangeInclusive<u64>>,
     ) {
-        // `first_epoch = 0` seeds epochs 0 and 1.
-        let range = install_range(anchor_height, epoch_height, EpochNumber::new(0)).map(epochs);
+        // `first_epoch = 1` seeds epochs 1 and 2.
+        let range = install_range(anchor_height, epoch_height, EpochNumber::new(1)).map(epochs);
         assert_eq!(range, expected);
     }
 
@@ -667,7 +670,7 @@ mod tests {
     }
 
     #[test]
-    fn plan_skip_walks_on_early_anchor() {
+    fn plan_skip_walks_on_empty_range() {
         let anchor = TrustedAnchor {
             height: EPOCH_HEIGHT,
             block_comm_root: CircuitField::from(0u64),
@@ -675,7 +678,7 @@ mod tests {
         let first = EpochNumber::new(FIRST_EPOCH);
         assert_eq!(
             plan_skip(&anchor, EPOCH_HEIGHT, first, None),
-            Err("anchor too early for epochs")
+            Err("no finalized state yet")
         );
     }
 
