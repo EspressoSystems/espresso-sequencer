@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import dataclasses
+import json
 import logging
 import os
 import re
@@ -32,6 +33,7 @@ from typing import Literal
 
 import httpx
 import yaml
+from rich.console import Console
 from rich.logging import RichHandler
 
 log = logging.getLogger("binary-upgrade-test")
@@ -94,6 +96,15 @@ RELEASE_TAG_RE = re.compile(r"^\d+\.\d+\.\d+\.\d+$")
 # Legacy tags; remove once every deployed network runs an X.Y.Z.N tag.
 LEGACY_TAG_GLOB = "20[0-9][0-9][0-1][0-9][0-3][0-9]"
 LEGACY_TAG_RE = re.compile(r"^20\d{2}[01]\d[0-3]\d$")
+
+NETWORKS = {
+    "mainnet": "https://query.main.net.espresso.network",
+    "decaf": "https://query.decaf.testnet.espresso.network",
+}
+CONSENSUS_VERSION_RE = re.compile(
+    r"^consensus_version\{(?P<labels>[^}]*)\}", re.MULTILINE
+)
+LABEL_RE = re.compile(r'(\w+)="([^"]*)"')
 
 # ---------------------------------------------------------------------------
 # Action types
@@ -209,17 +220,34 @@ SCENARIOS: dict[str, list[Action]] = {
 }
 
 
-def default_base_tag() -> str:
-    """Pick the base tag from the repo's release tags relative to HEAD."""
-    return pick_base_tag(
-        release_tags(),
+def base_tags() -> list[str]:
+    """BASE_TAG if set, else the tags live networks run that HEAD upgrades from."""
+    if tag := os.environ.get("BASE_TAG"):
+        return [tag]
+    return default_base_tags()
+
+
+def single_base_tag() -> str:
+    *older, newest = base_tags()
+    if older:
+        log.info(f"Using newest base tag {newest}; set BASE_TAG to run {older}")
+    return newest
+
+
+def default_base_tags() -> list[str]:
+    live = {network: live_tag(network, url) for network, url in NETWORKS.items()}
+    log.info(f"Live network tags: {live}")
+    return pick_base_tags(
+        live,
         release_tags("--merged", "HEAD"),
         release_tags("--contains", "HEAD"),
     )
 
 
-def pick_base_tag(tags: set[str], reachable: set[str], containing: set[str]) -> str:
-    """Pick the newest tag by version that does not contain HEAD and is on HEAD's line or older.
+def pick_base_tags(
+    live: dict[str, str], reachable: set[str], containing: set[str]
+) -> list[str]:
+    """Live tags on HEAD's release line or older that do not contain HEAD.
 
     HEAD's line is that of its newest reachable tag. Patch tags are not ancestors of
     main, so they count by line rather than reachability; newer lines are excluded.
@@ -231,10 +259,79 @@ def pick_base_tag(tags: set[str], reachable: set[str], containing: set[str]) -> 
             " fetch full history with tags."
         )
     newest = max(reachable, key=tag_order)
-    pool = {t for t in tags - containing if line_order(t) <= line_order(newest)}
-    if not pool:
-        raise RuntimeError(f"No base tag up to the line of {newest} outside HEAD.")
-    return max(pool, key=tag_order)
+    bases = {
+        t
+        for t in live.values()
+        if line_order(t) <= line_order(newest) and t not in containing
+    }
+    if not bases:
+        raise RuntimeError(
+            f"No live network tag ({live}) up to the line of {newest} outside HEAD;"
+            " set BASE_TAG to override."
+        )
+    return sorted(bases, key=tag_order)
+
+
+def live_tag(network: str, url: str) -> str:
+    desc, rev = parse_consensus_version(fetch_metrics(url))
+    check_live_tag(network, desc, rev, tag_commit(desc))
+    return desc
+
+
+def parse_consensus_version(metrics: str) -> tuple[str, str]:
+    """`(desc, rev)` labels of the `consensus_version` Prometheus metric."""
+    match = CONSENSUS_VERSION_RE.search(metrics)
+    if match is None:
+        raise RuntimeError("consensus_version metric missing")
+    labels = dict(LABEL_RE.findall(match["labels"]))
+    return labels["desc"], labels["rev"]
+
+
+def check_live_tag(network: str, desc: str, rev: str, commit: str | None) -> None:
+    """Raise unless `desc` is a release tag whose local commit is `rev`."""
+    if not (RELEASE_TAG_RE.match(desc) or LEGACY_TAG_RE.match(desc)):
+        raise RuntimeError(f"{network} runs {desc!r}, not a release tag.")
+    if commit is None:
+        raise RuntimeError(
+            f"{network} runs tag {desc}, missing locally;"
+            " fetch full history with `git fetch --tags`."
+        )
+    if commit != rev:
+        raise RuntimeError(
+            f"{network} runs {desc} at {rev}, local tag is {commit};"
+            " refresh tags with `git fetch --tags --force`."
+        )
+
+
+def fetch_metrics(url: str, attempts: int = 3, backoff: float = 2.0) -> str:
+    """GET the metrics, retrying transport errors and 5xx responses."""
+    for attempt in range(1, attempts):
+        try:
+            return get_metrics(url)
+        except httpx.TransportError as e:
+            log.warning(f"GET {url} metrics attempt {attempt}/{attempts}: {e}")
+        except httpx.HTTPStatusError as e:
+            if not e.response.is_server_error:
+                raise
+            log.warning(f"GET {url} metrics attempt {attempt}/{attempts}: {e}")
+        time.sleep(backoff * attempt)
+    return get_metrics(url)
+
+
+def get_metrics(url: str) -> str:
+    r = httpx.get(f"{url}/v1/status/metrics", timeout=30, follow_redirects=True)
+    return r.raise_for_status().text
+
+
+def tag_commit(tag: str) -> str | None:
+    result = subprocess.run(
+        ["git", "rev-parse", "--verify", "--quiet", f"refs/tags/{tag}^{{commit}}"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return result.stdout.strip() if result.returncode == 0 else None
 
 
 def tag_order(tag: str) -> tuple[int, ...]:
@@ -269,7 +366,7 @@ class Config:
     @classmethod
     def from_env(cls) -> Config:
         return cls(
-            base_tag=os.environ.get("BASE_TAG") or default_base_tag(),
+            base_tag=single_base_tag(),
             upgrade_tag=os.environ.get("UPGRADE_TAG", "main"),
             keep_running=os.environ.get("KEEP_RUNNING") == "1",
             upgrade_pull=os.environ.get("UPGRADE_PULL") == "1",
@@ -1021,16 +1118,28 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Pull base and (if UPGRADE_PULL=1) upgrade images, then exit.",
     )
+    parser.add_argument(
+        "--list-base-tags",
+        action="store_true",
+        help="Print the base tags as a JSON list, then exit.",
+    )
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
     logging.basicConfig(
-        handlers=[RichHandler(show_path=False)],
+        # stdout carries only the JSON list in --list-base-tags mode.
+        handlers=[
+            RichHandler(console=Console(stderr=args.list_base_tags), show_path=False)
+        ],
         level=args.log_level,
         format="%(message)s",
     )
+
+    if args.list_base_tags:
+        print(json.dumps(base_tags()))
+        return 0
 
     if not (REPO_ROOT / ".env").exists():
         log.error(".env not found. Copy .env.docker.example to .env first.")

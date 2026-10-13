@@ -42,12 +42,12 @@ covers both cross-version directions plus the vanilla rolling upgrade.
 
 ## Inputs
 
-| env          | default                                                                                          |
-| ------------ | ------------------------------------------------------------------------------------------------ |
-| BASE_TAG     | newest release tag by version not containing HEAD, up to the line of the newest tag HEAD reaches |
-| UPGRADE_TAG  | main                                                                                             |
-| KEEP_RUNNING | 0                                                                                                |
-| UPGRADE_PULL | 0                                                                                                |
+| env          | default                                                                                                                                                    |
+| ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| BASE_TAG     | tags decaf and mainnet run (`/v1/status/metrics`), at or below HEAD's release line and not containing HEAD; one CI job per base, local runs use the newest |
+| UPGRADE_TAG  | main                                                                                                                                                       |
+| KEEP_RUNNING | 0                                                                                                                                                          |
+| UPGRADE_PULL | 0                                                                                                                                                          |
 
 ## CI
 
