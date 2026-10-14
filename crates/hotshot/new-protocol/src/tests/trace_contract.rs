@@ -86,11 +86,24 @@ const RESTART_KEYS: [&str; 5] = [
     "resumes",
 ];
 
+/// The body of `Recorder::restarted`, up to the next method.
+fn restarted_body() -> &'static str {
+    let body = TRACE_RS
+        .split("pub fn restarted")
+        .nth(1)
+        .and_then(|rest| rest.split("\n    pub fn ").next())
+        .expect("trace.rs no longer defines Recorder::restarted");
+    assert!(!body.is_empty(), "Recorder::restarted has an empty body");
+    body
+}
+
+// Lists the keys here until `Header.lean` has a `restart` to read them from.
 #[test]
 fn every_restart_key_is_one_the_recorder_writes() {
+    let body = restarted_body();
     for key in RESTART_KEYS {
         assert!(
-            TRACE_RS.contains(&format!("(\"{key}\", ")),
+            body.contains(&format!("(\"{key}\", ")),
             "`{key}` is read from the restart header by the replay but never written by the \
              recorder: add it to `Recorder::restarted` or remove it from Header.lean"
         );

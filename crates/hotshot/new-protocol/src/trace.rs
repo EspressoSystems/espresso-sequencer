@@ -1159,13 +1159,18 @@ fn null() -> String {
 
 #[cfg(test)]
 mod tests {
-    use hotshot_example_types::node_types::TestTypes;
+    use hotshot::types::{BLSPubKey, SignatureKey};
+    use hotshot_example_types::{
+        node_types::{TEST_VERSIONS, TestTypes},
+        state_types::{TestInstanceState, TestValidatedState},
+    };
 
     use super::*;
+    use crate::tests::common::coordinator_builder::build_genesis_cert1;
 
     fn recorder_in_tmp(name: &str) -> Recorder {
         let mut recorder = Recorder::inert();
-        recorder.path = Some(PathBuf::from("./tmp/np-trace-test").join(name));
+        recorder.path = Some(PathBuf::from("np-trace-test").join(name));
         recorder.identified = false;
         recorder
     }
@@ -1211,5 +1216,34 @@ mod tests {
         rec.identified = true;
         assert_eq!(rec.file_name().as_deref(), Some("c.0.jsonl"));
         assert_eq!(Recorder::inert().file_name(), None);
+    }
+
+    #[tokio::test]
+    async fn identity_line_carries_restart_after_anchor_cert() {
+        let leaf = Leaf2::<TestTypes>::genesis(
+            &TestValidatedState::default(),
+            &TestInstanceState::default(),
+            TEST_VERSIONS.test.base,
+        )
+        .await;
+        let cert = build_genesis_cert1(&leaf);
+        let mut rec = recorder_in_tmp("d.0.jsonl");
+        rec.restarted(Some(&cert), ViewNumber::new(7), None, &[], None);
+        rec.preamble::<TestTypes>(
+            &BLSPubKey::generated_from_seed_indexed([0; 32], 0).0,
+            &leaf,
+            Some(&cert),
+            10,
+        );
+        let lock = cert1_json_raw(&cert);
+        let identity = &rec.lines[0];
+        assert!(
+            identity.contains(&format!(
+                "\"anchorCert\":{lock},\"restart\":{{\"lock\":{lock},"
+            )),
+            "{identity}"
+        );
+        // The recorder writes nothing on drop while `lines` holds only the identity line.
+        rec.lines.clear();
     }
 }
