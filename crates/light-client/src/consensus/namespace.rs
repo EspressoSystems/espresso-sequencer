@@ -3,6 +3,8 @@ use espresso_types::{Header, NamespaceId, NsProof, Transaction};
 use hotshot_types::data::VidCommon;
 use serde::{Deserialize, Serialize};
 
+use super::payload::check_vid_param;
+
 /// Information required to verify a payload.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 
@@ -34,9 +36,16 @@ impl NamespaceProof {
 
     /// Verify a [`NamespaceProof`].
     ///
-    /// If the data in this proof matches the expected `header` and belongs to `namespace`, the list
-    /// of transactions from the namespace is returned.
-    pub fn verify(&self, header: &Header, namespace: NamespaceId) -> Result<Vec<Transaction>> {
+    /// `total_weight` is the VID total weight of the stake table the block was dispersed with,
+    /// which the light client derives itself rather than taking from the proof. If the data in
+    /// this proof matches the expected `header` and belongs to `namespace`, the list of
+    /// transactions from the namespace is returned.
+    pub fn verify(
+        &self,
+        header: &Header,
+        namespace: NamespaceId,
+        total_weight: usize,
+    ) -> Result<Vec<Transaction>> {
         let Some(proof) = &self.proof else {
             // A trivial proof is a claim that the requested namespace is not present in the
             // namespace table. We need to verify this claim.
@@ -49,6 +58,7 @@ impl NamespaceProof {
             return Ok(vec![]);
         };
 
+        check_vid_param(&proof.common, total_weight)?;
         let (txs, ns) = proof
             .proof
             .verify(
@@ -69,6 +79,7 @@ impl NamespaceProof {
 mod test {
     use espresso_types::{Leaf2, NodeState};
     use hotshot_query_service_types::availability::TransactionIndex;
+    use hotshot_types::vid::avidm::AvidMParam;
     use versions::FEE_VERSION;
 
     use super::*;
@@ -88,16 +99,19 @@ mod test {
                 position: 0,
             })
             .unwrap();
+        let total_weight = client.vid_total_weight(1).await;
         let proof =
             NamespaceProof::new(NsProof::new(&payload, &0.into(), &common).unwrap(), common);
         assert_eq!(
-            proof.verify(leaf.header(), tx.namespace()).unwrap(),
+            proof
+                .verify(leaf.header(), tx.namespace(), total_weight)
+                .unwrap(),
             vec![tx.clone()]
         );
 
         // Check that a trivial proof is not accepted for a non-trivial namespace.
         let err = NamespaceProof::not_present()
-            .verify(leaf.header(), tx.namespace())
+            .verify(leaf.header(), tx.namespace(), total_weight)
             .unwrap_err();
         assert!(
             err.to_string()
@@ -113,7 +127,7 @@ mod test {
         let proof = NamespaceProof::not_present();
 
         assert_eq!(
-            proof.verify(leaf.block_header(), 0u64.into()).unwrap(),
+            proof.verify(leaf.block_header(), 0u64.into(), 1).unwrap(),
             vec![]
         );
     }
@@ -137,7 +151,10 @@ mod test {
         );
 
         let leaf2 = client.leaf(2).await;
-        let err = proof.verify(leaf2.header(), tx.namespace()).unwrap_err();
+        let total_weight = client.vid_total_weight(2).await;
+        let err = proof
+            .verify(leaf2.header(), tx.namespace(), total_weight)
+            .unwrap_err();
         assert!(
             err.to_string().contains("invalid namespace proof"),
             "{err:#}"
@@ -164,11 +181,47 @@ mod test {
             .verify(
                 leaf.header(),
                 NamespaceId::from(u64::from(tx.namespace()) + 1),
+                client.vid_total_weight(1).await,
             )
             .unwrap_err();
         assert!(
             err.to_string().contains("proof is for wrong namespace"),
             "{err:#}"
         );
+    }
+
+    /// The commitment does not bind the VID parameters a provider sends along with a proof, so
+    /// they are checked against the stake table before they drive any computation.
+    #[tokio::test]
+    #[test_log::test]
+    async fn test_namespace_proof_rejects_forged_vid_param() {
+        let client = TestClient::default();
+        let leaf = client.leaf(1).await;
+        let payload = client.payload(1).await;
+        let common = client.vid_common(1).await;
+
+        let tx = payload
+            .transaction(&TransactionIndex {
+                ns_index: 0.into(),
+                position: 0,
+            })
+            .unwrap();
+        let ns_proof = NsProof::new(&payload, &0.into(), &common).unwrap();
+        let VidCommon::V1(param) = common else {
+            panic!("the test client serves AvidM commons");
+        };
+        let forged = VidCommon::V1(AvidMParam {
+            recovery_threshold: 0,
+            ..param
+        });
+
+        let err = NamespaceProof::new(ns_proof, forged)
+            .verify(
+                leaf.header(),
+                tx.namespace(),
+                client.vid_total_weight(1).await,
+            )
+            .unwrap_err();
+        assert!(err.to_string().contains("stake table"), "{err:#}");
     }
 }

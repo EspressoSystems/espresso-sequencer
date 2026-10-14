@@ -543,7 +543,7 @@ mod test {
             sql::DataSource,
             test_helpers::{TestNetwork, TestNetworkConfigBuilder},
         },
-        testing::{TestConfigBuilder, wait_for_decide_on_handle},
+        testing::{TestConfig, TestConfigBuilder, wait_for_decide_on_handle},
     };
     use espresso_types::{Header, TEST_UPGRADE, Transaction};
     use futures::{TryStreamExt, stream::StreamExt};
@@ -551,16 +551,34 @@ mod test {
         Resolvable,
         availability::{BlockQueryData, LeafQueryData},
     };
+    use hotshot_types::{stake_table::HSStakeTable, utils::epoch_from_block_number};
     use pretty_assertions::assert_eq;
     use rand::RngCore;
     use test_utils;
     use tokio::time::sleep;
+    use versions::EPOCH_VERSION;
 
     use super::*;
     use crate::{
-        consensus::leaf::{FinalityProof, LeafProofHint},
+        consensus::{
+            leaf::{FinalityProof, LeafProofHint},
+            quorum::StakeTable,
+        },
         testing::AlwaysTrueQuorum,
     };
+
+    /// The VID total weight consensus used for `header` on the test network, whose static stake
+    /// table serves every epoch.
+    fn vid_total_weight(cfg: &TestConfig<1>, header: &Header) -> usize {
+        let epoch = (header.version() >= EPOCH_VERSION).then(|| {
+            EpochNumber::new(epoch_from_block_number(
+                header.height(),
+                cfg.hotshot_config().epoch_height,
+            ))
+        });
+        StakeTable::from(HSStakeTable::from(cfg.known_nodes_with_stake().to_vec()))
+            .vid_total_weight(epoch)
+    }
 
     fn client(url: Url) -> impl Client {
         // Run all tests with a fallback client where the first client is an invalid URL, to stress
@@ -792,7 +810,7 @@ mod test {
             .network_config(test_config)
             .build();
 
-        let _network = TestNetwork::new(config, TEST_UPGRADE).await;
+        let network = TestNetwork::new(config, TEST_UPGRADE).await;
         let client = client(url.clone());
 
         // Wait for a few blocks to be produced.
@@ -807,8 +825,9 @@ mod test {
             .unwrap();
 
         let proof = client.payload_proof(1).await.unwrap();
+        let total_weight = vid_total_weight(&network.cfg, blocks[0].header());
         assert_eq!(
-            proof.verify(blocks[0].header()).unwrap(),
+            proof.verify(blocks[0].header(), total_weight).unwrap(),
             *blocks[0].payload()
         );
 
@@ -816,13 +835,22 @@ mod test {
         // correct endpoint and deserializes correctly.
         let ns = NamespaceId::from(0u64);
         let ns_proof = client.namespace_proof(1, ns).await.unwrap();
-        assert_eq!(ns_proof.verify(blocks[0].header(), ns).unwrap(), vec![]);
+        assert_eq!(
+            ns_proof
+                .verify(blocks[0].header(), ns, total_weight)
+                .unwrap(),
+            vec![]
+        );
 
         // Get a range of payloads.
         let proofs = client.payload_proofs_in_range(1, 3).await.unwrap();
         assert_eq!(proofs.len(), 2);
         for (block, proof) in blocks.iter().zip(proofs) {
-            assert_eq!(proof.verify(block.header()).unwrap(), *block.payload());
+            let total_weight = vid_total_weight(&network.cfg, block.header());
+            assert_eq!(
+                proof.verify(block.header(), total_weight).unwrap(),
+                *block.payload()
+            );
         }
     }
 
@@ -877,7 +905,11 @@ mod test {
         // Query namespaces individually.
         for (tx, header) in txs.iter().zip(&headers) {
             let proof = client.namespace_proof(header.height(), ns).await.unwrap();
-            assert_eq!(proof.verify(header, ns).unwrap(), std::slice::from_ref(tx));
+            let total_weight = vid_total_weight(&network.cfg, header);
+            assert_eq!(
+                proof.verify(header, ns, total_weight).unwrap(),
+                std::slice::from_ref(tx)
+            );
         }
 
         // Query both namespaces by range.
@@ -890,11 +922,15 @@ mod test {
             headers[1].height() + 1 - headers[0].height()
         );
         assert_eq!(
-            proofs[0].verify(&headers[0], ns).unwrap(),
+            proofs[0]
+                .verify(&headers[0], ns, vid_total_weight(&network.cfg, &headers[0]))
+                .unwrap(),
             std::slice::from_ref(&txs[0])
         );
         assert_eq!(
-            proofs[proofs.len() - 1].verify(&headers[1], ns).unwrap(),
+            proofs[proofs.len() - 1]
+                .verify(&headers[1], ns, vid_total_weight(&network.cfg, &headers[1]))
+                .unwrap(),
             std::slice::from_ref(&txs[1])
         );
         // All other blocks in the range should be empty.
@@ -907,7 +943,8 @@ mod test {
                 .send()
                 .await
                 .unwrap();
-            assert_eq!(proof.verify(&header, ns).unwrap(), vec![]);
+            let total_weight = vid_total_weight(&network.cfg, &header);
+            assert_eq!(proof.verify(&header, ns, total_weight).unwrap(), vec![]);
         }
 
         let absent = NamespaceId::from(u64::from(ns) + 1);
@@ -925,10 +962,11 @@ mod test {
                 .send()
                 .await
                 .unwrap();
+            let total_weight = vid_total_weight(&network.cfg, &header);
             for queried in [ns, absent] {
                 match (header.ns_table().find_ns_id(&queried), block.get(&queried)) {
                     (Some(_), Some(proof)) => {
-                        proof.verify(&header, queried).unwrap();
+                        proof.verify(&header, queried, total_weight).unwrap();
                     },
                     (None, None) => {},
                     (present, returned) => panic!(
@@ -943,14 +981,18 @@ mod test {
 
         // The first and last blocks are the ones we submitted `ns` transactions to.
         assert_eq!(
-            blocks[0].get(&ns).unwrap().verify(&headers[0], ns).unwrap(),
+            blocks[0]
+                .get(&ns)
+                .unwrap()
+                .verify(&headers[0], ns, vid_total_weight(&network.cfg, &headers[0]))
+                .unwrap(),
             std::slice::from_ref(&txs[0])
         );
         assert_eq!(
             blocks[blocks.len() - 1]
                 .get(&ns)
                 .unwrap()
-                .verify(&headers[1], ns)
+                .verify(&headers[1], ns, vid_total_weight(&network.cfg, &headers[1]))
                 .unwrap(),
             std::slice::from_ref(&txs[1])
         );

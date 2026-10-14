@@ -39,19 +39,27 @@ impl PayloadProof {
 
     /// Verify a [`PayloadProof`].
     ///
-    /// If the data in this proof matches the expected `header`, the full payload data is returned.
-    pub fn verify(self, header: &Header) -> Result<Payload> {
-        Ok(self.verify_with_vid_common(header)?.0)
+    /// `total_weight` is the VID total weight of the stake table the block was dispersed with,
+    /// which the light client derives itself rather than taking from the proof. If the data in
+    /// this proof matches the expected `header`, the full payload data is returned.
+    pub fn verify(self, header: &Header, total_weight: usize) -> Result<Payload> {
+        Ok(self.verify_with_vid_common(header, total_weight)?.0)
     }
 
     /// Verify a [`PayloadProof`] and get the corresponding [`VidCommon`].
     ///
-    /// If the data in this proof matches the expected `header`, the full payload data is returned.
-    pub fn verify_with_vid_common(self, header: &Header) -> Result<(Payload, VidCommon)> {
+    /// Takes the same arguments as [`verify`](Self::verify). If the data in this proof matches
+    /// the expected `header`, the full payload data is returned.
+    pub fn verify_with_vid_common(
+        self,
+        header: &Header,
+        total_weight: usize,
+    ) -> Result<(Payload, VidCommon)> {
         ensure!(
             self.payload.ns_table() == header.ns_table(),
             "namespace table of payload does not match namespace table in header"
         );
+        check_vid_param(&self.vid_common, total_weight)?;
         let commit = match &self.vid_common {
             VidCommon::V0(common) => {
                 advz_scheme(ADVZScheme::get_num_storage_nodes(common) as usize)
@@ -60,10 +68,9 @@ impl PayloadProof {
                     .context("computing ADVZ commitment")?
             },
             VidCommon::V1(avidm) => {
-                let param = init_avidm_param(avidm.total_weights)?;
                 let bytes = self.payload.encode();
                 AvidMScheme::commit(
-                    &param,
+                    avidm,
                     &bytes,
                     parse_ns_table(bytes.len(), &header.ns_table().encode()),
                 )
@@ -71,10 +78,9 @@ impl PayloadProof {
                 .map_err(|err| anyhow!("computing AvidM commitment: {err:#}"))?
             },
             VidCommon::V2(avidm_gf2) => {
-                let param = init_avidm_gf2_param(avidm_gf2.param.total_weights)?;
                 let bytes = self.payload.encode();
                 AvidmGf2Scheme::commit(
-                    &param,
+                    &avidm_gf2.param,
                     &bytes,
                     parse_ns_table(bytes.len(), &header.ns_table().encode()),
                 )
@@ -90,10 +96,29 @@ impl PayloadProof {
     }
 }
 
+/// Check that `common` carries the VID parameters consensus derived from a stake table of
+/// `total_weight`.
+///
+/// The commitment binds the payload but not these parameters, so a provider could otherwise pick
+/// ones that make recomputing the commitment arbitrarily expensive, or that the scheme cannot
+/// encode with at all.
+pub(crate) fn check_vid_param(common: &VidCommon, total_weight: usize) -> Result<()> {
+    let matches = match common {
+        VidCommon::V0(common) => ADVZScheme::get_num_storage_nodes(common) as usize == total_weight,
+        VidCommon::V1(param) => *param == init_avidm_param(total_weight)?,
+        VidCommon::V2(common) => common.param == init_avidm_gf2_param(total_weight)?,
+    };
+    ensure!(
+        matches,
+        "VID common does not match the stake table, whose total weight is {total_weight}"
+    );
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use espresso_types::{NamespaceId, NodeState, Transaction};
-    use hotshot_types::traits::block_contents::BlockPayload;
+    use hotshot_types::{traits::block_contents::BlockPayload, vid::avidm::AvidMParam};
 
     use super::*;
     use crate::testing::TestClient;
@@ -115,9 +140,10 @@ mod tests {
         let header = client.leaf(1).await.header().clone();
         let payload = client.payload(1).await;
         let vid_common = client.vid_common(1).await;
+        let total_weight = client.vid_total_weight(1).await;
 
         let verified = PayloadProof::new(payload.clone(), vid_common.clone())
-            .verify(&header)
+            .verify(&header, total_weight)
             .unwrap();
         assert_eq!(verified.ns_table(), header.ns_table());
 
@@ -132,8 +158,30 @@ mod tests {
         let forged = Payload::from_bytes(payload.raw_payload(), other.ns_table());
 
         let err = PayloadProof::new(forged, vid_common)
-            .verify(&header)
+            .verify(&header, total_weight)
             .unwrap_err();
         assert!(err.to_string().contains("namespace table"), "{err:#}");
+    }
+
+    /// The commitment does not bind the VID parameters a provider sends along with a payload, so
+    /// they are checked against the stake table before they drive any computation.
+    #[tokio::test]
+    #[test_log::test]
+    async fn test_verify_rejects_forged_vid_param() {
+        let client = TestClient::default();
+        let header = client.leaf(1).await.header().clone();
+        let payload = client.payload(1).await;
+        let VidCommon::V1(param) = client.vid_common(1).await else {
+            panic!("the test client serves AvidM commons");
+        };
+        let forged = VidCommon::V1(AvidMParam {
+            total_weights: usize::MAX,
+            ..param
+        });
+
+        let err = PayloadProof::new(payload, forged)
+            .verify(&header, client.vid_total_weight(1).await)
+            .unwrap_err();
+        assert!(err.to_string().contains("stake table"), "{err:#}");
     }
 }

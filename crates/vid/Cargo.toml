@@ -41,6 +41,7 @@ tagged-base64 = { workspace = true }
 ark-bls12-381 = { workspace = true }
 criterion = { workspace = true }
 rand = { workspace = true }
+serde_json = { workspace = true }
 
 [[bench]]
 name = "avidm"
