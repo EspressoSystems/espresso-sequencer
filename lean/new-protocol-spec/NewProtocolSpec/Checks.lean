@@ -3,7 +3,7 @@ module
 import NewProtocolSpec.Proofs.Decide
 import NewProtocolSpec.Proofs.Liveness.Epochs
 import NewProtocolSpec.Witness
-import NewProtocolSpec.Restart
+import NewProtocolSpec.Proofs.Restart
 meta import Lean.Elab.Command
 
 /-!
@@ -66,6 +66,9 @@ info: 'NewProtocol.Liveness.chainGrows' depends on axioms: [propext, Classical.c
 
 /-- info: 'NewProtocol.Witness.per_epoch' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in #print axioms Witness.per_epoch
+
+/-- info: 'NewProtocol.safe_across_restart' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in #print axioms safe_across_restart
 
 /-- Fail when a structure's fields are not what is expected. -/
 meta def checkFields (parent : Name) (expected : List Name) : MetaM Unit := do

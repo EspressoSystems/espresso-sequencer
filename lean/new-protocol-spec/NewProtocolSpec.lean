@@ -12,6 +12,7 @@ public import NewProtocolSpec.Properties
 public import NewProtocolSpec.Restart
 public import NewProtocolSpec.Lists
 public import NewProtocolSpec.Proofs.Traces
+public import NewProtocolSpec.Proofs.Restart
 public import NewProtocolSpec.Proofs.Inputs
 public import NewProtocolSpec.Proofs.Votes
 public import NewProtocolSpec.Proofs.Certificates
@@ -52,7 +53,8 @@ or on recorded traces (the Rust node).
 * `Proofs/`: `noFork` (`Proofs/Safety.lean`) and `decideAgreement`
   (`Proofs/Decide.lean`), from the signing rules and the verification premises
   alone; `ChainGrows` for every epoch height (`Proofs/Liveness/Epochs.lean`), from
-  the full protocol, promptness and synchrony
+  the full protocol, promptness and synchrony; `safe_across_restart`
+  (`Proofs/Restart.lean`), the signing rules across a restart
 * `Witness`: a network meeting every safety premise, with a block committed and
   an epoch opened behind it
 * `Checks`: the axiom footprint and the field lists of the rules and premises
@@ -67,8 +69,11 @@ delivery assumptions of `Synchrony` hold.
 
 ## Not covered
 
-Restarts, a node's own storage, anything before GST beyond safety, and more than
-the tolerated number of faulty nodes in a committee. Nor is fetching what a node
-missed: a decide may skip ancestors the node does not hold, so no node is promised
-every committed block.
+A restart is covered as a splice of two histories around the steps the restart
+loads, given a stored summary (`Persisted`) faithful to the history before it.
+Not covered: the durability of that summary, fetching what a node missed, restarts
+at the version before the timeout epoch bound, anything before GST beyond safety,
+and more than the tolerated number of faulty nodes in a committee. A decide may
+skip ancestors the node does not hold, so no node is promised every committed
+block.
 -/

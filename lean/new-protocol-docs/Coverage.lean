@@ -55,7 +55,8 @@ def contractModules : List Name :=
 def mainResults : List Name :=
   [`NewProtocol.noFork, `NewProtocol.decideAgreement, `NewProtocol.decidesValid, `NewProtocol.Liveness.chainGrows,
    `NewProtocol.Witness.premises_met,
-   `NewProtocol.Witness.per_epoch]
+   `NewProtocol.Witness.per_epoch, `NewProtocol.safe_across_restart,
+   `NewProtocol.safe_trace_across_restart]
 
 /--
 Whether a declaration is one a reader meets as a definition.

@@ -16,7 +16,8 @@ crash, the steps that loading saved proposals amounts to
 (`Persisted.restoredSteps`), and the history after it are one history
 (`Trace.splice`). It obeys the signing rules when the history after the crash does
 under the restart's configuration (`Persisted.config`), judged behind the inputs of
-the history before it (`History.inputsOnly`).
+the history before it (`History.inputsOnly`): `safe_across_restart`, and per prefix
+of the spliced trace `safe_trace_across_restart` (`NewProtocolSpec.Proofs.Restart`).
 
 Not covered: the durability of the summary itself, a crash during a write, and
 restarts at the version before the timeout epoch bound.
