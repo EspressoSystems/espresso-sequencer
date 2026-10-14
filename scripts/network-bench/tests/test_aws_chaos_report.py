@@ -22,7 +22,7 @@ from fakes import (
 )
 from test_chaos import EVENTS, KINDS, T0, ev
 
-CONFIG = {
+CONFIG: dict[str, Any] = {
     "nodes": 22,
     "query_nodes": 4,
     "node_type": "c8g.xlarge",
