@@ -48,7 +48,8 @@ it.
 def contractModules : List Name :=
   [`NewProtocolSpec.Base, `NewProtocolSpec.Types, `NewProtocolSpec.Interface,
    `NewProtocolSpec.Validity, `NewProtocolSpec.History, `NewProtocolSpec.Rules,
-   `NewProtocolSpec.Network, `NewProtocolSpec.Timing, `NewProtocolSpec.Properties]
+   `NewProtocolSpec.Network, `NewProtocolSpec.Timing, `NewProtocolSpec.Properties,
+   `NewProtocolSpec.Restart]
 
 /-- The results the specification is for, and the witness that its premises can be met. -/
 def mainResults : List Name :=
@@ -84,7 +85,7 @@ def accessors : List Name :=
    `NewProtocol.Message.leaderEpoch, `NewProtocol.Proposal.payloadCommit,
    `NewProtocol.Vote1Data.toVote2, `NewProtocol.ViewNumber.genesis,
    `NewProtocol.Config.anchorCert2, `NewProtocol.Config.startEpoch,
-   `NewProtocol.Obligation.epoch]
+   `NewProtocol.Obligation.epoch, `NewProtocol.Persisted.anchorView]
 
 /-- Whether the document must reproduce `name` with `:::spec`. -/
 def needsSpec (env : Environment) (name : Name) : Bool :=

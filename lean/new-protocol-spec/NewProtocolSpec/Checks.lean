@@ -3,6 +3,7 @@ module
 import NewProtocolSpec.Proofs.Decide
 import NewProtocolSpec.Proofs.Liveness.Epochs
 import NewProtocolSpec.Witness
+import NewProtocolSpec.Restart
 meta import Lean.Elab.Command
 
 /-!
@@ -120,6 +121,16 @@ run_meta (checkFields `NewProtocol.Synchrony
    `timeoutCert, `timeoutOneHonest, `timeoutCertForward, `timeoutCatchUp, `timeoutLockSpread, `epochChange,
    `proposalValid, `validatedSound, `validated, `header, `timeUnbounded, `timerNotEarly,
    `timerFires])
+
+/-! What a restarted node stored, what it must be faithful to, and the bars it sets. -/
+run_meta (checkFields `NewProtocol.Persisted
+  [`anchorBlock, `anchorCert, `lock, `highestVoted, `reconstructed])
+
+run_meta (checkFields `NewProtocol.Summarises
+  [`anchorAfter, `anchorCertHeld, `anchorHeld, `anchorPayload, `anchorCert2Held, `reconstructedHeld,
+   `vote1Below, `vote2Below, `timeoutBelow, `vote2Locked, `decidedBelow])
+
+run_meta (checkFields `NewProtocol.RestartOK [`vote1After, `vote2After, `lockKept])
 
 end Checks
 end NewProtocol

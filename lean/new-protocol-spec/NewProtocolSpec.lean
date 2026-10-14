@@ -9,6 +9,7 @@ public import NewProtocolSpec.Rules
 public import NewProtocolSpec.Network
 public import NewProtocolSpec.Timing
 public import NewProtocolSpec.Properties
+public import NewProtocolSpec.Restart
 public import NewProtocolSpec.Lists
 public import NewProtocolSpec.Proofs.Traces
 public import NewProtocolSpec.Proofs.Inputs
@@ -45,6 +46,8 @@ or on recorded traces (the Rust node).
   for real votes
 * `Timing`: times, promptness, and synchrony after GST
 * `Properties`: no fork, agreement on decides, and a chain that keeps growing
+* `Restart`: what a restarted node stored, when that is faithful to its history,
+  and the bars it sets on resuming
 * `Lists`: a history as finite lists, each proved to hold what a predicate names
 * `Proofs/`: `noFork` (`Proofs/Safety.lean`) and `decideAgreement`
   (`Proofs/Decide.lean`), from the signing rules and the verification premises
