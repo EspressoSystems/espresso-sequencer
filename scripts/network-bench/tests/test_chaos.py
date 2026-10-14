@@ -1,5 +1,6 @@
 import gzip
 import json
+import random
 import shlex
 import subprocess
 from datetime import UTC, datetime
@@ -26,8 +27,10 @@ def queries_of(topo) -> frozenset[str]:
     return frozenset(netbench.query_nodes(topo))
 
 
-def init(cfg=CFG, topo=None, load_s: float = 6000.0) -> Any:
-    return ch.chaos_init(cfg, list((topo or topo_of())["nodes"]), 0.0, 60.0, load_s)
+def init(cfg=CFG, topo=None, load_s: float = 6000.0, stake=None) -> Any:
+    nodes = (topo or topo_of())["nodes"]
+    stake = stake or dict.fromkeys(nodes, 1)
+    return ch.chaos_init(cfg, list(nodes), stake, 0.0, 60.0, load_s)
 
 
 def observe(
@@ -64,11 +67,20 @@ def step(state, obs, now, cfg=CFG, topo=None, peers=None) -> Any:
     return ch.chaos_step(state, cfg, queries_of(topo), peers or peers_of(), obs, now)
 
 
-def run(cfg=CFG, n=10, k=3, seconds=2000.0, tick=5.0, recover=True, load_s=6000.0):
+def run(
+    cfg=CFG,
+    n=10,
+    k=3,
+    seconds=2000.0,
+    tick=5.0,
+    recover=True,
+    load_s=6000.0,
+    stake=None,
+):
     """Ticks the controller; observations follow the state: a not up node shows the tip when
     `recover`, else answers nothing."""
     topo, peers = topo_of(n, k), peers_of(n, k)
-    state = init(cfg, topo, load_s)
+    state = init(cfg, topo, load_s, stake)
     now, steps = 0.0, []
     while now < seconds:
         now += tick
@@ -88,26 +100,39 @@ def faults(steps) -> list[dict]:
 
 
 # REQ:awsbench-chaos-budget
-# TEST:fault-budget-table-ok
-def test_fault_budget_table():
-    for n in range(4, 26):
-        assert ch.fault_budget(n) == max(0, (n - 1) // 3 - 1)
-    assert ch.fault_budget(22) == 6
-    assert ch.fault_budget(awsb.CHAOS_MIN_NODES) == 1
+def test_halts_is_the_exact_third_of_the_stake():
+    stake = dict.fromkeys("abcdefghij", 1)
+    assert not ch.halts(stake, list("abc"))
+    assert ch.halts(stake, list("abcd"))
+    assert ch.halts({"a": 1, "b": 2}, ["b"])
+    assert not ch.halts({"a": 1, "b": 3, "c": 3}, ["a"])
 
 
 # REQ:awsbench-chaos-invariants
-# TEST:budget-never-exceeded-ok
-@pytest.mark.parametrize("n", range(7, 23))
+# REQ:sched-stake-budget
+# TEST:sched-stake-budget-ok
+@pytest.mark.parametrize("n", range(7, 33))
 def test_budget_never_exceeded(n):
     k = min(3, n - 4)
     for seed in range(3):
+        rng = random.Random(seed)
+        stake = {f"node{i}": rng.randint(1, 20) for i in range(n)}
         cfg = ch.ChaosConfig(seed=seed, recover_timeout_s=1e9)
-        for result in run(cfg, n, k, seconds=1500, recover=False):
+        for result in run(cfg, n, k, seconds=1500, recover=False, stake=stake):
             faulty = [
-                s for s in result["state"]["nodes"].values() if s["health"] != "up"
+                m for m, s in result["state"]["nodes"].items() if s["health"] != "up"
             ]
-            assert len(faulty) <= ch.fault_budget(n)
+            assert not ch.halts(stake, faulty)
+
+
+# REQ:sched-stake-budget
+# TEST:sched-heavy-node-ok
+def test_a_node_holding_a_third_of_the_stake_is_never_a_target():
+    n = 10
+    topo = topo_of(n, 3)
+    stake = {**dict.fromkeys(topo["nodes"], 1), "node0": 5}
+    for result in run(CFG, n, 3, seconds=1500, stake=stake):
+        assert "node0" not in [e["node"] for e in faults([result])]
 
 
 # TEST:query-floor-kept-ok
@@ -188,17 +213,16 @@ def test_fault_keeps_two_up_peers_for_every_faulty_node():
 
 def test_up_node_without_answer_or_behind_the_tip_counts_as_faulty():
     topo = topo_of()
-    assert ch.fault_budget(10) == 2
     state = init(topo=topo)
     state["order"] = ["node3", "node4"]
     state["next_fault_at"] = 0.0
     silent = step(state, observe(topo, node3=None), 100.0)
     assert [e["node"] for e in faults([silent])] == ["node4"]
     lagging = (100 - ch.LAG_BLOCKS - 1, 100, 0, (0, 0, 0))
-    full = step(state, observe(topo, node3=None, node5=lagging), 100.0)
+    full = step(state, observe(topo, node3=None, node5=lagging, node7=lagging), 100.0)
     assert faults([full]) == []
     near = (100 - ch.LAG_BLOCKS, 100, 0, (0, 0, 0))
-    room = step(state, observe(topo, node3=None, node5=near), 100.0)
+    room = step(state, observe(topo, node3=None, node5=near, node7=lagging), 100.0)
     assert [e["node"] for e in faults([room])] == ["node4"]
 
 
@@ -436,8 +460,7 @@ def test_recover_timeout_marks_the_node_stuck_once():
 def test_stuck_node_keeps_its_budget_slot_and_is_never_targeted():
     n = 7
     topo, peers = topo_of(n, 3), peers_of(n, 3)
-    assert ch.fault_budget(n) == 1
-    state = with_health(init(topo=topo), node5="stuck")
+    state = with_health(init(topo=topo), node5="stuck", node6="stuck")
     state["next_fault_at"] = 0.0
     state["order"] = ["node5", "node4"]
     result = step(state, observe(topo), 100.0, topo=topo, peers=peers)
@@ -640,7 +663,7 @@ def test_deferred_fault_issued_later():
     state["next_fault_at"] = 60.0
     first = step(state, observe(topo), 60.0, topo=topo, peers=peers)
     (fault,) = faults([first])
-    full = first["state"]
+    full = with_health(first["state"], node6="stuck")
     assert full["next_fault_at"] == 60.0 + CFG.gap_s
     blocked = step(full, observe(topo), 200.0, topo=topo, peers=peers)
     assert faults([blocked]) == []

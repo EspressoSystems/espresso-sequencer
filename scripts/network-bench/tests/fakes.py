@@ -970,6 +970,21 @@ class ClusterRunner(FakeRunner):
                 return completed(stdout=self.probe())
             if target == "ctl" and "date +%s.%N" in command:
                 return completed(stdout=f"{self.cluster.clock.time()}\n")
+            if target == "ctl" and "/v1/config/hotshot" in command:
+                return completed(
+                    stdout="".join(f"{n} key-{n}\n" for n in self.cluster.members)
+                )
+            if target == "ctl" and "stake-table/current" in command:
+                entries = [
+                    {
+                        "stake_table_entry": {
+                            "stake_key": f"key-{n}",
+                            "stake_amount": "0x1",
+                        }
+                    }
+                    for n in self.cluster.members
+                ]
+                return completed(stdout=json.dumps({"stake_table": entries}))
             if target != "ctl" and any(key in command for key in NODE_COMMANDS):
                 return self.cluster.docker(target, command)
         return super().default(argv)

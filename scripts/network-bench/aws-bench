@@ -1633,11 +1633,7 @@ def format_node_summary(cfg: RunConfig) -> list[str]:
             f"leader-trace {'on' if cfg.leader_trace else 'off'}"
         ),
         f"node-env: {' '.join(cfg.node_env) or 'none'}",
-        *(
-            [format_chaos_summary(cfg.chaos, cfg.nodes, cfg.latency)]
-            if cfg.chaos
-            else []
-        ),
+        *([format_chaos_summary(cfg.chaos, cfg.latency)] if cfg.chaos else []),
         *(
             [f"prune: data and state older than {cfg.prune}s, every {PRUNE_INTERVAL}"]
             if cfg.prune
@@ -1646,11 +1642,11 @@ def format_node_summary(cfg: RunConfig) -> list[str]:
     ]
 
 
-def format_chaos_summary(chaos: ch.ChaosConfig, nodes: int, latency: str) -> str:
+def format_chaos_summary(chaos: ch.ChaosConfig, latency: str) -> str:
     return (
         f"chaos: {chaos.minutes} min at {chaos.rate_mb_s:g} MB/s; latency {latency}; "
         f"kinds {','.join(chaos.kinds) or 'none'}; seed {chaos.seed}; "
-        f"at most {ch.fault_budget(nodes)} faulty; gap {chaos.gap_s:g} s; "
+        f"budget < 1/3 stake; gap {chaos.gap_s:g} s; "
         f"kill down {chaos.kill_down_s:g} s; recover timeout {chaos.recover_timeout_s:g} s; "
         f"query floor {chaos.query_floor}"
     )
@@ -6207,6 +6203,41 @@ DOCKER_NODE_COMMANDS = {
 }
 
 
+def node_stakes(remote: Remote, topo: nb.Topology) -> dict[str, int]:
+    """Stake amount of each node, read from ctl: a node's own key from its hotshot config, the
+    amount of each key from the stake table of the first query node. Raises on a node
+    without a key or a key not in the table."""
+    keys_jq = ".config.known_nodes_with_stake[.node_index].stake_table_entry.stake_key"
+    lines = [
+        f'(echo "{name} $(curl -sf -m 5 {shlex.quote(url)}/v1/config/hotshot | '
+        f'jq -r {shlex.quote(keys_jq)})") &'
+        for name, url in topo["nodes"].items()
+    ]
+    keys = remote.ssh("ctl", "\n".join([*lines, "wait"])).stdout
+    query = shlex.quote(topo["nodes"][nb.query_nodes(topo)[0]])
+    table = remote.ssh(
+        "ctl", f"curl -sf -m 5 {query}/v1/node/stake-table/current"
+    ).stdout
+    return parse_stakes(keys, table, topo["nodes"])
+
+
+def parse_stakes(keys: str, table: str, nodes: Iterable[str]) -> dict[str, int]:
+    """`keys` has a `<node> <stake key>` line per node, `table` is the stake table JSON."""
+    key_of = {}
+    for line in keys.splitlines():
+        name, *rest = line.split()
+        if len(rest) != 1:
+            raise ValueError(f"no stake key for {name}: {line!r}")
+        key_of[name] = rest[0]
+    amount_of = {
+        entry["stake_table_entry"]["stake_key"]: int(
+            entry["stake_table_entry"]["stake_amount"], 0
+        )
+        for entry in json.loads(table)["stake_table"]
+    }
+    return {name: amount_of[key_of[name]] for name in nodes}
+
+
 class ChaosRunner:
     """Drives `chaos_step` from the laptop, which has ssh to every host: the probe runs on ctl,
     the faults on the nodes. Called from the single `poll_agent` thread, so a fault never races
@@ -6241,8 +6272,14 @@ class ChaosRunner:
         ts = self.clock.time() + self.offset
         if self.state is None:
             load_s = len(self.load.steps) * self.load.step_s
+            stake = node_stakes(self.remote, self.topo)
             self.state = ch.chaos_init(
-                self.chaos, list(self.topo["nodes"]), ts, self.load.warmup_s, load_s
+                self.chaos,
+                list(self.topo["nodes"]),
+                stake,
+                ts,
+                self.load.warmup_s,
+                load_s,
             )
         self._advance(ts)
 
@@ -7652,7 +7689,7 @@ def chaos_totals(
     lines = [
         (
             f"- Faults: {len(rows)}{f' ({per_kind})' if per_kind else ''}; max concurrent faulty "
-            f"{ch.max_concurrent_faulty(rows, end)} of budget {ch.fault_budget(config['nodes'])}"
+            f"{ch.max_concurrent_faulty(rows, end)}; budget < 1/3 stake"
         ),
         f"- Timeouts: {timeouts}",
     ]

@@ -174,6 +174,8 @@ class ChaosState(TypedDict):
     mass_height: int | None
     # Nodes whose mass restart ssh failed -> time of that restart, issued again by the next tick.
     mass_retry: dict[str, float]
+    # Node -> stake amount; faulty stake is bounded by a third of the total.
+    stake: dict[str, int]
 
 
 class ChaosObservation(TypedDict):
@@ -196,9 +198,9 @@ class ChaosStep(TypedDict):
     events: list[ChaosEvent]
 
 
-def fault_budget(n: int) -> int:
-    """Most nodes faulty at once with faulty stake strictly below f = (n-1)//3."""
-    return max(0, (n - 1) // 3 - 1)
+def halts(stake: Mapping[str, int], faulty: Collection[str]) -> bool:
+    """Whether the `faulty` nodes hold a third of the total stake or more, which stops consensus."""
+    return 3 * sum(stake[name] for name in faulty) >= sum(stake.values())
 
 
 def mass_restart_only(cfg: ChaosConfig) -> bool:
@@ -208,6 +210,7 @@ def mass_restart_only(cfg: ChaosConfig) -> bool:
 def chaos_init(
     cfg: ChaosConfig,
     nodes: Sequence[str],
+    stake: Mapping[str, int],
     t_load: float,
     warmup_s: float,
     load_s: float,
@@ -238,6 +241,7 @@ def chaos_init(
         stop_at=stop_at,
         mass_height=None,
         mass_retry={},
+        stake=dict(stake),
     )
 
 
@@ -405,6 +409,7 @@ def chaos_step(
                 _lagging(nodes, obs, tip),
                 queries,
                 peers,
+                state["stake"],
                 cfg.query_floor,
             )
         )
@@ -438,6 +443,7 @@ def chaos_step(
             stop_at=state["stop_at"],
             mass_height=mass_height,
             mass_retry={},
+            stake=state["stake"],
         ),
         actions=actions,
         events=events,
@@ -476,6 +482,7 @@ def revert_failed(
             stop_at=state["stop_at"],
             mass_height=state["mass_height"],
             mass_retry={name: at for name, at in mass_at.items() if name in failed},
+            stake=state["stake"],
         ),
         actions=[a for a in step["actions"] if a["node"] not in failed],
         events=[e for e in step["events"] if e["node"] not in failed],
@@ -588,14 +595,15 @@ def _fault_target(
     lagging: Collection[str],
     queries: Collection[str],
     peers: dict[str, list[str]],
+    stake: Mapping[str, int],
     query_floor: int,
 ) -> int | None:
-    """Index in `order` of the first node from `cursor` on whose fault keeps the budget, the up
-    query floor and 2 up peers for itself and for every faulty node; `None` when there is
-    none. A `lagging` node counts as faulty everywhere and is never a target."""
+    """Index in `order` of the first node from `cursor` on whose fault keeps the faulty stake
+    below a third, the up query floor and 2 up peers for itself and for every faulty node;
+    `None` when there is none. A `lagging` node counts as faulty everywhere and is never a
+    target."""
     up = {name for name, s in nodes.items() if s["health"] == "up"} - set(lagging)
-    if len(nodes) - len(up) + 1 > fault_budget(len(nodes)):
-        return None
+    down = nodes.keys() - up
     up_queries = sum(q in up for q in queries)
 
     def up_peers(name: str, without: str) -> int:
@@ -605,6 +613,8 @@ def _fault_target(
         i = (cursor + step) % len(order)
         name = order[i]
         if name not in up:
+            continue
+        if halts(stake, [*down, name]):
             continue
         if up_queries - (name in queries) < query_floor:
             continue

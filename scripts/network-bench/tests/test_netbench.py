@@ -232,7 +232,7 @@ def edited(edits: dict[str, Any]) -> netbench.BenchResult:
 
 CALIBRATION = "calibration.before.sha256_1t_mb_s"
 INVALID = {"valid": False, "noisy": False, "reasons": ["x"]}
-STALLED = {"stake_table": ["0x1", "0x2", "0x1"], "nodes.node2.decided_blocks": 0}
+STALLED = {"stake_table": ["0x1", "0x1"], "nodes.node2.decided_blocks": 0}
 TRACKER_LAG = {"load.tracker_lag_ms": quantiles(300.0, 1500.0)}
 
 

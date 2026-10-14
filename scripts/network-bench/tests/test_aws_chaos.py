@@ -455,17 +455,78 @@ def make_controller(
     )
 
 
+def equal(ctrl: Any) -> dict[str, int]:
+    return dict.fromkeys(ctrl.topo["nodes"], 1)
+
+
 def scripted_controller(isolated: Path) -> tuple[Any, Any]:
     runner = Scripted({"date +%s.%N": [completed("1000.5")]})
     clock = FakeClock(start=1000.0)
     return make_controller(isolated, runner, fleet(7, 3), clock), runner
 
 
+def stake_runner(keys: dict[str, str], amounts: dict[str, str]) -> Any:
+    names = [f"node{i}" for i in range(7)]
+    table = {
+        "stake_table": [
+            {"stake_table_entry": {"stake_key": key, "stake_amount": amount}}
+            for key, amount in amounts.items()
+        ]
+    }
+    return Scripted(
+        {
+            "date +%s.%N": [completed("1000.5")],
+            "/v1/config/hotshot": [
+                completed("\n".join(f"{n} {keys[n]}" for n in names if n in keys))
+            ],
+            "stake-table/current": [completed(json.dumps(table))],
+        }
+    )
+
+
+# REQ:stake-node-mapping
+# TEST:stake-node-mapping-ok
+def test_node_stakes_maps_each_node_to_the_amount_of_its_key(isolated: Path):
+    keys = {f"node{i}": f"key{i}" for i in range(7)}
+    amounts = {f"key{i}": hex(i + 1) for i in range(7)}
+    ctrl = make_controller(
+        isolated, stake_runner(keys, amounts), fleet(7, 3), FakeClock(start=0.0)
+    )
+    stake = awsb.node_stakes(ctrl.remote, ctrl.topo)
+    assert stake == {f"node{i}": i + 1 for i in range(7)}
+    command = ctrl.remote.run.calls[1][-1]
+    assert command.count("/v1/config/hotshot") == 7
+    assert ".known_nodes_with_stake[.node_index].stake_table_entry.stake_key" in command
+
+
+# TEST:stake-missing-key-fails
+def test_node_stakes_fails_on_a_key_missing_from_the_table(isolated: Path):
+    keys = {f"node{i}": f"key{i}" for i in range(7)}
+    amounts = {f"key{i}": "0x1" for i in range(6)}
+    ctrl = make_controller(
+        isolated, stake_runner(keys, amounts), fleet(7, 3), FakeClock(start=0.0)
+    )
+    with pytest.raises(KeyError, match="key6"):
+        awsb.node_stakes(ctrl.remote, ctrl.topo)
+
+
+def test_node_stakes_fails_on_a_node_without_a_config(isolated: Path):
+    keys = {f"node{i}": f"key{i}" for i in range(6)}
+    amounts = {f"key{i}": "0x1" for i in range(7)}
+    ctrl = make_controller(
+        isolated, stake_runner(keys, amounts), fleet(7, 3), FakeClock(start=0.0)
+    )
+    with pytest.raises(KeyError, match="node6"):
+        awsb.node_stakes(ctrl.remote, ctrl.topo)
+
+
 # REQ:awsbench-chaos-restore
 # TEST:restore-starts-down-ok
 def test_restore_starts_down_nodes(isolated: Path):
     ctrl, runner = scripted_controller(isolated)
-    state = ch.chaos_init(ch.ChaosConfig(), list(ctrl.topo["nodes"]), 0.0, 60.0, 600.0)
+    state = ch.chaos_init(
+        ch.ChaosConfig(), list(ctrl.topo["nodes"]), equal(ctrl), 0.0, 60.0, 600.0
+    )
     ctrl.state = with_health(state, node4="down", node5="down", node6="recovering")
     ctrl.restore()
     starts = [c[-1] for c in runner.calls if "docker start" in c[-1]]
@@ -482,7 +543,9 @@ def test_restore_starts_down_nodes(isolated: Path):
 
 def test_restore_leaves_stuck_nodes_alone(isolated: Path):
     ctrl, runner = scripted_controller(isolated)
-    state = ch.chaos_init(ch.ChaosConfig(), list(ctrl.topo["nodes"]), 0.0, 60.0, 600.0)
+    state = ch.chaos_init(
+        ch.ChaosConfig(), list(ctrl.topo["nodes"]), equal(ctrl), 0.0, 60.0, 600.0
+    )
     ctrl.state = with_health(state, node4="stuck")
     ctrl.restore()
     assert not [c for c in runner.calls if "docker start" in c[-1]]
@@ -491,7 +554,9 @@ def test_restore_leaves_stuck_nodes_alone(isolated: Path):
 
 def test_expected_down_is_the_killed_stuck_and_unrestarted_nodes(isolated: Path):
     ctrl, _ = scripted_controller(isolated)
-    state = ch.chaos_init(ch.ChaosConfig(), list(ctrl.topo["nodes"]), 0.0, 60.0, 600.0)
+    state = ch.chaos_init(
+        ch.ChaosConfig(), list(ctrl.topo["nodes"]), equal(ctrl), 0.0, 60.0, 600.0
+    )
     state = with_health(state, node1="recovering", node2="down", node3="stuck")
     state = with_health(state, node4="catching_up")
     ctrl.state = {**state, "mass_retry": {"node5": 1.0}}
@@ -537,7 +602,7 @@ def cluster_controller(
     cfg = dataclasses.replace(chaos_cfg(), chaos=ch.ChaosConfig(**chaos))
     ctrl = make_controller(isolated, runner, runner.hosts, clock, cfg)
     ctrl.state = ch.chaos_init(
-        cfg.chaos, list(ctrl.topo["nodes"]), clock.time(), 60.0, 0.0
+        cfg.chaos, list(ctrl.topo["nodes"]), equal(ctrl), clock.time(), 60.0, 0.0
     )
     cluster.kill("node4")
     ctrl.state = with_health(ctrl.state, node4="down")
@@ -581,7 +646,7 @@ def test_failed_fault_is_retried_on_the_next_tick(isolated: Path):
     ctrl, cluster, clock = cluster_controller(isolated, restarts=1, kinds=("restart",))
     cluster.start("node4")
     ctrl.state = ch.chaos_init(
-        ctrl.chaos, list(ctrl.topo["nodes"]), clock.time(), 0.0, 3600.0
+        ctrl.chaos, list(ctrl.topo["nodes"]), equal(ctrl), clock.time(), 0.0, 3600.0
     )
     ctrl.tick(LOADING)
     assert ctrl.remote.run.restarts == 0
@@ -598,7 +663,7 @@ def test_a_partly_failed_mass_restart_records_started_and_retries(isolated: Path
     )
     cluster.start("node4")
     ctrl.state = ch.chaos_init(
-        ctrl.chaos, list(ctrl.topo["nodes"]), clock.time(), 0.0, 3600.0
+        ctrl.chaos, list(ctrl.topo["nodes"]), equal(ctrl), clock.time(), 0.0, 3600.0
     )
     ctrl.state["next_fault_at"] = 0.0
     ctrl.tick(LOADING)
@@ -738,7 +803,12 @@ def seed_faulting_a_query_node() -> int:
     queries = set(awsb.nb.query_nodes(topo))
     for seed in range(100):
         order = ch.chaos_init(
-            ch.ChaosConfig(seed=seed), list(topo["nodes"]), 0.0, 0.0, 0.0
+            ch.ChaosConfig(seed=seed),
+            list(topo["nodes"]),
+            dict.fromkeys(topo["nodes"], 1),
+            0.0,
+            0.0,
+            0.0,
         )["order"]
         if order[0] in queries:
             return seed
@@ -778,7 +848,10 @@ def test_stuck_node_lets_the_load_finish_and_fails_the_run(run_harness: RunHarne
     )
     assert awsb.cmd_run(args, FakeSystem(run=runner, clock=clock)) == awsb.EXIT_FAILED
     events = ch.read_events(run_harness.run_dir)
-    assert [e["event"] for e in events] == ["fault", "started", "timeout"]
+    # 2 of 7 equal stakes stay below a third: a second node is killed before the first times out.
+    assert [e["event"] for e in events] == ["fault"] * 2 + ["started"] * 2 + [
+        "timeout"
+    ] * 2
     # Written from the agent's final state: the load ran to its end.
     assert (run_harness.run_dir / "run.json").exists()
     assert "not recovered within 300 s" in run_harness.log()

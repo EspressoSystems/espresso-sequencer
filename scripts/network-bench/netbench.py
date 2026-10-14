@@ -2732,8 +2732,8 @@ def check_validity(
     if load["included"] <= 0:
         invalid.append("no transactions included")
     stakes = result["stake_table"]
-    if len(stakes) != n_nodes or len(set(stakes)) != 1:
-        invalid.append(f"stake table is not {n_nodes} equal entries: {stakes}")
+    if len(stakes) != n_nodes:
+        invalid.append(f"stake table is not {n_nodes} entries: {stakes}")
     if result["host"]["steal_pct"] > STEAL_NOISY_PCT:
         noisy.append(
             f"steal {result['host']['steal_pct']:.1f}% > {STEAL_NOISY_PCT:.0f}%"

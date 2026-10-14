@@ -86,7 +86,7 @@ def test_decided_with_and_without_a_fault_comes_from_the_counters(tmp_path: Path
 def test_totals_of_a_run_without_fault_kinds_name_no_kinds():
     config = {**CONFIG, "chaos": {**CONFIG["chaos"], "kinds": []}}
     lines = awsb.chaos_totals([], [], T0 + 240, config, None, Counter())
-    assert lines[0] == "- Faults: 0; max concurrent faulty 0 of budget 6"
+    assert lines[0] == "- Faults: 0; max concurrent faulty 0; budget < 1/3 stake"
 
 
 def test_totals_count_faults_budget_timeouts_and_txs():
@@ -95,7 +95,7 @@ def test_totals_count_faults_budget_timeouts_and_txs():
     rows = ch.fault_rows(EVENTS)
     lines = awsb.chaos_totals(rows, EVENTS, T0 + 240, CONFIG, meta, txs)
     assert lines == [
-        "- Faults: 2 (restart 1, kill 1, wipe 0); max concurrent faulty 1 of budget 6",
+        "- Faults: 2 (restart 1, kill 1, wipe 0); max concurrent faulty 1; budget < 1/3 stake",
         "- Timeouts: 0; lost payloads 2 (641, 1553); submit failovers 19",
         "- Txs: 11 submitted, 8 included, 2 timed out, 1 pending",
     ]
