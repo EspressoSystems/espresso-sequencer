@@ -2973,26 +2973,24 @@ mod api_tests {
     use committable::Committable;
     use data_source::testing::TestableSequencerDataSource;
     use espresso_types::{
-        Header, Leaf2, MOCK_SEQUENCER_VERSIONS, NamespaceId, NamespaceProofQueryData, TEST_UPGRADE,
-        ValidatedState,
+        Header, Leaf2, NamespaceId, NamespaceProofQueryData, TEST_UPGRADE, ValidatedState,
         traits::{EventConsumer, PersistenceOptions},
     };
     use futures::{future, stream::StreamExt};
-    use hotshot_example_types::node_types::TEST_VERSIONS;
     use hotshot_query_service::availability::{
         AvailabilityDataSource, BlockQueryData, VidCommonQueryData,
     };
     use hotshot_types::{
         data::{
             DaProposal2, EpochNumber, QuorumProposal2, QuorumProposalWrapper, VidCommitment,
-            VidDisperseShare, ns_table::parse_ns_table, vid_disperse::AvidMDisperseShare,
+            VidDisperseShare, ns_table::parse_ns_table, vid_disperse::AvidmGf2DisperseShare,
         },
         event::LeafInfo,
         message::Proposal,
         simple_certificate::{CertificatePair, QuorumCertificate2},
         traits::{EncodeBytes, signature_key::SignatureKey},
         utils::EpochTransitionIndicator,
-        vid::avidm::{AvidMScheme, init_avidm_param},
+        vid::avidm_gf2::{AvidmGf2Scheme, init_avidm_gf2_param},
     };
     use http_client::{Client, error::ClientErr};
     use test_helpers::{
@@ -3001,11 +2999,12 @@ mod api_tests {
     };
     use test_utils::reserve_tcp_port;
     use vbs::version::StaticVersion;
+    use versions::NEW_PROTOCOL_VERSION;
 
     use super::{update::ApiEventConsumer, *};
     use crate::{
         network,
-        persistence::no_storage::NoStorage,
+        persistence::{no_storage::NoStorage, sql::DECIDE_GAP_FILL_HORIZON},
         testing::{TestConfigBuilder, wait_for_decide_on_handle},
     };
 
@@ -3231,21 +3230,18 @@ mod api_tests {
         // Create two non-consecutive leaf chains.
         let mut chain1 = vec![];
 
-        let genesis = Leaf2::genesis(
-            &Default::default(),
-            &NodeState::mock(),
-            TEST_VERSIONS.test.base,
-        )
-        .await;
+        let node_state = NodeState::mock().with_genesis_version(NEW_PROTOCOL_VERSION);
+        let genesis = Leaf2::genesis(&Default::default(), &node_state, TEST_UPGRADE.base).await;
         let payload = genesis.block_payload().unwrap();
         let payload_bytes_arc = payload.encode();
 
-        let avidm_param = init_avidm_param(2).unwrap();
+        let avidm_param = init_avidm_gf2_param(2).unwrap();
         let weights = vec![1u32; 2];
 
         let ns_table = parse_ns_table(payload.byte_len().as_usize(), &payload.ns_table().encode());
-        let (payload_commitment, shares) =
-            AvidMScheme::ns_disperse(&avidm_param, &weights, &payload_bytes_arc, ns_table).unwrap();
+        let (payload_commitment, common, shares) =
+            AvidmGf2Scheme::ns_disperse(&avidm_param, &weights, &payload_bytes_arc, ns_table)
+                .unwrap();
 
         let mut quorum_proposal = QuorumProposalWrapper::<SeqTypes> {
             proposal: QuorumProposal2::<SeqTypes> {
@@ -3253,8 +3249,8 @@ mod api_tests {
                 view_number: ViewNumber::genesis(),
                 justify_qc: QuorumCertificate2::genesis(
                     &ValidatedState::default(),
-                    &NodeState::mock(),
-                    MOCK_SEQUENCER_VERSIONS,
+                    &node_state,
+                    TEST_UPGRADE,
                 )
                 .await,
                 upgrade_certificate: None,
@@ -3265,15 +3261,15 @@ mod api_tests {
                 state_cert: None,
             },
         };
-        let mut qc = QuorumCertificate2::genesis(
-            &ValidatedState::default(),
-            &NodeState::mock(),
-            MOCK_SEQUENCER_VERSIONS,
-        )
-        .await;
+        let mut qc =
+            QuorumCertificate2::genesis(&ValidatedState::default(), &node_state, TEST_UPGRADE)
+                .await;
 
+        // Long enough that the gap at view 2 falls outside `DECIDE_GAP_FILL_HORIZON` of the newest
+        // decide, so the leaves after it are delivered rather than held for a gap-fill decide.
+        let chain_len = 3 + DECIDE_GAP_FILL_HORIZON;
         let mut justify_qc = qc.clone();
-        for i in 0..5 {
+        for i in 0..chain_len {
             *quorum_proposal.proposal.block_header.height_mut() = i;
             quorum_proposal.proposal.view_number = ViewNumber::new(i);
             quorum_proposal.proposal.justify_qc = justify_qc;
@@ -3297,14 +3293,14 @@ mod api_tests {
                 .unwrap();
 
             // Include VID information for each leaf.
-            let share: VidDisperseShare<SeqTypes> = AvidMDisperseShare {
+            let share: VidDisperseShare<SeqTypes> = AvidmGf2DisperseShare {
                 view_number: leaf.view_number(),
                 payload_commitment,
                 share: shares[0].clone(),
                 recipient_key: pubkey,
                 epoch: Some(EpochNumber::new(0)),
                 target_epoch: Some(EpochNumber::new(0)),
-                common: avidm_param.clone(),
+                common: common.clone(),
             }
             .into();
 
@@ -3329,7 +3325,7 @@ mod api_tests {
                 _pd: Default::default(),
             };
             persistence
-                .append_da2(&da_proposal, VidCommitment::V1(payload_commitment))
+                .append_da2(&da_proposal, VidCommitment::V2(payload_commitment))
                 .await
                 .unwrap();
         }
@@ -3364,7 +3360,7 @@ mod api_tests {
         tracing::info!("decide successfully");
         persistence
             .append_decided_leaves(
-                ViewNumber::new(4),
+                ViewNumber::new(chain_len - 1),
                 leaf_chain.iter().map(|(leaf, qc)| (leaf, qc.clone())),
                 None,
                 &consumer,
@@ -3457,18 +3453,11 @@ mod api_tests {
             ));
         let consumer = ApiEventConsumer::from(data_source.clone());
 
-        let mut qc = QuorumCertificate2::genesis(
-            &ValidatedState::default(),
-            &NodeState::mock(),
-            MOCK_SEQUENCER_VERSIONS,
-        )
-        .await;
-        let leaf = Leaf2::genesis(
-            &ValidatedState::default(),
-            &NodeState::mock(),
-            TEST_VERSIONS.test.base,
-        )
-        .await;
+        let node_state = NodeState::mock().with_genesis_version(NEW_PROTOCOL_VERSION);
+        let mut qc =
+            QuorumCertificate2::genesis(&ValidatedState::default(), &node_state, TEST_UPGRADE)
+                .await;
+        let leaf = Leaf2::genesis(&ValidatedState::default(), &node_state, TEST_UPGRADE.base).await;
 
         // Append the genesis leaf. We don't use this for the test, because the update function will
         // automatically fill in the missing data for genesis. We just append this to get into a
@@ -3492,7 +3481,7 @@ mod api_tests {
         // with this header, and the payload will not actually be missing.
         let mut block_header = leaf.block_header().clone();
         *block_header.height_mut() += 1;
-        *block_header.payload_commitment_mut() = VidCommitment::V1(
+        *block_header.payload_commitment_mut() = VidCommitment::V2(
             CanonicalDeserialize::deserialize_uncompressed_unchecked([1u8; 32].as_slice()).unwrap(),
         );
         let qp = QuorumProposalWrapper {
@@ -5083,7 +5072,12 @@ mod test {
                         .expect("leader config")
                         .account;
                     let leader = validators.get(&account).context("leader not found")?;
-                    pay_block_reward(&mut expected, leader, block_reward, header)?;
+                    pay_block_reward(
+                        &mut expected,
+                        leader,
+                        block_reward,
+                        RewardAmount(total_distributed),
+                    )?;
                     total_distributed += block_reward.0;
                     paid_commissions
                         .entry(account)
@@ -5106,21 +5100,18 @@ mod test {
     }
 
     /// Adds what one block pays `leader`'s commission and delegators to `balances`.
+    /// `distributed_before` is the chain's total before this block, as the parent header has it.
     fn pay_block_reward(
         balances: &mut HashMap<Address, U256>,
         leader: &AuthenticatedValidator<PubKey>,
         block_reward: RewardAmount,
-        header: &Header,
+        distributed_before: RewardAmount,
     ) -> anyhow::Result<()> {
         let delegated: U256 = leader.delegators.values().cloned().sum();
         ensure!(delegated == leader.stake, "delegations add up to the stake");
 
-        let rewards = RewardDistributor::new(
-            leader.clone(),
-            block_reward,
-            header.total_reward_distributed().unwrap(),
-        )
-        .compute_rewards()?;
+        let rewards = RewardDistributor::new(leader.clone(), block_reward, distributed_before)
+            .compute_rewards()?;
         let commission =
             U256::from(leader.commission) * block_reward.0 / U256::from(COMMISSION_BASIS_POINTS);
         // The leader also gets what flooring each delegator's share left over.
@@ -9166,7 +9157,19 @@ mod test {
                 v2_header.timestamp,
                 v1_header["timestamp"].as_u64().unwrap()
             );
+            assert_eq!(
+                v2_header.timestamp_millis,
+                v1_header["timestamp_millis"].as_u64().unwrap()
+            );
             assert_eq!(v2_header.l1_head, v1_header["l1_head"].as_u64().unwrap());
+            assert_eq!(
+                v2_header.reward_merkle_tree_root,
+                v1_header["reward_merkle_tree_root"].as_str().unwrap()
+            );
+            assert_eq!(
+                v2_header.total_reward_distributed,
+                v1_header["total_reward_distributed"].as_str().unwrap()
+            );
             let v2_fee = v2_header.fee_info.as_ref().unwrap();
             assert_eq!(
                 v2_fee.account,
@@ -11167,11 +11170,13 @@ mod test {
                 balances.push(balance?.unwrap_or_default().0);
             } else {
                 // The v2 tree was never written, so there is no proof to answer with.
-                ensure!(
-                    balance.is_err(),
-                    "{}: {validator} has a v2 balance {balance:?}",
-                    chain.name
-                );
+                match balance {
+                    Err(err) if err.status == StatusCode::NOT_FOUND => {},
+                    other => bail!(
+                        "{}: {validator} v2 balance should be missing, got {other:?}",
+                        chain.name
+                    ),
+                }
             }
         }
         ensure!(

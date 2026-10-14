@@ -115,7 +115,7 @@ impl MockChain {
         timestamp: u64,
     ) -> &MockBlock {
         let (payload, metadata) = <MockPayload as BlockPayload<MockTypes>>::from_transactions(
-            txs,
+            &txs.into_iter().collect::<Vec<_>>(),
             &Default::default(),
             &Default::default(),
         )
