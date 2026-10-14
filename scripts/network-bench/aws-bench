@@ -9057,9 +9057,10 @@ def migrate_index(out_root: Path) -> None:
             if manifest.exists()
             else "-"
         )
-        lines.append(
-            format_index_row({k: old.get(k, chaos) for k in INDEX_COLUMNS}).rstrip("\n")
-        )
+        filled = {k: old.get(k, "-") for k in INDEX_COLUMNS} | {
+            "chaos": old.get("chaos", chaos)
+        }
+        lines.append(format_index_row(filled).rstrip("\n"))
     path.write_text("\n".join(lines) + "\n")
 
 

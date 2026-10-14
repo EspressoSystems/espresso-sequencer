@@ -515,6 +515,31 @@ def test_commit_message_of_a_chaos_run_names_its_faults():
     assert awsb.commit_message("f/01-run", row).endswith("chaos 10 faults, 0 timeouts")
 
 
+def test_migrate_index_fills_only_the_chaos_column_from_the_run_dir(tmp_path: Path):
+    run_dir = make_run_dir(tmp_path)
+    manifest = netbench.read_json(run_dir / "manifest.json")
+    manifest["config"]["chaos"] = {"rate_mb_s": 4.0}
+    netbench.write_json(run_dir / "manifest.json", manifest)
+    event = ch.chaos_event(1.0, "fault", "node1", True, "kill", 5, None)
+    (run_dir / "chaos.jsonl").write_text(json.dumps(event) + "\n")
+    old_keys = [k for k in awsb.INDEX_COLUMNS if k not in ("bound", "chaos")]
+    old_header = (
+        f"| {' | '.join(awsb.INDEX_COLUMNS[k] for k in old_keys)} |\n"
+        f"{'|---' * len(old_keys)}|\n"
+    )
+    old_row = awsb.format_index_row(
+        {**{k: "x" for k in old_keys}, "run": f"{FLEET}/01-run"}
+    )
+    out_root = tmp_path / "bench-state/aws"
+    (out_root / "INDEX.md").write_text(old_header + old_row)
+    awsb.migrate_index(out_root)
+    line = (out_root / "INDEX.md").read_text().splitlines()[2]
+    cells = dict(
+        zip(awsb.INDEX_COLUMNS, (c.strip() for c in line.strip("|").split("|")))
+    )
+    assert (cells["bound"], cells["chaos"]) == ("-", "1 faults, 0 timeouts")
+
+
 def test_append_index_rebuilds_a_file_with_the_old_header(tmp_path: Path):
     old_columns = [c for k, c in awsb.INDEX_COLUMNS.items() if k != "chaos"]
     old_header = f"| {' | '.join(old_columns)} |\n{'|---' * len(old_columns)}|\n"
