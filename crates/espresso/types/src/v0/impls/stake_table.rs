@@ -1517,7 +1517,12 @@ impl Fetcher {
             },
         };
 
-        Self::ensure_provider_reached(&l1_client, to_block).await?;
+        // Providers answer a log query past their head with the logs they have and no error,
+        // so the scan cannot tell a complete answer from a truncated one on its own.
+        let head = Self::provider_head(&l1_client).await;
+        if head < to_block {
+            return Err(StakeTableError::L1ProviderBehind { head, to_block });
+        }
 
         // To avoid making large RPC calls, divide the range into smaller chunks.
         // chunk size is from env "ESPRESSO_L1_EVENTS_MAX_BLOCK_RANGE
@@ -1569,20 +1574,18 @@ impl Fetcher {
         }
 
         // A failover inside the scan can land on a provider that is behind.
-        Self::ensure_provider_reached(&l1_client, to_block).await?;
+        let head = Self::provider_head(&l1_client).await;
+        if head < to_block {
+            return Err(StakeTableError::L1ProviderBehind { head, to_block });
+        }
 
         sort_stake_table_events(events).map_err(Into::into)
     }
 
-    /// Providers answer a log query past their head with the logs they have and no error, so
-    /// the scan cannot tell a complete answer from a truncated one on its own.
     #[cfg(feature = "node")]
-    async fn ensure_provider_reached(
-        l1_client: &L1Client,
-        to_block: u64,
-    ) -> Result<(), StakeTableError> {
+    async fn provider_head(l1_client: &L1Client) -> u64 {
         let provider = l1_client.provider.clone();
-        let head = retry(
+        retry(
             l1_client.options().l1_retry_delay,
             l1_client.options().l1_events_max_retry_duration,
             "L1 head fetch",
@@ -1591,11 +1594,7 @@ impl Fetcher {
                 Box::pin(async move { provider.get_block_number().await })
             },
         )
-        .await;
-        if head < to_block {
-            return Err(StakeTableError::L1ProviderBehind { head, to_block });
-        }
-        Ok(())
+        .await
     }
 
     /// The filter matching every stake table event the fetcher understands.
