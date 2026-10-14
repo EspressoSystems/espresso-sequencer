@@ -416,7 +416,7 @@
 <a href=#416 id=416 data-nosnippet>416</a>    <span class="kw">use </span>tempfile::TempDir;
 <a href=#417 id=417 data-nosnippet>417</a>    <span class="kw">use </span>test_utils::reserve_tcp_port;
 <a href=#418 id=418 data-nosnippet>418</a>    <span class="kw">use </span>tokio::spawn;
-<a href=#419 id=419 data-nosnippet>419</a>    <span class="kw">use </span>versions::{LARGE_BLOCK_VERSION, NEW_PROTOCOL_VERSION};
+<a href=#419 id=419 data-nosnippet>419</a>    <span class="kw">use </span>vbs::version::Version;
 <a href=#420 id=420 data-nosnippet>420</a>
 <a href=#421 id=421 data-nosnippet>421</a>    <span class="kw">use super</span>::<span class="kw-2">*</span>;
 <a href=#422 id=422 data-nosnippet>422</a>    <span class="kw">use crate</span>::{
@@ -443,58 +443,58 @@
 <a href=#443 id=443 data-nosnippet>443</a>            accounts: Default::default(),
 <a href=#444 id=444 data-nosnippet>444</a>            l1_finalized: L1Finalized::Number { number: <span class="number">0 </span>},
 <a href=#445 id=445 data-nosnippet>445</a>            header: Default::default(),
-<a href=#446 id=446 data-nosnippet>446</a>            upgrades: [(
-<a href=#447 id=447 data-nosnippet>447</a>                LARGE_BLOCK_VERSION,
-<a href=#448 id=448 data-nosnippet>448</a>                Upgrade {
-<a href=#449 id=449 data-nosnippet>449</a>                    mode: UpgradeMode::View(ViewBasedUpgrade {
-<a href=#450 id=450 data-nosnippet>450</a>                        start_proposing_view: <span class="number">100</span>,
-<a href=#451 id=451 data-nosnippet>451</a>                        stop_proposing_view: <span class="number">200</span>,
-<a href=#452 id=452 data-nosnippet>452</a>                        start_voting_view: <span class="prelude-val">None</span>,
-<a href=#453 id=453 data-nosnippet>453</a>                        stop_voting_view: <span class="prelude-val">None</span>,
-<a href=#454 id=454 data-nosnippet>454</a>                    }),
-<a href=#455 id=455 data-nosnippet>455</a>                    upgrade_type: UpgradeType::LargeBlock {
-<a href=#456 id=456 data-nosnippet>456</a>                        chain_config: Default::default(),
-<a href=#457 id=457 data-nosnippet>457</a>                    },
-<a href=#458 id=458 data-nosnippet>458</a>                },
-<a href=#459 id=459 data-nosnippet>459</a>            )]
-<a href=#460 id=460 data-nosnippet>460</a>            .into_iter()
-<a href=#461 id=461 data-nosnippet>461</a>            .collect(),
-<a href=#462 id=462 data-nosnippet>462</a>            base_version: NEW_PROTOCOL_VERSION,
-<a href=#463 id=463 data-nosnippet>463</a>            upgrade_version: LARGE_BLOCK_VERSION,
-<a href=#464 id=464 data-nosnippet>464</a>            epoch_height: <span class="prelude-val">Some</span>(<span class="number">10</span>),
-<a href=#465 id=465 data-nosnippet>465</a>            drb_difficulty: <span class="prelude-val">None</span>,
-<a href=#466 id=466 data-nosnippet>466</a>            drb_upgrade_difficulty: <span class="prelude-val">None</span>,
-<a href=#467 id=467 data-nosnippet>467</a>            epoch_start_block: <span class="prelude-val">None</span>,
-<a href=#468 id=468 data-nosnippet>468</a>            stake_table_capacity: <span class="prelude-val">None</span>,
-<a href=#469 id=469 data-nosnippet>469</a>            genesis_version: NEW_PROTOCOL_VERSION,
-<a href=#470 id=470 data-nosnippet>470</a>            da_committees: <span class="prelude-val">None</span>,
-<a href=#471 id=471 data-nosnippet>471</a>        };
-<a href=#472 id=472 data-nosnippet>472</a>        genesis.to_file(<span class="kw-2">&amp;</span>genesis_file).unwrap();
-<a href=#473 id=473 data-nosnippet>473</a>
-<a href=#474 id=474 data-nosnippet>474</a>        <span class="kw">let </span>modules = Modules {
-<a href=#475 id=475 data-nosnippet>475</a>            http: <span class="prelude-val">Some</span>(Http::with_port(port1)),
-<a href=#476 id=476 data-nosnippet>476</a>            query: <span class="prelude-val">Some</span>(Default::default()),
-<a href=#477 id=477 data-nosnippet>477</a>            storage_fs: <span class="prelude-val">Some</span>(fs::Options::new(tmp.path().into())),
-<a href=#478 id=478 data-nosnippet>478</a>            config: <span class="prelude-val">Some</span>(Default::default()),
-<a href=#479 id=479 data-nosnippet>479</a>            ..Default::default()
-<a href=#480 id=480 data-nosnippet>480</a>        };
-<a href=#481 id=481 data-nosnippet>481</a>        <span class="kw">let </span>opt = Options::parse_from([
-<a href=#482 id=482 data-nosnippet>482</a>            <span class="string">"sequencer"</span>,
-<a href=#483 id=483 data-nosnippet>483</a>            <span class="string">"--private-staking-key"</span>,
-<a href=#484 id=484 data-nosnippet>484</a>            <span class="kw-2">&amp;</span>priv_key.to_tagged_base64().expect(<span class="string">"valid key"</span>).to_string(),
-<a href=#485 id=485 data-nosnippet>485</a>            <span class="string">"--private-state-key"</span>,
-<a href=#486 id=486 data-nosnippet>486</a>            <span class="kw-2">&amp;</span>state_key
-<a href=#487 id=487 data-nosnippet>487</a>                .sign_key_ref()
-<a href=#488 id=488 data-nosnippet>488</a>                .to_tagged_base64()
-<a href=#489 id=489 data-nosnippet>489</a>                .expect(<span class="string">"valid key"</span>)
-<a href=#490 id=490 data-nosnippet>490</a>                .to_string(),
-<a href=#491 id=491 data-nosnippet>491</a>            <span class="string">"--private-x25519-key"</span>,
-<a href=#492 id=492 data-nosnippet>492</a>            <span class="kw-2">&amp;</span>TaggedBase64::try_from(x25519_kp.secret_key())
-<a href=#493 id=493 data-nosnippet>493</a>                .expect(<span class="string">"valid key"</span>)
-<a href=#494 id=494 data-nosnippet>494</a>                .to_string(),
-<a href=#495 id=495 data-nosnippet>495</a>            <span class="string">"--cliquenet-bind-address"</span>,
-<a href=#496 id=496 data-nosnippet>496</a>            <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"127.0.0.1:{port2}"</span>),
-<a href=#497 id=497 data-nosnippet>497</a>            <span class="string">"--cliquenet-advertise-address"</span>,
+<a href=#446 id=446 data-nosnippet>446</a>            <span class="comment">// `validate_fee_contract` would reject this upgrade (no fee_contract); the test
+<a href=#447 id=447 data-nosnippet>447</a>            // never reaches validation because startup blocks at the orchestrator first.
+<a href=#448 id=448 data-nosnippet>448</a>            </span>upgrades: [(
+<a href=#449 id=449 data-nosnippet>449</a>                Version { major: <span class="number">0</span>, minor: <span class="number">2 </span>},
+<a href=#450 id=450 data-nosnippet>450</a>                Upgrade {
+<a href=#451 id=451 data-nosnippet>451</a>                    mode: UpgradeMode::View(ViewBasedUpgrade {
+<a href=#452 id=452 data-nosnippet>452</a>                        start_proposing_view: <span class="number">100</span>,
+<a href=#453 id=453 data-nosnippet>453</a>                        stop_proposing_view: <span class="number">200</span>,
+<a href=#454 id=454 data-nosnippet>454</a>                        start_voting_view: <span class="prelude-val">None</span>,
+<a href=#455 id=455 data-nosnippet>455</a>                        stop_voting_view: <span class="prelude-val">None</span>,
+<a href=#456 id=456 data-nosnippet>456</a>                    }),
+<a href=#457 id=457 data-nosnippet>457</a>                    upgrade_type: UpgradeType::Fee {
+<a href=#458 id=458 data-nosnippet>458</a>                        chain_config: Default::default(),
+<a href=#459 id=459 data-nosnippet>459</a>                    },
+<a href=#460 id=460 data-nosnippet>460</a>                },
+<a href=#461 id=461 data-nosnippet>461</a>            )]
+<a href=#462 id=462 data-nosnippet>462</a>            .into_iter()
+<a href=#463 id=463 data-nosnippet>463</a>            .collect(),
+<a href=#464 id=464 data-nosnippet>464</a>            base_version: Version { major: <span class="number">0</span>, minor: <span class="number">1 </span>},
+<a href=#465 id=465 data-nosnippet>465</a>            upgrade_version: Version { major: <span class="number">0</span>, minor: <span class="number">2 </span>},
+<a href=#466 id=466 data-nosnippet>466</a>            epoch_height: <span class="prelude-val">None</span>,
+<a href=#467 id=467 data-nosnippet>467</a>            drb_difficulty: <span class="prelude-val">None</span>,
+<a href=#468 id=468 data-nosnippet>468</a>            drb_upgrade_difficulty: <span class="prelude-val">None</span>,
+<a href=#469 id=469 data-nosnippet>469</a>            epoch_start_block: <span class="prelude-val">None</span>,
+<a href=#470 id=470 data-nosnippet>470</a>            stake_table_capacity: <span class="prelude-val">None</span>,
+<a href=#471 id=471 data-nosnippet>471</a>            genesis_version: Version { major: <span class="number">0</span>, minor: <span class="number">1 </span>},
+<a href=#472 id=472 data-nosnippet>472</a>            da_committees: <span class="prelude-val">None</span>,
+<a href=#473 id=473 data-nosnippet>473</a>        };
+<a href=#474 id=474 data-nosnippet>474</a>        genesis.to_file(<span class="kw-2">&amp;</span>genesis_file).unwrap();
+<a href=#475 id=475 data-nosnippet>475</a>
+<a href=#476 id=476 data-nosnippet>476</a>        <span class="kw">let </span>modules = Modules {
+<a href=#477 id=477 data-nosnippet>477</a>            http: <span class="prelude-val">Some</span>(Http::with_port(port1)),
+<a href=#478 id=478 data-nosnippet>478</a>            query: <span class="prelude-val">Some</span>(Default::default()),
+<a href=#479 id=479 data-nosnippet>479</a>            storage_fs: <span class="prelude-val">Some</span>(fs::Options::new(tmp.path().into())),
+<a href=#480 id=480 data-nosnippet>480</a>            config: <span class="prelude-val">Some</span>(Default::default()),
+<a href=#481 id=481 data-nosnippet>481</a>            ..Default::default()
+<a href=#482 id=482 data-nosnippet>482</a>        };
+<a href=#483 id=483 data-nosnippet>483</a>        <span class="kw">let </span>opt = Options::parse_from([
+<a href=#484 id=484 data-nosnippet>484</a>            <span class="string">"sequencer"</span>,
+<a href=#485 id=485 data-nosnippet>485</a>            <span class="string">"--private-staking-key"</span>,
+<a href=#486 id=486 data-nosnippet>486</a>            <span class="kw-2">&amp;</span>priv_key.to_tagged_base64().expect(<span class="string">"valid key"</span>).to_string(),
+<a href=#487 id=487 data-nosnippet>487</a>            <span class="string">"--private-state-key"</span>,
+<a href=#488 id=488 data-nosnippet>488</a>            <span class="kw-2">&amp;</span>state_key
+<a href=#489 id=489 data-nosnippet>489</a>                .sign_key_ref()
+<a href=#490 id=490 data-nosnippet>490</a>                .to_tagged_base64()
+<a href=#491 id=491 data-nosnippet>491</a>                .expect(<span class="string">"valid key"</span>)
+<a href=#492 id=492 data-nosnippet>492</a>                .to_string(),
+<a href=#493 id=493 data-nosnippet>493</a>            <span class="string">"--private-x25519-key"</span>,
+<a href=#494 id=494 data-nosnippet>494</a>            <span class="kw-2">&amp;</span>TaggedBase64::try_from(x25519_kp.secret_key())
+<a href=#495 id=495 data-nosnippet>495</a>                .expect(<span class="string">"valid key"</span>)
+<a href=#496 id=496 data-nosnippet>496</a>                .to_string(),
+<a href=#497 id=497 data-nosnippet>497</a>            <span class="string">"--cliquenet-bind-address"</span>,
 <a href=#498 id=498 data-nosnippet>498</a>            <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"127.0.0.1:{port2}"</span>),
 <a href=#499 id=499 data-nosnippet>499</a>            <span class="comment">// Never bound: this test blocks at orchestrator before libp2p starts. Port 0 is a
 <a href=#500 id=500 data-nosnippet>500</a>            // placeholder to satisfy the orchestrator-bootstrap requirement on the advertise
@@ -580,15 +580,15 @@
 <a href=#580 id=580 data-nosnippet>580</a>            <span class="string">"expected testing in features: {lines:#?}"
 <a href=#581 id=581 data-nosnippet>581</a>        </span>);
 <a href=#582 id=582 data-nosnippet>582</a>        <span class="kw">let </span>genesis_line = <span class="macro">concat!</span>(
-<a href=#583 id=583 data-nosnippet>583</a>            <span class="string">r#"consensus_genesis{base_version="0.6",genesis_version="0.6","#</span>,
-<a href=#584 id=584 data-nosnippet>584</a>            <span class="string">r#"upgrade_version="0.7"} 1"#
+<a href=#583 id=583 data-nosnippet>583</a>            <span class="string">r#"consensus_genesis{base_version="0.1",genesis_version="0.1","#</span>,
+<a href=#584 id=584 data-nosnippet>584</a>            <span class="string">r#"upgrade_version="0.2"} 1"#
 <a href=#585 id=585 data-nosnippet>585</a>        </span>);
 <a href=#586 id=586 data-nosnippet>586</a>        <span class="macro">assert!</span>(
 <a href=#587 id=587 data-nosnippet>587</a>            lines.contains(<span class="kw-2">&amp;</span>genesis_line),
 <a href=#588 id=588 data-nosnippet>588</a>            <span class="string">"missing consensus_genesis metric: {lines:#?}"
 <a href=#589 id=589 data-nosnippet>589</a>        </span>);
 <a href=#590 id=590 data-nosnippet>590</a>        <span class="macro">assert!</span>(
-<a href=#591 id=591 data-nosnippet>591</a>            lines.contains(<span class="kw-2">&amp;</span><span class="string">r#"consensus_genesis_upgrade{version="0.7"} 1"#</span>),
+<a href=#591 id=591 data-nosnippet>591</a>            lines.contains(<span class="kw-2">&amp;</span><span class="string">r#"consensus_genesis_upgrade{version="0.2"} 1"#</span>),
 <a href=#592 id=592 data-nosnippet>592</a>            <span class="string">"missing consensus_genesis_upgrade metric: {lines:#?}"
 <a href=#593 id=593 data-nosnippet>593</a>        </span>);
 <a href=#594 id=594 data-nosnippet>594</a>
@@ -631,12 +631,12 @@
 <a href=#631 id=631 data-nosnippet>631</a>        }
 <a href=#632 id=632 data-nosnippet>632</a>        <span class="macro">assert_eq!</span>(
 <a href=#633 id=633 data-nosnippet>633</a>            node_cfg[<span class="string">"genesis"</span>][<span class="string">"base_version"</span>],
-<a href=#634 id=634 data-nosnippet>634</a>            serde_json::Value::String(<span class="string">"0.6"</span>.into()),
+<a href=#634 id=634 data-nosnippet>634</a>            serde_json::Value::String(<span class="string">"0.1"</span>.into()),
 <a href=#635 id=635 data-nosnippet>635</a>            <span class="string">"genesis.base_version mismatch: {node_cfg}"
 <a href=#636 id=636 data-nosnippet>636</a>        </span>);
 <a href=#637 id=637 data-nosnippet>637</a>        <span class="macro">assert_eq!</span>(
 <a href=#638 id=638 data-nosnippet>638</a>            node_cfg[<span class="string">"genesis"</span>][<span class="string">"upgrade"</span>][<span class="number">0</span>][<span class="string">"version"</span>],
-<a href=#639 id=639 data-nosnippet>639</a>            serde_json::Value::String(<span class="string">"0.7"</span>.into()),
+<a href=#639 id=639 data-nosnippet>639</a>            serde_json::Value::String(<span class="string">"0.2"</span>.into()),
 <a href=#640 id=640 data-nosnippet>640</a>            <span class="string">"genesis.upgrade[0].version mismatch: {node_cfg}"
 <a href=#641 id=641 data-nosnippet>641</a>        </span>);
 <a href=#642 id=642 data-nosnippet>642</a>        <span class="macro">assert_eq!</span>(
