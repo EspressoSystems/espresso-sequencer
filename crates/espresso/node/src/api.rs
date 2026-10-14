@@ -4999,7 +4999,12 @@ mod test {
                         .expect("leader config")
                         .account;
                     let leader = validators.get(&account).context("leader not found")?;
-                    pay_block_reward(&mut expected, leader, block_reward, header)?;
+                    pay_block_reward(
+                        &mut expected,
+                        leader,
+                        block_reward,
+                        RewardAmount(total_distributed),
+                    )?;
                     total_distributed += block_reward.0;
                     paid_commissions
                         .entry(account)
@@ -5022,21 +5027,18 @@ mod test {
     }
 
     /// Adds what one block pays `leader`'s commission and delegators to `balances`.
+    /// `distributed_before` is the chain's total before this block, as the parent header has it.
     fn pay_block_reward(
         balances: &mut HashMap<Address, U256>,
         leader: &AuthenticatedValidator<PubKey>,
         block_reward: RewardAmount,
-        header: &Header,
+        distributed_before: RewardAmount,
     ) -> anyhow::Result<()> {
         let delegated: U256 = leader.delegators.values().cloned().sum();
         ensure!(delegated == leader.stake, "delegations add up to the stake");
 
-        let rewards = RewardDistributor::new(
-            leader.clone(),
-            block_reward,
-            header.total_reward_distributed().unwrap(),
-        )
-        .compute_rewards()?;
+        let rewards = RewardDistributor::new(leader.clone(), block_reward, distributed_before)
+            .compute_rewards()?;
         let commission =
             U256::from(leader.commission) * block_reward.0 / U256::from(COMMISSION_BASIS_POINTS);
         // The leader also gets what flooring each delegator's share left over.
