@@ -44,6 +44,7 @@ use crate::{
     coordinator::{Coordinator, error::Severity},
     message::{Certificate1, ConsensusMessage, Message, MessageType, OpaqueMessage, Unchecked},
     network::Cliquenet,
+    rejoin::RejoinMode,
     tests::common::{
         coordinator_builder::{UpgradeSetup, build_test_coordinator},
         utils::{
@@ -132,8 +133,8 @@ pub struct TestRunner {
     persistent_storage: bool,
 
     /// Write each node process's trace to `NP_TRACE_DIR` for the Lean replay.
-    /// A restart with `persistent_storage` writes a second file resuming the
-    /// first.
+    /// A restart writes a second file resuming the first: restored with
+    /// `persistent_storage`, rejoining after a wipe without it.
     #[builder(default)]
     record_traces: bool,
 
@@ -146,6 +147,15 @@ pub struct TestRunner {
     /// process's trace resumes.
     #[builder(skip)]
     trace_names: Vec<Option<String>>,
+
+    /// Per node, the storage its latest restart with blank storage replaced,
+    /// so tests can inspect what the node did before it was wiped.
+    #[builder(skip)]
+    wiped_storages: Vec<Option<TestStorage<TestTypes>>>,
+
+    /// Per node, `(bar, anchor view)` of each rejoin after a wipe, in order.
+    #[builder(skip)]
+    rejoins: BTreeMap<usize, Vec<(ViewNumber, ViewNumber)>>,
 
     /// Node indices that are offline for the entire test.  Down nodes do
     /// not run a coordinator.  Views where a down node is leader are
@@ -333,6 +343,10 @@ impl fmt::Display for TestError {
 
 enum NodeEvent {
     Decided(BTreeMap<ViewNumber, [u8; 32]>),
+    Rejoined {
+        bar: ViewNumber,
+        anchor_view: ViewNumber,
+    },
     DecidedTransactions(ViewNumber, Vec<Commitment<TestTransaction>>),
     TimedOut(ViewNumber),
 }
@@ -385,6 +399,14 @@ impl TestRunner {
 
     pub fn node_storages(&self) -> &[TestStorage<TestTypes>] {
         &self.node_storages
+    }
+
+    pub fn wiped_storages(&self) -> &[Option<TestStorage<TestTypes>>] {
+        &self.wiped_storages
+    }
+
+    pub fn rejoins(&self) -> &BTreeMap<usize, Vec<(ViewNumber, ViewNumber)>> {
+        &self.rejoins
     }
 
     pub fn decided_transactions(&self) -> &BTreeMap<ViewNumber, Vec<Commitment<TestTransaction>>> {
@@ -488,6 +510,7 @@ impl TestRunner {
             .collect();
         self.node_locks = vec![None; self.num_nodes];
         self.trace_names = vec![None; self.num_nodes];
+        self.wiped_storages = vec![None; self.num_nodes];
         // The test body runs on the thread named after the test; `run_node`
         // runs on workers.
         let test = std::thread::current().name().unwrap_or("trace").to_owned();
@@ -575,6 +598,7 @@ impl TestRunner {
                     config: self.upgrade_config.clone(),
                 },
                 external_tx,
+                RejoinMode::Fresh,
             )
             .await;
 
@@ -672,8 +696,13 @@ impl TestRunner {
                                 // Create a fresh coordinator; it resumes
                                 // from the persisted anchor when storage is
                                 // persistent, from genesis otherwise.
+                                let wiped = !self.persistent_storage
+                                    && !matches!(change.action, NodeAction::Start);
                                 if !self.persistent_storage {
-                                    self.node_storages[change.idx] = TestStorage::default();
+                                    let old = std::mem::take(&mut self.node_storages[change.idx]);
+                                    if wiped {
+                                        self.wiped_storages[change.idx] = Some(old);
+                                    }
                                 }
                                 let upgrade_lock = self.make_upgrade_lock(change.idx).await;
                                 let net = create_network(
@@ -710,6 +739,11 @@ impl TestRunner {
                                         config: self.upgrade_config.clone(),
                                     },
                                     external_tx,
+                                    if wiped {
+                                        RejoinMode::Wiped
+                                    } else {
+                                        RejoinMode::Fresh
+                                    },
                                 )
                                 .await;
                                 let anchor_qc = if self.persistent_storage {
@@ -723,6 +757,9 @@ impl TestRunner {
                                     .await;
                                     storage.anchor_leaf().await.map(|(_, qc)| qc)
                                 } else {
+                                    if wiped {
+                                        trace.rejoining(self.trace_names[change.idx].as_deref());
+                                    }
                                     None
                                 };
                                 // Bump the generation so stale events queued
@@ -796,6 +833,12 @@ impl TestRunner {
                 },
                 NodeEvent::TimedOut(view) => {
                     node_timeouts[tagged.idx].insert(view);
+                },
+                NodeEvent::Rejoined { bar, anchor_view } => {
+                    self.rejoins
+                        .entry(tagged.idx)
+                        .or_default()
+                        .push((bar, anchor_view));
                 },
             }
         }
@@ -1135,6 +1178,24 @@ async fn run_node(
                     }
                 }
                 send(NodeEvent::Decided(commits.clone()));
+            } else if let ConsensusOutput::RejoinAnchored {
+                leaf,
+                cert1,
+                cert2,
+                bar,
+            } = &output
+            {
+                trace.rejoined(*bar, leaf, cert1);
+                storage
+                    .insert_cert2(leaf.view_number(), cert2.clone())
+                    .await;
+                storage
+                    .update_anchor_leaf(leaf.clone(), cert1.clone())
+                    .await;
+                send(NodeEvent::Rejoined {
+                    bar: *bar,
+                    anchor_view: leaf.view_number(),
+                });
             } else if let ConsensusOutput::SendTimeoutVote(vote, ..) = &output {
                 let view = vote.view_number();
                 debug!(node = %coord.node_id(), %view, "timeout vote");
