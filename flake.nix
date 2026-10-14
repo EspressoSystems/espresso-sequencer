@@ -245,6 +245,9 @@
             opentofu # scripts/network-bench/aws
             awscli2 # scripts/network-bench/aws
 
+            # Lean
+            elan
+
             # Figures
             graphviz
             plantuml
