@@ -1400,6 +1400,19 @@ def test_decided_rate_survives_a_restart_of_every_validator():
     assert some(m["decided_mb_s"]) == pytest.approx(10.0, rel=0.1)
 
 
+def test_step_timeouts_survive_a_restart_of_every_validator():
+    counters = restarted_counters(22, 10.0)
+    for c in counters:
+        # Before the restart one timeout per second, after it one per second again from 0.
+        c["timeouts"] = c["ts"] if c["ts"] < 22 else c["ts"] - 21
+        for node in c["nodes"].values():
+            node["timeouts"] = c["timeouts"]
+    m = netbench.step_measures(
+        step_window(), netbench.BenchConfig(), [], [], counters, 30.0
+    )
+    assert m["timeouts"] == 6 + 8
+
+
 def test_decided_rate_is_not_negative_when_the_leader_restarts_into_a_stall():
     counters = [
         {
@@ -1407,8 +1420,8 @@ def test_decided_rate_is_not_negative_when_the_leader_restarts_into_a_stall():
             "decided_bytes": 100e6 if t < 22 else 30e6,
             "timeouts": 0.0,
             "nodes": {
-                "a": {"decided_bytes": 100e6 if t < 22 else 0.0},
-                "b": {"decided_bytes": 30e6},
+                "a": {"decided_bytes": 100e6 if t < 22 else 0.0, "timeouts": 0.0},
+                "b": {"decided_bytes": 30e6, "timeouts": 0.0},
             },
         }
         for t in range(31)

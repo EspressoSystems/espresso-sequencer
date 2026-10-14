@@ -2252,12 +2252,12 @@ def log_progress(
     decided = block_mb = None
     view_timeouts = 0
     if len(inside) > 1:
-        first, last = inside[0], inside[-1]
-        decided_bytes = last["decided_bytes"] - first["decided_bytes"]
-        decided = decided_bytes / (last["ts"] - first["ts"]) / 1e6
-        spanned = sum(1 for t in seen.values() if first["ts"] <= t <= last["ts"])
+        first, last = inside[0]["ts"], inside[-1]["ts"]
+        decided_bytes = ch.counter_total(inside, "decided_bytes")[-1][1]
+        decided = decided_bytes / (last - first) / 1e6
+        spanned = sum(1 for t in seen.values() if first <= t <= last)
         block_mb = decided_bytes / spanned / 1e6 if spanned else None
-        view_timeouts = int(last["timeouts"] - first["timeouts"])
+        view_timeouts = int(ch.counter_total(inside, "timeouts")[-1][1])
     share = (
         f"{min(decided / submitted, 9.99):4.0%}"
         if decided is not None and submitted
@@ -2366,7 +2366,7 @@ def step_measures(
     exceeds the target."""
     t0, t1 = step["t_mid"], step["t_end"]
     inside = [c for c in counters if t0 <= c["ts"] <= t1]
-    first, last = (inside[0], inside[-1]) if len(inside) >= 2 else (None, None)
+    timeouts = ch.counter_total(inside, "timeouts")
     on_validator = {h["height"]: h["validator"] for h in heights}
     consensus = []
     for tx in txs:
@@ -2396,9 +2396,7 @@ def step_measures(
         ),
         **submit_measures(txs, cfg.tx_size, t0, t1, now),
         "decided_mb_s": decided,
-        "timeouts": int(last["timeouts"] - first["timeouts"])
-        if first and last
-        else None,
+        "timeouts": int(timeouts[-1][1]) if timeouts else None,
         "consensus_latency_ms": quantiles(consensus),
         "query_lag_ms": quantiles([lag for _, lag in lags]),
         "query_lag_slope_ms_s": theil_sen(lags),
