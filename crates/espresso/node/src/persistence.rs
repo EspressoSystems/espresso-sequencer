@@ -324,6 +324,15 @@ mod tests {
         }
     }
 
+    /// Leaves built from this state have a 0.1 header, so they take the legacy decide path, the
+    /// only one that emits the `EventType::Decide` events `EventCollector` records.
+    fn legacy_node_state() -> NodeState {
+        let v0_1 = versions::version(0, 1);
+        NodeState::mock()
+            .with_current_version(v0_1)
+            .with_genesis_version(v0_1)
+    }
+
     #[derive(Clone, Copy, Debug)]
     struct FailConsumer;
 
@@ -651,7 +660,7 @@ mod tests {
 
         let leaf: Leaf2 = Leaf2::genesis(
             &ValidatedState::default(),
-            &NodeState::mock(),
+            &legacy_node_state(),
             TEST_VERSIONS.test.base,
         )
         .await;
@@ -688,7 +697,7 @@ mod tests {
                     view_number: ViewNumber::genesis(),
                     justify_qc: QuorumCertificate2::genesis(
                         &ValidatedState::default(),
-                        &NodeState::mock(),
+                        &legacy_node_state(),
                         TEST_VERSIONS.test,
                     )
                     .await,
@@ -1422,7 +1431,7 @@ mod tests {
 
         let leaf: Leaf2 = Leaf::genesis(
             &ValidatedState::default(),
-            &NodeState::mock(),
+            &legacy_node_state(),
             MOCK_UPGRADE.base,
         )
         .await
@@ -1458,7 +1467,7 @@ mod tests {
                 view_number: ViewNumber::genesis(),
                 justify_qc: QuorumCertificate::genesis(
                     &ValidatedState::default(),
-                    &NodeState::mock(),
+                    &legacy_node_state(),
                     TEST_VERSIONS.test,
                 )
                 .await
@@ -1473,7 +1482,7 @@ mod tests {
         };
         let mut qc = QuorumCertificate2::genesis(
             &ValidatedState::default(),
-            &NodeState::mock(),
+            &legacy_node_state(),
             TEST_VERSIONS.test,
         )
         .await;
@@ -1650,7 +1659,7 @@ mod tests {
 
         let leaf: Leaf2 = Leaf::genesis(
             &ValidatedState::default(),
-            &NodeState::mock(),
+            &legacy_node_state(),
             MOCK_UPGRADE.base,
         )
         .await
@@ -1686,7 +1695,7 @@ mod tests {
                 view_number: ViewNumber::genesis(),
                 justify_qc: QuorumCertificate::genesis(
                     &ValidatedState::default(),
-                    &NodeState::mock(),
+                    &legacy_node_state(),
                     TEST_VERSIONS.test,
                 )
                 .await
@@ -1701,7 +1710,7 @@ mod tests {
         };
         let mut qc = QuorumCertificate2::genesis(
             &ValidatedState::default(),
-            &NodeState::mock(),
+            &legacy_node_state(),
             TEST_VERSIONS.test,
         )
         .await;
@@ -3124,7 +3133,7 @@ mod tests {
 
         let genesis_leaf: Leaf2 = Leaf2::genesis(
             &ValidatedState::default(),
-            &NodeState::mock(),
+            &legacy_node_state(),
             TEST_VERSIONS.test.base,
         )
         .await;
@@ -3135,7 +3144,7 @@ mod tests {
                 view_number: genesis_leaf.view_number(),
                 justify_qc: QuorumCertificate2::genesis(
                     &ValidatedState::default(),
-                    &NodeState::mock(),
+                    &legacy_node_state(),
                     TEST_VERSIONS.test,
                 )
                 .await,
