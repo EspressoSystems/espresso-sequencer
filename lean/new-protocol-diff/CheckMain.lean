@@ -125,6 +125,7 @@ def checkOne (δ : Nat) (path : System.FilePath) : IO Finding := do
         return match ← checkRejoined path said r h with
           | .error e => .unreadable e
           | .ok .unanchored => .outOfScope "wiped and never rejoined"
+          | .ok .actedUnanchored => .broken ["rejoin:silentUntilAnchored"]
           | .ok (.unchecked why) => .outOfScope s!"resumes a file whose rules are not checked: {why}"
           | .ok (.checked view pre []) => .signingOnly s!"rejoined at view {view} after {pre}"
           | .ok (.checked _ _ broken) => .broken broken

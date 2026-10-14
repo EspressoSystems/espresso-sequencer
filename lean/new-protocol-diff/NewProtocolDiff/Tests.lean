@@ -809,6 +809,7 @@ private def checkWiped (name : String) : IO Unit := do
   | .error e => IO.println e
   | .ok (.checked v f broken) => IO.println s!"checked {v} {f} {broken}"
   | .ok .unanchored => IO.println "unanchored"
+  | .ok .actedUnanchored => IO.println "acted unanchored"
   | .ok (.unchecked why) => IO.println s!"unchecked: {why}"
 
 /-- info: checked 6 .lake/restart-tests/w.0.jsonl [] -/
@@ -818,6 +819,14 @@ private def checkWiped (name : String) : IO Unit := do
 #guard_msgs in
 #eval do
   writeFiles [("w.none.jsonl", rejoinedHeader "null" "\"w.0.jsonl\"" ++ lines adopting)]
+  checkWiped "w.none.jsonl"
+
+-- A node that signs without ever adopting an anchor is not out of scope.
+/-- info: acted unanchored -/
+#guard_msgs in
+#eval do
+  writeFiles [("w.none.jsonl", rejoinedHeader "null" "\"w.0.jsonl\"" ++
+    lines (adopting ++ [st (.timeout ⟨1⟩) [timeoutVote 1 cfg.anchorCert]]))]
   checkWiped "w.none.jsonl"
 
 /-- info: resumes an empty recording but loaded an anchor -/

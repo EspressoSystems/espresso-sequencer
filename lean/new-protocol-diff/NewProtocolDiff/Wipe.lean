@@ -148,8 +148,10 @@ end Soundness
 inductive RejoinFinding where
   /-- The premises were checked; `broken` names those that failed. -/
   | checked (anchorView : Nat) (resumes : String) (broken : List String)
-  /-- The node never adopted an anchor, so it signed nothing to check. -/
+  /-- The node never adopted an anchor and signed or decided nothing. -/
   | unanchored
+  /-- The node never adopted an anchor yet signed or decided. -/
+  | actedUnanchored
   /-- A file it resumes is out of scope, so the history before the wipe is not established. -/
   | unchecked (why : String)
 
@@ -159,13 +161,17 @@ Check a rejoined trace, whose header said `said` and `r` and whose history is
 wipe, the bars on `post`, and the signing rules on `pre.inputsOnly ++ post` under
 `Rejoin.config cfg`.
 
+A node that never adopted an anchor is checked only for having signed or decided
+nothing (`Step.Acts`).
+
 An error when the resumed file is missing or unreadable, when the header names no
 anchor certificate, or when the two runs disagree on the node, epoch height or
 decide buffer.
 -/
 def checkRejoined (path : System.FilePath) (said : Preamble) (r : Rejoined) (post : History) :
     IO (Except String RejoinFinding) := do
-  let some bar := r.bar | return .ok .unanchored
+  let some bar := r.bar
+    | return .ok (if post.any (decide ·.Acts) then .actedUnanchored else .unanchored)
   match ← resumedBy path said r.resumes post with
   | .error (.unreadable e) => return .error e
   | .error (.unchecked why) => return .ok (.unchecked why)
