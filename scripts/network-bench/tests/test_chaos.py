@@ -1099,6 +1099,44 @@ def test_metrics_fallback_does_not_count_a_wiped_node_starting_from_zero(tmp_pat
     assert ch.counter_split(series, [], 0.0, 10.0).outside == 3.0
 
 
+def test_running_max_ignores_a_node_catching_up_from_zero():
+    series = {
+        "a": [(0.0, 120.0), (3.0, 130.0)],
+        "b": [(0.0, 0.0), (3.0, 125.0)],
+    }
+    split = ch.counter_split(ch.running_max(series), [(0.0, 3.0)], 0.0, 3.0)
+    assert split.during == 10.0
+
+
+def test_legacy_samples_do_not_count_the_rise_back_after_a_dip():
+    samples = [{"ts": t, "k": v} for t, v in [(0, 100), (1, 50), (2, 100), (3, 110)]]
+    split = ch.counter_split(ch.counter_series(samples, "k"), [], 0.0, 10.0)
+    assert split.outside == 10.0
+
+
+def test_mass_halt_counts_stuck_nodes_as_faulty():
+    cfg = ch.ChaosConfig(kinds=("mass-kill",), mass_nodes=3)
+    topo = topo_of()
+    state = init(cfg, topo)
+    stuck = state["order"][0]
+    state = with_health(state, **{stuck: "stuck"})
+    state["next_fault_at"] = 0.0
+    out = step(state, observe(topo, **{stuck: None}), 10.0, cfg, topo)
+    members = [a["node"] for a in out["actions"]]
+    state = out["state"]
+    events = []
+    for now in range(15, 120, 5):
+        overrides = {stuck: None}
+        if now <= 65:
+            overrides.update(silent(members))
+        elif now <= 80:
+            overrides.update({m: (100, 100, 100, (0, 0, 0)) for m in members})
+        out = step(state, observe(topo, tip=101, **overrides), float(now), cfg, topo)
+        state = out["state"]
+        events += out["events"]
+    assert not [e for e in events if e["event"] == "rejoined"]
+
+
 def test_common_window_clips_to_the_shared_samples():
     a = {"n0": [(5.0, 0.0), (30.0, 1.0)], "n1": [(20.0, 0.0), (50.0, 1.0)]}
     b = {"n0": [(1.0, 0.0), (40.0, 1.0)]}

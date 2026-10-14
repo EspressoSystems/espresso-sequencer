@@ -15,7 +15,7 @@ from collections import Counter
 from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from itertools import pairwise
+from itertools import accumulate, pairwise
 from pathlib import Path
 from typing import Any, Literal, NamedTuple, NotRequired, TypedDict
 
@@ -557,7 +557,8 @@ def _raised(
         for name, s in nodes.items()
         if s["kind"] in MASS_KINDS and s["health"] in OPEN and s["up_at"] is None
     ]
-    if halts(stake, pending):
+    stuck = [name for name, s in nodes.items() if s["health"] == "stuck"]
+    if halts(stake, [*pending, *stuck]):
         names = [name for name, s in nodes.items() if s["health"] != "stuck"]
     else:
         names = [name for name in pending if nodes[name]["health"] == "recovering"]
@@ -1051,14 +1052,28 @@ def counter_series(
     samples: Sequence[Mapping[str, Any]], key: str
 ) -> dict[str, list[tuple[float, float]]]:
     """(ts, value) of `key` per validator from the `poll_counters` samples. Samples without
-    `nodes` (runs from before it) form one series, the highest value over the validators."""
+    `nodes` (runs from before it) form one series, the highest value over the validators so
+    far."""
     if samples and all("nodes" in c for c in samples):
         series: dict[str, list[tuple[float, float]]] = {}
         for c in samples:
             for node, m in c["nodes"].items():
                 series.setdefault(node, []).append((c["ts"], m[key]))
         return series
-    return {"": [(c["ts"], c[key]) for c in samples]} if samples else {}
+    return running_max({"": [(c["ts"], c[key]) for c in samples]}) if samples else {}
+
+
+def running_max(series: CounterSeries) -> dict[str, list[tuple[float, float]]]:
+    """One series, the highest value over the nodes so far, for gauges: a restarted node
+    reading low and catching up does not count as growth."""
+    by_time = {node: dict(samples) for node, samples in series.items()}
+    times = sorted({ts for samples in by_time.values() for ts in samples})
+    top = list(
+        accumulate(
+            (max(s[ts] for s in by_time.values() if ts in s) for ts in times), max
+        )
+    )
+    return {"": list(zip(times, top))} if times else {}
 
 
 def counter_increases(series: CounterSeries) -> list[tuple[float, float, float]]:

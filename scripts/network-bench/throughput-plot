@@ -107,10 +107,11 @@ def block_series(
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Mean block interval (s) and size (MB) over the `w` s before each counter sample, from the
     first sample `w` s in; NaN where no block fell in the window."""
-    ts, decided = np.array(ch.counter_total(counters, "decided_bytes")).T
+    total = np.array(ch.counter_total(counters, "decided_bytes")).T
+    ts, decided = total
     keep = ts - w >= ts[0]
     ts, decided = ts[keep], decided[keep]
-    before = np.interp(ts - w, *np.array(ch.counter_total(counters, "decided_bytes")).T)
+    before = np.interp(ts - w, *total)
     blocks = np.searchsorted(block_ts, ts, "right") - np.searchsorted(
         block_ts, ts - w, "right"
     )

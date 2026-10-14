@@ -6301,7 +6301,7 @@ class ChaosRunner:
         self._advance(ts)
 
     def expected_down(self) -> frozenset[str]:
-        """Nodes `check_nodes` skips: killed or stuck ones, and those whose mass restart ssh
+        """Nodes `check_nodes` skips: killed or stuck ones, and those whose mass fault ssh
         failed and may have stopped. A restarted node is running once its action returned, so
         it is inspected."""
         if self.state is None:
@@ -7612,7 +7612,7 @@ def floor_section(
         return []
     spans = [ch.floor_span(r, end) for r in rows]
     timeout_series = ch.counter_series(consensus, "timeouts")
-    view_series = ch.view_samples(run_dir, consensus)
+    view_series = ch.running_max(ch.view_samples(run_dir, consensus))
     start, stop = ch.common_window(
         [timeout_series, view_series], steps[0]["t_start"], steps[-1]["t_end"]
     )
@@ -7705,7 +7705,8 @@ def chaos_totals(
     assert chaos is not None
     mass_size = chaos.mass_nodes or config["nodes"]
     per_kind = ", ".join(
-        f"{k} {len({r.fault for r in rows if r.kind == k})} ({mass_size} nodes)"
+        f"{k} {len(groups := Counter(r.fault for r in rows if r.kind == k))} "
+        f"({max(groups.values(), default=0)} nodes)"
         if k in ch.MASS_KINDS
         else f"{k} {sum(r.kind == k for r in rows)}"
         for k in dict.fromkeys(chaos.kinds)
