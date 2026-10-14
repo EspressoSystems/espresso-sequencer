@@ -124,7 +124,12 @@ pub struct AvidMShare {
 }
 
 /// Public parameters of the AVID-M scheme.
+///
+/// Deserialization goes through [`AvidMParam::new`], so a parameter off the wire satisfies the
+/// same invariants as one built locally. The scheme divides by the threshold and sizes its
+/// encoding by the total weight without checking either again.
 #[derive(Clone, Debug, Hash, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(try_from = "RawAvidMParam")]
 pub struct AvidMParam {
     /// Total weights of all storage nodes
     pub total_weights: usize,
@@ -142,6 +147,20 @@ impl AvidMParam {
             total_weights,
             recovery_threshold,
         })
+    }
+}
+
+#[derive(Deserialize)]
+struct RawAvidMParam {
+    total_weights: usize,
+    recovery_threshold: usize,
+}
+
+impl TryFrom<RawAvidMParam> for AvidMParam {
+    type Error = VidError;
+
+    fn try_from(raw: RawAvidMParam) -> VidResult<Self> {
+        Self::new(raw.recovery_threshold, raw.total_weights)
     }
 }
 
@@ -469,8 +488,23 @@ impl VidScheme for AvidMScheme {
 pub mod tests {
     use rand::{RngCore, seq::SliceRandom};
 
-    use super::F;
+    use super::{AvidMParam, F};
     use crate::{VidScheme, avidm::AvidMScheme, utils::bytes_to_field};
+
+    /// A parameter off the wire must satisfy what `new` enforces, since the scheme divides by the
+    /// threshold and sizes its domain by the total weight.
+    #[test]
+    fn deserialize_rejects_invalid_param() {
+        let param: AvidMParam =
+            serde_json::from_str(r#"{"total_weights":10,"recovery_threshold":4}"#).unwrap();
+        assert_eq!(param, AvidMParam::new(4, 10).unwrap());
+        for raw in [
+            r#"{"total_weights":10,"recovery_threshold":0}"#,
+            r#"{"total_weights":3,"recovery_threshold":4}"#,
+        ] {
+            assert!(serde_json::from_str::<AvidMParam>(raw).is_err(), "{raw}");
+        }
+    }
 
     #[test]
     fn test_padding() {
