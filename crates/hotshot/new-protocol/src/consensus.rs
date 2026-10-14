@@ -1207,6 +1207,11 @@ impl<T: NodeType> Consensus<T> {
         matches!(self.rejoin, Rejoin::Querying(_) | Rejoin::Waiting { .. })
     }
 
+    /// Where this node is on its way back into the network.
+    pub(crate) fn rejoin(&self) -> &Rejoin<T::SignatureKey> {
+        &self.rejoin
+    }
+
     /// Whether a proposal for `view` in `epoch` can still matter to this node.
     ///
     /// Locks are ordered by epoch, then view, so a proposal of a later epoch

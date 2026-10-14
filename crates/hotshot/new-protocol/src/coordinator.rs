@@ -63,7 +63,7 @@ use crate::{
     network::Cliquenet,
     outbox::Outbox,
     proposal::{ProposalValidator, VidShareValidator},
-    rejoin::{RejoinMode, evidence_key},
+    rejoin::{Rejoin, RejoinMode, evidence_key},
     serve::Server,
     state::{HeaderRequest, StateEntry, StateManager, StateManagerOutput},
     storage::{NewProtocolStorage, Storage},
@@ -2380,19 +2380,20 @@ where
         }
     }
 
-    /// Submit the certificate of a reply for verification. Replies are not
-    /// subject to the view and epoch windows of unsolicited certificates: they
-    /// answer a request of this node.
+    /// Submit the certificate of a reply for verification. Only the kind of
+    /// reply the rejoin state asks for is read; it is then not subject to the
+    /// view and epoch windows of unsolicited certificates.
     fn on_cert_fetch_response(&mut self, sender: &T::SignatureKey, response: CertFetchResponse<T>) {
+        let rejoin = self.consensus.rejoin();
         match response.into_body() {
-            CertResponseBody::Newest(evidence) => {
+            CertResponseBody::Newest(evidence) if matches!(rejoin, Rejoin::Querying(_)) => {
                 self.consensus
                     .rejoin_claim(sender.clone(), evidence.as_ref().map(evidence_key));
                 if let Some(evidence) = evidence {
                     self.verify_evidence(sender, evidence);
                 }
             },
-            CertResponseBody::Cert1(Some(cert)) => {
+            CertResponseBody::Cert1(Some(cert)) if matches!(rejoin, Rejoin::Waiting { .. }) => {
                 if cert.view_number() == ViewNumber::genesis() {
                     warn!(node = %self.node_id, %sender, "cert fetch response at the genesis view");
                     return;
@@ -2402,6 +2403,7 @@ where
                 }
             },
             CertResponseBody::Cert1(None) => {},
+            _ => debug!(node = %self.node_id, %sender, "cert fetch response not asked for"),
         }
     }
 

@@ -1,6 +1,8 @@
 //! A node restarted with nothing stored signs nothing until it knows a view
 //! bar and has adopted the first decide above it.
 
+use std::time::Duration;
+
 use hotshot::types::BLSPubKey;
 use hotshot_example_types::node_types::TestTypes;
 use hotshot_types::{
@@ -8,15 +10,21 @@ use hotshot_types::{
     traits::{block_contents::BlockHeader, signature_key::SignatureKey},
 };
 
-use super::common::utils::{ConsensusHarness, TestData, TestView, build_cert1, build_cert2};
+use super::common::{
+    harness::TestHarness,
+    utils::{ConsensusHarness, TestData, TestView, build_cert1, build_cert2},
+};
 use crate::{
     cert_verifier::ValidCert,
     consensus::{ConsensusInput, ConsensusOutput},
     helpers::{proposal_commitment, test_timeout_epoch_lock},
-    message::{CatchupEvidence, TimeoutVote},
+    message::{
+        CatchupEvidence, Message, MessageType, TimeoutVote, Validated,
+        cert::{CertFetchMessage, CertFetchResponse, CertResponseBody},
+    },
     rejoin::evidence_key,
     tests::common::assertions::{
-        is_leaf_decided, is_send_timeout_vote, is_vote1, is_vote1_for_view, is_vote2,
+        any, is_leaf_decided, is_send_timeout_vote, is_vote1, is_vote1_for_view, is_vote2,
     },
 };
 
@@ -360,4 +368,58 @@ async fn a_node_restarted_from_storage_does_not_rejoin() {
         ConsensusHarness::restarted_from(0, anchor.proposal.data.clone(), anchor.cert1.clone(), [])
             .await;
     harness.consensus.start_rejoin();
+}
+
+/// How long a negative assertion waits; each is followed by a positive control.
+const NO_INPUT_WINDOW: Duration = Duration::from_secs(2);
+
+fn cert_fetch_reply(
+    sender: BLSPubKey,
+    view: ViewNumber,
+    body: CertResponseBody<TestTypes>,
+) -> Message<TestTypes, Validated> {
+    Message {
+        sender,
+        message_type: MessageType::CertFetch(CertFetchMessage::Res(CertFetchResponse::new(
+            view, body,
+        ))),
+    }
+}
+
+/// A reply this node did not ask for reaches no verifier.
+#[tokio::test]
+async fn drops_cert_fetch_replies_it_did_not_ask_for() {
+    let test_data = TestData::new(5).await;
+    let mut harness = TestHarness::new(NODE).await;
+    let newest = &test_data.views[4];
+    let newest_reply = |sender| {
+        cert_fetch_reply(
+            sender,
+            ViewNumber::new(1),
+            CertResponseBody::Newest(Some(CatchupEvidence::Qc(newest.cert1.clone()))),
+        )
+    };
+    let advanced = |i: &ConsensusInput<TestTypes>| matches!(i, ConsensusInput::AdvanceView(_));
+
+    harness.message(newest_reply(peer(2)));
+    harness.message(cert_fetch_reply(
+        peer(3),
+        newest.view_number,
+        CertResponseBody::Cert1(Some(newest.cert1.clone())),
+    ));
+    harness.message(cert_fetch_reply(
+        peer(4),
+        newest.view_number,
+        CertResponseBody::Cert1(None),
+    ));
+    let inputs = harness.process_for(NO_INPUT_WINDOW).await;
+    assert!(
+        !any(&inputs, |i| advanced(i)
+            || matches!(i, ConsensusInput::Certificate1(_))),
+        "unsolicited replies must not be verified: {inputs:?}"
+    );
+
+    harness.coordinator_mut().consensus_mut().start_rejoin();
+    harness.message(newest_reply(peer(5)));
+    harness.process_until(|inputs| any(inputs, advanced)).await;
 }
