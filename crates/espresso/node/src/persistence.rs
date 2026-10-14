@@ -236,7 +236,10 @@ mod tests {
     use hotshot_types::{
         data::{
             DaProposal2, EpochNumber, QuorumProposal2, QuorumProposalWrapper, VidCommitment,
-            ViewNumber, ns_table::parse_ns_table, vid_commitment, vid_disperse::AvidMDisperseShare,
+            ViewNumber,
+            ns_table::parse_ns_table,
+            vid_commitment,
+            vid_disperse::{AvidMDisperseShare, AvidmGf2DisperseShare},
         },
         event::{EventType, HotShotAction, LeafInfo},
         light_client::{LightClientState, StakeTableState, StateKeyPair},
@@ -251,7 +254,10 @@ mod tests {
         },
         traits::{EncodeBytes, block_contents::BlockHeader},
         utils::EpochTransitionIndicator,
-        vid::avidm::{AvidMScheme, init_avidm_param},
+        vid::{
+            avidm::{AvidMScheme, init_avidm_param},
+            avidm_gf2::{AvidmGf2Scheme, init_avidm_gf2_param},
+        },
         vote::HasViewNumber,
     };
     use http_client::{Client, error::ClientErr};
@@ -269,6 +275,7 @@ mod tests {
             test_helpers::{STAKE_TABLE_CAPACITY_FOR_TEST, TestNetwork, TestNetworkConfigBuilder},
         },
         catchup::NullStateCatchup,
+        persistence::sql::DECIDE_GAP_FILL_HORIZON,
         prefetch_stake_table_events,
         testing::{TestConfigBuilder, staking_priv_keys},
     };
@@ -294,20 +301,21 @@ mod tests {
 
     #[derive(Clone, Debug, Default)]
     struct EventCollector {
-        events: Arc<RwLock<Vec<Event>>>,
+        events: Arc<RwLock<Vec<CoordinatorEvent<SeqTypes>>>>,
     }
 
     impl EventCollector {
+        /// The leaves of every decide event received so far, oldest first.
         async fn leaf_chain(&self) -> Vec<LeafInfo<SeqTypes>> {
             self.events
                 .read()
                 .await
                 .iter()
                 .flat_map(|event| {
-                    let EventType::Decide { leaf_chain, .. } = &event.event else {
+                    let CoordinatorEvent::NewDecide { leaf_infos, .. } = event else {
                         panic!("expected decide event, got {event:?}");
                     };
-                    leaf_chain.iter().cloned().rev()
+                    leaf_infos.iter().cloned().rev()
                 })
                 .collect::<Vec<_>>()
         }
@@ -316,20 +324,9 @@ mod tests {
     #[async_trait]
     impl EventConsumer for EventCollector {
         async fn handle_event(&self, event: &CoordinatorEvent<SeqTypes>) -> anyhow::Result<()> {
-            if let CoordinatorEvent::LegacyEvent(event) = event {
-                self.events.write().await.push(event.clone());
-            }
+            self.events.write().await.push(event.clone());
             Ok(())
         }
-    }
-
-    /// Leaves built from this state have a 0.1 header, so they take the legacy decide path, the
-    /// only one that emits the `EventType::Decide` events `EventCollector` records.
-    fn legacy_node_state() -> NodeState {
-        let v0_1 = versions::version(0, 1);
-        NodeState::mock()
-            .with_current_version(v0_1)
-            .with_genesis_version(v0_1)
     }
 
     #[derive(Clone, Copy, Debug)]
@@ -657,36 +654,33 @@ mod tests {
             None
         );
 
-        let leaf: Leaf2 = Leaf2::genesis(
-            &ValidatedState::default(),
-            &legacy_node_state(),
-            TEST_VERSIONS.test.base,
-        )
-        .await;
+        let node_state = NodeState::mock().with_genesis_version(versions::NEW_PROTOCOL_VERSION);
+        let leaf: Leaf2 =
+            Leaf2::genesis(&ValidatedState::default(), &node_state, TEST_UPGRADE.base).await;
         let leaf_payload = leaf.block_payload().unwrap();
         let leaf_payload_bytes_arc = leaf_payload.encode();
 
-        let avidm_param = init_avidm_param(2).unwrap();
+        let avidm_param = init_avidm_gf2_param(2).unwrap();
         let weights = vec![1u32; 2];
 
         let ns_table = parse_ns_table(
             leaf_payload.byte_len().as_usize(),
             &leaf_payload.ns_table().encode(),
         );
-        let (payload_commitment, shares) =
-            AvidMScheme::ns_disperse(&avidm_param, &weights, &leaf_payload_bytes_arc, ns_table)
+        let (payload_commitment, common, shares) =
+            AvidmGf2Scheme::ns_disperse(&avidm_param, &weights, &leaf_payload_bytes_arc, ns_table)
                 .unwrap();
 
         let (pubkey, privkey) = BLSPubKey::generated_from_seed_indexed([0; 32], 1);
         let signature = PubKey::sign(&privkey, &[]).unwrap();
-        let mut vid = AvidMDisperseShare::<SeqTypes> {
+        let mut vid = AvidmGf2DisperseShare::<SeqTypes> {
             view_number: ViewNumber::new(0),
             payload_commitment,
             share: shares[0].clone(),
             recipient_key: pubkey,
             epoch: Some(EpochNumber::new(0)),
             target_epoch: Some(EpochNumber::new(0)),
-            common: avidm_param,
+            common,
         };
         let mut quorum_proposal = Proposal {
             data: QuorumProposalWrapper::<SeqTypes> {
@@ -696,8 +690,8 @@ mod tests {
                     view_number: ViewNumber::genesis(),
                     justify_qc: QuorumCertificate2::genesis(
                         &ValidatedState::default(),
-                        &legacy_node_state(),
-                        TEST_VERSIONS.test,
+                        &node_state,
+                        TEST_UPGRADE,
                     )
                     .await,
                     upgrade_certificate: None,
@@ -771,7 +765,7 @@ mod tests {
             &leaf_payload_bytes_arc,
             &leaf.block_header().metadata().encode(),
             2,
-            TEST_VERSIONS.test.base,
+            TEST_UPGRADE.base,
         );
 
         storage
@@ -1003,19 +997,17 @@ mod tests {
         // A decide event should have been processed.
         let events = consumer.events.read().await;
         assert_eq!(events.len(), 1);
-        assert_eq!(events[0].view_number, ViewNumber::new(3));
-        let EventType::Decide {
-            committing_qc,
-            leaf_chain,
-            ..
-        } = &events[0].event
+        let CoordinatorEvent::NewDecide {
+            leaf_infos, cert1, ..
+        } = &events[0]
         else {
             panic!("expected decide event, got {:?}", events[0]);
         };
-        assert_eq!(**committing_qc, qcs[3]);
-        assert_eq!(leaf_chain.len(), 1);
-        let info = &leaf_chain[0];
+        assert_eq!(cert1, qcs[3].qc());
+        assert_eq!(leaf_infos.len(), 1);
+        let info = &leaf_infos[0];
         assert_eq!(info.leaf, leaves[3]);
+        assert_eq!(info.leaf.view_number(), ViewNumber::new(3));
 
         // The remaining data should have been GCed.
         assert_eq!(
@@ -1428,34 +1420,30 @@ mod tests {
         // Create a short blockchain.
         let mut chain = vec![];
 
-        let leaf: Leaf2 = Leaf::genesis(
-            &ValidatedState::default(),
-            &legacy_node_state(),
-            MOCK_UPGRADE.base,
-        )
-        .await
-        .into();
+        let node_state = NodeState::mock().with_genesis_version(versions::NEW_PROTOCOL_VERSION);
+        let leaf: Leaf2 =
+            Leaf2::genesis(&ValidatedState::default(), &node_state, TEST_UPGRADE.base).await;
         let leaf_payload = leaf.block_payload().unwrap();
         let leaf_payload_bytes_arc = leaf_payload.encode();
-        let avidm_param = init_avidm_param(2).unwrap();
+        let avidm_param = init_avidm_gf2_param(2).unwrap();
         let weights = vec![1u32; 2];
         let ns_table = parse_ns_table(
             leaf_payload.byte_len().as_usize(),
             &leaf_payload.ns_table().encode(),
         );
-        let (payload_commitment, shares) =
-            AvidMScheme::ns_disperse(&avidm_param, &weights, &leaf_payload_bytes_arc, ns_table)
+        let (payload_commitment, common, shares) =
+            AvidmGf2Scheme::ns_disperse(&avidm_param, &weights, &leaf_payload_bytes_arc, ns_table)
                 .unwrap();
 
         let (pubkey, privkey) = BLSPubKey::generated_from_seed_indexed([0; 32], 1);
-        let mut vid = AvidMDisperseShare::<SeqTypes> {
+        let mut vid = AvidmGf2DisperseShare::<SeqTypes> {
             view_number: ViewNumber::new(0),
             payload_commitment,
             share: shares[0].clone(),
             recipient_key: pubkey,
             epoch: Some(EpochNumber::new(0)),
             target_epoch: Some(EpochNumber::new(0)),
-            common: avidm_param,
+            common,
         }
         .to_proposal(&privkey)
         .unwrap()
@@ -1464,13 +1452,12 @@ mod tests {
             proposal: QuorumProposal2::<SeqTypes> {
                 block_header: leaf.block_header().clone(),
                 view_number: ViewNumber::genesis(),
-                justify_qc: QuorumCertificate::genesis(
+                justify_qc: QuorumCertificate2::genesis(
                     &ValidatedState::default(),
-                    &legacy_node_state(),
-                    TEST_VERSIONS.test,
+                    &node_state,
+                    TEST_UPGRADE,
                 )
-                .await
-                .to_qc2(),
+                .await,
                 upgrade_certificate: None,
                 view_change_evidence: None,
                 next_drb_result: None,
@@ -1479,12 +1466,9 @@ mod tests {
                 state_cert: None,
             },
         };
-        let mut qc = QuorumCertificate2::genesis(
-            &ValidatedState::default(),
-            &legacy_node_state(),
-            TEST_VERSIONS.test,
-        )
-        .await;
+        let mut qc =
+            QuorumCertificate2::genesis(&ValidatedState::default(), &node_state, TEST_UPGRADE)
+                .await;
 
         let block_payload_signature = BLSPubKey::sign(&privkey, &leaf_payload_bytes_arc)
             .expect("Failed to sign block payload");
@@ -1504,7 +1488,7 @@ mod tests {
             &leaf_payload_bytes_arc,
             &leaf.block_header().metadata().encode(),
             2,
-            TEST_VERSIONS.test.base,
+            TEST_UPGRADE.base,
         );
 
         for i in 0..4 {
@@ -1656,34 +1640,30 @@ mod tests {
         // Create a short blockchain (same setup as `test_decide_with_failing_event_consumer`).
         let mut chain = vec![];
 
-        let leaf: Leaf2 = Leaf::genesis(
-            &ValidatedState::default(),
-            &legacy_node_state(),
-            MOCK_UPGRADE.base,
-        )
-        .await
-        .into();
+        let node_state = NodeState::mock().with_genesis_version(versions::NEW_PROTOCOL_VERSION);
+        let leaf: Leaf2 =
+            Leaf2::genesis(&ValidatedState::default(), &node_state, TEST_UPGRADE.base).await;
         let leaf_payload = leaf.block_payload().unwrap();
         let leaf_payload_bytes_arc = leaf_payload.encode();
-        let avidm_param = init_avidm_param(2).unwrap();
+        let avidm_param = init_avidm_gf2_param(2).unwrap();
         let weights = vec![1u32; 2];
         let ns_table = parse_ns_table(
             leaf_payload.byte_len().as_usize(),
             &leaf_payload.ns_table().encode(),
         );
-        let (payload_commitment, shares) =
-            AvidMScheme::ns_disperse(&avidm_param, &weights, &leaf_payload_bytes_arc, ns_table)
+        let (payload_commitment, common, shares) =
+            AvidmGf2Scheme::ns_disperse(&avidm_param, &weights, &leaf_payload_bytes_arc, ns_table)
                 .unwrap();
 
         let (pubkey, privkey) = BLSPubKey::generated_from_seed_indexed([0; 32], 1);
-        let mut vid = AvidMDisperseShare::<SeqTypes> {
+        let mut vid = AvidmGf2DisperseShare::<SeqTypes> {
             view_number: ViewNumber::new(0),
             payload_commitment,
             share: shares[0].clone(),
             recipient_key: pubkey,
             epoch: Some(EpochNumber::new(0)),
             target_epoch: Some(EpochNumber::new(0)),
-            common: avidm_param,
+            common,
         }
         .to_proposal(&privkey)
         .unwrap()
@@ -1692,13 +1672,12 @@ mod tests {
             proposal: QuorumProposal2::<SeqTypes> {
                 block_header: leaf.block_header().clone(),
                 view_number: ViewNumber::genesis(),
-                justify_qc: QuorumCertificate::genesis(
+                justify_qc: QuorumCertificate2::genesis(
                     &ValidatedState::default(),
-                    &legacy_node_state(),
-                    TEST_VERSIONS.test,
+                    &node_state,
+                    TEST_UPGRADE,
                 )
-                .await
-                .to_qc2(),
+                .await,
                 upgrade_certificate: None,
                 view_change_evidence: None,
                 next_drb_result: None,
@@ -1707,12 +1686,9 @@ mod tests {
                 state_cert: None,
             },
         };
-        let mut qc = QuorumCertificate2::genesis(
-            &ValidatedState::default(),
-            &legacy_node_state(),
-            TEST_VERSIONS.test,
-        )
-        .await;
+        let mut qc =
+            QuorumCertificate2::genesis(&ValidatedState::default(), &node_state, TEST_UPGRADE)
+                .await;
 
         let block_payload_signature = BLSPubKey::sign(&privkey, &leaf_payload_bytes_arc)
             .expect("Failed to sign block payload");
@@ -1732,7 +1708,7 @@ mod tests {
             &leaf_payload_bytes_arc,
             &leaf.block_header().metadata().encode(),
             2,
-            TEST_VERSIONS.test.base,
+            TEST_UPGRADE.base,
         );
 
         for i in 0..4 {
@@ -3087,17 +3063,16 @@ mod tests {
         Ok(())
     }
 
+    /// Non-consecutive decided leaves are delivered as separate events, and only the event of the
+    /// directly finalized leaf carries its cert2.
     #[rstest_reuse::apply(persistence_types)]
     pub async fn test_non_consecutive_decide<P: TestablePersistence>(_p: PhantomData<P>) {
         let tmp = P::tmp_storage().await;
         let storage = P::connect(&tmp).await;
 
-        let genesis_leaf: Leaf2 = Leaf2::genesis(
-            &ValidatedState::default(),
-            &legacy_node_state(),
-            TEST_VERSIONS.test.base,
-        )
-        .await;
+        let node_state = NodeState::mock().with_genesis_version(versions::NEW_PROTOCOL_VERSION);
+        let genesis_leaf: Leaf2 =
+            Leaf2::genesis(&ValidatedState::default(), &node_state, TEST_UPGRADE.base).await;
         let mut quorum_proposal = QuorumProposalWrapper::<SeqTypes> {
             proposal: QuorumProposal2::<SeqTypes> {
                 epoch: None,
@@ -3105,8 +3080,8 @@ mod tests {
                 view_number: genesis_leaf.view_number(),
                 justify_qc: QuorumCertificate2::genesis(
                     &ValidatedState::default(),
-                    &legacy_node_state(),
-                    TEST_VERSIONS.test,
+                    &node_state,
+                    TEST_UPGRADE,
                 )
                 .await,
                 upgrade_certificate: None,
@@ -3124,6 +3099,11 @@ mod tests {
         quorum_proposal.proposal.justify_qc.view_number = ViewNumber::new(1);
         let leaf2 = Leaf2::from_quorum_proposal(&quorum_proposal);
 
+        let newest_view = ViewNumber::new(2 + DECIDE_GAP_FILL_HORIZON);
+        quorum_proposal.proposal.view_number = newest_view;
+        *quorum_proposal.proposal.block_header.height_mut() = newest_view.u64();
+        let newest_leaf = Leaf2::from_quorum_proposal(&quorum_proposal);
+
         let mut qc0 = leaf0.justify_qc().clone();
         qc0.data.leaf_commit = Committable::commit(&leaf0);
 
@@ -3131,8 +3111,24 @@ mod tests {
         qc2.view_number += 1;
         qc2.data.leaf_commit = Committable::commit(&leaf2);
 
-        let mut deciding_qc = qc2.clone();
-        deciding_qc.view_number += 1;
+        let mut newest_qc = newest_leaf.justify_qc().clone();
+        newest_qc.view_number = newest_view;
+        newest_qc.data.leaf_commit = Committable::commit(&newest_leaf);
+
+        let cert2 = {
+            let data = Vote2Data {
+                leaf_commit: Committable::commit(&leaf2),
+                epoch: EpochNumber::new(1),
+                block_number: leaf2.height(),
+            };
+            Certificate2::new(
+                data.clone(),
+                data.commit(),
+                leaf2.view_number(),
+                None,
+                PhantomData,
+            )
+        };
 
         // Decide the first leaf, but fail to generate a decide event.
         storage
@@ -3148,9 +3144,25 @@ mod tests {
             .await
             .unwrap();
 
-        // Later, decide a new leaf, but skipping some leaf in the middle. This should generate
-        // decide events for both the leaves, correctly separating into two events since the leaves
-        // are non-consecutive, and correctly applying `deciding_qc` only to the last event.
+        // Far enough ahead that the gap below `leaf2` falls outside `DECIDE_GAP_FILL_HORIZON`, so
+        // `leaf2` is delivered rather than held for a gap-fill decide.
+        storage
+            .persist_decided_leaves(
+                newest_view,
+                [(
+                    &leaf_info(newest_leaf),
+                    CertificatePair::non_epoch_change(newest_qc),
+                )],
+                None,
+                None,
+                &NullEventConsumer,
+            )
+            .await
+            .unwrap();
+        storage
+            .append_cert2(leaf2.view_number(), cert2.clone())
+            .await
+            .unwrap();
         let consumer = EventCollector::default();
         storage
             .append_decided_leaves(
@@ -3159,40 +3171,38 @@ mod tests {
                     &leaf_info(leaf2.clone()),
                     CertificatePair::non_epoch_change(qc2),
                 )],
-                Some(Arc::new(CertificatePair::non_epoch_change(
-                    deciding_qc.clone(),
-                ))),
+                None,
                 &consumer,
             )
             .await
             .unwrap();
 
         let events = consumer.events.read().await;
-        assert_eq!(events.len(), 2);
+        assert_eq!(events.len(), 2, "{events:#?}");
 
-        let EventType::Decide {
-            leaf_chain: leaf_chain0,
-            deciding_qc: deciding_qc0,
+        let CoordinatorEvent::NewDecide {
+            leaf_infos: leaf_infos0,
+            cert2: cert2_0,
             ..
-        } = &events[0].event
+        } = &events[0]
         else {
-            panic!("expected decide event, got {:?}", events[0].event);
+            panic!("expected decide event, got {:?}", events[0]);
         };
-        assert_eq!(leaf_chain0.len(), 1);
-        assert_eq!(leaf_chain0[0].leaf, leaf0);
-        assert_eq!(*deciding_qc0, None);
+        assert_eq!(leaf_infos0.len(), 1);
+        assert_eq!(leaf_infos0[0].leaf, leaf0);
+        assert_eq!(*cert2_0, None);
 
-        let EventType::Decide {
-            leaf_chain: leaf_chain2,
-            deciding_qc: deciding_qc2,
+        let CoordinatorEvent::NewDecide {
+            leaf_infos: leaf_infos2,
+            cert2: cert2_2,
             ..
-        } = &events[1].event
+        } = &events[1]
         else {
-            panic!("expected decide event, got {:?}", events[1].event);
+            panic!("expected decide event, got {:?}", events[1]);
         };
-        assert_eq!(leaf_chain2.len(), 1);
-        assert_eq!(leaf_chain2[0].leaf, leaf2);
-        assert_eq!(deciding_qc2.as_ref().unwrap().qc(), &deciding_qc);
+        assert_eq!(leaf_infos2.len(), 1);
+        assert_eq!(leaf_infos2[0].leaf, leaf2);
+        assert_eq!(cert2_2.as_ref(), Some(&cert2));
     }
 
     /// Without the query module, storage keeps what consensus needs to run and restart, and
@@ -3201,34 +3211,30 @@ mod tests {
     pub async fn test_consensus_only_decide<P: TestablePersistence>(_p: PhantomData<P>) {
         let tmp = P::tmp_storage().await;
 
-        let leaf: Leaf2 = Leaf::genesis(
-            &ValidatedState::default(),
-            &NodeState::mock(),
-            MOCK_UPGRADE.base,
-        )
-        .await
-        .into();
+        let node_state = NodeState::mock().with_genesis_version(versions::NEW_PROTOCOL_VERSION);
+        let leaf: Leaf2 =
+            Leaf2::genesis(&ValidatedState::default(), &node_state, TEST_UPGRADE.base).await;
         let leaf_payload = leaf.block_payload().unwrap();
         let leaf_payload_bytes_arc = leaf_payload.encode();
-        let avidm_param = init_avidm_param(2).unwrap();
+        let avidm_param = init_avidm_gf2_param(2).unwrap();
         let weights = Vec::from([1u32; 2]);
         let ns_table = parse_ns_table(
             leaf_payload.byte_len().as_usize(),
             &leaf_payload.ns_table().encode(),
         );
-        let (payload_commitment, shares) =
-            AvidMScheme::ns_disperse(&avidm_param, &weights, &leaf_payload_bytes_arc, ns_table)
+        let (payload_commitment, common, shares) =
+            AvidmGf2Scheme::ns_disperse(&avidm_param, &weights, &leaf_payload_bytes_arc, ns_table)
                 .unwrap();
 
         let (pubkey, privkey) = BLSPubKey::generated_from_seed_indexed([0; 32], 1);
-        let mut vid = AvidMDisperseShare::<SeqTypes> {
+        let mut vid = AvidmGf2DisperseShare::<SeqTypes> {
             view_number: ViewNumber::new(0),
             payload_commitment,
             share: shares[0].clone(),
             recipient_key: pubkey,
             epoch: Some(EpochNumber::new(0)),
             target_epoch: Some(EpochNumber::new(0)),
-            common: avidm_param,
+            common,
         }
         .to_proposal(&privkey)
         .unwrap();
@@ -3247,19 +3253,18 @@ mod tests {
             &leaf_payload_bytes_arc,
             &leaf.block_header().metadata().encode(),
             2,
-            TEST_VERSIONS.test.base,
+            TEST_UPGRADE.base,
         );
         let mut quorum_proposal = QuorumProposalWrapper::<SeqTypes> {
             proposal: QuorumProposal2::<SeqTypes> {
                 block_header: leaf.block_header().clone(),
                 view_number: ViewNumber::genesis(),
-                justify_qc: QuorumCertificate::genesis(
+                justify_qc: QuorumCertificate2::genesis(
                     &ValidatedState::default(),
-                    &NodeState::mock(),
-                    TEST_VERSIONS.test,
+                    &node_state,
+                    TEST_UPGRADE,
                 )
-                .await
-                .to_qc2(),
+                .await,
                 upgrade_certificate: None,
                 view_change_evidence: None,
                 next_drb_result: None,
@@ -3268,12 +3273,9 @@ mod tests {
                 state_cert: None,
             },
         };
-        let mut qc = QuorumCertificate2::genesis(
-            &ValidatedState::default(),
-            &NodeState::mock(),
-            TEST_VERSIONS.test,
-        )
-        .await;
+        let mut qc =
+            QuorumCertificate2::genesis(&ValidatedState::default(), &node_state, TEST_UPGRADE)
+                .await;
 
         let mut chain = Vec::new();
         for i in 0..4 {
