@@ -21,6 +21,7 @@ use versions::{TIMEOUT_EPOCH_VERSION, Upgrade};
 use crate::tests::common::{
     runner::{NodeAction, NodeChange, TestRunner},
     utils::StakeTableSchedule,
+    views,
 };
 
 /// 6 nodes, epoch_height=15; nodes 0-4 form epochs 1-2, node 5 joins the
@@ -184,9 +185,10 @@ async fn incoming_validator_restarts_before_replacement_boundary() {
 /// the boundary view 13 is led by node 1 while node 5 (views 5, 11, 17,
 /// ...) is idle through the handoff.
 ///
-/// Node 5 leads views 17, 23, 29 and 35 after the rotation, every view is
-/// required to decide, and its post-restart decisions (target 20) must
-/// match the other nodes' chain. The 10s view timeout keeps a loaded CI
+/// Node 5 leads views 17, 23, 29 and 35 after the rotation. Its storage is
+/// wiped, so it signs nothing until it rejoins and view 17 may time out;
+/// every other view is required to decide, and its post-restart decisions
+/// (target 20) must match the other nodes' chain. The 10s view timeout keeps a loaded CI
 /// runner from timing out a view (5-of-6 leaves no vote slack, so a
 /// single slow node fails the view).
 #[cfg(target_os = "linux")]
@@ -214,6 +216,7 @@ async fn validator_rotates_address_at_epoch_boundary() {
             }],
         )])
         .node_decision_targets(BTreeMap::from([(5, 20)]))
+        .tolerated_failed_views(views([17]))
         .build()
         .run()
         .await
