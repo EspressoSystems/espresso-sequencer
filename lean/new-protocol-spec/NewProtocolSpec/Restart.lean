@@ -166,6 +166,28 @@ structure RestartOK (P : Persisted) (post : History) : Prop where
   lockKept : ∀ v : TimeoutVote, post.Sent (.timeoutVote v) → LockLE P.lock v.data.lock
 
 /--
+An output the node signs or decides: a vote, a timeout vote, a proposal, a re-vote
+request, or a decide.
+
+Relaying a certificate, a timeout certificate, an epoch change or a VID share is
+not acting: the node signs none of them.
+-/
+def Output.acts : Output → Bool
+  | .send (.vote1 _) | .send (.vote2 _) | .send (.timeoutVote _) | .send (.proposal _)
+  | .send (.revote _) | .decided _ _ _ => true
+  | _ => false
+
+/--
+The step signs or decides something (`Output.acts`).
+
+What a resumed node acts on it must hold by that step; a step that only relays may
+come before.
+-/
+def Step.Acts (st : Step) : Prop := ∃ o ∈ st.output, Output.acts o = true
+
+instance (st : Step) : Decidable st.Acts := inferInstanceAs (Decidable (∃ o ∈ st.output, _))
+
+/--
 The trace whose first steps are `pre` and whose later steps are those of `r`.
 
 With `pre` the history before a crash followed by `Persisted.restoredSteps`, and

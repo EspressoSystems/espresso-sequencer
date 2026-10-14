@@ -135,5 +135,10 @@ run_meta (checkFields `NewProtocol.Summarises
 
 run_meta (checkFields `NewProtocol.RestartOK [`vote1After, `vote2After, `lockKept])
 
+/-! What the restart proof reads of the stored state: `Summarises` with the anchor held by each acting step. -/
+run_meta (checkFields `NewProtocol.Resumes
+  [`anchorAfter, `anchorCertHeld, `anchorHeld, `anchorPayload, `anchorCert2Held,
+   `vote1Below, `vote2Below, `timeoutBelow, `vote2Locked, `decidedBelow])
+
 end Checks
 end NewProtocol

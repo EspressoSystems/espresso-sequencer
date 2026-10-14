@@ -17,6 +17,11 @@ it at `Persisted.firstAllowed` or later, so no rule relates two votes across the
 crash except a timeout vote's lock, which the stored lock covers. What the history
 after the crash holds under the restart's configuration, it holds under the
 original one, since the stored anchor was held before the crash.
+
+The proof reads less of the summary than `Summarises` states: `Resumes` asks only
+that each step after the crash that signs or decides holds the anchor by then.
+`safe_across_resume` is proved from it, and `safe_across_restart` follows
+(`Summarises.resumes`).
 -/
 
 @[expose] public section
@@ -87,6 +92,64 @@ theorem decidedView_restoredSteps {P : Persisted} {v : ViewNumber} : ¬ P.restor
 
 end History
 
+/-! ## What the proof reads of a resumption -/
+
+/--
+What `safe_across_resume` reads of the stored state `P`, the history `pre` before
+the crash and the history `post` after it: `Summarises`, with the anchor held by
+each step after the crash that acts (`Step.Acts`) rather than before the crash.
+
+A node that held its anchor before the crash meets it (`Summarises.resumes`), and
+so may one that learns its anchor after the crash, before it acts on it.
+-/
+structure Resumes (cfg : Config) (P : Persisted) (pre post : History) : Prop where
+  /-- The stored anchor is no earlier than the configured one. -/
+  anchorAfter : cfg.anchorView ≤ P.anchorView
+
+  /-- Each step that acts holds the anchor's `Cert1` by then. -/
+  anchorCertHeld : ∀ n st, post[n]? = some st → st.Acts →
+    (pre ++ P.restoredSteps ++ post.upTo (n + 1)).HasCert1 cfg P.anchorCert
+
+  /-- Each step that acts holds the anchor's proposal by then. -/
+  anchorHeld : ∀ n st, post[n]? = some st → st.Acts →
+    (pre ++ P.restoredSteps ++ post.upTo (n + 1)).HasProposal cfg P.anchorBlock
+
+  /--
+  A vote2 over a block the node holds at the anchor's view with the anchor's
+  payload comes after the anchor's payload.
+  -/
+  anchorPayload : ∀ n (v : Vote2) (b : Block), post.SentAt n (.vote2 v) →
+    (pre ++ P.restoredSteps ++ post.upTo (n + 1)).HasProposal cfg b →
+    b.viewNumber = P.anchorView → b.payloadCommit = P.anchorBlock.payloadCommit →
+    v.data = ⟨blockHash b, b.epoch, b.blockHeader.blockNumber⟩ →
+    (pre ++ P.restoredSteps ++ post.upTo (n + 1)).HasPayload cfg P.anchorView P.anchorBlock.payloadCommit
+
+  /--
+  The anchor's `Cert2` under the restart's configuration is the original one, or
+  each step that acts holds a `Cert2` over the anchor by then, at a view before
+  `Persisted.firstAllowed`.
+  -/
+  anchorCert2Held : ∀ n st, post[n]? = some st → st.Acts →
+    (P.config cfg).anchorCert2 = cfg.anchorCert2
+      ∨ ∃ c2, (pre ++ P.restoredSteps ++ post.upTo (n + 1)).HasCert2 c2
+        ∧ c2.data = P.anchorCert.data.toVote2 ∧ c2.view < P.firstAllowed
+
+  /-- Every vote1 before the crash is at or before `Persisted.highestVoted`. -/
+  vote1Below : ∀ v : Vote1, pre.Sent (.vote1 v) → v.view ≤ P.highestVoted
+
+  /-- Every vote2 before the crash is at or before `Persisted.highestVoted`. -/
+  vote2Below : ∀ v : Vote2, pre.Sent (.vote2 v) → v.view ≤ P.highestVoted
+
+  /-- Every timeout vote before the crash is at or before `Persisted.highestVoted`. -/
+  timeoutBelow : ∀ v : TimeoutVote, pre.Sent (.timeoutVote v) → v.view ≤ P.highestVoted
+
+  /-- Every vote2 before the crash is no later than the stored lock (`EpochViewLE`). -/
+  vote2Locked : ∀ v : Vote2, pre.Sent (.vote2 v) →
+    EpochViewLE v.data.epoch v.view P.lock.data.epoch P.lock.view
+
+  /-- Every view decided before the crash is at or before the anchor's. -/
+  decidedBelow : ∀ v, pre.DecidedView v → v ≤ P.anchorView
+
 /-! ## Lifting what the restarted node holds -/
 
 section Lift
@@ -108,29 +171,45 @@ theorem hasCert2_restart_of_pre {c : Cert2} (h : pre.HasCert2 c) : (pre ++ P.res
   · exact Or.inl (received_restart_of_pre h)
   · exact Or.inr ⟨c1, p, received_restart_of_pre h⟩
 
-/-- A `Cert1` the restarted history holds, the spliced one holds: the stored anchor's was held before the crash. -/
-theorem hasCert1_of_restart (hs : Summarises cfg P pre post) {c : Cert1}
+/-- A `Cert1` the node held before the crash, the spliced history holds. -/
+theorem hasCert1_restart_of_pre {c : Cert1} (h : pre.HasCert1 cfg c) : (pre ++ P.restoredSteps ++ q).HasCert1 cfg c := by
+  rcases h with h | h | ⟨c2, p, h⟩
+  · exact Or.inl h
+  · exact Or.inr (Or.inl (received_restart_of_pre h))
+  · exact Or.inr (Or.inr ⟨c2, p, received_restart_of_pre h⟩)
+
+/-- A proposal the node held before the crash, the spliced history holds. -/
+theorem hasProposal_restart_of_pre {b : Block} (h : pre.HasProposal cfg b) :
+    (pre ++ P.restoredSteps ++ q).HasProposal cfg b := by
+  rcases h with h | ⟨s, share, h⟩ | ⟨c1, c2, h⟩
+  · exact Or.inl h
+  · exact Or.inr (Or.inl ⟨s, share, received_restart_of_pre h⟩)
+  · exact Or.inr (Or.inr ⟨c1, c2, received_restart_of_pre h⟩)
+
+/-- A payload the node held before the crash, the spliced history holds. -/
+theorem hasPayload_restart_of_pre {v : ViewNumber} {pc : PayloadCommit} (h : pre.HasPayload cfg v pc) :
+    (pre ++ P.restoredSteps ++ q).HasPayload cfg v pc := by
+  rcases h with h | h
+  · exact Or.inl h
+  · exact Or.inr (received_restart_of_pre h)
+
+/-- A `Cert1` the restarted history holds, the spliced one holds, given that it holds the stored anchor's. -/
+theorem hasCert1_of_restart (hheld : (pre ++ P.restoredSteps ++ q).HasCert1 cfg P.anchorCert) {c : Cert1}
     (h : (pre.inputsOnly ++ P.restoredSteps ++ q).HasCert1 (P.config cfg) c) :
     (pre ++ P.restoredSteps ++ q).HasCert1 cfg c := by
   rcases h with h | h | ⟨c2, p, h⟩
   · obtain rfl : c = P.anchorCert := h
-    rcases hs.anchorCertHeld with h | h | ⟨c2, p, h⟩
-    · exact Or.inl h
-    · exact Or.inr (Or.inl (received_restart_of_pre h))
-    · exact Or.inr (Or.inr ⟨c2, p, received_restart_of_pre h⟩)
+    exact hheld
   · exact Or.inr (Or.inl (received_restart.mp h))
   · exact Or.inr (Or.inr ⟨c2, p, received_restart.mp h⟩)
 
-/-- A proposal the restarted history holds, the spliced one holds: the stored anchor's was held before the crash. -/
-theorem hasProposal_of_restart (hs : Summarises cfg P pre post) {b : Block}
+/-- A proposal the restarted history holds, the spliced one holds, given that it holds the stored anchor's. -/
+theorem hasProposal_of_restart (hheld : (pre ++ P.restoredSteps ++ q).HasProposal cfg P.anchorBlock) {b : Block}
     (h : (pre.inputsOnly ++ P.restoredSteps ++ q).HasProposal (P.config cfg) b) :
     (pre ++ P.restoredSteps ++ q).HasProposal cfg b := by
   rcases h with h | ⟨s, share, h⟩ | ⟨c1, c2, h⟩
   · obtain rfl : b = P.anchorBlock := h
-    rcases hs.anchorHeld with h | ⟨s, share, h⟩ | ⟨c1, c2, h⟩
-    · exact Or.inl h
-    · exact Or.inr (Or.inl ⟨s, share, received_restart_of_pre h⟩)
-    · exact Or.inr (Or.inr ⟨c1, c2, received_restart_of_pre h⟩)
+    exact hheld
   · exact Or.inr (Or.inl ⟨s, share, received_restart.mp h⟩)
   · exact Or.inr (Or.inr ⟨c1, c2, received_restart.mp h⟩)
 
@@ -147,37 +226,39 @@ payload where it is read.
 -/
 theorem hasPayload_of_restart {v : ViewNumber} {pc : PayloadCommit}
     (hanchor : v = P.anchorView → pc = P.anchorBlock.payloadCommit →
-      pre.HasPayload cfg P.anchorView P.anchorBlock.payloadCommit)
+      (pre ++ P.restoredSteps ++ q).HasPayload cfg P.anchorView P.anchorBlock.payloadCommit)
     (h : (pre.inputsOnly ++ P.restoredSteps ++ q).HasPayload (P.config cfg) v pc) :
     (pre ++ P.restoredSteps ++ q).HasPayload cfg v pc := by
   rcases h with ⟨hv, hpc⟩ | h
-  · rcases hanchor hv hpc with ⟨hv', hpc'⟩ | h
-    · exact Or.inl ⟨hv.trans hv', hpc.trans hpc'⟩
-    · rw [hv, hpc]
-      exact Or.inr (received_restart_of_pre h)
+  · rw [hv, hpc]
+    exact hanchor hv hpc
   · exact Or.inr (received_restart.mp h)
 
 /--
 A proposal at `Persisted.firstAllowed` or later that opens an epoch under the
-restart's configuration does so under the original one: a `Cert2` over the stored
-anchor was held before the crash, or is the configured one.
+restart's configuration does so under the original one: the spliced history holds
+a `Cert2` over the stored anchor, or it is the configured one.
 -/
-theorem opensEpochJustified_of_restart (hs : Summarises cfg P pre post) {p : Proposal}
-    (hv : P.firstAllowed ≤ p.viewNumber)
+theorem opensEpochJustified_of_restart
+    (hheld : (pre ++ P.restoredSteps ++ q).HasProposal cfg P.anchorBlock)
+    (hc2 : (P.config cfg).anchorCert2 = cfg.anchorCert2
+      ∨ ∃ c2, (pre ++ P.restoredSteps ++ q).HasCert2 c2 ∧ c2.data = P.anchorCert.data.toVote2
+        ∧ c2.view < P.firstAllowed)
+    {p : Proposal} (hv : P.firstAllowed ≤ p.viewNumber)
     (h : OpensEpochJustified (P.config cfg) (pre.inputsOnly ++ P.restoredSteps ++ q) p) :
     OpensEpochJustified cfg (pre ++ P.restoredSteps ++ q) p := by
   intro henter
-  obtain ⟨⟨parent, hp, hpv, hph⟩, c2, hc2, hlt, hdata⟩ := h henter
-  refine ⟨⟨parent, hasProposal_of_restart hs hp, hpv, hph⟩, ?_⟩
-  rcases hc2 with hc2 | rfl
-  · exact ⟨c2, Or.inl (hasCert2_of_restart hc2), hlt, hdata⟩
-  · rcases hs.anchorCert2Held with heq | ⟨c2', hc2', hd', hv'⟩
+  obtain ⟨⟨parent, hp, hpv, hph⟩, c2, hc2', hlt, hdata⟩ := h henter
+  refine ⟨⟨parent, hasProposal_of_restart hheld hp, hpv, hph⟩, ?_⟩
+  rcases hc2' with hc2' | rfl
+  · exact ⟨c2, Or.inl (hasCert2_of_restart hc2'), hlt, hdata⟩
+  · rcases hc2 with heq | ⟨c2', hc2', hd', hv'⟩
     · exact ⟨_, Or.inr heq, hlt, hdata⟩
-    · exact ⟨c2', Or.inl (hasCert2_restart_of_pre hc2'), Nat.lt_of_lt_of_le hv' hv, hd'.trans hdata⟩
+    · exact ⟨c2', Or.inl hc2', Nat.lt_of_lt_of_le hv' hv, hd'.trans hdata⟩
 
-/-- A proposal the restarted history holds was held before the crash or received after it. -/
-theorem hasProposal_pre_post (hs : Summarises cfg P pre post) {n : Nat} {b : Block}
-    (h : (pre.inputsOnly ++ P.restoredSteps ++ post.upTo n).HasProposal (P.config cfg) b) :
+/-- A proposal the spliced history holds was held before the crash or received after it. -/
+theorem hasProposal_pre_post {n : Nat} {b : Block}
+    (h : (pre ++ P.restoredSteps ++ post.upTo n).HasProposal cfg b) :
     (pre ++ post).HasProposal cfg b := by
   have hrec : ∀ i, (pre ++ P.restoredSteps ++ post.upTo n).Received i →
       (∀ v pc, i ≠ .blockReconstructed v pc) → (pre ++ post).Received i := by
@@ -188,10 +269,26 @@ theorem hasProposal_pre_post (hs : Summarises cfg P pre post) {n : Nat} {b : Blo
       · obtain ⟨x, -, rfl⟩ := History.received_restoredSteps.mp hi
         exact absurd rfl (hne _ _)
     · exact History.received_append.mpr (Or.inr ⟨st, List.mem_of_mem_take hst, e⟩)
-  rcases hasProposal_of_restart hs h with h | ⟨s, share, h⟩ | ⟨c1, c2, h⟩
+  rcases h with h | ⟨s, share, h⟩ | ⟨c1, c2, h⟩
   · exact Or.inl h
   · exact Or.inr (Or.inl ⟨s, share, hrec _ h (by intro _ _ e; cases e)⟩)
   · exact Or.inr (Or.inr ⟨c1, c2, hrec _ h (by intro _ _ e; cases e)⟩)
+
+/-- A faithful summary meets what the proof reads: what the node held before the crash, every later step holds. -/
+theorem Summarises.resumes (hs : Summarises cfg P pre post) : Resumes cfg P pre post :=
+  { anchorAfter := hs.anchorAfter
+    anchorCertHeld := fun _ _ _ _ => hasCert1_restart_of_pre hs.anchorCertHeld
+    anchorHeld := fun _ _ _ _ => hasProposal_restart_of_pre hs.anchorHeld
+    anchorPayload := fun _ v b ⟨st, hst, hm⟩ hb hbv hbpc hd =>
+      hasPayload_restart_of_pre
+        (hs.anchorPayload v b ⟨st, List.mem_of_getElem? hst, hm⟩ (hasProposal_pre_post hb) hbv hbpc hd)
+    anchorCert2Held := fun _ _ _ _ =>
+      hs.anchorCert2Held.imp id fun ⟨c2, h, hd, hv⟩ => ⟨c2, hasCert2_restart_of_pre h, hd, hv⟩
+    vote1Below := hs.vote1Below
+    vote2Below := hs.vote2Below
+    timeoutBelow := hs.timeoutBelow
+    vote2Locked := hs.vote2Locked
+    decidedBelow := hs.decidedBelow }
 
 end Lift
 
@@ -350,15 +447,15 @@ theorem SafeHistory.append_silent {cfg : Config} {node : PubKey} {honestIn : Epo
 /-! ## The splice obeys the signing rules -/
 
 /--
-**Safety across a restart.** A history before a crash that obeys the signing rules,
-followed by the steps the restart loads and a history after it, obeys them as a
-whole, when the stored summary is faithful to the history before, the history
-after obeys the rules under the restart's configuration behind the inputs of the
-one before, and keeps the restart's bars.
+**Safety across a resumption.** A history before a crash that obeys the signing
+rules, followed by the steps the restart loads and a history after it, obeys them
+as a whole, when the stored state meets `Resumes` for the two histories, the
+history after obeys the rules under the restart's configuration behind the inputs
+of the one before, and keeps the restart's bars.
 -/
-theorem safe_across_restart {cfg : Config} {node : PubKey} {honestIn : EpochNumber → Prop}
+theorem safe_across_resume {cfg : Config} {node : PubKey} {honestIn : EpochNumber → Prop}
     {P : Persisted} {pre post : History}
-    (hpre : SafeHistory cfg node honestIn pre) (hsum : Summarises cfg P pre post)
+    (hpre : SafeHistory cfg node honestIn pre) (hres : Resumes cfg P pre post)
     (hpost : SafeHistory (P.config cfg) node honestIn (pre.inputsOnly ++ P.restoredSteps ++ post))
     (hok : RestartOK P post) :
     SafeHistory cfg node honestIn (pre ++ P.restoredSteps ++ post) := by
@@ -383,15 +480,16 @@ theorem safe_across_restart {cfg : Config} {node : PubKey} {honestIn : EpochNumb
       · have hv : P.firstAllowed ≤ p.viewNumber := by rw [← hfor.1]; exact hafter
         exact Or.inl ⟨sender, p, vid, received_restart.mp hrec,
           ⟨hwf.parentEarlier, hwf.covered, hwf.epoch, hwf.height⟩, hval, hsafe,
-          opensEpochJustified_of_restart hsum hv hopens, hfor⟩
+          opensEpochJustified_of_restart (hres.anchorHeld k st hq ⟨_, hm, rfl⟩)
+            (hres.anchorCert2Held k st hq ⟨_, hm, rfl⟩) hv hopens, hfor⟩
       · exact Or.inr ⟨sender, r, received_restart.mp hrec, hwf, hsafe, hagain⟩
   · intro v v' h1 h2 he hep hview
     rcases Persisted.sent_splice.mp h1 with h1 | h1 <;> rcases Persisted.sent_splice.mp h2 with h2 | h2
     · exact hpre.vote1Once v v' h1 h2 he hep hview
-    · have := Persisted.lt_of_below_after (hsum.vote1Below v h1) (hok.vote1After v' h2)
+    · have := Persisted.lt_of_below_after (hres.vote1Below v h1) (hok.vote1After v' h2)
       rw [hview] at this
       exact absurd this (Nat.lt_irrefl _)
-    · have := Persisted.lt_of_below_after (hsum.vote1Below v' h2) (hok.vote1After v h1)
+    · have := Persisted.lt_of_below_after (hres.vote1Below v' h2) (hok.vote1After v h1)
       rw [hview] at this
       exact absurd this (Nat.lt_irrefl _)
     · exact hpost.vote1Once v v' (Persisted.sent_restarted.mpr h1) (Persisted.sent_restarted.mpr h2) he hep hview
@@ -404,18 +502,20 @@ theorem safe_across_restart {cfg : Config} {node : PubKey} {honestIn : EpochNumb
         hpost.vote2Justified _ vote ⟨st, hpost_at hq, hm⟩ he
       rw [Persisted.upTo_restarted_succ] at hc hb hpay
       rw [Persisted.upTo_splice_succ]
-      refine ⟨hsig, Nat.lt_of_le_of_lt hsum.anchorAfter hav, c, b, hasCert1_of_restart hsum hc,
-        hasProposal_of_restart hsum hb, hcert, hasPayload_of_restart ?_ hpay, hview, hdata⟩
+      have hheld := hres.anchorHeld k st hq ⟨_, hm, rfl⟩
+      refine ⟨hsig, Nat.lt_of_le_of_lt hres.anchorAfter hav, c, b,
+        hasCert1_of_restart (hres.anchorCertHeld k st hq ⟨_, hm, rfl⟩) hc,
+        hasProposal_of_restart hheld hb, hcert, hasPayload_of_restart ?_ hpay, hview, hdata⟩
       intro hbv hbpc
-      exact hsum.anchorPayload vote b (hsentq hq hm) (hasProposal_pre_post hsum hb) hbv hbpc
+      exact hres.anchorPayload k vote b ⟨st, hq, hm⟩ (hasProposal_of_restart hheld hb) hbv hbpc
         (by rw [hdata, hcert.2]; rfl)
   · intro v v' h1 h2 he hep hview
     rcases Persisted.sent_splice.mp h1 with h1 | h1 <;> rcases Persisted.sent_splice.mp h2 with h2 | h2
     · exact hpre.vote2Once v v' h1 h2 he hep hview
-    · have := Persisted.lt_of_below_after (hsum.vote2Below v h1) (hok.vote2After v' h2)
+    · have := Persisted.lt_of_below_after (hres.vote2Below v h1) (hok.vote2After v' h2)
       rw [hview] at this
       exact absurd this (Nat.lt_irrefl _)
-    · have := Persisted.lt_of_below_after (hsum.vote2Below v' h2) (hok.vote2After v h1)
+    · have := Persisted.lt_of_below_after (hres.vote2Below v' h2) (hok.vote2After v h1)
       rw [hview] at this
       exact absurd this (Nat.lt_irrefl _)
     · exact hpost.vote2Once v v' (Persisted.sent_restarted.mpr h1) (Persisted.sent_restarted.mpr h2) he hep hview
@@ -426,7 +526,7 @@ theorem safe_across_restart {cfg : Config} {node : PubKey} {honestIn : EpochNumb
     · simp [hout] at hm
     · rw [Persisted.upTo_splice_succ] at htv
       rcases Persisted.sent_splice.mp htv with htv | htv
-      · exact Persisted.lt_of_below_after (hsum.timeoutBelow tv htv) (hok.vote2After vote (hsentq hq hm))
+      · exact Persisted.lt_of_below_after (hres.timeoutBelow tv htv) (hok.vote2After vote (hsentq hq hm))
       · refine hpost.vote2BeforeTimeout _ vote ⟨st, hpost_at hq, hm⟩ he tv ?_ htve
         rw [Persisted.upTo_restarted_succ]
         exact Persisted.sent_restarted.mpr htv
@@ -437,7 +537,7 @@ theorem safe_across_restart {cfg : Config} {node : PubKey} {honestIn : EpochNumb
     · simp [hout] at hm
     · rw [Persisted.upTo_splice] at hv2
       rcases Persisted.sent_splice.mp hv2 with hv2 | hv2
-      · exact EpochViewLE.trans (hsum.vote2Locked v2 hv2) (hok.lockKept vote (hsentq hq hm))
+      · exact EpochViewLE.trans (hres.vote2Locked v2 hv2) (hok.lockKept vote (hsentq hq hm))
       · refine hpost.timeoutLock _ vote ⟨st, hpost_at hq, hm⟩ he v2 ?_ hv2e
         rw [Persisted.upTo_restarted]
         exact Persisted.sent_restarted.mpr hv2
@@ -450,9 +550,10 @@ theorem safe_across_restart {cfg : Config} {node : PubKey} {honestIn : EpochNumb
         hpost.decideJustified _ st blocks c1 c2 (hpost_at hq) hm he
       rw [Persisted.upTo_restarted_succ] at hc2 hc1 hall
       rw [Persisted.upTo_splice_succ]
-      exact ⟨head, rest, hbl, hasCert2_of_restart hc2, hcommit, hasCert1_of_restart hsum hc1, hcert,
-        hlinked, fun b hb => ⟨hasProposal_of_restart hsum (hall b hb).1,
-          Nat.lt_of_le_of_lt hsum.anchorAfter (hall b hb).2⟩⟩
+      exact ⟨head, rest, hbl, hasCert2_of_restart hc2, hcommit,
+        hasCert1_of_restart (hres.anchorCertHeld k st hq ⟨_, hm, rfl⟩) hc1, hcert,
+        hlinked, fun b hb => ⟨hasProposal_of_restart (hres.anchorHeld k st hq ⟨_, hm, rfl⟩) (hall b hb).1,
+          Nat.lt_of_le_of_lt hres.anchorAfter (hall b hb).2⟩⟩
   · intro n st i blocks c1 c2 hst hi he
     rcases Persisted.getElem?_splice hst with ⟨hn, hst⟩ | hout | ⟨k, rfl, hq⟩
     · rw [Persisted.upTo_splice_pre (Nat.le_of_lt hn)]
@@ -464,10 +565,25 @@ theorem safe_across_restart {cfg : Config} {node : PubKey} {honestIn : EpochNumb
       refine ⟨hnd, fun b hb hd => ?_⟩
       rw [Persisted.upTo_splice, List.append_assoc (pre ++ P.restoredSteps)] at hd
       rcases Persisted.decidedView_splice.mp hd with hd | hd
-      · exact absurd (Nat.lt_of_le_of_lt (hsum.decidedBelow _ hd) (hall b hb).2) (Nat.lt_irrefl _)
+      · exact absurd (Nat.lt_of_le_of_lt (hres.decidedBelow _ hd) (hall b hb).2) (Nat.lt_irrefl _)
       · apply hnot b hb
         rw [Persisted.upTo_restarted, List.append_assoc (pre.inputsOnly ++ P.restoredSteps)]
         exact Persisted.decidedView_restarted.mpr hd
+
+/--
+**Safety across a restart.** A history before a crash that obeys the signing rules,
+followed by the steps the restart loads and a history after it, obeys them as a
+whole, when the stored summary is faithful to the history before, the history
+after obeys the rules under the restart's configuration behind the inputs of the
+one before, and keeps the restart's bars.
+-/
+theorem safe_across_restart {cfg : Config} {node : PubKey} {honestIn : EpochNumber → Prop}
+    {P : Persisted} {pre post : History}
+    (hpre : SafeHistory cfg node honestIn pre) (hsum : Summarises cfg P pre post)
+    (hpost : SafeHistory (P.config cfg) node honestIn (pre.inputsOnly ++ P.restoredSteps ++ post))
+    (hok : RestartOK P post) :
+    SafeHistory cfg node honestIn (pre ++ P.restoredSteps ++ post) :=
+  safe_across_resume hpre hsum.resumes hpost hok
 
 /-! ## The spliced trace -/
 
