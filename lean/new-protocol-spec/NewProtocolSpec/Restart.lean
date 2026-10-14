@@ -32,8 +32,8 @@ What a restarted node loaded from storage.
 
 The anchor is the newest decided block with its `Cert1`, the lock is the locked
 `Cert1`, and `highestVoted` is the latest view the node signed anything in. The
-restarted node starts from the anchor (`Persisted.config`) and signs nothing at or
-before `highestVoted` (`RestartOK`).
+restarted node starts from the anchor (`Persisted.config`) and casts no vote1 or
+vote2 at or before `highestVoted` (`RestartOK`).
 -/
 structure Persisted where
   /-- The newest decided block. -/

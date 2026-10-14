@@ -43,15 +43,6 @@ theorem sent_append {pre post : History} {m : Message} :
     (pre ++ post).Sent m ↔ pre.Sent m ∨ post.Sent m := by
   simp only [Sent, List.mem_append, or_and_right, exists_or]
 
-theorem sentAt_append {pre post : History} {n : Nat} {m : Message} :
-    (pre ++ post).SentAt n m ↔
-      (n < pre.length ∧ pre.SentAt n m) ∨ (pre.length ≤ n ∧ post.SentAt (n - pre.length) m) := by
-  unfold SentAt
-  by_cases hn : n < pre.length
-  · rw [List.getElem?_append_left hn]
-    exact ⟨fun h => Or.inl ⟨hn, h⟩, fun h => h.elim (·.2) fun ⟨h', _⟩ => absurd h' (Nat.not_le.mpr hn)⟩
-  · simp [List.getElem?_append_right (Nat.le_of_not_lt hn), hn, Nat.le_of_not_lt hn]
-
 theorem decidedView_append {pre post : History} {v : ViewNumber} :
     (pre ++ post).DecidedView v ↔ pre.DecidedView v ∨ post.DecidedView v := by
   simp only [DecidedView, List.mem_append, or_and_right, exists_or]
