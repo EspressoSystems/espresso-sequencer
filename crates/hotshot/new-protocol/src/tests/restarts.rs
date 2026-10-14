@@ -101,6 +101,7 @@ async fn restart_all_nodes_with_storage() {
         .target_decisions(35)
         .epoch_height(10)
         .persistent_storage(true)
+        .record_traces(true)
         .tolerated_failed_views(views(1..=30))
         .node_changes(vec![(
             crash_view,
@@ -148,6 +149,7 @@ async fn restart_all_nodes_at_epoch_boundary() {
         .target_decisions(35)
         .epoch_height(10)
         .persistent_storage(true)
+        .record_traces(true)
         .tolerated_failed_views(views(1..=30))
         .node_changes(vec![(
             crash_view,
