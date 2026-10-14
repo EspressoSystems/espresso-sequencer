@@ -127,6 +127,19 @@ def test_query_floor_kept():
     ]
 
 
+# TEST:sched-query-floor-ok
+def test_query_floor_sets_the_up_query_nodes_kept():
+    topo = topo_of(13, 3)
+    state = with_health(init(topo=topo), node0="catching_up")
+    state["order"] = ["node1", "node5"]
+    state["next_fault_at"] = 0.0
+    obs = observe(topo, node0=None)
+    for floor, target in ((1, "node1"), (2, "node5")):
+        cfg = ch.ChaosConfig(query_floor=floor)
+        result = step(state, obs, 100.0, cfg=cfg, topo=topo, peers=peers_of(13, 3))
+        assert [e["node"] for e in faults([result])] == [target]
+
+
 def test_a_lagging_query_node_does_not_count_toward_the_query_floor():
     topo = topo_of(13, 4)
     state = with_health(init(topo=topo), node0="catching_up")

@@ -19,8 +19,6 @@ from itertools import accumulate, pairwise
 from pathlib import Path
 from typing import Literal, NamedTuple, NotRequired, TypedDict
 
-# Up query nodes kept at every fault: one serves scans and heights while another catches up.
-QUERY_FLOOR = 2
 # No faults in the last `kill_down_s` plus this of the load, so a late kill recovers under load.
 RECOVERY_ALLOWANCE_S = 120.0
 LAG_BLOCKS = 2
@@ -53,6 +51,8 @@ class ChaosConfig:
     gap_s: float = 45.0
     kill_down_s: float = 60.0
     recover_timeout_s: float = 300.0
+    # Up query nodes kept at every fault: one serves scans and heights while another catches up.
+    query_floor: int = 2
 
 
 ChaosEventKind = Literal[
@@ -399,7 +399,13 @@ def chaos_step(
         and kind is not None
         and (
             i := _fault_target(
-                state["order"], cursor, nodes, _lagging(nodes, obs, tip), queries, peers
+                state["order"],
+                cursor,
+                nodes,
+                _lagging(nodes, obs, tip),
+                queries,
+                peers,
+                cfg.query_floor,
             )
         )
         is not None
@@ -582,6 +588,7 @@ def _fault_target(
     lagging: Collection[str],
     queries: Collection[str],
     peers: dict[str, list[str]],
+    query_floor: int,
 ) -> int | None:
     """Index in `order` of the first node from `cursor` on whose fault keeps the budget, the up
     query floor and 2 up peers for itself and for every faulty node; `None` when there is
@@ -599,7 +606,7 @@ def _fault_target(
         name = order[i]
         if name not in up:
             continue
-        if up_queries - (name in queries) < QUERY_FLOOR:
+        if up_queries - (name in queries) < query_floor:
             continue
         if up_peers(name, name) < 2:
             continue

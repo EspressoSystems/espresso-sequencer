@@ -582,6 +582,7 @@ CHAOS_FLAGS = (
     "--chaos-gap",
     "--chaos-kill-down",
     "--chaos-recover-timeout",
+    "--chaos-query-floor",
 )
 # The load shape is the chaos config's.
 CHAOS_LOAD_FLAGS = ("--steps", "--step-s", "--search", "--keep-going", "--warmup-s")
@@ -1261,10 +1262,11 @@ def check_chaos(cfg: RunConfig) -> None:
             f"--chaos needs at least {CHAOS_MIN_NODES} nodes to keep faulty stake below f: "
             f"{cfg.nodes}"
         )
-    if cfg.query_nodes <= ch.QUERY_FLOOR:
+    if cfg.query_nodes <= cfg.chaos.query_floor:
         raise Refused(
-            f"--chaos needs more than {ch.QUERY_FLOOR} query nodes, so that one can be "
-            f"faulted with {ch.QUERY_FLOOR} left serving: {cfg.query_nodes}"
+            f"--chaos needs more than {cfg.chaos.query_floor} query nodes, so that one can be "
+            f"faulted with {cfg.chaos.query_floor} left serving (--chaos-query-floor): "
+            f"{cfg.query_nodes}"
         )
     if cfg.chaos.recover_timeout_s <= cfg.chaos.kill_down_s:
         raise Refused(
@@ -1649,7 +1651,8 @@ def format_chaos_summary(chaos: ch.ChaosConfig, nodes: int, latency: str) -> str
         f"chaos: {chaos.minutes} min at {chaos.rate_mb_s:g} MB/s; latency {latency}; "
         f"kinds {','.join(chaos.kinds) or 'none'}; seed {chaos.seed}; "
         f"at most {ch.fault_budget(nodes)} faulty; gap {chaos.gap_s:g} s; "
-        f"kill down {chaos.kill_down_s:g} s; recover timeout {chaos.recover_timeout_s:g} s"
+        f"kill down {chaos.kill_down_s:g} s; recover timeout {chaos.recover_timeout_s:g} s; "
+        f"query floor {chaos.query_floor}"
     )
 
 
@@ -2918,6 +2921,13 @@ def add_chaos_flags(parser: argparse.ArgumentParser) -> None:
             default=value,
             help=f"with --chaos: {text}, default {value:g}",
         )
+    parser.add_argument(
+        "--chaos-query-floor",
+        type=positive_int,
+        default=chaos.query_floor,
+        help="with --chaos: up query nodes kept at every fault, so the fleet needs more query "
+        f"nodes than this, default {chaos.query_floor}",
+    )
 
 
 def add_region_flag(parser: argparse.ArgumentParser, default: str | None) -> None:
@@ -3106,6 +3116,7 @@ def chaos_from_args(args: argparse.Namespace) -> ch.ChaosConfig | None:
         gap_s=args.chaos_gap,
         kill_down_s=args.chaos_kill_down,
         recover_timeout_s=args.chaos_recover_timeout,
+        query_floor=args.chaos_query_floor,
     )
 
 
@@ -7623,7 +7634,7 @@ def setup_line(config: dict[str, Any]) -> str:
         f"{config['node_type']}, latency {latency_cell(config)}, {chaos.minutes} min at "
         f"{chaos.rate_mb_s:g} MB/s, seed {chaos.seed}, kinds {','.join(chaos.kinds) or 'none'}, "
         f"gap {chaos.gap_s:g} s, kill down {chaos.kill_down_s:g} s, "
-        f"recover timeout {chaos.recover_timeout_s:g} s"
+        f"recover timeout {chaos.recover_timeout_s:g} s, query floor {chaos.query_floor}"
     )
 
 
