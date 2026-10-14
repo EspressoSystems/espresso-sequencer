@@ -984,6 +984,48 @@ async fn own_certificate1_after_a_revotes_certificate2_decides_the_boundary_bloc
     );
 }
 
+/// A node that missed the boundary block's `Certificate1` and the re-vote's
+/// decides the block when the first block of the next epoch arrives, naming
+/// the block's own certificate and carrying the re-vote's `Certificate2`.
+#[tokio::test]
+async fn first_block_carrying_a_revotes_commit_decides_the_boundary_block() {
+    let test_data = TestData::new_with_epoch_height(BOUNDARY + 2, EPOCH_HEIGHT).await;
+    let boundary = &test_data.views[BOUNDARY];
+    let first = &test_data.views[BOUNDARY + 1];
+    let mut harness =
+        node_before_the_boundary_certificate(0, &test_data, test_timeout_epoch_lock()).await;
+
+    // The first block of epoch 2 at view 12, after a re-vote at view 11.
+    let (_, cert2_11) = revote_certs(&harness, &test_data, view(11));
+    let tc = timeout_cert_of(&harness, epoch(2), view(11), Some(boundary.cert1.clone()));
+    let mut proposal = first.proposal_message();
+    proposal.proposal.data.view_number = view(12);
+    proposal.proposal.data.next_epoch_justify_qc = Some(cert2_11);
+    proposal.proposal.data.view_change_evidence = Some(tc);
+    assert_eq!(proposal.proposal.data.justify_qc, boundary.cert1);
+    assert!(crate::proposal::well_formed(&proposal.proposal.data, EPOCH_HEIGHT).is_ok());
+    let node_key = BLSPubKey::generated_from_seed_indexed([0; 32], 0).0;
+    let mut share = first.vid_share_for(&node_key);
+    share.view_number = view(12);
+    let leader = leader_index(&harness, view(12), epoch(2));
+    let leader_key = BLSPubKey::generated_from_seed_indexed([0u8; 32], leader).0;
+    harness
+        .apply_pair((
+            ConsensusInput::Proposal(leader_key, proposal),
+            ConsensusInput::VidShare(share),
+        ))
+        .await;
+
+    assert!(
+        harness.outputs().iter().any(|o| matches!(
+            o,
+            ConsensusOutput::LeafDecided { leaves, .. }
+                if leaves.first().is_some_and(|l| l.view_number() == view(10))
+        )),
+        "the boundary block is decided"
+    );
+}
+
 /// A node lacking both the re-vote's block and its payload fetches both.
 #[tokio::test]
 async fn revote_fetches_the_block_and_then_its_payload() {

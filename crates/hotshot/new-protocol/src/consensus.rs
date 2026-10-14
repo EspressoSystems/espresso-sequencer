@@ -1493,16 +1493,23 @@ impl<T: NodeType> Consensus<T> {
         //
         // The first block of an epoch carries its parent's commit, which
         // decides the previous epoch's last block.
-        if let Some(cert2) = proposal.next_epoch_justify_qc.clone() {
+        let commit_view = proposal.next_epoch_justify_qc.clone().and_then(|cert2| {
             let commit_view = cert2.view_number();
-            if commit_view > self.decide_floor() && self.insert_cert2(cert2) {
-                self.maybe_decide(commit_view, outbox);
-            }
-        }
+            (commit_view > self.decide_floor()).then(|| {
+                self.insert_cert2(cert2);
+                commit_view
+            })
+        });
         // The parent's certificate and the timeout certificate were verified
         // with the proposal, and put this node in the proposal's view.
         let parent_epoch = LockView::of(&proposal.justify_qc).epoch;
         self.advance_on(proposal.justify_qc.clone(), parent_epoch, outbox);
+        // Decided only now: a re-vote's commit is at a later view than the
+        // block, and deciding it needs a `Certificate1` over the block, which
+        // the parent's certificate may be the first of.
+        if let Some(commit_view) = commit_view {
+            self.maybe_decide(commit_view, outbox);
+        }
         if let Some(tc) = proposal.view_change_evidence.clone()
             && !self.timeout_certs.contains_key(&view)
         {
