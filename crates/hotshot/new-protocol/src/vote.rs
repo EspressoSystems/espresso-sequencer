@@ -47,7 +47,7 @@ use tracing::{error, info, warn};
 
 use crate::{
     cert_verifier::{ValidCert, verify_signatures, verify_timeout3},
-    message::{TimeoutBallot, Vote1},
+    message::{Certificate1, TimeoutBallot, Vote1},
 };
 
 /// Information about a vote.
@@ -272,6 +272,11 @@ pub struct TimeoutTally<T: NodeType, Th> {
     ballots: Vec<TimeoutBallot<T>>,
     weight: U256,
     verify_votes: bool,
+    /// Whether each lock certificate checked so far is signed by a quorum.
+    ///
+    /// Most voters name the same lock, so once votes are checked one by one,
+    /// each certificate's signatures are checked once rather than per vote.
+    checked_locks: HashMap<Certificate1<T>, bool>,
     _threshold: PhantomData<fn() -> Th>,
 }
 
@@ -286,6 +291,7 @@ impl<T: NodeType, Th: Threshold<T> + Send + 'static> Tally<T> for TimeoutTally<T
             ballots: Vec::new(),
             weight: U256::ZERO,
             verify_votes: false,
+            checked_locks: HashMap::new(),
             _threshold: PhantomData,
         }
     }
@@ -404,7 +410,7 @@ impl<T: NodeType, Th: Threshold<T>> TimeoutTally<T, Th> {
     }
 
     /// Check a ballot's signature and its lock certificate.
-    fn is_valid(&self, ballot: &TimeoutBallot<T>) -> bool {
+    fn is_valid(&mut self, ballot: &TimeoutBallot<T>) -> bool {
         let vote = ballot.vote();
         let Ok(data) =
             VersionedVoteData::new(vote.data.clone(), vote.view_number(), &self.upgrade_lock)
@@ -430,21 +436,28 @@ impl<T: NodeType, Th: Threshold<T>> TimeoutTally<T, Th> {
         {
             return false;
         }
-        let Ok(membership) = self
-            .membership
-            .coordinator
-            .membership_for_epoch(cert.data.epoch)
-        else {
-            return false;
+        let valid = match self.checked_locks.get(cert) {
+            Some(valid) => *valid,
+            None => {
+                let Ok(membership) = self
+                    .membership
+                    .coordinator
+                    .membership_for_epoch(cert.data.epoch)
+                else {
+                    return false;
+                };
+                let entries = StakeTableEntries::from_iter(membership.stake_table()).0;
+                let valid = verify_signatures(
+                    cert,
+                    &entries,
+                    membership.success_threshold(),
+                    &self.upgrade_lock,
+                )
+                .is_ok();
+                self.checked_locks.insert(cert.clone(), valid);
+                valid
+            },
         };
-        let entries = StakeTableEntries::from_iter(membership.stake_table()).0;
-        let valid = verify_signatures(
-            cert,
-            &entries,
-            membership.success_threshold(),
-            &self.upgrade_lock,
-        )
-        .is_ok();
         if !valid {
             warn!(view = %vote.view_number(), signer = %vote.signing_key(), "timeout vote with an invalid lock certificate");
         }
