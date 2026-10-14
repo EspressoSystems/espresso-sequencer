@@ -231,6 +231,51 @@ def test_chaos_flags_need_chaos():
         awsb.config_from_args(parse("--chaos-rate", "2"))
 
 
+# TEST:cli-chaos-defaults-unchanged-ok
+def test_chaos_flag_defaults_equal_the_config():
+    args = parse("--chaos")
+    chaos = ch.ChaosConfig()
+    assert (args.chaos_gap, args.chaos_kill_down, args.chaos_recover_timeout) == (
+        chaos.gap_s,
+        chaos.kill_down_s,
+        chaos.recover_timeout_s,
+    )
+
+
+def test_chaos_timing_flags_reach_the_config():
+    cfg = awsb.config_from_args(
+        parse(
+            "--chaos",
+            "--chaos-gap",
+            "10",
+            "--chaos-kill-down",
+            "30",
+            "--chaos-recover-timeout",
+            "120",
+        )
+    )
+    assert cfg.chaos == ch.ChaosConfig(
+        gap_s=10.0, kill_down_s=30.0, recover_timeout_s=120.0
+    )
+
+
+@pytest.mark.parametrize(
+    "flag", ["--chaos-gap", "--chaos-kill-down", "--chaos-recover-timeout"]
+)
+def test_chaos_timing_flag_without_chaos_refused(flag):
+    with pytest.raises(awsb.Refused, match=f"{flag} needs --chaos"):
+        awsb.config_from_args(parse(flag, "100"))
+
+
+# TEST:cli-chaos-refusals-fails
+def test_chaos_recover_timeout_not_above_kill_down_refused():
+    chaos = ch.ChaosConfig(kill_down_s=100.0, recover_timeout_s=100.0)
+    with pytest.raises(awsb.Refused, match="--chaos-recover-timeout"):
+        awsb.check_chaos(dataclasses.replace(chaos_cfg(), chaos=chaos))
+    chaos = ch.ChaosConfig(kill_down_s=100.0, recover_timeout_s=101.0)
+    awsb.check_chaos(dataclasses.replace(chaos_cfg(), chaos=chaos))
+
+
 # TEST:chaos-postgres-refused-fails
 @pytest.mark.parametrize(
     ("change", "reason"),
@@ -309,6 +354,16 @@ def test_old_manifest_defaults():
     del saved["query_nodes"], saved["chaos"]
     cfg = awsb.config_from_manifest(saved)
     assert (cfg.query_nodes, cfg.chaos) == (1, None)
+
+
+# TEST:manifest-old-config-ok
+def test_old_manifest_chaos_without_timing_fields():
+    saved = awsb.config_to_json(awsb.RunConfig(tag="x", chaos=ch.ChaosConfig()))
+    for field in ("gap_s", "kill_down_s", "recover_timeout_s"):
+        del saved["chaos"][field]
+    assert awsb.config_from_manifest(saved).chaos == ch.ChaosConfig()
+    line = awsb.setup_line({**saved, "nodes": 22, "query_nodes": 4, "node_type": "x"})
+    assert line.endswith("gap 45 s, kill down 60 s, recover timeout 300 s")
 
 
 def test_manifest_config_round_trips_chaos():
@@ -609,10 +664,11 @@ def test_hash_includes_chaos_and_query_nodes():
         digest(base),
         digest(dataclasses.replace(base, chaos=ch.ChaosConfig(seed=7))),
         digest(dataclasses.replace(base, chaos=ch.ChaosConfig(rate_mb_s=2.0))),
+        digest(dataclasses.replace(base, chaos=ch.ChaosConfig(gap_s=10.0))),
         digest(dataclasses.replace(base, query_nodes=4)),
         digest(dataclasses.replace(base, chaos=None)),
     }
-    assert len(hashes) == 5
+    assert len(hashes) == 6
     assert digest(base) == digest(chaos_cfg())
 
 

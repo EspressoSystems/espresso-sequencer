@@ -544,6 +544,17 @@ def test_gap_respected():
     assert all(b - a >= CFG.gap_s for a, b in pairwise(times))
 
 
+# TEST:sched-gap-density-ok
+def test_gap_sets_the_fault_density():
+    cfg = ch.ChaosConfig(gap_s=10.0)
+    window = 600.0
+    load_s = window + cfg.kill_down_s + ch.RECOVERY_ALLOWANCE_S
+    steps = run(cfg, n=32, k=3, seconds=60.0 + window, load_s=load_s)
+    times = [e["ts"] for e in faults(steps)]
+    assert len(times) >= 40
+    assert all(b - a >= cfg.gap_s for a, b in pairwise(times))
+
+
 # TEST:stops-before-tail-ok
 def test_stops_so_that_a_late_kill_recovers_under_load():
     steps = run(seconds=1500, load_s=600.0)

@@ -574,7 +574,15 @@ CHAOS_NODES = 22
 CHAOS_NODE_TYPE = "c8g.large"
 CHAOS_CTL_TYPE = "c8g.xlarge"
 CHAOS_LATENCY = "decaf-2025"
-CHAOS_FLAGS = ("--chaos-min", "--chaos-rate", "--chaos-seed", "--chaos-kinds")
+CHAOS_FLAGS = (
+    "--chaos-min",
+    "--chaos-rate",
+    "--chaos-seed",
+    "--chaos-kinds",
+    "--chaos-gap",
+    "--chaos-kill-down",
+    "--chaos-recover-timeout",
+)
 # The load shape is the chaos config's.
 CHAOS_LOAD_FLAGS = ("--steps", "--step-s", "--search", "--keep-going", "--warmup-s")
 CHAOS_MIN_NODES = 7
@@ -1257,6 +1265,11 @@ def check_chaos(cfg: RunConfig) -> None:
         raise Refused(
             f"--chaos needs more than {ch.QUERY_FLOOR} query nodes, so that one can be "
             f"faulted with {ch.QUERY_FLOOR} left serving: {cfg.query_nodes}"
+        )
+    if cfg.chaos.recover_timeout_s <= cfg.chaos.kill_down_s:
+        raise Refused(
+            f"--chaos-recover-timeout {cfg.chaos.recover_timeout_s:g} must exceed "
+            f"--chaos-kill-down {cfg.chaos.kill_down_s:g}: a killed node stays down that long"
         )
     quiet_s = cfg.chaos.kill_down_s + ch.RECOVERY_ALLOWANCE_S
     if cfg.chaos.kinds and cfg.chaos.minutes * CHAOS_STEP_S <= quiet_s:
@@ -2890,6 +2903,21 @@ def add_chaos_flags(parser: argparse.ArgumentParser) -> None:
         help="with --chaos: comma separated fault kinds, used in turn; `mass-restart` restarts every "
         "node at once; `none` for no faults",
     )
+    for flag, value, text in (
+        ("gap", chaos.gap_s, "seconds between two faults"),
+        ("kill-down", chaos.kill_down_s, "seconds a killed node stays down"),
+        (
+            "recover-timeout",
+            chaos.recover_timeout_s,
+            "seconds a faulted node has to recover before the run fails",
+        ),
+    ):
+        parser.add_argument(
+            f"--chaos-{flag}",
+            type=positive_float,
+            default=value,
+            help=f"with --chaos: {text}, default {value:g}",
+        )
 
 
 def add_region_flag(parser: argparse.ArgumentParser, default: str | None) -> None:
@@ -3075,6 +3103,9 @@ def chaos_from_args(args: argparse.Namespace) -> ch.ChaosConfig | None:
         rate_mb_s=args.chaos_rate,
         seed=args.chaos_seed,
         kinds=args.chaos_kinds,
+        gap_s=args.chaos_gap,
+        kill_down_s=args.chaos_kill_down,
+        recover_timeout_s=args.chaos_recover_timeout,
     )
 
 
@@ -7585,11 +7616,14 @@ def tx_counts(run_dir: Path) -> Counter[str]:
 
 
 def setup_line(config: dict[str, Any]) -> str:
-    chaos = config["chaos"]
+    chaos = chaos_config(config["chaos"])
+    assert chaos is not None
     return (
         f"- Setup: {config['nodes']} nodes ({config['query_nodes']} query), "
-        f"{config['node_type']}, latency {latency_cell(config)}, {chaos['minutes']} min at "
-        f"{chaos['rate_mb_s']:g} MB/s, seed {chaos['seed']}, kinds {','.join(chaos['kinds']) or 'none'}"
+        f"{config['node_type']}, latency {latency_cell(config)}, {chaos.minutes} min at "
+        f"{chaos.rate_mb_s:g} MB/s, seed {chaos.seed}, kinds {','.join(chaos.kinds) or 'none'}, "
+        f"gap {chaos.gap_s:g} s, kill down {chaos.kill_down_s:g} s, "
+        f"recover timeout {chaos.recover_timeout_s:g} s"
     )
 
 
