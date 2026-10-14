@@ -46,6 +46,8 @@ pub struct ConsensusHandle<T: NodeType, I: NodeImplementation<T>> {
     membership_coordinator: EpochMembershipCoordinator<T>,
     resting: RwLock<Resting<T>>,
     new_proto: Arc<RwLock<NewProtocol<T, I::Storage>>>,
+    /// Cancelled once the coordinator task has ended, however it ended.
+    exited: CancellationToken,
 }
 
 /// What consensus reports once the coordinator has stopped: its last report, or the anchor if it
@@ -121,6 +123,7 @@ where
                 state: initializer.anchor_state().clone(),
             }),
             new_proto,
+            exited: CancellationToken::new(),
         }
     }
 
@@ -147,6 +150,7 @@ where
                         event_tx,
                         queue_len,
                         shutdown.clone(),
+                        self.exited.clone(),
                     ))),
                     client_api,
                     shutdown,
@@ -160,38 +164,54 @@ where
         self.event_rx.activate_cloned().boxed()
     }
 
-    /// Falls back to the resting state when the coordinator has shut down under a reader that
-    /// cloned the client API before `shut_down` took it.
+    /// Resolves once the coordinator task has ended, whether `shut_down` stopped it or it died
+    /// on a critical error or a panic. Never resolves if consensus never started.
+    pub async fn stopped(&self) {
+        self.exited.cancelled().await
+    }
+
+    /// Serves the resting state once the coordinator has shut down, including under a reader
+    /// that cloned the client API before `shut_down` took it. Panics if the coordinator died
+    /// instead: the node must not answer as if the chain had stopped.
     pub async fn current_view(&self) -> ViewNumber {
-        if let Some(client_api) = self.client_api().await
-            && let Ok(view) = client_api.current_view().await
-        {
-            return view;
+        let Some(client_api) = self.client_api().await else {
+            return self.resting.read().view;
+        };
+        match client_api.current_view().await {
+            Ok(view) => view,
+            Err(err) => self.resting_unless_dead(err).view,
         }
-        self.resting.read().view
     }
 
-    /// Falls back to the resting state, see [`Self::current_view`].
+    /// See [`Self::current_view`].
     pub async fn decided_leaf(&self) -> Leaf2<T> {
-        if let Some(client_api) = self.client_api().await
-            && let Ok(leaf) = client_api.decided_leaf().await
-        {
-            return leaf;
+        let Some(client_api) = self.client_api().await else {
+            return self.resting.read().leaf.clone();
+        };
+        match client_api.decided_leaf().await {
+            Ok(leaf) => leaf,
+            Err(err) => self.resting_unless_dead(err).leaf.clone(),
         }
-        self.resting.read().leaf.clone()
     }
 
+    /// See [`Self::current_view`].
     pub async fn decided_state(&self) -> Option<Arc<T::ValidatedState>> {
         let Some(client_api) = self.client_api().await else {
             return Some(self.resting.read().state.clone());
         };
         match client_api.decided_state().await {
             Ok(state) => state,
-            Err(err) => {
-                warn!(%err, "coordinator unavailable for decided_state");
-                None
-            },
+            Err(err) => Some(self.resting_unless_dead(err).state.clone()),
         }
+    }
+
+    /// Where a failed request leaves a reader: `shut_down` took the coordinator and the resting
+    /// state answers, or the coordinator is still registered as running, so it died.
+    fn resting_unless_dead(&self, err: QueryError) -> parking_lot::RwLockReadGuard<'_, Resting<T>> {
+        if matches!(*self.new_proto.read(), NewProtocol::Running { .. }) {
+            panic!("coordinator died: {err}");
+        }
+        self.resting.read()
     }
 
     pub async fn state(&self, view: ViewNumber) -> Option<Arc<T::ValidatedState>> {
@@ -416,6 +436,14 @@ where
         *self.resting.write() = Resting { view, leaf, state };
     }
 
+    /// Aborts the coordinator task without touching the handle's state, as a panic in it would.
+    #[cfg(test)]
+    pub(crate) fn kill_coordinator(&self) {
+        if let NewProtocol::Running { coordinator, .. } = &*self.new_proto.read() {
+            coordinator.abort();
+        }
+    }
+
     pub(crate) async fn client_api(&self) -> Option<ClientApi<T>> {
         if let NewProtocol::Running { client_api, .. } = &*self.new_proto.read() {
             return Some(client_api.clone());
@@ -435,10 +463,12 @@ async fn run_coordinator<T, S>(
     tx: Sender<CoordinatorEvent<T>>,
     queue_len: Option<Arc<dyn Gauge>>,
     shutdown: CancellationToken,
+    exited: CancellationToken,
 ) where
     T: NodeType,
     S: NewProtocolStorage<T>,
 {
+    let _exited = exited.drop_guard();
     coord.start();
     let _forward = AbortOnDropHandle::new(spawn({
         let tx = tx.clone();

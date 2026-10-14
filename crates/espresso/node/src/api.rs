@@ -4412,6 +4412,34 @@ mod test {
         drop(network);
     }
 
+    /// A coordinator that dies is not papered over: `join` returns so the node exits, and the
+    /// readers fail instead of serving the resting state as if the chain had stopped.
+    #[test_log::test(tokio::test(flavor = "multi_thread"))]
+    async fn test_dead_coordinator_is_visible() {
+        let port = reserve_tcp_port().expect("OS should have ephemeral ports available");
+        let config = TestNetworkConfigBuilder::default()
+            .api_config(Options::with_port(port))
+            .network_config(TestConfigBuilder::default().build())
+            .build();
+        let mut network = TestNetwork::new(config, TEST_UPGRADE).await;
+        let node = &mut network.peers[0];
+        while node.decided_leaf().await.height() < 1 {
+            sleep(Duration::from_millis(100)).await;
+        }
+
+        let handle = node.consensus_handle();
+        handle.kill_coordinator();
+
+        timeout(Duration::from_secs(10), node.join())
+            .await
+            .expect("join did not return after the coordinator died");
+        let read = tokio::spawn(async move { handle.decided_leaf().await }).await;
+        assert!(
+            read.is_err_and(|err| err.is_panic()),
+            "a dead coordinator was served from the resting state"
+        );
+    }
+
     /// After shutdown the readers serve the coordinator's last decide, not the anchor the node
     /// started from, and the leaf and state they serve belong to the same block.
     #[test_log::test(tokio::test(flavor = "multi_thread"))]

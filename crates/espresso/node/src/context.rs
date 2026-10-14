@@ -45,7 +45,7 @@ use hotshot_types::{
 use parking_lot::Mutex;
 use request_response::RequestResponseConfig;
 use tokio::{
-    spawn,
+    select, spawn,
     sync::{
         broadcast,
         mpsc::{channel, unbounded_channel},
@@ -561,8 +561,13 @@ where
     ///
     /// Under normal conditions, this function will block forever, which is a convenient way of
     /// keeping the main thread from exiting as long as there are still active background tasks.
+    /// It returns once the coordinator has stopped, so a node whose coordinator died exits
+    /// instead of serving its last state.
     pub async fn join(&mut self) {
-        self.tasks.join().await;
+        select! {
+            () = self.tasks.join() => {},
+            () = self.consensus_handle.stopped() => tracing::error!("coordinator stopped"),
+        }
     }
 
     /// Allow this node to continue participating in consensus even after it is dropped.
