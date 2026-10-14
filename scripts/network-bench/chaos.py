@@ -316,12 +316,12 @@ def chaos_step(
     mass = _mass_reference(nodes, obs, queries, mass_height)
     for name, s in nodes.items():
         ref = mass if s["kind"] == MASS_RESTART else normal
-        if ref.tip is None:
-            continue
         if s["health"] == "down" and now >= s["since"] + cfg.kill_down_s:
             actions.append({"node": name, "op": "start"})
             s.update(health="recovering", started=now, streak=0)
             emit("started", name, now - s["since"])
+        elif ref.tip is None:
+            continue
         elif s["health"] == "recovering":
             # The fault or start action ran before this tick: the answer is the new process.
             if s["up_at"] is None and obs["height"][name] is not None:

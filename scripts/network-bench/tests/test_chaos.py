@@ -416,6 +416,20 @@ def test_kill_starts_after_delay():
     assert late["state"]["nodes"][fault["node"]]["started"] == 120.0
 
 
+# TEST:sched-no-tip-kill-ok
+def test_kill_starts_when_no_node_answers():
+    topo = topo_of()
+    cfg = ch.ChaosConfig(kinds=("kill",))
+    state = with_health(init(cfg, topo), node5="down")
+    state["nodes"]["node5"].update(since=100.0, kind="kill")
+    state["next_fault_at"] = 1e9
+    obs = observe(topo, **dict.fromkeys(topo["nodes"]))
+    result = step(state, obs, 100.0 + cfg.kill_down_s, cfg)
+    assert {"node": "node5", "op": "start"} in result["actions"]
+    assert result["state"]["nodes"]["node5"]["health"] == "recovering"
+    assert timeouts(result) == []
+
+
 def test_kill_recovery_counts_from_the_start():
     topo = topo_of()
     cfg = ch.ChaosConfig(kinds=("kill",))
