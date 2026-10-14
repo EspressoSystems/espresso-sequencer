@@ -20,9 +20,14 @@ use hotshot_query_service_types::{
     availability::{BlockQueryData, LeafId, LeafQueryData, PayloadQueryData, VidCommonQueryData},
     node::BlockId,
 };
-use hotshot_types::{data::EpochNumber, stake_table::StakeTableEntry, utils::root_block_in_epoch};
+use hotshot_types::{
+    data::EpochNumber,
+    stake_table::StakeTableEntry,
+    utils::{epoch_from_block_number, root_block_in_epoch},
+};
 use serde::{Deserialize, Serialize};
 use vbs::version::{StaticVersionType, Version};
+use versions::EPOCH_VERSION;
 
 use crate::{
     client::Client,
@@ -632,7 +637,8 @@ where
         header: Header,
     ) -> Result<(BlockQueryData<SeqTypes>, VidCommonQueryData<SeqTypes>)> {
         let proof = self.server.payload_proof(header.height()).await?;
-        let (payload, vid_common) = proof.verify_with_vid_common(&header)?;
+        let total_weight = self.vid_total_weight(&header).await?;
+        let (payload, vid_common) = proof.verify_with_vid_common(&header, total_weight)?;
         Ok((
             BlockQueryData::new(header.clone(), payload),
             VidCommonQueryData::new(header, vid_common),
@@ -680,17 +686,16 @@ where
             "server returned wrong number of payload proofs for range {start}..{end} ({})",
             proofs.len(),
         );
-        headers
-            .into_iter()
-            .zip(proofs)
-            .map(|(header, proof)| {
-                let (payload, vid_common) = proof.verify_with_vid_common(&header)?;
-                Ok((
-                    BlockQueryData::new(header.clone(), payload),
-                    VidCommonQueryData::new(header, vid_common),
-                ))
-            })
-            .collect()
+        let mut blocks = Vec::with_capacity(proofs.len());
+        for (header, proof) in headers.into_iter().zip(proofs) {
+            let total_weight = self.vid_total_weight(&header).await?;
+            let (payload, vid_common) = proof.verify_with_vid_common(&header, total_weight)?;
+            blocks.push((
+                BlockQueryData::new(header.clone(), payload),
+                VidCommonQueryData::new(header, vid_common),
+            ));
+        }
+        Ok(blocks)
     }
 
     /// Fetch and verify the blocks and VID common data for a set of height ranges.
@@ -730,18 +735,17 @@ where
             leaves.len(),
         );
 
-        leaves
-            .into_iter()
-            .zip(proofs)
-            .map(|(leaf, proof)| {
-                let header = leaf.header().clone();
-                let (payload, vid_common) = proof.verify_with_vid_common(&header)?;
-                Ok((
-                    BlockQueryData::new(header.clone(), payload),
-                    VidCommonQueryData::new(header, vid_common),
-                ))
-            })
-            .collect()
+        let mut blocks = Vec::with_capacity(proofs.len());
+        for (leaf, proof) in leaves.into_iter().zip(proofs) {
+            let header = leaf.header().clone();
+            let total_weight = self.vid_total_weight(&header).await?;
+            let (payload, vid_common) = proof.verify_with_vid_common(&header, total_weight)?;
+            blocks.push((
+                BlockQueryData::new(header.clone(), payload),
+                VidCommonQueryData::new(header, vid_common),
+            ));
+        }
+        Ok(blocks)
     }
 
     /// Fetch and verify the transactions in the given namespace of the requested block.
@@ -764,7 +768,8 @@ where
             .server
             .namespace_proof(header.height(), namespace)
             .await?;
-        proof.verify(header, namespace)
+        let total_weight = self.vid_total_weight(header).await?;
+        proof.verify(header, namespace, total_weight)
     }
 
     /// Fetch and verify the transactions in the given namespace of blocks in the range
@@ -788,11 +793,12 @@ where
             headers.len(),
             proofs.len()
         );
-        proofs
-            .into_iter()
-            .zip(&headers)
-            .map(|(proof, header)| proof.verify(header, namespace))
-            .collect()
+        let mut namespaces = Vec::with_capacity(proofs.len());
+        for (proof, header) in proofs.into_iter().zip(&headers) {
+            let total_weight = self.vid_total_weight(header).await?;
+            namespaces.push(proof.verify(header, namespace, total_weight)?);
+        }
+        Ok(namespaces)
     }
 
     /// Fetch and verify the transactions in the given namespaces of blocks in the range
@@ -819,16 +825,32 @@ where
             headers.len(),
             proofs.len()
         );
-        proofs
-            .into_iter()
-            .zip(&headers)
-            .map(|(proofs, header)| {
+        let mut blocks = Vec::with_capacity(proofs.len());
+        for (proofs, header) in proofs.into_iter().zip(&headers) {
+            let total_weight = self.vid_total_weight(header).await?;
+            blocks.push(
                 proofs
                     .into_iter()
-                    .map(|(namespace, proof)| Ok((namespace, proof.verify(header, namespace)?)))
-                    .collect()
-            })
-            .collect()
+                    .map(|(namespace, proof)| {
+                        Ok((namespace, proof.verify(header, namespace, total_weight)?))
+                    })
+                    .collect::<Result<_>>()?,
+            );
+        }
+        Ok(blocks)
+    }
+
+    /// The VID total weight consensus used for the block of `header`, which the proofs for its
+    /// payload are checked against.
+    async fn vid_total_weight(&self, header: &Header) -> Result<usize> {
+        if header.version() < EPOCH_VERSION {
+            return Ok(self.genesis_stake_table.vid_total_weight(None));
+        }
+        let epoch = EpochNumber::new(epoch_from_block_number(header.height(), self.epoch_height));
+        Ok(self
+            .quorum_for_epoch(epoch)
+            .await?
+            .vid_total_weight(Some(epoch)))
     }
 
     /// Fetch and verify the stake table for the requested epoch.

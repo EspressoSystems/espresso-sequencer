@@ -27,7 +27,7 @@ use hotshot_query_service_types::{
 use hotshot_types::{
     data::{
         EpochNumber, QuorumProposal2, QuorumProposalWrapper, VidCommitment, VidCommon, ViewNumber,
-        vid_commitment,
+        vid_commitment, vid_disperse::vid_total_weight_from_stakes,
     },
     message::UpgradeLock,
     signature_key::SchnorrPubKey,
@@ -408,6 +408,22 @@ impl InnerTestClient {
         }
     }
 
+    /// The VID total weight consensus derives for the block at `height`, which the light client
+    /// recomputes from the quorum of that block's epoch.
+    fn vid_total_weight(&mut self, height: u64, epoch_height: u64) -> usize {
+        let epoch = epoch_from_block_number(height, epoch_height);
+        let version = self.version_at(height);
+        let stakes: Vec<_> = self
+            .quorum_for_epoch(epoch)
+            .iter()
+            .map(|(_, validator)| validator.stake)
+            .collect();
+        vid_total_weight_from_stakes(
+            stakes,
+            (version >= EPOCH_VERSION).then(|| EpochNumber::new(epoch)),
+        )
+    }
+
     fn quorum_for_epoch(&mut self, epoch: u64) -> &[(PrivKey, AuthenticatedValidator<PubKey>)] {
         // For testing purposes, we will say that one new node joins the quorum each epoch. The
         // static stake table used before the first epoch with dynamic stake is the same as the
@@ -511,10 +527,11 @@ impl InnerTestClient {
             tracing::debug!(?transactions, "generated block {i}");
             let (payload, ns_table) =
                 Payload::from_transactions_sync(&transactions, node_state.chain_config).unwrap();
+            let total_weight = self.vid_total_weight(i as u64, epoch_height);
             let payload_comm = vid_commitment(
                 &payload.encode(),
                 &ns_table.encode(),
-                quorum.len(),
+                total_weight,
                 upgrade.base,
             );
 
@@ -700,9 +717,7 @@ impl InnerTestClient {
     }
 
     fn vid_common(&mut self, height: u64, epoch_height: u64) -> VidCommon {
-        let epoch = epoch_from_block_number(height, epoch_height);
-        let quorum = self.quorum_for_epoch(epoch);
-        VidCommon::V1(init_avidm_param(quorum.len()).unwrap())
+        VidCommon::V1(init_avidm_param(self.vid_total_weight(height, epoch_height)).unwrap())
     }
 }
 
@@ -828,6 +843,12 @@ impl TestClient {
     pub async fn vid_common(&self, height: u64) -> VidCommon {
         let mut inner = self.inner.lock().await;
         inner.vid_common(height, self.epoch_height)
+    }
+
+    /// The VID total weight the light client derives for the block at `height`.
+    pub async fn vid_total_weight(&self, height: u64) -> usize {
+        let mut inner = self.inner.lock().await;
+        inner.vid_total_weight(height, self.epoch_height)
     }
 
     pub async fn mock_block_height(&self, height: u64) {

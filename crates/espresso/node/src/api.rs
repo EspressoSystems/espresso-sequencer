@@ -3637,7 +3637,7 @@ mod test {
     use hotshot_types::{
         ValidatorConfig,
         addr::NetAddr,
-        data::EpochNumber,
+        data::{EpochNumber, vid_disperse::vid_total_weight},
         event::LeafInfo,
         new_protocol::CoordinatorEvent,
         traits::{block_contents::BlockHeader, election::Membership, metrics::NoMetrics},
@@ -12834,14 +12834,19 @@ mod test {
     ///
     /// Only checks that proofs verify, not which `FinalityProof` variant they
     /// use
-    async fn check_light_client_proofs(
+    async fn check_light_client_proofs<N, P>(
         client: &Client<ClientErr, StaticVersion<0, 1>>,
+        server: &SequencerContext<N, P>,
         actual_leaves: &[LeafQueryData<SeqTypes>],
         actual_blocks: &[BlockQueryData<SeqTypes>],
         heights: impl IntoIterator<Item = u64>,
         epoch_height: u64,
-    ) {
+    ) where
+        N: ConnectedNetwork<PubKey>,
+        P: SequencerPersistence,
+    {
         let quorum = EpochChangeQuorum::new(epoch_height);
+        let coordinator = server.consensus_handle().membership_coordinator().await;
         for i in heights {
             let leaf = &actual_leaves[i as usize];
             let block = &actual_blocks[i as usize];
@@ -12911,7 +12916,18 @@ mod test {
                 .send()
                 .await
                 .unwrap();
-            assert_eq!(proof.verify(leaf.header()).unwrap(), *block.payload());
+            let epoch = leaf.leaf().epoch(epoch_height);
+            let total_weight = vid_total_weight(
+                coordinator
+                    .stake_table_for_epoch(epoch)
+                    .unwrap()
+                    .stake_table(),
+                epoch,
+            );
+            assert_eq!(
+                proof.verify(leaf.header(), total_weight).unwrap(),
+                *block.payload()
+            );
         }
     }
 
@@ -13079,6 +13095,7 @@ mod test {
 
         check_light_client_proofs(
             &client,
+            &network.server,
             &actual_leaves,
             &actual_blocks,
             heights,

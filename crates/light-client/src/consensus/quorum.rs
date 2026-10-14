@@ -5,6 +5,7 @@ use anyhow::{Context, Result, bail, ensure};
 use committable::Committable;
 use espresso_types::{Certificate2, Leaf2, PubKey, SeqTypes};
 use hotshot_types::{
+    data::{EpochNumber, vid_disperse::vid_total_weight_from_stakes},
     epoch_membership::EpochMembership,
     message::UpgradeLock,
     simple_certificate::CertificatePair,
@@ -323,6 +324,12 @@ impl StakeTable {
     /// Get a stake table from a particular epoch's quorum membership.
     pub async fn from_membership(membership: &EpochMembership<SeqTypes>) -> Self {
         HSStakeTable::from_iter(membership.stake_table()).into()
+    }
+
+    /// The VID total weight consensus derives from this stake table, which fixes the erasure
+    /// parameters of every block it disperses.
+    pub fn vid_total_weight(&self, epoch: Option<EpochNumber>) -> usize {
+        vid_total_weight_from_stakes(self.entries.iter().map(|entry| entry.stake_amount), epoch)
     }
 
     /// Verify that a certificate is signed by a quorum of this stake table.
