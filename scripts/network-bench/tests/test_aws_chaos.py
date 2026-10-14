@@ -299,7 +299,7 @@ def test_chaos_mass_nodes_reaches_the_config():
         parse("--chaos", "--chaos-kinds", "mass-kill", "--chaos-mass-nodes", "3")
     )
     assert cfg.chaos == ch.ChaosConfig(kinds=("mass-kill",), mass_nodes=3)
-    assert "mass 3 nodes" in awsb.format_chaos_summary(cfg.chaos, "off")
+    assert "mass nodes 3" in awsb.format_chaos_summary(cfg.chaos, "off")
 
 
 def test_chaos_mass_nodes_refusals():
@@ -417,7 +417,7 @@ def test_old_manifest_chaos_without_timing_fields():
     assert awsb.config_from_manifest(saved).chaos == ch.ChaosConfig()
     line = awsb.setup_line({**saved, "nodes": 22, "query_nodes": 4, "node_type": "x"})
     assert line.endswith(
-        "gap 45 s, kill down 60 s, recover timeout 300 s, query floor 2"
+        "gap 45 s; kill down 60 s; recover timeout 300 s; query floor 2"
     )
 
 

@@ -333,7 +333,7 @@ just bench aws run --tag chaos-dense --chaos --nodes 32 --query-nodes 3 --chaos-
   `started` events (older runs) the time of the fault. `never` for a step that did not happen. The recovery table has
   one row per kind, also for a repeated kind, and a `mass-restart` or `mass-kill` row has one fault per node. Its
   per-node spans count as during fault for the floor and the other panels.
-- Setup (nodes, rate, seed, kinds, gap, kill down, recover timeout, query floor, mass nodes), and totals: faults per
+- Setup (nodes, rate, kinds, seed, gap, kill down, recover timeout, query floor, mass nodes), and totals: faults per
   kind (mass kinds as `mass-kill G (N nodes)`), max concurrent faulty against the stake budget, with a note when mass
   faults exceed it, timeouts, lost payloads, submit failovers, txs submitted, included and timed out.
 - Recovery table per kind: count, rejoin p50 and max, caught-up p50 and max (seconds from the fault, from the start for

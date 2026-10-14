@@ -1650,11 +1650,17 @@ def format_node_summary(cfg: RunConfig) -> list[str]:
 def format_chaos_summary(chaos: ch.ChaosConfig, latency: str) -> str:
     return (
         f"chaos: {chaos.minutes} min at {chaos.rate_mb_s:g} MB/s; latency {latency}; "
-        f"kinds {','.join(chaos.kinds) or 'none'}; seed {chaos.seed}; "
-        f"budget < 1/3 stake; gap {chaos.gap_s:g} s; "
+        f"budget < 1/3 stake; {chaos_settings(chaos)}"
+    )
+
+
+def chaos_settings(chaos: ch.ChaosConfig) -> str:
+    """The fault settings of `chaos`, as the run summary and the report show them."""
+    return (
+        f"kinds {','.join(chaos.kinds) or 'none'}; seed {chaos.seed}; gap {chaos.gap_s:g} s; "
         f"kill down {chaos.kill_down_s:g} s; recover timeout {chaos.recover_timeout_s:g} s; "
         f"query floor {chaos.query_floor}"
-        + (f"; mass {chaos.mass_nodes} nodes" if chaos.mass_nodes is not None else "")
+        + (f"; mass nodes {chaos.mass_nodes}" if chaos.mass_nodes is not None else "")
     )
 
 
@@ -7683,11 +7689,8 @@ def setup_line(config: dict[str, Any]) -> str:
     assert chaos is not None
     return (
         f"- Setup: {config['nodes']} nodes ({config['query_nodes']} query), "
-        f"{config['node_type']}, latency {latency_cell(config)}, {chaos.minutes} min at "
-        f"{chaos.rate_mb_s:g} MB/s, seed {chaos.seed}, kinds {','.join(chaos.kinds) or 'none'}, "
-        f"gap {chaos.gap_s:g} s, kill down {chaos.kill_down_s:g} s, "
-        f"recover timeout {chaos.recover_timeout_s:g} s, query floor {chaos.query_floor}"
-        + (f", mass nodes {chaos.mass_nodes}" if chaos.mass_nodes is not None else "")
+        f"{config['node_type']}; latency {latency_cell(config)}; {chaos.minutes} min at "
+        f"{chaos.rate_mb_s:g} MB/s; {chaos_settings(chaos)}"
     )
 
 
