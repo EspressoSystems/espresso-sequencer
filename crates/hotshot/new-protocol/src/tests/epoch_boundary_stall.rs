@@ -496,6 +496,53 @@ async fn pending_vote2_of_an_epoch_left_is_not_sent() {
     );
 }
 
+/// A timeout certificate's lock whose payload is missing is asked for once per
+/// view: a fetched proposal in the same view does not ask again, the next view
+/// does.
+#[tokio::test]
+async fn lock_payload_is_requested_once_per_view() {
+    let test_data = TestData::new_with_epoch_height(3, EPOCH_HEIGHT).await;
+    let node_key = BLSPubKey::generated_from_seed_indexed([0; 32], 0).0;
+    let mut harness =
+        ConsensusHarness::new_with_upgrade_lock(0, EPOCH_HEIGHT, test_timeout_epoch_lock()).await;
+    let locked = &test_data.views[0];
+    let requests = |harness: &ConsensusHarness| {
+        harness
+            .outputs()
+            .iter()
+            .filter(|o| {
+                matches!(o, ConsensusOutput::RequestMissingPayload { view: v, .. } if *v == locked.view_number)
+            })
+            .count()
+    };
+
+    // The block of the lock, without its payload.
+    harness
+        .apply_pair(locked.proposal_input_consensus(&node_key))
+        .await;
+    let lock = Some(locked.cert1.clone());
+    harness
+        .apply(timeout_cert_input(timeout_cert(
+            &harness,
+            view(1),
+            lock.clone(),
+        )))
+        .await;
+    assert_eq!(requests(&harness), 1, "the lock's payload is asked for");
+
+    harness
+        .apply(ConsensusInput::FetchedProposal(
+            test_data.views[1].proposal_message(),
+        ))
+        .await;
+    assert_eq!(requests(&harness), 1, "not again in the same view");
+
+    harness
+        .apply(timeout_cert_input(timeout_cert(&harness, view(2), lock)))
+        .await;
+    assert!(requests(&harness) > 1, "again in the next view");
+}
+
 /// The outgoing committee's re-vote and the incoming committee's first block
 /// share the view after the boundary block, and a node votes1 on each: votes
 /// are counted per epoch and view.

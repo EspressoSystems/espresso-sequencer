@@ -297,6 +297,11 @@ pub struct Consensus<T: NodeType> {
     /// What was requested for each re-vote view, so it is requested once.
     revote_fetches: BTreeSet<(ViewNumber, RevoteFetch)>,
 
+    /// The payloads of timeout certificate locks this node asked for, by the
+    /// block's view and payload commitment, with the view it asked in. Each is
+    /// asked for once per view: a silent peer is replaced in the next view.
+    lock_payload_fetches: BTreeMap<(ViewNumber, VidCommitment2), ViewNumber>,
+
     /// An assembled or adopted upgrade certificate, kept until a leader turn
     /// attaches it, the upgrade decides, or `decide_by` passes.
     formed_upgrade_certificate: Option<ValidCert<UpgradeCertificate2<T>>>,
@@ -440,6 +445,7 @@ impl<T: NodeType> Consensus<T> {
             revote_commits: BTreeMap::new(),
             revotes: BTreeMap::new(),
             revote_fetches: BTreeSet::new(),
+            lock_payload_fetches: BTreeMap::new(),
             formed_upgrade_certificate: None,
             decided_upgrade_carrier: None,
             private_key,
@@ -1286,6 +1292,9 @@ impl<T: NodeType> Consensus<T> {
                 self.revote_fetches = self
                     .revote_fetches
                     .split_off(&(keep_from, RevoteFetch::Proposal));
+                self.lock_payload_fetches = self
+                    .lock_payload_fetches
+                    .split_off(&(keep_from, VidCommitment2::default()));
                 let epoch = EpochNumber::new(self.current_epoch.saturating_sub(1));
                 self.drb_results = self.drb_results.split_off(&epoch);
                 self.state_certs = self.state_certs.split_off(&epoch);
@@ -2389,6 +2398,10 @@ impl<T: NodeType> Consensus<T> {
                     && !self
                         .blocks_reconstructed
                         .contains(&(block_view, payload_commitment))
+                    && self
+                        .lock_payload_fetches
+                        .insert((block_view, payload_commitment), self.current_view)
+                        .is_none_or(|asked_in| asked_in < self.current_view)
                 {
                     debug!(%view, %lock, "timeout certificate lock without its payload; requesting fetch");
                     outbox.push_back(ConsensusOutput::RequestMissingPayload {
