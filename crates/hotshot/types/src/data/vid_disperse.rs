@@ -347,31 +347,35 @@ where
     T: NodeType,
     I: Iterator<Item = &'a PeerConfig<T>>,
 {
+    vid_total_weight_of_stakes(
+        stake_table.map(|entry| entry.stake_table_entry.stake()),
+        epoch,
+    )
+}
+
+/// The total VID weight of a stake table, given the stake of each of its entries.
+pub fn vid_total_weight_of_stakes(
+    stakes: impl Iterator<Item = U256>,
+    epoch: Option<EpochNumber>,
+) -> usize {
     if epoch.is_none() {
-        stake_table
-            .fold(U256::ZERO, |acc, entry| {
-                acc + entry.stake_table_entry.stake()
-            })
+        stakes
+            .fold(U256::ZERO, |acc, stake| acc + stake)
             .to::<usize>()
     } else {
-        let stake_table = stake_table.cloned().collect::<Vec<_>>();
-        approximate_weights(&stake_table[..]).total_weight
+        approximate_weights(stakes).total_weight
     }
 }
 
-fn approximate_weights<TYPES: NodeType>(stake_table: &[PeerConfig<TYPES>]) -> Weights {
-    let total_stake = stake_table.iter().fold(U256::ZERO, |acc, entry| {
-        acc + entry.stake_table_entry.stake()
-    });
+fn approximate_weights(stakes: impl Iterator<Item = U256>) -> Weights {
+    let stakes = stakes.collect::<Vec<_>>();
+    let total_stake = stakes.iter().fold(U256::ZERO, |acc, stake| acc + *stake);
 
     let mut total_weight: usize = 0;
 
     // don't attempt to scale if the total stake is small enough
     if total_stake <= U256::from(VID_TARGET_TOTAL_STAKE) {
-        let weights = stake_table
-            .iter()
-            .map(|entry| entry.stake_table_entry.stake().to::<u32>())
-            .collect();
+        let weights = stakes.iter().map(|stake| stake.to::<u32>()).collect();
 
         // Note: this panics if `total_stake` exceeds `usize::MAX`, but this shouldn't happen.
         total_weight = total_stake.to::<usize>();
@@ -381,13 +385,11 @@ fn approximate_weights<TYPES: NodeType>(stake_table: &[PeerConfig<TYPES>]) -> We
             total_weight,
         }
     } else {
-        let weights = stake_table
+        let weights = stakes
             .iter()
-            .map(|entry| {
-                let weight: U256 = ((entry.stake_table_entry.stake()
-                    * U256::from(VID_TARGET_TOTAL_STAKE))
-                    / total_stake)
-                    + U256::ONE;
+            .map(|stake| {
+                let weight: U256 =
+                    ((*stake * U256::from(VID_TARGET_TOTAL_STAKE)) / total_stake) + U256::ONE;
 
                 // Note: this panics if `weight` exceeds `usize::MAX`, but this shouldn't happen.
                 total_weight += weight.to::<usize>();
@@ -455,8 +457,11 @@ impl<TYPES: NodeType> AvidMDisperse<TYPES> {
         metadata: &<TYPES::BlockPayload as BlockPayload<TYPES>>::Metadata,
     ) -> Result<(Self, Duration)> {
         let target_mem = membership.stake_table_for_epoch(target_epoch)?;
-        let stake_table: Vec<_> = target_mem.stake_table().cloned().collect();
-        let approximate_weights = approximate_weights(&stake_table);
+        let approximate_weights = approximate_weights(
+            target_mem
+                .stake_table()
+                .map(|entry| entry.stake_table_entry.stake()),
+        );
 
         let txns = payload.encode();
         let num_txns = txns.len();
@@ -715,8 +720,11 @@ impl<TYPES: NodeType> AvidmGf2Disperse<TYPES> {
         metadata: &<TYPES::BlockPayload as BlockPayload<TYPES>>::Metadata,
     ) -> Result<(Self, Duration)> {
         let target_mem = membership.stake_table_for_epoch(target_epoch)?;
-        let stake_table: Vec<_> = target_mem.stake_table().cloned().collect();
-        let approximate_weights = approximate_weights(&stake_table);
+        let approximate_weights = approximate_weights(
+            target_mem
+                .stake_table()
+                .map(|entry| entry.stake_table_entry.stake()),
+        );
 
         let txns = payload.encode();
         let num_txns = txns.len();
@@ -847,7 +855,11 @@ impl<TYPES: NodeType> AvidmGf2Disperse<TYPES> {
         let Weights {
             weights,
             total_weight,
-        } = approximate_weights(&stake_table);
+        } = approximate_weights(
+            stake_table
+                .iter()
+                .map(|entry| entry.stake_table_entry.stake()),
+        );
         let recipients = stake_table
             .iter()
             .map(|entry| entry.stake_table_entry.public_key())
