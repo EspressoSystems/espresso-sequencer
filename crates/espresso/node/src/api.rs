@@ -13150,6 +13150,152 @@ mod test {
         Ok(())
     }
 
+    #[derive(Clone, Copy, Debug)]
+    enum Lie {
+        LeafChain,
+        Cert2,
+    }
+
+    /// A catchup peer that relays an honest peer, except that it answers one kind of request with
+    /// the honest answer for a different height: well-formed, correctly signed, and wrong.
+    #[derive(Clone)]
+    struct LyingPeer {
+        honest: Url,
+        lie: Lie,
+        lies_told: Arc<std::sync::atomic::AtomicUsize>,
+    }
+
+    impl LyingPeer {
+        async fn serve(self) -> (Url, tokio_util::task::AbortOnDropHandle<()>) {
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let url = format!("http://{}", listener.local_addr().unwrap())
+                .parse()
+                .unwrap();
+            let app = axum::Router::new()
+                .fallback(relay_with_lie)
+                .with_state(self);
+            let server = tokio::spawn(async move {
+                axum::serve(listener, app).await.unwrap();
+            });
+            (url, tokio_util::task::AbortOnDropHandle::new(server))
+        }
+
+        async fn path_to_relay(&self, path: &str) -> String {
+            let segments = path.split('/').collect::<Vec<_>>();
+            let ["", "v1", "catchup", height, kind] = segments[..] else {
+                return path.to_owned();
+            };
+            let Ok(height) = height.parse::<u64>() else {
+                return path.to_owned();
+            };
+            let lie = match (self.lie, kind) {
+                (Lie::LeafChain, "leafchain") => {
+                    espresso_api::routes::v1::catchup_leafchain(height + 1)
+                },
+                (Lie::Cert2, "cert2") => {
+                    // The cert2 finalizing the honest chain for the next height is one the honest
+                    // peer is known to hold, and it finalizes a different leaf.
+                    let client: Client<ClientErr, StaticVersion<0, 1>> =
+                        Client::new(self.honest.clone());
+                    let other_chain = client
+                        .get::<Vec<Leaf2>>(&espresso_api::routes::v1::catchup_leafchain(height + 1))
+                        .send()
+                        .await
+                        .unwrap();
+                    espresso_api::routes::v1::catchup_cert2(other_chain.last().unwrap().height())
+                },
+                (Lie::LeafChain | Lie::Cert2, _) => return path.to_owned(),
+            };
+            self.lies_told
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            lie
+        }
+    }
+
+    async fn relay_with_lie(
+        axum::extract::State(peer): axum::extract::State<LyingPeer>,
+        headers: axum::http::HeaderMap,
+        uri: axum::http::Uri,
+    ) -> axum::response::Response {
+        use axum::{http::header, response::IntoResponse as _};
+
+        let path = peer.path_to_relay(uri.path()).await;
+        let mut request = reqwest::Client::new().get(espresso_api::url(&peer.honest, path));
+        if let Some(accept) = headers.get(header::ACCEPT) {
+            request = request.header(header::ACCEPT, accept);
+        }
+        let relayed = request.send().await.unwrap();
+        let status = relayed.status();
+        let content_type = relayed.headers().get(header::CONTENT_TYPE).cloned();
+        let mut response = (status, relayed.bytes().await.unwrap()).into_response();
+        if let Some(content_type) = content_type {
+            response
+                .headers_mut()
+                .insert(header::CONTENT_TYPE, content_type);
+        }
+        response
+    }
+
+    /// A peer that answers leaf catchup with a well-formed but wrong leaf chain or cert2 is charged
+    /// for it, so catchup moves on to an honest peer instead of retrying the liar forever.
+    #[rstest]
+    #[case::leaf_chain(Lie::LeafChain)]
+    #[case::cert2(Lie::Cert2)]
+    #[test_log::test(tokio::test(flavor = "multi_thread"))]
+    async fn test_fetch_leaf_fails_over_from_a_lying_peer(#[case] lie: Lie) {
+        const EPOCH_HEIGHT: u64 = 10;
+        const NUM_NODES: usize = 5;
+        const TARGET_HEIGHT: u64 = EPOCH_HEIGHT * 3 + 2;
+
+        let port = reserve_tcp_port().expect("No ports free for query service");
+        let honest: Url = format!("http://localhost:{port}").parse().unwrap();
+        let (storage, persistence) = node_storage::<SqlDataSource, NUM_NODES>().await;
+        let config = TestNetworkConfigBuilder::with_num_nodes()
+            .api_config(SqlDataSource::options(
+                &storage[0],
+                Options::with_port(port),
+            ))
+            .network_config(
+                TestConfigBuilder::default()
+                    .epoch_height(EPOCH_HEIGHT)
+                    .build(),
+            )
+            .persistences(persistence)
+            .build();
+        let network = TestNetwork::new(config, TEST_UPGRADE).await;
+        let height_client: Client<ClientErr, StaticVersion<0, 1>> = Client::new(honest.clone());
+        wait_until_block_height(&height_client, "node/block-height", TARGET_HEIGHT + 5).await;
+
+        let lies_told = Arc::default();
+        let (liar, _liar_server) = LyingPeer {
+            honest: honest.clone(),
+            lie,
+            lies_told: Arc::clone(&lies_told),
+        }
+        .serve()
+        .await;
+        // Equal scores keep the first peer on top, so the liar is asked first.
+        let catchup = StatePeers::<StaticVersion<0, 1>>::from_urls(
+            Vec::from([liar, honest]),
+            Default::default(),
+            Duration::from_secs(5),
+            &NoMetrics,
+        );
+
+        let leaf = tokio::time::timeout(
+            Duration::from_secs(60),
+            catchup.fetch_leaf(network.server.node_state().coordinator, TARGET_HEIGHT),
+        )
+        .await
+        .expect("catchup kept retrying the lying peer")
+        .unwrap();
+        assert_eq!(leaf.height(), TARGET_HEIGHT);
+        assert!(
+            lies_told.load(std::sync::atomic::Ordering::Relaxed) > 0,
+            "the liar was never asked, so this proves nothing"
+        );
+    }
+
     /// Start a network at V5 from genesis, restart ALL nodes just before an epoch transition block
     /// (`boundary - 3`), and confirm the chain keeps producing blocks afterward.
     #[test_log::test(tokio::test(flavor = "multi_thread"))]

@@ -36,10 +36,6 @@ pub async fn verify_new_protocol_leaf_chain<T: NodeType>(
     ensure!(!leaf_chain.is_empty(), "empty leaf chain");
     let newest = &leaf_chain[0];
 
-    ensure!(
-        cert2.view_number() > ViewNumber::genesis(),
-        "cert2 must not be the genesis view"
-    );
     // Verify cert2 against the leaf chain before spawning a catchup request for its stake table.
     ensure!(
         cert2.data.leaf_commit == newest.commit(),
@@ -53,22 +49,7 @@ pub async fn verify_new_protocol_leaf_chain<T: NodeType>(
         cert2.view_number() == newest.view_number(),
         "cert2 view does not match the newest leaf"
     );
-    let epoch = EpochNumber::new(epoch_from_block_number(
-        cert2.data.block_number,
-        *coordinator.epoch_height(),
-    ));
-    ensure!(
-        cert2.data.epoch == epoch,
-        "cert2 epoch {} does not match epoch {epoch} derived from its block number {}",
-        cert2.data.epoch,
-        cert2.data.block_number
-    );
-
-    let membership = coordinator
-        .stake_table_for_epoch(Some(epoch))
-        .map_err(|err| anyhow!("no stake table available for epoch {epoch}: {err:?}"))?;
-    let entries = StakeTableEntries::<T>::from_iter(membership.stake_table()).0;
-    cert2.is_valid_cert(&entries, membership.success_threshold(), upgrade_lock)?;
+    verify_cert2(&cert2, coordinator, upgrade_lock)?;
 
     if newest.height() == expected_height {
         return Ok(newest.clone());
@@ -126,6 +107,39 @@ pub async fn verify_new_protocol_leaf_chain<T: NodeType>(
     Err(anyhow!(
         "expected height was not found in the cert2-finalized chain"
     ))
+}
+
+/// Verify that `cert2` is signed by a success threshold of the stake table for the epoch its
+/// block number falls in.
+///
+/// This says nothing about which leaf the certificate finalizes. Use
+/// [`verify_new_protocol_leaf_chain`] to tie it to a leaf.
+pub fn verify_cert2<T: NodeType>(
+    cert2: &Certificate2<T>,
+    coordinator: &EpochMembershipCoordinator<T>,
+    upgrade_lock: &UpgradeLock<T>,
+) -> anyhow::Result<()> {
+    ensure!(
+        cert2.view_number() > ViewNumber::genesis(),
+        "cert2 must not be the genesis view"
+    );
+    let epoch = EpochNumber::new(epoch_from_block_number(
+        cert2.data.block_number,
+        *coordinator.epoch_height(),
+    ));
+    ensure!(
+        cert2.data.epoch == epoch,
+        "cert2 epoch {} does not match epoch {epoch} derived from its block number {}",
+        cert2.data.epoch,
+        cert2.data.block_number
+    );
+
+    let membership = coordinator
+        .stake_table_for_epoch(Some(epoch))
+        .map_err(|err| anyhow!("no stake table available for epoch {epoch}: {err:?}"))?;
+    let entries = StakeTableEntries::<T>::from_iter(membership.stake_table()).0;
+    cert2.is_valid_cert(&entries, membership.success_threshold(), upgrade_lock)?;
+    Ok(())
 }
 
 #[cfg(test)]
