@@ -1052,18 +1052,29 @@ def test_counter_split_counts_the_rise_after_every_node_restarted():
     assert split == ch.CounterSplit(0.0, 0.0, 250.0, 40.0)
 
 
-def test_counter_split_takes_the_fastest_node_present_at_both_ends():
+def test_a_block_two_nodes_see_in_different_intervals_counts_once():
+    series = {
+        "node0": [(0.0, 0.0), (1.0, 10.0), (2.0, 10.0), (3.0, 20.0)],
+        "node1": [(0.0, 0.0), (1.0, 0.0), (2.0, 10.0), (3.0, 20.0)],
+    }
+    assert ch.counter_increases(series) == [
+        (0.0, 1.0, 10.0),
+        (1.0, 2.0, 0.0),
+        (2.0, 3.0, 10.0),
+    ]
+
+
+def test_a_restarted_node_continues_from_its_count_before_the_restart():
     series = {
         "node0": [(T0 + t, v) for t, v in [(0, 10), (10, 20), (20, 5), (30, 9)]],
         "node1": [(T0 + t, v) for t, v in [(0, 10), (10, 13), (20, 14), (30, 15)]],
-        "node2": [(T0 + 20, 1000.0), (T0 + 30, 1001.0)],
     }
     split = ch.counter_split(series, [(T0 + 15, T0 + 25)], T0, T0 + 30)
-    # Per interval the largest non-negative delta: 10, then 1 (node0 dropped), then 4.
+    # node0 stitched: 10, 20, 20, 24; the restart interval adds nothing.
     assert split == ch.CounterSplit(
-        during=1.0 + 4.0, during_s=20.0, outside=10.0, outside_s=10.0
+        during=0.0 + 4.0, during_s=20.0, outside=10.0, outside_s=10.0
     )
-    assert ch.counter_split(series, [], T0 + 10, T0 + 20).outside == 1.0
+    assert ch.counter_split(series, [], T0 + 10, T0 + 20).outside == 0.0
 
 
 def test_counter_split_diffs_bytes_by_fault_overlap():

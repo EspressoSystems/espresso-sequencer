@@ -1077,26 +1077,29 @@ def running_max(series: CounterSeries) -> dict[str, list[tuple[float, float]]]:
 
 
 def counter_increases(series: CounterSeries) -> list[tuple[float, float, float]]:
-    """(start, stop, increase) of each interval between consecutive sample times of `series`.
-    The increase is the largest non-negative delta over the validators with a sample at both
-    ends: a restart is a drop, which skips that validator for the interval."""
-    by_time = {node: dict(samples) for node, samples in series.items()}
-    times = sorted({ts for samples in by_time.values() for ts in samples})
-    return [
-        (
-            a,
-            b,
-            max(
-                (
-                    max(0.0, samples[b] - samples[a])
-                    for samples in by_time.values()
-                    if a in samples and b in samples
-                ),
-                default=0.0,
-            ),
-        )
-        for a, b in pairwise(times)
-    ]
+    """(start, stop, increase) of each interval between consecutive sample times of `series`:
+    the growth of the network total, the highest `_stitched` count over the nodes sampled at
+    the time, never decreasing. Nodes see a block in different intervals: the highest count
+    rather than the highest delta counts it once."""
+    stitched = {node: _stitched(samples) for node, samples in series.items()}
+    times = sorted({ts for samples in stitched.values() for ts in samples})
+    total = accumulate(
+        (max(s[ts] for s in stitched.values() if ts in s) for ts in times), max
+    )
+    return [(a, b, tb - ta) for (a, ta), (b, tb) in pairwise(zip(times, total))]
+
+
+def _stitched(samples: Sequence[tuple[float, float]]) -> dict[float, float]:
+    """A node's count with its resets stitched: a drop (the process restarted) adds nothing
+    and the count then grows from the value before it."""
+    out: dict[float, float] = {}
+    value = 0.0
+    prev: float | None = None
+    for ts, raw in sorted(samples):
+        value = raw if prev is None else value + max(0.0, raw - prev)
+        prev = raw
+        out[ts] = value
+    return out
 
 
 def counter_total(

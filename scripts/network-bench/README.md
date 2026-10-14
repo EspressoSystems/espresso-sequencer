@@ -347,10 +347,12 @@ just bench aws run --tag chaos-dense --chaos --nodes 32 --query-nodes 3 --chaos-
   as views that began under the fault time out after it. A stuck node stays faulty to the end; an interrupted fault ends
   at `interrupted` plus the tail. Timeouts are `consensus_number_of_timeouts` and views `consensus_current_view`
   (`timeouts` and `views` of `consensus.jsonl`, the highest over the nodes), over the sample intervals within the steps;
-  an interval overlapping a fault counts as during. Each series is diffed as its running maximum: a drop of the highest
-  value (the leading node restarted, or its sample is missing) adds nothing and the rise back is not counted. Runs from
-  before `views` read it from `metrics.jsonl` (a second holds the nodes scraped in it); both series are then clipped to
-  the time both have samples. Decided MB/s above uses the same diff.
+  an interval overlapping a fault counts as during. Timeouts are diffed per node with resets stitched (a drop, the
+  process restarted, adds nothing and the count grows on from the value before it), then as the highest count over the
+  nodes sampled at each time, never decreasing: nodes that see a block in different intervals count it once. Views, a
+  gauge, are diffed as the running maximum over the nodes. Runs from before `views` read it from `metrics.jsonl` (a
+  second holds the nodes scraped in it); both series are then clipped to the time both have samples. Decided MB/s, here
+  and in the step table, uses the timeouts' diff.
 - Node log counters, one table row per event and `missing` set: `stub`
   (`parent state unavailable; ... from_header stub inserted`), `no-propose[missing]`, `no-vote1[missing]`,
   `header-failed`, `frontier`, `unsafe`, `parent-fetch`, `cert2-fetch`; patterns in `LOG_PATTERNS` of `chaos.py`,
