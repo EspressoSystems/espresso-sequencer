@@ -1517,24 +1517,7 @@ impl Fetcher {
             },
         };
 
-        // A provider that has not reached `to_block` answers the range with the logs it has
-        // and no error, so a scan past its head would be stored as complete up to `to_block`.
-        let head = {
-            let provider = l1_client.provider.clone();
-            retry(
-                retry_delay,
-                max_retry_duration,
-                "L1 head fetch",
-                move || {
-                    let provider = provider.clone();
-                    Box::pin(async move { provider.get_block_number().await })
-                },
-            )
-            .await
-        };
-        if head < to_block {
-            return Err(StakeTableError::L1ProviderBehind { head, to_block });
-        }
+        Self::ensure_provider_reached(&l1_client, to_block).await?;
 
         // To avoid making large RPC calls, divide the range into smaller chunks.
         // chunk size is from env "ESPRESSO_L1_EVENTS_MAX_BLOCK_RANGE
@@ -1585,7 +1568,34 @@ impl Fetcher {
             }
         }
 
+        // A failover inside the scan can land on a provider that is behind.
+        Self::ensure_provider_reached(&l1_client, to_block).await?;
+
         sort_stake_table_events(events).map_err(Into::into)
+    }
+
+    /// Providers answer a log query past their head with the logs they have and no error, so
+    /// the scan cannot tell a complete answer from a truncated one on its own.
+    #[cfg(feature = "node")]
+    async fn ensure_provider_reached(
+        l1_client: &L1Client,
+        to_block: u64,
+    ) -> Result<(), StakeTableError> {
+        let provider = l1_client.provider.clone();
+        let head = retry(
+            l1_client.options().l1_retry_delay,
+            l1_client.options().l1_events_max_retry_duration,
+            "L1 head fetch",
+            move || {
+                let provider = provider.clone();
+                Box::pin(async move { provider.get_block_number().await })
+            },
+        )
+        .await;
+        if head < to_block {
+            return Err(StakeTableError::L1ProviderBehind { head, to_block });
+        }
+        Ok(())
     }
 
     /// The filter matching every stake table event the fetcher understands.
@@ -2341,9 +2351,12 @@ mod tests {
     use hotshot_types::{light_client::StateKeyPair, signature_key::BLSKeyPair};
     use pretty_assertions::assert_matches;
     use rstest::rstest;
+    use serde_json::{Value, json};
+    use url::Url;
     use versions::{
         DRB_AND_HEADER_UPGRADE_VERSION, EPOCH_REWARD_VERSION, EPOCH_VERSION, NEW_PROTOCOL_VERSION,
     };
+    use warp::Filter;
 
     use super::*;
     use crate::{L1ClientOptions, v0::impls::testing::*};
@@ -5214,6 +5227,56 @@ mod tests {
                 .unwrap()
                 .stake_table_key,
             prior_v2
+        );
+    }
+
+    /// Answers `eth_blockNumber` with `head` and `eth_getLogs` with `logs`, or with a JSON-RPC
+    /// error when `logs` is `None`.
+    async fn serve_provider(head: u64, logs: Option<Value>) -> Url {
+        let route = warp::post()
+            .and(warp::body::json::<Value>())
+            .map(move |req: Value| {
+                let id = req["id"].clone();
+                let reply = match (req["method"].as_str(), &logs) {
+                    (Some("eth_blockNumber"), _) => {
+                        json!({ "jsonrpc": "2.0", "id": id, "result": format!("{head:#x}") })
+                    },
+                    (Some("eth_getLogs"), Some(logs)) => {
+                        json!({ "jsonrpc": "2.0", "id": id, "result": logs })
+                    },
+                    (method, _) => json!({
+                        "jsonrpc": "2.0",
+                        "id": id,
+                        "error": { "code": -32000, "message": format!("{method:?} unavailable") },
+                    }),
+                };
+                warp::reply::json(&reply)
+            });
+        test_server::serve_on_random_port(route).await
+    }
+
+    #[test_log::test(tokio::test(flavor = "multi_thread"))]
+    async fn test_scan_refuses_a_lagging_provider_reached_by_failover() {
+        let ahead_but_failing_logs = serve_provider(16, None).await;
+        let behind = serve_provider(8, Some(json!([]))).await;
+        let l1_client = L1ClientOptions {
+            l1_retry_delay: Duration::from_millis(10),
+            l1_consecutive_failure_tolerance: 1,
+            l1_frequent_failure_tolerance: Duration::ZERO,
+            ..Default::default()
+        }
+        .connect(Vec::from([ahead_but_failing_logs, behind]))
+        .unwrap();
+
+        let err = Fetcher::fetch_events_from_contract(l1_client, Address::ZERO, Some(0), 16)
+            .await
+            .unwrap_err();
+        assert_matches!(
+            err,
+            StakeTableError::L1ProviderBehind {
+                head: 8,
+                to_block: 16
+            }
         );
     }
 }
