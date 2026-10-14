@@ -4,6 +4,7 @@ import NewProtocolDiff.Header
 import NewProtocolDiff.Trace
 import NewProtocolDiff.Check
 import NewProtocolDiff.Restart
+import NewProtocolDiff.Wipe
 import NewProtocolDiff.ProtocolCheck
 import NewProtocolDiff.PromptCheck
 import NewProtocolImpl.Machine
@@ -26,7 +27,9 @@ view directly is checked against the signing rules of `NewProtocol.SafeHistory`
 only (`NewProtocolDiff.checkSafe_sound`), since its steps do not show the view it
 is in. A trace restored from storage is checked with the file it resumes against
 the premises of `NewProtocol.safe_across_restart` (`NewProtocolDiff.checkRestarted`),
-and not against `PromptUntil`: what a node owes after a restart is not covered.
+and not against `PromptUntil`: what a node owes after a restart is not covered. A
+trace rejoined after wiped storage is checked likewise against the premises of
+`NewProtocol.safe_across_wipe` (`NewProtocolDiff.checkRejoined`).
 The exit status is 1 if any trace breaks a rule or cannot be read.
 -/
 
@@ -97,7 +100,7 @@ def checkOne (δ : Nat) (path : System.FilePath) : IO Finding := do
   | .ok said =>
     if signsNoLock text then
       return .outOfScope "its timeouts sign no lock, as before the certificate rule"
-    else if said.restart.isNone && said.anchorView ≠ 0 then
+    else if said.restart.isNone && said.rejoin.isNone && said.anchorView ≠ 0 then
       return .outOfScope s!"restored from view {said.anchorView}, and restarts are not covered"
     else
     match parseTrace text with
@@ -117,6 +120,13 @@ def checkOne (δ : Nat) (path : System.FilePath) : IO Finding := do
           | .ok .recasts => .outOfScope "re-casts vote2 below the bar, as before the certificate rule"
           | .ok (.unchecked why) => .outOfScope s!"resumes a file whose rules are not checked: {why}"
           | .ok (.checked view pre []) => .signingOnly s!"restored from view {view} after {pre}"
+          | .ok (.checked _ _ broken) => .broken broken
+      if let some r := said.rejoin then
+        return match ← checkRejoined path said r h with
+          | .error e => .unreadable e
+          | .ok .unanchored => .outOfScope "wiped and never rejoined"
+          | .ok (.unchecked why) => .outOfScope s!"resumes a file whose rules are not checked: {why}"
+          | .ok (.checked view pre []) => .signingOnly s!"rejoined at view {view} after {pre}"
           | .ok (.checked _ _ broken) => .broken broken
       let broken := (checkRules (said.configFor h) ⟨said.node⟩ h).filterMap fun (name, ok) =>
         if ok then none else some name

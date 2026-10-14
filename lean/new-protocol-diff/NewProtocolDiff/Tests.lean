@@ -5,6 +5,7 @@ public import NewProtocolDiff.Corpus
 public import NewProtocolDiff.PromptCheck
 public import NewProtocolDiff.Check
 public import NewProtocolDiff.Restart
+public import NewProtocolDiff.Wipe
 public meta import NewProtocolSpec.Interface
 public meta import NewProtocolDiff.Json
 public meta import NewProtocolDiff.Trace
@@ -13,6 +14,7 @@ public meta import NewProtocolDiff.PromptCheck
 public meta import NewProtocolDiff.Header
 public meta import NewProtocolDiff.Check
 public meta import NewProtocolDiff.Restart
+public meta import NewProtocolDiff.Wipe
 
 /-!
 # Checks on the harness itself
@@ -28,7 +30,9 @@ the format is checked at build time in both directions:
 * the signing rules refuse a vote whose identity does not match the block, since
   that is how a hash-namespace mistake would show up;
 * a restarted pair that keeps its summary and bars passes, and each premise
-  broken alone is reported by its name.
+  broken alone is reported by its name;
+* a pair rejoined after a wipe that adopts a sound anchor and keeps its bars
+  passes, and each premise broken alone is reported by its name.
 -/
 
 @[expose] public section
@@ -486,7 +490,7 @@ private def chainMessage : ChainError → String
   let .ok said := readPreamble (header (restartJson (toJson cfg.anchorCert).compress "null"))
     | IO.println "unreadable"
   let some r := said.restart | IO.println "no restart"
-  match ← resumedBy "x.jsonl" said r [] with
+  match ← resumedBy "x.jsonl" said r.resumes [] with
   | .ok (_, _, _, pre) => IO.println s!"ok {pre.length}"
   | .error e => IO.println (chainMessage e)
 
@@ -496,7 +500,7 @@ private def chainMessage : ChainError → String
   let .ok said := readPreamble (header (",\"anchorView\":3" ++ restartJson (toJson c1).compress "null"))
     | IO.println "unreadable"
   let some r := said.restart | IO.println "no restart"
-  match ← resumedBy "x.jsonl" said r [] with
+  match ← resumedBy "x.jsonl" said r.resumes [] with
   | .ok _ => IO.println "accepted"
   | .error e => IO.println (chainMessage e)
 
@@ -595,6 +599,254 @@ private def checkFile (name : String) : IO Unit := do
   writeFiles [("n.held.jsonl", header "" ++ lines preRun
     ++ "# 1 outputs had no step to join: " ++ (toJson (vote2 c5)).compress ++ "\n")]
   chainOf "n.held.jsonl"
+
+/-! ## After a wipe
+
+One node's run before and after its storage is wiped. Before: it votes1 and
+votes2 at view 1, decides it, votes1 at view 2, and votes1 and votes2 at view 3.
+It rejoins with the bar at view 4 and adopts the block at view 6, which it
+receives with its `Cert1` and `Cert2` after the wipe and before it signs anything.
+After: it votes1 and votes2 at view 7, decides it, and times out view 8 under the
+lock at view 7.
+-/
+
+private def b3 : Block := blk 3 3 (certOn b2 2)
+private def c3 : Cert1 := certOn b3 3
+private def b6 : Block := blk 6 4 c3
+private def c6 : Cert1 := certOn b6 6
+private def b7 : Block := blk 7 5 c6
+private def c7 : Cert1 := certOn b7 7
+
+private def preWipe : History :=
+  [ st (.certificate1 c1), recv b1,
+    st (.blockValidated ⟨1⟩ b1.identity) [vote1 b1],
+    st (.blockReconstructed ⟨1⟩ b1.payloadCommit) [vote2 c1],
+    st (.certificate2 (commit c1)) [.decided [b1] c1 (commit c1)],
+    recv b2,
+    st (.blockValidated ⟨2⟩ b2.identity) [vote1 b2],
+    st (.certificate1 (certOn b2 2)), recv b3,
+    st (.blockValidated ⟨3⟩ b3.identity) [vote1 b3],
+    st (.certificate1 c3),
+    st (.blockReconstructed ⟨3⟩ b3.payloadCommit) [vote2 c3] ]
+
+private def rejoin : Rejoin := ⟨⟨4⟩, b6, c6⟩
+
+/-- What the node receives before it signs anything after the wipe: the anchor's pieces. -/
+private def adopting : History :=
+  [ st (.certificate1 c6), st (.proposal ⟨2⟩ b6 none), st (.certificate2 (commit c6)) ]
+
+/-- What the node does once it holds the anchor. -/
+private def acting : History :=
+  [ recv b7,
+    st (.blockValidated ⟨7⟩ b7.identity) [vote1 b7],
+    st (.certificate1 c7),
+    st (.blockReconstructed ⟨7⟩ b7.payloadCommit) [vote2 c7],
+    st (.certificate2 (commit c7)) [.decided [b7] c7 (commit c7)],
+    st (.timeout ⟨8⟩) [timeoutVote 8 c7] ]
+
+private def postWipe : History := adopting ++ acting
+
+/-- The premises of a rejoin that fail. -/
+private def failingRejoin (R : Rejoin) (pre post : History) : List String :=
+  (checkRejoin cfg R pre post).filterMap fun (n, ok) => if ok then none else some n
+
+/-- The signing rules the history after a wipe breaks under the adopted configuration. -/
+private def failingAfterRejoin (R : Rejoin) (pre post : History) : List String :=
+  (checkRules (R.config cfg) me (pre.inputsOnly ++ post)).filterMap
+    fun (n, ok) => if ok then none else some n
+
+/-- info: [] -/
+#guard_msgs in #eval failingRejoin rejoin preWipe postWipe
+
+/-- info: true -/
+#guard_msgs in #eval checkSafe cfg me preWipe
+
+/-- info: [] -/
+#guard_msgs in #eval failingAfterRejoin rejoin preWipe postWipe
+
+/-- The premises of `NewProtocol.safe_across_wipe` can be met. -/
+example : Rejoins cfg rejoin preWipe postWipe ∧ RejoinOK rejoin postWipe :=
+  ⟨checkRejoins_sound (by decide), checkRestartOK_sound (by decide)⟩
+
+-- Each premise broken alone is reported, and only it.
+/-- info: ["bars:vote1After"] -/
+#guard_msgs in
+#eval failingRejoin rejoin preWipe (postWipe ++ [st (.timeout ⟨9⟩) [vote1 (blk 5 4 c3)]])
+
+/-- info: ["bars:lockKept"] -/
+#guard_msgs in #eval failingRejoin rejoin preWipe (postWipe ++ [st (.timeout ⟨9⟩) [timeoutVote 9 c3]])
+
+/-- info: ["rejoin:vote1Below"] -/
+#guard_msgs in
+#eval failingRejoin rejoin (preWipe ++ [st (.timeout ⟨5⟩) [vote1 (blk 5 4 c3)]]) postWipe
+
+/-- info: ["rejoin:vote2Below"] -/
+#guard_msgs in
+#eval failingRejoin rejoin (preWipe ++ [st (.timeout ⟨5⟩) [vote2 (certOn b3 5)]]) postWipe
+
+/-- info: ["rejoin:timeoutBelow"] -/
+#guard_msgs in #eval failingRejoin rejoin (preWipe ++ [st (.timeout ⟨5⟩) [timeoutVote 5 c3]]) postWipe
+
+/-- info: ["rejoin:vote2Locked"] -/
+#guard_msgs in
+#eval failingRejoin rejoin (preWipe ++ [st (.timeout ⟨3⟩) [.send (.vote2 ⟨⟨b3.identity, ⟨1⟩, 3⟩, ⟨3⟩, me⟩)]])
+  postWipe
+
+/-- info: ["rejoin:decidedBelow"] -/
+#guard_msgs in
+#eval failingRejoin rejoin (preWipe ++ [st (.certificate2 (commit c7)) [.decided [b7] c7 (commit c7)]])
+  postWipe
+
+/-- info: ["rejoin:anchorAbove"] -/
+#guard_msgs in #eval failingRejoin { rejoin with bar := ⟨6⟩ } preWipe postWipe
+
+/-- info: ["rejoin:anchorCertHeld", "rejoin:anchorHeld", "rejoin:anchorCert2Held"] -/
+#guard_msgs in #eval failingRejoin rejoin preWipe (st (.timeout ⟨7⟩) [vote1 b7] :: postWipe)
+
+/-- info: ["rejoin:anchorCert2Held"] -/
+#guard_msgs in #eval failingRejoin rejoin preWipe (adopting.take 2 ++ acting)
+
+-- A vote2 over the anchor under a re-vote's certificate reads the anchor's payload.
+/-- info: ["rejoin:anchorPayload"] -/
+#guard_msgs in
+#eval failingRejoin rejoin preWipe (postWipe ++ [st (.certificate1 (certOn b6 8)) [vote2 (certOn b6 8)]])
+
+/-! ### Edge cases -/
+
+/-- info: [] -/
+#guard_msgs in
+#eval failingRejoin rejoin preWipe (postWipe ++
+  [st (.blockReconstructed ⟨6⟩ b6.payloadCommit), st (.certificate1 (certOn b6 8)) [vote2 (certOn b6 8)]])
+
+-- An anchor under a re-vote's certificate: the spec admits it, though Rust never adopts one.
+private def b9 : Block := blk 9 5 (certOn b6 8)
+
+/-- info: ([], []) -/
+#guard_msgs in
+#eval
+  let R := { rejoin with bar := ⟨7⟩, anchorCert := certOn b6 8 }
+  let post := [st (.certificate1 (certOn b6 8)), st (.proposal ⟨2⟩ b6 none),
+    st (.certificate2 (commit (certOn b6 8))), recv b9,
+    st (.blockValidated ⟨9⟩ b9.identity) [vote1 b9]]
+  (failingRejoin R preWipe post, failingAfterRejoin R preWipe post)
+
+-- The anchor's proposal received before the wipe.
+/-- info: ([], []) -/
+#guard_msgs in
+#eval
+  let pre := preWipe ++ [recv b6]
+  let post := adopting.eraseIdx 1 ++ acting
+  (failingRejoin rejoin pre post, failingAfterRejoin rejoin pre post)
+
+-- The step that delivers the anchor's last piece also votes.
+/-- info: [] -/
+#guard_msgs in
+#eval failingRejoin rejoin preWipe
+  [st (.certificate1 c6), st (.proposal ⟨2⟩ b6 none), recv b7, st (.certificate2 (commit c6)) [vote1 b7]]
+
+-- Relaying the anchor's certificates before holding its proposal is not acting.
+/-- info: ([], []) -/
+#guard_msgs in
+#eval
+  let post := [st (.certificate1 c6) [.send (.cert1 c6)],
+    st (.certificate2 (commit c6)) [.send (.cert2 (commit c6))], st (.proposal ⟨2⟩ b6 none)] ++ acting
+  (failingRejoin rejoin preWipe post, failingAfterRejoin rejoin preWipe post)
+
+-- A wipe never adopts the configured anchor: the bar is never below its certificate.
+/-- info: ["rejoin:anchorAbove"] -/
+#guard_msgs in #eval failingRejoin ⟨⟨0⟩, cfg.anchorBlock, cfg.anchorCert⟩ [] postWipe
+
+/-! ### Rejoined headers and files -/
+
+/-- The `rejoin` object, with `bar` and `resumes` as given. -/
+private def rejoinJson (bar resumes : String) : String :=
+  ",\"rejoin\":{\"bar\":" ++ bar ++ ",\"resumes\":" ++ resumes ++ "}"
+
+/-- What `readPreamble` makes of a header's `rejoin` object. -/
+private def rejoinedOf (text : String) : String :=
+  match readPreamble text with
+  | .error e => e
+  | .ok said => match said.rejoin with
+    | none => "none"
+    | some r => s!"{r.bar} {r.resumes}"
+
+/-- info: "none" -/
+#guard_msgs in #eval rejoinedOf (header "")
+
+/-- info: "(some 4) (some a.jsonl)" -/
+#guard_msgs in #eval rejoinedOf (header (rejoinJson "4" "\"a.jsonl\""))
+
+/-- info: "none none" -/
+#guard_msgs in #eval rejoinedOf (header (rejoinJson "null" "null"))
+
+/-- info: "its `# trace` header's `rejoin` has no `bar`" -/
+#guard_msgs in #eval rejoinedOf (header ",\"rejoin\":{\"resumes\":null}")
+
+/-- info: "rejoined at view 6 with no `anchorCert`" -/
+#guard_msgs in
+#eval match readPreamble (header (",\"anchorView\":6" ++ rejoinJson "4" "null")) with
+  | .ok said => match rejoinOf cfg [] [] said 4 with
+    | .error e => e
+    | .ok _ => "accepted"
+  | .error e => e
+
+/-- The header of a file rejoined at the anchor at view 6 with `rejoin` as given. -/
+private def rejoinedHeader (bar resumes : String) : String :=
+  header (",\"anchorView\":6,\"anchorCert\":" ++ (toJson c6).compress ++ rejoinJson bar resumes)
+
+/-- The run before the wipe and the run that rejoins after it. -/
+private def wipeFiles : List (String × String) :=
+  [("w.0.jsonl", header "" ++ lines preWipe),
+    ("w.1.jsonl", rejoinedHeader "4" "\"w.0.jsonl\"" ++ lines postWipe)]
+
+/-- What `checkRejoined` makes of the rejoined file `name` under `dir`. -/
+private def checkWiped (name : String) : IO Unit := do
+  let text ← IO.FS.readFile (dir / name)
+  let .ok said := readPreamble text | IO.println "unreadable header"
+  let some r := said.rejoin | IO.println "no rejoin"
+  let .ok events := parseTrace text | IO.println "unparsed"
+  match ← checkRejoined (dir / name) said r (historyOf events) with
+  | .error e => IO.println e
+  | .ok (.checked v f broken) => IO.println s!"checked {v} {f} {broken}"
+  | .ok .unanchored => IO.println "unanchored"
+  | .ok (.unchecked why) => IO.println s!"unchecked: {why}"
+
+/-- info: checked 6 .lake/restart-tests/w.0.jsonl [] -/
+#guard_msgs in #eval do writeFiles wipeFiles; checkWiped "w.1.jsonl"
+
+/-- info: unanchored -/
+#guard_msgs in
+#eval do
+  writeFiles [("w.none.jsonl", rejoinedHeader "null" "\"w.0.jsonl\"" ++ lines adopting)]
+  checkWiped "w.none.jsonl"
+
+/-- info: resumes an empty recording but loaded an anchor -/
+#guard_msgs in
+#eval do
+  writeFiles [("w.empty.jsonl", rejoinedHeader "4" "null" ++ lines postWipe)]
+  checkWiped "w.empty.jsonl"
+
+-- A restart after a rejoin splices the run before the wipe, the run after it, and its own.
+private def afterWipe : History := [st (.timeout ⟨9⟩)]
+
+/-- info: true -/
+#guard_msgs in
+#eval show IO Bool from do
+  writeFiles (wipeFiles ++ [("w.2.jsonl",
+    header (",\"anchorView\":7,\"anchorCert\":" ++ (toJson c7).compress ++ ",\"restart\":{\"lock\":"
+      ++ (toJson c7).compress ++ ",\"highestVoted\":8,\"vote2Bar\":8,\"reconstructed\":[],"
+      ++ "\"resumes\":\"w.1.jsonl\"}") ++ lines afterWipe)])
+  match ← chainHistory (dir / "w.2.jsonl") with
+  | .ok (_, _, h) => return h == preWipe ++ postWipe ++ afterWipe
+  | .error _ => return false
+
+-- A file that resumes a wiped run that never rejoined establishes nothing.
+/-- info: unchecked: .lake/restart-tests/w.none.jsonl was wiped and never rejoined -/
+#guard_msgs in
+#eval do
+  writeFiles [("w.none.jsonl", rejoinedHeader "null" "\"w.0.jsonl\"" ++ lines adopting),
+    ("w.after.jsonl", rejoinedHeader "4" "\"w.none.jsonl\"" ++ lines postWipe)]
+  checkWiped "w.after.jsonl"
 
 end Tests
 end NewProtocolDiff

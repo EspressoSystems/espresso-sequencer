@@ -223,9 +223,11 @@ The node, the configuration of its first run, and its whole history up to the
 end of the trace at `path`: each file it resumes, the steps each restart loaded,
 and its own steps, spliced.
 
-A file without a `restart` header is the first run, and must start at genesis.
-Each file's own premises are checked when it is itself the argument; this only
-splices, and refuses a file whose re-cast vote2 `check` leaves out of scope.
+A file without a `restart` or `rejoin` header is the first run, and must start at
+genesis. A file rejoined after a wipe splices onto the history it resumes with no
+loaded steps. Each file's own premises are checked when it is itself the argument;
+this only splices, and refuses a file whose re-cast vote2 `check` leaves out of
+scope, or that never adopted an anchor after a wipe.
 -/
 partial def chainHistory (path : System.FilePath) (seen : List System.FilePath := []) :
     IO (Except ChainError (Nat × Config × History)) := do
@@ -234,14 +236,21 @@ partial def chainHistory (path : System.FilePath) (seen : List System.FilePath :
   match ← readRecorded path with
   | .error e => return .error e
   | .ok (said, h) =>
-  match said.restart with
-  | none =>
+  match said.restart, said.rejoin with
+  | none, some r =>
+    if r.bar.isNone then
+      return .error (.unchecked s!"{path} was wiped and never rejoined")
+    let resumed ← resumedBy path said r.resumes h seen
+    return do
+      let (_, node, cfg, pre) ← resumed
+      pure (node, cfg, pre ++ h)
+  | none, none =>
     if said.anchorView ≠ 0 then
       return .error (.unreadable
         s!"{path} is restored from view {said.anchorView} and names no file it resumes")
     return .ok (said.node, said.configFor h, h)
-  | some r =>
-    let resumed ← resumedBy path said r h seen
+  | some r, _ =>
+    let resumed ← resumedBy path said r.resumes h seen
     return do
       let (_, node, cfg, pre) ← resumed
       let some P ← (persistedOf cfg pre said r).mapError .unreadable
@@ -251,19 +260,19 @@ partial def chainHistory (path : System.FilePath) (seen : List System.FilePath :
       pure (node, cfg, pre ++ P.restoredSteps ++ h)
 
 /--
-What the restarted trace at `path`, with header `said` and `r` and history `h`,
-resumes: the file's name, the node, the configuration of the node's first run,
-and the history up to the crash.
+What the trace at `path`, with header `said` and history `h`, resumes when it names
+the file `resumes`: that file's name, the node, the configuration of the node's
+first run, and the history up to the crash.
 
 A restart that resumes no file is one whose first run recorded no step: its
 history before the crash is empty, which only a node anchored at genesis can
 have. An error when `said` names another node, epoch height or decide buffer
 than the run it resumes.
 -/
-partial def resumedBy (path : System.FilePath) (said : Preamble) (r : Restored) (h : History)
-    (seen : List System.FilePath := []) :
+partial def resumedBy (path : System.FilePath) (said : Preamble) (resumes : Option String)
+    (h : History) (seen : List System.FilePath := []) :
     IO (Except ChainError (String × Nat × Config × History)) := do
-  match r.resumes with
+  match resumes with
   | some f =>
     let prev := path.parent.getD "." / f
     let chain ← chainHistory prev (path :: seen)
@@ -301,7 +310,7 @@ incomplete, or when the two runs disagree on the node, epoch height or decide bu
 -/
 def checkRestarted (path : System.FilePath) (said : Preamble) (r : Restored) (post : History) :
     IO (Except String RestartFinding) := do
-  match ← resumedBy path said r post with
+  match ← resumedBy path said r.resumes post with
   | .error (.unreadable e) => return .error e
   | .error (.unchecked why) => return .ok (.unchecked why)
   | .ok (resumes, node, cfg, pre) =>

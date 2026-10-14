@@ -23,6 +23,15 @@ the crash:
                 "reconstructed": [[1, "…"], …], "resumes": "…node0.1.jsonl"}
 
 Every key of `restart` is required; `lock`, `vote2Bar` and `resumes` may be `null`.
+
+A node restarted with nothing stored adds the view bar it recovered, and the file
+of its run before the wipe:
+
+    "rejoin": {"bar": 4, "resumes": "…node0.1.jsonl"}
+
+Its `anchor`, `anchorView` and `anchorCert` are the ones it adopted, rewritten
+when it adopts them. Every key of `rejoin` is required; `bar` is `null` until it
+adopts, and `resumes` may be `null`.
 -/
 
 @[expose] public section
@@ -50,6 +59,14 @@ structure Restored where
   /-- The file of its run before the crash, in the same directory; `none` when that run recorded no step. -/
   resumes : Option String
 
+/-- What a node restarted with nothing stored adopted, as its header states it. -/
+structure Rejoined where
+  /-- The view bar it recovered from the network; `none` until it adopted an anchor. -/
+  bar : Option Nat
+
+  /-- The file of its run before the wipe, in the same directory; `none` when that run recorded no step. -/
+  resumes : Option String
+
 /-- What a recorder said about the run it recorded. -/
 structure Preamble where
   node : Nat
@@ -67,12 +84,16 @@ structure Preamble where
   /--
   The view of the block the node started from.
 
-  After genesis only for a node restored from storage. Zero when absent.
+  After genesis only for a node restored from storage or rejoined after a wipe.
+  Zero when absent.
   -/
   anchorView : Nat
 
   /-- What the node loaded, when it was restarted from storage. -/
   restart : Option Restored
+
+  /-- What the node adopted, when it was restarted with nothing stored. -/
+  rejoin : Option Rejoined
 
 /-- Read the `# trace` header line. -/
 def readPreamble (text : String) : Except String Preamble := do
@@ -98,16 +119,19 @@ def readPreamble (text : String) : Except String Preamble := do
       | .ok c => pure (some c)
       | .error e => throw s!"its `# trace` header's `anchorCert`: {e}"
   let anchorView := (json.getObjVal? "anchorView").toOption.bind (Json.getNat? · |>.toOption)
+  let key {α : Type} [FromJson α] (obj : String) (j : Json) (name : String) : Except String α := do
+    let v ← (j.getObjVal? name).mapError fun _ => s!"its `# trace` header's `{obj}` has no `{name}`"
+    (fromJson? v).mapError fun e => s!"its `# trace` header's `{obj}.{name}`: {e}"
   let restart : Option Restored ← match json.getObjVal? "restart" with
     | .error _ => pure none
     | .ok j =>
-      let key {α : Type} [FromJson α] (name : String) : Except String α := do
-        let v ← (j.getObjVal? name).mapError fun _ => s!"its `# trace` header's `restart` has no `{name}`"
-        (fromJson? v).mapError fun e => s!"its `# trace` header's `restart.{name}`: {e}"
-      pure (some ⟨← key "lock", ← key "highestVoted", ← key "vote2Bar", ← key "reconstructed",
-        ← key "resumes"⟩)
+      pure (some ⟨← key "restart" j "lock", ← key "restart" j "highestVoted",
+        ← key "restart" j "vote2Bar", ← key "restart" j "reconstructed", ← key "restart" j "resumes"⟩)
+  let rejoin : Option Rejoined ← match json.getObjVal? "rejoin" with
+    | .error _ => pure none
+    | .ok j => pure (some ⟨← key "rejoin" j "bar", ← key "rejoin" j "resumes"⟩)
   pure ⟨← ident "node", ← ident "anchor", buffer, height.getD 0, anchorCert, anchorView.getD 0,
-    restart⟩
+    restart, rejoin⟩
 
 /--
 The configuration a header describes.

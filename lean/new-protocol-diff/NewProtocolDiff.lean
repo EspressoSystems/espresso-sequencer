@@ -5,6 +5,7 @@ public import NewProtocolDiff.Trace
 public import NewProtocolDiff.Header
 public import NewProtocolDiff.Check
 public import NewProtocolDiff.Restart
+public import NewProtocolDiff.Wipe
 public import NewProtocolDiff.ProtocolCheck
 public import NewProtocolDiff.PromptCheck
 public import NewProtocolDiff.Corpus
@@ -25,6 +26,8 @@ implementation produced (`lake exe check`), and for running the machine.
 * `NewProtocolDiff.Check` — the signing rules of `NewProtocol.SafeHistory`.
 * `NewProtocolDiff.Restart`: pairs a restarted node's trace with the file it
   resumes and checks the premises of `NewProtocol.safe_across_restart`.
+* `NewProtocolDiff.Wipe`: pairs a trace rejoined after wiped storage with the file
+  it resumes and checks the premises of `NewProtocol.safe_across_wipe`.
 * `NewProtocolDiff.ProtocolCheck` — the rest of `NewProtocol.ProtocolHistory`.
 * `NewProtocolDiff.PromptCheck` — `NewProtocol.Prompt`, on the steps a trace has.
 * `NewProtocolDiff.Corpus` — what puts a trace or a delay outside what the
