@@ -1710,7 +1710,7 @@ pub(crate) fn light_client_genesis(config: &NetworkConfig<SeqTypes>, chain_id: C
 /// tries again.
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""))]
-struct LightClientProvider<C: ApiContext> {
+pub(crate) struct LightClientProvider<C: ApiContext> {
     light_client: OnceCell<Arc<NodeLightClient>>,
     state: ApiState<C>,
     client: FallbackClient<QueryServiceClient>,
@@ -1719,7 +1719,7 @@ struct LightClientProvider<C: ApiContext> {
 }
 
 impl<C: ApiContext> LightClientProvider<C> {
-    pub fn new(
+    fn new(
         peers: impl IntoIterator<Item = Url>,
         state: ApiState<C>,
         opt: LightClientOptions,
@@ -1735,7 +1735,7 @@ impl<C: ApiContext> LightClientProvider<C> {
         })
     }
 
-    async fn light_client(&self) -> Option<&Arc<NodeLightClient>> {
+    pub(crate) async fn light_client(&self) -> Option<&Arc<NodeLightClient>> {
         self.light_client
             .get_or_try_init(|| self.init())
             .await
