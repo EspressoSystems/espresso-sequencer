@@ -64,7 +64,10 @@ use std::{
 
 use committable::Committable;
 use hotshot_types::{
-    data::{EpochNumber, Leaf2, VidCommitment, VidCommitment2, VidDisperseShare2, ViewNumber},
+    data::{
+        EpochNumber, Leaf2, VidCommitment, VidCommitment2, VidDisperseShare2, ViewChangeEvidence2,
+        ViewNumber,
+    },
     simple_certificate::{TimeoutCertificate3, TimeoutEvidence},
     simple_vote::HasEpoch,
     traits::{block_contents::BlockHeader, node_implementation::NodeType},
@@ -876,10 +879,7 @@ impl Recorder {
                 // The model's decide carries a `Cert2`; without one there is nothing
                 // to compare, and the views will arrive with a later decide anyway.
                 let cert2 = cert2.as_ref()?;
-                let blocks: Vec<String> = leaves
-                    .iter()
-                    .map(|l| leaf_json(l, self.epoch_height))
-                    .collect();
+                let blocks: Vec<String> = leaves.iter().map(|l| self.leaf_json(l)).collect();
                 return Some(tagged(
                     "decided",
                     obj(&[
@@ -917,6 +917,32 @@ impl Recorder {
                 "identity",
                 ident(&crate::helpers::proposal_commitment(proposal)),
             ),
+        ])
+    }
+
+    /// A decided leaf, as the model's `Block`.
+    ///
+    /// Written like the proposal it came from, which a decide must deliver as
+    /// held. A leaf carries no epoch of its own; it is derived from the height.
+    fn leaf_json<T: NodeType>(&self, leaf: &Leaf2<T>) -> String {
+        let evidence = leaf
+            .view_change_evidence
+            .clone()
+            .and_then(ViewChangeEvidence2::timeout_evidence);
+        obj(&[
+            ("blockHeader", header_json::<T>(leaf.block_header())),
+            ("viewNumber", view_json(leaf.view_number())),
+            (
+                "epoch",
+                leaf.epoch(self.epoch_height)
+                    .map_or_else(|| "0".to_string(), |e| e.to_string()),
+            ),
+            ("parentCert", cert1_json_raw(leaf.justify_qc())),
+            (
+                "timeoutEvidence",
+                evidence.map_or_else(null, |tc| self.timeout_cert_json(&tc)),
+            ),
+            ("identity", ident(&leaf.commit())),
         ])
     }
 
@@ -1059,25 +1085,6 @@ fn header_json<T: NodeType>(header: &T::BlockHeader) -> String {
     ])
 }
 
-/// A decided leaf, as the model's `Block`.
-///
-/// Only the view numbers are compared, so the remaining fields are filled as
-/// faithfully as a leaf allows and no further.
-fn leaf_json<T: NodeType>(leaf: &Leaf2<T>, epoch_height: u64) -> String {
-    obj(&[
-        ("blockHeader", header_json::<T>(leaf.block_header())),
-        ("viewNumber", view_json(leaf.view_number())),
-        (
-            "epoch",
-            leaf.epoch(epoch_height)
-                .map_or_else(|| "0".to_string(), |e| e.to_string()),
-        ),
-        ("parentCert", cert1_json_raw(leaf.justify_qc())),
-        ("timeoutEvidence", "null".to_string()),
-        ("identity", ident(&leaf.commit())),
-    ])
-}
-
 fn payload_json<H: BlockHeader<T>, T: NodeType>(header: &H) -> String {
     match header.payload_commitment() {
         VidCommitment::V2(commit) => ident(&commit),
@@ -1186,11 +1193,14 @@ fn null() -> String {
 
 #[cfg(test)]
 mod tests {
+    use std::marker::PhantomData;
+
     use hotshot::types::{BLSPubKey, SignatureKey};
     use hotshot_example_types::{
         node_types::{TEST_VERSIONS, TestTypes},
         state_types::{TestInstanceState, TestValidatedState},
     };
+    use hotshot_types::{simple_certificate::TimeoutCertificate2, simple_vote::TimeoutData2};
 
     use super::*;
     use crate::tests::common::coordinator_builder::{build_genesis_cert1, build_genesis_proposal};
@@ -1267,6 +1277,35 @@ mod tests {
         };
         let parent = format!("\"parent\":{}", ident(&cert.data.leaf_commit));
         assert!(json.contains(&parent), "{json}");
+    }
+
+    #[tokio::test]
+    async fn decided_block_keeps_the_proposal_timeout_evidence() {
+        let leaf = Leaf2::<TestTypes>::genesis(
+            &TestValidatedState::default(),
+            &TestInstanceState::default(),
+            TEST_VERSIONS.test.base,
+        )
+        .await;
+        let cert = build_genesis_cert1(&leaf);
+        let data = TimeoutData2 {
+            view: ViewNumber::new(1),
+            epoch: Some(EpochNumber::genesis()),
+        };
+        let tc = TimeoutCertificate2::new(
+            data.clone(),
+            data.commit(),
+            ViewNumber::new(1),
+            None,
+            PhantomData,
+        );
+        let mut proposal = build_genesis_proposal(&leaf, &cert);
+        proposal.view_number = ViewNumber::new(2);
+        proposal.view_change_evidence = Some(TimeoutEvidence::V2(tc));
+        let decided: Leaf2<TestTypes> = proposal.clone().into();
+        let mut rec = recorder_in_tmp("f.0.jsonl");
+        rec.epoch_height = 10;
+        assert_eq!(rec.leaf_json(&decided), rec.proposal_json(&proposal));
     }
 
     #[tokio::test]
