@@ -197,9 +197,11 @@ inductive ChainError where
   | unchecked (why : String)
 
 /--
-A resumed trace's preamble and history, its held outputs included.
+A resumed trace's preamble and history.
 
-Refused as `unchecked` when its timeouts sign no lock, which `check` leaves out of scope.
+Refused as `unchecked` when its timeouts sign no lock, which `check` leaves out of
+scope, and as `unreadable` when it notes actions before any step, which its history
+would leave out.
 -/
 def readRecorded (path : System.FilePath) : IO (Except ChainError (Preamble × History)) := do
   unless ← path.pathExists do
@@ -207,11 +209,12 @@ def readRecorded (path : System.FilePath) : IO (Except ChainError (Preamble × H
   let text ← IO.FS.readFile path
   if signsNoLock text then
     return .error (.unchecked s!"{path} signs no lock in its timeouts")
+  if heldNote text |>.isSome then
+    return .error (.unreadable s!"{path} has actions before any step")
   return Except.mapError .unreadable do
     let said ← readPreamble text
     let events ← parseTrace text
-    let held ← (heldOutputs text).mapError (s!"held outputs: {·}")
-    pure (said, historyOf (withHeld events held))
+    pure (said, historyOf events)
 
 mutual
 

@@ -1,15 +1,15 @@
 module
 
 public import NewProtocolDiff.Trace
-public import NewProtocolDiff.Replay
 public import NewProtocolDiff.Corpus
+public import NewProtocolDiff.PromptCheck
+public import NewProtocolDiff.Check
 public import NewProtocolDiff.Restart
 public meta import NewProtocolSpec.Interface
-public meta import NewProtocolImpl.Machine
 public meta import NewProtocolDiff.Json
 public meta import NewProtocolDiff.Trace
-public meta import NewProtocolDiff.Replay
 public meta import NewProtocolDiff.Corpus
+public meta import NewProtocolDiff.PromptCheck
 public meta import NewProtocolDiff.Header
 public meta import NewProtocolDiff.Check
 public meta import NewProtocolDiff.Restart
@@ -23,9 +23,10 @@ the format is checked at build time in both directions:
 * the identity injection does not collide and preserves the recorder's text, and
   every constructor round-trips through JSON — which catches an instance the
   deriving got wrong as well as one a future hand-written override breaks;
-* the comparison accepts a run the machine agrees with, and rejects one it does
-  not — including the case that matters most, a recorded identity that does not
-  match the block, since that is how a hash-namespace mistake would show up;
+* the step times are read as written, and the `Prompt` check passes a node that
+  votes in time and fails one that does not;
+* the signing rules refuse a vote whose identity does not match the block, since
+  that is how a hash-namespace mistake would show up;
 * a restarted pair that keeps its summary and bars passes, and each premise
   broken alone is reported by its name.
 -/
@@ -36,11 +37,6 @@ namespace NewProtocolDiff
 namespace Tests
 
 open Lean NewProtocol
-
--- `NewProtocol.Event` carries no equality of its own, nothing in the
--- specification comparing two events. The round-trip check needs one, so it is
--- derived here rather than the specification growing an instance for a test.
-deriving instance DecidableEq for Event
 
 /-! ## Identities
 
@@ -137,11 +133,10 @@ private def outputRoundTrips : Bool := roundTrips outputs
 /-- info: true -/
 #guard_msgs in #eval outputRoundTrips
 
-/-- A whole trace survives writing and reading, collections and all. -/
+/-- A whole trace survives writing and reading. -/
 private def trace : List Event :=
   [ .consensus (.certificate1 ⟨⟨⟨1⟩, ⟨0⟩, 0⟩, ViewNumber.genesis⟩) [],
     .consensus (.proposal ⟨1⟩ prop1 (some ⟨⟨1⟩, ⟨42⟩⟩)) [.send (.vote1 ⟨⟨⟨3⟩, ⟨0⟩, 1⟩, ⟨1⟩, ⟨1⟩⟩)],
-    .collect,
     .consensus (.timeout ⟨4⟩)
       [.send (.timeoutVote ⟨⟨⟨0⟩, lk⟩, ⟨4⟩, ⟨1⟩⟩), .send (.cert1 ⟨⟨⟨3⟩, ⟨0⟩, 1⟩, ⟨1⟩⟩)] ]
 
@@ -166,11 +161,12 @@ private def wide : Proposal :=
   | .ok c => c == (⟨⟨⟨3⟩, ⟨0⟩, 1⟩, ⟨1⟩⟩ : Cert1)
   | .error _ => false
 
-/-! ## The comparison
+/-! ## Acting promptly
 
-The same run three ways: as the machine plays it, missing the validity report
-the vote depends on, and with an identity that does not match the block. The
-last is the namespace mistake a structural hash would have caused everywhere.
+A run that owes a vote1 once the block is validated, voting in the same step, later
+on a release, or not at all. A vote with an identity that does not match the block ends the obligation
+too, since a node votes once per view, so the signing rules are what refuse it: the
+namespace mistake a structural hash would have caused everywhere.
 -/
 
 private def anchor : Block :=
@@ -179,38 +175,64 @@ private def anchor : Block :=
 private def cfg : Config := ⟨anchor, ⟨⟨⟨1⟩, ⟨0⟩, 0⟩, ViewNumber.genesis⟩, 20, 0⟩
 private def me : PubKey := ⟨1⟩
 
-private def run (es : List Event) : String :=
-  (replay cfg (fun _ _ => some me) me es).report
-
 private def opening : List Event :=
   [ .consensus (.certificate1 ⟨⟨⟨1⟩, ⟨0⟩, 0⟩, ViewNumber.genesis⟩) [],
     .consensus (.proposal ⟨1⟩ prop1 (some ⟨⟨1⟩, ⟨42⟩⟩)) [],
     .consensus (.blockReconstructed ViewNumber.genesis ⟨7⟩) [] ]
 
-private def voteStep (identity : BlockHash) : Event :=
-  .consensus (.blockValidated ⟨1⟩ identity)
-    [.send (.vote1 ⟨⟨⟨3⟩, ⟨0⟩, 1⟩, ⟨1⟩, me⟩), .send (.vidShare ⟨⟨1⟩, ⟨42⟩⟩)]
+private def voteStep (votes : List Output) : Event :=
+  .consensus (.blockValidated ⟨1⟩ ⟨3⟩) votes
 
-/-- info: "OK: 4 steps, marks agree exactly" -/
-#guard_msgs in #eval run (opening ++ [voteStep ⟨3⟩])
+private def vote (identity : BlockHash) : Output := .send (.vote1 ⟨⟨identity, ⟨0⟩, 1⟩, ⟨1⟩, me⟩)
 
-/-- info: "DIVERGED after 3 steps\n  step 3: the recording voted1 in view 1 of epoch 0, the machine did not" -/
-#guard_msgs in
-#eval run (opening ++ [.consensus (.timeout ⟨9⟩) [.send (.vote1 ⟨⟨⟨3⟩, ⟨0⟩, 1⟩, ⟨1⟩, me⟩)]])
-
-/-- info: "DIVERGED after 3 steps\n  step 3: the recording voted1 in view 1 of epoch 0, the machine did not" -/
-#guard_msgs in #eval run (opening ++ [voteStep ⟨999⟩])
-
-/-! ### Collecting
-
-A collection prunes the machine and must leave what the run still owes. Nothing
-records one — see `NewProtocolDiff.Trace` — so without a trace written here the
-`collect` arm of `replay` would be reached by nothing at all, and could rot
-unnoticed.
+/--
+What a run still owes `δ` after it, with step `n` at time `n`, the last step's
+outputs released at `released`, and the recording ending at `ended`.
 -/
+private def late (es : List Event) (released : List (Nat × Nat)) (ended δ : Nat) : List String :=
+  let h := historyOf es
+  let ms := moments h (List.range h.length).toArray
+    ((List.replicate (h.length - 1) []).toArray.push released)
+  (promptFaults cfg (fun _ _ => some me) me ms ended δ).map fun (k, o) =>
+    match o, ms[k]? with
+    | .vote1 p, some m => s!"vote1 in view {p.viewNumber.toNat} at t={m.time}"
+    | _, _ => "another obligation"
 
-/-- info: "OK: 5 steps, marks agree exactly" -/
-#guard_msgs in #eval run (opening ++ [.collect, voteStep ⟨3⟩])
+/-- info: [] -/
+#guard_msgs in #eval late (opening ++ [voteStep [vote ⟨3⟩]]) [] 100 5
+
+/-- info: ["vote1 in view 1 at t=3"] -/
+#guard_msgs in #eval late (opening ++ [voteStep []]) [] 100 5
+
+-- A vote released after the step is cast when it is released, not when the step was taken.
+/-- info: ["vote1 in view 1 at t=3"] -/
+#guard_msgs in #eval late (opening ++ [voteStep [vote ⟨3⟩]]) [(50, 1)] 100 5
+
+/-- info: [] -/
+#guard_msgs in #eval late (opening ++ [voteStep [vote ⟨3⟩]]) [(50, 1)] 100 60
+
+/-- info: true -/
+#guard_msgs in #eval checkSafe cfg me (historyOf (opening ++ [voteStep [vote ⟨3⟩]]))
+
+/-- info: false -/
+#guard_msgs in #eval checkSafe cfg me (historyOf (opening ++ [voteStep [vote ⟨999⟩]]))
+
+-- A recording that stopped before the deadline could still have voted.
+/-- info: [] -/
+#guard_msgs in #eval late (opening ++ [voteStep []]) [] 8 5
+
+/-- A recorded step carries its time and its releases, and the trace its end. -/
+private def timedTrace : String :=
+  "# trace {}\n" ++
+  r#"{"consensus":{"input":{"timeout":{"v":4}},"output":[],"t":17}}"# ++ "\n" ++
+  r#"{"consensus":{"input":{"timeout":{"v":5}},"output":[],"t":40,"released":[{"t":48,"outputs":2}]}}"# ++
+  "\n# ended at t=55\n"
+
+/-- info: "ok #[17, 40] #[[], [(48, 2)]] 55" -/
+#guard_msgs in
+#eval match readTiming timedTrace with
+  | .ok t => s!"ok {t.steps} {t.releases} {t.ended}"
+  | .error e => e
 
 /-! ## A boundary of the model is not a failure
 
@@ -566,16 +588,13 @@ private def checkFile (name : String) : IO Unit := do
       ("n.recast1.jsonl", restartedHeader "n.recast.jsonl" ++ lines postRun)])
   checkFile "n.recast1.jsonl"
 
--- Outputs held for want of a later step belong to the run before the crash.
-/-- info: ([], ["summary:vote2Below"]) -/
+-- A resumed file whose actions came before any step is refused, since its history leaves them out.
+/-- info: unreadable: .lake/restart-tests/n.held.jsonl has actions before any step -/
 #guard_msgs in
-#eval show IO (List String × List String) from do
+#eval do
   writeFiles [("n.held.jsonl", header "" ++ lines preRun
-    ++ "# 1 outputs had no later step to ride on: " ++ (toJson (vote2 c5)).compress ++ "\n")]
-  let P := { persisted with highestVoted := ⟨4⟩, lock := c5 }
-  match ← chainHistory (dir / "n.held.jsonl") with
-  | .ok (_, _, pre) => return (failing P preRun postRun, failing P pre postRun)
-  | .error e => return ([chainMessage e], [])
+    ++ "# 1 outputs had no step to join: " ++ (toJson (vote2 c5)).compress ++ "\n")]
+  chainOf "n.held.jsonl"
 
 end Tests
 end NewProtocolDiff

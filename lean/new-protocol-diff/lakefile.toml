@@ -1,5 +1,5 @@
 name = "new-protocol-diff"
-defaultTargets = ["NewProtocolDiff", "replay", "sim"]
+defaultTargets = ["NewProtocolDiff", "check", "sim"]
 
 # Test scaffolding, kept out of the verified packages: it depends on the
 # implementation, and neither the implementation nor the specification depends
@@ -14,10 +14,6 @@ path = "../new-protocol-impl"
 
 [[lean_lib]]
 name = "NewProtocolDiff"
-
-[[lean_exe]]
-name = "replay"
-root = "Main"
 
 [[lean_exe]]
 name = "check"
