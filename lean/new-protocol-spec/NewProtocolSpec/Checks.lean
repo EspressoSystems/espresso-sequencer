@@ -70,6 +70,9 @@ info: 'NewProtocol.Liveness.chainGrows' depends on axioms: [propext, Classical.c
 /-- info: 'NewProtocol.safe_across_restart' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in #print axioms safe_across_restart
 
+/-- info: 'NewProtocol.safe_across_wipe' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in #print axioms safe_across_wipe
+
 /-- Fail when a structure's fields are not what is expected. -/
 meta def checkFields (parent : Name) (expected : List Name) : MetaM Unit := do
   let actual := (getStructureFields (← getEnv) parent).toList
@@ -134,6 +137,13 @@ run_meta (checkFields `NewProtocol.Summarises
    `vote1Below, `vote2Below, `timeoutBelow, `vote2Locked, `decidedBelow])
 
 run_meta (checkFields `NewProtocol.RestartOK [`vote1After, `vote2After, `lockKept])
+
+/-! What a node that restarted with nothing stored adopts, and when that is sound. -/
+run_meta (checkFields `NewProtocol.Rejoin [`bar, `anchorBlock, `anchorCert])
+
+run_meta (checkFields `NewProtocol.Rejoins
+  [`anchorAfter, `anchorAbove, `anchorCertHeld, `anchorHeld, `anchorPayload, `anchorCert2Held,
+   `vote1Below, `vote2Below, `timeoutBelow, `vote2Locked, `decidedBelow])
 
 /-! What the restart proof reads of the stored state: `Summarises` with the anchor held by each acting step. -/
 run_meta (checkFields `NewProtocol.Resumes

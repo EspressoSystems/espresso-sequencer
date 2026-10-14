@@ -19,6 +19,13 @@ under the restart's configuration (`Persisted.config`), judged behind the inputs
 the history before it (`History.inputsOnly`): `safe_across_restart`, and per prefix
 of the spliced trace `safe_trace_across_restart` (`NewProtocolSpec.Proofs.Restart`).
 
+A restart with nothing stored is the same splice with no loaded steps. The
+summary is replaced by what the node adopts from the network before it signs
+anything (`Rejoin`): a view bar, and the anchor and lock of the first decide above
+it. `Rejoins` says what it adopts is sound for the history before the crash, and
+`RejoinOK` is the bars it sets. `safe_across_wipe` proves the splice obeys the
+signing rules. How the node finds the bar and the anchor is not modelled.
+
 Not covered: the durability of the summary itself, a crash during a write, and
 restarts at the version before the timeout epoch bound.
 -/
@@ -186,6 +193,102 @@ come before.
 def Step.Acts (st : Step) : Prop := ∃ o ∈ st.output, Output.acts o = true
 
 instance (st : Step) : Decidable st.Acts := inferInstanceAs (Decidable (∃ o ∈ st.output, _))
+
+/--
+What a node that restarted with nothing stored adopts before it signs anything.
+
+It recovers a view bar from the network, at or after every view it signed in
+before the crash, and waits for the first `Cert2` above the bar. The block that
+certificate commits becomes its anchor and the `Cert1` at the certificate's view
+its lock. It casts no vote1 or vote2 at or before that view (`RejoinOK`).
+-/
+structure Rejoin where
+  /-- The view bar: no earlier than any view the node signed in before the crash. -/
+  bar : ViewNumber
+
+  /-- The adopted anchor, the block the first `Cert2` above the bar commits. -/
+  anchorBlock : Block
+
+  /-- The adopted lock, the `Cert1` at that `Cert2`'s view, over the anchor block. -/
+  anchorCert : Cert1
+deriving Repr
+
+/-- The adopted anchor's view. -/
+abbrev Rejoin.anchorView (R : Rejoin) : ViewNumber := R.anchorBlock.viewNumber
+
+/--
+What a rejoined node runs from, as if loaded from storage: the adopted anchor and
+lock, the lock's view as the latest view signed in, and no payload held.
+-/
+def Rejoin.persisted (R : Rejoin) : Persisted :=
+  ⟨R.anchorBlock, R.anchorCert, R.anchorCert, R.anchorCert.view, []⟩
+
+/-- The configuration a rejoined node runs under: the original one with the adopted anchor. -/
+abbrev Rejoin.config (cfg : Config) (R : Rejoin) : Config := R.persisted.config cfg
+
+/-- The bars a rejoined node sets: those of a restart from `Rejoin.persisted`. -/
+abbrev RejoinOK (R : Rejoin) (post : History) : Prop := RestartOK R.persisted post
+
+/--
+What a node that restarted with nothing stored adopts, `R`, is sound for the
+history `pre` before the crash and the history `post` after it.
+
+The node learns its anchor after the crash, so each anchor field asks it held by
+the step after the crash that acts on it (`Step.Acts`). The votes before the crash
+are at or before the bar, which is before the adopted lock's view.
+-/
+structure Rejoins (cfg : Config) (R : Rejoin) (pre post : History) : Prop where
+  /-- The adopted anchor is no earlier than the configured one. -/
+  anchorAfter : cfg.anchorView ≤ R.anchorView
+
+  /-- The adopted lock is after the bar. -/
+  anchorAbove : R.bar < R.anchorCert.view
+
+  /-- Each step that acts holds the adopted lock by then. -/
+  anchorCertHeld : ∀ n st, post[n]? = some st → st.Acts →
+    (pre ++ post.upTo (n + 1)).HasCert1 cfg R.anchorCert
+
+  /-- Each step that acts holds the adopted anchor's proposal by then. -/
+  anchorHeld : ∀ n st, post[n]? = some st → st.Acts →
+    (pre ++ post.upTo (n + 1)).HasProposal cfg R.anchorBlock
+
+  /--
+  A vote2 over a block the node holds at the anchor's view with the anchor's
+  payload comes after the anchor's payload.
+  -/
+  anchorPayload : ∀ n (v : Vote2) (b : Block), post.SentAt n (.vote2 v) →
+    (pre ++ post.upTo (n + 1)).HasProposal cfg b →
+    b.viewNumber = R.anchorView → b.payloadCommit = R.anchorBlock.payloadCommit →
+    v.data = ⟨blockHash b, b.epoch, b.blockHeader.blockNumber⟩ →
+    (pre ++ post.upTo (n + 1)).HasPayload cfg R.anchorView R.anchorBlock.payloadCommit
+
+  /--
+  The anchor's `Cert2` under the rejoined configuration is the original one, or
+  each step that acts holds it by then.
+  -/
+  anchorCert2Held : ∀ n st, post[n]? = some st → st.Acts →
+    (R.config cfg).anchorCert2 = cfg.anchorCert2
+      ∨ (pre ++ post.upTo (n + 1)).HasCert2 (R.config cfg).anchorCert2
+
+  /-- Every vote1 before the crash is at or before the bar. -/
+  vote1Below : ∀ v : Vote1, pre.Sent (.vote1 v) → v.view ≤ R.bar
+
+  /-- Every vote2 before the crash is at or before the bar. -/
+  vote2Below : ∀ v : Vote2, pre.Sent (.vote2 v) → v.view ≤ R.bar
+
+  /-- Every timeout vote before the crash is at or before the bar. -/
+  timeoutBelow : ∀ v : TimeoutVote, pre.Sent (.timeoutVote v) → v.view ≤ R.bar
+
+  /-- Every vote2 before the crash is no later than the adopted lock (`EpochViewLE`). -/
+  vote2Locked : ∀ v : Vote2, pre.Sent (.vote2 v) →
+    EpochViewLE v.data.epoch v.view R.anchorCert.data.epoch R.anchorCert.view
+
+  /--
+  Every view decided before the crash is at or before the adopted anchor's.
+
+  Assumed: nothing the node holds after the crash shows it.
+  -/
+  decidedBelow : ∀ v, pre.DecidedView v → v ≤ R.anchorView
 
 /--
 The trace whose first steps are `pre` and whose later steps are those of `r`.

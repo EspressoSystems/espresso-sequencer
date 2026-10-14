@@ -22,6 +22,11 @@ The proof reads less of the summary than `Summarises` states: `Resumes` asks onl
 that each step after the crash that signs or decides holds the anchor by then.
 `safe_across_resume` is proved from it, and `safe_across_restart` follows
 (`Summarises.resumes`).
+
+A node that restarted with nothing stored runs as if it loaded what it adopted
+(`Rejoin.persisted`), with no steps loaded. Its votes before the crash are at or
+before the bar, which is before the adopted lock's view, so it meets `Resumes`
+(`Rejoins.resumes`) and `safe_across_wipe` follows.
 -/
 
 @[expose] public section
@@ -444,6 +449,41 @@ theorem SafeHistory.append_silent {cfg : Config} {node : PubKey} {honestIn : Epo
       exact hs.decideOnce n st i blocks c1 c2 hst hi he
     · simp [hout] at hi
 
+/-! ## What a rejoined node adopts -/
+
+/-- A rejoined node runs from no loaded steps. -/
+theorem Rejoin.restoredSteps_persisted (R : Rejoin) : R.persisted.restoredSteps = [] := rfl
+
+/-- The adopted lock's view is before the first view a rejoined node may vote in. -/
+theorem Rejoin.anchorCert_lt_firstAllowed (R : Rejoin) : R.anchorCert.view < R.persisted.firstAllowed :=
+  R.persisted.highestVoted_lt_firstAllowed
+
+/--
+What a rejoined node adopts meets what the proof reads: the bar is before the
+adopted lock's view, and nothing is loaded.
+-/
+theorem Rejoins.resumes {cfg : Config} {R : Rejoin} {pre post : History} (hr : Rejoins cfg R pre post) :
+    Resumes cfg R.persisted pre post := by
+  have below : ∀ {v : ViewNumber}, v ≤ R.bar → v ≤ R.persisted.highestVoted :=
+    fun h => Nat.le_trans h (Nat.le_of_lt hr.anchorAbove)
+  refine
+    { anchorAfter := hr.anchorAfter
+      anchorCertHeld := fun n st hst hact => ?_
+      anchorHeld := fun n st hst hact => ?_
+      anchorPayload := fun n v b hsent hb hbv hbpc hd => ?_
+      anchorCert2Held := fun n st hst hact => ?_
+      vote1Below := fun v h => below (hr.vote1Below v h)
+      vote2Below := fun v h => below (hr.vote2Below v h)
+      timeoutBelow := fun v h => below (hr.timeoutBelow v h)
+      vote2Locked := hr.vote2Locked
+      decidedBelow := hr.decidedBelow } <;>
+    simp only [Rejoin.restoredSteps_persisted, List.append_nil] at *
+  · exact hr.anchorCertHeld n st hst hact
+  · exact hr.anchorHeld n st hst hact
+  · exact hr.anchorPayload n v b hsent hb hbv hbpc hd
+  · exact (hr.anchorCert2Held n st hst hact).imp id
+      fun h => ⟨_, h, rfl, R.anchorCert_lt_firstAllowed⟩
+
 /-! ## The splice obeys the signing rules -/
 
 /--
@@ -584,6 +624,23 @@ theorem safe_across_restart {cfg : Config} {node : PubKey} {honestIn : EpochNumb
     (hok : RestartOK P post) :
     SafeHistory cfg node honestIn (pre ++ P.restoredSteps ++ post) :=
   safe_across_resume hpre hsum.resumes hpost hok
+
+/--
+**Safety across wiped storage.** A history before a crash that obeys the signing
+rules, followed by a history after a restart with nothing stored, obeys them as a
+whole, when what the node adopts is sound for the history before (`Rejoins`), the
+history after obeys the rules under the adopted configuration behind the inputs of
+the one before, and keeps the bars of what it adopted (`RejoinOK`).
+-/
+theorem safe_across_wipe {cfg : Config} {node : PubKey} {honestIn : EpochNumber → Prop}
+    {R : Rejoin} {pre post : History}
+    (hpre : SafeHistory cfg node honestIn pre) (hr : Rejoins cfg R pre post)
+    (hpost : SafeHistory (R.config cfg) node honestIn (pre.inputsOnly ++ post))
+    (hok : RejoinOK R post) :
+    SafeHistory cfg node honestIn (pre ++ post) := by
+  have h := safe_across_resume (P := R.persisted) hpre hr.resumes
+    (by rwa [Rejoin.restoredSteps_persisted, List.append_nil]) hok
+  rwa [Rejoin.restoredSteps_persisted, List.append_nil] at h
 
 /-! ## The spliced trace -/
 

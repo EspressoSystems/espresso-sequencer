@@ -56,7 +56,7 @@ def mainResults : List Name :=
   [`NewProtocol.noFork, `NewProtocol.decideAgreement, `NewProtocol.decidesValid, `NewProtocol.Liveness.chainGrows,
    `NewProtocol.Witness.premises_met,
    `NewProtocol.Witness.per_epoch, `NewProtocol.safe_across_restart,
-   `NewProtocol.safe_trace_across_restart]
+   `NewProtocol.safe_trace_across_restart, `NewProtocol.safe_across_wipe]
 
 /--
 Whether a declaration is one a reader meets as a definition.
@@ -86,7 +86,8 @@ def accessors : List Name :=
    `NewProtocol.Message.leaderEpoch, `NewProtocol.Proposal.payloadCommit,
    `NewProtocol.Vote1Data.toVote2, `NewProtocol.ViewNumber.genesis,
    `NewProtocol.Config.anchorCert2, `NewProtocol.Config.startEpoch,
-   `NewProtocol.Obligation.epoch, `NewProtocol.Persisted.anchorView]
+   `NewProtocol.Obligation.epoch, `NewProtocol.Persisted.anchorView,
+   `NewProtocol.Rejoin.anchorView]
 
 /-- Whether the document must reproduce `name` with `:::spec`. -/
 def needsSpec (env : Environment) (name : Name) : Bool :=
