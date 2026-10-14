@@ -437,6 +437,26 @@ private def restartOf (text : String) : String :=
     | _ => false
   | .error _ => false
 
+/-- What `persistedOf` makes of a header, its error when it refuses it. -/
+private def persistedError (text : String) : String :=
+  match readPreamble text with
+  | .error e => e
+  | .ok said => match said.restart.map (persistedOf cfg [] said) with
+    | some (.error e) => e
+    | some (.ok _) => "accepted"
+    | none => "no restart"
+
+/-- info: "its `restart` header names no lock" -/
+#guard_msgs in #eval persistedError (header (restartJson "null" "null"))
+
+/-- info: "restored from view 3 with no `anchorCert`" -/
+#guard_msgs in #eval persistedError (header (",\"anchorView\":3" ++ restartJson (toJson c1).compress "null"))
+
+/-- Why a chain could not be spliced, as one line. -/
+private def chainMessage : ChainError → String
+  | .unreadable e => s!"unreadable: {e}"
+  | .unchecked e => s!"unchecked: {e}"
+
 -- An empty first run is accepted only for a node anchored at genesis.
 /-- info: ok 0 -/
 #guard_msgs in
@@ -445,10 +465,10 @@ private def restartOf (text : String) : String :=
     | IO.println "unreadable"
   let some r := said.restart | IO.println "no restart"
   match ← resumedBy "x.jsonl" said r [] with
-  | .ok (_, _, pre) => IO.println s!"ok {pre.length}"
-  | .error e => IO.println e
+  | .ok (_, _, _, pre) => IO.println s!"ok {pre.length}"
+  | .error e => IO.println (chainMessage e)
 
-/-- info: resumes an empty recording but loaded an anchor -/
+/-- info: unreadable: resumes an empty recording but loaded an anchor -/
 #guard_msgs in
 #eval show IO Unit from do
   let .ok said := readPreamble (header (",\"anchorView\":3" ++ restartJson (toJson c1).compress "null"))
@@ -456,23 +476,106 @@ private def restartOf (text : String) : String :=
   let some r := said.restart | IO.println "no restart"
   match ← resumedBy "x.jsonl" said r [] with
   | .ok _ => IO.println "accepted"
-  | .error e => IO.println e
+  | .error e => IO.println (chainMessage e)
 
 /-- A history as trace lines. -/
 private def lines (h : History) : String := renderTrace (h.map fun s => .consensus s.input s.output)
+
+/-- The directory the chain fixtures are written to. -/
+private def dir : System.FilePath := ".lake/restart-tests"
+
+/-- The header of a file restarted from the anchor at view 1 that resumes `file`. -/
+private def restartedHeader (file : String) : String :=
+  header (",\"anchorView\":1,\"anchorCert\":" ++ (toJson c1).compress
+    ++ restartJson (toJson c1).compress ("\"" ++ file ++ "\""))
+
+/-- Write each `(name, text)` under `dir`. -/
+private def writeFiles (files : List (String × String)) : IO Unit := do
+  IO.FS.createDirAll dir
+  for (name, text) in files do IO.FS.writeFile (dir / name) text
+
+/-- The first run and the run that resumes it. -/
+private def pairFiles : List (String × String) :=
+  [("n.0.jsonl", header "" ++ lines preRun), ("n.1.jsonl", restartedHeader "n.0.jsonl" ++ lines postRun)]
+
+/-- What `chainHistory` makes of the file `name` under `dir`. -/
+private def chainOf (name : String) : IO Unit := do
+  match ← chainHistory (dir / name) with
+  | .ok (node, _, h) => IO.println s!"ok {node} {h.length}"
+  | .error e => IO.println (chainMessage e)
+
+/-- What `checkRestarted` makes of the restarted file `name` under `dir`. -/
+private def checkFile (name : String) : IO Unit := do
+  let text ← IO.FS.readFile (dir / name)
+  let .ok said := readPreamble text | IO.println "unreadable header"
+  let some r := said.restart | IO.println "no restart"
+  let .ok events := parseTrace text | IO.println "unparsed"
+  match ← checkRestarted (dir / name) said r (historyOf events) with
+  | .error e => IO.println e
+  | .ok (.checked v f broken) => IO.println s!"checked {v} {f} {broken}"
+  | .ok .recasts => IO.println "recasts"
+  | .ok (.unchecked why) => IO.println s!"unchecked: {why}"
 
 -- Two files of one node chain into the history before the crash, the restored steps, and the history after.
 /-- info: true -/
 #guard_msgs in
 #eval show IO Bool from do
-  let dir : System.FilePath := ".lake/restart-tests"
-  IO.FS.createDirAll dir
-  IO.FS.writeFile (dir / "n.0.jsonl") (header "" ++ lines preRun)
-  IO.FS.writeFile (dir / "n.1.jsonl") (header (",\"anchorView\":1,\"anchorCert\":" ++ (toJson c1).compress
-    ++ restartJson (toJson c1).compress "\"n.0.jsonl\"") ++ lines postRun)
+  writeFiles pairFiles
   match ← chainHistory (dir / "n.1.jsonl") with
-  | .ok (_, h) => return h == preRun ++ persisted.restoredSteps ++ postRun
+  | .ok (_, _, h) => return h == preRun ++ persisted.restoredSteps ++ postRun
   | .error _ => return false
+
+/-- info: checked 1 .lake/restart-tests/n.0.jsonl [] -/
+#guard_msgs in #eval do writeFiles pairFiles; checkFile "n.1.jsonl"
+
+-- A file that names another node's run as the one it resumes.
+/-- info: the node of .lake/restart-tests/n.other.jsonl differs from that of .lake/restart-tests/n.0.jsonl -/
+#guard_msgs in
+#eval do
+  writeFiles (pairFiles ++
+    [("n.other.jsonl", (restartedHeader "n.0.jsonl").replace "\"node\":1" "\"node\":2" ++ lines postRun)])
+  checkFile "n.other.jsonl"
+
+/-- info: unreadable: .lake/restart-tests/n.self.jsonl resumes itself -/
+#guard_msgs in
+#eval do
+  writeFiles [("n.self.jsonl", restartedHeader "n.self.jsonl" ++ lines postRun)]
+  chainOf "n.self.jsonl"
+
+/-- info: unreadable: .lake/restart-tests/n.late.jsonl is restored from view 3 and names no file it resumes -/
+#guard_msgs in
+#eval do
+  writeFiles [("n.late.jsonl", header (",\"anchorView\":3,\"anchorCert\":" ++ (toJson c1).compress)
+    ++ lines preRun)]
+  chainOf "n.late.jsonl"
+
+-- A resumed file `check` leaves out of scope establishes nothing for the file after it.
+/-- info: unchecked: .lake/restart-tests/n.nolock.jsonl signs no lock in its timeouts -/
+#guard_msgs in
+#eval do
+  writeFiles [("n.nolock.jsonl", header "" ++ "# timeouts sign no lock\n" ++ lines preRun),
+    ("n.nolock1.jsonl", restartedHeader "n.nolock.jsonl" ++ lines postRun)]
+  checkFile "n.nolock1.jsonl"
+
+/-- info: unchecked: .lake/restart-tests/n.recast.jsonl may re-cast vote2 below the bar -/
+#guard_msgs in
+#eval do
+  writeFiles (pairFiles ++
+    [("n.recast.jsonl", (restartedHeader "n.0.jsonl").replace "\"vote2Bar\":3" "\"vote2Bar\":null"
+        ++ lines postRun),
+      ("n.recast1.jsonl", restartedHeader "n.recast.jsonl" ++ lines postRun)])
+  checkFile "n.recast1.jsonl"
+
+-- Outputs held for want of a later step belong to the run before the crash.
+/-- info: ([], ["summary:vote2Below"]) -/
+#guard_msgs in
+#eval show IO (List String × List String) from do
+  writeFiles [("n.held.jsonl", header "" ++ lines preRun
+    ++ "# 1 outputs had no later step to ride on: " ++ (toJson (vote2 c5)).compress ++ "\n")]
+  let P := { persisted with highestVoted := ⟨4⟩, lock := c5 }
+  match ← chainHistory (dir / "n.held.jsonl") with
+  | .ok (_, _, pre) => return (failing P preRun postRun, failing P pre postRun)
+  | .error e => return ([chainMessage e], [])
 
 end Tests
 end NewProtocolDiff

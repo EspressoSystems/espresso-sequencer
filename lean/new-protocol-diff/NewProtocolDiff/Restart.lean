@@ -173,7 +173,8 @@ reports after it were truthful.
 `hpre` is a `SafeHistory` rather than a check: for a node restarted twice the
 history before the second crash is itself a splice, which no single run of
 `checkSafe` covers. Each file of a chain is checked when it is itself the
-argument, and `check` fails if any does, so every link is established.
+argument, and `check` fails if any does; `chainHistory` refuses a file that
+`check` leaves out of scope, so every link is established.
 -/
 theorem restart_pair_safe {node : PubKey} {honestIn : EpochNumber → Prop}
     (hpre : SafeHistory cfg node honestIn pre) (hs : decide (CheckSummarises cfg P pre post) = true)
@@ -188,12 +189,25 @@ end Soundness
 
 /-! ## Following a chain of files -/
 
-/-- A trace's preamble and history, its held outputs included. -/
-def readRecorded (path : System.FilePath) : IO (Except String (Preamble × History)) := do
+/-- Why the files a restarted trace resumes could not be spliced. -/
+inductive ChainError where
+  /-- A file is missing or unreadable, or disagrees with the run it resumes. -/
+  | unreadable (why : String)
+  /-- A file is one `check` leaves out of scope, so the history it ends is not established. -/
+  | unchecked (why : String)
+
+/--
+A resumed trace's preamble and history, its held outputs included.
+
+Refused as `unchecked` when its timeouts sign no lock, which `check` leaves out of scope.
+-/
+def readRecorded (path : System.FilePath) : IO (Except ChainError (Preamble × History)) := do
   unless ← path.pathExists do
-    return .error s!"resumes {path}, which is missing"
+    return .error (.unreadable s!"resumes {path}, which is missing")
   let text ← IO.FS.readFile path
-  return do
+  if signsNoLock text then
+    return .error (.unchecked s!"{path} signs no lock in its timeouts")
+  return Except.mapError .unreadable do
     let said ← readPreamble text
     let events ← parseTrace text
     let held ← (heldOutputs text).mapError (s!"held outputs: {·}")
@@ -202,53 +216,65 @@ def readRecorded (path : System.FilePath) : IO (Except String (Preamble × Histo
 mutual
 
 /--
-The configuration of a node's first run and its whole history up to the end of
-the trace at `path`: each file it resumes, the steps each restart loaded, and its
-own steps, spliced.
+The node, the configuration of its first run, and its whole history up to the
+end of the trace at `path`: each file it resumes, the steps each restart loaded,
+and its own steps, spliced.
 
 A file without a `restart` header is the first run, and must start at genesis.
 Each file's own premises are checked when it is itself the argument; this only
-splices.
+splices, and refuses a file whose re-cast vote2 `check` leaves out of scope.
 -/
 partial def chainHistory (path : System.FilePath) (seen : List System.FilePath := []) :
-    IO (Except String (Config × History)) := do
+    IO (Except ChainError (Nat × Config × History)) := do
   if seen.contains path then
-    return .error s!"{path} resumes itself"
+    return .error (.unreadable s!"{path} resumes itself")
   match ← readRecorded path with
   | .error e => return .error e
   | .ok (said, h) =>
   match said.restart with
   | none =>
     if said.anchorView ≠ 0 then
-      return .error s!"{path} is restored from view {said.anchorView} and names no file it resumes"
-    return .ok (said.configFor h, h)
+      return .error (.unreadable
+        s!"{path} is restored from view {said.anchorView} and names no file it resumes")
+    return .ok (said.node, said.configFor h, h)
   | some r =>
     let resumed ← resumedBy path said r h seen
     return do
-      let (_, cfg, pre) ← resumed
-      let some P ← persistedOf cfg pre said r
-        | throw s!"{path}: its anchor is not among the proposals the run before held"
-      pure (cfg, pre ++ P.restoredSteps ++ h)
+      let (_, node, cfg, pre) ← resumed
+      let some P ← (persistedOf cfg pre said r).mapError .unreadable
+        | throw (.unreadable s!"{path}: its anchor is not among the proposals the run before held")
+      unless barsVote2 P r do
+        throw (.unchecked s!"{path} may re-cast vote2 below the bar")
+      pure (node, cfg, pre ++ P.restoredSteps ++ h)
 
 /--
 What the restarted trace at `path`, with header `said` and `r` and history `h`,
-resumes: the file's name, the configuration of the node's first run, and the
-history up to the crash.
+resumes: the file's name, the node, the configuration of the node's first run,
+and the history up to the crash.
 
 A restart that resumes no file is one whose first run recorded no step: its
 history before the crash is empty, which only a node anchored at genesis can
-have.
+have. An error when `said` names another node, epoch height or decide buffer
+than the run it resumes.
 -/
 partial def resumedBy (path : System.FilePath) (said : Preamble) (r : Restored) (h : History)
-    (seen : List System.FilePath := []) : IO (Except String (String × Config × History)) := do
+    (seen : List System.FilePath := []) :
+    IO (Except ChainError (String × Nat × Config × History)) := do
   match r.resumes with
   | some f =>
     let prev := path.parent.getD "." / f
-    return (prev.toString, ·) <$> (← chainHistory prev (path :: seen))
+    let chain ← chainHistory prev (path :: seen)
+    return do
+      let (node, cfg, pre) ← chain
+      unless node = said.node do
+        throw (.unreadable s!"the node of {path} differs from that of {prev}")
+      unless cfg.epochHeight = said.epochHeight ∧ cfg.decideBuffer = said.decideBuffer do
+        throw (.unreadable s!"the epoch height or decide buffer of {path} differs from that of {prev}")
+      pure (prev.toString, node, cfg, pre)
   | none =>
     if said.anchorView ≠ 0 then
-      return .error "resumes an empty recording but loaded an anchor"
-    return .ok ("an empty recording", said.configFor h, [])
+      return .error (.unreadable "resumes an empty recording but loaded an anchor")
+    return .ok ("an empty recording", said.node, said.configFor h, [])
 
 end
 
@@ -258,6 +284,8 @@ inductive RestartFinding where
   | checked (anchorView : Nat) (resumes : String) (broken : List String)
   /-- The node may re-cast a vote2 below the bar, as before the certificate rule. -/
   | recasts
+  /-- A file it resumes is out of scope, so the history before the crash is not established. -/
+  | unchecked (why : String)
 
 /--
 Check a restarted trace, whose header said `said` and `r` and whose history is
@@ -266,20 +294,20 @@ crash, the bars on `post`, and the signing rules on
 `pre.inputsOnly ++ P.restoredSteps ++ post` under `P.config cfg`.
 
 An error when the resumed file is missing or unreadable, when the header is
-incomplete, or when the two runs disagree on the epoch height or decide buffer.
+incomplete, or when the two runs disagree on the node, epoch height or decide buffer.
 -/
 def checkRestarted (path : System.FilePath) (said : Preamble) (r : Restored) (post : History) :
     IO (Except String RestartFinding) := do
-  let resumed ← resumedBy path said r post
+  match ← resumedBy path said r post with
+  | .error (.unreadable e) => return .error e
+  | .error (.unchecked why) => return .ok (.unchecked why)
+  | .ok (resumes, node, cfg, pre) =>
   return do
-    let (resumes, cfg, pre) ← resumed
-    unless cfg.epochHeight = said.epochHeight ∧ cfg.decideBuffer = said.decideBuffer do
-      throw s!"its epoch height or decide buffer differs from those of {resumes}"
     let some P ← persistedOf cfg pre said r
       | pure (.checked said.anchorView resumes ["summary:anchorHeld"])
     if !barsVote2 P r then return .recasts
     let rules := checkRestart cfg P pre post
-      ++ checkRules (P.config cfg) ⟨said.node⟩ (pre.inputsOnly ++ P.restoredSteps ++ post)
+      ++ checkRules (P.config cfg) ⟨node⟩ (pre.inputsOnly ++ P.restoredSteps ++ post)
     pure (.checked P.anchorView.toNat resumes (rules.filterMap fun (n, ok) => if ok then none else some n))
 
 end NewProtocolDiff

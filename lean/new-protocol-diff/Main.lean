@@ -53,6 +53,8 @@ def replayRestarted (found : Except String RestartFinding) (total : Nat) :
   | .error e => (.unreplayable, e, 0, total)
   | .ok .recasts =>
     (.outOfScope "re-cast", "re-casts vote2 below the bar, as before the certificate rule", 0, total)
+  | .ok (.unchecked why) =>
+    (.outOfScope "unchecked resume", s!"resumes a file whose rules are not checked: {why}", 0, total)
   | .ok (.checked view pre []) =>
     (.outOfScope "restart", s!"restart from view {view} checked against {pre}: summary and bars \
       hold, signing rules hold; the machine is not run across a restart", 0, total)

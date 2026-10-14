@@ -89,6 +89,7 @@ def checkOne (path : System.FilePath) : IO Finding := do
         return match ← checkRestarted path said r h with
           | .error e => .unreadable e
           | .ok .recasts => .outOfScope "re-casts vote2 below the bar, as before the certificate rule"
+          | .ok (.unchecked why) => .outOfScope s!"resumes a file whose rules are not checked: {why}"
           | .ok (.checked view pre []) => .signingOnly s!"restored from view {view} after {pre}"
           | .ok (.checked _ _ broken) => .broken broken
       let broken := (checkRules (said.configFor h) ⟨said.node⟩ h).filterMap fun (name, ok) =>
