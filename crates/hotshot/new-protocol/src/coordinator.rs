@@ -656,7 +656,6 @@ where
                 },
                 Some(item) = self.proposal_validator.next() => match item {
                     Ok(validated) if validated.fetched => {
-                        self.notify_vid_reconstructor(&validated.message.proposal.data);
                         return Ok(ConsensusInput::FetchedProposal(validated.message))
                     }
                     Ok(validated) => {
@@ -941,6 +940,10 @@ where
                         warn!(%node, %view, "no payload for proposed block");
                     }
                 }
+            },
+            ConsensusOutput::ProposalCertified(proposal) => {
+                debug!(%node, view = %proposal.view_number, "certified proposal adopted");
+                self.notify_vid_reconstructor(&proposal);
             },
             ConsensusOutput::ProposalPaired {
                 proposal,

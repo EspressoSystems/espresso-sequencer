@@ -1770,6 +1770,47 @@ async fn test_fetched_proposal_rebuilds_payload_from_broadcast_shares() {
     .expect("the payload is rebuilt from the broadcast shares");
 }
 
+/// A node that received a view's proposal but not its own share rebuilds the
+/// payload from the shares the voters broadcast once a certificate names the
+/// proposal.
+#[tokio::test]
+async fn test_parked_proposal_rebuilds_payload_from_broadcast_shares() {
+    let test_data = TestData::new(1).await;
+    let mut harness = TestHarness::new(0).await;
+    let node_key = BLSPubKey::generated_from_seed_indexed([0; 32], 0).0;
+    let view = &test_data.views[0];
+
+    // The proposal arrives without this node's share, so it waits for one.
+    harness.message(view.proposal_input());
+    harness
+        .process_until(|inputs| {
+            inputs
+                .iter()
+                .any(|input| matches!(input, ConsensusInput::Proposal(..)))
+        })
+        .await;
+    for share in view
+        .vid_shares
+        .iter()
+        .filter(|s| s.recipient_key != node_key)
+    {
+        harness.message(Message::<TestTypes, Validated> {
+            sender: share.recipient_key,
+            message_type: MessageType::Consensus(ConsensusMessage::VidShareBroadcast(
+                share.clone(),
+            )),
+        });
+    }
+    // A commit names the proposal, which the node then adopts.
+    harness.apply_and_process(view.cert2_input());
+    timeout(
+        Duration::from_secs(5),
+        harness.process_until(|inputs| any(inputs, is_block_reconstructed)),
+    )
+    .await
+    .expect("the payload is rebuilt from the broadcast shares");
+}
+
 /// A node that a timeout certificate moved past a view before any certificate
 /// of the view reached it keeps the shares the voters broadcast for it, and
 /// still rebuilds the payload once a late commit makes it fetch the proposal.

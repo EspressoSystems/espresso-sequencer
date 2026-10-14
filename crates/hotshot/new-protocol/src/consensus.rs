@@ -152,6 +152,9 @@ pub enum ConsensusOutput<T: NodeType> {
     ViewChanged(ViewNumber, EpochNumber),
     /// A view timed out with a timeout certificate.
     ViewTimedOut(ViewNumber),
+    /// A proposal a certificate names was adopted, so the shares of its view,
+    /// the ones voters broadcast included, can rebuild its payload.
+    ProposalCertified(Proposal<T>),
     /// A validated proposal met this node's VID share.
     ProposalPaired {
         proposal: SignedProposal<T, Proposal<T>>,
@@ -1645,6 +1648,7 @@ impl<T: NodeType> Consensus<T> {
         self.request_parent_proposal_if_missing(&proposal, outbox);
         self.adopt_certified_drb(view);
         self.adopt_proposal_upgrade_certificate(&proposal);
+        outbox.push_back(ConsensusOutput::ProposalCertified(proposal.clone()));
 
         let payload_size = self.payload_size_for(&proposal);
         self.request_state(&proposal, payload_size, outbox);
