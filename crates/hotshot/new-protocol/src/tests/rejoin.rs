@@ -7,8 +7,11 @@ use hotshot::types::BLSPubKey;
 use hotshot_example_types::node_types::TestTypes;
 use hotshot_types::{
     data::{EpochNumber, ViewNumber},
+    message::UpgradeLock,
     traits::{block_contents::BlockHeader, signature_key::SignatureKey},
+    upgrade_config::UpgradeConfig,
 };
+use versions::{NEW_PROTOCOL_VERSION, Upgrade, version};
 
 use super::common::{
     harness::TestHarness,
@@ -19,13 +22,19 @@ use crate::{
     consensus::{ConsensusInput, ConsensusOutput},
     helpers::{proposal_commitment, test_timeout_epoch_lock},
     message::{
-        CatchupEvidence, Message, MessageType, TimeoutVote, Validated,
-        cert::{CertFetchMessage, CertFetchResponse, CertResponseBody},
+        CatchupEvidence, ConsensusMessage, EpochChangeMessage, Message, MessageType, TimeoutVote,
+        Validated,
+        cert::{
+            CertFetchMessage, CertFetchRequest, CertFetchResponse, CertRequestBody,
+            CertResponseBody,
+        },
     },
     rejoin::evidence_key,
     tests::common::assertions::{
         any, is_leaf_decided, is_send_timeout_vote, is_vote1, is_vote1_for_view, is_vote2,
+        node_index_for_key,
     },
+    upgrade::UpgradeProtocol,
 };
 
 const EPOCH_HEIGHT: u64 = 10;
@@ -280,6 +289,59 @@ async fn adopts_the_first_decide_above_the_bar() {
     assert!(!harness.outputs().iter().any(is_vote2));
 }
 
+/// The pieces of a decide above the bar that arrived while querying are
+/// adopted on the first tick after the bar settles.
+#[tokio::test]
+async fn adopts_pieces_held_before_the_bar() {
+    let test_data = TestData::new(9).await;
+    let mut harness = wiped_node().await;
+    let anchor = &test_data.views[8];
+
+    harness.apply(anchor.cert2_input()).await;
+    harness.apply(fetched_proposal(anchor)).await;
+    harness.apply(anchor.cert1_input()).await;
+    claim_cert1(&mut harness, &test_data.views[4], 7).await;
+    assert_eq!(harness.consensus.rejoin_bar(), Some(ViewNumber::new(7)));
+    assert!(anchored(&harness).is_empty());
+
+    harness
+        .apply(ConsensusInput::Timeout(harness.consensus.current_view()))
+        .await;
+    assert_eq!(
+        anchored(&harness),
+        vec![(anchor.view_number, ViewNumber::new(7))]
+    );
+}
+
+/// An epoch change does not lock a waiting node: its first lock is its
+/// anchor's.
+#[tokio::test]
+async fn waiting_takes_no_lock_from_an_epoch_change() {
+    let test_data = TestData::new_with_epoch_height(10, EPOCH_HEIGHT).await;
+    let boundary = &test_data.views[9];
+    let epoch_change = || {
+        ConsensusInput::EpochChange(EpochChangeMessage::validated(
+            boundary.cert1.clone(),
+            boundary.cert2.clone(),
+            boundary.proposal.data.clone(),
+        ))
+    };
+    let lock_updated =
+        |o: &ConsensusOutput<TestTypes>| matches!(o, ConsensusOutput::LockUpdated(_));
+
+    let mut fresh =
+        ConsensusHarness::new_with_upgrade_lock(NODE, EPOCH_HEIGHT, test_timeout_epoch_lock())
+            .await;
+    fresh.apply(epoch_change()).await;
+    assert!(fresh.outputs().iter().any(lock_updated));
+
+    let mut harness = waiting_at_bar_7(&test_data).await;
+    let lock = harness.consensus.locked_cert().cloned();
+    harness.apply(epoch_change()).await;
+    assert_eq!(harness.consensus.locked_cert().cloned(), lock);
+    assert!(!harness.outputs().iter().any(lock_updated));
+}
+
 #[tokio::test]
 async fn fetches_the_anchor_certificate1_it_lacks() {
     let test_data = TestData::new(9).await;
@@ -408,6 +470,51 @@ fn cert_fetch_reply(
     }
 }
 
+/// A peer answers with the newest certificate it holds, not its lock, and
+/// with the `Certificate1` asked for, each at the request's view.
+#[tokio::test]
+async fn serves_the_newest_certificate_and_the_cert1_asked_for() {
+    let test_data = TestData::new(3).await;
+    let mut harness = TestHarness::new(0).await;
+    for view in &test_data.views {
+        harness.apply_and_process(view.cert1_input());
+    }
+    let coordinator = harness.coordinator();
+    let newest = &test_data.views[2].cert1;
+    assert_ne!(coordinator.consensus().locked_cert(), Some(newest));
+
+    let asked_at = ViewNumber::new(40);
+    let response =
+        coordinator.cert_fetch_response(&CertFetchRequest::new(asked_at, CertRequestBody::Newest));
+    assert_eq!(
+        response,
+        CertFetchResponse::new(
+            asked_at,
+            CertResponseBody::Newest(Some(CatchupEvidence::Qc(newest.clone())))
+        )
+    );
+
+    let held = &test_data.views[1];
+    let cert1 = CertRequestBody::Cert1 {
+        epoch: held.epoch_number,
+    };
+    let response =
+        coordinator.cert_fetch_response(&CertFetchRequest::new(held.view_number, cert1.clone()));
+    assert_eq!(
+        response,
+        CertFetchResponse::new(
+            held.view_number,
+            CertResponseBody::Cert1(Some(held.cert1.clone()))
+        )
+    );
+    let unknown = ViewNumber::new(9);
+    let response = coordinator.cert_fetch_response(&CertFetchRequest::new(unknown, cert1));
+    assert_eq!(
+        response,
+        CertFetchResponse::new(unknown, CertResponseBody::Cert1(None))
+    );
+}
+
 /// A reply this node did not ask for reaches no verifier.
 #[tokio::test]
 async fn drops_cert_fetch_replies_it_did_not_ask_for() {
@@ -444,4 +551,71 @@ async fn drops_cert_fetch_replies_it_did_not_ask_for() {
     harness.coordinator_mut().consensus_mut().start_rejoin();
     harness.message(newest_reply(peer(5)));
     harness.process_until(|inputs| any(inputs, advanced)).await;
+}
+
+/// Proposing and voting are open for every view and time.
+fn open_window() -> UpgradeConfig {
+    UpgradeConfig {
+        start_proposing_view: 0,
+        stop_proposing_view: u64::MAX,
+        start_voting_view: 0,
+        stop_voting_view: u64::MAX,
+        start_proposing_time: 0,
+        stop_proposing_time: u64::MAX,
+        start_voting_time: 0,
+        stop_voting_time: u64::MAX,
+    }
+}
+
+fn upgrade_lock() -> UpgradeLock<TestTypes> {
+    UpgradeLock::new(Upgrade::new(NEW_PROTOCOL_VERSION, version(0, 7)))
+}
+
+async fn upgrade_harness(node: u64, wiped: bool) -> TestHarness {
+    let mut harness = TestHarness::new_with_upgrade(node, upgrade_lock(), open_window()).await;
+    if wiped {
+        harness.coordinator_mut().consensus_mut().start_rejoin();
+    }
+    harness
+}
+
+/// A rejoining node neither proposes an upgrade in a view it leads nor votes
+/// for one.
+#[tokio::test]
+async fn rejoining_node_signs_no_upgrade() {
+    let test_data = TestData::new(2).await;
+    let led = &test_data.views[1];
+    let (view, epoch) = (led.view_number, led.epoch_number);
+    let leader = node_index_for_key(&led.leader_public_key);
+
+    for wiped in [false, true] {
+        let mut harness = upgrade_harness(leader, wiped).await;
+        harness
+            .coordinator_mut()
+            .process_consensus_output(ConsensusOutput::ViewChanged(view, epoch))
+            .expect("view change is processed");
+        assert_eq!(
+            harness.coordinator().upgrade_protocol().proposed(view),
+            !wiped
+        );
+    }
+
+    let proposal = UpgradeProtocol::<TestTypes>::new(
+        open_window(),
+        upgrade_lock(),
+        led.leader_public_key,
+        led.leader_private_key.clone(),
+    )
+    .maybe_propose(view, epoch)
+    .expect("the leader proposes");
+    for wiped in [false, true] {
+        let mut harness = upgrade_harness((leader + 1) % 10, wiped).await;
+        harness.message(Message::<TestTypes, Validated> {
+            sender: led.leader_public_key,
+            message_type: MessageType::Consensus(ConsensusMessage::UpgradeProposal(
+                proposal.clone(),
+            )),
+        });
+        assert_eq!(harness.coordinator().upgrade_protocol().voted(view), !wiped);
+    }
 }

@@ -68,7 +68,13 @@ impl TestHarness {
     }
 
     pub async fn new_with_timer(node_index: u64, timer_duration: Duration) -> Self {
-        Self::new_with(node_index, timer_duration, test_upgrade_lock()).await
+        Self::new_with(
+            node_index,
+            timer_duration,
+            test_upgrade_lock(),
+            UpgradeConfig::default(),
+        )
+        .await
     }
 
     /// A harness whose nodes run under `upgrade_lock` rather than the fixed
@@ -77,13 +83,29 @@ impl TestHarness {
         node_index: u64,
         upgrade_lock: UpgradeLock<TestTypes>,
     ) -> Self {
-        Self::new_with(node_index, Duration::from_secs(30), upgrade_lock).await
+        Self::new_with_upgrade(node_index, upgrade_lock, UpgradeConfig::default()).await
+    }
+
+    /// A harness whose upgrade sub-protocol runs under `upgrade_config`.
+    pub async fn new_with_upgrade(
+        node_index: u64,
+        upgrade_lock: UpgradeLock<TestTypes>,
+        upgrade_config: UpgradeConfig,
+    ) -> Self {
+        Self::new_with(
+            node_index,
+            Duration::from_secs(30),
+            upgrade_lock,
+            upgrade_config,
+        )
+        .await
     }
 
     async fn new_with(
         node_index: u64,
         timer_duration: Duration,
         upgrade_lock: UpgradeLock<TestTypes>,
+        upgrade_config: UpgradeConfig,
     ) -> Self {
         let epoch_height = 10;
         crate::logging::init_test_logging();
@@ -191,7 +213,7 @@ impl TestHarness {
             .epoch_root_collector(epoch_root_collector)
             .upgrade_vote_collector(VoteCollector::new(membership.clone(), upgrade_lock.clone()))
             .upgrade_protocol(UpgradeProtocol::new(
-                UpgradeConfig::default(),
+                upgrade_config,
                 upgrade_lock.clone(),
                 public_key,
                 private_key.clone(),

@@ -173,6 +173,16 @@ impl<T: NodeType> UpgradeProtocol<T> {
         Some(vote)
     }
 
+    #[cfg(test)]
+    pub(crate) fn proposed(&self, view: ViewNumber) -> bool {
+        self.proposed_views.contains(&view)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn voted(&self, view: ViewNumber) -> bool {
+        self.voted_views.contains(&view)
+    }
+
     pub fn gc(&mut self, view: ViewNumber) {
         self.proposed_views = self.proposed_views.split_off(&view);
         self.voted_views = self.voted_views.split_off(&view);

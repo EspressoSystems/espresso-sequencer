@@ -1269,6 +1269,11 @@ where
     }
 
     #[cfg(test)]
+    pub(crate) fn upgrade_protocol(&self) -> &UpgradeProtocol<T> {
+        &self.upgrade_protocol
+    }
+
+    #[cfg(test)]
     pub(crate) fn network(&self) -> &Cliquenet<T> {
         &self.network
     }
@@ -2359,20 +2364,14 @@ where
         }
     }
 
-    /// Unicast to `peer` what `request` asks for, answering at the request's view.
+    /// Unicast to `peer` what `request` asks for.
     fn serve_cert_fetch(&self, peer: &T::SignatureKey, request: &CertFetchRequest) {
         let view = request.view_number();
-        let body = match request.body() {
-            CertRequestBody::Newest => CertResponseBody::Newest(self.consensus.newest_evidence()),
-            CertRequestBody::Cert1 { epoch } => {
-                CertResponseBody::Cert1(self.consensus.cert1_in(ViewEpoch(view, *epoch)).cloned())
-            },
-        };
         let message = Message {
             sender: self.public_key.clone(),
-            message_type: MessageType::CertFetch(CertFetchMessage::Res(CertFetchResponse::new(
-                view, body,
-            ))),
+            message_type: MessageType::CertFetch(CertFetchMessage::Res(
+                self.cert_fetch_response(request),
+            )),
         };
         if let Err(err) =
             self.network
@@ -2381,6 +2380,18 @@ where
         {
             warn!(node = %self.node_id, %view, %err, "failed to send cert fetch response");
         }
+    }
+
+    /// The answer to `request`, at the request's view.
+    pub(crate) fn cert_fetch_response(&self, request: &CertFetchRequest) -> CertFetchResponse<T> {
+        let view = request.view_number();
+        let body = match request.body() {
+            CertRequestBody::Newest => CertResponseBody::Newest(self.consensus.newest_evidence()),
+            CertRequestBody::Cert1 { epoch } => {
+                CertResponseBody::Cert1(self.consensus.cert1_in(ViewEpoch(view, *epoch)).cloned())
+            },
+        };
+        CertFetchResponse::new(view, body)
     }
 
     /// Submit the certificate of a reply for verification. Only the kind of
