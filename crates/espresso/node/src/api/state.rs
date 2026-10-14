@@ -1395,6 +1395,7 @@ fn payload_id_to_hs(id: v1::availability::PayloadId) -> anyhow::Result<HsBlockId
 fn classify_query_error(err: hotshot_query_service::QueryError) -> anyhow::Error {
     match err {
         QueryError::NotFound | QueryError::Missing => not_found(err.to_string()),
+        QueryError::Pruned { .. } => AvailabilityError::Pruned(err.to_string()).into(),
         QueryError::Error { .. } => anyhow::anyhow!(err.to_string()),
     }
 }
@@ -3340,6 +3341,7 @@ fn lc_large_object_range_limit() -> usize {
 pub(crate) fn lc_error(err: hotshot_query_service::Error) -> anyhow::Error {
     match err.status() {
         StatusCode::NOT_FOUND => not_found(err.to_string()),
+        StatusCode::GONE => AvailabilityError::Pruned(err.to_string()).into(),
         StatusCode::BAD_REQUEST => bad_request(err.to_string()),
         _ => anyhow::anyhow!("{err}"),
     }
@@ -5617,6 +5619,15 @@ mod tests {
         assert!(matches!(
             err.downcast_ref::<AvailabilityError>(),
             Some(AvailabilityError::NotFound(_))
+        ));
+    }
+
+    #[test]
+    fn lc_error_preserves_gone() {
+        let err = lc_error(custom(StatusCode::GONE));
+        assert!(matches!(
+            err.downcast_ref::<AvailabilityError>(),
+            Some(AvailabilityError::Pruned(_))
         ));
     }
 

@@ -398,6 +398,8 @@ struct InnerTestClient {
     fail_leaf_ranges: bool,
     /// If set, fail payload proof ranges requests, like a server that predates the endpoint.
     fail_payload_proof_ranges: bool,
+    /// If set, fail header proofs, like a server that pruned the root's merklized state.
+    fail_header_proofs: bool,
 }
 
 impl InnerTestClient {
@@ -853,6 +855,19 @@ impl TestClient {
         let mut inner = self.inner.lock().await;
         inner.fail_payload_proof_ranges = true;
     }
+
+    /// Fail header proofs, like a server that pruned the root's merklized state.
+    pub async fn fail_header_proofs(&self) {
+        let mut inner = self.inner.lock().await;
+        inner.fail_header_proofs = true;
+    }
+
+    /// Drop the `Certificate2` finalizing the leaf at `height`, like a server that never stored it.
+    pub async fn forget_cert2(&self, height: usize) {
+        let mut inner = self.inner.lock().await;
+        inner.leaf(height, self.epoch_height, None).await;
+        inner.cert2s.remove(&height);
+    }
 }
 
 impl Client for TestClient {
@@ -944,6 +959,10 @@ impl Client for TestClient {
 
     async fn header_proof(&self, root: u64, id: BlockId<SeqTypes>) -> Result<HeaderProof> {
         let mut inner = self.inner.lock().await;
+        ensure!(
+            !inner.fail_header_proofs,
+            "no merklized state at root {root}"
+        );
 
         let root = root as usize;
         let mut height = inner.leaf_height(id.into())?;

@@ -406,8 +406,13 @@ impl<Mode: TransactionMode> Transaction<Mode> {
                     message: format!("failed to load pruned height: {e}"),
                 })?;
 
-        if pruned_height.is_some_and(|h| created <= h as i64) {
-            return Err(QueryError::NotFound);
+        if let Some(pruned_height) = pruned_height
+            && created <= pruned_height as i64
+        {
+            return Err(QueryError::Pruned {
+                height: created as u64,
+                pruned_height,
+            });
         }
 
         Ok(())
