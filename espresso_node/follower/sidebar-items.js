@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["connect_light_client","init_follower_node","seed_first_epoch"],"struct":["Follower","FollowerConsensus","FollowerContext","FollowerHandle","FollowerOptions","FollowerParams","VerifiedBlock"]};
+window.SIDEBAR_ITEMS = {"fn":["connect_light_client","init_follower_node","init_replay_node","init_with_source","seed_first_epoch"],"struct":["Follower","FollowerConsensus","FollowerContext","FollowerHandle","FollowerOptions","FollowerParams","VerifiedBlock"],"trait":["ChainSource"]};
