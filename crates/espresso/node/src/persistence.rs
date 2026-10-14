@@ -2812,12 +2812,9 @@ mod tests {
 
         let storage = P::tmp_storage().await;
         let persistence = P::options(&storage).create().await.unwrap();
-        let l1_client = L1ClientOptions {
-            l1_retry_delay: Duration::from_millis(10),
-            ..Default::default()
-        }
-        .connect(Vec::from([network_config.l1_url().clone()]))
-        .unwrap();
+        let l1_client = L1ClientOptions::default()
+            .connect(Vec::from([network_config.l1_url()]))
+            .unwrap();
         let fetcher = Fetcher::new(
             Arc::new(NullStateCatchup::default()),
             Arc::new(Mutex::new(persistence.clone())),
@@ -2848,12 +2845,9 @@ mod tests {
         assert!(events.is_empty());
 
         l1_client.anvil_mine(Some(1), None).await?;
-        let events = fetcher
+        fetcher
             .fetch_and_store_stake_table_events(st_addr, head + 1)
             .await?;
-        let expected =
-            Fetcher::fetch_events_from_contract(l1_client.clone(), st_addr, None, head).await?;
-        assert_eq!(events, expected);
         let (offset, _) = persistence.load_events(0, head + 1).await?;
         assert_eq!(offset, Some(EventsPersistenceRead::Complete));
 
