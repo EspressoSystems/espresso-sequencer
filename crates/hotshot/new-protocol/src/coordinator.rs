@@ -850,30 +850,7 @@ where
                 self.epoch_manager.request_drb_result(epoch);
             },
             ConsensusOutput::LeafDecided { leaves, cert1, .. } => {
-                info!(
-                    %node,
-                    view = %cert1.view_number(),
-                    epoch = ?cert1.epoch().map(|e| *e),
-                    leaves = leaves.len(),
-                    "leaves decided"
-                );
-                self.on_decide_metrics(&leaves);
-                // `leaves` is ordered newest first.
-                //  Garbage collect the data for views < decided view
-                if let Some(newest) = leaves.first() {
-                    let gc_view = newest.view_number();
-                    let gc_epoch = newest.justify_qc().epoch().unwrap_or_default();
-                    self.gc(gc_epoch, GcScope::Decided(gc_view))?;
-                    // A gap-fill decide trails the decided view; gc already covered its leaves.
-                    if gc_view == self.consensus.last_decided_view() {
-                        self.state_manager.seed_decided(newest.clone());
-                    }
-                }
-                for leaf in leaves.into_iter().rev() {
-                    self.participation
-                        .on_leaf_decided(&leaf, &self.membership_coordinator);
-                    self.epoch_manager.handle_leaf_decided(leaf);
-                }
+                self.on_leaves_decided(leaves, &cert1)?;
             },
             ConsensusOutput::LockUpdated(view) => {
                 debug!(%node, %view, "lock updated");
@@ -1195,6 +1172,39 @@ where
                 );
                 self.storage.update_decided_upgrade_certificate(cert);
             },
+        }
+        Ok(())
+    }
+
+    fn on_leaves_decided(
+        &mut self,
+        leaves: Vec<Leaf2<T>>,
+        cert1: &Certificate1<T>,
+    ) -> Result<(), CoordinatorError> {
+        let node = self.node_id;
+        info!(
+            %node,
+            view = %cert1.view_number(),
+            epoch = ?cert1.epoch().map(|e| *e),
+            leaves = leaves.len(),
+            "leaves decided"
+        );
+        self.on_decide_metrics(&leaves);
+        // `leaves` is ordered newest first.
+        //  Garbage collect the data for views < decided view
+        if let Some(newest) = leaves.first() {
+            let gc_view = newest.view_number();
+            let gc_epoch = newest.justify_qc().epoch().unwrap_or_default();
+            self.gc(gc_epoch, GcScope::Decided(gc_view))?;
+            // A gap-fill decide trails the decided view; gc already covered its leaves.
+            if gc_view == self.consensus.last_decided_view() {
+                self.state_manager.seed_decided(newest.clone());
+            }
+        }
+        for leaf in leaves.into_iter().rev() {
+            self.participation
+                .on_leaf_decided(&leaf, &self.membership_coordinator);
+            self.epoch_manager.handle_leaf_decided(leaf);
         }
         Ok(())
     }
