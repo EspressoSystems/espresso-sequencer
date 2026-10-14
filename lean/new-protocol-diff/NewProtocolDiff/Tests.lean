@@ -4,12 +4,15 @@ public import NewProtocolDiff.Trace
 public import NewProtocolDiff.Corpus
 public import NewProtocolDiff.PromptCheck
 public import NewProtocolDiff.Check
+public import NewProtocolDiff.Restart
 public meta import NewProtocolSpec.Interface
 public meta import NewProtocolDiff.Json
 public meta import NewProtocolDiff.Trace
 public meta import NewProtocolDiff.Corpus
 public meta import NewProtocolDiff.PromptCheck
+public meta import NewProtocolDiff.Header
 public meta import NewProtocolDiff.Check
+public meta import NewProtocolDiff.Restart
 
 /-!
 # Checks on the harness itself
@@ -23,7 +26,9 @@ the format is checked at build time in both directions:
 * the step times are read as written, and the `Prompt` check passes a node that
   votes in time and fails one that does not;
 * the signing rules refuse a vote whose identity does not match the block, since
-  that is how a hash-namespace mistake would show up.
+  that is how a hash-namespace mistake would show up;
+* a restarted pair that keeps its summary and bars passes, and each premise
+  broken alone is reported by its name.
 -/
 
 @[expose] public section
@@ -264,6 +269,332 @@ private def classify (line : String) : String :=
 
 /-- info: "malformed" -/
 #guard_msgs in #eval classify brokenLine
+
+/-! ## Across a restart
+
+One node's run before and after a crash. Before: it votes1 and votes2 at view 1,
+decides it, votes1 at view 2, times out view 3 under the lock at view 1, and
+receives the proposal at view 4. Its summary: the anchor at view 1, the lock at
+view 1, `highestVoted` 3, and the payload of view 2 marked as held. After: it
+votes1 and votes2 at view 5 and times out view 6 under the lock at view 5.
+
+Identities are written as numbers rather than read through `blockHash`, which is
+opaque to `decide`.
+-/
+
+/-- The block at view `v` and height `n` on `parent`, with identity `100 + v` and payload `10 + v`. -/
+private def blk (v n : Nat) (parent : Cert1) : Block := ⟨⟨⟨10 + v⟩, ⟨n⟩⟩, ⟨v⟩, ⟨0⟩, parent, none, ⟨100 + v⟩⟩
+
+/-- A `Cert1` over `b` formed at view `v`. -/
+private def certOn (b : Block) (v : Nat) : Cert1 := ⟨⟨b.identity, b.epoch, b.blockHeader.blockNumber⟩, ⟨v⟩⟩
+
+private def b1 : Block := blk 1 1 cfg.anchorCert
+private def c1 : Cert1 := certOn b1 1
+private def b2 : Block := blk 2 2 c1
+private def b4 : Block := blk 4 3 (certOn b2 2)
+private def c4 : Cert1 := certOn b4 4
+private def b5 : Block := blk 5 4 c4
+private def c5 : Cert1 := certOn b5 5
+
+/-- The `Cert2` matching a `Cert1`. -/
+private def commit (c : Cert1) : Cert2 := ⟨c.data.toVote2, c.view⟩
+
+/-- A step. -/
+private def st (i : Input) (out : List Output := []) : Step := ⟨i, out⟩
+
+/-- Receive `b` with this node's share. -/
+private def recv (b : Block) : Step := st (.proposal ⟨2⟩ b (some ⟨b.viewNumber, b.payloadCommit⟩))
+
+private def vote1 (b : Block) : Output :=
+  .send (.vote1 ⟨⟨b.identity, b.epoch, b.blockHeader.blockNumber⟩, b.viewNumber, me⟩)
+
+private def vote2 (c : Cert1) : Output := .send (.vote2 ⟨c.data.toVote2, c.view, me⟩)
+
+private def timeoutVote (v : Nat) (lock : Cert1) : Output := .send (.timeoutVote ⟨⟨⟨0⟩, lock⟩, ⟨v⟩, me⟩)
+
+private def preRun : History :=
+  [ st (.certificate1 c1), recv b1,
+    st (.blockValidated ⟨1⟩ b1.identity) [vote1 b1],
+    st (.blockReconstructed ⟨1⟩ b1.payloadCommit) [vote2 c1],
+    st (.certificate2 (commit c1)) [.decided [b1] c1 (commit c1)],
+    recv b2,
+    st (.blockValidated ⟨2⟩ b2.identity) [vote1 b2],
+    st (.timeout ⟨3⟩) [timeoutVote 3 c1],
+    recv b4 ]
+
+private def persisted : Persisted := ⟨b1, c1, c1, ⟨3⟩, [(⟨2⟩, b2.payloadCommit)]⟩
+
+private def postRun : History :=
+  [ st (.certificate1 c4), recv b5,
+    st (.blockValidated ⟨5⟩ b5.identity) [vote1 b5],
+    st (.certificate1 c5),
+    st (.blockReconstructed ⟨5⟩ b5.payloadCommit) [vote2 c5],
+    st (.timeout ⟨6⟩) [timeoutVote 6 c5] ]
+
+/-- The premises of a restart that fail. -/
+private def failing (P : Persisted) (pre post : History) : List String :=
+  (checkRestart cfg P pre post).filterMap fun (n, ok) => if ok then none else some n
+
+/-- The signing rules the history after a restart breaks under the restart's configuration. -/
+private def failingAfter (P : Persisted) (pre post : History) : List String :=
+  (checkRules (P.config cfg) me (pre.inputsOnly ++ P.restoredSteps ++ post)).filterMap
+    fun (n, ok) => if ok then none else some n
+
+/-- info: [] -/
+#guard_msgs in #eval failing persisted preRun postRun
+
+/-- info: true -/
+#guard_msgs in #eval checkSafe cfg me preRun
+
+/-- info: [] -/
+#guard_msgs in #eval failingAfter persisted preRun postRun
+
+/-- The premises of `NewProtocol.safe_across_restart` can be met. -/
+example : Summarises cfg persisted preRun postRun ∧ RestartOK persisted postRun :=
+  ⟨checkSummarises_sound (by decide), checkRestartOK_sound (by decide)⟩
+
+-- Each premise broken alone is reported, and only it.
+/-- info: ["bars:vote2After"] -/
+#guard_msgs in
+#eval failing persisted preRun (postRun ++ [st (.timeout ⟨7⟩) [vote2 (certOn b2 3)]])
+
+/-- info: ["bars:lockKept"] -/
+#guard_msgs in
+#eval failing persisted preRun (postRun ++ [st (.timeout ⟨7⟩) [timeoutVote 7 cfg.anchorCert]])
+
+/-- info: ["summary:timeoutBelow"] -/
+#guard_msgs in #eval failing { persisted with highestVoted := ⟨2⟩ } preRun postRun
+
+/-- info: ["summary:vote2Locked"] -/
+#guard_msgs in #eval failing { persisted with lock := cfg.anchorCert } preRun postRun
+
+/-- info: ["summary:decidedBelow"] -/
+#guard_msgs in
+#eval failing persisted (preRun ++ [st (.certificate2 (commit c4)) [.decided [b4] c4 (commit c4)]])
+  postRun
+
+/-- info: ["summary:reconstructedHeld"] -/
+#guard_msgs in #eval failing { persisted with reconstructed := [(⟨7⟩, ⟨77⟩)] } preRun postRun
+
+/-! ### Edge cases -/
+
+-- A re-vote's certificate over the anchor, at a later view than the block, still finds it.
+/-- info: true -/
+#guard_msgs in #eval restartAnchor cfg preRun ⟨c1.data, ⟨3⟩⟩ == some b1
+
+/-- info: [] -/
+#guard_msgs in
+#eval failing { persisted with anchorCert := ⟨c1.data, ⟨3⟩⟩ }
+  (preRun ++ [st (.certificate1 ⟨c1.data, ⟨3⟩⟩), st (.certificate2 (commit ⟨c1.data, ⟨3⟩⟩))]) postRun
+
+-- A timeout vote pending at the crash leaves `highestVoted` above the last vote sent.
+/-- info: [] -/
+#guard_msgs in #eval failing { persisted with highestVoted := ⟨4⟩ } preRun postRun
+
+-- A timeout vote naming the stored lock itself keeps it.
+/-- info: [] -/
+#guard_msgs in #eval failing persisted preRun (postRun ++ [st (.timeout ⟨7⟩) [timeoutVote 7 c1]])
+
+-- A vote2 on a proposal whose payload only the restart marks as held.
+/-- info: ([], []) -/
+#guard_msgs in
+#eval
+  let P := { persisted with reconstructed := persisted.reconstructed ++ [(⟨4⟩, b4.payloadCommit)] }
+  let post := [st (.certificate1 c4) [vote2 c4]]
+  (failing P preRun post, failingAfter P preRun post)
+
+/-- info: ["vote2Justified"] -/
+#guard_msgs in #eval failingAfter persisted preRun [st (.certificate1 c4) [vote2 c4]]
+
+-- The anchor decided without its payload: owed only once a vote2 after the crash reads it.
+private def preNoPayload : History :=
+  preRun.map fun s =>
+    if s.input = .blockReconstructed ⟨1⟩ b1.payloadCommit then { s with input := .timeout ⟨1⟩ } else s
+
+/-- info: [] -/
+#guard_msgs in #eval failing persisted preNoPayload postRun
+
+/-- info: ["summary:anchorPayload"] -/
+#guard_msgs in
+#eval failing persisted preNoPayload (postRun ++ [st (.timeout ⟨7⟩) [vote2 (certOn b1 7)]])
+
+/-! ### Headers and files -/
+
+/-- A header line, with `extra` appended to its object. -/
+private def header (extra : String) : String :=
+  "# trace {\"node\":1,\"anchor\":1,\"decideBuffer\":20" ++ extra ++ "}\n"
+
+/-- The `restart` object, with `lock` and `resumes` as given. -/
+private def restartJson (lock resumes : String) : String :=
+  ",\"restart\":{\"lock\":" ++ lock ++ ",\"highestVoted\":3,\"vote2Bar\":3,\"reconstructed\":[[2,12]],\"resumes\":"
+    ++ resumes ++ "}"
+
+/-- What `readPreamble` makes of a header's `restart` object. -/
+private def restartOf (text : String) : String :=
+  match readPreamble text with
+  | .error e => e
+  | .ok said => match said.restart with
+    | none => "none"
+    | some r => s!"{r.lock.isSome} {r.highestVoted} {r.vote2Bar} {r.reconstructed.map (·.1)} {r.resumes}"
+
+/-- info: "none" -/
+#guard_msgs in #eval restartOf (header "")
+
+/-- info: "true 3 (some 3) [2] (some a.jsonl)" -/
+#guard_msgs in #eval restartOf (header (restartJson (toJson c1).compress "\"a.jsonl\""))
+
+/-- info: "false 3 (some 3) [2] none" -/
+#guard_msgs in #eval restartOf (header (restartJson "null" "null"))
+
+/-- info: "its `# trace` header's `restart` has no `lock`" -/
+#guard_msgs in
+#eval restartOf (header ",\"restart\":{\"highestVoted\":3,\"vote2Bar\":3,\"reconstructed\":[],\"resumes\":null}")
+
+-- A restart with no decide before the crash takes the configuration's anchor.
+/-- info: true -/
+#guard_msgs in
+#eval match readPreamble (header (restartJson (toJson cfg.anchorCert).compress "null")) with
+  | .ok said => match said.restart.map (persistedOf cfg [] said) with
+    | some (.ok (some P)) => P.anchorBlock == cfg.anchorBlock && P.anchorCert == cfg.anchorCert
+    | _ => false
+  | .error _ => false
+
+/-- What `persistedOf` makes of a header, its error when it refuses it. -/
+private def persistedError (text : String) : String :=
+  match readPreamble text with
+  | .error e => e
+  | .ok said => match said.restart.map (persistedOf cfg [] said) with
+    | some (.error e) => e
+    | some (.ok _) => "accepted"
+    | none => "no restart"
+
+/-- info: "its `restart` header names no lock" -/
+#guard_msgs in #eval persistedError (header (restartJson "null" "null"))
+
+/-- info: "restored from view 3 with no `anchorCert`" -/
+#guard_msgs in #eval persistedError (header (",\"anchorView\":3" ++ restartJson (toJson c1).compress "null"))
+
+/-- Why a chain could not be spliced, as one line. -/
+private def chainMessage : ChainError → String
+  | .unreadable e => s!"unreadable: {e}"
+  | .unchecked e => s!"unchecked: {e}"
+
+-- An empty first run is accepted only for a node anchored at genesis.
+/-- info: ok 0 -/
+#guard_msgs in
+#eval show IO Unit from do
+  let .ok said := readPreamble (header (restartJson (toJson cfg.anchorCert).compress "null"))
+    | IO.println "unreadable"
+  let some r := said.restart | IO.println "no restart"
+  match ← resumedBy "x.jsonl" said r [] with
+  | .ok (_, _, _, pre) => IO.println s!"ok {pre.length}"
+  | .error e => IO.println (chainMessage e)
+
+/-- info: unreadable: resumes an empty recording but loaded an anchor -/
+#guard_msgs in
+#eval show IO Unit from do
+  let .ok said := readPreamble (header (",\"anchorView\":3" ++ restartJson (toJson c1).compress "null"))
+    | IO.println "unreadable"
+  let some r := said.restart | IO.println "no restart"
+  match ← resumedBy "x.jsonl" said r [] with
+  | .ok _ => IO.println "accepted"
+  | .error e => IO.println (chainMessage e)
+
+/-- A history as trace lines. -/
+private def lines (h : History) : String := renderTrace (h.map fun s => .consensus s.input s.output)
+
+/-- The directory the chain fixtures are written to. -/
+private def dir : System.FilePath := ".lake/restart-tests"
+
+/-- The header of a file restarted from the anchor at view 1 that resumes `file`. -/
+private def restartedHeader (file : String) : String :=
+  header (",\"anchorView\":1,\"anchorCert\":" ++ (toJson c1).compress
+    ++ restartJson (toJson c1).compress ("\"" ++ file ++ "\""))
+
+/-- Write each `(name, text)` under `dir`. -/
+private def writeFiles (files : List (String × String)) : IO Unit := do
+  IO.FS.createDirAll dir
+  for (name, text) in files do IO.FS.writeFile (dir / name) text
+
+/-- The first run and the run that resumes it. -/
+private def pairFiles : List (String × String) :=
+  [("n.0.jsonl", header "" ++ lines preRun), ("n.1.jsonl", restartedHeader "n.0.jsonl" ++ lines postRun)]
+
+/-- What `chainHistory` makes of the file `name` under `dir`. -/
+private def chainOf (name : String) : IO Unit := do
+  match ← chainHistory (dir / name) with
+  | .ok (node, _, h) => IO.println s!"ok {node} {h.length}"
+  | .error e => IO.println (chainMessage e)
+
+/-- What `checkRestarted` makes of the restarted file `name` under `dir`. -/
+private def checkFile (name : String) : IO Unit := do
+  let text ← IO.FS.readFile (dir / name)
+  let .ok said := readPreamble text | IO.println "unreadable header"
+  let some r := said.restart | IO.println "no restart"
+  let .ok events := parseTrace text | IO.println "unparsed"
+  match ← checkRestarted (dir / name) said r (historyOf events) with
+  | .error e => IO.println e
+  | .ok (.checked v f broken) => IO.println s!"checked {v} {f} {broken}"
+  | .ok .recasts => IO.println "recasts"
+  | .ok (.unchecked why) => IO.println s!"unchecked: {why}"
+
+-- Two files of one node chain into the history before the crash, the restored steps, and the history after.
+/-- info: true -/
+#guard_msgs in
+#eval show IO Bool from do
+  writeFiles pairFiles
+  match ← chainHistory (dir / "n.1.jsonl") with
+  | .ok (_, _, h) => return h == preRun ++ persisted.restoredSteps ++ postRun
+  | .error _ => return false
+
+/-- info: checked 1 .lake/restart-tests/n.0.jsonl [] -/
+#guard_msgs in #eval do writeFiles pairFiles; checkFile "n.1.jsonl"
+
+-- A file that names another node's run as the one it resumes.
+/-- info: the node of .lake/restart-tests/n.other.jsonl differs from that of .lake/restart-tests/n.0.jsonl -/
+#guard_msgs in
+#eval do
+  writeFiles (pairFiles ++
+    [("n.other.jsonl", (restartedHeader "n.0.jsonl").replace "\"node\":1" "\"node\":2" ++ lines postRun)])
+  checkFile "n.other.jsonl"
+
+/-- info: unreadable: .lake/restart-tests/n.self.jsonl resumes itself -/
+#guard_msgs in
+#eval do
+  writeFiles [("n.self.jsonl", restartedHeader "n.self.jsonl" ++ lines postRun)]
+  chainOf "n.self.jsonl"
+
+/-- info: unreadable: .lake/restart-tests/n.late.jsonl is restored from view 3 and names no file it resumes -/
+#guard_msgs in
+#eval do
+  writeFiles [("n.late.jsonl", header (",\"anchorView\":3,\"anchorCert\":" ++ (toJson c1).compress)
+    ++ lines preRun)]
+  chainOf "n.late.jsonl"
+
+-- A resumed file `check` leaves out of scope establishes nothing for the file after it.
+/-- info: unchecked: .lake/restart-tests/n.nolock.jsonl signs no lock in its timeouts -/
+#guard_msgs in
+#eval do
+  writeFiles [("n.nolock.jsonl", header "" ++ "# timeouts sign no lock\n" ++ lines preRun),
+    ("n.nolock1.jsonl", restartedHeader "n.nolock.jsonl" ++ lines postRun)]
+  checkFile "n.nolock1.jsonl"
+
+/-- info: unchecked: .lake/restart-tests/n.recast.jsonl may re-cast vote2 below the bar -/
+#guard_msgs in
+#eval do
+  writeFiles (pairFiles ++
+    [("n.recast.jsonl", (restartedHeader "n.0.jsonl").replace "\"vote2Bar\":3" "\"vote2Bar\":null"
+        ++ lines postRun),
+      ("n.recast1.jsonl", restartedHeader "n.recast.jsonl" ++ lines postRun)])
+  checkFile "n.recast1.jsonl"
+
+-- A resumed file whose actions came before any step is refused, since its history leaves them out.
+/-- info: unreadable: .lake/restart-tests/n.held.jsonl has actions before any step -/
+#guard_msgs in
+#eval do
+  writeFiles [("n.held.jsonl", header "" ++ lines preRun
+    ++ "# 1 outputs had no step to join: " ++ (toJson (vote2 c5)).compress ++ "\n")]
+  chainOf "n.held.jsonl"
 
 end Tests
 end NewProtocolDiff

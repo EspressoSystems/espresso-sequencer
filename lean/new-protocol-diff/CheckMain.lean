@@ -3,6 +3,7 @@ module
 import NewProtocolDiff.Header
 import NewProtocolDiff.Trace
 import NewProtocolDiff.Check
+import NewProtocolDiff.Restart
 import NewProtocolDiff.ProtocolCheck
 import NewProtocolDiff.PromptCheck
 import NewProtocolImpl.Machine
@@ -23,7 +24,10 @@ an unmodelled input excuses is reported and does not fail the trace, so a pass
 with an excuse does not mean `PromptUntil`. A trace in which a test set the node's
 view directly is checked against the signing rules of `NewProtocol.SafeHistory`
 only (`NewProtocolDiff.checkSafe_sound`), since its steps do not show the view it
-is in. The exit status is 1 if any trace breaks a rule or cannot be read.
+is in. A trace restored from storage is checked with the file it resumes against
+the premises of `NewProtocol.safe_across_restart` (`NewProtocolDiff.checkRestarted`),
+and not against `PromptUntil`: what a node owes after a restart is not covered.
+The exit status is 1 if any trace breaks a rule or cannot be read.
 -/
 
 open Lean NewProtocol NewProtocolDiff
@@ -91,10 +95,10 @@ def checkOne (δ : Nat) (path : System.FilePath) : IO Finding := do
   match readPreamble text with
   | .error e => return .unreadable e
   | .ok said =>
-    if said.anchorView ≠ 0 then
-      return .outOfScope s!"restored from view {said.anchorView}, and restarts are not covered"
-    else if signsNoLock text then
+    if signsNoLock text then
       return .outOfScope "its timeouts sign no lock, as before the certificate rule"
+    else if said.restart.isNone && said.anchorView ≠ 0 then
+      return .outOfScope s!"restored from view {said.anchorView}, and restarts are not covered"
     else
     match parseTrace text with
     | .error e =>
@@ -107,6 +111,13 @@ def checkOne (δ : Nat) (path : System.FilePath) : IO Finding := do
       return .broken [s!"actions before any step ({(line.drop 2).toString})"]
     else
       let h := historyOf events
+      if let some r := said.restart then
+        return match ← checkRestarted path said r h with
+          | .error e => .unreadable e
+          | .ok .recasts => .outOfScope "re-casts vote2 below the bar, as before the certificate rule"
+          | .ok (.unchecked why) => .outOfScope s!"resumes a file whose rules are not checked: {why}"
+          | .ok (.checked view pre []) => .signingOnly s!"restored from view {view} after {pre}"
+          | .ok (.checked _ _ broken) => .broken broken
       let broken := (checkRules (said.configFor h) ⟨said.node⟩ h).filterMap fun (name, ok) =>
         if ok then none else some name
       if !broken.isEmpty then return .broken broken
