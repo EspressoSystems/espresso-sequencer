@@ -10919,11 +10919,13 @@ mod test {
                 balances.push(balance?.unwrap_or_default().0);
             } else {
                 // The v2 tree was never written, so there is no proof to answer with.
-                ensure!(
-                    balance.is_err(),
-                    "{}: {validator} has a v2 balance {balance:?}",
-                    chain.name
-                );
+                match balance {
+                    Err(err) if err.status == StatusCode::NOT_FOUND => {},
+                    other => bail!(
+                        "{}: {validator} v2 balance should be missing, got {other:?}",
+                        chain.name
+                    ),
+                }
             }
         }
         ensure!(
