@@ -1269,11 +1269,6 @@ def check_chaos(cfg: RunConfig) -> None:
             f"faulted with {cfg.chaos.query_floor} left serving (--chaos-query-floor): "
             f"{cfg.query_nodes}"
         )
-    if cfg.chaos.recover_timeout_s <= cfg.chaos.kill_down_s:
-        raise Refused(
-            f"--chaos-recover-timeout {cfg.chaos.recover_timeout_s:g} must exceed "
-            f"--chaos-kill-down {cfg.chaos.kill_down_s:g}: a killed node stays down that long"
-        )
     if cfg.chaos.mass_nodes is not None:
         if not ch.MASS_KINDS.intersection(cfg.chaos.kinds):
             raise Refused(
@@ -3120,17 +3115,20 @@ def chaos_from_args(args: argparse.Namespace) -> ch.ChaosConfig | None:
         return None
     if flags := sorted(given & set(CHAOS_LOAD_FLAGS)):
         raise Refused(f"{', '.join(flags)} is set by --chaos")
-    return ch.ChaosConfig(
-        minutes=args.chaos_min,
-        rate_mb_s=args.chaos_rate,
-        seed=args.chaos_seed,
-        kinds=args.chaos_kinds,
-        gap_s=args.chaos_gap,
-        kill_down_s=args.chaos_kill_down,
-        recover_timeout_s=args.chaos_recover_timeout,
-        query_floor=args.chaos_query_floor,
-        mass_nodes=args.chaos_mass_nodes,
-    )
+    try:
+        return ch.ChaosConfig(
+            minutes=args.chaos_min,
+            rate_mb_s=args.chaos_rate,
+            seed=args.chaos_seed,
+            kinds=args.chaos_kinds,
+            gap_s=args.chaos_gap,
+            kill_down_s=args.chaos_kill_down,
+            recover_timeout_s=args.chaos_recover_timeout,
+            query_floor=args.chaos_query_floor,
+            mass_nodes=args.chaos_mass_nodes,
+        )
+    except ValueError as exc:
+        raise Refused(f"--chaos-recover-timeout, --chaos-kill-down: {exc}") from exc
 
 
 def chaos_load(load: nb.BenchConfig, chaos: ch.ChaosConfig) -> nb.BenchConfig:

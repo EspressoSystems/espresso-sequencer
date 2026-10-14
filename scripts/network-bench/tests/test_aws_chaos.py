@@ -280,11 +280,10 @@ def test_chaos_timing_flag_without_chaos_refused(flag):
 
 # TEST:cli-chaos-refusals-fails
 def test_chaos_recover_timeout_not_above_kill_down_refused():
-    chaos = ch.ChaosConfig(kill_down_s=100.0, recover_timeout_s=100.0)
+    flags = ("--chaos", "--chaos-kill-down", "100", "--chaos-recover-timeout")
     with pytest.raises(awsb.Refused, match="--chaos-recover-timeout"):
-        awsb.check_chaos(dataclasses.replace(chaos_cfg(), chaos=chaos))
-    chaos = ch.ChaosConfig(kill_down_s=100.0, recover_timeout_s=101.0)
-    awsb.check_chaos(dataclasses.replace(chaos_cfg(), chaos=chaos))
+        awsb.config_from_args(parse(*flags, "100"))
+    assert awsb.config_from_args(parse(*flags, "101")).chaos is not None
 
 
 def test_chaos_query_floor_not_below_query_nodes_refused():
@@ -663,9 +662,15 @@ def test_drain_waits_for_the_recovery(isolated: Path):
 
 # TEST:drain-timeout-fails
 def test_drain_returns_past_a_stuck_node(isolated: Path):
-    ctrl, _, clock = cluster_controller(isolated, kill_down_s=1e9, recover_timeout_s=60)
+    ctrl, cluster, clock = cluster_controller(
+        isolated, kill_down_s=30, recover_timeout_s=60
+    )
+    # No node climbs; the up nodes sit at the tip, node4 stays at the height it was killed at.
+    cluster.catchup_blocks_s = 0.0
+    for name, m in cluster.members.items():
+        m.base = 10**9 if name != "node4" else m.base
     ctrl.drain(interrupts_of(clock))
-    assert [e["event"] for e in ch.read_events(isolated)] == ["timeout"]
+    assert [e["event"] for e in ch.read_events(isolated)] == ["started", "timeout"]
     assert ctrl.expected_down() == frozenset({"node4"})
     assert ctrl.stuck() == ["node4"]
 

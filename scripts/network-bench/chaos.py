@@ -59,6 +59,13 @@ class ChaosConfig:
     # Nodes of a mass fault; `None`: every node.
     mass_nodes: int | None = None
 
+    def __post_init__(self) -> None:
+        if self.recover_timeout_s <= self.kill_down_s:
+            raise ValueError(
+                f"recover_timeout_s {self.recover_timeout_s:g} must exceed kill_down_s "
+                f"{self.kill_down_s:g}: a killed node stays down that long"
+            )
+
 
 ChaosEventKind = Literal[
     "fault", "started", "rejoined", "caught_up", "timeout", "restored", "interrupted"
@@ -365,12 +372,10 @@ def chaos_step(
                 )
                 s.update(health="up", kind=None)
 
+    # A killed node started before its timeout: `kill_down_s` is below `recover_timeout_s`.
     for name, s in nodes.items():
         if s["health"] in OPEN and now >= s["since"] + cfg.recover_timeout_s:
             emit("timeout", name, now - s["since"], s["last_missing"])
-            if s["health"] == "down":
-                # Running for the collection, as `restore` only starts open faults.
-                actions.append({"node": name, "op": "start"})
             s.update(health="stuck", streak=0)
 
     cursor, faults, next_fault_at = (

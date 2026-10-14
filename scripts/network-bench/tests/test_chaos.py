@@ -497,6 +497,12 @@ def test_killed_node_past_its_timeout_is_started_and_stuck():
     assert result["state"]["nodes"]["node5"]["health"] == "stuck"
 
 
+def test_a_recover_timeout_within_the_kill_down_time_is_refused():
+    with pytest.raises(ValueError, match="recover_timeout_s"):
+        ch.ChaosConfig(kill_down_s=100.0, recover_timeout_s=100.0)
+    ch.ChaosConfig(kill_down_s=100.0, recover_timeout_s=101.0)
+
+
 # TEST:timeout-counts-from-fault-ok
 def test_timeout_counts_from_fault():
     topo = topo_of()
