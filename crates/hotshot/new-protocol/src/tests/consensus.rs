@@ -478,7 +478,7 @@ async fn view_one_proposed_from_genesis(
     let epoch = EpochNumber::genesis();
     let genesis_leaf = harness.consensus.last_decided_leaf().clone();
     let genesis_cert1 = build_genesis_cert1(&genesis_leaf);
-    let genesis_proposal = build_genesis_proposal(&genesis_leaf, &genesis_cert1);
+    let genesis_proposal = build_genesis_proposal(&genesis_leaf);
     harness
         .consensus
         .seed_parent(genesis_cert1, genesis_proposal.clone(), std::iter::empty());
@@ -537,7 +537,8 @@ async fn test_timeout_filters_vote1_not_processing() {
     let test_data = TestData::new(6).await;
     let node_key = BLSPubKey::generated_from_seed_indexed([0; 32], 0).0;
 
-    // Set timeout at view 3
+    // Reach view 3, then time it out.
+    harness.apply(test_data.views[1].cert1_input()).await;
     harness
         .apply(ConsensusInput::Timeout(ViewNumber::new(3)))
         .await;
@@ -1216,6 +1217,7 @@ async fn test_timeout_prevents_vote1_but_allows_vote2() {
     harness
         .apply(test_data.views[0].block_reconstructed_input())
         .await;
+    harness.apply(test_data.views[0].cert1_input()).await;
 
     let vote1_before = count_matching(harness.outputs(), is_vote1);
 

@@ -68,8 +68,7 @@ pub fn validated_state_cert<T: NodeType>(
 /// `NP_TEST_VERSION=0.7` runs the tests at
 /// [`TIMEOUT_EPOCH_VERSION`](versions::TIMEOUT_EPOCH_VERSION) instead, whose
 /// timeout votes and certificates sign their lock: the form the Lean
-/// specification covers. `just test-lean-check` and `just test-lean-diff`
-/// record a second pass that way.
+/// specification covers. `just test-lean-check` records the tests that way.
 #[cfg(test)]
 pub fn test_version() -> versions::Version {
     match std::env::var("NP_TEST_VERSION").as_deref() {

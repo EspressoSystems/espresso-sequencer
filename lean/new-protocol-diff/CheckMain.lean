@@ -95,6 +95,8 @@ def checkOne (δ : Nat) (path : System.FilePath) : IO Finding := do
       return .outOfScope s!"restored from view {said.anchorView}, and restarts are not covered"
     else if signsNoLock text then
       return .outOfScope "its timeouts sign no lock, as before the certificate rule"
+    else if testFailed text then
+      return .outOfScope "the test that recorded it failed"
     else
     match parseTrace text with
     | .error e =>

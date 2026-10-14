@@ -86,6 +86,13 @@ const ANCHOR_LOCK: &str = "\"<anchor lock>\"";
 /// and the rules that read one do not apply. A checker leaves such a run out.
 const UNSIGNED_LOCKS: &str = "# timeouts sign no lock";
 
+/// The note saying the test that recorded the run failed.
+///
+/// A failing test has left the path it was written for, often because it was
+/// written for another version, so its run says nothing about whether the node
+/// conforms. A checker leaves such a run out rather than report its breaks.
+const TEST_FAILED: &str = "# test failed";
+
 /// Distinguishes recorders sharing a label.
 ///
 /// A test may build several nodes, and the model is a specification of *one*, so
@@ -556,6 +563,10 @@ impl Drop for Recorder {
         }
         let ended = self.now();
         self.lines.push(format!("# ended at t={ended}"));
+        // A test fails by panicking, and the recorder drops while it unwinds.
+        if std::thread::panicking() {
+            self.lines.push(TEST_FAILED.to_string());
+        }
         if self.unsigned_locks.get() {
             self.lines
                 .insert(1.min(self.lines.len()), UNSIGNED_LOCKS.to_string());

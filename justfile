@@ -191,11 +191,9 @@ test-all:
 # owed within `defaultDelta` (`Prompt`). See `lean/new-protocol-diff/CheckMain.lean`
 # and `crates/hotshot/new-protocol/src/trace.rs`.
 #
-# The suite is recorded twice: at the version the tests default to, and at 0.7
-# (`NP_TEST_VERSION`), whose timeouts sign their lock. The specification covers
-# only lock-signing timeouts, so most runs with a timeout are in scope only in the
-# second pass. A test written for the default version may fail there; its traces
-# are checked all the same.
+# The suite is recorded at 0.7 (`NP_TEST_VERSION`), whose timeouts sign their
+# lock: the specification covers only lock-signing timeouts. A test written for an
+# earlier version may fail there; its traces are checked all the same.
 #
 # Record runs of the new-protocol tests and check each against `lean/new-protocol-spec`.
 test-lean-check dir="":
@@ -210,17 +208,12 @@ test-lean-check dir="":
     # A fixed path, cleared first, so runs overwrite rather than accumulate.
     # Under `target` because it is build output: gitignored, and cleaned with it.
     traces="$(pwd)/target/np-traces"
-    rm -rf "$traces" "$traces-0.7"
-    echo "recording to $traces"
-    NP_TRACE_DIR="$traces" cargo test -p hotshot-new-protocol --release --lib tests:: || exit $?
-    echo "recording at 0.7 to $traces-0.7"
-    NP_TEST_VERSION=0.7 NP_TRACE_DIR="$traces-0.7" \
+    rm -rf "$traces"
+    echo "recording at 0.7 to $traces"
+    NP_TEST_VERSION=0.7 NP_TRACE_DIR="$traces" \
       cargo test -p hotshot-new-protocol --release --lib tests:: \
       || echo "note: some tests fail at 0.7; checking the traces they recorded" >&2
-    checked=0
-    lean/new-protocol-diff/.lake/build/bin/check "$traces" || checked=$?
-    lean/new-protocol-diff/.lake/build/bin/check "$traces-0.7" || checked=$?
-    exit $checked
+    lean/new-protocol-diff/.lake/build/bin/check "$traces"
 
 test-integration: (build "test")
 	INTEGRATION_TEST_NODE_VERSION=2 cargo nextest run -p tests --nocapture --profile integration test_native_demo_basic

@@ -29,6 +29,7 @@ use crate::{
         CatchupEvidence, Certificate1, ConsensusMessage, EpochChangeMessage, Message, MessageType,
         Proposal, ProposalFetchMessage, TimeoutBallot, TimeoutVoteMessage3, Validated,
     },
+    outbox::Outbox,
     storage::ActionKind,
     tests::common::assertions::{
         any, count_matching, is_block_built, is_block_reconstructed, is_cert1, is_cert2,
@@ -803,6 +804,19 @@ async fn test_epoch_binding_timeout_votes_form_a_certificate() {
         any(harness.outputs(), is_view_changed),
         "the certificate must advance the view"
     );
+    // A timeout vote goes out once its action is stored; the run ends after it.
+    if signed {
+        harness
+            .process_until_output(|outputs| timeout_vote_sent(outputs, test_view.view_number))
+            .await;
+    }
+}
+
+/// Whether a timeout vote for `view` was sent.
+fn timeout_vote_sent(outputs: &Outbox<ConsensusOutput<TestTypes>>, view: ViewNumber) -> bool {
+    outputs.iter().any(
+        |o| matches!(o, ConsensusOutput::SendTimeoutVote(vote, ..) if vote.view_number() == view),
+    )
 }
 
 /// Integration: sequential views both produce Vote1 through real state validation.
@@ -1481,6 +1495,10 @@ async fn test_timeout_vote_tc_advances_view() {
                 .iter()
                 .any(|i| matches!(i, ConsensusInput::Timeout(view) if **view == 3))
         })
+        .await;
+    // A timeout vote goes out once its action is stored; the run ends after it.
+    harness
+        .process_until_output(|outputs| timeout_vote_sent(outputs, ViewNumber::new(3)))
         .await;
 }
 

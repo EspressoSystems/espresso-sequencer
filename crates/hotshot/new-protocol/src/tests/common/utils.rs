@@ -1202,10 +1202,12 @@ impl ConsensusHarness {
         let state_private_key = state_key_pair.sign_key_ref().clone();
         let membership = mock_membership();
         let instance = Arc::new(TestInstanceState::default());
+        // At an epoch version, as a new-protocol anchor is: a leaf from before
+        // epochs commits differently from the proposal rebuilt from it.
         let genesis_leaf = Leaf2::<TestTypes>::genesis(
             &TestValidatedState::default(),
             &instance,
-            TEST_VERSIONS.test.base,
+            TEST_VERSIONS.vid2.base,
         )
         .await;
         let consensus = Consensus::new(
