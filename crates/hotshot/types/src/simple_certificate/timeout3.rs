@@ -182,9 +182,9 @@ impl<T: NodeType> TimeoutCertificate3<T> {
     ///
     /// The earlier groups must be in lock order with no lock twice, all
     /// earlier than the certificate's lock, which must pass
-    /// [`Self::check_lock`], and no signer may be in two groups. Each group's
-    /// signature must be valid over its own data, and together the groups
-    /// must reach `threshold`. That the lock certificate is signed by a quorum
+    /// [`Self::check_lock`]. Every group must have a signer, and no signer may
+    /// be in two groups. Each group's signature must be valid over its own
+    /// data, and together the groups must reach `threshold`. That the lock certificate is signed by a quorum
     /// of its own epoch is [`Self::lock_epoch`]'s committee's to check, and
     /// is not checked here: a certificate is valid only with both.
     pub fn check_signatures(
@@ -210,6 +210,7 @@ impl<T: NodeType> TimeoutCertificate3<T> {
                 signers.len() == stake_table.len(),
                 "signer bit vector does not match the stake table"
             );
+            ensure!(signers.any(), "a timeout certificate group has no signer");
             for (index, entry) in stake_table.iter().enumerate() {
                 if signers[index] {
                     ensure!(
