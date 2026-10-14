@@ -2,7 +2,7 @@
 #
 # Verso lives here, not in `new-protocol-spec`: a `require` there propagates to
 # every package that depends on the specification, so the implementation and the
-# differential harness would each have to carry a documentation tool neither of
+# trace checker would each have to carry a documentation tool neither of
 # them uses.
 name = "new-protocol-docs"
 defaultTargets = ["reference"]
@@ -14,7 +14,7 @@ path = "../new-protocol-spec"
 [[require]]
 name = "verso"
 git = "https://github.com/leanprover/verso"
-rev = "v4.34.0"
+rev = "v4.35.0"
 
 [[lean_lib]]
 name = "Reference"
