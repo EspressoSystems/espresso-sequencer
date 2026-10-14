@@ -572,13 +572,24 @@ where
         );
 
         let blocks: Vec<_> = blocks_stream
-            .then(|block| async move { block.resolve().await })
-            .collect()
-            .await;
+            .zip(futures::stream::iter(from..until))
+            .then(|(block, i)| async move {
+                block
+                    .with_timeout(FETCH_TIMEOUT)
+                    .await
+                    .ok_or_else(|| not_found(format!("block {i} not available")))
+            })
+            .try_collect()
+            .await?;
         let vids: Vec<_> = vids_stream
-            .then(|vid| async move { vid.resolve().await })
-            .collect()
-            .await;
+            .zip(futures::stream::iter(from..until))
+            .then(|(vid, i)| async move {
+                vid.with_timeout(FETCH_TIMEOUT)
+                    .await
+                    .ok_or_else(|| not_found(format!("VID common for block {i} not available")))
+            })
+            .try_collect()
+            .await?;
 
         if blocks.len() != vids.len() {
             return Err(anyhow::anyhow!(
@@ -5667,7 +5678,7 @@ mod tests {
             .map(|byte| espresso_types::Transaction::new(namespace, vec![byte; 8]))
             .collect();
         let (payload, _) = espresso_types::Payload::from_transactions(
-            transactions,
+            &transactions,
             &Default::default(),
             &Default::default(),
         )

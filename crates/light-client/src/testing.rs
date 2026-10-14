@@ -37,7 +37,7 @@ use hotshot_types::{
     },
     stake_table::{StakeTableEntry, supermajority_threshold},
     traits::{
-        block_contents::EncodeBytes,
+        block_contents::{BlockPayload as _, EncodeBytes},
         signature_key::{SignatureKey, StateSignatureKey},
     },
     utils::{epoch_from_block_number, is_epoch_transition, is_ge_epoch_root},
@@ -510,7 +510,7 @@ impl InnerTestClient {
             };
             tracing::debug!(?transactions, "generated block {i}");
             let (payload, ns_table) =
-                Payload::from_transactions_sync(transactions, node_state.chain_config).unwrap();
+                Payload::from_transactions_sync(&transactions, node_state.chain_config).unwrap();
             let payload_comm = vid_commitment(
                 &payload.encode(),
                 &ns_table.encode(),
@@ -1057,12 +1057,12 @@ impl Client for TestClient {
 
         let payload = if inner.invalid_payloads.contains(&height) {
             tracing::info!(height, "return mock incorrect payload proof");
-            Payload::from_transactions_sync(
-                [Transaction::random(&mut rand::thread_rng())],
-                NodeState::mock_v3().chain_config,
-            )
-            .unwrap()
-            .0
+            // Keep the honest namespace table, so the proof is rejected for its commitment and
+            // not for the table, which is checked first.
+            let honest = &inner.payloads[height];
+            let mut bytes = honest.raw_payload().to_vec();
+            bytes.push(0);
+            Payload::from_bytes(&bytes, honest.ns_table())
         } else {
             inner.payloads[height].clone()
         };
@@ -1109,7 +1109,7 @@ impl Client for TestClient {
             rand::thread_rng().fill_bytes(&mut payload);
             let tx = Transaction::new(namespace, payload);
             let node_state = NodeState::mock_v3();
-            Payload::from_transactions_sync([tx], node_state.chain_config).unwrap()
+            Payload::from_transactions_sync(&[tx], node_state.chain_config).unwrap()
         } else {
             (
                 inner.payloads[height].clone(),

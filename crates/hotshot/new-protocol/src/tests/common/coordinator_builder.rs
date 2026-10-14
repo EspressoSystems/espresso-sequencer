@@ -19,6 +19,7 @@ use hotshot_types::{
     traits::{signature_key::SignatureKey, storage::Storage as _},
     upgrade_config::UpgradeConfig,
 };
+use tokio::sync::mpsc;
 
 use super::utils::reconstructed_blocks;
 use crate::{
@@ -29,7 +30,7 @@ use crate::{
     coordinator::{Coordinator, timer::Timer},
     epoch::EpochManager,
     helpers::test_upgrade_lock,
-    message::{Certificate1, Proposal},
+    message::{Certificate1, OpaqueMessage, Proposal},
     network::Cliquenet,
     outbox::Outbox,
     proposal::{ProposalValidator, VidShareValidator},
@@ -65,6 +66,7 @@ pub async fn build_test_coordinator(
     epoch_height: u64,
     view_timeout: Duration,
     upgrade: UpgradeSetup,
+    external_tx: mpsc::UnboundedSender<OpaqueMessage<BLSPubKey>>,
 ) -> Coordinator<TestTypes, TestStorage<TestTypes>> {
     let (public_key, private_key) = BLSPubKey::generated_from_seed_indexed([0; 32], node_index);
     let state_key_pair = StateKeyPair::generate_from_seed_indexed([0u8; 32], node_index);
@@ -285,6 +287,7 @@ pub async fn build_test_coordinator(
         .client(client)
         .membership_coordinator(membership)
         .outbox(Outbox::new())
+        .external_tx(external_tx)
         .timer(Timer::new(view_timeout, ViewNumber::genesis()))
         .public_key(public_key)
         .build();

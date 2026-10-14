@@ -12,6 +12,7 @@ use hotshot_types::{
     traits::{metrics::NoMetrics, signature_key::SignatureKey},
     upgrade_config::UpgradeConfig,
 };
+use tokio::sync::mpsc;
 
 use super::{
     coordinator_builder::{build_genesis_cert1, build_genesis_proposal},
@@ -206,6 +207,7 @@ impl TestHarness {
             .client(client)
             .membership_coordinator(membership)
             .outbox(Outbox::new())
+            .external_tx(mpsc::unbounded_channel().0)
             .timer(Timer::new(timer_duration, ViewNumber::genesis() + 1))
             .public_key(public_key)
             .node_id(KeyPrefix::from(&public_key))

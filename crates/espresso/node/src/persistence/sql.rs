@@ -1483,7 +1483,7 @@ impl Persistence {
                 )
                 .await?;
                 tx.execute(
-                    query("DELETE FROM decided_cert2 where view >= $1 AND view <= $2")
+                    query("DELETE FROM decided_cert2 where view >= $1 AND view < $2")
                         .bind(from_view_i64)
                         .bind(to_view_i64),
                 )
@@ -1736,9 +1736,23 @@ impl SequencerPersistence for Persistence {
         &self,
         _view: ViewNumber,
         leaf_chain: impl IntoIterator<Item = (&LeafInfo<SeqTypes>, CertificatePair<SeqTypes>)> + Send,
+        cert2: Option<&Certificate2<SeqTypes>>,
         _deciding_qc: Option<Arc<CertificatePair<SeqTypes>>>,
         _consumer: &(impl EventConsumer + 'static),
     ) -> anyhow::Result<()> {
+        let leaf_chain: Vec<_> = leaf_chain.into_iter().collect();
+        // Keyed by the view of the newest leaf, which a re-vote's cert2 is later than.
+        let newest = leaf_chain
+            .iter()
+            .map(|(info, _)| info.leaf.view_number())
+            .max();
+        let cert2_row = cert2
+            .zip(newest)
+            .map(|(cert2, newest)| {
+                let data = bincode::serialize(cert2).context("serializing cert2")?;
+                anyhow::Ok((newest.u64() as i64, data))
+            })
+            .transpose()?;
         let values = leaf_chain
             .into_iter()
             .map(|(info, cert)| {
@@ -1749,7 +1763,9 @@ impl SequencerPersistence for Persistence {
                 let mut leaf = info.leaf.clone();
                 leaf.unfill_block_payload();
 
-                let view = cert.view_number().u64() as i64;
+                // Keyed by the leaf's view, as everything joined with it is: the certificate of
+                // an epoch's last block may be a re-vote's, at a later view.
+                let view = leaf.view_number().u64() as i64;
                 let leaf_bytes = bincode::serialize(&leaf)?;
                 let qc_bytes = bincode::serialize(cert.qc())?;
                 let next_epoch_qc_bytes = match cert.next_epoch_qc() {
@@ -1760,8 +1776,8 @@ impl SequencerPersistence for Persistence {
             })
             .collect::<anyhow::Result<Vec<_>>>()?;
 
-        // Append the new leaves. We do this in its own transaction because even if GC or the
-        // event consumer later fails, there is no need to abort the storage of the leaves.
+        // Append the new leaves and their cert2. We do this in its own transaction because even if
+        // GC or the event consumer later fails, there is no need to abort the storage of the leaves.
         serializable_retry!(self, || async {
             let mut tx = self.db.write().await?;
             tx.upsert(
@@ -1771,6 +1787,10 @@ impl SequencerPersistence for Persistence {
                 values.clone(),
             )
             .await?;
+            if let Some(row) = &cert2_row {
+                tx.upsert("decided_cert2", ["view", "data"], ["view"], [row.clone()])
+                    .await?;
+            }
             tx.commit().await
         })
         .await?;
@@ -4148,7 +4168,7 @@ mod postgres_tests {
             .into();
 
         let (payload, ns_table) =
-            Payload::from_transactions(txs.clone(), &validated_state, &instance_state)
+            Payload::from_transactions(&txs, &validated_state, &instance_state)
                 .await
                 .unwrap();
         let payload_bytes = payload.encode();
@@ -4222,7 +4242,13 @@ mod postgres_tests {
 
     #[test_log::test(tokio::test(flavor = "multi_thread"))]
     async fn test_postgres_read_ns_table_v0_1() {
-        test_postgres_read_ns_table(NodeState::mock()).await;
+        let v0_1 = versions::version(0, 1);
+        test_postgres_read_ns_table(
+            NodeState::mock()
+                .with_current_version(v0_1)
+                .with_genesis_version(v0_1),
+        )
+        .await;
     }
 
     #[test_log::test(tokio::test(flavor = "multi_thread"))]
