@@ -223,6 +223,20 @@ fn cert1_key<T: NodeType>(cert: &Certificate1<T>) -> ViewEpoch {
     ViewEpoch(cert.view_number(), LockView::of(cert).epoch)
 }
 
+fn newer_evidence<T: NodeType>(
+    tc: Option<&TimeoutEvidence<T>>,
+    qc: Option<&Certificate1<T>>,
+) -> Option<CatchupEvidence<T>> {
+    match (tc, qc) {
+        (Some(tc), Some(qc)) if qc.view_number() > tc.view_number() => {
+            Some(CatchupEvidence::Qc(qc.clone()))
+        },
+        (Some(tc), _) => Some(CatchupEvidence::from(tc)),
+        (None, Some(qc)) => Some(CatchupEvidence::Qc(qc.clone())),
+        (None, None) => None,
+    }
+}
+
 fn cert2_key<T: NodeType>(cert: &Certificate2<T>) -> ViewEpoch {
     ViewEpoch(cert.view_number(), cert.data.epoch)
 }
@@ -753,14 +767,24 @@ impl<T: NodeType> Consensus<T> {
     /// certificate).
     pub fn catchup_evidence(&self) -> Option<CatchupEvidence<T>> {
         let tc = self.timeout_certs.last_key_value().map(|(_, tc)| tc);
-        match (tc, self.locked_cert.as_ref()) {
-            (Some(tc), Some(qc)) if qc.view_number() > tc.view_number() => {
-                Some(CatchupEvidence::Qc(qc.clone()))
-            },
-            (Some(tc), _) => Some(CatchupEvidence::from(tc)),
-            (None, Some(qc)) => Some(CatchupEvidence::Qc(qc.clone())),
-            (None, None) => None,
-        }
+        newer_evidence(tc, self.locked_cert.as_ref())
+    }
+
+    /// The newest certificate we hold: the latest `Cert1` or the latest
+    /// timeout certificate, whichever has the higher view (ties go to the
+    /// timeout certificate).
+    ///
+    /// Unlike `catchup_evidence` this is not the lock, which moves only on a
+    /// vote2 and can be older than a `Cert1` held without its payload.
+    pub fn newest_evidence(&self) -> Option<CatchupEvidence<T>> {
+        let tc = self.timeout_certs.last_key_value().map(|(_, tc)| tc);
+        let qc = self.certs1.last_key_value().map(|(_, qc)| qc);
+        newer_evidence(tc, qc)
+    }
+
+    /// The `Certificate1` held at exactly `key`.
+    pub(crate) fn cert1_in(&self, key: ViewEpoch) -> Option<&Certificate1<T>> {
+        self.certs1.get(&key)
     }
 
     /// This node's signed VID share of `proposal`'s payload, if it holds one.

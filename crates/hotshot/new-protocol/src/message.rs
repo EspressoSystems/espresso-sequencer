@@ -1,3 +1,4 @@
+pub mod cert;
 pub mod fetch;
 pub mod payload;
 
@@ -30,7 +31,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     helpers::proposal_commitment,
-    message::payload::PayloadFetchMessage,
+    message::{cert::CertFetchMessage, payload::PayloadFetchMessage},
     proposal::{
         MalformedProposal, epoch_matches_height, justify_qc_matches_parent,
         state_cert_matches_parent, view_change_evidence_matches_parent,
@@ -792,6 +793,8 @@ pub enum MessageType<T: NodeType, S> {
     ProposalFetch(ProposalFetchMessage<T>),
     External(#[serde(with = "serde_bytes")] Vec<u8>),
     PayloadFetch(PayloadFetchMessage),
+    // Only append new variants, as for `ConsensusMessage`.
+    CertFetch(CertFetchMessage<T>),
 }
 
 impl<T: NodeType, S> MessageType<T, S> {
@@ -803,6 +806,7 @@ impl<T: NodeType, S> MessageType<T, S> {
             Self::ProposalFetch(r) => MessageType::ProposalFetch(r),
             Self::External(v) => MessageType::External(v),
             Self::PayloadFetch(r) => MessageType::PayloadFetch(r),
+            Self::CertFetch(r) => MessageType::CertFetch(r),
         }
     }
 }
@@ -836,6 +840,7 @@ impl<T: NodeType, S> HasViewNumber for Message<T, S> {
             MessageType::ProposalFetch(message) => message.view_number(),
             MessageType::External(_) => ViewNumber::new(1), // TODO: This can become a problem
             MessageType::PayloadFetch(message) => message.view_number(),
+            MessageType::CertFetch(message) => message.view_number(),
         }
     }
 }

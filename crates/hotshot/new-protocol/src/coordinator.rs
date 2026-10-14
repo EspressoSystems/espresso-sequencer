@@ -53,7 +53,12 @@ use crate::{
     message::{
         self, BlockMessage, CatchupEvidence, Certificate1, Certificate2, ConsensusMessage, Message,
         MessageType, OpaqueMessage, Proposal, ProposalFetchMessage, ProposalMessage, TimeoutVote,
-        TransactionMessage, Unchecked, Validated, Vote2, payload::PayloadFetchMessage,
+        TransactionMessage, Unchecked, Validated, Vote2,
+        cert::{
+            CertFetchMessage, CertFetchRequest, CertFetchResponse, CertRequestBody,
+            CertResponseBody,
+        },
+        payload::PayloadFetchMessage,
     },
     network::Cliquenet,
     outbox::Outbox,
@@ -1752,6 +1757,16 @@ where
                 }
                 None
             },
+            MessageType::CertFetch(CertFetchMessage::Req(request)) => {
+                debug!(%node, %sender, view = %request.view_number(), "received cert fetch request");
+                self.serve_cert_fetch(&message.sender, &request);
+                None
+            },
+            MessageType::CertFetch(CertFetchMessage::Res(response)) => {
+                debug!(%node, %sender, view = %response.view_number(), "received cert fetch response");
+                self.on_cert_fetch_response(&message.sender, response);
+                None
+            },
             MessageType::External(data) => {
                 debug!(%node, %sender, bytes = data.len(), "recv external message");
                 let _ = self.external_tx.send(OpaqueMessage {
@@ -2279,6 +2294,66 @@ where
         })
     }
 
+    /// Submit `evidence` for verification and drive the catchup of its epoch if
+    /// that is not known yet.
+    fn verify_evidence(&mut self, sender: &T::SignatureKey, evidence: CatchupEvidence<T>) {
+        let epoch = match evidence {
+            CatchupEvidence::Qc(qc) => self.verify_advance(sender, qc),
+            CatchupEvidence::Tc(tc) => self.verify_timeout_cert(sender, tc),
+            CatchupEvidence::Tc3(tc) => self.verify_timeout_cert3(sender, tc),
+        };
+        if let Some(epoch) = epoch {
+            self.epoch_manager.request_drb_result(epoch);
+        }
+    }
+
+    /// Unicast to `peer` what `request` asks for, answering at the request's view.
+    fn serve_cert_fetch(&self, peer: &T::SignatureKey, request: &CertFetchRequest) {
+        let view = request.view_number();
+        let body = match request.body() {
+            CertRequestBody::Newest => CertResponseBody::Newest(self.consensus.newest_evidence()),
+            CertRequestBody::Cert1 { epoch } => {
+                CertResponseBody::Cert1(self.consensus.cert1_in(ViewEpoch(view, *epoch)).cloned())
+            },
+        };
+        let message = Message {
+            sender: self.public_key.clone(),
+            message_type: MessageType::CertFetch(CertFetchMessage::Res(CertFetchResponse::new(
+                view, body,
+            ))),
+        };
+        if let Err(err) =
+            self.network
+                .sender()
+                .unicast(self.consensus.current_view(), peer, &message)
+        {
+            warn!(node = %self.node_id, %view, %err, "failed to send cert fetch response");
+        }
+    }
+
+    /// Submit the certificate of a reply for verification. Replies are not
+    /// subject to the view and epoch windows of unsolicited certificates: they
+    /// answer a request of this node.
+    fn on_cert_fetch_response(&mut self, sender: &T::SignatureKey, response: CertFetchResponse<T>) {
+        match response.into_body() {
+            CertResponseBody::Newest(evidence) => {
+                if let Some(evidence) = evidence {
+                    self.verify_evidence(sender, evidence);
+                }
+            },
+            CertResponseBody::Cert1(Some(cert)) => {
+                if cert.view_number() == ViewNumber::genesis() {
+                    warn!(node = %self.node_id, %sender, "cert fetch response at the genesis view");
+                    return;
+                }
+                if let Some(epoch) = self.cert_verifiers.cert1.verify(sender.clone(), cert) {
+                    self.epoch_manager.request_drb_result(epoch);
+                }
+            },
+            CertResponseBody::Cert1(None) => {},
+        }
+    }
+
     fn on_timeout_vote(
         &mut self,
         sender: &T::SignatureKey,
@@ -2296,14 +2371,7 @@ where
         let has_evidence = evidence.is_some();
 
         if let Some(e) = evidence.filter(|e| e.view_number() >= current_view) {
-            let epoch = match e {
-                CatchupEvidence::Qc(qc) => self.verify_advance(sender, qc),
-                CatchupEvidence::Tc(tc) => self.verify_timeout_cert(sender, tc),
-                CatchupEvidence::Tc3(tc) => self.verify_timeout_cert3(sender, tc),
-            };
-            if let Some(epoch) = epoch {
-                self.epoch_manager.request_drb_result(epoch);
-            }
+            self.verify_evidence(sender, e);
         }
 
         if self.is_view_too_far_ahead(view) {
