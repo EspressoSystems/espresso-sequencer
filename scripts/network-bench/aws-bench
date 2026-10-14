@@ -7611,7 +7611,7 @@ def floor_section(
     if not steps:
         return []
     spans = [ch.floor_span(r, end) for r in rows]
-    timeout_series = ch.counter_samples(consensus, "timeouts")
+    timeout_series = ch.counter_series(consensus, "timeouts")
     view_series = ch.view_samples(run_dir, consensus)
     start, stop = ch.common_window(
         [timeout_series, view_series], steps[0]["t_start"], steps[-1]["t_end"]
@@ -7773,7 +7773,7 @@ def fault_throughput_lines(
         return []
     spans = [ch.fault_span(r, end) for r in rows]
     split = ch.counter_split(
-        ch.counter_samples(consensus, "decided_bytes"),
+        ch.counter_series(consensus, "decided_bytes"),
         spans,
         steps[0]["t_start"],
         steps[-1]["t_end"],

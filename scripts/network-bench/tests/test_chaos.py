@@ -949,17 +949,6 @@ def test_a_step_counts_a_query_node_faulty_while_it_catches_up():
     assert [c["faults"] for c in chaos] == ["node1 wipe", "node1 wipe"]
 
 
-def test_counter_split_diffs_bytes_by_fault_overlap():
-    counters = [(float(t), 2e6 * t) for t in range(11)]
-    split = ch.counter_split(counters, [(2.5, 4.0)], 1.0, 9.0)
-    # Intervals 2-3 and 3-4 overlap the fault; 1-2 and 4-9 do not.
-    assert (split.during / 1e6, split.during_s) == (4.0, 2.0)
-    assert (split.outside / 1e6, split.outside_s) == (12.0, 6.0)
-    assert ch.counter_split(counters, [], 0.0, 10.0) == ch.CounterSplit(
-        0.0, 0.0, 20e6, 10.0
-    )
-
-
 def test_events_without_query_get_it_from_the_topology(tmp_path):
     old = [{k: v for k, v in e.items() if k != "query"} for e in EVENTS]
     lines = "".join(json.dumps(e) + "\n" for e in old)
@@ -1055,34 +1044,49 @@ def test_floor_span_of_stuck_and_interrupted_faults():
     assert ch.floor_span(cut[0], T0 + 240) == (T0 + 10, T0 + 30 + ch.FLOOR_TAIL_S)
 
 
-def test_counter_split_by_overlap_holds_the_peak_over_drops():
-    samples = [(T0 + t, v) for t, v in [(0, 0), (10, 1), (20, 3), (30, 2), (40, 5)]]
-    split = ch.counter_split(samples, [(T0 + 15, T0 + 25)], T0, T0 + 40)
-    # (10, 20] and (20, 30] overlap the span; the drop at 30 holds 3, so (30, 40] adds 2.
+def test_counter_split_counts_the_rise_after_every_node_restarted():
+    node = [(T0 + t, v) for t, v in [(0, 0), (10, 100), (20, 200), (30, 0), (40, 50)]]
+    series = {"node0": node, "node1": node}
+    split = ch.counter_split(series, [], T0, T0 + 40)
+    # The restart interval (20, 30] adds nothing; (30, 40] adds the 50 after it.
+    assert split == ch.CounterSplit(0.0, 0.0, 250.0, 40.0)
+
+
+def test_counter_split_takes_the_fastest_node_present_at_both_ends():
+    series = {
+        "node0": [(T0 + t, v) for t, v in [(0, 10), (10, 20), (20, 5), (30, 9)]],
+        "node1": [(T0 + t, v) for t, v in [(0, 10), (10, 13), (20, 14), (30, 15)]],
+        "node2": [(T0 + 20, 1000.0), (T0 + 30, 1001.0)],
+    }
+    split = ch.counter_split(series, [(T0 + 15, T0 + 25)], T0, T0 + 30)
+    # Per interval the largest non-negative delta: 10, then 1 (node0 dropped), then 4.
     assert split == ch.CounterSplit(
-        during=2.0, during_s=20.0, outside=1.0 + 2.0, outside_s=20.0
+        during=1.0 + 4.0, during_s=20.0, outside=10.0, outside_s=10.0
     )
-    assert ch.counter_split(samples, [], T0 + 10, T0 + 20) == ch.CounterSplit(
-        0.0, 0.0, 2.0, 10.0
+    assert ch.counter_split(series, [], T0 + 10, T0 + 20).outside == 1.0
+
+
+def test_counter_split_diffs_bytes_by_fault_overlap():
+    counters = {"node0": [(float(t), 2e6 * t) for t in range(11)]}
+    split = ch.counter_split(counters, [(2.5, 4.0)], 1.0, 9.0)
+    # Intervals 2-3 and 3-4 overlap the fault; 1-2 and 4-9 do not.
+    assert (split.during / 1e6, split.during_s) == (4.0, 2.0)
+    assert (split.outside / 1e6, split.outside_s) == (12.0, 6.0)
+    assert ch.counter_split(counters, [], 0.0, 10.0) == ch.CounterSplit(
+        0.0, 0.0, 20e6, 10.0
     )
 
 
-def test_counter_split_does_not_count_the_rise_back_after_a_missing_lead_sample():
-    # The leader's sample is missing at 20 and 30: the series falls to a lagging node.
-    views = [
-        (T0 + t, v) for t, v in [(0, 100), (10, 110), (20, 60), (30, 62), (40, 115)]
-    ]
-    split = ch.counter_split(views, [], T0, T0 + 40)
-    assert split == ch.CounterSplit(0.0, 0.0, 15.0, 40.0)
-
-
-def test_metrics_fallback_with_a_single_node_bucket_does_not_overcount(tmp_path):
+def test_metrics_fallback_does_not_count_a_wiped_node_starting_from_zero(tmp_path):
     scrapes = [
         (1.1, "node0", 100),
         (1.2, "node1", 101),
-        (2.1, "node5", 0),  # a wiped node alone in its second
+        (2.1, "node0", 102),
+        (2.2, "node1", 103),
+        (2.3, "node5", 0),
         (3.1, "node0", 103),
         (3.2, "node1", 104),
+        (3.3, "node5", 1),
     ]
     (tmp_path / "metrics.jsonl").write_text(
         "".join(
@@ -1091,15 +1095,15 @@ def test_metrics_fallback_with_a_single_node_bucket_does_not_overcount(tmp_path)
         )
     )
     series = ch.view_samples(tmp_path, [])
-    assert series == [(1.0, 101.0), (2.0, 0.0), (3.0, 104.0)]
+    assert series["node5"] == [(2.0, 0.0), (3.0, 1.0)]
     assert ch.counter_split(series, [], 0.0, 10.0).outside == 3.0
 
 
 def test_common_window_clips_to_the_shared_samples():
-    a = [(5.0, 0.0), (50.0, 1.0)]
-    b = [(1.0, 0.0), (40.0, 1.0)]
+    a = {"n0": [(5.0, 0.0), (30.0, 1.0)], "n1": [(20.0, 0.0), (50.0, 1.0)]}
+    b = {"n0": [(1.0, 0.0), (40.0, 1.0)]}
     assert ch.common_window([a, b], 0.0, 100.0) == (5.0, 40.0)
-    assert ch.common_window([a, []], 10.0, 100.0) == (10.0, 50.0)
+    assert ch.common_window([a, {}, {"n0": []}], 10.0, 100.0) == (10.0, 50.0)
 
 
 def test_floor_lines_show_rates_and_dash_without_views():
@@ -1198,7 +1202,7 @@ def test_node_counts_read_current_and_wiped_logs_by_region(tmp_path):
 
 
 def test_views_come_from_consensus_else_metrics(tmp_path):
-    assert ch.view_samples(tmp_path, ch.read_consensus(tmp_path)) == []
+    assert ch.view_samples(tmp_path, ch.read_consensus(tmp_path)) == {}
     (tmp_path / "consensus.jsonl").write_text(
         '{"ts": 1.5, "decided_bytes": 0, "timeouts": 2}\n'
     )
@@ -1208,12 +1212,15 @@ def test_views_come_from_consensus_else_metrics(tmp_path):
         '{"ts": 2.1, "node": "node1", "ok": false}\n'
     )
     consensus = ch.read_consensus(tmp_path)
-    assert ch.view_samples(tmp_path, consensus) == [(1.0, 7.0)]
-    assert ch.counter_samples(consensus, "timeouts") == [(1.5, 2)]
+    assert ch.view_samples(tmp_path, consensus) == {
+        "node0": [(1.0, 5.0)],
+        "node1": [(1.0, 7.0)],
+    }
+    assert ch.counter_series(consensus, "timeouts") == {"": [(1.5, 2)]}
     (tmp_path / "consensus.jsonl").write_text(
         '{"ts": 1.5, "decided_bytes": 0, "timeouts": 2, "views": 9}\n'
     )
-    assert ch.view_samples(tmp_path, ch.read_consensus(tmp_path)) == [(1.5, 9)]
+    assert ch.view_samples(tmp_path, ch.read_consensus(tmp_path)) == {"": [(1.5, 9)]}
 
 
 def test_no_kinds_issues_no_fault():

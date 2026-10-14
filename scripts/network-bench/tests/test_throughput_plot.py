@@ -229,11 +229,11 @@ def test_main_draws_the_chaos_lanes_and_the_clients_panel_together(tmp_path: Pat
     assert both != chaos_only
 
 
-def test_timeout_increments_diff_the_running_maximum():
+def test_timeout_increments_skip_drops():
     counters = [{"ts": t, "timeouts": v} for t, v in enumerate([1, 3, 2, 3, 4])]
     ts, grown = plot.timeout_increments(counters)
     assert list(ts) == [1, 2, 3, 4]
-    assert list(grown) == [2, 0, 0, 1]
+    assert list(grown) == [2, 0, 1, 1]
 
 
 def test_bin_counts_sums_weights_per_bin():

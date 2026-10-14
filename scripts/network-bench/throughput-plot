@@ -71,9 +71,9 @@ SIZE_UNITS |= {"kib": 2**10, "mib": 2**20, "gib": 2**30}
 
 def decided_mb_s(counters: list[dict]) -> tuple[np.ndarray, np.ndarray]:
     """Rate between consecutive counter samples, at the later sample's time."""
-    ts = np.array([c["ts"] for c in counters])
-    decided = np.array([c["decided_bytes"] for c in counters])
-    return ts[1:], np.diff(decided) / np.diff(ts) / 1e6
+    steps = np.array(ch.counter_increases(ch.counter_series(counters, "decided_bytes")))
+    steps = steps.reshape(-1, 3)
+    return steps[:, 1], steps[:, 2] / (steps[:, 1] - steps[:, 0]) / 1e6
 
 
 def binned_bytes_mb_s(
@@ -107,13 +107,10 @@ def block_series(
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Mean block interval (s) and size (MB) over the `w` s before each counter sample, from the
     first sample `w` s in; NaN where no block fell in the window."""
-    ts = np.array([c["ts"] for c in counters])
-    decided = np.array([c["decided_bytes"] for c in counters])
+    ts, decided = np.array(ch.counter_total(counters, "decided_bytes")).T
     keep = ts - w >= ts[0]
     ts, decided = ts[keep], decided[keep]
-    before = np.interp(
-        ts - w, [c["ts"] for c in counters], [c["decided_bytes"] for c in counters]
-    )
+    before = np.interp(ts - w, *np.array(ch.counter_total(counters, "decided_bytes")).T)
     blocks = np.searchsorted(block_ts, ts, "right") - np.searchsorted(
         block_ts, ts - w, "right"
     )
@@ -159,19 +156,17 @@ def client_lag(
     return done, lag * 1000
 
 
+def timeout_increments(counters: list[dict]) -> tuple[np.ndarray, np.ndarray]:
+    """Sample times and the timeout count growth at each, as the floor counts it."""
+    steps = np.array(ch.counter_increases(ch.counter_series(counters, "timeouts")))
+    steps = steps.reshape(-1, 3)
+    return steps[:, 1], steps[:, 2]
+
+
 def timeout_times(counters: list[dict]) -> np.ndarray:
     """Counter sample times at which the view timeout count grew."""
-    ts = np.array([c["ts"] for c in counters])
-    timeouts = np.array([c["timeouts"] for c in counters])
-    return ts[1:][np.diff(timeouts) > 0]
-
-
-def timeout_increments(counters: list[dict]) -> tuple[np.ndarray, np.ndarray]:
-    """Sample times and the growth of the running maximum of the timeout count at each, as the
-    floor diffs it."""
-    ts = np.array([c["ts"] for c in counters])
-    peak = np.maximum.accumulate([c["timeouts"] for c in counters])
-    return ts[1:], np.diff(peak)
+    ts, growth = timeout_increments(counters)
+    return ts[growth > 0]
 
 
 def bin_counts(

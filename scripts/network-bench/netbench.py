@@ -1656,8 +1656,9 @@ def keep_up(
     t1: float,
 ) -> float | None:
     """Decided over submitted MB/s in `[t0, t1]`; None without a decided rate or submits."""
+    window = [c for c in counters if t0 <= c["ts"] <= t1]
     decided = theil_sen(
-        [(c["ts"], c["decided_bytes"] / 1e6) for c in counters if t0 <= c["ts"] <= t1]
+        [(ts, v / 1e6) for ts, v in ch.counter_total(window, "decided_bytes")]
     )
     submitted = window_mb_s((tx.t_submit for tx in txs), tx_size, t0, t1)
     if decided is None or not submitted:
@@ -2089,19 +2090,21 @@ async def poll_counters(
     client: Client, urls: Sequence[str], counters: list[dict[str, Any]], clock: Clock
 ) -> None:
     """Every COUNTER_POLL_S, decided payload bytes, view timeouts and the current view: the highest over the
-    validators that answer. A restarted validator's counters start from 0 and fall under
-    the others'. A sweep nobody answers writes no sample."""
+    validators that answer, and `nodes` with each answering validator's own. A restarted
+    validator's counters start from 0 and fall under the others'. A sweep nobody answers
+    writes no sample."""
     while True:
         answers = await asyncio.gather(
             *(client.call(try_counters, url) for url in urls)
         )
-        if ms := [m for m in answers if m is not None]:
+        if nodes := {url: m for url, m in zip(urls, answers, strict=True) if m}:
             counters.append(
                 {"ts": clock.time()}
                 | {
-                    key: max(m[key] for m in ms)
+                    key: max(m[key] for m in nodes.values())
                     for key in ("decided_bytes", "timeouts", "views")
                 }
+                | {"nodes": nodes}
             )
         await clock.asleep(COUNTER_POLL_S)
 
@@ -2384,7 +2387,9 @@ def step_measures(
         elif (now - seen) * 1000 > cfg.query_lag_target_ms:
             lags.append((seen, (now - seen) * 1000))
     # A slope over all samples: two samples see whole blocks, off by up to one block.
-    decided = theil_sen([(c["ts"], c["decided_bytes"] / 1e6) for c in inside])
+    decided = theil_sen(
+        [(ts, v / 1e6) for ts, v in ch.counter_total(inside, "decided_bytes")]
+    )
     return {
         "submitted_mb_s": window_mb_s(
             (tx["t_submit"] for tx in txs), cfg.tx_size, t0, t1

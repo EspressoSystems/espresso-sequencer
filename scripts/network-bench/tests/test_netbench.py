@@ -1376,6 +1376,49 @@ def test_decided_rate_is_not_quantized_by_blocks():
     assert fails(m) == ([], [])
 
 
+def restarted_counters(drop_at: int, rate_mb_s: float) -> list[dict[str, Any]]:
+    """Two validators that both restart at `drop_at` (counters back to 0) and decide at
+    `rate_mb_s`; the sample holds the highest value, as `poll_counters` writes it."""
+    counters = []
+    for t in range(31):
+        value = rate_mb_s * 1e6 * (t if t < drop_at else t - drop_at)
+        node = {"decided_bytes": value, "timeouts": 0.0, "views": 0.0}
+        counters.append({"ts": float(t)} | node | {"nodes": {"a": node, "b": node}})
+    return counters
+
+
+def test_decided_rate_survives_a_restart_of_every_validator():
+    m = netbench.step_measures(
+        step_window(),
+        netbench.BenchConfig(),
+        [],
+        [],
+        restarted_counters(22, 10.0),
+        30.0,
+    )
+    # The restart interval adds nothing, so the slope is a little under the 10 MB/s.
+    assert some(m["decided_mb_s"]) == pytest.approx(10.0, rel=0.1)
+
+
+def test_decided_rate_is_not_negative_when_the_leader_restarts_into_a_stall():
+    counters = [
+        {
+            "ts": float(t),
+            "decided_bytes": 100e6 if t < 22 else 30e6,
+            "timeouts": 0.0,
+            "nodes": {
+                "a": {"decided_bytes": 100e6 if t < 22 else 0.0},
+                "b": {"decided_bytes": 30e6},
+            },
+        }
+        for t in range(31)
+    ]
+    m = netbench.step_measures(
+        step_window(), netbench.BenchConfig(), [], [], counters, 30.0
+    )
+    assert some(m["decided_mb_s"]) == pytest.approx(0.0)
+
+
 def test_growing_query_lag():
     m = measures(query_growth=0.2)
     assert m["query_lag_slope_ms_s"] == pytest.approx(200.0, abs=1)
