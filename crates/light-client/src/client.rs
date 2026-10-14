@@ -551,6 +551,7 @@ mod test {
         Resolvable,
         availability::{BlockQueryData, LeafQueryData},
     };
+    use hotshot_types::data::vid_disperse::vid_total_weight;
     use pretty_assertions::assert_eq;
     use rand::RngCore;
     use test_utils;
@@ -779,6 +780,10 @@ mod test {
         let url: Url = format!("http://localhost:{port}").parse().unwrap();
 
         let test_config = TestConfigBuilder::default().build();
+        let vid_total_weight = vid_total_weight(
+            test_config.known_nodes_with_stake().iter(),
+            Some(EpochNumber::new(1)),
+        );
         let storage = DataSource::create_storage().await;
         let persistence =
             <DataSource as TestableSequencerDataSource>::persistence_options(&storage);
@@ -816,7 +821,12 @@ mod test {
         // correct endpoint and deserializes correctly.
         let ns = NamespaceId::from(0u64);
         let ns_proof = client.namespace_proof(1, ns).await.unwrap();
-        assert_eq!(ns_proof.verify(blocks[0].header(), ns).unwrap(), vec![]);
+        assert_eq!(
+            ns_proof
+                .verify(blocks[0].header(), ns, vid_total_weight)
+                .unwrap(),
+            vec![]
+        );
 
         // Get a range of payloads.
         let proofs = client.payload_proofs_in_range(1, 3).await.unwrap();
@@ -834,6 +844,10 @@ mod test {
         let url: Url = format!("http://localhost:{port}").parse().unwrap();
 
         let test_config = TestConfigBuilder::default().build();
+        let vid_total_weight = vid_total_weight(
+            test_config.known_nodes_with_stake().iter(),
+            Some(EpochNumber::new(1)),
+        );
         let storage = DataSource::create_storage().await;
         let persistence =
             <DataSource as TestableSequencerDataSource>::persistence_options(&storage);
@@ -877,7 +891,10 @@ mod test {
         // Query namespaces individually.
         for (tx, header) in txs.iter().zip(&headers) {
             let proof = client.namespace_proof(header.height(), ns).await.unwrap();
-            assert_eq!(proof.verify(header, ns).unwrap(), std::slice::from_ref(tx));
+            assert_eq!(
+                proof.verify(header, ns, vid_total_weight).unwrap(),
+                std::slice::from_ref(tx)
+            );
         }
 
         // Query both namespaces by range.
@@ -890,11 +907,13 @@ mod test {
             headers[1].height() + 1 - headers[0].height()
         );
         assert_eq!(
-            proofs[0].verify(&headers[0], ns).unwrap(),
+            proofs[0].verify(&headers[0], ns, vid_total_weight).unwrap(),
             std::slice::from_ref(&txs[0])
         );
         assert_eq!(
-            proofs[proofs.len() - 1].verify(&headers[1], ns).unwrap(),
+            proofs[proofs.len() - 1]
+                .verify(&headers[1], ns, vid_total_weight)
+                .unwrap(),
             std::slice::from_ref(&txs[1])
         );
         // All other blocks in the range should be empty.
@@ -907,7 +926,7 @@ mod test {
                 .send()
                 .await
                 .unwrap();
-            assert_eq!(proof.verify(&header, ns).unwrap(), vec![]);
+            assert_eq!(proof.verify(&header, ns, vid_total_weight).unwrap(), vec![]);
         }
 
         let absent = NamespaceId::from(u64::from(ns) + 1);
@@ -928,7 +947,7 @@ mod test {
             for queried in [ns, absent] {
                 match (header.ns_table().find_ns_id(&queried), block.get(&queried)) {
                     (Some(_), Some(proof)) => {
-                        proof.verify(&header, queried).unwrap();
+                        proof.verify(&header, queried, vid_total_weight).unwrap();
                     },
                     (None, None) => {},
                     (present, returned) => panic!(
@@ -943,14 +962,18 @@ mod test {
 
         // The first and last blocks are the ones we submitted `ns` transactions to.
         assert_eq!(
-            blocks[0].get(&ns).unwrap().verify(&headers[0], ns).unwrap(),
+            blocks[0]
+                .get(&ns)
+                .unwrap()
+                .verify(&headers[0], ns, vid_total_weight)
+                .unwrap(),
             std::slice::from_ref(&txs[0])
         );
         assert_eq!(
             blocks[blocks.len() - 1]
                 .get(&ns)
                 .unwrap()
-                .verify(&headers[1], ns)
+                .verify(&headers[1], ns, vid_total_weight)
                 .unwrap(),
             std::slice::from_ref(&txs[1])
         );

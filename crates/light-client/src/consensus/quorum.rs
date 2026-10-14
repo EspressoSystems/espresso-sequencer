@@ -325,6 +325,11 @@ impl StakeTable {
         HSStakeTable::from_iter(membership.stake_table()).into()
     }
 
+    /// The stake of each entry, in stake table order.
+    pub fn stakes(&self) -> impl Iterator<Item = U256> + '_ {
+        self.entries.iter().map(|entry| entry.stake_amount)
+    }
+
     /// Verify that a certificate is signed by a quorum of this stake table.
     pub async fn verify_cert<V, T>(&self, cert: &impl vote::Certificate<SeqTypes, T>) -> Result<()>
     where

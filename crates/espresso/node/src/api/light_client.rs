@@ -1907,7 +1907,13 @@ mod test {
             .unwrap();
         assert_eq!(proofs.len(), 3);
         for (leaf, proof) in leaves.iter().zip(proofs) {
-            proof.verify(leaf.header(), ns).unwrap();
+            proof
+                .verify(
+                    leaf.header(),
+                    ns,
+                    client.vid_total_weight(leaf.height()).await,
+                )
+                .unwrap();
         }
 
         // Test happy path: subset.
@@ -1922,7 +1928,12 @@ mod test {
             .await
             .unwrap();
         assert_eq!(proofs.len(), 1);
-        assert_eq!(proofs[0].verify(leaves[1].header(), ns).unwrap(), [tx]);
+        assert_eq!(
+            proofs[0]
+                .verify(leaves[1].header(), ns, client.vid_total_weight(1).await)
+                .unwrap(),
+            [tx]
+        );
 
         // Test missing data in range.
         let err = get_namespace_proof_range(&ds, 0, 4, ns.into(), Duration::from_secs(1), 100)
