@@ -374,25 +374,27 @@ where
             .map_err(|e| anyhow::anyhow!("{e}"))
     }
 
+    /// Stops the coordinator if it runs, and drops it if it never started so that nothing can
+    /// start it afterwards; the readers serve the resting state from here on.
     pub async fn shut_down(&self) {
         self.membership_coordinator.cancel_all_drb();
-        let client_api = {
-            let NewProtocol::Running { client_api, .. } = &*self.new_proto.read() else {
-                return;
-            };
-            client_api.clone()
+        let client_api = match &*self.new_proto.read() {
+            NewProtocol::Running { client_api, .. } => Some(client_api.clone()),
+            _ => None,
         };
-        self.rest(&client_api).await;
-        let NewProtocol::Running {
+        if let Some(client_api) = &client_api {
+            self.rest(client_api).await;
+        }
+        let taken = self.new_proto.write().take();
+        if let NewProtocol::Running {
             shutdown,
             coordinator,
             ..
-        } = self.new_proto.write().take()
-        else {
-            return;
-        };
-        shutdown.cancel();
-        let _ = coordinator.await;
+        } = taken
+        {
+            shutdown.cancel();
+            let _ = coordinator.await;
+        }
     }
 
     /// Keep what the coordinator last reported, for the readers that outlive it. This runs

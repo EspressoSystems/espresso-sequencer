@@ -4412,6 +4412,52 @@ mod test {
         drop(network);
     }
 
+    /// A node shut down before it ever started consensus stays stopped: a later read serves the
+    /// anchor instead of lazily starting the coordinator after shutdown.
+    #[test_log::test(tokio::test(flavor = "multi_thread"))]
+    async fn test_shut_down_before_start_keeps_consensus_stopped() {
+        const NUM_NODES: usize = 3;
+        const LATE: usize = NUM_NODES - 1;
+        let port = reserve_tcp_port().expect("OS should have ephemeral ports available");
+        let config = TestNetworkConfigBuilder::<NUM_NODES, _, _>::with_num_nodes()
+            .api_config(Options::with_port(port))
+            .network_config(TestConfigBuilder::default().build())
+            .deferred_start(&[LATE])
+            .build();
+        let network = TestNetwork::new(config, TEST_UPGRADE).await;
+
+        let late = network
+            .cfg
+            .init_node(
+                LATE,
+                network.genesis_state(LATE),
+                no_storage::Options,
+                Some(NullStateCatchup::default()),
+                None,
+                &NoMetrics,
+                STAKE_TABLE_CAPACITY_FOR_TEST,
+                NullEventConsumer,
+                TEST_UPGRADE,
+                network.cfg.upgrades(),
+            )
+            .await;
+        let handle = late.consensus_handle();
+
+        // No read before the shutdown: a read would lazily start consensus.
+        late.shutdown_consensus().await;
+
+        assert_eq!(late.decided_leaf().await.height(), 0, "not the anchor");
+        assert!(
+            handle.client_api().await.is_none(),
+            "a read started consensus after shutdown"
+        );
+        handle.start_consensus().await;
+        assert!(
+            handle.client_api().await.is_none(),
+            "consensus restarted after shutdown"
+        );
+    }
+
     #[test_log::test(tokio::test(flavor = "multi_thread"))]
     pub(crate) async fn test_restart() {
         const NUM_NODES: usize = 5;
