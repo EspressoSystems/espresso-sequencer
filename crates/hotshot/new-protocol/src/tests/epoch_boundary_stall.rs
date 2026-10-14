@@ -35,6 +35,8 @@ use crate::{
         Certificate1, Certificate2, EpochChangeMessage, ProposalMessage, ReVote, ReVoteMessage,
         TimeoutVote,
     },
+    outbox::Outbox,
+    storage::StorageOutput,
 };
 
 const EPOCH_HEIGHT: u64 = 10;
@@ -452,6 +454,46 @@ async fn node_votes_on_a_revote_naming_a_revotes_certificate() {
 
     let vote = vote1_at(&harness, view(13)).expect("the node votes1 on the re-vote");
     assert_eq!(vote.vote.data, boundary.cert1.data);
+}
+
+/// A vote2 still waiting for its lock to be stored is not sent once the node
+/// has moved to a later epoch: a node votes for no epoch earlier than its own.
+#[tokio::test]
+async fn pending_vote2_of_an_epoch_left_is_not_sent() {
+    let test_data = TestData::new_with_epoch_height(BOUNDARY + 1, EPOCH_HEIGHT).await;
+    let boundary = &test_data.views[BOUNDARY];
+    let mut harness =
+        node_before_the_boundary_certificate(0, &test_data, test_timeout_epoch_lock()).await;
+    let sent_vote2 = |outbox: &Outbox<ConsensusOutput<TestTypes>>| {
+        outbox.iter().any(
+            |o| matches!(o, ConsensusOutput::SendVote2(vote) if vote.view_number() == view(10)),
+        )
+    };
+
+    // Applied directly, so nothing confirms the lock's storage and the vote2 waits.
+    let mut outbox = Outbox::new();
+    harness.consensus.apply(boundary.cert1_input(), &mut outbox);
+    let lock = outbox
+        .iter()
+        .find_map(|o| match o {
+            ConsensusOutput::PersistHighQc(qc) => Some(LockView::of(qc)),
+            _ => None,
+        })
+        .expect("the node locks on the boundary block");
+    assert!(!sent_vote2(&outbox));
+
+    let tc = timeout_cert_of(&harness, epoch(2), view(11), Some(boundary.cert1.clone()));
+    harness.consensus.apply(timeout_cert_input(tc), &mut outbox);
+    assert_eq!(harness.consensus.current_epoch(), Some(epoch(2)));
+
+    harness.consensus.apply(
+        ConsensusInput::Stored(StorageOutput::HighQc(lock)),
+        &mut outbox,
+    );
+    assert!(
+        !sent_vote2(&outbox),
+        "no vote2 of the epoch the node has left"
+    );
 }
 
 /// The outgoing committee's re-vote and the incoming committee's first block

@@ -3101,6 +3101,10 @@ impl<T: NodeType> Consensus<T> {
             return;
         }
         let vote1 = self.pending_vote1.remove(&key).expect("checked above");
+        if self.upgrade_lock.certificate_rule(view) && epoch < self.current_epoch {
+            debug!(%view, %epoch, "dropping pending vote1 of an epoch this node has left");
+            return;
+        }
         if view <= self.timeout_view {
             debug!(%view, "dropping pending vote1 for timed-out view");
             return;
@@ -3128,7 +3132,7 @@ impl<T: NodeType> Consensus<T> {
     }
 
     fn release_vote2_at(&mut self, key: ViewEpoch, outbox: &mut Outbox<ConsensusOutput<T>>) {
-        let view = key.0;
+        let ViewEpoch(view, epoch) = key;
         let Some(pending) = self.pending_vote2.get(&key) else {
             return;
         };
@@ -3141,6 +3145,10 @@ impl<T: NodeType> Consensus<T> {
             return;
         }
         let pending = self.pending_vote2.remove(&key).expect("checked above");
+        if self.upgrade_lock.certificate_rule(view) && epoch < self.current_epoch {
+            debug!(%view, %epoch, "dropping pending vote2 of an epoch this node has left");
+            return;
+        }
         if self.timed_out_for_vote2(view) {
             warn!(%view, "dropping pending vote2 for a view this node has timed out");
             return;
@@ -3207,10 +3215,14 @@ impl<T: NodeType> Consensus<T> {
         if !self.stored_actions.contains(&(view, ActionKind::Propose)) {
             return;
         }
-        for (_, message) in self
+        for (ViewEpoch(_, epoch), message) in self
             .pending_revote
             .extract_if(ViewEpoch::at_view(view), |_, _| true)
         {
+            if epoch < self.current_epoch {
+                debug!(%view, %epoch, "dropping pending re-vote request of an epoch this node has left");
+                continue;
+            }
             outbox.push_back(ConsensusOutput::SendReVote(message));
         }
         let stored = self.stored_proposals.get(&view);
