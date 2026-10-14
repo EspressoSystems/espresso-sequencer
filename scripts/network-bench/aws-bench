@@ -9038,8 +9038,9 @@ def append_index(out_root: Path, row: str) -> None:
 
 
 def migrate_index(out_root: Path) -> None:
-    """Rewrites an INDEX.md with an older header to `INDEX_HEADER`. A row keeps its cells; the
-    ones the header lacks come from its run dir, else `-` (the run dir may be deleted)."""
+    """Rewrites an INDEX.md with an older header to `INDEX_HEADER`. A row keeps its cells; a
+    missing `chaos` comes from its run dir, else `-` (the run dir may be deleted); any other
+    missing column is `-`."""
     path = out_root / "INDEX.md"
     by_name = {name: key for key, name in INDEX_COLUMNS.items()}
     head, _, *body = path.read_text().splitlines()
