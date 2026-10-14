@@ -7938,10 +7938,23 @@ mod test {
         tracing::warn!("shutting down node 0");
         node_0.shutdown_consensus().await;
 
-        // The oldest stored proposal. It may already be decided, since pruning lags the decide.
-        let (to_view, proposal) = persistence
-            .load_quorum_proposals()
-            .await?
+        // The decide processor keeps pruning the proposals of decides that landed before the
+        // shutdown, so wait for the stored set to settle before choosing one. The oldest may
+        // already be decided, since pruning lags the decide.
+        let proposals = timeout(Duration::from_secs(30), async {
+            let mut proposals = persistence.load_quorum_proposals().await?;
+            loop {
+                sleep(Duration::from_millis(500)).await;
+                let now = persistence.load_quorum_proposals().await?;
+                if now.keys().eq(proposals.keys()) {
+                    break anyhow::Ok(now);
+                }
+                proposals = now;
+            }
+        })
+        .await
+        .context("stored proposals did not settle after the shutdown")??;
+        let (to_view, proposal) = proposals
             .into_iter()
             .next()
             .expect("an undecided proposal survives the shutdown");
