@@ -270,7 +270,7 @@ mod tests {
         },
         catchup::NullStateCatchup,
         prefetch_stake_table_events,
-        testing::{TestConfigBuilder, staking_priv_keys},
+        testing::{TestConfig, TestConfigBuilder, staking_priv_keys},
     };
 
     #[async_trait]
@@ -2657,14 +2657,7 @@ mod tests {
         Ok(())
     }
 
-    #[rstest_reuse::apply(persistence_types)]
-    pub async fn test_prefetch_stake_table_events<P: TestablePersistence>(
-        _p: PhantomData<P>,
-    ) -> anyhow::Result<()> {
-        use espresso_types::v0_3::ChainConfig;
-
-        let network_config = TestConfigBuilder::<1>::default().build();
-
+    async fn deploy_stake_table_with_one_registration(network_config: &TestConfig<1>) -> Address {
         let (_, priv_keys): (Vec<_>, Vec<_>) = (0..1)
             .map(|i| <PubKey as SignatureKey>::generated_from_seed_indexed([1; 32], i as u64))
             .unzip();
@@ -2734,6 +2727,18 @@ mod tests {
             .await
             .expect("send tx failed")
             .expect("at least one registration transaction is queued");
+        st_addr
+    }
+
+    #[rstest_reuse::apply(persistence_types)]
+    pub async fn test_prefetch_stake_table_events<P: TestablePersistence>(
+        _p: PhantomData<P>,
+    ) -> anyhow::Result<()> {
+        use espresso_types::v0_3::ChainConfig;
+
+        let network_config = TestConfigBuilder::<1>::default().build();
+
+        let st_addr = deploy_stake_table_with_one_registration(&network_config).await;
 
         let storage = P::tmp_storage().await;
         let persistence = P::options(&storage).create().await.unwrap();
