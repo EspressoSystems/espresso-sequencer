@@ -1479,7 +1479,10 @@ impl Fetcher {
         })
     }
 
-    /// Fetch all stake table events from L1
+    /// Fetch all stake table events from L1.
+    ///
+    /// Fails with [`StakeTableError::L1ProviderBehind`] when the provider has not reached
+    /// `to_block`. The call is worth retrying once the provider catches up.
     #[cfg(feature = "node")]
     pub async fn fetch_events_from_contract(
         l1_client: L1Client,
@@ -1513,6 +1516,25 @@ impl Fetcher {
                 }
             },
         };
+
+        // A provider that has not reached `to_block` answers the range with the logs it has
+        // and no error, so a scan past its head would be stored as complete up to `to_block`.
+        let head = {
+            let provider = l1_client.provider.clone();
+            retry(
+                retry_delay,
+                max_retry_duration,
+                "L1 head fetch",
+                move || {
+                    let provider = provider.clone();
+                    Box::pin(async move { provider.get_block_number().await })
+                },
+            )
+            .await
+        };
+        if head < to_block {
+            return Err(StakeTableError::L1ProviderBehind { head, to_block });
+        }
 
         // To avoid making large RPC calls, divide the range into smaller chunks.
         // chunk size is from env "ESPRESSO_L1_EVENTS_MAX_BLOCK_RANGE
