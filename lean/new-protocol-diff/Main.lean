@@ -10,8 +10,10 @@ Replay recorded traces against the reference machine.
 Each argument is a trace or a directory of `*.jsonl` traces.
 
 Every trace starts with the header `NewProtocolDiff.Header` reads. A trace
-restored from storage, or one in which a test set the node's view directly, is
-out of scope: its steps do not show the state the node started from.
+restored from storage without a `restart` header, or one in which a test set the
+node's view directly, is out of scope: its steps do not show the state the node
+started from. A trace with a `restart` header is checked against the file it
+resumes (`NewProtocolDiff.checkRestarted`) and not replayed.
 
 The exit status is 1 if any trace diverged, could not be read, or could not be
 replayed. A trace that runs past what the specification covers is reported and
@@ -40,6 +42,24 @@ def parseOptions (args : List String) : Except String ReplayOptions :=
       else go { o with paths := o.paths.push arg } rest
   go {} args
 
+/--
+The verdict on a restarted trace, which is checked against the file it resumes
+rather than replayed: the machine owes votes on the proposals the node loaded,
+which its restart bars it from casting.
+-/
+def replayRestarted (found : Except String RestartFinding) (total : Nat) :
+    Verdict × String × Nat × Nat :=
+  match found with
+  | .error e => (.unreplayable, e, 0, total)
+  | .ok .recasts =>
+    (.outOfScope "re-cast", "re-casts vote2 below the bar, as before the certificate rule", 0, total)
+  | .ok (.checked view pre []) =>
+    (.outOfScope "restart", s!"restart from view {view} checked against {pre}: summary and bars \
+      hold, signing rules hold; the machine is not run across a restart", 0, total)
+  | .ok (.checked view pre broken) =>
+    (.diverge, s!"restart from view {view} checked against {pre}: breaks \
+      {String.intercalate ", " broken}", 0, total)
+
 /-- Replay one trace and say what came of it. -/
 def replayOne (path : System.FilePath) : IO (Verdict × String × Nat × Nat) := do
   let text ← IO.FS.readFile path
@@ -49,15 +69,15 @@ def replayOne (path : System.FilePath) : IO (Verdict × String × Nat × Nat) :=
   match readPreamble text with
   | .error e => return (.unreplayable, e, 0, steps.length)
   | .ok said =>
-  if said.anchorView ≠ 0 then
-    return (.outOfScope "restart", s!"restored from view {said.anchorView}, and restarts are not covered",
-      0, steps.length)
   if signsNoLock text then
     return (.outOfScope "unsigned locks",
       "its timeouts sign no lock, as before the certificate rule", 0, steps.length)
   if let some line := (text.splitOn "\n").find?
       (fun l => l.startsWith "# placed " || l.startsWith "# forced ") then
     return (.outOfScope "placed", s!"the test set the node's state directly ({(line.drop 2).toString})",
+      0, steps.length)
+  if said.restart.isNone && said.anchorView ≠ 0 then
+    return (.outOfScope "restart", s!"restored from view {said.anchorView}, and restarts are not covered",
       0, steps.length)
   match parseTrace text with
   | .error e =>
@@ -70,6 +90,8 @@ def replayOne (path : System.FilePath) : IO (Verdict × String × Nat × Nat) :=
   | .error e => return (.malformed, Divergence.describe (.malformed s!"held outputs: {e}"), 0, steps.length)
   | .ok held =>
     let events := withHeld events held
+    if let some r := said.restart then
+      return replayRestarted (← checkRestarted path said r (historyOf events)) steps.length
     let leader := leaderIn (readLeaders text)
     let h := historyOf events
     let cfg := said.configFor h

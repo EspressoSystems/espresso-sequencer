@@ -3,6 +3,7 @@ module
 import NewProtocolDiff.Header
 import NewProtocolDiff.Trace
 import NewProtocolDiff.Check
+import NewProtocolDiff.Restart
 import NewProtocolDiff.ProtocolCheck
 import NewProtocolImpl.Machine
 import NewProtocolDiff.Corpus
@@ -17,7 +18,9 @@ its history obeys every rule of `NewProtocol.ProtocolHistory`, for the leaders t
 trace names; `NewProtocolDiff.checkProtocol_sound` is what makes a pass mean that.
 A trace in which a test set the node's view directly is checked against the
 signing rules of `NewProtocol.SafeHistory` only (`NewProtocolDiff.checkSafe_sound`),
-since its steps do not show the view it is in. The exit status
+since its steps do not show the view it is in. A trace restored from storage is
+checked with the file it resumes against the premises of
+`NewProtocol.safe_across_restart` (`NewProtocolDiff.checkRestarted`). The exit status
 is 1 if any trace breaks a rule or cannot be read.
 -/
 
@@ -69,10 +72,10 @@ def checkOne (path : System.FilePath) : IO Finding := do
   match readPreamble text with
   | .error e => return .unreadable e
   | .ok said =>
-    if said.anchorView ≠ 0 then
-      return .outOfScope s!"restored from view {said.anchorView}, and restarts are not covered"
-    else if signsNoLock text then
+    if signsNoLock text then
       return .outOfScope "its timeouts sign no lock, as before the certificate rule"
+    else if said.restart.isNone && said.anchorView ≠ 0 then
+      return .outOfScope s!"restored from view {said.anchorView}, and restarts are not covered"
     else
     match parseTrace text with
     | .error e => return .unreadable e
@@ -82,6 +85,12 @@ def checkOne (path : System.FilePath) : IO Finding := do
     | .error e => return .unreadable s!"held outputs: {e}"
     | .ok held =>
       let h := historyOf (withHeld events held)
+      if let some r := said.restart then
+        return match ← checkRestarted path said r h with
+          | .error e => .unreadable e
+          | .ok .recasts => .outOfScope "re-casts vote2 below the bar, as before the certificate rule"
+          | .ok (.checked view pre []) => .signingOnly s!"restored from view {view} after {pre}"
+          | .ok (.checked _ _ broken) => .broken broken
       let broken := (checkRules (said.configFor h) ⟨said.node⟩ h).filterMap fun (name, ok) =>
         if ok then none else some name
       if !broken.isEmpty then return .broken broken
