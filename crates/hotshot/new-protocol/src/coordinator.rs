@@ -486,6 +486,9 @@ where
 
         self.outbox
             .push_back(ConsensusOutput::ViewChanged(next_view, epoch));
+        if matches!(self.consensus.rejoin(), Rejoin::Querying(_)) {
+            self.outbox.push_back(ConsensusOutput::FetchNewestCerts);
+        }
 
         if let Some(leader) = self.leader(next_view, epoch)
             && leader == self.public_key

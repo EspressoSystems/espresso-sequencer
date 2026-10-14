@@ -862,6 +862,16 @@ impl<T: NodeType> Consensus<T> {
     /// Apply consensus to the given input and collect protocol outputs.
     #[instrument(level = "debug", skip_all, fields(node = %self.node_id, view = %input.view_number()))]
     pub fn apply(&mut self, input: ConsensusInput<T>, outbox: &mut Outbox<ConsensusOutput<T>>) {
+        let view = self.current_view;
+        self.dispatch(input, outbox);
+        // A node following the network rarely times out, so it asks again on
+        // every view it enters.
+        if self.current_view != view && matches!(self.rejoin, Rejoin::Querying(_)) {
+            outbox.push_back(ConsensusOutput::FetchNewestCerts);
+        }
+    }
+
+    fn dispatch(&mut self, input: ConsensusInput<T>, outbox: &mut Outbox<ConsensusOutput<T>>) {
         // DRB results and formed upgrade certificates arrive asynchronously
         // with no specific view attached. Use `current_view` so that the
         // post-apply retries (`maybe_propose`, `maybe_vote_*`) target the view

@@ -143,6 +143,28 @@ async fn silent_while_querying() {
     assert_eq!(harness.consensus.rejoin_bar(), None);
 }
 
+/// A node following the network rarely times out, so it asks on every view
+/// it enters.
+#[tokio::test]
+async fn asks_again_on_each_view_while_querying() {
+    let test_data = TestData::new(1).await;
+    let mut harness = wiped_node().await;
+
+    harness
+        .apply(ConsensusInput::AdvanceView(ValidCert::new(
+            test_data.views[0].cert1.clone(),
+            test_data.views[0].epoch_number,
+        )))
+        .await;
+
+    assert!(
+        harness
+            .outputs()
+            .iter()
+            .any(|o| matches!(o, ConsensusOutput::FetchNewestCerts))
+    );
+}
+
 #[tokio::test]
 async fn bar_is_the_highest_verified_claim_plus_two() {
     let test_data = TestData::new(5).await;
