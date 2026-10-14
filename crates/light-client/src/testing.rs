@@ -27,7 +27,7 @@ use hotshot_query_service_types::{
 use hotshot_types::{
     data::{
         EpochNumber, QuorumProposal2, QuorumProposalWrapper, VidCommitment, VidCommon, ViewNumber,
-        vid_commitment,
+        vid_commitment, vid_disperse::vid_total_weight_of_stakes,
     },
     message::UpgradeLock,
     signature_key::SchnorrPubKey,
@@ -514,7 +514,7 @@ impl InnerTestClient {
             let payload_comm = vid_commitment(
                 &payload.encode(),
                 &ns_table.encode(),
-                quorum.len(),
+                self.vid_total_weight(i as u64, epoch_height),
                 upgrade.base,
             );
 
@@ -699,10 +699,17 @@ impl InnerTestClient {
         }
     }
 
-    fn vid_common(&mut self, height: u64, epoch_height: u64) -> VidCommon {
+    fn vid_total_weight(&mut self, height: u64, epoch_height: u64) -> usize {
         let epoch = epoch_from_block_number(height, epoch_height);
-        let quorum = self.quorum_for_epoch(epoch);
-        VidCommon::V1(init_avidm_param(quorum.len()).unwrap())
+        let stakes = self
+            .quorum_for_epoch(epoch)
+            .iter()
+            .map(|(_, validator)| validator.stake);
+        vid_total_weight_of_stakes(stakes, Some(EpochNumber::new(epoch)))
+    }
+
+    fn vid_common(&mut self, height: u64, epoch_height: u64) -> VidCommon {
+        VidCommon::V1(init_avidm_param(self.vid_total_weight(height, epoch_height)).unwrap())
     }
 }
 
@@ -828,6 +835,11 @@ impl TestClient {
     pub async fn vid_common(&self, height: u64) -> VidCommon {
         let mut inner = self.inner.lock().await;
         inner.vid_common(height, self.epoch_height)
+    }
+
+    pub async fn vid_total_weight(&self, height: u64) -> usize {
+        let mut inner = self.inner.lock().await;
+        inner.vid_total_weight(height, self.epoch_height)
     }
 
     pub async fn mock_block_height(&self, height: u64) {
