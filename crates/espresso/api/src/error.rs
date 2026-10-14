@@ -35,20 +35,10 @@ pub enum ApiError {
 impl fmt::Display for ApiError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-<<<<<<< HEAD
-            ApiError::BadRequest(err) | ApiError::NotFound(err) | ApiError::Internal(err) => {
-||||||| parent of 55ce223a7 (fall back to a leaf proof when a header proof hits pruned state (#5164))
-            ApiError::BadRequest(err)
-            | ApiError::NotFound(err)
-            | ApiError::Internal(err)
-            | ApiError::Unavailable(err) => {
-=======
             ApiError::BadRequest(err)
             | ApiError::NotFound(err)
             | ApiError::Gone(err)
-            | ApiError::Internal(err)
-            | ApiError::Unavailable(err) => {
->>>>>>> 55ce223a7 (fall back to a leaf proof when a header proof hits pruned state (#5164))
+            | ApiError::Internal(err) => {
                 // Both transports render handler errors through this impl (v1 via the axum
                 // handlers, v2 via `to_status`), so a provider credential in the message is
                 // removed once, here.
@@ -61,40 +51,18 @@ impl fmt::Display for ApiError {
 impl std::error::Error for ApiError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-<<<<<<< HEAD
-            ApiError::BadRequest(err) | ApiError::NotFound(err) | ApiError::Internal(err) => {
-                err.source()
-            },
-||||||| parent of 55ce223a7 (fall back to a leaf proof when a header proof hits pruned state (#5164))
-            ApiError::BadRequest(err)
-            | ApiError::NotFound(err)
-            | ApiError::Internal(err)
-            | ApiError::Unavailable(err) => err.source(),
-=======
             ApiError::BadRequest(err)
             | ApiError::NotFound(err)
             | ApiError::Gone(err)
-            | ApiError::Internal(err)
-            | ApiError::Unavailable(err) => err.source(),
->>>>>>> 55ce223a7 (fall back to a leaf proof when a header proof hits pruned state (#5164))
+            | ApiError::Internal(err) => err.source(),
         }
     }
 }
 
-<<<<<<< HEAD
 /// Errors raised as [`AvailabilityError`] by a state implementation carry semantic meaning;
 /// anything else is a failure the client cannot act on. Both transports classify through here,
-/// so v1 and v2 cannot drift on what counts as a 404.
-||||||| parent of 55ce223a7 (fall back to a leaf proof when a header proof hits pruned state (#5164))
-/// Errors raised as [`SubmitError`] or [`AvailabilityError`] by a state implementation carry
-/// semantic meaning; anything else is a failure the client cannot act on. Both transports classify
-/// through here, so v1 and v2 cannot drift on what counts as a 404.
-=======
-/// Errors raised as [`SubmitError`] or [`AvailabilityError`] by a state implementation carry
-/// semantic meaning; anything else is a failure the client cannot act on. Both transports classify
-/// through here, so v1 and v2 cannot drift on what counts as a 404. gRPC has no gone code, so v2
-/// reports a 410 as `not_found`.
->>>>>>> 55ce223a7 (fall back to a leaf proof when a header proof hits pruned state (#5164))
+/// so v1 and v2 cannot drift on what counts as a 404. gRPC has no gone code, so v2 reports a 410
+/// as `not_found`.
 pub fn classify(err: anyhow::Error) -> ApiError {
     match err.downcast_ref::<AvailabilityError>() {
         Some(AvailabilityError::NotFound(_)) => ApiError::NotFound(err),
