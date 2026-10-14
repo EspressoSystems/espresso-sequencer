@@ -399,14 +399,15 @@ where
 
     /// Keep what the coordinator last reported, for the readers that outlive it. This runs
     /// before the coordinator is cancelled, so a decide that lands in between leaves the resting
-    /// state one leaf behind.
+    /// state one leaf behind. The state is the one for the leaf's own view, not the decided
+    /// state, which that decide would have moved past the leaf.
     async fn rest(&self, client_api: &ClientApi<T>) {
-        let (view, leaf, state) = join!(
-            client_api.current_view(),
-            client_api.decided_leaf(),
-            client_api.decided_state()
-        );
-        let (Ok(view), Ok(leaf), Ok(state)) = (view, leaf, state) else {
+        let (Ok(view), Ok(leaf)) = join!(client_api.current_view(), client_api.decided_leaf())
+        else {
+            warn!("coordinator unavailable at shutdown, keeping its earlier state");
+            return;
+        };
+        let Ok(state) = client_api.state(leaf.view_number()).await else {
             warn!("coordinator unavailable at shutdown, keeping its earlier state");
             return;
         };

@@ -4412,6 +4412,38 @@ mod test {
         drop(network);
     }
 
+    /// After shutdown the readers serve the coordinator's last decide, not the anchor the node
+    /// started from, and the leaf and state they serve belong to the same block.
+    #[test_log::test(tokio::test(flavor = "multi_thread"))]
+    async fn test_shut_down_keeps_last_decided_leaf_and_state() {
+        const HEIGHT: u64 = 5;
+        let port = reserve_tcp_port().expect("OS should have ephemeral ports available");
+        let config = TestNetworkConfigBuilder::default()
+            .api_config(Options::with_port(port))
+            .network_config(TestConfigBuilder::default().build())
+            .build();
+        let network = TestNetwork::new(config, TEST_UPGRADE).await;
+        let node = &network.peers[0];
+        while node.decided_leaf().await.height() < HEIGHT {
+            sleep(Duration::from_millis(100)).await;
+        }
+
+        node.shutdown_consensus().await;
+
+        let leaf = node.decided_leaf().await;
+        let state = node.decided_state().await.expect("state after shutdown");
+        assert!(
+            leaf.height() >= HEIGHT,
+            "anchor served instead of the last decide"
+        );
+        // The state at height `h` holds the commitments of the `h` headers before it.
+        assert_eq!(
+            state.block_merkle_tree.num_leaves(),
+            leaf.height(),
+            "state does not belong to the resting leaf"
+        );
+    }
+
     /// A node shut down before it ever started consensus stays stopped: a later read serves the
     /// anchor instead of lazily starting the coordinator after shutdown.
     #[test_log::test(tokio::test(flavor = "multi_thread"))]
