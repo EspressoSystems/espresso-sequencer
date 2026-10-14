@@ -49,7 +49,7 @@ use crate::{
         utils::{
             StakeTableSchedule, mock_membership_with_client,
             mock_membership_with_client_and_schedule, reconstructed_blocks, record_fallback_anchor,
-            record_leader, record_output_leaders,
+            record_genesis_parent, record_leader, record_output_leaders,
         },
     },
     trace::Recorder,
@@ -1027,6 +1027,7 @@ fn apply_recorded(
     );
     record_leader(trace, consensus, &input);
     record_fallback_anchor(trace, consensus);
+    record_genesis_parent(trace, consensus);
     coord.apply_consensus(input.clone());
     record_output_leaders(trace, coord.consensus(), coord.outbox().iter());
     // The drain in `run_node` empties the outbox after each step, so it now

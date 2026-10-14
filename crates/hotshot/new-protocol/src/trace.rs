@@ -156,6 +156,9 @@ pub struct Recorder {
     /// What a restarted node loaded, as a JSON object for the identity line; see
     /// [`Recorder::restarted`].
     restart: Option<String>,
+    /// The commitment of the proposal seeded at genesis, and the block its
+    /// certificate names; see [`Recorder::genesis_parent`].
+    genesis_parent: Option<(String, String)>,
 }
 
 impl Recorder {
@@ -193,6 +196,7 @@ impl Recorder {
             unsigned_locks: Cell::new(false),
             fallback_anchor: None,
             restart: None,
+            genesis_parent: None,
         }
     }
 
@@ -305,6 +309,22 @@ impl Recorder {
         if self.path.is_some() && self.fallback_anchor.is_none() {
             self.fallback_anchor = Some(cert1_json_raw(cert));
         }
+    }
+
+    /// Name the proposal consensus holds at the genesis view.
+    ///
+    /// Consensus keys a header built on genesis by this proposal's commitment,
+    /// while the proposal it then makes names the block of the genesis
+    /// certificate. The model keys both by that block, so a header built on
+    /// this proposal is written with it.
+    pub fn genesis_parent<T: NodeType>(&mut self, proposal: &Proposal<T>) {
+        if self.path.is_none() || self.genesis_parent.is_some() {
+            return;
+        }
+        self.genesis_parent = Some((
+            ident(&crate::helpers::proposal_commitment(proposal)),
+            ident(&proposal.justify_qc.data.leaf_commit),
+        ));
     }
 
     /// Record that the node holds `proposal` without having received it, as a
@@ -681,14 +701,21 @@ impl Recorder {
             // root — dropping the variant would lose a certificate the model wants.
             ConsensusInput::EpochRootCertificates { cert1, .. } => certificate1_json(cert1),
             ConsensusInput::Certificate2(cert) => certificate2_json(cert),
-            ConsensusInput::HeaderCreated(view, parent, header) => tagged(
-                "headerBuilt",
-                obj(&[
-                    ("v", view_json(*view)),
-                    ("parent", ident(parent)),
-                    ("h", header_json::<T>(header)),
-                ]),
-            ),
+            ConsensusInput::HeaderCreated(view, parent, header) => {
+                let parent = ident(parent);
+                let parent = match &self.genesis_parent {
+                    Some((seeded, named)) if *seeded == parent => named.clone(),
+                    _ => parent,
+                };
+                tagged(
+                    "headerBuilt",
+                    obj(&[
+                        ("v", view_json(*view)),
+                        ("parent", parent),
+                        ("h", header_json::<T>(header)),
+                    ]),
+                )
+            },
             ConsensusInput::StateValidated(response) => tagged(
                 "blockValidated",
                 obj(&[
@@ -1166,7 +1193,7 @@ mod tests {
     };
 
     use super::*;
-    use crate::tests::common::coordinator_builder::build_genesis_cert1;
+    use crate::tests::common::coordinator_builder::{build_genesis_cert1, build_genesis_proposal};
 
     fn recorder_in_tmp(name: &str) -> Recorder {
         let mut recorder = Recorder::inert();
@@ -1216,6 +1243,30 @@ mod tests {
         rec.identified = true;
         assert_eq!(rec.file_name().as_deref(), Some("c.0.jsonl"));
         assert_eq!(Recorder::inert().file_name(), None);
+    }
+
+    #[tokio::test]
+    async fn header_on_genesis_names_the_genesis_certificate_block() {
+        let leaf = Leaf2::<TestTypes>::genesis(
+            &TestValidatedState::default(),
+            &TestInstanceState::default(),
+            TEST_VERSIONS.test.base,
+        )
+        .await;
+        let cert = build_genesis_cert1(&leaf);
+        let genesis = build_genesis_proposal(&leaf, &cert);
+        let mut rec = recorder_in_tmp("e.0.jsonl");
+        rec.genesis_parent(&genesis);
+        let input = ConsensusInput::HeaderCreated(
+            ViewNumber::new(1),
+            crate::helpers::proposal_commitment(&genesis),
+            leaf.block_header().clone(),
+        );
+        let Ok(json) = rec.input_json(&input) else {
+            panic!("headerBuilt is modelled");
+        };
+        let parent = format!("\"parent\":{}", ident(&cert.data.leaf_commit));
+        assert!(json.contains(&parent), "{json}");
     }
 
     #[tokio::test]

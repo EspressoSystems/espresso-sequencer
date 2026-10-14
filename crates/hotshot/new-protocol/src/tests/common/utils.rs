@@ -1172,6 +1172,7 @@ impl ConsensusHarness {
         );
         record_leader(&mut self.trace, &self.consensus, &input);
         record_fallback_anchor(&mut self.trace, &self.consensus);
+        record_genesis_parent(&mut self.trace, &self.consensus);
         let before = outbox.len();
         self.consensus.apply(input.clone(), outbox);
         record_output_leaders(&mut self.trace, &self.consensus, outbox.iter().skip(before));
@@ -1862,6 +1863,17 @@ pub(crate) fn record_fallback_anchor(
     if trace.recording() && consensus.last_decided_view() == ViewNumber::genesis() {
         let leaf = consensus.last_decided_leaf();
         trace.fallback_anchor(&super::coordinator_builder::build_genesis_cert1(leaf));
+    }
+}
+
+/// Give the trace the proposal seeded at genesis, which a header built on
+/// genesis is keyed by.
+pub(crate) fn record_genesis_parent(trace: &mut trace::Recorder, consensus: &Consensus<TestTypes>) {
+    if !trace.recording() || consensus.last_decided_view() != ViewNumber::genesis() {
+        return;
+    }
+    if let Some(proposal) = consensus.proposal_at(ViewNumber::genesis()) {
+        trace.genesis_parent(proposal);
     }
 }
 
