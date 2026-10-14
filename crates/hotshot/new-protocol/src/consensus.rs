@@ -3238,7 +3238,6 @@ impl<T: NodeType> Consensus<T> {
         {
             info!(%epoch, "rejoin: querying a later committee");
             query.restart(epoch);
-            return;
         }
         let membership = match self
             .stake_table_coordinator
