@@ -27,7 +27,7 @@ use crate::{
     helpers::test_timeout_epoch_lock,
     message::{
         CatchupEvidence, Certificate1, ConsensusMessage, EpochChangeMessage, Message, MessageType,
-        Proposal, ProposalFetchMessage, Validated,
+        Proposal, ProposalFetchMessage, TimeoutBallot, TimeoutVoteMessage3, Validated,
     },
     storage::ActionKind,
     tests::common::assertions::{
@@ -1550,6 +1550,45 @@ async fn test_timeout_vote_evidence_overrides_distance_check() {
         32,
         "the attached timeout certificate should advance us to view 32"
     );
+}
+
+/// A timeout vote without catchup evidence offers its lock as the evidence, so
+/// a node that fell behind still advances on it.
+#[tokio::test]
+async fn test_timeout_vote_lock_serves_as_catchup_evidence() {
+    let test_data = TestData::new(3).await;
+    // The test data is certified under the default version; the evidence is
+    // taken from the vote before its form is checked against the version.
+    let mut harness = TestHarness::new(0).await;
+    let timed_out = &test_data.views[1];
+    let (pub_key, priv_key) = BLSPubKey::generated_from_seed_indexed([0u8; 32], 1);
+    let ballot = TimeoutBallot::sign(
+        timed_out.view_number,
+        timed_out.epoch_number,
+        Some(test_data.views[0].cert1.clone()),
+        &pub_key,
+        &priv_key,
+        &test_timeout_epoch_lock(),
+    )
+    .expect("sign the timeout vote");
+    harness.message(Message::<TestTypes, Validated> {
+        sender: pub_key,
+        message_type: MessageType::Consensus(ConsensusMessage::TimeoutVote3(
+            TimeoutVoteMessage3::new(ballot, None),
+        )),
+    });
+
+    timeout(
+        Duration::from_secs(5),
+        harness.process_until_output(|outputs| {
+            any(
+                outputs,
+                |o| matches!(o, ConsensusOutput::ViewChanged(view, _) if **view == 2),
+            )
+        }),
+    )
+    .await
+    .expect("the lock advances the node");
 }
 
 /// A stale timeout vote is answered with the responder's newest certificate,

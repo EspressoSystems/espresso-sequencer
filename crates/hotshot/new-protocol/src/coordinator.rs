@@ -1495,7 +1495,7 @@ where
                         Ok(ballot) => self.on_timeout_vote(
                             &message.sender,
                             TimeoutVote::V3(ballot),
-                            timeout_msg.evidence,
+                            timeout_msg.evidence(),
                         ),
                         Err(reason) => warn!(
                             %node, %sender, view = %timeout_msg.view, %reason,

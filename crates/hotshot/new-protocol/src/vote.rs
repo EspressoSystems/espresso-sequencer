@@ -746,7 +746,7 @@ mod tests {
     use crate::{
         cert_verifier::verify_timeout3,
         helpers::{test_timeout_epoch_lock, test_upgrade_lock},
-        message::{TimeoutBallot, TimeoutVoteMessage3, UpgradeVoteMessage, Vote2},
+        message::{CatchupEvidence, TimeoutBallot, TimeoutVoteMessage3, UpgradeVoteMessage, Vote2},
         tests::common::utils::{build_timeout_cert3_with_lock, mock_membership},
     };
 
@@ -1361,6 +1361,36 @@ mod tests {
         };
         assert!(verify(with_forged_lock(EpochNumber::new(0))).is_ok());
         assert!(verify(with_forged_lock(EpochNumber::new(1))).is_err());
+    }
+
+    /// A timeout vote message carries its lock once: evidence that is the lock
+    /// is left out and restored from the lock on receipt, other evidence is
+    /// kept.
+    #[tokio::test]
+    async fn timeout_vote_message_carries_its_lock_once() {
+        let lock = test_timeout_epoch_lock();
+        let epoch = EpochNumber::genesis();
+        let membership = mock_membership().membership_for_epoch(Some(epoch)).unwrap();
+        let own = lock_cert(ViewNumber::new(2), epoch, &membership, &lock);
+        let other = lock_cert(ViewNumber::new(3), epoch, &membership, &lock);
+        let (pub_key, priv_key) = BLSPubKey::generated_from_seed_indexed([0u8; 32], 0);
+        let ballot = TimeoutBallot::sign(
+            ViewNumber::new(5),
+            epoch,
+            Some(own.clone()),
+            &pub_key,
+            &priv_key,
+            &lock,
+        )
+        .unwrap();
+
+        let message =
+            TimeoutVoteMessage3::new(ballot.clone(), Some(CatchupEvidence::Qc(own.clone())));
+        assert!(message.evidence.is_none());
+        assert_eq!(message.evidence(), Some(CatchupEvidence::Qc(own)));
+
+        let message = TimeoutVoteMessage3::new(ballot, Some(CatchupEvidence::Qc(other.clone())));
+        assert_eq!(message.evidence(), Some(CatchupEvidence::Qc(other)));
     }
 
     /// A `Certificate1` at `view` signed by every member.

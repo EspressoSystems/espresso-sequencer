@@ -237,12 +237,18 @@ pub struct TimeoutVoteMessage3<T: NodeType> {
     /// The certificate of the signer's lock; `None` if it is locked on nothing
     /// but genesis. A lock no quorum certified cannot be counted.
     pub lock: Option<Certificate1<T>>,
+    /// The signer's catchup evidence.
+    ///
+    /// If the `lock` serves as catchup evidence it is `None`.
     pub evidence: Option<CatchupEvidence<T>>,
 }
 
 impl<T: NodeType> TimeoutVoteMessage3<T> {
+    /// The message for `ballot`, with `evidence` left out if it is the lock.
     pub fn new(ballot: TimeoutBallot<T>, evidence: Option<CatchupEvidence<T>>) -> Self {
         let TimeoutBallot { vote, lock } = ballot;
+        let evidence =
+            evidence.filter(|e| !matches!(e, CatchupEvidence::Qc(qc) if Some(qc) == lock.as_ref()));
         Self {
             signer: vote.signature.0,
             signature: vote.signature.1,
@@ -251,6 +257,14 @@ impl<T: NodeType> TimeoutVoteMessage3<T> {
             lock,
             evidence,
         }
+    }
+
+    /// The signer's catchup evidence: the one the message carries, or else
+    /// its lock.
+    pub fn evidence(&self) -> Option<CatchupEvidence<T>> {
+        self.evidence
+            .clone()
+            .or_else(|| self.lock.clone().map(CatchupEvidence::Qc))
     }
 
     /// The vote, if its lock is a signed certificate no later than the view
