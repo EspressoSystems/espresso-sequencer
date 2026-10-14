@@ -3059,7 +3059,7 @@
 <a href=#3059 id=3059 data-nosnippet>3059</a>                        )
 <a href=#3060 id=3060 data-nosnippet>3060</a>                        .<span class="kw">await
 <a href=#3061 id=3061 data-nosnippet>3061</a>                        </span>.unwrap_err();
-<a href=#3062 id=3062 data-nosnippet>3062</a>                    <span class="macro">assert!</span>(<span class="macro">matches!</span>(err, QueryError::NotFound), <span class="string">"{err:?}"</span>);
+<a href=#3062 id=3062 data-nosnippet>3062</a>                    <span class="macro">assert!</span>(<span class="macro">matches!</span>(err, QueryError::Pruned { .. }), <span class="string">"{err:?}"</span>);
 <a href=#3063 id=3063 data-nosnippet>3063</a>                }
 <a href=#3064 id=3064 data-nosnippet>3064</a>            }
 <a href=#3065 id=3065 data-nosnippet>3065</a>        }
@@ -3359,7 +3359,7 @@
 <a href=#3359 id=3359 data-nosnippet>3359</a>            )
 <a href=#3360 id=3360 data-nosnippet>3360</a>            .<span class="kw">await
 <a href=#3361 id=3361 data-nosnippet>3361</a>            </span>.unwrap_err();
-<a href=#3362 id=3362 data-nosnippet>3362</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(err, QueryError::NotFound), <span class="string">"{err:?}"</span>);
+<a href=#3362 id=3362 data-nosnippet>3362</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(err, QueryError::Pruned { .. }), <span class="string">"{err:?}"</span>);
 <a href=#3363 id=3363 data-nosnippet>3363</a>    }
 <a href=#3364 id=3364 data-nosnippet>3364</a>
 <a href=#3365 id=3365 data-nosnippet>3365</a>    <span class="doccomment">/// Zero retention puts the whole chain past its state retention, but a run still stops below
@@ -3492,7 +3492,7 @@
 <a href=#3492 id=3492 data-nosnippet>3492</a>            )
 <a href=#3493 id=3493 data-nosnippet>3493</a>            .<span class="kw">await
 <a href=#3494 id=3494 data-nosnippet>3494</a>            </span>.unwrap_err();
-<a href=#3495 id=3495 data-nosnippet>3495</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(err, QueryError::NotFound), <span class="string">"{err:?}"</span>);
+<a href=#3495 id=3495 data-nosnippet>3495</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(err, QueryError::Pruned { .. }), <span class="string">"{err:?}"</span>);
 <a href=#3496 id=3496 data-nosnippet>3496</a>    }
 <a href=#3497 id=3497 data-nosnippet>3497</a>
 <a href=#3498 id=3498 data-nosnippet>3498</a>    <span class="doccomment">/// `get_path_at` reads a snapshot below the head after the data pruner deleted its header, by
@@ -3570,7 +3570,7 @@
 <a href=#3570 id=3570 data-nosnippet>3570</a>            )
 <a href=#3571 id=3571 data-nosnippet>3571</a>            .<span class="kw">await
 <a href=#3572 id=3572 data-nosnippet>3572</a>            </span>.unwrap_err();
-<a href=#3573 id=3573 data-nosnippet>3573</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(err, QueryError::NotFound), <span class="string">"{err:?}"</span>);
+<a href=#3573 id=3573 data-nosnippet>3573</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(err, QueryError::Pruned { .. }), <span class="string">"{err:?}"</span>);
 <a href=#3574 id=3574 data-nosnippet>3574</a>    }
 <a href=#3575 id=3575 data-nosnippet>3575</a>
 <a href=#3576 id=3576 data-nosnippet>3576</a>    <span class="doccomment">/// State up to `head`, then pruned past it by a run from before the state pruner was bounded:
