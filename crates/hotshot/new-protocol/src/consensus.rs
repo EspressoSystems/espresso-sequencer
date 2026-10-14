@@ -1127,22 +1127,21 @@ impl<T: NodeType> Consensus<T> {
         self.set_current_view_max(resume_view);
     }
 
-    /// Whether a proposal for `view` in `epoch` can still matter to this node.
+    /// Whether a proposal for `view` can still matter to this node.
     ///
-    /// Locks are ordered by epoch, then view, so a proposal of a later epoch
-    /// is wanted even if a lock of an earlier one is at a later view.
-    pub fn wants_proposal_for_view(&self, view: &ViewNumber, epoch: EpochNumber) -> bool {
-        let locked_too_new = self
-            .lock_view()
-            .is_some_and(|lock| lock > LockView { epoch, view: *view });
+    /// One at or before the decide floor cannot be decided any more. One behind
+    /// the lock is kept: it gets no vote1 (`maybe_vote_1`), but a `Certificate2`
+    /// for its view may still arrive and decide it.
+    pub fn wants_proposal_for_view(&self, view: &ViewNumber) -> bool {
+        if *view <= self.decide_floor() {
+            return false;
+        }
         // A proposal may already be in `self.proposals` because we received
         // an EpochChangeMessage for it (which carries the proposal but no
         // vid_share and does not trigger state validation).  In that case we
         // still want to process the real proposal message so handle_proposal
         // runs — it populates vid_shares and emits RequestState.
-        let fully_processed =
-            self.proposals.live(*view).is_some() && self.vid_shares.contains_key(view);
-        !(locked_too_new || fully_processed)
+        self.proposals.live(*view).is_none() || !self.vid_shares.contains_key(view)
     }
 
     pub fn proposals(&self) -> &Proposals<T> {
@@ -1449,7 +1448,7 @@ impl<T: NodeType> Consensus<T> {
         let block_number = proposal.proposal.data.block_header.block_number();
         let qc_view = proposal.proposal.data.justify_qc.view_number();
 
-        if !self.wants_proposal_for_view(&view, proposal.proposal.data.epoch) {
+        if !self.wants_proposal_for_view(&view) {
             warn!(
                 %view, %proposer, block = %block_number,
                 epoch = %proposal.proposal.data.epoch, %qc_view,
@@ -3316,6 +3315,16 @@ impl<T: NodeType> Consensus<T> {
             debug!(%view, "proposal not available");
             return;
         };
+        // A proposal behind the lock is kept only to be decided.
+        if self.lock_view().is_some_and(|lock| {
+            lock > LockView {
+                epoch: proposal.epoch,
+                view,
+            }
+        }) {
+            debug!(%view, "proposal behind the lock");
+            return;
+        }
         if !self
             .states_verified
             .contains(&(view, proposal_commitment(proposal)))
