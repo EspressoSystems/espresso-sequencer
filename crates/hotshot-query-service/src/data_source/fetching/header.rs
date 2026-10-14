@@ -279,6 +279,9 @@ where
             // header or not. Return an error so we can try again.
             bail!("failed to fetch header for block {req:?}: {message}");
         },
+        Err(err @ QueryError::Pruned { .. }) => {
+            bail!("failed to fetch header for block {req:?}: {err}")
+        },
     }
 
     // If the header is _not_ present, we may still be able to fetch the request, but we need to
@@ -352,6 +355,9 @@ where
             // An error occurred while querying the database. We don't know if we need to fetch the
             // headers or not. Return an error so we can try again.
             bail!("failed to fetch headers for range {req:?}: {message}");
+        },
+        Err(err @ QueryError::Pruned { .. }) => {
+            bail!("failed to fetch headers for range {req:?}: {err}")
         },
     }
 
