@@ -342,7 +342,7 @@
 <a href=#342 id=342 data-nosnippet>342</a>    <span class="attr">#[cfg(any(test, feature = <span class="string">"testing"</span>))]
 <a href=#343 id=343 data-nosnippet>343</a>    </span><span class="kw">pub fn </span>mock() -&gt; <span class="self">Self </span>{
 <a href=#344 id=344 data-nosnippet>344</a>        <span class="kw">use </span>hotshot_example_types::storage_types::TestStorage;
-<a href=#345 id=345 data-nosnippet>345</a>        <span class="kw">use </span>versions::version;
+<a href=#345 id=345 data-nosnippet>345</a>        <span class="kw">use </span>versions::NEW_PROTOCOL_VERSION;
 <a href=#346 id=346 data-nosnippet>346</a>
 <a href=#347 id=347 data-nosnippet>347</a>        <span class="kw">use crate</span>::{EpochCommittees, v0_3::Fetcher};
 <a href=#348 id=348 data-nosnippet>348</a>
@@ -360,9 +360,9 @@
 <a href=#360 id=360 data-nosnippet>360</a>            chain_config,
 <a href=#361 id=361 data-nosnippet>361</a>            l1,
 <a href=#362 id=362 data-nosnippet>362</a>            Arc::new(mock::MockStateCatchup::default()),
-<a href=#363 id=363 data-nosnippet>363</a>            version(<span class="number">0</span>, <span class="number">1</span>),
+<a href=#363 id=363 data-nosnippet>363</a>            NEW_PROTOCOL_VERSION,
 <a href=#364 id=364 data-nosnippet>364</a>            coordinator,
-<a href=#365 id=365 data-nosnippet>365</a>            version(<span class="number">0</span>, <span class="number">1</span>),
+<a href=#365 id=365 data-nosnippet>365</a>            NEW_PROTOCOL_VERSION,
 <a href=#366 id=366 data-nosnippet>366</a>        )
 <a href=#367 id=367 data-nosnippet>367</a>    }
 <a href=#368 id=368 data-nosnippet>368</a>

@@ -3250,15 +3250,15 @@
 <a href=#3250 id=3250 data-nosnippet>3250</a>                ApiState::new(future::pending()),
 <a href=#3251 id=3251 data-nosnippet>3251</a>            ));
 <a href=#3252 id=3252 data-nosnippet>3252</a>
-<a href=#3253 id=3253 data-nosnippet>3253</a>        <span class="comment">// Create two non-consecutive leaf chains.
-<a href=#3254 id=3254 data-nosnippet>3254</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>chain1 = <span class="macro">vec!</span>[];
-<a href=#3255 id=3255 data-nosnippet>3255</a>
-<a href=#3256 id=3256 data-nosnippet>3256</a>        <span class="kw">let </span>genesis = Leaf2::genesis(
-<a href=#3257 id=3257 data-nosnippet>3257</a>            <span class="kw-2">&amp;</span>Default::default(),
-<a href=#3258 id=3258 data-nosnippet>3258</a>            <span class="kw-2">&amp;</span>NodeState::mock(),
-<a href=#3259 id=3259 data-nosnippet>3259</a>            TEST_VERSIONS.test.base,
-<a href=#3260 id=3260 data-nosnippet>3260</a>        )
-<a href=#3261 id=3261 data-nosnippet>3261</a>        .<span class="kw">await</span>;
+<a href=#3253 id=3253 data-nosnippet>3253</a>        <span class="comment">// Create two non-consecutive leaf chains. The headers stay below 0.6 because the test
+<a href=#3254 id=3254 data-nosnippet>3254</a>        // stores AvidM (V1) VID shares, which only the legacy decide path accepts.
+<a href=#3255 id=3255 data-nosnippet>3255</a>        </span><span class="kw">let </span>node_state = NodeState::mock()
+<a href=#3256 id=3256 data-nosnippet>3256</a>            .with_current_version(MOCK_SEQUENCER_VERSIONS.base)
+<a href=#3257 id=3257 data-nosnippet>3257</a>            .with_genesis_version(MOCK_SEQUENCER_VERSIONS.base);
+<a href=#3258 id=3258 data-nosnippet>3258</a>        <span class="kw">let </span><span class="kw-2">mut </span>chain1 = <span class="macro">vec!</span>[];
+<a href=#3259 id=3259 data-nosnippet>3259</a>
+<a href=#3260 id=3260 data-nosnippet>3260</a>        <span class="kw">let </span>genesis =
+<a href=#3261 id=3261 data-nosnippet>3261</a>            Leaf2::genesis(<span class="kw-2">&amp;</span>Default::default(), <span class="kw-2">&amp;</span>node_state, TEST_VERSIONS.test.base).<span class="kw">await</span>;
 <a href=#3262 id=3262 data-nosnippet>3262</a>        <span class="kw">let </span>payload = genesis.block_payload().unwrap();
 <a href=#3263 id=3263 data-nosnippet>3263</a>        <span class="kw">let </span>payload_bytes_arc = payload.encode();
 <a href=#3264 id=3264 data-nosnippet>3264</a>
@@ -3275,7 +3275,7 @@
 <a href=#3275 id=3275 data-nosnippet>3275</a>                view_number: ViewNumber::genesis(),
 <a href=#3276 id=3276 data-nosnippet>3276</a>                justify_qc: QuorumCertificate2::genesis(
 <a href=#3277 id=3277 data-nosnippet>3277</a>                    <span class="kw-2">&amp;</span>ValidatedState::default(),
-<a href=#3278 id=3278 data-nosnippet>3278</a>                    <span class="kw-2">&amp;</span>NodeState::mock(),
+<a href=#3278 id=3278 data-nosnippet>3278</a>                    <span class="kw-2">&amp;</span>node_state,
 <a href=#3279 id=3279 data-nosnippet>3279</a>                    MOCK_SEQUENCER_VERSIONS,
 <a href=#3280 id=3280 data-nosnippet>3280</a>                )
 <a href=#3281 id=3281 data-nosnippet>3281</a>                .<span class="kw">await</span>,
@@ -3289,7 +3289,7 @@
 <a href=#3289 id=3289 data-nosnippet>3289</a>        };
 <a href=#3290 id=3290 data-nosnippet>3290</a>        <span class="kw">let </span><span class="kw-2">mut </span>qc = QuorumCertificate2::genesis(
 <a href=#3291 id=3291 data-nosnippet>3291</a>            <span class="kw-2">&amp;</span>ValidatedState::default(),
-<a href=#3292 id=3292 data-nosnippet>3292</a>            <span class="kw-2">&amp;</span>NodeState::mock(),
+<a href=#3292 id=3292 data-nosnippet>3292</a>            <span class="kw-2">&amp;</span>node_state,
 <a href=#3293 id=3293 data-nosnippet>3293</a>            MOCK_SEQUENCER_VERSIONS,
 <a href=#3294 id=3294 data-nosnippet>3294</a>        )
 <a href=#3295 id=3295 data-nosnippet>3295</a>        .<span class="kw">await</span>;
