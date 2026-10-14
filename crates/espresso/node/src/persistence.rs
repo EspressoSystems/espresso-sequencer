@@ -205,7 +205,7 @@ mod tests {
         primitives::{Address, U256},
         providers::{Provider, ProviderBuilder, ext::AnvilApi},
     };
-    use anyhow::bail;
+    use anyhow::{bail, ensure};
     use async_lock::{Mutex, RwLock};
     use async_trait::async_trait;
     use committable::{Commitment, Committable};
@@ -275,6 +275,7 @@ mod tests {
             test_helpers::{STAKE_TABLE_CAPACITY_FOR_TEST, TestNetwork, TestNetworkConfigBuilder},
         },
         catchup::NullStateCatchup,
+        legacy_chain::LegacyChain,
         persistence::sql::DECIDE_GAP_FILL_HORIZON,
         prefetch_stake_table_events,
         testing::{TestConfigBuilder, staking_priv_keys},
@@ -2454,6 +2455,44 @@ mod tests {
             )
             .await?;
         }
+        Ok(())
+    }
+
+    /// Nodes still read the whole event history of mainnet's stake table contract, which went from
+    /// V1 to V2 to V3 as the v4 chain's did.
+    #[test_log::test(tokio::test(flavor = "multi_thread"))]
+    async fn test_legacy_stake_table_events() -> anyhow::Result<()> {
+        let chain = LegacyChain::load("v4")?;
+        let replay = chain.replay().await?;
+        let node_state = replay.node.node_state();
+        let contract = node_state.chain_config.stake_table_contract.unwrap();
+        let l1_client = L1Client::new(vec![replay.l1.endpoint_url()])?;
+        let block = l1_client.provider.get_block_number().await?;
+        let membership = node_state.coordinator.membership();
+
+        assert_events_eq(
+            &replay.persistence().await?,
+            block,
+            membership.fetcher(),
+            &l1_client,
+            contract,
+        )
+        .await?;
+
+        let (_, events) = replay.persistence().await?.load_events(0, block).await?;
+        let has = |f: fn(&StakeTableEvent) -> bool| events.iter().any(|(_, event)| f(event));
+        ensure!(
+            has(|e| matches!(e, StakeTableEvent::Register(_))),
+            "V1 registrations"
+        );
+        ensure!(
+            has(|e| matches!(e, StakeTableEvent::CommissionUpdate(_))),
+            "V2 commissions"
+        );
+        ensure!(
+            has(|e| matches!(e, StakeTableEvent::X25519KeyUpdate(_))),
+            "V3 network config"
+        );
         Ok(())
     }
 
