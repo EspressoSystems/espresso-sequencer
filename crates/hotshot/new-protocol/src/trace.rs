@@ -1251,8 +1251,6 @@ fn ident<D: std::fmt::Display>(value: &D) -> String {
     quoted(&value.to_string())
 }
 
-/// JSON, assembled by hand: the crate has no JSON writer and these shapes are
-/// small and fixed.
 /// Replace the value of `key` in `fields`, or add it.
 fn set_field(fields: &mut Vec<(&'static str, String)>, key: &'static str, value: String) {
     match fields.iter_mut().find(|(k, _)| *k == key) {
@@ -1261,6 +1259,8 @@ fn set_field(fields: &mut Vec<(&'static str, String)>, key: &'static str, value:
     }
 }
 
+/// JSON, assembled by hand: the crate has no JSON writer and these shapes are
+/// small and fixed.
 fn obj(fields: &[(&str, String)]) -> String {
     let body: Vec<String> = fields
         .iter()
