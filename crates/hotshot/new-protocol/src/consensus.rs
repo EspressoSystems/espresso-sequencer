@@ -644,6 +644,18 @@ impl<T: NodeType> Consensus<T> {
         self.locked_cert.as_ref().map(LockView::of)
     }
 
+    #[cfg(test)]
+    #[expect(dead_code, reason = "first read by the restart trace recorder")]
+    pub(crate) fn locked_cert(&self) -> Option<&Certificate1<T>> {
+        self.locked_cert.as_ref()
+    }
+
+    #[cfg(test)]
+    #[expect(dead_code, reason = "first read by the restart trace recorder")]
+    pub(crate) fn timeout_vote_bar(&self) -> Option<ViewNumber> {
+        self.timeout_vote_bar
+    }
+
     /// The proposal a certificate at `view` over `leaf_commit` certifies, with
     /// the view it was proposed at.
     ///
