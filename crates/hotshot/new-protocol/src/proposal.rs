@@ -486,7 +486,12 @@ impl<T: NodeType> Validator<T> {
             let Some(tc_epoch) = tc.epoch() else {
                 return Err(ValidationError::MissingEpoch(view, "view_change_evidence"));
             };
-            if tc_epoch > proposal.epoch {
+            let admitted = if tc.binds_epoch() {
+                tc_epoch == proposal.epoch
+            } else {
+                tc_epoch <= proposal.epoch
+            };
+            if !admitted {
                 return Err(ValidationError::ViewChangeEvidenceEpoch {
                     view,
                     evidence_epoch: tc_epoch,
@@ -639,8 +644,8 @@ pub enum ValidationError {
     MissingEpoch(ViewNumber, &'static str),
 
     #[error(
-        "view change evidence of proposal at view {view} is of epoch {evidence_epoch}, later than \
-         the proposal's epoch {epoch}"
+        "view change evidence of proposal at view {view} is of epoch {evidence_epoch}, which the \
+         proposal's epoch {epoch} does not admit"
     )]
     ViewChangeEvidenceEpoch {
         view: ViewNumber,
