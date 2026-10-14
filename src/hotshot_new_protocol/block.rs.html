@@ -105,7 +105,7 @@
 <a href=#105 id=105 data-nosnippet>105</a>    // path.
 <a href=#106 id=106 data-nosnippet>106</a>    </span><span class="kw">let </span>(hashes, (payload_commitment, builder_commitment)) = rayon::join(
 <a href=#107 id=107 data-nosnippet>107</a>        || {
-<a href=#108 id=108 data-nosnippet>108</a>            <span class="macro">debug_span!</span>(<span class="string">"transaction_commitments"</span>)
+<a href=#108 id=108 data-nosnippet>108</a>            <span class="macro">debug_span!</span>(<span class="string">"transaction_hashes"</span>)
 <a href=#109 id=109 data-nosnippet>109</a>                .in_scope(|| payload.payload.transaction_commitments(<span class="kw-2">&amp;</span>payload.metadata))
 <a href=#110 id=110 data-nosnippet>110</a>        },
 <a href=#111 id=111 data-nosnippet>111</a>        || {
