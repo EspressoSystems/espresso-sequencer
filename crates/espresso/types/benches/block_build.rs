@@ -30,6 +30,7 @@ use hotshot_new_protocol::block::{BlockCommitments, block_commitments};
 use hotshot_types::{consensus::PayloadWithMetadata, data::vid_disperse::VID_TARGET_TOTAL_STAKE};
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
+use rustix::time::{ClockId, clock_gettime};
 use tracing::{Level, Subscriber, span};
 use tracing_subscriber::{
     Layer,
@@ -146,8 +147,8 @@ impl<S: Subscriber + for<'a> LookupSpan<'a>> Layer<S> for StepTimer {
         let span = ctx.span(id).expect("entered span is registered");
         let entered = Entered {
             at,
-            thread_cpu: cpu_ms(libc::CLOCK_THREAD_CPUTIME_ID),
-            process_cpu: wide(span.name()).then(|| cpu_ms(libc::CLOCK_PROCESS_CPUTIME_ID)),
+            thread_cpu: cpu_ms(ClockId::ThreadCPUTime),
+            process_cpu: wide(span.name()).then(|| cpu_ms(ClockId::ProcessCPUTime)),
         };
         if span.name() == "request_block" {
             *ITERATION.lock().expect("iteration lock") = Some(Iteration {
@@ -162,7 +163,7 @@ impl<S: Subscriber + for<'a> LookupSpan<'a>> Layer<S> for StepTimer {
 
     fn on_exit(&self, id: &span::Id, ctx: Context<'_, S>) {
         let end = Instant::now();
-        let thread_cpu = cpu_ms(libc::CLOCK_THREAD_CPUTIME_ID);
+        let thread_cpu = cpu_ms(ClockId::ThreadCPUTime);
         let span = ctx.span(id).expect("exited span is registered");
         let name = span.name();
         let (start, start_cpu, start_process) = {
@@ -179,7 +180,7 @@ impl<S: Subscriber + for<'a> LookupSpan<'a>> Layer<S> for StepTimer {
             return;
         }
         let cpu = match start_process {
-            Some(process) => cpu_ms(libc::CLOCK_PROCESS_CPUTIME_ID) - process,
+            Some(process) => cpu_ms(ClockId::ProcessCPUTime) - process,
             None => thread_cpu - start_cpu,
         };
         iteration.steps.push(Step {
@@ -228,14 +229,8 @@ fn record(iteration: Iteration) {
     }
 }
 
-fn cpu_ms(clock: libc::clockid_t) -> f64 {
-    let mut ts = libc::timespec {
-        tv_sec: 0,
-        tv_nsec: 0,
-    };
-    // SAFETY: `ts` is a valid timespec for clock_gettime to write.
-    let rc = unsafe { libc::clock_gettime(clock, &mut ts) };
-    assert_eq!(rc, 0, "clock_gettime failed");
+fn cpu_ms(clock: ClockId) -> f64 {
+    let ts = clock_gettime(clock);
     ts.tv_sec as f64 * 1e3 + ts.tv_nsec as f64 / 1e6
 }
 

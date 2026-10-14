@@ -296,7 +296,6 @@ jf-signature-compat = { package = "jf-signature", git = "https://github.com/Espr
 ] }
 jf-utils = { git = "https://github.com/EspressoSystems/jellyfish", tag = "jf-utils-v0.5.0" }
 lazy_static = "1"
-libc = "0.2"
 libp2p = { package = "libp2p", version = "0.56", default-features = false, features = [
     "macros",
     "cbor",
@@ -375,6 +374,7 @@ reqwest = { version = "0.12", features = ["rustls-tls", "json"] }
 rstest = "0.25.0"
 rstest_reuse = "0.7.0"
 rust_decimal = "1.36.0"
+rustix = { version = "1", features = ["time"] }
 schemars = "0.9"
 scopeguard = "1.2.0"
 semver = "1"
