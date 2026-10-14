@@ -27,7 +27,7 @@ use crate::{
     helpers::test_timeout_epoch_lock,
     message::{
         CatchupEvidence, Certificate1, ConsensusMessage, EpochChangeMessage, Message, MessageType,
-        Proposal, Validated,
+        Proposal, ProposalFetchMessage, Validated,
     },
     storage::ActionKind,
     tests::common::assertions::{
@@ -1691,6 +1691,83 @@ async fn test_share_assembles_for_the_view_just_left() {
     )
     .await
     .expect("the share for the view just left must assemble");
+}
+
+/// A node left out of a view, holding no share of its own, rebuilds the
+/// view's payload from the shares the voters broadcast once it fetches the
+/// proposal a certificate names.
+#[tokio::test]
+async fn test_fetched_proposal_rebuilds_payload_from_broadcast_shares() {
+    let test_data = TestData::new(1).await;
+    let mut harness = TestHarness::new(0).await;
+    let node_key = BLSPubKey::generated_from_seed_indexed([0; 32], 0).0;
+    let view = &test_data.views[0];
+
+    for share in view
+        .vid_shares
+        .iter()
+        .filter(|s| s.recipient_key != node_key)
+    {
+        harness.message(Message::<TestTypes, Validated> {
+            sender: share.recipient_key,
+            message_type: MessageType::Consensus(ConsensusMessage::VidShareBroadcast(
+                share.clone(),
+            )),
+        });
+    }
+    // A commit without its proposal makes the node fetch it.
+    harness.apply_and_process(view.cert2_input());
+    harness.message(Message::<TestTypes, Validated> {
+        sender: view.leader_public_key,
+        message_type: MessageType::ProposalFetch(ProposalFetchMessage::Response(Box::new(
+            view.proposal.clone(),
+        ))),
+    });
+    timeout(
+        Duration::from_secs(5),
+        harness.process_until(|inputs| any(inputs, is_block_reconstructed)),
+    )
+    .await
+    .expect("the payload is rebuilt from the broadcast shares");
+}
+
+/// A node that a timeout certificate moved past a view before any certificate
+/// of the view reached it keeps the shares the voters broadcast for it, and
+/// still rebuilds the payload once a late commit makes it fetch the proposal.
+#[tokio::test]
+async fn test_timed_out_view_keeps_broadcast_shares_for_a_late_commit() {
+    let test_data = TestData::new(1).await;
+    let mut harness = TestHarness::new(0).await;
+    let node_key = BLSPubKey::generated_from_seed_indexed([0; 32], 0).0;
+    let view = &test_data.views[0];
+
+    for share in view
+        .vid_shares
+        .iter()
+        .filter(|s| s.recipient_key != node_key)
+    {
+        harness.message(Message::<TestTypes, Validated> {
+            sender: share.recipient_key,
+            message_type: MessageType::Consensus(ConsensusMessage::VidShareBroadcast(
+                share.clone(),
+            )),
+        });
+    }
+    harness.apply_and_process(view.timeout_cert_input());
+    assert_eq!(harness.current_view(), view.view_number + 1);
+    harness.apply_and_process(view.cert2_input());
+    harness.message(Message::<TestTypes, Validated> {
+        sender: view.leader_public_key,
+        message_type: MessageType::ProposalFetch(ProposalFetchMessage::Response(Box::new(
+            view.proposal.clone(),
+        ))),
+    });
+    timeout(
+        Duration::from_secs(5),
+        harness.process_until(|inputs| any(inputs, is_block_reconstructed)),
+    )
+    .await
+    .expect("the payload is rebuilt from the shares kept past the timeout");
 }
 
 /// A signed `Cert1` whose epoch is not the one its block number falls in is

@@ -651,6 +651,7 @@ where
                 },
                 Some(item) = self.proposal_validator.next() => match item {
                     Ok(validated) if validated.fetched => {
+                        self.notify_vid_reconstructor(&validated.message.proposal.data);
                         return Ok(ConsensusInput::FetchedProposal(validated.message))
                     }
                     Ok(validated) => {
@@ -965,15 +966,7 @@ where
                     self.storage
                         .append_state_cert(state_cert.view_number(), state_cert.clone());
                 }
-                let expected_param =
-                    expected_vid_param(&self.membership_coordinator, proposal.data.epoch);
-                self.vid_reconstructor.handle_proposal(
-                    view,
-                    vid_share.payload_commitment,
-                    proposal.data.block_header.metadata().clone(),
-                    proposal.data.epoch,
-                    expected_param,
-                );
+                self.notify_vid_reconstructor(&proposal.data);
                 self.vid_reconstructor
                     .handle_vid_share(self.public_key.clone(), vid_share);
             },
@@ -2167,6 +2160,21 @@ where
             .validate_fetched(ProposalMessage::unchecked(proposal));
     }
 
+    fn notify_vid_reconstructor(&mut self, proposal: &Proposal<T>) {
+        let VidCommitment::V2(payload_commitment) = proposal.block_header.payload_commitment()
+        else {
+            return;
+        };
+        let expected_param = expected_vid_param(&self.membership_coordinator, proposal.epoch);
+        self.vid_reconstructor.handle_proposal(
+            proposal.view_number,
+            payload_commitment,
+            proposal.block_header.metadata().clone(),
+            proposal.epoch,
+            expected_param,
+        );
+    }
+
     fn gc(&mut self, epoch: EpochNumber, scope: GcScope) -> Result<(), CoordinatorError> {
         self.consensus.gc(scope);
         match scope {
@@ -2208,11 +2216,17 @@ where
                 self.payload_txn_bytes = self.payload_txn_bytes.split_off(&(decide_floor + 1));
             },
             GcScope::Timeout(view) => {
+                // The shares voters broadcast for the view before stay until now, so a
+                // node a timeout certificate moved past a view before any certificate of
+                // it arrived can still rebuild the payload once it fetches the proposal.
+                let before = ViewNumber::from(view.saturating_sub(1));
+                if !self.consensus.keeps_payload_on_timeout(before) {
+                    self.vid_reconstructor.retire_view(before);
+                }
                 // The same guard keeps `Consensus::gc` from dropping its half.
                 if self.consensus.keeps_payload_on_timeout(view) {
                     return Ok(());
                 }
-                self.vid_reconstructor.retire_view(view);
                 let vc = VidCommitment2::default();
                 self.da_payloads
                     .extract_if((view, vc)..(view + 1, vc), |_, _| true)
