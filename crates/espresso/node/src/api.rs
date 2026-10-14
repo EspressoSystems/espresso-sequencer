@@ -3250,15 +3250,15 @@ mod api_tests {
                 ApiState::new(future::pending()),
             ));
 
-        // Create two non-consecutive leaf chains.
+        // Create two non-consecutive leaf chains. The headers stay below 0.6 because the test
+        // stores AvidM (V1) VID shares, which only the legacy decide path accepts.
+        let node_state = NodeState::mock()
+            .with_current_version(MOCK_SEQUENCER_VERSIONS.base)
+            .with_genesis_version(MOCK_SEQUENCER_VERSIONS.base);
         let mut chain1 = vec![];
 
-        let genesis = Leaf2::genesis(
-            &Default::default(),
-            &NodeState::mock(),
-            TEST_VERSIONS.test.base,
-        )
-        .await;
+        let genesis =
+            Leaf2::genesis(&Default::default(), &node_state, TEST_VERSIONS.test.base).await;
         let payload = genesis.block_payload().unwrap();
         let payload_bytes_arc = payload.encode();
 
@@ -3275,7 +3275,7 @@ mod api_tests {
                 view_number: ViewNumber::genesis(),
                 justify_qc: QuorumCertificate2::genesis(
                     &ValidatedState::default(),
-                    &NodeState::mock(),
+                    &node_state,
                     MOCK_SEQUENCER_VERSIONS,
                 )
                 .await,
@@ -3289,7 +3289,7 @@ mod api_tests {
         };
         let mut qc = QuorumCertificate2::genesis(
             &ValidatedState::default(),
-            &NodeState::mock(),
+            &node_state,
             MOCK_SEQUENCER_VERSIONS,
         )
         .await;
