@@ -32,7 +32,8 @@ use hotshot_types::{
         block_contents::{BlockHeader, EncodeBytes},
         node_implementation::NodeType,
         signature_key::{
-            LCV2StateSignatureKey, LCV3StateSignatureKey, SignatureKey, StateSignatureKey,
+            LCV2StateSignatureKey, LCV3StateSignatureKey, SignatureKey, StakeTableEntryType,
+            StateSignatureKey,
         },
     },
     utils::{is_epoch_root, is_epoch_transition, is_last_block},
@@ -54,6 +55,7 @@ use crate::{
         Validated, Vote1, Vote2,
     },
     outbox::Outbox,
+    rejoin::{BarQuery, Rejoin, evidence_key},
     state::{StateRequest, StateResponse},
     storage::{ActionKind, StorageOutput},
     vid::ns_lens_match_metadata,
@@ -187,6 +189,21 @@ pub enum ConsensusOutput<T: NodeType> {
     BroadcastVidShare(VidDisperseShare2<T>),
     /// The `UpgradeLock` has been updated; the certificate must be persisted.
     UpgradeDecided(UpgradeCertificate<T>),
+    /// Ask peers for the newest certificate each holds, to fix a wiped node's bar.
+    FetchNewestCerts,
+    /// Ask peers for the `Certificate1` at `view` in `epoch`.
+    FetchCert1 {
+        view: ViewNumber,
+        epoch: EpochNumber,
+    },
+    /// A wiped node took the block a `Certificate2` above its bar commits as
+    /// anchor, and the `Certificate1` at that view as lock. Adopted, not decided.
+    RejoinAnchored {
+        leaf: Leaf2<T>,
+        cert1: Certificate1<T>,
+        cert2: Certificate2<T>,
+        bar: ViewNumber,
+    },
 }
 
 /// What a proposal and this node's VID share for it must agree on to pair.
@@ -327,6 +344,9 @@ pub struct Consensus<T: NodeType> {
     /// `UpgradeLock` (see [`Self::maybe_decide_upgrade`]).
     decided_upgrade_carrier: Option<ViewNumber>,
 
+    /// How far a node that restarted with nothing stored is on its way back.
+    rejoin: Rejoin<T::SignatureKey>,
+
     timeout_view: ViewNumber,
     /// Highest view this node may have acted in before a restart (from the
     /// persisted action log). Bars re-*recording* a view's Vote action, not
@@ -465,6 +485,7 @@ impl<T: NodeType> Consensus<T> {
             lock_payload_fetches: BTreeMap::new(),
             formed_upgrade_certificate: None,
             decided_upgrade_carrier: None,
+            rejoin: Rejoin::Fresh,
             private_key,
             state_private_key,
             stake_table_capacity,
@@ -668,6 +689,14 @@ impl<T: NodeType> Consensus<T> {
         self.timeout_vote_bar
     }
 
+    #[cfg(test)]
+    pub(crate) fn rejoin_bar(&self) -> Option<ViewNumber> {
+        match self.rejoin {
+            Rejoin::Waiting { bar } => Some(bar),
+            _ => None,
+        }
+    }
+
     /// The proposal a certificate at `view` over `leaf_commit` certifies, with
     /// the view it was proposed at.
     ///
@@ -845,6 +874,7 @@ impl<T: NodeType> Consensus<T> {
         } else {
             input.view_number()
         };
+        self.rejoin_verified(&input);
         let proto = match input {
             ConsensusInput::Proposal(sender, proposal) => {
                 debug!(
@@ -1149,6 +1179,32 @@ impl<T: NodeType> Consensus<T> {
             .stored_high_qc
             .map_or(anchor_view + 1, |lock| lock.view);
         self.set_current_view_max(resume_view);
+    }
+
+    /// Start rejoining after a restart with nothing stored: sign nothing until
+    /// the bar is known and a decide above it is adopted (see [`Rejoin`]).
+    pub fn start_rejoin(&mut self) {
+        assert!(
+            self.last_decided_view == ViewNumber::genesis()
+                && self.restart_barred_view == ViewNumber::genesis(),
+            "a node restarted from storage has a summary and does not rejoin as wiped"
+        );
+        info!(epoch = %self.current_epoch, "rejoin: querying the newest certificates");
+        self.rejoin = Rejoin::Querying(BarQuery::new(self.current_epoch));
+    }
+
+    /// Record the certificate `peer` reports as the newest it holds.
+    pub(crate) fn rejoin_claim(&mut self, peer: T::SignatureKey, key: Option<ViewEpoch>) {
+        let Rejoin::Querying(query) = &mut self.rejoin else {
+            return;
+        };
+        query.claim(peer, key);
+        self.settle_bar();
+    }
+
+    /// Whether this node is rejoining and must not sign anything yet.
+    pub(crate) fn signing_barred(&self) -> bool {
+        matches!(self.rejoin, Rejoin::Querying(_) | Rejoin::Waiting { .. })
     }
 
     /// Whether a proposal for `view` in `epoch` can still matter to this node.
@@ -2232,6 +2288,10 @@ impl<T: NodeType> Consensus<T> {
         self.timeout_view = max(self.timeout_view, view);
         self.request_missing_payloads(outbox);
 
+        if self.signing_barred() {
+            self.request_rejoin_pieces(outbox);
+            return Protocol::Abort;
+        }
         if !self.staked_in_epoch(epoch) {
             return Protocol::Abort;
         }
@@ -2513,10 +2573,12 @@ impl<T: NodeType> Consensus<T> {
         }
 
         // Locked on without the payload, which the commit shows a quorum had,
-        // so that a node new to the incoming committee can lock.
-        if self
-            .lock_view()
-            .is_none_or(|lock| lock < LockView::of(&cert1))
+        // so that a node new to the incoming committee can lock. A rejoining
+        // node's first lock is its anchor's.
+        if !self.signing_barred()
+            && self
+                .lock_view()
+                .is_none_or(|lock| lock < LockView::of(&cert1))
         {
             self.locked_cert = Some(cert1.clone());
             outbox.push_back(ConsensusOutput::LockUpdated(block_view));
@@ -2555,7 +2617,7 @@ impl<T: NodeType> Consensus<T> {
 
     #[instrument(level = "debug", skip_all)]
     fn maybe_propose(&mut self, view: ViewNumber, outbox: &mut Outbox<ConsensusOutput<T>>) {
-        if view <= self.timeout_view {
+        if view <= self.timeout_view || self.signing_barred() {
             return;
         }
 
@@ -2951,6 +3013,12 @@ impl<T: NodeType> Consensus<T> {
 
     fn maybe_decide_at(&mut self, key: ViewEpoch, outbox: &mut Outbox<ConsensusOutput<T>>) {
         let ViewEpoch(view, epoch) = key;
+        if self.signing_barred() {
+            if !self.rejoin_blocks_decide(view) {
+                self.adopt_rejoin_anchor(key, outbox);
+            }
+            return;
+        }
         // Any still-undecided view above the floor can decide, even one older
         // than the watermark (a gap).
         let floor = self.decide_floor();
@@ -3047,6 +3115,180 @@ impl<T: NodeType> Consensus<T> {
             cert2: Some(cert2),
             vid_shares,
         });
+    }
+
+    /// Whether a rejoining node holds back the decide at `view`: it decides
+    /// nothing while querying, and nothing at or below its bar.
+    fn rejoin_blocks_decide(&self, view: ViewNumber) -> bool {
+        match self.rejoin {
+            Rejoin::Querying(_) => true,
+            Rejoin::Waiting { bar } => view <= bar,
+            Rejoin::Fresh | Rejoin::Done => false,
+        }
+    }
+
+    /// Adopt the block the `Certificate2` at `key` commits as anchor, and the
+    /// `Certificate1` at its view as lock, once both and the proposal are held.
+    ///
+    /// Only a block at the certificate's own view that does not end its epoch
+    /// is adopted: then every later epoch starts after `view`, so the lock
+    /// dominates every vote2 this node may have cast before it was wiped.
+    fn adopt_rejoin_anchor(&mut self, key: ViewEpoch, outbox: &mut Outbox<ConsensusOutput<T>>) {
+        let Rejoin::Waiting { bar } = self.rejoin else {
+            return;
+        };
+        let ViewEpoch(view, epoch) = key;
+        let Some(cert2) = self.certs2.get(&key).cloned() else {
+            return;
+        };
+        if is_last_block(cert2.data.block_number, *self.epoch_height) {
+            return;
+        }
+        let Some((block_view, proposal)) =
+            self.certified_proposal(view, cert2.data.leaf_commit, Some(cert2.data.block_number))
+        else {
+            return;
+        };
+        if block_view != view {
+            return;
+        }
+        let Some(cert1) = self
+            .cert1_in(key)
+            .filter(|cert1| cert1.data.leaf_commit == cert2.data.leaf_commit)
+            .cloned()
+        else {
+            outbox.push_back(ConsensusOutput::FetchCert1 { view, epoch });
+            return;
+        };
+        let mut leaf: Leaf2<T> = proposal.clone().into();
+        if let VidCommitment::V2(pc) = proposal.block_header.payload_commitment() {
+            if let Some(payload) = self.blocks.get(&(view, pc)) {
+                leaf.fill_block_payload_unchecked(payload.clone());
+            }
+            self.blocks_reconstructed.insert((view, pc));
+        }
+        info!(%view, %epoch, %bar, "rejoin: adopted the first decide above the bar");
+        self.locked_cert = Some(cert1.clone());
+        self.decided_views.insert(view);
+        self.last_decided_view = view;
+        self.last_decided_leaf = leaf.clone();
+        self.raise_rejoin_bars(view);
+        let curr_view = self.current_view;
+        self.set_current_view_max(view + 1);
+        self.set_current_epoch_max(epoch);
+        if self.current_view != curr_view {
+            outbox.push_back(ConsensusOutput::ViewChanged(
+                self.current_view,
+                self.current_epoch,
+            ));
+        }
+        self.rejoin = Rejoin::Done;
+        outbox.push_back(ConsensusOutput::LockUpdated(view));
+        outbox.push_back(ConsensusOutput::PersistHighQc(cert1.clone()));
+        outbox.push_back(ConsensusOutput::RejoinAnchored {
+            leaf,
+            cert1,
+            cert2,
+            bar,
+        });
+    }
+
+    /// Bar voting, proposing and deciding at `view` and before it.
+    fn raise_rejoin_bars(&mut self, view: ViewNumber) {
+        self.timeout_view = max(self.timeout_view, view);
+        self.restart_barred_view = max(self.restart_barred_view, view);
+        self.decide_floor_view = max(self.decide_floor_view, view);
+        self.timeout_vote_bar = max(self.timeout_vote_bar, Some(view));
+    }
+
+    /// Count a certificate a verifier accepted towards the rejoin bar.
+    ///
+    /// Read before dispatch: a verifier reports each certificate once.
+    fn rejoin_verified(&mut self, input: &ConsensusInput<T>) {
+        if !matches!(self.rejoin, Rejoin::Querying(_)) {
+            return;
+        }
+        let key = match input {
+            ConsensusInput::Certificate1(cert1) | ConsensusInput::AdvanceView(cert1) => {
+                cert1_key(cert1.cert())
+            },
+            ConsensusInput::EpochRootCertificates { cert1, .. } => cert1_key(cert1.cert()),
+            ConsensusInput::TimeoutCertificate(tc) => {
+                evidence_key(&CatchupEvidence::from(tc.cert()))
+            },
+            _ => return,
+        };
+        if let Rejoin::Querying(query) = &mut self.rejoin {
+            query.verified(key);
+        }
+        self.settle_bar();
+    }
+
+    /// Fix the bar once enough stake has answered, or move the query to the
+    /// later committee a verified answer names.
+    fn settle_bar(&mut self) {
+        let Rejoin::Querying(query) = &mut self.rejoin else {
+            return;
+        };
+        if let Some(epoch) = query.later_epoch()
+            && self
+                .stake_table_coordinator
+                .stake_table_for_epoch(Some(epoch))
+                .is_ok()
+        {
+            info!(%epoch, "rejoin: querying a later committee");
+            query.restart(epoch);
+            return;
+        }
+        let membership = match self
+            .stake_table_coordinator
+            .membership_for_epoch(Some(query.epoch()))
+        {
+            Ok(membership) => membership,
+            Err(err) => {
+                warn!(epoch = %query.epoch(), %err, "rejoin: no stake table to count answers");
+                return;
+            },
+        };
+        let Some(bar) = query.bar(
+            |peer| membership.stake(peer).map(|p| p.stake_table_entry.stake()),
+            membership.success_threshold(),
+        ) else {
+            return;
+        };
+        info!(%bar, "rejoin: views up to the bar are barred");
+        self.rejoin = Rejoin::Waiting { bar };
+        self.raise_rejoin_bars(bar);
+    }
+
+    /// Ask again for what the rejoin waits on: the newest certificates while
+    /// querying, then the pieces of the lowest decide above the bar it can adopt.
+    fn request_rejoin_pieces(&mut self, outbox: &mut Outbox<ConsensusOutput<T>>) {
+        let bar = match self.rejoin {
+            Rejoin::Querying(_) => {
+                outbox.push_back(ConsensusOutput::FetchNewestCerts);
+                return;
+            },
+            Rejoin::Waiting { bar } => bar,
+            Rejoin::Fresh | Rejoin::Done => return,
+        };
+        let Some((key, leaf_commit)) = self
+            .certs2
+            .range(ViewEpoch::start(bar + 1)..)
+            .find(|(_, cert2)| !is_last_block(cert2.data.block_number, *self.epoch_height))
+            .map(|(key, cert2)| (*key, cert2.data.leaf_commit))
+        else {
+            return;
+        };
+        let ViewEpoch(view, epoch) = key;
+        if self.proposals.contains(view, leaf_commit) {
+            self.adopt_rejoin_anchor(key, outbox);
+            return;
+        }
+        outbox.push_back(ConsensusOutput::RequestMissingProposal { view, leaf_commit });
+        if self.cert1_in(key).is_none() {
+            outbox.push_back(ConsensusOutput::FetchCert1 { view, epoch });
+        }
     }
 
     /// Build a `LightClientStateUpdateVote2` for an epoch-root leaf.
@@ -3316,7 +3558,7 @@ impl<T: NodeType> Consensus<T> {
 
     #[instrument(level = "debug", skip_all)]
     fn maybe_vote_1(&mut self, view: ViewNumber, outbox: &mut Outbox<ConsensusOutput<T>>) {
-        if view <= self.timeout_view {
+        if view <= self.timeout_view || self.signing_barred() {
             return;
         }
         // A re-vote of an epoch's last block and the next epoch's first block
@@ -3530,6 +3772,9 @@ impl<T: NodeType> Consensus<T> {
         outbox: &mut Outbox<ConsensusOutput<T>>,
     ) {
         let ViewEpoch(view, epoch) = key;
+        if self.signing_barred() {
+            return;
+        }
         let Some(cert1) = self.certs1.get(&key) else {
             return;
         };
@@ -3754,6 +3999,9 @@ impl<T: NodeType> Consensus<T> {
     /// must also hold the block and its payload, which it fetches once if
     /// missing.
     fn maybe_vote_revote(&mut self, view: ViewNumber, outbox: &mut Outbox<ConsensusOutput<T>>) {
+        if self.signing_barred() {
+            return;
+        }
         let Some(revote) = self.revotes.get(&view) else {
             return;
         };

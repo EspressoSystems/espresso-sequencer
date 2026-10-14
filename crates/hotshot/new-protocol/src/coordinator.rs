@@ -63,6 +63,7 @@ use crate::{
     network::Cliquenet,
     outbox::Outbox,
     proposal::{ProposalValidator, VidShareValidator},
+    rejoin::{RejoinMode, evidence_key},
     serve::Server,
     state::{HeaderRequest, StateEntry, StateManager, StateManagerOutput},
     storage::{NewProtocolStorage, Storage},
@@ -205,6 +206,9 @@ where
         anchor_cert2: Option<Certificate2<T>>,
         upgrade_config: UpgradeConfig,
         external_tx: mpsc::UnboundedSender<OpaqueMessage<T::SignatureKey>>,
+        /// Whether the node restarted with nothing stored and must rejoin first.
+        #[builder(default)]
+        rejoin: RejoinMode,
     ) -> Self {
         let mut consensus = Consensus::new(
             membership_coordinator.clone(),
@@ -335,6 +339,9 @@ where
             initializer.start_view(),
             initializer.last_actioned_view(),
         );
+        if rejoin == RejoinMode::Wiped {
+            consensus.start_rejoin();
+        }
         if let Some(state_cert) = initializer.state_cert().cloned() {
             consensus.seed_state_cert(state_cert);
         }
@@ -1144,6 +1151,7 @@ where
                 }
 
                 if self.leader(view, epoch).as_ref() == Some(&self.public_key)
+                    && !self.consensus.signing_barred()
                     && let Some(upgrade_proposal) = self.upgrade_protocol.maybe_propose(view, epoch)
                 {
                     self.broadcast(
@@ -1171,6 +1179,20 @@ where
                     "persisting decided upgrade certificate"
                 );
                 self.storage.update_decided_upgrade_certificate(cert);
+            },
+            ConsensusOutput::FetchNewestCerts => {
+                let view = self.consensus.current_view();
+                self.broadcast_cert_fetch(CertFetchRequest::new(view, CertRequestBody::Newest));
+            },
+            ConsensusOutput::FetchCert1 { view, epoch } => {
+                let body = CertRequestBody::Cert1 { epoch };
+                self.broadcast_cert_fetch(CertFetchRequest::new(view, body));
+            },
+            ConsensusOutput::RejoinAnchored {
+                leaf, cert1, bar, ..
+            } => {
+                info!(%node, view = %leaf.view_number(), %bar, "rejoined");
+                self.on_leaves_decided(vec![leaf], &cert1)?;
             },
         }
         Ok(())
@@ -1610,14 +1632,16 @@ where
                         .current_epoch()
                         .unwrap_or(EpochNumber::genesis());
                     let leader = self.leader(view, current_epoch);
-                    if let Some(vote) = self.upgrade_protocol.maybe_vote(
-                        &upgrade_proposal,
-                        &message.sender,
-                        leader.as_ref(),
-                        current_view,
-                        current_epoch,
-                    ) && let Err(err) =
-                        self.broadcast(ConsensusMessage::UpgradeVote(vote), "upgrade vote")
+                    if !self.consensus.signing_barred()
+                        && let Some(vote) = self.upgrade_protocol.maybe_vote(
+                            &upgrade_proposal,
+                            &message.sender,
+                            leader.as_ref(),
+                            current_view,
+                            current_epoch,
+                        )
+                        && let Err(err) =
+                            self.broadcast(ConsensusMessage::UpgradeVote(vote), "upgrade vote")
                     {
                         warn!(%node, %err, "network error while broadcasting upgrade vote");
                     }
@@ -2317,6 +2341,21 @@ where
         }
     }
 
+    fn broadcast_cert_fetch(&self, request: CertFetchRequest) {
+        let view = request.view_number();
+        let message = Message {
+            sender: self.public_key.clone(),
+            message_type: MessageType::CertFetch(CertFetchMessage::Req(request)),
+        };
+        if let Err(err) = self
+            .network
+            .sender()
+            .broadcast(self.consensus.current_view(), &message)
+        {
+            warn!(node = %self.node_id, %view, %err, "failed to send cert fetch request");
+        }
+    }
+
     /// Unicast to `peer` what `request` asks for, answering at the request's view.
     fn serve_cert_fetch(&self, peer: &T::SignatureKey, request: &CertFetchRequest) {
         let view = request.view_number();
@@ -2347,6 +2386,8 @@ where
     fn on_cert_fetch_response(&mut self, sender: &T::SignatureKey, response: CertFetchResponse<T>) {
         match response.into_body() {
             CertResponseBody::Newest(evidence) => {
+                self.consensus
+                    .rejoin_claim(sender.clone(), evidence.as_ref().map(evidence_key));
                 if let Some(evidence) = evidence {
                     self.verify_evidence(sender, evidence);
                 }

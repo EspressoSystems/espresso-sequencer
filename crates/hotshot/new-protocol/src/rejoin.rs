@@ -76,6 +76,18 @@ impl<K: Eq + Hash + Clone> BarQuery<K> {
         }
     }
 
+    /// The epoch whose committee is queried.
+    pub fn epoch(&self) -> EpochNumber {
+        self.epoch
+    }
+
+    /// Query the committee of `epoch` instead. Claims are asked for again;
+    /// a verifier reports each certificate once, so verified keys are kept.
+    pub fn restart(&mut self, epoch: EpochNumber) {
+        self.epoch = epoch;
+        self.claims.clear();
+    }
+
     /// Record what `peer` holds; its latest claim replaces an earlier one.
     pub fn claim(&mut self, peer: K, key: Option<ViewEpoch>) {
         self.claims.insert(peer, key);
@@ -211,5 +223,17 @@ mod tests {
 
         query.verified(later);
         assert_eq!(query.later_epoch(), Some(EpochNumber::new(3)));
+    }
+
+    #[test]
+    fn restart_drops_claims_and_keeps_verification() {
+        let mut query = claimed(&[Some(3); 7]);
+        query.restart(EpochNumber::new(2));
+        assert_eq!(bar(&query), None);
+
+        for peer in 0..7 {
+            query.claim(peer, Some(key(3)));
+        }
+        assert_eq!(bar(&query), Some(ViewNumber::new(5)));
     }
 }
