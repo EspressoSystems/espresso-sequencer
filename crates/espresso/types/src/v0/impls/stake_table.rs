@@ -563,8 +563,9 @@ impl StakeTableState {
                     return Err(StakeTableError::BlsKeyAlreadyUsed(k.to_string()));
                 }
 
-                // The contract only remembers schnorr keys registered since its v2 upgrade,
-                // so a key from a v1 registration can be accepted on chain a second time.
+                // The contract only remembers schnorr keys registered since its v2 upgrade, so a
+                // key from a v1 registration can be accepted on chain a second time. Decaf started
+                // on the v1 contract and mainnet on v2, so only decaf has v1 registrations.
                 let (state_ver_key, authenticated) = match state_ver_key {
                     Some(k) if self.used_schnorr_keys.contains(&k) => {
                         tracing::warn!(
