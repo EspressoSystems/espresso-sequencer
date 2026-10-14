@@ -1740,6 +1740,16 @@ def test_mass_lines_name_the_kind_and_the_group_size():
     )
 
 
+def test_mass_lines_leave_out_catch_up_without_query_nodes():
+    events = [
+        *(ev(0, "fault", f"node{i}", "mass-kill") for i in range(4, 8)),
+        *(ev(60, "started", f"node{i}", "mass-kill") for i in range(4, 8)),
+        *(ev(75, "rejoined", f"node{i}", "mass-kill") for i in range(4, 8)),
+    ]
+    (line,) = ch.mass_lines(ch.fault_rows(events), [], T0, 10)
+    assert line.endswith("all rejoined after 75 s")
+
+
 # REQ:report-kind-dedupe
 # TEST:report-kind-dedupe-ok
 def test_recovery_table_prints_one_row_per_kind():
