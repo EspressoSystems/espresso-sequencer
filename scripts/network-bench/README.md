@@ -232,6 +232,9 @@ just bench aws run --tag release-x --chaos --chaos-min 10 --chaos-rate 4 --chaos
 just bench aws run --tag release-x --chaos --chaos-kinds none --chaos-rate 0.1   # fault-free baseline of the shape
 just bench aws up --tag release-x --nodes 22 --query-nodes 22 --node-type c8g.large --ctl-type c8g.xlarge --ttl-min 180
 just bench aws run --fleet --chaos --query-engine sqlite
+just bench aws run --tag chaos-dense --chaos --nodes 32 --query-nodes 3 --chaos-min 15 --chaos-gap 10 \
+  --chaos-query-floor 1 --chaos-mass-nodes 11 \
+  --chaos-kinds restart,kill,wipe,restart,kill,wipe,mass-kill,mass-restart   # dense faults, groups beyond f
 ```
 
 - `--chaos` restarts, kills and wipes nodes, any node, while the load runs at a constant rate. Flags not given take the
@@ -243,29 +246,34 @@ just bench aws run --fleet --chaos --query-engine sqlite
 - Refused: `--steps`, `--step-s`, `--search`, `--keep-going` and `--warmup-s` (set by the chaos config); fewer than 7
   nodes; 2 or fewer query nodes; a `--chaos-min` that gives no faults (not with `--chaos-kinds none`);
   `--query-engine postgres`; `--query-db` other than `colocated`.
-- Faults start after the warmup, one per 45 s, and stop the kill down time plus 120 s (180 s) before the load ends, so a
-  late kill recovers under load; `--chaos-min 3` or less is refused, as it gives no faults. Kinds are used in turn from
-  `--chaos-kinds` (default `restart,kill,wipe`) on nodes in the order `--chaos-seed` shuffles them to. `none` alone
-  issues no faults: the chaos shape and report as a baseline for the view timeout floor. `--chaos-rate` takes any
-  positive value; the heartbeat (50 tx/s of 12 B) does not depend on it.
-  - `restart`: `docker restart`. `kill`: `docker kill`, `docker start` after 60 s. `wipe`: container logs saved to
-    `/opt/bench/espresso-node.wiped.log.gz`, container removed, journal and payload dir emptied, container recreated
-    from `node-rejoin.env` (`recreate.sh`), started. `mass-restart` (opt-in, e.g.
-    `--chaos-kinds restart,kill,wipe,mass-restart` or alone): `docker restart` of every node in one tick, all ssh in
-    parallel, to test recovery from storage.
-- Mass restart scheduling: bypasses the fault budget, query floor and peer rules. Issued only when no fault is open; no
-  other fault is issued until every node recovered from it. Alone, one mass restart midway between the first fault time
-  and the stop time (`stop_at`). In a rotation it takes its turn like the other kinds (so again each time the rotation
-  returns to it) and delays the faults behind it until it can be issued. A failed ssh of a node restarts that node alone
-  again on the next tick (its fault is recorded at the time of the restart); the nodes whose restart succeeded keep
-  recovering. A stuck node is restarted too and stays stuck: it gets no fault event, never counts as recovered and is
-  not a target of other faults. Each node whose restart succeeded gets a `started` event at the time the last restart
-  ssh returned.
+- Faults start after the warmup, one per `--chaos-gap` (45 s), and stop the kill down time plus 120 s (180 s) before the
+  load ends, so a late kill recovers under load; `--chaos-min 3` or less is refused, as it gives no faults. Kinds are
+  used in turn from `--chaos-kinds` (default `restart,kill,wipe`) on nodes in the order `--chaos-seed` shuffles them to.
+  `none` alone issues no faults: the chaos shape and report as a baseline for the view timeout floor. `--chaos-rate`
+  takes any positive value; the heartbeat (50 tx/s of 12 B) does not depend on it.
+  - `restart`: `docker restart`. `kill`: `docker kill`, `docker start` after `--chaos-kill-down` (60 s). `wipe`:
+    container logs saved to `/opt/bench/espresso-node.wiped.log.gz`, container removed, journal and payload dir emptied,
+    container recreated from `node-rejoin.env` (`recreate.sh`), started. `mass-restart` (opt-in, e.g.
+    `--chaos-kinds restart,kill,wipe,mass-restart` or alone): `docker restart` of every node, or of `--chaos-mass-nodes`
+    of them, in one tick, all ssh in parallel, to test recovery from storage. `mass-kill` (opt-in, same use):
+    `docker kill` of the group, `docker start` after `--chaos-kill-down`.
+- Faults beyond `f` only through the mass kinds. A group holding a third of the stake or more halts the network; its
+  members rejoin only after a block decided after the fault.
+- Mass scheduling (`mass-restart` and `mass-kill`): bypasses the fault budget, query floor and peer rules. Issued only
+  when no fault is open; no other fault is issued until every node recovered from it. Alone, one mass restart midway
+  between the first fault time and the stop time (`stop_at`). In a rotation it takes its turn like the other kinds (so
+  again each time the rotation returns to it) and delays the faults behind it until it can be issued. A failed ssh of a
+  node repeats that node alone with its own kind on the next tick (its fault is recorded at the time of the original
+  fault); the nodes whose restart succeeded keep recovering. `--chaos-mass-nodes K` takes the first K non-stuck nodes of
+  the seeded order from the cursor, which moves past them; a mass kill skips stuck nodes. A stuck node is restarted too
+  by a mass restart of all nodes and stays stuck: it gets no fault event, never counts as recovered and is not a target
+  of other faults. Each node whose restart succeeded gets a `started` event at the time the last restart ssh returned.
 - `check_nodes` skips killed nodes, stuck nodes and nodes of a mass restart whose ssh failed; a node that was restarted
   is inspected, so a container that crash-loops after a restart fails the run.
-- A fault is issued only while faulty nodes stay at most `(n-1)//3 - 1` (6 of 22), at least 2 query nodes are up and the
-  target and every faulty node keep 2 up peers; otherwise it waits for a recovery. Faulty counts stuck nodes and up
-  nodes whose probe failed or is more than 2 blocks behind the tip; those are never targets.
+- A fault is issued only while the faulty stake stays below a third of the total (7 of 22 nodes with equal stake), at
+  least `--chaos-query-floor` (2) query nodes are up and the target and every faulty node keep 2 up peers; otherwise it
+  waits for a recovery. Faulty counts stuck nodes and up nodes whose probe failed or is more than 2 blocks behind the
+  tip; those are never targets.
 - Query nodes get `ESPRESSO_NODE_SYNC_STATUS_TTL=5s` in `node.env` and `node-rejoin.env`; the default 5 min cache would
   report a wiped node as synced from its empty database.
 - Recovery gates, 2 consecutive 5 s ticks: a node rejoined when its height and voted view are near the tip of the up
@@ -278,7 +286,9 @@ just bench aws run --fleet --chaos --query-engine sqlite
   restart and is raised, on every tick, to the height of each node's first answer after the restart (blocks decided
   between the probe and the stop are stored and reported again). It is only exceeded by a block decided after the
   restart, which one node alone cannot produce. A node that first answers late at the current tip delays the rejoin by
-  one more block. Query nodes then need `caught_up` as above. The 300 s timeout applies per node.
+  one more block. Query nodes then need `caught_up` as above. The `--chaos-recover-timeout` (300 s) applies per node.
+  While the pending members hold a third of the stake or more, the threshold is raised from every answering node, not
+  only from the first answers of members; once they hold less, a member that never answers times out alone.
 - `summary.md` and `driver.log` omit the capacity verdict, the search line and the baseline under `--chaos`: steps with
   a dead leader do not measure capacity.
 - The load driver submits to the next node when one is down; `submit_failovers` in `load-meta.json` counts the switches,
@@ -287,10 +297,10 @@ just bench aws run --fleet --chaos --query-engine sqlite
   or `--tx-timeout-s` passes, and is no submit error. A reused keep-alive connection is retried on a fresh one only when
   it failed before sending or was reset by the server. `submit_duplicates` counts scans that saw an already included tx
   id; the chaos totals line shows it when non-zero.
-- A node not recovered within 300 s writes one `timeout` event and turns `stuck`: it keeps its slot in the fault budget,
-  is no longer gated or faulted, and the load runs on; the final drain waits only for the other faults. The run then
-  fails: exit 3, `summary.md` keeps the reason, the run is invalid. A node that crashes without a fault fails the run at
-  once.
+- A node not recovered within `--chaos-recover-timeout` (300 s) writes one `timeout` event and turns `stuck`: it keeps
+  its slot in the fault budget, is no longer gated or faulted, and the load runs on; the final drain waits only for the
+  other faults. The run then fails: exit 3, `summary.md` keeps the reason, the run is invalid. A node that crashes
+  without a fault fails the run at once.
 - A failed probe or fault ssh skips the tick, and the fault is retried on the next one; 5 such ticks in a row fail the
   run.
 - Ctrl-C or an error ends the faults still open with an `interrupted` event; the verdict names them, it does not count
@@ -316,14 +326,16 @@ just bench aws run --fleet --chaos --query-engine sqlite
   timed out node stays faulty until the end of the run, an interrupted fault ends at `interrupted`. Max concurrent
   faulty, the faults per step, the decided split and the plot all use this span; every event carries `query`, events
   written before it get it from the roles in `topology.json`.
-- Mass restart line, one per mass restart:
-  `Mass restart: all N nodes at <s>, first decide after X s, all rejoined after Y s (all caught up after Z s)`. First
-  decide: seconds from the time the last restart ssh returned (the last `started` event of the restart) to the first
-  height above every height shown until then (`heights.jsonl`: one poller per validator, every 0.1 s). Without `started`
-  events (older runs) the time of the fault. `never` for a step that did not happen. The recovery table has a
-  `mass-restart` row (one fault per node). Its per-node spans count as during fault for the floor and the other panels.
-- Setup, and totals: faults per kind, max concurrent faulty against the fault budget, timeouts, lost payloads, submit
-  failovers, txs submitted, included and timed out.
+- Mass line, one per mass fault:
+  `Mass restart|Mass kill: all N nodes|K of N nodes at <s>, first decide after X s, all rejoined after Y s (all caught up after Z s)`.
+  First decide: seconds from the time the last restart ssh returned (the last `started` event of the restart) to the
+  first height above every height shown until then (`heights.jsonl`: one poller per validator, every 0.1 s). Without
+  `started` events (older runs) the time of the fault. `never` for a step that did not happen. The recovery table has
+  one row per kind, also for a repeated kind, and a `mass-restart` or `mass-kill` row has one fault per node. Its
+  per-node spans count as during fault for the floor and the other panels.
+- Setup (nodes, rate, seed, kinds, gap, kill down, recover timeout, query floor, mass nodes), and totals: faults per
+  kind (mass kinds as `mass-kill G (N nodes)`), max concurrent faulty against the stake budget, with a note when mass
+  faults exceed it, timeouts, lost payloads, submit failovers, txs submitted, included and timed out.
 - Recovery table per kind: count, rejoin p50 and max, caught-up p50 and max (seconds from the fault, from the start for
   a kill, as the `from` column says; query nodes only catch up).
 - Throughput: mean decided against offered and the lowest step; then decided MB/s from `consensus.jsonl` over the steps,
@@ -377,11 +389,12 @@ just bench aws run --fleet --chaos --query-engine sqlite
 - ctl services: orchestrator, state-relay-server, anvil and the load driver are never faulted.
 - Host faults: no instance reboot, disk full, disk stalls or clock skew.
 - Byzantine behaviour: faulted nodes stop or lose state, they never equivocate or send bad data.
-- Faults at or above `f`: the scheduler stays below the fault budget, so liveness loss is not exercised.
+- Faults at or above `f` from single kinds: they stay below the stake budget; liveness loss only through `mass-restart`
+  and `mass-kill`.
 - Postgres query nodes: wipe needs `--query-engine sqlite`; `volume`, `rds` and `tmpfs` query storage are refused.
 - Upgrades: no binary or protocol version upgrade during the run.
 - Load shape: constant rate only; no bursts or capacity search under faults.
-- Correlated or simultaneous faults: one fault per tick, at least `gap_s` (45 s) apart.
+- Correlated or simultaneous faults: one fault per tick, at least `--chaos-gap` apart; mass kinds fault a group at once.
 - Faults aimed at upcoming leaders: targets follow the seeded order, not the leader schedule.
 
 ### Node build and config
@@ -548,7 +561,12 @@ Where:
 | `--chaos-min`                         | 10                             | per run      | minutes of load, one 60 s step each                                                           |
 | `--chaos-rate`                        | 4                              | per run      | MB/s of every step                                                                            |
 | `--chaos-seed`                        | 42                             | per run      | seed of the order nodes are faulted in                                                        |
-| `--chaos-kinds`                       | `restart,kill,wipe`            | per run      | comma separated, used in turn; `none` for no faults                                           |
+| `--chaos-kinds`                       | `restart,kill,wipe`            | per run      | comma separated, used in turn, repeats weight; adds `mass-restart`, `mass-kill`; `none`       |
+| `--chaos-gap`                         | 45                             | per run      | seconds between single faults                                                                 |
+| `--chaos-kill-down`                   | 60                             | per run      | seconds a killed node stays down                                                              |
+| `--chaos-recover-timeout`             | 300                            | per run      | seconds a node has to recover; must exceed `--chaos-kill-down`                                |
+| `--chaos-query-floor`                 | 2                              | per run      | query nodes kept up; below `--query-nodes`                                                    |
+| `--chaos-mass-nodes`                  | all nodes                      | per run      | nodes per mass fault; needs a mass kind, at most `--nodes`                                    |
 | `--max-block-size`                    | `50mb`                         | per run      | genesis `max_block_size`                                                                      |
 | `--node-env KEY=VALUE`                | none                           | per run      | repeatable; node environment                                                                  |
 | `--leader-trace`, `--no-leader-trace` | off                            | per run      | leader trace CSVs and plots                                                                   |
