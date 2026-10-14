@@ -492,7 +492,8 @@ impl TestRunner {
         // runs on workers.
         let test = std::thread::current().name().unwrap_or("trace").to_owned();
         let initially_down = self.initially_down_nodes();
-        let mut node_handles: Vec<Option<JoinHandle<()>>> = Vec::with_capacity(self.num_nodes);
+        let mut node_handles: Vec<Option<JoinHandle<Option<String>>>> =
+            Vec::with_capacity(self.num_nodes);
         let mut clients = Vec::new();
         let mut generations: Vec<u64> = vec![0; self.num_nodes];
         let (event_tx, mut event_rx) = mpsc::unbounded_channel::<TaggedEvent>();
@@ -659,13 +660,12 @@ impl TestRunner {
                         );
                         match &change.action {
                             NodeAction::Restart | NodeAction::RestartAt(_) | NodeAction::Start => {
-                                self.trace_names[change.idx] =
-                                    cancel_node(cancels.remove(&change.idx)).await;
                                 // Kill existing task if any.
-                                if let Some(handle) = node_handles[change.idx].take() {
-                                    handle.abort();
-                                    let _ = handle.await;
-                                }
+                                self.trace_names[change.idx] = stop_node(
+                                    cancels.remove(&change.idx),
+                                    node_handles[change.idx].take(),
+                                )
+                                .await;
                                 if let NodeAction::RestartAt(addr) = &change.action {
                                     parties[change.idx].2 = addr.clone();
                                 }
@@ -750,12 +750,11 @@ impl TestRunner {
                             NodeAction::Shutdown => {
                                 // Stop the coordinator gracefully so it closes
                                 // its cliquenet listener and flushes storage.
-                                self.trace_names[change.idx] =
-                                    cancel_node(cancels.remove(&change.idx)).await;
-                                if let Some(handle) = node_handles[change.idx].take() {
-                                    handle.abort();
-                                    let _ = handle.await;
-                                }
+                                self.trace_names[change.idx] = stop_node(
+                                    cancels.remove(&change.idx),
+                                    node_handles[change.idx].take(),
+                                )
+                                .await;
                                 // Stale events queued by the stopped task are
                                 // ignored from here on.
                                 generations[change.idx] += 1;
@@ -887,7 +886,7 @@ impl TestRunner {
     }
 }
 
-async fn create_network(
+pub(crate) async fn create_network(
     i: usize,
     parties: &[(Keypair, BLSPubKey, NetAddr)],
     blocked_pairs: &BTreeSet<(usize, usize)>,
@@ -966,14 +965,22 @@ async fn submit_transactions(clients: Vec<ClientApi<TestTypes>>, count: usize) {
     }
 }
 
-/// Stop a node's task through its cancel channel, and return the trace file it
-/// wrote, if any.
-async fn cancel_node(
-    cancel: Option<oneshot::Sender<oneshot::Sender<Option<String>>>>,
+/// Stop a node's task, asking it to stop gracefully first, and return the trace
+/// file it wrote, if any. A task that already exited on a critical error
+/// still returns its file.
+async fn stop_node(
+    cancel: Option<oneshot::Sender<oneshot::Sender<()>>>,
+    handle: Option<JoinHandle<Option<String>>>,
 ) -> Option<String> {
-    let (ack, name) = oneshot::channel();
-    cancel?.send(ack).ok()?;
-    name.await.ok()?
+    if let Some(tx) = cancel {
+        let (ack, done) = oneshot::channel();
+        if tx.send(ack).is_ok() {
+            let _ = done.await;
+        }
+    }
+    let handle = handle?;
+    handle.abort();
+    handle.await.ok().flatten()
 }
 
 /// Note what a restarted node loaded, ahead of its first step.
@@ -1036,10 +1043,10 @@ async fn run_node(
     idx: usize,
     generation: u64,
     external_events_tx: Sender<Event<TestTypes>>,
-    mut cancel: oneshot::Receiver<oneshot::Sender<Option<String>>>,
+    mut cancel: oneshot::Receiver<oneshot::Sender<()>>,
     mut trace: Recorder,
     anchor_qc: Option<Certificate1<TestTypes>>,
-) {
+) -> Option<String> {
     let mut commits: BTreeMap<ViewNumber, [u8; 32]> = BTreeMap::new();
     let mut last_view = ViewNumber::genesis();
     let _forward = AbortOnDropHandle::new(tokio::spawn(async move {
@@ -1068,15 +1075,15 @@ async fn run_node(
         select! {
             i = coord.next_consensus_input() => match i {
                 Ok(input) => apply_recorded(&mut coord, &mut trace, anchor_qc.as_ref(), input),
-                Err(err) if err.severity == Severity::Critical => break,
+                Err(err) if err.severity == Severity::Critical => return trace.file_name(),
                 Err(_) => continue,
             },
             x = &mut cancel => {
                 coord.stop().await;
                 if let Ok(tx) = x {
-                    let _ = tx.send(trace.file_name());
+                    let _ = tx.send(());
                 }
-                return
+                return trace.file_name();
             }
         }
 
@@ -1147,7 +1154,7 @@ async fn run_node(
                 && err.severity == Severity::Critical
             {
                 tracing::error!(%err, node = %coord.node_id(), "critical error processing output");
-                return;
+                return trace.file_name();
             }
         }
     }
