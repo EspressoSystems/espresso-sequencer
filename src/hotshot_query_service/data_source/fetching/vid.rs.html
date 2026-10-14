@@ -202,12 +202,12 @@
 <a href=#202 id=202 data-nosnippet>202</a>    P: AvailabilityProvider&lt;Types&gt;,
 <a href=#203 id=203 data-nosnippet>203</a>{
 <a href=#204 id=204 data-nosnippet>204</a>    <span class="kw">let </span><span class="prelude-val">Some</span>(vid_fetcher) = fetcher.vid_common_fetcher.as_ref() <span class="kw">else </span>{
-<a href=#205 id=205 data-nosnippet>205</a>        <span class="macro">tracing::info!</span>(<span class="string">"not fetching vid because of leaf only mode"</span>);
+<a href=#205 id=205 data-nosnippet>205</a>        <span class="macro">tracing::debug!</span>(<span class="string">"not fetching vid because of leaf only mode"</span>);
 <a href=#206 id=206 data-nosnippet>206</a>        <span class="kw">return</span>;
 <a href=#207 id=207 data-nosnippet>207</a>    };
 <a href=#208 id=208 data-nosnippet>208</a>
 <a href=#209 id=209 data-nosnippet>209</a>    <span class="comment">// Now that we have the header, we only need to retrieve the VID common data.
-<a href=#210 id=210 data-nosnippet>210</a>    </span><span class="macro">tracing::info!</span>(
+<a href=#210 id=210 data-nosnippet>210</a>    </span><span class="macro">tracing::debug!</span>(
 <a href=#211 id=211 data-nosnippet>211</a>        <span class="string">"spawned active fetch for VID common {:?} (height {})"</span>,
 <a href=#212 id=212 data-nosnippet>212</a>        header.payload_commitment(),
 <a href=#213 id=213 data-nosnippet>213</a>        header.block_number()

@@ -216,7 +216,7 @@
 <a href=#216 id=216 data-nosnippet>216</a>                },
 <a href=#217 id=217 data-nosnippet>217</a>            }
 <a href=#218 id=218 data-nosnippet>218</a>
-<a href=#219 id=219 data-nosnippet>219</a>            <span class="macro">tracing::info!</span>(height, <span class="string">"received new leaf; fetching missing parent"</span>);
+<a href=#219 id=219 data-nosnippet>219</a>            <span class="macro">tracing::debug!</span>(height, <span class="string">"received new leaf; fetching missing parent"</span>);
 <a href=#220 id=220 data-nosnippet>220</a>            fetcher.leaf_fetcher.clone().spawn_fetch(
 <a href=#221 id=221 data-nosnippet>221</a>                request::LeafRequest::new(height - <span class="number">1</span>),
 <a href=#222 id=222 data-nosnippet>222</a>                fetcher.provider.clone(),
@@ -341,7 +341,7 @@
 <a href=#341 id=341 data-nosnippet>341</a>    <span class="kw">async fn </span>run(<span class="self">self</span>, leaf: LeafQueryData&lt;Types&gt;) {
 <a href=#342 id=342 data-nosnippet>342</a>        <span class="kw">match </span><span class="self">self </span>{
 <a href=#343 id=343 data-nosnippet>343</a>            <span class="self">Self</span>::Leaf { fetcher } =&gt; {
-<a href=#344 id=344 data-nosnippet>344</a>                <span class="macro">tracing::info!</span>(<span class="string">"fetched leaf {}"</span>, leaf.height());
+<a href=#344 id=344 data-nosnippet>344</a>                <span class="macro">tracing::debug!</span>(<span class="string">"fetched leaf {}"</span>, leaf.height());
 <a href=#345 id=345 data-nosnippet>345</a>                <span class="comment">// Trigger a fetch of the parent leaf, if we don't already have it.
 <a href=#346 id=346 data-nosnippet>346</a>                </span>trigger_fetch_for_parent(<span class="kw-2">&amp;</span>fetcher, <span class="kw-2">&amp;</span>leaf);
 <a href=#347 id=347 data-nosnippet>347</a>                fetcher.store_and_notify(<span class="kw-2">&amp;</span>leaf).<span class="kw">await</span>;
