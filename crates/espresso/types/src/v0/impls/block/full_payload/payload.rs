@@ -291,6 +291,7 @@ impl BlockPayload<SeqTypes> for Payload {
         metadata: &Self::Metadata,
     ) -> Vec<Commitment<Self::Transaction>> {
         self.map_transactions(metadata, |index| {
+            let _span = tracing::debug_span!("tx_hash").entered();
             self.transaction(index)
                 .expect("index yielded by iter must resolve to a transaction")
                 .commit()
