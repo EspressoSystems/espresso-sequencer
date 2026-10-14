@@ -7622,12 +7622,7 @@ def floor_section(
     )
     timeouts = ch.counter_split(timeout_series, spans, start, stop)
     views = ch.counter_split(view_series, spans, start, stop)
-    assignment = manifest["latency"]["assignment"] if "latency" in manifest else {}
-    nodes = sorted(
-        (p.name for p in (run_dir / "hosts").glob("node*")),
-        key=lambda name: int(name.removeprefix("node")),
-    )
-    regions = {n: assignment.get(n, "-") for n in nodes}
+    regions = ch.node_regions(run_dir, manifest)
     counts = ch.node_counts(run_dir, regions, rows, start, stop, end)
     nb.write_json(
         run_dir / "floor.json",

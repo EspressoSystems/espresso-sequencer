@@ -610,19 +610,12 @@ def main(argv: list[str] | None = None) -> None:
         twin_legend(cli_ax, fetch_ax)
     if len(floor_panels):
         manifest_path = run_dir / "manifest.json"
-        assignment = (
-            json.loads(manifest_path.read_text())
-            .get("latency", {})
-            .get("assignment", {})
-            if manifest_path.exists()
-            else {}
+        manifest = (
+            json.loads(manifest_path.read_text()) if manifest_path.exists() else {}
         )
-        nodes = sorted(
-            (p.name for p in (run_dir / "hosts").glob("node*")),
-            key=lambda name: int(name.removeprefix("node")),
-        )
-        groups = region_groups({n: assignment.get(n, "-") for n in nodes})
-        log = read_log_events(run_dir, nodes, t0, t1)
+        regions = ch.node_regions(run_dir, manifest)
+        groups = region_groups(regions)
+        log = read_log_events(run_dir, list(regions), t0, t1)
         draw_floor(floor_panels, counters, log, groups, t0, t1, minutes)
     panels[-1].set_xlabel("minutes since run start", color=INK)
 

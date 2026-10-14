@@ -1298,6 +1298,17 @@ class NodeCounts(TypedDict):
     outside: dict[str, int]
 
 
+def node_regions(run_dir: Path, manifest: Mapping[str, Any]) -> dict[str, str]:
+    """Latency region of every node with a host dir under `run_dir`, in node order; `-` for a
+    node the `manifest` assigns none (a run without latency shaping)."""
+    assignment = manifest["latency"]["assignment"] if "latency" in manifest else {}
+    nodes = sorted(
+        (p.name for p in (run_dir / "hosts").glob("node*")),
+        key=lambda name: int(name.removeprefix("node")),
+    )
+    return {name: assignment.get(name, "-") for name in nodes}
+
+
 def node_log_files(run_dir: Path, node: str) -> list[Path]:
     """The logs of `node` that exist: the one a wipe saved, then the current one."""
     host = run_dir / "hosts" / node

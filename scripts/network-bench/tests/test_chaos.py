@@ -1222,6 +1222,20 @@ def test_node_counts_read_every_wipe_appended_to_the_wiped_log(tmp_path):
     assert counts["node0"]["outside"] == {"header-failed": 2}
 
 
+def test_node_regions_follow_the_host_dirs_in_node_order(tmp_path):
+    for node in ("node10", "node0", "node2"):
+        (tmp_path / "hosts" / node).mkdir(parents=True)
+    manifest = {"latency": {"assignment": {"node0": "eu", "node2": "us"}}}
+    assert ch.node_regions(tmp_path, manifest) == {
+        "node0": "eu",
+        "node2": "us",
+        "node10": "-",
+    }
+    assert ch.node_regions(tmp_path, {}) == dict.fromkeys(
+        ("node0", "node2", "node10"), "-"
+    )
+
+
 def test_node_counts_read_current_and_wiped_logs_by_region(tmp_path):
     for node, name in [
         ("node0", "espresso-node.log.gz"),
