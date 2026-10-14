@@ -109,3 +109,22 @@ fn every_restart_key_is_one_the_recorder_writes() {
         );
     }
 }
+
+/// The keys `Header.lean` reads from the `rejoin` object of the identity line.
+const REJOIN_KEYS: [&str; 2] = ["bar", "resumes"];
+
+#[test]
+fn every_rejoin_key_is_one_the_recorder_writes() {
+    let body = TRACE_RS
+        .split("pub fn rejoining")
+        .nth(1)
+        .and_then(|rest| rest.split("\n    pub fn ").next())
+        .expect("trace.rs no longer defines Recorder::rejoining");
+    for key in REJOIN_KEYS {
+        assert!(
+            body.contains(&format!("(\"{key}\", ")),
+            "`{key}` is read from the rejoin header by Header.lean but never written by \
+             `Recorder::rejoining`"
+        );
+    }
+}
