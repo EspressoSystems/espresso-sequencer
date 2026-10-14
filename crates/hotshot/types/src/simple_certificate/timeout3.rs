@@ -200,15 +200,11 @@ impl<T: NodeType> TimeoutCertificate3<T> {
         );
         self.check_lock()?;
 
-        let params = T::SignatureKey::public_parameter(stake_table, U256::ZERO);
+        // The signers and their weight first, so that a certificate refused for
+        // them costs no signature check.
         let mut seen = bitvec![0; stake_table.len()];
         let mut weight = U256::ZERO;
-        for (lock, signatures) in self.groups() {
-            let commit =
-                VersionedVoteData::new(self.data(lock), self.view_number, upgrade_lock)?.commit();
-            T::SignatureKey::check(&params, commit.as_ref(), signatures)
-                .wrap()
-                .context(|e| warn!("timeout certificate signature check failed: {e}"))?;
+        for (_, signatures) in self.groups() {
             let (_, signers) = T::SignatureKey::sig_proof(signatures);
             ensure!(
                 signers.len() == stake_table.len(),
@@ -229,6 +225,15 @@ impl<T: NodeType> TimeoutCertificate3<T> {
             weight >= threshold,
             "timeout certificate weight {weight} is below threshold {threshold}"
         );
+
+        let params = T::SignatureKey::public_parameter(stake_table, U256::ZERO);
+        for (lock, signatures) in self.groups() {
+            let commit =
+                VersionedVoteData::new(self.data(lock), self.view_number, upgrade_lock)?.commit();
+            T::SignatureKey::check(&params, commit.as_ref(), signatures)
+                .wrap()
+                .context(|e| warn!("timeout certificate signature check failed: {e}"))?;
+        }
         Ok(())
     }
 

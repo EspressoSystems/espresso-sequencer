@@ -747,7 +747,9 @@ mod tests {
         cert_verifier::verify_timeout3,
         helpers::{test_timeout_epoch_lock, test_upgrade_lock},
         message::{CatchupEvidence, TimeoutBallot, TimeoutVoteMessage3, UpgradeVoteMessage, Vote2},
-        tests::common::utils::{build_timeout_cert3_with_lock, mock_membership},
+        tests::common::utils::{
+            build_timeout_cert3_signed_by, build_timeout_cert3_with_lock, mock_membership,
+        },
     };
 
     /// Number of test validators.
@@ -1391,6 +1393,28 @@ mod tests {
 
         let message = TimeoutVoteMessage3::new(ballot, Some(CatchupEvidence::Qc(other.clone())));
         assert_eq!(message.evidence(), Some(CatchupEvidence::Qc(other)));
+    }
+
+    /// A timeout certificate refused for its signers is refused before any of
+    /// its signatures is checked: too few signers with signatures that would
+    /// not verify either are refused for their weight.
+    #[tokio::test]
+    async fn timeout_certificate_weight_is_checked_before_signatures() {
+        let lock = test_timeout_epoch_lock();
+        let epoch = EpochNumber::genesis();
+        let membership = mock_membership().membership_for_epoch(Some(epoch)).unwrap();
+        let entries = StakeTableEntries::<TestTypes>::from_iter(membership.stake_table()).0;
+        let mut cert =
+            build_timeout_cert3_signed_by(ViewNumber::new(5), epoch, None, &membership, &[0, 1, 2]);
+        // The signatures are over view 5, so they do not verify for view 6.
+        cert.view_number = ViewNumber::new(6);
+        let err = cert
+            .check_signatures(&entries, membership.success_threshold(), &lock)
+            .expect_err("three signers are below the threshold");
+        assert!(
+            err.to_string().contains("below threshold"),
+            "refused for its weight, not its signatures: {err}"
+        );
     }
 
     /// A `Certificate1` at `view` signed by every member.
