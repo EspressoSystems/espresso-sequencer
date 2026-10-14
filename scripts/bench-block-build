@@ -18,8 +18,7 @@ Each ref is built in a temporary git worktree into this checkout's target dir. E
 benchmark runs in its own process, since glibc's mmap threshold depends on earlier allocations,
 with base and head alternating, under glibc.malloc.hugetlb=1 by default (the AWS bench nodes).
 Changes carry one standard error from the spread of run medians and are marked as noise within
-two. Per-step comparisons need both refs to contain the step instrumentation; steps without CPU on
-either side are marked not comparable. Before each run the script samples CPU use while idle and warns if other work is busy.
+two. Before each run the script samples CPU use while idle and warns if other work is busy.
 """
 
 import json
@@ -197,15 +196,9 @@ def summarize(runs: pd.DataFrame) -> str:
         # Delta-method standard error of head / base.
         se = (sem["head"] ** 2 + ratio**2 * sem["base"] ** 2) ** 0.5 / median["base"]
         cpu_ratio = cpu["head"] / cpu["base"]
-        # The whole build compares by duration alone.
-        comparable = cpu_ratio.reindex(median.index).notna() | (
-            median.index.get_level_values("step") == "request_block"
-        )
         change = [
             f"{r - 1:+.1%} ± {e:.1%}{'' if abs(r - 1) > 2 * e else ' (noise)'}"
-            if ok
-            else "(not comparable)"
-            for r, e, ok in zip(ratio, se.reindex(ratio.index), comparable, strict=True)
+            for r, e in zip(ratio, se.reindex(ratio.index), strict=True)
         ]
         table = median.assign(
             change=change,

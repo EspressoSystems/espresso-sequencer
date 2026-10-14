@@ -132,7 +132,7 @@ struct Iteration {
     /// Sum of `tx_hash` thread CPU.
     leaf_cpu: f64,
     /// Latest `tx_hash` exit, when `transaction_hashes` completes.
-    leaves_end: f64,
+    leaves_end: Option<f64>,
 }
 
 /// Times each step by its own work. A rayon worker that waits inside a step span steals unrelated
@@ -155,7 +155,7 @@ impl<S: Subscriber + for<'a> LookupSpan<'a>> Layer<S> for StepTimer {
                 origin: at,
                 steps: Vec::new(),
                 leaf_cpu: 0.0,
-                leaves_end: 0.0,
+                leaves_end: None,
             });
         }
         span.extensions_mut().replace(entered);
@@ -176,7 +176,7 @@ impl<S: Subscriber + for<'a> LookupSpan<'a>> Layer<S> for StepTimer {
         let rel = |t: Instant| ms(t - iteration.origin);
         if name == "tx_hash" {
             iteration.leaf_cpu += thread_cpu - start_cpu;
-            iteration.leaves_end = iteration.leaves_end.max(rel(end));
+            iteration.leaves_end = Some(iteration.leaves_end.map_or(rel(end), |e| e.max(rel(end))));
             return;
         }
         let cpu = match start_process {
@@ -218,7 +218,10 @@ fn record(iteration: Iteration) {
     let mut steps = STEPS.lock().expect("steps lock");
     for step in &iteration.steps {
         let (end, cpu) = match step.name {
-            "transaction_hashes" => (iteration.leaves_end, iteration.leaf_cpu),
+            "transaction_hashes" => (
+                iteration.leaves_end.expect("a tx_hash span ran"),
+                iteration.leaf_cpu,
+            ),
             "vid_commitment" => (step.end, vid_cpu),
             _ => (step.end, step.cpu),
         };
