@@ -956,13 +956,12 @@ def fetch_range(
 def poll_reader(
     pool: Http, query_urls: Sequence[str], reader: Reader, clock: Clock
 ) -> list[dict[str, Any]]:
-    """Fetches the blocks the first answering query node has beyond the reader's cursor, one
-    record per range. A range no node serves yet is tried again on the next poll; after
-    MISSING_PAYLOAD_S it is recorded as missing and skipped."""
-    height = get_first(pool, query_urls, HEIGHT_API["query"][0])
-    if height is None:
+    """Fetches the blocks beyond the reader's cursor up to `query_tip`, one record per range.
+    A range no node serves yet is tried again on the next poll; after MISSING_PAYLOAD_S it is
+    recorded as missing and skipped."""
+    tip = query_tip(pool, query_urls, reader.next)
+    if tip is None:
         return []
-    tip = int(height)
     records = []
     while reader.next < tip:
         start, end = reader.next, min(tip, reader.next + CLIENT_RANGE)
@@ -986,6 +985,16 @@ def poll_reader(
         )
         reader.next, reader.since = end, None
     return records
+
+
+def query_tip(pool: Http, query_urls: Sequence[str], above: int) -> int | None:
+    """Block height of the first query node that answers one above `above`; a node catching
+    up after a wipe answers a lower one. None if none does."""
+    for url in query_urls:
+        height = get_first(pool, [url], HEIGHT_API["query"][0])
+        if height is not None and int(height) > above:
+            return int(height)
+    return None
 
 
 def run_readers(

@@ -446,7 +446,8 @@ just bench aws run --tag release-x --leader-trace
     `/v1/light-client/namespaces/{start}/{end}/NS~...` for its namespace. Proofs are not verified; the node's load is
     the same.
   - Each request goes to the query nodes in order, node0 first, and moves on at a refused or failed request, a timeout
-    (10 s), 5xx or 404. A range no query node serves is retried every poll for 10 s, then counted as missing.
+    (10 s), 5xx or 404; the height also at one not above the reader's cursor (a node catching up after a wipe). A range
+    no query node serves is retried every poll for 10 s, then counted as missing.
   - A reader failure ends the run; the cause is in `clients.log`.
   - Writes `clients.jsonl`; the summary reports reader lag behind a validator, fetch time per range and MB/s, the chart
     adds a lag panel. No step rule uses them.

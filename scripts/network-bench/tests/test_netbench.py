@@ -2764,6 +2764,25 @@ def test_a_reader_fails_over_to_the_next_query_node(first: int | OSError):
     assert (rec["status"], rec["bytes"]) == ("ok", 30)
 
 
+class Stale(QueryNode):
+    """`http://a` answers a height below the readers' cursor, as a node catching up after a
+    wipe does, and 503 to the rest; `http://q` is the QueryNode."""
+
+    def request(self, method, url, body=None, timeout=10.0):
+        if url.startswith("http://a"):
+            if url.endswith("/v1/node/block-height"):
+                return 200, b"5"
+            return 503, b""
+        return super().request(method, url, body, timeout)
+
+
+def test_a_reader_takes_the_height_of_a_query_node_above_its_cursor():
+    node = Stale(fakes.FakeClock(), 13)
+    reader = netbench.Reader(ns=10000, index=0, next=10)
+    (rec,) = netbench.poll_reader(node, ["http://a", "http://q"], reader, node.clock)
+    assert (rec["status"], rec["bytes"], reader.next) == ("ok", 30, 13)
+
+
 def test_a_reader_with_every_query_node_down_waits_for_the_next_poll():
     node = BehindDown(fakes.FakeClock(), 13, ConnectionRefusedError("down"))
     reader = netbench.Reader(ns=10000, index=0, next=10)
