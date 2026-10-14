@@ -19,6 +19,7 @@ pub mod vid;
 pub mod vote;
 
 pub mod proposal;
+pub mod rejoin;
 
 #[cfg(any(test, feature = "trace"))]
 pub mod trace;
