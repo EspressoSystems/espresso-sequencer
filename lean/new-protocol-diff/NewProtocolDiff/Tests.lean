@@ -700,8 +700,15 @@ example : Rejoins cfg rejoin preWipe postWipe ∧ RejoinOK rejoin postWipe :=
 /-- info: ["rejoin:anchorAbove"] -/
 #guard_msgs in #eval failingRejoin { rejoin with bar := ⟨6⟩ } preWipe postWipe
 
-/-- info: ["rejoin:anchorCertHeld", "rejoin:anchorHeld", "rejoin:anchorCert2Held"] -/
-#guard_msgs in #eval failingRejoin rejoin preWipe (st (.timeout ⟨7⟩) [vote1 b7] :: postWipe)
+/-- info: ["rejoin:anchorHeld"] -/
+#guard_msgs in
+#eval failingRejoin rejoin preWipe ([st (.certificate1 c6), st (.certificate2 (commit c6)), recv b7,
+  st (.blockValidated ⟨7⟩ b7.identity) [vote1 b7], st (.proposal ⟨2⟩ b6 none)] ++ acting.drop 2)
+
+/-- info: ["rejoin:anchorCertHeld"] -/
+#guard_msgs in
+#eval failingRejoin rejoin preWipe ([st (.proposal ⟨2⟩ b6 none), st (.certificate2 (commit c6)), recv b7,
+  st (.blockValidated ⟨7⟩ b7.identity) [vote1 b7], st (.certificate1 c6)] ++ acting.drop 2)
 
 /-- info: ["rejoin:anchorCert2Held"] -/
 #guard_msgs in #eval failingRejoin rejoin preWipe (adopting.take 2 ++ acting)
