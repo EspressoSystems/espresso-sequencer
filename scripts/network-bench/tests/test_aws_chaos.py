@@ -1,6 +1,7 @@
 import dataclasses
 import json
 import signal
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
@@ -269,6 +270,7 @@ def test_chaos_timing_flags_reach_the_config():
         "--chaos-kill-down",
         "--chaos-recover-timeout",
         "--chaos-query-floor",
+        "--chaos-mass-nodes",
     ],
 )
 def test_chaos_timing_flag_without_chaos_refused(flag):
@@ -291,6 +293,41 @@ def test_chaos_query_floor_not_below_query_nodes_refused():
         awsb.check_chaos(dataclasses.replace(chaos_cfg(), chaos=chaos))
     chaos = ch.ChaosConfig(query_floor=2)
     awsb.check_chaos(dataclasses.replace(chaos_cfg(), chaos=chaos))
+
+
+def test_chaos_mass_nodes_reaches_the_config():
+    cfg = awsb.config_from_args(
+        parse("--chaos", "--chaos-kinds", "mass-kill", "--chaos-mass-nodes", "3")
+    )
+    assert cfg.chaos == ch.ChaosConfig(kinds=("mass-kill",), mass_nodes=3)
+    assert "mass 3 nodes" in awsb.format_chaos_summary(cfg.chaos, "off")
+
+
+def test_chaos_mass_nodes_refusals():
+    cfg = chaos_cfg()
+    mass = ch.ChaosConfig(kinds=("restart", "mass-kill"), mass_nodes=7)
+    awsb.check_chaos(dataclasses.replace(cfg, chaos=mass))
+    over = dataclasses.replace(mass, mass_nodes=8)
+    with pytest.raises(awsb.Refused, match="--chaos-mass-nodes 8 exceeds"):
+        awsb.check_chaos(dataclasses.replace(cfg, chaos=over))
+    plain = ch.ChaosConfig(mass_nodes=3)
+    with pytest.raises(awsb.Refused, match="needs a mass kind"):
+        awsb.check_chaos(dataclasses.replace(cfg, chaos=plain))
+
+
+def test_mass_totals_name_groups_and_exceeding_the_budget():
+    chaos = {
+        "minutes": 3,
+        "kinds": ["restart", "mass-kill", "restart"],
+        "mass_nodes": 3,
+    }
+    config = {"nodes": 7, "chaos": chaos}
+    rows = [ch.FaultRow(f"node{i}", False, "mass-kill", 10.0) for i in range(3)]
+    (faults, _) = awsb.chaos_totals(rows, [], 100.0, config, None, Counter())
+    assert faults == (
+        "- Faults: 3 (restart 0, mass-kill 1 (3 nodes)); max concurrent faulty 3; "
+        "budget < 1/3 stake; mass faults exceed it"
+    )
 
 
 # TEST:chaos-postgres-refused-fails
@@ -559,7 +596,7 @@ def test_expected_down_is_the_killed_stuck_and_unrestarted_nodes(isolated: Path)
     )
     state = with_health(state, node1="recovering", node2="down", node3="stuck")
     state = with_health(state, node4="catching_up")
-    ctrl.state = {**state, "mass_retry": {"node5": 1.0}}
+    ctrl.state = {**state, "mass_retry": {"node5": ("mass-restart", 1.0)}}
     assert ctrl.expected_down() == frozenset({"node2", "node3", "node5"})
 
 
@@ -794,6 +831,37 @@ def test_chaos_run_end_to_end(run_harness: RunHarness):
     assert "chaos: kill node" in log and "chaos: restart node" in log
     assert "caught up after" in log and "rejoined after" in log
     assert (run_harness.run_dir / "hosts/node0/recreate.sh").exists()
+
+
+@pytest.mark.usefixtures("valid")
+def test_chaos_run_with_mass_kill_end_to_end(run_harness: RunHarness):
+    clock = FakeClock(start=FAKE_EPOCH, limit_s=20000)
+    cluster = FakeCluster(
+        clock, [f"node{i}" for i in range(7)], {"node0", "node1", "node2"}
+    )
+    runner = ClusterRunner(cluster, 3, [LOADING] * 80 + [DONE_STATE], describe=DESCRIBE)
+    args = run_harness.args(
+        "--chaos",
+        "--latency",
+        "off",
+        "--chaos-min",
+        "6",
+        "--chaos-kinds",
+        "restart,mass-kill",
+        "--chaos-mass-nodes",
+        "3",
+        "--query-nodes",
+        "3",
+        nodes=7,
+    )
+    assert awsb.cmd_run(args, FakeSystem(run=runner, clock=clock)) == awsb.EXIT_OK
+    events = ch.read_events(run_harness.run_dir)
+    mass = [e for e in events if e["event"] == "fault" and e["kind"] == "mass-kill"]
+    assert len(mass) == 3
+    assert {e["event"] for e in events} >= {"started", "rejoined"}
+    assert "timeout" not in {e["event"] for e in events}
+    assert runner.ran("docker kill") and runner.ran("docker start")
+    assert all(m.running for m in cluster.members.values())
 
 
 def seed_faulting_a_query_node() -> int:

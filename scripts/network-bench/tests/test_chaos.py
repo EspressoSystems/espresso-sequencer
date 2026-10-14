@@ -1441,7 +1441,7 @@ def test_a_partly_failed_mass_restart_retries_only_the_failed_nodes():
     topo = topo_of()
     state, issued = mass_issued(topo)
     reverted = ch.revert_failed(state, issued, {"node3"})
-    assert reverted["state"]["mass_retry"] == {"node3": 10.0}
+    assert reverted["state"]["mass_retry"] == {"node3": ("mass-restart", 10.0)}
     assert reverted["state"]["nodes"]["node3"] == state["nodes"]["node3"]
     assert reverted["state"]["faults"] == 1
     assert len(reverted["actions"]) == 9 and len(reverted["events"]) == 9
@@ -1464,7 +1464,7 @@ def test_a_failed_retry_keeps_the_rejoined_events_of_the_same_tick():
     assert {e["event"] for e in out["events"]} == {"rejoined", "fault"}
     kept = ch.revert_failed(state, out, {"node3"})
     assert len(kept["events"]) == 9
-    assert kept["state"]["mass_retry"] == {"node3": 10.0}
+    assert kept["state"]["mass_retry"] == {"node3": ("mass-restart", 10.0)}
     assert kept["state"]["nodes"]["node0"]["health"] == "catching_up"
 
 
@@ -1513,7 +1513,7 @@ def test_mass_restart_line_from_synthetic_data():
     ]
     # 505 shown before the restarts finished (1007) is the baseline, not a decide
     heights = [(999.0, 504), (1003.0, 505), (1007.2, 505), (1007.9, 506), (1008.5, 507)]
-    lines = ch.mass_restart_lines(ch.fault_rows(events), heights, t0=900.0)
+    lines = ch.mass_lines(ch.fault_rows(events), heights, 900.0, 4)
     assert lines == [
         (
             "- Mass restart: all 4 nodes at 100 s, first decide after 1 s, "
@@ -1525,9 +1525,184 @@ def test_mass_restart_line_from_synthetic_data():
 def test_mass_restart_line_names_what_did_not_happen():
     ev = ch.chaos_event
     events = [ev(1000.0, "fault", "node0", True, "mass-restart", 500, None)]
-    (line,) = ch.mass_restart_lines(ch.fault_rows(events), [], t0=1000.0)
+    (line,) = ch.mass_lines(ch.fault_rows(events), [], 1000.0, 1)
     assert line == (
         "- Mass restart: all 1 nodes at 0 s, first decide after never, "
         "all rejoined after never (all caught up after never)"
     )
-    assert ch.mass_restart_lines([], [], 0.0) == []
+    assert ch.mass_lines([], [], 0.0, 1) == []
+
+
+MASS_KILL = ch.ChaosConfig(kinds=("mass-kill",), mass_nodes=4)
+
+
+def mass_kill_issued(cfg=MASS_KILL, topo=None):
+    topo = topo or topo_of()
+    state = init(cfg, topo)
+    state["next_fault_at"] = 0.0
+    return state, step(state, observe(topo), 10.0, cfg, topo)
+
+
+def silent(names) -> dict:
+    return dict.fromkeys(names)
+
+
+# REQ:sched-mass-group-size
+# TEST:sched-mass-group-size-ok
+def test_a_mass_group_is_the_next_nodes_from_the_cursor():
+    state = init(CFG)
+    order, nodes = state["order"], state["nodes"]
+    assert ch._mass_group(order, 0, nodes, 3) == (order[:3], 3)
+    assert ch._mass_group(order, 8, nodes, 3) == ([*order[8:], order[0]], 1)
+    assert ch._mass_group(order, 4, nodes, None) == (list(nodes), 4)
+    assert ch._mass_group(order, 0, nodes, 20) == (order, 0)
+
+
+# TEST:sched-stuck-in-group-ok
+def test_a_mass_group_skips_stuck_nodes():
+    state = init(CFG)
+    order = state["order"]
+    nodes = with_health(state, **{order[1]: "stuck"})["nodes"]
+    assert ch._mass_group(order, 0, nodes, 3) == ([order[0], *order[2:4]], 4)
+
+
+def test_mass_nodes_faults_a_group_and_moves_the_cursor():
+    cfg = ch.ChaosConfig(kinds=("mass-restart",), mass_nodes=3)
+    topo = topo_of()
+    state = init(cfg, topo)
+    state["next_fault_at"] = 0.0
+    out = step(state, observe(topo), 10.0, cfg, topo)
+    group = state["order"][:3]
+    assert [a["node"] for a in out["actions"]] == group
+    assert out["state"]["cursor"] == 3
+    assert {n for n, s in out["state"]["nodes"].items() if s["health"] != "up"} == set(
+        group
+    )
+
+
+def test_a_mass_kill_leaves_a_stuck_node_alone():
+    cfg = ch.ChaosConfig(kinds=("mass-kill",))
+    topo = topo_of()
+    state = with_health(init(cfg, topo), node1="stuck")
+    state["next_fault_at"] = 0.0
+    out = step(state, observe(topo), 10.0, cfg, topo)
+    assert {a["node"] for a in out["actions"]} == set(topo["nodes"]) - {"node1"}
+    assert {a["op"] for a in out["actions"]} == {"kill"}
+    assert {e["kind"] for e in out["events"]} == {"mass-kill"}
+
+
+# REQ:sched-mass-kill-halt
+# TEST:sched-mass-kill-halt-ok
+def test_a_mass_kill_beyond_the_bound_rejoins_only_after_a_new_decide():
+    topo = topo_of()
+    state, issued = mass_kill_issued(topo=topo)
+    members = [a["node"] for a in issued["actions"]]
+    assert len(members) == 4 and ch.halts(state["stake"], members)
+    assert {a["op"] for a in issued["actions"]} == {"kill"}
+    state = issued["state"]
+    assert {state["nodes"][m]["health"] for m in members} == {"down"}
+    down = silent(members)
+    out = step(state, observe(topo, **down), 65.0, MASS_KILL, topo)
+    assert out["actions"] == []
+    out = step(out["state"], observe(topo, **down), 70.0, MASS_KILL, topo)
+    assert {(a["node"], a["op"]) for a in out["actions"]} == {
+        (m, "start") for m in members
+    }
+    state = out["state"]
+    for now in (75.0, 80.0, 85.0, 90.0):
+        out = step(state, observe(topo, tip=100), now, MASS_KILL, topo)
+        assert [e for e in out["events"] if e["event"] == "rejoined"] == []
+        state = out["state"]
+    assert state["mass_height"] == 100
+    for now in (95.0, 100.0):
+        out = step(state, observe(topo, tip=101), now, MASS_KILL, topo)
+        state = out["state"]
+    assert {e["node"] for e in out["events"] if e["event"] == "rejoined"} == set(
+        members
+    )
+
+
+# TEST:sched-silent-member-ok
+def test_a_silent_member_times_out_alone():
+    topo = topo_of()
+    state, issued = mass_kill_issued(topo=topo)
+    members = [a["node"] for a in issued["actions"]]
+    mute = members[0]
+    state, events = issued["state"], []
+    for now in range(15, 316, 5):
+        tip = 100 if now <= 75 else 101
+        out = step(
+            state, observe(topo, tip=tip, **{mute: None}), float(now), MASS_KILL, topo
+        )
+        state, events = out["state"], [*events, *out["events"]]
+    assert {e["node"] for e in events if e["event"] == "timeout"} == {mute}
+    assert {e["node"] for e in events if e["event"] == "rejoined"} == set(members) - {
+        mute
+    }
+    assert state["nodes"][mute]["health"] == "stuck"
+
+
+# TEST:sched-small-group-ok
+def test_a_mass_group_below_the_bound_needs_a_decide_after_its_own_answers():
+    cfg = ch.ChaosConfig(kinds=("mass-restart",), mass_nodes=3)
+    topo = topo_of()
+    state = init(cfg, topo)
+    state["next_fault_at"] = 0.0
+    out = step(state, observe(topo), 10.0, cfg, topo)
+    group = {a["node"] for a in out["actions"]}
+    assert not ch.halts(state["stake"], group)
+    state = out["state"]
+    for now, tip in ((15.0, 100), (20.0, 101), (25.0, 101)):
+        out = step(state, observe(topo, tip=tip), now, cfg, topo)
+        state = out["state"]
+    assert state["mass_height"] == 100
+    assert {e["node"] for e in out["events"] if e["event"] == "rejoined"} == group
+    assert {n for n, s in state["nodes"].items() if s["kind"] is None} >= (
+        set(topo["nodes"]) - group
+    )
+
+
+# REQ:sched-mass-retry-kind
+# TEST:sched-mass-retry-kind-ok
+def test_a_failed_mass_kill_member_is_killed_again_at_the_fault_time():
+    topo = topo_of()
+    state, issued = mass_kill_issued(topo=topo)
+    failed = issued["actions"][0]["node"]
+    reverted = ch.revert_failed(state, issued, {failed})
+    assert reverted["state"]["mass_retry"] == {failed: ("mass-kill", 10.0)}
+    assert reverted["state"]["nodes"][failed]["health"] == "up"
+    retry = step(reverted["state"], observe(topo), 15.0, MASS_KILL, topo)
+    assert retry["actions"] == [{"node": failed, "op": "kill"}]
+    (fault,) = [e for e in retry["events"] if e["event"] == "fault"]
+    assert (fault["node"], fault["kind"], fault["ts"]) == (failed, "mass-kill", 10.0)
+    assert retry["state"]["nodes"][failed]["health"] == "down"
+    assert retry["state"]["nodes"][failed]["since"] == 10.0
+
+
+# REQ:report-mass-lines
+# TEST:report-mass-lines-ok
+def test_mass_lines_name_the_kind_and_the_group_size():
+    events = [
+        *(ev(0, "fault", f"node{i}", "mass-kill") for i in range(4)),
+        *(ev(60, "started", f"node{i}", "mass-kill") for i in range(4)),
+        *(ev(75, "rejoined", f"node{i}", "mass-kill") for i in range(4)),
+    ]
+    heights = [(T0, 10), (T0 + 62, 10), (T0 + 70, 11)]
+    (line,) = ch.mass_lines(ch.fault_rows(events), heights, T0, 10)
+    assert line == (
+        "- Mass kill: 4 of 10 nodes at 0 s, first decide after 10 s, "
+        "all rejoined after 75 s (all caught up after never)"
+    )
+
+
+# REQ:report-kind-dedupe
+# TEST:report-kind-dedupe-ok
+def test_recovery_table_prints_one_row_per_kind():
+    kinds = ["kill", "restart", "kill", "mass-kill", "mass-restart"]
+    table = ch.recovery_table(ch.fault_rows(EVENTS), kinds)
+    assert [row.split(" | ")[0:3] for row in table[2:]] == [
+        ["| kill", "1", "start"],
+        ["| restart", "1", "fault"],
+        ["| mass-kill", "0", "start"],
+        ["| mass-restart", "0", "restart"],
+    ]

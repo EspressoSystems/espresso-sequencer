@@ -252,7 +252,7 @@ def draw_lanes(
                 mew=2,
                 clip_on=False,
             )
-        if row.kind != ch.MASS_RESTART:
+        if row.kind not in ch.MASS_KINDS:
             lanes_ax.text(
                 minutes(row.fault),
                 y - 0.45,
@@ -261,11 +261,11 @@ def draw_lanes(
                 color=MUTED,
                 va="bottom",
             )
-    for at in dict.fromkeys(r.fault for r in rows if r.kind == ch.MASS_RESTART):
+    for kind, at in dict.fromkeys(
+        (r.kind, r.fault) for r in rows if r.kind in ch.MASS_KINDS
+    ):
         lanes_ax.axvline(minutes(at), color=MUTED, ls=":", lw=1, zorder=1)
-        lanes_ax.text(
-            minutes(at), -0.6, "mass-restart", fontsize=6, color=MUTED, va="bottom"
-        )
+        lanes_ax.text(minutes(at), -0.6, kind, fontsize=6, color=MUTED, va="bottom")
     lanes_ax.set_yticks(range(len(nodes)), nodes, color=INK, fontsize=7)
     lanes_ax.set_ylim(len(nodes) - 0.4, -0.7)
     lanes_ax.spines[["top", "right"]].set_visible(False)

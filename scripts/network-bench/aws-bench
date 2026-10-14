@@ -583,6 +583,7 @@ CHAOS_FLAGS = (
     "--chaos-kill-down",
     "--chaos-recover-timeout",
     "--chaos-query-floor",
+    "--chaos-mass-nodes",
 )
 # The load shape is the chaos config's.
 CHAOS_LOAD_FLAGS = ("--steps", "--step-s", "--search", "--keep-going", "--warmup-s")
@@ -1273,6 +1274,15 @@ def check_chaos(cfg: RunConfig) -> None:
             f"--chaos-recover-timeout {cfg.chaos.recover_timeout_s:g} must exceed "
             f"--chaos-kill-down {cfg.chaos.kill_down_s:g}: a killed node stays down that long"
         )
+    if cfg.chaos.mass_nodes is not None:
+        if not ch.MASS_KINDS.intersection(cfg.chaos.kinds):
+            raise Refused(
+                "--chaos-mass-nodes needs a mass kind in --chaos-kinds (mass-restart, mass-kill)"
+            )
+        if cfg.chaos.mass_nodes > cfg.nodes:
+            raise Refused(
+                f"--chaos-mass-nodes {cfg.chaos.mass_nodes} exceeds --nodes {cfg.nodes}"
+            )
     quiet_s = cfg.chaos.kill_down_s + ch.RECOVERY_ALLOWANCE_S
     if cfg.chaos.kinds and cfg.chaos.minutes * CHAOS_STEP_S <= quiet_s:
         raise Refused(
@@ -1649,6 +1659,7 @@ def format_chaos_summary(chaos: ch.ChaosConfig, latency: str) -> str:
         f"budget < 1/3 stake; gap {chaos.gap_s:g} s; "
         f"kill down {chaos.kill_down_s:g} s; recover timeout {chaos.recover_timeout_s:g} s; "
         f"query floor {chaos.query_floor}"
+        + (f"; mass {chaos.mass_nodes} nodes" if chaos.mass_nodes is not None else "")
     )
 
 
@@ -2899,8 +2910,8 @@ def add_chaos_flags(parser: argparse.ArgumentParser) -> None:
         "--chaos-kinds",
         type=chaos_kinds,
         default=chaos.kinds,
-        help="with --chaos: comma separated fault kinds, used in turn; `mass-restart` restarts every "
-        "node at once; `none` for no faults",
+        help="with --chaos: comma separated fault kinds, used in turn; `mass-restart` and `mass-kill` "
+        "fault every node at once, or --chaos-mass-nodes of them; `none` for no faults",
     )
     for flag, value, text in (
         ("gap", chaos.gap_s, "seconds between two faults"),
@@ -2923,6 +2934,11 @@ def add_chaos_flags(parser: argparse.ArgumentParser) -> None:
         default=chaos.query_floor,
         help="with --chaos: up query nodes kept at every fault, so the fleet needs more query "
         f"nodes than this, default {chaos.query_floor}",
+    )
+    parser.add_argument(
+        "--chaos-mass-nodes",
+        type=positive_int,
+        help="with --chaos: nodes of a mass-restart or mass-kill, default every node",
     )
 
 
@@ -3113,6 +3129,7 @@ def chaos_from_args(args: argparse.Namespace) -> ch.ChaosConfig | None:
         kill_down_s=args.chaos_kill_down,
         recover_timeout_s=args.chaos_recover_timeout,
         query_floor=args.chaos_query_floor,
+        mass_nodes=args.chaos_mass_nodes,
     )
 
 
@@ -7571,7 +7588,7 @@ def chaos_view(
             nb.read_json(meta_path) if meta_path.exists() else None,
             tx_counts(run_dir),
         ),
-        *ch.mass_restart_lines(rows, ch.read_heights(run_dir), t0),
+        *ch.mass_lines(rows, ch.read_heights(run_dir), t0, config["nodes"]),
         "",
         "",
         *(ch.recovery_table(rows, config["chaos"]["kinds"]) if rows else []),
@@ -7672,6 +7689,7 @@ def setup_line(config: dict[str, Any]) -> str:
         f"{chaos.rate_mb_s:g} MB/s, seed {chaos.seed}, kinds {','.join(chaos.kinds) or 'none'}, "
         f"gap {chaos.gap_s:g} s, kill down {chaos.kill_down_s:g} s, "
         f"recover timeout {chaos.recover_timeout_s:g} s, query floor {chaos.query_floor}"
+        + (f", mass nodes {chaos.mass_nodes}" if chaos.mass_nodes is not None else "")
     )
 
 
@@ -7683,13 +7701,25 @@ def chaos_totals(
     meta: dict[str, Any] | None,
     txs: Counter[str],
 ) -> list[str]:
-    kinds = config["chaos"]["kinds"]
-    per_kind = ", ".join(f"{k} {sum(r.kind == k for r in rows)}" for k in kinds)
+    chaos = chaos_config(config["chaos"])
+    assert chaos is not None
+    mass_size = chaos.mass_nodes or config["nodes"]
+    per_kind = ", ".join(
+        f"{k} {len({r.fault for r in rows if r.kind == k})} ({mass_size} nodes)"
+        if k in ch.MASS_KINDS
+        else f"{k} {sum(r.kind == k for r in rows)}"
+        for k in dict.fromkeys(chaos.kinds)
+    )
+    exceeds = (
+        "; mass faults exceed it"
+        if ch.MASS_KINDS.intersection(chaos.kinds) and 3 * mass_size >= config["nodes"]
+        else ""
+    )
     timeouts = sum(e["event"] == "timeout" for e in events)
     lines = [
         (
             f"- Faults: {len(rows)}{f' ({per_kind})' if per_kind else ''}; max concurrent faulty "
-            f"{ch.max_concurrent_faulty(rows, end)}; budget < 1/3 stake"
+            f"{ch.max_concurrent_faulty(rows, end)}; budget < 1/3 stake{exceeds}"
         ),
         f"- Timeouts: {timeouts}",
     ]
