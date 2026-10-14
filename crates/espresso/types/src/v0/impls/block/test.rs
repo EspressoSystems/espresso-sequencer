@@ -447,6 +447,6 @@ fn tx_digest_known_vector() {
     let tx = Transaction::new(NamespaceId::from(7u32), b"hello".to_vec());
     assert_eq!(
         tx.digest().to_string(),
-        "acadb7cd2d07b7e365d085da1f66729da74f89308371c1454611325287e54c7f"
+        "TX_DIGEST~rK23zS0Ht-Nl0IXaH2ZynadPiTCDccFFRhEyUoflTH-1"
     );
 }

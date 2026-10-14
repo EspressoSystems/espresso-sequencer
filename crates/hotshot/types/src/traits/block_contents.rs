@@ -18,9 +18,11 @@ use std::{
 };
 
 use alloy_primitives::FixedBytes;
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use async_trait::async_trait;
 use committable::{Commitment, Committable};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
+use tagged_base64::tagged;
 use vbs::version::Version;
 
 use super::signature_key::BuilderSignatureKey;
@@ -38,18 +40,15 @@ pub trait EncodeBytes {
 }
 
 /// Blake3 key identifying a transaction for local dedup. Not the public tx hash.
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[tagged("TX_DIGEST")]
+#[derive(
+    Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, CanonicalSerialize, CanonicalDeserialize,
+)]
 pub struct TxDigest([u8; 32]);
 
 impl From<blake3::Hash> for TxDigest {
     fn from(hash: blake3::Hash) -> Self {
         Self(hash.into())
-    }
-}
-
-impl Display for TxDigest {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(blake3::Hash::from_bytes(self.0).to_hex().as_str())
     }
 }
 
