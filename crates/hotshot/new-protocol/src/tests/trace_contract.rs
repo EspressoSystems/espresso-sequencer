@@ -76,3 +76,23 @@ fn every_excused_input_is_one_the_recorder_drops() {
         );
     }
 }
+
+/// The keys `Header.lean` reads from the `restart` object of the identity line.
+const RESTART_KEYS: [&str; 5] = [
+    "lock",
+    "highestVoted",
+    "vote2Bar",
+    "reconstructed",
+    "resumes",
+];
+
+#[test]
+fn every_restart_key_is_one_the_recorder_writes() {
+    for key in RESTART_KEYS {
+        assert!(
+            TRACE_RS.contains(&format!("(\"{key}\", ")),
+            "`{key}` is read from the restart header by the replay but never written by the \
+             recorder: add it to `Recorder::restarted` or remove it from Header.lean"
+        );
+    }
+}

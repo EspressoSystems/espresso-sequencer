@@ -40,6 +40,14 @@
 //! more state than we do — which shows up as the machine being ahead, which the
 //! comparison tolerates.
 //!
+//! # Restarts
+//!
+//! A node restored from storage writes a second file. Its header carries a
+//! `restart` object naming what the node loaded (`lock`, `highestVoted`,
+//! `vote2Bar`, `reconstructed`) and the file it resumes (`resumes`, null when
+//! the node took no step before the crash). The pair is checked as one history;
+//! the machine is not run across a restart.
+//!
 //! # Identities
 //!
 //! A block's identity travels as the text of its commitment. The Lean side does
@@ -56,7 +64,7 @@ use std::{
 
 use committable::Committable;
 use hotshot_types::{
-    data::{EpochNumber, Leaf2, VidCommitment, VidDisperseShare2, ViewNumber},
+    data::{EpochNumber, Leaf2, VidCommitment, VidCommitment2, VidDisperseShare2, ViewNumber},
     simple_certificate::{TimeoutCertificate3, TimeoutEvidence},
     simple_vote::HasEpoch,
     traits::{block_contents::BlockHeader, node_implementation::NodeType},
@@ -145,12 +153,34 @@ pub struct Recorder {
     /// A certificate for the anchor to name when the run gives none, as
     /// [`Recorder::fallback_anchor`] was told.
     fallback_anchor: Option<String>,
+    /// What a restarted node loaded, as a JSON object for the identity line; see
+    /// [`Recorder::restarted`].
+    restart: Option<String>,
 }
 
 impl Recorder {
     /// A recorder collecting a trace for `$NP_TRACE_DIR/<label>.jsonl`, or an inert one.
     pub fn new(label: &str) -> Self {
-        let inert = Self {
+        let Ok(dir) = std::env::var(TRACE_DIR) else {
+            return Self::inert();
+        };
+        let dir = PathBuf::from(dir);
+        if let Err(err) = create_dir_all(&dir) {
+            eprintln!("trace: cannot create {}: {err}", dir.display());
+            return Self::inert();
+        }
+        // A label may name a test, and test names contain `::`.
+        let name = label.replace("::", "-");
+        let seq = NEXT_TRACE.fetch_add(1, Ordering::Relaxed);
+        let mut recorder = Self::inert();
+        recorder.path = Some(dir.join(format!("{name}.{seq}.jsonl")));
+        recorder.identified = false;
+        recorder
+    }
+
+    /// A recorder that records nothing.
+    pub fn inert() -> Self {
+        Self {
             path: None,
             lines: Vec::new(),
             identified: true,
@@ -162,36 +192,54 @@ impl Recorder {
             anchor_lock: None,
             unsigned_locks: Cell::new(false),
             fallback_anchor: None,
-        };
-        let Ok(dir) = std::env::var(TRACE_DIR) else {
-            return inert;
-        };
-        let dir = PathBuf::from(dir);
-        if let Err(err) = create_dir_all(&dir) {
-            eprintln!("trace: cannot create {}: {err}", dir.display());
-            return inert;
-        }
-        // A label may name a test, and test names contain `::`.
-        let name = label.replace("::", "-");
-        let seq = NEXT_TRACE.fetch_add(1, Ordering::Relaxed);
-        Self {
-            path: Some(dir.join(format!("{name}.{seq}.jsonl"))),
-            lines: Vec::new(),
-            identified: false,
-            pending: Vec::new(),
-            last: None,
-            led: BTreeMap::new(),
-            steps: 0,
-            epoch_height: 0,
-            anchor_lock: None,
-            unsigned_locks: Cell::new(false),
-            fallback_anchor: None,
+            restart: None,
         }
     }
 
     /// A recorder labelled by the running test, which is this thread's name.
     pub fn for_current_test() -> Self {
         Self::new(std::thread::current().name().unwrap_or("trace"))
+    }
+
+    /// The name of the file this recorder writes, once its identity line is
+    /// written; a node that took no step wrote none.
+    pub fn file_name(&self) -> Option<String> {
+        if !self.identified {
+            return None;
+        }
+        let name = self.path.as_ref()?.file_name()?;
+        Some(name.to_string_lossy().into_owned())
+    }
+
+    /// Note what a restarted node loaded from storage, to go into the identity
+    /// line.
+    ///
+    /// Call before [`Recorder::preamble`]. `resumes` names the file the node
+    /// wrote before the crash, as [`Recorder::file_name`] gave it, and is `None`
+    /// when that node took no step. `reconstructed` lists the saved proposals
+    /// the node marks reconstructed, as `(view, payload commitment)`.
+    pub fn restarted<T: NodeType>(
+        &mut self,
+        lock: Option<&Certificate1<T>>,
+        highest_voted: ViewNumber,
+        vote2_bar: Option<ViewNumber>,
+        reconstructed: &[(ViewNumber, VidCommitment2)],
+        resumes: Option<&str>,
+    ) {
+        if self.path.is_none() {
+            return;
+        }
+        let reconstructed: Vec<String> = reconstructed
+            .iter()
+            .map(|(view, commit)| arr(&[view_json(*view), ident(commit)]))
+            .collect();
+        self.restart = Some(obj(&[
+            ("lock", lock.map_or_else(null, cert1_json_raw)),
+            ("highestVoted", view_json(highest_voted)),
+            ("vote2Bar", vote2_bar.map_or_else(null, view_json)),
+            ("reconstructed", arr(&reconstructed)),
+            ("resumes", resumes.map_or_else(null, quoted)),
+        ]));
     }
 
     /// Write the identity line, once, before the first step.
@@ -231,14 +279,17 @@ impl Recorder {
         let mut fields = vec![
             ("node", ident(node)),
             ("anchor", ident(&anchor.commit())),
-            // After genesis only for a node restored from storage, which the
-            // model does not cover.
+            // After genesis only for a node restored from storage, which says
+            // what it loaded in `restart`.
             ("anchorView", view_json(anchor.view_number())),
             ("decideBuffer", DECIDE_BUFFER.to_string()),
             ("epochHeight", epoch_height.to_string()),
         ];
         if let Some(cert) = &self.anchor_lock {
             fields.push(("anchorCert", cert.clone()));
+        }
+        if let Some(restart) = &self.restart {
+            fields.push(("restart", restart.clone()));
         }
         let line = obj(&fields);
         self.lines.push(format!("# trace {line}"));
@@ -1100,4 +1151,65 @@ fn quoted(text: &str) -> String {
 
 fn tagged(tag: &str, body: String) -> String {
     obj(&[(tag, body)])
+}
+
+fn null() -> String {
+    "null".to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use hotshot_example_types::node_types::TestTypes;
+
+    use super::*;
+
+    fn recorder_in_tmp(name: &str) -> Recorder {
+        let mut recorder = Recorder::inert();
+        recorder.path = Some(PathBuf::from("./tmp/np-trace-test").join(name));
+        recorder.identified = false;
+        recorder
+    }
+
+    #[test]
+    fn restarted_writes_every_loaded_field() {
+        let mut rec = recorder_in_tmp("a.0.jsonl");
+        rec.restarted::<TestTypes>(
+            None,
+            ViewNumber::new(7),
+            Some(ViewNumber::new(5)),
+            &[(ViewNumber::new(6), VidCommitment2::default())],
+            Some("a.0.jsonl"),
+        );
+        let restart = rec.restart.take().expect("restart is set");
+        let commit = ident(&VidCommitment2::default());
+        assert_eq!(
+            restart,
+            format!(
+                "{{\"lock\":null,\"highestVoted\":7,\"vote2Bar\":5,\"reconstructed\":[[6,\
+                 {commit}]],\"resumes\":\"a.0.jsonl\"}}"
+            )
+        );
+    }
+
+    #[test]
+    fn restarted_marks_absent_fields_null() {
+        let mut rec = recorder_in_tmp("b.0.jsonl");
+        rec.restarted::<TestTypes>(None, ViewNumber::new(0), None, &[], None);
+        assert_eq!(
+            rec.restart.as_deref(),
+            Some(
+                "{\"lock\":null,\"highestVoted\":0,\"vote2Bar\":null,\"reconstructed\":[],\"\
+                 resumes\":null}"
+            )
+        );
+    }
+
+    #[test]
+    fn file_name_waits_for_identity() {
+        let mut rec = recorder_in_tmp("c.0.jsonl");
+        assert_eq!(rec.file_name(), None);
+        rec.identified = true;
+        assert_eq!(rec.file_name().as_deref(), Some("c.0.jsonl"));
+        assert_eq!(Recorder::inert().file_name(), None);
+    }
 }
