@@ -602,6 +602,11 @@ impl RewardMerkleTreeDataSource for SqlStorage {
                     if tree_height == 0 {
                         return Ok(());
                     }
+                    // A loop replaying history below the boundary may not have its leaf yet, and a
+                    // failed read would fail the whole state update.
+                    if height < tree_height {
+                        return Ok(());
+                    }
                     // During V4→V5 upgrades the previous epoch boundary may be V4.
                     let mut tx = self.read().await.context("opening read transaction")?;
                     let leaf = tx

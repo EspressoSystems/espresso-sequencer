@@ -4105,7 +4105,7 @@ mod postgres_tests {
             .into();
 
         let (payload, ns_table) =
-            Payload::from_transactions(txs.clone(), &validated_state, &instance_state)
+            Payload::from_transactions(&txs, &validated_state, &instance_state)
                 .await
                 .unwrap();
         let payload_bytes = payload.encode();
@@ -4179,7 +4179,13 @@ mod postgres_tests {
 
     #[test_log::test(tokio::test(flavor = "multi_thread"))]
     async fn test_postgres_read_ns_table_v0_1() {
-        test_postgres_read_ns_table(NodeState::mock()).await;
+        let v0_1 = versions::version(0, 1);
+        test_postgres_read_ns_table(
+            NodeState::mock()
+                .with_current_version(v0_1)
+                .with_genesis_version(v0_1),
+        )
+        .await;
     }
 
     #[test_log::test(tokio::test(flavor = "multi_thread"))]
