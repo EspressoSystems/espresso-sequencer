@@ -3705,6 +3705,7 @@ mod test {
         catchup::{NullStateCatchup, StatePeers},
         follower::{FollowerContext, FollowerOptions, FollowerParams, init_follower_node},
         genesis::{Genesis as NodeGenesis, L1Finalized, StakeTableConfig},
+        legacy_chain::LegacyChain,
         persistence,
         persistence::no_storage,
         testing::{
@@ -10885,6 +10886,66 @@ mod test {
                 "Mismatched transactions for namespace {namespace}"
             );
         }
+    }
+
+    /// Rewards accrue in the v1 tree before 0.4 and in the v2 tree from 0.4 on. The replay checks
+    /// every derived root against its header, so this only checks which tree each era filled. The
+    /// v1 balances are not queryable: the state loop stores no v1 paths since #4325.
+    #[rstest]
+    #[case::v3("v3", false)]
+    #[case::v4("v4", true)]
+    #[test_log::test(tokio::test(flavor = "multi_thread"))]
+    async fn test_legacy_reward_tree_updates(
+        #[case] chain: &str,
+        #[case] fills_v2: bool,
+    ) -> anyhow::Result<()> {
+        let chain = LegacyChain::load(chain)?;
+        let replay = chain.replay().await?;
+        let client = &replay.client;
+        let tip = chain.tip();
+
+        let roots: Vec<_> = chain
+            .blocks
+            .iter()
+            .map(|block| block.leaf.header().reward_merkle_tree_root())
+            .collect();
+        ensure!(
+            roots.iter().all(|root| root.is_right() == fills_v2),
+            "{} headers commit to the wrong reward tree",
+            chain.name
+        );
+        let reward_blocks = roots.windows(2).filter(|pair| pair[0] != pair[1]).count();
+        ensure!(reward_blocks > 0, "{} never paid a reward", chain.name);
+
+        let validators: AuthenticatedValidatorMap = client.get("node/validators/3").send().await?;
+        ensure!(!validators.is_empty(), "epoch 3 has validators");
+        let mut balances = vec![];
+        for validator in validators.keys() {
+            let balance = client
+                .get::<Option<RewardAmount>>(&format!(
+                    "reward-state-v2/reward-balance/{tip}/{validator}"
+                ))
+                .send()
+                .await;
+            if fills_v2 {
+                balances.push(balance?.unwrap_or_default().0);
+            } else {
+                // The v2 tree was never written, so there is no proof to answer with.
+                match balance {
+                    Err(err) if err.status == StatusCode::NOT_FOUND => {},
+                    other => bail!(
+                        "{}: {validator} v2 balance should be missing, got {other:?}",
+                        chain.name
+                    ),
+                }
+            }
+        }
+        ensure!(
+            balances.iter().any(|balance| !balance.is_zero()) == fills_v2,
+            "{}: v2 reward balances {balances:?}",
+            chain.name
+        );
+        Ok(())
     }
 
     #[test_log::test(tokio::test(flavor = "multi_thread"))]
