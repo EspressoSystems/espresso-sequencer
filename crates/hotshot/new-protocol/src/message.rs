@@ -525,7 +525,10 @@ impl<T: NodeType> ReVote<T> {
         }
         match &self.timeout {
             None if parent + 1 != self.view => return Err(ReVoteError::Timeout),
-            Some(tc) if tc.view_number + 1 != self.view || tc.epoch != self.epoch => {
+            Some(tc)
+                if tc.view_number.u64().checked_add(1) != Some(self.view.u64())
+                    || tc.epoch != self.epoch =>
+            {
                 return Err(ReVoteError::Timeout);
             },
             Some(tc) if tc.check_lock().is_err() => return Err(ReVoteError::TimeoutLock),
