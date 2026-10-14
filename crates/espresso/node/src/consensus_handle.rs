@@ -33,7 +33,7 @@ use hotshot_types::{
     utils::StateAndDelta,
 };
 use parking_lot::RwLock;
-use tokio::{join, select, spawn, sync::mpsc::UnboundedReceiver};
+use tokio::{select, spawn, sync::mpsc::UnboundedReceiver};
 use tokio_util::{sync::CancellationToken, task::AbortOnDropHandle};
 use tracing::{error, warn};
 
@@ -44,14 +44,14 @@ pub struct ConsensusHandle<T: NodeType, I: NodeImplementation<T>> {
     event_rx: InactiveReceiver<CoordinatorEvent<T>>,
     upgrade_lock: UpgradeLock<T>,
     membership_coordinator: EpochMembershipCoordinator<T>,
-    resting: RwLock<Resting<T>>,
+    resting: Arc<RwLock<Resting<T>>>,
     new_proto: Arc<RwLock<NewProtocol<T, I::Storage>>>,
     /// Cancelled once the coordinator task has ended, however it ended.
     exited: CancellationToken,
 }
 
-/// What consensus reports once the coordinator has stopped: its last report, or the anchor if it
-/// never made one.
+/// What the readers serve once the coordinator has stopped: what it held when it stopped, written
+/// by its task on the way out, or the anchor if it never ran.
 struct Resting<T: NodeType> {
     view: ViewNumber,
     leaf: Leaf2<T>,
@@ -68,6 +68,8 @@ enum NewProtocol<T: NodeType, S> {
         queue_len: Option<Arc<dyn Gauge>>,
     },
     Running {
+        /// Held so that dropping the handle aborts the task; `shut_down` waits on `exited`.
+        #[cfg_attr(not(test), allow(dead_code))]
         coordinator: AbortOnDropHandle<()>,
         client_api: ClientApi<T>,
         shutdown: CancellationToken,
@@ -117,11 +119,11 @@ where
             event_rx: event_rx.deactivate(),
             upgrade_lock,
             membership_coordinator,
-            resting: RwLock::new(Resting {
+            resting: Arc::new(RwLock::new(Resting {
                 view: initializer.anchor_leaf().view_number(),
                 leaf: initializer.anchor_leaf().clone(),
                 state: initializer.anchor_state().clone(),
-            }),
+            })),
             new_proto,
             exited: CancellationToken::new(),
         }
@@ -151,6 +153,7 @@ where
                         queue_len,
                         shutdown.clone(),
                         self.exited.clone(),
+                        Arc::clone(&self.resting),
                     ))),
                     client_api,
                     shutdown,
@@ -170,16 +173,16 @@ where
         self.exited.cancelled().await
     }
 
-    /// Serves the resting state once the coordinator has shut down, including under a reader
-    /// that cloned the client API before `shut_down` took it. Panics if the coordinator died
-    /// instead: the node must not answer as if the chain had stopped.
+    /// Serves the resting state once the coordinator has been told to shut down, waiting for
+    /// the state it leaves on the way out if a request fails meanwhile. Panics if the
+    /// coordinator died instead: the node must not answer as if the chain had stopped.
     pub async fn current_view(&self) -> ViewNumber {
         let Some(client_api) = self.client_api().await else {
             return self.resting.read().view;
         };
         match client_api.current_view().await {
             Ok(view) => view,
-            Err(err) => self.resting_unless_dead(err).view,
+            Err(err) => self.resting_unless_dead(err).await.view,
         }
     }
 
@@ -190,7 +193,7 @@ where
         };
         match client_api.decided_leaf().await {
             Ok(leaf) => leaf,
-            Err(err) => self.resting_unless_dead(err).leaf.clone(),
+            Err(err) => self.resting_unless_dead(err).await.leaf.clone(),
         }
     }
 
@@ -201,16 +204,25 @@ where
         };
         match client_api.decided_state().await {
             Ok(state) => state,
-            Err(err) => Some(self.resting_unless_dead(err).state.clone()),
+            Err(err) => Some(self.resting_unless_dead(err).await.state.clone()),
         }
     }
 
-    /// Where a failed request leaves a reader: `shut_down` took the coordinator and the resting
-    /// state answers, or the coordinator is still registered as running, so it died.
-    fn resting_unless_dead(&self, err: QueryError) -> parking_lot::RwLockReadGuard<'_, Resting<T>> {
-        if matches!(*self.new_proto.read(), NewProtocol::Running { .. }) {
+    /// Where a failed request leaves a reader: the coordinator was told to shut down and the
+    /// resting state it leaves behind answers, or no shutdown was asked for, so it died.
+    async fn resting_unless_dead(
+        &self,
+        err: QueryError,
+    ) -> parking_lot::RwLockReadGuard<'_, Resting<T>> {
+        let stopping = match &*self.new_proto.read() {
+            NewProtocol::Running { shutdown, .. } => shutdown.is_cancelled(),
+            _ => true,
+        };
+        if !stopping {
             panic!("coordinator died: {err}");
         }
+        // The coordinator writes the resting state before it exits.
+        self.exited.cancelled().await;
         self.resting.read()
     }
 
@@ -398,42 +410,20 @@ where
     /// start it afterwards; the readers serve the resting state from here on.
     pub async fn shut_down(&self) {
         self.membership_coordinator.cancel_all_drb();
-        let client_api = match &*self.new_proto.read() {
-            NewProtocol::Running { client_api, .. } => Some(client_api.clone()),
-            _ => None,
+        let running = match &*self.new_proto.read() {
+            NewProtocol::Running { shutdown, .. } => {
+                shutdown.cancel();
+                true
+            },
+            _ => false,
         };
-        if let Some(client_api) = &client_api {
-            self.rest(client_api).await;
+        if running {
+            // The coordinator writes the resting state before it exits. Take it only afterwards,
+            // so a reader whose request fails meanwhile waits for that state instead of taking
+            // the coordinator for dead.
+            self.exited.cancelled().await;
         }
-        let taken = self.new_proto.write().take();
-        if let NewProtocol::Running {
-            shutdown,
-            coordinator,
-            ..
-        } = taken
-        {
-            shutdown.cancel();
-            let _ = coordinator.await;
-        }
-    }
-
-    /// Keep what the coordinator last reported, for the readers that outlive it. This runs
-    /// before the coordinator is cancelled, so a decide that lands in between leaves the resting
-    /// state one leaf behind. The state is the one for the leaf's own view, not the decided
-    /// state, which that decide would have moved past the leaf.
-    async fn rest(&self, client_api: &ClientApi<T>) {
-        let (Ok(view), Ok(leaf)) = join!(client_api.current_view(), client_api.decided_leaf())
-        else {
-            warn!("coordinator unavailable at shutdown, keeping its earlier state");
-            return;
-        };
-        let Ok(state) = client_api.state(leaf.view_number()).await else {
-            warn!("coordinator unavailable at shutdown, keeping its earlier state");
-            return;
-        };
-        let state =
-            state.unwrap_or_else(|| Arc::new(T::ValidatedState::from_header(leaf.block_header())));
-        *self.resting.write() = Resting { view, leaf, state };
+        drop(self.new_proto.write().take());
     }
 
     /// Aborts the coordinator task without touching the handle's state, as a panic in it would.
@@ -464,6 +454,7 @@ async fn run_coordinator<T, S>(
     queue_len: Option<Arc<dyn Gauge>>,
     shutdown: CancellationToken,
     exited: CancellationToken,
+    resting: Arc<RwLock<Resting<T>>>,
 ) where
     T: NodeType,
     S: NewProtocolStorage<T>,
@@ -498,6 +489,18 @@ async fn run_coordinator<T, S>(
         }
     }
 
+    // Leave the readers what the coordinator holds now. No request reaches it from here on, so
+    // nothing it still has queued moves the chain past this.
+    let leaf = coord.last_decided_leaf().clone();
+    let state = coord
+        .state(leaf.view_number())
+        .map(|entry| entry.state.clone())
+        .unwrap_or_else(|| Arc::new(T::ValidatedState::from_header(leaf.block_header())));
+    *resting.write() = Resting {
+        view: coord.current_view(),
+        leaf,
+        state,
+    };
     coord.stop().await;
 }
 

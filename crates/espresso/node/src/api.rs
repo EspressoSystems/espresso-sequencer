@@ -7939,8 +7939,7 @@ mod test {
         node_0.shutdown_consensus().await;
 
         // The decide processor keeps pruning the proposals of decides that landed before the
-        // shutdown, so wait for the stored set to settle before choosing one. The oldest may
-        // already be decided, since pruning lags the decide.
+        // shutdown, so wait for the stored set to settle before choosing one.
         let proposals = timeout(Duration::from_secs(30), async {
             let mut proposals = persistence.load_quorum_proposals().await?;
             loop {
