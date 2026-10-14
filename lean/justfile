@@ -13,7 +13,7 @@ lint:
 impl:
     cd new-protocol-impl && lake build
 
-# Build the differential harness and the `replay` binary.
+# Build the trace checker and the simulator.
 diff:
     cd new-protocol-diff && lake build
 

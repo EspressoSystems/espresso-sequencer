@@ -187,16 +187,17 @@ test-all:
     just nextest --features embedded-db --profile all
     just nextest --profile all
 
-# Record runs of the new-protocol tests and check each against the signing rules
-# of `lean/new-protocol-spec`, directly rather than through the Lean machine. A
-# pass means the recorded node obeyed `SafeHistory`; see
-# `lean/new-protocol-diff/NewProtocolDiff/Check.lean`.
+# A pass means the recorded node obeyed `ProtocolHistory` and discharged what it
+# owed within `defaultDelta` (`Prompt`). See `lean/new-protocol-diff/CheckMain.lean`
+# and `crates/hotshot/new-protocol/src/trace.rs`.
 #
 # The suite is recorded twice: at the version the tests default to, and at 0.7
 # (`NP_TEST_VERSION`), whose timeouts sign their lock. The specification covers
 # only lock-signing timeouts, so most runs with a timeout are in scope only in the
 # second pass. A test written for the default version may fail there; its traces
 # are checked all the same.
+#
+# Record runs of the new-protocol tests and check each against `lean/new-protocol-spec`.
 test-lean-check dir="":
     #!/usr/bin/env bash
     set -uo pipefail
@@ -206,6 +207,8 @@ test-lean-check dir="":
       lean/new-protocol-diff/.lake/build/bin/check "{{dir}}"
       exit $?
     fi
+    # A fixed path, cleared first, so runs overwrite rather than accumulate.
+    # Under `target` because it is build output: gitignored, and cleaned with it.
     traces="$(pwd)/target/np-traces"
     rm -rf "$traces" "$traces-0.7"
     echo "recording to $traces"
@@ -218,50 +221,6 @@ test-lean-check dir="":
     lean/new-protocol-diff/.lake/build/bin/check "$traces" || checked=$?
     lean/new-protocol-diff/.lake/build/bin/check "$traces-0.7" || checked=$?
     exit $checked
-
-# Record runs of the new-protocol tests and replay them against the Lean machine.
-#
-# The machine is proved to satisfy `lean/new-protocol-spec`, so a divergence is
-# either the implementation departing from the specification or the trace running
-# past what the specification covers. The `replay` binary separates the two; see
-# `lean/new-protocol-diff/NewProtocolDiff/Corpus.lean` and
-# `crates/hotshot/new-protocol/src/trace.rs`.
-test-lean-diff dir="":
-    #!/usr/bin/env bash
-    set -uo pipefail
-    (cd lean/new-protocol-diff && lake build) || exit 1
-    # Given a directory, record nothing and replay what is already there.
-    if [ -n "{{dir}}" ]; then
-      lean/new-protocol-diff/.lake/build/bin/replay "{{dir}}"
-      exit $?
-    fi
-    # A fixed path, cleared first, so runs overwrite rather than accumulate.
-    # Under `target` because it is build output: gitignored, and cleaned with it.
-    # The suite is recorded twice, as for `test-lean-check`: at the default
-    # version, and at 0.7, whose timeouts the specification covers.
-    traces="$(pwd)/target/np-traces"
-    rm -rf "$traces" "$traces-0.7"
-    echo "recording to $traces"
-    suite=0
-    NP_TRACE_DIR="$traces" cargo test -p hotshot-new-protocol --release --lib tests:: || suite=$?
-    if [ "$suite" -ne 0 ]; then
-      echo "note: the test suite failed; replaying the traces it did record" >&2
-    fi
-    echo "recording at 0.7 to $traces-0.7"
-    NP_TEST_VERSION=0.7 NP_TRACE_DIR="$traces-0.7" \
-      cargo test -p hotshot-new-protocol --release --lib tests:: \
-      || echo "note: some tests fail at 0.7; replaying the traces they recorded" >&2
-    replayed=0
-    lean/new-protocol-diff/.lake/build/bin/replay "$traces" || replayed=$?
-    lean/new-protocol-diff/.lake/build/bin/replay "$traces-0.7" || replayed=$?
-    # A corpus from a clean run is worth keeping: `just test-lean-diff $traces`
-    # replays it without paying for the suite again.
-    if [ "$suite" -ne 0 ]; then
-      rm -rf "$traces" "$traces-0.7"
-    else
-      echo "traces kept in $traces and $traces-0.7"
-    fi
-    [ "$suite" -eq 0 ] && [ "$replayed" -eq 0 ]
 
 test-integration: (build "test")
 	INTEGRATION_TEST_NODE_VERSION=2 cargo nextest run -p tests --nocapture --profile integration test_native_demo_basic
