@@ -81,6 +81,8 @@ impl From<hotshot_events_service::events::Error> for Error {
 }
 
 /// An internal error that arises when querying a database.
+///
+/// Serialized by variant index, so add new variants at the end.
 #[derive(Clone, Debug, Snafu, Deserialize, Serialize)]
 #[snafu(visibility(pub))]
 pub enum QueryError {
@@ -94,12 +96,18 @@ pub enum QueryError {
     #[snafu(display("Failed to fetch requested resource: {message}"))]
     #[snafu(context(suffix(ErrorSnafu)))]
     Error { message: String },
+    /// The requested state was pruned.
+    #[snafu(display(
+        "state at height {height} was pruned (pruned through height {pruned_height})"
+    ))]
+    Pruned { height: u64, pruned_height: u64 },
 }
 
 impl QueryError {
     pub fn status(&self) -> StatusCode {
         match self {
             Self::NotFound | Self::Missing => StatusCode::NOT_FOUND,
+            Self::Pruned { .. } => StatusCode::GONE,
             Self::Error { .. } => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
