@@ -607,24 +607,14 @@ impl RewardMerkleTreeDataSource for SqlStorage {
                     if height < tree_height {
                         return Ok(());
                     }
-                    // During V4→V5 upgrades the previous epoch boundary may be V4. A loop that
-                    // started from a later boundary snapshot may never have had this leaf, and
-                    // has no tree here either, so skip it like a missing tree below.
+                    // During V4→V5 upgrades the previous epoch boundary may be V4. The data pruner
+                    // may have deleted the boundary leaf, in which case the tree load below decides.
                     let mut tx = self.read().await.context("opening read transaction")?;
-                    let leaf = match tx
+                    if let Ok(leaf) = tx
                         .get_leaf(LeafId::<SeqTypes>::from(tree_height as usize))
                         .await
+                        && leaf.header().version() < EPOCH_REWARD_VERSION
                     {
-                        Ok(leaf) => leaf,
-                        Err(err) => {
-                            tracing::info!(
-                                tree_height,
-                                "leaf at epoch boundary not available: {err:#}"
-                            );
-                            return Ok(());
-                        },
-                    };
-                    if leaf.header().version() < EPOCH_REWARD_VERSION {
                         return Ok(());
                     }
                 }

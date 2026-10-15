@@ -35,7 +35,7 @@ use hotshot_query_service::{
 };
 use hotshot_types::{
     addr::NetAddr, network::NetworkConfig, simple_certificate::LightClientStateUpdateCertificateV2,
-    x25519,
+    utils::epoch_from_block_number, x25519,
 };
 use http_client::{Client, error::ClientErr};
 use serde::{Deserialize, Serialize};
@@ -100,8 +100,9 @@ pub struct RecordedNetworkConfigUpdate {
 pub struct ReplayNode {
     pub node: FollowerContext<persistence::sql::Persistence>,
     pub client: Client<ClientErr, SequencerApiVersion>,
+    pub url: url::Url,
     pub l1: AnvilInstance,
-    _storage: TmpDb,
+    storage: TmpDb,
 }
 
 impl LegacyChain {
@@ -133,6 +134,17 @@ impl LegacyChain {
             .expect("a recorded chain has blocks")
             .leaf
             .height()
+    }
+
+    pub fn epoch_height(&self) -> u64 {
+        self.genesis
+            .epoch_height
+            .expect("a recorded chain has epochs")
+    }
+
+    /// The epoch of the last recorded block.
+    pub fn last_epoch(&self) -> u64 {
+        epoch_from_block_number(self.tip(), self.epoch_height())
     }
 
     /// Starts a query node on this chain and returns once it has stored every block and derived
@@ -167,6 +179,7 @@ impl LegacyChain {
             .catchup(Default::default())
             .config(Default::default())
             .explorer(Default::default())
+            .light_client(Default::default())
             .serve(move |metrics, sink, _| {
                 async move {
                     init_replay_node(
@@ -186,7 +199,7 @@ impl LegacyChain {
             .context("replayed node should start")?;
         let node = FollowerContext::new(handle);
 
-        let client = Client::new(url);
+        let client = Client::new(url.clone());
         ensure!(
             client.connect(Some(Duration::from_secs(60))).await,
             "replayed query API did not come up"
@@ -195,9 +208,17 @@ impl LegacyChain {
         Ok(ReplayNode {
             node,
             client,
+            url,
             l1,
-            _storage: storage,
+            storage,
         })
+    }
+}
+
+impl ReplayNode {
+    /// Another connection to the node's consensus storage.
+    pub async fn persistence(&self) -> anyhow::Result<persistence::sql::Persistence> {
+        tmp_options(&self.storage).create().await
     }
 }
 
