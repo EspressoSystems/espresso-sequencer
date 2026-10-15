@@ -13,7 +13,9 @@ Only flag something as Important if it fits one of the cases below. Anything els
 
 - **Untrusted input crashes or exhausts a node.** Look for a panic, `unwrap`, `expect`, or unbounded allocation that a
   peer, an HTTP caller, or L1 data can reach. A length or size read off the wire is the usual culprit.
-- **Permanent halts.** One input or one missing piece of data that stops L1 light-client updates, the prover, or a node background loop (state loop, catchup, fetchers) for good. That includes retrying a failure that can never succeed, retrying with no backoff, and a new hard dependency on a flag that is optional, such as `--peers`.
+- **Permanent halts.** One input or one missing piece of data that stops L1 light-client updates, the prover, or a node
+  background loop (state loop, catchup, fetchers) for good. That includes retrying a failure that can never succeed,
+  retrying with no backoff, and a new hard dependency on a flag that is optional, such as `--peers`.
 - **Code trusts a field it never verified.** After checking a signature, QC, certificate, or proof, the code should only
   rely on fields that were signed, or values derived from them. We've been bitten by an epoch label sitting next to a
   certificate, a "zero means skip this check" value, and a namespace table that wasn't matched to its header.
@@ -38,9 +40,10 @@ Only flag something as Important if it fits one of the cases below. Anything els
   or a version bump with a new publisher. Flag git dependencies pinned to a tag or branch instead of a commit.
 - **CI changes.** A new or changed GitHub Action not pinned to a commit SHA, a workflow given new secrets or write
   permissions, or a script that runs PR-controlled code with secrets available.
-- **Network scope.** Behavior that was limited to one network, such as a decaf-only branch keyed on `DECAF_CHAIN_ID`, now applies to mainnet, or the reverse.
-- **Swallowed errors.** `if let Ok`, `.ok()`, or `unwrap_or_default()` throws away every error when only one kind, such as "not found", is expected. Important on consensus, state, and catchup paths.
-
+- **Network scope.** Behavior that was limited to one network, such as a decaf-only branch keyed on `DECAF_CHAIN_ID`,
+  now applies to mainnet, or the reverse.
+- **Swallowed errors.** `if let Ok`, `.ok()`, or `unwrap_or_default()` throws away every error when only one kind, such
+  as "not found", is expected. Important on consensus, state, and catchup paths.
 
 ### Protocol rules
 
@@ -111,8 +114,8 @@ rejects or panics on, that's Important. So is a contract ABI change without rege
 
 - Back up every claim about behavior with a `file:line` in the source. Don't infer from a name.
 - If the code sits behind a protocol version gate, name the gate and compare it with `base_version` in
-  `data/genesis/mainnet.toml`. Label the finding "dormant" only if the gate is above `base_version`; older versions
-  are "live on mainnet", because they still run during sync, catchup, and replay.
+  `data/genesis/mainnet.toml`. Label the finding "dormant" only if the gate is above `base_version`; older versions are
+  "live on mainnet", because they still run during sync, catchup, and replay.
 - Say who the attacker has to be: any peer, a staked validator, the chain operator, or someone holding an admin key. If
   it takes an admin key, the timelock, or the chain operator, it isn't Important unless the PR changes who holds that
   power or what it can do.
@@ -122,7 +125,8 @@ rejects or panics on, that's Important. So is a contract ABI change without rege
 - New v2 endpoints are defined in `crates/espresso/api/proto/v2/` and generated, not written by hand (see `API.md`).
 - New SQL migrations come in a PostgreSQL and a SQLite version, named `V{n}__{name}.sql`.
 - Every behavior change is mentioned in the PR description, especially an error that becomes a soft skip.
-- A regression test reproduces the production shape of the bug, and doesn't depend on fixed ports or timing that make it flaky.
+- A regression test reproduces the production shape of the bug, and doesn't depend on fixed ports or timing that make it
+  flaky.
 
 ## Don't report
 
