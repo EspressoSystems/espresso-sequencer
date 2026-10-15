@@ -1090,13 +1090,18 @@ def test_idle_allows_heartbeat_bytes():
 
 
 class BeatPool:
-    """Records heartbeat bodies; sets `stop` after `beats` requests, refuses those to `down`."""
+    """Records heartbeat bodies; sets `stop` after `beats` requests, refuses those to `down`, loses the
+    responses if `lost`."""
 
     def __init__(
-        self, beats: int, stop: threading.Event, down: tuple[str, ...] = ()
+        self,
+        beats: int,
+        stop: threading.Event,
+        down: tuple[str, ...] = (),
+        lost: bool = False,
     ) -> None:
         self.clock = fakes.FakeClock()
-        self.beats, self.stop, self.down = beats, stop, down
+        self.beats, self.stop, self.down, self.lost = beats, stop, down, lost
         self.sent: list[tuple[float, str, bytes]] = []
 
     def request(
@@ -1108,6 +1113,8 @@ class BeatPool:
             self.stop.set()
         if url.startswith(self.down):
             raise OSError("refused")
+        if self.lost:
+            raise netbench.ResponseLost("timed out")
         return 200, b""
 
 
@@ -2160,6 +2167,7 @@ def test_a_tx_no_node_takes_is_one_submit_error_and_dropped():
     assert load.state.submit_errors == 1
     assert load.state.txs == []
     assert load.state.pending == {}
+    assert (tx.node, load.state.failovers) == (1, 0)
 
 
 def test_a_failed_over_tx_stays_pending_and_records_where_it_landed():

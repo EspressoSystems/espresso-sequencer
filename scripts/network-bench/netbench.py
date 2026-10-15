@@ -1969,7 +1969,7 @@ async def submit_tx(load: Load, tx: Tx) -> None:
     request = functools.partial(load.bodies.request, tx.id, lo + tx.id % (hi - lo + 1))
     status = await load.client.call(post_tx, load.state, tx, load.urls, request)
     # A lost response stays pending: the scan or `tx_timeout_s` resolves it.
-    if status is not None and status not in (200, LOST):
+    if status is not None and status != 200:
         load.state.failed(tx)
 
 
@@ -2051,9 +2051,10 @@ def post_tx(
         status, index, _ = post_failover(pool, urls, tx.node, body)
     finally:
         tx.t_done = pool.clock.time()
-    with state.lock:
-        state.failovers += (index - tx.node) % len(urls)
-    tx.node = index
+    if 0 < status < 500 or status == LOST:
+        with state.lock:
+            state.failovers += (index - tx.node) % len(urls)
+        tx.node = index
     return status
 
 
