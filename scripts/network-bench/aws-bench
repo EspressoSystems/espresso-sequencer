@@ -1278,6 +1278,14 @@ def check_chaos(cfg: RunConfig) -> None:
             raise Refused(
                 f"--chaos-mass-nodes {cfg.chaos.mass_nodes} exceeds --nodes {cfg.nodes}"
             )
+    if set(cfg.chaos.kinds) - ch.MASS_KINDS and not any(
+        len(peers(i, cfg.nodes, cfg.query_nodes)) >= 2 for i in range(cfg.nodes)
+    ):
+        raise Refused(
+            f"--chaos needs a node with 2 peers to fault one node at a time: --nodes "
+            f"{cfg.nodes} with --query-nodes {cfg.query_nodes} leaves 1 validator; use "
+            "mass kinds only"
+        )
     quiet_s = cfg.chaos.kill_down_s + ch.RECOVERY_ALLOWANCE_S
     if cfg.chaos.kinds and cfg.chaos.minutes * CHAOS_STEP_S <= quiet_s:
         raise Refused(

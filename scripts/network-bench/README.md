@@ -244,8 +244,9 @@ just bench aws run --tag chaos-dense --chaos --nodes 32 --query-nodes 3 --chaos-
   `--submit-nodes` and `--query-engine` given on the command line are kept; `--latency` is per run, `up` does not take
   it; `--nodes N` alone gives N query nodes.
 - Refused: `--steps`, `--step-s`, `--search`, `--keep-going` and `--warmup-s` (set by the chaos config); fewer than 7
-  nodes; 2 or fewer query nodes; a `--chaos-min` that gives no faults (not with `--chaos-kinds none`);
-  `--query-engine postgres`; `--query-db` other than `colocated`.
+  nodes; 2 or fewer query nodes; a shape where no node has 2 peers (`--nodes 7 --query-nodes 6`; not with mass kinds
+  only or `none`); a `--chaos-min` that gives no faults (not with `--chaos-kinds none`); `--query-engine postgres`;
+  `--query-db` other than `colocated`.
 - Faults start after the warmup, one per `--chaos-gap` (45 s), and stop the kill down time plus 120 s (180 s) before the
   load ends, so a late kill recovers under load; `--chaos-min 3` or less is refused, as it gives no faults. Kinds are
   used in turn from `--chaos-kinds` (default `restart,kill,wipe`) on nodes in the order `--chaos-seed` shuffles them to.

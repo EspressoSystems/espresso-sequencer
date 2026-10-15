@@ -299,6 +299,16 @@ def test_chaos_query_floor_not_below_query_nodes_refused():
     awsb.check_chaos(dataclasses.replace(chaos_cfg(), chaos=chaos))
 
 
+def test_chaos_refuses_a_shape_where_no_node_has_two_peers():
+    cfg = dataclasses.replace(chaos_cfg(), query_nodes=6)
+    with pytest.raises(awsb.Refused, match="2 peers"):
+        awsb.check_chaos(cfg)
+    for kinds in (("mass-kill",), ()):
+        chaos = ch.ChaosConfig(kinds=kinds)
+        awsb.check_chaos(dataclasses.replace(cfg, chaos=chaos))
+    awsb.check_chaos(dataclasses.replace(chaos_cfg(), query_nodes=5))
+
+
 def test_chaos_mass_nodes_reaches_the_config():
     cfg = awsb.config_from_args(
         parse("--chaos", "--chaos-kinds", "mass-kill", "--chaos-mass-nodes", "3")
