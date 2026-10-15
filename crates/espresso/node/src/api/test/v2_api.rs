@@ -1934,6 +1934,20 @@ async fn check_ranges_v2_parity(
     }
 }
 
+async fn post<T, B>(client: &HttpClient, route: &str, body: &B) -> T
+where
+    T: serde::de::DeserializeOwned,
+    B: serde::Serialize,
+{
+    client
+        .post(route)
+        .body_json(body)
+        .unwrap()
+        .send()
+        .await
+        .unwrap_or_else(|err| panic!("{route}: {err}"))
+}
+
 /// The first data frame of a v2 availability stream, read under a deadline since a stream
 /// never ends on its own.
 async fn first_sse_frame<T>(port: u16, stream: &str) -> T

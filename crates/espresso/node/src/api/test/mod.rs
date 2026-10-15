@@ -167,20 +167,6 @@ where
         .unwrap_or_else(|err| panic!("{route}: {err}"))
 }
 
-async fn post<T, B>(client: &HttpClient, route: &str, body: &B) -> T
-where
-    T: serde::de::DeserializeOwned,
-    B: serde::Serialize,
-{
-    client
-        .post(route)
-        .body_json(body)
-        .unwrap()
-        .send()
-        .await
-        .unwrap_or_else(|err| panic!("{route}: {err}"))
-}
-
 async fn error_status(client: &HttpClient, route: &str) -> StatusCode {
     client
         .get::<serde_json::Value>(route)
