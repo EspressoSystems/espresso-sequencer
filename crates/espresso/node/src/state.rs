@@ -588,22 +588,21 @@ where
 {
     let start = heights.start as usize;
     let end = heights.end as usize;
+    let mut delay = Duration::from_secs(1);
     loop {
-        let Some(light_client) = provider.light_client().await else {
-            sleep(Duration::from_secs(1)).await;
-            continue;
-        };
-        match light_client.fetch_leaves_in_range(start, end).await {
-            Ok(leaves) => return leaves.into_iter().map(|leaf| leaf.leaf().clone()).collect(),
-            Err(err) => {
-                tracing::warn!(
+        if let Some(light_client) = provider.light_client().await {
+            match light_client.fetch_leaves_in_range(start, end).await {
+                Ok(leaves) => return leaves.into_iter().map(|leaf| leaf.leaf().clone()).collect(),
+                Err(err) => tracing::warn!(
                     ?heights,
+                    ?delay,
                     err = %format_args!("{err:#}"),
                     "fetching leaves failed, retrying"
-                );
-                sleep(Duration::from_secs(1)).await;
-            },
+                ),
+            }
         }
+        sleep(delay).await;
+        delay = (delay * 2).min(Duration::from_secs(60));
     }
 }
 
