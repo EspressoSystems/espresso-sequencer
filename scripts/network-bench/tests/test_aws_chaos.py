@@ -612,11 +612,13 @@ def test_tick_before_loading_does_nothing(isolated: Path, agent):
 
 class FlakyRunner(ClusterRunner):
     """The first `probes` chaos probes and `restarts` docker restarts fail over ssh; the
-    first `wipes` wipes fail over ssh after removing the container."""
+    first `wipes` wipes fail over ssh after removing the container and the first `kills`
+    kills fail over ssh after stopping it."""
 
     probes = 0
     restarts = 0
     wipes = 0
+    kills = 0
 
     def default(self, argv: list[str]) -> Any:
         command = argv[-1] if argv[0] == "ssh" else ""
@@ -625,6 +627,10 @@ class FlakyRunner(ClusterRunner):
             return completed(returncode=awsb.SSH_FAILED_RC, stderr="Connection reset")
         if self.restarts and "docker restart" in command:
             self.restarts -= 1
+            return completed(returncode=awsb.SSH_FAILED_RC, stderr="Connection reset")
+        if self.kills and "docker kill" in command:
+            self.kills -= 1
+            super().default(argv)
             return completed(returncode=awsb.SSH_FAILED_RC, stderr="Connection reset")
         if self.wipes and "docker rm -f" in command:
             self.wipes -= 1
@@ -635,13 +641,19 @@ class FlakyRunner(ClusterRunner):
 
 
 def cluster_controller(
-    isolated: Path, probes: int = 0, restarts: int = 0, wipes: int = 0, **chaos: Any
+    isolated: Path,
+    probes: int = 0,
+    restarts: int = 0,
+    wipes: int = 0,
+    kills: int = 0,
+    **chaos: Any,
 ) -> tuple[Any, Any, Any]:
     clock = FakeClock(start=FAKE_EPOCH, limit_s=7200)
     names = [f"node{i}" for i in range(7)]
     cluster = FakeCluster(clock, names, {"node0", "node1", "node2"})
     runner = FlakyRunner(cluster, 3, [LOADING])
-    runner.probes, runner.restarts, runner.wipes = probes, restarts, wipes
+    runner.probes, runner.restarts = probes, restarts
+    runner.wipes, runner.kills = wipes, kills
     cfg = dataclasses.replace(chaos_cfg(), chaos=ch.ChaosConfig(**chaos))
     ctrl = make_controller(isolated, runner, runner.hosts, clock, cfg)
     ctrl.state = ch.chaos_init(
@@ -725,6 +737,24 @@ def test_a_failed_wipe_stays_faulted_and_is_wiped_again(isolated: Path):
     assert not cluster.members[node].removed
     assert ctrl.state["fault_retry"] == {}
     assert ctrl.failures == 0
+
+
+def test_a_kill_whose_ssh_failed_after_it_ran_is_killed_again(isolated: Path):
+    ctrl, cluster, clock = cluster_controller(isolated, kills=1, kinds=("mass-kill",))
+    cluster.start("node4")
+    ctrl.state = ch.chaos_init(
+        ctrl.chaos, list(ctrl.topo["nodes"]), equal(ctrl), clock.time(), 0.0, 3600.0
+    )
+    ctrl.state["next_fault_at"] = 0.0
+    ctrl.tick(LOADING)
+    assert ctrl.failures == 1
+    (node,) = ctrl.state["fault_retry"]
+    assert not cluster.members[node].running
+    clock.sleep(awsb.AGENT_POLL_S)
+    ctrl.tick(LOADING)
+    assert ctrl.failures == 0
+    assert ctrl.state["fault_retry"] == {}
+    assert ctrl.state["nodes"][node]["health"] == "down"
 
 
 def test_a_partly_failed_mass_restart_records_started_and_retries(isolated: Path):

@@ -650,6 +650,8 @@ class FakeCluster:
         m = self.members[name]
         for line in command.splitlines():
             if "docker kill" in line:
+                if not m.running and "||" not in line:
+                    return completed(returncode=1, stderr="container is not running")
                 self.kill(name)
             elif "docker rm -f" in line:
                 self.kill(name)

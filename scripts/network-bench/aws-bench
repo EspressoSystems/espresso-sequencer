@@ -6219,7 +6219,9 @@ def manifest_storage(config: dict[str, Any]) -> ConsensusStorage:
 
 DOCKER_NODE_COMMANDS = {
     "restart": "sudo docker restart -t 30 espresso-node",
-    "kill": "sudo docker kill espresso-node",
+    # Succeeds for a container already stopped, so a retry after a lost ssh reply passes.
+    "kill": "sudo docker kill espresso-node || "
+    "[ \"$(sudo docker inspect -f '{{.State.Running}}' espresso-node)\" = false ]",
     "start": "sudo docker start espresso-node",
 }
 
