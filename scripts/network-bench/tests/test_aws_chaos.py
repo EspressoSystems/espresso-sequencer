@@ -3,7 +3,7 @@ import json
 import signal
 from collections import Counter
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import chaos as ch
 import latency
@@ -650,8 +650,8 @@ class FlakyRunner(ClusterRunner):
         if self.stakes and "/v1/config/hotshot" in command:
             self.stakes -= 1
             return completed(stdout="node0 \n")
-        if "docker restart" in command:
-            self.cluster.clock.advance(self.restart_s)
+        if self.restart_s and "docker restart" in command:
+            cast("FakeClock", self.cluster.clock).advance(self.restart_s)
         if self.restarts and "docker restart" in command:
             self.restarts -= 1
             return completed(returncode=awsb.SSH_FAILED_RC, stderr="Connection reset")
