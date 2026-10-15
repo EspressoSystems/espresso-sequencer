@@ -480,8 +480,6 @@ pub enum StakeTableError {
     ValidatorAlreadyExited(Address),
     #[error("Validator {0:#x} has invalid commission {1}")]
     InvalidCommission(Address, u16),
-    #[error("Schnorr key already used: {0}")]
-    SchnorrKeyAlreadyUsed(String),
     #[error("x25519 key already used: {0}")]
     X25519KeyAlreadyUsed(String),
     #[error("Invalid x25519 key: {0}")]
