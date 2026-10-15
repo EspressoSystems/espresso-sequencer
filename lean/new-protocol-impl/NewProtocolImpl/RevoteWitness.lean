@@ -1294,7 +1294,9 @@ theorem votes2 (k : PubKey) (u : Nat) (hl : lag k u = 0) : ∃ j, j ≤ 15 * u +
     ∧ Output.send (.vote2 ⟨(C2 u).data, ⟨3 * u + 1⟩, k⟩) ∈ (tr k j).output := by
   refine Classical.byContradiction fun hneg => settled k (15 * u + 4) (.vote2 (certOf (blk u)))
     ⟨⟨blk u, hasCert1_of u (by omega), hasProposal_of u (by omega), ⟨Nat.le_refl _, rfl⟩,
-      payload_of u hl (by omega)⟩, fun vote hs _ hvv => ?_, fun c2 hc2 _ hv2 => ?_, ?_,
+      payload_of u hl (by omega)⟩,
+      notBehind (by rw [cert_epoch]; have := eAt_facts u 5 (by omega); show eAt (15 * u + 5) ≤ u + 1; omega),
+      fun vote hs _ hvv => ?_, fun c2 hc2 _ hv2 => ?_, ?_,
       by rw [cert_view]; show 0 < 3 * u + 1; omega, Kit.decidedBefore_of fun c2 hc2 => ?_⟩
   · obtain ⟨j, hj, hjv⟩ := sent_iff.mp hs
     obtain ⟨u', -, ⟨rfl, -⟩ | ⟨rfl, -⟩⟩ := sent_vote2 hv hjv
@@ -1328,6 +1330,12 @@ theorem votes2R (k : PubKey) (u : Nat) (hl : lag k u = 0) : ∃ j, j ≤ 15 * u 
   refine Classical.byContradiction fun hneg => settled k (15 * u + 6) (.vote2 (CR u))
     ⟨⟨blk u, hasCR_of u (by omega), hasProposal_of u (by omega),
       ⟨by rw [blk_view]; show 3 * u + 1 ≤ 3 * u + 2; omega, rfl⟩, payload_of u hl (by omega)⟩,
+      notBehind (by
+        show eAt (15 * u + 7) ≤ (certOf (blk u)).data.epoch.toNat
+        rw [cert_epoch]
+        have := eAt_facts u 7 (by omega)
+        show eAt (15 * u + 7) ≤ u + 1
+        omega),
       fun vote hs _ hvv => ?_, fun c2 hc2 _ hv2 => ?_, ?_, by show 0 < 3 * u + 2; omega,
       Kit.decidedBefore_of fun c2 hc2 => ?_⟩
   · obtain ⟨j, hj, hjv⟩ := sent_iff.mp hs

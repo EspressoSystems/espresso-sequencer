@@ -1506,7 +1506,12 @@ theorem votes2 (k : PubKey) (u : Nat) : ∃ j, j ≤ sAt u + lkOff k
   have hlk := lkOff_facts k
   refine Classical.byContradiction fun hneg => settled k (sAt u + lkOff k) (.vote2 (certOf (blk u)))
     ⟨⟨blk u, hasCert1_of u (by omega), hasProposal_of u (by omega), ⟨Nat.le_refl _, rfl⟩,
-      payload_of u (by omega)⟩, fun vote hs _ hvv => ?_, fun c2 hc2 _ hv2 => ?_, ?_,
+      payload_of u (by omega)⟩,
+      notBehind (by
+        rw [cert_epoch, show sAt u + lkOff k + 1 = sAt u + (lkOff k + 1) by omega,
+          eAt_view u (lkOff k + 1) (by omega)]
+        exact Nat.le_refl _),
+      fun vote hs _ hvv => ?_, fun c2 hc2 _ hv2 => ?_, ?_,
       by rw [cert_view]; show 0 < vOf u; unfold vOf; omega, Kit.decidedBefore_of fun c2 hc2 => ?_⟩
   · obtain ⟨j, hj, hjv⟩ := sent_iff.mp hs
     obtain ⟨u', rfl, -⟩ := sent_vote2 hv hjv
@@ -1732,7 +1737,7 @@ theorem d_late (hB : B = true) (n : Nat) (hn : 25 ≤ n) (o : Obligation)
     rintro ⟨⟨s, hr, -⟩, -⟩
     exact no_revote ((he.received _).mp hr)
   | vote2 c =>
-    rintro ⟨⟨x, hc, -⟩, -, hc2, -, hgen, -⟩
+    rintro ⟨⟨x, hc, -⟩, -, -, hc2, -, hgen, -⟩
     rcases hasCert1 ((he.hasCert1 _).mp hc) with rfl | ⟨u, rfl, -⟩
     · exact absurd hgen (Nat.lt_irrefl 0)
     · have hu := hfirst u (by rw [← cert_epoch]; exact hf)

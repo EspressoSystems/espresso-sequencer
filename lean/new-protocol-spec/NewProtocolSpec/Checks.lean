@@ -97,7 +97,7 @@ run_meta (checkFields `NewProtocol.OwedVote1Again
   [`received, `wellFormed, `safe, `payload, `current, `notTimedOut, `notVoted, `inView])
 
 run_meta (checkFields `NewProtocol.OwedVote2
-  [`holds, `notVoted, `notCommitted, `notPast, `afterAnchor, `notDecidedPast])
+  [`holds, `current, `notVoted, `notCommitted, `notPast, `afterAnchor, `notDecidedPast])
 
 run_meta (checkFields `NewProtocol.OwedDecide [`holds])
 

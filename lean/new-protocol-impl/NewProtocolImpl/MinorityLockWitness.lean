@@ -866,7 +866,7 @@ theorem votes2 (k : PubKey) (u : Nat) (hu : u ≠ 0 ∨ k ≠ c) : ∃ j, j ≤ 
     · exact not_pastView (by rw [certOf_view, vOf_succ]; show 3 ≤ u + 3; omega)
   refine Classical.byContradiction fun hneg => settled k (sAt u + 4) (.vote2 (certOf (blk u)))
     ⟨⟨blk u, Or.inr (Or.inl (recv_cert1 u (by omega))), hasProposal_of u (by omega),
-      ⟨Nat.le_refl _, rfl⟩, Or.inr ?_⟩, fun vote hs _ hvv => ?_, fun c2 hc2 _ hv2 => ?_,
+      ⟨Nat.le_refl _, rfl⟩, Or.inr ?_⟩, notBehind, fun vote hs _ hvv => ?_, fun c2 hc2 _ hv2 => ?_,
       hpast, by rw [certOf_view]; show 0 < vOf u; unfold vOf; split <;> omega,
       Kit.decidedBefore_of fun c2 hc2 => by
         obtain ⟨x, rfl, hlt⟩ := hasCert2 hc2

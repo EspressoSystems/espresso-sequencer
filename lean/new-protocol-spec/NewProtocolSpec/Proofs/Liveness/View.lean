@@ -1876,6 +1876,7 @@ theorem vote2_or_cert2 {δ : Nat} (hp : Prompt N δ) (hex : ∃ T, ReachedBy N T
   refine ⟨show C.honest L.data.epoch k by rw [hLe]; exact hkE,
     ⟨b, (hsi.hasCert1 _).mpr (hasCert1_grows hgr hc1), (hsi.hasProposal _).mpr (hasProposal_grows hgr hb), hcert,
       (hsi.hasPayload _ _).mpr (hasPayload_grows hgr hpay)⟩,
+    (hsi.notBehind _).mpr (by rw [hLe]; exact fun e' he' => hst.bound k hk _ e' he'.1),
     fun vote hsv _ hvv => ?_,
     fun c2 hc2 _ hv => hneg (Or.inr (Or.inl ⟨k, hk, m, c2, (hsi.hasCert2 _).mp hc2, hv, htm⟩)),
     not_past hcfg hs hw hex hlt hwL, hgen, fun u hu => ?_⟩

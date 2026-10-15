@@ -768,7 +768,7 @@ theorem step_ok (hvt : ValidityTruthful (pre ++ [Step.mk i []])) :
     rcases step_mem hm with h0 | ⟨o, out', hsub, ho, ha⟩
     · obtain ⟨v, hx, _⟩ := mem_timeoutAnswer h0; cases hx
     · obtain ⟨c, rfl, rfl⟩ := act_vote2 ha
-      obtain ⟨⟨b, hc, hb, hcert, hpay⟩, _, _, _, hgen, _⟩ := ho
+      obtain ⟨⟨b, hc, hb, hcert, hpay⟩, _, _, _, _, hgen, _⟩ := ho
       exact ⟨rfl, hgen, c, b, (sameInputs_step.hasCert1 c).mp hc, (sameInputs_step.hasProposal b).mp hb,
         hcert, (sameInputs_step.hasPayload _ _).mp hpay, rfl, rfl⟩
   · intro blocks c1 c2 hm

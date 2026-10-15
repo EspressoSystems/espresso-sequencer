@@ -800,7 +800,8 @@ theorem votes2 (k : PubKey) (u : Nat) (hl : lag k (u / 2) = 0) : ∃ j, j ≤ 8 
     ∧ Output.send (.vote2 ⟨(C2 u).data, ⟨u + 1⟩, k⟩) ∈ (tr k j).output := by
   refine Classical.byContradiction fun hneg => settled k (8 * u + 4) (.vote2 (certOf (blk u)))
     ⟨⟨blk u, hasCert1_of u (by omega), hasProposal_of u (by omega), ⟨Nat.le_refl _, rfl⟩,
-      payload_of u hl (by omega)⟩, fun vote hs _ hvv => ?_, fun c2 hc2 _ hv2 => ?_, not_pastView,
+      payload_of u hl (by omega)⟩, notBehind (by rw [cert_epoch]; show (8 * u + 4 + 1 + 1) / 16 + 1 ≤ u / 2 + 1; omega),
+      fun vote hs _ hvv => ?_, fun c2 hc2 _ hv2 => ?_, not_pastView,
       by rw [cert_view]; show 0 < u + 1; omega, Kit.decidedBefore_of fun c2 hc2 => ?_⟩
   · obtain ⟨j, hj, hjv⟩ := sent_iff.mp hs
     obtain ⟨u', rfl, -⟩ := sent_vote2 hv hjv

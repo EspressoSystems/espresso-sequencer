@@ -506,13 +506,22 @@ inductive Obligation where
 
 /--
 The node owes a vote2 on the block `c` is over: it holds `c`, the block's proposal
-and payload, has not yet voted2 for the epoch and view, holds no `Cert2` there,
-has not given the view up, and has decided nothing at the view or a later one.
+and payload, has not left `c`'s epoch, has not yet voted2 for the epoch and view,
+holds no `Cert2` there, has not given the view up, and has decided nothing at the
+view or a later one.
 -/
 structure OwedVote2 (h : History) (c : Cert1) : Prop where
   /-- The node holds `c`, the block it is over, and the block's payload. -/
   holds : ∃ b, h.HasCert1 cfg c ∧ h.HasProposal cfg b ∧ Certifies c b
     ∧ h.HasPayload cfg b.viewNumber b.payloadCommit
+
+  /--
+  It is for the node's epoch or a later one.
+
+  A node that has left the epoch holds the `Cert2` that ended it, and the nodes
+  still in the epoch receive that `Cert2` with the epoch change.
+  -/
+  current : NotBehind cfg h c.data.epoch
 
   /-- The node has not voted2 for the epoch and view. -/
   notVoted : ∀ vote : Vote2, h.Sent (.vote2 vote) → vote.data.epoch = c.data.epoch → vote.view ≠ c.view
@@ -554,7 +563,8 @@ The node owes the action.
 Each case is the action being justified by what the node holds, not yet taken, and
 not overtaken. A vote1 and a proposal are owed only in the view the node is in, and
 until it times the view out; a vote2 until the node gives the certificate's view
-up, holds its `Cert2`, or decides the view or a later one; a decide until the
+up, holds its `Cert2`, decides the view or a later one, or leaves the epoch; a
+decide until the
 block's view is decided or falls behind the floor. So every obligation ends, and
 none asks for anything the node would have to fetch, or for a view earlier than
 the floor (`Config.decideBuffer`).

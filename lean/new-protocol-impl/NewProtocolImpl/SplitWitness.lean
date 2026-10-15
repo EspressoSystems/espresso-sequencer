@@ -1414,7 +1414,20 @@ theorem votes2 (k : PubKey) (u : Nat) (hl : lag k u = 0) : ∃ j, j ≤ at0 4 10
   have hcl := classes k
   refine Classical.byContradiction fun hneg => settled k (at0 4 10 u) (.vote2 (certOf (blk u)))
     ⟨⟨blk u, hasCert1_of u (by have := at0_facts 3 9 u; omega), hasProposal_of u (by have := at0_facts 1 7 u; omega),
-      ⟨Nat.le_refl _, rfl⟩, payload_of u hl (by omega)⟩, fun vote hs _ hvv => ?_, fun c2 hc2 _ hv2 => ?_, ?_,
+      ⟨Nat.le_refl _, rfl⟩, payload_of u hl (by omega)⟩, notBehind (by
+        rw [cert_epoch]
+        show eAt k (at0 4 10 u + 1) ≤ u + 1
+        have := at0_facts 4 10 u
+        by_cases hu : u = 0
+        · subst hu
+          rw [show at0 4 10 0 + 1 = 5 by simp [at0]]
+          have := eAt_first (k := k) (n := 5) (by omega)
+          have : 6 ≤ ecAt k := by unfold ecAt; split <;> omega
+          omega
+        · rw [show at0 4 10 u + 1 = 8 * u + 5 + 6 by omega]
+          have := eAt_later (k := k) u 5 (by omega) (by omega)
+          omega),
+      fun vote hs _ hvv => ?_, fun c2 hc2 _ hv2 => ?_, ?_,
       by rw [cert_view]; show 0 < bv u; have := bv_facts u; omega, Kit.decidedBefore_of fun c2 hc2 => ?_⟩
   · obtain ⟨j, hj, hjv⟩ := sent_iff.mp hs
     obtain ⟨u', rfl, -, -⟩ := sent_vote2 hv hjv
