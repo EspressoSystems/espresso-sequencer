@@ -738,6 +738,26 @@ impl SqlStorage {
             }
             .boxed()
         });
+        // TODO(abdul): remove once a sqlx release includes launchbadge/sqlx#4394.
+        // In sqlx 0.8.6, if `begin()` is cancelled, the connection can go back to the pool with a
+        // transaction still open, and sqlx does not know about it. Ask Postgres and drop it.
+        // With no transaction open, this query starts its own, so both timestamps are the same.
+        // Inside an open transaction, the transaction started earlier, so they differ.
+        // Keep `raw_sql`. A normal query is sent in several messages and Postgres moves
+        // `statement_timestamp()` forward on each one, so the timestamps would always differ.
+        #[cfg(not(feature = "embedded-db"))]
+        let pool = pool.after_release(|conn, _| {
+            async move {
+                let row = conn
+                    .fetch_one(sqlx::raw_sql(
+                        "SELECT transaction_timestamp() <> statement_timestamp()",
+                    ))
+                    .await?;
+                let in_transaction: bool = row.try_get(0)?;
+                Ok(!in_transaction)
+            }
+            .boxed()
+        });
 
         #[cfg(feature = "embedded-db")]
         if config.reset {
@@ -3039,7 +3059,7 @@ mod test {
                         )
                         .await
                         .unwrap_err();
-                    assert!(matches!(err, QueryError::NotFound), "{err:?}");
+                    assert!(matches!(err, QueryError::Pruned { .. }), "{err:?}");
                 }
             }
         }
@@ -3339,7 +3359,7 @@ mod test {
             )
             .await
             .unwrap_err();
-        assert!(matches!(err, QueryError::NotFound), "{err:?}");
+        assert!(matches!(err, QueryError::Pruned { .. }), "{err:?}");
     }
 
     /// Zero retention puts the whole chain past its state retention, but a run still stops below
@@ -3472,7 +3492,85 @@ mod test {
             )
             .await
             .unwrap_err();
+        assert!(matches!(err, QueryError::Pruned { .. }), "{err:?}");
+    }
+
+    /// `get_path_at` reads a snapshot below the head after the data pruner deleted its header, by
+    /// the root the caller gives. It rejects a root the snapshot does not have, and a snapshot at
+    /// the state pruned height.
+    #[test_log::test(tokio::test(flavor = "multi_thread"))]
+    async fn test_get_path_at_without_header() {
+        let db = TmpDb::init().await;
+        let storage = SqlStorage::connect(db.config(), StorageConnectionType::Query)
+            .await
+            .unwrap();
+
+        let head = 5u64;
+        let pruned = 1u64;
+        let mut tree = MockMerkleTree::new(MockMerkleTree::tree_height());
+        let mut roots = vec![];
+        {
+            let mut tx = storage.write().await.unwrap();
+            for height in 0..=head {
+                insert_mock_state(&mut tx, &mut tree, height, 0).await;
+                roots.push(tree.commitment());
+            }
+            UpdateStateData::<_, MockMerkleTree, 8>::set_last_state_height(&mut tx, head as usize)
+                .await
+                .unwrap();
+            query("DELETE FROM header WHERE height < $1")
+                .bind(head as i64)
+                .execute(tx.as_mut())
+                .await
+                .unwrap();
+            tx.commit().await.unwrap();
+        }
+        let mut tx = storage.prune_write().await.unwrap();
+        tx.save_state_pruned_height(pruned).await.unwrap();
+        tx.commit().await.unwrap();
+
+        let created = 3u64;
+        let key = created as usize;
+        let mut tx = storage.read().await.unwrap();
+        let err = tx
+            .get_path(
+                Snapshot::<_, MockMerkleTree, { MockMerkleTree::ARITY }>::Index(created),
+                key,
+            )
+            .await
+            .unwrap_err();
         assert!(matches!(err, QueryError::NotFound), "{err:?}");
+        let proof = tx
+            .get_path_at::<MockTypes, MockMerkleTree, { MockMerkleTree::ARITY }>(
+                created, roots[key], key,
+            )
+            .await
+            .unwrap();
+        assert_eq!(proof.elem(), Some(&key));
+
+        // Nothing but `path_at` sees the root here, so this checks its root check alone.
+        let err = tx
+            .get_path_at::<MockTypes, MockMerkleTree, { MockMerkleTree::ARITY }>(
+                created,
+                roots[key - 1],
+                key,
+            )
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(&err, QueryError::Error { message } if message.contains("does not match")),
+            "{err:?}"
+        );
+
+        let err = tx
+            .get_path_at::<MockTypes, MockMerkleTree, { MockMerkleTree::ARITY }>(
+                pruned,
+                roots[pruned as usize],
+                pruned as usize,
+            )
+            .await
+            .unwrap_err();
+        assert!(matches!(err, QueryError::Pruned { .. }), "{err:?}");
     }
 
     /// State up to `head`, then pruned past it by a run from before the state pruner was bounded:
@@ -3649,5 +3747,38 @@ mod test {
         tx.upsert("does_not_exist", ["test"], ["test"], [(1_i64,)])
             .await
             .unwrap_err();
+    }
+
+    #[test_log::test(tokio::test(flavor = "multi_thread"))]
+    #[cfg(not(feature = "embedded-db"))]
+    async fn test_cancelled_begin_does_not_leak_transaction() {
+        use sqlx::Connection;
+
+        let db = TmpDb::init().await;
+        let storage = SqlStorage::connect(
+            db.config().max_connections(1),
+            StorageConnectionType::Sequencer,
+        )
+        .await
+        .unwrap();
+
+        let mut conn = storage.pool.acquire().await.unwrap();
+        assert!(
+            conn.begin().now_or_never().is_none(),
+            "BEGIN finished on the first poll, so nothing was cancelled"
+        );
+        drop(conn);
+
+        let mut conn = storage.pool.acquire().await.unwrap();
+        let row = conn
+            .fetch_one(sqlx::raw_sql(
+                "SELECT transaction_timestamp() <> statement_timestamp()",
+            ))
+            .await
+            .unwrap();
+        assert!(
+            !row.get::<bool, _>(0),
+            "the connection came back from the pool inside the cancelled transaction"
+        );
     }
 }

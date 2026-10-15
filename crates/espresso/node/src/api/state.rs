@@ -572,13 +572,24 @@ where
         );
 
         let blocks: Vec<_> = blocks_stream
-            .then(|block| async move { block.resolve().await })
-            .collect()
-            .await;
+            .zip(futures::stream::iter(from..until))
+            .then(|(block, i)| async move {
+                block
+                    .with_timeout(FETCH_TIMEOUT)
+                    .await
+                    .ok_or_else(|| not_found(format!("block {i} not available")))
+            })
+            .try_collect()
+            .await?;
         let vids: Vec<_> = vids_stream
-            .then(|vid| async move { vid.resolve().await })
-            .collect()
-            .await;
+            .zip(futures::stream::iter(from..until))
+            .then(|(vid, i)| async move {
+                vid.with_timeout(FETCH_TIMEOUT)
+                    .await
+                    .ok_or_else(|| not_found(format!("VID common for block {i} not available")))
+            })
+            .try_collect()
+            .await?;
 
         if blocks.len() != vids.len() {
             return Err(anyhow::anyhow!(
@@ -1395,6 +1406,7 @@ fn payload_id_to_hs(id: v1::availability::PayloadId) -> anyhow::Result<HsBlockId
 fn classify_query_error(err: hotshot_query_service::QueryError) -> anyhow::Error {
     match err {
         QueryError::NotFound | QueryError::Missing => not_found(err.to_string()),
+        QueryError::Pruned { .. } => AvailabilityError::Pruned(err.to_string()).into(),
         QueryError::Error { .. } => anyhow::anyhow!(err.to_string()),
     }
 }
@@ -2347,7 +2359,6 @@ impl From<crate::options::ApiModulesConfig> for proto::ApiModules {
                 light_client_db: Some(proto::LightClientDbOptions {
                     num_connections: query.light_client_db.num_connections,
                     num_leaves: query.light_client_db.num_leaves,
-                    num_stake_tables: query.light_client_db.num_stake_tables,
                     lc_path: query
                         .light_client_db
                         .lc_path
@@ -2568,6 +2579,29 @@ where
     }
 }
 
+#[tonic::async_trait]
+impl<D> proto::submit_service_server::SubmitService for NodeApiStateImpl<D>
+where
+    D: Deref + Clone + Send + Sync + 'static,
+    D::Target: SubmitDataSourceErased + Send + Sync,
+{
+    async fn submit_transaction(
+        &self,
+        request: tonic::Request<proto::SubmitTransactionRequest>,
+    ) -> Result<tonic::Response<proto::SubmitTransactionResponse>, tonic::Status> {
+        let request = request.into_inner();
+        let namespace = required(namespace_from_query(request.namespace)?, "namespace")?;
+        let payload = required(request.payload, "payload")?;
+        let transaction = espresso_types::Transaction::new(namespace.into(), payload);
+        let hash = v1::SubmitApi::submit(self, transaction)
+            .await
+            .map_err(to_status)?;
+        Ok(tonic::Response::new(proto::SubmitTransactionResponse {
+            hash: hash.to_string(),
+        }))
+    }
+}
+
 /// Network-agnostic submit hook used by the axum wrapper. The original
 /// `SubmitDataSource<N, P>` trait is parameterized by the network type; this
 /// erased trait lets `NodeApiStateImpl` avoid carrying those parameters.
@@ -2774,6 +2808,11 @@ where
         }
         let target = match target {
             v1::TxIdent::HeightAndOffset(h, o) => {
+                // The query binds `limit + offset` as an i64 row count, which a larger offset
+                // would overflow into a negative or wrapped limit.
+                if limit.checked_add(o).is_none_or(|n| n > i64::MAX as u64) {
+                    return Err(bad_request(format!("offset {o} is too large")));
+                }
                 TransactionIdentifier::HeightAndOffset(h as usize, o as usize)
             },
             v1::TxIdent::Hash(h) => TransactionIdentifier::Hash(
@@ -2826,6 +2865,150 @@ where
     }
 }
 
+#[tonic::async_trait]
+impl<D> proto::explorer_service_server::ExplorerService for NodeApiStateImpl<D>
+where
+    D: Deref + Clone + Send + Sync + 'static,
+    D::Target: hotshot_query_service::explorer::ExplorerDataSource<SeqTypes> + Send + Sync,
+{
+    async fn get_explorer_block_detail(
+        &self,
+        request: tonic::Request<proto::GetExplorerBlockDetailRequest>,
+    ) -> Result<tonic::Response<proto::ExplorerBlockDetailResponse>, tonic::Status> {
+        let request = request.into_inner();
+        let ident = block_ident(request.height, request.hash)?;
+        let detail = <Self as v1::ExplorerApi>::get_block_detail(self, ident)
+            .await
+            .map_err(to_status)?;
+        Ok(tonic::Response::new(proto::ExplorerBlockDetailResponse {
+            block_detail: Some((&detail.block_detail).into()),
+        }))
+    }
+
+    async fn get_explorer_block_summaries(
+        &self,
+        request: tonic::Request<proto::GetExplorerBlockSummariesRequest>,
+    ) -> Result<tonic::Response<proto::ExplorerBlockSummariesResponse>, tonic::Status> {
+        let request = request.into_inner();
+        let limit = required(request.limit, "limit")?;
+        let ident = block_ident(request.height, request.hash)?;
+        let summaries = <Self as v1::ExplorerApi>::get_block_summaries(self, ident, limit)
+            .await
+            .map_err(to_status)?;
+        Ok(tonic::Response::new(
+            proto::ExplorerBlockSummariesResponse {
+                block_summaries: summaries.block_summaries.iter().map(Into::into).collect(),
+            },
+        ))
+    }
+
+    async fn get_explorer_transaction_detail(
+        &self,
+        request: tonic::Request<proto::GetExplorerTransactionDetailRequest>,
+    ) -> Result<tonic::Response<proto::ExplorerTransactionDetailResponse>, tonic::Status> {
+        let request = request.into_inner();
+        let ident = transaction_ident(request.height, request.offset, request.hash)?;
+        let detail = <Self as v1::ExplorerApi>::get_transaction_detail(self, ident)
+            .await
+            .map_err(to_status)?
+            .transaction_detail;
+        Ok(tonic::Response::new(
+            proto::ExplorerTransactionDetailResponse {
+                details: Some((&detail.details).into()),
+                data: detail.data.iter().map(Into::into).collect(),
+            },
+        ))
+    }
+
+    async fn get_explorer_transaction_summaries(
+        &self,
+        request: tonic::Request<proto::GetExplorerTransactionSummariesRequest>,
+    ) -> Result<tonic::Response<proto::ExplorerTransactionSummariesResponse>, tonic::Status> {
+        let request = request.into_inner();
+        let limit = required(request.limit, "limit")?;
+        let ident = transaction_ident(request.height, request.offset, request.hash)?;
+        let filter = match (request.block, namespace_from_query(request.namespace)?) {
+            (Some(_), Some(_)) => {
+                return Err(tonic::Status::invalid_argument(
+                    "block and namespace are mutually exclusive",
+                ));
+            },
+            (Some(block), None) => v1::TxSummaryFilter::Block(block),
+            (None, Some(namespace)) => v1::TxSummaryFilter::Namespace(namespace.into()),
+            (None, None) => v1::TxSummaryFilter::None,
+        };
+        let summaries =
+            <Self as v1::ExplorerApi>::get_transaction_summaries(self, ident, limit, filter)
+                .await
+                .map_err(to_status)?;
+        Ok(tonic::Response::new(
+            proto::ExplorerTransactionSummariesResponse {
+                transaction_summaries: summaries
+                    .transaction_summaries
+                    .iter()
+                    .map(Into::into)
+                    .collect(),
+            },
+        ))
+    }
+
+    async fn get_explorer_summary(
+        &self,
+        _request: tonic::Request<proto::GetExplorerSummaryRequest>,
+    ) -> Result<tonic::Response<proto::ExplorerSummaryResponse>, tonic::Status> {
+        let summary = <Self as v1::ExplorerApi>::get_explorer_summary(self)
+            .await
+            .map_err(to_status)?
+            .explorer_summary;
+        Ok(tonic::Response::new((&summary).into()))
+    }
+
+    async fn get_explorer_search(
+        &self,
+        request: tonic::Request<proto::GetExplorerSearchRequest>,
+    ) -> Result<tonic::Response<proto::ExplorerSearchResponse>, tonic::Status> {
+        let query = required(request.into_inner().query, "query")?;
+        let results = <Self as v1::ExplorerApi>::get_search_result(self, query)
+            .await
+            .map_err(to_status)?
+            .search_results;
+        Ok(tonic::Response::new((&results).into()))
+    }
+}
+
+/// v1 spells the three ways of naming a block as separate routes, so v2's optional parameters
+/// carry the same choice, with neither given meaning the latest block.
+fn block_ident(height: Option<u64>, hash: Option<String>) -> Result<v1::BlockIdent, tonic::Status> {
+    match (height, hash) {
+        (Some(_), Some(_)) => Err(tonic::Status::invalid_argument(
+            "height and hash are mutually exclusive",
+        )),
+        (Some(height), None) => Ok(v1::BlockIdent::Height(height)),
+        (None, Some(hash)) => Ok(v1::BlockIdent::Hash(hash)),
+        (None, None) => Ok(v1::BlockIdent::Latest),
+    }
+}
+
+/// As [`block_ident`], except that naming a transaction by position takes both `height` and
+/// `offset`, so half of that pair is a bad request rather than a fallback to the latest.
+fn transaction_ident(
+    height: Option<u64>,
+    offset: Option<u64>,
+    hash: Option<String>,
+) -> Result<v1::TxIdent, tonic::Status> {
+    match (height, offset, hash) {
+        (None, None, None) => Ok(v1::TxIdent::Latest),
+        (None, None, Some(hash)) => Ok(v1::TxIdent::Hash(hash)),
+        (Some(height), Some(offset), None) => Ok(v1::TxIdent::HeightAndOffset(height, offset)),
+        (Some(_), None, None) | (None, Some(_), None) => Err(tonic::Status::invalid_argument(
+            "height and offset must be given together",
+        )),
+        _ => Err(tonic::Status::invalid_argument(
+            "hash is exclusive with height and offset",
+        )),
+    }
+}
+
 #[async_trait]
 impl<D> v1::LightClientApi for NodeApiStateImpl<D>
 where
@@ -2835,7 +3018,8 @@ where
             SeqTypes,
             espresso_types::BlockMerkleTree,
             3,
-        > + NodeStateDataSource
+        > + hotshot_query_service::merklized_state::MerklizedStateHeightPersistence
+        + NodeStateDataSource
         + StakeTableDataSource<SeqTypes>
         + hotshot_query_service::data_source::VersionedDataSource
         + Sized
@@ -3168,6 +3352,7 @@ fn lc_large_object_range_limit() -> usize {
 pub(crate) fn lc_error(err: hotshot_query_service::Error) -> anyhow::Error {
     match err.status() {
         StatusCode::NOT_FOUND => not_found(err.to_string()),
+        StatusCode::GONE => AvailabilityError::Pruned(err.to_string()).into(),
         StatusCode::BAD_REQUEST => bad_request(err.to_string()),
         _ => anyhow::anyhow!("{err}"),
     }
@@ -4294,19 +4479,25 @@ mod tests {
     /// Covers the four shapes and all seven arms: every version's vector must select the arm named
     /// after it, and the proto message must carry exactly the fields v1 serializes, so neither a
     /// new protocol version nor a proto edit can add or drop a header field without failing here.
+    /// A version may drop a field its shape still declares, which the shape then renders empty;
+    /// the table names that field so the check stays exact for the rest.
     #[test]
     fn every_header_version_maps_to_its_arm_and_fields() {
-        for (version, shape) in [
-            ("v1", "HeaderV1"),
-            ("v2", "HeaderV1"),
-            ("v3", "HeaderV3"),
-            ("v4", "HeaderV4"),
-            ("v5", "HeaderV5"),
-            ("v6", "HeaderV5"),
-            ("v7", "HeaderV5"),
+        for (version, shape, dropped) in [
+            ("v1", "HeaderV1", None),
+            ("v2", "HeaderV1", None),
+            ("v3", "HeaderV3", None),
+            ("v4", "HeaderV4", None),
+            ("v5", "HeaderV5", None),
+            ("v6", "HeaderV5", None),
+            ("v7", "HeaderV5", Some("builder_commitment")),
         ] {
             let (header, fields) = reference_header(version);
-            assert_same_fields(shape, &fields);
+            let mut expected = fields.clone();
+            if let Some(field) = dropped {
+                expected[field] = String::new().into();
+            }
+            assert_same_fields(shape, &expected);
 
             use proto::header_response::Header;
             let converted = proto::HeaderResponse::from(&header).header.unwrap();
@@ -4322,10 +4513,6 @@ mod tests {
                     assert_eq!(
                         header.payload_commitment,
                         fields["payload_commitment"].as_str().unwrap()
-                    );
-                    assert_eq!(
-                        header.builder_commitment,
-                        fields["builder_commitment"].as_str().unwrap()
                     );
                     assert_eq!(
                         header.block_merkle_tree_root,
@@ -4361,16 +4548,28 @@ mod tests {
                     assert!(header.chain_config.is_some());
                 }};
             }
+            // Every shape before 0.7 carries the builder commitment; 0.7 dropped the field.
+            macro_rules! assert_builder_commitment {
+                ($header:expr) => {
+                    assert_eq!(
+                        $header.builder_commitment,
+                        fields["builder_commitment"].as_str().unwrap()
+                    );
+                };
+            }
             let arm = match converted {
                 Header::V1(header) => {
+                    assert_builder_commitment!(&header);
                     assert_shared_fields!(header);
                     "v1"
                 },
                 Header::V2(header) => {
+                    assert_builder_commitment!(&header);
                     assert_shared_fields!(header);
                     "v2"
                 },
                 Header::V3(header) => {
+                    assert_builder_commitment!(&header);
                     assert_shared_fields!(&header);
                     assert_eq!(
                         header.reward_merkle_tree_root,
@@ -4379,6 +4578,7 @@ mod tests {
                     "v3"
                 },
                 Header::V4(header) => {
+                    assert_builder_commitment!(&header);
                     assert_shared_fields!(&header);
                     assert_eq!(
                         header.timestamp_millis,
@@ -4395,14 +4595,20 @@ mod tests {
                     "v4"
                 },
                 Header::V5(header) => {
+                    assert_builder_commitment!(&header);
                     assert_shared_fields!(&header);
                     "v5"
                 },
                 Header::V6(header) => {
+                    assert_builder_commitment!(&header);
                     assert_shared_fields!(&header);
                     "v6"
                 },
                 Header::V7(header) => {
+                    assert_eq!(
+                        header.builder_commitment, "",
+                        "0.7 carries no builder commitment"
+                    );
                     assert_shared_fields!(&header);
                     "v7"
                 },
@@ -4537,8 +4743,9 @@ mod tests {
         );
     }
 
-    // A test network only disperses with ADVZ, so the AvidM arms run only here, against the
-    // namespaced wrappers the node stores rather than the inner per-namespace shares.
+    // A test network only disperses with AvidmGf2, so the ADVZ and AvidM arms, which mainnet
+    // still serves for blocks from before 0.6, run only here, against the namespaced wrappers
+    // the node stores rather than the inner per-namespace shares.
     #[test]
     fn every_vid_share_arm_maps_to_its_own_shape() {
         let payload = b"two namespaces worth of payload bytes, dispersed";
@@ -4555,7 +4762,20 @@ mod tests {
             panic!("the V0 arm");
         };
         assert!(advz.aggregate_proofs.starts_with("FIELD~"));
-        assert!(!advz.evals_proof.unwrap().proof.is_empty());
+        let v1 = &serde_json::to_value(&share).unwrap()["V0"];
+        assert_eq!(
+            advz.aggregate_proofs,
+            v1["aggregate_proofs"].as_str().unwrap()
+        );
+        assert_eq!(advz.evals, v1["evals"].as_str().unwrap());
+        let proof = advz.evals_proof.unwrap();
+        assert_eq!(proof.pos, v1["evals_proof"]["pos"].as_str().unwrap());
+        let v1_nodes = v1["evals_proof"]["proof"].as_array().unwrap();
+        assert!(v1_nodes.len() > 1, "{v1}");
+        assert_eq!(proof.proof.len(), v1_nodes.len());
+        for (v1_node, node) in v1_nodes.iter().zip(&proof.proof) {
+            assert_advz_node_matches_v1(v1_node, node);
+        }
 
         let param = init_avidm_param(3).unwrap();
         let (_, mut shares) =
@@ -4588,6 +4808,35 @@ mod tests {
         assert_eq!(gf2.namespaces.len(), 2);
         assert!(!gf2.namespaces[0].payload.is_empty());
         assert!(gf2.namespaces[0].mt_proofs[0].starts_with("MERKLE_PROOF~"));
+    }
+
+    fn assert_advz_node_matches_v1(v1: &serde_json::Value, v2: &proto::AdvzMerkleNode) {
+        use proto::advz_merkle_node::Node;
+        match (v2.node.as_ref().unwrap(), v1) {
+            (Node::Leaf(leaf), v1) if v1.get("Leaf").is_some() => {
+                let v1 = &v1["Leaf"];
+                assert_eq!(leaf.elem, v1["elem"].as_str().unwrap());
+                assert_eq!(leaf.pos, v1["pos"].as_str().unwrap());
+                assert_eq!(leaf.value, v1["value"].as_str().unwrap());
+            },
+            (Node::Branch(branch), v1) if v1.get("Branch").is_some() => {
+                let v1 = &v1["Branch"];
+                assert_eq!(branch.value, v1["value"].as_str().unwrap());
+                let v1_children = v1["children"].as_array().unwrap();
+                assert_eq!(branch.children.len(), v1_children.len());
+                for (v1_child, v2_child) in v1_children.iter().zip(&branch.children) {
+                    assert_advz_node_matches_v1(v1_child, v2_child);
+                }
+            },
+            (Node::ForgottenSubtree(subtree), v1) if v1.get("ForgettenSubtree").is_some() => {
+                assert_eq!(
+                    subtree.value,
+                    v1["ForgettenSubtree"]["value"].as_str().unwrap()
+                );
+            },
+            (Node::Empty(_), v1) if v1.as_str() == Some("Empty") => {},
+            (v2, v1) => panic!("{v2:?} against {v1}"),
+        }
     }
 
     // No test network registers a validator, so this mapping is only exercised here.
@@ -5428,6 +5677,15 @@ mod tests {
     }
 
     #[test]
+    fn lc_error_preserves_gone() {
+        let err = lc_error(custom(StatusCode::GONE));
+        assert!(matches!(
+            err.downcast_ref::<AvailabilityError>(),
+            Some(AvailabilityError::Pruned(_))
+        ));
+    }
+
+    #[test]
     fn lc_error_other_statuses_stay_internal() {
         let err = lc_error(custom(StatusCode::INTERNAL_SERVER_ERROR));
         assert!(err.downcast_ref::<AvailabilityError>().is_none());
@@ -5474,7 +5732,7 @@ mod tests {
             .map(|byte| espresso_types::Transaction::new(namespace, vec![byte; 8]))
             .collect();
         let (payload, _) = espresso_types::Payload::from_transactions(
-            transactions,
+            &transactions,
             &Default::default(),
             &Default::default(),
         )
@@ -5569,8 +5827,6 @@ mod tests {
             "7",
             "--light-client-db-num-leaves",
             "11",
-            "--light-client-db-num-stake-tables",
-            "13",
             "--",
             "config",
         ]);
@@ -5690,12 +5946,11 @@ mod tests {
                                 .num_stake_tables_in_memory
                                 as u64,
                         }),
-                        // Three same-typed fields whose defaults are 5/100/100, so the flags above
-                        // give each a distinct value: a crossed pair would pass otherwise.
+                        // Two same-typed fields whose defaults are 5/100, so the flags above give
+                        // each a distinct value: a crossed pair would pass otherwise.
                         light_client_db: Some(proto::LightClientDbOptions {
                             num_connections: 7,
                             num_leaves: 11,
-                            num_stake_tables: 13,
                             lc_path: None,
                         }),
                     }),

@@ -4,9 +4,7 @@
 
 **MUST:**
 
-- Use `-p <package>` for all cargo commands (full workspace builds OOM)
 - Run `cargo fmt` and `cargo check -p <package>` after changes
-- Run `cargo test -p espresso-types reference` after modifying any serializable type
 - Update all three storage backends (PostgreSQL, SQLite, filesystem) when changing persistence
 
 **NEVER:**
@@ -21,9 +19,7 @@
 cargo nextest run -p <package> -- <test_name>
 
 just check                            # postgres + embedded-db variants (pre-commit only)
-just lint                             # clippy with -D warnings
-just test-demo base                   # basic E2E
-just test-demo pos-base               # PoS E2E
+just test-demo base                   # basic E2E; other cases in the `test-demo` recipe
 just test-slow                        # long-running tests
 just demo-native                      # local network via process-compose
 ```
@@ -34,8 +30,7 @@ just demo-native                      # local network via process-compose
 - HTTP API: axum routers in `crates/espresso/api/src/axum.rs`; v1 API traits in `crates/espresso/api/src/v1/`; v2 is
   generated from `crates/espresso/api/proto/v2/`. Both are implemented on the node's state in
   `crates/espresso/node/src/api/state.rs`
-- HTTP clients: `http-client` (reqwest). `surf-disco` is gone; `tide-disco` survives only in the builder-api,
-  events-service and hotshot-testing crates
+- HTTP clients: `http-client` (reqwest)
 
 ## Type-driven design
 
@@ -57,13 +52,14 @@ just demo-native                      # local network via process-compose
 - **Node** (`crates/espresso/node/src/lib.rs`): generic over `N: ConnectedNetwork`, `P: SequencerPersistence`.
 - **ValidatedState** (`crates/espresso/types/src/v0/impls/state.rs`): four merkle trees (block, fee, reward v1, reward
   v2) plus chain config; `validate_and_apply_header()` is the state transition. Persisting the merklized state is
-  `crates/espresso/node/src/state.rs`.
+  `crates/espresso/node/src/state.rs`: a loop that replays every leaf from its newest snapshot. Leaves and snapshot
+  reads the data pruner has already deleted fall back to peers; the state pruner never passes that snapshot.
 - **HotShot SystemContext** (`crates/hotshot/hotshot/src/lib.rs`): tasks via `ConsensusTaskRegistry`, broadcast channels
   with `HotShotEvent` variants. `EpochMembershipCoordinator` manages per-epoch stake tables.
 - **L1Client** (`crates/espresso/types/src/v0/impls/l1.rs`): tracks `head` and `finalized`; reads use
   `BlockId::finalized()`.
 - **Stake table fetcher** (`crates/espresso/types/src/v0/impls/stake_table.rs`): polls finalized L1, builds
-  `ValidatorMap`; `select_active_validator_set()` picks top 100 by stake.
+  `ValidatorMap`. Selection rules: `doc/agents/architecture.md`.
 - **Catchup** (`crates/espresso/node/src/catchup.rs`): `SqlStateCatchup` (local DB), `StatePeers` (HTTP, reliability
   scored), `ParallelStateCatchup` (local first, peers fallback). Fetches fee/reward proofs, block frontier, chain
   config, leaf chain, and `LightClientStateUpdateCertificateV2` state certs per epoch.
@@ -93,8 +89,8 @@ just exercise code paths. Regression test first when fixing bugs.
 
 Test layers:
 
-- Unit (`cargo nextest -p <crate>`): individual functions/modules
-- Reference (`cargo nextest -p espresso-types reference`): serialization compatibility, in
+- Unit (`cargo nextest run -p <crate>`): individual functions/modules
+- Reference (`cargo nextest run -p espresso-types reference`): serialization compatibility, in
   `crates/espresso/types/src/reference_tests.rs`
 - New protocol (`cargo nextest run -p hotshot-new-protocol`): consensus, cutover, network sims, in
   `crates/hotshot/new-protocol/src/tests/`
@@ -121,11 +117,6 @@ Migrations (all three backends required when adding storage):
 - Filesystem (`crates/espresso/node/src/persistence/fs.rs`): no migration framework. Handle older on-disk formats with
   read-time fallbacks (see `load_stake` and `legacy_anchor_leaf_path`), and keep writes atomic via `Inner::replace`.
 - Update `SequencerPersistence` for all backends; test with `cargo test -p espresso-node persistence`.
-
-Refinery migrations run synchronously at startup before the node joins consensus, so they must be fast and schema-only.
-Any migration whose work scales with database size must use the `DataBackfill` pattern (background task, runs after
-startup) instead. Before writing a migration that touches existing rows, read
-[`doc/agents/refinery-migrations.md`](refinery-migrations.md).
 
 ## Adding an API endpoint
 
