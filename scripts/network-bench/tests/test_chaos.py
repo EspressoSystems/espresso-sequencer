@@ -625,34 +625,32 @@ def test_short_load_has_no_faults(load_s):
     assert faults(run(seconds=600, load_s=load_s)) == []
 
 
-def test_failed_fault_is_not_applied_and_retried_next_tick():
+@pytest.mark.parametrize(
+    ("kind", "health"),
+    [("restart", "recovering"), ("kill", "down"), ("wipe", "recovering")],
+)
+def test_a_failed_fault_keeps_the_schedule_and_is_issued_again_at_its_time(
+    kind: ch.ChaosKind, health: ch.NodeHealth
+):
     topo = topo_of()
-    state = init(topo=topo)
-    first = step(state, observe(topo), 60.0)
-    ((fault,),) = [first["actions"]]
-    undone = ch.revert_failed(state, first, {fault["node"]})
-    after = undone["state"]
-    assert after["nodes"][fault["node"]] == state["nodes"][fault["node"]]
-    schedule = ("cursor", "faults", "next_fault_at")
-    assert [after[k] for k in schedule] == [state[k] for k in schedule]
-    assert undone["actions"] == [] and undone["events"] == []
-    retry = step(undone["state"], observe(topo), 65.0)
-    assert retry["actions"] == [fault]
-
-
-def test_failed_wipe_keeps_the_node_faulted_and_wipes_again_next_tick():
-    topo = topo_of()
-    cfg = ch.ChaosConfig(kinds=("wipe",))
+    cfg = ch.ChaosConfig(kinds=(kind,))
     state = init(cfg, topo)
     first = step(state, observe(topo), 60.0, cfg, topo)
     ((action,),) = [first["actions"]]
     node = action["node"]
     undone = ch.revert_failed(state, first, {node})
-    assert undone["state"]["fault_retry"] == {node: ("wipe", 60.0)}
-    assert undone["state"]["faults"] == 1
+    assert undone["state"]["nodes"][node] == state["nodes"][node]
+    schedule = ("cursor", "faults", "next_fault_at")
+    assert [undone["state"][k] for k in schedule] == [
+        first["state"][k] for k in schedule
+    ]
+    assert undone["state"]["fault_retry"] == {node: (kind, 60.0)}
+    assert undone["actions"] == [] and undone["events"] == []
     retry = step(undone["state"], observe(topo), 65.0, cfg, topo)
     assert retry["actions"] == [action]
-    assert retry["state"]["nodes"][node]["health"] == "recovering"
+    (fault,) = [e for e in retry["events"] if e["event"] == "fault"]
+    assert fault["ts"] == 60.0
+    assert retry["state"]["nodes"][node]["health"] == health
     assert retry["state"]["nodes"][node]["since"] == 60.0
     assert retry["state"]["fault_retry"] == {}
 

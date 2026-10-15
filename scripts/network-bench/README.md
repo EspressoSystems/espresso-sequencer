@@ -269,8 +269,8 @@ just bench aws run --tag chaos-dense --chaos --nodes 32 --query-nodes 3 --chaos-
   the seeded order from the cursor, which moves past them; a mass kill skips stuck nodes. A stuck node is restarted too
   by a mass restart of all nodes and stays stuck: it gets no fault event, never counts as recovered and is not a target
   of other faults. Each node whose restart succeeded gets a `started` event at the time the last restart ssh returned.
-- `check_nodes` skips killed nodes, stuck nodes and nodes of a mass fault or wipe whose ssh failed; a node that was
-  restarted is inspected, so a container that crash-loops after a restart fails the run.
+- `check_nodes` skips killed nodes, stuck nodes and nodes whose fault ssh failed; a node that was restarted is
+  inspected, so a container that crash-loops after a restart fails the run.
 - A fault is issued only while the faulty stake stays below a third of the total (7 of 22 nodes with equal stake), at
   least `--chaos-query-floor` (2) query nodes are up and the target and every faulty node keep 2 up peers; otherwise it
   waits for a recovery. Faulty counts stuck nodes and up nodes whose probe failed or is more than 2 blocks behind the
@@ -302,9 +302,9 @@ just bench aws run --tag chaos-dense --chaos --nodes 32 --query-nodes 3 --chaos-
   its slot in the fault budget, is no longer gated or faulted, and the load runs on; the final drain waits only for the
   other faults. The run then fails: exit 3, `summary.md` keeps the reason, the run is invalid. A node that crashes
   without a fault fails the run at once.
-- A failed or truncated probe, a failed stake read or a fault ssh skips the tick, and the fault is retried on the next
-  one; 5 such ticks in a row fail the run. A failed wipe or mass-fault member keeps its fault time and is issued again
-  alone (the wipe script is rerun-safe).
+- A failed or truncated probe, a failed stake read or a fault ssh skips the tick; 5 such ticks in a row fail the run. A
+  failed fault keeps its fault time and schedule and is issued again alone on the next tick, as the action may have run
+  before the ssh reply was lost (the wipe script and the kill are rerun-safe).
 - Ctrl-C or an error ends the faults still open with an `interrupted` event; the verdict names them, it does not count
   them as failures.
 - Output: `chaos.jsonl` (`fault`, `started`, `rejoined`, `caught_up`, `timeout`, `restored`, `interrupted`; `ts` on

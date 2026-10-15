@@ -185,8 +185,7 @@ class ChaosState(TypedDict):
     # answer of each member, and by every answer while the pending members halt consensus. The
     # network decided anew once the tip exceeds it.
     mass_height: int | None
-    # Nodes whose mass or wipe fault ssh failed -> (kind, time of that fault), issued again by the
-    # next tick.
+    # Nodes whose fault ssh failed -> (kind, time of that fault), issued again by the next tick.
     fault_retry: dict[str, tuple[ChaosKind, float]]
     # Node -> stake amount; faulty stake is bounded by a third of the total.
     stake: dict[str, int]
@@ -462,36 +461,26 @@ def revert_failed(
     prev: ChaosState, step: ChaosStep, failed: Collection[str]
 ) -> ChaosStep:
     """`step` without the actions of the `failed` nodes: their state and events as before it,
-    so that the next tick retries them. A failed fault also keeps the schedule as before. A
-    failed node of a mass fault or a wipe gets its own kind again alone at the time of the
-    fault, as the action may have run partly; the other nodes keep their state and events."""
+    so that the next tick retries them. A failed fault keeps the schedule and is issued again
+    alone at the time of the fault, as the action may have run partly."""
     if not failed:
         return step
     state = step["state"]
-    retry_at = {
-        e["node"]: (e["kind"], e["ts"])
-        for e in step["events"]
-        if e["event"] == "fault" and (e["kind"] in MASS_KINDS or e["kind"] == "wipe")
-    }
-    faulted = not retry_at and any(
-        a["node"] in failed and a["op"] != "start" for a in step["actions"]
-    )
-    schedule = prev if faulted else state
     return ChaosStep(
-        state=ChaosState(
-            nodes={
+        state={
+            **state,
+            "nodes": {
                 name: prev["nodes"][name] if name in failed else s
                 for name, s in state["nodes"].items()
             },
-            order=state["order"],
-            cursor=schedule["cursor"],
-            faults=schedule["faults"],
-            next_fault_at=schedule["next_fault_at"],
-            stop_at=state["stop_at"],
-            mass_height=state["mass_height"],
-            fault_retry={name: m for name, m in retry_at.items() if name in failed},
-            stake=state["stake"],
-        ),
+            "fault_retry": {
+                e["node"]: (e["kind"], e["ts"])
+                for e in step["events"]
+                if e["event"] == "fault"
+                and e["kind"] is not None
+                and e["node"] in failed
+            },
+        },
         actions=[a for a in step["actions"] if a["node"] not in failed],
         events=[e for e in step["events"] if e["node"] not in failed],
     )

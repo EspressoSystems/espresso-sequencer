@@ -762,10 +762,11 @@ def test_failed_fault_is_retried_on_the_next_tick(isolated: Path):
     ctrl.tick(LOADING)
     assert ctrl.remote.run.restarts == 0
     assert ch.read_events(isolated) == []
-    assert ctrl.expected_down() == frozenset()
+    assert ctrl.expected_down() == frozenset(ctrl.state["fault_retry"])
     clock.sleep(awsb.AGENT_POLL_S)
     ctrl.tick(LOADING)
     assert [e["event"] for e in ch.read_events(isolated)] == ["fault"]
+    assert ctrl.expected_down() == frozenset()
 
 
 def test_a_failed_wipe_stays_faulted_and_is_wiped_again(isolated: Path):
@@ -789,8 +790,11 @@ def test_a_failed_wipe_stays_faulted_and_is_wiped_again(isolated: Path):
     assert ctrl.failures == 0
 
 
-def test_a_kill_whose_ssh_failed_after_it_ran_is_killed_again(isolated: Path):
-    ctrl, cluster, clock = cluster_controller(isolated, kills=1, kinds=("mass-kill",))
+@pytest.mark.parametrize("kind", ["kill", "mass-kill"])
+def test_a_kill_whose_ssh_failed_after_it_ran_is_killed_again(
+    isolated: Path, kind: ch.ChaosKind
+):
+    ctrl, cluster, clock = cluster_controller(isolated, kills=1, kinds=(kind,))
     cluster.start("node4")
     ctrl.state = ch.chaos_init(
         ctrl.chaos, list(ctrl.topo["nodes"]), equal(ctrl), clock.time(), 0.0, 3600.0
@@ -800,6 +804,7 @@ def test_a_kill_whose_ssh_failed_after_it_ran_is_killed_again(isolated: Path):
     assert ctrl.failures == 1
     (node,) = ctrl.state["fault_retry"]
     assert not cluster.members[node].running
+    assert node in ctrl.expected_down()
     clock.sleep(awsb.AGENT_POLL_S)
     ctrl.tick(LOADING)
     assert ctrl.failures == 0

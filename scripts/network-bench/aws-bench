@@ -6320,9 +6320,9 @@ class ChaosRunner:
         self._advance(ts)
 
     def expected_down(self) -> frozenset[str]:
-        """Nodes `check_nodes` skips: killed or stuck ones, and those whose mass fault ssh
-        failed and may have stopped. A restarted node is running once its action returned, so
-        it is inspected."""
+        """Nodes `check_nodes` skips: killed or stuck ones, and those whose fault ssh failed
+        and may have stopped. A restarted node is running once its action returned, so it is
+        inspected."""
         if self.state is None:
             return frozenset()
         return frozenset(
