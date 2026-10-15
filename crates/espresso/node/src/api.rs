@@ -1710,7 +1710,7 @@ pub(crate) fn light_client_genesis(config: &NetworkConfig<SeqTypes>, chain_id: C
 /// tries again.
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""))]
-struct LightClientProvider<C: ApiContext> {
+pub(crate) struct LightClientProvider<C: ApiContext> {
     light_client: OnceCell<Arc<NodeLightClient>>,
     state: ApiState<C>,
     client: FallbackClient<QueryServiceClient>,
@@ -1719,7 +1719,7 @@ struct LightClientProvider<C: ApiContext> {
 }
 
 impl<C: ApiContext> LightClientProvider<C> {
-    pub fn new(
+    fn new(
         peers: impl IntoIterator<Item = Url>,
         state: ApiState<C>,
         opt: LightClientOptions,
@@ -1735,7 +1735,7 @@ impl<C: ApiContext> LightClientProvider<C> {
         })
     }
 
-    async fn light_client(&self) -> Option<&Arc<NodeLightClient>> {
+    pub(crate) async fn light_client(&self) -> Option<&Arc<NodeLightClient>> {
         self.light_client
             .get_or_try_init(|| self.init())
             .await
@@ -3623,7 +3623,10 @@ mod test {
         state_signature_test_helper, status_test_helper, submit_test_helper, wait_for_committee,
     };
     use test_utils::reserve_tcp_port;
-    use tokio::time::sleep;
+    use tokio::{
+        net::{TcpListener, TcpStream},
+        time::sleep,
+    };
     use vbs::version::StaticVersion;
     use versions::{
         DRB_AND_HEADER_UPGRADE_VERSION, EPOCH_VERSION, LARGE_BLOCK_VERSION, NEW_PROTOCOL_VERSION,
@@ -4387,6 +4390,112 @@ mod test {
         drop(network);
     }
 
+    /// A coordinator that dies is not papered over: `join` returns so the node exits, and the
+    /// readers fail instead of serving the resting state as if the chain had stopped.
+    #[test_log::test(tokio::test(flavor = "multi_thread"))]
+    async fn test_dead_coordinator_is_visible() {
+        let port = reserve_tcp_port().expect("OS should have ephemeral ports available");
+        let config = TestNetworkConfigBuilder::default()
+            .api_config(Options::with_port(port))
+            .network_config(TestConfigBuilder::default().build())
+            .build();
+        let mut network = TestNetwork::new(config, TEST_UPGRADE).await;
+        let node = &mut network.peers[0];
+        while node.decided_leaf().await.height() < 1 {
+            sleep(Duration::from_millis(100)).await;
+        }
+
+        let handle = node.consensus_handle();
+        handle.kill_coordinator();
+
+        timeout(Duration::from_secs(10), node.join())
+            .await
+            .expect("join did not return after the coordinator died");
+        let read = tokio::spawn(async move { handle.decided_leaf().await }).await;
+        assert!(
+            read.is_err_and(|err| err.is_panic()),
+            "a dead coordinator was served from the resting state"
+        );
+    }
+
+    /// After shutdown the readers serve the coordinator's last decide, not the anchor the node
+    /// started from, and the leaf and state they serve belong to the same block.
+    #[test_log::test(tokio::test(flavor = "multi_thread"))]
+    async fn test_shut_down_keeps_last_decided_leaf_and_state() {
+        const HEIGHT: u64 = 5;
+        let port = reserve_tcp_port().expect("OS should have ephemeral ports available");
+        let config = TestNetworkConfigBuilder::default()
+            .api_config(Options::with_port(port))
+            .network_config(TestConfigBuilder::default().build())
+            .build();
+        let network = TestNetwork::new(config, TEST_UPGRADE).await;
+        let node = &network.peers[0];
+        while node.decided_leaf().await.height() < HEIGHT {
+            sleep(Duration::from_millis(100)).await;
+        }
+
+        node.shutdown_consensus().await;
+
+        let leaf = node.decided_leaf().await;
+        let state = node.decided_state().await.expect("state after shutdown");
+        assert!(
+            leaf.height() >= HEIGHT,
+            "anchor served instead of the last decide"
+        );
+        // The state at height `h` holds the commitments of the `h` headers before it.
+        assert_eq!(
+            state.block_merkle_tree.num_leaves(),
+            leaf.height(),
+            "state does not belong to the resting leaf"
+        );
+    }
+
+    /// A node shut down before it ever started consensus stays stopped: a later read serves the
+    /// anchor instead of lazily starting the coordinator after shutdown.
+    #[test_log::test(tokio::test(flavor = "multi_thread"))]
+    async fn test_shut_down_before_start_keeps_consensus_stopped() {
+        const NUM_NODES: usize = 3;
+        const LATE: usize = NUM_NODES - 1;
+        let port = reserve_tcp_port().expect("OS should have ephemeral ports available");
+        let config = TestNetworkConfigBuilder::<NUM_NODES, _, _>::with_num_nodes()
+            .api_config(Options::with_port(port))
+            .network_config(TestConfigBuilder::default().build())
+            .deferred_start(&[LATE])
+            .build();
+        let network = TestNetwork::new(config, TEST_UPGRADE).await;
+
+        let late = network
+            .cfg
+            .init_node(
+                LATE,
+                network.genesis_state(LATE),
+                no_storage::Options,
+                Some(NullStateCatchup::default()),
+                None,
+                &NoMetrics,
+                STAKE_TABLE_CAPACITY_FOR_TEST,
+                NullEventConsumer,
+                TEST_UPGRADE,
+                network.cfg.upgrades(),
+            )
+            .await;
+        let handle = late.consensus_handle();
+
+        // No read before the shutdown: a read would lazily start consensus.
+        late.shutdown_consensus().await;
+
+        assert_eq!(late.decided_leaf().await.height(), 0, "not the anchor");
+        assert!(
+            handle.client_api().await.is_none(),
+            "a read started consensus after shutdown"
+        );
+        handle.start_consensus().await;
+        assert!(
+            handle.client_api().await.is_none(),
+            "consensus restarted after shutdown"
+        );
+    }
+
     #[test_log::test(tokio::test(flavor = "multi_thread"))]
     pub(crate) async fn test_restart() {
         const NUM_NODES: usize = 5;
@@ -4952,7 +5061,12 @@ mod test {
                         .expect("leader config")
                         .account;
                     let leader = validators.get(&account).context("leader not found")?;
-                    pay_block_reward(&mut expected, leader, block_reward, header)?;
+                    pay_block_reward(
+                        &mut expected,
+                        leader,
+                        block_reward,
+                        RewardAmount(total_distributed),
+                    )?;
                     total_distributed += block_reward.0;
                     paid_commissions
                         .entry(account)
@@ -4975,21 +5089,18 @@ mod test {
     }
 
     /// Adds what one block pays `leader`'s commission and delegators to `balances`.
+    /// `distributed_before` is the chain's total before this block, as the parent header has it.
     fn pay_block_reward(
         balances: &mut HashMap<Address, U256>,
         leader: &AuthenticatedValidator<PubKey>,
         block_reward: RewardAmount,
-        header: &Header,
+        distributed_before: RewardAmount,
     ) -> anyhow::Result<()> {
         let delegated: U256 = leader.delegators.values().cloned().sum();
         ensure!(delegated == leader.stake, "delegations add up to the stake");
 
-        let rewards = RewardDistributor::new(
-            leader.clone(),
-            block_reward,
-            header.total_reward_distributed().unwrap(),
-        )
-        .compute_rewards()?;
+        let rewards = RewardDistributor::new(leader.clone(), block_reward, distributed_before)
+            .compute_rewards()?;
         let commission =
             U256::from(leader.commission) * block_reward.0 / U256::from(COMMISSION_BASIS_POINTS);
         // The leader also gets what flooring each delegator's share left over.
@@ -7372,14 +7483,15 @@ mod test {
         /// The marker is stamped while the loop waits on the local stream for a leaf that never
         /// comes: the loop has to notice and switch to peers. The loop is put well behind first,
         /// as a long outage would, since a gap above the consensus anchor is re-decided on
-        /// restart and cannot be kept open.
+        /// restart and cannot be kept open, and the peers stay unreachable until the stamp, since
+        /// the fetcher would otherwise fill the gap.
         WhileWaiting,
     }
 
     /// The availability layer never fetches a leaf at or below the data pruned height, so the
     /// state loop has to get the leaves it still needs from peers, without storing them, and
-    /// carry on from the local stream once it is past the pruned height. Peers' leaf chains are
-    /// verified against per-epoch stake tables, so the network runs with epochs.
+    /// carry on from the local stream once it is past the pruned height. The leaves come through
+    /// the light client, verified against per-epoch stake tables, so the network runs with epochs.
     #[rstest]
     #[case::before_restart(DataPruned::BeforeRestart)]
     #[case::while_waiting(DataPruned::WhileWaiting)]
@@ -7543,9 +7655,11 @@ mod test {
             },
             DataPruned::WhileWaiting => {
                 // Put the loop behind its own storage and take the leaves above its new head out
-                // of local reach: below the consensus anchor they are never re-decided, and
-                // without availability peers they are never fetched. The loop then waits on the
-                // stream for the leaf above its head while consensus moves the tip on.
+                // of local reach. Below the consensus anchor they are never re-decided, and with
+                // the peers unreachable they are never fetched. The loop then waits on the stream
+                // for the leaf above its head while consensus moves the tip on.
+                let proxy_port =
+                    reserve_tcp_port().expect("OS should have ephemeral ports available");
                 {
                     let mut tx = db.write().await?;
                     UpdateStateData::<SeqTypes, BlockMerkleTree, { BlockMerkleTree::ARITY }>::set_last_state_height(
@@ -7556,7 +7670,8 @@ mod test {
                     tx.commit().await?;
                 }
                 delete_data_between(&db, BEHIND, head_at_shutdown).await?;
-                _restarted = start_query_node(vec![]).await;
+                _restarted =
+                    start_query_node(vec![format!("http://localhost:{proxy_port}").parse()?]).await;
                 let deadline = Instant::now() + Duration::from_secs(120);
                 loop {
                     if local_block_height(&db).await? > local_tip + GAP {
@@ -7574,10 +7689,12 @@ mod test {
                     head == BEHIND,
                     "the loop moved to {head} without the leaf above {BEHIND}"
                 );
-                // Now stamp past the height the loop is waiting for. The old head is well below
-                // the tip, as a real run leaves it.
+                // Now stamp past the height the loop is waiting for, with the old head well below
+                // the tip as a real run leaves it, and let the peers through. The fetcher no
+                // longer asks them for heights at or below the stamp, so the loop has to.
                 let pruned = head_at_shutdown;
                 prune_data_to(&db, pruned).await?;
+                tokio::spawn(forward_tcp(proxy_port, api_port));
                 pruned
             },
         };
@@ -7610,6 +7727,19 @@ mod test {
             "{stored} leaves at or below the data pruned height {pruned} were stored"
         );
         Ok(())
+    }
+
+    /// Forward connections on `port` to `target`, so a peer's URL is dead until this runs and
+    /// reachable from then on.
+    async fn forward_tcp(port: u16, target: u16) {
+        let listener = TcpListener::bind(("127.0.0.1", port)).await.unwrap();
+        loop {
+            let (mut inbound, _) = listener.accept().await.unwrap();
+            tokio::spawn(async move {
+                let mut outbound = TcpStream::connect(("127.0.0.1", target)).await.unwrap();
+                _ = tokio::io::copy_bidirectional(&mut inbound, &mut outbound).await;
+            });
+        }
     }
 
     /// The number of blocks in the node's own availability storage.
@@ -7816,10 +7946,22 @@ mod test {
         tracing::warn!("shutting down node 0");
         node_0.shutdown_consensus().await;
 
-        // The oldest stored proposal. It may already be decided, since pruning lags the decide.
-        let (to_view, proposal) = persistence
-            .load_quorum_proposals()
-            .await?
+        // The decide processor keeps pruning the proposals of decides that landed before the
+        // shutdown, so wait for the stored set to settle before choosing one.
+        let proposals = timeout(Duration::from_secs(30), async {
+            let mut proposals = persistence.load_quorum_proposals().await?;
+            loop {
+                sleep(Duration::from_millis(500)).await;
+                let now = persistence.load_quorum_proposals().await?;
+                if now.keys().eq(proposals.keys()) {
+                    break anyhow::Ok(now);
+                }
+                proposals = now;
+            }
+        })
+        .await
+        .context("stored proposals did not settle after the shutdown")??;
+        let (to_view, proposal) = proposals
             .into_iter()
             .next()
             .expect("an undecided proposal survives the shutdown");
@@ -9035,7 +9177,19 @@ mod test {
                 v2_header.timestamp,
                 v1_header["timestamp"].as_u64().unwrap()
             );
+            assert_eq!(
+                v2_header.timestamp_millis,
+                v1_header["timestamp_millis"].as_u64().unwrap()
+            );
             assert_eq!(v2_header.l1_head, v1_header["l1_head"].as_u64().unwrap());
+            assert_eq!(
+                v2_header.reward_merkle_tree_root,
+                v1_header["reward_merkle_tree_root"].as_str().unwrap()
+            );
+            assert_eq!(
+                v2_header.total_reward_distributed,
+                v1_header["total_reward_distributed"].as_str().unwrap()
+            );
             let v2_fee = v2_header.fee_info.as_ref().unwrap();
             assert_eq!(
                 v2_fee.account,
@@ -11036,11 +11190,13 @@ mod test {
                 balances.push(balance?.unwrap_or_default().0);
             } else {
                 // The v2 tree was never written, so there is no proof to answer with.
-                ensure!(
-                    balance.is_err(),
-                    "{}: {validator} has a v2 balance {balance:?}",
-                    chain.name
-                );
+                match balance {
+                    Err(err) if err.status == StatusCode::NOT_FOUND => {},
+                    other => bail!(
+                        "{}: {validator} v2 balance should be missing, got {other:?}",
+                        chain.name
+                    ),
+                }
             }
         }
         ensure!(

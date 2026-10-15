@@ -2392,5 +2392,5 @@ machine and the trace checker; neither needs reading to judge what is claimed.
   make?
 
 What no reading can check is that this formalisation is the intended protocol. An
-audit narrows that gap, and so does replaying a real node's traces against these
-rules, which the differential harness in `new-protocol-diff` does.
+audit narrows that gap, and so does checking a real node's traces against these
+rules, which `check` in `new-protocol-diff` does.
