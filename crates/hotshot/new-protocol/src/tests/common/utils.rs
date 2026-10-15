@@ -70,7 +70,7 @@ use crate::{
     },
     outbox::Outbox,
     state::StateResponse,
-    storage::StorageOutput,
+    storage::{ActionKind, StorageOutput},
     trace,
     upgrade::expected_upgrade_data,
 };
@@ -296,8 +296,9 @@ impl TestView {
         }
     }
 
-    /// Build a TimeoutVote Event from a specific validator, optionally
-    /// carrying the sender's catchup evidence.
+    /// Build a timeout vote from a specific validator, optionally carrying the
+    /// sender's catchup evidence, in the form the version the tests run at
+    /// admits for the view ([`test_upgrade_lock`]).
     pub fn timeout_vote_input(
         &self,
         node_index: u64,
@@ -307,8 +308,24 @@ impl TestView {
     }
 
     /// A timeout vote naming `epoch` rather than the view's own, for the
-    /// checks that bound which epochs a vote may name.
+    /// checks that bound which epochs a vote may name, in the form the version
+    /// the tests run at admits.
     pub fn timeout_vote_input_for_epoch(
+        &self,
+        node_index: u64,
+        epoch: EpochNumber,
+        evidence: Option<CatchupEvidence<TestTypes>>,
+    ) -> Message<TestTypes, Validated> {
+        if test_upgrade_lock::<TestTypes>().timeout_epoch_bound(self.view_number) {
+            self.timeout_vote3_input_for_epoch(node_index, epoch, evidence)
+        } else {
+            self.timeout_vote2_input_for_epoch(node_index, epoch, evidence)
+        }
+    }
+
+    /// A timeout vote in the form that signs no lock, whatever the version the
+    /// tests run at, for the tests that send it on purpose.
+    pub fn timeout_vote2_input_for_epoch(
         &self,
         node_index: u64,
         epoch: EpochNumber,
@@ -1154,6 +1171,8 @@ pub(crate) struct ConsensusHarness {
     pub collected: Outbox<ConsensusOutput<TestTypes>>,
     deferred_states: BTreeMap<ViewNumber, ConsensusInput<TestTypes>>,
     defer_state_for: BTreeSet<ViewNumber>,
+    deferred_actions: BTreeSet<(ViewNumber, ActionKind)>,
+    defer_action_for: BTreeSet<(ViewNumber, ActionKind)>,
     trace: trace::Recorder,
 }
 
@@ -1202,10 +1221,12 @@ impl ConsensusHarness {
         let state_private_key = state_key_pair.sign_key_ref().clone();
         let membership = mock_membership();
         let instance = Arc::new(TestInstanceState::default());
+        // At an epoch version, as a new-protocol anchor is: a leaf from before
+        // epochs commits differently from the proposal rebuilt from it.
         let genesis_leaf = Leaf2::<TestTypes>::genesis(
             &TestValidatedState::default(),
             &instance,
-            TEST_VERSIONS.test.base,
+            TEST_VERSIONS.vid2.base,
         )
         .await;
         let consensus = Consensus::new(
@@ -1224,6 +1245,8 @@ impl ConsensusHarness {
             collected: Outbox::new(),
             deferred_states: BTreeMap::new(),
             defer_state_for: BTreeSet::new(),
+            deferred_actions: BTreeSet::new(),
+            defer_action_for: BTreeSet::new(),
             trace: trace::Recorder::for_current_test(),
         }
     }
@@ -1276,6 +1299,8 @@ impl ConsensusHarness {
             collected: Outbox::new(),
             deferred_states: BTreeMap::new(),
             defer_state_for: BTreeSet::new(),
+            deferred_actions: BTreeSet::new(),
+            defer_action_for: BTreeSet::new(),
             trace: trace::Recorder::for_current_test(),
         }
     }
@@ -1343,6 +1368,28 @@ impl ConsensusHarness {
         self.apply(input).await;
     }
 
+    /// Withhold the storage confirmation of the `kind` action at `view` until
+    /// [`Self::release_action`].
+    ///
+    /// The harness confirms each action as soon as it is recorded, so a vote1 or
+    /// a proposal waiting on storage never waits. A test that turns on what
+    /// happens meanwhile places the delay. Must be called before the action is
+    /// recorded.
+    pub fn defer_action(&mut self, view: ViewNumber, kind: ActionKind) {
+        self.defer_action_for.insert((view, kind));
+    }
+
+    /// Deliver the confirmation withheld by [`Self::defer_action`].
+    pub async fn release_action(&mut self, view: ViewNumber, kind: ActionKind) {
+        self.defer_action_for.remove(&(view, kind));
+        assert!(
+            self.deferred_actions.remove(&(view, kind)),
+            "an action for this view was deferred"
+        );
+        self.apply(ConsensusInput::Stored(StorageOutput::Action(view, kind)))
+            .await;
+    }
+
     /// Apply a [`ConsensusInput`] and drain outputs, auto-responding to
     /// actions that consensus expects feedback for.
     pub async fn apply(&mut self, input: ConsensusInput<TestTypes>) {
@@ -1383,10 +1430,14 @@ impl ConsensusHarness {
                 }
             },
             ConsensusOutput::RecordAction(view, _, kind) => {
-                self.apply_recorded(
-                    ConsensusInput::Stored(StorageOutput::Action(*view, *kind)),
-                    outbox,
-                );
+                if self.defer_action_for.contains(&(*view, *kind)) {
+                    self.deferred_actions.insert((*view, *kind));
+                } else {
+                    self.apply_recorded(
+                        ConsensusInput::Stored(StorageOutput::Action(*view, *kind)),
+                        outbox,
+                    );
+                }
             },
             ConsensusOutput::PersistHighQc(high_qc) => {
                 self.apply_recorded(

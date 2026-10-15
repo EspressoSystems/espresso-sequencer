@@ -278,7 +278,7 @@ pub struct Consensus<T: NodeType> {
     pending_vote2: BTreeMap<ViewEpoch, PendingVote2<T>>,
     pending_proposal: BTreeMap<ViewEpoch, SignedProposal<T, Proposal<T>>>,
     pending_revote: BTreeMap<ViewEpoch, ReVoteMessage<T, Validated>>,
-    pending_timeout_vote: BTreeMap<ViewNumber, PendingTimeoutVote<T>>,
+    pending_timeout_vote: BTreeMap<ViewEpoch, PendingTimeoutVote<T>>,
 
     /// The highest view this node has sent, or may have sent before a
     /// restart, a lock-carrying timeout vote for.
@@ -943,6 +943,16 @@ impl<T: NodeType> Consensus<T> {
                 }
                 return;
             },
+            ConsensusInput::Timeout(view)
+                if view > self.current_view.max(self.last_decided_view + 1) =>
+            {
+                debug!(
+                    %view,
+                    current_view = %self.current_view,
+                    "ignoring timeout for a view not reached"
+                );
+                Protocol::Abort
+            },
             ConsensusInput::Timeout(view) => {
                 let epoch = self.current_epoch;
                 let leader = self.leader_label(view, epoch);
@@ -1119,20 +1129,30 @@ impl<T: NodeType> Consensus<T> {
 
     /// Whether a proposal for `view` in `epoch` can still matter to this node.
     ///
-    /// Locks are ordered by epoch, then view, so a proposal of a later epoch
-    /// is wanted even if a lock of an earlier one is at a later view.
+    /// One at or before the decide floor cannot be decided any more. Under the
+    /// certificate rule, one behind the lock is kept: it gets no vote1
+    /// (`maybe_vote_1`), but a `Certificate2` for its view may still arrive and
+    /// decide it. Before the certificate rule, one behind the lock fails
+    /// `is_safe` and is not wanted. Locks are ordered by epoch, then view, so a
+    /// proposal of a later epoch is wanted even if a lock of an earlier one is at
+    /// a later view.
     pub fn wants_proposal_for_view(&self, view: &ViewNumber, epoch: EpochNumber) -> bool {
-        let locked_too_new = self
-            .lock_view()
-            .is_some_and(|lock| lock > LockView { epoch, view: *view });
+        if *view <= self.decide_floor() {
+            return false;
+        }
+        if !self.upgrade_lock.certificate_rule(*view)
+            && self
+                .lock_view()
+                .is_some_and(|lock| lock > LockView { epoch, view: *view })
+        {
+            return false;
+        }
         // A proposal may already be in `self.proposals` because we received
         // an EpochChangeMessage for it (which carries the proposal but no
         // vid_share and does not trigger state validation).  In that case we
         // still want to process the real proposal message so handle_proposal
         // runs — it populates vid_shares and emits RequestState.
-        let fully_processed =
-            self.proposals.live(*view).is_some() && self.vid_shares.contains_key(view);
-        !(locked_too_new || fully_processed)
+        self.proposals.live(*view).is_none() || !self.vid_shares.contains_key(view)
     }
 
     pub fn proposals(&self) -> &Proposals<T> {
@@ -1289,7 +1309,8 @@ impl<T: NodeType> Consensus<T> {
                 self.pending_vote2 = self.pending_vote2.split_off(&ViewEpoch::start(view));
                 self.pending_proposal = self.pending_proposal.split_off(&ViewEpoch::start(view));
                 self.pending_revote = self.pending_revote.split_off(&ViewEpoch::start(view));
-                self.pending_timeout_vote = self.pending_timeout_vote.split_off(&view);
+                self.pending_timeout_vote =
+                    self.pending_timeout_vote.split_off(&ViewEpoch::start(view));
                 self.revotes = self.revotes.split_off(&keep_from);
                 self.revote_commits = self.revote_commits.split_off(&keep_from);
                 self.revote_fetches = self
@@ -2269,7 +2290,8 @@ impl<T: NodeType> Consensus<T> {
             self.send_timeout_vote(vote, evidence, outbox);
         } else {
             self.request_action(view, Some(epoch), ActionKind::Timeout, outbox);
-            self.pending_timeout_vote.insert(view, (vote, evidence));
+            self.pending_timeout_vote
+                .insert(ViewEpoch(view, epoch), (vote, evidence));
         }
     }
 
@@ -2277,8 +2299,15 @@ impl<T: NodeType> Consensus<T> {
         if !self.stored_actions.contains(&(view, ActionKind::Timeout)) {
             return;
         }
-        if let Some((vote, evidence)) = self.pending_timeout_vote.remove(&view) {
-            self.send_timeout_vote(vote, evidence, outbox);
+        let pending: Vec<ViewEpoch> = self
+            .pending_timeout_vote
+            .range(ViewEpoch::at_view(view))
+            .map(|(key, _)| *key)
+            .collect();
+        for key in pending {
+            if let Some((vote, evidence)) = self.pending_timeout_vote.remove(&key) {
+                self.send_timeout_vote(vote, evidence, outbox);
+            }
         }
     }
 
@@ -3306,6 +3335,16 @@ impl<T: NodeType> Consensus<T> {
             debug!(%view, "proposal not available");
             return;
         };
+        // A proposal behind the lock is kept only to be decided.
+        if self.lock_view().is_some_and(|lock| {
+            lock > LockView {
+                epoch: proposal.epoch,
+                view,
+            }
+        }) {
+            debug!(%view, "proposal behind the lock");
+            return;
+        }
         if !self
             .states_verified
             .contains(&(view, proposal_commitment(proposal)))
@@ -3584,7 +3623,7 @@ impl<T: NodeType> Consensus<T> {
 
         if self.voted_2_at(view, epoch)
             || self.certs2.contains_key(&key)
-            || self.decided_views.contains(&block_view)
+            || self.decided_views.contains(&view)
             || view <= self.decide_floor()
         {
             return;

@@ -23,9 +23,12 @@ use hotshot_types::{
     vote::HasViewNumber,
 };
 
-use super::common::utils::{
-    ConsensusHarness, TEST_DRB_RESULT, TestData, build_cert1, build_cert2,
-    build_timeout_cert3_with_lock,
+use super::common::{
+    assertions::{any, decides_view, is_vote2_for_view},
+    utils::{
+        ConsensusHarness, TEST_DRB_RESULT, TestData, build_cert1, build_cert2,
+        build_timeout_cert3_with_lock,
+    },
 };
 use crate::{
     cert_verifier::ValidCert,
@@ -454,6 +457,35 @@ async fn node_votes_on_a_revote_naming_a_revotes_certificate() {
 
     let vote = vote1_at(&harness, view(13)).expect("the node votes1 on the re-vote");
     assert_eq!(vote.vote.data, boundary.cert1.data);
+}
+
+/// A node that decided the boundary block still votes2 on a re-vote's
+/// `Certificate1` over it: the nodes that missed the first commit need the
+/// re-vote's.
+#[tokio::test]
+async fn node_votes2_on_a_revote_of_a_block_it_decided() {
+    let test_data = TestData::new_with_epoch_height(BOUNDARY + 1, EPOCH_HEIGHT).await;
+    let boundary = &test_data.views[BOUNDARY];
+    let mut harness =
+        node_before_the_boundary_certificate(0, &test_data, test_timeout_epoch_lock()).await;
+    harness.apply(boundary.cert1_input()).await;
+    harness.apply(boundary.cert2_input()).await;
+    assert!(
+        any(harness.outputs(), |o| decides_view(o, 10)),
+        "setup: the node decides the boundary block"
+    );
+
+    let (cert1_12, _) = revote_certs(&harness, &test_data, view(12));
+    harness
+        .apply(ConsensusInput::Certificate1(ValidCert::new(
+            cert1_12,
+            epoch(1),
+        )))
+        .await;
+    assert!(
+        any(harness.outputs(), |o| is_vote2_for_view(o, 12)),
+        "the node votes2 on the re-vote's certificate"
+    );
 }
 
 /// A vote2 still waiting for its lock to be stored is not sent once the node

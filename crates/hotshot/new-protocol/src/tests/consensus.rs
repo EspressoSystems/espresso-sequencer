@@ -120,6 +120,37 @@ async fn test_timeout_vote_binds_the_local_epoch_when_upgraded() {
     assert_eq!(vote.vote().data.epoch, local);
 }
 
+/// A timeout vote waiting for its action to be stored is not replaced by one
+/// the node signs for the same view in a later epoch. Each answers its own timer,
+/// and both are sent once the action is stored.
+#[tokio::test]
+async fn test_timeout_votes_waiting_on_storage_are_kept_per_epoch() {
+    let mut harness =
+        ConsensusHarness::new_with_upgrade_lock(0, 10, test_timeout_epoch_lock()).await;
+    let view = ViewNumber::new(2);
+    let first = EpochNumber::genesis();
+    harness.defer_action(view, ActionKind::Timeout);
+    harness.set_view(view, first);
+    harness.apply(ConsensusInput::Timeout(view)).await;
+    harness.set_view(view, first + 1);
+    harness.apply(ConsensusInput::TimeoutOneHonest(view)).await;
+    assert!(
+        !any(harness.outputs(), is_send_timeout_vote),
+        "setup: both votes wait for the action to be stored"
+    );
+
+    harness.release_action(view, ActionKind::Timeout).await;
+    let epochs: Vec<_> = harness
+        .outputs()
+        .iter()
+        .filter_map(|o| match o {
+            ConsensusOutput::SendTimeoutVote(vote, ..) => Some(HasEpoch::epoch(vote)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(epochs, vec![Some(first), Some(first + 1)]);
+}
+
 /// A timeout certificate from an epoch the node has left does not pull it back.
 ///
 /// The certificate names the epoch its voters signed under, and at a boundary
@@ -173,6 +204,8 @@ async fn test_timeout_certificate_does_not_lower_the_epoch() {
 /// it. The view still advances: that is what the certificate attests to.
 #[tokio::test]
 async fn test_unbound_timeout_certificate_does_not_move_the_epoch() {
+    // Tests behaviour before 0.7.
+    crate::helpers::pin_test_version(versions::NEW_PROTOCOL_VERSION);
     let mut harness = ConsensusHarness::new(0).await;
     let test_data = TestData::new(2).await;
     let timed_out = &test_data.views[1];
@@ -478,7 +511,7 @@ async fn view_one_proposed_from_genesis(
     let epoch = EpochNumber::genesis();
     let genesis_leaf = harness.consensus.last_decided_leaf().clone();
     let genesis_cert1 = build_genesis_cert1(&genesis_leaf);
-    let genesis_proposal = build_genesis_proposal(&genesis_leaf, &genesis_cert1);
+    let genesis_proposal = build_genesis_proposal(&genesis_leaf);
     harness
         .consensus
         .seed_parent(genesis_cert1, genesis_proposal.clone(), std::iter::empty());
@@ -537,7 +570,8 @@ async fn test_timeout_filters_vote1_not_processing() {
     let test_data = TestData::new(6).await;
     let node_key = BLSPubKey::generated_from_seed_indexed([0; 32], 0).0;
 
-    // Set timeout at view 3
+    // Reach view 3, then time it out.
+    harness.apply(test_data.views[1].cert1_input()).await;
     harness
         .apply(ConsensusInput::Timeout(ViewNumber::new(3)))
         .await;
@@ -1216,6 +1250,7 @@ async fn test_timeout_prevents_vote1_but_allows_vote2() {
     harness
         .apply(test_data.views[0].block_reconstructed_input())
         .await;
+    harness.apply(test_data.views[0].cert1_input()).await;
 
     let vote1_before = count_matching(harness.outputs(), is_vote1);
 
@@ -1274,6 +1309,60 @@ async fn test_leader_sends_proposal() {
     assert!(
         any(harness.outputs(), is_proposal),
         "Leader should send a proposal when it has cert1, header, block, and vid_disperse"
+    );
+}
+
+/// Whether a node locked at view 3 decides view 2, and whether it votes1 there,
+/// when view 2's proposal and certificates arrive after the lock moved.
+async fn proposal_behind_the_lock(
+    lock: hotshot_types::message::UpgradeLock<TestTypes>,
+) -> (bool, bool) {
+    let test_data = TestData::new(3).await;
+    let mut harness = ConsensusHarness::new_with_upgrade_lock(0, 10, lock).await;
+    let node_key = BLSPubKey::generated_from_seed_indexed([0; 32], 0).0;
+
+    let later = &test_data.views[2];
+    harness
+        .apply_pair(later.proposal_input_consensus(&node_key))
+        .await;
+    harness.apply(later.block_reconstructed_input()).await;
+    harness.apply(later.cert1_input()).await;
+    assert_eq!(
+        harness.consensus.lock_view().map(|lock| lock.view),
+        Some(ViewNumber::new(3)),
+        "setup: the node is locked at view 3"
+    );
+
+    let earlier = &test_data.views[1];
+    harness
+        .apply_pair(earlier.proposal_input_consensus(&node_key))
+        .await;
+    harness.apply(earlier.block_reconstructed_input()).await;
+    harness.apply(earlier.cert1_input()).await;
+    harness.apply(earlier.cert2_input()).await;
+    (
+        any(harness.outputs(), |o| decides_view(o, 2)),
+        any(harness.outputs(), |o| is_vote1_for_view(o, 2)),
+    )
+}
+
+/// Under the certificate rule a proposal behind the lock is kept and decided by
+/// its `Certificate2`, with no vote1. Before it, the proposal is not wanted, as
+/// it fails `is_safe`.
+#[tokio::test]
+async fn test_proposal_behind_the_lock_is_decided_under_the_certificate_rule() {
+    assert_eq!(
+        proposal_behind_the_lock(test_timeout_epoch_lock()).await,
+        (true, false),
+        "under the certificate rule: decided, no vote1"
+    );
+    let before = hotshot_types::message::UpgradeLock::new(versions::Upgrade::trivial(
+        versions::NEW_PROTOCOL_VERSION,
+    ));
+    assert_eq!(
+        proposal_behind_the_lock(before).await,
+        (false, false),
+        "before the certificate rule: not wanted"
     );
 }
 
@@ -1684,6 +1773,8 @@ async fn test_timeout_proposal_chains_from_lock_not_timed_out_cert1() {
 /// that branch skipped.
 #[tokio::test]
 async fn test_node_votes_once_in_a_view_it_has_left() {
+    // Tests behaviour before 0.7.
+    crate::helpers::pin_test_version(versions::NEW_PROTOCOL_VERSION);
     let test_data = TestData::new(2).await;
     let view = &test_data.views[0];
     let node_index = 0;
@@ -2117,6 +2208,8 @@ async fn test_no_revote2_for_restart_barred_views() {
 /// the Cert2 can never form — while not re-recording the Vote action.
 #[tokio::test]
 async fn test_revote2_after_restart_without_cert2() {
+    // Tests behaviour before 0.7.
+    crate::helpers::pin_test_version(versions::NEW_PROTOCOL_VERSION);
     let test_data = TestData::new(4).await;
     let anchor = &test_data.views[1];
     let voted = &test_data.views[2];
@@ -2576,6 +2669,8 @@ async fn test_advance_view_records_a_certificate_behind_the_view() {
 /// for view 3.
 #[tokio::test]
 async fn test_no_fork_votes_from_one_node() {
+    // Tests behaviour before 0.7.
+    crate::helpers::pin_test_version(versions::NEW_PROTOCOL_VERSION);
     let mut harness = ConsensusHarness::new(0).await;
     let test_data = TestData::new(6).await;
     let node_key = BLSPubKey::generated_from_seed_indexed([0; 32], 0).0;

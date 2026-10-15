@@ -971,6 +971,8 @@ mod tests {
     /// Same-view copies park instead of spawning redundant tasks.
     #[tokio::test]
     async fn test_same_view_copies_are_parked() {
+        // Tests behaviour before 0.7.
+        crate::helpers::pin_test_version(versions::NEW_PROTOCOL_VERSION);
         let mut verifier = verifier();
         let view = ViewNumber::new(1);
         let tc = valid_tc(1);
@@ -991,6 +993,8 @@ mod tests {
     /// A sender can't park a second copy behind its own in-flight one.
     #[tokio::test]
     async fn test_same_sender_resubmit_is_dropped() {
+        // Tests behaviour before 0.7.
+        crate::helpers::pin_test_version(versions::NEW_PROTOCOL_VERSION);
         let mut verifier = verifier();
         let view = ViewNumber::new(1);
         let tc = valid_tc(1);
@@ -1008,6 +1012,8 @@ mod tests {
     /// A parked copy is verified when the in-flight one proves invalid.
     #[tokio::test]
     async fn test_parked_copy_promoted_after_invalid() {
+        // Tests behaviour before 0.7.
+        crate::helpers::pin_test_version(versions::NEW_PROTOCOL_VERSION);
         let mut verifier = verifier();
         let view = ViewNumber::new(1);
 
@@ -1026,6 +1032,8 @@ mod tests {
     /// Certificates for distinct views still verify concurrently.
     #[tokio::test]
     async fn test_distinct_views_verify_concurrently() {
+        // Tests behaviour before 0.7.
+        crate::helpers::pin_test_version(versions::NEW_PROTOCOL_VERSION);
         let mut verifier = verifier();
 
         verifier.verify(sender(1), valid_tc(1));
@@ -1082,6 +1090,8 @@ mod tests {
     /// submissions for the view.
     #[tokio::test]
     async fn test_mark_completed_clears_view() {
+        // Tests behaviour before 0.7.
+        crate::helpers::pin_test_version(versions::NEW_PROTOCOL_VERSION);
         let mut verifier = verifier();
         let view = ViewNumber::new(1);
 
@@ -1103,6 +1113,8 @@ mod tests {
     /// stale resubmits, and leaves views at or above the cutoff live.
     #[tokio::test]
     async fn test_gc_clears_stale_state() {
+        // Tests behaviour before 0.7.
+        crate::helpers::pin_test_version(versions::NEW_PROTOCOL_VERSION);
         let mut verifier = verifier();
         let live = ViewNumber::new(5);
 
