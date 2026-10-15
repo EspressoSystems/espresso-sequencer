@@ -687,13 +687,7 @@ where
                     .push_back(ConsensusOutput::BlockPayloadReconstructed {
                         view: out.view,
                         header: proposal.block_header.clone(),
-<<<<<<< HEAD
-                        payload: out.payload,
-||||||| parent of fa9c12647 (fix(new-protocol): carry an obtained payload in the decide (#5129))
-                        payload: Arc::new(out.payload),
-=======
-                        payload: Arc::new(out.payload.clone()),
->>>>>>> fa9c12647 (fix(new-protocol): carry an obtained payload in the decide (#5129))
+                        payload: out.payload.clone(),
                     });
             } else {
                 warn!(
