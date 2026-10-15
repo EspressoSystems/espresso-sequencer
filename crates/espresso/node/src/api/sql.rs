@@ -602,15 +602,14 @@ impl RewardMerkleTreeDataSource for SqlStorage {
                     if tree_height == 0 {
                         return Ok(());
                     }
-                    // During V4→V5 upgrades the previous epoch boundary may be V4.
+                    // During V4→V5 upgrades the previous epoch boundary may be V4. The data pruner
+                    // may have deleted the boundary leaf, in which case the tree load below decides.
                     let mut tx = self.read().await.context("opening read transaction")?;
-                    let leaf = tx
+                    if let Ok(leaf) = tx
                         .get_leaf(LeafId::<SeqTypes>::from(tree_height as usize))
                         .await
-                        .context(format!(
-                            "leaf at epoch boundary {tree_height} not available"
-                        ))?;
-                    if leaf.header().version() < EPOCH_REWARD_VERSION {
+                        && leaf.header().version() < EPOCH_REWARD_VERSION
+                    {
                         return Ok(());
                     }
                 }
