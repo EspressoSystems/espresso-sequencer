@@ -1020,10 +1020,6 @@ pub trait SequencerPersistence:
         }
     }
 
-    async fn load_next_epoch_quorum_certificate(
-        &self,
-    ) -> anyhow::Result<Option<NextEpochQuorumCertificate2<SeqTypes>>>;
-
     async fn append_next_epoch_high_qc2(
         &self,
         _next_epoch_high_qc: NextEpochQuorumCertificate2<SeqTypes>,
