@@ -45,10 +45,7 @@ structure Persisted where
   /-- The restored lock, the latest `Cert1` the node locked on before the crash. -/
   lock : Cert1
 
-  /--
-  The latest view the node voted, proposed or timed out in: the Rust node's
-  last_actioned_view.
-  -/
+  /-- The latest view the node voted, proposed or timed out in. -/
   highestVoted : ViewNumber
 
   /-- The saved proposals the node marks as having their payload, by view and payload commitment. -/
@@ -130,9 +127,17 @@ structure Summarises (cfg : Config) (P : Persisted) (pre post : History) : Prop 
   anchorCert2Held : (P.config cfg).anchorCert2 = cfg.anchorCert2
     ∨ ∃ c2, pre.HasCert2 c2 ∧ c2.data = P.anchorCert.data.toVote2 ∧ c2.view < P.firstAllowed
 
-  /-- Every saved proposal marked as reconstructed is one the node held before the crash. -/
+  /--
+  Every saved proposal marked as reconstructed is one the node held before the
+  crash, with its payload unless it is the anchor's. Loading it becomes an
+  `Input.blockReconstructed` (`Persisted.restoredSteps`), which a vote2 reads.
+  -/
   reconstructedHeld : ∀ x ∈ P.reconstructed,
-    ∃ b, pre.HasProposal cfg b ∧ b.viewNumber = x.1 ∧ b.payloadCommit = x.2
+    ∃ b, pre.HasProposal cfg b
+      ∧ b.viewNumber = x.1
+      ∧ b.payloadCommit = x.2
+      ∧ ((x.1 = P.anchorView ∧ x.2 = P.anchorBlock.payloadCommit)
+        ∨ pre.HasPayload cfg x.1 x.2)
 
   /-- Every vote1 before the crash is at or before `Persisted.highestVoted`. -/
   vote1Below : ∀ v : Vote1, pre.Sent (.vote1 v) → v.view ≤ P.highestVoted
