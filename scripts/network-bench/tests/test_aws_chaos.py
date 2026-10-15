@@ -35,6 +35,11 @@ from fakes import (
 from test_chaos import peers_of, topo_of, with_health
 
 
+@pytest.mark.parametrize("op", ["restart", "kill", "start"])
+def test_node_docker_commands_run_under_a_timeout(op: str):
+    assert awsb.DOCKER_NODE_COMMANDS[op].startswith("sudo timeout -k 10 ")
+
+
 # REQ:awsbench-chaos-wipe
 # TEST:wipe-script-steps-ok
 def test_wipe_script_steps():
@@ -566,7 +571,7 @@ def test_restore_starts_down_nodes(isolated: Path):
     ctrl.state = with_health(state, node4="down", node5="down", node6="recovering")
     ctrl.restore()
     starts = [c[-1] for c in runner.calls if "docker start" in c[-1]]
-    assert starts == ["sudo docker start espresso-node"] * 2
+    assert starts == [awsb.DOCKER_NODE_COMMANDS["start"]] * 2
     events = ch.read_events(isolated)
     assert [(e["event"], e["node"]) for e in events] == [
         ("restored", "node4"),

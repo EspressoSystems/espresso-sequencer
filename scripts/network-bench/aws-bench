@@ -6217,13 +6217,14 @@ def manifest_storage(config: dict[str, Any]) -> ConsensusStorage:
     return config.get("consensus_storage", LEGACY_CONSENSUS_STORAGE)
 
 
-DOCKER_NODE_COMMANDS = {
+NODE_DOCKER = {
     "restart": "sudo docker restart -t 30 espresso-node",
     # Succeeds for a container already stopped, so a retry after a lost ssh reply passes.
     "kill": "sudo docker kill espresso-node || "
     "[ \"$(sudo docker inspect -f '{{.State.Running}}' espresso-node)\" = false ]",
     "start": "sudo docker start espresso-node",
 }
+DOCKER_NODE_COMMANDS = {op: bounded(command) for op, command in NODE_DOCKER.items()}
 
 
 def node_stakes(remote: Remote, topo: nb.Topology) -> dict[str, int]:
