@@ -1269,7 +1269,7 @@ where
                     {
                         self.proposal_received_at = Some((view, Instant::now()));
                     }
-                    if self.consensus.wants_proposal_for_view(&view) {
+                    if self.consensus.wants_proposal_for_view(&view, epoch) {
                         self.proposal_validator.validate(p);
                     }
                     None
@@ -1314,7 +1314,7 @@ where
                         );
                         return None;
                     }
-                    if self.consensus.wants_proposal_for_view(&view) {
+                    if self.consensus.wants_proposal_for_view(&view, epoch) {
                         let signature = fragment.signature.clone();
                         match self
                             .vid_fragment_accumulator

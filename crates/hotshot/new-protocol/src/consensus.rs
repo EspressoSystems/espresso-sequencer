@@ -1127,13 +1127,24 @@ impl<T: NodeType> Consensus<T> {
         self.set_current_view_max(resume_view);
     }
 
-    /// Whether a proposal for `view` can still matter to this node.
+    /// Whether a proposal for `view` in `epoch` can still matter to this node.
     ///
-    /// One at or before the decide floor cannot be decided any more. One behind
-    /// the lock is kept: it gets no vote1 (`maybe_vote_1`), but a `Certificate2`
-    /// for its view may still arrive and decide it.
-    pub fn wants_proposal_for_view(&self, view: &ViewNumber) -> bool {
+    /// One at or before the decide floor cannot be decided any more. Under the
+    /// certificate rule, one behind the lock is kept: it gets no vote1
+    /// (`maybe_vote_1`), but a `Certificate2` for its view may still arrive and
+    /// decide it. Before the certificate rule, one behind the lock fails
+    /// `is_safe` and is not wanted. Locks are ordered by epoch, then view, so a
+    /// proposal of a later epoch is wanted even if a lock of an earlier one is at
+    /// a later view.
+    pub fn wants_proposal_for_view(&self, view: &ViewNumber, epoch: EpochNumber) -> bool {
         if *view <= self.decide_floor() {
+            return false;
+        }
+        if !self.upgrade_lock.certificate_rule(*view)
+            && self
+                .lock_view()
+                .is_some_and(|lock| lock > LockView { epoch, view: *view })
+        {
             return false;
         }
         // A proposal may already be in `self.proposals` because we received
@@ -1448,7 +1459,7 @@ impl<T: NodeType> Consensus<T> {
         let block_number = proposal.proposal.data.block_header.block_number();
         let qc_view = proposal.proposal.data.justify_qc.view_number();
 
-        if !self.wants_proposal_for_view(&view) {
+        if !self.wants_proposal_for_view(&view, proposal.proposal.data.epoch) {
             warn!(
                 %view, %proposer, block = %block_number,
                 epoch = %proposal.proposal.data.epoch, %qc_view,
