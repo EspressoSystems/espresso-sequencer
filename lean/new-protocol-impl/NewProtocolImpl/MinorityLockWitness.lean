@@ -615,7 +615,7 @@ open Lists
 variable (hv : ∀ b, BlockValid b)
 
 include hv in
-theorem protocol (k : PubKey) (n : Nat) : ProtocolHistory cfg leader k (fun _ => True) (fun _ => True) (H k n) :=
+theorem protocol (k : PubKey) (n : Nat) : ProtocolHistory cfg leader k (fun _ => True) (H k n) :=
   Kit.protocol input hv k n
 
 /-- Nothing is owed after a step. -/
@@ -1232,7 +1232,7 @@ include hv in
 /-- **The liveness premises can be met together, with a timeout before GST.** -/
 theorem premises_met :
     ConfigCoherent cfg ∧ Synchrony (net hv) 28 3 25 ∧ Prompt (net hv) 0
-      ∧ 8 * 3 + 3 * 0 < 25 ∧ LeaderRotation C leader :=
+      ∧ 8 * 3 + 4 * 0 < 25 ∧ LeaderRotation C leader :=
   ⟨cfg_coherent, sync hv, prompt_of_machine _ 0 (fun k _ => ⟨input k, rfl⟩)
     (fun _ hk => Kit.steady_of_uniform (fun _ _ _ h => h) hk), by decide, rotation⟩
 

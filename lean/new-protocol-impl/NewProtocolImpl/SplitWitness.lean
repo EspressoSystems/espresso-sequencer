@@ -981,7 +981,7 @@ theorem not_timedOut {k : PubKey} {n : Nat} {v : ViewNumber} (h : (H k n).TimedO
 variable (hv : ∀ b, BlockValid b)
 
 include hv in
-theorem protocol (k : PubKey) (n : Nat) : ProtocolHistory cfg leader k (fun _ => True) (fun _ => True) (H k n) :=
+theorem protocol (k : PubKey) (n : Nat) : ProtocolHistory cfg leader k (fun _ => True) (H k n) :=
   Kit.protocol input hv k n
 
 /-- What a justified proposal or request names, the node holds. -/
@@ -1909,8 +1909,7 @@ theorem sync : Synchrony (net hv) 36 4 33 where
       rwa [(vAt_first (by omega)).2 (by omega)] at this
     have hinput : (tr k 7).input = .timeout ⟨2⟩ := by
       rw [Kit.tr_step]; show input k 7 = _; rw [input_first (by omega)]; rfl
-    obtain ⟨e', L', -, hout⟩ := (Kit.protocol input hv k 8).timeoutAnswered 7 _ ⟨2⟩ (Kit.getElem_H 7)
-      (Or.inl ⟨hinput, by rw [Kit.upTo_H]; exact hin7⟩) (fun _ _ => ⟨trivial, trivial⟩)
+    obtain ⟨e', L', -, hout⟩ := Kit.answers (Or.inl ⟨hinput, hin7⟩)
     obtain ⟨_, hke⟩ := hk
     exact by_at hv (m := 8) (fun _ => by show tm 7 ≤ _; omega)
       (Or.inr (Or.inr ⟨_, Kit.sent_iff.mpr ⟨7, by omega, hout⟩, rfl, hke⟩))
@@ -1980,7 +1979,7 @@ include hv in
 /-- **The liveness premises can be met together, with a first epoch change that splits the nodes before GST.** -/
 theorem premises_met :
     ConfigCoherent cfg ∧ Synchrony (net hv) 36 4 33 ∧ Prompt (net hv) 0
-      ∧ 8 * 4 + 3 * 0 < 33 ∧ LeaderRotation C leader :=
+      ∧ 8 * 4 + 4 * 0 < 33 ∧ LeaderRotation C leader :=
   ⟨cfg_coherent, sync hv, prompt_of_machine _ 0 (fun k _ => ⟨input k, rfl⟩)
     (fun _ hk => Kit.steady_of_uniform (fun _ _ _ h => h) hk), by decide, rotation⟩
 

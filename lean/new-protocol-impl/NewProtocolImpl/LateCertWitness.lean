@@ -1080,7 +1080,7 @@ theorem not_timedOut {k : PubKey} {n : Nat} {v : ViewNumber} (h : (H k n).TimedO
 variable (hv : ∀ b, BlockValid b)
 
 include hv in
-theorem protocol (k : PubKey) (n : Nat) : ProtocolHistory cfg leader k (fun _ => True) (fun _ => True) (H k n) :=
+theorem protocol (k : PubKey) (n : Nat) : ProtocolHistory cfg leader k (fun _ => True) (H k n) :=
   Kit.protocol input hv k n
 
 /-- What a justified proposal or request names, the node holds. -/
@@ -2286,7 +2286,7 @@ include hv in
 /-- **The liveness premises can be met together, with an epoch that ends on its re-vote's `Cert2`.** -/
 theorem premises_met :
     ConfigCoherent cfg ∧ Synchrony (net hv) 33 4 33 ∧ Prompt (net hv) 0
-      ∧ 8 * 4 + 3 * 0 < 33 ∧ LeaderRotation C leader :=
+      ∧ 8 * 4 + 4 * 0 < 33 ∧ LeaderRotation C leader :=
   ⟨cfg_coherent, sync hv, prompt_of_machine _ 0 (fun k _ => ⟨input k, rfl⟩)
     (fun _ hk => Kit.steady_of_uniform (fun _ _ _ h => h) hk), by decide, rotation⟩
 

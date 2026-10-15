@@ -21,8 +21,10 @@ What an honest node's history must satisfy.
 
 Each rule reads the history up to and including the step it constrains, so a node
 may act on an input in the step it arrives. The timeout rules are the exception:
-they read the history before the step, because a timer or one-honest indication
-is answered from the view and epoch the node was in when it arrived.
+they read the history before the step that took the timer or one-honest
+indication, because the vote answers it from the view, epoch and lock the node
+had when it arrived. The vote may be sent in a later step, as by a node that stores
+its timeout before sending it; `Prompt` asks that it come within `δ`.
 -/
 
 @[expose] public section
@@ -138,13 +140,18 @@ structure SafeHistory (honestIn : EpochNumber → Prop) (h : History) : Prop whe
 
   /--
   A timeout vote names a lock no earlier, in epoch and view order (`EpochViewLE`),
-  than every vote2 the node sent before it.
+  than every vote2 the node sent before it at the vote's view or an earlier one.
 
   What makes `SafeParent` safe: a timeout certificate's lock is then no earlier
-  than any view its honest signers voted2 in before timing out.
+  than any view up to its own that its honest signers voted2 in before timing out.
+  The lock is one the node held at the timer (`ProtocolHistory.timeoutJustified`),
+  so between the timer and the vote it draws, the node does not vote2 at the
+  vote's view or an earlier one. A vote2 at a later view may come in between, and
+  the lock need not cover it.
   -/
   timeoutLock : ∀ n vote, h.SentAt n (.timeoutVote vote) →
     honestIn vote.data.epoch → ∀ v2 : Vote2, (h.upTo n).Sent (.vote2 v2) → honestIn v2.data.epoch →
+      v2.view ≤ vote.view →
       EpochViewLE v2.data.epoch v2.view vote.data.lock.data.epoch vote.data.lock.view
 
   /--
@@ -325,17 +332,35 @@ def ProposedIn (h : History) (e : EpochNumber) (v : ViewNumber) : Prop :=
     ∨ ∃ r, h.Sent (.revote r) ∧ r.view = v ∧ r.cert.data.epoch = e
 
 /--
+At step `n`, the node took a timer or the one-honest indication for view `v`.
+
+The timer fires for the view the node is in. The one-honest indication may be for
+a later view, since the node is following others who already left. Both are read
+from the history before the step (`h.upTo n`), not after it.
+-/
+def History.TimerAt (h : History) (n : Nat) (v : ViewNumber) : Prop :=
+  ∃ st, h[n]? = some st
+    ∧ ((st.input = .timeout v ∧ (h.upTo n).InView cfg v)
+      ∨ (st.input = .timeoutOneHonest v ∧ ∃ w, (h.upTo n).InView cfg w ∧ w ≤ v))
+
+/--
+`h` answers the timer for view `v` the node took at step `n`: in that step or a
+later one, it sent a timeout vote for `v` naming the epoch it was in at the timer.
+-/
+def History.TimerAnswered (h : History) (n : Nat) (v : ViewNumber) : Prop :=
+  ∃ e L i, n ≤ i ∧ (h.upTo n).InEpoch cfg e
+    ∧ h.SentAt i (.timeoutVote { data := { epoch := e, lock := L }, view := v, signer := node })
+
+/--
 `SafeHistory`, and the rest of what an honest node may do, for the epochs it is
 honest in.
 
 The added fields are what liveness needs: a node that timed out at will could stop
-every view, and one that answered no timer could keep a failed view open for ever.
-As for the signing rules, a rule applies when the node is honest in the epoch of
-the messages it relates. A timer is answered when the node is honest in the epoch
-it is in and a member of its committee (`memberIn`): a timeout vote counts towards
-no certificate of an epoch the node is not a member of.
+every view. As for the signing rules, a rule applies when the node is honest in the
+epoch of the messages it relates. That a node answers its timers is a matter of
+time, and `Prompt` asks it of the epochs it is honest in and a member of.
 -/
-structure ProtocolHistory (honestIn memberIn : EpochNumber → Prop) (h : History) : Prop
+structure ProtocolHistory (honestIn : EpochNumber → Prop) (h : History) : Prop
     extends SafeHistory cfg node honestIn h where
   /--
   A vote1 is on a proposal, or answers a re-vote request, that the leader of its
@@ -358,30 +383,15 @@ structure ProtocolHistory (honestIn memberIn : EpochNumber → Prop) (h : Histor
       ∧ NotBehind cfg (h.upTo (n + 1)) r.cert.data.epoch)
 
   /--
-  A timeout vote answers a timer or the one-honest indication, names the node's
-  epoch, and names as its lock a certificate the node holds.
-
-  The timer fires for the view the node is in. The one-honest indication may be
-  for a later view, since the node is following others who already left. Both are
-  read from the history before the step (`h.upTo n`), not after it.
+  A timeout vote answers a timer or the one-honest indication the node took at or
+  before the step it is sent in (`History.TimerAt`). It is the vote the node would
+  have sent at the timer: it names the node's epoch then, and as its lock a
+  certificate the node held then.
   -/
   timeoutJustified : ∀ n st vote, h[n]? = some st → Output.send (.timeoutVote vote) ∈ st.output →
-    honestIn vote.data.epoch → vote.signer = node ∧ (h.upTo n).InEpoch cfg vote.data.epoch
-      ∧ (h.upTo n).HasCert1 cfg vote.data.lock
-      ∧ ((st.input = .timeout vote.view ∧ (h.upTo n).InView cfg vote.view)
-        ∨ (st.input = .timeoutOneHonest vote.view
-            ∧ ∃ v, (h.upTo n).InView cfg v ∧ v ≤ vote.view))
-
-  /--
-  Such a timer or indication is answered, in the step it arrives, in an epoch the
-  node is honest in and a member of.
-  -/
-  timeoutAnswered : ∀ n st v, h[n]? = some st →
-    ((st.input = .timeout v ∧ (h.upTo n).InView cfg v)
-      ∨ (st.input = .timeoutOneHonest v ∧ ∃ w, (h.upTo n).InView cfg w ∧ w ≤ v)) →
-    (∀ e, (h.upTo n).InEpoch cfg e → honestIn e ∧ memberIn e) →
-    ∃ e L, (h.upTo n).InEpoch cfg e
-      ∧ Output.send (.timeoutVote { data := { epoch := e, lock := L }, view := v, signer := node }) ∈ st.output
+    honestIn vote.data.epoch → vote.signer = node
+      ∧ ∃ m ≤ n, h.TimerAt cfg m vote.view ∧ (h.upTo m).InEpoch cfg vote.data.epoch
+        ∧ (h.upTo m).HasCert1 cfg vote.data.lock
 
   /-- A proposal is one the node may make. -/
   proposeJustified : ∀ n p, h.SentAt n (.proposal p) →

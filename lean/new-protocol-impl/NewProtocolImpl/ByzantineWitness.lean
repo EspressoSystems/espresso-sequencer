@@ -35,7 +35,7 @@ neither. `blockSpread` asks nothing for them: with distinct block hashes
 `c` is slow: every `Cert1` reaches it two steps after the others, and every
 payload one step earlier, so it enters each view later and its timer for `d`'s
 view fires later. Before it does, the one-honest indication from `a`'s and `b`'s
-timeout votes arrives, and `c` answers it (`ProtocolHistory.timeoutAnswered`);
+timeout votes arrives, and `c` answers it (`Prompt.timers`);
 that vote completes the quorum behind the timeout certificate.
 
 Each honest leader's view takes the header, the proposal with the node's share,
@@ -1213,7 +1213,7 @@ theorem not_timedOut {k : PubKey} {n u : Nat} (h : (H k n).TimedOut ⟨vOf u⟩)
 variable (hv : ∀ b, BlockValid b)
 
 include hv in
-theorem protocol (k : PubKey) (n : Nat) : ProtocolHistory cfg leader k (fun _ => True) (fun _ => True) (H k n) := Kit.protocol input hv k n
+theorem protocol (k : PubKey) (n : Nat) : ProtocolHistory cfg leader k (fun _ => True) (H k n) := Kit.protocol input hv k n
 
 /-- What a justified proposal names, the node holds. -/
 theorem justified_held {k : PubKey} {n : Nat} {x : Cert1} {ev : Option TimeoutCert}
@@ -2370,8 +2370,12 @@ include hv hcf in
 /-- **The liveness premises can be met together, with a leader that equivocates.** -/
 theorem premises_met :
     ConfigCoherent cfg ∧ Synchrony (net hv B) 0 4 33 ∧ Prompt (net hv B) 0
-      ∧ 8 * 4 + 3 * 0 < 33 ∧ LeaderRotation (C' B) leader :=
-  ⟨cfg_coherent, sync hv hcf, fun _ hk n o ho => absurd ho (settledIn hv hk n o), by decide, rotation⟩
+      ∧ 8 * 4 + 4 * 0 < 33 ∧ LeaderRotation (C' B) leader :=
+  ⟨cfg_coherent, sync hv hcf,
+    ⟨fun _ hk n o ho => absurd ho (settledIn hv hk n o), fun k hk n v ht _ =>
+      ⟨n, Nat.le_refl _, Nat.le_add_right _ _,
+        Or.inl (timers_of_machine (net hv B) (fun k _ => ⟨input k, rfl⟩) k hk n v ht)⟩⟩,
+    by decide, rotation⟩
 
 theorem ldr_d (w : Nat) : ldr (4 * w + 4) = d := by
   simp [ldr, show (4 * w + 4) % 4 = 0 by omega]

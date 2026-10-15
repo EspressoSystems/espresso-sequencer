@@ -72,19 +72,26 @@ theorem settled (k : PubKey) (n : Nat) (o : Obligation) : ¬ Owed cfg leader k (
 variable (input) in
 /-- Every prefix obeys the rules, with validity taken as reported. -/
 theorem protocol (hv : ∀ b, BlockValid b) (k : PubKey) (n : Nat) :
-    ProtocolHistory cfg leader k (fun _ => True) (fun _ => True) (H cfg leader input k n) := by
+    ProtocolHistory cfg leader k (fun _ => True) (H cfg leader input k n) := by
   rw [← hpre]; exact historyOf_protocol (fun _ _ _ _ b _ => hv b) n
 
 variable (input) in
 /-- A timeout vote is sent in the step its view's timer or one-honest indication arrives. -/
-theorem timeout_vote_input (hv : ∀ b, BlockValid b) {j : Nat} {vote : TimeoutVote}
+theorem timeout_vote_input {j : Nat} {vote : TimeoutVote}
     (hx : Output.send (.timeoutVote vote) ∈ (tr cfg leader input k j).output) :
     input k j = .timeout vote.view ∨ input k j = .timeoutOneHonest vote.view := by
-  obtain ⟨-, -, -, hcase⟩ := (protocol input hv k (j + 1)).timeoutJustified j _ vote (getElem_H j) hx trivial
-  have hin : (tr cfg leader input k j).input = input k j := by rw [tr_step]; rfl
-  rcases hcase with ⟨h, -⟩ | ⟨h, -⟩
-  · exact Or.inl (hin ▸ h)
-  · exact Or.inr (hin ▸ h)
+  rw [tr_step] at hx
+  exact step_timeoutVote_input hx
+
+/-- The node answers a timer or one-honest indication in the step that takes it. -/
+theorem answers {j : Nat} {v : ViewNumber}
+    (ht : ((tr cfg leader input k j).input = .timeout v ∧ (H cfg leader input k j).InView cfg v)
+      ∨ ((tr cfg leader input k j).input = .timeoutOneHonest v
+        ∧ ∃ w, (H cfg leader input k j).InView cfg w ∧ w ≤ v)) :
+    ∃ e L, (H cfg leader input k j).InEpoch cfg e
+      ∧ Output.send (.timeoutVote ⟨⟨e, L⟩, v, k⟩) ∈ (tr cfg leader input k j).output := by
+  rw [tr_step] at ht ⊢
+  exact step_answers ht
 
 variable (input) in
 /-- A view the node decided is after the anchor's, and that of a block whose proposal it holds. -/

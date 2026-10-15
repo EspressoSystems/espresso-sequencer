@@ -546,7 +546,7 @@ theorem not_pastView {k : PubKey} {n : Nat} {v : ViewNumber} : ¬ (H k n).PastVi
 variable (hv : ∀ b, BlockValid b)
 
 include hv in
-theorem protocol (k : PubKey) (n : Nat) : ProtocolHistory cfg leader k (fun _ => True) (fun _ => True) (H k n) :=
+theorem protocol (k : PubKey) (n : Nat) : ProtocolHistory cfg leader k (fun _ => True) (H k n) :=
   Kit.protocol input hv k n
 
 /-- With no timeout certificate anywhere, a justified certificate carries no evidence. -/
@@ -1025,14 +1025,14 @@ theorem sync : Synchrony (net hv) 0 4 33 where
     obtain ⟨k0, hq0, -, hk0⟩ := C.intersect _ q q hq hq
     obtain ⟨L, hs⟩ := hvotes k0 hq0 hk0
     obtain ⟨j, -, hj⟩ := sentBy hv hs
-    rcases Kit.timeout_vote_input input hv hj with h | h
+    rcases Kit.timeout_vote_input input hj with h | h
     · exact input_quiet.1 _ h
     · exact input_quiet.2.1 _ h
   timeoutCertForward tc k hk n hin := absurd (hin ▸ Trace.received_self _ n) no_tc
   timeoutCatchUp k hk v hrep := by
     exfalso
     obtain ⟨m, vote, -, -, hout⟩ := hrep 0
-    rcases Kit.timeout_vote_input input hv hout with h | h
+    rcases Kit.timeout_vote_input input hout with h | h
     · exact input_quiet.1 _ h
     · exact input_quiet.2.1 _ h
   timeoutLockSpread tc k hk n hin := absurd hin no_tc
@@ -1070,7 +1070,7 @@ include hv in
 /-- **The liveness premises can be met together, with two blocks to an epoch.** -/
 theorem premises_met :
     ConfigCoherent cfg ∧ Synchrony (net hv) 0 4 33 ∧ Prompt (net hv) 0
-      ∧ 8 * 4 + 3 * 0 < 33 ∧ LeaderRotation C leader :=
+      ∧ 8 * 4 + 4 * 0 < 33 ∧ LeaderRotation C leader :=
   ⟨cfg_coherent, sync hv, prompt_of_machine _ 0 (fun k _ => ⟨input k, rfl⟩)
     (fun _ hk => Kit.steady_of_uniform (fun _ _ _ h => h) hk), by decide, rotation⟩
 
