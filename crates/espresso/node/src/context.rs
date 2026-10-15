@@ -10,7 +10,7 @@ use anyhow::Context;
 use async_lock::RwLock;
 use derivative::Derivative;
 use espresso_types::{
-    NodeState, Transaction, ValidatedState,
+    NodeState, PubKey, Transaction, ValidatedState,
     v0::traits::{EventConsumer as PersistenceEventConsumer, SequencerPersistence},
 };
 use futures::{
@@ -21,6 +21,7 @@ use hotshot::HotShotInitializer;
 use hotshot_new_protocol::{
     client::ClientApi,
     coordinator::Coordinator,
+    message::OpaqueMessage,
     network::{Cliquenet, NetworkError},
 };
 use hotshot_orchestrator::client::OrchestratorClient;
@@ -41,7 +42,11 @@ use parking_lot::Mutex;
 use request_response::RequestResponseConfig;
 use tokio::{
     spawn,
-    sync::{broadcast, mpsc::channel, watch},
+    sync::{
+        broadcast,
+        mpsc::{UnboundedSender, channel, unbounded_channel},
+        watch,
+    },
     task::JoinHandle,
 };
 use tracing::{Instrument, Level, info};
@@ -205,8 +210,10 @@ where
             tracing::warn!(%current_epoch, %err, "coordinator network apply_epoch failed at startup");
         }
 
+        let (external_tx, external_rx) = unbounded_channel();
         let coordinator = build_coordinator(
             coordinator_network,
+            external_tx,
             &initializer,
             upgrade_lock.clone(),
             &validator_config,
@@ -220,6 +227,7 @@ where
         .await?;
         let coordinator = Arc::new(CoordinatorTask::new(
             coordinator,
+            external_rx,
             EXTERNAL_EVENT_CHANNEL_SIZE,
             metrics,
         ));
@@ -543,6 +551,7 @@ where
 #[allow(clippy::too_many_arguments)]
 async fn build_coordinator<P>(
     network: Cliquenet<SeqTypes>,
+    external_tx: UnboundedSender<OpaqueMessage<PubKey>>,
     initializer: &HotShotInitializer<SeqTypes>,
     upgrade_lock: UpgradeLock<SeqTypes>,
     validator_config: &ValidatorConfig<SeqTypes>,
@@ -594,6 +603,7 @@ where
             start_voting_time: config.start_voting_time,
             stop_voting_time: config.stop_voting_time,
         })
+        .external_tx(external_tx)
         .make())
 }
 

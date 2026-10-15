@@ -31,9 +31,7 @@ use espresso_contract_deployer::{
     self as deployer, Contract, Contracts, DEFAULT_EXIT_ESCROW_PERIOD_SECONDS, DeployedContracts,
     HttpProviderWithWallet, network_config::light_client_genesis_from_stake_table,
 };
-use espresso_dev_node::{
-    AltChainInfo, DevInfo, DevNodeVersion, SetHotshotDownReqBody, SetHotshotUpReqBody,
-};
+use espresso_dev_node::{AltChainInfo, DevInfo, SetHotshotDownReqBody, SetHotshotUpReqBody};
 use espresso_node::{
     SequencerApiVersion,
     api::{
@@ -226,10 +224,6 @@ struct Args {
     #[clap(flatten)]
     sql: persistence::sql::Options,
 
-    /// protocol version to run
-    #[clap(long, env = "ESPRESSO_DEV_NODE_VERSION", default_value = "0.6")]
-    version: DevNodeVersion,
-
     #[clap(flatten)]
     logging: logging::Config,
 }
@@ -284,7 +278,6 @@ async fn async_main(migrated_envs: Vec<(&str, &str)>) -> anyhow::Result<()> {
         initial_token_supply,
         token_name,
         token_symbol,
-        version,
     } = cli_params;
 
     logging.init();
@@ -522,12 +515,9 @@ async fn async_main(migrated_envs: Vec<(&str, &str)>) -> anyhow::Result<()> {
             )
             .await?;
 
-            if matches!(version, DevNodeVersion::V0_6) {
-                let l1_client = l1_opt.clone().connect(vec![l1_url.clone()])?;
-                deployer::upgrade_stake_table_v2(&provider, l1_client, contracts, admin, admin)
-                    .await?;
-                deployer::upgrade_stake_table_v3(&provider, contracts).await?;
-            }
+            let l1_client = l1_opt.clone().connect(vec![l1_url.clone()])?;
+            deployer::upgrade_stake_table_v2(&provider, l1_client, contracts, admin, admin).await?;
+            deployer::upgrade_stake_table_v3(&provider, contracts).await?;
 
             if let Some(multisig) = multisig_address {
                 deployer::transfer_ownership(
@@ -680,12 +670,7 @@ async fn async_main(migrated_envs: Vec<(&str, &str)>) -> anyhow::Result<()> {
         .build();
 
     // Start the nodes
-    let network = {
-        let u = match version {
-            DevNodeVersion::V0_6 => Upgrade::trivial(versions::NEW_PROTOCOL_VERSION),
-        };
-        TestNetwork::new(config, u).await
-    };
+    let network = TestNetwork::new(config, Upgrade::trivial(versions::NEW_PROTOCOL_VERSION)).await;
 
     let relay_server_handle = spawn(async move {
         // using explicit relayer state will avoid it calling the dev-node on `/config/hotshot` for epoch info,

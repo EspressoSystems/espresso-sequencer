@@ -1,7 +1,4 @@
-use std::fmt;
-
 use alloy::primitives::Address;
-use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
@@ -32,18 +29,4 @@ pub struct SetHotshotDownReqBody {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SetHotshotUpReqBody {
     pub chain_id: u64,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
-pub enum DevNodeVersion {
-    #[value(name = "0.6")]
-    V0_6,
-}
-
-impl fmt::Display for DevNodeVersion {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            DevNodeVersion::V0_6 => write!(f, "0.6"),
-        }
-    }
 }

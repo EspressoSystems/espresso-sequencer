@@ -9,6 +9,7 @@ use hotshot_new_protocol::{
         Coordinator,
         error::{CoordinatorError, Severity},
     },
+    message::OpaqueMessage,
     storage::NewProtocolStorage,
 };
 use hotshot_types::{
@@ -24,7 +25,7 @@ use hotshot_types::{
 use parking_lot::Mutex;
 use tokio::{
     select, spawn,
-    sync::{oneshot, watch},
+    sync::{mpsc::UnboundedReceiver, oneshot, watch},
 };
 use tokio_util::{sync::CancellationToken, task::AbortOnDropHandle};
 use tracing::{error, warn};
@@ -59,6 +60,7 @@ where
 {
     pub(crate) fn new<S>(
         coordinator: Coordinator<T, S>,
+        external_rx: UnboundedReceiver<OpaqueMessage<T::SignatureKey>>,
         event_channel_capacity: usize,
         metrics: &dyn Metrics,
     ) -> CoordinatorTask<T>
@@ -81,6 +83,7 @@ where
         let shutdown = CancellationToken::new();
         let task = spawn(run_coordinator(
             coordinator,
+            external_rx,
             event_tx,
             queue_len,
             start_rx,
@@ -146,6 +149,7 @@ where
 
 async fn run_coordinator<T, S>(
     coord: Coordinator<T, S>,
+    external_rx: UnboundedReceiver<OpaqueMessage<T::SignatureKey>>,
     tx: Sender<CoordinatorEvent<T>>,
     queue_len: Option<Arc<dyn Gauge>>,
     start: oneshot::Receiver<()>,
@@ -159,7 +163,7 @@ async fn run_coordinator<T, S>(
         started = start => {
             if started.is_ok() {
                 status.send_replace(Status::Running);
-                drive_coordinator(coord, tx, queue_len, shutdown).await;
+                drive_coordinator(coord, external_rx, tx, queue_len, shutdown).await;
             }
         },
         () = shutdown.cancelled() => {},
@@ -169,6 +173,7 @@ async fn run_coordinator<T, S>(
 
 async fn drive_coordinator<T, S>(
     mut coord: Coordinator<T, S>,
+    mut external_rx: UnboundedReceiver<OpaqueMessage<T::SignatureKey>>,
     tx: Sender<CoordinatorEvent<T>>,
     queue_len: Option<Arc<dyn Gauge>>,
     shutdown: CancellationToken,
@@ -177,6 +182,18 @@ async fn drive_coordinator<T, S>(
     S: NewProtocolStorage<T>,
 {
     coord.start();
+    let _forward = AbortOnDropHandle::new(spawn({
+        let tx = tx.clone();
+        async move {
+            while let Some(m) = external_rx.recv().await {
+                let e = CoordinatorEvent::ExternalMessageReceived {
+                    sender: m.sender,
+                    data: m.data,
+                };
+                broadcast_event(&tx, e).await;
+            }
+        }
+    }));
 
     loop {
         select! {
@@ -225,14 +242,6 @@ where
             }
             warn!(%err, "coordinator: error processing output");
         }
-    }
-
-    while let Some(m) = coord.coordinator_outbox_mut().pop_front() {
-        let e = CoordinatorEvent::ExternalMessageReceived {
-            sender: m.sender,
-            data: m.data,
-        };
-        broadcast_event(tx, e).await;
     }
 
     Ok(())

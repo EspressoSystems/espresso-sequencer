@@ -85,6 +85,7 @@ impl IntoResponse for ApiError {
         let status = match &self {
             ApiError::BadRequest(_) => StatusCode::BAD_REQUEST,
             ApiError::NotFound(_) => StatusCode::NOT_FOUND,
+            ApiError::Gone(_) => StatusCode::GONE,
             ApiError::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
             ApiError::Unavailable(_) => StatusCode::SERVICE_UNAVAILABLE,
         };

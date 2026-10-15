@@ -3013,14 +3013,15 @@ async fn select_some<T>(
 
 #[cfg(test)]
 mod test {
-    use hotshot::traits::BlockPayload;
     use hotshot_example_types::{
         block_types::{TestBlockHeader, TestMetadata},
         node_types::TEST_VERSIONS,
         state_types::{TestInstanceState, TestValidatedState},
     };
     use hotshot_types::{
-        data::vid_commitment, traits::block_contents::EncodeBytes, utils::BuilderCommitment,
+        data::vid_commitment,
+        traits::{BlockPayload, block_contents::EncodeBytes},
+        utils::BuilderCommitment,
     };
 
     use super::{leaf::RangeRequest, *};
@@ -3453,9 +3454,9 @@ mod test {
 
         for i in 0..n {
             // Height i carries i+1 distinct transactions.
-            let txs = (0..=i).map(|j| mock_transaction(vec![j as u8]));
+            let txs: Vec<_> = (0..=i).map(|j| mock_transaction(vec![j as u8])).collect();
             let (payload, metadata) = <MockPayload as BlockPayload<MockTypes>>::from_transactions(
-                txs,
+                &txs,
                 &TestValidatedState::default(),
                 &TestInstanceState::default(),
             )

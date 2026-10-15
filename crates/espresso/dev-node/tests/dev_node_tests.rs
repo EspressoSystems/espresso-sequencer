@@ -9,9 +9,7 @@ use alloy::{
 };
 use committable::{Commitment, Committable};
 use escargot::CargoBuild;
-use espresso_dev_node::{
-    AltChainInfo, DevInfo, DevNodeVersion, SetHotshotDownReqBody, SetHotshotUpReqBody,
-};
+use espresso_dev_node::{AltChainInfo, DevInfo, SetHotshotDownReqBody, SetHotshotUpReqBody};
 use espresso_node::SequencerApiVersion;
 use espresso_types::{BlockMerkleTree, Header, NamespaceProofQueryData, SeqTypes, Transaction};
 use futures::{StreamExt, TryStreamExt};
@@ -45,7 +43,6 @@ impl Drop for BackgroundProcess {
 // - Types (like `Header`) update
 #[test_log::test(tokio::test(flavor = "multi_thread"))]
 async fn slow_dev_node_test() {
-    let version = DevNodeVersion::V0_6;
     let api_port = reserve_tcp_port().unwrap();
     let dev_node_port = reserve_tcp_port().unwrap();
 
@@ -68,7 +65,6 @@ async fn slow_dev_node_test() {
         .env("ESPRESSO_NODE_STORAGE_PATH", tmp_dir.path().as_os_str())
         .env("ESPRESSO_NODE_DATABASE_MAX_CONNECTIONS", "25")
         .env("ESPRESSO_DEV_NODE_MAX_BLOCK_SIZE", "500000")
-        .env("ESPRESSO_DEV_NODE_VERSION", version.to_string())
         .spawn()
         .unwrap();
 
