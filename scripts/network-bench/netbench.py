@@ -640,7 +640,8 @@ class HttpPool:
     """Keep-alive connections shared by threads, one request per connection at a time. A
     reused connection that fails before the request was sent, or with a `STALE` error, is
     retried once on a fresh one; any other failure raises OSError, `ResponseLost` if it came
-    after the request was sent. `closed` tells retrying readers to give up."""
+    after the request was sent, the error's own class if the connection failed (`get_first`
+    tells a refusing node from a failing one). `closed` tells retrying readers to give up."""
 
     def __init__(self, clock: Clock = SYSTEM_CLOCK) -> None:
         self.clock = clock
@@ -673,7 +674,13 @@ class HttpPool:
             except (OSError, http.client.HTTPException) as err:
                 conn.close()
                 if attempt or not reused or (sent and not isinstance(err, STALE)):
-                    kind = ResponseLost if sent else OSError
+                    kind = (
+                        ResponseLost
+                        if sent
+                        else type(err)
+                        if isinstance(err, ConnectionError)
+                        else OSError
+                    )
                     raise kind(f"{method} {url}: {err}") from err
                 continue
             with self._lock:

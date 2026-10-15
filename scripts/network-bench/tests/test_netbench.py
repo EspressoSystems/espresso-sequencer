@@ -2263,6 +2263,14 @@ def test_a_refused_connection_is_not_response_lost():
     assert not isinstance(err.value, netbench.ResponseLost)
 
 
+def test_a_refused_query_node_is_no_answer_through_the_pool():
+    with socket.socket() as server:
+        server.bind(("127.0.0.1", 0))
+        url = f"http://127.0.0.1:{server.getsockname()[1]}"
+    with pytest.raises(netbench.NoAnswer):
+        netbench.get_first(netbench.HttpPool(), [url], "/x")
+
+
 def test_the_heartbeat_fails_over_to_the_next_url():
     stop = threading.Event()
     pool = BeatPool(4, stop, down=("http://a",))
