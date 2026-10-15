@@ -3,9 +3,7 @@ use std::{num::NonZeroUsize, time::Duration};
 use hotshot_types::{
     HotShotConfig, PeerConfig, ValidatorConfig, VersionedDaCommittee,
     addr::NetAddr,
-    network::{
-        BuilderType, CombinedNetworkConfig, Libp2pConfig, NetworkConfig, RandomBuilderConfig,
-    },
+    network::{BuilderType, NetworkConfig, RandomBuilderConfig},
     x25519,
 };
 use serde::{Deserialize, Serialize};
@@ -234,10 +232,7 @@ pub struct PublicNetworkConfig {
     seed: [u8; 32],
     transaction_size: usize,
     key_type_name: String,
-    libp2p_config: Option<Libp2pConfig>,
     config: PublicHotShotConfig,
-    cdn_marshal_address: Option<String>,
-    combined_network_config: Option<CombinedNetworkConfig>,
     commit_sha: String,
     builder: BuilderType,
     random_builder: Option<RandomBuilderConfig>,
@@ -259,10 +254,7 @@ impl From<NetworkConfig<SeqTypes>> for PublicNetworkConfig {
             seed: cfg.seed,
             transaction_size: cfg.transaction_size,
             key_type_name: cfg.key_type_name,
-            libp2p_config: cfg.libp2p_config,
             config: cfg.config.into(),
-            cdn_marshal_address: cfg.cdn_marshal_address,
-            combined_network_config: cfg.combined_network_config,
             commit_sha: cfg.commit_sha,
             builder: cfg.builder,
             random_builder: cfg.random_builder,
@@ -296,10 +288,7 @@ impl PublicNetworkConfig {
             seed: self.seed,
             transaction_size: self.transaction_size,
             key_type_name: self.key_type_name,
-            libp2p_config: self.libp2p_config,
             config: self.config.into_hotshot_config(),
-            cdn_marshal_address: self.cdn_marshal_address,
-            combined_network_config: self.combined_network_config,
             commit_sha: self.commit_sha,
             builder: self.builder,
             random_builder: self.random_builder,
@@ -322,18 +311,6 @@ impl PublicNetworkConfig {
         self.indexed_da
     }
 
-    pub fn cdn_marshal_address(&self) -> Option<&str> {
-        self.cdn_marshal_address.as_deref()
-    }
-
-    pub fn libp2p_config(&self) -> Option<&Libp2pConfig> {
-        self.libp2p_config.as_ref()
-    }
-
-    pub fn combined_network_config(&self) -> Option<&CombinedNetworkConfig> {
-        self.combined_network_config.as_ref()
-    }
-
     pub fn builder(&self) -> BuilderType {
         self.builder
     }
@@ -354,9 +331,6 @@ mod tests {
             config: _,
             commit_sha: _,
             indexed_da: _,
-            cdn_marshal_address: _,
-            libp2p_config: _,
-            combined_network_config: _,
             builder: _,
             // Dropped: orchestrator run parameters, the masked password, a Rust type name, and
             // the timings and bootstrap count repeated here with stale values.

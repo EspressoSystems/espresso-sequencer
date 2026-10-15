@@ -551,8 +551,7 @@ Each step is judged over its second half. A step stopped early is judged over it
 - Stake: equal, orchestrator self-registration. 5 nodes give quorum 4, so a lagging `node0` never stalls consensus.
 - Peers: `node0` has state peers like every node and no API peers.
 - Keys: test mnemonic, index 20 + i. No `keygen`, no `stake-for-demo`.
-- Network: cliquenet over private IPs, libp2p over private DNS. The security group allows ssh from this machine's IP
-  only (checkip).
+- Network: cliquenet over private IPs. The security group allows ssh from this machine's IP only (checkip).
 - Images: `ghcr.io/espressosystems/espresso-network/<component>:<--tag>` plus foundry and postgres. Preflight resolves
   digests, hosts pull by digest, the manifest records them.
 - ssh: every fleet gets an ed25519 key in `<fleet>/ssh/`. The private half is deleted after destroy and kept after a

@@ -99,16 +99,11 @@ message HotshotConfigResponse {
   // When true the first nodes to register form the DA committee; when false a node asks to join
   bool indexed_da = 29;
 
-  // Absent unless the node reaches the CDN through a marshal
-  optional string cdn_marshal_address = 30;
-
-  // Absent unless libp2p is configured
-  optional Libp2pNetworkConfig libp2p_config = 31;
-
-  // Absent unless the node runs the combined network
-  optional CombinedNetworkConfig combined_network_config = 32;
-
   BuilderType builder = 33;
+
+  // The CDN and libp2p networks consensus ran on before protocol 0.6
+  reserved 30, 31, 32;
+  reserved "cdn_marshal_address", "libp2p_config", "combined_network_config";
 }
 
 message VersionedDaCommittee {
@@ -118,21 +113,6 @@ message VersionedDaCommittee {
   uint64 start_epoch = 2;
 
   repeated PeerConfig committee = 3;
-}
-
-message Libp2pBootstrapNode {
-  string peer_id = 1;
-
-  string multiaddr = 2;
-}
-
-message Libp2pNetworkConfig {
-  repeated Libp2pBootstrapNode bootstrap_nodes = 1;
-}
-
-message CombinedNetworkConfig {
-  // Wait before a message also goes out over the secondary network
-  uint64 delay_duration_ms = 1;
 }
 
 enum BuilderType {
@@ -361,7 +341,7 @@ message FollowerModule {
 }
 
 // The node's effective runtime configuration: CLI flags, environment and defaults merged. The
-// genesis and the catchup, proposal-fetcher, libp2p and L1 tuning stay on v1. No credential this
+// genesis and the catchup, proposal-fetcher and L1 tuning stay on v1. No credential this
 // node holds is served, but a URL an operator configured with userinfo is served as given, as v1
 // serves it
 message RuntimeConfigResponse {
@@ -388,20 +368,11 @@ message RuntimeConfigResponse {
 
   string orchestrator_url = 10;
 
-  string cdn_endpoint = 11;
-
   // "host:port", with an IPv6 literal left unbracketed as v1 writes it
   string cliquenet_bind_address = 12;
 
   // "host:port", with an IPv6 literal left unbracketed as v1 writes it
   optional string cliquenet_advertise_address = 13;
-
-  string libp2p_bind_address = 14;
-
-  optional string libp2p_advertise_address = 15;
-
-  // libp2p multiaddrs, empty when not configured
-  repeated string libp2p_bootstrap_nodes = 16;
 
   // How many L1 RPC endpoints are configured. These URLs are the ones most often given an API
   // key, so only the count is served
@@ -413,6 +384,10 @@ message RuntimeConfigResponse {
 
   // Unset on a validator. A follower verifies the chain from the query module's peers
   optional FollowerModule follower = 20;
+
+  // The CDN and libp2p networks consensus ran on before protocol 0.6
+  reserved 11, 14, 15, 16;
+  reserved "cdn_endpoint", "libp2p_bind_address", "libp2p_advertise_address", "libp2p_bootstrap_nodes";
 }
 
 service ConfigService {
