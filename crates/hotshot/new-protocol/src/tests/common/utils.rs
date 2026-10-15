@@ -1171,6 +1171,8 @@ pub(crate) struct ConsensusHarness {
     pub collected: Outbox<ConsensusOutput<TestTypes>>,
     deferred_states: BTreeMap<ViewNumber, ConsensusInput<TestTypes>>,
     defer_state_for: BTreeSet<ViewNumber>,
+    deferred_headers: BTreeMap<ViewNumber, Vec<ConsensusInput<TestTypes>>>,
+    defer_header_for: BTreeSet<ViewNumber>,
     deferred_actions: BTreeSet<(ViewNumber, ActionKind)>,
     defer_action_for: BTreeSet<(ViewNumber, ActionKind)>,
     trace: trace::Recorder,
@@ -1245,6 +1247,8 @@ impl ConsensusHarness {
             collected: Outbox::new(),
             deferred_states: BTreeMap::new(),
             defer_state_for: BTreeSet::new(),
+            deferred_headers: BTreeMap::new(),
+            defer_header_for: BTreeSet::new(),
             deferred_actions: BTreeSet::new(),
             defer_action_for: BTreeSet::new(),
             trace: trace::Recorder::for_current_test(),
@@ -1299,6 +1303,8 @@ impl ConsensusHarness {
             collected: Outbox::new(),
             deferred_states: BTreeMap::new(),
             defer_state_for: BTreeSet::new(),
+            deferred_headers: BTreeMap::new(),
+            defer_header_for: BTreeSet::new(),
             deferred_actions: BTreeSet::new(),
             defer_action_for: BTreeSet::new(),
             trace: trace::Recorder::for_current_test(),
@@ -1368,6 +1374,15 @@ impl ConsensusHarness {
         self.apply(input).await;
     }
 
+    /// Withhold `view`'s header and block until [`Self::release_header`].
+    ///
+    /// As with [`Self::defer_state`]: a real builder answers a leader's request
+    /// later, and a test that turns on what happens meanwhile places the delay.
+    /// Must be called before the leader requests them.
+    pub fn defer_header(&mut self, view: ViewNumber) {
+        self.defer_header_for.insert(view);
+    }
+
     /// Withhold the storage confirmation of the `kind` action at `view` until
     /// [`Self::release_action`].
     ///
@@ -1388,6 +1403,18 @@ impl ConsensusHarness {
         );
         self.apply(ConsensusInput::Stored(StorageOutput::Action(view, kind)))
             .await;
+    }
+
+    /// Deliver the header and block withheld by [`Self::defer_header`].
+    pub async fn release_header(&mut self, view: ViewNumber) {
+        self.defer_header_for.remove(&view);
+        let inputs = self
+            .deferred_headers
+            .remove(&view)
+            .expect("a header request for this view was deferred");
+        for input in inputs {
+            self.apply(input).await;
+        }
     }
 
     /// Apply a [`ConsensusInput`] and drain outputs, auto-responding to
@@ -1480,11 +1507,8 @@ impl ConsensusHarness {
                     mock_block.metadata,
                     TEST_VERSIONS.test.base,
                 );
-                self.apply_recorded(
+                let inputs = vec![
                     ConsensusInput::HeaderCreated(req.view, parent_leaf.commit(), header),
-                    outbox,
-                );
-                self.apply_recorded(
                     ConsensusInput::BlockBuilt {
                         view: req.view,
                         epoch: req.epoch,
@@ -1492,8 +1516,14 @@ impl ConsensusHarness {
                         metadata: mock_block.metadata,
                         payload_commitment: mock_block.payload_commitment,
                     },
-                    outbox,
-                );
+                ];
+                if self.defer_header_for.contains(&req.view) {
+                    self.deferred_headers.insert(req.view, inputs);
+                } else {
+                    for input in inputs {
+                        self.apply_recorded(input, outbox);
+                    }
+                }
             },
             ConsensusOutput::RequestVidDisperse {
                 view,

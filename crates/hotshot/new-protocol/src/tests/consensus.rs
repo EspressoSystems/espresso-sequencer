@@ -1366,6 +1366,37 @@ async fn test_proposal_behind_the_lock_is_decided_under_the_certificate_rule() {
     );
 }
 
+/// A leader that times its view out before its header is built does not
+/// propose in that view once the header arrives, at the version whose timeout
+/// votes sign their lock.
+#[tokio::test]
+async fn test_leader_does_not_propose_in_a_view_it_timed_out() {
+    let test_data = TestData::new(4).await;
+    let leader_for_view_2 = test_data.views[1].leader_public_key;
+    let leader_index = node_index_for_key(&leader_for_view_2);
+    let mut harness =
+        ConsensusHarness::new_with_upgrade_lock(leader_index, 10, test_timeout_epoch_lock()).await;
+    harness.defer_header(ViewNumber::new(2));
+
+    harness
+        .apply_pair(test_data.views[0].proposal_input_consensus(&leader_for_view_2))
+        .await;
+    harness.apply(test_data.views[0].cert1_input()).await;
+    assert!(
+        any(harness.outputs(), is_request_block_and_header),
+        "setup: the leader asks for its header"
+    );
+
+    harness
+        .apply(ConsensusInput::Timeout(ViewNumber::new(2)))
+        .await;
+    harness.release_header(ViewNumber::new(2)).await;
+    assert!(
+        !any(harness.outputs(), is_proposal),
+        "no proposal for a view the leader timed out"
+    );
+}
+
 /// A fetched proposal gets its state validated like a gossiped one.
 #[tokio::test]
 async fn test_fetched_proposal_requests_state() {
