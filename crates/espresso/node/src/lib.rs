@@ -1051,7 +1051,7 @@ pub(crate) async fn prefetch_stake_table_events(
         "prefetching stake table events",
     );
     let events = fetcher
-        .fetch_and_store_stake_table_events(addr, finalized.number)
+        .fetch_and_store_stake_table_events(addr, finalized)
         .await
         .context("prefetching stake table events")?;
     tracing::info!(target: "announce", events = events.len(), "prefetched stake table events");

@@ -81,7 +81,7 @@ use super::{traits::MembershipPersistence, v0_3::StakeTableUpdateTask};
 #[cfg(feature = "node")]
 use crate::traits::EventsPersistenceRead;
 #[cfg(feature = "node")]
-use crate::v0_1::L1Provider;
+use crate::v0_1::{L1BlockInfo, L1Provider};
 #[cfg(feature = "node")]
 use crate::v0_3::{BLOCKS_PER_YEAR, INFLATION_RATE};
 use crate::{
@@ -1266,8 +1266,8 @@ impl Fetcher {
             // Begin the main polling loop
             loop {
                 let finalized_block = loop {
-                    let last_finalized = state.lock().await.last_finalized;
-                    if let Some(block) = last_finalized {
+                    let finalized = state.lock().await.snapshot.finalized;
+                    if let Some(block) = finalized {
                         break block;
                     }
                     tracing::debug!("Finalized block not yet available. Retrying in {l1_retry:?}",);
@@ -1312,12 +1312,17 @@ impl Fetcher {
     /// contract's initialization block to the provided `to_block` value.
     /// Events are fetched in chunks and retries are implemented for failed requests.
     /// Only new events fetched from L1 are stored in persistence.
+    ///
+    /// Fails with [`StakeTableError::L1ProviderBlockMismatch`] when the provider does not hold
+    /// `finalized`, because it is behind or on another branch. The call is worth retrying once
+    /// the provider catches up.
     #[cfg(feature = "node")]
     pub async fn fetch_and_store_stake_table_events(
         &self,
         contract: Address,
-        to_block: u64,
+        finalized: L1BlockInfo,
     ) -> anyhow::Result<Vec<(EventKey, StakeTableEvent)>> {
+        let to_block = finalized.number();
         let (read_l1_offset, persistence_events) = {
             let persistence_lock = self.persistence.lock().await;
             persistence_lock.load_events(0, to_block).await?
@@ -1347,6 +1352,7 @@ impl Fetcher {
 
         tracing::info!(%to_block, from_block = ?from_block, "Fetching events from contract");
 
+        self.ensure_provider_holds(finalized).await?;
         let contract_events = Self::fetch_events_from_contract(
             self.l1_client.clone(),
             contract,
@@ -1354,6 +1360,8 @@ impl Fetcher {
             to_block,
         )
         .await?;
+        // A failover inside the scan can land on a provider that does not hold `finalized`.
+        self.ensure_provider_holds(finalized).await?;
 
         // Store only the new events fetched from L1 contract
         tracing::info!(
@@ -1399,6 +1407,37 @@ impl Fetcher {
         }
 
         Ok(events)
+    }
+
+    /// The scan is stored as complete, so the provider answering it must hold `finalized` itself.
+    /// A provider past that height on another branch returns different logs and no error. The
+    /// hash commits to every ancestor, so one match covers the whole scanned range.
+    #[cfg(feature = "node")]
+    async fn ensure_provider_holds(&self, finalized: L1BlockInfo) -> Result<(), StakeTableError> {
+        let provider = self.l1_client.provider.clone();
+        let actual = retry(
+            self.l1_client.options().l1_retry_delay,
+            self.l1_client.options().l1_events_max_retry_duration,
+            "L1 block hash fetch",
+            move || {
+                let provider = provider.clone();
+                Box::pin(async move {
+                    let block = provider
+                        .get_block_by_number(finalized.number.into())
+                        .await?;
+                    Ok::<_, alloy::transports::TransportError>(block.map(|block| block.header.hash))
+                })
+            },
+        )
+        .await;
+        if actual != Some(finalized.hash) {
+            return Err(StakeTableError::L1ProviderBlockMismatch {
+                number: finalized.number,
+                expected: finalized.hash,
+                actual,
+            });
+        }
+        Ok(())
     }
 
     /// Validate a stake table event.
@@ -1916,7 +1955,7 @@ impl Fetcher {
         };
 
         let events = match self
-            .fetch_and_store_stake_table_events(address, l1_finalized_block_info.number())
+            .fetch_and_store_stake_table_events(address, l1_finalized_block_info)
             .await
             .map_err(GetStakeTablesError::L1ClientFetchError)
         {

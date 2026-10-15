@@ -202,7 +202,7 @@ mod tests {
 
     use alloy::{
         network::EthereumWallet,
-        primitives::{Address, U256},
+        primitives::{Address, B256, U256},
         providers::{Provider, ProviderBuilder, ext::AnvilApi},
     };
     use anyhow::bail;
@@ -214,8 +214,8 @@ mod tests {
         network_config::light_client_genesis_from_stake_table,
     };
     use espresso_types::{
-        Event, L1Client, L1ClientOptions, Leaf, Leaf2, NodeState, PubKey, SeqTypes, TEST_UPGRADE,
-        ValidatedState,
+        Event, L1BlockInfo, L1Client, L1ClientOptions, Leaf, Leaf2, NodeState, PubKey, SeqTypes,
+        TEST_UPGRADE, ValidatedState,
         traits::{
             EventConsumer, EventsPersistenceRead, MembershipPersistence, NullEventConsumer,
             PersistenceOptions, SequencerPersistence,
@@ -2324,11 +2324,12 @@ mod tests {
 
     async fn assert_events_eq<P: TestablePersistence>(
         persistence: &P,
-        block: u64,
+        finalized: L1BlockInfo,
         stake_table_fetcher: &Fetcher,
         l1_client: &L1Client,
         stake_table_contract: Address,
     ) -> anyhow::Result<()> {
+        let block = finalized.number;
         // Load persisted events
         let (stored_l1, events) = persistence.load_events(0, block).await?;
         assert!(!events.is_empty());
@@ -2349,7 +2350,7 @@ mod tests {
 
         // Fetch events from stake table fetcher and compare with persisted data
         let fetched_events = stake_table_fetcher
-            .fetch_and_store_stake_table_events(stake_table_contract, block)
+            .fetch_and_store_stake_table_events(stake_table_contract, finalized)
             .await?;
         assert_eq!(fetched_events, events);
 
@@ -2435,7 +2436,7 @@ mod tests {
 
             assert_events_eq(
                 &persistence,
-                block1,
+                l1_client.wait_for_finalized_block(block1).await,
                 stake_table_fetcher,
                 &l1_client,
                 stake_table_contract,
@@ -2462,7 +2463,7 @@ mod tests {
 
             assert_events_eq(
                 &persistence,
-                block2,
+                l1_client.wait_for_finalized_block(block2).await,
                 stake_table_fetcher,
                 &l1_client,
                 stake_table_contract,
@@ -2779,14 +2780,7 @@ mod tests {
 
         prefetch_stake_table_events(&fetcher, &l1_client, &finalized, Some(st_addr)).await?;
 
-        assert_events_eq(
-            &persistence,
-            finalized.number,
-            &fetcher,
-            &l1_client,
-            st_addr,
-        )
-        .await?;
+        assert_events_eq(&persistence, finalized, &fetcher, &l1_client, st_addr).await?;
         let (offset, _) = persistence.load_events(0, finalized.number).await?;
         assert_eq!(offset, Some(EventsPersistenceRead::Complete));
 
@@ -2802,7 +2796,7 @@ mod tests {
     }
 
     #[rstest_reuse::apply(persistence_types)]
-    pub async fn test_scan_past_provider_head_stores_nothing<P: TestablePersistence>(
+    pub async fn test_scan_without_the_finalized_block_stores_nothing<P: TestablePersistence>(
         _p: PhantomData<P>,
     ) -> anyhow::Result<()> {
         use espresso_types::v0_3::{ChainConfig, StakeTableError};
@@ -2829,14 +2823,39 @@ mod tests {
         // This anvil mines only on transactions, so the block past the head stays unmined
         // until the test mines it.
         let head = l1_client.get_block_number().await?;
+        let unmined = L1BlockInfo {
+            number: head + 1,
+            ..Default::default()
+        };
         let err = fetcher
-            .fetch_and_store_stake_table_events(st_addr, head + 1)
+            .fetch_and_store_stake_table_events(st_addr, unmined)
             .await
-            .expect_err("a scan past the provider's head must not succeed");
+            .expect_err("a provider without the block must not be scanned");
         assert!(
             matches!(
                 err.downcast_ref::<StakeTableError>(),
-                Some(StakeTableError::L1ProviderBehind { .. })
+                Some(StakeTableError::L1ProviderBlockMismatch { actual: None, .. })
+            ),
+            "{err:#}"
+        );
+
+        l1_client.anvil_mine(Some(1), None).await?;
+        let mined = l1_client.wait_for_finalized_block(head + 1).await;
+        let other_branch = L1BlockInfo {
+            hash: B256::repeat_byte(1),
+            ..mined
+        };
+        let err = fetcher
+            .fetch_and_store_stake_table_events(st_addr, other_branch)
+            .await
+            .expect_err("a provider on another branch must not be scanned");
+        assert!(
+            matches!(
+                err.downcast_ref::<StakeTableError>(),
+                Some(StakeTableError::L1ProviderBlockMismatch {
+                    actual: Some(_),
+                    ..
+                })
             ),
             "{err:#}"
         );
@@ -2844,9 +2863,8 @@ mod tests {
         assert_eq!(offset, None);
         assert!(events.is_empty());
 
-        l1_client.anvil_mine(Some(1), None).await?;
         fetcher
-            .fetch_and_store_stake_table_events(st_addr, head + 1)
+            .fetch_and_store_stake_table_events(st_addr, mined)
             .await?;
         let (offset, _) = persistence.load_events(0, head + 1).await?;
         assert_eq!(offset, Some(EventsPersistenceRead::Complete));

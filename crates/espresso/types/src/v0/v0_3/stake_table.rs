@@ -1,7 +1,7 @@
 use std::{collections::HashMap, sync::Arc};
 
 use alloy::{
-    primitives::{Address, Log, U256},
+    primitives::{Address, B256, Log, U256},
     transports::{RpcError, TransportErrorKind},
 };
 use async_lock::{Mutex, RwLock};
@@ -523,6 +523,12 @@ pub enum StakeTableError {
     EventSortingError(#[from] EventSortingError),
     #[error("L1 provider head {head} is behind the requested block {to_block}")]
     L1ProviderBehind { head: u64, to_block: u64 },
+    #[error("L1 provider block {number} has hash {actual:?}, expected {expected}")]
+    L1ProviderBlockMismatch {
+        number: u64,
+        expected: B256,
+        actual: Option<B256>,
+    },
 }
 
 #[derive(Debug, Error)]
