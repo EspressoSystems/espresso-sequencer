@@ -487,9 +487,7 @@ impl<S: TestableSequencerDataSource> TestNode<S> {
         let node_id = context.node_id();
         tracing::info!(node_id, num_nodes, "waiting for progress from node");
 
-        // Wait for a block proposed by this node. This proves that the node is tracking consensus
-        // (getting Decide events) and participating (able to propose). Works for both legacy and
-        // new-protocol (V6) decides.
+        // A decided leaf proposed by this node proves it both follows consensus and can propose.
         let mut events = context.event_stream();
         while let Some(event) = events.next().await {
             let Some(leaf_chain) = decided_leaves(&event) else {
