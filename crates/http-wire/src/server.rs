@@ -109,9 +109,9 @@ pub fn cors_layer() -> CorsLayer {
 }
 
 /// Forwards `stream` over `socket` in the format negotiated by [`ContentType::negotiate`] until
-/// the stream ends or the client disconnects, then performs the close handshake. Production
-/// stream consumers default to `Accept: application/octet-stream` and expect VBS-encoded
-/// `Message::Binary` frames.
+/// the stream ends, an item fails to encode or the client disconnects, then performs the close
+/// handshake. Production stream consumers default to `Accept: application/octet-stream` and expect
+/// VBS-encoded `Message::Binary` frames.
 ///
 /// This is the one shared way to serve a socket stream endpoint; hand-rolled write-only loops
 /// leak the task and its data-source subscription whenever a client disconnects while the stream

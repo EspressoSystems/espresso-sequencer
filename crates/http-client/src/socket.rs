@@ -211,12 +211,17 @@ impl<FromServer: DeserializeOwned, ToServer: ?Sized, E: ClientError, VER: Static
                 // No code or a normal one is the end of the stream. Any other code is the server
                 // giving up on it, which must not look the same.
                 Message::Close(Some(frame)) if frame.code != CloseCode::Normal => {
-                    Some(Err(E::catch_all(
-                        reqwest::StatusCode::INTERNAL_SERVER_ERROR,
+                    let msg = if frame.reason.is_empty() {
+                        format!("server closed stream with code {}", frame.code)
+                    } else {
                         format!(
                             "server closed stream with code {}: {}",
                             frame.code, frame.reason
-                        ),
+                        )
+                    };
+                    Some(Err(E::catch_all(
+                        reqwest::StatusCode::INTERNAL_SERVER_ERROR,
+                        msg,
                     )))
                 },
                 Message::Close(_) => None,
@@ -341,6 +346,22 @@ mod tests {
         assert_eq!(
             err.to_string(),
             "Error 500: server closed stream with code 1011: failed to encode stream item"
+        );
+        assert!(conn.next().await.is_none());
+    }
+
+    #[tokio::test]
+    async fn abnormal_close_without_a_reason_reports_only_the_code() {
+        let mut conn = subscribe_to_closing_server(Some(CloseFrame {
+            code: CloseCode::Away,
+            reason: "".into(),
+        }))
+        .await;
+        assert_eq!(conn.next().await.unwrap().unwrap(), 1);
+        let err = conn.next().await.unwrap().unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "Error 500: server closed stream with code 1001"
         );
         assert!(conn.next().await.is_none());
     }
