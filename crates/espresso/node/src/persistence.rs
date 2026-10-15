@@ -256,11 +256,14 @@ mod tests {
     };
     use http_client::{Client, error::ClientErr};
     use indexmap::IndexMap;
+    use serde_json::{Value, json};
     use staking_cli::demo::{DelegationConfig, StakingTransactions};
     use test_utils::reserve_tcp_port;
     use tokio::{spawn, time::sleep};
+    use url::Url;
     use vbs::version::Version;
     use versions::Upgrade;
+    use warp::Filter;
 
     use crate::{
         RECENT_STAKE_TABLES_LIMIT, SequencerApiVersion,
@@ -2868,6 +2871,89 @@ mod tests {
             .await?;
         let (offset, _) = persistence.load_events(0, head + 1).await?;
         assert_eq!(offset, Some(EventsPersistenceRead::Complete));
+
+        Ok(())
+    }
+
+    /// Answers `eth_getBlockByNumber` with `block`, `eth_call` with zero, and `eth_getLogs` with
+    /// `logs`, or with a JSON-RPC error when `logs` is `None`.
+    async fn serve_provider(block: Option<Value>, logs: Option<Value>) -> Url {
+        let route = warp::post()
+            .and(warp::body::json::<Value>())
+            .map(move |req: Value| {
+                let id = req["id"].clone();
+                let reply = match (req["method"].as_str(), &logs) {
+                    (Some("eth_getBlockByNumber"), _) => {
+                        json!({ "jsonrpc": "2.0", "id": id, "result": block })
+                    },
+                    (Some("eth_call"), _) => {
+                        json!({ "jsonrpc": "2.0", "id": id, "result": B256::ZERO })
+                    },
+                    (Some("eth_getLogs"), Some(logs)) => {
+                        json!({ "jsonrpc": "2.0", "id": id, "result": logs })
+                    },
+                    (method, _) => json!({
+                        "jsonrpc": "2.0",
+                        "id": id,
+                        "error": { "code": -32000, "message": format!("{method:?} unavailable") },
+                    }),
+                };
+                warp::reply::json(&reply)
+            });
+        test_server::serve_on_random_port(route).await
+    }
+
+    #[rstest_reuse::apply(persistence_types)]
+    pub async fn test_scan_refuses_a_lagging_provider_reached_by_failover<
+        P: TestablePersistence,
+    >(
+        _p: PhantomData<P>,
+    ) -> anyhow::Result<()> {
+        use espresso_types::v0_3::{ChainConfig, StakeTableError};
+
+        let finalized = L1BlockInfo {
+            number: 16,
+            hash: B256::repeat_byte(1),
+            ..Default::default()
+        };
+        let mut block = alloy::rpc::types::Block::<alloy::rpc::types::Transaction>::default();
+        block.header.hash = finalized.hash;
+        block.header.inner.number = finalized.number;
+
+        let ahead_but_failing_logs = serve_provider(Some(json!(block)), None).await;
+        let behind = serve_provider(None, Some(json!([]))).await;
+        let l1_client = L1ClientOptions {
+            l1_retry_delay: Duration::from_millis(10),
+            l1_consecutive_failure_tolerance: 1,
+            l1_frequent_failure_tolerance: Duration::ZERO,
+            ..Default::default()
+        }
+        .connect(Vec::from([ahead_but_failing_logs, behind]))
+        .unwrap();
+
+        let storage = P::tmp_storage().await;
+        let persistence = P::options(&storage).create().await.unwrap();
+        let fetcher = Fetcher::new(
+            Arc::new(NullStateCatchup::default()),
+            Arc::new(Mutex::new(persistence.clone())),
+            l1_client,
+            ChainConfig::default(),
+        );
+
+        let err = fetcher
+            .fetch_and_store_stake_table_events(Address::ZERO, finalized)
+            .await
+            .expect_err("a scan finished on a provider without the block must not succeed");
+        assert!(
+            matches!(
+                err.downcast_ref::<StakeTableError>(),
+                Some(StakeTableError::L1ProviderBlockMismatch { actual: None, .. })
+            ),
+            "{err:#}"
+        );
+        let (offset, events) = persistence.load_events(0, finalized.number).await?;
+        assert_eq!(offset, None);
+        assert!(events.is_empty());
 
         Ok(())
     }
