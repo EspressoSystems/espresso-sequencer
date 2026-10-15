@@ -1129,8 +1129,8 @@ pub mod testing {
         network_config::light_client_genesis_from_stake_table,
     };
     use espresso_types::{
-        ChainConfig, Event, FeeAccount, L1Client, NetworkConfig, PubKey, SeqTypes, Transaction,
-        Upgrade, UpgradeMap, UpgradeMode,
+        ChainConfig, FeeAccount, L1Client, NetworkConfig, PubKey, SeqTypes, Transaction, Upgrade,
+        UpgradeMap, UpgradeMode,
         eth_signature_key::EthKeyPair,
         v0::traits::{EventConsumer, NullEventConsumer, PersistenceOptions, StateCatchup},
     };
@@ -1138,12 +1138,9 @@ pub mod testing {
         future::join_all,
         stream::{Stream, StreamExt},
     };
-    use hotshot::{
-        traits::{
-            BlockPayload,
-            implementations::{MasterMap, MemoryNetwork},
-        },
-        types::EventType,
+    use hotshot::traits::{
+        BlockPayload,
+        implementations::{MasterMap, MemoryNetwork},
     };
     use hotshot_contract_adapter::stake_table::StakeTableContractVersion;
     use hotshot_types::{
@@ -1944,21 +1941,15 @@ pub mod testing {
         }
     }
 
-    // Wait for the submitted transaction to be sequenced in a decided block. Return the block
-    // number containing the transaction and the block payload size.
-    /// The leaves a decide event finalizes, newest first. Decides arrive as
-    /// `LegacyEvent` before the new protocol and as `NewDecide` after.
+    /// The leaves a decide event finalizes, newest first.
     pub fn decided_leaves(event: &CoordinatorEvent<SeqTypes>) -> Option<&[LeafInfo<SeqTypes>]> {
         match event {
-            CoordinatorEvent::LegacyEvent(Event {
-                event: EventType::Decide { leaf_chain, .. },
-                ..
-            }) => Some(leaf_chain),
             CoordinatorEvent::NewDecide { leaf_infos, .. } => Some(leaf_infos),
             _ => None,
         }
     }
 
+    /// Wait for `submitted_txn` to be decided; returns its block number and payload size.
     pub async fn wait_for_decide_on_handle(
         events: &mut (impl Stream<Item = CoordinatorEvent<SeqTypes>> + Unpin),
         submitted_txn: &Transaction,
@@ -2036,13 +2027,8 @@ pub mod testing {
         tracing::info!(target_epoch, "waiting for epoch");
         let mut last_seen = None;
         while let Some(event) = events.next().await {
-            // Decides arrive as `LegacyEvent` before the new protocol and as
-            // `NewDecide` after; both carry the most recent leaf first.
+            // A decide carries its most recent leaf first.
             let leaf = match event {
-                CoordinatorEvent::LegacyEvent(Event {
-                    event: EventType::Decide { leaf_chain, .. },
-                    ..
-                }) => leaf_chain[0].leaf.clone(),
                 CoordinatorEvent::NewDecide { leaf_infos, .. } => leaf_infos[0].leaf.clone(),
                 _ => continue,
             };
