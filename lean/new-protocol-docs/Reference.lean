@@ -1275,8 +1275,8 @@ The rules above are permissions: a node that never acts satisfies all of them.
 action that is justified by what the node holds, not yet taken, and not overtaken
 by events. Every obligation ends, and none asks for anything the node would have to
 fetch: a vote1 and a proposal are owed only in the node's current view and until it
-times the view out, a vote2 until the node gives its view up, and a decide only
-after the decide floor.
+times the view out, a vote2 until the node gives its view up or decides that far,
+and a decide only after the decide floor.
 
 How long an obligation may stay owed is not said here. That is {name NewProtocol.Prompt}`Prompt`, below.
 

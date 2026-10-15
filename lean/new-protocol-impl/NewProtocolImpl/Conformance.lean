@@ -768,8 +768,8 @@ theorem step_ok (hvt : ValidityTruthful (pre ++ [Step.mk i []])) :
     rcases step_mem hm with h0 | ⟨o, out', hsub, ho, ha⟩
     · obtain ⟨v, hx, _⟩ := mem_timeoutAnswer h0; cases hx
     · obtain ⟨c, rfl, rfl⟩ := act_vote2 ha
-      obtain ⟨⟨b, hc, hb, hcert, hpay⟩, _, _, _, hgen⟩ := ho
-      exact ⟨rfl, hgen.1, c, b, (sameInputs_step.hasCert1 c).mp hc, (sameInputs_step.hasProposal b).mp hb,
+      obtain ⟨⟨b, hc, hb, hcert, hpay⟩, _, _, _, hgen, _⟩ := ho
+      exact ⟨rfl, hgen, c, b, (sameInputs_step.hasCert1 c).mp hc, (sameInputs_step.hasProposal b).mp hb,
         hcert, (sameInputs_step.hasPayload _ _).mp hpay, rfl, rfl⟩
   · intro blocks c1 c2 hm
     rcases step_mem hm with h0 | ⟨o, out', hsub, ho, ha⟩
@@ -835,6 +835,20 @@ theorem step_global (hg : Global pre) : Global (pre ++ [step cfg leader node pre
   have h0 := global_arrive (i := i) hg (out := timeoutAnswer cfg node pre i)
     (fun x hx => by obtain ⟨v, hx, _⟩ := mem_timeoutAnswer hx; exact ⟨_, hx⟩)
   exact discharge_global _ _ h0
+
+/-- A step decides only blocks at or before the view of a `Cert2` the node holds. -/
+theorem step_decided_le {blocks : List Block} {c1 : Cert1} {c2 : Cert2}
+    (hm : Output.decided blocks c1 c2 ∈ (step cfg leader node pre i).output) :
+    (pre ++ [step cfg leader node pre i]).HasCert2 c2 ∧ ∀ x ∈ blocks, x.viewNumber ≤ c2.view := by
+  rcases step_mem hm with h0 | ⟨o, out', _, ho, ha⟩
+  · obtain ⟨v, hx, _⟩ := mem_timeoutAnswer h0; cases hx
+  · obtain ⟨rfl, b, -, hcm, -, -, -, seen, rfl⟩ := act_decided ha
+    obtain ⟨-, -, hc2, -⟩ := owedDecide_iff.mp ho
+    refine ⟨(sameInputs_step.hasCert2 c2).mp hc2, fun x hx => ?_⟩
+    have hb : b.viewNumber.toNat ≤ c2.view.toNat := hcm.1
+    rcases mem_chainFrom _ _ _ _ _ hx with rfl | ⟨-, -, -, -, hlt⟩
+    · exact hb
+    · show x.viewNumber.toNat ≤ c2.view.toNat; omega
 
 /-- A step sends a timeout vote only in answer to a timer or one-honest indication for its view. -/
 theorem step_timeoutVote_input {vote : TimeoutVote}

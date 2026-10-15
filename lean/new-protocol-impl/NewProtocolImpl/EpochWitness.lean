@@ -841,7 +841,8 @@ theorem votes2 (k : PubKey) (u : Nat) (hl : lag k u = 0) : ∃ j, j ≤ 8 * u + 
     ∧ Output.send (.vote2 ⟨(C2 u).data, ⟨u + 1⟩, k⟩) ∈ (tr k j).output := by
   refine Classical.byContradiction fun hneg => settled k (8 * u + 4) (.vote2 (certOf (blk u)))
     ⟨⟨blk u, hasCert1_of u (by omega), hasProposal_of u (by omega), ⟨Nat.le_refl _, rfl⟩,
-      payload_of u hl (by omega)⟩, fun vote hs _ hvv => ?_, fun c2 hc2 _ hv2 => ?_, not_pastView, ?_⟩
+      payload_of u hl (by omega)⟩, fun vote hs _ hvv => ?_, fun c2 hc2 _ hv2 => ?_, not_pastView,
+      by rw [cert_view]; show 0 < u + 1; omega, Kit.decidedBefore_of fun c2 hc2 => ?_⟩
   · obtain ⟨j, hj, hjv⟩ := sent_iff.mp hs
     obtain ⟨u', rfl, -⟩ := sent_vote2 hv hjv
     rw [cert_view] at hvv
@@ -851,11 +852,10 @@ theorem votes2 (k : PubKey) (u : Nat) (hl : lag k u = 0) : ∃ j, j ≤ 8 * u + 
     rw [cert_view] at hv2
     have : x + 1 = u + 1 := view_inj hv2
     omega
-  · refine Kit.afterFloor_of input hv (by rw [cert_view]; show 0 < u + 1; omega) fun x hx => ?_
+  · obtain ⟨x, rfl, hlt⟩ := hasCert2 hc2
     rw [cert_view]
-    rcases hasProposal hx with rfl | ⟨y, rfl, hy⟩
-    · show 0 < u + 1 + 20; omega
-    · rw [blk_view]; show y + 1 < u + 1 + 20; omega
+    show x + 1 < u + 1
+    omega
 
 end Sends
 

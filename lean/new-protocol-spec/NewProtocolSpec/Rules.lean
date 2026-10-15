@@ -507,7 +507,7 @@ inductive Obligation where
 /--
 The node owes a vote2 on the block `c` is over: it holds `c`, the block's proposal
 and payload, has not yet voted2 for the epoch and view, holds no `Cert2` there,
-has not given the view up, and the view is after its floor.
+has not given the view up, and has decided nothing at the view or a later one.
 -/
 structure OwedVote2 (h : History) (c : Cert1) : Prop where
   /-- The node holds `c`, the block it is over, and the block's payload. -/
@@ -523,8 +523,16 @@ structure OwedVote2 (h : History) (c : Cert1) : Prop where
   /-- The node has not given the view up. -/
   notPast : ¬ h.PastView c.view
 
-  /-- The view is after the floor (`History.AfterFloor`), so after the anchor's. -/
-  afterFloor : h.AfterFloor cfg c.view
+  /-- The view is after the anchor's. -/
+  afterAnchor : cfg.anchorView < c.view
+
+  /--
+  The node has decided no view at `c`'s or a later one.
+
+  Its chain is decided past the view, so the vote2 can no longer help it, and a
+  decide comes with a `Cert2` the other nodes receive as well.
+  -/
+  notDecidedPast : ∀ u, h.DecidedView u → u < c.view
 
 /--
 The node owes a decide of the block `c` commits: it holds `c`, the block's

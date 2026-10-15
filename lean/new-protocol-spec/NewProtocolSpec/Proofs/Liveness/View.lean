@@ -1745,8 +1745,8 @@ end Members
 Node `k` decided a view at `w` or later by `T`, on a `Cert2` of an epoch it is
 honest in.
 
-A node that has decided that far no longer owes a vote2 on a certificate whose
-view is behind its floor (`OwedVote2.afterFloor`).
+A node that has decided that far no longer owes a vote2 on a certificate at `w`
+or later and no later than the view it decided (`OwedVote2.notDecidedPast`).
 -/
 def EarlyDecide (N : TimedNetwork cfg leader C) (k : PubKey) (hk : C.Honest k) (w : ViewNumber) (T : Nat) :
     Prop :=
@@ -1878,14 +1878,12 @@ theorem vote2_or_cert2 {δ : Nat} (hp : Prompt N δ) (hex : ∃ T, ReachedBy N T
       (hsi.hasPayload _ _).mpr (hasPayload_grows hgr hpay)⟩,
     fun vote hsv _ hvv => ?_,
     fun c2 hc2 _ hv => hneg (Or.inr (Or.inl ⟨k, hk, m, c2, (hsi.hasCert2 _).mp hc2, hv, htm⟩)),
-    not_past hcfg hs hw hex hlt hwL, ⟨hgen, fun u hu => ?_⟩⟩
+    not_past hcfg hs hw hex hlt hwL, hgen, fun u hu => ?_⟩
   · obtain ⟨hsv, hev⟩ := restrict_sent.mp hsv
     obtain ⟨i, hi, hiout⟩ := (Trace.sent_history _).mp hsv
     have hvote := vote2_is hcfg hcf hs hst hw hl hLb hwL hiout hev hvv
     exact hneg (Or.inl ⟨m + 1, hbefore, (Trace.sent_history _).mpr ⟨i, hi, hvote ▸ hiout⟩⟩)
-  · -- A view decided this late would already be past `w`.
-    refine Nat.lt_of_not_le fun hle => hneg (Or.inr (Or.inr ⟨m + 1, hbefore, u, ?_, hu⟩))
-    have : (u - cfg.decideBuffer).toNat ≤ u.toNat := Nat.sub_le _ _
+  · refine Nat.lt_of_not_le fun hle => hneg (Or.inr (Or.inr ⟨m + 1, hbefore, u, ?_, hu⟩))
     have : w.toNat ≤ L.view.toNat := hwL
     show w.toNat ≤ u.toNat
     omega

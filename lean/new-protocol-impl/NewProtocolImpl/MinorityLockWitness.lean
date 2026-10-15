@@ -867,13 +867,12 @@ theorem votes2 (k : PubKey) (u : Nat) (hu : u ≠ 0 ∨ k ≠ c) : ∃ j, j ≤ 
   refine Classical.byContradiction fun hneg => settled k (sAt u + 4) (.vote2 (certOf (blk u)))
     ⟨⟨blk u, Or.inr (Or.inl (recv_cert1 u (by omega))), hasProposal_of u (by omega),
       ⟨Nat.le_refl _, rfl⟩, Or.inr ?_⟩, fun vote hs _ hvv => ?_, fun c2 hc2 _ hv2 => ?_,
-      hpast, Kit.afterFloor_of input hv (by rw [certOf_view]; show 0 < vOf u; unfold vOf; split <;> omega)
-        fun x hx => by
-          rw [certOf_view]
-          rcases hasProposal hx with rfl | ⟨y, rfl, hy⟩
-          · show 0 < vOf u + 20; omega
-          · rw [blk_view]; show vOf y < vOf u + 20
-            rcases y with _ | y <;> rcases u with _ | u <;> simp [vOf, sAt] at hy ⊢ <;> omega⟩
+      hpast, by rw [certOf_view]; show 0 < vOf u; unfold vOf; split <;> omega,
+      Kit.decidedBefore_of fun c2 hc2 => by
+        obtain ⟨x, rfl, hlt⟩ := hasCert2 hc2
+        rw [certOf_view]
+        show x + 3 < vOf u
+        rcases u with _ | u <;> simp [vOf, sAt] at hlt ⊢ <;> omega⟩
   · rw [blk_view]; exact recv_payload u (by omega)
   · obtain ⟨j, hj, hjv⟩ := sent_iff.mp hs
     obtain ⟨u', rfl, -⟩ := sent_vote2 hv hjv

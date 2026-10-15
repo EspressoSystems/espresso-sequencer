@@ -1690,7 +1690,8 @@ theorem votes2R (k : PubKey) (hl : lag k 0 = 0) : ∃ j, j ≤ 9
     ∧ Output.send (.vote2 ⟨(C2 0).data, ⟨2⟩, k⟩) ∈ (tr k j).output := by
   refine Classical.byContradiction fun hneg => settled k 9 (.vote2 CR)
     ⟨⟨blk 0, hasCR (by omega), hasProposal_of 0 (by simp [at0]), ⟨show (1 : Nat) ≤ 2 by omega, rfl⟩,
-      payload_of 0 hl (by simp [at0])⟩, fun vote hs _ hvv => ?_, fun c2 hc2 _ hv2 => ?_, ?_, ?_⟩
+      payload_of 0 hl (by simp [at0])⟩, fun vote hs _ hvv => ?_, fun c2 hc2 _ hv2 => ?_, ?_,
+      by show (0 : Nat) < 2; omega, Kit.decidedBefore_of fun c2 hc2 => ?_⟩
   · obtain ⟨j, hj, hjv⟩ := sent_iff.mp hs
     obtain ⟨u', rfl, -, -⟩ := sent_vote2 hv hjv
     have h1 : cv u' = 2 := view_inj hvv
@@ -1704,12 +1705,9 @@ theorem votes2R (k : PubKey) (hl : lag k 0 = 0) : ∃ j, j ≤ 9
     · rcases received_tc htc with ⟨rfl, -⟩ | ⟨rfl, h14⟩
       · exact absurd hle (by show ¬ (2 : Nat) ≤ 1; omega)
       · omega
-  · refine Kit.afterFloor_of input hv (by show (0 : Nat) < 2; omega) fun x hx => ?_
-    rcases hasProposal hx with rfl | ⟨y, rfl, hy⟩
-    · show 0 < 2 + 20; omega
-    · rw [blk_view]; show bv y < 2 + 20
-      have := bv_facts y; have := at0_facts 1 8 y
-      omega
+  · obtain ⟨x, rfl, hlt⟩ := hasCert2 hc2
+    have := at0_facts 10 12 x
+    omega
 
 include hv in
 /-- Every member of a later block's committee votes2 for it by the step its payload arrives in. -/
@@ -1720,7 +1718,8 @@ theorem votes2 (k : PubKey) (u : Nat) (hu : 1 ≤ u) (hl : lag k u = 0) : ∃ j,
   have hbv := (bv_facts u).2 hu
   refine Classical.byContradiction fun hneg => settled k (8 * u + 11) (.vote2 (certOf (blk u)))
     ⟨⟨blk u, hasCert1_of u (by have := at0_facts 5 10 u; omega), hasProposal_of u (by have := at0_facts 1 8 u; omega),
-      ⟨Nat.le_refl _, rfl⟩, payload_of u hl (by omega)⟩, fun vote hs _ hvv => ?_, fun c2 hc2 _ hv2 => ?_, ?_, ?_⟩
+      ⟨Nat.le_refl _, rfl⟩, payload_of u hl (by omega)⟩, fun vote hs _ hvv => ?_, fun c2 hc2 _ hv2 => ?_, ?_,
+      by rw [cert_view]; show 0 < bv u; omega, Kit.decidedBefore_of fun c2 hc2 => ?_⟩
   · obtain ⟨j, hj, hjv⟩ := sent_iff.mp hs
     obtain ⟨u', rfl, -, -⟩ := sent_vote2 hv hjv
     rw [cert_view] at hvv
@@ -1742,13 +1741,11 @@ theorem votes2 (k : PubKey) (u : Nat) (hu : 1 ≤ u) (hl : lag k u = 0) : ∃ j,
       rcases received_tc htc with ⟨rfl, -⟩ | ⟨rfl, -⟩
       · have : bv u ≤ 1 := h'; omega
       · have : bv u ≤ 3 := h'; omega
-  · refine Kit.afterFloor_of input hv (by rw [cert_view]; show 0 < bv u; omega) fun x hx => ?_
+  · obtain ⟨x, rfl, hlt⟩ := hasCert2 hc2
     rw [cert_view]
-    rcases hasProposal hx with rfl | ⟨y, rfl, hy⟩
-    · show 0 < bv u + 20; omega
-    · rw [blk_view]; show bv y < bv u + 20
-      have := bv_facts y; have := at0_facts 1 8 y
-      omega
+    show cv x < bv u
+    have := at0_facts 10 12 x; have := cv_facts x
+    omega
 
 end Sends
 

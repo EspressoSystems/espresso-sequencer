@@ -1414,7 +1414,8 @@ theorem votes2 (k : PubKey) (u : Nat) (hl : lag k u = 0) : ∃ j, j ≤ at0 4 10
   have hcl := classes k
   refine Classical.byContradiction fun hneg => settled k (at0 4 10 u) (.vote2 (certOf (blk u)))
     ⟨⟨blk u, hasCert1_of u (by have := at0_facts 3 9 u; omega), hasProposal_of u (by have := at0_facts 1 7 u; omega),
-      ⟨Nat.le_refl _, rfl⟩, payload_of u hl (by omega)⟩, fun vote hs _ hvv => ?_, fun c2 hc2 _ hv2 => ?_, ?_, ?_⟩
+      ⟨Nat.le_refl _, rfl⟩, payload_of u hl (by omega)⟩, fun vote hs _ hvv => ?_, fun c2 hc2 _ hv2 => ?_, ?_,
+      by rw [cert_view]; show 0 < bv u; have := bv_facts u; omega, Kit.decidedBefore_of fun c2 hc2 => ?_⟩
   · obtain ⟨j, hj, hjv⟩ := sent_iff.mp hs
     obtain ⟨u', rfl, -, -⟩ := sent_vote2 hv hjv
     rw [cert_view] at hvv
@@ -1435,14 +1436,13 @@ theorem votes2 (k : PubKey) (u : Nat) (hl : lag k u = 0) : ∃ j, j ≤ at0 4 10
       have h' : bv u ≤ 2 := hle
       have := bv_facts u
       omega
-  · refine Kit.afterFloor_of input hv (by rw [cert_view]; show 0 < bv u; have := bv_facts u; omega) fun x hx => ?_
+  · obtain ⟨x, rfl, hlt⟩ := hasCert2 hc2
     rw [cert_view]
-    have := bv_facts u
-    rcases hasProposal hx with rfl | ⟨y, rfl, hy⟩
-    · show 0 < bv u + 20; omega
-    · rw [blk_view]; show bv y < bv u + 20
-      have := bv_facts y; have := at0_facts 1 7 y; have := at0_facts 4 10 u
-      omega
+    show bv x < bv u
+    have := at0_facts (c2At k) 11 x
+    have : 5 ≤ c2At k := by unfold c2At; split <;> omega
+    have := bv_facts x; have := bv_facts u
+    omega
 
 end Sends
 

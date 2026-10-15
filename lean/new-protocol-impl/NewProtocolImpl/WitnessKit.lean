@@ -106,16 +106,25 @@ theorem decided_proposal (hv : ∀ b, BlockValid b) {n : Nat} {w : ViewNumber}
   rw [upTo_self] at hp
   exact ⟨b, Liveness.hasProposal_grows (fun _ => received_mono hj) hp, rfl, hgen⟩
 
-variable (input) in
-/-- A view is after the floor if every proposal the node holds is less than the decide buffer past it. -/
-theorem afterFloor_of (hv : ∀ b, BlockValid b) {n : Nat} {v : ViewNumber} (hgen : cfg.anchorView < v)
-    (hle : ∀ x, (H cfg leader input k n).HasProposal cfg x → x.viewNumber.toNat < v.toNat + cfg.decideBuffer) :
-    (H cfg leader input k n).AfterFloor cfg v := by
-  refine ⟨hgen, fun w hw => ?_⟩
-  obtain ⟨x, hx, rfl, -⟩ := decided_proposal input hv hw
-  have := hle x hx
-  have : cfg.anchorView.toNat < v.toNat := hgen
-  show x.viewNumber.toNat - cfg.decideBuffer < v.toNat
+/-- Every view the node decided is at or before the view of a `Cert2` it holds. -/
+theorem decided_le_cert2 {n : Nat} {w : ViewNumber} (hd : (H cfg leader input k n).DecidedView w) :
+    ∃ c2, (H cfg leader input k n).HasCert2 c2 ∧ w ≤ c2.view := by
+  obtain ⟨st, hst, blocks, c1, c2, b, hm, hb, rfl⟩ := hd
+  obtain ⟨j, hj, rfl⟩ := (Trace.mem_history _).mp hst
+  rw [tr_step] at hm
+  obtain ⟨hc2, hle⟩ := step_decided_le hm
+  have hc2 : (H cfg leader input k (j + 1)).HasCert2 c2 := by
+    rw [← hpre, historyOf, hpre]; exact hc2
+  exact ⟨c2, Liveness.hasCert2_grows (fun _ => received_mono hj) hc2, hle b hb⟩
+
+/-- The node has decided no view at `v` or later if every `Cert2` it holds is before `v`. -/
+theorem decidedBefore_of {n : Nat} {v : ViewNumber}
+    (hc2 : ∀ c2, (H cfg leader input k n).HasCert2 c2 → c2.view < v) :
+    ∀ u, (H cfg leader input k n).DecidedView u → u < v := fun u hu => by
+  obtain ⟨c2, hc, hle⟩ := decided_le_cert2 hu
+  have : c2.view.toNat < v.toNat := hc2 c2 hc
+  have : u.toNat ≤ c2.view.toNat := hle
+  show u.toNat < v.toNat
   omega
 
 /-! ## Views and epochs, from a candidate -/

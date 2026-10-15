@@ -1506,7 +1506,8 @@ theorem votes2 (k : PubKey) (u : Nat) : ∃ j, j ≤ sAt u + lkOff k
   have hlk := lkOff_facts k
   refine Classical.byContradiction fun hneg => settled k (sAt u + lkOff k) (.vote2 (certOf (blk u)))
     ⟨⟨blk u, hasCert1_of u (by omega), hasProposal_of u (by omega), ⟨Nat.le_refl _, rfl⟩,
-      payload_of u (by omega)⟩, fun vote hs _ hvv => ?_, fun c2 hc2 _ hv2 => ?_, ?_, ?_⟩
+      payload_of u (by omega)⟩, fun vote hs _ hvv => ?_, fun c2 hc2 _ hv2 => ?_, ?_,
+      by rw [cert_view]; show 0 < vOf u; unfold vOf; omega, Kit.decidedBefore_of fun c2 hc2 => ?_⟩
   · obtain ⟨j, hj, hjv⟩ := sent_iff.mp hs
     obtain ⟨u', rfl, -⟩ := sent_vote2 hv hjv
     rw [cert_view] at hvv
@@ -1522,14 +1523,13 @@ theorem votes2 (k : PubKey) (u : Nat) : ∃ j, j ≤ sAt u + lkOff k
     · obtain ⟨w, rfl, hw⟩ := received_tc htc
       have := view_le_round (u := u) (w := w) hle
       omega
-  · refine Kit.afterFloor_of input hv (by rw [cert_view]; show 0 < vOf u; unfold vOf; omega) fun x hx => ?_
+  · obtain ⟨x, rfl, hlt⟩ := hasCert2 hc2
     rw [cert_view]
-    have := lkOff_facts k
-    rcases hasProposal hx with rfl | ⟨y, rfl, hy⟩ | ⟨w, ⟨-, rfl⟩ | ⟨-, rfl⟩, hw⟩
-    · show 0 < vOf u + 20; omega
-    · rw [blk_view]; show vOf y < vOf u + 20; unfold vOf sAt at *; omega
-    · show 4 * w + 4 < vOf u + 20; unfold vOf sAt at *; omega
-    · show 4 * w + 4 < vOf u + 20; unfold vOf sAt at *; omega
+    show vOf x < vOf u
+    have hxu : x < u := Nat.lt_of_not_le fun hle => by have := sAt_mono hle; omega
+    have := vOf_succ x
+    have := vOf_mono (j := x + 1) (u := u) hxu
+    omega
 
 end Sends
 
@@ -1732,9 +1732,9 @@ theorem d_late (hB : B = true) (n : Nat) (hn : 25 ≤ n) (o : Obligation)
     rintro ⟨⟨s, hr, -⟩, -⟩
     exact no_revote ((he.received _).mp hr)
   | vote2 c =>
-    rintro ⟨⟨x, hc, -⟩, -, hc2, -, hgen⟩
+    rintro ⟨⟨x, hc, -⟩, -, hc2, -, hgen, -⟩
     rcases hasCert1 ((he.hasCert1 _).mp hc) with rfl | ⟨u, rfl, -⟩
-    · exact absurd hgen.1 (Nat.lt_irrefl 0)
+    · exact absurd hgen (Nat.lt_irrefl 0)
     · have hu := hfirst u (by rw [← cert_epoch]; exact hf)
       exact hc2 (C2 u) ((he.hasCert2 _).mpr (hasCert2_of u (by unfold sAt; omega))) rfl (by rw [cert_view]; rfl)
   | decide c =>
