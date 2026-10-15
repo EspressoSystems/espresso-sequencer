@@ -1175,6 +1175,8 @@ pub(crate) struct ConsensusHarness {
     defer_header_for: BTreeSet<ViewNumber>,
     deferred_actions: BTreeSet<(ViewNumber, ActionKind)>,
     defer_action_for: BTreeSet<(ViewNumber, ActionKind)>,
+    deferred_locks: BTreeMap<ViewNumber, ConsensusInput<TestTypes>>,
+    defer_lock_for: BTreeSet<ViewNumber>,
     trace: trace::Recorder,
 }
 
@@ -1251,6 +1253,8 @@ impl ConsensusHarness {
             defer_header_for: BTreeSet::new(),
             deferred_actions: BTreeSet::new(),
             defer_action_for: BTreeSet::new(),
+            deferred_locks: BTreeMap::new(),
+            defer_lock_for: BTreeSet::new(),
             trace: trace::Recorder::for_current_test(),
         }
     }
@@ -1307,6 +1311,8 @@ impl ConsensusHarness {
             defer_header_for: BTreeSet::new(),
             deferred_actions: BTreeSet::new(),
             defer_action_for: BTreeSet::new(),
+            deferred_locks: BTreeMap::new(),
+            defer_lock_for: BTreeSet::new(),
             trace: trace::Recorder::for_current_test(),
         }
     }
@@ -1405,6 +1411,24 @@ impl ConsensusHarness {
             .await;
     }
 
+    /// Withhold the storage confirmation of a lock at `view` until
+    /// [`Self::release_lock`], as [`Self::defer_action`] does an action's.
+    ///
+    /// A vote2 waits for the lock it moves the node to be stored.
+    pub fn defer_lock(&mut self, view: ViewNumber) {
+        self.defer_lock_for.insert(view);
+    }
+
+    /// Deliver the confirmation withheld by [`Self::defer_lock`].
+    pub async fn release_lock(&mut self, view: ViewNumber) {
+        self.defer_lock_for.remove(&view);
+        let input = self
+            .deferred_locks
+            .remove(&view)
+            .expect("a lock at this view was deferred");
+        self.apply(input).await;
+    }
+
     /// Deliver the header and block withheld by [`Self::defer_header`].
     pub async fn release_header(&mut self, view: ViewNumber) {
         self.defer_header_for.remove(&view);
@@ -1467,10 +1491,13 @@ impl ConsensusHarness {
                 }
             },
             ConsensusOutput::PersistHighQc(high_qc) => {
-                self.apply_recorded(
-                    ConsensusInput::Stored(StorageOutput::HighQc(LockView::of(high_qc))),
-                    outbox,
-                );
+                let input = ConsensusInput::Stored(StorageOutput::HighQc(LockView::of(high_qc)));
+                if self.defer_lock_for.contains(&LockView::of(high_qc).view) {
+                    self.deferred_locks
+                        .insert(LockView::of(high_qc).view, input);
+                } else {
+                    self.apply_recorded(input, outbox);
+                }
             },
             ConsensusOutput::PersistProposal(proposal) => {
                 let view = proposal.data.view_number;

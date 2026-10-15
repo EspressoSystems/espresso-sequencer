@@ -3268,6 +3268,13 @@ impl<T: NodeType> Consensus<T> {
         if !self.stored_actions.contains(&(view, ActionKind::Propose)) {
             return;
         }
+        if view <= self.timeout_view {
+            debug!(%view, "dropping pending proposal and re-vote request for timed-out view");
+            self.pending_revote.retain(|ViewEpoch(v, _), _| *v != view);
+            self.pending_proposal
+                .retain(|ViewEpoch(v, _), _| *v != view);
+            return;
+        }
         for (ViewEpoch(_, epoch), message) in self
             .pending_revote
             .extract_if(ViewEpoch::at_view(view), |_, _| true)
