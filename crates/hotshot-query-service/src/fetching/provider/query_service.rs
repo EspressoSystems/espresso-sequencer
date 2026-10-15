@@ -482,7 +482,13 @@ where
 // These tests run the `postgres` Docker image, which doesn't work on Windows.
 #[cfg(all(test, not(target_os = "windows")))]
 mod test {
-    use std::{future::IntoFuture, marker::PhantomData, time::Duration};
+    use std::{
+        any,
+        future::IntoFuture,
+        marker::PhantomData,
+        sync::{Arc, Mutex},
+        time::Duration,
+    };
 
     use axum::{Router, extract::Path, http::HeaderMap, response::Response, routing::get};
     use committable::Committable;
@@ -511,13 +517,17 @@ mod test {
                 sql::testing::TmpDb,
             },
         },
-        fetching::provider::{
-            AnyProvider, NoFetching, Provider as ProviderTrait, TestProvider, test_fixtures,
+        fetching::{
+            Request,
+            provider::{
+                AnyProvider, NoFetching, Provider as ProviderTrait, TestProvider, test_fixtures,
+            },
         },
         node::data_source::NodeDataSource,
         testing::{
-            consensus::{MockDataSource, MockNetwork},
-            mocks::{MockPayload, MockTypes, mock_transaction},
+            chain::ChainNode,
+            consensus::MockDataSource,
+            mocks::{MockPayload, MockTransaction, MockTypes, mock_transaction},
             sleep,
         },
         types::HeightIndexed,
@@ -526,6 +536,25 @@ mod test {
     type Provider = TestProvider<TrustedQueryServiceProvider>;
 
     fn ignore<T>(_: T) {}
+
+    /// Blocks a peer has decided after genesis: enough for every test in this module.
+    const PEER_BLOCKS: usize = 6;
+
+    /// A peer that has already decided a short chain, standing in for a node following consensus.
+    async fn peer() -> ChainNode<MockDataSource> {
+        let mut peer = ChainNode::new().await;
+        peer.push_empty(PEER_BLOCKS).await;
+        peer
+    }
+
+    /// A peer whose chain decides `tx` in a block in the middle.
+    async fn peer_with_transaction(tx: MockTransaction) -> ChainNode<MockDataSource> {
+        let mut peer = ChainNode::new().await;
+        peer.push_empty(PEER_BLOCKS / 2).await;
+        peer.push([tx]).await;
+        peer.push_empty(PEER_BLOCKS / 2 - 1).await;
+        peer
+    }
 
     async fn v6_leaf(number: u64) -> LeafQueryData<MockTypes> {
         use committable::Committable;
@@ -634,8 +663,8 @@ mod test {
 
     #[test_log::test(tokio::test(flavor = "multi_thread"))]
     async fn test_fetch_on_request() {
-        // Create the consensus network.
-        let mut network = MockNetwork::<MockDataSource>::init().await;
+        // Create a peer that has already decided some blocks.
+        let network = peer().await;
 
         // Start a web server that the non-consensus node can use to fetch blocks.
         let (port, _server) = serve_availability(network.data_source()).await;
@@ -646,9 +675,6 @@ mod test {
             format!("http://localhost:{port}").parse().unwrap(),
         ));
         let data_source = data_source(&db, &provider).await;
-
-        // Start consensus.
-        network.start().await;
 
         // Wait until the block height reaches 6. This gives us the genesis block, one additional
         // block at the end, and then one block to play around with fetching each type of resource:
@@ -844,8 +870,8 @@ mod test {
 
     #[test_log::test(tokio::test(flavor = "multi_thread"))]
     async fn test_fetch_block_and_leaf_concurrently() {
-        // Create the consensus network.
-        let mut network = MockNetwork::<MockDataSource>::init().await;
+        // Create a peer that has already decided some blocks.
+        let network = peer().await;
 
         // Start a web server that the non-consensus node can use to fetch blocks.
         let (port, _server) = serve_availability(network.data_source()).await;
@@ -856,9 +882,6 @@ mod test {
             format!("http://localhost:{port}").parse().unwrap(),
         ));
         let data_source = data_source(&db, &provider).await;
-
-        // Start consensus.
-        network.start().await;
 
         // Wait until the block height reaches 3. This gives us the genesis block, one additional
         // block at the end, and then one block that we can use to test fetching.
@@ -887,10 +910,173 @@ mod test {
         assert_eq!(leaf.header(), block.header());
     }
 
+    /// Forwards requests to a peer and records the type of each one.
+    #[derive(Clone, Debug)]
+    struct Recorder {
+        inner: TrustedQueryServiceProvider,
+        requests: Arc<Mutex<Vec<&'static str>>>,
+    }
+
+    #[async_trait]
+    impl<T> ProviderTrait<MockTypes, T> for Recorder
+    where
+        T: Request<MockTypes> + 'static,
+        TrustedQueryServiceProvider: ProviderTrait<MockTypes, T>,
+    {
+        async fn fetch(&self, req: T) -> Option<T::Response> {
+            self.requests.lock().unwrap().push(any::type_name::<T>());
+            self.inner.fetch(req).await
+        }
+    }
+
+    /// A node that knows the chain height but stores none of the leaves below it.
+    struct MissingBlocks {
+        network: ChainNode<MockDataSource>,
+        _server: JoinHandle<()>,
+        _db: TmpDb,
+        provider: Recorder,
+        data_source: SqlDataSource<MockTypes, Recorder>,
+        tx_heights: Vec<u64>,
+        end: u64,
+    }
+
+    impl MissingBlocks {
+        async fn init() -> Self {
+            let mut network = ChainNode::<MockDataSource>::new().await;
+            // Distinct payloads, so one VID common row cannot cover several heights.
+            let mut tx_heights = Vec::new();
+            for i in 0..3u8 {
+                network.push_empty(1).await;
+                let block = network.push([mock_transaction(vec![i; 3])]).await;
+                tx_heights.push(block.height());
+            }
+            network.push_empty(1).await;
+            let (port, server) = serve_availability(network.data_source()).await;
+            let db = TmpDb::init().await;
+            let provider = Recorder {
+                inner: trusted_provider(port),
+                requests: Default::default(),
+            };
+            // No aggregator, whose block fetches would mask what each test requests.
+            let data_source = builder(&db, &provider)
+                .await
+                .disable_aggregator()
+                .build()
+                .await
+                .unwrap();
+
+            let end = tx_heights.last().unwrap() + 1;
+
+            let node = Self {
+                network,
+                _server: server,
+                _db: db,
+                provider,
+                data_source,
+                tx_heights,
+                end,
+            };
+            // Learn the block height without `append`, whose parent fetch would walk back the chain.
+            node.insert_leaf(end).await;
+            node
+        }
+
+        async fn insert_leaf(&self, height: u64) {
+            let leaf = self
+                .network
+                .data_source()
+                .get_leaf(height as usize)
+                .await
+                .await;
+            let mut tx = self.data_source.write().await.unwrap();
+            tx.insert_leaf(&leaf).await.unwrap();
+            tx.commit().await.unwrap();
+        }
+
+        /// Wait until the VID common of every block in `tx_heights` is stored.
+        async fn wait_for_vid_common(&self) {
+            // Polls storage, since `get_vid_common` would trigger its own fetch.
+            for &h in &self.tx_heights {
+                timeout(Duration::from_secs(10), async {
+                    loop {
+                        let mut tx = self.data_source.read().await.unwrap();
+                        let id = BlockId::<MockTypes>::Number(h as usize);
+                        if tx.get_vid_common(id).await.is_ok() {
+                            break;
+                        }
+                        drop(tx);
+                        sleep(Duration::from_millis(100)).await;
+                    }
+                })
+                .await
+                .unwrap_or_else(|_| panic!("VID common for block {h} was never fetched"));
+            }
+        }
+    }
+
+    /// Blocks fetched in height order, each with a missing leaf, also get their VID common.
+    #[test_log::test(tokio::test(flavor = "multi_thread"))]
+    async fn test_fetch_block_backfills_vid_common() {
+        let node = MissingBlocks::init().await;
+        for h in 1..node.end {
+            node.data_source.get_block(h as usize).await.await;
+        }
+        node.wait_for_vid_common().await;
+    }
+
+    /// Leaves fetched first, as a leaf stream does, then their blocks: the block fetch finds the
+    /// header present and must still request VID common.
+    #[test_log::test(tokio::test(flavor = "multi_thread"))]
+    async fn test_fetch_block_after_leaf_backfills_vid_common() {
+        let node = MissingBlocks::init().await;
+        node.data_source
+            .get_leaf_range(1..node.end as usize)
+            .await
+            .then(Fetch::resolve)
+            .collect::<Vec<_>>()
+            .await;
+        for &h in &node.tx_heights {
+            node.data_source.get_block(h as usize).await.await;
+        }
+        node.wait_for_vid_common().await;
+    }
+
+    #[test_log::test(tokio::test(flavor = "multi_thread"))]
+    async fn test_fetch_block_range_backfills_vid_common() {
+        let node = MissingBlocks::init().await;
+        node.data_source
+            .get_block_range(1..node.end as usize)
+            .await
+            .then(Fetch::resolve)
+            .collect::<Vec<_>>()
+            .await;
+        node.wait_for_vid_common().await;
+    }
+
+    #[test_log::test(tokio::test(flavor = "multi_thread"))]
+    async fn test_fetch_leaf_fetches_only_leaf() {
+        let node = MissingBlocks::init().await;
+        let h = node.tx_heights[0];
+        // A stored parent leaves nothing for the parent recovery to fetch.
+        node.insert_leaf(h - 1).await;
+        node.data_source.get_leaf(h as usize).await.await;
+        // Derived fetches would be spawned by the leaf's callbacks, right after it is stored.
+        sleep(Duration::from_secs(1)).await;
+        let requests = node.provider.requests.lock().unwrap().clone();
+        assert!(
+            !requests.is_empty()
+                && requests.iter().all(|&req| {
+                    req == any::type_name::<LeafRequest>()
+                        || req == any::type_name::<Certificate2Request>()
+                }),
+            "{requests:?}"
+        );
+    }
+
     #[test_log::test(tokio::test(flavor = "multi_thread"))]
     async fn test_fetch_different_blocks_same_payload() {
-        // Create the consensus network.
-        let mut network = MockNetwork::<MockDataSource>::init().await;
+        // Create a peer that has already decided some blocks.
+        let network = peer().await;
 
         // Start a web server that the non-consensus node can use to fetch blocks.
         let (port, _server) = serve_availability(network.data_source()).await;
@@ -901,9 +1087,6 @@ mod test {
             format!("http://localhost:{port}").parse().unwrap(),
         ));
         let data_source = data_source(&db, &provider).await;
-
-        // Start consensus.
-        network.start().await;
 
         // Wait until the block height reaches 4. This gives us the genesis block, one additional
         // block at the end, and then two blocks that we can use to test fetching.
@@ -938,8 +1121,8 @@ mod test {
 
     #[test_log::test(tokio::test(flavor = "multi_thread"))]
     async fn test_fetch_stream() {
-        // Create the consensus network.
-        let mut network = MockNetwork::<MockDataSource>::init().await;
+        // Create a peer that has already decided some blocks.
+        let network = peer().await;
 
         // Start a web server that the non-consensus node can use to fetch blocks.
         let (port, _server) = serve_availability(network.data_source()).await;
@@ -950,9 +1133,6 @@ mod test {
             format!("http://localhost:{port}").parse().unwrap(),
         ));
         let data_source = data_source(&db, &provider).await;
-
-        // Start consensus.
-        network.start().await;
 
         // Subscribe to objects from the future.
         let blocks = data_source.subscribe_blocks(0).await;
@@ -984,8 +1164,8 @@ mod test {
 
     #[test_log::test(tokio::test(flavor = "multi_thread"))]
     async fn test_fetch_range_start() {
-        // Create the consensus network.
-        let mut network = MockNetwork::<MockDataSource>::init().await;
+        // Create a peer that has already decided some blocks.
+        let network = peer().await;
 
         // Start a web server that the non-consensus node can use to fetch blocks.
         let (port, _server) = serve_availability(network.data_source()).await;
@@ -996,9 +1176,6 @@ mod test {
             format!("http://localhost:{port}").parse().unwrap(),
         ));
         let data_source = data_source(&db, &provider).await;
-
-        // Start consensus.
-        network.start().await;
 
         // Wait for a few blocks to be finalized.
         let finalized_leaves = network.data_source().subscribe_leaves(0).await;
@@ -1027,8 +1204,9 @@ mod test {
 
     #[test_log::test(tokio::test(flavor = "multi_thread"))]
     async fn fetch_transaction() {
-        // Create the consensus network.
-        let mut network = MockNetwork::<MockDataSource>::init().await;
+        // Create a peer that has already decided a block containing the transaction.
+        let tx = mock_transaction(vec![1, 2, 3]);
+        let network = peer_with_transaction(tx.clone()).await;
 
         // Start a web server that the non-consensus node can use to fetch blocks. This test
         // fetches passively, so nothing ever contacts the server; it is here only to mirror the
@@ -1044,19 +1222,12 @@ mod test {
         let mut leaves = network.data_source().subscribe_leaves(1).await;
         let mut blocks = network.data_source().subscribe_blocks(1).await;
 
-        // Start consensus.
-        network.start().await;
-
-        // Subscribe to a transaction which hasn't been sequenced yet. This is completely passive
+        // Subscribe to a transaction this data source hasn't seen yet. This is completely passive
         // and works without a fetcher; we don't trigger fetches for transactions that we don't know
         // exist.
-        let tx = mock_transaction(vec![1, 2, 3]);
         let fut = data_source
             .get_block_containing_transaction(tx.commit())
             .await;
-
-        // Sequence the transaction.
-        network.submit_transaction(tx.clone()).await;
 
         // Send blocks to the query service, the future will resolve as soon as it sees a block
         // containing the transaction.
@@ -1093,8 +1264,8 @@ mod test {
 
     #[test_log::test(tokio::test(flavor = "multi_thread"))]
     async fn test_retry() {
-        // Create the consensus network.
-        let mut network = MockNetwork::<MockDataSource>::init().await;
+        // Create a peer that has already decided some blocks.
+        let network = peer().await;
 
         // Start a web server that the non-consensus node can use to fetch blocks.
         let (port, _server) = serve_availability(network.data_source()).await;
@@ -1110,9 +1281,6 @@ mod test {
             .build()
             .await
             .unwrap();
-
-        // Start consensus.
-        network.start().await;
 
         // Wait until the block height reaches 3. This gives us the genesis block, one additional
         // block at the end, and one block to try fetching.
@@ -1151,8 +1319,8 @@ mod test {
 
     #[test_log::test(tokio::test(flavor = "multi_thread"))]
     async fn test_archive_recovery() {
-        // Create the consensus network.
-        let mut network = MockNetwork::<MockDataSource>::init().await;
+        // Create a peer that has already decided some blocks.
+        let network = peer().await;
 
         // Start a web server that the non-consensus node can use to fetch blocks.
         let (port, _server) = serve_availability(network.data_source()).await;
@@ -1185,9 +1353,6 @@ mod test {
             .build()
             .await
             .unwrap();
-
-        // Start consensus.
-        network.start().await;
 
         // Wait until a few blocks are produced.
         let leaves = network.data_source().subscribe_leaves(1).await;
@@ -1290,8 +1455,8 @@ mod test {
     }
 
     async fn test_fetch_storage_failure_helper(failure: FailureType) {
-        // Create the consensus network.
-        let mut network = MockNetwork::<MockDataSource>::init().await;
+        // Create a peer that has already decided some blocks.
+        let network = peer().await;
 
         // Start a web server that the non-consensus node can use to fetch blocks.
         let (port, _server) = serve_availability(network.data_source()).await;
@@ -1314,9 +1479,6 @@ mod test {
             .build()
             .await
             .unwrap();
-
-        // Start consensus.
-        network.start().await;
 
         // Wait until a couple of blocks are produced.
         let leaves = network.data_source().subscribe_leaves(1).await;
@@ -1380,8 +1542,8 @@ mod test {
     }
 
     async fn test_fetch_storage_failure_retry_helper(failure: FailureType) {
-        // Create the consensus network.
-        let mut network = MockNetwork::<MockDataSource>::init().await;
+        // Create a peer that has already decided some blocks.
+        let network = peer().await;
 
         // Start a web server that the non-consensus node can use to fetch blocks.
         let (port, _server) = serve_availability(network.data_source()).await;
@@ -1403,9 +1565,6 @@ mod test {
             .build()
             .await
             .unwrap();
-
-        // Start consensus.
-        network.start().await;
 
         // Wait until a couple of blocks are produced.
         let leaves = network.data_source().subscribe_leaves(1).await;
@@ -1463,8 +1622,8 @@ mod test {
 
     #[test_log::test(tokio::test(flavor = "multi_thread"))]
     async fn test_fetch_on_decide() {
-        // Create the consensus network.
-        let mut network = MockNetwork::<MockDataSource>::init().await;
+        // Create a peer that has already decided some blocks.
+        let network = peer().await;
 
         // Start a web server that the non-consensus node can use to fetch blocks.
         let (port, _server) = serve_availability(network.data_source()).await;
@@ -1480,9 +1639,6 @@ mod test {
             .build()
             .await
             .unwrap();
-
-        // Start consensus.
-        network.start().await;
 
         // Wait until a block has been decided.
         let leaf = network
@@ -2370,8 +2526,8 @@ mod test {
 
     #[test_log::test(tokio::test(flavor = "multi_thread"))]
     async fn test_fetch_begin_failure() {
-        // Create the consensus network.
-        let mut network = MockNetwork::<MockDataSource>::init().await;
+        // Create a peer that has already decided some blocks.
+        let network = peer().await;
 
         // Start a web server that the non-consensus node can use to fetch blocks.
         let (port, _server) = serve_availability(network.data_source()).await;
@@ -2393,9 +2549,6 @@ mod test {
             .build()
             .await
             .unwrap();
-
-        // Start consensus.
-        network.start().await;
 
         // Wait until a couple of blocks are produced.
         let leaves = network.data_source().subscribe_leaves(1).await;
@@ -2419,8 +2572,8 @@ mod test {
 
     #[test_log::test(tokio::test(flavor = "multi_thread"))]
     async fn test_fetch_load_failure_block() {
-        // Create the consensus network.
-        let mut network = MockNetwork::<MockDataSource>::init().await;
+        // Create a peer that has already decided some blocks.
+        let network = peer().await;
 
         // Start a web server that the non-consensus node can use to fetch blocks.
         let (port, _server) = serve_availability(network.data_source()).await;
@@ -2442,9 +2595,6 @@ mod test {
             .build()
             .await
             .unwrap();
-
-        // Start consensus.
-        network.start().await;
 
         // Wait until a block is produced.
         let mut leaves = network.data_source().subscribe_leaves(1).await;
@@ -2486,8 +2636,9 @@ mod test {
 
     #[test_log::test(tokio::test(flavor = "multi_thread"))]
     async fn test_fetch_load_failure_tx() {
-        // Create the consensus network.
-        let mut network = MockNetwork::<MockDataSource>::init().await;
+        // Create a peer that has already decided a block containing the transaction.
+        let tx = mock_transaction(vec![1, 2, 3]);
+        let network = peer_with_transaction(tx.clone()).await;
 
         // Start a web server that the non-consensus node can use to fetch blocks.
         let (port, _server) = serve_availability(network.data_source()).await;
@@ -2510,12 +2661,7 @@ mod test {
             .await
             .unwrap();
 
-        // Start consensus.
-        network.start().await;
-
-        // Wait until a transaction is sequenced.
-        let tx = mock_transaction(vec![1, 2, 3]);
-        network.submit_transaction(tx.clone()).await;
+        // Find the block the peer decided the transaction in.
         let tx = network
             .data_source()
             .get_block_containing_transaction(tx.commit())
@@ -2575,8 +2721,8 @@ mod test {
 
     #[test_log::test(tokio::test(flavor = "multi_thread"))]
     async fn test_stream_begin_failure() {
-        // Create the consensus network.
-        let mut network = MockNetwork::<MockDataSource>::init().await;
+        // Create a peer that has already decided some blocks.
+        let network = peer().await;
 
         // Start a web server that the non-consensus node can use to fetch blocks.
         let (port, _server) = serve_availability(network.data_source()).await;
@@ -2599,9 +2745,6 @@ mod test {
             .build()
             .await
             .unwrap();
-
-        // Start consensus.
-        network.start().await;
 
         // Wait until a few blocks are produced.
         let leaves = network.data_source().subscribe_leaves(1).await;
@@ -2633,8 +2776,8 @@ mod test {
 
     #[test_log::test(tokio::test(flavor = "multi_thread"))]
     async fn test_stream_load_failure() {
-        // Create the consensus network.
-        let mut network = MockNetwork::<MockDataSource>::init().await;
+        // Create a peer that has already decided some blocks.
+        let network = peer().await;
 
         // Start a web server that the non-consensus node can use to fetch blocks.
         let (port, _server) = serve_availability(network.data_source()).await;
@@ -2657,9 +2800,6 @@ mod test {
             .build()
             .await
             .unwrap();
-
-        // Start consensus.
-        network.start().await;
 
         // Wait until a few blocks are produced.
         let leaves = network.data_source().subscribe_leaves(1).await;
@@ -2696,8 +2836,8 @@ mod test {
     }
 
     async fn test_metadata_stream_begin_failure_helper(stream: MetadataType) {
-        // Create the consensus network.
-        let mut network = MockNetwork::<MockDataSource>::init().await;
+        // Create a peer that has already decided some blocks.
+        let network = peer().await;
 
         // Start a web server that the non-consensus node can use to fetch blocks.
         let (port, _server) = serve_availability(network.data_source()).await;
@@ -2720,9 +2860,6 @@ mod test {
             .build()
             .await
             .unwrap();
-
-        // Start consensus.
-        network.start().await;
 
         // Wait until a few blocks are produced.
         let leaves = network.data_source().subscribe_leaves(1).await;
@@ -2795,14 +2932,11 @@ mod test {
     #[tokio::test(flavor = "multi_thread")]
     #[test_log::test]
     async fn test_ranged_fetch() {
-        // Create the consensus network.
-        let mut network = MockNetwork::<MockDataSource>::init().await;
+        // Create a peer that has already decided some blocks.
+        let network = peer().await;
 
         // Start a web server that the non-consensus node can use to fetch blocks.
         let (port, _server) = serve_availability(network.data_source()).await;
-
-        // Start consensus.
-        network.start().await;
 
         // Wait for a few blocks to be produced.
         let leaves = network

@@ -1637,7 +1637,7 @@ mod test {
         async fn into_mock_header(self) -> (Header, u32) {
             let instance = NodeState::mock_v2();
             let (payload, metadata) =
-                Payload::from_transactions([self], &instance.genesis_state, &instance)
+                Payload::from_transactions(&[self], &instance.genesis_state, &instance)
                     .await
                     .unwrap();
 
@@ -1913,6 +1913,30 @@ mod test {
             ),
             err
         );
+    }
+
+    /// A state holding only a chain config commitment takes the full config from the instance
+    /// when the commitments match, without asking peers.
+    #[test_log::test(tokio::test(flavor = "multi_thread"))]
+    async fn test_chain_config_resolved_from_instance() {
+        // The mock peers serve the default config, so the instance's must differ from it for
+        // an answer fetched from them to fail the assertion.
+        let instance = NodeState::mock().with_chain_config(ChainConfig {
+            max_block_size: BlockSize(300),
+            ..Default::default()
+        });
+        let commitment_only = ResolvableChainConfig::from(instance.chain_config.commit());
+        let state = ValidatedState {
+            chain_config: commitment_only,
+            ..Default::default()
+        };
+
+        let chain_config = state
+            .get_chain_config(&instance, &MockStateCatchup::default(), &commitment_only)
+            .await
+            .unwrap();
+
+        assert_eq!(chain_config, instance.chain_config);
     }
 
     #[test_log::test(tokio::test(flavor = "multi_thread"))]
@@ -2469,7 +2493,7 @@ mod test {
         let instance = NodeState::mock().with_genesis_version(version(0, 4));
 
         let (payload, metadata) =
-            Payload::from_transactions([], &instance.genesis_state, &instance)
+            Payload::from_transactions(&[], &instance.genesis_state, &instance)
                 .await
                 .unwrap();
 

@@ -85,6 +85,23 @@ compile-metrics *args:
 lint *args:
     just clippy {{args}} -- -D warnings
 
+# Check the v2 protos' formatting and, if they changed since `base`, that they stay wire and JSON compatible
+proto-check $base="origin/main":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    buf format --diff --exit-code crates/espresso/api/proto
+    merge_base=$(git merge-base "$base" HEAD)
+    # `buf.yaml` too, so a PR that only loosens the rules is still checked under them.
+    if git diff --quiet "$merge_base" -- 'crates/espresso/api/proto/*.proto' crates/espresso/api/proto/buf.yaml; then
+        echo "No proto changes since $base"
+        exit 0
+    fi
+    # buf's own `.git#ref=` input cannot read a git worktree, so compare against an export.
+    dir=$(mktemp -d)
+    trap 'rm -rf "$dir"' EXIT
+    git archive "$merge_base" crates/espresso/api/proto | tar -x -C "$dir"
+    buf breaking crates/espresso/api/proto --against "$dir/crates/espresso/api/proto"
+
 # postgres and sqlite variants checked separately to cover all code
 clippy *args:
     cargo clippy --workspace --exclude espresso-node-sqlite --exclude espresso-dev-node --features testing --all-targets {{args}}
@@ -109,6 +126,11 @@ demo-native-large-block-upgrade *args: (build "test" "--no-default-features")
 
 demo-native-ff *args: (build "test" "--no-default-features")
     ESPRESSO_NODE_GENESIS_FILE=data/genesis/demo-ff.toml scripts/demo-native -f process-compose.yaml {{args}}
+
+# A/B the leader block-build critical path between two git refs (see scripts/bench-block-build)
+[positional-arguments]
+bench-block-build *args:
+    scripts/bench-block-build "$@"
 
 demo-native-benchmark:
     cargo build --release --features benchmarking
@@ -165,20 +187,18 @@ test-all:
     just nextest --features embedded-db --profile all
     just nextest --profile all
 
-# Record runs of the new-protocol tests and replay them against the Lean machine.
+# A pass means the recorded node obeyed `ProtocolHistory` and discharged what it
+# owed within `defaultDelta` (`Prompt`). See `lean/new-protocol-diff/CheckMain.lean`
+# and `crates/hotshot/new-protocol/src/trace.rs`.
 #
-# The machine is proved to satisfy `lean/new-protocol-spec`, so a divergence is
-# either the implementation departing from the specification or the trace running
-# past what the specification covers. The `replay` binary separates the two; see
-# `lean/new-protocol-diff/NewProtocolDiff/Corpus.lean` and
-# `crates/hotshot/new-protocol/src/trace.rs`.
-test-lean-diff dir="":
+# Record runs of the new-protocol tests and check each against `lean/new-protocol-spec`.
+test-lean-check dir="":
     #!/usr/bin/env bash
     set -uo pipefail
-    (cd lean/new-protocol-diff && lake build) || exit 1
-    # Given a directory, record nothing and replay what is already there.
+    (cd lean/new-protocol-diff && lake build check) || exit 1
+    # Given a directory, record nothing and check what is already there.
     if [ -n "{{dir}}" ]; then
-      lean/new-protocol-diff/.lake/build/bin/replay "{{dir}}"
+      lean/new-protocol-diff/.lake/build/bin/check "{{dir}}"
       exit $?
     fi
     # A fixed path, cleared first, so runs overwrite rather than accumulate.
@@ -186,21 +206,8 @@ test-lean-diff dir="":
     traces="$(pwd)/target/np-traces"
     rm -rf "$traces"
     echo "recording to $traces"
-    suite=0
-    NP_TRACE_DIR="$traces" cargo test -p hotshot-new-protocol --release --lib tests:: || suite=$?
-    if [ "$suite" -ne 0 ]; then
-      echo "note: the test suite failed; replaying the traces it did record" >&2
-    fi
-    replayed=0
-    lean/new-protocol-diff/.lake/build/bin/replay "$traces" || replayed=$?
-    # A corpus from a clean run is worth keeping: `just test-lean-diff $traces`
-    # replays it without paying for the suite again.
-    if [ "$suite" -ne 0 ]; then
-      rm -rf "$traces"
-    else
-      echo "traces kept in $traces"
-    fi
-    [ "$suite" -eq 0 ] && [ "$replayed" -eq 0 ]
+    NP_TRACE_DIR="$traces" cargo test -p hotshot-new-protocol --release --lib tests:: || exit $?
+    lean/new-protocol-diff/.lake/build/bin/check "$traces"
 
 test-integration: (build "test")
 	INTEGRATION_TEST_NODE_VERSION=2 cargo nextest run -p tests --nocapture --profile integration test_native_demo_basic

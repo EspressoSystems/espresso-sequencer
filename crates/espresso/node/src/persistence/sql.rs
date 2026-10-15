@@ -29,7 +29,6 @@ use espresso_types::{
     },
 };
 use futures::stream::StreamExt;
-use hotshot::InitializerEpochInfo;
 use hotshot_libp2p_networking::network::behaviours::dht::store::persistent::{
     DhtPersistentStorage, SerializableRecord,
 };
@@ -59,7 +58,8 @@ use hotshot_types::{
         QuorumProposalWrapperLegacy, VidCommitment, VidCommon, VidDisperseShare,
     },
     drb::{DrbInput, DrbResult},
-    event::{Event, EventType, HotShotAction, LeafInfo},
+    event::{HotShotAction, LeafInfo},
+    initializer::InitializerEpochInfo,
     message::{Proposal, convert_proposal},
     new_protocol::CoordinatorEvent,
     simple_certificate::{
@@ -250,7 +250,7 @@ pub struct Options {
     /// - pruning_threshold: 3 TB
     /// - minimum_retention: 1 day
     /// - target_retention: 7 days
-    /// - batch_size: 1000
+    /// - batch_size: 100
     /// - max_usage: 80%
     /// - interval: 1 hour
     #[clap(long, env = "ESPRESSO_NODE_DATABASE_PRUNE")]
@@ -664,7 +664,8 @@ pub struct PruningOptions {
     pub(crate) target_retention: Option<Duration>,
 
     /// Target retention period for Merklized state.
-    /// State older than this is pruned to free up space.
+    /// State older than this is pruned to free up space, but never at or past the newest
+    /// merklized state, which the state writer resumes from.
     #[clap(
         long,
         env = "ESPRESSO_NODE_PRUNER_STATE_TARGET_RETENTION",
@@ -804,6 +805,19 @@ pub struct ConsensusPruningOptions {
         default_value = "1000000000"
     )]
     pub(crate) target_usage: u64,
+
+    /// How often to measure consensus storage against TARGET_USAGE.
+    ///
+    /// On SQLite a measurement scans every page of the consensus tables. Between measurements,
+    /// each decide prunes only to TARGET_RETENTION.
+    #[clap(
+        name = "USAGE_CHECK_INTERVAL",
+        long = "consensus-storage-usage-check-interval",
+        env = "ESPRESSO_NODE_CONSENSUS_STORAGE_USAGE_CHECK_INTERVAL",
+        default_value = "5m",
+        value_parser = parse_duration
+    )]
+    pub(crate) usage_check_interval: Duration,
 }
 
 impl Default for ConsensusPruningOptions {
@@ -914,6 +928,7 @@ impl PersistenceOptions for Options {
         let persistence = Persistence {
             db,
             gc_opt: self.consensus_pruning,
+            last_usage_check: Arc::default(),
             consensus_only: self.consensus_only,
             internal_metrics: PersistenceMetricsValue::default(),
             #[cfg(feature = "embedded-db")]
@@ -940,6 +955,8 @@ impl PersistenceOptions for Options {
 pub struct Persistence {
     db: SqlStorage,
     gc_opt: ConsensusPruningOptions,
+    /// When consensus storage usage was last measured, shared by clones.
+    last_usage_check: Arc<parking_lot::Mutex<Option<Instant>>>,
     consensus_only: bool,
     /// A reference to the internal metrics
     internal_metrics: PersistenceMetricsValue,
@@ -970,67 +987,26 @@ struct DecidedLeaf {
     cert: CertificatePair<SeqTypes>,
 }
 
-fn decide_events_from_chain(
-    mut chain: Vec<DecidedLeaf>,
+/// The decide for `chain`, newest leaf first; `cert2`, if any, finalizes the newest leaf only.
+fn decide_event_from_chain(
+    chain: Vec<DecidedLeaf>,
     cert2: Option<Certificate2<SeqTypes>>,
-    deciding_qc: Option<Arc<CertificatePair<SeqTypes>>>,
-) -> Vec<CoordinatorEvent<SeqTypes>> {
-    let split_idx = chain
-        .iter()
-        .position(|leaf| leaf.info.leaf.block_header().version() < versions::NEW_PROTOCOL_VERSION)
-        .unwrap_or(chain.len());
-    let legacy_leaves = chain.split_off(split_idx);
-    let new_leaves = chain;
-
-    let mut events = Vec::with_capacity(2);
-    if !legacy_leaves.is_empty() {
-        let committing_qc = legacy_leaves[0].cert.clone();
-        let deciding_qc = new_leaves
-            .is_empty()
-            .then_some(deciding_qc)
-            .flatten()
-            .filter(|qc| qc.view_number() == committing_qc.view_number() + 1);
-        let view_number = legacy_leaves[0].info.leaf.view_number();
-        let leaf_chain = legacy_leaves
-            .into_iter()
-            .map(|leaf| leaf.info)
-            .collect::<Vec<_>>();
-
-        events.push(CoordinatorEvent::LegacyEvent(Event {
-            view_number,
-            event: EventType::Decide {
-                leaf_chain: Arc::new(leaf_chain),
-                committing_qc: Arc::new(committing_qc),
-                deciding_qc,
-                block_size: None,
-            },
-        }));
-    }
-
-    if new_leaves.is_empty() && cert2.is_some() {
-        tracing::warn!(
-            "decide_events_from_chain called with cert2 but no new-protocol leaves; cert2 will be \
-             dropped"
-        );
-    }
-
-    if !new_leaves.is_empty() {
-        // cert1 is the QC for the newest leaf
-        // ancestors are certified by
-        // their successor's justify_qc. cert2 finalizes the newest leaf.
-        // update() uses cert1 to build LeafQueryData for
-        // the newest leaf and only attaches cert2 to it.
-        let cert1 = new_leaves[0].cert.qc().clone();
-        let leaf_infos = new_leaves.into_iter().map(|leaf| leaf.info).collect();
-
-        events.push(CoordinatorEvent::NewDecide {
-            leaf_infos,
-            cert1,
-            cert2,
-        });
-    }
-
-    events
+) -> Option<CoordinatorEvent<SeqTypes>> {
+    let Some(newest) = chain.first() else {
+        if cert2.is_some() {
+            tracing::warn!(
+                "decide_event_from_chain called with cert2 but no leaves; cert2 will be dropped"
+            );
+        }
+        return None;
+    };
+    let cert1 = newest.cert.qc().clone();
+    let leaf_infos = chain.into_iter().map(|leaf| leaf.info).collect();
+    Some(CoordinatorEvent::NewDecide {
+        leaf_infos,
+        cert1,
+        cert2,
+    })
 }
 
 impl Persistence {
@@ -1093,11 +1069,7 @@ impl Persistence {
             .map(|row| ViewNumber::new(row.get::<i64, _>("last_processed_view") as u64)))
     }
 
-    async fn generate_decide_events(
-        &self,
-        deciding_qc: Option<Arc<CertificatePair<SeqTypes>>>,
-        consumer: &impl EventConsumer,
-    ) -> anyhow::Result<()> {
+    async fn generate_decide_events(&self, consumer: &impl EventConsumer) -> anyhow::Result<()> {
         let mut last_processed_view: Option<i64> = serializable_retry!(self, || async {
             Ok(self
                 .db
@@ -1396,7 +1368,7 @@ impl Persistence {
                 "generating decide event"
             );
 
-            for event in decide_events_from_chain(chain, cert2, deciding_qc.clone()) {
+            if let Some(event) = decide_event_from_chain(chain, cert2) {
                 consumer.handle_event(&event).await?;
             }
 
@@ -1465,7 +1437,7 @@ impl Persistence {
                 )
                 .await?;
                 tx.execute(
-                    query("DELETE FROM decided_cert2 where view >= $1 AND view <= $2")
+                    query("DELETE FROM decided_cert2 where view >= $1 AND view < $2")
                         .bind(from_view_i64)
                         .bind(to_view_i64),
                 )
@@ -1562,57 +1534,77 @@ impl Persistence {
         Ok(result)
     }
 
+    /// Prune everything older than the target retention, then, at most once per usage check
+    /// interval, prune toward the minimum retention if storage is over the target usage.
     #[tracing::instrument(skip(self))]
     async fn prune_to_retention(&self, cur_view: ViewNumber) -> anyhow::Result<()> {
-        serializable_retry!(self, || async {
-            let mut tx = self.db.write().await?;
-
-            // Prune everything older than the target retention period.
-            prune_to_view(
-                &mut tx,
-                cur_view.u64().saturating_sub(self.gc_opt.target_retention),
-            )
+        self.prune_below(cur_view.u64().saturating_sub(self.gc_opt.target_retention))
             .await?;
 
-            // Check our storage usage; if necessary we will prune more aggressively (up to the
-            // minimum retention) to get below the target usage.
-            #[cfg(feature = "embedded-db")]
-            let usage_query = format!(
-                "SELECT sum(pgsize) FROM dbstat WHERE name IN ({})",
-                PRUNE_TABLES
-                    .iter()
-                    .map(|table| format!("'{table}'"))
-                    .join(",")
+        if !self.usage_check_due() {
+            return Ok(());
+        }
+        let usage = self.consensus_storage_usage().await?;
+        tracing::debug!(usage, "consensus storage usage after pruning");
+        if usage > self.gc_opt.target_usage {
+            tracing::warn!(
+                usage,
+                gc_opt = ?self.gc_opt,
+                "consensus storage is running out of space, pruning to minimum retention"
             );
-
-            #[cfg(not(feature = "embedded-db"))]
-            let usage_query = {
-                let table_sizes = PRUNE_TABLES
-                    .iter()
-                    .map(|table| format!("pg_table_size('{table}')"))
-                    .join(" + ");
-                format!("SELECT {table_sizes}")
-            };
-
-            let (usage,): (i64,) = query_as(&usage_query).fetch_one(tx.as_mut()).await?;
-            tracing::debug!(usage, "consensus storage usage after pruning");
-
-            if (usage as u64) > self.gc_opt.target_usage {
-                tracing::warn!(
-                    usage,
-                    gc_opt = ?self.gc_opt,
-                    "consensus storage is running out of space, pruning to minimum retention"
-                );
-                prune_to_view(
-                    &mut tx,
-                    cur_view.u64().saturating_sub(self.gc_opt.minimum_retention),
-                )
+            self.prune_below(cur_view.u64().saturating_sub(self.gc_opt.minimum_retention))
                 .await?;
-            }
+        }
+        Ok(())
+    }
 
+    async fn prune_below(&self, view: u64) -> anyhow::Result<()> {
+        // An empty write transaction still takes SQLite's write lock.
+        if view == 0 {
+            return Ok(());
+        }
+        serializable_retry!(self, || async {
+            let mut tx = self.db.write().await?;
+            prune_to_view(&mut tx, view).await?;
             tx.commit().await
         })
         .await
+    }
+
+    /// Measured in a read transaction: on SQLite it scans every page of the pruned tables, and
+    /// holding the write lock that long stalls the vote and proposal writes consensus waits on.
+    async fn consensus_storage_usage(&self) -> anyhow::Result<u64> {
+        #[cfg(feature = "embedded-db")]
+        let usage_query = format!(
+            "SELECT sum(pgsize) FROM dbstat WHERE name IN ({})",
+            PRUNE_TABLES
+                .iter()
+                .map(|table| format!("'{table}'"))
+                .join(",")
+        );
+
+        #[cfg(not(feature = "embedded-db"))]
+        let usage_query = {
+            let table_sizes = PRUNE_TABLES
+                .iter()
+                .map(|table| format!("pg_table_size('{table}')"))
+                .join(" + ");
+            format!("SELECT {table_sizes}")
+        };
+
+        let mut tx = self.db.read().await?;
+        let (usage,): (i64,) = query_as(&usage_query).fetch_one(tx.as_mut()).await?;
+        Ok(usage as u64)
+    }
+
+    fn usage_check_due(&self) -> bool {
+        let now = Instant::now();
+        let mut last = self.last_usage_check.lock();
+        if last.is_some_and(|last| now.duration_since(last) < self.gc_opt.usage_check_interval) {
+            return false;
+        }
+        *last = Some(now);
+        true
     }
 }
 
@@ -1627,10 +1619,6 @@ const PRUNE_TABLES: &[&str] = &[
 ];
 
 async fn prune_to_view(tx: &mut Transaction<Write>, view: u64) -> anyhow::Result<()> {
-    if view == 0 {
-        // Nothing to prune, the entire chain is younger than the retention period.
-        return Ok(());
-    }
     tracing::debug!(view, "pruning consensus storage");
 
     for table in PRUNE_TABLES {
@@ -1700,11 +1688,16 @@ impl SequencerPersistence for Persistence {
 
     async fn persist_decided_leaves(
         &self,
-        _view: ViewNumber,
         leaf_chain: impl IntoIterator<Item = (&LeafInfo<SeqTypes>, CertificatePair<SeqTypes>)> + Send,
-        _deciding_qc: Option<Arc<CertificatePair<SeqTypes>>>,
+        cert2: Option<&Certificate2<SeqTypes>>,
         _consumer: &(impl EventConsumer + 'static),
     ) -> anyhow::Result<()> {
+        let cert2_row = cert2
+            .map(|cert2| {
+                let data = bincode::serialize(cert2).context("serializing cert2")?;
+                anyhow::Ok((cert2.view_number.u64() as i64, data))
+            })
+            .transpose()?;
         let values = leaf_chain
             .into_iter()
             .map(|(info, cert)| {
@@ -1726,8 +1719,8 @@ impl SequencerPersistence for Persistence {
             })
             .collect::<anyhow::Result<Vec<_>>>()?;
 
-        // Append the new leaves. We do this in its own transaction because even if GC or the
-        // event consumer later fails, there is no need to abort the storage of the leaves.
+        // Append the new leaves and their cert2. We do this in its own transaction because even if
+        // GC or the event consumer later fails, there is no need to abort the storage of the leaves.
         serializable_retry!(self, || async {
             let mut tx = self.db.write().await?;
             tx.upsert(
@@ -1737,6 +1730,10 @@ impl SequencerPersistence for Persistence {
                 values.clone(),
             )
             .await?;
+            if let Some(row) = &cert2_row {
+                tx.upsert("decided_cert2", ["view", "data"], ["view"], [row.clone()])
+                    .await?;
+            }
             tx.commit().await
         })
         .await?;
@@ -1747,7 +1744,6 @@ impl SequencerPersistence for Persistence {
     async fn process_decided_events(
         &self,
         view: ViewNumber,
-        deciding_qc: Option<Arc<CertificatePair<SeqTypes>>>,
         consumer: &(impl EventConsumer + 'static),
     ) -> anyhow::Result<Option<ViewNumber>> {
         let now = Instant::now();
@@ -1756,7 +1752,7 @@ impl SequencerPersistence for Persistence {
         } else {
             // Generate events for the new leaves, then GC. On error `last_processed_view` is not
             // advanced past the failure point, so no data is lost and the range is retried.
-            self.generate_decide_events(deciding_qc, consumer).await?;
+            self.generate_decide_events(consumer).await?;
 
             // Best-effort GC of data not included in any decide event; runs again at the next
             // decide.
@@ -3843,7 +3839,7 @@ mod test {
         // the target, because of the minimum retention.
         tracing::info!("decide view 1");
         storage
-            .append_decided_leaves(data_view + 1, [], None, &NullEventConsumer)
+            .append_decided_leaves(data_view + 1, [], &NullEventConsumer)
             .await
             .unwrap();
         assert_eq!(
@@ -3865,7 +3861,7 @@ mod test {
         // retention) so it gets pruned.
         tracing::info!("decide view 2");
         storage
-            .append_decided_leaves(data_view + 2, [], None, &NullEventConsumer)
+            .append_decided_leaves(data_view + 2, [], &NullEventConsumer)
             .await
             .unwrap();
         assert!(storage.load_vid_share(data_view).await.unwrap().is_none(),);
@@ -3900,6 +3896,7 @@ mod test {
             // Use a very high target retention, so that pruning is only triggered by the minimum
             // retention.
             target_retention: u64::MAX,
+            usage_check_interval: Duration::ZERO,
         })
         .await
     }
@@ -3914,6 +3911,7 @@ mod test {
             // Use a very high target usage, so that pruning is only triggered by the target
             // retention.
             target_usage: u64::MAX,
+            usage_check_interval: Duration::ZERO,
         })
         .await
     }
@@ -3970,7 +3968,7 @@ mod test {
 
         for view in [10, 5] {
             storage
-                .append_decided_leaves(ViewNumber::new(view), [], None, &NullEventConsumer)
+                .append_decided_leaves(ViewNumber::new(view), [], &NullEventConsumer)
                 .await
                 .unwrap();
         }
@@ -4059,7 +4057,7 @@ mod postgres_tests {
             .into();
 
         let (payload, ns_table) =
-            Payload::from_transactions(txs.clone(), &validated_state, &instance_state)
+            Payload::from_transactions(&txs, &validated_state, &instance_state)
                 .await
                 .unwrap();
         let payload_bytes = payload.encode();
@@ -4133,7 +4131,13 @@ mod postgres_tests {
 
     #[test_log::test(tokio::test(flavor = "multi_thread"))]
     async fn test_postgres_read_ns_table_v0_1() {
-        test_postgres_read_ns_table(NodeState::mock()).await;
+        let v0_1 = versions::version(0, 1);
+        test_postgres_read_ns_table(
+            NodeState::mock()
+                .with_current_version(v0_1)
+                .with_genesis_version(v0_1),
+        )
+        .await;
     }
 
     #[test_log::test(tokio::test(flavor = "multi_thread"))]

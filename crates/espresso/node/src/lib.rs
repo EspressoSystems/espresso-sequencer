@@ -10,6 +10,8 @@ pub mod consensus_handle;
 pub mod context;
 pub mod follower;
 pub mod genesis;
+#[cfg(any(test, feature = "testing"))]
+pub mod legacy_chain;
 pub use espresso_keyset as keyset;
 pub mod network;
 pub mod options;
@@ -82,7 +84,6 @@ use hotshot_types::{
         node_implementation::{NodeImplementation, NodeType},
         storage::Storage,
     },
-    utils::BuilderCommitment,
     x25519,
 };
 use libp2p::Multiaddr;
@@ -93,10 +94,9 @@ pub use options::Options;
 use proposal_fetcher::ProposalFetcherConfig;
 pub use run::main;
 use serde::{Deserialize, Serialize};
-use tokio::select;
 use tracing::info;
 use url::Url;
-use vbs::version::{StaticVersion, Version};
+use vbs::version::StaticVersion;
 
 use crate::request_response::data_source::Storage as RequestResponseStorage;
 
@@ -498,7 +498,7 @@ where
                 "waiting for other nodes to connect, DO NOT RESTART until fully connected"
             );
 
-            let registration = orchestrator_registration(&validator_config, genesis.base_version)?;
+            let registration = orchestrator_registration(&validator_config)?;
 
             let bootstrap_advertise_addr = libp2p_announce_addresses.first().cloned().context(
                 "ESPRESSO_NODE_LIBP2P_ADVERTISE_ADDRESS must be set when bootstrapping a libp2p \
@@ -677,21 +677,6 @@ where
 
         info!("Libp2p network initialized");
 
-        // From `NEW_PROTOCOL_VERSION` on, all consensus traffic runs on
-        // cliquenet and the legacy stack is torn down at startup, so don't
-        // hold up boot waiting for legacy connectivity.
-        if genesis.base_version < versions::NEW_PROTOCOL_VERSION {
-            tracing::warn!("Waiting for at least one connection to be initialized");
-            select! {
-                _ = cdn_network.wait_for_ready() => {
-                    tracing::warn!("CDN connection initialized");
-                },
-                _ = p2p_network.wait_for_ready() => {
-                    tracing::warn!("P2P connection initialized");
-                },
-            };
-        }
-
         // Combine the CDN and P2P networks
         CombinedNetworks::new(cdn_network, p2p_network, Some(Duration::from_secs(1)))
     };
@@ -789,27 +774,16 @@ fn local_validator_config(
 
 /// The config this node registers with the orchestrator. Its `public_config()` is also what
 /// `/ready` posts, since the orchestrator equality-checks that against `known_nodes_with_stake`.
-///
-/// From `NEW_PROTOCOL_VERSION` on it carries the node's cliquenet `connect_info` so peers can
-/// dial us from the stake table, which requires an advertise address to be configured. Before
-/// that version the stake table has no `connect_info`, so it is left out even though the node
-/// already runs cliquenet with the identity in `validator_config`.
+/// It carries the node's cliquenet `connect_info` so peers can dial us from the stake table, which
+/// requires an advertise address to be configured.
 fn orchestrator_registration(
     validator_config: &ValidatorConfig<SeqTypes>,
-    base_version: Version,
 ) -> anyhow::Result<ValidatorConfig<SeqTypes>> {
-    let p2p_addr = if base_version >= versions::NEW_PROTOCOL_VERSION {
-        Some(validator_config.p2p_addr.clone().context(
-            "ESPRESSO_NODE_CLIQUENET_ADVERTISE_ADDRESS must be set when bootstrapping a Cliquenet \
-             network from the orchestrator",
-        )?)
-    } else {
-        None
-    };
-    Ok(ValidatorConfig {
-        p2p_addr,
-        ..validator_config.clone()
-    })
+    validator_config.p2p_addr.as_ref().context(
+        "ESPRESSO_NODE_CLIQUENET_ADVERTISE_ADDRESS must be set when bootstrapping a Cliquenet \
+         network from the orchestrator",
+    )?;
+    Ok(validator_config.clone())
 }
 
 pub(crate) async fn load_or_fetch_network_config<P: SequencerPersistence>(
@@ -1021,10 +995,6 @@ where
     })
 }
 
-pub fn empty_builder_commitment() -> BuilderCommitment {
-    BuilderCommitment::from_bytes([])
-}
-
 /// Scans the whole L1 contract history when nothing is persisted yet, keeping every
 /// `bootstrap_epoch_window` step bounded to one epoch instead of loading that scan onto
 /// the first step, which silently downgrades the node to a stale epoch window when it
@@ -1159,7 +1129,7 @@ pub mod testing {
         network_config::light_client_genesis_from_stake_table,
     };
     use espresso_types::{
-        Event, FeeAccount, L1Client, NetworkConfig, PubKey, SeqTypes, Transaction, Upgrade,
+        ChainConfig, FeeAccount, L1Client, NetworkConfig, PubKey, SeqTypes, Transaction, Upgrade,
         UpgradeMap, UpgradeMode,
         eth_signature_key::EthKeyPair,
         v0::traits::{EventConsumer, NullEventConsumer, PersistenceOptions, StateCatchup},
@@ -1168,17 +1138,11 @@ pub mod testing {
         future::join_all,
         stream::{Stream, StreamExt},
     };
-    use hotshot::{
-        traits::{
-            BlockPayload,
-            implementations::{MasterMap, MemoryNetwork},
-        },
-        types::EventType,
+    use hotshot::traits::{
+        BlockPayload,
+        implementations::{MasterMap, MemoryNetwork},
     };
     use hotshot_contract_adapter::stake_table::StakeTableContractVersion;
-    use hotshot_testing::block_builder::{
-        BuilderTask, SimpleBuilderImplementation, TestBuilderImplementation,
-    };
     use hotshot_types::{
         HotShotConfig, PeerConfig, PeerConnectInfo,
         data::EpochNumber,
@@ -1215,33 +1179,6 @@ pub mod testing {
         >,
     >;
 
-    pub async fn run_test_builder<const NUM_NODES: usize>(
-        port: Option<u16>,
-    ) -> (Box<dyn BuilderTask<SeqTypes>>, Url) {
-        let port = match port {
-            Some(p) => p,
-            None => reserve_tcp_port().expect("OS should have ephemeral ports available"),
-        };
-
-        // This should never fail.
-        let url: Url = format!("http://localhost:{port}")
-            .parse()
-            .expect("Failed to parse builder URL");
-        tracing::info!("Starting test builder on {url}");
-
-        let task = <SimpleBuilderImplementation as TestBuilderImplementation<SeqTypes>>::start(
-            NUM_NODES,
-            format!("http://0.0.0.0:{port}")
-                .parse()
-                .expect("Failed to parse builder listener"),
-            (),
-            HashMap::new(),
-        )
-        .await;
-
-        (task, url)
-    }
-
     pub struct TestConfigBuilder<const NUM_NODES: usize> {
         config: HotShotConfig<SeqTypes>,
         priv_keys: Vec<BLSPrivKey>,
@@ -1252,7 +1189,6 @@ pub mod testing {
         anvil_provider: Option<AnvilFillProvider>,
         signer: LocalSigner<SigningKey>,
         state_relay_url: Option<Url>,
-        builder_port: Option<u16>,
         upgrades: BTreeMap<Version, Upgrade>,
         coordinator_addrs: Vec<NetAddr>,
         contracts: Option<Contracts>,
@@ -1320,11 +1256,6 @@ pub mod testing {
     }
 
     impl<const NUM_NODES: usize> TestConfigBuilder<NUM_NODES> {
-        pub fn builder_port(mut self, builder_port: Option<u16>) -> Self {
-            self.builder_port = builder_port;
-            self
-        }
-
         pub fn state_relay_url(mut self, url: Url) -> Self {
             self.state_relay_url = Some(url);
             self
@@ -1525,11 +1456,11 @@ pub mod testing {
                 l1_opt: self.l1_opt,
                 signer: self.signer,
                 state_relay_url: self.state_relay_url,
-                builder_port: self.builder_port,
                 upgrades: self.upgrades,
                 anvil_provider: self.anvil_provider,
                 coordinator_addrs: self.coordinator_addrs,
                 contracts: self.contracts,
+                genesis_chain_config: None,
             }
         }
 
@@ -1596,7 +1527,7 @@ pub mod testing {
                 view_sync_timeout: Duration::from_secs(1),
                 data_request_delay: Duration::from_secs(1),
                 builder_urls: vec1::vec1![
-                    Url::parse(&format!("http://127.0.0.1:{builder_port}")).unwrap()
+                    Url::parse(&format!("http://localhost:{builder_port}")).unwrap()
                 ],
                 builder_timeout: Duration::from_secs(1),
                 start_threshold: (
@@ -1644,7 +1575,6 @@ pub mod testing {
                 anvil_provider: Some(anvil_provider),
                 signer,
                 state_relay_url: None,
-                builder_port: None,
                 upgrades: Default::default(),
                 coordinator_addrs,
                 contracts: None,
@@ -1663,12 +1593,13 @@ pub mod testing {
         anvil_provider: Option<AnvilFillProvider>,
         signer: LocalSigner<SigningKey>,
         state_relay_url: Option<Url>,
-        builder_port: Option<u16>,
         upgrades: BTreeMap<Version, Upgrade>,
         /// Per-node cliquenet coordinator bind addresses, indexed by node.
         coordinator_addrs: Vec<NetAddr>,
         /// Contracts deployed by [`TestConfigBuilder::set_upgrades_with`], if any.
         contracts: Option<Contracts>,
+        /// See [`Self::set_genesis_chain_config`].
+        genesis_chain_config: Option<ChainConfig>,
     }
 
     impl<const NUM_NODES: usize> TestConfig<NUM_NODES> {
@@ -1680,20 +1611,16 @@ pub mod testing {
             &self.config
         }
 
-        pub fn set_builder_urls(&mut self, builder_urls: vec1::Vec1<Url>) {
-            self.config.builder_urls = builder_urls;
-        }
-
-        pub fn builder_port(&self) -> Option<u16> {
-            self.builder_port
-        }
-
         pub fn signer(&self) -> LocalSigner<SigningKey> {
             self.signer.clone()
         }
 
         pub fn l1_url(&self) -> Url {
             self.l1_url.clone()
+        }
+
+        pub fn l1_opt(&self) -> L1ClientOptions {
+            self.l1_opt.clone()
         }
 
         pub fn anvil(&self) -> Option<&AnvilFillProvider> {
@@ -1755,6 +1682,15 @@ pub mod testing {
         pub fn set_consensus_keys(&mut self, i: usize, bls: BLSPrivKey, state: StateKeyPair) {
             self.priv_keys[i] = bls;
             self.state_key_pairs[i] = state;
+        }
+
+        /// Builds every node's genesis header from `chain_config`, as a real
+        /// network's shared genesis file does. Otherwise a node takes it from
+        /// its own starting state, so nodes that start from only a commitment
+        /// build a different genesis leaf, and the new protocol rejects each
+        /// other's genesis QC.
+        pub fn set_genesis_chain_config(&mut self, chain_config: ChainConfig) {
+            self.genesis_chain_config = Some(chain_config);
         }
 
         /// Contracts deployed by [`TestConfigBuilder::set_upgrades_with`], if
@@ -1926,7 +1862,7 @@ pub mod testing {
             );
 
             let max_block_size = *chain_config.max_block_size;
-            let node_state = NodeState::new(
+            let mut node_state = NodeState::new(
                 i as u64,
                 chain_config,
                 l1_client,
@@ -1940,6 +1876,12 @@ pub mod testing {
             .with_epoch_height(config.epoch_height)
             .with_upgrades(upgrades)
             .with_epoch_start_block(config.epoch_start_block);
+            // Only the genesis header: `chain_config` stays what this node resolves from its
+            // state, so a node that starts from a commitment still has to fetch the config.
+            if let Some(genesis_chain_config) = self.genesis_chain_config {
+                node_state.genesis_header.chain_config = genesis_chain_config;
+                node_state.genesis_chain_config = genesis_chain_config;
+            }
 
             tracing::info!(
                 i,
@@ -2001,19 +1943,25 @@ pub mod testing {
         }
     }
 
-    // Wait for the submitted transaction to be sequenced in a decided block. Return the block
-    // number containing the transaction and the block payload size.
+    /// The leaves a decide event finalizes, newest first.
+    pub fn decided_leaves(event: &CoordinatorEvent<SeqTypes>) -> Option<&[LeafInfo<SeqTypes>]> {
+        match event {
+            CoordinatorEvent::NewDecide { leaf_infos, .. } => Some(leaf_infos),
+            _ => None,
+        }
+    }
+
+    /// Wait for `submitted_txn` to be decided; returns its block number and payload size.
     pub async fn wait_for_decide_on_handle(
         events: &mut (impl Stream<Item = CoordinatorEvent<SeqTypes>> + Unpin),
         submitted_txn: &Transaction,
     ) -> (u64, usize) {
         let commitment = submitted_txn.commit();
 
-        // At 0.6 a decide carries the block payload only on the node that
-        // built the block; every other node receives the payload through a
-        // separate `BlockPayloadReconstructed` event, which can arrive before
-        // or after the decide. Pair the two by view so the transaction is
-        // only reported once its block is decided.
+        // At 0.6 a decide carries the block payload if the node built or
+        // reconstructed it by then; otherwise the payload follows in a
+        // separate `BlockPayloadReconstructed` event. Pair the two by view so
+        // the transaction is only reported once its block is decided.
         let mut reconstructed = HashMap::new();
         let mut decided_without_payload = HashSet::new();
 
@@ -2041,15 +1989,8 @@ pub mod testing {
                     continue;
                 }
 
-                // Decides arrive as `LegacyEvent` before the new protocol and
-                // as `NewDecide` after.
-                let leaf_chain: &[LeafInfo<SeqTypes>] = match &event {
-                    CoordinatorEvent::LegacyEvent(Event {
-                        event: EventType::Decide { leaf_chain, .. },
-                        ..
-                    }) => leaf_chain,
-                    CoordinatorEvent::NewDecide { leaf_infos, .. } => leaf_infos,
-                    _ => continue,
+                let Some(leaf_chain) = decided_leaves(&event) else {
+                    continue;
                 };
                 for LeafInfo { leaf, .. } in leaf_chain {
                     let Some(payload) = leaf.block_payload() else {
@@ -2088,13 +2029,8 @@ pub mod testing {
         tracing::info!(target_epoch, "waiting for epoch");
         let mut last_seen = None;
         while let Some(event) = events.next().await {
-            // Decides arrive as `LegacyEvent` before the new protocol and as
-            // `NewDecide` after; both carry the most recent leaf first.
+            // A decide carries its most recent leaf first.
             let leaf = match event {
-                CoordinatorEvent::LegacyEvent(Event {
-                    event: EventType::Decide { leaf_chain, .. },
-                    ..
-                }) => leaf_chain[0].leaf.clone(),
                 CoordinatorEvent::NewDecide { leaf_infos, .. } => leaf_infos[0].leaf.clone(),
                 _ => continue,
             };
@@ -2116,27 +2052,22 @@ pub mod testing {
 
 #[cfg(test)]
 mod test {
-    use alloy::{
-        node_bindings::Anvil,
-        signers::local::coins_bip39::{English, Mnemonic},
-    };
+    use alloy::signers::local::coins_bip39::{English, Mnemonic};
     use espresso_keyset::KeySet;
-    use espresso_types::{Header, MOCK_SEQUENCER_VERSIONS, NamespaceId, Payload, Transaction};
+    use espresso_types::{Header, NamespaceId, TEST_UPGRADE, Transaction};
     use futures::StreamExt;
-    use hotshot::types::{Event, EventType};
-    use hotshot_example_types::node_types::TEST_VERSIONS;
     use hotshot_types::{
-        PeerConnectInfo,
-        addr::NetAddr,
-        event::LeafInfo,
-        new_protocol::CoordinatorEvent,
-        traits::block_contents::{BlockHeader, BlockPayload},
+        PeerConnectInfo, addr::NetAddr, event::LeafInfo, traits::block_contents::BlockHeader,
         x25519,
     };
-    use testing::{TestConfigBuilder, wait_for_decide_on_handle};
-    use versions::{EPOCH_VERSION, NEW_PROTOCOL_VERSION};
+    use test_utils::reserve_tcp_port;
+    use testing::{TestConfigBuilder, decided_leaves, wait_for_decide_on_handle};
 
     use super::{local_validator_config, orchestrator_registration};
+    use crate::api::{
+        Options,
+        test_helpers::{TestNetwork, TestNetworkConfigBuilder},
+    };
 
     fn test_keys() -> KeySet {
         let mnemonic = Mnemonic::<English>::new_from_phrase(
@@ -2184,11 +2115,8 @@ mod test {
         assert!(without_addr.public_config().connect_info.is_none());
     }
 
-    /// The stake table only carries cliquenet `connect_info` from `NEW_PROTOCOL_VERSION` on. The
-    /// orchestrator registration leaves it out before that, although the node's own config has
-    /// it, and requires an advertise address after.
     #[test]
-    fn orchestrator_registration_publishes_connect_info_only_on_new_protocol() {
+    fn orchestrator_registration_publishes_connect_info() {
         let keys = test_keys();
         let advertise: NetAddr = "node.example.com:9977".parse().unwrap();
         let config = local_validator_config(
@@ -2199,12 +2127,9 @@ mod test {
             false,
         );
 
-        let legacy = orchestrator_registration(&config, EPOCH_VERSION).unwrap();
-        assert!(legacy.public_config().connect_info.is_none());
-
-        let new_protocol = orchestrator_registration(&config, NEW_PROTOCOL_VERSION).unwrap();
+        let registration = orchestrator_registration(&config).unwrap();
         assert_eq!(
-            new_protocol
+            registration
                 .public_config()
                 .connect_info
                 .map(|i| i.p2p_addr),
@@ -2213,7 +2138,7 @@ mod test {
 
         let unconfigured =
             local_validator_config(keys.staking, keys.state, &keys.x25519, None, false);
-        assert!(orchestrator_registration(&unconfigured, NEW_PROTOCOL_VERSION).is_err());
+        assert!(orchestrator_registration(&unconfigured).is_err());
     }
 
     #[test]
@@ -2280,46 +2205,21 @@ mod test {
         assert_eq!(config.config.stake_table_capacity, 50);
     }
 
-    use self::testing::run_test_builder;
     use super::*;
 
     #[test_log::test(tokio::test(flavor = "multi_thread"))]
     async fn test_skeleton_instantiation() {
-        // Assign `config` so it isn't dropped early.
-        let anvil = Anvil::new().spawn();
-        let url = anvil.endpoint_url();
-        const NUM_NODES: usize = 5;
-        let mut config = TestConfigBuilder::<NUM_NODES>::default()
-            .l1_url(url)
+        let port = reserve_tcp_port().expect("OS should have ephemeral ports available");
+        let config = TestNetworkConfigBuilder::default()
+            .api_config(Options::with_port(port))
+            .network_config(TestConfigBuilder::default().build())
             .build();
+        let network = TestNetwork::new(config, TEST_UPGRADE).await;
+        let mut events = network.server.event_stream();
 
-        let (builder_task, builder_url) = run_test_builder::<NUM_NODES>(None).await;
-
-        config.set_builder_urls(vec1::vec1![builder_url]);
-
-        let handles = config.init_nodes(MOCK_SEQUENCER_VERSIONS).await;
-
-        let handle_0 = &handles[0];
-
-        // Hook the builder up to the event stream from the first node
-        builder_task.start(Box::new(
-            handle_0
-                .consensus_handle()
-                .legacy_consensus()
-                .read()
-                .await
-                .event_stream(),
-        ));
-
-        let mut events = handle_0.event_stream();
-
-        for handle in handles.iter() {
-            handle.start_consensus().await;
-        }
-
-        // Submit target transaction to handle
         let txn = Transaction::new(NamespaceId::from(1_u32), vec![1, 2, 3]);
-        handles[0]
+        network
+            .server
             .submit_transaction(txn.clone())
             .await
             .expect("Failed to submit transaction");
@@ -2331,61 +2231,22 @@ mod test {
     #[test_log::test(tokio::test(flavor = "multi_thread"))]
     async fn test_header_invariants() {
         let success_height = 30;
-        // Assign `config` so it isn't dropped early.
-        let anvil = Anvil::new().spawn();
-        let url = anvil.endpoint_url();
-        const NUM_NODES: usize = 5;
-        let mut config = TestConfigBuilder::<NUM_NODES>::default()
-            .l1_url(url)
+        let port = reserve_tcp_port().expect("OS should have ephemeral ports available");
+        let config = TestNetworkConfigBuilder::default()
+            .api_config(Options::with_port(port))
+            .network_config(TestConfigBuilder::default().build())
             .build();
+        let network = TestNetwork::new(config, TEST_UPGRADE).await;
+        let mut events = network.server.event_stream();
 
-        let (builder_task, builder_url) = run_test_builder::<NUM_NODES>(None).await;
-
-        config.set_builder_urls(vec1::vec1![builder_url]);
-        let handles = config.init_nodes(MOCK_SEQUENCER_VERSIONS).await;
-
-        let handle_0 = &handles[0];
-
-        let mut events = handle_0.event_stream();
-
-        // Hook the builder up to the event stream from the first node
-        builder_task.start(Box::new(
-            handle_0
-                .consensus_handle()
-                .legacy_consensus()
-                .read()
-                .await
-                .event_stream(),
-        ));
-
-        for handle in handles.iter() {
-            handle.start_consensus().await;
-        }
-
-        let mut parent = {
-            // TODO refactor repeated code from other tests
-            let (genesis_payload, genesis_ns_table) =
-                Payload::from_transactions([], &ValidatedState::default(), &NodeState::mock())
-                    .await
-                    .unwrap();
-
-            let genesis_state = NodeState::mock();
-            Header::genesis(
-                &genesis_state,
-                genesis_payload,
-                &genesis_ns_table,
-                TEST_VERSIONS.test.base,
-            )
-        };
+        // The network is already running, so start from the first header it
+        // decides after we subscribe.
+        let mut parent: Option<Header> = None;
 
         loop {
             let event = events.next().await.unwrap();
             tracing::info!("Received event from handle: {event:?}");
-            let CoordinatorEvent::LegacyEvent(Event {
-                event: EventType::Decide { leaf_chain, .. },
-                ..
-            }) = event
-            else {
+            let Some(leaf_chain) = decided_leaves(&event) else {
                 continue;
             };
             tracing::info!("Got decide {leaf_chain:?}");
@@ -2394,18 +2255,19 @@ mod test {
             // the fields which should be monotonic are.
             for LeafInfo { leaf, .. } in leaf_chain.iter().rev() {
                 let header = leaf.block_header().clone();
-                if header.height() == 0 {
-                    parent = header;
-                    continue;
+                if let Some(parent) = &parent {
+                    assert_eq!(header.height(), parent.height() + 1);
+                    assert!(header.timestamp() >= parent.timestamp());
+                    assert!(header.l1_head() >= parent.l1_head());
+                    assert!(header.l1_finalized() >= parent.l1_finalized());
                 }
-                assert_eq!(header.height(), parent.height() + 1);
-                assert!(header.timestamp() >= parent.timestamp());
-                assert!(header.l1_head() >= parent.l1_head());
-                assert!(header.l1_finalized() >= parent.l1_finalized());
-                parent = header;
+                parent = Some(header);
             }
 
-            if parent.height() >= success_height {
+            if parent
+                .as_ref()
+                .is_some_and(|p| p.height() >= success_height)
+            {
                 break;
             }
         }
