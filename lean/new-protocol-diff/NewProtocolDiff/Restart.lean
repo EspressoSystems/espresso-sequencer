@@ -95,7 +95,9 @@ def summaryChecks : List (String × Bool) :=
     ("summary:anchorCert2Held", decide ((P.config cfg).anchorCert2 = cfg.anchorCert2
       ∨ ∃ c2 ∈ cert2sHeld pre, c2.data = P.anchorCert.data.toVote2 ∧ c2.view < P.firstAllowed)),
     ("summary:reconstructedHeld", decide (∀ x ∈ P.reconstructed,
-      ∃ b ∈ proposalsHeld cfg pre, b.viewNumber = x.1 ∧ b.payloadCommit = x.2)),
+      ∃ b ∈ proposalsHeld cfg pre, b.viewNumber = x.1 ∧ b.payloadCommit = x.2
+        ∧ ((x.1 = P.anchorView ∧ x.2 = P.anchorBlock.payloadCommit)
+          ∨ pre.HasPayload cfg x.1 x.2))),
     ("summary:vote1Below", decide (∀ st ∈ pre, ∀ v ∈ vote1sOf st, v.view ≤ P.highestVoted)),
     ("summary:vote2Below", decide (∀ st ∈ pre, ∀ v ∈ vote2sOf st, v.view ≤ P.highestVoted)),
     ("summary:timeoutBelow", decide (∀ st ∈ pre, ∀ v ∈ timeoutVotesOf st, v.view ≤ P.highestVoted)),
@@ -145,8 +147,8 @@ theorem checkSummarises_sound (h : decide (CheckSummarises cfg P pre post) = tru
     · exact Or.inl he
     · exact Or.inr ⟨c2, hasCert2_of_mem hm, hd, hv⟩
   · intro x hx
-    obtain ⟨b, hb, hv, hpc⟩ := hrec x hx
-    exact ⟨b, mem_proposalsHeld.mp hb, hv, hpc⟩
+    obtain ⟨b, hb, hv, hpc, hpay⟩ := hrec x hx
+    exact ⟨b, mem_proposalsHeld.mp hb, hv, hpc, hpay⟩
   · rintro v ⟨st, hst, hm⟩; exact h1 st hst v (mem_vote1sOf.mpr hm)
   · rintro v ⟨st, hst, hm⟩; exact h2 st hst v (mem_vote2sOf.mpr hm)
   · rintro v ⟨st, hst, hm⟩; exact ht st hst v (mem_timeoutVotesOf hm)

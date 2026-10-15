@@ -2290,7 +2290,7 @@ end Spec.History_inputsOnly
 
 The summary is faithful when each of its parts was written before the node acted
 on it. The anchor, its certificate and its saved proposals are ones the node held
-before the crash, and every vote before the crash lies at or before the stored
+before the crash, each saved proposal other than the anchor with its payload, and every vote before the crash lies at or before the stored
 view and lock.
 
 {docstring NewProtocol.Summarises}
@@ -2298,9 +2298,7 @@ view and lock.
 {name NewProtocol.Summarises.vote2Locked}`Summarises.vote2Locked` requires the
 stored lock to be written as a compare-and-set in {name NewProtocol.LockLE}`LockLE`
 order, epoch first, then view: a write that compares views alone can replace a
-lock of a later epoch with one of an earlier epoch at a later view. The test
-storage meets this; `append_high_qc2` in the SQL storage compares views only and
-does not.
+lock of a later epoch with one of an earlier epoch at a later view.
 
 {docstring NewProtocol.RestartOK}
 

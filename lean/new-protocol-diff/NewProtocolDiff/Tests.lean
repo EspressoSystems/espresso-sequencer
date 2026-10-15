@@ -319,6 +319,7 @@ private def preRun : History :=
     st (.certificate2 (commit c1)) [.decided [b1] c1 (commit c1)],
     recv b2,
     st (.blockValidated ⟨2⟩ b2.identity) [vote1 b2],
+    st (.blockReconstructed ⟨2⟩ b2.payloadCommit),
     st (.timeout ⟨3⟩) [timeoutVote 3 c1],
     recv b4 ]
 
@@ -395,8 +396,8 @@ example : Summarises cfg persisted preRun postRun ∧ RestartOK persisted postRu
 /-- info: [] -/
 #guard_msgs in #eval failing persisted preRun (postRun ++ [st (.timeout ⟨7⟩) [timeoutVote 7 c1]])
 
--- A vote2 on a proposal whose payload only the restart marks as held.
-/-- info: ([], []) -/
+-- A saved proposal marked as held whose payload the node never had is refused.
+/-- info: (["summary:reconstructedHeld"], []) -/
 #guard_msgs in
 #eval
   let P := { persisted with reconstructed := persisted.reconstructed ++ [(⟨4⟩, b4.payloadCommit)] }
