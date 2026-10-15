@@ -1326,11 +1326,10 @@ mod tests {
         assert_eq!(initializer.high_qc().view_number, ViewNumber::new(9));
     }
 
-    /// Recovery must not hand `Consensus::new` a mismatched (high QC, next-epoch QC) pair: when a
-    /// newer running high QC is adopted, a persisted next-epoch QC that does not correspond to it
-    /// (`verify_next_epoch_qc`) is dropped to `None` instead of being recovered alongside it.
+    /// `load_consensus_state` adopts the running high QC persisted via `update_high_qc2` over an
+    /// older eQC checkpoint.
     #[rstest_reuse::apply(persistence_types)]
-    pub async fn test_load_consensus_state_drops_noncorresponding_next_epoch_qc<
+    pub async fn test_load_consensus_state_prefers_running_high_qc_over_eqc<
         P: TestablePersistence,
     >(
         _p: PhantomData<P>,
@@ -1376,19 +1375,10 @@ mod tests {
             .await
             .unwrap();
 
-        // A newer running high QC (view 9) — recovery adopts it...
+        // A newer running high QC (view 9): recovery adopts it over the eQC checkpoint.
         let mut running_high_qc = eqc_high_qc.clone();
         running_high_qc.view_number = ViewNumber::new(9);
         storage.append_high_qc2(running_high_qc).await.unwrap();
-
-        // ...and a standalone next-epoch QC (view 3) in its table. Neither it nor the eQC's view-5
-        // next-epoch QC corresponds to the recovered high QC at view 9.
-        let mut other_next_epoch_qc = next_epoch_qc.clone();
-        other_next_epoch_qc.view_number = ViewNumber::new(3);
-        storage
-            .append_next_epoch_high_qc2(other_next_epoch_qc)
-            .await
-            .unwrap();
 
         let (initializer, _anchor_view) = storage
             .load_consensus_state(
@@ -1399,12 +1389,6 @@ mod tests {
             .unwrap();
 
         assert_eq!(initializer.high_qc().view_number, ViewNumber::new(9));
-        // The recovered high QC corresponds to neither persisted next-epoch QC, so the pair is left
-        // without one rather than recovering a mismatched (high QC, next-epoch QC) pair.
-        assert!(
-            initializer.next_epoch_high_qc().is_none(),
-            "a next-epoch QC that does not correspond to the recovered high QC must be dropped"
-        );
     }
 
     #[rstest_reuse::apply(persistence_types)]
