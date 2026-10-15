@@ -236,7 +236,7 @@ impl TestViewGenerator {
 
 async fn empty_payload() -> (TestBlockPayload, TestMetadata) {
     <TestBlockPayload as BlockPayload<TestTypes>>::from_transactions(
-        Vec::<TestTransaction>::new(),
+        &[],
         &TestValidatedState::default(),
         &TestInstanceState::default(),
     )
