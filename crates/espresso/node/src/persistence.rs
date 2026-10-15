@@ -2802,7 +2802,7 @@ mod tests {
     pub async fn test_scan_without_the_finalized_block_stores_nothing<P: TestablePersistence>(
         _p: PhantomData<P>,
     ) -> anyhow::Result<()> {
-        use espresso_types::v0_3::{ChainConfig, StakeTableError};
+        use espresso_types::v0_3::{ChainConfig, ProviderBlockError};
 
         let network_config = TestConfigBuilder::<1>::default().build();
         let st_addr = deploy_stake_table_with_one_registration(&network_config).await;
@@ -2836,8 +2836,8 @@ mod tests {
             .expect_err("a provider without the block must not be scanned");
         assert!(
             matches!(
-                err.downcast_ref::<StakeTableError>(),
-                Some(StakeTableError::L1ProviderBlockMismatch { actual: None, .. })
+                err.downcast_ref::<ProviderBlockError>(),
+                Some(ProviderBlockError::Mismatch { actual: None, .. })
             ),
             "{err:#}"
         );
@@ -2854,8 +2854,8 @@ mod tests {
             .expect_err("a provider on another branch must not be scanned");
         assert!(
             matches!(
-                err.downcast_ref::<StakeTableError>(),
-                Some(StakeTableError::L1ProviderBlockMismatch {
+                err.downcast_ref::<ProviderBlockError>(),
+                Some(ProviderBlockError::Mismatch {
                     actual: Some(_),
                     ..
                 })
@@ -2909,7 +2909,7 @@ mod tests {
     >(
         _p: PhantomData<P>,
     ) -> anyhow::Result<()> {
-        use espresso_types::v0_3::{ChainConfig, StakeTableError};
+        use espresso_types::v0_3::{ChainConfig, ProviderBlockError};
 
         let finalized = L1BlockInfo {
             number: 16,
@@ -2926,6 +2926,7 @@ mod tests {
             l1_retry_delay: Duration::from_millis(10),
             l1_consecutive_failure_tolerance: 1,
             l1_frequent_failure_tolerance: Duration::ZERO,
+            l1_events_max_retry_duration: Duration::from_secs(5),
             ..Default::default()
         }
         .connect(Vec::from([ahead_but_failing_logs, behind]))
@@ -2946,8 +2947,8 @@ mod tests {
             .expect_err("a scan finished on a provider without the block must not succeed");
         assert!(
             matches!(
-                err.downcast_ref::<StakeTableError>(),
-                Some(StakeTableError::L1ProviderBlockMismatch { actual: None, .. })
+                err.downcast_ref::<ProviderBlockError>(),
+                Some(ProviderBlockError::Mismatch { actual: None, .. })
             ),
             "{err:#}"
         );

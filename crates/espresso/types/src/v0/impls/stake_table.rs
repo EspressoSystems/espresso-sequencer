@@ -14,6 +14,7 @@ use alloy::{
     providers::Provider,
     rpc::types::Filter,
     sol_types::{SolEvent, SolEventInterface},
+    transports::TransportErrorKind,
 };
 use alloy::{
     primitives::{Address, U256, address},
@@ -83,7 +84,7 @@ use crate::traits::EventsPersistenceRead;
 #[cfg(feature = "node")]
 use crate::v0_1::{L1BlockInfo, L1Provider};
 #[cfg(feature = "node")]
-use crate::v0_3::{BLOCKS_PER_YEAR, INFLATION_RATE};
+use crate::v0_3::{BLOCKS_PER_YEAR, INFLATION_RATE, ProviderBlockError};
 use crate::{
     v0_1::{ChainId, DECAF_CHAIN_ID, MAINNET_CHAIN_ID},
     v0_3::{
@@ -1313,16 +1314,15 @@ impl Fetcher {
     /// Events are fetched in chunks and retries are implemented for failed requests.
     /// Only new events fetched from L1 are stored in persistence.
     ///
-    /// Fails with [`StakeTableError::L1ProviderBlockMismatch`] when the provider does not hold
-    /// `finalized`, because it is behind or on another branch. The call is worth retrying once
-    /// the provider catches up.
+    /// Fails with [`ProviderBlockError`] when the provider does not hold `finalized`, because it
+    /// is behind, on another branch, or unreachable. The call is worth retrying.
     #[cfg(feature = "node")]
     pub async fn fetch_and_store_stake_table_events(
         &self,
         contract: Address,
         finalized: L1BlockInfo,
     ) -> anyhow::Result<Vec<(EventKey, StakeTableEvent)>> {
-        let to_block = finalized.number();
+        let to_block = finalized.number;
         let (read_l1_offset, persistence_events) = {
             let persistence_lock = self.persistence.lock().await;
             persistence_lock.load_events(0, to_block).await?
@@ -1417,25 +1417,22 @@ impl Fetcher {
     async fn ensure_provider_has_block(
         &self,
         finalized: L1BlockInfo,
-    ) -> Result<(), StakeTableError> {
-        let provider = self.l1_client.provider.clone();
-        let actual = retry(
-            self.l1_client.options().l1_retry_delay,
-            self.l1_client.options().l1_events_max_retry_duration,
-            "L1 block hash fetch",
-            move || {
-                let provider = provider.clone();
-                Box::pin(async move {
-                    let block = provider
-                        .get_block_by_number(finalized.number.into())
-                        .await?;
-                    Ok::<_, alloy::transports::TransportError>(block.map(|block| block.header.hash))
-                })
-            },
+    ) -> Result<(), ProviderBlockError> {
+        let block = tokio::time::timeout(
+            self.l1_client.options().l1_request_timeout,
+            self.l1_client
+                .provider
+                .get_block_by_number(finalized.number.into()),
         )
-        .await;
+        .await
+        .unwrap_or_else(|_| Err(TransportErrorKind::custom_str("L1 request timed out")))
+        .map_err(|source| ProviderBlockError::Fetch {
+            number: finalized.number,
+            source,
+        })?;
+        let actual = block.map(|block| block.header.hash);
         if actual != Some(finalized.hash) {
-            return Err(StakeTableError::L1ProviderBlockMismatch {
+            return Err(ProviderBlockError::Mismatch {
                 number: finalized.number,
                 expected: finalized.hash,
                 actual,

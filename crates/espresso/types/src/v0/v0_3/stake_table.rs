@@ -521,11 +521,23 @@ pub enum StakeTableError {
     StakeTableEventDecodeError(#[from] alloy::sol_types::Error),
     #[error("Stake table events sorting error: {0}")]
     EventSortingError(#[from] EventSortingError),
+}
+
+/// The L1 provider cannot vouch for the block a stake table scan stops at. Retryable once the
+/// provider catches up.
+#[derive(Debug, Error)]
+pub enum ProviderBlockError {
     #[error("L1 provider block {number} has hash {actual:?}, expected {expected}")]
-    L1ProviderBlockMismatch {
+    Mismatch {
         number: u64,
         expected: B256,
         actual: Option<B256>,
+    },
+    #[error("Failed to fetch L1 block {number}: {source}")]
+    Fetch {
+        number: u64,
+        #[source]
+        source: RpcError<TransportErrorKind>,
     },
 }
 

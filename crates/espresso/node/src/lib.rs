@@ -35,7 +35,7 @@ use espresso_types::{
     traits::{EventConsumer, MembershipPersistence},
     v0::traits::SequencerPersistence,
     v0_1::{ChainId, DECAF_CHAIN_ID, MAINNET_CHAIN_ID},
-    v0_3::Fetcher,
+    v0_3::{Fetcher, ProviderBlockError},
 };
 
 pub(crate) const MAINNET_TELEMETRY_ENDPOINT: &str = "https://telemetry.main.net.espresso.network";
@@ -1050,10 +1050,22 @@ pub(crate) async fn prefetch_stake_table_events(
         to_block = finalized.number,
         "prefetching stake table events",
     );
-    let events = fetcher
-        .fetch_and_store_stake_table_events(addr, finalized)
-        .await
-        .context("prefetching stake table events")?;
+    let events = loop {
+        match fetcher
+            .fetch_and_store_stake_table_events(addr, finalized)
+            .await
+        {
+            Ok(events) => break events,
+            Err(err) if err.is::<ProviderBlockError>() => {
+                tracing::warn!(
+                    err = %format_args!("{err:#}"),
+                    "L1 provider cannot vouch for the finalized block yet, retrying stake table prefetch",
+                );
+                tokio::time::sleep(l1_client.options().l1_retry_delay).await;
+            },
+            Err(err) => return Err(err.context("prefetching stake table events")),
+        }
+    };
     tracing::info!(target: "announce", events = events.len(), "prefetched stake table events");
     Ok(())
 }
