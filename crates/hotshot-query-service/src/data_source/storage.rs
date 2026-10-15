@@ -61,9 +61,7 @@ use std::ops::{Range, RangeBounds};
 use alloy::primitives::map::HashMap;
 use async_trait::async_trait;
 use futures::future::Future;
-use hotshot_types::{
-    data::VidShare, simple_certificate::CertificatePair, traits::node_implementation::NodeType,
-};
+use hotshot_types::{data::VidShare, traits::node_implementation::NodeType};
 use jf_merkle_tree_compat::prelude::MerkleProof;
 use tagged_base64::TaggedBase64;
 
@@ -86,7 +84,6 @@ use crate::{
     },
     merklized_state::{MerklizedState, Snapshot},
     node::{SyncStatusQueryData, TimeWindowQueryData, WindowStart},
-    types::HeightIndexed,
 };
 
 /// Retry a fallible storage operation whenever it fails due to a transient serialization conflict.
@@ -282,18 +279,6 @@ where
         self.insert_leaf_range([leaf])
     }
 
-    fn insert_leaf_with_qc_chain(
-        &mut self,
-        leaf: &LeafQueryData<Types>,
-        qc_chain: Option<[CertificatePair<Types>; 2]>,
-    ) -> impl Send + Future<Output = anyhow::Result<()>> {
-        async move {
-            self.insert_leaf(leaf).await?;
-            self.insert_qc_chain(leaf.height(), qc_chain).await?;
-            Ok(())
-        }
-    }
-
     fn insert_block(
         &mut self,
         block: &BlockQueryData<Types>,
@@ -308,12 +293,6 @@ where
     ) -> impl Send + Future<Output = anyhow::Result<()>> {
         self.insert_vid_range([(common, share)])
     }
-
-    fn insert_qc_chain(
-        &mut self,
-        height: u64,
-        qc_chain: Option<[CertificatePair<Types>; 2]>,
-    ) -> impl Send + Future<Output = anyhow::Result<()>>;
 
     fn insert_cert2(
         &mut self,
@@ -365,8 +344,6 @@ where
         end: u64,
         limit: usize,
     ) -> QueryResult<TimeWindowQueryData<Header<Types>>>;
-
-    async fn latest_qc_chain(&mut self) -> QueryResult<Option<[CertificatePair<Types>; 2]>>;
 
     /// Load the earliest cert2 whose finalized block height is at or above `height`.
     ///

@@ -1,11 +1,8 @@
-use std::{default::Default, fmt, iter::Peekable, ops::Range, sync::Arc};
+use std::{borrow::Cow, default::Default, iter::Peekable, ops::Range, sync::Arc};
 
 use derive_more::Display;
 use hotshot_types::vid::advz::{LargeRangeProofType, SmallRangeProofType};
-use serde::{
-    Deserialize, Deserializer, Serialize,
-    de::{self, SeqAccess, Visitor},
-};
+use serde::{Deserialize, Deserializer, Serialize};
 use thiserror::Error;
 
 use crate::Transaction;
@@ -198,33 +195,7 @@ fn deserialize_shared_bytes<'de, D: Deserializer<'de>>(d: D) -> Result<Arc<[u8]>
     if d.is_human_readable() {
         base64_bytes::deserialize(d).map(Arc::from)
     } else {
-        d.deserialize_bytes(SharedBytesVisitor)
-    }
-}
-
-struct SharedBytesVisitor;
-
-impl<'de> Visitor<'de> for SharedBytesVisitor {
-    type Value = Arc<[u8]>;
-
-    fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.write_str("a byte array")
-    }
-
-    fn visit_bytes<E: de::Error>(self, v: &[u8]) -> Result<Self::Value, E> {
-        Ok(Arc::from(v))
-    }
-
-    fn visit_byte_buf<E: de::Error>(self, v: Vec<u8>) -> Result<Self::Value, E> {
-        Ok(Arc::from(v))
-    }
-
-    fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<Self::Value, A::Error> {
-        let mut bytes = Vec::with_capacity(seq.size_hint().unwrap_or(0));
-        while let Some(b) = seq.next_element()? {
-            bytes.push(b);
-        }
-        Ok(Arc::from(bytes))
+        serde_bytes::deserialize::<Cow<[u8]>, _>(d).map(Arc::from)
     }
 }
 
