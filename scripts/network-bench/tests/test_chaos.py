@@ -1517,7 +1517,7 @@ def test_a_partly_failed_mass_restart_retries_only_the_failed_nodes():
     topo = topo_of()
     state, issued = mass_issued(topo)
     reverted = ch.revert_failed(state, issued, {"node3"})
-    assert reverted["state"]["mass_retry"] == {"node3": ("mass-restart", 10.0)}
+    assert reverted["state"]["fault_retry"] == {"node3": ("mass-restart", 10.0)}
     assert reverted["state"]["nodes"]["node3"] == state["nodes"]["node3"]
     assert reverted["state"]["faults"] == 1
     assert len(reverted["actions"]) == 9 and len(reverted["events"]) == 9
@@ -1525,7 +1525,7 @@ def test_a_partly_failed_mass_restart_retries_only_the_failed_nodes():
     assert retry["actions"] == [{"node": "node3", "op": "restart"}]
     (fault,) = [e for e in retry["events"] if e["event"] == "fault"]
     assert (fault["node"], fault["ts"]) == ("node3", 10.0)
-    assert retry["state"]["mass_retry"] == {}
+    assert retry["state"]["fault_retry"] == {}
     assert retry["state"]["nodes"]["node3"]["health"] == "recovering"
 
 
@@ -1540,7 +1540,7 @@ def test_a_failed_retry_keeps_the_rejoined_events_of_the_same_tick():
     assert {e["event"] for e in out["events"]} == {"rejoined", "fault"}
     kept = ch.revert_failed(state, out, {"node3"})
     assert len(kept["events"]) == 9
-    assert kept["state"]["mass_retry"] == {"node3": ("mass-restart", 10.0)}
+    assert kept["state"]["fault_retry"] == {"node3": ("mass-restart", 10.0)}
     assert kept["state"]["nodes"]["node0"]["health"] == "catching_up"
 
 
@@ -1745,7 +1745,7 @@ def test_a_failed_mass_kill_member_is_killed_again_at_the_fault_time():
     state, issued = mass_kill_issued(topo=topo)
     failed = issued["actions"][0]["node"]
     reverted = ch.revert_failed(state, issued, {failed})
-    assert reverted["state"]["mass_retry"] == {failed: ("mass-kill", 10.0)}
+    assert reverted["state"]["fault_retry"] == {failed: ("mass-kill", 10.0)}
     assert reverted["state"]["nodes"][failed]["health"] == "up"
     retry = step(reverted["state"], observe(topo), 15.0, MASS_KILL, topo)
     assert retry["actions"] == [{"node": failed, "op": "kill"}]

@@ -6316,7 +6316,7 @@ class ChaosRunner:
                 for name, s in self.state["nodes"].items()
                 if s["health"] in ("down", "stuck")
             }
-            | self.state["mass_retry"].keys()
+            | self.state["fault_retry"].keys()
         )
 
     def stuck(self) -> list[str]:
@@ -6325,7 +6325,7 @@ class ChaosRunner:
     def drain(self, interrupts: Interrupts) -> None:
         """Ticks until every fault recovered or got stuck."""
         while self.state is not None and (
-            ch.open_faults(self.state) or self.state["mass_retry"]
+            ch.open_faults(self.state) or self.state["fault_retry"]
         ):
             interrupts.sleep(AGENT_POLL_S)
             self._advance(self.clock.time() + self.offset)

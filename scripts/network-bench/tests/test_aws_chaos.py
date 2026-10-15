@@ -595,7 +595,7 @@ def test_expected_down_is_the_killed_stuck_and_unrestarted_nodes(isolated: Path)
     )
     state = with_health(state, node1="recovering", node2="down", node3="stuck")
     state = with_health(state, node4="catching_up")
-    ctrl.state = {**state, "mass_retry": {"node5": ("mass-restart", 1.0)}}
+    ctrl.state = {**state, "fault_retry": {"node5": ("mass-restart", 1.0)}}
     assert ctrl.expected_down() == frozenset({"node2", "node3", "node5"})
 
 
@@ -712,8 +712,8 @@ def test_a_partly_failed_mass_restart_records_started_and_retries(isolated: Path
     events = ch.read_events(isolated)
     assert [e["event"] for e in events].count("fault") == 6
     assert [e["event"] for e in events].count("started") == 6
-    assert len(ctrl.state["mass_retry"]) == 1
-    (retry,) = ctrl.state["mass_retry"]
+    assert len(ctrl.state["fault_retry"]) == 1
+    (retry,) = ctrl.state["fault_retry"]
     assert retry in ctrl.expected_down()
     clock.sleep(awsb.AGENT_POLL_S)
     ctrl.tick(LOADING)
@@ -722,7 +722,7 @@ def test_a_partly_failed_mass_restart_records_started_and_retries(isolated: Path
         ("fault", retry),
         ("started", retry),
     ]
-    assert ctrl.state["mass_retry"] == {}
+    assert ctrl.state["fault_retry"] == {}
 
 
 # TEST:timeout-event-invalid-ok

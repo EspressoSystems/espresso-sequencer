@@ -186,7 +186,7 @@ class ChaosState(TypedDict):
     # network decided anew once the tip exceeds it.
     mass_height: int | None
     # Nodes whose mass fault ssh failed -> (kind, time of that fault), issued again by the next tick.
-    mass_retry: dict[str, tuple[ChaosKind, float]]
+    fault_retry: dict[str, tuple[ChaosKind, float]]
     # Node -> stake amount; faulty stake is bounded by a third of the total.
     stake: dict[str, int]
 
@@ -253,7 +253,7 @@ def chaos_init(
         next_fault_at=(first + stop_at) / 2 if mass_only(cfg) else first,
         stop_at=stop_at,
         mass_height=None,
-        mass_retry={},
+        fault_retry={},
         stake=dict(stake),
     )
 
@@ -390,10 +390,10 @@ def chaos_step(
         and next_fault_at <= now < state["stop_at"]
         and not (mass_only(cfg) and faults)
         and not _mass_open(nodes)
-        and not state["mass_retry"]
+        and not state["fault_retry"]
     )
-    if state["mass_retry"]:
-        for name, (retry_kind, at) in state["mass_retry"].items():
+    if state["fault_retry"]:
+        for name, (retry_kind, at) in state["fault_retry"].items():
             _issue(nodes[name], retry_kind, at)
             actions.append({"node": name, "op": _op(retry_kind)})
             emit("fault", name, ts=at)
@@ -449,7 +449,7 @@ def chaos_step(
             next_fault_at=next_fault_at,
             stop_at=state["stop_at"],
             mass_height=mass_height,
-            mass_retry={},
+            fault_retry={},
             stake=state["stake"],
         ),
         actions=actions,
@@ -488,7 +488,7 @@ def revert_failed(
             next_fault_at=schedule["next_fault_at"],
             stop_at=state["stop_at"],
             mass_height=state["mass_height"],
-            mass_retry={name: m for name, m in mass_at.items() if name in failed},
+            fault_retry={name: m for name, m in mass_at.items() if name in failed},
             stake=state["stake"],
         ),
         actions=[a for a in step["actions"] if a["node"] not in failed],
