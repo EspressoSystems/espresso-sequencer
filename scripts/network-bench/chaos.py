@@ -160,9 +160,9 @@ OPEN: tuple[NodeHealth, ...] = ("down", "recovering", "catching_up")
 
 class NodeState(TypedDict):
     """`since` is the fault time: timeouts measure from it. `started` is the fault time, the
-    start of a killed node or the end of a mass restart: recoveries measure from it. `up_at` is the first tick the node
-    answered after it. `streak_at` is the first tick of the passing streak. `last_missing` is
-    the last `Missing` answered since the fault."""
+    start of a killed node or the end of a mass restart: recoveries measure from it. `up_at`
+    is the first tick the node answered after it. `streak_at` is the first tick of the passing
+    streak. `last_missing` is the last `Missing` answered since the fault."""
 
     health: NodeHealth
     kind: ChaosKind | None
