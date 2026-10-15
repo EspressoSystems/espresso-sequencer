@@ -3655,7 +3655,10 @@ mod test {
         state_signature_test_helper, status_test_helper, submit_test_helper, wait_for_committee,
     };
     use test_utils::reserve_tcp_port;
-    use tokio::time::sleep;
+    use tokio::{
+        net::{TcpListener, TcpStream},
+        time::sleep,
+    };
     use vbs::version::StaticVersion;
     use versions::{
         DRB_AND_HEADER_UPGRADE_VERSION, EPOCH_VERSION, LARGE_BLOCK_VERSION, NEW_PROTOCOL_VERSION,
@@ -7486,14 +7489,15 @@ mod test {
         /// The marker is stamped while the loop waits on the local stream for a leaf that never
         /// comes: the loop has to notice and switch to peers. The loop is put well behind first,
         /// as a long outage would, since a gap above the consensus anchor is re-decided on
-        /// restart and cannot be kept open.
+        /// restart and cannot be kept open, and the peers stay unreachable until the stamp, since
+        /// the fetcher would otherwise fill the gap.
         WhileWaiting,
     }
 
     /// The availability layer never fetches a leaf at or below the data pruned height, so the
     /// state loop has to get the leaves it still needs from peers, without storing them, and
-    /// carry on from the local stream once it is past the pruned height. Peers' leaf chains are
-    /// verified against per-epoch stake tables, so the network runs with epochs.
+    /// carry on from the local stream once it is past the pruned height. The leaves come through
+    /// the light client, verified against per-epoch stake tables, so the network runs with epochs.
     #[rstest]
     #[case::before_restart(DataPruned::BeforeRestart)]
     #[case::while_waiting(DataPruned::WhileWaiting)]
@@ -7657,9 +7661,11 @@ mod test {
             },
             DataPruned::WhileWaiting => {
                 // Put the loop behind its own storage and take the leaves above its new head out
-                // of local reach: below the consensus anchor they are never re-decided, and
-                // without availability peers they are never fetched. The loop then waits on the
-                // stream for the leaf above its head while consensus moves the tip on.
+                // of local reach. Below the consensus anchor they are never re-decided, and with
+                // the peers unreachable they are never fetched. The loop then waits on the stream
+                // for the leaf above its head while consensus moves the tip on.
+                let proxy_port =
+                    reserve_tcp_port().expect("OS should have ephemeral ports available");
                 {
                     let mut tx = db.write().await?;
                     UpdateStateData::<SeqTypes, BlockMerkleTree, { BlockMerkleTree::ARITY }>::set_last_state_height(
@@ -7670,7 +7676,8 @@ mod test {
                     tx.commit().await?;
                 }
                 delete_data_between(&db, BEHIND, head_at_shutdown).await?;
-                _restarted = start_query_node(vec![]).await;
+                _restarted =
+                    start_query_node(vec![format!("http://localhost:{proxy_port}").parse()?]).await;
                 let deadline = Instant::now() + Duration::from_secs(120);
                 loop {
                     if local_block_height(&db).await? > local_tip + GAP {
@@ -7688,10 +7695,12 @@ mod test {
                     head == BEHIND,
                     "the loop moved to {head} without the leaf above {BEHIND}"
                 );
-                // Now stamp past the height the loop is waiting for. The old head is well below
-                // the tip, as a real run leaves it.
+                // Now stamp past the height the loop is waiting for, with the old head well below
+                // the tip as a real run leaves it, and let the peers through. The fetcher no
+                // longer asks them for heights at or below the stamp, so the loop has to.
                 let pruned = head_at_shutdown;
                 prune_data_to(&db, pruned).await?;
+                tokio::spawn(forward_tcp(proxy_port, api_port));
                 pruned
             },
         };
@@ -7724,6 +7733,19 @@ mod test {
             "{stored} leaves at or below the data pruned height {pruned} were stored"
         );
         Ok(())
+    }
+
+    /// Forward connections on `port` to `target`, so a peer's URL is dead until this runs and
+    /// reachable from then on.
+    async fn forward_tcp(port: u16, target: u16) {
+        let listener = TcpListener::bind(("127.0.0.1", port)).await.unwrap();
+        loop {
+            let (mut inbound, _) = listener.accept().await.unwrap();
+            tokio::spawn(async move {
+                let mut outbound = TcpStream::connect(("127.0.0.1", target)).await.unwrap();
+                _ = tokio::io::copy_bidirectional(&mut inbound, &mut outbound).await;
+            });
+        }
     }
 
     /// The number of blocks in the node's own availability storage.
