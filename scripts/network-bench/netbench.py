@@ -1969,7 +1969,7 @@ async def submit_tx(load: Load, tx: Tx) -> None:
     request = functools.partial(load.bodies.request, tx.id, lo + tx.id % (hi - lo + 1))
     status = await load.client.call(post_tx, load.state, tx, load.urls, request)
     # A lost response stays pending: the scan or `tx_timeout_s` resolves it.
-    if status is not None and status != 200:
+    if status is not None and status not in (200, LOST):
         load.state.failed(tx)
 
 
@@ -1984,7 +1984,7 @@ def heartbeat(
     A counter keeps them distinct, so mempool deduplication keeps every one; without the bench
     marker the scans skip them. A slow submit drops the beats it delayed instead of bursting
     them. A beat goes to the next url when its own fails. Returns the number of beats no url
-    took; the first is logged."""
+    took (a lost response is not one); the first is logged."""
     clock = pool.clock
     interval = 1 / rate_tx_s
     n = failed = 0
@@ -1993,7 +1993,7 @@ def heartbeat(
         payload = base64.b64encode(n.to_bytes(8, "big"))
         body = b'{"namespace":%d,"payload":"%s"}' % (namespace, payload)
         status, _, reply = post_failover(pool, urls, n % len(urls), body)
-        if status != 200:
+        if status not in (200, LOST):
             if not failed:
                 log.warning("heartbeat submit failed: %d %s", status, reply[:200])
             failed += 1

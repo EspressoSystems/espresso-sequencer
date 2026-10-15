@@ -2285,6 +2285,13 @@ def test_a_heartbeat_no_url_takes_counts_as_failed():
     assert failed == 2
 
 
+def test_a_heartbeat_with_a_lost_response_is_no_error():
+    stop = threading.Event()
+    pool = BeatPool(4, stop, lost=True)
+    failed = netbench.heartbeat(cast("Any", pool), ["http://a"], 7, 50.0, stop)
+    assert failed == 0
+
+
 def test_a_payload_comes_from_the_next_query_node_on_404_or_refusal():
     clock = fakes.FakeClock()
     cluster = fakes.FakeCluster(clock, ["node0", "node1", "node2"], {"node0", "node1"})
