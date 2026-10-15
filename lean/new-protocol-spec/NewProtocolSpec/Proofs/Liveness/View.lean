@@ -1932,7 +1932,7 @@ theorem cert2_everywhere {δ : Nat} (hp : Prompt N δ) (hex : ∃ T, ReachedBy N
 
 omit hw in
 /--
-If view `w` has an honest leader of `E`, then by `8Δ + 2δ` after it is first reached
+If view `w` has an honest leader of `E`, then by `8Δ + 3δ` after it is first reached
 every honest member of `E` can lock on one certificate at `w` or later.
 -/
 theorem lock_spreads {δ : Nat} (hp : Prompt N δ) (hw3 : cfg.anchorView.toNat + 3 ≤ w.toNat) (hex : ∃ T, ReachedBy N T w)

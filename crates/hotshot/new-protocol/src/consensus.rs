@@ -278,7 +278,7 @@ pub struct Consensus<T: NodeType> {
     pending_vote2: BTreeMap<ViewEpoch, PendingVote2<T>>,
     pending_proposal: BTreeMap<ViewEpoch, SignedProposal<T, Proposal<T>>>,
     pending_revote: BTreeMap<ViewEpoch, ReVoteMessage<T, Validated>>,
-    pending_timeout_vote: BTreeMap<ViewNumber, PendingTimeoutVote<T>>,
+    pending_timeout_vote: BTreeMap<ViewEpoch, PendingTimeoutVote<T>>,
 
     /// The highest view this node has sent, or may have sent before a
     /// restart, a lock-carrying timeout vote for.
@@ -1309,7 +1309,8 @@ impl<T: NodeType> Consensus<T> {
                 self.pending_vote2 = self.pending_vote2.split_off(&ViewEpoch::start(view));
                 self.pending_proposal = self.pending_proposal.split_off(&ViewEpoch::start(view));
                 self.pending_revote = self.pending_revote.split_off(&ViewEpoch::start(view));
-                self.pending_timeout_vote = self.pending_timeout_vote.split_off(&view);
+                self.pending_timeout_vote =
+                    self.pending_timeout_vote.split_off(&ViewEpoch::start(view));
                 self.revotes = self.revotes.split_off(&keep_from);
                 self.revote_commits = self.revote_commits.split_off(&keep_from);
                 self.revote_fetches = self
@@ -2289,7 +2290,8 @@ impl<T: NodeType> Consensus<T> {
             self.send_timeout_vote(vote, evidence, outbox);
         } else {
             self.request_action(view, Some(epoch), ActionKind::Timeout, outbox);
-            self.pending_timeout_vote.insert(view, (vote, evidence));
+            self.pending_timeout_vote
+                .insert(ViewEpoch(view, epoch), (vote, evidence));
         }
     }
 
@@ -2297,8 +2299,15 @@ impl<T: NodeType> Consensus<T> {
         if !self.stored_actions.contains(&(view, ActionKind::Timeout)) {
             return;
         }
-        if let Some((vote, evidence)) = self.pending_timeout_vote.remove(&view) {
-            self.send_timeout_vote(vote, evidence, outbox);
+        let pending: Vec<ViewEpoch> = self
+            .pending_timeout_vote
+            .range(ViewEpoch::at_view(view))
+            .map(|(key, _)| *key)
+            .collect();
+        for key in pending {
+            if let Some((vote, evidence)) = self.pending_timeout_vote.remove(&key) {
+                self.send_timeout_vote(vote, evidence, outbox);
+            }
         }
     }
 

@@ -46,7 +46,7 @@ it has not delivered yet, as far back as it holds them. An ancestor it does not 
 {ref "valid-decides"}[Valid decides] says when a skipped block is delivered later.
 
 A view that produces no {name NewProtocol.Cert1}`Cert1` in time is given up. Each node's timer fires, and
-the node sends a timeout vote. The vote names a {name NewProtocol.Cert1}`Cert1` the node holds, no
+the node sends a timeout vote. The vote names a {name NewProtocol.Cert1}`Cert1` the node held at the timer, no
 earlier than any block it voted2 on up to the vote's view, called the vote's lock. A node that sees
 timeout votes for a view from enough nodes that one of them is honest (the
 _one-honest indication_) times the view out too. A quorum of timeout votes is a

@@ -100,14 +100,21 @@ def vote1LeaderBy (post : History) (v : Vote1) : Bool :=
       || (receivedRevotes post).any fun x => decide (leader x.2.cert.data.epoch x.2.view = some x.1
         ∧ Vote1Again v x.2 ∧ NotBehindB cfg post x.2.cert.data.epoch))
 
+/-- Why a timeout vote sent in step `n` is not justified, given that `timeoutJustifiedBy` failed. -/
+def timeoutReason (n : Nat) (st : Step) : String :=
+  match (timeoutVotesOf st).find? (!timeoutJustifiedBy cfg h node n ·) with
+  | some tv => s!"timeoutJustified: a vote for view {tv.view.toNat} naming epoch \
+      {tv.data.epoch.toNat}, with no timer for that view at which the node was in that epoch \
+      and held the lock"
+  | none => "timeoutJustified"
+
 /-- The first rule step `n` breaks, and why. -/
 def stepFault (n : Nat) (st : Step) : Option String :=
-  let pre := h.take n
   if !(vote1sOf st).all (vote1LeaderBy cfg leader (h.take (n + 1))) then
     some s!"vote1Leader: a vote1 not on a proposal or re-vote request its view's leader sent, \
       or for a view not reached or an epoch left"
   else if !(timeoutVotesOf st).all (timeoutJustifiedBy cfg h node n) then
-    some s!"timeoutJustified: view {(viewOf cfg pre).toNat}, epoch {(epochOfHistory cfg pre).toNat}"
+    some (timeoutReason cfg h node n st)
   else
     match (proposalsOf st).findSome? fun p =>
         (proposalFault cfg node leader (h.take (n + 1)) p).map (s!"proposeJustified: {·}") with

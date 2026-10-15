@@ -146,8 +146,8 @@ structure SafeHistory (honestIn : EpochNumber → Prop) (h : History) : Prop whe
   than any view up to its own that its honest signers voted2 in before timing out.
   The lock is one the node held at the timer (`ProtocolHistory.timeoutJustified`),
   so between the timer and the vote it draws, the node does not vote2 at the
-  vote's view or an earlier one. A vote2 at a later view may come in between, and
-  the lock need not cover it.
+  vote's view or an earlier one unless the lock covers it. A vote2 at a later view
+  may come in between, and the lock need not cover it.
   -/
   timeoutLock : ∀ n vote, h.SentAt n (.timeoutVote vote) →
     honestIn vote.data.epoch → ∀ v2 : Vote2, (h.upTo n).Sent (.vote2 v2) → honestIn v2.data.epoch →
