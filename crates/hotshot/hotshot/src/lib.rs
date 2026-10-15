@@ -1081,11 +1081,18 @@ impl<TYPES: NodeType> HotShotInitializer<TYPES> {
     pub fn state_cert(&self) -> Option<&LightClientStateUpdateCertificateV2<TYPES>> {
         self.state_cert.as_ref()
     }
+
+    /// The epoch roots and DRB results persistence holds.
+    pub fn start_epoch_info(&self) -> &[InitializerEpochInfo<TYPES>] {
+        &self.start_epoch_info
+    }
 }
 
-async fn load_start_epoch_info<TYPES: NodeType>(
+/// Seed `coordinator` with the first epoch, and with the epoch roots and DRB results in
+/// `start_epoch_info`.
+pub async fn load_start_epoch_info<TYPES: NodeType>(
     coordinator: &EpochMembershipCoordinator<TYPES>,
-    start_epoch_info: &Vec<InitializerEpochInfo<TYPES>>,
+    start_epoch_info: &[InitializerEpochInfo<TYPES>],
     epoch_height: u64,
     epoch_start_block: u64,
 ) {
@@ -1096,7 +1103,7 @@ async fn load_start_epoch_info<TYPES: NodeType>(
     tracing::warn!("Calling set_first_epoch for epoch {first_epoch_number}");
     membership.set_first_epoch(first_epoch_number, INITIAL_DRB_RESULT);
 
-    let mut sorted_epoch_info = start_epoch_info.clone();
+    let mut sorted_epoch_info = start_epoch_info.to_vec();
     sorted_epoch_info.sort_by_key(|info| info.epoch);
     for epoch_info in sorted_epoch_info {
         if let Some(block_header) = &epoch_info.block_header {

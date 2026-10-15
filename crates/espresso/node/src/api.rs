@@ -1835,7 +1835,7 @@ pub mod test_helpers {
         network,
         persistence::no_storage,
         testing::{
-            TestConfig, TestConfigBuilder, decided_leaves, deploy_stake_table, run_test_builder,
+            TestConfig, TestConfigBuilder, decided_leaves, deploy_stake_table,
             wait_for_decide_on_handle, wait_for_epochs,
         },
     };
@@ -2138,14 +2138,6 @@ pub mod test_helpers {
             if upgrade.base >= NEW_PROTOCOL_VERSION && !cfg.has_stake_table() {
                 cfg.deploy_default_stake_table().await;
             }
-            let mut builder_tasks = Vec::new();
-
-            let (task, builder_url) =
-                run_test_builder::<{ NUM_NODES }>(cfg.network_config.builder_port()).await;
-            builder_tasks.push(task);
-            cfg.network_config
-                .set_builder_urls(vec1::vec1![builder_url.clone()]);
-
             // add default storage if none is provided as query module is now required
             let mut opt = cfg.api_config.clone();
             let temp_dir = if opt.storage_fs.is_none() && opt.storage_sql.is_none() {
@@ -2229,20 +2221,6 @@ pub mod test_helpers {
                     }),
             )
             .await;
-
-            let handle_0 = &nodes[0];
-
-            // Hook the builder(s) up to the event stream from the first node
-            for builder_task in builder_tasks {
-                builder_task.start(Box::new(
-                    handle_0
-                        .consensus_handle()
-                        .legacy_consensus()
-                        .read()
-                        .await
-                        .event_stream(),
-                ));
-            }
 
             for ctx in &nodes {
                 ctx.start_consensus().await;
@@ -4423,6 +4401,112 @@ mod test {
         drop(network);
     }
 
+    /// A coordinator that dies is not papered over: `join` returns so the node exits, and the
+    /// readers fail instead of serving the resting state as if the chain had stopped.
+    #[test_log::test(tokio::test(flavor = "multi_thread"))]
+    async fn test_dead_coordinator_is_visible() {
+        let port = reserve_tcp_port().expect("OS should have ephemeral ports available");
+        let config = TestNetworkConfigBuilder::default()
+            .api_config(Options::with_port(port))
+            .network_config(TestConfigBuilder::default().build())
+            .build();
+        let mut network = TestNetwork::new(config, TEST_UPGRADE).await;
+        let node = &mut network.peers[0];
+        while node.decided_leaf().await.height() < 1 {
+            sleep(Duration::from_millis(100)).await;
+        }
+
+        let handle = node.consensus_handle();
+        handle.kill_coordinator();
+
+        timeout(Duration::from_secs(10), node.join())
+            .await
+            .expect("join did not return after the coordinator died");
+        let read = tokio::spawn(async move { handle.decided_leaf().await }).await;
+        assert!(
+            read.is_err_and(|err| err.is_panic()),
+            "a dead coordinator was served from the resting state"
+        );
+    }
+
+    /// After shutdown the readers serve the coordinator's last decide, not the anchor the node
+    /// started from, and the leaf and state they serve belong to the same block.
+    #[test_log::test(tokio::test(flavor = "multi_thread"))]
+    async fn test_shut_down_keeps_last_decided_leaf_and_state() {
+        const HEIGHT: u64 = 5;
+        let port = reserve_tcp_port().expect("OS should have ephemeral ports available");
+        let config = TestNetworkConfigBuilder::default()
+            .api_config(Options::with_port(port))
+            .network_config(TestConfigBuilder::default().build())
+            .build();
+        let network = TestNetwork::new(config, TEST_UPGRADE).await;
+        let node = &network.peers[0];
+        while node.decided_leaf().await.height() < HEIGHT {
+            sleep(Duration::from_millis(100)).await;
+        }
+
+        node.shutdown_consensus().await;
+
+        let leaf = node.decided_leaf().await;
+        let state = node.decided_state().await.expect("state after shutdown");
+        assert!(
+            leaf.height() >= HEIGHT,
+            "anchor served instead of the last decide"
+        );
+        // The state at height `h` holds the commitments of the `h` headers before it.
+        assert_eq!(
+            state.block_merkle_tree.num_leaves(),
+            leaf.height(),
+            "state does not belong to the resting leaf"
+        );
+    }
+
+    /// A node shut down before it ever started consensus stays stopped: a later read serves the
+    /// anchor instead of lazily starting the coordinator after shutdown.
+    #[test_log::test(tokio::test(flavor = "multi_thread"))]
+    async fn test_shut_down_before_start_keeps_consensus_stopped() {
+        const NUM_NODES: usize = 3;
+        const LATE: usize = NUM_NODES - 1;
+        let port = reserve_tcp_port().expect("OS should have ephemeral ports available");
+        let config = TestNetworkConfigBuilder::<NUM_NODES, _, _>::with_num_nodes()
+            .api_config(Options::with_port(port))
+            .network_config(TestConfigBuilder::default().build())
+            .deferred_start(&[LATE])
+            .build();
+        let network = TestNetwork::new(config, TEST_UPGRADE).await;
+
+        let late = network
+            .cfg
+            .init_node(
+                LATE,
+                network.genesis_state(LATE),
+                no_storage::Options,
+                Some(NullStateCatchup::default()),
+                None,
+                &NoMetrics,
+                STAKE_TABLE_CAPACITY_FOR_TEST,
+                NullEventConsumer,
+                TEST_UPGRADE,
+                network.cfg.upgrades(),
+            )
+            .await;
+        let handle = late.consensus_handle();
+
+        // No read before the shutdown: a read would lazily start consensus.
+        late.shutdown_consensus().await;
+
+        assert_eq!(late.decided_leaf().await.height(), 0, "not the anchor");
+        assert!(
+            handle.client_api().await.is_none(),
+            "a read started consensus after shutdown"
+        );
+        handle.start_consensus().await;
+        assert!(
+            handle.client_api().await.is_none(),
+            "consensus restarted after shutdown"
+        );
+    }
+
     #[test_log::test(tokio::test(flavor = "multi_thread"))]
     pub(crate) async fn test_restart() {
         const NUM_NODES: usize = 5;
@@ -5444,80 +5528,6 @@ mod test {
                     .expect("decided state resolves its chain config"),
                 upgrade_chain_config,
             );
-        }
-
-        Ok(())
-    }
-
-    /// Run entirely without the legacy consensus stack: with base version
-    /// `NEW_PROTOCOL_VERSION` it is torn down at startup, and the explicit
-    /// mid-run `shut_down_legacy` calls below must be harmless to repeat.
-    /// The network has to keep deciding across epoch boundaries: DRB
-    /// computations on the shared membership coordinator must survive the
-    /// teardown.
-    #[test_log::test(tokio::test(flavor = "multi_thread"))]
-    async fn test_new_protocol_survives_legacy_shutdown() -> anyhow::Result<()> {
-        const EPOCH_HEIGHT: u64 = 20;
-        const NUM_NODES: usize = 5;
-        const SHUTDOWN_HEIGHT: u64 = 10;
-        const TARGET_BLOCK_HEIGHT: u64 = 50;
-
-        let network_config = TestConfigBuilder::default()
-            .epoch_height(EPOCH_HEIGHT)
-            .epoch_start_block(0)
-            .build();
-
-        let api_port = reserve_tcp_port().expect("No ports free for query service");
-
-        let (storage, persistence) = node_storage::<SqlDataSource, NUM_NODES>().await;
-
-        let config = TestNetworkConfigBuilder::<NUM_NODES, _, _>::with_num_nodes()
-            .api_config(SqlDataSource::options(
-                &storage[0],
-                Options::with_port(api_port),
-            ))
-            .network_config(network_config)
-            .persistences(persistence)
-            .build();
-
-        let network = TestNetwork::new(config, TEST_UPGRADE).await;
-
-        let client: Client<ClientErr, SequencerApiVersion> =
-            Client::new(format!("http://localhost:{api_port}").parse().unwrap());
-        client.connect(Some(Duration::from_secs(30))).await;
-
-        let mut leaves = client
-            .socket("availability/stream/leaves/0")
-            .subscribe::<LeafQueryData<SeqTypes>>()
-            .await
-            .expect("subscribe to leaf stream");
-
-        // Let the new protocol decide a few blocks first.
-        let mut height = 0;
-        while height < SHUTDOWN_HEIGHT {
-            let leaf = leaves
-                .next()
-                .await
-                .expect("leaf stream ended early")
-                .expect("leaf stream yielded an error");
-            height = leaf.header().height();
-        }
-
-        // Tear down the legacy stack on every node.
-        network.server.consensus_handle().shut_down_legacy().await;
-        for peer in &network.peers {
-            peer.consensus_handle().shut_down_legacy().await;
-        }
-
-        // The chain must keep growing across the epoch boundaries at 20 and
-        // 40 purely on the new protocol.
-        while height < TARGET_BLOCK_HEIGHT {
-            let leaf = leaves
-                .next()
-                .await
-                .expect("leaf stream ended early")
-                .expect("leaf stream yielded an error");
-            height = leaf.header().height();
         }
 
         Ok(())
@@ -7246,8 +7256,6 @@ mod test {
             }
         }
 
-        // Read before shutting consensus down: once the coordinator stops, these fall back to the
-        // legacy handle, which never ran at 0.6.
         let decided_leaf = node_0.decided_leaf().await;
         let state = node_0.decided_state().await.unwrap();
         node_0.shutdown_consensus().await;
@@ -7885,8 +7893,6 @@ mod test {
         // Wait until at least 3 epochs have passed
         wait_for_epochs(&mut events, EPOCH_HEIGHT, 3).await;
 
-        // Read before shutting consensus down: once the coordinator stops, the decided state falls
-        // back to the legacy handle, which never ran at 0.6.
         let instance = node_0.node_state();
         // A node can decide a leaf before it has validated that leaf's state itself.
         let state = timeout(Duration::from_secs(60), async {
@@ -7932,10 +7938,22 @@ mod test {
         tracing::warn!("shutting down node 0");
         node_0.shutdown_consensus().await;
 
-        // The oldest stored proposal. It may already be decided, since pruning lags the decide.
-        let (to_view, proposal) = persistence
-            .load_quorum_proposals()
-            .await?
+        // The decide processor keeps pruning the proposals of decides that landed before the
+        // shutdown, so wait for the stored set to settle before choosing one.
+        let proposals = timeout(Duration::from_secs(30), async {
+            let mut proposals = persistence.load_quorum_proposals().await?;
+            loop {
+                sleep(Duration::from_millis(500)).await;
+                let now = persistence.load_quorum_proposals().await?;
+                if now.keys().eq(proposals.keys()) {
+                    break anyhow::Ok(now);
+                }
+                proposals = now;
+            }
+        })
+        .await
+        .context("stored proposals did not settle after the shutdown")??;
+        let (to_view, proposal) = proposals
             .into_iter()
             .next()
             .expect("an undecided proposal survives the shutdown");

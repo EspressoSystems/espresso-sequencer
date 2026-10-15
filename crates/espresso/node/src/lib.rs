@@ -94,10 +94,9 @@ pub use options::Options;
 use proposal_fetcher::ProposalFetcherConfig;
 pub use run::main;
 use serde::{Deserialize, Serialize};
-use tokio::select;
 use tracing::info;
 use url::Url;
-use vbs::version::{StaticVersion, Version};
+use vbs::version::StaticVersion;
 
 use crate::request_response::data_source::Storage as RequestResponseStorage;
 
@@ -499,7 +498,7 @@ where
                 "waiting for other nodes to connect, DO NOT RESTART until fully connected"
             );
 
-            let registration = orchestrator_registration(&validator_config, genesis.base_version)?;
+            let registration = orchestrator_registration(&validator_config)?;
 
             let bootstrap_advertise_addr = libp2p_announce_addresses.first().cloned().context(
                 "ESPRESSO_NODE_LIBP2P_ADVERTISE_ADDRESS must be set when bootstrapping a libp2p \
@@ -678,21 +677,6 @@ where
 
         info!("Libp2p network initialized");
 
-        // From `NEW_PROTOCOL_VERSION` on, all consensus traffic runs on
-        // cliquenet and the legacy stack is torn down at startup, so don't
-        // hold up boot waiting for legacy connectivity.
-        if genesis.base_version < versions::NEW_PROTOCOL_VERSION {
-            tracing::warn!("Waiting for at least one connection to be initialized");
-            select! {
-                _ = cdn_network.wait_for_ready() => {
-                    tracing::warn!("CDN connection initialized");
-                },
-                _ = p2p_network.wait_for_ready() => {
-                    tracing::warn!("P2P connection initialized");
-                },
-            };
-        }
-
         // Combine the CDN and P2P networks
         CombinedNetworks::new(cdn_network, p2p_network, Some(Duration::from_secs(1)))
     };
@@ -790,27 +774,16 @@ fn local_validator_config(
 
 /// The config this node registers with the orchestrator. Its `public_config()` is also what
 /// `/ready` posts, since the orchestrator equality-checks that against `known_nodes_with_stake`.
-///
-/// From `NEW_PROTOCOL_VERSION` on it carries the node's cliquenet `connect_info` so peers can
-/// dial us from the stake table, which requires an advertise address to be configured. Before
-/// that version the stake table has no `connect_info`, so it is left out even though the node
-/// already runs cliquenet with the identity in `validator_config`.
+/// It carries the node's cliquenet `connect_info` so peers can dial us from the stake table, which
+/// requires an advertise address to be configured.
 fn orchestrator_registration(
     validator_config: &ValidatorConfig<SeqTypes>,
-    base_version: Version,
 ) -> anyhow::Result<ValidatorConfig<SeqTypes>> {
-    let p2p_addr = if base_version >= versions::NEW_PROTOCOL_VERSION {
-        Some(validator_config.p2p_addr.clone().context(
-            "ESPRESSO_NODE_CLIQUENET_ADVERTISE_ADDRESS must be set when bootstrapping a Cliquenet \
-             network from the orchestrator",
-        )?)
-    } else {
-        None
-    };
-    Ok(ValidatorConfig {
-        p2p_addr,
-        ..validator_config.clone()
-    })
+    validator_config.p2p_addr.as_ref().context(
+        "ESPRESSO_NODE_CLIQUENET_ADVERTISE_ADDRESS must be set when bootstrapping a Cliquenet \
+         network from the orchestrator",
+    )?;
+    Ok(validator_config.clone())
 }
 
 pub(crate) async fn load_or_fetch_network_config<P: SequencerPersistence>(
@@ -1173,9 +1146,6 @@ pub mod testing {
         types::EventType,
     };
     use hotshot_contract_adapter::stake_table::StakeTableContractVersion;
-    use hotshot_testing::block_builder::{
-        BuilderTask, SimpleBuilderImplementation, TestBuilderImplementation,
-    };
     use hotshot_types::{
         HotShotConfig, PeerConfig, PeerConnectInfo,
         data::EpochNumber,
@@ -1212,33 +1182,6 @@ pub mod testing {
         >,
     >;
 
-    pub async fn run_test_builder<const NUM_NODES: usize>(
-        port: Option<u16>,
-    ) -> (Box<dyn BuilderTask<SeqTypes>>, Url) {
-        let port = match port {
-            Some(p) => p,
-            None => reserve_tcp_port().expect("OS should have ephemeral ports available"),
-        };
-
-        // This should never fail.
-        let url: Url = format!("http://localhost:{port}")
-            .parse()
-            .expect("Failed to parse builder URL");
-        tracing::info!("Starting test builder on {url}");
-
-        let task = <SimpleBuilderImplementation as TestBuilderImplementation<SeqTypes>>::start(
-            NUM_NODES,
-            format!("http://0.0.0.0:{port}")
-                .parse()
-                .expect("Failed to parse builder listener"),
-            (),
-            HashMap::new(),
-        )
-        .await;
-
-        (task, url)
-    }
-
     pub struct TestConfigBuilder<const NUM_NODES: usize> {
         config: HotShotConfig<SeqTypes>,
         priv_keys: Vec<BLSPrivKey>,
@@ -1249,7 +1192,6 @@ pub mod testing {
         anvil_provider: Option<AnvilFillProvider>,
         signer: LocalSigner<SigningKey>,
         state_relay_url: Option<Url>,
-        builder_port: Option<u16>,
         upgrades: BTreeMap<Version, Upgrade>,
         coordinator_addrs: Vec<NetAddr>,
         contracts: Option<Contracts>,
@@ -1317,11 +1259,6 @@ pub mod testing {
     }
 
     impl<const NUM_NODES: usize> TestConfigBuilder<NUM_NODES> {
-        pub fn builder_port(mut self, builder_port: Option<u16>) -> Self {
-            self.builder_port = builder_port;
-            self
-        }
-
         pub fn state_relay_url(mut self, url: Url) -> Self {
             self.state_relay_url = Some(url);
             self
@@ -1520,7 +1457,6 @@ pub mod testing {
                 l1_opt: self.l1_opt,
                 signer: self.signer,
                 state_relay_url: self.state_relay_url,
-                builder_port: self.builder_port,
                 upgrades: self.upgrades,
                 anvil_provider: self.anvil_provider,
                 coordinator_addrs: self.coordinator_addrs,
@@ -1592,7 +1528,7 @@ pub mod testing {
                 view_sync_timeout: Duration::from_secs(1),
                 data_request_delay: Duration::from_secs(1),
                 builder_urls: vec1::vec1![
-                    Url::parse(&format!("http://127.0.0.1:{builder_port}")).unwrap()
+                    Url::parse(&format!("http://localhost:{builder_port}")).unwrap()
                 ],
                 builder_timeout: Duration::from_secs(1),
                 start_threshold: (
@@ -1640,7 +1576,6 @@ pub mod testing {
                 anvil_provider: Some(anvil_provider),
                 signer,
                 state_relay_url: None,
-                builder_port: None,
                 upgrades: Default::default(),
                 coordinator_addrs,
                 contracts: None,
@@ -1659,7 +1594,6 @@ pub mod testing {
         anvil_provider: Option<AnvilFillProvider>,
         signer: LocalSigner<SigningKey>,
         state_relay_url: Option<Url>,
-        builder_port: Option<u16>,
         upgrades: BTreeMap<Version, Upgrade>,
         /// Per-node cliquenet coordinator bind addresses, indexed by node.
         coordinator_addrs: Vec<NetAddr>,
@@ -1676,14 +1610,6 @@ pub mod testing {
 
         pub fn hotshot_config(&self) -> &HotShotConfig<SeqTypes> {
             &self.config
-        }
-
-        pub fn set_builder_urls(&mut self, builder_urls: vec1::Vec1<Url>) {
-            self.config.builder_urls = builder_urls;
-        }
-
-        pub fn builder_port(&self) -> Option<u16> {
-            self.builder_port
         }
 
         pub fn signer(&self) -> LocalSigner<SigningKey> {
@@ -2148,7 +2074,6 @@ mod test {
     };
     use test_utils::reserve_tcp_port;
     use testing::{TestConfigBuilder, decided_leaves, wait_for_decide_on_handle};
-    use versions::{EPOCH_VERSION, NEW_PROTOCOL_VERSION};
 
     use super::{local_validator_config, orchestrator_registration};
     use crate::api::{
@@ -2202,11 +2127,8 @@ mod test {
         assert!(without_addr.public_config().connect_info.is_none());
     }
 
-    /// The stake table only carries cliquenet `connect_info` from `NEW_PROTOCOL_VERSION` on. The
-    /// orchestrator registration leaves it out before that, although the node's own config has
-    /// it, and requires an advertise address after.
     #[test]
-    fn orchestrator_registration_publishes_connect_info_only_on_new_protocol() {
+    fn orchestrator_registration_publishes_connect_info() {
         let keys = test_keys();
         let advertise: NetAddr = "node.example.com:9977".parse().unwrap();
         let config = local_validator_config(
@@ -2217,12 +2139,9 @@ mod test {
             false,
         );
 
-        let legacy = orchestrator_registration(&config, EPOCH_VERSION).unwrap();
-        assert!(legacy.public_config().connect_info.is_none());
-
-        let new_protocol = orchestrator_registration(&config, NEW_PROTOCOL_VERSION).unwrap();
+        let registration = orchestrator_registration(&config).unwrap();
         assert_eq!(
-            new_protocol
+            registration
                 .public_config()
                 .connect_info
                 .map(|i| i.p2p_addr),
@@ -2231,7 +2150,7 @@ mod test {
 
         let unconfigured =
             local_validator_config(keys.staking, keys.state, &keys.x25519, None, false);
-        assert!(orchestrator_registration(&unconfigured, NEW_PROTOCOL_VERSION).is_err());
+        assert!(orchestrator_registration(&unconfigured).is_err());
     }
 
     #[test]
