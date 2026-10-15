@@ -998,12 +998,14 @@ def mass_lines(
     heights: Iterable[tuple[float, int]],
     t0: float,
     nodes: int,
+    mass_nodes: int | None,
 ) -> list[str]:
     """One line per mass fault (the rows of one mass kind with one fault time): its time since
     `t0`, seconds from the end of its restarts or starts (the last `started`, else the fault) to
     the first height above any shown until then, then seconds from the fault to the last
     `rejoined` and to the last `caught_up`, the latter only for a group with query nodes.
-    `never` for a step that did not happen. `nodes` is the size of the fleet."""
+    `never` for a step that did not happen. `nodes` is the size of the fleet; a `mass_nodes` of
+    `None` makes every group all of it, as a stuck node restarted by a mass restart has no fault."""
     heights = list(heights)
     lines = []
     for kind, at in dict.fromkeys(
@@ -1021,7 +1023,8 @@ def mass_lines(
             default=None,
         )
         queries = [r.caught_up for r in group if r.query]
-        size = f"all {nodes}" if len(group) == nodes else f"{len(group)} of {nodes}"
+        everyone = mass_nodes is None or len(group) == nodes
+        size = f"all {nodes}" if everyone else f"{len(group)} of {nodes}"
         caught = f" (all caught up after {_after_all(queries, at)})" if queries else ""
         lines.append(
             f"- {'Mass kill' if kind == MASS_KILL else 'Mass restart'}: {size} nodes at "

@@ -329,12 +329,12 @@ just bench aws run --tag chaos-dense --chaos --nodes 32 --query-nodes 3 --chaos-
   faulty, the faults per step, the decided split and the plot all use this span; every event carries `query`, events
   written before it get it from the roles in `topology.json`.
 - Mass line, one per mass fault:
-  `Mass restart|Mass kill: all N nodes|K of N nodes at <s>, first decide after X s, all rejoined after Y s (all caught up after Z s)`.
-  First decide: seconds from the time the last restart ssh returned (the last `started` event of the restart) to the
-  first height above every height shown until then (`heights.jsonl`: one poller per validator, every 0.1 s). Without
-  `started` events (older runs) the time of the fault. `never` for a step that did not happen. The recovery table has
-  one row per kind, also for a repeated kind, and a `mass-restart` or `mass-kill` row has one fault per node. Its
-  per-node spans count as during fault for the floor and the other panels.
+  `Mass restart|Mass kill: all N nodes|K of N nodes at <s>, first decide after X s, all rejoined after Y s (all caught up after Z s)`
+  `all` when `--chaos-mass-nodes` is unset. First decide: seconds from the time the last restart ssh returned (the last
+  `started` event of the restart) to the first height above every height shown until then (`heights.jsonl`: one poller
+  per validator, every 0.1 s). Without `started` events (older runs) the time of the fault. `never` for a step that did
+  not happen. The recovery table has one row per kind, also for a repeated kind, and a `mass-restart` or `mass-kill` row
+  has one fault per node. Its per-node spans count as during fault for the floor and the other panels.
 - Setup (nodes, rate, kinds, seed, gap, kill down, recover timeout, query floor, mass nodes), and totals: faults per
   kind (mass kinds as `mass-kill G (N nodes)`), max concurrent faulty against the stake budget, with a note when mass
   faults exceed it, timeouts, lost payloads, submit failovers, txs submitted, included and timed out.

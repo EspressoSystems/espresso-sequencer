@@ -1619,7 +1619,7 @@ def test_mass_restart_line_from_synthetic_data():
     ]
     # 505 shown before the restarts finished (1007) is the baseline, not a decide
     heights = [(999.0, 504), (1003.0, 505), (1007.2, 505), (1007.9, 506), (1008.5, 507)]
-    lines = ch.mass_lines(ch.fault_rows(events), heights, 900.0, 4)
+    lines = ch.mass_lines(ch.fault_rows(events), heights, 900.0, 4, None)
     assert lines == [
         (
             "- Mass restart: all 4 nodes at 100 s, first decide after 1 s, "
@@ -1631,12 +1631,12 @@ def test_mass_restart_line_from_synthetic_data():
 def test_mass_restart_line_names_what_did_not_happen():
     ev = ch.chaos_event
     events = [ev(1000.0, "fault", "node0", True, "mass-restart", 500, None)]
-    (line,) = ch.mass_lines(ch.fault_rows(events), [], 1000.0, 1)
+    (line,) = ch.mass_lines(ch.fault_rows(events), [], 1000.0, 1, None)
     assert line == (
         "- Mass restart: all 1 nodes at 0 s, first decide after never, "
         "all rejoined after never (all caught up after never)"
     )
-    assert ch.mass_lines([], [], 0.0, 1) == []
+    assert ch.mass_lines([], [], 0.0, 1, None) == []
 
 
 MASS_KILL = ch.ChaosConfig(kinds=("mass-kill",), mass_nodes=4)
@@ -1794,11 +1794,20 @@ def test_mass_lines_name_the_kind_and_the_group_size():
         *(ev(75, "rejoined", f"node{i}", "mass-kill") for i in range(4)),
     ]
     heights = [(T0, 10), (T0 + 62, 10), (T0 + 70, 11)]
-    (line,) = ch.mass_lines(ch.fault_rows(events), heights, T0, 10)
+    (line,) = ch.mass_lines(ch.fault_rows(events), heights, T0, 10, 4)
     assert line == (
         "- Mass kill: 4 of 10 nodes at 0 s, first decide after 10 s, "
         "all rejoined after 75 s (all caught up after never)"
     )
+
+
+def test_mass_lines_say_all_nodes_when_a_stuck_node_got_no_fault_event():
+    events = [
+        *(ev(0, "fault", f"node{i}", "mass-restart") for i in range(9)),
+        *(ev(75, "rejoined", f"node{i}", "mass-restart") for i in range(9)),
+    ]
+    (line,) = ch.mass_lines(ch.fault_rows(events), [], T0, 10, None)
+    assert line.startswith("- Mass restart: all 10 nodes at 0 s")
 
 
 def test_mass_lines_leave_out_catch_up_without_query_nodes():
@@ -1807,7 +1816,7 @@ def test_mass_lines_leave_out_catch_up_without_query_nodes():
         *(ev(60, "started", f"node{i}", "mass-kill") for i in range(4, 8)),
         *(ev(75, "rejoined", f"node{i}", "mass-kill") for i in range(4, 8)),
     ]
-    (line,) = ch.mass_lines(ch.fault_rows(events), [], T0, 10)
+    (line,) = ch.mass_lines(ch.fault_rows(events), [], T0, 10, 4)
     assert line.endswith("all rejoined after 75 s")
 
 

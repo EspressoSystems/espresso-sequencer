@@ -7584,6 +7584,8 @@ def chaos_view(
     """The chaos report of a run from its `chaos.jsonl`, `load-meta.json` and `steps`; without
     a `result` (the analysis did not run) or with an `error.txt` the run failed."""
     config = manifest["config"]
+    chaos = chaos_config(config["chaos"])
+    assert chaos is not None
     error_path = run_dir / "error.txt"
     error = error_path.read_text() if error_path.exists() else None
     events = ch.read_events(run_dir)
@@ -7612,7 +7614,13 @@ def chaos_view(
             nb.read_json(meta_path) if meta_path.exists() else None,
             tx_counts(run_dir),
         ),
-        *ch.mass_lines(rows, ch.read_heights(run_dir), t0, config["nodes"]),
+        *ch.mass_lines(
+            rows,
+            ch.read_heights(run_dir),
+            t0,
+            config["nodes"],
+            chaos.mass_nodes,
+        ),
         "",
         "",
         *(ch.recovery_table(rows, config["chaos"]["kinds"]) if rows else []),
