@@ -1818,7 +1818,7 @@ pub async fn add_fee_accounts_to_state(
     tree: &FeeMerkleTree,
     leaf: Leaf2,
 ) -> anyhow::Result<()> {
-    let (existing_state, delta) = consensus_handle.state_and_delta(*view).await;
+    let (existing_state, delta) = consensus_handle.state_and_delta(*view).await?;
     let (state, delta) = match existing_state {
         Some(existing) => {
             let mut state = (*existing).clone();
@@ -1865,7 +1865,7 @@ pub async fn add_v2_reward_accounts_to_state(
     tree: &RewardMerkleTreeV2,
     leaf: Leaf2,
 ) -> anyhow::Result<()> {
-    let (existing_state, delta) = consensus_handle.state_and_delta(*view).await;
+    let (existing_state, delta) = consensus_handle.state_and_delta(*view).await?;
     let (state, delta) = match existing_state {
         Some(existing) => {
             let mut state = (*existing).clone();
@@ -1912,7 +1912,7 @@ pub async fn add_v1_reward_accounts_to_state(
     tree: &RewardMerkleTreeV1,
     leaf: Leaf2,
 ) -> anyhow::Result<()> {
-    let (existing_state, delta) = consensus_handle.state_and_delta(*view).await;
+    let (existing_state, delta) = consensus_handle.state_and_delta(*view).await?;
     let (state, delta) = match existing_state {
         Some(existing) => {
             let mut state = (*existing).clone();
