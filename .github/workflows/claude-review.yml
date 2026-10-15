@@ -87,6 +87,10 @@ jobs:
 
       - name: Claude Code Review
         uses: anthropics/claude-code-action@v1
+        env:
+          # The action stops at the first result, so background subagents leave the review unposted.
+          # https://github.com/anthropics/claude-code-action/issues/1499
+          CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: "1"
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           track_progress: true
