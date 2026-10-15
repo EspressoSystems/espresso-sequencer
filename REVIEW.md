@@ -110,8 +110,9 @@ rejects or panics on, that's Important. So is a contract ABI change without rege
 ## Before you post a finding
 
 - Back up every claim about behavior with a `file:line` in the source. Don't infer from a name.
-- If the code sits behind a protocol version gate, name the gate, check whether `base_version` in
-  `data/genesis/mainnet.toml` turns it on, and label the finding "live on mainnet" or "dormant".
+- If the code sits behind a protocol version gate, name the gate and compare it with `base_version` in
+  `data/genesis/mainnet.toml`. Label the finding "dormant" only if the gate is above `base_version`; older versions
+  are "live on mainnet", because they still run during sync, catchup, and replay.
 - Say who the attacker has to be: any peer, a staked validator, the chain operator, or someone holding an admin key. If
   it takes an admin key, the timelock, or the chain operator, it isn't Important unless the PR changes who holds that
   power or what it can do.
