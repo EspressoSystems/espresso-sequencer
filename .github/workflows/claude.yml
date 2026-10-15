@@ -35,6 +35,10 @@ jobs:
           fetch-depth: 1
 
       - uses: anthropics/claude-code-action@v1
+        env:
+          # The action stops at the first result, so background subagents leave the reply unposted.
+          # https://github.com/anthropics/claude-code-action/issues/1499
+          CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: "1"
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           claude_args: "--model opus --max-turns 60"
