@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["H_256","H_512"],"enum":["HotShotError"],"fn":["load_start_epoch_info"],"mod":["documentation","helpers","tasks","traits","types"],"struct":["HotShotInitializer","InitializerEpochInfo","SystemContext"],"type":["InitializerAnchor"]};
+window.SIDEBAR_ITEMS = {"constant":["H_256","H_512"],"enum":["HotShotError"],"mod":["documentation","helpers","tasks","traits","types"],"struct":["SystemContext"]};

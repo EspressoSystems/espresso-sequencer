@@ -8,7 +8,7 @@
 <a href=#8 id=8 data-nosnippet>8</a><span class="kw">use </span>alloy::primitives::FixedBytes;
 <a href=#9 id=9 data-nosnippet>9</a><span class="kw">use </span>async_lock::RwLock;
 <a href=#10 id=10 data-nosnippet>10</a><span class="kw">use </span>espresso_types::Header;
-<a href=#11 id=11 data-nosnippet>11</a><span class="kw">use </span>hotshot::types::{Event, EventType, SchnorrPubKey};
+<a href=#11 id=11 data-nosnippet>11</a><span class="kw">use </span>hotshot::types::SchnorrPubKey;
 <a href=#12 id=12 data-nosnippet>12</a><span class="kw">use </span>hotshot_contract_adapter::light_client::derive_signed_state_digest;
 <a href=#13 id=13 data-nosnippet>13</a><span class="kw">use </span>hotshot_types::{
 <a href=#14 id=14 data-nosnippet>14</a>    data::{EpochNumber, ViewNumber},
@@ -269,46 +269,42 @@
 <a href=#269 id=269 data-nosnippet>269</a><span class="kw">impl </span>DecidedLeaf {
 <a href=#270 id=270 data-nosnippet>270</a>    <span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>from_event(event: <span class="kw-2">&amp;</span>CoordinatorEvent&lt;SeqTypes&gt;) -&gt; <span class="prelude-ty">Option</span>&lt;DecidedLeaf&gt; {
 <a href=#271 id=271 data-nosnippet>271</a>        <span class="kw">let </span>leaf = <span class="kw">match </span>event {
-<a href=#272 id=272 data-nosnippet>272</a>            CoordinatorEvent::LegacyEvent(Event {
-<a href=#273 id=273 data-nosnippet>273</a>                event: EventType::Decide { leaf_chain, .. },
-<a href=#274 id=274 data-nosnippet>274</a>                ..
-<a href=#275 id=275 data-nosnippet>275</a>            }) =&gt; <span class="kw-2">&amp;</span>leaf_chain.first()<span class="question-mark">?</span>.leaf,
-<a href=#276 id=276 data-nosnippet>276</a>            CoordinatorEvent::NewDecide { leaf_infos, .. } =&gt; <span class="kw-2">&amp;</span>leaf_infos.first()<span class="question-mark">?</span>.leaf,
-<a href=#277 id=277 data-nosnippet>277</a>            <span class="kw">_ </span>=&gt; <span class="kw">return </span><span class="prelude-val">None</span>,
-<a href=#278 id=278 data-nosnippet>278</a>        };
-<a href=#279 id=279 data-nosnippet>279</a>        <span class="prelude-val">Some</span>(DecidedLeaf {
-<a href=#280 id=280 data-nosnippet>280</a>            header: leaf.block_header().clone(),
-<a href=#281 id=281 data-nosnippet>281</a>            view: leaf.view_number(),
-<a href=#282 id=282 data-nosnippet>282</a>            with_epoch: leaf.with_epoch,
-<a href=#283 id=283 data-nosnippet>283</a>        })
-<a href=#284 id=284 data-nosnippet>284</a>    }
-<a href=#285 id=285 data-nosnippet>285</a>}
-<a href=#286 id=286 data-nosnippet>286</a>
-<a href=#287 id=287 data-nosnippet>287</a><span class="doccomment">/// A rolling in-memory storage for the most recent light client state signatures.
-<a href=#288 id=288 data-nosnippet>288</a></span><span class="attr">#[derive(Debug, Default)]
-<a href=#289 id=289 data-nosnippet>289</a></span><span class="kw">pub struct </span>StateSignatureMemStorage {
-<a href=#290 id=290 data-nosnippet>290</a>    pool: HashMap&lt;u64, LCV3StateSignatureRequestBody&gt;,
-<a href=#291 id=291 data-nosnippet>291</a>    deque: VecDeque&lt;u64&gt;,
-<a href=#292 id=292 data-nosnippet>292</a>}
-<a href=#293 id=293 data-nosnippet>293</a>
-<a href=#294 id=294 data-nosnippet>294</a><span class="kw">impl </span>StateSignatureMemStorage {
-<a href=#295 id=295 data-nosnippet>295</a>    <span class="kw">pub fn </span>push(<span class="kw-2">&amp;mut </span><span class="self">self</span>, height: u64, signature: LCV3StateSignatureRequestBody) {
-<a href=#296 id=296 data-nosnippet>296</a>        <span class="self">self</span>.pool.insert(height, signature);
-<a href=#297 id=297 data-nosnippet>297</a>        <span class="self">self</span>.deque.push_back(height);
-<a href=#298 id=298 data-nosnippet>298</a>        <span class="kw">if </span><span class="self">self</span>.pool.len() &gt; SIGNATURE_STORAGE_CAPACITY {
-<a href=#299 id=299 data-nosnippet>299</a>            <span class="self">self</span>.pool.remove(<span class="kw-2">&amp;</span><span class="self">self</span>.deque.pop_front().unwrap());
-<a href=#300 id=300 data-nosnippet>300</a>        }
+<a href=#272 id=272 data-nosnippet>272</a>            CoordinatorEvent::NewDecide { leaf_infos, .. } =&gt; <span class="kw-2">&amp;</span>leaf_infos.first()<span class="question-mark">?</span>.leaf,
+<a href=#273 id=273 data-nosnippet>273</a>            <span class="kw">_ </span>=&gt; <span class="kw">return </span><span class="prelude-val">None</span>,
+<a href=#274 id=274 data-nosnippet>274</a>        };
+<a href=#275 id=275 data-nosnippet>275</a>        <span class="prelude-val">Some</span>(DecidedLeaf {
+<a href=#276 id=276 data-nosnippet>276</a>            header: leaf.block_header().clone(),
+<a href=#277 id=277 data-nosnippet>277</a>            view: leaf.view_number(),
+<a href=#278 id=278 data-nosnippet>278</a>            with_epoch: leaf.with_epoch,
+<a href=#279 id=279 data-nosnippet>279</a>        })
+<a href=#280 id=280 data-nosnippet>280</a>    }
+<a href=#281 id=281 data-nosnippet>281</a>}
+<a href=#282 id=282 data-nosnippet>282</a>
+<a href=#283 id=283 data-nosnippet>283</a><span class="doccomment">/// A rolling in-memory storage for the most recent light client state signatures.
+<a href=#284 id=284 data-nosnippet>284</a></span><span class="attr">#[derive(Debug, Default)]
+<a href=#285 id=285 data-nosnippet>285</a></span><span class="kw">pub struct </span>StateSignatureMemStorage {
+<a href=#286 id=286 data-nosnippet>286</a>    pool: HashMap&lt;u64, LCV3StateSignatureRequestBody&gt;,
+<a href=#287 id=287 data-nosnippet>287</a>    deque: VecDeque&lt;u64&gt;,
+<a href=#288 id=288 data-nosnippet>288</a>}
+<a href=#289 id=289 data-nosnippet>289</a>
+<a href=#290 id=290 data-nosnippet>290</a><span class="kw">impl </span>StateSignatureMemStorage {
+<a href=#291 id=291 data-nosnippet>291</a>    <span class="kw">pub fn </span>push(<span class="kw-2">&amp;mut </span><span class="self">self</span>, height: u64, signature: LCV3StateSignatureRequestBody) {
+<a href=#292 id=292 data-nosnippet>292</a>        <span class="self">self</span>.pool.insert(height, signature);
+<a href=#293 id=293 data-nosnippet>293</a>        <span class="self">self</span>.deque.push_back(height);
+<a href=#294 id=294 data-nosnippet>294</a>        <span class="kw">if </span><span class="self">self</span>.pool.len() &gt; SIGNATURE_STORAGE_CAPACITY {
+<a href=#295 id=295 data-nosnippet>295</a>            <span class="self">self</span>.pool.remove(<span class="kw-2">&amp;</span><span class="self">self</span>.deque.pop_front().unwrap());
+<a href=#296 id=296 data-nosnippet>296</a>        }
+<a href=#297 id=297 data-nosnippet>297</a>    }
+<a href=#298 id=298 data-nosnippet>298</a>
+<a href=#299 id=299 data-nosnippet>299</a>    <span class="kw">pub fn </span>get_signature(<span class="kw-2">&amp;</span><span class="self">self</span>, height: u64) -&gt; <span class="prelude-ty">Option</span>&lt;LCV3StateSignatureRequestBody&gt; {
+<a href=#300 id=300 data-nosnippet>300</a>        <span class="self">self</span>.pool.get(<span class="kw-2">&amp;</span>height).cloned()
 <a href=#301 id=301 data-nosnippet>301</a>    }
-<a href=#302 id=302 data-nosnippet>302</a>
-<a href=#303 id=303 data-nosnippet>303</a>    <span class="kw">pub fn </span>get_signature(<span class="kw-2">&amp;</span><span class="self">self</span>, height: u64) -&gt; <span class="prelude-ty">Option</span>&lt;LCV3StateSignatureRequestBody&gt; {
-<a href=#304 id=304 data-nosnippet>304</a>        <span class="self">self</span>.pool.get(<span class="kw-2">&amp;</span>height).cloned()
-<a href=#305 id=305 data-nosnippet>305</a>    }
-<a href=#306 id=306 data-nosnippet>306</a>}
-<a href=#307 id=307 data-nosnippet>307</a>
-<a href=#308 id=308 data-nosnippet>308</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>should_vote(stake_table: <span class="kw-2">&amp;</span>HSStakeTable&lt;SeqTypes&gt;, ver_key: <span class="kw-2">&amp;</span>SchnorrPubKey) -&gt; bool {
-<a href=#309 id=309 data-nosnippet>309</a>    stake_table
-<a href=#310 id=310 data-nosnippet>310</a>        .<span class="number">0
-<a href=#311 id=311 data-nosnippet>311</a>        </span>.iter()
-<a href=#312 id=312 data-nosnippet>312</a>        .any(|peer| <span class="kw-2">&amp;</span>peer.state_ver_key == ver_key &amp;&amp; !peer.stake_table_entry.stake().is_zero())
-<a href=#313 id=313 data-nosnippet>313</a>}
+<a href=#302 id=302 data-nosnippet>302</a>}
+<a href=#303 id=303 data-nosnippet>303</a>
+<a href=#304 id=304 data-nosnippet>304</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>should_vote(stake_table: <span class="kw-2">&amp;</span>HSStakeTable&lt;SeqTypes&gt;, ver_key: <span class="kw-2">&amp;</span>SchnorrPubKey) -&gt; bool {
+<a href=#305 id=305 data-nosnippet>305</a>    stake_table
+<a href=#306 id=306 data-nosnippet>306</a>        .<span class="number">0
+<a href=#307 id=307 data-nosnippet>307</a>        </span>.iter()
+<a href=#308 id=308 data-nosnippet>308</a>        .any(|peer| <span class="kw-2">&amp;</span>peer.state_ver_key == ver_key &amp;&amp; !peer.stake_table_entry.stake().is_zero())
+<a href=#309 id=309 data-nosnippet>309</a>}
 </code></pre></div></section></main></body></html>
