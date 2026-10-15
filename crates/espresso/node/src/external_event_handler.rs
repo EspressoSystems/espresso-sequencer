@@ -6,10 +6,7 @@ use anyhow::{Context, Result, bail};
 use espresso_types::{PubKey, SeqTypes, v0::traits::SequencerPersistence};
 use hotshot::types::Message;
 use hotshot_new_protocol::client::ClientApi;
-use hotshot_types::{
-    message::MessageKind,
-    traits::{metrics::Counter, network::ConnectedNetwork},
-};
+use hotshot_types::{message::MessageKind, traits::metrics::Counter};
 use request_response::network::Bytes;
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc::{Receiver, Sender, error::TrySendError};
@@ -42,16 +39,15 @@ pub enum OutboundMessage {
 }
 
 impl ExternalEventHandler {
-    pub async fn new<N, P>(
+    pub async fn new<P>(
         tasks: &mut TaskList,
         request_response_sender: Sender<Bytes>,
         outbound_message_receiver: Receiver<OutboundMessage>,
-        consensus_handle: Arc<ConsensusHandle<SeqTypes, ConsensusNode<N, P>>>,
+        consensus_handle: Arc<ConsensusHandle<SeqTypes, ConsensusNode<P>>>,
         public_key: PubKey,
         dropped_messages: Arc<dyn Counter>,
     ) -> Result<Self>
     where
-        N: ConnectedNetwork<PubKey>,
         P: SequencerPersistence,
     {
         // Spawn the outbound message handling loop
@@ -94,12 +90,11 @@ impl ExternalEventHandler {
     }
 
     /// The main loop for sending outbound messages.
-    async fn outbound_message_loop<N, P>(
+    async fn outbound_message_loop<P>(
         mut receiver: Receiver<OutboundMessage>,
-        consensus_handle: Arc<ConsensusHandle<SeqTypes, ConsensusNode<N, P>>>,
+        consensus_handle: Arc<ConsensusHandle<SeqTypes, ConsensusNode<P>>>,
         public_key: PubKey,
     ) where
-        N: ConnectedNetwork<PubKey>,
         P: SequencerPersistence,
     {
         while let Some(message) = receiver.recv().await {
