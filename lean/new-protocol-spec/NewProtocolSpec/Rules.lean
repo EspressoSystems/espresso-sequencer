@@ -529,8 +529,8 @@ structure OwedVote2 (h : History) (c : Cert1) : Prop where
   /--
   The node has decided no view at `c`'s or a later one.
 
-  Its chain is decided past the view, so the vote2 can no longer help it, and a
-  decide comes with a `Cert2` the other nodes receive as well.
+  Its chain is decided at the view or a later one, so the vote2 can no longer help
+  it, and a decide comes with a `Cert2` the other nodes receive as well.
   -/
   notDecidedPast : ∀ u, h.DecidedView u → u < c.view
 
@@ -554,7 +554,7 @@ The node owes the action.
 Each case is the action being justified by what the node holds, not yet taken, and
 not overtaken. A vote1 and a proposal are owed only in the view the node is in, and
 until it times the view out; a vote2 until the node gives the certificate's view
-up, holds its `Cert2`, or the view falls behind the floor; a decide until the
+up, holds its `Cert2`, or decides the view or a later one; a decide until the
 block's view is decided or falls behind the floor. So every obligation ends, and
 none asks for anything the node would have to fetch, or for a view earlier than
 the floor (`Config.decideBuffer`).

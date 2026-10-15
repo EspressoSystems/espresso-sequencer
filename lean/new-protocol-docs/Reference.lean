@@ -1275,8 +1275,8 @@ The rules above are permissions: a node that never acts satisfies all of them.
 action that is justified by what the node holds, not yet taken, and not overtaken
 by events. Every obligation ends, and none asks for anything the node would have to
 fetch: a vote1 and a proposal are owed only in the node's current view and until it
-times the view out, a vote2 until the node gives its view up or decides that far,
-and a decide only after the decide floor.
+times the view out, a vote2 until the node gives its view up or decides it or a
+later one, and a decide only after the decide floor.
 
 How long an obligation may stay owed is not said here. That is {name NewProtocol.Prompt}`Prompt`, below.
 
@@ -2294,8 +2294,9 @@ kind is where an audit should spend its doubt.
 
 *Harmless omissions.*
 
-* _How a node stores, fetches and prunes._ Votes and proposals are owed only in the
-  node's current view, and a decide only within `decideBuffer` views of its latest
+* _How a node stores, fetches and prunes._ A vote1 and a proposal are owed only in
+  the node's current view, a vote2 only until the node decides its view or a later
+  one, and a decide only within `decideBuffer` views of its latest
   decide ({name NewProtocol.History.AfterFloor}`History.AfterFloor`), so a node may
   forget what is older. How it stores the rest, and how it fetches what it missed,
   are its own business. A fetched proposal arrives as an

@@ -3623,7 +3623,7 @@ impl<T: NodeType> Consensus<T> {
 
         if self.voted_2_at(view, epoch)
             || self.certs2.contains_key(&key)
-            || self.decided_views.contains(&block_view)
+            || self.decided_views.contains(&view)
             || view <= self.decide_floor()
         {
             return;

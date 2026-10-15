@@ -1745,8 +1745,8 @@ end Members
 Node `k` decided a view at `w` or later by `T`, on a `Cert2` of an epoch it is
 honest in.
 
-A node that has decided that far no longer owes a vote2 on a certificate at `w`
-or later and no later than the view it decided (`OwedVote2.notDecidedPast`).
+A node that has decided that far no longer owes a vote2 on a certificate at or
+before a view it decided (`OwedVote2.notDecidedPast`).
 -/
 def EarlyDecide (N : TimedNetwork cfg leader C) (k : PubKey) (hk : C.Honest k) (w : ViewNumber) (T : Nat) :
     Prop :=
