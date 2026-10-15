@@ -1,19 +1,35 @@
 use std::{
-    collections::{BTreeMap, HashSet},
+    collections::{BTreeMap, BTreeSet, HashSet},
+    marker::PhantomData,
+    net::Ipv4Addr,
     time::Duration,
 };
 
+use committable::Committable;
 use hotshot::types::BLSPubKey;
+use hotshot_example_types::{
+    node_types::{TEST_VERSIONS, TestTypes},
+    state_types::{TestInstanceState, TestValidatedState},
+    storage_types::TestStorage,
+};
 use hotshot_types::{
-    data::{EpochNumber, ViewNumber},
+    addr::NetAddr,
+    data::{EpochNumber, Leaf2, ViewNumber},
+    simple_vote::QuorumData2,
     traits::signature_key::SignatureKey,
+    x25519::Keypair,
 };
 use versions::{TIMEOUT_EPOCH_VERSION, Upgrade};
 
-use crate::tests::common::{
-    runner::{NodeAction, NodeChange, TestRunner},
-    utils::{build_timeout_cert, mock_membership_with_num_nodes},
-    views,
+use crate::{
+    message::Certificate1,
+    storage::NewProtocolStorage as _,
+    tests::common::{
+        coordinator_builder::{UpgradeSetup, build_test_coordinator},
+        runner::{NodeAction, NodeChange, TestRunner, create_network},
+        utils::{build_timeout_cert, mock_membership_with_client, mock_membership_with_num_nodes},
+        views,
+    },
 };
 
 // ---------------------------------------------------------------------------
@@ -101,6 +117,7 @@ async fn restart_all_nodes_with_storage() {
         .target_decisions(35)
         .epoch_height(10)
         .persistent_storage(true)
+        .record_traces(true)
         .tolerated_failed_views(views(1..=30))
         .node_changes(vec![(
             crash_view,
@@ -148,6 +165,7 @@ async fn restart_all_nodes_at_epoch_boundary() {
         .target_decisions(35)
         .epoch_height(10)
         .persistent_storage(true)
+        .record_traces(true)
         .tolerated_failed_views(views(1..=30))
         .node_changes(vec![(
             crash_view,
@@ -339,4 +357,81 @@ async fn late_start_f_nodes_with_epochs() {
         .run()
         .await
         .unwrap();
+}
+
+fn cert_at(view: u64, leaf: &Leaf2<TestTypes>) -> Certificate1<TestTypes> {
+    let data = QuorumData2 {
+        leaf_commit: leaf.commit(),
+        epoch: Some(EpochNumber::new(1)),
+        block_number: Some(view),
+    };
+    Certificate1::new(
+        data,
+        data.commit(),
+        ViewNumber::new(view),
+        None,
+        PhantomData,
+    )
+}
+
+/// A node restarted from storage holds the lock and boundary certificate it
+/// persisted, even when they are newer than the anchor's certificate.
+#[tokio::test(flavor = "multi_thread")]
+async fn restart_restores_persisted_lock_and_boundary_cert() {
+    let epoch_height = 10;
+    let leaf = Leaf2::<TestTypes>::genesis(
+        &TestValidatedState::default(),
+        &TestInstanceState::default(),
+        TEST_VERSIONS.test.base,
+    )
+    .await;
+    let (lock, boundary) = (cert_at(3, &leaf), cert_at(4, &leaf));
+    let storage = TestStorage::<TestTypes>::default();
+    storage
+        .update_anchor_leaf(leaf.clone(), cert_at(0, &leaf))
+        .await;
+    storage.append_high_qc2(lock.clone()).await.unwrap();
+    storage.append_boundary_qc2(boundary.clone()).await.unwrap();
+
+    let (public_key, private_key) = BLSPubKey::generated_from_seed_indexed([0; 32], 0);
+    let addr = NetAddr::Inet(
+        Ipv4Addr::LOCALHOST.into(),
+        test_utils::reserve_tcp_port().expect("OS should have ephemeral ports available"),
+    );
+    let parties = [(
+        Keypair::derive_from::<BLSPubKey>(&private_key).unwrap(),
+        public_key,
+        addr.clone(),
+    )];
+    let upgrade = UpgradeSetup::default();
+    let network = create_network(
+        0,
+        &parties,
+        &BTreeSet::new(),
+        BTreeSet::new(),
+        &addr,
+        &upgrade.lock,
+        None,
+    )
+    .await;
+    let (membership, storage, client, _) =
+        mock_membership_with_client(1, epoch_height, public_key, storage);
+    let (external_tx, _external_rx) = tokio::sync::mpsc::unbounded_channel();
+
+    let coord = build_test_coordinator(
+        0,
+        network,
+        membership,
+        storage,
+        client,
+        epoch_height,
+        Duration::from_secs(5),
+        upgrade,
+        external_tx,
+    )
+    .await;
+
+    let consensus = coord.consensus();
+    assert_eq!(consensus.locked_cert(), Some(&lock));
+    assert_eq!(consensus.cert1_at(boundary.view_number), Some(&boundary));
 }

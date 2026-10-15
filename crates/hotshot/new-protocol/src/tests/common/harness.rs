@@ -17,8 +17,8 @@ use tokio::sync::mpsc;
 use super::{
     coordinator_builder::{build_genesis_cert1, build_genesis_proposal},
     utils::{
-        mock_membership_with_num_nodes, record_fallback_anchor, record_leader,
-        record_output_leaders,
+        mock_membership_with_num_nodes, record_fallback_anchor, record_genesis_parent,
+        record_leader, record_output_leaders,
     },
 };
 use crate::{
@@ -236,6 +236,7 @@ impl TestHarness {
         );
         record_leader(&mut self.trace, consensus, &input);
         record_fallback_anchor(&mut self.trace, consensus);
+        record_genesis_parent(&mut self.trace, consensus);
         self.coordinator.apply_consensus(input.clone());
         record_output_leaders(
             &mut self.trace,

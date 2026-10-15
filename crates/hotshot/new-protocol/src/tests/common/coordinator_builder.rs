@@ -35,6 +35,7 @@ use crate::{
     outbox::Outbox,
     proposal::{ProposalValidator, VidShareValidator},
     state::StateManager,
+    storage::NewProtocolStorage as _,
     upgrade::UpgradeProtocol,
     vid::{VidDisperser, VidReconstructor},
     vote::VoteCollector,
@@ -191,6 +192,14 @@ pub async fn build_test_coordinator(
                 .map(|p| Proposal::from(p.data.clone())),
         );
         consensus.seed_parent(anchor_cert, anchor_proposal, reconstructed);
+        // The persisted lock can be newer than the anchor QC, so this runs
+        // after `seed_parent` (mirrors `Coordinator::maker`).
+        if let Some(qc) = storage.load_high_qc2().await.unwrap() {
+            consensus.seed_locked_cert(qc);
+        }
+        if let Some(qc) = storage.load_boundary_qc2().await.unwrap() {
+            consensus.seed_boundary_cert(qc);
+        }
         if let Some(cert2) = storage.cert2(anchor_view).await {
             consensus.seed_anchor_cert2(cert2);
         }

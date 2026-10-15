@@ -3,6 +3,7 @@ module
 import NewProtocolSpec.Proofs.Decide
 import NewProtocolSpec.Proofs.Liveness.Epochs
 import NewProtocolSpec.Witness
+import NewProtocolSpec.Proofs.Restart
 meta import Lean.Elab.Command
 
 /-!
@@ -66,6 +67,9 @@ info: 'NewProtocol.Liveness.chainGrows' depends on axioms: [propext, Classical.c
 /-- info: 'NewProtocol.Witness.per_epoch' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in #print axioms Witness.per_epoch
 
+/-- info: 'NewProtocol.safe_across_restart' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in #print axioms safe_across_restart
+
 /-- Fail when a structure's fields are not what is expected. -/
 meta def checkFields (parent : Name) (expected : List Name) : MetaM Unit := do
   let actual := (getStructureFields (← getEnv) parent).toList
@@ -120,6 +124,16 @@ run_meta (checkFields `NewProtocol.Synchrony
    `timeoutCert, `timeoutOneHonest, `timeoutCertForward, `timeoutCatchUp, `timeoutLockSpread, `epochChange,
    `proposalValid, `validatedSound, `validated, `header, `timeUnbounded, `timerNotEarly,
    `timerFires])
+
+/-! What a restarted node stored, what it must be faithful to, and the bars it sets. -/
+run_meta (checkFields `NewProtocol.Persisted
+  [`anchorBlock, `anchorCert, `lock, `highestVoted, `reconstructed])
+
+run_meta (checkFields `NewProtocol.Summarises
+  [`anchorAfter, `anchorCertHeld, `anchorHeld, `anchorPayload, `anchorCert2Held, `reconstructedHeld,
+   `vote1Below, `vote2Below, `timeoutBelow, `vote2Locked, `decidedBelow])
+
+run_meta (checkFields `NewProtocol.RestartOK [`vote1After, `vote2After, `lockKept])
 
 end Checks
 end NewProtocol

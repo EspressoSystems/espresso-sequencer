@@ -26,6 +26,14 @@
 //! Pruning is not recorded either. The specification says nothing about what a
 //! node keeps, so there is nothing to check it against.
 //!
+//! # Restarts
+//!
+//! A node restored from storage writes a second file. Its header carries a
+//! `restart` object naming what the node loaded (`lock`, `highestVoted`,
+//! `vote2Bar`, `reconstructed`) and the file it resumes (`resumes`, null when
+//! the node took no step before the crash). The pair is checked as one history;
+//! the machine is not run across a restart.
+//!
 //! # Identities
 //!
 //! A block's identity travels as the text of its commitment. The Lean side does
@@ -57,7 +65,10 @@ use std::{
 
 use committable::Committable;
 use hotshot_types::{
-    data::{EpochNumber, Leaf2, VidCommitment, VidDisperseShare2, ViewNumber},
+    data::{
+        EpochNumber, Leaf2, VidCommitment, VidCommitment2, VidDisperseShare2, ViewChangeEvidence2,
+        ViewNumber,
+    },
     simple_certificate::{TimeoutCertificate3, TimeoutEvidence},
     simple_vote::HasEpoch,
     traits::{block_contents::BlockHeader, node_implementation::NodeType},
@@ -143,6 +154,12 @@ pub struct Recorder {
     /// A certificate for the anchor to name when the run gives none, as
     /// [`Recorder::fallback_anchor`] was told.
     fallback_anchor: Option<String>,
+    /// What a restarted node loaded, as a JSON object for the identity line; see
+    /// [`Recorder::restarted`].
+    restart: Option<String>,
+    /// The commitment of the proposal seeded at genesis, and the block its
+    /// certificate names; see [`Recorder::genesis_parent`].
+    genesis_parent: Option<(String, String)>,
     /// When the recorder was made, which step times count from.
     started: Instant,
 }
@@ -162,7 +179,26 @@ struct LastStep {
 impl Recorder {
     /// A recorder collecting a trace for `$NP_TRACE_DIR/<label>.jsonl`, or an inert one.
     pub fn new(label: &str) -> Self {
-        let inert = Self {
+        let Ok(dir) = std::env::var(TRACE_DIR) else {
+            return Self::inert();
+        };
+        let dir = PathBuf::from(dir);
+        if let Err(err) = create_dir_all(&dir) {
+            eprintln!("trace: cannot create {}: {err}", dir.display());
+            return Self::inert();
+        }
+        // A label may name a test, and test names contain `::`.
+        let name = label.replace("::", "-");
+        let seq = NEXT_TRACE.fetch_add(1, Ordering::Relaxed);
+        let mut recorder = Self::inert();
+        recorder.path = Some(dir.join(format!("{name}.{seq}.jsonl")));
+        recorder.identified = false;
+        recorder
+    }
+
+    /// A recorder that records nothing.
+    pub fn inert() -> Self {
+        Self {
             path: None,
             lines: Vec::new(),
             identified: true,
@@ -174,31 +210,8 @@ impl Recorder {
             anchor_lock: None,
             unsigned_locks: Cell::new(false),
             fallback_anchor: None,
-            started: Instant::now(),
-        };
-        let Ok(dir) = std::env::var(TRACE_DIR) else {
-            return inert;
-        };
-        let dir = PathBuf::from(dir);
-        if let Err(err) = create_dir_all(&dir) {
-            eprintln!("trace: cannot create {}: {err}", dir.display());
-            return inert;
-        }
-        // A label may name a test, and test names contain `::`.
-        let name = label.replace("::", "-");
-        let seq = NEXT_TRACE.fetch_add(1, Ordering::Relaxed);
-        Self {
-            path: Some(dir.join(format!("{name}.{seq}.jsonl"))),
-            lines: Vec::new(),
-            identified: false,
-            pending: Vec::new(),
-            last: None,
-            led: BTreeMap::new(),
-            steps: 0,
-            epoch_height: 0,
-            anchor_lock: None,
-            unsigned_locks: Cell::new(false),
-            fallback_anchor: None,
+            restart: None,
+            genesis_parent: None,
             started: Instant::now(),
         }
     }
@@ -206,6 +219,47 @@ impl Recorder {
     /// A recorder labelled by the running test, which is this thread's name.
     pub fn for_current_test() -> Self {
         Self::new(std::thread::current().name().unwrap_or("trace"))
+    }
+
+    /// The name of the file this recorder writes, once its identity line is
+    /// written; a node that took no step wrote none.
+    pub fn file_name(&self) -> Option<String> {
+        if !self.identified {
+            return None;
+        }
+        let name = self.path.as_ref()?.file_name()?;
+        Some(name.to_string_lossy().into_owned())
+    }
+
+    /// Note what a restarted node loaded from storage, to go into the identity
+    /// line.
+    ///
+    /// Call before [`Recorder::preamble`]. `resumes` names the file the node
+    /// wrote before the crash, as [`Recorder::file_name`] gave it, and is `None`
+    /// when that node took no step. `reconstructed` lists the saved proposals
+    /// the node marks reconstructed, as `(view, payload commitment)`.
+    pub fn restarted<T: NodeType>(
+        &mut self,
+        lock: Option<&Certificate1<T>>,
+        highest_voted: ViewNumber,
+        vote2_bar: Option<ViewNumber>,
+        reconstructed: &[(ViewNumber, VidCommitment2)],
+        resumes: Option<&str>,
+    ) {
+        if self.path.is_none() {
+            return;
+        }
+        let reconstructed: Vec<String> = reconstructed
+            .iter()
+            .map(|(view, commit)| arr(&[view_json(*view), ident(commit)]))
+            .collect();
+        self.restart = Some(obj(&[
+            ("lock", lock.map_or_else(null, cert1_json_raw)),
+            ("highestVoted", view_json(highest_voted)),
+            ("vote2Bar", vote2_bar.map_or_else(null, view_json)),
+            ("reconstructed", arr(&reconstructed)),
+            ("resumes", resumes.map_or_else(null, quoted)),
+        ]));
     }
 
     /// Write the identity line, once, before the first step.
@@ -245,14 +299,17 @@ impl Recorder {
         let mut fields = vec![
             ("node", ident(node)),
             ("anchor", ident(&anchor.commit())),
-            // After genesis only for a node restored from storage, which the
-            // model does not cover.
+            // After genesis only for a node restored from storage, which says
+            // what it loaded in `restart`.
             ("anchorView", view_json(anchor.view_number())),
             ("decideBuffer", DECIDE_BUFFER.to_string()),
             ("epochHeight", epoch_height.to_string()),
         ];
         if let Some(cert) = &self.anchor_lock {
             fields.push(("anchorCert", cert.clone()));
+        }
+        if let Some(restart) = &self.restart {
+            fields.push(("restart", restart.clone()));
         }
         let line = obj(&fields);
         self.lines.push(format!("# trace {line}"));
@@ -268,6 +325,22 @@ impl Recorder {
         if self.path.is_some() && self.fallback_anchor.is_none() {
             self.fallback_anchor = Some(cert1_json_raw(cert));
         }
+    }
+
+    /// Name the proposal consensus holds at the genesis view.
+    ///
+    /// Consensus keys a header built on genesis by this proposal's commitment,
+    /// while the proposal it then makes names the block of the genesis
+    /// certificate. The model keys both by that block, so a header built on
+    /// this proposal is written with it.
+    pub fn genesis_parent<T: NodeType>(&mut self, proposal: &Proposal<T>) {
+        if self.path.is_none() || self.genesis_parent.is_some() {
+            return;
+        }
+        self.genesis_parent = Some((
+            ident(&crate::helpers::proposal_commitment(proposal)),
+            ident(&proposal.justify_qc.data.leaf_commit),
+        ));
     }
 
     /// Record that the node holds `proposal` without having received it, as a
@@ -680,14 +753,21 @@ impl Recorder {
             // root — dropping the variant would lose a certificate the model wants.
             ConsensusInput::EpochRootCertificates { cert1, .. } => certificate1_json(cert1),
             ConsensusInput::Certificate2(cert) => certificate2_json(cert),
-            ConsensusInput::HeaderCreated(view, parent, header) => tagged(
-                "headerBuilt",
-                obj(&[
-                    ("v", view_json(*view)),
-                    ("parent", ident(parent)),
-                    ("h", header_json::<T>(header)),
-                ]),
-            ),
+            ConsensusInput::HeaderCreated(view, parent, header) => {
+                let parent = ident(parent);
+                let parent = match &self.genesis_parent {
+                    Some((seeded, named)) if *seeded == parent => named.clone(),
+                    _ => parent,
+                };
+                tagged(
+                    "headerBuilt",
+                    obj(&[
+                        ("v", view_json(*view)),
+                        ("parent", parent),
+                        ("h", header_json::<T>(header)),
+                    ]),
+                )
+            },
             ConsensusInput::StateValidated(response) => tagged(
                 "blockValidated",
                 obj(&[
@@ -848,10 +928,7 @@ impl Recorder {
                 // The model's decide carries a `Cert2`; without one there is nothing
                 // to compare, and the views will arrive with a later decide anyway.
                 let cert2 = cert2.as_ref()?;
-                let blocks: Vec<String> = leaves
-                    .iter()
-                    .map(|l| leaf_json(l, self.epoch_height))
-                    .collect();
+                let blocks: Vec<String> = leaves.iter().map(|l| self.leaf_json(l)).collect();
                 return Some(tagged(
                     "decided",
                     obj(&[
@@ -889,6 +966,32 @@ impl Recorder {
                 "identity",
                 ident(&crate::helpers::proposal_commitment(proposal)),
             ),
+        ])
+    }
+
+    /// A decided leaf, as the model's `Block`.
+    ///
+    /// Written like the proposal it came from, which a decide must deliver as
+    /// held. A leaf carries no epoch of its own; it is derived from the height.
+    fn leaf_json<T: NodeType>(&self, leaf: &Leaf2<T>) -> String {
+        let evidence = leaf
+            .view_change_evidence
+            .clone()
+            .and_then(ViewChangeEvidence2::timeout_evidence);
+        obj(&[
+            ("blockHeader", header_json::<T>(leaf.block_header())),
+            ("viewNumber", view_json(leaf.view_number())),
+            (
+                "epoch",
+                leaf.epoch(self.epoch_height)
+                    .map_or_else(|| "0".to_string(), |e| e.to_string()),
+            ),
+            ("parentCert", cert1_json_raw(leaf.justify_qc())),
+            (
+                "timeoutEvidence",
+                evidence.map_or_else(null, |tc| self.timeout_cert_json(&tc)),
+            ),
+            ("identity", ident(&leaf.commit())),
         ])
     }
 
@@ -1031,25 +1134,6 @@ fn header_json<T: NodeType>(header: &T::BlockHeader) -> String {
     ])
 }
 
-/// A decided leaf, as the model's `Block`.
-///
-/// Only the view numbers are compared, so the remaining fields are filled as
-/// faithfully as a leaf allows and no further.
-fn leaf_json<T: NodeType>(leaf: &Leaf2<T>, epoch_height: u64) -> String {
-    obj(&[
-        ("blockHeader", header_json::<T>(leaf.block_header())),
-        ("viewNumber", view_json(leaf.view_number())),
-        (
-            "epoch",
-            leaf.epoch(epoch_height)
-                .map_or_else(|| "0".to_string(), |e| e.to_string()),
-        ),
-        ("parentCert", cert1_json_raw(leaf.justify_qc())),
-        ("timeoutEvidence", "null".to_string()),
-        ("identity", ident(&leaf.commit())),
-    ])
-}
-
 fn payload_json<H: BlockHeader<T>, T: NodeType>(header: &H) -> String {
     match header.payload_commitment() {
         VidCommitment::V2(commit) => ident(&commit),
@@ -1150,4 +1234,155 @@ fn quoted(text: &str) -> String {
 
 fn tagged(tag: &str, body: String) -> String {
     obj(&[(tag, body)])
+}
+
+fn null() -> String {
+    "null".to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use std::marker::PhantomData;
+
+    use hotshot::types::{BLSPubKey, SignatureKey};
+    use hotshot_example_types::{
+        node_types::{TEST_VERSIONS, TestTypes},
+        state_types::{TestInstanceState, TestValidatedState},
+    };
+    use hotshot_types::{simple_certificate::TimeoutCertificate2, simple_vote::TimeoutData2};
+
+    use super::*;
+    use crate::tests::common::coordinator_builder::{build_genesis_cert1, build_genesis_proposal};
+
+    fn recorder_in_tmp(name: &str) -> Recorder {
+        let mut recorder = Recorder::inert();
+        recorder.path = Some(PathBuf::from("np-trace-test").join(name));
+        recorder.identified = false;
+        recorder
+    }
+
+    #[test]
+    fn restarted_writes_every_loaded_field() {
+        let mut rec = recorder_in_tmp("a.0.jsonl");
+        rec.restarted::<TestTypes>(
+            None,
+            ViewNumber::new(7),
+            Some(ViewNumber::new(5)),
+            &[(ViewNumber::new(6), VidCommitment2::default())],
+            Some("a.0.jsonl"),
+        );
+        let restart = rec.restart.take().expect("restart is set");
+        let commit = ident(&VidCommitment2::default());
+        assert_eq!(
+            restart,
+            format!(
+                "{{\"lock\":null,\"highestVoted\":7,\"vote2Bar\":5,\"reconstructed\":[[6,\
+                 {commit}]],\"resumes\":\"a.0.jsonl\"}}"
+            )
+        );
+    }
+
+    #[test]
+    fn restarted_marks_absent_fields_null() {
+        let mut rec = recorder_in_tmp("b.0.jsonl");
+        rec.restarted::<TestTypes>(None, ViewNumber::new(0), None, &[], None);
+        assert_eq!(
+            rec.restart.as_deref(),
+            Some(
+                "{\"lock\":null,\"highestVoted\":0,\"vote2Bar\":null,\"reconstructed\":[],\"\
+                 resumes\":null}"
+            )
+        );
+    }
+
+    #[test]
+    fn file_name_waits_for_identity() {
+        let mut rec = recorder_in_tmp("c.0.jsonl");
+        assert_eq!(rec.file_name(), None);
+        rec.identified = true;
+        assert_eq!(rec.file_name().as_deref(), Some("c.0.jsonl"));
+        assert_eq!(Recorder::inert().file_name(), None);
+    }
+
+    #[tokio::test]
+    async fn header_on_genesis_names_the_genesis_certificate_block() {
+        let leaf = Leaf2::<TestTypes>::genesis(
+            &TestValidatedState::default(),
+            &TestInstanceState::default(),
+            TEST_VERSIONS.test.base,
+        )
+        .await;
+        let cert = build_genesis_cert1(&leaf);
+        let genesis = build_genesis_proposal(&leaf, &cert);
+        let mut rec = recorder_in_tmp("e.0.jsonl");
+        rec.genesis_parent(&genesis);
+        let input = ConsensusInput::HeaderCreated(
+            ViewNumber::new(1),
+            crate::helpers::proposal_commitment(&genesis),
+            leaf.block_header().clone(),
+        );
+        let Ok(json) = rec.input_json(&input) else {
+            panic!("headerBuilt is modelled");
+        };
+        let parent = format!("\"parent\":{}", ident(&cert.data.leaf_commit));
+        assert!(json.contains(&parent), "{json}");
+    }
+
+    #[tokio::test]
+    async fn decided_block_keeps_the_proposal_timeout_evidence() {
+        let leaf = Leaf2::<TestTypes>::genesis(
+            &TestValidatedState::default(),
+            &TestInstanceState::default(),
+            TEST_VERSIONS.test.base,
+        )
+        .await;
+        let cert = build_genesis_cert1(&leaf);
+        let data = TimeoutData2 {
+            view: ViewNumber::new(1),
+            epoch: Some(EpochNumber::genesis()),
+        };
+        let tc = TimeoutCertificate2::new(
+            data.clone(),
+            data.commit(),
+            ViewNumber::new(1),
+            None,
+            PhantomData,
+        );
+        let mut proposal = build_genesis_proposal(&leaf, &cert);
+        proposal.view_number = ViewNumber::new(2);
+        proposal.view_change_evidence = Some(TimeoutEvidence::V2(tc));
+        let decided: Leaf2<TestTypes> = proposal.clone().into();
+        let mut rec = recorder_in_tmp("f.0.jsonl");
+        rec.epoch_height = 10;
+        assert_eq!(rec.leaf_json(&decided), rec.proposal_json(&proposal));
+    }
+
+    #[tokio::test]
+    async fn identity_line_carries_restart_after_anchor_cert() {
+        let leaf = Leaf2::<TestTypes>::genesis(
+            &TestValidatedState::default(),
+            &TestInstanceState::default(),
+            TEST_VERSIONS.test.base,
+        )
+        .await;
+        let cert = build_genesis_cert1(&leaf);
+        let mut rec = recorder_in_tmp("d.0.jsonl");
+        rec.restarted(Some(&cert), ViewNumber::new(7), None, &[], None);
+        rec.preamble::<TestTypes>(
+            &BLSPubKey::generated_from_seed_indexed([0; 32], 0).0,
+            &leaf,
+            Some(&cert),
+            10,
+        );
+        let lock = cert1_json_raw(&cert);
+        let identity = &rec.lines[0];
+        assert!(
+            identity.contains(&format!(
+                "\"anchorCert\":{lock},\"restart\":{{\"lock\":{lock},"
+            )),
+            "{identity}"
+        );
+        // The recorder writes nothing on drop while `lines` holds only the identity line.
+        rec.lines.clear();
+    }
 }
