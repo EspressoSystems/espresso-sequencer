@@ -1266,9 +1266,9 @@ impl Fetcher {
             // Begin the main polling loop
             loop {
                 let finalized_block = loop {
-                    let finalized = state.lock().await.snapshot.finalized;
-                    if let Some(block) = finalized {
-                        break block;
+                    let last_finalized = state.lock().await.last_finalized;
+                    if let Some(block) = last_finalized {
+                        break self_clone.l1_client.wait_for_finalized_block(block).await;
                     }
                     tracing::debug!("Finalized block not yet available. Retrying in {l1_retry:?}",);
                     sleep(l1_retry).await;

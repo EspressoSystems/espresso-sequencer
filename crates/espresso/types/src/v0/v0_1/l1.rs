@@ -312,6 +312,7 @@ impl Provider for L1Client {
 pub(crate) struct L1State {
     pub(crate) snapshot: L1Snapshot,
     pub(crate) finalized: LruCache<u64, L1BlockInfoWithParent>,
+    pub(crate) last_finalized: Option<u64>,
     /// When a waiter last refreshed the head from the RPC, throttling `refresh_head` to one call
     /// per `WAIT_REFRESH_INTERVAL` across every concurrent waiter.
     pub(crate) last_head_refresh: Option<Instant>,
