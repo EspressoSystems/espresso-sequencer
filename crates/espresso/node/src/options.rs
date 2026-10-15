@@ -1688,6 +1688,8 @@ pub(crate) mod tests {
             "24000",
             "--",
             "query",
+            "--peers",
+            "http://peer.example:24000",
             "--",
             "config",
         ]);

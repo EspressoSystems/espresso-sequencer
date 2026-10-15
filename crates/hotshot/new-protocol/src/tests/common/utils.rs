@@ -1715,10 +1715,10 @@ pub(crate) fn build_timeout_cert3(
     ))
 }
 
-/// Name the leader of the view a step is about, for the replay.
+/// Name the leader of the view a step is about, for the trace checker.
 ///
 /// Every view has one, and the model takes the schedule as a parameter, so a
-/// trace that does not say who leads leaves the replay unable to tell a proposal
+/// trace that does not say who leads leaves the checker unable to tell a proposal
 /// this node was entitled to make from one it was not. Asked of the stake table
 /// here rather than taken from the propose path, so a propose path that forgets
 /// to check leadership is caught rather than confirmed.
@@ -1732,7 +1732,7 @@ pub(crate) fn build_timeout_cert3(
 /// silence would not say whether a view's leader was unknown or merely unrecorded,
 /// and the two mean different things to a reader. It is not a failure — an epoch
 /// the membership does not have leaves consensus unable to claim leadership
-/// either, so a replay that refuses to propose there agrees with it. Only reached
+/// either, and the rules, which then find no leader, agree with it. Only reached
 /// while recording, so an ordinary test run is unaffected.
 pub(crate) fn record_leader(
     trace: &mut trace::Recorder,
