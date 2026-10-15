@@ -5,18 +5,19 @@ use committable::{Commitment, Committable};
 use hotshot_query_service_types::availability::{QueryablePayload, VidCommonQueryData};
 use hotshot_types::{
     data::ViewNumber,
-    traits::{BlockPayload, EncodeBytes},
+    traits::{BlockPayload, EncodeBytes, block_contents::TxDigest},
     utils::BuilderCommitment,
     vid::advz::{ADVZCommon, ADVZScheme},
 };
 use jf_advz::VidScheme;
+use p3_maybe_rayon::prelude::*;
 use sha2::Digest;
 use thiserror::Error;
 
 use crate::{
     Index, Iter, NamespaceId, NsIndex, NsPayload, NsPayloadBuilder, NsPayloadRange, NsTable,
     NsTableBuilder, Payload, PayloadByteLen, SeqTypes, Transaction, TxIndex, TxProof,
-    v0::impls::{NodeState, ValidatedState},
+    v0::impls::{NodeState, ValidatedState, transaction::tx_digest},
     v0_3::ChainConfig,
 };
 
@@ -60,6 +61,16 @@ impl Payload {
         ns_payload.export_tx(&ns_id, &TxIndex(index.position as usize))
     }
 
+    /// Borrow a transaction's namespace ID and payload bytes from this payload.
+    fn transaction_bytes(&self, index: &Index) -> Option<(NamespaceId, &[u8])> {
+        let ns = &index.ns_index;
+        let ns_id = self.ns_table.read_ns_id(ns)?;
+        let bytes = self
+            .ns_payload(ns)
+            .tx_payload(&TxIndex(index.position as usize))?;
+        Some((ns_id, bytes))
+    }
+
     // CRATE-VISIBLE HELPERS START HERE
 
     pub(crate) fn read_ns_payload(&self, range: &NsPayloadRange) -> &NsPayload {
@@ -79,6 +90,28 @@ impl Payload {
     }
 
     // PRIVATE HELPERS START HERE
+
+    /// Apply `f` to every transaction index, in [`QueryablePayload::iter`] order.
+    ///
+    /// Indices are materialized first (far smaller than the transactions), so only `f` goes wide,
+    /// and only past [`MIN_PARALLEL_TRANSACTIONS`] or [`MIN_PARALLEL_BYTES`]. `par_iter` is
+    /// indexed, so `collect` preserves order.
+    fn map_transactions<T: Send>(
+        &self,
+        metadata: &NsTable,
+        f: impl Fn(&Index) -> T + Sync + Send,
+    ) -> Vec<T> {
+        let leaf = |index: &Index| {
+            let _span = tracing::debug_span!("tx_hash").entered();
+            f(index)
+        };
+        let indices: Vec<Index> = QueryablePayload::iter(self, metadata).collect();
+        if indices.len() < MIN_PARALLEL_TRANSACTIONS && self.raw_payload.len() < MIN_PARALLEL_BYTES
+        {
+            return indices.iter().map(leaf).collect();
+        }
+        indices.par_iter().map(leaf).collect()
+    }
 
     /// Need a sync version of [`BlockPayload::from_transactions`] in order to impl [`BlockPayload::empty`].
     pub fn from_transactions_sync(
@@ -154,19 +187,13 @@ impl Payload {
     }
 }
 
-/// Transaction count below which [`BlockPayload::transaction_commitments`] hashes
-/// serially.
+/// Transaction count below which [`Payload::map_transactions`] runs serially.
 ///
-/// Splitting and joining across the rayon pool costs more than the handful of
-/// Keccak256 rounds it would distribute, so small blocks — the common case — are
-/// better off never leaving the calling thread. The parallel path exists for
-/// recovery of large blocks, where this work is the serial tail between the
-/// erasure decode and the vote.
+/// Below this, splitting across the rayon pool costs more than the hashing it distributes.
 pub(crate) const MIN_PARALLEL_TRANSACTIONS: usize = 32;
 
-/// Payload size from which [`BlockPayload::transaction_commitments`] hashes in
-/// parallel regardless of transaction count; a few large transactions are slow to
-/// hash serially.
+/// Payload size from which [`Payload::map_transactions`] runs in parallel regardless of
+/// transaction count.
 pub(crate) const MIN_PARALLEL_BYTES: usize = 1 << 20;
 
 #[async_trait]
@@ -263,24 +290,23 @@ impl BlockPayload<SeqTypes> for Payload {
         &self,
         metadata: &Self::Metadata,
     ) -> Vec<Commitment<Self::Transaction>> {
-        use p3_maybe_rayon::prelude::*;
-
-        // `iter` only yields in-bounds indices; the same assumption `enumerate`
-        // documents and unwraps on. Both branches resolve through this, so they
-        // cannot disagree on contents or order.
-        let commit = |index: &Index| {
+        self.map_transactions(metadata, |index| {
             let _span = tracing::debug_span!("tx_hash").entered();
             self.transaction(index)
                 .expect("index yielded by iter must resolve to a transaction")
                 .commit()
-        };
+        })
+    }
 
-        let indices: Vec<Index> = QueryablePayload::iter(self, metadata).collect();
-        if indices.len() < MIN_PARALLEL_TRANSACTIONS && self.raw_payload.len() < MIN_PARALLEL_BYTES
-        {
-            return indices.iter().map(commit).collect();
-        }
-        indices.par_iter().map(commit).collect()
+    /// Same order and parallelism as [`Self::transaction_commitments`], hashing
+    /// the borrowed bytes without materializing each [`Transaction`].
+    fn transaction_digests(&self, metadata: &Self::Metadata) -> Vec<TxDigest> {
+        self.map_transactions(metadata, |index| {
+            let (ns, bytes) = self
+                .transaction_bytes(index)
+                .expect("index yielded by iter must resolve to a transaction");
+            tx_digest(ns, bytes)
+        })
     }
 
     fn txn_bytes(&self) -> usize {

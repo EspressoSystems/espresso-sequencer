@@ -3,7 +3,7 @@ pub mod payload;
 
 use std::marker::PhantomData;
 
-use committable::{Commitment, Committable};
+use committable::Committable;
 use hotshot_types::{
     data::{
         EpochNumber, UpgradeProposal2, VidDisperseShare2, ViewNumber,
@@ -17,7 +17,9 @@ use hotshot_types::{
         UpgradeVote2, Vote2Data,
     },
     traits::{
-        block_contents::BlockHeader, node_implementation::NodeType, signature_key::SignatureKey,
+        block_contents::{BlockHeader, TxDigest},
+        node_implementation::NodeType,
+        signature_key::SignatureKey,
     },
     utils::{epoch_from_block_number, is_last_block},
     vote::{HasViewNumber, Vote},
@@ -471,10 +473,10 @@ impl<T: NodeType> HasViewNumber for ProposalFetchMessage<T> {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Hash, Eq)]
 #[serde(bound(deserialize = ""))]
-pub struct DedupManifest<T: NodeType> {
+pub struct DedupManifest {
     pub view: ViewNumber,
     pub epoch: EpochNumber,
-    pub hashes: Vec<Commitment<T::Transaction>>,
+    pub hashes: Vec<TxDigest>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Hash, Eq)]
@@ -488,7 +490,7 @@ pub struct TransactionMessage<T: NodeType> {
 #[serde(bound(deserialize = ""))]
 pub enum BlockMessage<T: NodeType> {
     Transactions(TransactionMessage<T>),
-    DedupManifest(DedupManifest<T>),
+    DedupManifest(DedupManifest),
 }
 
 impl<T: NodeType> HasViewNumber for BlockMessage<T> {

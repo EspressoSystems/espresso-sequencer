@@ -18,9 +18,11 @@ use std::{
 };
 
 use alloy_primitives::FixedBytes;
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use async_trait::async_trait;
 use committable::{Commitment, Committable};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
+use tagged_base64::tagged;
 use vbs::version::Version;
 
 use super::signature_key::BuilderSignatureKey;
@@ -37,10 +39,32 @@ pub trait EncodeBytes {
     fn encode(&self) -> Arc<[u8]>;
 }
 
+/// Blake3 key identifying a transaction for local dedup. Not the public tx hash.
+#[tagged("TX_DIGEST")]
+#[derive(
+    Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, CanonicalSerialize, CanonicalDeserialize,
+)]
+pub struct TxDigest([u8; 32]);
+
+impl From<blake3::Hash> for TxDigest {
+    fn from(hash: blake3::Hash) -> Self {
+        Self(hash.into())
+    }
+}
+
+impl Debug for TxDigest {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Display::fmt(self, f)
+    }
+}
+
 /// Abstraction over any type of transaction. Used by [`BlockPayload`].
 pub trait Transaction:
     Clone + Serialize + DeserializeOwned + Debug + PartialEq + Eq + Sync + Send + Committable + Hash
 {
+    /// Local dedup key, not the public hash returned by [`Committable::commit`].
+    fn digest(&self) -> TxDigest;
+
     /// The function to estimate the transaction size
     /// It takes in the transaction itself and a boolean indicating if the transaction adds a new namespace
     /// Since each new namespace adds overhead
@@ -113,6 +137,11 @@ pub trait BlockPayload<TYPES: NodeType>:
         metadata: &Self::Metadata,
     ) -> Vec<Commitment<Self::Transaction>> {
         self.transactions(metadata).map(|tx| tx.commit()).collect()
+    }
+
+    /// List of transaction digests, in [`Self::transactions`] order.
+    fn transaction_digests(&self, metadata: &Self::Metadata) -> Vec<TxDigest> {
+        self.transactions(metadata).map(|tx| tx.digest()).collect()
     }
 
     /// Number of transactions in the block.
