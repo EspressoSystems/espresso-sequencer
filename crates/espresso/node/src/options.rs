@@ -12,7 +12,10 @@ use std::{
 };
 
 use anyhow::Context;
-use clap::{Args, FromArgMatches, Parser, error::ErrorKind};
+use clap::{
+    ArgMatches, Args, Command, CommandFactory, FromArgMatches, Parser, error::ErrorKind,
+    parser::ValueSource,
+};
 use derivative::Derivative;
 use espresso_telemetry::TelemetryOptions;
 use espresso_types::{BackoffParams, L1ClientOptions, parse_duration};
@@ -65,9 +68,9 @@ pub struct Options {
     #[derivative(Debug(format_with = "Display::fmt"))]
     pub orchestrator_url: Url,
 
-    /// The socket address of the HotShot CDN's main entry point (the marshal)
-    /// in `IP:port` form
+    /// Deprecated and ignored since protocol 0.6; kept so existing deployments still parse.
     #[clap(
+        hide = true,
         short,
         long,
         env = "ESPRESSO_NODE_CDN_ENDPOINT",
@@ -95,136 +98,176 @@ pub struct Options {
     )]
     pub cliquenet_advertise_address: Option<NetAddr>,
 
-    /// The address to bind to for Libp2p (in `host:port` form)
+    /// Deprecated and ignored since protocol 0.6; kept so existing deployments still parse.
     #[clap(
+        hide = true,
         long,
         env = "ESPRESSO_NODE_LIBP2P_BIND_ADDRESS",
         default_value = "0.0.0.0:1769"
     )]
     pub libp2p_bind_address: String,
 
-    /// Time between each Libp2p heartbeat
-    #[clap(long, env = "ESPRESSO_NODE_LIBP2P_HEARTBEAT_INTERVAL", default_value = "1s", value_parser = parse_duration)]
+    /// Deprecated and ignored since protocol 0.6; kept so existing deployments still parse.
+    #[clap(hide = true, long, env = "ESPRESSO_NODE_LIBP2P_HEARTBEAT_INTERVAL", default_value = "1s", value_parser = parse_duration)]
     pub libp2p_heartbeat_interval: Duration,
 
-    /// Number of past heartbeats to gossip about on Libp2p
-    #[clap(long, env = "ESPRESSO_NODE_LIBP2P_HISTORY_GOSSIP", default_value = "3")]
+    /// Deprecated and ignored since protocol 0.6; kept so existing deployments still parse.
+    #[clap(
+        hide = true,
+        long,
+        env = "ESPRESSO_NODE_LIBP2P_HISTORY_GOSSIP",
+        default_value = "3"
+    )]
     pub libp2p_history_gossip: usize,
 
-    /// Number of heartbeats to keep in the Libp2p `memcache`
-    #[clap(long, env = "ESPRESSO_NODE_LIBP2P_HISTORY_LENGTH", default_value = "5")]
+    /// Deprecated and ignored since protocol 0.6; kept so existing deployments still parse.
+    #[clap(
+        hide = true,
+        long,
+        env = "ESPRESSO_NODE_LIBP2P_HISTORY_LENGTH",
+        default_value = "5"
+    )]
     pub libp2p_history_length: usize,
 
-    /// Target number of peers for the Libp2p mesh network
-    #[clap(long, env = "ESPRESSO_NODE_LIBP2P_MESH_N", default_value = "8")]
+    /// Deprecated and ignored since protocol 0.6; kept so existing deployments still parse.
+    #[clap(
+        hide = true,
+        long,
+        env = "ESPRESSO_NODE_LIBP2P_MESH_N",
+        default_value = "8"
+    )]
     pub libp2p_mesh_n: usize,
 
-    /// Maximum number of peers in the Libp2p mesh network before removing some
-    #[clap(long, env = "ESPRESSO_NODE_LIBP2P_MESH_N_HIGH", default_value = "12")]
+    /// Deprecated and ignored since protocol 0.6; kept so existing deployments still parse.
+    #[clap(
+        hide = true,
+        long,
+        env = "ESPRESSO_NODE_LIBP2P_MESH_N_HIGH",
+        default_value = "12"
+    )]
     pub libp2p_mesh_n_high: usize,
 
-    /// Minimum number of peers in the Libp2p mesh network before adding more
-    #[clap(long, env = "ESPRESSO_NODE_LIBP2P_MESH_N_LOW", default_value = "6")]
+    /// Deprecated and ignored since protocol 0.6; kept so existing deployments still parse.
+    #[clap(
+        hide = true,
+        long,
+        env = "ESPRESSO_NODE_LIBP2P_MESH_N_LOW",
+        default_value = "6"
+    )]
     pub libp2p_mesh_n_low: usize,
 
-    /// Minimum number of outbound Libp2p peers in the mesh network before adding more
+    /// Deprecated and ignored since protocol 0.6; kept so existing deployments still parse.
     #[clap(
+        hide = true,
         long,
         env = "ESPRESSO_NODE_LIBP2P_MESH_OUTBOUND_MIN",
         default_value = "2"
     )]
     pub libp2p_mesh_outbound_min: usize,
 
-    /// The maximum number of messages to include in a Libp2p IHAVE message
+    /// Deprecated and ignored since protocol 0.6; kept so existing deployments still parse.
     #[clap(
+        hide = true,
         long,
         env = "ESPRESSO_NODE_LIBP2P_MAX_IHAVE_LENGTH",
         default_value = "5000"
     )]
     pub libp2p_max_ihave_length: usize,
 
-    /// The maximum number of IHAVE messages to accept from a Libp2p peer within a heartbeat
+    /// Deprecated and ignored since protocol 0.6; kept so existing deployments still parse.
     #[clap(
+        hide = true,
         long,
         env = "ESPRESSO_NODE_LIBP2P_MAX_IHAVE_MESSAGES",
         default_value = "10"
     )]
     pub libp2p_max_ihave_messages: usize,
 
-    /// Libp2p published message ids time cache duration
-    #[clap(long, env = "ESPRESSO_NODE_LIBP2P_PUBLISHED_MESSAGE_IDS_CACHE_TIME", default_value = "10s", value_parser = parse_duration)]
+    /// Deprecated and ignored since protocol 0.6; kept so existing deployments still parse.
+    #[clap(hide = true, long, env = "ESPRESSO_NODE_LIBP2P_PUBLISHED_MESSAGE_IDS_CACHE_TIME", default_value = "10s", value_parser = parse_duration)]
     pub libp2p_published_message_ids_cache_time: Duration,
 
-    /// Time to wait for a Libp2p message requested through IWANT following an IHAVE advertisement
+    /// Deprecated and ignored since protocol 0.6; kept so existing deployments still parse.
     #[clap(
+        hide = true,
         long,
         env = "ESPRESSO_NODE_LIBP2P_MAX_IWANT_FOLLOWUP_TIME",
         default_value = "3s", value_parser = parse_duration
     )]
     pub libp2p_iwant_followup_time: Duration,
 
-    /// The maximum number of Libp2p messages we will process in a given RPC
-    #[clap(long, env = "ESPRESSO_NODE_LIBP2P_MAX_MESSAGES_PER_RPC")]
+    /// Deprecated and ignored since protocol 0.6; kept so existing deployments still parse.
+    #[clap(hide = true, long, env = "ESPRESSO_NODE_LIBP2P_MAX_MESSAGES_PER_RPC")]
     pub libp2p_max_messages_per_rpc: Option<usize>,
 
-    /// How many times we will allow a Libp2p peer to request the same message id through IWANT gossip before we start ignoring them
+    /// Deprecated and ignored since protocol 0.6; kept so existing deployments still parse.
     #[clap(
+        hide = true,
         long,
         env = "ESPRESSO_NODE_LIBP2P_GOSSIP_RETRANSMISSION",
         default_value = "3"
     )]
     pub libp2p_gossip_retransmission: u32,
 
-    /// If enabled newly created messages will always be sent to all peers that are subscribed to the topic and have a good enough score
+    /// Deprecated and ignored since protocol 0.6; kept so existing deployments still parse.
     #[clap(
+        hide = true,
         long,
         env = "ESPRESSO_NODE_LIBP2P_FLOOD_PUBLISH",
         default_value = "true"
     )]
     pub libp2p_flood_publish: bool,
 
-    /// The time period that Libp2p message hashes are stored in the cache
-    #[clap(long, env = "ESPRESSO_NODE_LIBP2P_DUPLICATE_CACHE_TIME", default_value = "20m", value_parser = parse_duration)]
+    /// Deprecated and ignored since protocol 0.6; kept so existing deployments still parse.
+    #[clap(hide = true, long, env = "ESPRESSO_NODE_LIBP2P_DUPLICATE_CACHE_TIME", default_value = "20m", value_parser = parse_duration)]
     pub libp2p_duplicate_cache_time: Duration,
 
-    /// Time to live for Libp2p fanout peers
-    #[clap(long, env = "ESPRESSO_NODE_LIBP2P_FANOUT_TTL", default_value = "60s", value_parser = parse_duration)]
+    /// Deprecated and ignored since protocol 0.6; kept so existing deployments still parse.
+    #[clap(hide = true, long, env = "ESPRESSO_NODE_LIBP2P_FANOUT_TTL", default_value = "60s", value_parser = parse_duration)]
     pub libp2p_fanout_ttl: Duration,
 
-    /// Initial delay in each Libp2p heartbeat
-    #[clap(long, env = "ESPRESSO_NODE_LIBP2P_HEARTBEAT_INITIAL_DELAY", default_value = "5s", value_parser = parse_duration)]
+    /// Deprecated and ignored since protocol 0.6; kept so existing deployments still parse.
+    #[clap(hide = true, long, env = "ESPRESSO_NODE_LIBP2P_HEARTBEAT_INITIAL_DELAY", default_value = "5s", value_parser = parse_duration)]
     pub libp2p_heartbeat_initial_delay: Duration,
 
-    /// How many Libp2p peers we will emit gossip to at each heartbeat
+    /// Deprecated and ignored since protocol 0.6; kept so existing deployments still parse.
     #[clap(
+        hide = true,
         long,
         env = "ESPRESSO_NODE_LIBP2P_GOSSIP_FACTOR",
         default_value = "0.25"
     )]
     pub libp2p_gossip_factor: f64,
 
-    /// Minimum number of Libp2p peers to emit gossip to during a heartbeat
-    #[clap(long, env = "ESPRESSO_NODE_LIBP2P_GOSSIP_LAZY", default_value = "6")]
+    /// Deprecated and ignored since protocol 0.6; kept so existing deployments still parse.
+    #[clap(
+        hide = true,
+        long,
+        env = "ESPRESSO_NODE_LIBP2P_GOSSIP_LAZY",
+        default_value = "6"
+    )]
     pub libp2p_gossip_lazy: usize,
 
-    /// The maximum number of bytes we will send in a single Libp2p gossip message
+    /// Deprecated and ignored since protocol 0.6; kept so existing deployments still parse.
     #[clap(
+        hide = true,
         long,
         env = "ESPRESSO_NODE_LIBP2P_MAX_GOSSIP_TRANSMIT_SIZE",
         default_value = "2000000"
     )]
     pub libp2p_max_gossip_transmit_size: usize,
 
-    /// The maximum number of bytes we will send in a single Libp2p direct message
+    /// Deprecated and ignored since protocol 0.6; kept so existing deployments still parse.
     #[clap(
+        hide = true,
         long,
         env = "ESPRESSO_NODE_LIBP2P_MAX_DIRECT_TRANSMIT_SIZE",
         default_value = "20000000"
     )]
     pub libp2p_max_direct_transmit_size: u64,
 
-    /// Only for the decaf network unmerge migration. Do not set unless specifically requested.
-    #[clap(long, env = "ESPRESSO_NODE_LIBP2P_DHT_PUT_QUORUM")]
+    /// Deprecated and ignored since protocol 0.6; kept so existing deployments still parse.
+    #[clap(hide = true, long, env = "ESPRESSO_NODE_LIBP2P_DHT_PUT_QUORUM")]
     pub libp2p_dht_put_quorum: Option<std::num::NonZeroUsize>,
 
     /// The URL we advertise to other nodes as being for our public API.
@@ -232,26 +275,13 @@ pub struct Options {
     #[clap(long, env = "ESPRESSO_NODE_PUBLIC_API_URL")]
     pub public_api_url: Option<Url>,
 
-    /// The address we advertise to other nodes as being a Libp2p endpoint.
-    /// Should be supplied in `host:port` form.
-    ///
-    /// Operators should set this to a publicly routable address whenever the bind address
-    /// is not directly reachable from peers (NAT, K8s NodePort, Docker bridge). It is added
-    /// to libp2p as an `external_address` so that Identify and Kademlia announce it to the
-    /// network. Non-globally-routable IP literals (loopback, RFC 1918 private, link-local,
-    /// etc.) only work for local testing (`demo-native`, `docker-compose`) and are dropped
-    /// from the libp2p announcement; hostnames are passed through unchanged.
-    ///
-    /// Also required when bootstrapping a fresh network from the orchestrator, where it is
-    /// registered into the stake table so peers can dial us.
-    #[clap(long, env = "ESPRESSO_NODE_LIBP2P_ADVERTISE_ADDRESS")]
+    /// Deprecated and ignored since protocol 0.6; kept so existing deployments still parse.
+    #[clap(hide = true, long, env = "ESPRESSO_NODE_LIBP2P_ADVERTISE_ADDRESS")]
     pub libp2p_advertise_address: Option<String>,
 
-    /// A comma-separated list of Libp2p multiaddresses to use as bootstrap
-    /// nodes.
-    ///
-    /// Overrides those loaded from the `HotShot` config.
+    /// Deprecated and ignored since protocol 0.6; kept so existing deployments still parse.
     #[clap(
+        hide = true,
         long,
         env = "ESPRESSO_NODE_LIBP2P_BOOTSTRAP_NODES",
         value_delimiter = ',',
@@ -381,6 +411,16 @@ pub struct Options {
 }
 
 impl Options {
+    /// Parse the command line, also returning the ignored network options it set.
+    pub fn parse_with_ignored() -> (Self, Vec<String>) {
+        let mut cmd = Self::command();
+        let matches = cmd.get_matches_mut();
+        let opt =
+            Self::from_arg_matches(&matches).unwrap_or_else(|err| err.format(&mut cmd).exit());
+        let ignored = ignored_network_options(&cmd, &matches);
+        (opt, ignored)
+    }
+
     pub fn modules(&self) -> Modules {
         ModuleArgs(self.modules.clone()).parse()
     }
@@ -427,6 +467,24 @@ impl Options {
             },
         })
     }
+}
+
+/// The CDN and libp2p options set on the command line or in the environment.
+///
+/// They configured the networks consensus ran on before 0.6. They still parse, so existing
+/// deployments start, but nothing reads them.
+fn ignored_network_options(cmd: &Command, matches: &ArgMatches) -> Vec<String> {
+    cmd.get_arguments()
+        .filter(|arg| {
+            let id = arg.get_id().as_str();
+            id == "cdn_endpoint" || id.starts_with("libp2p_")
+        })
+        .filter_map(|arg| match matches.value_source(arg.get_id().as_str())? {
+            ValueSource::CommandLine => arg.get_long().map(|long| format!("--{long}")),
+            ValueSource::EnvVariable => arg.get_env().map(|env| env.to_string_lossy().into_owned()),
+            _ => None,
+        })
+        .collect()
 }
 
 /// Parse an address to bind to, and check that it is well-formed, so that a mistyped
@@ -1250,6 +1308,40 @@ pub(crate) mod tests {
         assert!(
             version.contains("testing"),
             "expected testing in features: {version}"
+        );
+    }
+
+    #[test]
+    fn ignored_network_options_skip_defaults() {
+        let cmd = Options::command();
+        let matches = cmd.clone().try_get_matches_from(["espresso-node"]).unwrap();
+        assert!(ignored_network_options(&cmd, &matches).is_empty());
+
+        let matches = cmd
+            .clone()
+            .try_get_matches_from([
+                "espresso-node",
+                "--cdn-endpoint",
+                "cdn:1737",
+                "--libp2p-mesh-n",
+                "4",
+            ])
+            .unwrap();
+        assert_eq!(
+            ignored_network_options(&cmd, &matches),
+            ["--cdn-endpoint", "--libp2p-mesh-n"]
+        );
+
+        // Clap reads the environment when the command is built, so build it after setting the
+        // variable. SAFETY: nextest runs each test in its own process, and no other test reads
+        // this variable.
+        unsafe { std::env::set_var("ESPRESSO_NODE_LIBP2P_MESH_N_HIGH", "16") };
+        let cmd = Options::command();
+        unsafe { std::env::remove_var("ESPRESSO_NODE_LIBP2P_MESH_N_HIGH") };
+        let matches = cmd.clone().try_get_matches_from(["espresso-node"]).unwrap();
+        assert_eq!(
+            ignored_network_options(&cmd, &matches),
+            ["ESPRESSO_NODE_LIBP2P_MESH_N_HIGH"]
         );
     }
 
