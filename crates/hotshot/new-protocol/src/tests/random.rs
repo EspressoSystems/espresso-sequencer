@@ -3,9 +3,9 @@
 //! The other tests here fix a delivery order and assert an outcome. This one
 //! fixes neither: it feeds one node a seeded random permutation of well-formed
 //! inputs and asserts nothing about what the node does. What checks the run is
-//! the recorded trace, replayed against the Lean reference machine — every
-//! action the node took must be one the machine could have taken from the same
-//! inputs, which is the whole of conformance.
+//! the recorded trace, checked against the Lean specification: every action the
+//! node took must be one the rules permit after the same inputs, and every
+//! action they oblige it to take it must take in time.
 //!
 //! The randomness is in the *schedule*, not in the bytes. Consensus consumes
 //! values the verification layer has already accepted (`ValidCert`, a validated
