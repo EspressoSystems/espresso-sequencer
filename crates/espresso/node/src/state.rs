@@ -32,7 +32,7 @@ use versions::{DRB_AND_HEADER_UPGRADE_VERSION, EPOCH_REWARD_VERSION, EPOCH_VERSI
 use crate::{
     NodeState, SeqTypes,
     api::{RewardMerkleTreeDataSource, RewardMerkleTreeV2Data},
-    catchup::{CatchupStorage, SqlStateCatchup},
+    catchup::{CatchupStorage, ParallelStateCatchup, SqlStateCatchup},
     persistence::ChainConfigPersistence,
 };
 
@@ -366,6 +366,11 @@ const PRUNED_LEAF_CHECK_INTERVAL: Duration = Duration::from_secs(10);
 /// How many leaves fetched from peers go by between progress log lines.
 const PRUNED_LEAF_PROGRESS_EVERY: u64 = 1000;
 
+/// How long a state update waits on this database before it asks peers. A local read answers or
+/// fails quickly, so this only keeps a stuck read from stalling the loop. It is long, so that a
+/// slow read does not send requests to peers for nothing.
+const LOCAL_CATCHUP_TIMEOUT: Duration = Duration::from_secs(60);
+
 #[tracing::instrument(skip_all)]
 pub(crate) async fn update_state_storage_loop<T>(
     storage: Arc<T>,
@@ -621,11 +626,20 @@ async fn apply_leaf<T>(
     for<'a> T::Transaction<'a>: SequencerStateUpdate,
 {
     // The parent snapshot is the state head, which this database always keeps, so read it from
-    // here only: peers may have pruned it. When the data pruner has deleted the parent's leaf and
-    // header, the catchup reads the snapshot by the roots in the parent state. Reward accounts do
-    // not use this catchup; `apply_header` reads them through the node's catchup. Retries are off
+    // here first: peers may have pruned it. When the data pruner has deleted the parent's leaf and
+    // header, the local catchup reads the snapshot by the roots in the parent state. What the
+    // snapshot lacks comes from the node's catchup, which asks peers: a loop that started from a
+    // boundary snapshot holds only the fee accounts it has touched since. Reward accounts do not
+    // use this catchup; `apply_header` reads them through the node's catchup. Retries are off
     // because the loop below retries.
-    let catchup = SqlStateCatchup::new(storage.clone(), BackoffParams::disabled());
+    let local: Arc<dyn StateCatchup> = Arc::new(SqlStateCatchup::new(
+        storage.clone(),
+        BackoffParams::disabled(),
+    ));
+    let catchup = ParallelStateCatchup::new(
+        &[local, instance.state_catchup.clone()],
+        LOCAL_CATCHUP_TIMEOUT,
+    );
     loop {
         tracing::debug!(
             height = leaf.height(),
