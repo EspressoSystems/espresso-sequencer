@@ -2628,11 +2628,14 @@ class QueryNode:
         self.height = height
         self.ready_at = ready_at
         self.status = 200
+        self.down = False
         self.paths: list[str] = []
 
     def request(
         self, method: str, url: str, body: bytes | None = None, timeout: float = 10.0
     ) -> tuple[int, bytes]:
+        if self.down:
+            raise ConnectionRefusedError("down")
         path = url.removeprefix("http://q")
         self.paths.append(path)
         if path == "/v1/node/block-height":
@@ -2705,6 +2708,34 @@ def test_a_range_the_node_lacks_is_retried_then_recorded_missing():
     (rec,) = poll(node, reader)
     assert (rec["status"], rec["bytes"], rec["t_start"]) == ("missing", 0, 0.0)
     assert (reader.next, reader.since) == (12, None)
+
+
+def test_a_range_is_not_aged_while_every_query_node_refuses():
+    clock = fakes.FakeClock()
+    node = QueryNode(clock, 12, ready_at=math.inf)
+    reader = netbench.Reader(ns=10000, index=0, next=10)
+    assert poll(node, reader) == []
+    node.down = True
+    clock.advance(2 * netbench.MISSING_PAYLOAD_S)
+    assert poll(node, reader) == []
+    node.down = False
+    assert poll(node, reader) == []
+    assert reader.next == 10
+
+
+def test_a_missing_payload_is_not_aged_while_every_query_node_refuses():
+    clock = fakes.FakeClock()
+    node = QueryNode(clock, 12)
+    node.down = True
+    state, missing = netbench.LoadState(), {10: 0.0}
+
+    async def scan(height: int) -> list[int] | None:
+        return netbench.scan_block(node, ["http://q"], b"m", height)
+
+    clock.advance(2 * netbench.MISSING_PAYLOAD_S)
+    clock.run(netbench.retry_missing(state, scan, netbench.Heights(10), missing, clock))
+    assert missing == {10: clock.now}
+    assert not state.missing_payloads
 
 
 def test_a_range_served_after_retries_counts_from_its_first_attempt():

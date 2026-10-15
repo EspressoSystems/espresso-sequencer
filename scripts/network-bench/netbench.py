@@ -694,6 +694,10 @@ class NetworkError(Exception):
     pass
 
 
+class NoAnswer(Exception):
+    """No query node accepted a connection."""
+
+
 def drive_load(
     cfg: BenchConfig,
     topo: Topology,
@@ -831,18 +835,24 @@ def block_count(pool: Http, url: str, source: "HeightSource") -> int:
 
 
 def get_first(pool: Http, query_urls: Sequence[str], path: str) -> bytes | None:
-    """Body of `path` from the first query node that has it. A node that refuses, fails,
-    answers 5xx or 404 (still syncing) is skipped; None if none has it yet."""
+    """Body of `path` from the first query node that has it. A node that fails, answers 5xx
+    or 404 (still syncing) is skipped; None if none has it yet. NoAnswer if every node refused
+    the connection."""
+    answered = False
     for query_url in query_urls:
         try:
             status, body = pool.request("GET", query_url + path)
         except OSError as err:
             log.debug("%s, trying the next query node", err)
+            answered |= not isinstance(err, ConnectionError)
             continue
+        answered = True
         if status == 200:
             return body
         if status != 404 and status < 500:
             raise NetworkError(f"GET {path} from query node: HTTP {status}")
+    if not answered:
+        raise NoAnswer(path)
     return None
 
 
@@ -957,17 +967,22 @@ def poll_reader(
     pool: Http, query_urls: Sequence[str], reader: Reader, clock: Clock
 ) -> list[dict[str, Any]]:
     """Fetches the blocks beyond the reader's cursor up to `query_tip`, one record per range.
-    A range no node serves yet is tried again on the next poll; after MISSING_PAYLOAD_S it is
-    recorded as missing and skipped."""
+    A range no node serves yet is tried again on the next poll; after MISSING_PAYLOAD_S of
+    nodes answering without it, it is recorded as missing and skipped."""
     tip = query_tip(pool, query_urls, reader.next)
     if tip is None:
+        reader.since = None
         return []
     records = []
     while reader.next < tip:
         start, end = reader.next, min(tip, reader.next + CLIENT_RANGE)
         if reader.since is None:
             reader.since = clock.time()
-        size = fetch_range(pool, query_urls, start, end, reader.ns)
+        try:
+            size = fetch_range(pool, query_urls, start, end, reader.ns)
+        except NoAnswer:
+            reader.since = None
+            break
         now = clock.time()
         if size is None and now - reader.since < MISSING_PAYLOAD_S:
             break
@@ -991,7 +1006,10 @@ def query_tip(pool: Http, query_urls: Sequence[str], above: int) -> int | None:
     """Block height of the first query node that answers one above `above`; a node catching
     up after a wipe answers a lower one. None if none does."""
     for url in query_urls:
-        height = get_first(pool, [url], HEIGHT_API["query"][0])
+        try:
+            height = get_first(pool, [url], HEIGHT_API["query"][0])
+        except NoAnswer:
+            continue
         if height is not None and int(height) > above:
             return int(height)
     return None
@@ -2181,9 +2199,9 @@ async def track_inclusion(
         while height < top - PAYLOAD_LAG_BLOCKS:
             batch = range(height, min(top - PAYLOAD_LAG_BLOCKS, height + SCAN_BATCH))
             scans = await asyncio.gather(*(scan_stamped(scan, h, clock) for h in batch))
-            for h, (ids, at) in zip(batch, scans):
+            for h, (ids, at, answered) in zip(batch, scans):
                 if ids is None:
-                    missing[h] = heights.seen["query"][h]
+                    missing[h] = heights.seen["query"][h] if answered else at
                 else:
                     record_inclusions(state, ids, heights, h, at)
             height = batch.stop
@@ -2199,9 +2217,13 @@ async def retry_missing(
     clock: Clock,
 ) -> None:
     """One fetch per missing payload. Past MISSING_PAYLOAD_S after its block appeared a
-    payload counts as lost; its transactions, which cannot be told apart, time out."""
+    payload counts as lost; its transactions, which cannot be told apart, time out. The
+    time restarts while every query node refuses."""
     for height, at_height in list(missing.items()):
-        ids, at = await scan_stamped(scan, height, clock)
+        ids, at, answered = await scan_stamped(scan, height, clock)
+        if not answered:
+            missing[height] = at
+            continue
         if ids is None and at - at_height < MISSING_PAYLOAD_S:
             continue
         del missing[height]
@@ -2214,10 +2236,14 @@ async def retry_missing(
 
 async def scan_stamped(
     scan: Scan, height: int, clock: Clock
-) -> tuple[list[int] | None, float]:
-    """The scan and when it finished, so blocks scanned together are not stamped alike."""
-    ids = await scan(height)
-    return ids, clock.time()
+) -> tuple[list[int] | None, float, bool]:
+    """The scan, when it finished (so blocks scanned together are not stamped alike) and
+    whether a query node answered."""
+    try:
+        ids, answered = await scan(height), True
+    except NoAnswer:
+        ids, answered = None, False
+    return ids, clock.time(), answered
 
 
 def record_inclusions(
