@@ -8,7 +8,6 @@ use ::light_client::{
 };
 use alloy::primitives::U256;
 use anyhow::{Context, bail, ensure};
-use async_lock::RwLock;
 use async_once_cell::Lazy;
 use async_trait::async_trait;
 use committable::Commitment;
@@ -59,7 +58,6 @@ use itertools::Itertools;
 use jf_merkle_tree_compat::MerkleTreeScheme;
 use moka::future::Cache;
 use rand::Rng;
-use request_response::RequestType;
 use serde::{Deserialize, Serialize};
 use tokio::{sync::OnceCell, time::timeout};
 use url::Url;
@@ -88,7 +86,6 @@ use crate::{
         request::{Request, Response},
     },
     state_cert::{StateCertFetchError, validate_state_cert},
-    state_signature::StateSigner,
 };
 
 pub mod context;
@@ -143,10 +140,6 @@ impl<C: ApiContext> ApiState<C> {
 
     async fn persistence(&self) -> Arc<C::Persistence> {
         self.context().await.persistence()
-    }
-
-    async fn state_signer(&self) -> Option<Arc<RwLock<StateSigner<SequencerApiVersion>>>> {
-        self.context().await.state_signer()
     }
 
     async fn network_config(&self) -> NetworkConfig<SeqTypes> {
@@ -528,7 +521,6 @@ where
             duration,
             request_response_protocol.request_indefinitely::<_, _, _>(
                 Request::VidShare(block_number, request_id),
-                RequestType::Batched,
                 move |_request, response| {
                     let avidm_param = avidm_param.clone();
                     let received_shares = received_shares_clone.clone();
@@ -1170,12 +1162,12 @@ impl<C: ApiContext, D: Sync> StateSignatureDataSource for StorageState<C, D> {
 #[async_trait]
 impl<C: ApiContext> StateSignatureDataSource for ApiState<C> {
     async fn get_state_signature(&self, height: u64) -> Option<LCV3StateSignatureRequestBody> {
-        self.state_signer()
-            .await?
+        self.context()
+            .await
+            .state_signatures()?
             .read()
             .await
-            .get_state_signature(height)
-            .await
+            .get_signature(height)
     }
 }
 

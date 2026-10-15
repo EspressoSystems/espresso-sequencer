@@ -1,5 +1,36 @@
 use super::*;
 
+/// A namespace proof range ahead of the chain tip gives up like the other range endpoints,
+/// instead of holding one of the server's request slots until the chain gets there.
+#[test_log::test(tokio::test(flavor = "multi_thread"))]
+async fn test_namespace_proof_range_ahead_of_tip_is_not_found() {
+    let port = reserve_tcp_port().expect("OS should have ephemeral ports available");
+    let storage = SqlDataSource::create_storage().await;
+    let options = SqlDataSource::options(&storage, Options::with_port(port));
+    let config = TestNetworkConfigBuilder::default()
+        .api_config(options)
+        .network_config(TestConfigBuilder::default().build())
+        .build();
+    let _network = TestNetwork::new(config, TEST_UPGRADE).await;
+    let url = format!("http://localhost:{port}").parse().unwrap();
+    let client: Client<ClientErr, SequencerApiVersion> = Client::new(url);
+    client.connect(Some(Duration::from_secs(15))).await;
+
+    for route in [
+        "availability/block/1000000/1000005/namespace/0",
+        "v2/availability/namespace-proof-range?from=1000000&until=1000005&namespace=0",
+    ] {
+        let err = tokio::time::timeout(
+            Duration::from_secs(10),
+            client.get::<serde_json::Value>(route).send(),
+        )
+        .await
+        .unwrap_or_else(|_| panic!("{route} did not answer"))
+        .expect_err(route);
+        assert_eq!(err.status, StatusCode::NOT_FOUND, "{route}");
+    }
+}
+
 #[test_log::test(tokio::test(flavor = "multi_thread"))]
 async fn test_tx_metadata() {
     let port = reserve_tcp_port().expect("OS should have ephemeral ports available");
@@ -17,7 +48,7 @@ async fn test_tx_metadata() {
         )
         .network_config(network_config)
         .build();
-    let network = TestNetwork::new(config, MOCK_SEQUENCER_VERSIONS).await;
+    let network = TestNetwork::new(config, TEST_UPGRADE).await;
     let mut events = network.server.event_stream();
 
     client.connect(None).await;
@@ -36,6 +67,16 @@ async fn test_tx_metadata() {
                 .await
                 .unwrap();
             let (block, _) = wait_for_decide_on_handle(&mut events, &txn).await;
+            // The decide can reach us before the query service has the block's payload.
+            client
+                .socket(&format!("availability/stream/blocks/{block}"))
+                .subscribe::<BlockQueryData<SeqTypes>>()
+                .await
+                .unwrap()
+                .next()
+                .await
+                .unwrap()
+                .unwrap();
 
             // Block summary should contain information about the namespace.
             let summary: BlockSummaryQueryData<SeqTypes> = client
@@ -105,7 +146,7 @@ async fn test_aggregator_namespace_endpoints() {
         .network_config(network_config)
         .persistences(persistence_options.clone())
         .build();
-    let network = TestNetwork::new(config, MOCK_SEQUENCER_VERSIONS).await;
+    let network = TestNetwork::new(config, TEST_UPGRADE).await;
     let mut events = network.server.event_stream();
     let start = Instant::now();
     let mut total_transactions = 0;
@@ -305,7 +346,7 @@ async fn test_stream_transactions_endpoint() {
         .network_config(network_config)
         .persistences(persistence_options.clone())
         .build();
-    let network = TestNetwork::new(config, MOCK_SEQUENCER_VERSIONS).await;
+    let network = TestNetwork::new(config, TEST_UPGRADE).await;
     let mut events = network.server.event_stream();
     let mut all_transactions = HashMap::new();
     let mut namespace_tx: HashMap<_, HashSet<_>> = HashMap::new();
@@ -391,24 +432,24 @@ async fn test_stream_transactions_endpoint() {
 }
 
 #[test_log::test(tokio::test(flavor = "multi_thread"))]
-async fn test_namespace_query_compat_v0_3() {
-    test_namespace_query_compat_helper(Upgrade::trivial(EPOCH_VERSION)).await;
-}
-
-async fn test_namespace_query_compat_helper(upgrade: Upgrade) {
+async fn test_namespace_query_compat() {
     // Number of nodes running in the test network.
     const NUM_NODES: usize = 5;
 
     let port = reserve_tcp_port().expect("OS should have ephemeral ports available");
     let url: Url = format!("http://localhost:{port}").parse().unwrap();
 
+    // At 0.6 the query service gets decided payloads and VID from the DA proposals and VID
+    // shares in consensus storage, so the nodes need real persistence.
+    let (storage, persistence) = node_storage::<SqlDataSource, NUM_NODES>().await;
+
     let test_config = TestConfigBuilder::default().build();
     let config = TestNetworkConfigBuilder::<NUM_NODES, _, _>::with_num_nodes()
-        .api_config(Options::from(options::Http {
-            port,
-            max_connections: None,
-            tonic_port: None,
-        }))
+        .api_config(SqlDataSource::options(
+            &storage[0],
+            Options::with_port(port),
+        ))
+        .persistences(persistence)
         .catchups(std::array::from_fn(|_| {
             StatePeers::<SequencerApiVersion>::from_urls(
                 vec![url.clone()],
@@ -420,7 +461,7 @@ async fn test_namespace_query_compat_helper(upgrade: Upgrade) {
         .network_config(test_config)
         .build();
 
-    let mut network = TestNetwork::new(config, upgrade).await;
+    let mut network = TestNetwork::new(config, TEST_UPGRADE).await;
     let mut events = network.server.event_stream();
 
     // Submit a transaction.
@@ -440,7 +481,6 @@ async fn test_namespace_query_compat_helper(upgrade: Upgrade) {
             .send()
     )
     .unwrap();
-    let version = header.version();
 
     // The latest version of the API (whether we specifically ask for v1 or let the redirect
     // occur) will give us a namespace proof no matter which VID version is in use.
@@ -455,11 +495,7 @@ async fn test_namespace_query_compat_helper(upgrade: Upgrade) {
             .await
             .unwrap();
         let proof = ns_proof.proof.as_ref().unwrap();
-        if version < EPOCH_VERSION {
-            assert!(matches!(proof, NsProof::V0(..)));
-        } else {
-            assert!(matches!(proof, NsProof::V1(..)));
-        }
+        assert!(matches!(proof, NsProof::V2(..)));
         let (txs, ns_from_proof) = proof
             .verify(
                 header.ns_table(),
@@ -516,4 +552,85 @@ async fn test_namespace_query_compat_helper(upgrade: Upgrade) {
     }
 
     network.server.shut_down().await;
+}
+
+/// Rollups still fetch their namespaces from mainnet blocks before 0.6, proven with ADVZ
+/// before 0.3 and AvidM after.
+#[rstest]
+#[case::v2_v3("v2-v3")]
+#[case::v4("v4")]
+#[case::v5("v5")]
+#[test_log::test(tokio::test(flavor = "multi_thread"))]
+async fn test_legacy_namespace_proofs(#[case] chain: &str) -> anyhow::Result<()> {
+    let chain = LegacyChain::load(chain)?;
+    let replay = chain.replay().await?;
+    let versions = chain.blocks[1..]
+        .iter()
+        .map(|block| block.leaf.header().version())
+        .collect::<HashSet<_>>();
+    // Proving every block of the 1001-block upgrade chain takes too long.
+    let sampled = versions.iter().flat_map(|version| {
+        chain
+            .blocks
+            .iter()
+            .filter(move |block| block.leaf.header().version() == *version)
+            .take(25)
+    });
+    let mut proven = HashSet::new();
+    for recorded in sampled {
+        let header = recorded.leaf.header();
+        let height = header.height();
+        for ns in [101u64, 102].map(NamespaceId::from) {
+            let res: NamespaceProofQueryData = replay
+                .client
+                .get(&format!("availability/block/{height}/namespace/{ns}"))
+                .send()
+                .await?;
+            let Some(proof) = &res.proof else {
+                ensure!(
+                    header.ns_table().find_ns_id(&ns).is_none() && res.transactions.is_empty(),
+                    "no proof of namespace {ns} in block {height}"
+                );
+                continue;
+            };
+            assert_ns_proof_matches_version(proof, header.version());
+            let (txs, proven_ns) = proof
+                .verify(
+                    header.ns_table(),
+                    &header.payload_commitment(),
+                    recorded.vid_common.common(),
+                )
+                .with_context(|| format!("namespace {ns} of block {height}"))?;
+            ensure!(
+                proven_ns == ns && !txs.is_empty() && txs == res.transactions,
+                "namespace {ns} of block {height} proves its transactions"
+            );
+            proven.insert(header.version());
+        }
+
+        let cert2 = replay
+            .client
+            .get::<serde_json::Value>(&format!("availability/cert2/{height}"))
+            .send()
+            .await;
+        ensure!(
+            matches!(&cert2, Err(err) if err.status == StatusCode::NOT_FOUND),
+            "legacy block {height} has a cert2: {cert2:?}"
+        );
+    }
+    ensure!(proven == versions, "proved {proven:?} of {versions:?}");
+    Ok(())
+}
+
+/// ADVZ proves namespaces before 0.3, AvidM until 0.6 and AvidmGf2 from then on.
+fn assert_ns_proof_matches_version(proof: &NsProof, version: Version) {
+    match proof {
+        NsProof::V0(..) => assert!(version < EPOCH_VERSION, "{version}"),
+        NsProof::V1(..) => assert!(
+            (EPOCH_VERSION..NEW_PROTOCOL_VERSION).contains(&version),
+            "{version}"
+        ),
+        NsProof::V2(..) => assert!(version >= NEW_PROTOCOL_VERSION, "{version}"),
+        NsProof::V1IncorrectEncoding(..) => panic!("honest blocks are encoded correctly"),
+    }
 }

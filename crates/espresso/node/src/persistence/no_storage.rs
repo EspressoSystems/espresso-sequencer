@@ -24,8 +24,8 @@ use hotshot_types::{
     message::Proposal,
     new_protocol::CoordinatorEvent,
     simple_certificate::{
-        CertificatePair, LightClientStateUpdateCertificateV2, NextEpochQuorumCertificate2,
-        QuorumCertificate2, UpgradeCertificate,
+        Certificate2, CertificatePair, LightClientStateUpdateCertificateV2,
+        NextEpochQuorumCertificate2, QuorumCertificate2, UpgradeCertificate,
     },
     traits::metrics::Metrics,
     vote::HasViewNumber,
@@ -70,6 +70,7 @@ impl SequencerPersistence for NoStorage {
         &self,
         view_number: ViewNumber,
         leaves: impl IntoIterator<Item = (&LeafInfo<SeqTypes>, CertificatePair<SeqTypes>)> + Send,
+        _cert2: Option<&Certificate2<SeqTypes>>,
         deciding_qc: Option<Arc<CertificatePair<SeqTypes>>>,
         consumer: &(impl EventConsumer + 'static),
     ) -> anyhow::Result<()> {

@@ -1,8 +1,7 @@
 use super::*;
 
-/// The v2 node, config, database and availability endpoints adapt the v1 handlers, so on one
-/// node both versions must report the same values, with v2's query parameters selecting what
-/// v1's path parameters do.
+/// The v2 endpoints adapt the v1 handlers, so on one node both versions must report the same
+/// values, with v2's query parameters selecting what v1's path parameters do.
 #[test_log::test(tokio::test(flavor = "multi_thread"))]
 async fn test_v2_api_agrees_with_v1() {
     let port = reserve_tcp_port().expect("OS should have ephemeral ports available");
@@ -10,20 +9,25 @@ async fn test_v2_api_agrees_with_v1() {
     let url = format!("http://localhost:{port}").parse().unwrap();
     let client: Client<ClientErr, StaticVersion<0, 1>> = Client::new(url);
 
-    let storage = SqlDataSource::create_storage().await;
+    // At 0.6 the query service gets decided payloads from the DA proposals in consensus
+    // storage, and proactive fetching is off, so the nodes need real persistence.
+    let (storage, persistence) = node_storage::<SqlDataSource, 5>().await;
     let network_config = TestConfigBuilder::default().build();
-    let mut ds_opts = tmp_options(&storage);
+    let mut ds_opts = tmp_options(&storage[0]);
     ds_opts.disable_proactive_fetching = true;
     let config = TestNetworkConfigBuilder::default()
         .api_config(
             Options::with_port(port)
                 .query_sql(Default::default(), ds_opts)
                 .submit(Default::default())
-                .config(Default::default()),
+                .config(Default::default())
+                .explorer(Default::default()),
         )
         .network_config(network_config)
+        .persistences(persistence)
         .build();
-    let network = TestNetwork::new(config, MOCK_SEQUENCER_VERSIONS).await;
+
+    let network = TestNetwork::new(config, TEST_UPGRADE).await;
     let mut events = network.server.event_stream();
 
     client.connect(None).await;
@@ -48,8 +52,8 @@ async fn test_v2_api_agrees_with_v1() {
     let last_block = *blocks.last().unwrap();
 
     // The counts come from aggregates a background task fills in after each block is
-    // stored, so wait for them to reach the last submitted transaction first; nothing else
-    // submits, so every number below is stable from then on.
+    // stored, so wait for them to reach the last submitted transaction first. Nothing else
+    // submits before the counts are compared, so they are stable from then on.
     let expected_total: u64 = namespace_counts
         .iter()
         .map(|(_, count)| u64::from(*count))
@@ -261,16 +265,181 @@ async fn test_v2_api_agrees_with_v1() {
 
     // An epoch this network never reaches, so only the status is comparable.
     let v1_err = client
-        .get::<serde_json::Value>("node/stake-table/1")
+        .get::<serde_json::Value>("node/stake-table/1000000")
         .send()
         .await
         .unwrap_err();
     let v2_err = client
-        .get::<serde_json::Value>("v2/node/stake-table?epoch=1")
+        .get::<serde_json::Value>("v2/node/stake-table?epoch=1000000")
         .send()
         .await
         .unwrap_err();
     assert_eq!(v2_err.status, v1_err.status);
+
+    // The signer covers only the newest leaf of each decide and runs behind the query
+    // storage, so search back from the tip for a height v1 answers rather than naming one.
+    let block_height: u64 = client.get("status/block-height").send().await.unwrap();
+    let (height, v1_signature) = {
+        let mut found = None;
+        for height in (1..block_height).rev().take(50) {
+            // As raw JSON, so the v2 strings are compared against the bytes v1 serves rather
+            // than against a `Display` impl that could disagree with its own serde.
+            match client
+                .get::<serde_json::Value>(&format!("state-signature/block/{height}"))
+                .send()
+                .await
+            {
+                Ok(body) => {
+                    found = Some((height, body));
+                    break;
+                },
+                Err(err) if err.status == StatusCode::NOT_FOUND => {},
+                Err(err) => panic!("v1 state-signature/block/{height}: {err:?}"),
+            }
+        }
+        found.expect("no recent block carries a state signature")
+    };
+    let v2_signature: espresso_api::proto::StateSignatureResponse = client
+        .get(&format!("v2/state-signature/block?height={height}"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(
+        v1_signature
+            .as_object()
+            .unwrap()
+            .keys()
+            .map(String::as_str)
+            .collect::<BTreeSet<_>>(),
+        BTreeSet::from([
+            "auth_root",
+            "key",
+            "next_stake",
+            "signature",
+            "state",
+            "v2_signature",
+        ]),
+        "v1 grew a field `StateSignatureResponse` does not carry"
+    );
+    assert_eq!(v2_signature.key, v1_signature["key"].as_str().unwrap());
+    assert_eq!(
+        v2_signature.light_client_state,
+        v1_signature["state"].as_str().unwrap()
+    );
+    assert_eq!(
+        v2_signature.next_stake_table_state,
+        v1_signature["next_stake"].as_str().unwrap()
+    );
+    assert_eq!(
+        v2_signature.auth_root,
+        v1_signature["auth_root"].as_str().unwrap()
+    );
+    assert_eq!(
+        v2_signature.lcv3_signature,
+        v1_signature["signature"].as_str().unwrap()
+    );
+    assert_eq!(
+        v2_signature.lcv2_signature,
+        v1_signature["v2_signature"].as_str().unwrap()
+    );
+
+    // The height is required rather than defaulted to the genesis block.
+    let err = client
+        .get::<serde_json::Value>("v2/state-signature/block")
+        .send()
+        .await
+        .unwrap_err();
+    assert_eq!(err.status, StatusCode::BAD_REQUEST);
+
+    // A height the node never signed is a 404 on both versions.
+    let unsigned = block_height + 1000;
+    let v1_err = client
+        .get::<serde_json::Value>(&format!("state-signature/block/{unsigned}"))
+        .send()
+        .await
+        .unwrap_err();
+    let v2_err = client
+        .get::<serde_json::Value>(&format!("v2/state-signature/block?height={unsigned}"))
+        .send()
+        .await
+        .unwrap_err();
+    assert_eq!(v1_err.status, StatusCode::NOT_FOUND);
+    assert_eq!(v2_err.status, StatusCode::NOT_FOUND);
+
+    // Waited on rather than just compared, so a handler that returns the commitment without
+    // sequencing anything fails here.
+    let submitted = Transaction::new(NamespaceId::from(103u64), vec![103, 0]);
+    let accepted: espresso_api::proto::SubmitTransactionResponse = client
+        .post("v2/submit/transaction")
+        .body_json(&espresso_api::proto::SubmitTransactionRequest {
+            namespace: Some(103),
+            payload: Some(vec![103, 0]),
+        })
+        .unwrap()
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(accepted.hash, submitted.commit().to_string());
+    wait_for_decide_on_handle(&mut events, &submitted).await;
+
+    let oversized = u64::from(network.server.node_state().chain_config.max_block_size) + 1;
+    let oversized = vec![0u8; oversized as usize];
+    let bad_submissions = [
+        (
+            "missing namespace",
+            serde_json::json!({ "payload": "" }),
+            espresso_api::proto::SubmitTransactionRequest {
+                namespace: None,
+                payload: Some(vec![]),
+            },
+        ),
+        (
+            "missing payload",
+            serde_json::json!({ "namespace": 104 }),
+            espresso_api::proto::SubmitTransactionRequest {
+                namespace: Some(104),
+                payload: None,
+            },
+        ),
+        (
+            "namespace above u32::MAX",
+            serde_json::json!({ "namespace": 1u64 << 32, "payload": "" }),
+            espresso_api::proto::SubmitTransactionRequest {
+                namespace: Some(1 << 32),
+                payload: Some(vec![]),
+            },
+        ),
+        (
+            "payload above max_block_size",
+            serde_json::to_value(Transaction::new(
+                NamespaceId::from(104u64),
+                oversized.clone(),
+            ))
+            .unwrap(),
+            espresso_api::proto::SubmitTransactionRequest {
+                namespace: Some(104),
+                payload: Some(oversized),
+            },
+        ),
+    ];
+    for (case, v1_body, v2_body) in bad_submissions {
+        let v1_err = client
+            .post::<serde_json::Value>("submit/submit")
+            .body_json(&v1_body)
+            .unwrap()
+            .send()
+            .await
+            .unwrap_err();
+        let v2_err = client
+            .post::<serde_json::Value>("v2/submit/transaction")
+            .body_json(&v2_body)
+            .unwrap()
+            .send()
+            .await
+            .unwrap_err();
+        assert_eq!(v1_err.status, StatusCode::BAD_REQUEST, "v1, {case}");
+        assert_eq!(v2_err.status, StatusCode::BAD_REQUEST, "v2, {case}");
+    }
 
     // Every decided view moves these, so retry until a pair straddles no view.
     let (v1_votes, v2_votes) = {
@@ -328,7 +497,7 @@ async fn test_v2_api_agrees_with_v1() {
         .send()
         .await
         .unwrap();
-    let end = tip["window"].as_array().unwrap().last().unwrap()["timestamp"]
+    let end = tip["window"].as_array().unwrap().last().unwrap()["fields"]["timestamp"]
         .as_u64()
         .unwrap();
     assert!(end > 0, "{tip}");
@@ -347,9 +516,11 @@ async fn test_v2_api_agrees_with_v1() {
     assert_eq!(v2_window.window.len(), v1_headers.len());
     for (v1_header, v2_header) in v1_headers.iter().zip(&v2_window.window) {
         let v2_header = match v2_header.header.as_ref().unwrap() {
-            espresso_api::proto::header_response::Header::V1(header) => header,
-            other => panic!("this network runs 0.1, not {other:?}"),
+            espresso_api::proto::header_response::Header::V6(header) => header,
+            other => panic!("this network runs 0.6, not {other:?}"),
         };
+        // Versioned headers nest their fields under the version.
+        let v1_header = &v1_header["fields"];
         assert_eq!(v2_header.height, v1_header["height"].as_u64().unwrap());
         assert_eq!(
             v2_header.payload_commitment,
@@ -371,7 +542,19 @@ async fn test_v2_api_agrees_with_v1() {
             v2_header.timestamp,
             v1_header["timestamp"].as_u64().unwrap()
         );
+        assert_eq!(
+            v2_header.timestamp_millis,
+            v1_header["timestamp_millis"].as_u64().unwrap()
+        );
         assert_eq!(v2_header.l1_head, v1_header["l1_head"].as_u64().unwrap());
+        assert_eq!(
+            v2_header.reward_merkle_tree_root,
+            v1_header["reward_merkle_tree_root"].as_str().unwrap()
+        );
+        assert_eq!(
+            v2_header.total_reward_distributed,
+            v1_header["total_reward_distributed"].as_str().unwrap()
+        );
         let v2_fee = v2_header.fee_info.as_ref().unwrap();
         assert_eq!(
             v2_fee.account,
@@ -427,12 +610,12 @@ async fn test_v2_api_agrees_with_v1() {
         );
     }
     let v2_next = match v2_window.next.as_ref().unwrap().header.as_ref().unwrap() {
-        espresso_api::proto::header_response::Header::V1(header) => header,
-        other => panic!("this network runs 0.1, not {other:?}"),
+        espresso_api::proto::header_response::Header::V6(header) => header,
+        other => panic!("this network runs 0.6, not {other:?}"),
     };
     assert_eq!(
         v2_next.height,
-        v1_window["next"]["height"].as_u64().unwrap()
+        v1_window["next"]["fields"]["height"].as_u64().unwrap()
     );
     // start_time=0 precedes every block, so like v1 the window has nothing before it.
     assert!(v1_window["prev"].is_null(), "{v1_window}");
@@ -444,8 +627,8 @@ async fn test_v2_api_agrees_with_v1() {
     assert_eq!(first.height(), 1);
     let first_hash = committable::Committable::commit(&first);
     let height = |header: &espresso_api::proto::HeaderResponse| match header.header.as_ref() {
-        Some(espresso_api::proto::header_response::Header::V1(header)) => header.height,
-        other => panic!("this network runs 0.1, not {other:?}"),
+        Some(espresso_api::proto::header_response::Header::V6(header)) => header.height,
+        other => panic!("this network runs 0.6, not {other:?}"),
     };
     for (v1_route, v2_query) in [
         (
@@ -463,25 +646,29 @@ async fn test_v2_api_agrees_with_v1() {
             .send()
             .await
             .unwrap();
-        assert_eq!(v1_window["prev"]["height"].as_u64(), Some(0), "{v1_route}");
+        assert_eq!(
+            v1_window["prev"]["fields"]["height"].as_u64(),
+            Some(0),
+            "{v1_route}"
+        );
         assert_eq!(
             v2_window.window.iter().map(height).collect::<Vec<_>>(),
             v1_window["window"]
                 .as_array()
                 .unwrap()
                 .iter()
-                .map(|header| header["height"].as_u64().unwrap())
+                .map(|header| header["fields"]["height"].as_u64().unwrap())
                 .collect::<Vec<_>>(),
             "{v2_query}"
         );
         assert_eq!(
             v2_window.prev.as_ref().map(height),
-            v1_window["prev"]["height"].as_u64(),
+            v1_window["prev"]["fields"]["height"].as_u64(),
             "{v2_query}"
         );
         assert_eq!(
             v2_window.next.as_ref().map(height),
-            v1_window["next"]["height"].as_u64(),
+            v1_window["next"]["fields"]["height"].as_u64(),
             "{v2_query}"
         );
     }
@@ -492,55 +679,17 @@ async fn test_v2_api_agrees_with_v1() {
         .send()
         .await
         .unwrap();
-    let v1_advz = &v1_share["V0"];
-    let v2_advz = match v2_share.share.as_ref().unwrap() {
-        espresso_api::proto::vid_share_response::Share::V0(share) => share,
-        other => panic!("this network disperses with ADVZ, not {other:?}"),
-    };
-    assert_eq!(
-        v2_advz.aggregate_proofs,
-        v1_advz["aggregate_proofs"].as_str().unwrap()
+    // 0.6 disperses with AvidmGf2, which v2 renders field for field from the share, so v2
+    // must serve exactly the rendering of v1's share.
+    let share: hotshot_types::data::VidShare = serde_json::from_value(v1_share.clone()).unwrap();
+    assert!(
+        matches!(share, hotshot_types::data::VidShare::V2(_)),
+        "{v1_share}"
     );
-    assert_eq!(v2_advz.evals, v1_advz["evals"].as_str().unwrap());
-    let v2_proof = v2_advz.evals_proof.as_ref().unwrap();
     assert_eq!(
-        v2_proof.pos,
-        v1_advz["evals_proof"]["pos"].as_str().unwrap()
+        v2_share,
+        espresso_api::proto::VidShareResponse::try_from(&share).unwrap()
     );
-    let v1_nodes = v1_advz["evals_proof"]["proof"].as_array().unwrap();
-    assert!(v1_nodes.len() > 1, "{v1_advz}");
-    assert_eq!(v2_proof.proof.len(), v1_nodes.len());
-    fn assert_node(v1: &serde_json::Value, v2: &espresso_api::proto::AdvzMerkleNode) {
-        use espresso_api::proto::advz_merkle_node::Node;
-        match (v2.node.as_ref().unwrap(), v1) {
-            (Node::Leaf(leaf), v1) if v1.get("Leaf").is_some() => {
-                let v1 = &v1["Leaf"];
-                assert_eq!(leaf.elem, v1["elem"].as_str().unwrap());
-                assert_eq!(leaf.pos, v1["pos"].as_str().unwrap());
-                assert_eq!(leaf.value, v1["value"].as_str().unwrap());
-            },
-            (Node::Branch(branch), v1) if v1.get("Branch").is_some() => {
-                let v1 = &v1["Branch"];
-                assert_eq!(branch.value, v1["value"].as_str().unwrap());
-                let v1_children = v1["children"].as_array().unwrap();
-                assert_eq!(branch.children.len(), v1_children.len());
-                for (v1_child, v2_child) in v1_children.iter().zip(&branch.children) {
-                    assert_node(v1_child, v2_child);
-                }
-            },
-            (Node::ForgottenSubtree(subtree), v1) if v1.get("ForgettenSubtree").is_some() => {
-                assert_eq!(
-                    subtree.value,
-                    v1["ForgettenSubtree"]["value"].as_str().unwrap()
-                );
-            },
-            (Node::Empty(_), v1) if v1.as_str() == Some("Empty") => {},
-            (v2, v1) => panic!("{v2:?} against {v1}"),
-        }
-    }
-    for (v1_node, v2_node) in v1_nodes.iter().zip(&v2_proof.proof) {
-        assert_node(v1_node, v2_node);
-    }
 
     // hash and payload_hash select the share by its block's hashes, as v1's own routes do, so
     // block 1's share comes back either way.
@@ -588,6 +737,382 @@ async fn test_v2_api_agrees_with_v1() {
             .unwrap_err();
         assert_eq!(err.status, StatusCode::BAD_REQUEST, "{query}: {err}");
     }
+
+    // Compared as raw JSON, so the rendered amounts and timestamps are checked against the
+    // bytes v1 serves rather than against the `Display` impls v2 reuses. Each comparison names
+    // its target by height, since the latest block moves with every decide.
+    let strings = |value: &serde_json::Value| {
+        value
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|entry| entry.as_str().unwrap().to_string())
+            .collect::<Vec<_>>()
+    };
+    let keys = |value: &serde_json::Value| {
+        value
+            .as_object()
+            .unwrap()
+            .keys()
+            .cloned()
+            .collect::<BTreeSet<_>>()
+    };
+    let key_set = |names: &[&str]| {
+        names
+            .iter()
+            .map(|name| name.to_string())
+            .collect::<BTreeSet<_>>()
+    };
+
+    let v1_block: serde_json::Value = client
+        .get(&format!("explorer/block/{first_block}"))
+        .send()
+        .await
+        .unwrap();
+    let v2_block: espresso_api::proto::ExplorerBlockDetailResponse = client
+        .get(&format!("v2/explorer/block?height={first_block}"))
+        .send()
+        .await
+        .unwrap();
+    let v1_block = &v1_block["block_detail"];
+    let v2_block = v2_block.block_detail.unwrap();
+    assert_eq!(
+        keys(v1_block),
+        key_set(&[
+            "block_reward",
+            "fee_recipient",
+            "hash",
+            "height",
+            "num_transactions",
+            "proposer_id",
+            "size",
+            "time",
+        ]),
+        "v1 grew a field `ExplorerBlockDetail` does not carry"
+    );
+    assert_eq!(v2_block.hash, v1_block["hash"].as_str().unwrap());
+    assert_eq!(v2_block.height, v1_block["height"].as_u64().unwrap());
+    assert_eq!(v2_block.time, v1_block["time"].as_str().unwrap());
+    assert_eq!(
+        v2_block.num_transactions,
+        v1_block["num_transactions"].as_u64().unwrap()
+    );
+    assert_eq!(v2_block.num_transactions, 1);
+    assert_eq!(v2_block.size, v1_block["size"].as_u64().unwrap());
+    assert_eq!(v2_block.proposer_id, strings(&v1_block["proposer_id"]));
+    assert_eq!(v2_block.fee_recipient, strings(&v1_block["fee_recipient"]));
+    assert_eq!(v2_block.block_reward, strings(&v1_block["block_reward"]));
+    let by_hash: espresso_api::proto::ExplorerBlockDetailResponse = client
+        .get(&format!("v2/explorer/block?hash={}", v2_block.hash))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(by_hash.block_detail.as_ref(), Some(&v2_block));
+
+    let assert_block_summary =
+        |v1: &serde_json::Value, v2: &espresso_api::proto::ExplorerBlockSummary| {
+            assert_eq!(
+                keys(v1),
+                key_set(&[
+                    "hash",
+                    "height",
+                    "num_transactions",
+                    "proposer_id",
+                    "size",
+                    "time",
+                ]),
+                "v1 grew a field `ExplorerBlockSummary` does not carry"
+            );
+            assert_eq!(v2.hash, v1["hash"].as_str().unwrap());
+            assert_eq!(v2.height, v1["height"].as_u64().unwrap());
+            assert_eq!(v2.proposer_id, strings(&v1["proposer_id"]));
+            assert_eq!(
+                v2.num_transactions,
+                v1["num_transactions"].as_u64().unwrap()
+            );
+            assert_eq!(v2.size, v1["size"].as_u64().unwrap());
+            assert_eq!(v2.time, v1["time"].as_str().unwrap());
+        };
+    let v1_blocks: serde_json::Value = client
+        .get(&format!("explorer/blocks/{last_block}/3"))
+        .send()
+        .await
+        .unwrap();
+    let v2_blocks: espresso_api::proto::ExplorerBlockSummariesResponse = client
+        .get(&format!("v2/explorer/blocks?height={last_block}&limit=3"))
+        .send()
+        .await
+        .unwrap();
+    let v1_blocks = v1_blocks["block_summaries"].as_array().unwrap();
+    assert_eq!(v2_blocks.block_summaries.len(), v1_blocks.len());
+    assert!(!v1_blocks.is_empty());
+    for (v1, v2) in v1_blocks.iter().zip(&v2_blocks.block_summaries) {
+        assert_block_summary(v1, v2);
+    }
+
+    let assert_transaction_summary =
+        |v1: &serde_json::Value, v2: &espresso_api::proto::ExplorerTransactionSummary| {
+            assert_eq!(
+                keys(v1),
+                key_set(&[
+                    "hash",
+                    "height",
+                    "num_transactions",
+                    "offset",
+                    "rollups",
+                    "time",
+                ]),
+                "v1 grew a field `ExplorerTransactionSummary` does not carry"
+            );
+            assert_eq!(v2.hash, v1["hash"].as_str().unwrap());
+            assert_eq!(
+                v2.rollups,
+                v1["rollups"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|namespace| namespace.as_u64().unwrap())
+                    .collect::<Vec<_>>()
+            );
+            assert_eq!(v2.height, v1["height"].as_u64().unwrap());
+            assert_eq!(v2.offset, v1["offset"].as_u64().unwrap());
+            assert_eq!(
+                v2.num_transactions,
+                v1["num_transactions"].as_u64().unwrap()
+            );
+            assert_eq!(v2.time, v1["time"].as_str().unwrap());
+        };
+    let mut newest_transaction = None;
+    for (v1_path, v2_path) in [
+        (
+            format!("explorer/transactions/from/{last_block}/0/5"),
+            format!("v2/explorer/transactions?height={last_block}&offset=0&limit=5"),
+        ),
+        (
+            format!("explorer/transactions/from/{last_block}/0/5/namespace/102"),
+            format!("v2/explorer/transactions?height={last_block}&offset=0&limit=5&namespace=102"),
+        ),
+        (
+            format!("explorer/transactions/from/{last_block}/0/5/block/{first_block}"),
+            format!(
+                "v2/explorer/transactions?height={last_block}&offset=0&limit=5&block={first_block}"
+            ),
+        ),
+    ] {
+        let v1: serde_json::Value = client.get(&v1_path).send().await.unwrap();
+        let v2: espresso_api::proto::ExplorerTransactionSummariesResponse =
+            client.get(&v2_path).send().await.unwrap();
+        let v1 = v1["transaction_summaries"].as_array().unwrap();
+        assert_eq!(v2.transaction_summaries.len(), v1.len(), "{v2_path}");
+        assert!(!v1.is_empty(), "{v1_path}");
+        for (v1, v2) in v1.iter().zip(&v2.transaction_summaries) {
+            assert_transaction_summary(v1, v2);
+        }
+        newest_transaction.get_or_insert(v2.transaction_summaries[0].clone());
+    }
+
+    let transaction = newest_transaction.unwrap();
+    let v1_detail: serde_json::Value = client
+        .get(&format!(
+            "explorer/transaction/{}/{}",
+            transaction.height, transaction.offset
+        ))
+        .send()
+        .await
+        .unwrap();
+    let v2_detail: espresso_api::proto::ExplorerTransactionDetailResponse = client
+        .get(&format!(
+            "v2/explorer/transaction?height={}&offset={}",
+            transaction.height, transaction.offset
+        ))
+        .send()
+        .await
+        .unwrap();
+    let v1_detail = &v1_detail["transaction_detail"];
+    let v1_details = &v1_detail["details"];
+    let v2_details = v2_detail.details.as_ref().unwrap();
+    assert_eq!(
+        keys(v1_details),
+        key_set(&[
+            "block_confirmed",
+            "fee_details",
+            "hash",
+            "height",
+            "num_transactions",
+            "offset",
+            "sequencing_fees",
+            "size",
+            "time",
+        ]),
+        "v1 grew a field `ExplorerTransactionDetail` does not carry"
+    );
+    assert_eq!(v2_details.hash, transaction.hash);
+    assert_eq!(v2_details.hash, v1_details["hash"].as_str().unwrap());
+    assert_eq!(v2_details.height, v1_details["height"].as_u64().unwrap());
+    assert_eq!(
+        v2_details.block_confirmed,
+        v1_details["block_confirmed"].as_bool().unwrap()
+    );
+    assert_eq!(v2_details.offset, v1_details["offset"].as_u64().unwrap());
+    assert_eq!(
+        v2_details.num_transactions,
+        v1_details["num_transactions"].as_u64().unwrap()
+    );
+    assert_eq!(v2_details.size, v1_details["size"].as_u64().unwrap());
+    assert_eq!(v2_details.time, v1_details["time"].as_str().unwrap());
+    assert_eq!(
+        v2_details.sequencing_fees,
+        strings(&v1_details["sequencing_fees"])
+    );
+    assert_eq!(
+        v2_details.fee_details.len(),
+        v1_details["fee_details"].as_array().unwrap().len()
+    );
+    let v1_data: Vec<Transaction> = serde_json::from_value(v1_detail["data"].clone()).unwrap();
+    assert!(!v1_data.is_empty());
+    assert_eq!(
+        v2_detail.data,
+        v1_data
+            .iter()
+            .map(|transaction| espresso_api::proto::Transaction {
+                namespace: u64::from(transaction.namespace()),
+                payload: transaction.payload().to_vec(),
+            })
+            .collect::<Vec<_>>()
+    );
+    let by_hash: espresso_api::proto::ExplorerTransactionDetailResponse = client
+        .get(&format!(
+            "v2/explorer/transaction?hash={}",
+            transaction.hash
+        ))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(by_hash, v2_detail);
+
+    let v1_search: serde_json::Value = client
+        .get(&format!("explorer/search/{}", transaction.hash))
+        .send()
+        .await
+        .unwrap();
+    let v2_search: espresso_api::proto::ExplorerSearchResponse = client
+        .get(&format!("v2/explorer/search?query={}", transaction.hash))
+        .send()
+        .await
+        .unwrap();
+    let v1_found = v1_search["search_results"]["transactions"]
+        .as_array()
+        .unwrap();
+    assert_eq!(v2_search.transactions.len(), v1_found.len());
+    assert!(!v1_found.is_empty());
+    for (v1, v2) in v1_found.iter().zip(&v2_search.transactions) {
+        assert_transaction_summary(v1, v2);
+    }
+
+    // v1 serves the histograms as four parallel arrays, which v2 zips into one point per
+    // block, so this proves the zip lines the four values up with the right height. The two
+    // reads can straddle a decide, so only the heights both windows hold are compared.
+    let v1_summary: serde_json::Value = client
+        .get("explorer/explorer-summary")
+        .send()
+        .await
+        .unwrap();
+    let v2_summary: espresso_api::proto::ExplorerSummaryResponse =
+        client.get("v2/explorer/summary").send().await.unwrap();
+    let v1_histograms = &v1_summary["explorer_summary"]["histograms"];
+    let v1_points: HashMap<u64, usize> = v1_histograms["block_heights"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .enumerate()
+        .map(|(i, height)| (height.as_u64().unwrap(), i))
+        .collect();
+    let mut compared = 0;
+    for point in &v2_summary.histograms {
+        let Some(&i) = v1_points.get(&point.height) else {
+            continue;
+        };
+        assert_eq!(point.block_time, v1_histograms["block_time"][i].as_f64());
+        assert_eq!(point.block_size, v1_histograms["block_size"][i].as_u64());
+        assert_eq!(
+            point.block_transactions,
+            v1_histograms["block_transactions"][i].as_u64().unwrap()
+        );
+        compared += 1;
+    }
+    assert!(compared > 0, "the two histogram windows share no height");
+
+    // Two ways of naming the same thing cannot both be given, and half of a height/offset
+    // pair is a mistake rather than a fallback to the latest transaction.
+    for query in [
+        "v2/explorer/block?height=1&hash=BLOCK~aa",
+        "v2/explorer/transaction?height=1",
+        "v2/explorer/transactions?limit=1&block=1&namespace=1",
+        "v2/explorer/transactions?limit=1&namespace=4294967296",
+        "v2/explorer/blocks",
+        "v2/explorer/search",
+    ] {
+        let err = client
+            .get::<serde_json::Value>(query)
+            .send()
+            .await
+            .unwrap_err();
+        assert_eq!(err.status, StatusCode::BAD_REQUEST, "{query}");
+    }
+
+    let missing_height = u64::from(u32::MAX);
+    let foreign_tag = tagged_base64::TaggedBase64::new("FOO", &[0; 32]).unwrap();
+    for (v1_path, v2_path, status) in [
+        (
+            format!("explorer/block/{missing_height}"),
+            format!("v2/explorer/block?height={missing_height}"),
+            StatusCode::NOT_FOUND,
+        ),
+        (
+            format!("explorer/transaction/{missing_height}/0"),
+            format!("v2/explorer/transaction?height={missing_height}&offset=0"),
+            StatusCode::NOT_FOUND,
+        ),
+        (
+            format!("explorer/transactions/from/1/{}/1", u64::MAX),
+            format!(
+                "v2/explorer/transactions?height=1&offset={}&limit=1",
+                u64::MAX
+            ),
+            StatusCode::BAD_REQUEST,
+        ),
+        (
+            format!("explorer/search/{foreign_tag}"),
+            format!("v2/explorer/search?query={foreign_tag}"),
+            StatusCode::BAD_REQUEST,
+        ),
+    ] {
+        for path in [&v1_path, &v2_path] {
+            let err = client
+                .get::<serde_json::Value>(path)
+                .send()
+                .await
+                .unwrap_err();
+            assert_eq!(err.status, status, "{path}");
+        }
+    }
+    let unknown_block = tagged_base64::TaggedBase64::new("BLOCK", &[0; 32]).unwrap();
+    let v1_search: serde_json::Value = client
+        .get(&format!("explorer/search/{unknown_block}"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(
+        v1_search["search_results"]["blocks"],
+        serde_json::json!([]),
+        "an unknown block hash is an empty result, as an unknown transaction hash is"
+    );
+    let v2_search: espresso_api::proto::ExplorerSearchResponse = client
+        .get(&format!("v2/explorer/search?query={unknown_block}"))
+        .send()
+        .await
+        .unwrap();
+    assert!(v2_search.blocks.is_empty());
 
     let v1_config = client
         .get::<espresso_types::config::PublicNetworkConfig>("config/hotshot")
@@ -788,7 +1313,7 @@ async fn test_v2_api_agrees_with_v1() {
     // Nothing in the repository runs a deferred migration yet, so without these rows both
     // versions report an empty list and agree vacuously.
     {
-        let cfg = Config::try_from(&tmp_options(&storage)).unwrap();
+        let cfg = Config::try_from(&tmp_options(&storage[0])).unwrap();
         let db = SqlStorage::connect(cfg, StorageConnectionType::Query)
             .await
             .unwrap();
@@ -896,9 +1421,9 @@ async fn check_merklized_state_v2_parity(client: &HttpClient, last_block: u64) {
     .await;
     assert_eq!(v2, proto::MerklePathResponse::from(&v1_block));
 
-    // The builder paid for `last_block`, so its account is in the fee tree.
-    let header: Header = fetch(client, &format!("availability/header/{last_block}")).await;
-    let account = header.fee_info().first().expect("a fee was paid").account();
+    // 0.6 charges no fees, but every test node prefunds the builder account at genesis, so it
+    // is in the fee tree.
+    let account = TestConfig::<5>::builder_key().fee_account();
     let v1_fee: MerkleProof<FeeAmount, FeeAccount, Sha3Node, 256> =
         fetch(client, &format!("fee-state/{state_height}/{account}")).await;
     let v2: proto::MerklePathResponse = fetch(
@@ -1117,12 +1642,12 @@ async fn check_availability_v2_parity(
         .await;
         assert_eq!(v2, proven, "{query}");
     }
-    // A 0.1 block is disseminated with ADVZ, so the proof must land on that arm and carry
-    // the range proof of a non-empty transaction.
-    let Some(proto::tx_proof::Proof::V0(v0)) = proven.proof.unwrap().proof else {
-        panic!("a 0.1 block's inclusion proof is ADVZ");
+    // A 0.6 block is disseminated with AvidmGf2, so the proof must land on that arm and carry
+    // the namespace proof of a non-empty transaction.
+    let Some(proto::tx_proof::Proof::V2(v2)) = proven.proof.unwrap().proof else {
+        panic!("a 0.6 block's inclusion proof is AvidmGf2");
     };
-    assert!(v0.payload_proof_tx.is_some());
+    assert!(v2.ns_proof.is_some());
 
     // 102 is the namespace of the last submitted transaction, so `last_block` carries it.
     let v1_proof: NamespaceProofQueryData = fetch(
@@ -1176,25 +1701,25 @@ async fn check_availability_v2_parity(
         assert_eq!(status, StatusCode::BAD_REQUEST, "{missing_selector}");
     }
 
-    // Without epochs there is no state certificate, a 0.1 block has no AvidM encoding to prove
-    // wrong, and no cert2 exists before the new protocol takes over. These only show both
+    // No state certificate or cert2 exists for an epoch or height the network never reaches,
+    // and a block this network built has no bad encoding to prove. These only show both
     // versions refusing alike. The conversions are covered by the reference-vector tests.
     for (v1, v2) in [
         (
-            "availability/state-cert/1".to_string(),
-            "v2/availability/state-cert?epoch=1".to_string(),
+            "availability/state-cert/1000000".to_string(),
+            "v2/availability/state-cert?epoch=1000000".to_string(),
         ),
         (
-            "availability/state-cert-v2/1".to_string(),
-            "v2/availability/state-cert-v2?epoch=1".to_string(),
+            "availability/state-cert-v2/1000000".to_string(),
+            "v2/availability/state-cert-v2?epoch=1000000".to_string(),
         ),
         (
             format!("availability/incorrect-encoding-proof/{last_block}/102"),
             format!("v2/availability/incorrect-encoding-proof?height={last_block}&namespace=102"),
         ),
         (
-            "availability/cert2/1".to_string(),
-            "v2/availability/cert2?height=1".to_string(),
+            "availability/cert2/1000000".to_string(),
+            "v2/availability/cert2?height=1000000".to_string(),
         ),
     ] {
         assert_eq!(

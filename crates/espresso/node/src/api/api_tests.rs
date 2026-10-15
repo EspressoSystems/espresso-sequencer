@@ -3,25 +3,24 @@ use std::{fmt::Debug, marker::PhantomData};
 use committable::Committable;
 use data_source::testing::TestableSequencerDataSource;
 use espresso_types::{
-    Header, Leaf2, MOCK_SEQUENCER_VERSIONS, NamespaceId, NamespaceProofQueryData, ValidatedState,
+    Header, Leaf2, NamespaceId, NamespaceProofQueryData, TEST_UPGRADE, ValidatedState,
     traits::{EventConsumer, PersistenceOptions},
 };
 use futures::{future, stream::StreamExt};
-use hotshot_example_types::node_types::TEST_VERSIONS;
 use hotshot_query_service::availability::{
     AvailabilityDataSource, BlockQueryData, VidCommonQueryData,
 };
 use hotshot_types::{
     data::{
         DaProposal2, EpochNumber, QuorumProposal2, QuorumProposalWrapper, VidCommitment,
-        VidDisperseShare, ns_table::parse_ns_table, vid_disperse::AvidMDisperseShare,
+        VidDisperseShare, ns_table::parse_ns_table, vid_disperse::AvidmGf2DisperseShare,
     },
     event::LeafInfo,
     message::Proposal,
     simple_certificate::{CertificatePair, QuorumCertificate2},
     traits::{EncodeBytes, signature_key::SignatureKey},
     utils::EpochTransitionIndicator,
-    vid::avidm::{AvidMScheme, init_avidm_param},
+    vid::avidm_gf2::{AvidmGf2Scheme, init_avidm_gf2_param},
 };
 use http_client::{Client, error::ClientErr};
 use test_helpers::{
@@ -30,11 +29,12 @@ use test_helpers::{
 };
 use test_utils::reserve_tcp_port;
 use vbs::version::StaticVersion;
+use versions::NEW_PROTOCOL_VERSION;
 
 use super::{update::ApiEventConsumer, *};
 use crate::{
     network,
-    persistence::no_storage::NoStorage,
+    persistence::{no_storage::NoStorage, sql::DECIDE_GAP_FILL_HORIZON},
     testing::{TestConfigBuilder, wait_for_decide_on_handle},
 };
 
@@ -83,7 +83,7 @@ pub(crate) async fn test_namespace_query<D: TestableSequencerDataSource>(_d: Pha
         .api_config(D::options(&storage, Options::with_port(port)).submit(Default::default()))
         .network_config(network_config)
         .build();
-    let network = TestNetwork::new(config, MOCK_SEQUENCER_VERSIONS).await;
+    let network = TestNetwork::new(config, TEST_UPGRADE).await;
     let mut events = network.server.event_stream();
 
     // Connect client.
@@ -257,21 +257,17 @@ where
     // Create two non-consecutive leaf chains.
     let mut chain1 = vec![];
 
-    let genesis = Leaf2::genesis(
-        &Default::default(),
-        &NodeState::mock(),
-        TEST_VERSIONS.test.base,
-    )
-    .await;
+    let node_state = NodeState::mock().with_genesis_version(NEW_PROTOCOL_VERSION);
+    let genesis = Leaf2::genesis(&Default::default(), &node_state, TEST_UPGRADE.base).await;
     let payload = genesis.block_payload().unwrap();
     let payload_bytes_arc = payload.encode();
 
-    let avidm_param = init_avidm_param(2).unwrap();
+    let avidm_param = init_avidm_gf2_param(2).unwrap();
     let weights = vec![1u32; 2];
 
     let ns_table = parse_ns_table(payload.byte_len().as_usize(), &payload.ns_table().encode());
-    let (payload_commitment, shares) =
-        AvidMScheme::ns_disperse(&avidm_param, &weights, &payload_bytes_arc, ns_table).unwrap();
+    let (payload_commitment, common, shares) =
+        AvidmGf2Scheme::ns_disperse(&avidm_param, &weights, &payload_bytes_arc, ns_table).unwrap();
 
     let mut quorum_proposal = QuorumProposalWrapper::<SeqTypes> {
         proposal: QuorumProposal2::<SeqTypes> {
@@ -279,8 +275,8 @@ where
             view_number: ViewNumber::genesis(),
             justify_qc: QuorumCertificate2::genesis(
                 &ValidatedState::default(),
-                &NodeState::mock(),
-                MOCK_SEQUENCER_VERSIONS,
+                &node_state,
+                TEST_UPGRADE,
             )
             .await,
             upgrade_certificate: None,
@@ -291,15 +287,14 @@ where
             state_cert: None,
         },
     };
-    let mut qc = QuorumCertificate2::genesis(
-        &ValidatedState::default(),
-        &NodeState::mock(),
-        MOCK_SEQUENCER_VERSIONS,
-    )
-    .await;
+    let mut qc =
+        QuorumCertificate2::genesis(&ValidatedState::default(), &node_state, TEST_UPGRADE).await;
 
+    // Long enough that the gap at view 2 falls outside `DECIDE_GAP_FILL_HORIZON` of the newest
+    // decide, so the leaves after it are delivered rather than held for a gap-fill decide.
+    let chain_len = 3 + DECIDE_GAP_FILL_HORIZON;
     let mut justify_qc = qc.clone();
-    for i in 0..5 {
+    for i in 0..chain_len {
         *quorum_proposal.proposal.block_header.height_mut() = i;
         quorum_proposal.proposal.view_number = ViewNumber::new(i);
         quorum_proposal.proposal.justify_qc = justify_qc;
@@ -323,14 +318,14 @@ where
             .unwrap();
 
         // Include VID information for each leaf.
-        let share: VidDisperseShare<SeqTypes> = AvidMDisperseShare {
+        let share: VidDisperseShare<SeqTypes> = AvidmGf2DisperseShare {
             view_number: leaf.view_number(),
             payload_commitment,
             share: shares[0].clone(),
             recipient_key: pubkey,
             epoch: Some(EpochNumber::new(0)),
             target_epoch: Some(EpochNumber::new(0)),
-            common: avidm_param.clone(),
+            common: common.clone(),
         }
         .into();
 
@@ -355,7 +350,7 @@ where
             _pd: Default::default(),
         };
         persistence
-            .append_da2(&da_proposal, VidCommitment::V1(payload_commitment))
+            .append_da2(&da_proposal, VidCommitment::V2(payload_commitment))
             .await
             .unwrap();
     }
@@ -390,7 +385,7 @@ where
     tracing::info!("decide successfully");
     persistence
         .append_decided_leaves(
-            ViewNumber::new(4),
+            ViewNumber::new(chain_len - 1),
             leaf_chain.iter().map(|(leaf, qc)| (leaf, qc.clone())),
             None,
             &consumer,
@@ -483,18 +478,10 @@ where
         ));
     let consumer = ApiEventConsumer::from(data_source.clone());
 
-    let mut qc = QuorumCertificate2::genesis(
-        &ValidatedState::default(),
-        &NodeState::mock(),
-        MOCK_SEQUENCER_VERSIONS,
-    )
-    .await;
-    let leaf = Leaf2::genesis(
-        &ValidatedState::default(),
-        &NodeState::mock(),
-        TEST_VERSIONS.test.base,
-    )
-    .await;
+    let node_state = NodeState::mock().with_genesis_version(NEW_PROTOCOL_VERSION);
+    let mut qc =
+        QuorumCertificate2::genesis(&ValidatedState::default(), &node_state, TEST_UPGRADE).await;
+    let leaf = Leaf2::genesis(&ValidatedState::default(), &node_state, TEST_UPGRADE.base).await;
 
     // Append the genesis leaf. We don't use this for the test, because the update function will
     // automatically fill in the missing data for genesis. We just append this to get into a
@@ -518,7 +505,7 @@ where
     // with this header, and the payload will not actually be missing.
     let mut block_header = leaf.block_header().clone();
     *block_header.height_mut() += 1;
-    *block_header.payload_commitment_mut() = VidCommitment::V1(
+    *block_header.payload_commitment_mut() = VidCommitment::V2(
         CanonicalDeserialize::deserialize_uncompressed_unchecked([1u8; 32].as_slice()).unwrap(),
     );
     let qp = QuorumProposalWrapper {

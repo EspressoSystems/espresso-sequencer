@@ -11,7 +11,7 @@ async fn test_healthcheck() {
         .api_config(options)
         .network_config(network_config)
         .build();
-    let _network = TestNetwork::new(config, MOCK_SEQUENCER_VERSIONS).await;
+    let _network = TestNetwork::new(config, TEST_UPGRADE).await;
 
     client.connect(None).await;
     let health = client.get::<AppHealth>("healthcheck").send().await.unwrap();
@@ -50,7 +50,7 @@ async fn test_leaf_only_data_source() {
         .api_config(options)
         .network_config(network_config)
         .build();
-    let _network = TestNetwork::new(config, MOCK_SEQUENCER_VERSIONS).await;
+    let _network = TestNetwork::new(config, TEST_UPGRADE).await;
     let url = format!("http://localhost:{port}").parse().unwrap();
     let client: Client<ClientErr, SequencerApiVersion> = Client::new(url);
 
@@ -136,7 +136,7 @@ async fn test_database_metadata_endpoints() {
         .api_config(options)
         .network_config(network_config)
         .build();
-    let _network = TestNetwork::new(config, MOCK_SEQUENCER_VERSIONS).await;
+    let _network = TestNetwork::new(config, TEST_UPGRADE).await;
     let url = format!("http://localhost:{port}").parse().unwrap();
     let client: Client<ClientErr, SequencerApiVersion> = Client::new(url);
     client.connect(Some(Duration::from_secs(15))).await;
@@ -170,7 +170,7 @@ async fn test_fetch_config() {
         .api_config(options)
         .network_config(network_config)
         .build();
-    let network = TestNetwork::new(config, MOCK_SEQUENCER_VERSIONS).await;
+    let network = TestNetwork::new(config, TEST_UPGRADE).await;
     client.connect(None).await;
 
     // Fetch a network config from the API server. The first peer URL is bogus, to test the

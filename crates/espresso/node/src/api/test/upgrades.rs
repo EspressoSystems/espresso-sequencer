@@ -8,8 +8,6 @@ async fn test_new_protocol_produces_blocks() -> anyhow::Result<()> {
     const NUM_NODES: usize = 5;
     const TARGET_BLOCK_HEIGHT: u64 = 100;
 
-    const NEW_PROTOCOL: Upgrade = Upgrade::trivial(NEW_PROTOCOL_VERSION);
-
     let network_config = TestConfigBuilder::default()
         .epoch_height(EPOCH_HEIGHT)
         .epoch_start_block(0)
@@ -17,13 +15,7 @@ async fn test_new_protocol_produces_blocks() -> anyhow::Result<()> {
 
     let api_port = reserve_tcp_port().expect("No ports free for query service");
 
-    let storage = join_all((0..NUM_NODES).map(|_| SqlDataSource::create_storage())).await;
-    let persistence: [_; NUM_NODES] = storage
-        .iter()
-        .map(<SqlDataSource as TestableSequencerDataSource>::persistence_options)
-        .collect::<Vec<_>>()
-        .try_into()
-        .unwrap();
+    let (storage, persistence) = node_storage::<SqlDataSource, NUM_NODES>().await;
 
     let config = TestNetworkConfigBuilder::<NUM_NODES, _, _>::with_num_nodes()
         .api_config(SqlDataSource::options(
@@ -32,24 +24,9 @@ async fn test_new_protocol_produces_blocks() -> anyhow::Result<()> {
         ))
         .network_config(network_config)
         .persistences(persistence)
-        .catchups(std::array::from_fn(|_| {
-            StatePeers::<SequencerApiVersion>::from_urls(
-                vec![format!("http://localhost:{api_port}").parse().unwrap()],
-                Default::default(),
-                Duration::from_secs(2),
-                &NoMetrics,
-            )
-        }))
-        .pos_hook(
-            DelegationConfig::MultipleDelegators,
-            StakeTableContractVersion::V3,
-            NEW_PROTOCOL,
-        )
-        .await
-        .unwrap()
         .build();
 
-    let _network = TestNetwork::new(config, NEW_PROTOCOL).await;
+    let _network = TestNetwork::new(config, TEST_UPGRADE).await;
 
     let client: Client<ClientErr, SequencerApiVersion> =
         Client::new(format!("http://localhost:{api_port}").parse().unwrap());
@@ -134,13 +111,7 @@ async fn test_new_protocol_large_block_upgrade() -> anyhow::Result<()> {
         ..Default::default()
     };
 
-    let storage = join_all((0..NUM_NODES).map(|_| SqlDataSource::create_storage())).await;
-    let persistence: [_; NUM_NODES] = storage
-        .iter()
-        .map(<SqlDataSource as TestableSequencerDataSource>::persistence_options)
-        .collect::<Vec<_>>()
-        .try_into()
-        .unwrap();
+    let (storage, persistence) = node_storage::<SqlDataSource, NUM_NODES>().await;
 
     let config = TestNetworkConfigBuilder::<NUM_NODES, _, _>::with_num_nodes()
         .api_config(SqlDataSource::options(
@@ -242,8 +213,6 @@ async fn test_new_protocol_survives_legacy_shutdown() -> anyhow::Result<()> {
     const SHUTDOWN_HEIGHT: u64 = 10;
     const TARGET_BLOCK_HEIGHT: u64 = 50;
 
-    const NEW_PROTOCOL: Upgrade = Upgrade::trivial(NEW_PROTOCOL_VERSION);
-
     let network_config = TestConfigBuilder::default()
         .epoch_height(EPOCH_HEIGHT)
         .epoch_start_block(0)
@@ -251,13 +220,7 @@ async fn test_new_protocol_survives_legacy_shutdown() -> anyhow::Result<()> {
 
     let api_port = reserve_tcp_port().expect("No ports free for query service");
 
-    let storage = join_all((0..NUM_NODES).map(|_| SqlDataSource::create_storage())).await;
-    let persistence: [_; NUM_NODES] = storage
-        .iter()
-        .map(<SqlDataSource as TestableSequencerDataSource>::persistence_options)
-        .collect::<Vec<_>>()
-        .try_into()
-        .unwrap();
+    let (storage, persistence) = node_storage::<SqlDataSource, NUM_NODES>().await;
 
     let config = TestNetworkConfigBuilder::<NUM_NODES, _, _>::with_num_nodes()
         .api_config(SqlDataSource::options(
@@ -266,24 +229,9 @@ async fn test_new_protocol_survives_legacy_shutdown() -> anyhow::Result<()> {
         ))
         .network_config(network_config)
         .persistences(persistence)
-        .catchups(std::array::from_fn(|_| {
-            StatePeers::<SequencerApiVersion>::from_urls(
-                vec![format!("http://localhost:{api_port}").parse().unwrap()],
-                Default::default(),
-                Duration::from_secs(2),
-                &NoMetrics,
-            )
-        }))
-        .pos_hook(
-            DelegationConfig::MultipleDelegators,
-            StakeTableContractVersion::V3,
-            NEW_PROTOCOL,
-        )
-        .await
-        .unwrap()
         .build();
 
-    let network = TestNetwork::new(config, NEW_PROTOCOL).await;
+    let network = TestNetwork::new(config, TEST_UPGRADE).await;
 
     let client: Client<ClientErr, SequencerApiVersion> =
         Client::new(format!("http://localhost:{api_port}").parse().unwrap());

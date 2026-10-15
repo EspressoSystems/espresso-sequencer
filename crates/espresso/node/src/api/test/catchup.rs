@@ -1,17 +1,23 @@
 use super::*;
 
 async fn run_catchup_test(url_suffix: &str) {
-    // Start a sequencer network, using the query service for catchup.
+    // Start a sequencer network, using the query service for catchup. Node 0 keeps merklized
+    // state in SQL: in memory it holds only the states from its decided view up, and a node
+    // restarted under load handles proposals behind the network, so by the time it asks for
+    // a parent's frontier a peer without storage has dropped that view, and the request
+    // retries forever.
     let port = reserve_tcp_port().expect("OS should have ephemeral ports available");
     const NUM_NODES: usize = 5;
+    let storage = SqlDataSource::create_storage().await;
 
     let url: url::Url = format!("http://localhost:{port}{url_suffix}")
         .parse()
         .unwrap();
 
     let config = TestNetworkConfigBuilder::<NUM_NODES, _, _>::with_num_nodes()
-        .api_config(Options::with_port(port))
+        .api_config(SqlDataSource::options(&storage, Options::with_port(port)))
         .network_config(TestConfigBuilder::default().build())
+        .without_api_catchup()
         .catchups(std::array::from_fn(|_| {
             StatePeers::<StaticVersion<0, 1>>::from_urls(
                 vec![url.clone()],
@@ -21,17 +27,44 @@ async fn run_catchup_test(url_suffix: &str) {
             )
         }))
         .build();
-    let mut network = TestNetwork::new(config, MOCK_SEQUENCER_VERSIONS).await;
+    let mut network = TestNetwork::new(config, TEST_UPGRADE).await;
+    let catchup = StatePeers::<StaticVersion<0, 1>>::from_urls(
+        vec![url],
+        Default::default(),
+        Duration::from_secs(2),
+        &NoMetrics,
+    );
+    restarted_node_catches_up(&mut network, catchup).await;
+}
 
-    // Wait for replica 0 to reach a (non-genesis) decide, before disconnecting it.
-    let mut events = network.peers[0].event_stream();
+/// Restarts replica 1 from genesis after the network has moved on without it, and waits for
+/// it to decide blocks past the height the network had reached when it came back, with a
+/// state it validated itself. We don't just stop consensus and restart it; we fully drop the
+/// node and recreate it so it loses all of its temporary state. It should be able to catch up
+/// by listening to proposals and then rebuild its state with `catchup`.
+async fn restarted_node_catches_up<const NUM_NODES: usize>(
+    network: &mut TestNetwork<no_storage::Options, NUM_NODES>,
+    catchup: impl StateCatchup + 'static,
+) {
+    // A decide proves only that the node hears the network: it takes a proposal and its two
+    // certificates, all broadcast, and never a validated state. A state this node computed
+    // carries a delta, where the `from_header` stub it holds otherwise has none.
+    restart_from_genesis_and_decide(network, catchup, |info| info.delta.is_some()).await;
+}
+
+/// Restarts replica 1 from genesis after the network has moved on without it, then waits for
+/// it to decide a leaf past the height the network had reached when it came back that also
+/// satisfies `caught_up`. Returns every leaf it decided on the way, oldest first.
+async fn restart_from_genesis_and_decide<const NUM_NODES: usize>(
+    network: &mut TestNetwork<no_storage::Options, NUM_NODES>,
+    catchup: impl StateCatchup + 'static,
+    caught_up: impl Fn(&LeafInfo<SeqTypes>) -> bool,
+) -> Vec<LeafInfo<SeqTypes>> {
+    // Wait for replica 1 to reach a (non-genesis) decide, before disconnecting it.
+    let mut events = network.node(1).event_stream();
     loop {
         let event = events.next().await.unwrap();
-        let CoordinatorEvent::LegacyEvent(Event {
-            event: EventType::Decide { leaf_chain, .. },
-            ..
-        }) = event
-        else {
+        let Some(leaf_chain) = decided_leaves(&event) else {
             continue;
         };
         if leaf_chain[0].leaf.height() > 0 {
@@ -39,82 +72,54 @@ async fn run_catchup_test(url_suffix: &str) {
         }
     }
 
-    // Shut down and restart replica 0. We don't just stop consensus and restart it; we fully
-    // drop the node and recreate it so it loses all of its temporary state and starts off from
-    // genesis. It should be able to catch up by listening to proposals and then rebuild its
-    // state from its peers.
     tracing::info!("shutting down node");
-    network.peers.remove(0);
+    network.stop_node(1).await;
 
     // Wait for a few blocks to pass while the node is down, so it falls behind.
     network
         .server
         .event_stream()
-        .filter(|event| {
-            future::ready(matches!(
-                event,
-                CoordinatorEvent::LegacyEvent(Event {
-                    event: EventType::Decide { .. },
-                    ..
-                })
-            ))
-        })
+        .filter(|event| future::ready(decided_leaves(event).is_some()))
         .take(3)
         .collect::<Vec<_>>()
         .await;
 
     tracing::info!("restarting node");
+    let target = network.server.decided_leaf().await.height() + 3;
     let node = network
-        .cfg
-        .init_node(
+        .start_stopped_node(
             1,
-            ValidatedState::default(),
+            network.genesis_state(1),
             no_storage::Options,
-            Some(StatePeers::<StaticVersion<0, 1>>::from_urls(
-                vec![url],
-                Default::default(),
-                Duration::from_secs(2),
-                &NoMetrics,
-            )),
-            None,
-            &NoMetrics,
-            test_helpers::STAKE_TABLE_CAPACITY_FOR_TEST,
-            NullEventConsumer,
-            MOCK_SEQUENCER_VERSIONS,
-            Default::default(),
+            catchup,
+            TEST_UPGRADE,
         )
         .await;
     let mut events = node.event_stream();
-
-    // Wait for a (non-genesis) block proposed by each node, to prove that the lagging node has
-    // caught up and all nodes are in sync.
-    let mut proposers = [false; NUM_NODES];
-    loop {
-        let event = events.next().await.unwrap();
-        let CoordinatorEvent::LegacyEvent(Event {
-            event: EventType::Decide { leaf_chain, .. },
-            ..
-        }) = event
-        else {
-            continue;
-        };
-        for LeafInfo { leaf, .. } in leaf_chain.iter().rev() {
-            let height = leaf.height();
-            let leaf_builder = (leaf.view_number().u64() as usize) % NUM_NODES;
-            if height == 0 {
+    let mut decided = Vec::new();
+    let done = timeout(Duration::from_secs(120), async {
+        loop {
+            let event = events.next().await.unwrap();
+            let Some(chain) = decided_leaves(&event) else {
                 continue;
+            };
+            decided.extend(chain.iter().rev().cloned());
+            let newest = &chain[0];
+            if newest.leaf.height() >= target && caught_up(newest) {
+                break;
             }
-
-            tracing::info!(
-                "waiting for blocks from {proposers:?}, block {height} is from {leaf_builder}",
-            );
-            proposers[leaf_builder] = true;
         }
-
-        if proposers.iter().all(|has_proposed| *has_proposed) {
-            break;
-        }
-    }
+    })
+    .await;
+    assert!(
+        done.is_ok(),
+        "restarted node never caught up to height {target}; decided (height, validated): {:?}",
+        decided
+            .iter()
+            .map(|info| (info.leaf.height(), info.delta.is_some()))
+            .collect::<Vec<_>>()
+    );
+    decided
 }
 
 #[test_log::test(tokio::test(flavor = "multi_thread"))]
@@ -132,104 +137,22 @@ async fn test_catchup_v1() {
     run_catchup_test("/v1").await;
 }
 
+/// Without HTTP state peers, a node restarted from genesis seeds a stub for its first decided
+/// leaf and catches up over request-response at that decided view, which peers still hold.
 #[test_log::test(tokio::test(flavor = "multi_thread"))]
-async fn test_catchup_no_state_peers() {
-    // Start a sequencer network, using the query service for catchup.
+async fn test_restart_no_state_peers_catches_up_over_request_response() {
     let port = reserve_tcp_port().expect("OS should have ephemeral ports available");
     const NUM_NODES: usize = 5;
     let config = TestNetworkConfigBuilder::<NUM_NODES, _, _>::with_num_nodes()
         .api_config(Options::with_port(port))
         .network_config(TestConfigBuilder::default().build())
+        .without_api_catchup()
         .build();
-    let mut network = TestNetwork::new(config, MOCK_SEQUENCER_VERSIONS).await;
-
-    // Wait for replica 0 to reach a (non-genesis) decide, before disconnecting it.
-    let mut events = network.peers[0].event_stream();
-    loop {
-        let event = events.next().await.unwrap();
-        let CoordinatorEvent::LegacyEvent(Event {
-            event: EventType::Decide { leaf_chain, .. },
-            ..
-        }) = event
-        else {
-            continue;
-        };
-        if leaf_chain[0].leaf.height() > 0 {
-            break;
-        }
-    }
-
-    // Shut down and restart replica 0. We don't just stop consensus and restart it; we fully
-    // drop the node and recreate it so it loses all of its temporary state and starts off from
-    // genesis. It should be able to catch up by listening to proposals and then rebuild its
-    // state from its peers.
-    tracing::info!("shutting down node");
-    network.peers.remove(0);
-
-    // Wait for a few blocks to pass while the node is down, so it falls behind.
-    network
-        .server
-        .event_stream()
-        .filter(|event| {
-            future::ready(matches!(
-                event,
-                CoordinatorEvent::LegacyEvent(Event {
-                    event: EventType::Decide { .. },
-                    ..
-                })
-            ))
-        })
-        .take(3)
-        .collect::<Vec<_>>()
-        .await;
-
-    tracing::info!("restarting node");
-    let node = network
-        .cfg
-        .init_node(
-            1,
-            ValidatedState::default(),
-            no_storage::Options,
-            None::<NullStateCatchup>,
-            None,
-            &NoMetrics,
-            test_helpers::STAKE_TABLE_CAPACITY_FOR_TEST,
-            NullEventConsumer,
-            MOCK_SEQUENCER_VERSIONS,
-            Default::default(),
-        )
-        .await;
-    let mut events = node.event_stream();
-
-    // Wait for a (non-genesis) block proposed by each node, to prove that the lagging node has
-    // caught up and all nodes are in sync.
-    let mut proposers = [false; NUM_NODES];
-    loop {
-        let event = events.next().await.unwrap();
-        let CoordinatorEvent::LegacyEvent(Event {
-            event: EventType::Decide { leaf_chain, .. },
-            ..
-        }) = event
-        else {
-            continue;
-        };
-        for LeafInfo { leaf, .. } in leaf_chain.iter().rev() {
-            let height = leaf.height();
-            let leaf_builder = (leaf.view_number().u64() as usize) % NUM_NODES;
-            if height == 0 {
-                continue;
-            }
-
-            tracing::info!(
-                "waiting for blocks from {proposers:?}, block {height} is from {leaf_builder}",
-            );
-            proposers[leaf_builder] = true;
-        }
-
-        if proposers.iter().all(|has_proposed| *has_proposed) {
-            break;
-        }
-    }
+    let mut network = TestNetwork::new(config, TEST_UPGRADE).await;
+    restart_from_genesis_and_decide(&mut network, NullStateCatchup::default(), |info| {
+        info.delta.is_some()
+    })
+    .await;
 }
 
 /// A query node with a gap must fill it from a peer over the path production runs: the
@@ -277,7 +200,7 @@ async fn test_query_service_catchup_from_peer() {
         .catchups(std::array::from_fn(|_| state_peers()))
         .network_config(TestConfigBuilder::default().build())
         .build();
-    let mut network = TestNetwork::new(config, MOCK_SEQUENCER_VERSIONS).await;
+    let mut network = TestNetwork::new(config, TEST_UPGRADE).await;
 
     // Interleave transactions with idle views so the chain gets both non-empty and empty
     // blocks. Which heights land either way is up to the builder, so the shape is read back
@@ -439,7 +362,7 @@ async fn test_query_service_catchup_from_peer() {
                         &*metrics,
                         STAKE_TABLE_CAPACITY_FOR_TEST,
                         consumer,
-                        MOCK_SEQUENCER_VERSIONS,
+                        TEST_UPGRADE,
                         upgrades_map,
                     )
                     .await)
@@ -497,215 +420,19 @@ async fn test_query_service_catchup_from_peer() {
     }
 }
 
-#[ignore]
-#[test_log::test(tokio::test(flavor = "multi_thread"))]
-async fn test_catchup_epochs_no_state_peers() {
-    // Start a sequencer network, using the query service for catchup.
-    let port = reserve_tcp_port().expect("OS should have ephemeral ports available");
-    const EPOCH_HEIGHT: u64 = 5;
-    let network_config = TestConfigBuilder::default()
-        .epoch_height(EPOCH_HEIGHT)
-        .build();
-    const NUM_NODES: usize = 5;
-    let config = TestNetworkConfigBuilder::<NUM_NODES, _, _>::with_num_nodes()
-        .api_config(Options::with_port(port))
-        .network_config(network_config)
-        .build();
-    let mut network = TestNetwork::new(config, Upgrade::trivial(EPOCH_VERSION)).await;
-
-    // Wait for replica 0 to decide in the third epoch.
-    let mut events = network.peers[0].event_stream();
-    loop {
-        let event = events.next().await.unwrap();
-        let CoordinatorEvent::LegacyEvent(Event {
-            event: EventType::Decide { leaf_chain, .. },
-            ..
-        }) = event
-        else {
-            continue;
-        };
-        tracing::error!("got decide height {}", leaf_chain[0].leaf.height());
-
-        if leaf_chain[0].leaf.height() > EPOCH_HEIGHT * 3 {
-            tracing::error!("decided past one epoch");
-            break;
-        }
-    }
-
-    // Shut down and restart replica 0. We don't just stop consensus and restart it; we fully
-    // drop the node and recreate it so it loses all of its temporary state and starts off from
-    // genesis. It should be able to catch up by listening to proposals and then rebuild its
-    // state from its peers.
-    tracing::info!("shutting down node");
-    network.peers.remove(0);
-
-    // Wait for a few blocks to pass while the node is down, so it falls behind.
-    network
-        .server
-        .event_stream()
-        .filter(|event| {
-            future::ready(matches!(
-                event,
-                CoordinatorEvent::LegacyEvent(Event {
-                    event: EventType::Decide { .. },
-                    ..
-                })
-            ))
-        })
-        .take(3)
-        .collect::<Vec<_>>()
-        .await;
-
-    tracing::error!("restarting node");
-    let node = network
-        .cfg
-        .init_node(
-            1,
-            ValidatedState::default(),
-            no_storage::Options,
-            None::<NullStateCatchup>,
-            None,
-            &NoMetrics,
-            test_helpers::STAKE_TABLE_CAPACITY_FOR_TEST,
-            NullEventConsumer,
-            MOCK_SEQUENCER_VERSIONS,
-            Default::default(),
-        )
-        .await;
-    let mut events = node.event_stream();
-
-    // Wait for a (non-genesis) block proposed by each node, to prove that the lagging node has
-    // caught up and all nodes are in sync.
-    let mut proposers = [false; NUM_NODES];
-    loop {
-        let event = events.next().await.unwrap();
-        let CoordinatorEvent::LegacyEvent(Event {
-            event: EventType::Decide { leaf_chain, .. },
-            ..
-        }) = event
-        else {
-            continue;
-        };
-        for LeafInfo { leaf, .. } in leaf_chain.iter().rev() {
-            let height = leaf.height();
-            let leaf_builder = (leaf.view_number().u64() as usize) % NUM_NODES;
-            if height == 0 {
-                continue;
-            }
-
-            tracing::info!(
-                "waiting for blocks from {proposers:?}, block {height} is from {leaf_builder}",
-            );
-            proposers[leaf_builder] = true;
-        }
-
-        if proposers.iter().all(|has_proposed| *has_proposed) {
-            break;
-        }
-    }
-}
-
-#[test_log::test(tokio::test(flavor = "multi_thread"))]
-async fn test_chain_config_from_instance() {
-    // This test uses a ValidatedState which only has the default chain config commitment.
-    // The NodeState has the full chain config.
-    // Both chain config commitments will match, so the ValidatedState should have the
-    // full chain config after a non-genesis block is decided.
-
-    let port = reserve_tcp_port().expect("OS should have ephemeral ports available");
-
-    let chain_config: ChainConfig = ChainConfig::default();
-
-    let state = ValidatedState {
-        chain_config: chain_config.commit().into(),
-        ..Default::default()
-    };
-
-    let states = std::array::from_fn(|_| state.clone());
-
-    let config = TestNetworkConfigBuilder::default()
-        .api_config(Options::with_port(port))
-        .states(states)
-        .catchups(std::array::from_fn(|_| {
-            StatePeers::<StaticVersion<0, 1>>::from_urls(
-                vec![format!("http://localhost:{port}").parse().unwrap()],
-                Default::default(),
-                Duration::from_secs(2),
-                &NoMetrics,
-            )
-        }))
-        .network_config(TestConfigBuilder::default().build())
-        .build();
-
-    let mut network = TestNetwork::new(config, MOCK_SEQUENCER_VERSIONS).await;
-
-    // Wait for few blocks to be decided.
-    network
-        .server
-        .event_stream()
-        .filter(|event| {
-            future::ready(matches!(
-                event,
-                CoordinatorEvent::LegacyEvent(Event {
-                    event: EventType::Decide { .. },
-                    ..
-                })
-            ))
-        })
-        .take(3)
-        .collect::<Vec<_>>()
-        .await;
-
-    for peer in &network.peers {
-        let state = peer.consensus_handle().decided_state().await.unwrap();
-
-        assert_eq!(state.chain_config.resolve().unwrap(), chain_config)
-    }
-
-    network.server.shut_down().await;
-    drop(network);
-}
-
 #[test_log::test(tokio::test(flavor = "multi_thread"))]
 async fn test_chain_config_catchup() {
-    // This test uses a ValidatedState with a non-default chain config
-    // so it will be different from the NodeState chain config used by the TestNetwork.
-    // However, for this test to work, at least one node should have a full chain config
-    // to allow other nodes to catch up.
-
+    // Only node 0 starts with the full chain config; every other node holds just its
+    // commitment and must fetch the config from node 0.
     let port = reserve_tcp_port().expect("OS should have ephemeral ports available");
 
-    let cf = ChainConfig {
-        max_block_size: 300.into(),
-        base_fee: 1.into(),
-        ..Default::default()
-    };
-
-    // State1 contains only the chain config commitment
-    let state1 = ValidatedState {
-        chain_config: cf.commit().into(),
-        ..Default::default()
-    };
-
-    //state 2 contains the full chain config
-    let state2 = ValidatedState {
-        chain_config: cf.into(),
-        ..Default::default()
-    };
-
-    let mut states = std::array::from_fn(|_| state1.clone());
-    // only one node has the full chain config
-    // all the other nodes should do a catchup to get the full chain config from peer 0
-    states[0] = state2;
-
     const NUM_NODES: usize = 5;
-    let config = TestNetworkConfigBuilder::<NUM_NODES, _, _>::with_num_nodes()
+    let builder = TestNetworkConfigBuilder::<NUM_NODES, _, _>::with_num_nodes()
         .api_config(Options::from(options::Http {
             port,
             max_connections: None,
             tonic_port: None,
         }))
-        .states(states)
         .catchups(std::array::from_fn(|_| {
             StatePeers::<StaticVersion<0, 1>>::from_urls(
                 vec![format!("http://localhost:{port}").parse().unwrap()],
@@ -715,29 +442,43 @@ async fn test_chain_config_catchup() {
             )
         }))
         .network_config(TestConfigBuilder::default().build())
-        .build();
+        .pos_hook(
+            DelegationConfig::MultipleDelegators,
+            StakeTableContractVersion::V3,
+            TEST_UPGRADE,
+        )
+        .await
+        .unwrap();
 
-    let mut network = TestNetwork::new(config, MOCK_SEQUENCER_VERSIONS).await;
+    // Differ from the default so a node can't get it from its own instance state.
+    let cf = ChainConfig {
+        max_block_size: 300.into(),
+        ..builder.chain_config()
+    };
+    let commitment_only = ValidatedState {
+        chain_config: cf.commit().into(),
+        ..Default::default()
+    };
+    let mut states = std::array::from_fn(|_| commitment_only.clone());
+    states[0] = ValidatedState {
+        chain_config: cf.into(),
+        ..Default::default()
+    };
+    let config = builder.states(states).genesis_chain_config(cf).build();
+
+    let mut network = TestNetwork::new(config, TEST_UPGRADE).await;
 
     // Wait for a few blocks to be decided.
     network
         .server
         .event_stream()
-        .filter(|event| {
-            future::ready(matches!(
-                event,
-                CoordinatorEvent::LegacyEvent(Event {
-                    event: EventType::Decide { .. },
-                    ..
-                })
-            ))
-        })
+        .filter(|event| future::ready(decided_leaves(event).is_some()))
         .take(3)
         .collect::<Vec<_>>()
         .await;
 
-    for peer in &network.peers {
-        let state = peer.consensus_handle().decided_state().await.unwrap();
+    for node in std::iter::once(&network.server).chain(&network.peers) {
+        let state = node.consensus_handle().decided_state().await.unwrap();
 
         assert_eq!(state.chain_config.resolve().unwrap(), cf)
     }
@@ -766,7 +507,7 @@ pub(crate) async fn test_restart() {
         .persistences(persistence.clone())
         .network_config(TestConfigBuilder::default().build())
         .build();
-    let mut network = TestNetwork::new(config, MOCK_SEQUENCER_VERSIONS).await;
+    let mut network = TestNetwork::new(config, TEST_UPGRADE).await;
 
     // Connect client.
     let client: Client<ClientErr, SequencerApiVersion> =
@@ -838,7 +579,7 @@ pub(crate) async fn test_restart() {
         }))
         .network_config(TestConfigBuilder::default().build())
         .build();
-    let _network = TestNetwork::new(config, MOCK_SEQUENCER_VERSIONS).await;
+    let _network = TestNetwork::new(config, TEST_UPGRADE).await;
     let client: Client<ClientErr, StaticVersion<0, 1>> =
         Client::new(format!("http://localhost:{port}").parse().unwrap());
     client.connect(None).await;
@@ -890,7 +631,7 @@ async fn test_new_protocol_query_node_restart_with_fresh_storage() -> anyhow::Re
     const NUM_NODES: usize = 6;
     const EPOCH_HEIGHT: u64 = 10;
     const EPOCHS_BEFORE_RESTART: u64 = 7;
-    const NEW_PROTOCOL: Upgrade = Upgrade::trivial(NEW_PROTOCOL_VERSION);
+    const TEST_UPGRADE: Upgrade = Upgrade::trivial(NEW_PROTOCOL_VERSION);
     /// Bound on each stage of the restarted node's recovery.
     const RECOVERY_TIMEOUT: Duration = Duration::from_secs(240);
 
@@ -904,13 +645,7 @@ async fn test_new_protocol_query_node_restart_with_fresh_storage() -> anyhow::Re
     let api_url: Url = format!("http://localhost:{api_port}").parse()?;
     let query_url: Url = format!("http://localhost:{query_port}").parse()?;
 
-    let storage = join_all((0..NUM_NODES).map(|_| SqlDataSource::create_storage())).await;
-    let persistence: [_; NUM_NODES] = storage
-        .iter()
-        .map(<SqlDataSource as TestableSequencerDataSource>::persistence_options)
-        .collect::<Vec<_>>()
-        .try_into()
-        .unwrap();
+    let (storage, persistence) = node_storage::<SqlDataSource, NUM_NODES>().await;
 
     // Both query nodes need the catchup and light client modules: state
     // catchup is served over the former, and the query service validates
@@ -940,16 +675,9 @@ async fn test_new_protocol_query_node_restart_with_fresh_storage() -> anyhow::Re
                 &NoMetrics,
             )
         }))
-        .pos_hook(
-            DelegationConfig::MultipleDelegators,
-            StakeTableContractVersion::V3,
-            NEW_PROTOCOL,
-        )
-        .await?
         .build();
-
-    let genesis_state = config.states()[0].clone();
-    let mut network = TestNetwork::new(config, NEW_PROTOCOL).await;
+    let mut network = TestNetwork::new(config, TEST_UPGRADE).await;
+    let genesis_state = network.genesis_state(0);
 
     // `TestNetwork` only gives node 0 an API, so node 1 has to be served
     // separately to become the second query node. Its keys are already in the
@@ -992,7 +720,7 @@ async fn test_new_protocol_query_node_restart_with_fresh_storage() -> anyhow::Re
                                 &*metrics,
                                 test_helpers::STAKE_TABLE_CAPACITY_FOR_TEST,
                                 consumer,
-                                NEW_PROTOCOL,
+                                TEST_UPGRADE,
                                 Default::default(),
                             )
                             .await)
@@ -1193,10 +921,6 @@ async fn test_new_protocol_query_node_restart_with_fresh_storage() -> anyhow::Re
     let proposed = timeout(RECOVERY_TIMEOUT, async {
         while let Some(event) = events.next().await {
             let leaf_infos: &[LeafInfo<SeqTypes>] = match &event {
-                CoordinatorEvent::LegacyEvent(Event {
-                    event: EventType::Decide { leaf_chain, .. },
-                    ..
-                }) => leaf_chain,
                 CoordinatorEvent::NewDecide { leaf_infos, .. } => leaf_infos,
                 _ => continue,
             };
@@ -1234,11 +958,8 @@ async fn test_new_protocol_query_node_restart_with_fresh_storage() -> anyhow::Re
     Ok(())
 }
 
-#[rstest]
-#[case(POS_V3)]
-#[case(POS_V4)]
 #[test_log::test(tokio::test(flavor = "multi_thread"))]
-async fn test_merklized_state_catchup_on_restart(#[case] upgrade: Upgrade) -> anyhow::Result<()> {
+async fn test_merklized_state_catchup_on_restart() -> anyhow::Result<()> {
     // This test verifies that a query node can catch up on
     // merklized state after being offline for multiple epochs.
     //
@@ -1263,17 +984,11 @@ async fn test_merklized_state_catchup_on_restart(#[case] upgrade: Upgrade) -> an
     tracing::info!("API PORT = {api_port}");
     const NUM_NODES: usize = 5;
 
-    let storage = join_all((0..NUM_NODES).map(|_| SqlDataSource::create_storage())).await;
-    let persistence: [_; NUM_NODES] = storage
-        .iter()
-        .map(<SqlDataSource as TestableSequencerDataSource>::persistence_options)
-        .collect::<Vec<_>>()
-        .try_into()
-        .unwrap();
+    let (storage, persistence) = node_storage::<SqlDataSource, NUM_NODES>().await;
 
     // The light client skips epoch-root stake-table-hash verification for pre-DRB headers only
-    // on the Decaf chain id, so use it to keep the V3->V4 catchup path covered. Must be set
-    // before `pos_hook`, which preserves the chain id from `state[0]`.
+    // on the Decaf chain id, so use it to keep the V3->V4 catchup path covered. The stake
+    // table deploy in `TestNetwork::new` keeps the chain id from `state[0]`.
     let decaf_state = ValidatedState {
         chain_config: ChainConfig {
             chain_id: DECAF_CHAIN_ID,
@@ -1293,24 +1008,9 @@ async fn test_merklized_state_catchup_on_restart(#[case] upgrade: Upgrade) -> an
         .network_config(network_config)
         .persistences(persistence.clone())
         .states(std::array::from_fn(|_| decaf_state.clone()))
-        .catchups(std::array::from_fn(|_| {
-            StatePeers::<StaticVersion<0, 1>>::from_urls(
-                vec![format!("http://localhost:{api_port}").parse().unwrap()],
-                Default::default(),
-                Duration::from_secs(2),
-                &NoMetrics,
-            )
-        }))
-        .pos_hook(
-            DelegationConfig::MultipleDelegators,
-            hotshot_contract_adapter::stake_table::StakeTableContractVersion::V3,
-            upgrade,
-        )
-        .await
-        .unwrap()
         .build();
-    let state = config.states()[0].clone();
-    let mut network = TestNetwork::new(config, upgrade).await;
+    let mut network = TestNetwork::new(config, TEST_UPGRADE).await;
+    let state = network.genesis_state(0);
 
     // Remove peer 0 and restart it with the query module enabled.
     // Adding an additional node to the test network is not straight forward,
@@ -1332,7 +1032,7 @@ async fn test_merklized_state_catchup_on_restart(#[case] upgrade: Upgrade) -> an
     );
 
     // start the query node so that it builds the merklized state
-    let node_0 = opt
+    let mut node_0 = opt
         .clone()
         .serve(|metrics, consumer, storage| {
             let cfg = network.cfg.clone();
@@ -1354,7 +1054,7 @@ async fn test_merklized_state_catchup_on_restart(#[case] upgrade: Upgrade) -> an
                         &*metrics,
                         test_helpers::STAKE_TABLE_CAPACITY_FOR_TEST,
                         consumer,
-                        upgrade,
+                        TEST_UPGRADE,
                         Default::default(),
                     )
                     .await)
@@ -1363,13 +1063,15 @@ async fn test_merklized_state_catchup_on_restart(#[case] upgrade: Upgrade) -> an
         })
         .await
         .unwrap();
+    node_0.start_consensus().await;
 
     let mut events = network.peers[2].event_stream();
     // wait for 1 epoch
     wait_for_epochs(&mut events, EPOCH_HEIGHT, 1).await;
 
-    // shutdown the node for 3 epochs
-    drop(node_0);
+    // Shut the node down for 3 epochs. Await it so its cliquenet listener releases its port
+    // before the restarted node binds the same address.
+    node_0.shut_down().await;
 
     // wait for 4 epochs
     wait_for_epochs(&mut events, EPOCH_HEIGHT, 4).await;
@@ -1395,7 +1097,7 @@ async fn test_merklized_state_catchup_on_restart(#[case] upgrade: Upgrade) -> an
                         &*metrics,
                         test_helpers::STAKE_TABLE_CAPACITY_FOR_TEST,
                         consumer,
-                        upgrade,
+                        TEST_UPGRADE,
                         Default::default(),
                     )
                     .await)
@@ -1404,6 +1106,7 @@ async fn test_merklized_state_catchup_on_restart(#[case] upgrade: Upgrade) -> an
         })
         .await
         .unwrap();
+    node_0.start_consensus().await;
 
     let client: Client<ClientErr, SequencerApiVersion> =
         Client::new(format!("http://localhost:{node_0_port}").parse().unwrap());
@@ -1417,15 +1120,10 @@ async fn test_merklized_state_catchup_on_restart(#[case] upgrade: Upgrade) -> an
     let mut retries = 0;
     loop {
         sleep(Duration::from_secs(1)).await;
-        let state = node_0.decided_state().await.unwrap();
-
-        let leaves = if upgrade.base == EPOCH_VERSION {
-            // Use legacy tree for V3
-            state.reward_merkle_tree_v1.num_leaves()
-        } else {
-            // Use new tree for V4 and above
-            state.reward_merkle_tree_v2.num_leaves()
-        };
+        let leaves = node_0
+            .decided_state()
+            .await
+            .map_or(0, |state| state.reward_merkle_tree_v2.num_leaves());
 
         if leaves > 0 {
             tracing::info!("Node's state has reward accounts");
@@ -1462,10 +1160,11 @@ async fn test_merklized_state_catchup_on_restart(#[case] upgrade: Upgrade) -> an
         }
     }
 
-    // shutdown consensus to freeze the state
-    node_0.shutdown_consensus().await;
+    // Read before shutting consensus down: once the coordinator stops, these fall back to the
+    // legacy handle, which never ran at 0.6.
     let decided_leaf = node_0.decided_leaf().await;
     let state = node_0.decided_state().await.unwrap();
+    node_0.shutdown_consensus().await;
     tracing::info!(
         height = decided_leaf.height(),
         ?decided_leaf,
@@ -1503,13 +1202,7 @@ async fn test_state_pruner_stays_below_state_head() -> anyhow::Result<()> {
     // loop has to get past the stale pruned height before the check ends.
     const GAP: u64 = 10;
 
-    let storage = join_all((0..NUM_NODES).map(|_| SqlDataSource::create_storage())).await;
-    let persistence: [_; NUM_NODES] = storage
-        .iter()
-        .map(<SqlDataSource as TestableSequencerDataSource>::persistence_options)
-        .collect::<Vec<_>>()
-        .try_into()
-        .unwrap();
+    let (storage, persistence) = node_storage::<SqlDataSource, NUM_NODES>().await;
     let api_port = reserve_tcp_port().expect("OS should have ephemeral ports available");
     let api_url: Url = format!("http://localhost:{api_port}").parse().unwrap();
     // The query node fetches what it missed from the API node, so the API node serves catchup
@@ -1524,8 +1217,8 @@ async fn test_state_pruner_stays_below_state_head() -> anyhow::Result<()> {
         .network_config(TestConfigBuilder::default().build())
         .persistences(persistence.clone())
         .build();
-    let genesis_state = config.states()[0].clone();
-    let mut network = TestNetwork::new(config, MOCK_SEQUENCER_VERSIONS).await;
+    let mut network = TestNetwork::new(config, TEST_UPGRADE).await;
+    let genesis_state = network.genesis_state(0);
 
     // Replace peer 0 with a query node whose state pruner runs every second with zero
     // retention: left to itself, every run would prune right up to the chain tip. Consensus
@@ -1582,7 +1275,7 @@ async fn test_state_pruner_stays_below_state_head() -> anyhow::Result<()> {
                                     &*metrics,
                                     STAKE_TABLE_CAPACITY_FOR_TEST,
                                     consumer,
-                                    MOCK_SEQUENCER_VERSIONS,
+                                    TEST_UPGRADE,
                                     Default::default(),
                                 )
                                 .await)
@@ -1696,6 +1389,307 @@ async fn test_state_pruner_stays_below_state_head() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// When the state loop meets the data pruned height, as on a node that was down for longer
+/// than its data retention.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum DataPruned {
+    /// The marker was stamped past the state head while the node was down: the loop finds
+    /// its head leaf gone and starts on peers.
+    BeforeRestart,
+    /// The marker is stamped while the loop waits on the local stream for a leaf that never
+    /// comes: the loop has to notice and switch to peers. The loop is put well behind first,
+    /// as a long outage would, since a gap above the consensus anchor is re-decided on
+    /// restart and cannot be kept open.
+    WhileWaiting,
+}
+
+/// The availability layer never fetches a leaf at or below the data pruned height, so the
+/// state loop has to get the leaves it still needs from peers, without storing them, and
+/// carry on from the local stream once it is past the pruned height. Peers' leaf chains are
+/// verified against per-epoch stake tables, so the network runs with epochs.
+#[rstest]
+#[case::before_restart(DataPruned::BeforeRestart)]
+#[case::while_waiting(DataPruned::WhileWaiting)]
+#[test_log::test(tokio::test(flavor = "multi_thread"))]
+async fn test_state_loop_fetches_pruned_leaves_from_peers(
+    #[case] pruned_when: DataPruned,
+) -> anyhow::Result<()> {
+    const NUM_NODES: usize = 5;
+    const EPOCH_HEIGHT: u64 = 10;
+    // Leaves the node holds beyond the state head when it goes down, the margin by which the
+    // loop has to get past the pruned height before the check ends, and the head the loop is
+    // put back to when it has to be left waiting.
+    const SYNCED: u64 = 5;
+    const GAP: u64 = 10;
+    const BEHIND: u64 = 2;
+
+    let storage = join_all((0..NUM_NODES).map(|_| SqlDataSource::create_storage())).await;
+    let persistence: [_; NUM_NODES] = storage
+        .iter()
+        .map(<SqlDataSource as TestableSequencerDataSource>::persistence_options)
+        .collect::<Vec<_>>()
+        .try_into()
+        .unwrap();
+    let api_port = reserve_tcp_port().expect("OS should have ephemeral ports available");
+    let api_url: Url = format!("http://localhost:{api_port}").parse().unwrap();
+    // The API node is the peer the query node fetches leaves from.
+    let config = TestNetworkConfigBuilder::with_num_nodes()
+        .api_config(SqlDataSource::options(
+            &storage[0],
+            Options::with_port(api_port)
+                .catchup(Default::default())
+                .light_client(Default::default()),
+        ))
+        .network_config(
+            TestConfigBuilder::default()
+                .epoch_height(EPOCH_HEIGHT)
+                .build(),
+        )
+        .persistences(persistence.clone())
+        .catchups(std::array::from_fn(|_| {
+            StatePeers::<StaticVersion<0, 1>>::from_urls(
+                vec![api_url.clone()],
+                Default::default(),
+                Duration::from_secs(2),
+                &NoMetrics,
+            )
+        }))
+        .pos_hook(
+            DelegationConfig::MultipleDelegators,
+            StakeTableContractVersion::V3,
+            TEST_UPGRADE,
+        )
+        .await?
+        .build();
+    let genesis_state = config.states()[0].clone();
+    let mut network = TestNetwork::new(config, TEST_UPGRADE).await;
+
+    // Replace peer 0 with a query node. Its availability fetcher gets the given peers: the
+    // API node, except when the loop has to be left waiting for a leaf that never arrives.
+    network.peers[0].shut_down().await;
+    network.peers.remove(0);
+    let query_port = reserve_tcp_port().expect("OS should have ephemeral ports available");
+    let db_opt = tmp_options(&storage[1]);
+    let start_query_node = {
+        let cfg = network.cfg.clone();
+        let node_persistence = persistence[1].clone();
+        let db_opt = db_opt.clone();
+        let api_url = api_url.clone();
+        move |availability_peers: Vec<Url>| {
+            let cfg = cfg.clone();
+            let genesis_state = genesis_state.clone();
+            let node_persistence = node_persistence.clone();
+            let db_opt = db_opt.clone();
+            let api_url = api_url.clone();
+            async move {
+                let opt = Options::with_port(query_port).query_sql(
+                    Query {
+                        peers: availability_peers,
+                        ..Default::default()
+                    },
+                    db_opt,
+                );
+                let ctx = opt
+                    .serve(move |metrics, consumer, storage| {
+                        async move {
+                            Ok(cfg
+                                .init_node(
+                                    1,
+                                    genesis_state,
+                                    node_persistence,
+                                    Some(StatePeers::<StaticVersion<0, 1>>::from_urls(
+                                        vec![api_url],
+                                        Default::default(),
+                                        Duration::from_secs(2),
+                                        &NoMetrics,
+                                    )),
+                                    storage,
+                                    &*metrics,
+                                    STAKE_TABLE_CAPACITY_FOR_TEST,
+                                    consumer,
+                                    TEST_UPGRADE,
+                                    Default::default(),
+                                )
+                                .await)
+                        }
+                        .boxed()
+                    })
+                    .await
+                    .expect("query node should start");
+                ctx.start_consensus().await;
+                ctx
+            }
+        }
+    };
+
+    let mut query_node = start_query_node(vec![api_url.clone()]).await;
+    let query_client: Client<ClientErr, StaticVersion<0, 1>> =
+        Client::new(format!("http://localhost:{query_port}").parse().unwrap());
+    assert!(query_client.connect(Some(Duration::from_secs(60))).await);
+    let api_client: Client<ClientErr, StaticVersion<0, 1>> = Client::new(api_url.clone());
+    assert!(api_client.connect(Some(Duration::from_secs(60))).await);
+
+    // Let the loop build some state, then take the node down while the chain moves on.
+    wait_until_block_height(&query_client, "block-state/block-height", 5).await;
+    query_node.shut_down().await;
+    drop(query_node);
+    // `shut_down` aborts the server task without waiting for it, so wait for the port before
+    // rebinding it.
+    timeout(Duration::from_secs(30), async {
+        while std::net::TcpListener::bind(("127.0.0.1", query_port)).is_err() {
+            sleep(Duration::from_millis(100)).await;
+        }
+    })
+    .await
+    .context("shut-down query node did not release its port")?;
+    let db = SqlStorage::connect(Config::try_from(&db_opt)?, StorageConnectionType::Query).await?;
+    let (_, head_at_shutdown) = state_heights(&db).await;
+    let local_tip = local_block_height(&db).await? - 1;
+
+    let _restarted;
+    let pruned = match pruned_when {
+        DataPruned::BeforeRestart => {
+            // Prune consensus data past the state head, as a pruner run during the downtime
+            // would have once the retention passed. A run never stamps past the node's own
+            // tip, so first give the node a leaf beyond the marker, as its fetcher would have
+            // before the outage outran the loop.
+            let synced_tip = local_tip + SYNCED;
+            let pruned = synced_tip - 1;
+            wait_until_block_height(&api_client, "status/block-height", synced_tip + 1).await;
+            let synced_leaf = api_client
+                .get::<LeafQueryData<SeqTypes>>(&format!("availability/leaf/{synced_tip}"))
+                .send()
+                .await?;
+            let mut tx = db.write().await?;
+            tx.insert_leaf(&synced_leaf).await?;
+            tx.commit().await?;
+            prune_data_to(&db, pruned).await?;
+            _restarted = start_query_node(vec![api_url.clone()]).await;
+            pruned
+        },
+        DataPruned::WhileWaiting => {
+            // Put the loop behind its own storage and take the leaves above its new head out
+            // of local reach: below the consensus anchor they are never re-decided, and
+            // without availability peers they are never fetched. The loop then waits on the
+            // stream for the leaf above its head while consensus moves the tip on.
+            {
+                let mut tx = db.write().await?;
+                UpdateStateData::<SeqTypes, BlockMerkleTree, { BlockMerkleTree::ARITY }>::set_last_state_height(
+                    &mut tx,
+                    BEHIND as usize,
+                )
+                .await?;
+                tx.commit().await?;
+            }
+            delete_data_between(&db, BEHIND, head_at_shutdown).await?;
+            _restarted = start_query_node(vec![]).await;
+            let deadline = Instant::now() + Duration::from_secs(120);
+            loop {
+                if local_block_height(&db).await? > local_tip + GAP {
+                    break;
+                }
+                ensure!(
+                    Instant::now() < deadline,
+                    "consensus did not move the local tip past {}",
+                    local_tip + GAP
+                );
+                sleep(Duration::from_millis(200)).await;
+            }
+            let (_, head) = state_heights(&db).await;
+            ensure!(
+                head == BEHIND,
+                "the loop moved to {head} without the leaf above {BEHIND}"
+            );
+            // Now stamp past the height the loop is waiting for. The old head is well below
+            // the tip, as a real run leaves it.
+            let pruned = head_at_shutdown;
+            prune_data_to(&db, pruned).await?;
+            pruned
+        },
+    };
+
+    // The loop has to get past the pruned height on leaves from the API node, and then follow
+    // the local stream.
+    let deadline = Instant::now() + Duration::from_secs(180);
+    loop {
+        let (_, head) = state_heights(&db).await;
+        if head > pruned + GAP {
+            break;
+        }
+        ensure!(
+            Instant::now() < deadline,
+            "state loop did not get past the data pruned height {pruned}: head {head}, started \
+             from {head_at_shutdown}"
+        );
+        sleep(Duration::from_millis(200)).await;
+    }
+
+    // The leaves the loop fetched from peers were not stored: the pruner would only delete
+    // them again.
+    let mut tx = db.read().await?;
+    let stored: i64 = sqlx::query_scalar("SELECT count(*) FROM leaf2 WHERE height <= $1")
+        .bind(pruned as i64)
+        .fetch_one(tx.as_mut())
+        .await?;
+    ensure!(
+        stored == 0,
+        "{stored} leaves at or below the data pruned height {pruned} were stored"
+    );
+    Ok(())
+}
+
+/// The number of blocks in the node's own availability storage.
+async fn local_block_height(db: &SqlStorage) -> anyhow::Result<u64> {
+    let mut tx = db.read().await?;
+    Ok(NodeStorage::<SeqTypes>::block_height(&mut tx).await? as u64)
+}
+
+/// Prune consensus data to `pruned` as a pruner batch would: stamp the data cursor, id 1,
+/// then delete what `delete_batch` deletes. The node may be writing new blocks meanwhile, so
+/// a serialization conflict is retried.
+async fn prune_data_to(db: &SqlStorage, pruned: u64) -> anyhow::Result<()> {
+    serializable_retry!(db, || async {
+        let mut tx = db.write().await?;
+        tx.upsert(
+            "pruned_height",
+            ["id", "last_height"],
+            ["id"],
+            [(1i32, pruned as i64)],
+        )
+        .await?;
+        for statement in [
+            "DELETE FROM transactions WHERE block_height <= $1",
+            "DELETE FROM leaf2 WHERE height <= $1",
+            "DELETE FROM header WHERE height <= $1",
+        ] {
+            sqlx::query(statement)
+                .bind(pruned as i64)
+                .execute(tx.as_mut())
+                .await?;
+        }
+        tx.commit().await
+    })
+    .await
+}
+
+/// Delete consensus data above `from` up to and including `to` without moving the data
+/// cursor, as if the node had never had it.
+async fn delete_data_between(db: &SqlStorage, from: u64, to: u64) -> anyhow::Result<()> {
+    let mut tx = db.write().await?;
+    for statement in [
+        "DELETE FROM transactions WHERE block_height > $1 AND block_height <= $2",
+        "DELETE FROM leaf2 WHERE height > $1 AND height <= $2",
+        "DELETE FROM header WHERE height > $1 AND height <= $2",
+    ] {
+        sqlx::query(statement)
+            .bind(from as i64)
+            .bind(to as i64)
+            .execute(tx.as_mut())
+            .await?;
+    }
+    tx.commit().await
+}
+
 /// The state pruned height, then the state head. Read in that order: every move of the
 /// cursor, up by a batch or down by the startup repair, lands below the head, and the head
 /// only grows, so a head read after the cursor is always above it.
@@ -1706,10 +1700,8 @@ async fn state_heights(db: &SqlStorage) -> (Option<u64>, u64) {
     (pruned, head)
 }
 
-#[rstest]
-#[case(POS_V4)]
 #[test_log::test(tokio::test(flavor = "multi_thread"))]
-async fn test_state_reconstruction(#[case] upgrade: Upgrade) -> anyhow::Result<()> {
+async fn test_state_reconstruction() -> anyhow::Result<()> {
     // This test verifies that a query node can successfully reconstruct its state
     // after being shut down from the database
     //
@@ -1736,13 +1728,7 @@ async fn test_state_reconstruction(#[case] upgrade: Upgrade) -> anyhow::Result<(
     tracing::info!("API PORT = {api_port}");
     const NUM_NODES: usize = 5;
 
-    let storage = join_all((0..NUM_NODES).map(|_| SqlDataSource::create_storage())).await;
-    let persistence: [_; NUM_NODES] = storage
-        .iter()
-        .map(<SqlDataSource as TestableSequencerDataSource>::persistence_options)
-        .collect::<Vec<_>>()
-        .try_into()
-        .unwrap();
+    let (storage, persistence) = node_storage::<SqlDataSource, NUM_NODES>().await;
 
     let config = TestNetworkConfigBuilder::with_num_nodes()
         .api_config(SqlDataSource::options(
@@ -1751,24 +1737,9 @@ async fn test_state_reconstruction(#[case] upgrade: Upgrade) -> anyhow::Result<(
         ))
         .network_config(network_config)
         .persistences(persistence.clone())
-        .catchups(std::array::from_fn(|_| {
-            StatePeers::<StaticVersion<0, 1>>::from_urls(
-                vec![format!("http://localhost:{api_port}").parse().unwrap()],
-                Default::default(),
-                Duration::from_secs(2),
-                &NoMetrics,
-            )
-        }))
-        .pos_hook(
-            DelegationConfig::MultipleDelegators,
-            hotshot_contract_adapter::stake_table::StakeTableContractVersion::V3,
-            upgrade,
-        )
-        .await
-        .unwrap()
         .build();
-    let state = config.states()[0].clone();
-    let mut network = TestNetwork::new(config, upgrade).await;
+    let mut network = TestNetwork::new(config, TEST_UPGRADE).await;
+    let state = network.genesis_state(0);
     // Remove peer 0 and restart it with the query module enabled.
     // Adding an additional node to the test network is not straight forward,
     // as the keys have already been initialized in the config above.
@@ -1811,7 +1782,7 @@ async fn test_state_reconstruction(#[case] upgrade: Upgrade) -> anyhow::Result<(
                         &*metrics,
                         test_helpers::STAKE_TABLE_CAPACITY_FOR_TEST,
                         consumer,
-                        upgrade,
+                        TEST_UPGRADE,
                         Default::default(),
                     )
                     .await)
@@ -1820,67 +1791,75 @@ async fn test_state_reconstruction(#[case] upgrade: Upgrade) -> anyhow::Result<(
         })
         .await
         .unwrap();
+    node_0.start_consensus().await;
 
     let mut events = network.peers[2].event_stream();
     // Wait until at least 3 epochs have passed
     wait_for_epochs(&mut events, EPOCH_HEIGHT, 3).await;
 
-    tracing::warn!("shutting down node 0");
-
-    node_0.shutdown_consensus().await;
-
+    // Read before shutting consensus down: once the coordinator stops, the decided state falls
+    // back to the legacy handle, which never ran at 0.6.
     let instance = node_0.node_state();
-    let state = node_0.decided_state().await.unwrap();
+    // A node can decide a leaf before it has validated that leaf's state itself.
+    let state = timeout(Duration::from_secs(60), async {
+        loop {
+            if let Some(state) = node_0.decided_state().await {
+                break state;
+            }
+            sleep(Duration::from_millis(100)).await;
+        }
+    })
+    .await
+    .context("node 0 never validated a decided state")?;
     let fee_accounts = state
         .fee_merkle_tree
         .clone()
         .into_iter()
         .map(|(acct, _)| acct)
         .collect::<Vec<_>>();
-    let reward_accounts = match upgrade.base {
-        EPOCH_VERSION => state
-            .reward_merkle_tree_v1
-            .clone()
-            .into_iter()
-            .map(|(acct, _)| RewardAccountV2::from(acct))
-            .collect::<Vec<_>>(),
-        DRB_AND_HEADER_UPGRADE_VERSION => state
-            .reward_merkle_tree_v2
-            .clone()
-            .into_iter()
-            .map(|(acct, _)| acct)
-            .collect::<Vec<_>>(),
-        _ => panic!("invalid version"),
-    };
+    let reward_accounts = state
+        .reward_merkle_tree_v2
+        .clone()
+        .into_iter()
+        .map(|(acct, _)| acct)
+        .collect::<Vec<_>>();
+
+    // At 0.6 a leaf can be decided before the next view's proposal arrives, and decided
+    // proposals are pruned from consensus storage, so shut down only once an undecided
+    // proposal is stored for `reconstruct_state` to reach.
+    let persistence = node_0.persistence();
+    timeout(Duration::from_secs(60), async {
+        loop {
+            let decided_view = node_0.decided_leaf().await.view_number();
+            let proposals = persistence.load_quorum_proposals().await?;
+            if proposals.keys().any(|view| *view > decided_view) {
+                break anyhow::Ok(());
+            }
+            sleep(Duration::from_millis(100)).await;
+        }
+    })
+    .await
+    .context("no undecided proposal was stored")??;
+
+    tracing::warn!("shutting down node 0");
+    node_0.shutdown_consensus().await;
+
+    // The oldest stored proposal. It may already be decided, since pruning lags the decide.
+    let (to_view, proposal) = persistence
+        .load_quorum_proposals()
+        .await?
+        .into_iter()
+        .next()
+        .expect("an undecided proposal survives the shutdown");
+    let from_height = proposal.data.block_header().height() - 1;
 
     let client: Client<ClientErr, SequencerApiVersion> =
         Client::new(format!("http://localhost:{node_0_port}").parse().unwrap());
     client.connect(Some(Duration::from_secs(10))).await;
-
-    // wait 3s to be sure that all the
-    // transactions have been committed
-    sleep(Duration::from_secs(3)).await;
-
-    tracing::info!("getting node block height");
-    let node_block_height = client
-        .get::<u64>("node/block-height")
-        .send()
-        .await
-        .context("getting Espresso block height")
-        .unwrap();
-
-    tracing::info!("node block height={node_block_height}");
-
-    let leaf_query_data = client
-        .get::<LeafQueryData<SeqTypes>>(&format!("availability/leaf/{}", node_block_height - 1))
-        .send()
-        .await
-        .context("error getting leaf")
-        .unwrap();
-
-    tracing::info!("leaf={leaf_query_data:?}");
-    let leaf = leaf_query_data.leaf();
-    let to_view = leaf.view_number() + 1;
+    wait_until_block_height(&client, "node/block-height", from_height + 1).await;
+    // `reconstruct_state` loads accounts from the merklized state at `from_height`, which a
+    // separate loop writes after the block is indexed.
+    wait_until_block_height(&client, "fee-state/block-height", from_height).await;
 
     let ds = SqlStorage::connect(
         Config::try_from(&node_0_persistence).unwrap(),
@@ -1890,22 +1869,14 @@ async fn test_state_reconstruction(#[case] upgrade: Upgrade) -> anyhow::Result<(
     .unwrap();
     let mut tx = ds.read().await?;
 
-    let (state, leaf) = reconstruct_state(
-        &instance,
-        &ds,
-        &mut tx,
-        node_block_height - 1,
-        to_view,
-        &[],
-        &[],
-    )
-    .await
-    .unwrap();
+    let (state, leaf) = reconstruct_state(&instance, &ds, &mut tx, from_height, to_view, &[], &[])
+        .await
+        .unwrap();
     assert_eq!(leaf.view_number(), to_view);
     assert!(
         state
             .block_merkle_tree
-            .lookup(node_block_height - 1)
+            .lookup(from_height)
             .expect_ok()
             .is_ok(),
         "inconsistent block merkle tree"
@@ -1916,7 +1887,7 @@ async fn test_state_reconstruction(#[case] upgrade: Upgrade) -> anyhow::Result<(
         &instance,
         &ds,
         &mut tx,
-        node_block_height - 1,
+        from_height,
         to_view,
         &fee_accounts,
         &[],
@@ -1928,7 +1899,7 @@ async fn test_state_reconstruction(#[case] upgrade: Upgrade) -> anyhow::Result<(
     assert!(
         state
             .block_merkle_tree
-            .lookup(node_block_height - 1)
+            .lookup(from_height)
             .expect_ok()
             .is_ok(),
         "inconsistent block merkle tree"
@@ -1944,7 +1915,7 @@ async fn test_state_reconstruction(#[case] upgrade: Upgrade) -> anyhow::Result<(
         &instance,
         &ds,
         &mut tx,
-        node_block_height - 1,
+        from_height,
         to_view,
         &[],
         &reward_accounts,
@@ -1952,33 +1923,19 @@ async fn test_state_reconstruction(#[case] upgrade: Upgrade) -> anyhow::Result<(
     .await
     .unwrap();
 
-    match upgrade.base {
-        EPOCH_VERSION => {
-            for account in reward_accounts.clone() {
-                state
-                    .reward_merkle_tree_v1
-                    .lookup(RewardAccountV1::from(account))
-                    .expect_ok()
-                    .unwrap();
-            }
-        },
-        DRB_AND_HEADER_UPGRADE_VERSION => {
-            for account in &reward_accounts {
-                state
-                    .reward_merkle_tree_v2
-                    .lookup(account)
-                    .expect_ok()
-                    .unwrap();
-            }
-        },
-        _ => panic!("invalid version"),
-    };
+    for account in &reward_accounts {
+        state
+            .reward_merkle_tree_v2
+            .lookup(account)
+            .expect_ok()
+            .unwrap();
+    }
 
     assert_eq!(leaf.view_number(), to_view);
     assert!(
         state
             .block_merkle_tree
-            .lookup(node_block_height - 1)
+            .lookup(from_height)
             .expect_ok()
             .is_ok(),
         "inconsistent block merkle tree"
@@ -1989,7 +1946,7 @@ async fn test_state_reconstruction(#[case] upgrade: Upgrade) -> anyhow::Result<(
         &instance,
         &ds,
         &mut tx,
-        node_block_height - 1,
+        from_height,
         to_view,
         &fee_accounts,
         &reward_accounts,
@@ -2000,34 +1957,20 @@ async fn test_state_reconstruction(#[case] upgrade: Upgrade) -> anyhow::Result<(
     assert!(
         state
             .block_merkle_tree
-            .lookup(node_block_height - 1)
+            .lookup(from_height)
             .expect_ok()
             .is_ok(),
         "inconsistent block merkle tree"
     );
     assert_eq!(leaf.view_number(), to_view);
 
-    match upgrade.base {
-        EPOCH_VERSION => {
-            for account in reward_accounts.clone() {
-                state
-                    .reward_merkle_tree_v1
-                    .lookup(RewardAccountV1::from(account))
-                    .expect_ok()
-                    .unwrap();
-            }
-        },
-        DRB_AND_HEADER_UPGRADE_VERSION => {
-            for account in &reward_accounts {
-                state
-                    .reward_merkle_tree_v2
-                    .lookup(account)
-                    .expect_ok()
-                    .unwrap();
-            }
-        },
-        _ => panic!("invalid version"),
-    };
+    for account in &reward_accounts {
+        state
+            .reward_merkle_tree_v2
+            .lookup(account)
+            .expect_ok()
+            .unwrap();
+    }
 
     for account in &fee_accounts {
         state.fee_merkle_tree.lookup(account).expect_ok().unwrap();
@@ -2049,13 +1992,7 @@ async fn test_fetch_leaf_returns_exact_height() -> anyhow::Result<()> {
 
     let port = reserve_tcp_port().expect("No ports free for query service");
 
-    let storage = join_all((0..NUM_NODES).map(|_| SqlDataSource::create_storage())).await;
-    let persistence: [_; NUM_NODES] = storage
-        .iter()
-        .map(<SqlDataSource as TestableSequencerDataSource>::persistence_options)
-        .collect::<Vec<_>>()
-        .try_into()
-        .unwrap();
+    let (storage, persistence) = node_storage::<SqlDataSource, NUM_NODES>().await;
 
     let catchup_peers = std::array::from_fn(|_| {
         StatePeers::<StaticVersion<0, 1>>::from_urls(
@@ -2074,15 +2011,9 @@ async fn test_fetch_leaf_returns_exact_height() -> anyhow::Result<()> {
         .network_config(network_config)
         .persistences(persistence)
         .catchups(catchup_peers)
-        .pos_hook(
-            DelegationConfig::MultipleDelegators,
-            Default::default(),
-            POS_V4,
-        )
-        .await?
         .build();
 
-    let network = TestNetwork::new(config, POS_V4).await;
+    let network = TestNetwork::new(config, TEST_UPGRADE).await;
 
     // Wait for chain to advance past our target height
     let height_client: Client<ClientErr, StaticVersion<0, 1>> =
@@ -2124,8 +2055,6 @@ async fn test_v5_restart_before_epoch_boundary() {
     // Blocks to produce after the restart before declaring success.
     const BLOCKS_AFTER_RESTART: u64 = 5;
 
-    const V5: Upgrade = Upgrade::trivial(EPOCH_REWARD_VERSION);
-
     let port = reserve_tcp_port().expect("OS should have ephemeral ports available");
 
     // Slow empty-block production so we comfortably stop at the exact target height. On an idle
@@ -2137,13 +2066,7 @@ async fn test_v5_restart_before_epoch_boundary() {
         .next_view_timeout(Duration::from_secs(10))
         .build();
 
-    let storage = join_all((0..NUM_NODES).map(|_| SqlDataSource::create_storage())).await;
-    let persistence: [_; NUM_NODES] = storage
-        .iter()
-        .map(<SqlDataSource as TestableSequencerDataSource>::persistence_options)
-        .collect::<Vec<_>>()
-        .try_into()
-        .unwrap();
+    let (storage, persistence) = node_storage::<SqlDataSource, NUM_NODES>().await;
 
     let config = TestNetworkConfigBuilder::<NUM_NODES, _, _>::with_num_nodes()
         .api_config(SqlDataSource::options(
@@ -2151,21 +2074,10 @@ async fn test_v5_restart_before_epoch_boundary() {
             Options::with_port(port),
         ))
         .persistences(persistence.clone())
-        .catchups(std::array::from_fn(|_| {
-            StatePeers::<SequencerApiVersion>::from_urls(
-                vec![format!("http://localhost:{port}").parse().unwrap()],
-                Default::default(),
-                Duration::from_secs(2),
-                &NoMetrics,
-            )
-        }))
         .network_config(network_config)
-        .pos_hook(DelegationConfig::MultipleDelegators, Default::default(), V5)
-        .await
-        .unwrap()
         .build();
 
-    let mut network = TestNetwork::new(config, V5).await;
+    let mut network = TestNetwork::new(config, TEST_UPGRADE).await;
 
     // Watch the decide stream and stop as soon as `boundary - 3` is decided. Consuming the
     // stream (rather than polling `decided_leaf`) makes this independent of block timing: we
@@ -2178,10 +2090,10 @@ async fn test_v5_restart_before_epoch_boundary() {
                 .next()
                 .await
                 .expect("event stream ended unexpectedly");
-            let CoordinatorEvent::LegacyEvent(Event {
-                event: EventType::Decide { leaf_chain, .. },
+            let CoordinatorEvent::NewDecide {
+                leaf_infos: leaf_chain,
                 ..
-            }) = event
+            } = event
             else {
                 continue;
             };
@@ -2205,6 +2117,8 @@ async fn test_v5_restart_before_epoch_boundary() {
 
     // Clone the TestConfig before dropping the network so the anvil/L1/contracts stay alive.
     let saved_cfg = network.cfg.clone();
+    // The genesis states carry the deployed stake table, so the rebuild deploys no new one.
+    let genesis_states: [_; NUM_NODES] = std::array::from_fn(|i| network.genesis_state(i));
 
     network.stop_consensus().await;
     drop(network);
@@ -2217,17 +2131,10 @@ async fn test_v5_restart_before_epoch_boundary() {
             Options::with_port(port2),
         ))
         .persistences(persistence)
-        .catchups(std::array::from_fn(|_| {
-            StatePeers::<SequencerApiVersion>::from_urls(
-                vec![format!("http://localhost:{port2}").parse().unwrap()],
-                Default::default(),
-                Duration::from_secs(2),
-                &NoMetrics,
-            )
-        }))
         .network_config(saved_cfg)
+        .states(genesis_states)
         .build();
-    let network2 = TestNetwork::new(config2, V5).await;
+    let network2 = TestNetwork::new(config2, TEST_UPGRADE).await;
 
     // The restarted network must keep advancing, including across the next epoch boundary.
     // Require BLOCKS_AFTER_RESTART new decides, using a lack-of-progress watchdog so a

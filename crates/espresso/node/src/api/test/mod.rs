@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeSet, HashMap, HashSet},
     time::{Duration, Instant},
 };
 
@@ -9,7 +9,7 @@ use ::light_client::{
         leaf::{LeafProof, LeafProofHint},
         payload::PayloadProof,
     },
-    testing::{EpochChangeQuorum, LEGACY_VERSION},
+    testing::EpochChangeQuorum,
 };
 use alloy::{
     eips::BlockId,
@@ -21,16 +21,16 @@ use async_lock::Mutex;
 use committable::{Commitment, Committable};
 use espresso_contract_deployer::{
     Contract, Contracts, builder::DeployerArgsBuilder,
-    network_config::light_client_genesis_from_stake_table, upgrade_stake_table_v2,
-    upgrade_stake_table_v3,
+    network_config::light_client_genesis_from_stake_table,
 };
 use espresso_types::{
-    FeeAmount, Header, L1Client, L1ClientOptions, MOCK_SEQUENCER_VERSIONS, NamespaceId,
+    Certificate2, FeeAmount, GenesisHeader, Header, L1ClientOptions, NamespaceId,
     NamespaceProofQueryData, NsProof, RegisteredValidatorMap, RewardDistributor, StakeTableState,
-    StateCertQueryDataV1, StateCertQueryDataV2, ValidatedState, ValidatorLeaderCounts,
+    StateCertQueryDataV1, StateCertQueryDataV2, TEST_UPGRADE, ValidatedState,
+    ValidatorLeaderCounts,
     config::PublicHotShotConfig,
     traits::{NullEventConsumer, PersistenceOptions},
-    v0_3::{COMMISSION_BASIS_POINTS, Fetcher, RewardAmount, RewardMerkleProofV1},
+    v0_3::{AuthenticatedValidator, COMMISSION_BASIS_POINTS, Fetcher, RewardAmount},
     v0_4::{RewardAccountV2, RewardMerkleProofV2},
     validators_from_l1_events,
 };
@@ -41,7 +41,7 @@ use futures::{
 };
 use hotshot::types::{Event, EventType};
 use hotshot_contract_adapter::{
-    reward::RewardClaimInput,
+    reward::{RewardAuthData, RewardClaimInput, RewardProofSiblings},
     sol_types::{EspToken, StakeTableV3},
     stake_table::StakeTableContractVersion,
 };
@@ -54,18 +54,21 @@ use hotshot_query_service::{
         Transaction as _, VersionedDataSource,
         sql::Config,
         storage::{
-            MerklizedStateHeightStorage, SqlStorage, StorageConnectionType,
-            UpdateAvailabilityStorage, pruning::PrunedHeightStorage,
+            MerklizedStateHeightStorage, NodeStorage, SerializableRetry, SqlStorage,
+            StorageConnectionType, UpdateAvailabilityStorage, pruning::PrunedHeightStorage,
         },
     },
     explorer::TransactionSummariesResponse,
+    merklized_state::UpdateStateData,
     node::{NodeDataSource as _, SyncStatus, SyncStatusQueryData},
+    serializable_retry,
     types::HeightIndexed,
 };
 use hotshot_types::{
     ValidatorConfig,
     addr::NetAddr,
     data::EpochNumber,
+    epoch_membership::EpochMembershipCoordinator,
     event::LeafInfo,
     new_protocol::CoordinatorEvent,
     traits::{block_contents::BlockHeader, election::Membership, metrics::NoMetrics},
@@ -89,15 +92,15 @@ use staking_cli::{
     update_network_config,
 };
 use test_helpers::{
-    TestNetwork, TestNetworkConfigBuilder, catchup_test_helper, state_signature_test_helper,
-    status_test_helper, submit_test_helper, wait_for_committee,
+    TestNetwork, TestNetworkConfigBuilder, catchup_test_helper, node_storage,
+    state_signature_test_helper, status_test_helper, submit_test_helper, wait_for_committee,
 };
 use test_utils::reserve_tcp_port;
 use tokio::time::sleep;
 use vbs::version::StaticVersion;
 use versions::{
-    DRB_AND_HEADER_UPGRADE_VERSION, EPOCH_REWARD_VERSION, EPOCH_VERSION, LARGE_BLOCK_VERSION,
-    NEW_PROTOCOL_VERSION, Upgrade, version,
+    DRB_AND_HEADER_UPGRADE_VERSION, EPOCH_VERSION, LARGE_BLOCK_VERSION, NEW_PROTOCOL_VERSION,
+    Upgrade,
 };
 
 use self::{
@@ -106,15 +109,21 @@ use self::{
 };
 use super::*;
 use crate::{
+    CatchupParams, L1Params,
     api::{
         options::Query,
         sql::{impl_testable_data_source::tmp_options, reconstruct_state},
         test_helpers::STAKE_TABLE_CAPACITY_FOR_TEST,
     },
     catchup::{NullStateCatchup, StatePeers},
+    follower::{FollowerContext, FollowerOptions, FollowerParams, init_follower_node},
+    genesis::{Genesis as NodeGenesis, L1Finalized, StakeTableConfig},
+    legacy_chain::LegacyChain,
     persistence,
     persistence::no_storage,
-    testing::{TestConfig, TestConfigBuilder, wait_for_decide_on_handle, wait_for_epochs},
+    testing::{
+        TestConfig, TestConfigBuilder, decided_leaves, wait_for_decide_on_handle, wait_for_epochs,
+    },
 };
 
 mod catchup;
@@ -125,9 +134,6 @@ mod rewards;
 mod stake_table;
 mod upgrades;
 mod v2_api;
-
-const POS_V3: Upgrade = Upgrade::trivial(version(0, 3));
-const POS_V4: Upgrade = Upgrade::trivial(version(0, 4));
 
 async fn wait_until_block_height(
     client: &Client<ClientErr, StaticVersion<0, 1>>,

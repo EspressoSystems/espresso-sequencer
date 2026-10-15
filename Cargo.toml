@@ -374,6 +374,7 @@ reqwest = { version = "0.12", features = ["rustls-tls", "json"] }
 rstest = "0.25.0"
 rstest_reuse = "0.7.0"
 rust_decimal = "1.36.0"
+rustix = { version = "1", features = ["time"] }
 schemars = "0.9"
 scopeguard = "1.2.0"
 semver = "1"
@@ -388,7 +389,7 @@ snafu = "0.8"
 snap = "1"
 snow = { version = "0.10.0", features = ["ring-accelerated"] }
 socket2 = "0.6.4"
-sqlx = { version = "=0.8.3", features = [
+sqlx = { version = "0.8.3", features = [
     "bit-vec",
     "chrono",
     "postgres",

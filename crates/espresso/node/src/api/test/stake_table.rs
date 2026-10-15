@@ -15,13 +15,7 @@ async fn test_stake_table_duplicate_events_from_contract() -> anyhow::Result<()>
 
     const NUM_NODES: usize = 5;
     // Initialize nodes.
-    let storage = join_all((0..NUM_NODES).map(|_| SqlDataSource::create_storage())).await;
-    let persistence: [_; NUM_NODES] = storage
-        .iter()
-        .map(<SqlDataSource as TestableSequencerDataSource>::persistence_options)
-        .collect::<Vec<_>>()
-        .try_into()
-        .unwrap();
+    let (storage, persistence) = node_storage::<SqlDataSource, NUM_NODES>().await;
 
     let l1_url = network_config.l1_url();
     let config = TestNetworkConfigBuilder::with_num_nodes()
@@ -31,24 +25,9 @@ async fn test_stake_table_duplicate_events_from_contract() -> anyhow::Result<()>
         ))
         .network_config(network_config)
         .persistences(persistence.clone())
-        .catchups(std::array::from_fn(|_| {
-            StatePeers::<StaticVersion<0, 1>>::from_urls(
-                vec![format!("http://localhost:{api_port}").parse().unwrap()],
-                Default::default(),
-                Duration::from_secs(2),
-                &NoMetrics,
-            )
-        }))
-        .pos_hook(
-            DelegationConfig::MultipleDelegators,
-            Default::default(),
-            POS_V3,
-        )
-        .await
-        .unwrap()
         .build();
 
-    let network = TestNetwork::new(config, POS_V3).await;
+    let network = TestNetwork::new(config, TEST_UPGRADE).await;
 
     let mut prev_st = None;
     let state = network.server.decided_state().await.unwrap();
@@ -127,7 +106,6 @@ async fn test_stake_table_duplicate_events_from_contract() -> anyhow::Result<()>
 async fn test_new_protocol_validator_exit_at_epoch_boundary() -> anyhow::Result<()> {
     const NUM_NODES: usize = 5;
     const EPOCH_HEIGHT: u64 = 10;
-    const NEW_PROTOCOL: Upgrade = Upgrade::trivial(NEW_PROTOCOL_VERSION);
     /// How many epochs after the exit transaction we allow for the event
     /// to finalize on L1 and reach a stake table snapshot before failing.
     const MAX_ACTIVATION_EPOCHS: u64 = 10;
@@ -139,13 +117,7 @@ async fn test_new_protocol_validator_exit_at_epoch_boundary() -> anyhow::Result<
 
     let api_port = reserve_tcp_port().expect("No ports free for query service");
 
-    let storage = join_all((0..NUM_NODES).map(|_| SqlDataSource::create_storage())).await;
-    let persistence: [_; NUM_NODES] = storage
-        .iter()
-        .map(<SqlDataSource as TestableSequencerDataSource>::persistence_options)
-        .collect::<Vec<_>>()
-        .try_into()
-        .unwrap();
+    let (storage, persistence) = node_storage::<SqlDataSource, NUM_NODES>().await;
 
     let config = TestNetworkConfigBuilder::<NUM_NODES, _, _>::with_num_nodes()
         .api_config(SqlDataSource::options(
@@ -154,24 +126,9 @@ async fn test_new_protocol_validator_exit_at_epoch_boundary() -> anyhow::Result<
         ))
         .network_config(network_config.clone())
         .persistences(persistence)
-        .catchups(std::array::from_fn(|_| {
-            StatePeers::<SequencerApiVersion>::from_urls(
-                vec![format!("http://localhost:{api_port}").parse().unwrap()],
-                Default::default(),
-                Duration::from_secs(2),
-                &NoMetrics,
-            )
-        }))
-        .pos_hook(
-            DelegationConfig::MultipleDelegators,
-            StakeTableContractVersion::V3,
-            NEW_PROTOCOL,
-        )
-        .await
-        .unwrap()
         .build();
 
-    let network = TestNetwork::new(config, NEW_PROTOCOL).await;
+    let network = TestNetwork::new(config, TEST_UPGRADE).await;
     let st_addr = network
         .contracts
         .as_ref()
@@ -253,11 +210,8 @@ async fn test_new_protocol_validator_exit_at_epoch_boundary() -> anyhow::Result<
     Ok(())
 }
 
-#[rstest]
-#[case(POS_V3)]
-#[case(POS_V4)]
 #[test_log::test(tokio::test(flavor = "multi_thread"))]
-async fn test_node_stake_table_api(#[case] upgrade: Upgrade) {
+async fn test_node_stake_table_api() {
     let epoch_height = 20;
 
     let network_config = TestConfigBuilder::default()
@@ -268,13 +222,7 @@ async fn test_node_stake_table_api(#[case] upgrade: Upgrade) {
 
     const NUM_NODES: usize = 2;
     // Initialize nodes.
-    let storage = join_all((0..NUM_NODES).map(|_| SqlDataSource::create_storage())).await;
-    let persistence: [_; NUM_NODES] = storage
-        .iter()
-        .map(<SqlDataSource as TestableSequencerDataSource>::persistence_options)
-        .collect::<Vec<_>>()
-        .try_into()
-        .unwrap();
+    let (storage, persistence) = node_storage::<SqlDataSource, NUM_NODES>().await;
 
     let config = TestNetworkConfigBuilder::with_num_nodes()
         .api_config(SqlDataSource::options(
@@ -283,24 +231,9 @@ async fn test_node_stake_table_api(#[case] upgrade: Upgrade) {
         ))
         .network_config(network_config)
         .persistences(persistence.clone())
-        .catchups(std::array::from_fn(|_| {
-            StatePeers::<StaticVersion<0, 1>>::from_urls(
-                vec![format!("http://localhost:{api_port}").parse().unwrap()],
-                Default::default(),
-                Duration::from_secs(2),
-                &NoMetrics,
-            )
-        }))
-        .pos_hook(
-            DelegationConfig::MultipleDelegators,
-            Default::default(),
-            upgrade,
-        )
-        .await
-        .unwrap()
         .build();
 
-    let _network = TestNetwork::new(config, upgrade).await;
+    let _network = TestNetwork::new(config, TEST_UPGRADE).await;
 
     let client: Client<ClientErr, SequencerApiVersion> =
         Client::new(format!("http://localhost:{api_port}").parse().unwrap());
@@ -331,11 +264,8 @@ async fn test_node_stake_table_api(#[case] upgrade: Upgrade) {
         .expect("failed to get stake table");
 }
 
-#[rstest]
-#[case(POS_V3)]
-#[case(POS_V4)]
 #[test_log::test(tokio::test(flavor = "multi_thread"))]
-async fn test_epoch_stake_table_catchup(#[case] upgrade: Upgrade) {
+async fn test_epoch_stake_table_catchup() {
     const EPOCH_HEIGHT: u64 = 10;
     const NUM_NODES: usize = 6;
 
@@ -346,14 +276,7 @@ async fn test_epoch_stake_table_catchup(#[case] upgrade: Upgrade) {
         .build();
 
     // Initialize storage for each node
-    let storage = join_all((0..NUM_NODES).map(|_| SqlDataSource::create_storage())).await;
-
-    let persistence_options: [_; NUM_NODES] = storage
-        .iter()
-        .map(<SqlDataSource as TestableSequencerDataSource>::persistence_options)
-        .collect::<Vec<_>>()
-        .try_into()
-        .unwrap();
+    let (storage, persistence_options) = node_storage::<SqlDataSource, NUM_NODES>().await;
 
     // setup catchup peers
     let catchup_peers = std::array::from_fn(|_| {
@@ -372,25 +295,17 @@ async fn test_epoch_stake_table_catchup(#[case] upgrade: Upgrade) {
         .network_config(network_config)
         .persistences(persistence_options.clone())
         .catchups(catchup_peers)
-        .pos_hook(
-            DelegationConfig::MultipleDelegators,
-            Default::default(),
-            upgrade,
-        )
-        .await
-        .unwrap()
         .build();
-
-    let state = config.states()[0].clone();
-    let mut network = TestNetwork::new(config, upgrade).await;
+    let mut network = TestNetwork::new(config, TEST_UPGRADE).await;
+    let state = network.genesis_state(0);
 
     // Wait for the peer 0 (node 1) to advance past three epochs
     let mut events = network.peers[0].event_stream();
     while let Some(event) = events.next().await {
-        if let CoordinatorEvent::LegacyEvent(Event {
-            event: EventType::Decide { leaf_chain, .. },
+        if let CoordinatorEvent::NewDecide {
+            leaf_infos: leaf_chain,
             ..
-        }) = event
+        } = event
         {
             let height = leaf_chain[0].leaf.height();
             tracing::info!("Node 0 decided at height: {height}");
@@ -407,10 +322,10 @@ async fn test_epoch_stake_table_catchup(#[case] upgrade: Upgrade) {
     // Wait for epochs to progress with node 1 offline
     let mut events = network.server.event_stream();
     while let Some(event) = events.next().await {
-        if let CoordinatorEvent::LegacyEvent(Event {
-            event: EventType::Decide { leaf_chain, .. },
+        if let CoordinatorEvent::NewDecide {
+            leaf_infos: leaf_chain,
             ..
-        }) = event
+        } = event
         {
             let height = leaf_chain[0].leaf.height();
             if height > EPOCH_HEIGHT * 7 {
@@ -439,7 +354,7 @@ async fn test_epoch_stake_table_catchup(#[case] upgrade: Upgrade) {
             &NoMetrics,
             test_helpers::STAKE_TABLE_CAPACITY_FOR_TEST,
             NullEventConsumer,
-            upgrade,
+            TEST_UPGRADE,
             Default::default(),
         )
         .await;
@@ -472,11 +387,8 @@ async fn test_epoch_stake_table_catchup(#[case] upgrade: Upgrade) {
     }
 }
 
-#[rstest]
-#[case(POS_V3)]
-#[case(POS_V4)]
 #[test_log::test(tokio::test(flavor = "multi_thread"))]
-async fn test_epoch_stake_table_catchup_stress(#[case] upgrade: Upgrade) {
+async fn test_epoch_stake_table_catchup_stress() {
     const EPOCH_HEIGHT: u64 = 10;
     const NUM_NODES: usize = 6;
 
@@ -487,14 +399,7 @@ async fn test_epoch_stake_table_catchup_stress(#[case] upgrade: Upgrade) {
         .build();
 
     // Initialize storage for each node
-    let storage = join_all((0..NUM_NODES).map(|_| SqlDataSource::create_storage())).await;
-
-    let persistence_options: [_; NUM_NODES] = storage
-        .iter()
-        .map(<SqlDataSource as TestableSequencerDataSource>::persistence_options)
-        .collect::<Vec<_>>()
-        .try_into()
-        .unwrap();
+    let (storage, persistence_options) = node_storage::<SqlDataSource, NUM_NODES>().await;
 
     // setup catchup peers
     let catchup_peers = std::array::from_fn(|_| {
@@ -513,25 +418,17 @@ async fn test_epoch_stake_table_catchup_stress(#[case] upgrade: Upgrade) {
         .network_config(network_config)
         .persistences(persistence_options.clone())
         .catchups(catchup_peers)
-        .pos_hook(
-            DelegationConfig::MultipleDelegators,
-            Default::default(),
-            upgrade,
-        )
-        .await
-        .unwrap()
         .build();
-
-    let state = config.states()[0].clone();
-    let mut network = TestNetwork::new(config, upgrade).await;
+    let mut network = TestNetwork::new(config, TEST_UPGRADE).await;
+    let state = network.genesis_state(0);
 
     // Wait for the peer 0 (node 1) to advance past three epochs
     let mut events = network.peers[0].event_stream();
     while let Some(event) = events.next().await {
-        if let CoordinatorEvent::LegacyEvent(Event {
-            event: EventType::Decide { leaf_chain, .. },
+        if let CoordinatorEvent::NewDecide {
+            leaf_infos: leaf_chain,
             ..
-        }) = event
+        } = event
         {
             let height = leaf_chain[0].leaf.height();
             tracing::info!("Node 0 decided at height: {height}");
@@ -548,10 +445,10 @@ async fn test_epoch_stake_table_catchup_stress(#[case] upgrade: Upgrade) {
     // Wait for epochs to progress with node 1 offline
     let mut events = network.server.event_stream();
     while let Some(event) = events.next().await {
-        if let CoordinatorEvent::LegacyEvent(Event {
-            event: EventType::Decide { leaf_chain, .. },
+        if let CoordinatorEvent::NewDecide {
+            leaf_infos: leaf_chain,
             ..
-        }) = event
+        } = event
         {
             let height = leaf_chain[0].leaf.height();
             tracing::info!("Server decided at height: {height}");
@@ -583,7 +480,7 @@ async fn test_epoch_stake_table_catchup_stress(#[case] upgrade: Upgrade) {
             &NoMetrics,
             test_helpers::STAKE_TABLE_CAPACITY_FOR_TEST,
             NullEventConsumer,
-            upgrade,
+            TEST_UPGRADE,
             Default::default(),
         )
         .await;
@@ -628,13 +525,10 @@ async fn test_epoch_stake_table_catchup_stress(#[case] upgrade: Upgrade) {
 
 /// `chain_id`: None = default (35353, non-mainnet), Some(1) = mainnet
 #[rstest]
-#[case(POS_V4, None)]
-#[case(POS_V4, Some(1u64))]
+#[case(None)]
+#[case(Some(1u64))]
 #[test_log::test(tokio::test(flavor = "multi_thread"))]
-async fn test_token_supply_api(
-    #[case] upgrade: Upgrade,
-    #[case] chain_id: Option<u64>,
-) -> anyhow::Result<()> {
+async fn test_token_supply_api(#[case] chain_id: Option<u64>) -> anyhow::Result<()> {
     use alloy::primitives::utils::parse_ether;
     use espresso_types::v0_3::ChainConfig;
 
@@ -646,13 +540,7 @@ async fn test_token_supply_api(
     let api_port = reserve_tcp_port().expect("OS should have ephemeral ports available");
 
     const NUM_NODES: usize = 1;
-    let storage = join_all((0..NUM_NODES).map(|_| SqlDataSource::create_storage())).await;
-    let persistence: [_; NUM_NODES] = storage
-        .iter()
-        .map(<SqlDataSource as TestableSequencerDataSource>::persistence_options)
-        .collect::<Vec<_>>()
-        .try_into()
-        .unwrap();
+    let (storage, persistence) = node_storage::<SqlDataSource, NUM_NODES>().await;
 
     // Use the real initial supply (3.59B tokens) so the unlock schedule
     // produces realistic locked/unlocked values in the supply calculations.
@@ -666,17 +554,9 @@ async fn test_token_supply_api(
         ))
         .network_config(network_config.clone())
         .persistences(persistence.clone())
-        .catchups(std::array::from_fn(|_| {
-            StatePeers::<StaticVersion<0, 1>>::from_urls(
-                vec![format!("http://localhost:{api_port}").parse().unwrap()],
-                Default::default(),
-                Duration::from_secs(2),
-                &NoMetrics,
-            )
-        }))
         .initial_token_supply(initial_supply_tokens);
 
-    // Must set states before pos_hook, which preserves chain_id from state[0].
+    // The stake table deploy in `pos_hook` keeps chain_id from state[0].
     if let Some(id) = chain_id {
         let state = ValidatedState {
             chain_config: ChainConfig {
@@ -692,14 +572,14 @@ async fn test_token_supply_api(
     let config = builder
         .pos_hook(
             DelegationConfig::VariableAmounts,
-            Default::default(),
-            upgrade,
+            StakeTableContractVersion::V3,
+            TEST_UPGRADE,
         )
         .await
         .unwrap()
         .build();
 
-    let _network = TestNetwork::new(config, upgrade).await;
+    let _network = TestNetwork::new(config, TEST_UPGRADE).await;
     let client: Client<ClientErr, SequencerApiVersion> =
         Client::new(format!("http://localhost:{api_port}").parse().unwrap());
 
@@ -882,25 +762,19 @@ async fn test_integration_commission_updates() -> anyhow::Result<()> {
     const EPOCH_HEIGHT: u64 = 10;
 
     // Use version that supports epochs (V3 or V4)
-    let versions = POS_V4;
 
     let api_port = reserve_tcp_port().expect("OS should have ephemeral ports available");
 
     // Initialize storage for nodes
-    let storage = join_all((0..NUM_NODES).map(|_| SqlDataSource::create_storage())).await;
-    let persistence: [_; NUM_NODES] = storage
-        .iter()
-        .map(<SqlDataSource as TestableSequencerDataSource>::persistence_options)
-        .collect::<Vec<_>>()
-        .try_into()
-        .unwrap();
+    let (storage, persistence) = node_storage::<SqlDataSource, NUM_NODES>().await;
 
     // Configure test network with epochs
     let network_config = TestConfigBuilder::default()
         .epoch_height(EPOCH_HEIGHT)
         .build();
 
-    // Build test network configuration starting with V1 stake table
+    // At 0.6 only validators with a registered x25519 key and p2p address are eligible, and
+    // only the V3 contract registers them.
     let config = TestNetworkConfigBuilder::<NUM_NODES, _, _>::with_num_nodes()
         .api_config(SqlDataSource::options(
             &storage[0],
@@ -908,37 +782,23 @@ async fn test_integration_commission_updates() -> anyhow::Result<()> {
         ))
         .network_config(network_config.clone())
         .persistences(persistence.clone())
-        .catchups(std::array::from_fn(|_| {
-            StatePeers::<SequencerApiVersion>::from_urls(
-                vec![format!("http://localhost:{api_port}").parse().unwrap()],
-                Default::default(),
-                Duration::from_secs(2),
-                &NoMetrics,
-            )
-        }))
         .pos_hook(
-            // We want no new rewards after setting the commission to zero.
             DelegationConfig::NoSelfDelegation,
-            StakeTableContractVersion::V1, // upgraded later
-            POS_V4,
+            StakeTableContractVersion::V3,
+            TEST_UPGRADE,
         )
         .await
         .unwrap()
         .build();
 
-    let network = TestNetwork::new(config, versions).await;
-    let provider = network.cfg.anvil().unwrap();
-    let deployer_addr = network.cfg.signer().address();
-    let mut contracts = network.contracts.unwrap();
+    let network = TestNetwork::new(config, TEST_UPGRADE).await;
+    let contracts = network.contracts.unwrap();
     let st_addr = contracts.address(Contract::StakeTableProxy).unwrap();
-    upgrade_stake_table_v2(
-        provider,
-        L1Client::new(vec![network.cfg.l1_url()])?,
-        &mut contracts,
-        deployer_addr,
-        deployer_addr,
-    )
-    .await?;
+
+    // Update only once epoch 3 has started: by then the stake tables of epochs 3 and 4 are
+    // fixed, so both carry the old commissions.
+    let mut events = network.peers[0].event_stream();
+    wait_for_epochs(&mut events, EPOCH_HEIGHT, 2).await;
 
     let mut commissions = vec![];
     for (i, (validator, provider)) in network_config.validator_providers().into_iter().enumerate() {
@@ -958,45 +818,55 @@ async fn test_integration_commission_updates() -> anyhow::Result<()> {
             .await?;
     }
 
-    // wait until new stake table takes effect
-    let current_epoch = network.peers[0]
-        .decided_leaf()
-        .await
-        .epoch(EPOCH_HEIGHT)
-        .unwrap();
-    let target_epoch = current_epoch.u64() + 3;
-    println!("target epoch for new stake table: {target_epoch}");
-    let mut events = network.peers[0].event_stream();
-    wait_for_epochs(&mut events, EPOCH_HEIGHT, target_epoch).await;
-
-    // the last epoch with the old commissions
     let client: Client<ClientErr, SequencerApiVersion> =
         Client::new(format!("http://localhost:{api_port}").parse().unwrap());
-    let validators = client
-        .get::<AuthenticatedValidatorMap>(&format!("node/validators/{}", target_epoch - 1))
-        .send()
-        .await
-        .expect("validators");
-    assert!(!validators.is_empty());
-    for (val, old_comm, _) in commissions.clone() {
-        assert_eq!(validators.get(&val).unwrap().commission, old_comm.to_evm());
+    let commissions_at = async |epoch: u64| {
+        let validators = client
+            .get::<AuthenticatedValidatorMap>(&format!("node/validators/{epoch}"))
+            .send()
+            .await
+            .expect("validators");
+        commissions
+            .iter()
+            .map(|(val, ..)| validators.get(val).unwrap().commission)
+            .collect::<Vec<_>>()
+    };
+    let old = commissions
+        .iter()
+        .map(|(_, old_comm, _)| old_comm.to_evm())
+        .collect::<Vec<_>>();
+    let new = commissions
+        .iter()
+        .map(|(.., new_comm)| new_comm.to_evm())
+        .collect::<Vec<_>>();
+    assert_eq!(commissions_at(4).await, old);
+
+    // Which epoch first has all the new commissions depends on when each update finalizes on
+    // L1 relative to the epoch roots, so search for it. Epochs in between can mix old and new.
+    let mut first_new_epoch = 5;
+    loop {
+        wait_for_epochs(&mut events, EPOCH_HEIGHT, first_new_epoch - 1).await;
+        if commissions_at(first_new_epoch).await == new {
+            break;
+        }
+        first_new_epoch += 1;
+        assert!(
+            first_new_epoch <= 10,
+            "the new commissions never took effect"
+        );
     }
 
-    // the first epoch with the new commissions
-    let client: Client<ClientErr, SequencerApiVersion> =
-        Client::new(format!("http://localhost:{api_port}").parse().unwrap());
-    let validators = client
-        .get::<AuthenticatedValidatorMap>(&format!("node/validators/{target_epoch}"))
-        .send()
-        .await
-        .expect("validators");
-    assert!(!validators.is_empty());
-    for (val, _, new_comm) in commissions.clone() {
-        assert_eq!(validators.get(&val).unwrap().commission, new_comm.to_evm());
-    }
-
-    let last_block_with_old_commissions = EPOCH_HEIGHT * (target_epoch - 1);
-    let block_with_new_commissions = EPOCH_HEIGHT * target_epoch;
+    // An epoch's rewards are applied at the last block of the next epoch, so the rewards
+    // applied at the end of `first_new_epoch + 1` are the first under the new commissions.
+    wait_for_epochs(&mut events, EPOCH_HEIGHT, first_new_epoch + 1).await;
+    let last_block_with_old_commissions = EPOCH_HEIGHT * first_new_epoch;
+    let block_with_new_commissions = EPOCH_HEIGHT * (first_new_epoch + 1);
+    wait_until_block_height(
+        &client,
+        "reward-state-v2/block-height",
+        block_with_new_commissions + 1,
+    )
+    .await;
     let mut new_amounts = vec![];
     for (val, ..) in commissions {
         let before = client
@@ -1026,24 +896,18 @@ async fn test_integration_commission_updates() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Start on StakeTable V2, upgrade to V3, call `updateNetworkConfig` on one
-/// validator, and verify the indexer surfaces the new x25519 key and p2p
-/// address in the validator map.
+/// Call `updateNetworkConfig` on one validator and verify the indexer surfaces the new x25519
+/// key and p2p address in the validator map.
 #[test_log::test(tokio::test(flavor = "multi_thread"))]
 async fn test_integration_update_fast_finality_network_config() -> anyhow::Result<()> {
-    const NUM_NODES: usize = 3;
+    // Peers switch to a validator's new key and address as soon as the update lands, and none
+    // can reach the updated one at its made-up address, so the others must keep a quorum.
+    const NUM_NODES: usize = 4;
     const EPOCH_HEIGHT: u64 = 10;
 
-    let versions = POS_V4;
     let api_port = reserve_tcp_port().expect("OS should have ephemeral ports available");
 
-    let storage = join_all((0..NUM_NODES).map(|_| SqlDataSource::create_storage())).await;
-    let persistence: [_; NUM_NODES] = storage
-        .iter()
-        .map(<SqlDataSource as TestableSequencerDataSource>::persistence_options)
-        .collect::<Vec<_>>()
-        .try_into()
-        .unwrap();
+    let (storage, persistence) = node_storage::<SqlDataSource, NUM_NODES>().await;
 
     let network_config = TestConfigBuilder::default()
         .epoch_height(EPOCH_HEIGHT)
@@ -1056,29 +920,18 @@ async fn test_integration_update_fast_finality_network_config() -> anyhow::Resul
         ))
         .network_config(network_config.clone())
         .persistences(persistence.clone())
-        .catchups(std::array::from_fn(|_| {
-            StatePeers::<SequencerApiVersion>::from_urls(
-                vec![format!("http://localhost:{api_port}").parse().unwrap()],
-                Default::default(),
-                Duration::from_secs(2),
-                &NoMetrics,
-            )
-        }))
         .pos_hook(
-            DelegationConfig::MultipleDelegators,
-            StakeTableContractVersion::V2,
-            POS_V4,
+            DelegationConfig::EqualAmounts,
+            StakeTableContractVersion::V3,
+            TEST_UPGRADE,
         )
         .await
         .unwrap()
         .build();
 
-    let network = TestNetwork::new(config, versions).await;
-    let provider = network.cfg.anvil().unwrap();
-    let mut contracts = network.contracts.unwrap();
+    let network = TestNetwork::new(config, TEST_UPGRADE).await;
+    let contracts = network.contracts.unwrap();
     let st_addr = contracts.address(Contract::StakeTableProxy).unwrap();
-
-    upgrade_stake_table_v3(provider, &mut contracts).await?;
 
     let (validator, validator_provider) = network_config
         .validator_providers()
@@ -1115,6 +968,64 @@ async fn test_integration_update_fast_finality_network_config() -> anyhow::Resul
     Ok(())
 }
 
+/// Mainnet's validators set their x25519 keys and p2p addresses with the V3 stake table
+/// contract, after epochs run on V1 and V2.
+#[test_log::test(tokio::test(flavor = "multi_thread"))]
+async fn test_legacy_network_config_update() -> anyhow::Result<()> {
+    let chain = LegacyChain::load("v4")?;
+    let update = chain
+        .network_config_update
+        .clone()
+        .context("the v4 recording registered a network config")?;
+    let replay = chain.replay().await?;
+    let last_epoch = chain.last_epoch();
+    let validators = |epoch: u64| {
+        let client = replay.client.clone();
+        async move {
+            client
+                .get::<AuthenticatedValidatorMap>(&format!("node/validators/{epoch}"))
+                .send()
+                .await
+        }
+    };
+
+    // The update reaches the stake table a few epochs after the V3 upgrade in epoch 4.
+    let mut first_seen = None;
+    // The stake table takes effect in epoch 3.
+    for epoch in 3..=last_epoch {
+        let validators = validators(epoch).await?;
+        ensure!(!validators.is_empty(), "epoch {epoch} has validators");
+        let configured = validators
+            .values()
+            .filter(|v| v.x25519_key.is_some() || v.p2p_addr.is_some())
+            .collect::<Vec<_>>();
+        if first_seen.is_none() {
+            if configured.is_empty() {
+                continue;
+            }
+            first_seen = Some(epoch);
+        }
+        let [v] = configured.as_slice() else {
+            bail!(
+                "epoch {epoch}: {} validators have a network config",
+                configured.len()
+            );
+        };
+        ensure!(
+            v.account == update.validator
+                && v.x25519_key.as_ref() == Some(&update.x25519_key)
+                && v.p2p_addr.as_ref() == Some(&update.p2p_addr),
+            "epoch {epoch} shows the recorded network config update, not {v:?}"
+        );
+    }
+    let first_seen = first_seen.context("no epoch shows the network config update")?;
+    ensure!(
+        first_seen > 4,
+        "a V1 or V2 contract registers no network config, but epoch {first_seen} has one"
+    );
+    Ok(())
+}
+
 #[test_log::test(tokio::test(flavor = "multi_thread"))]
 async fn test_all_validators_endpoint() -> anyhow::Result<()> {
     const EPOCH_HEIGHT: u64 = 20;
@@ -1127,13 +1038,7 @@ async fn test_all_validators_endpoint() -> anyhow::Result<()> {
 
     const NUM_NODES: usize = 5;
 
-    let storage = join_all((0..NUM_NODES).map(|_| SqlDataSource::create_storage())).await;
-    let persistence: [_; NUM_NODES] = storage
-        .iter()
-        .map(<SqlDataSource as TestableSequencerDataSource>::persistence_options)
-        .collect::<Vec<_>>()
-        .try_into()
-        .unwrap();
+    let (storage, persistence) = node_storage::<SqlDataSource, NUM_NODES>().await;
 
     let config = TestNetworkConfigBuilder::with_num_nodes()
         .api_config(SqlDataSource::options(
@@ -1142,24 +1047,9 @@ async fn test_all_validators_endpoint() -> anyhow::Result<()> {
         ))
         .network_config(network_config)
         .persistences(persistence.clone())
-        .catchups(std::array::from_fn(|_| {
-            StatePeers::<StaticVersion<0, 1>>::from_urls(
-                vec![format!("http://localhost:{api_port}").parse().unwrap()],
-                Default::default(),
-                Duration::from_secs(2),
-                &NoMetrics,
-            )
-        }))
-        .pos_hook(
-            DelegationConfig::MultipleDelegators,
-            Default::default(),
-            POS_V4,
-        )
-        .await
-        .unwrap()
         .build();
 
-    let network = TestNetwork::new(config, POS_V4).await;
+    let network = TestNetwork::new(config, TEST_UPGRADE).await;
     let client: Client<ClientErr, SequencerApiVersion> =
         Client::new(format!("http://localhost:{api_port}").parse().unwrap());
 
