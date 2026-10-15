@@ -302,9 +302,9 @@ just bench aws run --tag chaos-dense --chaos --nodes 32 --query-nodes 3 --chaos-
   its slot in the fault budget, is no longer gated or faulted, and the load runs on; the final drain waits only for the
   other faults. The run then fails: exit 3, `summary.md` keeps the reason, the run is invalid. A node that crashes
   without a fault fails the run at once.
-- A failed probe or fault ssh skips the tick, and the fault is retried on the next one; 5 such ticks in a row fail the
-  run. A failed wipe or mass-fault member keeps its fault time and is issued again alone (the wipe script is
-  rerun-safe).
+- A failed or truncated probe, a failed stake read or a fault ssh skips the tick, and the fault is retried on the next
+  one; 5 such ticks in a row fail the run. A failed wipe or mass-fault member keeps its fault time and is issued again
+  alone (the wipe script is rerun-safe).
 - Ctrl-C or an error ends the faults still open with an `interrupted` event; the verdict names them, it does not count
   them as failures.
 - Output: `chaos.jsonl` (`fault`, `started`, `rejoined`, `caught_up`, `timeout`, `restored`, `interrupted`; `ts` on

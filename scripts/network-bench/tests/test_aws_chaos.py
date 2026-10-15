@@ -628,18 +628,27 @@ def test_tick_before_loading_does_nothing(isolated: Path, agent):
 class FlakyRunner(ClusterRunner):
     """The first `probes` chaos probes and `restarts` docker restarts fail over ssh; the
     first `wipes` wipes fail over ssh after removing the container and the first `kills`
-    kills fail over ssh after stopping it."""
+    kills fail over ssh after stopping it. The first `truncated` probes and `stakes` stake key
+    reads answer incompletely, as after a curl timeout."""
 
     probes = 0
     restarts = 0
     wipes = 0
     kills = 0
+    truncated = 0
+    stakes = 0
 
     def default(self, argv: list[str]) -> Any:
         command = argv[-1] if argv[0] == "ssh" else ""
         if self.probes and "consensus_last_voted_view" in command:
             self.probes -= 1
             return completed(returncode=awsb.SSH_FAILED_RC, stderr="Connection reset")
+        if self.truncated and "consensus_last_voted_view" in command:
+            self.truncated -= 1
+            return completed(stdout="node0 1 1\n")
+        if self.stakes and "/v1/config/hotshot" in command:
+            self.stakes -= 1
+            return completed(stdout="node0 \n")
         if self.restarts and "docker restart" in command:
             self.restarts -= 1
             return completed(returncode=awsb.SSH_FAILED_RC, stderr="Connection reset")
@@ -661,6 +670,8 @@ def cluster_controller(
     restarts: int = 0,
     wipes: int = 0,
     kills: int = 0,
+    truncated: int = 0,
+    stakes: int = 0,
     **chaos: Any,
 ) -> tuple[Any, Any, Any]:
     clock = FakeClock(start=FAKE_EPOCH, limit_s=7200)
@@ -669,6 +680,7 @@ def cluster_controller(
     runner = FlakyRunner(cluster, 3, [LOADING])
     runner.probes, runner.restarts = probes, restarts
     runner.wipes, runner.kills = wipes, kills
+    runner.truncated, runner.stakes = truncated, stakes
     cfg = dataclasses.replace(chaos_cfg(), chaos=ch.ChaosConfig(**chaos))
     ctrl = make_controller(isolated, runner, runner.hosts, clock, cfg)
     ctrl.state = ch.chaos_init(
@@ -716,6 +728,26 @@ def test_failed_probes_skip_ticks_until_the_limit(isolated: Path):
     ctrl, _, clock = cluster_controller(isolated, probes=awsb.CHAOS_SSH_FAILURES)
     with pytest.raises(awsb.RemoteError, match="consecutive"):
         ctrl.drain(interrupts_of(clock))
+
+
+def test_a_truncated_probe_skips_the_tick(isolated: Path):
+    ctrl, _, clock = cluster_controller(isolated, truncated=1)
+    ctrl.tick(LOADING)
+    assert ctrl.failures == 1
+    assert ch.read_events(isolated) == []
+    clock.sleep(awsb.AGENT_POLL_S)
+    ctrl.tick(LOADING)
+    assert ctrl.failures == 0
+
+
+def test_a_failed_stake_read_skips_the_tick(isolated: Path):
+    ctrl, _, clock = cluster_controller(isolated, stakes=1)
+    ctrl.state = None
+    ctrl.tick(LOADING)
+    assert ctrl.failures == 1 and ctrl.state is None
+    clock.sleep(awsb.AGENT_POLL_S)
+    ctrl.tick(LOADING)
+    assert ctrl.failures == 0 and ctrl.state is not None
 
 
 def test_failed_fault_is_retried_on_the_next_tick(isolated: Path):
