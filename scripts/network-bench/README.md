@@ -447,7 +447,8 @@ just bench aws run --tag release-x --leader-trace
     the same.
   - Each request goes to the query nodes in order, node0 first, and moves on at a refused or failed request, a timeout
     (10 s), 5xx or 404; the height also at one not above the reader's cursor (a node catching up after a wipe). A range
-    no query node serves is retried every poll for 10 s, then counted as missing.
+    no query node serves is retried every poll for 10 s, then counted as missing; the 10 s restart while every query
+    node refuses connections (a mass kill). The load's payload scan follows the same rule.
   - A reader failure ends the run; the cause is in `clients.log`.
   - Writes `clients.jsonl`; the summary reports reader lag behind a validator, fetch time per range and MB/s, the chart
     adds a lag panel. No step rule uses them.
