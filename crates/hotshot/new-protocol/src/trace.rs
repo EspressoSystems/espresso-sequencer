@@ -34,6 +34,12 @@
 //! the node took no step before the crash). The pair is checked as one history;
 //! the machine is not run across a restart.
 //!
+//! A node restarted with nothing stored writes a second file too, whose header
+//! carries a `rejoin` object, `bar` and `resumes`. Until the node adopts an
+//! anchor, `bar` is null and the anchor is genesis. At adoption the identity
+//! line is written again with the adopted `anchor`, `anchorView`, `anchorCert`
+//! and the bar. The adopted `Cert1` and `Cert2` are received steps of that file.
+//!
 //! # Identities
 //!
 //! A block's identity travels as the text of its commitment. The Lean side does
@@ -157,6 +163,12 @@ pub struct Recorder {
     /// What a restarted node loaded, as a JSON object for the identity line; see
     /// [`Recorder::restarted`].
     restart: Option<String>,
+    /// The fields of the `rejoin` object of a node restarted with nothing
+    /// stored; see [`Recorder::rejoining`].
+    rejoin: Option<Vec<(&'static str, String)>>,
+    /// The identity line's index in `lines` and its fields, to write it again
+    /// once a rejoining node adopts its anchor; see [`Recorder::rejoined`].
+    identity: Option<(usize, Vec<(&'static str, String)>)>,
     /// The commitment of the proposal seeded at genesis, and the block its
     /// certificate names; see [`Recorder::genesis_parent`].
     genesis_parent: Option<(String, String)>,
@@ -211,6 +223,8 @@ impl Recorder {
             unsigned_locks: Cell::new(false),
             fallback_anchor: None,
             restart: None,
+            rejoin: None,
+            identity: None,
             genesis_parent: None,
             started: Instant::now(),
         }
@@ -262,6 +276,44 @@ impl Recorder {
         ]));
     }
 
+    /// Note that the node restarted with nothing stored and rejoins, to go into
+    /// the identity line.
+    ///
+    /// Call before [`Recorder::preamble`]. `resumes` names the file the node
+    /// wrote before it was wiped, as for [`Recorder::restarted`]. The bar is
+    /// null until [`Recorder::rejoined`].
+    pub fn rejoining(&mut self, resumes: Option<&str>) {
+        if self.path.is_none() {
+            return;
+        }
+        self.rejoin = Some(vec![
+            ("bar", null()),
+            ("resumes", resumes.map_or_else(null, quoted)),
+        ]);
+    }
+
+    /// Write the identity line again with what a rejoining node adopted: the
+    /// anchor block, the `Certificate1` it locks on, and the bar.
+    ///
+    /// The anchor lock that fills a timeout vote's placeholder stays the
+    /// genesis certificate: once anchored, no lock is the genesis one.
+    pub fn rejoined<T: NodeType>(
+        &mut self,
+        bar: ViewNumber,
+        anchor: &Leaf2<T>,
+        lock: &Certificate1<T>,
+    ) {
+        let (Some((line, fields)), Some(rejoin)) = (&mut self.identity, &mut self.rejoin) else {
+            return;
+        };
+        set_field(rejoin, "bar", view_json(bar));
+        set_field(fields, "anchor", ident(&anchor.commit()));
+        set_field(fields, "anchorView", view_json(anchor.view_number()));
+        set_field(fields, "anchorCert", cert1_json_raw(lock));
+        set_field(fields, "rejoin", obj(rejoin));
+        self.lines[*line] = format!("# trace {}", obj(fields));
+    }
+
     /// Write the identity line, once, before the first step.
     ///
     /// A checker needs two things the steps do not carry: which node this is, and
@@ -311,7 +363,11 @@ impl Recorder {
         if let Some(restart) = &self.restart {
             fields.push(("restart", restart.clone()));
         }
+        if let Some(rejoin) = &self.rejoin {
+            fields.push(("rejoin", obj(rejoin)));
+        }
         let line = obj(&fields);
+        self.identity = Some((self.lines.len(), fields));
         self.lines.push(format!("# trace {line}"));
     }
 
@@ -1195,6 +1251,14 @@ fn ident<D: std::fmt::Display>(value: &D) -> String {
     quoted(&value.to_string())
 }
 
+/// Replace the value of `key` in `fields`, or add it.
+fn set_field(fields: &mut Vec<(&'static str, String)>, key: &'static str, value: String) {
+    match fields.iter_mut().find(|(k, _)| *k == key) {
+        Some((_, v)) => *v = value,
+        None => fields.push((key, value)),
+    }
+}
+
 /// JSON, assembled by hand: the crate has no JSON writer and these shapes are
 /// small and fixed.
 fn obj(fields: &[(&str, String)]) -> String {
@@ -1383,6 +1447,44 @@ mod tests {
             "{identity}"
         );
         // The recorder writes nothing on drop while `lines` holds only the identity line.
+        rec.lines.clear();
+    }
+
+    #[tokio::test]
+    async fn rejoined_writes_the_adopted_anchor_into_the_identity_line() {
+        let leaf = Leaf2::<TestTypes>::genesis(
+            &TestValidatedState::default(),
+            &TestInstanceState::default(),
+            TEST_VERSIONS.test.base,
+        )
+        .await;
+        let cert = build_genesis_cert1(&leaf);
+        let mut proposal = build_genesis_proposal(&leaf, &cert);
+        proposal.view_number = ViewNumber::new(9);
+        let anchor: Leaf2<TestTypes> = proposal.into();
+        let mut rec = recorder_in_tmp("g.1.jsonl");
+        rec.rejoining(Some("g.0.jsonl"));
+        rec.preamble::<TestTypes>(
+            &BLSPubKey::generated_from_seed_indexed([0; 32], 0).0,
+            &leaf,
+            Some(&cert),
+            10,
+        );
+        assert!(
+            rec.lines[0].contains("\"rejoin\":{\"bar\":null,\"resumes\":\"g.0.jsonl\"}"),
+            "{}",
+            rec.lines[0]
+        );
+
+        rec.rejoined(ViewNumber::new(7), &anchor, &cert);
+        let identity = &rec.lines[0];
+        for field in [
+            format!("\"anchor\":{}", ident(&anchor.commit())),
+            "\"anchorView\":9".to_string(),
+            "\"rejoin\":{\"bar\":7,\"resumes\":\"g.0.jsonl\"}".to_string(),
+        ] {
+            assert!(identity.contains(&field), "{identity}");
+        }
         rec.lines.clear();
     }
 }

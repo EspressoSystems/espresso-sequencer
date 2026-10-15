@@ -11,6 +11,7 @@ mod integration;
 mod liveness;
 mod proposal;
 mod random;
+mod rejoin;
 mod restarts;
 mod safety;
 mod stake_table_changes;

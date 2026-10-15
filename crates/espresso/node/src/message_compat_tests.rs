@@ -36,6 +36,7 @@ use hotshot_new_protocol::message::{
     EpochChangeMessage, Message as NewProtocolMessage, MessageType, ProposalFetchMessage,
     ProposalFetchRequest, ProposalMessage, ReVote, ReVoteMessage, TimeoutVoteMessage,
     TimeoutVoteMessage3, TransactionMessage, Unchecked, Validated, Vote1,
+    cert::{CertFetchMessage, CertRequestBody, CertResponseBody},
     fetch::{Request, Response},
     payload::{PayloadFetchMessage, PayloadRequestBody, PayloadResponseBody},
 };
@@ -718,6 +719,25 @@ async fn reference_new_protocol_messages(
         }],
     };
 
+    let cert_fetch_messages = [
+        CertFetchMessage::Req(Request::new(view, CertRequestBody::Newest)),
+        CertFetchMessage::Req(Request::new(view, CertRequestBody::Cert1 { epoch })),
+        CertFetchMessage::Res(Response::new(
+            view,
+            CertResponseBody::Newest(Some(CatchupEvidence::Qc(cert1.clone()))),
+        )),
+        CertFetchMessage::Res(Response::new(
+            view,
+            CertResponseBody::Newest(Some(catchup_tc.clone())),
+        )),
+        CertFetchMessage::Res(Response::new(view, CertResponseBody::Newest(None))),
+        CertFetchMessage::Res(Response::new(
+            view,
+            CertResponseBody::Cert1(Some(cert1.clone())),
+        )),
+        CertFetchMessage::Res(Response::new(view, CertResponseBody::Cert1(None))),
+    ];
+
     let consensus_messages = vec![
         ConsensusMessage::Proposal(ProposalMessage::validated(signed_proposal.clone())),
         ConsensusMessage::Vote1(Vote1 {
@@ -803,7 +823,8 @@ async fn reference_new_protocol_messages(
             // External payloads bypass this envelope on the wire, so this entry pins only the
             // encoding of the variant itself.
             MessageType::External(vec![1, 2, 3]),
-        ]);
+        ])
+        .chain(cert_fetch_messages.into_iter().map(MessageType::CertFetch));
 
     message_types
         .map(|message_type| NewProtocolMessage {

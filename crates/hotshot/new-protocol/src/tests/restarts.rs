@@ -23,6 +23,7 @@ use versions::{TIMEOUT_EPOCH_VERSION, Upgrade};
 
 use crate::{
     message::Certificate1,
+    rejoin::RejoinMode,
     storage::NewProtocolStorage as _,
     tests::common::{
         coordinator_builder::{UpgradeSetup, build_test_coordinator},
@@ -39,14 +40,17 @@ use crate::{
 /// 10 nodes, 1 restarts from blank state at view 11, epoch_height=10.
 ///
 /// Verifies that a single node can restart from genesis while the rest of
-/// the network continues, and that it catches up and participates across
-/// epoch boundaries.
+/// the network continues, and that it rejoins and participates across
+/// epoch boundaries. It signs nothing until it rejoins, so a view it leads
+/// before then times out: 15, or 25 on a slow rejoin.
 #[tokio::test(flavor = "multi_thread")]
 async fn restart_one_node_with_epochs() {
     TestRunner::builder()
         .num_nodes(10)
         .target_decisions(30)
         .epoch_height(10)
+        .record_traces(true)
+        .tolerated_failed_views(views([15, 25]))
         .node_changes(vec![(
             11,
             vec![NodeChange {
@@ -60,22 +64,20 @@ async fn restart_one_node_with_epochs() {
         .unwrap();
 }
 
-/// 10 nodes, f=3 restart from blank state simultaneously at view 15,
+/// 10 nodes, f=3 restart from blank state simultaneously at view 11,
 /// epoch_height=10.
 ///
 /// Verifies the network recovers when the maximum tolerable number of
-/// nodes restart at once.  Views where a restarting node is leader during
-/// catchup are expected to fail.
+/// nodes restart at once.  Views a restarting node leads before it rejoins
+/// time out: 17, 18, 19, or the next round on a slow rejoin.
 #[tokio::test(flavor = "multi_thread")]
 async fn restart_f_nodes_with_epochs() {
-    // Nodes 7, 8, 9 restart at view 13.  Their first leader views after
-    // restart are 17(7), 18(8), 19(9) — they should propose while catching
-    // up.  Views 27(7), 28(8), 29(9) are in the epoch transition zone and
-    // may also fail if the DRB hasn't arrived yet, but this tests that it does.
     TestRunner::builder()
         .num_nodes(10)
         .target_decisions(30)
         .epoch_height(10)
+        .record_traces(true)
+        .tolerated_failed_views(views([17, 18, 19, 27, 28, 29]))
         .node_changes(vec![(
             11,
             vec![
@@ -97,6 +99,58 @@ async fn restart_f_nodes_with_epochs() {
         .run()
         .await
         .unwrap();
+}
+
+/// 10 nodes, node 5 restarts with blank storage at view 11, epoch_height=10.
+///
+/// The node signs nothing until it knows a bar at or above every view it may
+/// have signed in, and adopts the first decide above it: everything it
+/// recorded before the wipe is at or below the bar, and everything after it
+/// above the adopted anchor.
+#[tokio::test(flavor = "multi_thread")]
+async fn wiped_node_rejoins_while_network_decides() {
+    let wiped = 5;
+    let mut runner = TestRunner::builder()
+        .num_nodes(10)
+        .target_decisions(40)
+        .epoch_height(10)
+        .record_traces(true)
+        .tolerated_failed_views(views([15, 25]))
+        .node_changes(vec![(
+            11,
+            vec![NodeChange {
+                idx: wiped,
+                action: NodeAction::Restart,
+            }],
+        )])
+        .build();
+    runner.run().await.unwrap();
+
+    let [(bar, anchor_view)] = runner.rejoins()[&wiped][..] else {
+        panic!("one rejoin expected: {:?}", runner.rejoins());
+    };
+    assert!(bar < anchor_view, "bar {bar} anchor {anchor_view}");
+    let before = runner.wiped_storages()[wiped]
+        .as_ref()
+        .expect("the wiped storage is kept");
+    for (view, _, action) in before.action_log().await {
+        assert!(
+            view <= bar,
+            "{action:?} at view {view} before the wipe is above the bar {bar}"
+        );
+    }
+    let after = &runner.node_storages()[wiped];
+    for (view, _, action) in after.action_log().await {
+        assert!(
+            view > anchor_view,
+            "{action:?} at view {view} after the wipe is not above the anchor {anchor_view}"
+        );
+    }
+    let (anchor, _) = after
+        .anchor_leaf()
+        .await
+        .expect("the rejoined node decides");
+    assert!(anchor.view_number() > anchor_view);
 }
 
 /// 5 nodes all crash at view ~5 and restart with their persisted storage.
@@ -428,6 +482,7 @@ async fn restart_restores_persisted_lock_and_boundary_cert() {
         Duration::from_secs(5),
         upgrade,
         external_tx,
+        RejoinMode::Fresh,
     )
     .await;
 

@@ -53,11 +53,17 @@ use crate::{
     message::{
         self, BlockMessage, CatchupEvidence, Certificate1, Certificate2, ConsensusMessage, Message,
         MessageType, OpaqueMessage, Proposal, ProposalFetchMessage, ProposalMessage, TimeoutVote,
-        TransactionMessage, Unchecked, Validated, Vote2, payload::PayloadFetchMessage,
+        TransactionMessage, Unchecked, Validated, Vote2,
+        cert::{
+            CertFetchMessage, CertFetchRequest, CertFetchResponse, CertRequestBody,
+            CertResponseBody,
+        },
+        payload::PayloadFetchMessage,
     },
     network::Cliquenet,
     outbox::Outbox,
     proposal::{ProposalValidator, VidShareValidator},
+    rejoin::{Rejoin, RejoinMode, evidence_key},
     serve::Server,
     state::{HeaderRequest, StateEntry, StateManager, StateManagerOutput},
     storage::{NewProtocolStorage, Storage},
@@ -200,6 +206,9 @@ where
         anchor_cert2: Option<Certificate2<T>>,
         upgrade_config: UpgradeConfig,
         external_tx: mpsc::UnboundedSender<OpaqueMessage<T::SignatureKey>>,
+        /// Whether the node restarted with nothing stored and must rejoin first.
+        #[builder(default)]
+        rejoin: RejoinMode,
     ) -> Self {
         let mut consensus = Consensus::new(
             membership_coordinator.clone(),
@@ -330,6 +339,9 @@ where
             initializer.start_view(),
             initializer.last_actioned_view(),
         );
+        if rejoin == RejoinMode::Wiped {
+            consensus.start_rejoin();
+        }
         if let Some(state_cert) = initializer.state_cert().cloned() {
             consensus.seed_state_cert(state_cert);
         }
@@ -474,6 +486,9 @@ where
 
         self.outbox
             .push_back(ConsensusOutput::ViewChanged(next_view, epoch));
+        if matches!(self.consensus.rejoin(), Rejoin::Querying(_)) {
+            self.outbox.push_back(ConsensusOutput::FetchNewestCerts);
+        }
 
         if let Some(leader) = self.leader(next_view, epoch)
             && leader == self.public_key
@@ -845,30 +860,7 @@ where
                 self.epoch_manager.request_drb_result(epoch);
             },
             ConsensusOutput::LeafDecided { leaves, cert1, .. } => {
-                info!(
-                    %node,
-                    view = %cert1.view_number(),
-                    epoch = ?cert1.epoch().map(|e| *e),
-                    leaves = leaves.len(),
-                    "leaves decided"
-                );
-                self.on_decide_metrics(&leaves);
-                // `leaves` is ordered newest first.
-                //  Garbage collect the data for views < decided view
-                if let Some(newest) = leaves.first() {
-                    let gc_view = newest.view_number();
-                    let gc_epoch = newest.justify_qc().epoch().unwrap_or_default();
-                    self.gc(gc_epoch, GcScope::Decided(gc_view))?;
-                    // A gap-fill decide trails the decided view; gc already covered its leaves.
-                    if gc_view == self.consensus.last_decided_view() {
-                        self.state_manager.seed_decided(newest.clone());
-                    }
-                }
-                for leaf in leaves.into_iter().rev() {
-                    self.participation
-                        .on_leaf_decided(&leaf, &self.membership_coordinator);
-                    self.epoch_manager.handle_leaf_decided(leaf);
-                }
+                self.on_leaves_decided(leaves, &cert1)?;
             },
             ConsensusOutput::LockUpdated(view) => {
                 debug!(%node, %view, "lock updated");
@@ -1162,6 +1154,7 @@ where
                 }
 
                 if self.leader(view, epoch).as_ref() == Some(&self.public_key)
+                    && !self.consensus.signing_barred()
                     && let Some(upgrade_proposal) = self.upgrade_protocol.maybe_propose(view, epoch)
                 {
                     self.broadcast(
@@ -1190,6 +1183,53 @@ where
                 );
                 self.storage.update_decided_upgrade_certificate(cert);
             },
+            ConsensusOutput::FetchNewestCerts => {
+                let view = self.consensus.current_view();
+                self.broadcast_cert_fetch(CertFetchRequest::new(view, CertRequestBody::Newest));
+            },
+            ConsensusOutput::FetchCert1 { view, epoch } => {
+                let body = CertRequestBody::Cert1 { epoch };
+                self.broadcast_cert_fetch(CertFetchRequest::new(view, body));
+            },
+            ConsensusOutput::RejoinAnchored {
+                leaf, cert1, bar, ..
+            } => {
+                info!(%node, view = %leaf.view_number(), %bar, "rejoined");
+                self.on_leaves_decided(vec![leaf], &cert1)?;
+            },
+        }
+        Ok(())
+    }
+
+    fn on_leaves_decided(
+        &mut self,
+        leaves: Vec<Leaf2<T>>,
+        cert1: &Certificate1<T>,
+    ) -> Result<(), CoordinatorError> {
+        let node = self.node_id;
+        info!(
+            %node,
+            view = %cert1.view_number(),
+            epoch = ?cert1.epoch().map(|e| *e),
+            leaves = leaves.len(),
+            "leaves decided"
+        );
+        self.on_decide_metrics(&leaves);
+        // `leaves` is ordered newest first.
+        //  Garbage collect the data for views < decided view
+        if let Some(newest) = leaves.first() {
+            let gc_view = newest.view_number();
+            let gc_epoch = newest.justify_qc().epoch().unwrap_or_default();
+            self.gc(gc_epoch, GcScope::Decided(gc_view))?;
+            // A gap-fill decide trails the decided view; gc already covered its leaves.
+            if gc_view == self.consensus.last_decided_view() {
+                self.state_manager.seed_decided(newest.clone());
+            }
+        }
+        for leaf in leaves.into_iter().rev() {
+            self.participation
+                .on_leaf_decided(&leaf, &self.membership_coordinator);
+            self.epoch_manager.handle_leaf_decided(leaf);
         }
         Ok(())
     }
@@ -1226,6 +1266,11 @@ where
     #[cfg(test)]
     pub(crate) fn consensus_mut(&mut self) -> &mut Consensus<T> {
         &mut self.consensus
+    }
+
+    #[cfg(test)]
+    pub(crate) fn upgrade_protocol(&self) -> &UpgradeProtocol<T> {
+        &self.upgrade_protocol
     }
 
     #[cfg(test)]
@@ -1595,14 +1640,16 @@ where
                         .current_epoch()
                         .unwrap_or(EpochNumber::genesis());
                     let leader = self.leader(view, current_epoch);
-                    if let Some(vote) = self.upgrade_protocol.maybe_vote(
-                        &upgrade_proposal,
-                        &message.sender,
-                        leader.as_ref(),
-                        current_view,
-                        current_epoch,
-                    ) && let Err(err) =
-                        self.broadcast(ConsensusMessage::UpgradeVote(vote), "upgrade vote")
+                    if !self.consensus.signing_barred()
+                        && let Some(vote) = self.upgrade_protocol.maybe_vote(
+                            &upgrade_proposal,
+                            &message.sender,
+                            leader.as_ref(),
+                            current_view,
+                            current_epoch,
+                        )
+                        && let Err(err) =
+                            self.broadcast(ConsensusMessage::UpgradeVote(vote), "upgrade vote")
                     {
                         warn!(%node, %err, "network error while broadcasting upgrade vote");
                     }
@@ -1750,6 +1797,16 @@ where
                         warn!(%node, %sender, %view, %err, "failed to send payload request");
                     }
                 }
+                None
+            },
+            MessageType::CertFetch(CertFetchMessage::Req(request)) => {
+                debug!(%node, %sender, view = %request.view_number(), "received cert fetch request");
+                self.serve_cert_fetch(&message.sender, &request);
+                None
+            },
+            MessageType::CertFetch(CertFetchMessage::Res(response)) => {
+                debug!(%node, %sender, view = %response.view_number(), "received cert fetch response");
+                self.on_cert_fetch_response(&message.sender, response);
                 None
             },
             MessageType::External(data) => {
@@ -2279,6 +2336,91 @@ where
         })
     }
 
+    /// Submit `evidence` for verification and drive the catchup of its epoch if
+    /// that is not known yet.
+    fn verify_evidence(&mut self, sender: &T::SignatureKey, evidence: CatchupEvidence<T>) {
+        let epoch = match evidence {
+            CatchupEvidence::Qc(qc) => self.verify_advance(sender, qc),
+            CatchupEvidence::Tc(tc) => self.verify_timeout_cert(sender, tc),
+            CatchupEvidence::Tc3(tc) => self.verify_timeout_cert3(sender, tc),
+        };
+        if let Some(epoch) = epoch {
+            self.epoch_manager.request_drb_result(epoch);
+        }
+    }
+
+    fn broadcast_cert_fetch(&self, request: CertFetchRequest) {
+        let view = request.view_number();
+        let message = Message {
+            sender: self.public_key.clone(),
+            message_type: MessageType::CertFetch(CertFetchMessage::Req(request)),
+        };
+        if let Err(err) = self
+            .network
+            .sender()
+            .broadcast(self.consensus.current_view(), &message)
+        {
+            warn!(node = %self.node_id, %view, %err, "failed to send cert fetch request");
+        }
+    }
+
+    /// Unicast to `peer` what `request` asks for.
+    fn serve_cert_fetch(&self, peer: &T::SignatureKey, request: &CertFetchRequest) {
+        let view = request.view_number();
+        let message = Message {
+            sender: self.public_key.clone(),
+            message_type: MessageType::CertFetch(CertFetchMessage::Res(
+                self.cert_fetch_response(request),
+            )),
+        };
+        if let Err(err) =
+            self.network
+                .sender()
+                .unicast(self.consensus.current_view(), peer, &message)
+        {
+            warn!(node = %self.node_id, %view, %err, "failed to send cert fetch response");
+        }
+    }
+
+    /// The answer to `request`, at the request's view.
+    pub(crate) fn cert_fetch_response(&self, request: &CertFetchRequest) -> CertFetchResponse<T> {
+        let view = request.view_number();
+        let body = match request.body() {
+            CertRequestBody::Newest => CertResponseBody::Newest(self.consensus.newest_evidence()),
+            CertRequestBody::Cert1 { epoch } => {
+                CertResponseBody::Cert1(self.consensus.cert1_in(ViewEpoch(view, *epoch)).cloned())
+            },
+        };
+        CertFetchResponse::new(view, body)
+    }
+
+    /// Submit the certificate of a reply for verification. Only the kind of
+    /// reply the rejoin state asks for is read; it is then not subject to the
+    /// view and epoch windows of unsolicited certificates.
+    fn on_cert_fetch_response(&mut self, sender: &T::SignatureKey, response: CertFetchResponse<T>) {
+        let rejoin = self.consensus.rejoin();
+        match response.into_body() {
+            CertResponseBody::Newest(evidence) if matches!(rejoin, Rejoin::Querying(_)) => {
+                self.consensus
+                    .rejoin_claim(sender.clone(), evidence.as_ref().map(evidence_key));
+                if let Some(evidence) = evidence {
+                    self.verify_evidence(sender, evidence);
+                }
+            },
+            CertResponseBody::Cert1(Some(cert)) if matches!(rejoin, Rejoin::Waiting { .. }) => {
+                if cert.view_number() == ViewNumber::genesis() {
+                    warn!(node = %self.node_id, %sender, "cert fetch response at the genesis view");
+                    return;
+                }
+                if let Some(epoch) = self.cert_verifiers.cert1.verify(sender.clone(), cert) {
+                    self.epoch_manager.request_drb_result(epoch);
+                }
+            },
+            CertResponseBody::Cert1(None) => {},
+            _ => debug!(node = %self.node_id, %sender, "cert fetch response not asked for"),
+        }
+    }
+
     fn on_timeout_vote(
         &mut self,
         sender: &T::SignatureKey,
@@ -2296,14 +2438,7 @@ where
         let has_evidence = evidence.is_some();
 
         if let Some(e) = evidence.filter(|e| e.view_number() >= current_view) {
-            let epoch = match e {
-                CatchupEvidence::Qc(qc) => self.verify_advance(sender, qc),
-                CatchupEvidence::Tc(tc) => self.verify_timeout_cert(sender, tc),
-                CatchupEvidence::Tc3(tc) => self.verify_timeout_cert3(sender, tc),
-            };
-            if let Some(epoch) = epoch {
-                self.epoch_manager.request_drb_result(epoch);
-            }
+            self.verify_evidence(sender, e);
         }
 
         if self.is_view_too_far_ahead(view) {

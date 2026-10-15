@@ -34,6 +34,7 @@ use crate::{
     network::Cliquenet,
     outbox::Outbox,
     proposal::{ProposalValidator, VidShareValidator},
+    rejoin::RejoinMode,
     state::StateManager,
     storage::NewProtocolStorage as _,
     upgrade::UpgradeProtocol,
@@ -68,6 +69,7 @@ pub async fn build_test_coordinator(
     view_timeout: Duration,
     upgrade: UpgradeSetup,
     external_tx: mpsc::UnboundedSender<OpaqueMessage<BLSPubKey>>,
+    rejoin: RejoinMode,
 ) -> Coordinator<TestTypes, TestStorage<TestTypes>> {
     let (public_key, private_key) = BLSPubKey::generated_from_seed_indexed([0; 32], node_index);
     let state_key_pair = StateKeyPair::generate_from_seed_indexed([0u8; 32], node_index);
@@ -227,6 +229,9 @@ pub async fn build_test_coordinator(
     let restart_view = storage.restart_view().await;
     let last_actioned_view = storage.last_actioned_view().await;
     consensus.resume_from_restart(anchor_view, restart_view, last_actioned_view);
+    if rejoin == RejoinMode::Wiped {
+        consensus.start_rejoin();
+    }
 
     // A leader proposing on an epoch-root parent QC right after restart
     // needs the persisted light-client state cert (as in production, where

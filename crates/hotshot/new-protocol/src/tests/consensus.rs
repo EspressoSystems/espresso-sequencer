@@ -28,8 +28,8 @@ use crate::{
     cert_verifier::ValidCert,
     consensus::{ConsensusInput, ConsensusOutput},
     coordinator::GcScope,
-    helpers::{proposal_commitment, test_timeout_epoch_lock, test_upgrade_lock},
-    message::{Proposal, ProposalMessage, TimeoutBallot, TimeoutVote},
+    helpers::{ViewEpoch, proposal_commitment, test_timeout_epoch_lock, test_upgrade_lock},
+    message::{CatchupEvidence, Proposal, ProposalMessage, TimeoutBallot, TimeoutVote},
     outbox::Outbox,
     proposal::{ProposalValidator, ValidationError},
     state::StateResponse,
@@ -3111,4 +3111,41 @@ async fn test_forged_state_cert_at_epoch_root_fails_validation() {
         Err(other) => panic!("expected InvalidStateCert, got: {other}"),
         Ok(_) => panic!("a state_cert with too few signers passed validation"),
     }
+}
+
+/// A peer asked for its newest certificate reports a `Cert1` held without its
+/// payload, which the lock-based catchup evidence does not.
+#[tokio::test]
+async fn test_newest_evidence_is_not_the_lock() {
+    let test_data = TestData::new(4).await;
+    let mut harness = ConsensusHarness::new(0).await;
+    let (tc_view, qc_view) = (&test_data.views[0], &test_data.views[2]);
+
+    harness.apply(tc_view.timeout_cert_input()).await;
+    harness.apply(qc_view.cert1_input()).await;
+
+    assert!(matches!(
+        harness.consensus.catchup_evidence(),
+        Some(CatchupEvidence::Tc(_) | CatchupEvidence::Tc3(_))
+    ));
+    assert_eq!(
+        harness.consensus.newest_evidence(),
+        Some(CatchupEvidence::Qc(qc_view.cert1.clone()))
+    );
+
+    let newer_tc = &test_data.views[3];
+    harness.apply(newer_tc.timeout_cert_input()).await;
+    assert!(matches!(
+        harness.consensus.newest_evidence(),
+        Some(CatchupEvidence::Tc(_) | CatchupEvidence::Tc3(_))
+    ));
+
+    let key = ViewEpoch(qc_view.view_number, qc_view.epoch_number);
+    assert_eq!(harness.consensus.cert1_in(key), Some(&qc_view.cert1));
+    assert_eq!(
+        harness
+            .consensus
+            .cert1_in(ViewEpoch(qc_view.view_number, qc_view.epoch_number + 1)),
+        None
+    );
 }

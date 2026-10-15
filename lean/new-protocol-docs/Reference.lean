@@ -1787,6 +1787,16 @@ it quantifies over.
   ({name NewProtocol.TimedNetwork.honestQuorum}`TimedNetwork.honestQuorum`); finitely many honest nodes
   ({name NewProtocol.Committee.honestFinite}`Committee.honestFinite`); {name NewProtocol.Synchrony}`Synchrony`, {name NewProtocol.Prompt}`Prompt`, `8Δ + 3δ < τ`,
   {name NewProtocol.LeaderRotation}`LeaderRotation`, {name NewProtocol.ConfigCoherent}`ConfigCoherent` and {name NewProtocol.CollisionFree}`CollisionFree`.
+* {name NewProtocol.SafeHistory}`SafeHistory` across a restart, proved by
+  {name NewProtocol.safe_across_restart}`safe_across_restart`: the signing rules before the
+  crash, a faithful summary ({name NewProtocol.Summarises}`Summarises`), the signing rules after
+  the crash under {name NewProtocol.Persisted.config}`Persisted.config`, and the restart's bars
+  ({name NewProtocol.RestartOK}`RestartOK`).
+* {name NewProtocol.SafeHistory}`SafeHistory` across wiped storage, proved by
+  {name NewProtocol.safe_across_wipe}`safe_across_wipe`: the signing rules before the
+  wipe, what the node adopts ({name NewProtocol.Rejoins}`Rejoins`), the signing rules
+  after it under {name NewProtocol.Rejoin.config}`Rejoin.config`, and the bars of what it
+  adopted ({name NewProtocol.RejoinOK}`RejoinOK`).
 
 ## No fork
 
@@ -2185,6 +2195,293 @@ cannot be.
 
 {docstring NewProtocol.Liveness.often_decides}
 
+## Across a restart
+
+%%%
+tag := "restart"
+%%%
+
+A node that crashes loses what it held in memory and resumes from what it stored.
+The signing rules read every vote the node ever sent, so a node that forgot its
+votes could sign twice. It stores a summary of them instead, and sets bars from
+that summary on resuming. A restart adds no input: the history before the crash,
+the steps that loading the saved proposals amounts to, and the history after the
+crash are one history.
+
+{docstring NewProtocol.Persisted}
+
+{docstring NewProtocol.Persisted.anchorView}
+
+{expansion NewProtocol.Persisted.anchorView}
+
+```lean -show
+namespace Spec.Persisted_config
+open NewProtocol.History
+```
+
+:::spec NewProtocol.Persisted.config
+  ```lean
+  def Persisted.config (cfg : Config) (P : Persisted) : Config :=
+    { cfg with anchorBlock := P.anchorBlock, anchorCert := P.anchorCert }
+  ```
+:::
+
+```lean -show
+example : @Spec.Persisted_config.Persisted.config = @NewProtocol.Persisted.config := rfl
+end Spec.Persisted_config
+```
+
+{includeDocstring NewProtocol.Persisted.config}
+
+```lean -show
+namespace Spec.Persisted_firstAllowed
+open NewProtocol.History
+```
+
+:::spec NewProtocol.Persisted.firstAllowed
+  ```lean
+  def Persisted.firstAllowed (P : Persisted) : ViewNumber :=
+    max (P.anchorView + 1) (P.highestVoted + 1)
+  ```
+:::
+
+```lean -show
+example : @Spec.Persisted_firstAllowed.Persisted.firstAllowed =
+    @NewProtocol.Persisted.firstAllowed := rfl
+end Spec.Persisted_firstAllowed
+```
+
+{includeDocstring NewProtocol.Persisted.firstAllowed}
+
+```lean -show
+namespace Spec.Persisted_restoredSteps
+open NewProtocol.History
+```
+
+:::spec NewProtocol.Persisted.restoredSteps
+  ```lean
+  def Persisted.restoredSteps (P : Persisted) : History :=
+    P.reconstructed.map fun x =>
+      { input := .blockReconstructed x.1 x.2, output := [] }
+  ```
+:::
+
+```lean -show
+example : @Spec.Persisted_restoredSteps.Persisted.restoredSteps =
+    @NewProtocol.Persisted.restoredSteps := rfl
+end Spec.Persisted_restoredSteps
+```
+
+{includeDocstring NewProtocol.Persisted.restoredSteps}
+
+```lean -show
+namespace Spec.History_inputsOnly
+open NewProtocol.History
+```
+
+:::spec NewProtocol.History.inputsOnly
+  ```lean
+  def History.inputsOnly (h : History) : History :=
+    h.map fun st => { st with output := [] }
+  ```
+:::
+
+```lean -show
+example : @Spec.History_inputsOnly.History.inputsOnly = @NewProtocol.History.inputsOnly := rfl
+end Spec.History_inputsOnly
+```
+
+{includeDocstring NewProtocol.History.inputsOnly}
+
+The summary is faithful when each of its parts was written before the node acted
+on it. The anchor, its certificate and its saved proposals are ones the node held
+before the crash, and every vote before the crash lies at or before the stored
+view and lock.
+
+{docstring NewProtocol.Summarises}
+
+{name NewProtocol.Summarises.vote2Locked}`Summarises.vote2Locked` requires the
+stored lock to be written as a compare-and-set in {name NewProtocol.LockLE}`LockLE`
+order, epoch first, then view: a write that compares views alone can replace a
+lock of a later epoch with one of an earlier epoch at a later view. The test
+storage meets this; `append_high_qc2` in the SQL storage compares views only and
+does not.
+
+{docstring NewProtocol.RestartOK}
+
+```lean -show
+namespace Spec.Trace_splice
+open NewProtocol.History
+```
+
+:::spec NewProtocol.Trace.splice
+  ```lean
+  def Trace.splice (pre : History) (r : Trace) : Trace :=
+    fun n => if h : n < pre.length then pre[n] else r (n - pre.length)
+  ```
+:::
+
+```lean -show
+example : @Spec.Trace_splice.Trace.splice = @NewProtocol.Trace.splice := rfl
+end Spec.Trace_splice
+```
+
+{includeDocstring NewProtocol.Trace.splice}
+
+The history after the crash is checked under the restart's configuration, behind
+the inputs of the history before it, so it may build on what the node received
+before the crash but not on what it sent. Votes before the crash are at or before
+{name NewProtocol.Persisted.highestVoted}`Persisted.highestVoted` and votes after
+it at {name NewProtocol.Persisted.firstAllowed}`Persisted.firstAllowed` or later,
+so no rule relates two votes across the crash except a timeout vote's lock, which
+the stored lock covers.
+
+{docstring NewProtocol.safe_across_restart}
+
+{docstring NewProtocol.safe_trace_across_restart}
+
+## After wiped storage
+
+%%%
+tag := "wipe"
+%%%
+
+A node that restarts with nothing stored has no summary to resume from, and the
+signing rules ({name NewProtocol.SafeHistory.vote1Once}`vote1Once`,
+{name NewProtocol.SafeHistory.vote2Once}`vote2Once`,
+{name NewProtocol.SafeHistory.timeoutLock}`timeoutLock`) still read every vote it
+ever sent. Before it signs anything, it recovers a view bar and a lock from the
+network.
+
+*The view bar.* If the node signed in view `L`, it was in `L`, so a certificate
+for `L-1` existed, so `f+1` honest nodes were in `L-1` and each holds a certificate
+for `L-2`. The node asks `2f+1` nodes for the newest certificate each holds: the
+newest `Cert1` or timeout certificate, not the lock, which moves only on a vote2
+with the payload and can be older. The maximum `c` of the replies satisfies
+`c ≥ L-2`, and the bar is `c+2 ≥ L`. Each reply carries its certificate, so no
+reply claims more than real progress. {name NewProtocol.Rejoins.vote1Below}`Rejoins.vote1Below`,
+{name NewProtocol.Rejoins.vote2Below}`vote2Below` and
+{name NewProtocol.Rejoins.timeoutBelow}`timeoutBelow` state the outcome; the count
+itself is prose. It has two premises. A responder that restarted from its own
+storage holds only its anchor certificate, lock and boundary certificate, which can
+be older than `L-2`. The honest responders of the overlap are in the committee the
+node queries, which holds under a static committee, or when nodes keep receiving
+certificates after leaving a committee.
+
+*The lost lock.* The node may have cast a vote2 at some view `u` at or before the
+bar, and cannot always fetch a lock at `u` or later: it may be one of exactly
+`f+1` honest vote2 signers at `u`. {name NewProtocol.SafeHistory.timeoutLock}`timeoutLock`
+reads every earlier vote2 whatever the timeout vote's view, so the node signs no
+timeout vote, vote1 or vote2 until it holds a lock that dominates `u`.
+
+*The wait for one decide.* The node waits for the first `Cert2` at a view `v` above
+the bar whose block is at `v` itself and is not its epoch's last block. Its `f+1`
+honest vote2 signers hold the `Cert1` at `v`, and none of them is the wiped node, so
+a `2f+1` query returns that `Cert1`. The node adopts the committed block as its
+anchor and the `Cert1` as its lock ({name NewProtocol.Rejoin}`Rejoin`), votes only
+after `v` ({name NewProtocol.RejoinOK}`RejoinOK`, through
+{name NewProtocol.Rejoin.persisted}`Rejoin.persisted`), and names no earlier lock in
+a timeout vote.
+
+The certificate must be over a block at its own view. A re-vote certificate of an
+epoch can form after the next epoch began, so a vote2 of the next epoch at a view
+below `v` may precede it, and a lock at `(e-1, v)` does not dominate `(e, u)`. The
+block must not be its epoch's last: a block other than the last committed at `v`
+puts every later epoch's start after `v`, so every earlier vote2 is at an epoch no
+later than `v`'s and a view below `v`. {name NewProtocol.Rejoins}`Rejoins` is wider
+than this rule: {name NewProtocol.Rejoins.anchorAbove}`anchorAbove` compares the
+certificate's view with the bar and {name NewProtocol.Rejoins.decidedBelow}`decidedBelow`
+the block's, so it admits an anchor adopted from a re-vote.
+
+*Acting.* The node holds the anchor at every step that signs or decides
+({name NewProtocol.Step.Acts}`Step.Acts`). A step that only relays a certificate is
+exempt: the node relays the anchor's own certificate before it holds the anchor.
+
+```lean -show
+namespace Spec.Output_acts
+open NewProtocol.History
+```
+
+:::spec NewProtocol.Output.acts
+  ```lean
+  def Output.acts : Output → Bool
+    | .send (.vote1 _) | .send (.vote2 _) | .send (.timeoutVote _)
+    | .send (.proposal _) | .send (.revote _) | .decided _ _ _ => true
+    | _ => false
+  ```
+:::
+
+```lean -show
+example : @Spec.Output_acts.Output.acts = @NewProtocol.Output.acts := rfl
+end Spec.Output_acts
+```
+
+{includeDocstring NewProtocol.Output.acts}
+
+```lean -show
+namespace Spec.Step_Acts
+open NewProtocol.History
+```
+
+:::spec NewProtocol.Step.Acts
+  ```lean
+  def Step.Acts (st : Step) : Prop := ∃ o ∈ st.output, Output.acts o = true
+  ```
+:::
+
+```lean -show
+example : @Spec.Step_Acts.Step.Acts = @NewProtocol.Step.Acts := rfl
+end Spec.Step_Acts
+```
+
+{includeDocstring NewProtocol.Step.Acts}
+
+{docstring NewProtocol.Rejoin}
+
+{docstring NewProtocol.Rejoin.anchorView}
+
+{expansion NewProtocol.Rejoin.anchorView}
+
+```lean -show
+namespace Spec.Rejoin_persisted
+open NewProtocol.History
+```
+
+:::spec NewProtocol.Rejoin.persisted
+  ```lean
+  def Rejoin.persisted (R : Rejoin) : Persisted :=
+    ⟨R.anchorBlock, R.anchorCert, R.anchorCert, R.anchorCert.view, []⟩
+  ```
+:::
+
+```lean -show
+example : @Spec.Rejoin_persisted.Rejoin.persisted = @NewProtocol.Rejoin.persisted := rfl
+end Spec.Rejoin_persisted
+```
+
+{includeDocstring NewProtocol.Rejoin.persisted}
+
+{docstring NewProtocol.Rejoin.config}
+
+{expansion NewProtocol.Rejoin.config}
+
+{docstring NewProtocol.Rejoins}
+
+{docstring NewProtocol.RejoinOK}
+
+{expansion NewProtocol.RejoinOK}
+
+*The residue.* A `Cert2` that only the node saw before the crash may have decided a
+view above the anchor. {name NewProtocol.Rejoins.decidedBelow}`Rejoins.decidedBelow`
+assumes it did not, and nothing here discharges it. It is the one premise an
+implementation cannot check from its own state after a wipe.
+
+*The cost.* A stalled network keeps the node waiting, and it signs nothing. Until
+it adopts an anchor, the node counts against `f`: with `f` other faults no
+certificate above the bar forms and the wait never ends.
+
+{docstring NewProtocol.safe_across_wipe}
+
 # The premises can be met
 
 %%%
@@ -2301,11 +2598,19 @@ kind is where an audit should spend its doubt.
   the liveness result needs the reports to be true: a node owes a vote1 on a block
   reported valid, and a false report would leave it an obligation it may not meet
   ({name NewProtocol.Prompt}`Prompt`).
-* _Crashes and restarts._ Nodes are honest or faulty, and an honest node never loses
-  its history. Restarts are out of scope. {name NewProtocol.SafeHistory.vote1Once}`SafeHistory.vote1Once`,
-  {name NewProtocol.SafeHistory.vote2Once}`SafeHistory.vote2Once` and {name NewProtocol.SafeHistory.timeoutLock}`SafeHistory.timeoutLock` read every vote the
-  node ever sent, so an implementation meets them across a restart only if it
-  persists what it signed.
+* _Crashes and restarts._ Nodes are honest or faulty. A node that stores a faithful
+  summary ({name NewProtocol.Summarises}`Summarises`) and keeps the bars it sets from
+  it ({name NewProtocol.RestartOK}`RestartOK`) obeys the signing rules across a
+  restart ({ref "restart"}[Across a restart]). Not covered are the durability of
+  the summary itself, a crash during a write, and restarts at the version before
+  the timeout epoch bound.
+* _Wiped storage._ A node that restarts with nothing stored obeys the signing rules
+  given what it adopts ({name NewProtocol.Rejoins}`Rejoins`) and the bars it sets
+  from it ({name NewProtocol.RejoinOK}`RejoinOK`) ({ref "wipe"}[After wiped storage]).
+  The view bar query and the wait for a decide are described, not proved.
+  {name NewProtocol.Rejoins.decidedBelow}`Rejoins.decidedBelow` is assumed. The
+  query's count assumes a static committee, or responders that keep receiving
+  certificates after leaving one. Liveness while the node waits is not covered.
 * _A bound on how long._ {name NewProtocol.ChainGrows}`ChainGrows` says decides keep coming after GST, not
   how soon. The proof uses `8Δ + 3δ < τ` to fit a view into one timer, but no
   latency bound reaches the statement.

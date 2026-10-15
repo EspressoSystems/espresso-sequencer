@@ -1503,5 +1503,168 @@
       ]
     },
     "sender": "BLS_VER_KEY~bQszS-QKYvUij2g20VqS8asttGSb95NrTu2PUj0uMh1CBUxNy1FqyPDjZqB29M7ZbjWqj79QkEOWkpga84AmDYUeTuWmy-0P1AdKHD3ehc-dKvei78BDj5USwXPJiDUlCxvYs_9rWYhagaq-5_LXENr78xel17spftNd5MA1Mw5U"
+  },
+  {
+    "message_type": {
+      "CertFetch": {
+        "Req": {
+          "body": "Newest",
+          "view": 0
+        }
+      }
+    },
+    "sender": "BLS_VER_KEY~bQszS-QKYvUij2g20VqS8asttGSb95NrTu2PUj0uMh1CBUxNy1FqyPDjZqB29M7ZbjWqj79QkEOWkpga84AmDYUeTuWmy-0P1AdKHD3ehc-dKvei78BDj5USwXPJiDUlCxvYs_9rWYhagaq-5_LXENr78xel17spftNd5MA1Mw5U"
+  },
+  {
+    "message_type": {
+      "CertFetch": {
+        "Req": {
+          "body": {
+            "Cert1": {
+              "epoch": 1
+            }
+          },
+          "view": 0
+        }
+      }
+    },
+    "sender": "BLS_VER_KEY~bQszS-QKYvUij2g20VqS8asttGSb95NrTu2PUj0uMh1CBUxNy1FqyPDjZqB29M7ZbjWqj79QkEOWkpga84AmDYUeTuWmy-0P1AdKHD3ehc-dKvei78BDj5USwXPJiDUlCxvYs_9rWYhagaq-5_LXENr78xel17spftNd5MA1Mw5U"
+  },
+  {
+    "message_type": {
+      "CertFetch": {
+        "Res": {
+          "body": {
+            "Newest": {
+              "Qc": {
+                "_pd": null,
+                "data": {
+                  "block_number": 0,
+                  "epoch": 1,
+                  "leaf_commit": "COMMIT~C16WN3ZnAjtbeqU2_7OYdb2vsV45zJZCv32CpeEtrLpa"
+                },
+                "signatures": [
+                  "BLS_SIG~HGyah1swNsrVRBQb6OVFeW6zP7wafTvyQbDXZo1IoQhnBwvIAl4vKp20SL1wb5bdMjVh_17et_Ne9XAvOtKPp4I",
+                  {
+                    "bits": 1,
+                    "data": [
+                      1
+                    ],
+                    "head": {
+                      "index": 0,
+                      "width": 64
+                    },
+                    "order": "bitvec::order::Lsb0"
+                  }
+                ],
+                "view_number": 0,
+                "vote_commitment": "COMMIT~P0irsaMnQsR4UQDIT2og71MULgvYi1LO2ZDQlS2PNr-h"
+              }
+            }
+          },
+          "view": 0
+        }
+      }
+    },
+    "sender": "BLS_VER_KEY~bQszS-QKYvUij2g20VqS8asttGSb95NrTu2PUj0uMh1CBUxNy1FqyPDjZqB29M7ZbjWqj79QkEOWkpga84AmDYUeTuWmy-0P1AdKHD3ehc-dKvei78BDj5USwXPJiDUlCxvYs_9rWYhagaq-5_LXENr78xel17spftNd5MA1Mw5U"
+  },
+  {
+    "message_type": {
+      "CertFetch": {
+        "Res": {
+          "body": {
+            "Newest": {
+              "Tc": {
+                "_pd": null,
+                "data": {
+                  "epoch": 1,
+                  "view": 0
+                },
+                "signatures": [
+                  "BLS_SIG~1ji5T947fM-qp_ri9cidUu36VfHzuaM4QX7MN3XzoxoF9rClKadl0Wc3oQ2d2z-U4si3S_O0brdwLXJXoI9zCV8",
+                  {
+                    "bits": 1,
+                    "data": [
+                      1
+                    ],
+                    "head": {
+                      "index": 0,
+                      "width": 64
+                    },
+                    "order": "bitvec::order::Lsb0"
+                  }
+                ],
+                "view_number": 0,
+                "vote_commitment": "COMMIT~TZG1F34lxU6Ny9aKQMkjZAxjW9zotdwW75EHEGbyALOi"
+              }
+            }
+          },
+          "view": 0
+        }
+      }
+    },
+    "sender": "BLS_VER_KEY~bQszS-QKYvUij2g20VqS8asttGSb95NrTu2PUj0uMh1CBUxNy1FqyPDjZqB29M7ZbjWqj79QkEOWkpga84AmDYUeTuWmy-0P1AdKHD3ehc-dKvei78BDj5USwXPJiDUlCxvYs_9rWYhagaq-5_LXENr78xel17spftNd5MA1Mw5U"
+  },
+  {
+    "message_type": {
+      "CertFetch": {
+        "Res": {
+          "body": {
+            "Newest": null
+          },
+          "view": 0
+        }
+      }
+    },
+    "sender": "BLS_VER_KEY~bQszS-QKYvUij2g20VqS8asttGSb95NrTu2PUj0uMh1CBUxNy1FqyPDjZqB29M7ZbjWqj79QkEOWkpga84AmDYUeTuWmy-0P1AdKHD3ehc-dKvei78BDj5USwXPJiDUlCxvYs_9rWYhagaq-5_LXENr78xel17spftNd5MA1Mw5U"
+  },
+  {
+    "message_type": {
+      "CertFetch": {
+        "Res": {
+          "body": {
+            "Cert1": {
+              "_pd": null,
+              "data": {
+                "block_number": 0,
+                "epoch": 1,
+                "leaf_commit": "COMMIT~C16WN3ZnAjtbeqU2_7OYdb2vsV45zJZCv32CpeEtrLpa"
+              },
+              "signatures": [
+                "BLS_SIG~HGyah1swNsrVRBQb6OVFeW6zP7wafTvyQbDXZo1IoQhnBwvIAl4vKp20SL1wb5bdMjVh_17et_Ne9XAvOtKPp4I",
+                {
+                  "bits": 1,
+                  "data": [
+                    1
+                  ],
+                  "head": {
+                    "index": 0,
+                    "width": 64
+                  },
+                  "order": "bitvec::order::Lsb0"
+                }
+              ],
+              "view_number": 0,
+              "vote_commitment": "COMMIT~P0irsaMnQsR4UQDIT2og71MULgvYi1LO2ZDQlS2PNr-h"
+            }
+          },
+          "view": 0
+        }
+      }
+    },
+    "sender": "BLS_VER_KEY~bQszS-QKYvUij2g20VqS8asttGSb95NrTu2PUj0uMh1CBUxNy1FqyPDjZqB29M7ZbjWqj79QkEOWkpga84AmDYUeTuWmy-0P1AdKHD3ehc-dKvei78BDj5USwXPJiDUlCxvYs_9rWYhagaq-5_LXENr78xel17spftNd5MA1Mw5U"
+  },
+  {
+    "message_type": {
+      "CertFetch": {
+        "Res": {
+          "body": {
+            "Cert1": null
+          },
+          "view": 0
+        }
+      }
+    },
+    "sender": "BLS_VER_KEY~bQszS-QKYvUij2g20VqS8asttGSb95NrTu2PUj0uMh1CBUxNy1FqyPDjZqB29M7ZbjWqj79QkEOWkpga84AmDYUeTuWmy-0P1AdKHD3ehc-dKvei78BDj5USwXPJiDUlCxvYs_9rWYhagaq-5_LXENr78xel17spftNd5MA1Mw5U"
   }
 ]
