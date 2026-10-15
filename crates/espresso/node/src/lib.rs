@@ -1025,7 +1025,8 @@ where
 /// Scans the whole L1 contract history when nothing is persisted yet, keeping every
 /// `bootstrap_epoch_window` step bounded to one epoch instead of loading that scan onto
 /// the first step, which silently downgrades the node to a stale epoch window when it
-/// exceeds its timeout. Untimed: an unreachable L1 panics after
+/// exceeds its timeout. An L1 provider that cannot vouch for the scan's last block is retried
+/// indefinitely. An L1 outage in the middle of the scan panics after
 /// `l1_events_max_retry_duration`.
 pub(crate) async fn prefetch_stake_table_events(
     fetcher: &Fetcher,

@@ -1172,6 +1172,10 @@ const STORE_EVENTS_ATTEMPTS: usize = 5;
 #[cfg_attr(not(feature = "node"), allow(dead_code))]
 const STORE_EVENTS_RETRY_DELAY: Duration = Duration::from_secs(1);
 
+/// Attempts to fetch the scan's last L1 block once the scan is done, before discarding it.
+#[cfg(feature = "node")]
+const BLOCK_CHECK_ATTEMPTS: usize = 5;
+
 /// Elapsed time between progress reports during an L1 event scan, checked between chunks.
 #[cfg_attr(not(feature = "node"), allow(dead_code))]
 const PROGRESS_INTERVAL: Duration = Duration::from_secs(30);
@@ -1360,8 +1364,23 @@ impl Fetcher {
             to_block,
         )
         .await?;
-        // A failover inside the scan can land on a provider that does not hold `finalized`.
-        self.ensure_provider_has_block(finalized).await?;
+        // A failover inside the scan can land on a provider that does not hold `finalized`. Only a
+        // failed fetch is retried: it says nothing about the logs, and giving up discards a scan
+        // that on a cold start took hours.
+        for attempt in 1..=BLOCK_CHECK_ATTEMPTS {
+            match self.ensure_provider_has_block(finalized).await {
+                Ok(()) => break,
+                Err(err @ ProviderBlockError::Fetch { .. }) if attempt < BLOCK_CHECK_ATTEMPTS => {
+                    tracing::warn!(
+                        attempt,
+                        err = %format_args!("{err:#}"),
+                        "failed to check the L1 block after the stake table scan, retrying",
+                    );
+                    sleep(self.l1_client.options().l1_retry_delay).await;
+                },
+                Err(err) => return Err(err.into()),
+            }
+        }
 
         // Store only the new events fetched from L1 contract
         tracing::info!(
@@ -1430,15 +1449,19 @@ impl Fetcher {
             number: finalized.number,
             source,
         })?;
-        let actual = block.map(|block| block.header.hash);
-        if actual != Some(finalized.hash) {
-            return Err(ProviderBlockError::Mismatch {
+        match block {
+            None => Err(ProviderBlockError::Missing {
                 number: finalized.number,
-                expected: finalized.hash,
-                actual,
-            });
+            }),
+            Some(block) if block.header.hash != finalized.hash => {
+                Err(ProviderBlockError::Mismatch {
+                    number: finalized.number,
+                    expected: finalized.hash,
+                    actual: block.header.hash,
+                })
+            },
+            Some(_) => Ok(()),
         }
-        Ok(())
     }
 
     /// Validate a stake table event.

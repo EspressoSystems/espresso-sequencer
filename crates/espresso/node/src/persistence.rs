@@ -2476,7 +2476,7 @@ mod tests {
 
         assert_events_eq(
             &replay.persistence().await?,
-            block,
+            l1_client.wait_for_finalized_block(block).await,
             membership.fetcher(),
             &l1_client,
             contract,
@@ -2861,7 +2861,7 @@ mod tests {
         assert!(
             matches!(
                 err.downcast_ref::<ProviderBlockError>(),
-                Some(ProviderBlockError::Mismatch { actual: None, .. })
+                Some(ProviderBlockError::Missing { .. })
             ),
             "{err:#}"
         );
@@ -2879,10 +2879,7 @@ mod tests {
         assert!(
             matches!(
                 err.downcast_ref::<ProviderBlockError>(),
-                Some(ProviderBlockError::Mismatch {
-                    actual: Some(_),
-                    ..
-                })
+                Some(ProviderBlockError::Mismatch { .. })
             ),
             "{err:#}"
         );
@@ -2919,7 +2916,7 @@ mod tests {
                     (method, _) => json!({
                         "jsonrpc": "2.0",
                         "id": id,
-                        "error": { "code": -32000, "message": format!("{method:?} unavailable") },
+                        "error": { "code": -32000, "message": format!("internal error serving {method:?}") },
                     }),
                 };
                 warp::reply::json(&reply)
@@ -2972,7 +2969,7 @@ mod tests {
         assert!(
             matches!(
                 err.downcast_ref::<ProviderBlockError>(),
-                Some(ProviderBlockError::Mismatch { actual: None, .. })
+                Some(ProviderBlockError::Missing { .. })
             ),
             "{err:#}"
         );

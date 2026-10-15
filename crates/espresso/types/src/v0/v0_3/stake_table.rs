@@ -527,13 +527,15 @@ pub enum StakeTableError {
 /// provider catches up.
 #[derive(Debug, Error)]
 pub enum ProviderBlockError {
-    #[error("L1 provider block {number} has hash {actual:?}, expected {expected}")]
+    #[error("L1 provider does not have block {number}")]
+    Missing { number: u64 },
+    #[error("L1 provider block {number} has hash {actual}, expected {expected}")]
     Mismatch {
         number: u64,
         expected: B256,
-        actual: Option<B256>,
+        actual: B256,
     },
-    #[error("Failed to fetch L1 block {number}: {source}")]
+    #[error("Failed to fetch L1 block {number}")]
     Fetch {
         number: u64,
         #[source]
