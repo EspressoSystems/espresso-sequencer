@@ -233,9 +233,19 @@ pub struct PublicNetworkConfig {
     transaction_size: usize,
     key_type_name: String,
     config: PublicHotShotConfig,
+    /// Served for peers running a release before this one, which refuse to start without a
+    /// libp2p section in the config they fetch; they never read its bootstrap nodes.
+    #[serde(default, skip_deserializing)]
+    libp2p_config: LegacyLibp2pConfig,
     commit_sha: String,
     builder: BuilderType,
     random_builder: Option<RandomBuilderConfig>,
+}
+
+/// Always `{"bootstrap_nodes": []}` on the wire.
+#[derive(Clone, Debug, Default, Serialize)]
+struct LegacyLibp2pConfig {
+    bootstrap_nodes: Vec<()>,
 }
 
 impl From<NetworkConfig<SeqTypes>> for PublicNetworkConfig {
@@ -255,6 +265,7 @@ impl From<NetworkConfig<SeqTypes>> for PublicNetworkConfig {
             transaction_size: cfg.transaction_size,
             key_type_name: cfg.key_type_name,
             config: cfg.config.into(),
+            libp2p_config: LegacyLibp2pConfig::default(),
             commit_sha: cfg.commit_sha,
             builder: cfg.builder,
             random_builder: cfg.random_builder,
@@ -332,8 +343,10 @@ mod tests {
             commit_sha: _,
             indexed_da: _,
             builder: _,
-            // Dropped: orchestrator run parameters, the masked password, a Rust type name, and
-            // the timings and bootstrap count repeated here with stale values.
+            // Dropped: orchestrator run parameters, the masked password, a Rust type name, the
+            // timings and bootstrap count repeated here with stale values, and the empty libp2p
+            // section served only to older peers.
+            libp2p_config: _,
             rounds: _,
             transactions_per_round: _,
             transaction_size: _,
@@ -348,6 +361,24 @@ mod tests {
             builder_timeout: _,
             data_request_delay: _,
         } = PublicNetworkConfig::from(NetworkConfig::<SeqTypes>::default());
+    }
+
+    /// A node from a release before this one fetches its config from peers and fails to start
+    /// unless the JSON carries a libp2p section, so the key is served with no bootstrap nodes.
+    #[test]
+    fn serves_an_empty_libp2p_section_for_older_peers() {
+        let config = PublicNetworkConfig::from(NetworkConfig::<SeqTypes>::default());
+        let json = serde_json::to_value(&config).unwrap();
+        assert_eq!(
+            json["libp2p_config"],
+            serde_json::json!({ "bootstrap_nodes": [] })
+        );
+        // Incoming values, including the non-empty lists older peers serve, are ignored.
+        let mut with_peers = json.clone();
+        with_peers["libp2p_config"] =
+            serde_json::json!({ "bootstrap_nodes": [["12D3KooW", "/ip4/10.0.0.1/tcp/1769"]] });
+        let parsed: PublicNetworkConfig = serde_json::from_value(with_peers).unwrap();
+        assert!(parsed.libp2p_config.bootstrap_nodes.is_empty());
     }
 
     #[test]
