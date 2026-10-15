@@ -35,7 +35,7 @@ use versions::{DRB_AND_HEADER_UPGRADE_VERSION, EPOCH_REWARD_VERSION, EPOCH_VERSI
 use crate::{
     NodeState, SeqTypes,
     api::{RewardMerkleTreeDataSource, RewardMerkleTreeV2Data},
-    catchup::{CatchupStorage, ParallelStateCatchup, SqlStateCatchup},
+    catchup::{CatchupStorage, ParallelStateCatchup, SingleAttemptCatchup, SqlStateCatchup},
     persistence::ChainConfigPersistence,
 };
 
@@ -827,8 +827,10 @@ async fn apply_leaf<T>(
     // header, the local catchup reads the snapshot by the roots in the parent state. What the
     // snapshot lacks comes from the node's catchup, which asks peers: a loop that started from a
     // boundary snapshot holds only the fee accounts it has touched since. Reward accounts do not
-    // use this catchup; `apply_header` reads them through the node's catchup. Retries are off
-    // because the loop below retries.
+    // use this catchup; `apply_header` reads them through the node's catchup. Each request is sent
+    // once, because the loop below retries: peers never answer a request for a height they have
+    // pruned, and the next try then starts from this database again. Each try passes its number
+    // on, so that peers get longer to answer, as they would on retries of the request itself.
     let local: Arc<dyn StateCatchup> = Arc::new(SqlStateCatchup::new(
         storage.clone(),
         BackoffParams::disabled(),
@@ -837,7 +839,7 @@ async fn apply_leaf<T>(
         &[local, instance.state_catchup.clone()],
         LOCAL_CATCHUP_TIMEOUT,
     );
-    loop {
+    for retry in 0.. {
         tracing::debug!(
             height = leaf.height(),
             node_id = instance.node_id,
@@ -848,7 +850,7 @@ async fn apply_leaf<T>(
             parent_state,
             storage,
             instance,
-            &catchup,
+            &SingleAttemptCatchup::new(catchup.clone(), retry),
             parent_leaf,
             &leaf,
         )
