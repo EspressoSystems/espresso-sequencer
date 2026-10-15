@@ -173,6 +173,8 @@ async fn test_timeout_certificate_does_not_lower_the_epoch() {
 /// it. The view still advances: that is what the certificate attests to.
 #[tokio::test]
 async fn test_unbound_timeout_certificate_does_not_move_the_epoch() {
+    // Tests behaviour before 0.7.
+    crate::helpers::pin_test_version(versions::NEW_PROTOCOL_VERSION);
     let mut harness = ConsensusHarness::new(0).await;
     let test_data = TestData::new(2).await;
     let timed_out = &test_data.views[1];
@@ -1740,6 +1742,8 @@ async fn test_timeout_proposal_chains_from_lock_not_timed_out_cert1() {
 /// that branch skipped.
 #[tokio::test]
 async fn test_node_votes_once_in_a_view_it_has_left() {
+    // Tests behaviour before 0.7.
+    crate::helpers::pin_test_version(versions::NEW_PROTOCOL_VERSION);
     let test_data = TestData::new(2).await;
     let view = &test_data.views[0];
     let node_index = 0;
@@ -2173,6 +2177,8 @@ async fn test_no_revote2_for_restart_barred_views() {
 /// the Cert2 can never form — while not re-recording the Vote action.
 #[tokio::test]
 async fn test_revote2_after_restart_without_cert2() {
+    // Tests behaviour before 0.7.
+    crate::helpers::pin_test_version(versions::NEW_PROTOCOL_VERSION);
     let test_data = TestData::new(4).await;
     let anchor = &test_data.views[1];
     let voted = &test_data.views[2];
@@ -2632,6 +2638,8 @@ async fn test_advance_view_records_a_certificate_behind_the_view() {
 /// for view 3.
 #[tokio::test]
 async fn test_no_fork_votes_from_one_node() {
+    // Tests behaviour before 0.7.
+    crate::helpers::pin_test_version(versions::NEW_PROTOCOL_VERSION);
     let mut harness = ConsensusHarness::new(0).await;
     let test_data = TestData::new(6).await;
     let node_key = BLSPubKey::generated_from_seed_indexed([0; 32], 0).0;

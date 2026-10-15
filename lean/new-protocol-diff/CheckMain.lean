@@ -23,7 +23,9 @@ an unmodelled input excuses is reported and does not fail the trace, so a pass
 with an excuse does not mean `PromptUntil`. A trace in which a test set the node's
 view directly is checked against the signing rules of `NewProtocol.SafeHistory`
 only (`NewProtocolDiff.checkSafe_sound`), since its steps do not show the view it
-is in. The exit status is 1 if any trace breaks a rule or cannot be read.
+is in. The exit status is 1 if any trace breaks a rule or cannot be read, or if no
+trace is checked against any rule: a recorder that stopped writing, or a run in
+which every trace is out of scope, must not pass for one that conforms.
 -/
 
 open Lean NewProtocol NewProtocolDiff
@@ -186,4 +188,7 @@ public def main (args : List String) : IO UInt32 := do
   IO.println s!"checked {traces.size} traces: {passed} obey every rule and discharge \
     what they owe within {δ} ms, {signingOnly} every signing rule, {skipped} out of scope; \
     {excused} of those passing were late where an unmodelled input excuses it"
+  if passed + signingOnly == 0 then
+    IO.println "no trace was checked against any rule"
+    failed := true
   return if failed then 1 else 0
