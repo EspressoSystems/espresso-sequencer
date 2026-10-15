@@ -640,6 +640,23 @@ def test_failed_fault_is_not_applied_and_retried_next_tick():
     assert retry["actions"] == [fault]
 
 
+def test_failed_wipe_keeps_the_node_faulted_and_wipes_again_next_tick():
+    topo = topo_of()
+    cfg = ch.ChaosConfig(kinds=("wipe",))
+    state = init(cfg, topo)
+    first = step(state, observe(topo), 60.0, cfg, topo)
+    ((action,),) = [first["actions"]]
+    node = action["node"]
+    undone = ch.revert_failed(state, first, {node})
+    assert undone["state"]["fault_retry"] == {node: ("wipe", 60.0)}
+    assert undone["state"]["faults"] == 1
+    retry = step(undone["state"], observe(topo), 65.0, cfg, topo)
+    assert retry["actions"] == [action]
+    assert retry["state"]["nodes"][node]["health"] == "recovering"
+    assert retry["state"]["nodes"][node]["since"] == 60.0
+    assert retry["state"]["fault_retry"] == {}
+
+
 def test_failed_start_keeps_the_node_down_until_a_start_works():
     topo = topo_of()
     state = with_health(init(topo=topo), node5="down", node6="recovering")
