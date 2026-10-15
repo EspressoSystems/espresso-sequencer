@@ -747,6 +747,8 @@ impl From<PublicNetworkConfig> for proto::HotshotConfigResponse {
                 BuilderType::Random => proto::BuilderType::Random,
             }
             .into(),
+            // The deprecated CDN and libp2p fields stay at their empty defaults.
+            ..Default::default()
         }
     }
 }

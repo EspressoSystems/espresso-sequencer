@@ -9829,6 +9829,7 @@ mod test {
                     },
                 }
                 .into(),
+                ..Default::default()
             }
         );
         // The comparison above builds its expected value with the same `From<PeerConfig>` the

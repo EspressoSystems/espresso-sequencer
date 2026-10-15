@@ -2266,6 +2266,8 @@ impl From<crate::options::PublicNodeConfig> for proto::RuntimeConfigResponse {
                 poll_interval_ms: follower.poll_interval.as_millis() as u64,
                 max_blocks_per_poll: follower.max_blocks_per_poll,
             }),
+            // The deprecated CDN and libp2p fields stay at their empty defaults.
+            ..Default::default()
         }
     }
 }
@@ -5941,6 +5943,7 @@ mod tests {
                     explorer: false,
                     light_client: false,
                 }),
+                ..Default::default()
             }
         );
         // IPv6 because that is the only case where NetAddr's Display and its serde impl
