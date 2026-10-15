@@ -1352,7 +1352,7 @@ impl Fetcher {
 
         tracing::info!(%to_block, from_block = ?from_block, "Fetching events from contract");
 
-        self.ensure_provider_holds(finalized).await?;
+        self.ensure_provider_has_block(finalized).await?;
         let contract_events = Self::fetch_events_from_contract(
             self.l1_client.clone(),
             contract,
@@ -1361,7 +1361,7 @@ impl Fetcher {
         )
         .await?;
         // A failover inside the scan can land on a provider that does not hold `finalized`.
-        self.ensure_provider_holds(finalized).await?;
+        self.ensure_provider_has_block(finalized).await?;
 
         // Store only the new events fetched from L1 contract
         tracing::info!(
@@ -1413,7 +1413,10 @@ impl Fetcher {
     /// A provider past that height on another branch returns different logs and no error. The
     /// hash commits to every ancestor, so one match covers the whole scanned range.
     #[cfg(feature = "node")]
-    async fn ensure_provider_holds(&self, finalized: L1BlockInfo) -> Result<(), StakeTableError> {
+    async fn ensure_provider_has_block(
+        &self,
+        finalized: L1BlockInfo,
+    ) -> Result<(), StakeTableError> {
         let provider = self.l1_client.provider.clone();
         let actual = retry(
             self.l1_client.options().l1_retry_delay,
