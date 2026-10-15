@@ -2290,7 +2290,8 @@ def test_a_payload_comes_from_the_next_query_node_on_404_or_refusal():
     assert netbench.block_payload(pool, urls, 10) == b""
     assert netbench.block_payload(pool, urls, 10_000) is None
     cluster.kill("node1")
-    assert netbench.block_payload(pool, urls, 10) is None
+    with pytest.raises(netbench.NoAnswer):
+        netbench.block_payload(pool, urls, 10)
 
 
 def test_scan_block_finds_ids_on_the_second_query_node():

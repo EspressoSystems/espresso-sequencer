@@ -674,7 +674,7 @@ class FakeCluster:
         parts = urlsplit(url)
         m = self.members[parts.netloc]
         if not m.running:
-            raise OSError(f"{method} {url}: connection refused")
+            raise ConnectionRefusedError(f"{method} {url}: connection refused")
         with self.lock:
             if method == "POST" and parts.path == "/v1/submit/submit":
                 assert body is not None
