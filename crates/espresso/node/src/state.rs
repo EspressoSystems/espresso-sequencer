@@ -532,6 +532,10 @@ where
     let Some(epoch_height) = instance.epoch_height.filter(|height| *height > 0) else {
         return Ok(None);
     };
+    // Each request is sent once, because this loop retries: peers never answer a request for a
+    // boundary they have pruned, and the next try then picks the boundary again from the tip. Each
+    // try passes its number on, so that peers get longer to answer.
+    let mut retry = 0;
     let (leaf, state) = loop {
         let tip = local_tip_above(&**storage, pruned).await;
         let boundary = tip - tip % epoch_height;
@@ -542,15 +546,19 @@ where
         if leaf.block_header().version() < EPOCH_REWARD_VERSION {
             return Ok(None);
         }
-        match fetch_boundary_state(instance, &leaf).await {
+        let catchup = SingleAttemptCatchup::new(instance.state_catchup.clone(), retry);
+        match fetch_boundary_state(&catchup, instance, &leaf).await {
             Ok(state) => break (leaf, state),
             // Peers may not have reached the boundary yet, or, if the local tip is stale, may
-            // have garbage collected its reward tree. Try again from wherever the tip is then.
+            // have pruned its frontier or garbage collected its reward tree. Try again from
+            // wherever the tip is then.
             Err(err) => {
                 tracing::warn!(
                     boundary,
+                    retry,
                     "fetching the state at the epoch boundary failed, retrying: {err:#}"
                 );
+                retry += 1;
                 sleep(BOUNDARY_RETRY_INTERVAL).await;
             },
         }
@@ -584,16 +592,16 @@ where
     }
 }
 
-/// The state at the epoch boundary `leaf`, from peers: the block frontier and the whole reward
+/// The state at the epoch boundary `leaf`, from `catchup`: the block frontier and the whole reward
 /// tree, each checked against its root in the boundary header.
 async fn fetch_boundary_state(
+    catchup: &impl StateCatchup,
     instance: &NodeState,
     leaf: &Leaf2,
 ) -> anyhow::Result<ValidatedState> {
     let header = leaf.block_header();
     let mut state = ValidatedState::from_header(header);
-    instance
-        .state_catchup
+    catchup
         .remember_blocks_merkle_tree(
             instance,
             leaf.height(),
@@ -606,8 +614,7 @@ async fn fetch_boundary_state(
         .reward_merkle_tree_root()
         .right()
         .context("V5+ header must have a v2 reward root")?;
-    state.reward_merkle_tree_v2 = instance
-        .state_catchup
+    state.reward_merkle_tree_v2 = catchup
         .fetch_reward_merkle_tree_v2(
             leaf.height(),
             leaf.view_number(),
