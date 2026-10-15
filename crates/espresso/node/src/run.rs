@@ -119,6 +119,16 @@ pub async fn main(migrated_envs: Vec<(&str, &str)>) -> anyhow::Result<()> {
     log_cpu_probe(genesis.drb_difficulty.max(genesis.drb_upgrade_difficulty)).await;
 
     tracing::warn!(?modules, "sequencer starting up");
+    if modules
+        .query
+        .as_ref()
+        .is_some_and(|query| query.peers.is_empty())
+    {
+        tracing::error!(
+            "module query fetches missing data from its peers but none are set: set --peers \
+             (ESPRESSO_NODE_API_PEERS)"
+        );
+    }
 
     let public_node_config = PublicNodeConfig::new(&opt, &modules, &genesis);
 
