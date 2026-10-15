@@ -171,7 +171,16 @@ async fn store_state_update(
     .await
     .context("failed to store fee merkle nodes")?;
 
-    // Insert block merkle tree nodes
+    store_block_frontier(tx, block_number, block_merkle_tree).await
+}
+
+/// Store the frontier of `block_merkle_tree`, the block tree at `block_number`, as that snapshot's
+/// block tree nodes.
+async fn store_block_frontier(
+    tx: &mut impl SequencerStateUpdate,
+    block_number: u64,
+    block_merkle_tree: &BlockMerkleTree,
+) -> anyhow::Result<()> {
     let (_, proof) = block_merkle_tree
         .lookup(block_number - 1)
         .expect_ok()
@@ -181,19 +190,15 @@ async fn store_state_update(
         block_merkle_tree.height(),
     );
 
-    {
-        tracing::debug!("inserting blocks frontier");
-        UpdateStateData::<SeqTypes, BlockMerkleTree, { BlockMerkleTree::ARITY }>::insert_merkle_nodes(
-            tx,
-            proof,
-            path,
-            block_number,
-        )
-        .await
-        .context("failed to store block merkle nodes")?;
-    }
-
-    Ok(())
+    tracing::debug!("inserting blocks frontier");
+    UpdateStateData::<SeqTypes, BlockMerkleTree, { BlockMerkleTree::ARITY }>::insert_merkle_nodes(
+        tx,
+        proof,
+        path,
+        block_number,
+    )
+    .await
+    .context("failed to store block merkle nodes")
 }
 
 #[tracing::instrument(
