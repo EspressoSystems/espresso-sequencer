@@ -1519,6 +1519,19 @@ def test_a_rejoin_needs_a_height_above_the_first_answers_after_the_restart():
     assert len([e for e in done["events"] if e["event"] == "rejoined"]) == 10
 
 
+def test_a_mass_restart_rejoins_after_its_started_event():
+    topo = topo_of()
+    _, issued = mass_issued(topo)
+    started = ch.restarted_events(issued, 40.0)
+    state = ch.with_started(issued["state"], started)
+    for now, tip in ((45.0, 105), (50.0, 106), (55.0, 106)):
+        out = step(state, observe(topo, tip=tip), now, MASS, topo)
+        state = out["state"]
+    rejoined = [e for e in out["events"] if e["event"] == "rejoined"]
+    assert len(rejoined) == 10
+    assert {e["after_s"] for e in rejoined} == {10.0}
+
+
 def test_a_lone_node_up_does_not_rejoin():
     topo = topo_of()
     _, issued = mass_issued(topo)

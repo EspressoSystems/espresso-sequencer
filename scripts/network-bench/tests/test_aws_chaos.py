@@ -637,6 +637,7 @@ class FlakyRunner(ClusterRunner):
     kills = 0
     truncated = 0
     stakes = 0
+    restart_s = 0.0
 
     def default(self, argv: list[str]) -> Any:
         command = argv[-1] if argv[0] == "ssh" else ""
@@ -649,6 +650,8 @@ class FlakyRunner(ClusterRunner):
         if self.stakes and "/v1/config/hotshot" in command:
             self.stakes -= 1
             return completed(stdout="node0 \n")
+        if "docker restart" in command:
+            self.cluster.clock.advance(self.restart_s)
         if self.restarts and "docker restart" in command:
             self.restarts -= 1
             return completed(returncode=awsb.SSH_FAILED_RC, stderr="Connection reset")
@@ -809,6 +812,7 @@ def test_a_partly_failed_mass_restart_records_started_and_retries(isolated: Path
         isolated, restarts=1, kinds=("mass-restart",)
     )
     cluster.start("node4")
+    ctrl.remote.run.restart_s = 30.0
     ctrl.state = ch.chaos_init(
         ctrl.chaos, list(ctrl.topo["nodes"]), equal(ctrl), clock.time(), 0.0, 3600.0
     )
@@ -819,6 +823,9 @@ def test_a_partly_failed_mass_restart_records_started_and_retries(isolated: Path
     assert [e["event"] for e in events].count("started") == 6
     assert len(ctrl.state["fault_retry"]) == 1
     (retry,) = ctrl.state["fault_retry"]
+    started = {e["ts"] for e in events if e["event"] == "started"}
+    nodes = ctrl.state["nodes"]
+    assert {s["started"] for n, s in nodes.items() if n != retry} == started
     assert retry in ctrl.expected_down()
     clock.sleep(awsb.AGENT_POLL_S)
     ctrl.tick(LOADING)

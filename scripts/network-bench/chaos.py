@@ -159,8 +159,8 @@ OPEN: tuple[NodeHealth, ...] = ("down", "recovering", "catching_up")
 
 
 class NodeState(TypedDict):
-    """`since` is the fault time: timeouts measure from it. `started` is the fault time, or the
-    start of a killed node: recoveries measure from it. `up_at` is the first tick the node
+    """`since` is the fault time: timeouts measure from it. `started` is the fault time, the
+    start of a killed node or the end of a mass restart: recoveries measure from it. `up_at` is the first tick the node
     answered after it. `streak_at` is the first tick of the passing streak. `last_missing` is
     the last `Missing` answered since the fault."""
 
@@ -505,6 +505,15 @@ def restarted_events(step: ChaosStep, ts: float) -> list[ChaosEvent]:
         for e in step["events"]
         if e["event"] == "fault" and e["kind"] == MASS_RESTART
     ]
+
+
+def with_started(state: ChaosState, started: Iterable[ChaosEvent]) -> ChaosState:
+    """`state` with the recoveries of the nodes of `started` (see `restarted_events`)
+    measured from the time of their event."""
+    nodes = {name: s.copy() for name, s in state["nodes"].items()}
+    for e in started:
+        nodes[e["node"]]["started"] = e["ts"]
+    return {**state, "nodes": nodes}
 
 
 def _op(kind: ChaosKind) -> Literal["restart", "kill", "wipe"]:

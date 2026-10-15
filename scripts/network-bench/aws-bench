@@ -6427,6 +6427,7 @@ class ChaosRunner:
                     s["last_missing"],
                 )
         restarted = ch.restarted_events(step, self.clock.time() + self.offset)
+        self.state = ch.with_started(self.state, restarted)
         self._record([*step["events"], *restarted])
         if failed:
             self._failed(

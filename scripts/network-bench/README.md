@@ -309,10 +309,10 @@ just bench aws run --tag chaos-dense --chaos --nodes 32 --query-nodes 3 --chaos-
   them as failures.
 - Output: `chaos.jsonl` (`fault`, `started`, `rejoined`, `caught_up`, `timeout`, `restored`, `interrupted`; `ts` on
   ctl's clock; a mass restart writes one `fault` event per node with kind `mass-restart`; `query` when the node serves
-  the query API; `after_s` from the fault, from `started` for a kill; `caught_up` carries `missing` as [blocks, leaves,
-  vid_common]; a query node's `timeout` carries `missing` when sync-status answered since the fault), a chaos report
-  leading `summary.md` (see [Chaos report](#chaos-report)), `chaos:` lines in `driver.log` (a timeout line lists the
-  last `missing` counts). Faulted nodes are exempt from the per-node scrape coverage and decided-blocks rules.
+  the query API; `after_s` from the fault, from `started` for a kill or mass restart; `caught_up` carries `missing` as
+  [blocks, leaves, vid_common]; a query node's `timeout` carries `missing` when sync-status answered since the fault), a
+  chaos report leading `summary.md` (see [Chaos report](#chaos-report)), `chaos:` lines in `driver.log` (a timeout line
+  lists the last `missing` counts). Faulted nodes are exempt from the per-node scrape coverage and decided-blocks rules.
 - Cost: about $4.4/h for the default fleet, about 40 min per single shot. `render` recomputes the chaos report offline,
   also for a run that failed.
 - `c8g.large` has 4 GiB; a chaos run peaked at 2.2 GiB used on node0 (`MemAvailable` in `hosts/<node>/host.jsonl`).
