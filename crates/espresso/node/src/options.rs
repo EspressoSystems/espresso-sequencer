@@ -619,6 +619,17 @@ impl ModuleArgs {
         if modules.follower.is_some() {
             validate_follower_modules(&modules)?;
         }
+        if modules
+            .query
+            .as_ref()
+            .is_some_and(|query| query.peers.is_empty())
+        {
+            return Err(clap::Error::raw(
+                ErrorKind::MissingRequiredArgument,
+                "module query fetches missing data from its peers: set --peers \
+                 (ESPRESSO_NODE_API_PEERS)",
+            ));
+        }
 
         Ok(modules)
     }
@@ -1596,6 +1607,8 @@ pub(crate) mod tests {
             "24000",
             "--",
             "query",
+            "--peers",
+            "http://peer.example:24000",
             "--",
             "config",
         ]);
