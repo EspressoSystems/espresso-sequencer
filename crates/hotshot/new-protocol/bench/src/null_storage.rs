@@ -13,8 +13,8 @@ use hotshot_example_types::storage_types::TestStorage;
 use hotshot_new_protocol::{message::Certificate1, storage::NewProtocolStorage};
 use hotshot_types::{
     data::{
-        DaProposal, DaProposal2, EpochNumber, Leaf2, QuorumProposal, QuorumProposal2, VidCommitment,
-        VidDisperseShare, ViewNumber,
+        DaProposal, DaProposal2, EpochNumber, Leaf2, QuorumProposal, QuorumProposal2,
+        VidCommitment, VidDisperseShare, ViewNumber,
     },
     drb::{DrbInput, DrbResult},
     event::HotShotAction,
