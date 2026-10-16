@@ -47,8 +47,8 @@
 //! all the same.
 
 use std::{
-    cell::Cell,
-    collections::BTreeMap,
+    cell::{Cell, RefCell},
+    collections::{BTreeMap, HashMap},
     fs::create_dir_all,
     path::PathBuf,
     sync::atomic::{AtomicUsize, Ordering},
@@ -150,6 +150,10 @@ pub struct Recorder {
     /// A certificate for the anchor to name when the run gives none, as
     /// [`Recorder::fallback_anchor`] was told.
     fallback_anchor: Option<String>,
+    /// The timeout evidence of each proposal the run had, by its identity.
+    ///
+    /// A decided leaf no longer carries it, and the model's decided block does.
+    evidence: RefCell<HashMap<String, String>>,
     /// When the recorder was made, which step times count from.
     started: Instant,
 }
@@ -181,6 +185,7 @@ impl Recorder {
             anchor_lock: None,
             unsigned_locks: Cell::new(false),
             fallback_anchor: None,
+            evidence: RefCell::new(HashMap::new()),
             started: Instant::now(),
         };
         let Ok(dir) = std::env::var(TRACE_DIR) else {
@@ -206,6 +211,7 @@ impl Recorder {
             anchor_lock: None,
             unsigned_locks: Cell::new(false),
             fallback_anchor: None,
+            evidence: RefCell::new(HashMap::new()),
             started: Instant::now(),
         }
     }
@@ -861,7 +867,7 @@ impl Recorder {
                 let cert2 = cert2.as_ref()?;
                 let blocks: Vec<String> = leaves
                     .iter()
-                    .map(|l| leaf_json(l, self.epoch_height))
+                    .map(|l| leaf_json(l, self.epoch_height, &self.evidence.borrow()))
                     .collect();
                 return Some(tagged(
                     "decided",
@@ -884,22 +890,21 @@ impl Recorder {
 
     /// A proposal we sent or received.
     fn proposal_json<T: NodeType>(&self, proposal: &Proposal<T>) -> String {
+        let identity = ident(&crate::helpers::proposal_commitment(proposal));
+        let evidence = match &proposal.view_change_evidence {
+            Some(tc) => self.timeout_cert_json(tc),
+            None => "null".to_string(),
+        };
+        self.evidence
+            .borrow_mut()
+            .insert(identity.clone(), evidence.clone());
         obj(&[
             ("blockHeader", header_json::<T>(&proposal.block_header)),
             ("viewNumber", view_json(proposal.view_number)),
             ("epoch", proposal.epoch.to_string()),
             ("parentCert", cert1_json_raw(&proposal.justify_qc)),
-            (
-                "timeoutEvidence",
-                match &proposal.view_change_evidence {
-                    Some(tc) => self.timeout_cert_json(tc),
-                    None => "null".to_string(),
-                },
-            ),
-            (
-                "identity",
-                ident(&crate::helpers::proposal_commitment(proposal)),
-            ),
+            ("timeoutEvidence", evidence),
+            ("identity", identity),
         ])
     }
 
@@ -1044,9 +1049,19 @@ fn header_json<T: NodeType>(header: &T::BlockHeader) -> String {
 
 /// A decided leaf, as the model's `Block`.
 ///
-/// Only the view numbers are compared, so the remaining fields are filled as
-/// faithfully as a leaf allows and no further.
-fn leaf_json<T: NodeType>(leaf: &Leaf2<T>, epoch_height: u64) -> String {
+/// The model compares a decided block with the proposal the node holds, field by
+/// field. A leaf does not carry the proposal's timeout evidence, so it is taken
+/// from the proposal of the same identity the run had, as `evidence` maps them.
+fn leaf_json<T: NodeType>(
+    leaf: &Leaf2<T>,
+    epoch_height: u64,
+    evidence: &HashMap<String, String>,
+) -> String {
+    let identity = ident(&leaf.commit());
+    let timeout_evidence = evidence
+        .get(&identity)
+        .cloned()
+        .unwrap_or_else(|| "null".to_string());
     obj(&[
         ("blockHeader", header_json::<T>(leaf.block_header())),
         ("viewNumber", view_json(leaf.view_number())),
@@ -1056,8 +1071,8 @@ fn leaf_json<T: NodeType>(leaf: &Leaf2<T>, epoch_height: u64) -> String {
                 .map_or_else(|| "0".to_string(), |e| e.to_string()),
         ),
         ("parentCert", cert1_json_raw(leaf.justify_qc())),
-        ("timeoutEvidence", "null".to_string()),
-        ("identity", ident(&leaf.commit())),
+        ("timeoutEvidence", timeout_evidence),
+        ("identity", identity),
     ])
 }
 

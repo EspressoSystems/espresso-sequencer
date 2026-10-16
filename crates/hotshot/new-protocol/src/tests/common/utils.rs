@@ -1094,7 +1094,9 @@ pub fn state_verified_input(
     })
 }
 
-fn extract_vid_shares(disperse: &VidDisperse2<TestTypes>) -> Vec<VidDisperseShare2<TestTypes>> {
+pub(crate) fn extract_vid_shares(
+    disperse: &VidDisperse2<TestTypes>,
+) -> Vec<VidDisperseShare2<TestTypes>> {
     disperse
         .shares
         .iter()
@@ -1358,6 +1360,13 @@ impl ConsensusHarness {
             self.trace.held(proposal);
         }
         self.consensus.seed_proposals(proposals);
+    }
+
+    /// Record the run under `label` instead of the test's name, for a test that
+    /// replays several runs.
+    pub fn record_as(mut self, label: &str) -> Self {
+        self.trace = trace::Recorder::new(label);
+        self
     }
 
     /// Withhold `view`'s state-validation response until [`Self::release_state`].

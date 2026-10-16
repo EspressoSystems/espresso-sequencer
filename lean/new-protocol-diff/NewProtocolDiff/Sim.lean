@@ -81,6 +81,13 @@ structure Params where
 
   /-- The height the decided chain must reach. -/
   minHeight : Nat := 3
+
+  /--
+  Every epoch has the same committee, nodes `1` to `size` in order, as the test
+  membership of the Rust node has. Otherwise each epoch's committee starts one node
+  later.
+  -/
+  staticCommittee : Bool := false
 deriving Repr
 
 namespace Params
@@ -88,7 +95,8 @@ namespace Params
 variable (P : Params)
 
 def members (e : EpochNumber) : List PubKey :=
-  (List.range P.size).map fun i => ⟨(e.toNat + i) % P.nodes + 1⟩
+  (List.range P.size).map fun i =>
+    if P.staticCommittee then ⟨i + 1⟩ else ⟨(e.toNat + i) % P.nodes + 1⟩
 
 def isMember (e : EpochNumber) (k : PubKey) : Bool := (P.members e).contains k
 
@@ -153,6 +161,8 @@ structure State where
   seq : Nat := 0
   queue : List Event := []
   hist : Array History
+  /-- The inputs each node took, latest first, with the time and whether it was its timer. -/
+  log : Array (List (Nat × Bool × Input))
   ids : List (Proposal × Nat) := []
   nextId : Nat := 2
   nextPayload : Nat := 1
@@ -299,6 +309,7 @@ def stepNode (now : Nat) (k : PubKey) (i : Input) (timer : Bool) : SimM Unit := 
   let h := (← get).hist[k.toNat - 1]!
   let v0 := viewOf P.cfg h
   if timer && i != .timeout v0 then return
+  modify fun s => { s with log := s.log.modify (k.toNat - 1) ((now, timer, i) :: ·) }
   let st := step P.cfg P.leader k h i
   let h' := h ++ [st]
   modify fun s => { s with hist := s.hist.set! (k.toNat - 1) h' }
@@ -329,7 +340,7 @@ def loop : Nat → SimM Unit
 
 /-- The state at the end of a run. -/
 def run : State :=
-  ((start P *> loop P 1000000).run { rng := P.seed, hist := Array.replicate P.nodes [] }).2
+  ((start P *> loop P 1000000).run { rng := P.seed, hist := Array.replicate P.nodes [], log := Array.replicate P.nodes [] }).2
 
 /-- What a run found. -/
 structure Outcome where
