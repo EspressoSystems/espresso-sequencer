@@ -1987,6 +1987,9 @@ impl<T: NodeType> Consensus<T> {
             warn!("locked certificate is newer than epoch change certificate1");
             return Protocol::Continue;
         }
+        // Taken in on the certificates' word like a fetched proposal, and this
+        // node may hold no share of it.
+        outbox.push_back(ConsensusOutput::ProposalCertified(proposal.clone()));
 
         let curr_view = self.current_view;
         let next_view = boundary_view + 1;
