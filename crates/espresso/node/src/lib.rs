@@ -649,7 +649,11 @@ where
         metrics,
     );
     state_catchup_providers.add_provider(Arc::new(state_peers));
-    match persistence.clone().into_catchup_provider(catchup.backoff) {
+    // Local is a single attempt per call; remote providers retry.
+    match persistence
+        .clone()
+        .into_catchup_provider(BackoffParams::disabled())
+    {
         Ok(provider) => {
             state_catchup_providers.add_provider(Arc::new(provider));
         },
@@ -1526,9 +1530,10 @@ pub mod testing {
             }
 
             // If we have a working local catchup provider, add it
+            // Local is a single attempt per call; remote providers retry.
             match persistence
                 .clone()
-                .into_catchup_provider(BackoffParams::default())
+                .into_catchup_provider(BackoffParams::disabled())
             {
                 Ok(local_catchup) => {
                     catchup_providers.add_provider(local_catchup);
