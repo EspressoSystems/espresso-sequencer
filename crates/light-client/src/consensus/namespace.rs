@@ -1,6 +1,8 @@
+use std::borrow::Cow;
+
 use anyhow::{Context, Result, bail, ensure};
 use espresso_types::{Header, NamespaceId, NsProof, Transaction};
-use hotshot_types::data::VidCommon;
+use hotshot_types::{data::VidCommon, vid::avidm::init_avidm_param};
 use serde::{Deserialize, Serialize};
 
 /// Information required to verify a payload.
@@ -36,7 +38,17 @@ impl NamespaceProof {
     ///
     /// If the data in this proof matches the expected `header` and belongs to `namespace`, the list
     /// of transactions from the namespace is returned.
-    pub fn verify(&self, header: &Header, namespace: NamespaceId) -> Result<Vec<Transaction>> {
+    ///
+    /// `vid_total_weight` is the total VID weight consensus dispersed the block with, which
+    /// [`vid_total_weight_of_stakes`](hotshot_types::data::vid_disperse::vid_total_weight_of_stakes)
+    /// computes from the block's stake table. A bad-encoding proof is verified under the VID
+    /// parameter this weight fixes, not under the one the proof came with.
+    pub fn verify(
+        &self,
+        header: &Header,
+        namespace: NamespaceId,
+        vid_total_weight: usize,
+    ) -> Result<Vec<Transaction>> {
         let Some(proof) = &self.proof else {
             // A trivial proof is a claim that the requested namespace is not present in the
             // namespace table. We need to verify this claim.
@@ -49,13 +61,17 @@ impl NamespaceProof {
             return Ok(vec![]);
         };
 
+        // Nothing binds the V1 VID parameter to the commitment, and under a smaller recovery
+        // threshold than consensus used any honest share passes as a bad-encoding proof.
+        let common = match &proof.proof {
+            NsProof::V1IncorrectEncoding(_) => {
+                Cow::Owned(VidCommon::V1(init_avidm_param(vid_total_weight)?))
+            },
+            NsProof::V0(_) | NsProof::V1(_) | NsProof::V2(_) => Cow::Borrowed(&proof.common),
+        };
         let (txs, ns) = proof
             .proof
-            .verify(
-                header.ns_table(),
-                &header.payload_commitment(),
-                &proof.common,
-            )
+            .verify(header.ns_table(), &header.payload_commitment(), &common)
             .context("invalid namespace proof")?;
         ensure!(
             ns == namespace,
@@ -67,8 +83,13 @@ impl NamespaceProof {
 
 #[cfg(test)]
 mod test {
-    use espresso_types::{Leaf2, NodeState};
+    use espresso_types::{Leaf2, NodeState, NsIndex, v0_3::AvidMIncorrectEncodingNsProof};
     use hotshot_query_service_types::availability::TransactionIndex;
+    use hotshot_types::{
+        data::{VidCommitment, ns_table::parse_ns_table},
+        traits::block_contents::{EncodeBytes, GENESIS_VID_NUM_STORAGE_NODES},
+        vid::avidm::{AvidMScheme, init_avidm_param},
+    };
     use versions::FEE_VERSION;
 
     use super::*;
@@ -88,16 +109,19 @@ mod test {
                 position: 0,
             })
             .unwrap();
+        let vid_total_weight = client.vid_total_weight(1).await;
         let proof =
             NamespaceProof::new(NsProof::new(&payload, &0.into(), &common).unwrap(), common);
         assert_eq!(
-            proof.verify(leaf.header(), tx.namespace()).unwrap(),
+            proof
+                .verify(leaf.header(), tx.namespace(), vid_total_weight)
+                .unwrap(),
             vec![tx.clone()]
         );
 
         // Check that a trivial proof is not accepted for a non-trivial namespace.
         let err = NamespaceProof::not_present()
-            .verify(leaf.header(), tx.namespace())
+            .verify(leaf.header(), tx.namespace(), vid_total_weight)
             .unwrap_err();
         assert!(
             err.to_string()
@@ -113,7 +137,13 @@ mod test {
         let proof = NamespaceProof::not_present();
 
         assert_eq!(
-            proof.verify(leaf.block_header(), 0u64.into()).unwrap(),
+            proof
+                .verify(
+                    leaf.block_header(),
+                    0u64.into(),
+                    GENESIS_VID_NUM_STORAGE_NODES
+                )
+                .unwrap(),
             vec![]
         );
     }
@@ -137,11 +167,60 @@ mod test {
         );
 
         let leaf2 = client.leaf(2).await;
-        let err = proof.verify(leaf2.header(), tx.namespace()).unwrap_err();
+        let err = proof
+            .verify(
+                leaf2.header(),
+                tx.namespace(),
+                client.vid_total_weight(2).await,
+            )
+            .unwrap_err();
         assert!(
             err.to_string().contains("invalid namespace proof"),
             "{err:#}"
         );
+    }
+
+    /// Nothing binds the V1 VID parameter to the commitment, so a server can pick one with
+    /// `total_weights = 1` and turn any honest share into a bad-encoding proof for a namespace
+    /// that fits one erasure-coding chunk.
+    #[tokio::test]
+    #[test_log::test]
+    async fn test_namespace_proof_rejects_bad_encoding_proof_under_forged_param() {
+        let client = TestClient::default();
+        let height = 1;
+        let namespace = NamespaceId::from(1u32);
+        client
+            .add_block(height, vec![Transaction::new(namespace, vec![7; 20])])
+            .await;
+        let header = client.leaf(height).await.header().clone();
+        let bytes = client.payload(height).await.encode();
+        let VidCommon::V1(param) = client.vid_common(height as u64).await else {
+            panic!("test harness builds V1 blocks");
+        };
+        assert!(param.recovery_threshold > 1);
+
+        let weights = vec![1; param.total_weights];
+        let ns_table = parse_ns_table(bytes.len(), &header.ns_table().encode());
+        let (commit, shares) =
+            AvidMScheme::ns_disperse(&param, &weights, &bytes, ns_table).unwrap();
+        assert_eq!(VidCommitment::V1(commit), header.payload_commitment());
+
+        let forged = init_avidm_param(1).unwrap();
+        let proof = AvidMIncorrectEncodingNsProof::new(
+            &shares,
+            header.ns_table(),
+            &NsIndex::from(0),
+            &header.payload_commitment(),
+            &forged,
+        )
+        .unwrap();
+        let proof = NamespaceProof::new(NsProof::V1IncorrectEncoding(proof), VidCommon::V1(forged));
+
+        proof
+            .verify(&header, namespace, param.total_weights)
+            .unwrap_err();
+        // the weight is the only thing standing in the way
+        assert_eq!(proof.verify(&header, namespace, 1).unwrap(), vec![]);
     }
 
     #[tokio::test]
@@ -164,6 +243,7 @@ mod test {
             .verify(
                 leaf.header(),
                 NamespaceId::from(u64::from(tx.namespace()) + 1),
+                client.vid_total_weight(1).await,
             )
             .unwrap_err();
         assert!(

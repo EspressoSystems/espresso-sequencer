@@ -20,9 +20,14 @@ use hotshot_query_service_types::{
     availability::{BlockQueryData, LeafId, LeafQueryData, PayloadQueryData, VidCommonQueryData},
     node::BlockId,
 };
-use hotshot_types::{data::EpochNumber, stake_table::StakeTableEntry, utils::root_block_in_epoch};
+use hotshot_types::{
+    data::{EpochNumber, vid_disperse::vid_total_weight_of_stakes},
+    stake_table::StakeTableEntry,
+    utils::{epoch_from_block_number, root_block_in_epoch},
+};
 use serde::{Deserialize, Serialize};
 use vbs::version::{StaticVersionType, Version};
+use versions::EPOCH_VERSION;
 
 use crate::{
     client::Client,
@@ -791,7 +796,7 @@ where
             .server
             .namespace_proof(header.height(), namespace)
             .await?;
-        proof.verify(header, namespace)
+        proof.verify(header, namespace, self.vid_total_weight(header).await?)
     }
 
     /// Fetch and verify the transactions in the given namespace of blocks in the range
@@ -815,11 +820,12 @@ where
             headers.len(),
             proofs.len()
         );
-        proofs
-            .into_iter()
-            .zip(&headers)
-            .map(|(proof, header)| proof.verify(header, namespace))
-            .collect()
+        let mut namespaces = Vec::with_capacity(headers.len());
+        for (proof, header) in proofs.into_iter().zip(&headers) {
+            let vid_total_weight = self.vid_total_weight(header).await?;
+            namespaces.push(proof.verify(header, namespace, vid_total_weight)?);
+        }
+        Ok(namespaces)
     }
 
     /// Fetch and verify the transactions in the given namespaces of blocks in the range
@@ -846,16 +852,32 @@ where
             headers.len(),
             proofs.len()
         );
-        proofs
-            .into_iter()
-            .zip(&headers)
-            .map(|(proofs, header)| {
+        let mut blocks = Vec::with_capacity(headers.len());
+        for (proofs, header) in proofs.into_iter().zip(&headers) {
+            let vid_total_weight = self.vid_total_weight(header).await?;
+            blocks.push(
                 proofs
                     .into_iter()
-                    .map(|(namespace, proof)| Ok((namespace, proof.verify(header, namespace)?)))
-                    .collect()
-            })
-            .collect()
+                    .map(|(namespace, proof)| {
+                        Ok((
+                            namespace,
+                            proof.verify(header, namespace, vid_total_weight)?,
+                        ))
+                    })
+                    .collect::<Result<HashMap<_, _>>>()?,
+            );
+        }
+        Ok(blocks)
+    }
+
+    async fn vid_total_weight(&self, header: &Header) -> Result<usize> {
+        let epoch = (header.version() >= EPOCH_VERSION)
+            .then(|| EpochNumber::new(epoch_from_block_number(header.height(), self.epoch_height)));
+        let stake_table = match epoch {
+            Some(epoch) => self.quorum_for_epoch(epoch).await?,
+            None => Arc::clone(&self.genesis_stake_table),
+        };
+        Ok(vid_total_weight_of_stakes(stake_table.stakes(), epoch))
     }
 
     /// Fetch and verify the stake table for the requested epoch.
@@ -1143,16 +1165,37 @@ mod test {
         NsIndex, RegisteredValidatorMap, StakeTableState, ValidatorSet, v0_3::RegisteredValidator,
     };
     use hotshot_query_service_types::availability::TransactionIndex;
-    use hotshot_types::{addr::NetAddr, x25519};
+    use hotshot_types::{addr::NetAddr, data::VidCommon, vid::avidm::init_avidm_param, x25519};
     use itertools::izip;
     use pretty_assertions::assert_eq;
-    use versions::{DRB_AND_HEADER_UPGRADE_VERSION, EPOCH_VERSION, NEW_PROTOCOL_VERSION};
+    use versions::{DRB_AND_HEADER_UPGRADE_VERSION, NEW_PROTOCOL_VERSION};
 
     use super::*;
     use crate::{
+        consensus::payload::PayloadProof,
         storage::SqliteStorage,
         testing::{TestClient, leaf_chain, random_validator},
     };
+
+    /// The weight derived from the stake table must be the one consensus committed the block
+    /// with, or every honest bad-encoding proof is rejected under it.
+    #[tokio::test]
+    #[test_log::test]
+    async fn test_vid_total_weight_reproduces_payload_commitment() {
+        let client = TestClient::with_epoch_height(10);
+        let lc = LightClient::from_genesis(
+            SqliteStorage::default().await.unwrap(),
+            client.clone(),
+            client.genesis().await,
+        );
+        let height = 41;
+        let header = client.leaf(height).await.header().clone();
+        let payload = client.payload(height).await;
+
+        let vid_total_weight = lc.vid_total_weight(&header).await.unwrap();
+        let common = VidCommon::V1(init_avidm_param(vid_total_weight).unwrap());
+        PayloadProof::new(payload, common).verify(&header).unwrap();
+    }
 
     #[tokio::test]
     #[test_log::test]
