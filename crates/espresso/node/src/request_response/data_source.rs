@@ -12,7 +12,6 @@ use espresso_types::{
     v0_3::{RewardAccountV1, RewardMerkleTreeV1},
     v0_4::{RewardAccountV2, RewardMerkleTreeV2},
 };
-use hotshot::traits::NodeImplementation;
 use hotshot_new_protocol::storage::NewProtocolStorage;
 use hotshot_query_service::{
     data_source::{
@@ -21,7 +20,9 @@ use hotshot_query_service::{
     },
     node::BlockId,
 };
-use hotshot_types::{data::ViewNumber, vote::HasViewNumber};
+use hotshot_types::{
+    data::ViewNumber, traits::node_implementation::NodeImplementation, vote::HasViewNumber,
+};
 use itertools::Itertools;
 use jf_merkle_tree_compat::{
     ForgetableMerkleTreeScheme, ForgetableUniversalMerkleTreeScheme, LookupResult,

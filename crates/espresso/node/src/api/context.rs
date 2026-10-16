@@ -17,7 +17,6 @@ use espresso_types::{
     v0::traits::SequencerPersistence,
 };
 use futures::future::BoxFuture;
-use hotshot::traits::NodeImplementation;
 use hotshot_new_protocol::storage::NewProtocolStorage;
 use hotshot_query_service::availability::VidCommonQueryData;
 use hotshot_types::{
@@ -26,6 +25,7 @@ use hotshot_types::{
     epoch_membership::EpochMembershipCoordinator,
     message::UpgradeLock,
     network::NetworkConfig,
+    traits::node_implementation::NodeImplementation,
     utils::StateAndDelta,
 };
 
