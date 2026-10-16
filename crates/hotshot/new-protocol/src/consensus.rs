@@ -655,7 +655,10 @@ impl<T: NodeType> Consensus<T> {
         leaf_commit: Commitment<Leaf2<T>>,
         block_number: Option<u64>,
     ) -> Option<(ViewNumber, &Proposal<T>)> {
-        if let Some(proposal) = self.proposals.get(view, leaf_commit) {
+        let numbered = |proposal: &&Proposal<T>| {
+            block_number.is_none_or(|bn| bn == proposal.block_header.block_number())
+        };
+        if let Some(proposal) = self.proposals.get(view, leaf_commit).filter(numbered) {
             return Some((view, proposal));
         }
         if !block_number.is_some_and(|bn| is_last_block(bn, *self.epoch_height)) {
@@ -663,6 +666,7 @@ impl<T: NodeType> Consensus<T> {
         }
         self.proposals
             .latest_before(view, leaf_commit)
+            .filter(numbered)
             .map(|proposal| (proposal.view_number, proposal))
     }
 
