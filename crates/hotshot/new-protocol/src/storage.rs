@@ -174,6 +174,7 @@ impl<T: NodeType, S: NewProtocolStorage<T>> Storage<T, S> {
         let view = vid_share.view_number;
         let Ok(stamp) = u32::try_from(header_timestamp) else {
             error!(
+                %view,
                 header_timestamp,
                 "header timestamp does not fit a u32 stamp"
             );

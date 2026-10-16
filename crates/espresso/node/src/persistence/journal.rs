@@ -95,6 +95,7 @@ const IN_FLIGHT_BYTES: usize = 128 << 20;
 /// Furthest past the local clock a frame stamp may reach. A segment's newest stamp pins its GC,
 /// and a leader's header time is unvalidated when the share is stored.
 const MAX_STAMP_DRIFT: u32 = 60;
+const OVER_BUDGET_WARN_EVERY: Duration = Duration::from_secs(60);
 
 /// Per-record size bounds, enforced in `put_wal`/`put_data` before a record reaches a lane.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -282,7 +283,7 @@ struct Inner {
     _threads: JoinOnDrop,
     // Serializes `gc` passes: `gc` computes the segments to unlink once up front, so an
     // overlapping pass could otherwise select and unlink the same segment twice.
-    gc_lock: parking_lot::Mutex<()>,
+    gc_lock: parking_lot::Mutex<GcState>,
     side: side_fs::Persistence,
     opts: Options,
     probe: StorageProbe,
@@ -293,6 +294,31 @@ struct Inner {
     /// Payloads not yet delivered to the query service. Memory only, see [`PendingPayloads`].
     pending_payloads: parking_lot::Mutex<PendingPayloads>,
     _lock: std::fs::File,
+}
+
+/// What successive `gc` passes remember.
+#[derive(Default)]
+struct GcState {
+    /// When the share lane over `max_bytes` was last warned about; `None` while it is under.
+    over_budget_warned: Option<Instant>,
+}
+
+impl GcState {
+    /// Whether the over-budget warning is due at `now`, which also starts its wait. A pass that
+    /// finds the lane under budget re-arms it.
+    fn over_budget_warning_due(&mut self, over: bool, now: Instant) -> bool {
+        if !over {
+            self.over_budget_warned = None;
+            return false;
+        }
+        let waiting = self
+            .over_budget_warned
+            .is_some_and(|last| now.duration_since(last) < OVER_BUDGET_WARN_EVERY);
+        if !waiting {
+            self.over_budget_warned = Some(now);
+        }
+        !waiting
+    }
 }
 
 struct Lanes {
@@ -686,7 +712,7 @@ impl Persistence {
                 state,
                 lanes: Lanes { wal, share, da },
                 _threads: JoinOnDrop(vec![wal_thread, share_thread, da_thread]),
-                gc_lock: parking_lot::Mutex::new(()),
+                gc_lock: parking_lot::Mutex::new(GcState::default()),
                 side,
                 opts,
                 probe,
@@ -861,8 +887,8 @@ impl Persistence {
         let share_cutoff = self.share_cutoff()?;
 
         tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
-            let _guard = inner.gc_lock.lock();
-            let pruned = prune_all(&inner, bound, share_cutoff, replayed);
+            let mut gc_state = inner.gc_lock.lock();
+            let pruned = prune_all(&inner, &mut gc_state, bound, share_cutoff, replayed);
             // Also after a failed pass: the segments it did unlink are already gone from
             // `segments`.
             inner.lanes.share.trim_index();
@@ -1108,6 +1134,7 @@ impl Persistence {
 /// Unlinks the segments GC selects. Wal first: a failure there leaves the other lanes untouched.
 fn prune_all(
     inner: &Inner,
+    gc_state: &mut GcState,
     bound: u64,
     share_cutoff: Option<u32>,
     replayed: Option<u64>,
@@ -1128,7 +1155,8 @@ fn prune_all(
         lanes.share.prune(&unlinkable)?;
     }
     let share_bytes = lanes.share.segments.lock().bytes();
-    if share_bytes > inner.opts.max_bytes {
+    let over = share_bytes > inner.opts.max_bytes;
+    if gc_state.over_budget_warning_due(over, Instant::now()) {
         tracing::warn!(
             share_bytes,
             max_bytes = inner.opts.max_bytes,
@@ -2109,6 +2137,19 @@ mod tests {
     }
 
     /// A leader's far-future header time must not keep a segment from ever being collected.
+    #[test]
+    fn over_budget_warning_is_rate_limited_and_rearms() {
+        let mut state = GcState::default();
+        let start = Instant::now();
+        assert!(!state.over_budget_warning_due(false, start));
+        assert!(state.over_budget_warning_due(true, start));
+        assert!(!state.over_budget_warning_due(true, start + Duration::from_secs(30)));
+        assert!(state.over_budget_warning_due(true, start + OVER_BUDGET_WARN_EVERY));
+        // Dropping under budget and going over again warns at once.
+        assert!(!state.over_budget_warning_due(false, start + Duration::from_secs(61)));
+        assert!(state.over_budget_warning_due(true, start + Duration::from_secs(62)));
+    }
+
     #[tokio::test]
     async fn far_future_stamp_is_clamped_and_collected() {
         let tmp = TempDir::new().unwrap();
