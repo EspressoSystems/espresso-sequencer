@@ -8,10 +8,7 @@
 use anyhow::Result;
 use async_trait::async_trait;
 use hotshot_example_types::storage_types::TestStorage;
-use hotshot_new_protocol::{
-    message::Certificate1,
-    storage::NewProtocolStorage,
-};
+use hotshot_new_protocol::{message::Certificate1, storage::NewProtocolStorage};
 use hotshot_types::{
     data::{
         DaProposal, DaProposal2, EpochNumber, QuorumProposal, QuorumProposal2, VidCommitment,
