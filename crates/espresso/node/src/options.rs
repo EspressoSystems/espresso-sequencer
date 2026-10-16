@@ -422,7 +422,7 @@ impl Options {
                 poll_interval: follower.poll_interval,
                 max_blocks_per_poll: follower.max_blocks_per_poll,
                 light_client: query.light_client.clone(),
-                light_client_db: query.light_client_db.clone(),
+                light_client_db: query.light_client_db(),
                 light_client_genesis,
             },
         })
@@ -1031,7 +1031,7 @@ impl From<&api::options::Query> for QueryConfig {
         Self {
             peers: o.peers.clone(),
             light_client: o.light_client.clone(),
-            light_client_db: o.light_client_db.clone(),
+            light_client_db: o.light_client_db(),
         }
     }
 }
@@ -1538,6 +1538,30 @@ pub(crate) mod tests {
             parse(&["storage-sql", "http", "query", "follower"]).is_err(),
             "the query module's peers are the upstreams"
         );
+    }
+
+    #[test]
+    fn light_client_db_defaults_under_storage_path() {
+        fn lc_path(storage_path: Option<&str>, lc_path: Option<&str>) -> Option<PathBuf> {
+            let query = api::options::Query {
+                storage_path: storage_path.map(PathBuf::from),
+                light_client_db: LightClientSqliteOptions {
+                    lc_path: lc_path.map(PathBuf::from),
+                    ..Default::default()
+                },
+                ..Default::default()
+            };
+            query.light_client_db().lc_path
+        }
+        assert_eq!(
+            lc_path(Some("/store/espresso"), None),
+            Some(PathBuf::from("/store/espresso/light-client/lc.db"))
+        );
+        assert_eq!(
+            lc_path(Some("/store/espresso"), Some("/store/lc")),
+            Some(PathBuf::from("/store/lc"))
+        );
+        assert_eq!(lc_path(None, None), None);
     }
 
     // Document the JSON shape of GET /config/runtime. Runs under Postgres builds only;
