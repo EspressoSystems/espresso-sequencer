@@ -226,6 +226,11 @@ impl<T: NodeType, S: NewProtocolStorage<T>> Healer<T, S> {
             .push(AbortOnDropHandle::new(tokio::spawn(run(ctx, responses))));
     }
 
+    /// The node's current view, as last passed to `on_view_changed`.
+    pub fn view_receiver(&self) -> watch::Receiver<ViewNumber> {
+        self.view.subscribe()
+    }
+
     pub fn on_view_changed(&self, view: ViewNumber) {
         self.view.send_replace(view);
     }

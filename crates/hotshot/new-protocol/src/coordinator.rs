@@ -333,16 +333,7 @@ where
         let mut vid_reconstructor = VidReconstructor::new();
         vid_reconstructor.set_tracer(leader_tracer);
 
-        let share_server = heal.as_ref().map(|config| {
-            ShareServer::over_network(
-                storage.clone(),
-                network.sender().clone(),
-                public_key.clone(),
-                config,
-                metrics,
-            )
-        });
-        let healer = heal.map(|config| {
+        let healer = heal.clone().map(|config| {
             Healer::new(
                 config,
                 storage.clone(),
@@ -351,6 +342,16 @@ where
                 private_key.clone(),
                 network.sender().clone(),
                 consensus.current_view(),
+                metrics,
+            )
+        });
+        let share_server = heal.as_ref().zip(healer.as_ref()).map(|(config, healer)| {
+            ShareServer::over_network(
+                storage.clone(),
+                network.sender().clone(),
+                public_key.clone(),
+                healer.view_receiver(),
+                config,
                 metrics,
             )
         });
@@ -1782,7 +1783,7 @@ where
             MessageType::ShareFetch(ShareFetchMessage::Req(request)) => {
                 debug!(%node, %sender, view = %request.view_number(), "received share fetch request");
                 if let Some(server) = &self.share_server {
-                    server.handle_request(request, message.sender, self.consensus.current_view());
+                    server.handle_request(request, message.sender);
                 }
                 None
             },
