@@ -18,7 +18,7 @@ use std::{
     path::{Path, PathBuf},
     sync::Arc,
     thread::JoinHandle,
-    time::Instant,
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
 use anyhow::{Context, ensure};
@@ -26,7 +26,7 @@ use async_trait::async_trait;
 use clap::Parser;
 use espresso_types::{
     AuthenticatedValidatorMap, Header, Leaf2, NetworkConfig, Payload, PubKey,
-    RegisteredValidatorMap, SeqTypes, StakeTableHash,
+    RegisteredValidatorMap, SeqTypes, StakeTableHash, parse_duration,
     traits::{EventsPersistenceRead, MembershipPersistence, StakeTuple},
     v0::traits::{EventConsumer, PersistenceOptions, SequencerPersistence},
     v0_3::{EventKey, IndexedStake, RegisteredValidator, RewardAmount, StakeTableEvent},
@@ -126,6 +126,9 @@ impl RecordLimits {
 /// Default `--max-bytes`: 100 GiB. Clap can't parse a `"100gb"` default into a plain `u64`
 /// without a custom value parser, so the CLI default is the equivalent byte count.
 const DEFAULT_MAX_BYTES: u64 = 100 * (1 << 30);
+/// Default `--share-retention`: 7 days.
+#[cfg(test)]
+const DEFAULT_SHARE_RETENTION: Duration = Duration::from_secs(7 * 24 * 3600);
 /// Default `--view-retention`: about 1 week at a 2s view time.
 const DEFAULT_VIEW_RETENTION: u64 = 302_000;
 /// Most views replayed into the query service in one decide event. Each batch reads its blocks'
@@ -149,8 +152,18 @@ pub struct Options {
     )]
     pub view_retention: u64,
 
-    /// Soft cap on total `share` and `da` lane bytes on disk, each; oldest segments are dropped
-    /// first once exceeded (age-based retention runs regardless of this cap).
+    /// How long a decided block's VID share and its leaf are kept, by block header timestamp.
+    /// Age only: the `share` lane is never trimmed by size.
+    #[clap(
+        long,
+        env = "ESPRESSO_NODE_JOURNAL_SHARE_RETENTION",
+        value_parser = parse_duration,
+        default_value = "7d"
+    )]
+    pub share_retention: Duration,
+
+    /// Soft cap on total `da` lane bytes on disk; oldest segments are dropped first once
+    /// exceeded (age-based retention runs regardless of this cap). The `share` lane only warns.
     #[clap(
         long,
         env = "ESPRESSO_NODE_JOURNAL_MAX_BYTES",
@@ -836,17 +849,16 @@ impl Persistence {
         .context("scan_for: blocking task panicked")?
     }
 
-    /// Unlinks the segments `wal_unlinkable` and `da_unlinkable` select. Passes are serialized by
-    /// `gc_lock`: see `lane::prune` for why an unlink failure stops the pass instead of skipping
-    /// ahead. On a query node, `replayed` keeps every share and da segment the query service still
-    /// has to ingest.
-    async fn gc(&self, decided: ViewNumber, replayed: Option<u64>) -> anyhow::Result<()> {
+    /// Unlinks the segments `wal_unlinkable`, `share_unlinkable` and `da_unlinkable` select, with
+    /// `now` in unix seconds. Passes are serialized by `gc_lock`: see `lane::prune` for why an
+    /// unlink failure stops the pass instead of skipping ahead. On a query node, `replayed` keeps
+    /// every share, leaf and da segment the query service still has to ingest.
+    async fn gc(&self, decided: ViewNumber, replayed: Option<u64>, now: u64) -> anyhow::Result<()> {
         let inner = self.inner.clone();
-        let bound = decided.u64().saturating_sub(inner.opts.view_retention);
 
         tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
             let _guard = inner.gc_lock.lock();
-            let pruned = prune_all(&inner, bound, replayed);
+            let pruned = prune_all(&inner, now, decided, replayed);
             // Also after a failed pass: the segments it did unlink are already gone from
             // `segments`.
             inner.lanes.share.trim_index();
@@ -1076,58 +1088,80 @@ impl Persistence {
 }
 
 /// Unlinks the segments GC selects. Wal first: a failure there leaves the other lanes untouched.
-fn prune_all(inner: &Inner, bound: u64, replayed: Option<u64>) -> anyhow::Result<()> {
+fn prune_all(
+    inner: &Inner,
+    now: u64,
+    decided: ViewNumber,
+    replayed: Option<u64>,
+) -> anyhow::Result<()> {
     let lanes = &inner.lanes;
+    let view_bound = decided.u64().saturating_sub(inner.opts.view_retention);
+    let share_bound = {
+        let mut state = inner.state.lock();
+        let bound = share_bound(&state.clock, now, inner.opts.share_retention);
+        if let Some(bound) = bound {
+            state.clock = state.clock.split_off(&bound);
+        }
+        bound
+    };
+
     lanes
         .wal
-        .prune(&wal_unlinkable(&lanes.wal.segments.lock(), bound))?;
-    lanes
-        .leaf
-        .prune(&wal_unlinkable(&lanes.leaf.segments.lock(), bound))?;
-    for lane in [&lanes.share, &lanes.da] {
-        let unlinkable =
-            da_unlinkable(&lane.segments.lock(), bound, inner.opts.max_bytes, replayed);
+        .prune(&wal_unlinkable(&lanes.wal.segments.lock(), view_bound))?;
+    for lane in [&lanes.share, &lanes.leaf] {
+        let unlinkable = share_unlinkable(&lane.segments.lock(), share_bound, replayed);
         lane.prune(&unlinkable)?;
     }
-    Ok(())
+    let share_bytes = lanes.share.segments.lock().bytes();
+    if share_bytes > inner.opts.max_bytes {
+        tracing::warn!(
+            share_bytes,
+            max_bytes = inner.opts.max_bytes,
+            "journal: share lane is over max_bytes and is only trimmed by share_retention"
+        );
+    }
+    let unlinkable = da_unlinkable(
+        &lanes.da.segments.lock(),
+        view_bound,
+        inner.opts.max_bytes,
+        replayed,
+    );
+    lanes.da.prune(&unlinkable)
 }
 
-/// Applies the leaf lane records after `after_lsn`, the ones no wal snapshot covers, in lane
-/// order. Reads segments newest first only until one starts at or before that lsn.
-fn replay_leaf_tail<F: JournalFs>(
-    fs: &F,
-    dir: &Path,
-    segments: &[SegmentMeta],
-    after_lsn: u64,
-    state: &mut State,
-) -> anyhow::Result<Vec<Finalized>> {
-    let mut tail = Vec::new();
-    for meta in segments.iter().rev() {
-        let header = fs
-            .read_header(&lane::segment_path(dir, meta.seq))
-            .with_context(|| format!("reading header of leaf segment {}", meta.seq))?;
-        tail.push(meta.seq);
-        if SegmentHeader::decode(&header)?.first_lsn <= after_lsn {
-            break;
-        }
-    }
+fn unix_now() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("system clock is before the unix epoch")
+        .as_secs()
+}
 
-    let mut finalized = Vec::new();
-    for seq in tail.into_iter().rev() {
-        let (records, end) = lane::read_records(fs, dir, Stream::Leaf, seq, Kind::is_known)?;
-        ensure!(
-            matches!(end, ScanEnd::Clean(_)),
-            "leaf segment {seq} is corrupt: scan ended at {end:?}"
-        );
-        for (header, body) in records.iter().filter(|(header, _)| header.lsn > after_lsn) {
-            let kind = Kind::from_u8(header.kind.0).context("unknown leaf record kind")?;
-            let record = Record::decode(kind, header.key, body)
-                .with_context(|| format!("decoding leaf record {}", header.lsn))?;
-            finalized.extend(state.apply(&record));
-            state.leaf_lsn = header.lsn;
-        }
-    }
-    Ok(finalized)
+/// The newest sampled view whose header time is at least `retention` before `now`. Everything
+/// below it is older than the cutoff, up to the clock's sampling step.
+fn share_bound(
+    clock: &BTreeMap<ViewNumber, u64>,
+    now: u64,
+    retention: Duration,
+) -> Option<ViewNumber> {
+    let cutoff = now.checked_sub(retention.as_secs())?;
+    clock
+        .iter()
+        .rev()
+        .find(|(_, timestamp)| **timestamp <= cutoff)
+        .map(|(view, _)| *view)
+}
+
+/// Segments holding only views below `bound`, for lanes kept by header time. Never trimmed by
+/// size. Segments holding a key after `replayed` stay: the query service still has to ingest them.
+fn share_unlinkable(
+    segments: &Segments,
+    bound: Option<ViewNumber>,
+    replayed: Option<u64>,
+) -> Vec<SegmentMeta> {
+    let Some(bound) = bound else {
+        return Vec::new();
+    };
+    replayable_prefix(segments.oldest_below(bound.u64()), replayed)
 }
 
 /// Age-based only. The two newest segments stay: a crash mid-roll falls back to the older one's
@@ -1146,14 +1180,62 @@ fn da_unlinkable(
     max_bytes: u64,
     replayed: Option<u64>,
 ) -> Vec<SegmentMeta> {
-    let mut by_age = segments.oldest_below(bound);
+    let by_age = replayable_prefix(segments.oldest_below(bound), replayed);
+    let by_bytes = segments.oldest_over_bytes(max_bytes, replayed);
+    std::cmp::max_by_key(by_age, by_bytes, Vec::len)
+}
+
+fn replayable_prefix(mut by_age: Vec<SegmentMeta>, replayed: Option<u64>) -> Vec<SegmentMeta> {
     let replayable = by_age
         .iter()
         .take_while(|meta| replayed.is_none_or(|replayed| meta.max_key <= replayed))
         .count();
     by_age.truncate(replayable);
-    let by_bytes = segments.oldest_over_bytes(max_bytes, replayed);
-    std::cmp::max_by_key(by_age, by_bytes, Vec::len)
+    by_age
+}
+
+/// Applies the leaf lane records after `after_lsn`, the ones no wal snapshot covers, in lane
+/// order. Reads segments newest first only until one starts at or before that lsn.
+fn replay_leaf_tail<F: JournalFs>(
+    fs: &F,
+    dir: &Path,
+    segments: &[SegmentMeta],
+    after_lsn: u64,
+    state: &mut State,
+) -> anyhow::Result<Vec<Finalized>> {
+    let mut tail = Vec::new();
+    for meta in segments.iter().rev() {
+        let header = fs
+            .read_header(&lane::segment_path(dir, meta.seq))
+            .with_context(|| format!("reading header of leaf segment {}", meta.seq))?;
+        tail.push(meta.seq);
+        let first_lsn = SegmentHeader::decode(&header)?.first_lsn;
+        if first_lsn <= after_lsn {
+            break;
+        }
+        ensure!(
+            meta.seq != segments[0].seq || first_lsn == after_lsn + 1,
+            "leaf records {}..{first_lsn} after the wal snapshot were pruned",
+            after_lsn + 1
+        );
+    }
+
+    let mut finalized = Vec::new();
+    for seq in tail.into_iter().rev() {
+        let (records, end) = lane::read_records(fs, dir, Stream::Leaf, seq, Kind::is_known)?;
+        ensure!(
+            matches!(end, ScanEnd::Clean(_)),
+            "leaf segment {seq} is corrupt: scan ended at {end:?}"
+        );
+        for (header, body) in records.iter().filter(|(header, _)| header.lsn > after_lsn) {
+            let kind = Kind::from_u8(header.kind.0).context("unknown leaf record kind")?;
+            let record = Record::decode(kind, header.key, body)
+                .with_context(|| format!("decoding leaf record {}", header.lsn))?;
+            finalized.extend(state.apply(&record));
+            state.leaf_lsn = header.lsn;
+        }
+    }
+    Ok(finalized)
 }
 
 /// Body of the last `kind` record at `key` in a whole segment file. A torn tail is expected on
@@ -1345,15 +1427,19 @@ impl SequencerPersistence for Persistence {
             // outage does not also stop the wal from being pruned.
             let replayed = self.replay_decided(consumer).await;
             let cursor = self.replay_cursor();
-            self.gc(decided_view, Some(cursor.map_or(0, |view| view.u64())))
-                .await?;
+            self.gc(
+                decided_view,
+                Some(cursor.map_or(0, |view| view.u64())),
+                unix_now(),
+            )
+            .await?;
             replayed?;
             if let Some(cursor) = cursor {
                 self.send_unattached_payloads(cursor, consumer).await?;
             }
             cursor
         } else {
-            self.gc(decided_view, None).await?;
+            self.gc(decided_view, None, unix_now()).await?;
             Some(decided_view)
         };
         self.metrics
@@ -1740,7 +1826,12 @@ mod tests {
     use hotshot_example_types::node_types::TEST_VERSIONS;
     use hotshot_query_service::metrics::PrometheusMetrics;
     use hotshot_types::{
-        light_client::LightClientState, traits::EncodeBytes, utils::EpochTransitionIndicator,
+        data::{ns_table::parse_ns_table, vid_disperse::AvidmGf2DisperseShare},
+        light_client::LightClientState,
+        message::convert_proposal,
+        traits::EncodeBytes,
+        utils::EpochTransitionIndicator,
+        vid::avidm_gf2::{AvidmGf2Scheme, init_avidm_gf2_param},
     };
     use tempfile::TempDir;
 
@@ -1788,6 +1879,70 @@ mod tests {
             &[(1, 100, 60), (2, 100, 0), (3, 100, 80), (4, 100, 90)],
         );
         assert!(wal_unlinkable(&segs, 50).is_empty());
+    }
+
+    fn clock(samples: &[(u64, u64)]) -> BTreeMap<ViewNumber, u64> {
+        samples
+            .iter()
+            .map(|&(view, timestamp)| (ViewNumber::new(view), timestamp))
+            .collect()
+    }
+
+    #[test]
+    fn share_bound_is_the_newest_sample_at_or_before_the_cutoff() {
+        let samples = clock(&[(1, 1000), (5, 1060), (9, 1120)]);
+        let hour = Duration::from_secs(3600);
+        for (now, expected) in [
+            (1000 + 3599, None),
+            (1000 + 3600, Some(1)),
+            (1060 + 3600, Some(5)),
+            (1119 + 3600, Some(5)),
+            (u64::MAX, Some(9)),
+        ] {
+            assert_eq!(
+                share_bound(&samples, now, hour),
+                expected.map(ViewNumber::new),
+                "now {now}"
+            );
+        }
+    }
+
+    #[test]
+    fn share_bound_is_none_without_samples_or_before_the_retention_elapsed() {
+        let week = Duration::from_secs(7 * 24 * 3600);
+        assert_eq!(share_bound(&clock(&[]), u64::MAX, week), None);
+        assert_eq!(share_bound(&clock(&[(1, 0)]), 10, week), None);
+    }
+
+    #[test]
+    fn share_unlinkable_ignores_byte_size() {
+        let segs = segments(
+            Stream::Share,
+            &[(1, 1 << 40, 5), (2, 1 << 40, 10), (3, 1, 20)],
+        );
+        assert!(share_unlinkable(&segs, None, None).is_empty());
+        assert!(share_unlinkable(&segs, Some(ViewNumber::new(5)), None).is_empty());
+    }
+
+    #[test]
+    fn share_unlinkable_drops_sealed_segments_below_the_bound() {
+        // Segment 2 holds views 6..=9 that never decided: only the bound covers it.
+        let segs = segments(
+            Stream::Share,
+            &[(1, 10, 5), (2, 10, 9), (3, 10, 20), (4, 10, 30)],
+        );
+        let bound = Some(ViewNumber::new(10));
+        assert_eq!(seqs(share_unlinkable(&segs, bound, None)), vec![1, 2]);
+        let bound = Some(ViewNumber::new(1000));
+        assert_eq!(seqs(share_unlinkable(&segs, bound, None)), vec![1, 2, 3]);
+    }
+
+    #[test]
+    fn share_unlinkable_keeps_unreplayed_segments() {
+        let segs = segments(Stream::Share, &[(1, 10, 5), (2, 10, 9), (3, 10, 20)]);
+        let bound = Some(ViewNumber::new(100));
+        assert_eq!(seqs(share_unlinkable(&segs, bound, Some(5))), vec![1]);
+        assert!(share_unlinkable(&segs, bound, Some(4)).is_empty());
     }
 
     #[test]
@@ -2062,6 +2217,46 @@ mod tests {
         }
     }
 
+    /// Leaves of views `0..n` with header time `start + view * step`.
+    async fn timestamped_chain(
+        n: u64,
+        start: u64,
+        step: u64,
+    ) -> Vec<(Leaf2, QuorumCertificate2<SeqTypes>)> {
+        let mut chain = consecutive_height_chain(n).await;
+        for (view, (leaf, _)) in chain.iter_mut().enumerate() {
+            let timestamp = start + view as u64 * step;
+            leaf.block_header_mut()
+                .set_timestamp(timestamp, timestamp * 1000);
+        }
+        chain
+    }
+
+    /// A signed VID share of the genesis payload for `view`.
+    async fn vid_share(view: u64) -> Proposal<SeqTypes, VidDisperseShare<SeqTypes>> {
+        let payload = genesis_leaf().await.block_payload().unwrap();
+        let payload_bytes = payload.encode();
+        let ns_table = parse_ns_table(payload.byte_len().as_usize(), &payload.ns_table().encode());
+        let (payload_commitment, common, shares) = AvidmGf2Scheme::ns_disperse(
+            &init_avidm_gf2_param(2).unwrap(),
+            &[1u32; 2],
+            &payload_bytes,
+            ns_table,
+        )
+        .unwrap();
+        let (pubkey, privkey) = BLSPubKey::generated_from_seed_indexed([0; 32], 1);
+        let share = AvidmGf2DisperseShare::<SeqTypes> {
+            view_number: ViewNumber::new(view),
+            payload_commitment,
+            share: shares[0].clone(),
+            recipient_key: pubkey,
+            epoch: Some(EpochNumber::new(0)),
+            target_epoch: Some(EpochNumber::new(0)),
+            common,
+        };
+        convert_proposal(share.to_proposal(&privkey).unwrap())
+    }
+
     fn encoded_state(storage: &Persistence) -> Vec<u8> {
         bincode::serialize(&*storage.inner.state.lock()).unwrap()
     }
@@ -2069,7 +2264,7 @@ mod tests {
     /// Decide leaves while the wal and the leaf lane roll many times, so only the newest wal
     /// snapshot and a multi-segment leaf tail are left to rebuild the state from.
     async fn write_rolling_history(storage: &Persistence) {
-        let chain = consecutive_height_chain(8).await;
+        let chain = timestamped_chain(8, unix_now(), 60).await;
         storage
             .add_state_cert(light_client_state_cert(20))
             .await
@@ -2111,6 +2306,59 @@ mod tests {
             Some(ViewNumber::new(7))
         );
         assert!(state.pending_state_certs.contains_key(&ViewNumber::new(20)));
+        assert_eq!(state.clock.len(), 8);
+    }
+
+    /// Short view retention drops da proposals; shares and leaves stay until their header time is
+    /// older than `share_retention`.
+    #[test_log::test(tokio::test)]
+    async fn shares_and_leaves_are_kept_by_header_time_and_da_by_views() {
+        // Decides run `gc` at the real time: header times near it keep everything.
+        let start = unix_now();
+        let tmp = TempDir::new().unwrap();
+        let storage = Persistence::open(Options {
+            segment_bytes: Some(64),
+            view_retention: 2,
+            share_retention: Duration::from_secs(3600),
+            ..options(&tmp)
+        })
+        .await
+        .unwrap();
+        let chain = timestamped_chain(6, start, 120).await;
+        for view in 0..6 {
+            storage.append_vid(&vid_share(view).await).await.unwrap();
+            storage
+                .put_data(
+                    &storage.inner.lanes.da,
+                    da_record_at(view, 1024).await,
+                    Class::Durable,
+                )
+                .await
+                .unwrap();
+        }
+        decide_range(&storage, &chain, 0..6, &NullEventConsumer).await;
+        let decided = ViewNumber::new(5);
+
+        storage.gc(decided, None, start).await.unwrap();
+        for view in 0..6 {
+            let share = storage.load_vid_share(ViewNumber::new(view)).await;
+            assert!(share.unwrap().is_some(), "share {view} expired too early");
+        }
+        let da = storage.load_da_proposal(ViewNumber::new(1)).await;
+        assert!(da.unwrap().is_none(), "da proposal outlived view retention");
+        let leaf_segments = storage.inner.lanes.leaf.segments.lock().list().len();
+
+        // Samples at views 0..=5 are 120 s apart: the cutoff covers views 0..=3, bound 3.
+        storage.gc(decided, None, start + 3600 + 360).await.unwrap();
+        for view in 0..6 {
+            let share = storage.load_vid_share(ViewNumber::new(view)).await;
+            assert_eq!(share.unwrap().is_some(), view >= 3, "share {view}");
+        }
+        let leaf_lane = &storage.inner.lanes.leaf.segments;
+        assert!(leaf_lane.lock().list().len() < leaf_segments);
+        assert!(leaf_lane.lock().list().first().unwrap().max_key >= 3);
+        let clock = storage.inner.state.lock().clock.clone();
+        assert_eq!(clock.keys().next().map(|v| v.u64()), Some(3));
     }
 
     #[test_log::test(tokio::test)]
@@ -2196,6 +2444,7 @@ mod tests {
         Options {
             path: tmp.path().to_path_buf(),
             view_retention: DEFAULT_VIEW_RETENTION,
+            share_retention: DEFAULT_SHARE_RETENTION,
             max_bytes: DEFAULT_MAX_BYTES,
             pending_payload_bytes: DEFAULT_PENDING_PAYLOAD_BYTES,
             ignore_existing: false,
@@ -2214,15 +2463,19 @@ mod tests {
         .await
     }
 
-    /// A view-1 DA proposal whose payload is `len` bytes.
     async fn da_record(len: usize) -> Record {
+        da_record_at(1, len).await
+    }
+
+    /// A DA proposal for `view` whose payload is `len` bytes.
+    async fn da_record_at(view: u64, len: usize) -> Record {
         let payload = genesis_leaf().await.block_payload().unwrap();
         let (_, privkey) = BLSPubKey::generated_from_seed_indexed([0; 32], 1);
         Record::Da(Proposal {
             data: DaProposal2::<SeqTypes> {
                 encoded_transactions: vec![7u8; len].into(),
                 metadata: payload.ns_table().clone(),
-                view_number: ViewNumber::new(1),
+                view_number: ViewNumber::new(view),
                 epoch: None,
                 epoch_transition_indicator: EpochTransitionIndicator::NotInTransition,
             },
@@ -2254,6 +2507,7 @@ mod tests {
         let err = Persistence::open(Options {
             path: tmp.path().to_path_buf(),
             view_retention: DEFAULT_VIEW_RETENTION,
+            share_retention: DEFAULT_SHARE_RETENTION,
             max_bytes: DEFAULT_MAX_BYTES,
             pending_payload_bytes: DEFAULT_PENDING_PAYLOAD_BYTES,
             ignore_existing: false,
@@ -2292,6 +2546,7 @@ mod testing {
             Options {
                 path: storage.path().into(),
                 view_retention: DEFAULT_VIEW_RETENTION,
+                share_retention: DEFAULT_SHARE_RETENTION,
                 max_bytes: DEFAULT_MAX_BYTES,
                 pending_payload_bytes: DEFAULT_PENDING_PAYLOAD_BYTES,
                 ignore_existing: false,

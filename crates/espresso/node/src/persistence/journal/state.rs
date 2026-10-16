@@ -30,6 +30,9 @@ use crate::ViewNumber;
 /// the anchor are unreachable and dropped.
 const DECIDE_GAP_FILL_HORIZON: u64 = 20;
 
+/// Seconds of header time between `State::clock` samples: about 10k entries per week.
+const CLOCK_STEP: u64 = 60;
+
 /// Everything the wal stream can change. Cloned into a `Snapshot` record at every wal segment
 /// roll and rebuilt by folding `apply` over records in LSN order after a restart.
 #[derive(Clone, Default, Serialize, Deserialize)]
@@ -55,6 +58,9 @@ pub struct State {
     pub replay: Option<Replay>,
     /// Newest leaf lane lsn applied to this state; recovery replays the leaf lane after it.
     pub leaf_lsn: u64,
+    /// Decided leaf view to its header timestamp in seconds, sampled every `CLOCK_STEP`. Header
+    /// time is monotonic in view order, so GC maps a wall-clock cutoff to a view bound with it.
+    pub clock: BTreeMap<ViewNumber, u64>,
 }
 
 /// Decided data a query node has not yet replayed into its query service.
@@ -375,6 +381,12 @@ impl State {
                 next_epoch_qc,
             } => {
                 let leaf_view = leaf.view_number();
+                let timestamp = leaf.block_header().timestamp();
+                if self.clock.last_key_value().is_none_or(|(view, sampled)| {
+                    leaf_view > *view && timestamp >= sampled + CLOCK_STEP
+                }) {
+                    self.clock.insert(leaf_view, timestamp);
+                }
                 if self
                     .anchor
                     .as_ref()
@@ -661,6 +673,43 @@ mod tests {
 
         assert_eq!(finalized.unwrap().cert.light_client_state.view_number, 4);
         assert_eq!(s.anchor.unwrap().0.view_number(), ViewNumber::new(10));
+    }
+
+    #[tokio::test]
+    async fn clock_samples_header_time_every_step() {
+        let mut s = State::default();
+        for (view, timestamp) in [(1, 1000), (2, 1059), (3, 1060), (4, 1061), (5, 1121)] {
+            let (mut leaf, qc) = leaf_and_qc(view).await;
+            leaf.block_header_mut()
+                .set_timestamp(timestamp, timestamp * 1000);
+            s.apply(&Record::Leaf {
+                leaf,
+                qc,
+                next_epoch_qc: None,
+            });
+        }
+        let clock = s
+            .clock
+            .into_iter()
+            .map(|(v, t)| (v.u64(), t))
+            .collect::<Vec<_>>();
+        assert_eq!(clock, vec![(1, 1000), (3, 1060), (5, 1121)]);
+    }
+
+    #[tokio::test]
+    async fn clock_ignores_gap_fill_leaves_behind_its_newest_sample() {
+        let mut s = State::default();
+        for (view, timestamp) in [(10, 1000), (4, 2000)] {
+            let (mut leaf, qc) = leaf_and_qc(view).await;
+            leaf.block_header_mut()
+                .set_timestamp(timestamp, timestamp * 1000);
+            s.apply(&Record::Leaf {
+                leaf,
+                qc,
+                next_epoch_qc: None,
+            });
+        }
+        assert_eq!(s.clock.len(), 1);
     }
 
     /// The wal's `Processed` and the leaf lane's `Leaf` reach recovery in either order.
