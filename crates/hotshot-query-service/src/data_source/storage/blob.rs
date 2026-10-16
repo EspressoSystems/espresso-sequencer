@@ -45,8 +45,14 @@ pub struct BlobCfg {
     pub share_retention: Duration,
 }
 
-/// Removes the lanes and the id of the blob directory of a database that is being reset.
+/// Removes the lanes and the id of the blob directory of a database that is being reset. Fails
+/// without deleting anything if another store holds the directory.
 pub fn reset_dir(dir: &Path) -> anyhow::Result<()> {
+    let _lock = acquire_lock(dir)?;
+    wipe(dir)
+}
+
+fn wipe(dir: &Path) -> anyhow::Result<()> {
     for lane in ["payload", "share"] {
         ignore_not_found(std::fs::remove_dir_all(dir.join(lane)))
             .with_context(|| format!("removing {lane} lane of {}", dir.display()))?;
@@ -163,7 +169,12 @@ impl<F: JournalFs> BlobStore<F> {
     /// Takes the directory lock, recovers both lanes, rebuilds the share index and starts the
     /// writers and the share sync task. A corrupt segment is dropped with every segment after it.
     pub async fn open(cfg: BlobCfg, fs: Arc<F>) -> anyhow::Result<Arc<Self>> {
-        Self::open_with(cfg, fs, SEGMENT_BYTES).await
+        Self::open_inner(cfg, fs, SEGMENT_BYTES, false).await
+    }
+
+    /// `open` that wipes the directory first, under the lock the store then keeps.
+    pub async fn open_resetting(cfg: BlobCfg, fs: Arc<F>) -> anyhow::Result<Arc<Self>> {
+        Self::open_inner(cfg, fs, SEGMENT_BYTES, true).await
     }
 
     pub fn install_metrics(&self, metrics: &dyn Metrics) {
@@ -329,9 +340,18 @@ impl<F: JournalFs> BlobStore<F> {
         fs: Arc<F>,
         segment_bytes: u64,
     ) -> anyhow::Result<Arc<Self>> {
+        Self::open_inner(cfg, fs, segment_bytes, false).await
+    }
+
+    async fn open_inner(
+        cfg: BlobCfg,
+        fs: Arc<F>,
+        segment_bytes: u64,
+        reset: bool,
+    ) -> anyhow::Result<Arc<Self>> {
         let payload_dir = cfg.dir.join("payload");
         let share_dir = cfg.dir.join("share");
-        let lock = lock_dir(&*fs, &cfg.dir, &[&payload_dir, &share_dir])?;
+        let lock = lock_dir(&*fs, &cfg.dir, &[&payload_dir, &share_dir], reset)?;
 
         let (payload, share) = tokio::try_join!(
             open_lane(fs.clone(), payload_dir, Stream::Payload, segment_bytes),
@@ -493,12 +513,9 @@ fn is_share(kind: u8) -> bool {
     kind == SHARE.0
 }
 
-/// The lane directories must exist on the real filesystem for the lock, whatever `F` is.
-fn lock_dir<F: JournalFs>(fs: &F, dir: &Path, lane_dirs: &[&Path]) -> anyhow::Result<File> {
-    for lane_dir in lane_dirs {
-        std::fs::create_dir_all(lane_dir)
-            .with_context(|| format!("creating blob directory {}", lane_dir.display()))?;
-    }
+fn acquire_lock(dir: &Path) -> anyhow::Result<File> {
+    std::fs::create_dir_all(dir)
+        .with_context(|| format!("creating blob directory {}", dir.display()))?;
     let lock = std::fs::OpenOptions::new()
         .create(true)
         .truncate(false)
@@ -508,6 +525,25 @@ fn lock_dir<F: JournalFs>(fs: &F, dir: &Path, lane_dirs: &[&Path]) -> anyhow::Re
     lock.try_lock()
         .map_err(io::Error::from)
         .context("blob directory is already in use by another process")?;
+    Ok(lock)
+}
+
+/// The lane directories must exist on the real filesystem for the lock, whatever `F` is. With
+/// `reset`, the lanes are wiped while holding the lock.
+fn lock_dir<F: JournalFs>(
+    fs: &F,
+    dir: &Path,
+    lane_dirs: &[&Path],
+    reset: bool,
+) -> anyhow::Result<File> {
+    let lock = acquire_lock(dir)?;
+    if reset {
+        wipe(dir)?;
+    }
+    for lane_dir in lane_dirs {
+        std::fs::create_dir_all(lane_dir)
+            .with_context(|| format!("creating blob directory {}", lane_dir.display()))?;
+    }
     // Directory entries `create_dir_all` just added are not durable until fsynced.
     let parent = dir.parent().filter(|p| !p.as_os_str().is_empty());
     for synced in lane_dirs.iter().copied().chain([dir]).chain(parent) {
@@ -770,6 +806,29 @@ mod tests {
         fn share_segment(&self, seq: u64) -> PathBuf {
             segment_path(&self.tmp.path().join("share"), seq)
         }
+    }
+
+    #[tokio::test]
+    async fn test_reset_dir_refuses_directory_in_use() {
+        let tmp = tempfile::tempdir().unwrap();
+        let cfg = BlobCfg {
+            dir: tmp.path().to_path_buf(),
+            share_retention: RETENTION,
+        };
+        let store = BlobStore::open(cfg.clone(), Arc::new(StdFs)).await.unwrap();
+        let loc = store.append_payload(1, body(7)).await.unwrap();
+        store.write_id("db").unwrap();
+
+        let err = reset_dir(tmp.path()).unwrap_err();
+        assert!(format!("{err:#}").contains("already in use"), "{err:#}");
+        assert!(
+            BlobStore::open_resetting(cfg, Arc::new(StdFs))
+                .await
+                .is_err()
+        );
+
+        assert_eq!(store.read_payload(1, loc).await.unwrap(), Some(body(7)));
+        assert_eq!(store.read_id().unwrap().as_deref(), Some("db"));
     }
 
     fn body(tag: u8) -> Vec<u8> {

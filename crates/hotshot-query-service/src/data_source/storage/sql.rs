@@ -896,12 +896,18 @@ async fn open_blobs(
     let Some(cfg) = cfg else {
         return Ok(None);
     };
-    if reset {
-        blob::reset_dir(&cfg.dir)?;
-    }
-    match connection_type {
-        StorageConnectionType::Query => Ok(Some(BlobStore::open(cfg, Arc::new(StdFs)).await?)),
-        StorageConnectionType::Sequencer => Ok(None),
+    match (connection_type, reset) {
+        (StorageConnectionType::Query, true) => {
+            Ok(Some(BlobStore::open_resetting(cfg, Arc::new(StdFs)).await?))
+        },
+        (StorageConnectionType::Query, false) => {
+            Ok(Some(BlobStore::open(cfg, Arc::new(StdFs)).await?))
+        },
+        (StorageConnectionType::Sequencer, true) => {
+            blob::reset_dir(&cfg.dir)?;
+            Ok(None)
+        },
+        (StorageConnectionType::Sequencer, false) => Ok(None),
     }
 }
 
