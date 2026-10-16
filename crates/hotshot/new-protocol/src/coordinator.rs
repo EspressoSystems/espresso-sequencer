@@ -66,7 +66,7 @@ use crate::{
     storage::{NewProtocolStorage, Storage},
     upgrade::UpgradeProtocol,
     vid::{
-        ObtainedPayload, VidDisperseRequest, VidDisperser, VidFragmentAccumulator,
+        ObtainedPayload, PinnedBy, VidDisperseRequest, VidDisperser, VidFragmentAccumulator,
         VidReconstructor, expected_vid_param,
     },
     vote::{EpochRootTally, SimpleTally, UpgradeTally, VoteCollector},
@@ -941,7 +941,7 @@ where
                     self.storage
                         .append_state_cert(state_cert.view_number(), state_cert.clone());
                 }
-                self.notify_vid_reconstructor(&proposal.data);
+                self.notify_vid_reconstructor(&proposal.data, PinnedBy::Leader);
                 self.vid_reconstructor
                     .handle_vid_share(self.public_key.clone(), vid_share);
             },
@@ -1155,7 +1155,7 @@ where
                     %node, view = %proposal.view_number,
                     "pinning reconstructor from certified proposal"
                 );
-                self.notify_vid_reconstructor(&proposal);
+                self.notify_vid_reconstructor(&proposal, PinnedBy::Certificate);
             },
             ConsensusOutput::BlockPayloadReconstructed { .. } => {},
             ConsensusOutput::UpgradeDecided(cert) => {
@@ -2078,7 +2078,7 @@ where
 
     /// Pin the reconstructor to `proposal`'s payload commitment, so the shares
     /// the voters broadcast for its view can rebuild the payload.
-    fn notify_vid_reconstructor(&mut self, proposal: &Proposal<T>) {
+    fn notify_vid_reconstructor(&mut self, proposal: &Proposal<T>, pinned_by: PinnedBy) {
         let view = proposal.view_number;
         let VidCommitment::V2(payload_commitment) = proposal.block_header.payload_commitment()
         else {
@@ -2092,6 +2092,7 @@ where
             proposal.block_header.metadata().clone(),
             proposal.epoch,
             expected_param,
+            pinned_by,
         );
     }
 
