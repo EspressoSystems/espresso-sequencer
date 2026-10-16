@@ -2,7 +2,6 @@ use std::{
     cmp::Ordering,
     collections::HashMap,
     fmt::{Debug, Display},
-    pin::pin,
     sync::Arc,
     time::Duration,
 };
@@ -29,7 +28,7 @@ use espresso_types::{
 };
 use futures::{
     StreamExt,
-    future::{self, Either, Future, FutureExt, TryFuture, TryFutureExt},
+    future::{Future, FutureExt, TryFuture, TryFutureExt},
     stream::FuturesUnordered,
 };
 use hotshot_new_protocol::utils::verify_new_protocol_leaf_chain;
@@ -52,7 +51,7 @@ use jf_merkle_tree_compat::{ForgetableMerkleTreeScheme, MerkleTreeScheme, prelud
 use parking_lot::Mutex;
 use priority_queue::PriorityQueue;
 use serde::de::DeserializeOwned;
-use tokio::time::timeout;
+use tokio::time::{sleep, timeout};
 use tokio_util::task::AbortOnDropHandle;
 use url::Url;
 use vbs::version::StaticVersionType;
@@ -1116,71 +1115,68 @@ impl StateCatchup for NullStateCatchup {
     }
 }
 
-/// A catchup implementation that races local against remote providers.
+/// A provider and when it joins the race.
+#[derive(Clone)]
+struct Provider {
+    catchup: Arc<dyn StateCatchup>,
+    /// Starts after `fallback_delay` if a non-fallback remote provider is present.
+    fallback: bool,
+}
+
+/// A catchup implementation that races all providers.
 /// It returns the first successful result.
 #[derive(Clone)]
 pub struct ParallelStateCatchup {
-    providers: Arc<Mutex<Vec<Arc<dyn StateCatchup>>>>,
+    providers: Arc<Mutex<Vec<Provider>>>,
     backoff: BackoffParams,
     /// Timeout for local provider requests
     local_timeout: Duration,
+    fallback_delay: Duration,
 }
 
 impl ParallelStateCatchup {
     /// Create a new [`ParallelStateCatchup`] with the given providers and local timeout.
     pub fn new(providers: &[Arc<dyn StateCatchup>], local_timeout: Duration) -> Self {
         Self {
-            providers: Arc::new(Mutex::new(providers.to_vec())),
+            providers: Arc::new(Mutex::new(
+                providers
+                    .iter()
+                    .map(|catchup| Provider {
+                        catchup: catchup.clone(),
+                        fallback: false,
+                    })
+                    .collect(),
+            )),
             backoff: BackoffParams::disabled(),
             local_timeout,
+            fallback_delay: Duration::ZERO,
         }
+    }
+
+    /// Delay before fallback providers start when a non-fallback remote provider exists.
+    pub fn with_fallback_delay(mut self, delay: Duration) -> Self {
+        self.fallback_delay = delay;
+        self
     }
 
     /// Add a provider to the list of providers
     pub fn add_provider(&self, provider: Arc<dyn StateCatchup>) {
-        self.providers.lock().push(provider);
+        self.add(provider, false);
     }
 
-    /// Race local against remote providers and return the first success.
-    ///
-    /// Remote starts immediately; the wait on local providers is bounded by `local_timeout`.
-    /// If one side fails, the other is awaited and the first error is attached as context.
-    async fn on_local_or_remote<C, F, RT>(&self, closure: C) -> anyhow::Result<RT>
-    where
-        C: Fn(Arc<dyn StateCatchup>) -> F + Clone + Send + Sync + 'static,
-        F: Future<Output = anyhow::Result<RT>> + Send + 'static,
-        RT: Send + Sync + 'static,
-    {
-        let local_timeout = self.local_timeout;
-        let local_closure = closure.clone();
-        let local = pin!(async {
-            timeout(
-                local_timeout,
-                self.on_providers(|provider| provider.is_local(), local_closure),
-            )
-            .await
-            .unwrap_or_else(|_| {
-                let err = format!("local provider timed out after {local_timeout:?}");
-                tracing::warn!("{err}");
-                Err(anyhow::anyhow!(err))
-            })
-        });
-        let remote = pin!(self.on_providers(|provider| !provider.is_local(), closure));
-        match future::select(local, remote).await {
-            Either::Left((Ok(res), _)) | Either::Right((Ok(res), _)) => Ok(res),
-            Either::Left((Err(local_err), remote)) => remote.await.map_err(|remote_err| {
-                anyhow::anyhow!("local: {local_err:#}; remote: {remote_err:#}")
-            }),
-            Either::Right((Err(remote_err), local)) => local.await.map_err(|local_err| {
-                anyhow::anyhow!("local: {local_err:#}; remote: {remote_err:#}")
-            }),
-        }
+    /// Add a remote provider that starts after the fallback delay if a non-fallback remote
+    /// provider is present.
+    pub fn add_fallback_provider(&self, provider: Arc<dyn StateCatchup>) {
+        self.add(provider, true);
     }
 
-    /// Perform an async operation on all providers matching the given predicate, returning the first result to succeed
-    async fn on_providers<P, C, F, RT>(&self, predicate: P, closure: C) -> anyhow::Result<RT>
+    fn add(&self, catchup: Arc<dyn StateCatchup>, fallback: bool) {
+        self.providers.lock().push(Provider { catchup, fallback });
+    }
+
+    /// Perform an async operation on all providers, returning the first result to succeed
+    async fn on_providers<C, F, RT>(&self, closure: C) -> anyhow::Result<RT>
     where
-        P: Fn(&Arc<dyn StateCatchup>) -> bool + Clone + Send + Sync + 'static,
         C: Fn(Arc<dyn StateCatchup>) -> F + Clone + Send + Sync + 'static,
         F: Future<Output = anyhow::Result<RT>> + Send + 'static,
         RT: Send + Sync + 'static,
@@ -1191,17 +1187,31 @@ impl ParallelStateCatchup {
             return Err(anyhow::anyhow!("no providers were initialized"));
         }
 
-        // Filter the providers by the predicate
-        let providers = providers.into_iter().filter(predicate).collect::<Vec<_>>();
-        if providers.is_empty() {
-            return Err(anyhow::anyhow!("no providers matched the given predicate"));
-        }
+        let has_primary_remote = providers
+            .iter()
+            .any(|p| !p.fallback && !p.catchup.is_local());
+        let local_timeout = self.local_timeout;
+        let fallback_delay = self.fallback_delay;
 
         // Spawn futures for each provider
         let mut futures = FuturesUnordered::new();
-        for provider in providers {
+        for Provider { catchup, fallback } in providers {
             let closure = closure.clone();
-            futures.push(AbortOnDropHandle::new(tokio::spawn(closure(provider))));
+            futures.push(AbortOnDropHandle::new(tokio::spawn(async move {
+                if catchup.is_local() {
+                    return timeout(local_timeout, closure(catchup))
+                        .await
+                        .unwrap_or_else(|_| {
+                            let err = format!("local provider timed out after {local_timeout:?}");
+                            tracing::warn!("{err}");
+                            Err(anyhow::anyhow!(err))
+                        });
+                }
+                if fallback && has_primary_remote {
+                    sleep(fallback_delay).await;
+                }
+                closure(catchup).await
+            })));
         }
 
         let mut logs = vec!["No providers returned a successful result.\n".to_string()];
@@ -1251,7 +1261,7 @@ impl StateCatchup for ParallelStateCatchup {
         coordinator: EpochMembershipCoordinator<SeqTypes>,
         height: u64,
     ) -> anyhow::Result<Leaf2> {
-        self.on_local_or_remote(clone! {(coordinator) move |provider| {
+        self.on_providers(clone! {(coordinator) move |provider| {
             clone!{(coordinator) async move {
                 provider
                     .try_fetch_leaf(retry, coordinator, height)
@@ -1271,7 +1281,7 @@ impl StateCatchup for ParallelStateCatchup {
         accounts: &[FeeAccount],
     ) -> anyhow::Result<Vec<FeeAccountProof>> {
         let accounts_vec = accounts.to_vec();
-        self.on_local_or_remote(clone! {(instance, accounts_vec) move |provider| {
+        self.on_providers(clone! {(instance, accounts_vec) move |provider| {
             clone! {(instance, accounts_vec) async move {
                 provider
                     .try_fetch_accounts(
@@ -1297,7 +1307,7 @@ impl StateCatchup for ParallelStateCatchup {
         mt: &mut BlockMerkleTree,
     ) -> anyhow::Result<()> {
         *mt = self
-            .on_local_or_remote(clone! {(mt, instance) move |provider| {
+            .on_providers(clone! {(mt, instance) move |provider| {
                 let mut mt = mt.clone();
                 clone! {(instance) async move {
                     provider
@@ -1323,7 +1333,7 @@ impl StateCatchup for ParallelStateCatchup {
         retry: usize,
         commitment: Commitment<ChainConfig>,
     ) -> anyhow::Result<ChainConfig> {
-        self.on_local_or_remote(move |provider| async move {
+        self.on_providers(move |provider| async move {
             provider.try_fetch_chain_config(retry, commitment).await
         })
         .await
@@ -1337,7 +1347,7 @@ impl StateCatchup for ParallelStateCatchup {
         reward_merkle_tree_root: RewardMerkleCommitmentV2,
         accounts: Arc<Vec<RewardAccountV2>>,
     ) -> anyhow::Result<PermittedRewardMerkleTreeV2> {
-        self.on_local_or_remote(clone! {(accounts) move |provider| {
+        self.on_providers(clone! {(accounts) move |provider| {
             clone! {(accounts) async move {
                 provider
                     .try_fetch_reward_merkle_tree_v2(
@@ -1363,7 +1373,7 @@ impl StateCatchup for ParallelStateCatchup {
         accounts: &[RewardAccountV1],
     ) -> anyhow::Result<Vec<RewardAccountProofV1>> {
         let accounts_vec = accounts.to_vec();
-        self.on_local_or_remote(clone! {(instance, accounts_vec) move |provider| {
+        self.on_providers(clone! {(instance, accounts_vec) move |provider| {
             clone! {(instance, accounts_vec) async move {
                 provider
                     .try_fetch_reward_accounts_v1(
@@ -1385,7 +1395,7 @@ impl StateCatchup for ParallelStateCatchup {
         retry: usize,
         epoch: u64,
     ) -> anyhow::Result<LightClientStateUpdateCertificateV2<SeqTypes>> {
-        self.on_local_or_remote(move |provider| async move {
+        self.on_providers(move |provider| async move {
             provider.try_fetch_state_cert(retry, epoch).await
         })
         .await
@@ -1401,7 +1411,7 @@ impl StateCatchup for ParallelStateCatchup {
             self.providers
                 .lock()
                 .iter()
-                .map(|p| p.name())
+                .map(|p| p.catchup.name())
                 .collect::<Vec<_>>()
                 .join(", ")
         )
@@ -1415,7 +1425,7 @@ impl StateCatchup for ParallelStateCatchup {
         fee_merkle_tree_root: FeeMerkleCommitment,
         accounts: Vec<FeeAccount>,
     ) -> anyhow::Result<Vec<FeeAccountProof>> {
-        self.on_local_or_remote(clone! {(instance, accounts) move |provider| {
+        self.on_providers(clone! {(instance, accounts) move |provider| {
             clone! {(instance, accounts) async move {
                 provider
                     .fetch_accounts(&instance, height, view, fee_merkle_tree_root, accounts)
@@ -1430,7 +1440,7 @@ impl StateCatchup for ParallelStateCatchup {
         coordinator: EpochMembershipCoordinator<SeqTypes>,
         height: u64,
     ) -> anyhow::Result<Leaf2> {
-        self.on_local_or_remote(clone! {(coordinator) move |provider| {
+        self.on_providers(clone! {(coordinator) move |provider| {
             clone! {(coordinator) async move {
                 provider.fetch_leaf(coordinator, height).await
             }}
@@ -1442,9 +1452,9 @@ impl StateCatchup for ParallelStateCatchup {
         &self,
         commitment: Commitment<ChainConfig>,
     ) -> anyhow::Result<ChainConfig> {
-        self.on_local_or_remote(move |provider| async move {
-            provider.fetch_chain_config(commitment).await
-        })
+        self.on_providers(
+            move |provider| async move { provider.fetch_chain_config(commitment).await },
+        )
         .await
     }
 
@@ -1456,7 +1466,7 @@ impl StateCatchup for ParallelStateCatchup {
         reward_merkle_tree_root: RewardMerkleCommitmentV1,
         accounts: Vec<RewardAccountV1>,
     ) -> anyhow::Result<Vec<RewardAccountProofV1>> {
-        self.on_local_or_remote(clone! {(instance, accounts) move |provider| {
+        self.on_providers(clone! {(instance, accounts) move |provider| {
             clone! {(instance, accounts) async move {
                 provider
                     .fetch_reward_accounts_v1(
@@ -1476,10 +1486,8 @@ impl StateCatchup for ParallelStateCatchup {
         &self,
         epoch: u64,
     ) -> anyhow::Result<LightClientStateUpdateCertificateV2<SeqTypes>> {
-        self.on_local_or_remote(
-            move |provider| async move { provider.fetch_state_cert(epoch).await },
-        )
-        .await
+        self.on_providers(move |provider| async move { provider.fetch_state_cert(epoch).await })
+            .await
     }
 
     async fn remember_blocks_merkle_tree(
@@ -1490,7 +1498,7 @@ impl StateCatchup for ParallelStateCatchup {
         mt: &mut BlockMerkleTree,
     ) -> anyhow::Result<()> {
         *mt = self
-            .on_local_or_remote(clone! {(mt, instance) move |provider| {
+            .on_providers(clone! {(mt, instance) move |provider| {
                 let mut mt = mt.clone();
                 clone! {(instance) async move {
                     provider
@@ -1505,7 +1513,7 @@ impl StateCatchup for ParallelStateCatchup {
     }
 
     fn is_local(&self) -> bool {
-        self.providers.lock().iter().all(|p| p.is_local())
+        self.providers.lock().iter().all(|p| p.catchup.is_local())
     }
 }
 
@@ -1652,6 +1660,8 @@ pub async fn add_v1_reward_accounts_to_state(
 
 #[cfg(test)]
 mod test {
+    use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
+
     use super::*;
 
     #[test]
@@ -1676,15 +1686,23 @@ mod test {
         local: bool,
         delay: Duration,
         backoff: BackoffParams,
+        calls: Arc<AtomicUsize>,
     }
 
     impl DelayedCatchup {
         fn provider(local: bool, delay: Duration) -> Arc<dyn StateCatchup> {
-            Arc::new(Self {
+            Self::counted(local, delay).0
+        }
+
+        fn counted(local: bool, delay: Duration) -> (Arc<dyn StateCatchup>, Arc<AtomicUsize>) {
+            let calls = Arc::new(AtomicUsize::new(0));
+            let provider = Arc::new(Self {
                 local,
                 delay,
                 backoff: BackoffParams::disabled(),
-            })
+                calls: calls.clone(),
+            });
+            (provider, calls)
         }
     }
 
@@ -1695,6 +1713,7 @@ mod test {
             _retry: usize,
             _commitment: Commitment<ChainConfig>,
         ) -> anyhow::Result<ChainConfig> {
+            self.calls.fetch_add(1, AtomicOrdering::SeqCst);
             tokio::time::sleep(self.delay).await;
             Ok(ChainConfig::default())
         }
@@ -1808,14 +1827,71 @@ mod test {
     }
 
     #[tokio::test(start_paused = true)]
-    async fn test_both_sides_failing_reports_both_errors() {
+    async fn test_all_providers_failing_reports_every_error() {
         let local = DelayedCatchup::provider(true, Duration::ZERO);
         let remote = DelayedCatchup::provider(false, Duration::ZERO);
         let catchup = ParallelStateCatchup::new(&[local, remote], Duration::from_secs(30));
 
         let err = format!("{:#}", catchup.fetch_state_cert(1).await.unwrap_err());
-        assert!(err.contains("local: "), "{err}");
-        assert!(err.contains("remote: "), "{err}");
         assert_eq!(err.matches("unsupported").count(), 2, "{err}");
+    }
+
+    const FALLBACK_DELAY: Duration = Duration::from_secs(2);
+
+    fn fallback_catchup(
+        primary: Option<Arc<dyn StateCatchup>>,
+        fallback: Arc<dyn StateCatchup>,
+    ) -> ParallelStateCatchup {
+        let catchup = ParallelStateCatchup::new(&[], Duration::from_secs(30))
+            .with_fallback_delay(FALLBACK_DELAY);
+        if let Some(primary) = primary {
+            catchup.add_provider(primary);
+        }
+        catchup.add_fallback_provider(fallback);
+        catchup
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn test_fallback_not_called_when_primary_answers_first() {
+        let (primary, _) = DelayedCatchup::counted(false, Duration::from_secs(1));
+        let (fallback, fallback_calls) = DelayedCatchup::counted(false, Duration::ZERO);
+        let catchup = fallback_catchup(Some(primary), fallback);
+
+        catchup
+            .fetch_chain_config(ChainConfig::default().commit())
+            .await
+            .unwrap();
+        tokio::time::sleep(FALLBACK_DELAY * 2).await;
+        assert_eq!(fallback_calls.load(AtomicOrdering::SeqCst), 0);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn test_fallback_answers_after_delay_when_primary_hangs() {
+        let (primary, _) = DelayedCatchup::counted(false, Duration::from_secs(3600));
+        let (fallback, fallback_calls) = DelayedCatchup::counted(false, Duration::ZERO);
+        let catchup = fallback_catchup(Some(primary), fallback);
+
+        let start = tokio::time::Instant::now();
+        catchup
+            .fetch_chain_config(ChainConfig::default().commit())
+            .await
+            .unwrap();
+        assert_eq!(start.elapsed(), FALLBACK_DELAY);
+        assert_eq!(fallback_calls.load(AtomicOrdering::SeqCst), 1);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn test_fallback_immediate_without_primary_remote() {
+        let local = DelayedCatchup::provider(true, Duration::from_secs(3600));
+        let (fallback, fallback_calls) = DelayedCatchup::counted(false, Duration::ZERO);
+        let catchup = fallback_catchup(Some(local), fallback);
+
+        let start = tokio::time::Instant::now();
+        catchup
+            .fetch_chain_config(ChainConfig::default().commit())
+            .await
+            .unwrap();
+        assert_eq!(start.elapsed(), Duration::ZERO);
+        assert_eq!(fallback_calls.load(AtomicOrdering::SeqCst), 1);
     }
 }
