@@ -403,7 +403,7 @@ async fn test_unreadable_record_is_missing_until_restored() {
         QueryError::Missing
     ));
     drop(tx);
-    assert_eq!(counter(&storage, "blob_missing"), 2);
+    assert_eq!(counter(&storage, "blob_missing"), 0);
 
     let mut tx = storage.write().await.unwrap();
     tx.insert_block(&block).await.unwrap();

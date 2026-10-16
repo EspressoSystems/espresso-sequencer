@@ -1,5 +1,6 @@
 //! Pruning and garbage collection of blob segments.
 
+use journal_lane::lane::segment_path;
 use tempfile::TempDir;
 use tokio::time::{sleep, timeout};
 
@@ -8,7 +9,11 @@ use super::{
     testing::TmpDb,
     *,
 };
-use crate::{data_source::storage::blob::BlobLoc, node::BlockId, testing::mocks::MockTypes};
+use crate::{
+    data_source::storage::{NodeStorage, blob::BlobLoc},
+    node::BlockId,
+    testing::mocks::MockTypes,
+};
 
 /// Every blob record rolls its segment, so each lands in a segment of its own.
 const ROLL_EACH: u64 = 1;
@@ -306,4 +311,52 @@ async fn test_pruning_gc_at_connect_finishes_the_delete_before_unlinking() {
     assert_eq!(count(&storage, "SELECT count(*) FROM payload_loc").await, 0);
     assert_eq!(count(&storage, "SELECT count(*) FROM header").await, 0);
     assert_eq!(readable(&storage, &locs).await, [false, false]);
+}
+
+async fn missing_blocks(storage: &SqlStorage) -> usize {
+    let mut tx = storage.read().await.unwrap();
+    NodeStorage::<MockTypes>::sync_status_for_range(&mut tx, 1, 4)
+        .await
+        .unwrap()
+        .blocks
+        .missing
+}
+
+async fn connect_to(db: &TmpDb, dir: &std::path::Path) -> SqlStorage {
+    let cfg = db.config().blob(BlobCfg {
+        dir: dir.to_path_buf(),
+        share_retention: Duration::from_secs(3600),
+    });
+    SqlStorage::connect(cfg, StorageConnectionType::Query)
+        .await
+        .unwrap()
+}
+
+#[test_log::test(tokio::test(flavor = "multi_thread"))]
+async fn test_connect_drops_locators_of_a_removed_segment() {
+    let db = TmpDb::init().await;
+    let (storage, dir) = connect_small(&db, Duration::from_secs(3600)).await;
+    let locs = store_blocks(&storage, &[1, 2, 3]).await;
+    seal_segments(&storage).await;
+    drop(storage);
+    std::fs::remove_file(segment_path(&dir.path().join("payload"), locs[0].1.seq)).unwrap();
+
+    let storage = connect_to(&db, dir.path()).await;
+
+    assert_eq!(count(&storage, "SELECT count(*) FROM payload_loc").await, 2);
+    assert_eq!(missing_blocks(&storage).await, 1);
+}
+
+#[test_log::test(tokio::test(flavor = "multi_thread"))]
+async fn test_connect_drops_locators_when_the_directory_is_replaced() {
+    let db = TmpDb::init().await;
+    let (storage, _dir) = connect_small(&db, Duration::from_secs(3600)).await;
+    store_blocks(&storage, &[1, 2, 3]).await;
+    drop(storage);
+
+    let empty = tempfile::tempdir().unwrap();
+    let storage = connect_to(&db, empty.path()).await;
+
+    assert_eq!(count(&storage, "SELECT count(*) FROM payload_loc").await, 0);
+    assert_eq!(missing_blocks(&storage).await, 3);
 }

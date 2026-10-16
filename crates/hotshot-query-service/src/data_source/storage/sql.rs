@@ -754,6 +754,7 @@ impl SqlStorage {
                     blobs,
                 };
                 storage.gc_blobs().await?;
+                storage.drop_lost_locators().await?;
                 return Ok(storage);
             }
         } else if config.pool.is_some() {
@@ -879,6 +880,7 @@ impl SqlStorage {
             blobs,
         };
         storage.gc_blobs().await?;
+        storage.drop_lost_locators().await?;
         // Before the state writer can start: it resumes from the head, and the heights it rewrites
         // have to come under a pruning batch again. The pruner's first run is an interval away.
         storage.state_prune_start().await?;
@@ -1427,6 +1429,51 @@ impl SqlStorage {
                 .context("unlinking pruned payload segments")?;
         }
         self.gc_shares().await
+    }
+
+    /// Deletes the locators of records the directory no longer holds (removed by recovery or
+    /// replaced directory), so those heights are missing again and get fetched.
+    async fn drop_lost_locators(&self) -> anyhow::Result<()> {
+        const BATCH: i64 = 10_000;
+        let Some(blobs) = &self.blobs else {
+            return Ok(());
+        };
+        let pruned = {
+            let mut tx = self.read().await?;
+            self.load_pruned_height(&mut tx, PruneCategory::Data)
+                .await?
+        };
+        let mut after = pruned.map_or(-1, |height| height as i64);
+        let mut removed = 0;
+        loop {
+            let mut tx = self.write().await?;
+            let rows = query_as::<(i64, String)>(
+                "SELECT height, loc FROM payload_loc WHERE height > $1 ORDER BY height LIMIT $2",
+            )
+            .bind(after)
+            .bind(BATCH)
+            .fetch_all(tx.as_mut())
+            .await?;
+            let Some((last, _)) = rows.last() else {
+                break;
+            };
+            after = *last;
+            for (height, loc) in &rows {
+                let loc: blob::BlobLoc = loc.parse()?;
+                if !blobs.payload_holds(&loc) {
+                    query("DELETE FROM payload_loc WHERE height = $1")
+                        .bind(height)
+                        .execute(tx.as_mut())
+                        .await?;
+                    removed += 1;
+                }
+            }
+            tx.commit().await?;
+        }
+        if removed > 0 {
+            tracing::info!(removed, "dropped payload locators of lost blob records");
+        }
+        Ok(())
     }
 
     async fn gc_shares(&self) -> anyhow::Result<()> {

@@ -21,7 +21,7 @@ use std::{
 use anyhow::{Context, ensure};
 use hotshot_types::traits::metrics::{Counter, Metrics, NoMetrics};
 use journal_lane::{
-    format::{Class, Kind, Lsn, SegmentHeader, Stream},
+    format::{Class, FRAME_HEADER_LEN, Kind, Lsn, SegmentHeader, Stream},
     lane::{
         self, DataIndex, JournalFs, Lane, LaneConfig, LaneMetrics, LaneMode, Location, Recovered,
         SegmentMeta, Segments, StdFs, segment_path,
@@ -304,6 +304,19 @@ impl<F: JournalFs> BlobStore<F> {
             .iter()
             .map(|meta| meta.bytes)
             .sum()
+    }
+
+    /// Whether `loc` lies inside a live payload segment. Says nothing about the record's content.
+    pub fn payload_holds(&self, loc: &BlobLoc) -> bool {
+        let segments = self.payload.segments.lock();
+        let frame_end = loc
+            .offset
+            .saturating_add((FRAME_HEADER_LEN as u64).saturating_add(loc.len.into()));
+        segments
+            .list()
+            .iter()
+            .find(|meta| meta.seq == loc.seq)
+            .is_some_and(|meta| frame_end <= meta.bytes)
     }
 
     pub fn share_bytes(&self) -> u64 {
