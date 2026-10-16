@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeSet, HashMap, HashSet},
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
@@ -118,10 +118,13 @@ async fn heal_pass<T: NodeType, S: NewProtocolStorage<T>>(
         "share heal: healing missing shares"
     );
 
-    let (mut healed, mut unreachable, mut skipped, mut failed) = (0, 0, 0, 0);
+    let (mut unreachable, mut skipped, mut failed) = (0, 0, 0);
+    let mut healed = BTreeSet::new();
     for target in &targets {
         match heal_one(ctx, responses, target).await {
-            Ok(Outcome::Healed) => healed += 1,
+            Ok(Outcome::Healed) => {
+                healed.insert(target.view);
+            },
             Ok(Outcome::Unreachable) => unreachable += 1,
             Ok(Outcome::Terminal) => {
                 skipped += 1;
@@ -132,9 +135,15 @@ async fn heal_pass<T: NodeType, S: NewProtocolStorage<T>>(
                 warn!(view = %target.view, %err, "share heal failed for height");
             },
         }
-        ctx.metrics.targets.set(targets.len() - healed);
+        ctx.metrics.targets.set(targets.len() - healed.len());
     }
     ctx.metrics.unreachable.set(unreachable);
+    // Best effort: the copies are an archive nothing reads back, and the healed views are no
+    // longer targets, so a failure is not retried.
+    if let Err(err) = ctx.storage.restore_leaf_copies(&healed).await {
+        warn!(%err, "share heal could not restore leaf copies");
+    }
+    let healed = healed.len();
     info!(
         healed,
         unreachable, skipped, failed, "share heal: pass done"

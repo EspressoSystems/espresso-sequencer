@@ -813,9 +813,12 @@ impl Persistence {
         .context("scan_for: blocking task panicked")?
     }
 
-    /// Decided leaves in the wal with header time at least `min_header_ts`, newest view first.
-    /// Cold scan of every wal segment.
-    async fn scan_decided_leaves(&self, min_header_ts: u64) -> anyhow::Result<Vec<Leaf2>> {
+    /// Decided leaf records in the wal that satisfy `keep`, newest view first. Cold scan of every
+    /// wal segment.
+    async fn scan_wal_leaves(
+        &self,
+        keep: impl Fn(&Leaf2) -> bool + Send + 'static,
+    ) -> anyhow::Result<Vec<LeafRecord>> {
         let wal = &self.inner.lanes.wal;
         let dir = wal.dir.clone();
         let candidates: Vec<(u64, bool)> = {
@@ -826,7 +829,7 @@ impl Persistence {
                 .map(|m| (m.seq, Some(m.seq) != active))
                 .collect()
         };
-        tokio::task::spawn_blocking(move || -> anyhow::Result<Vec<Leaf2>> {
+        tokio::task::spawn_blocking(move || -> anyhow::Result<Vec<LeafRecord>> {
             let mut by_view = BTreeMap::new();
             for (seq, sealed) in candidates {
                 let path = lane::segment_path(&dir, seq);
@@ -838,14 +841,14 @@ impl Persistence {
                         return Err(err).with_context(|| format!("reading {}", path.display()));
                     },
                 };
-                let leaves = leaves_in_segment(&bytes, min_header_ts, sealed)
+                let leaves = leaves_in_segment(&bytes, &keep, sealed)
                     .with_context(|| format!("scanning segment {}", path.display()))?;
-                by_view.extend(leaves.into_iter().map(|leaf| (leaf.view_number(), leaf)));
+                by_view.extend(leaves.into_iter().map(|rec| (rec.0.view_number(), rec)));
             }
             Ok(by_view.into_values().rev().collect())
         })
         .await
-        .context("scan_decided_leaves: blocking task panicked")?
+        .context("scan_wal_leaves: blocking task panicked")?
     }
 
     /// Unlinks the segments `wal_unlinkable` and `da_unlinkable` select. Passes are serialized by
@@ -1177,8 +1180,19 @@ fn da_unlinkable(
     std::cmp::max_by_key(by_age, by_bytes, Vec::len)
 }
 
-/// Decided leaves in a whole wal segment file whose header time is at least `min_header_ts`.
-fn leaves_in_segment(bytes: &[u8], min_header_ts: u64, sealed: bool) -> anyhow::Result<Vec<Leaf2>> {
+/// A wal `Leaf` record: the leaf with the QCs that decided it.
+type LeafRecord = (
+    Leaf2,
+    QuorumCertificate2<SeqTypes>,
+    Option<NextEpochQuorumCertificate2<SeqTypes>>,
+);
+
+/// Decided leaves in a whole wal segment file that satisfy `keep`.
+fn leaves_in_segment(
+    bytes: &[u8],
+    keep: &impl Fn(&Leaf2) -> bool,
+    sealed: bool,
+) -> anyhow::Result<Vec<LeafRecord>> {
     ensure!(
         bytes.len() >= SegmentHeader::LEN,
         "segment shorter than its header"
@@ -1193,11 +1207,16 @@ fn leaves_in_segment(bytes: &[u8], min_header_ts: u64, sealed: bool) -> anyhow::
             if h.kind != Kind::Leaf.into() {
                 return Ok(());
             }
-            let Record::Leaf { leaf, .. } = Record::decode(Kind::Leaf, h.key, body)? else {
+            let Record::Leaf {
+                leaf,
+                qc,
+                next_epoch_qc,
+            } = Record::decode(Kind::Leaf, h.key, body)?
+            else {
                 anyhow::bail!("leaf frame decoded to another record");
             };
-            if leaf.block_header().timestamp() >= min_header_ts {
-                leaves.push(leaf);
+            if keep(&leaf) {
+                leaves.push((leaf, qc, next_epoch_qc));
             }
             Ok(())
         },
@@ -1472,7 +1491,27 @@ impl SequencerPersistence for Persistence {
     }
 
     async fn decided_leaves(&self, min_header_ts: u64) -> anyhow::Result<Vec<Leaf2>> {
-        self.scan_decided_leaves(min_header_ts).await
+        let records = self
+            .scan_wal_leaves(move |leaf| leaf.block_header().timestamp() >= min_header_ts)
+            .await?;
+        Ok(records.into_iter().map(|(leaf, ..)| leaf).collect())
+    }
+
+    async fn restore_leaf_copies(&self, views: &BTreeSet<ViewNumber>) -> anyhow::Result<()> {
+        let views = views.clone();
+        let records = self
+            .scan_wal_leaves(move |leaf| views.contains(&leaf.view_number()))
+            .await?;
+        for (leaf, qc, next_epoch_qc) in records {
+            let stamp = header_stamp(&leaf)?;
+            let record = Record::Leaf {
+                leaf,
+                qc,
+                next_epoch_qc,
+            };
+            self.put_share_copy(record, stamp).await?;
+        }
+        Ok(())
     }
 
     /// Without a header at hand, stamps the share with the local clock, which is within the
@@ -1845,7 +1884,6 @@ mod tests {
     use hotshot_query_service::metrics::PrometheusMetrics;
     use hotshot_types::{
         data::{ns_table::parse_ns_table, vid_disperse::AvidmGf2DisperseShare},
-        simple_certificate::NextEpochQuorumCertificate2,
         traits::EncodeBytes,
         utils::EpochTransitionIndicator,
         vid::avidm_gf2::{AvidmGf2Scheme, init_avidm_gf2_param},
@@ -1988,16 +2026,10 @@ mod tests {
         share.to_proposal(&privkey).unwrap()
     }
 
-    type LeafCopy = (
-        Leaf2,
-        QuorumCertificate2<SeqTypes>,
-        Option<NextEpochQuorumCertificate2<SeqTypes>>,
-    );
-
     async fn has_leaf_copy(storage: &Persistence, view: u64) -> bool {
         let share = &storage.inner.lanes.share;
         storage
-            .scan_for::<LeafCopy>(share, Kind::Leaf, ViewNumber::new(view))
+            .scan_for::<LeafRecord>(share, Kind::Leaf, ViewNumber::new(view))
             .await
             .unwrap()
             .is_some()
@@ -2131,6 +2163,41 @@ mod tests {
         )));
         let err = Persistence::open(opts).await.err().unwrap();
         assert!(err.to_string().contains("query node"), "{err:#}");
+    }
+
+    /// A wiped share lane loses the leaf copies with the shares; restoring writes them again for
+    /// the requested views only, stamped with their header time.
+    #[tokio::test]
+    async fn restore_leaf_copies_after_share_wipe_ok() {
+        let tmp = TempDir::new().unwrap();
+        let opts = Options {
+            share_heal: true,
+            ..options(&tmp)
+        };
+        let storage = Persistence::open(opts.clone()).await.unwrap();
+        let mut chain = consecutive_height_chain(3).await;
+        for (view, (leaf, _)) in chain.iter_mut().enumerate() {
+            let ts = 1000 * (view as u64 + 1);
+            leaf.block_header_mut().set_timestamp(ts, ts * 1000);
+        }
+        decide_range(&storage, &chain, 0..3, &NullEventConsumer).await;
+        drop(storage);
+
+        fs::remove_dir_all(tmp.path().join("journal/share")).unwrap();
+        let storage = Persistence::open(opts).await.unwrap();
+        assert!(!has_leaf_copy(&storage, 1).await);
+
+        let views = BTreeSet::from([ViewNumber::new(1)]);
+        storage.restore_leaf_copies(&views).await.unwrap();
+        // A durable append waits for the enqueued copies before it.
+        storage
+            .append_vid_stamped(&vid_share(9).await, 100)
+            .await
+            .unwrap();
+        assert!(has_leaf_copy(&storage, 1).await);
+        assert!(!has_leaf_copy(&storage, 0).await);
+        assert!(!has_leaf_copy(&storage, 2).await);
+        assert_eq!(share_stamps(&storage)[0], 2000);
     }
 
     #[tokio::test]

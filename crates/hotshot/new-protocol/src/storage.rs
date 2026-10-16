@@ -68,6 +68,12 @@ pub trait NewProtocolStorage<T: NodeType>: StorageTrait<T> {
 
     /// Decided leaves with header time at least `min_header_ts`, newest first.
     async fn decided_leaves(&self, min_header_ts: u64) -> anyhow::Result<Vec<Leaf2<T>>>;
+
+    /// Write the archive copies of the decided leaves at `views`, which outlive the wal and are
+    /// lost with the share store.
+    async fn restore_leaf_copies(&self, _views: &BTreeSet<ViewNumber>) -> anyhow::Result<()> {
+        Ok(())
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]

@@ -637,6 +637,12 @@ pub trait SequencerPersistence:
     async fn decided_leaves(&self, _min_header_ts: u64) -> anyhow::Result<Vec<Leaf2>> {
         anyhow::bail!("share heal needs storage-journal")
     }
+
+    /// Write the archive copies of the decided leaves at `views` that outlive the wal, which a
+    /// wiped share store lost. Share heal only; needs `storage-journal`.
+    async fn restore_leaf_copies(&self, _views: &BTreeSet<ViewNumber>) -> anyhow::Result<()> {
+        anyhow::bail!("share heal needs storage-journal")
+    }
     async fn load_da_proposal(
         &self,
         view: ViewNumber,
@@ -1334,6 +1340,10 @@ impl<P: SequencerPersistence> NewProtocolStorage<SeqTypes> for Arc<P> {
 
     async fn decided_leaves(&self, min_header_ts: u64) -> anyhow::Result<Vec<Leaf2>> {
         (**self).decided_leaves(min_header_ts).await
+    }
+
+    async fn restore_leaf_copies(&self, views: &BTreeSet<ViewNumber>) -> anyhow::Result<()> {
+        (**self).restore_leaf_copies(views).await
     }
 }
 
