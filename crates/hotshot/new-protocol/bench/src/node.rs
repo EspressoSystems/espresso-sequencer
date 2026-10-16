@@ -35,6 +35,7 @@ use hotshot_types::{
     upgrade_config::UpgradeConfig,
     x25519::Keypair,
 };
+use tokio::sync::mpsc;
 use tracing::{error, info, warn};
 use versions::{NEW_PROTOCOL_VERSION, Upgrade};
 
@@ -252,6 +253,7 @@ async fn build_coordinator(
         .client(client)
         .membership_coordinator(membership)
         .outbox(Outbox::new())
+        .external_tx(mpsc::unbounded_channel().0)
         .timer(timer)
         .public_key(public_key)
         .build();

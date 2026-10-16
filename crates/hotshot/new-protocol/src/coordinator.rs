@@ -10,11 +10,12 @@ use std::{
 
 use bon::{Builder, bon};
 use committable::Commitment;
-use hotshot::{HotShotInitializer, traits::BlockPayload, types::SignatureKey};
+use hotshot::{traits::BlockPayload, types::SignatureKey};
 use hotshot_types::{
     consensus::{ConsensusMetricsValue, ParticipationTracker},
     data::{EpochNumber, Leaf2, VidCommitment, VidCommitment2, ViewChangeEvidence2, ViewNumber},
     epoch_membership::EpochMembershipCoordinator,
+    initializer::HotShotInitializer,
     message::{Proposal as SignedProposal, UpgradeLock},
     simple_certificate::{
         OneHonestThreshold, SuccessThreshold, TimeoutCertificate2, TimeoutCertificate3,
@@ -30,7 +31,10 @@ use hotshot_types::{
     vote::{HasViewNumber, Vote},
 };
 use time::OffsetDateTime;
-use tokio::{select, sync::oneshot};
+use tokio::{
+    select,
+    sync::{mpsc, oneshot},
+};
 use tracing::{debug, error, info, warn};
 use versions::Version;
 
@@ -130,8 +134,8 @@ pub struct Coordinator<T: NodeType, S> {
     storage: Storage<T, S>,
     #[builder(default)]
     outbox: Outbox<ConsensusOutput<T>>,
-    #[builder(default)]
-    coordinator_outbox: Outbox<OpaqueMessage<T::SignatureKey>>,
+    /// Forwards external messages on arrival, independent of consensus inputs.
+    external_tx: mpsc::UnboundedSender<OpaqueMessage<T::SignatureKey>>,
     public_key: T::SignatureKey,
     #[builder(default = KeyPrefix::from(&public_key))]
     node_id: KeyPrefix,
@@ -195,6 +199,7 @@ where
         anchor_cert2: Option<Certificate2<T>>,
         upgrade_config: UpgradeConfig,
         leader_tracer: Option<LeaderTracerHandle>,
+        external_tx: mpsc::UnboundedSender<OpaqueMessage<T::SignatureKey>>,
     ) -> Self {
         let mut consensus = Consensus::new(
             membership_coordinator.clone(),
@@ -418,6 +423,7 @@ where
             .public_key(public_key)
             .maybe_metrics(coordinator_metrics)
             .participation(participation)
+            .external_tx(external_tx)
             .build()
     }
 
@@ -816,12 +822,7 @@ where
                 debug!(%node, %epoch, "request drb result");
                 self.epoch_manager.request_drb_result(epoch);
             },
-            ConsensusOutput::LeafDecided {
-                leaves,
-                cert1,
-                cert2,
-                ..
-            } => {
+            ConsensusOutput::LeafDecided { leaves, cert1, .. } => {
                 info!(
                     %node,
                     view = %cert1.view_number(),
@@ -830,15 +831,16 @@ where
                     "leaves decided"
                 );
                 self.on_decide_metrics(&leaves);
-                if let Some(cert2) = cert2 {
-                    self.storage.append_cert2(cert2.view_number, cert2.clone());
-                }
                 // `leaves` is ordered newest first.
                 //  Garbage collect the data for views < decided view
                 if let Some(newest) = leaves.first() {
                     let gc_view = newest.view_number();
                     let gc_epoch = newest.justify_qc().epoch().unwrap_or_default();
                     self.gc(gc_epoch, GcScope::Decided(gc_view))?;
+                    // A gap-fill decide trails the decided view; gc already covered its leaves.
+                    if gc_view == self.consensus.last_decided_view() {
+                        self.state_manager.seed_decided(newest.clone());
+                    }
                 }
                 for leaf in leaves.into_iter().rev() {
                     self.participation
@@ -1222,16 +1224,12 @@ where
         &mut self.outbox
     }
 
-    pub fn coordinator_outbox(&self) -> &Outbox<OpaqueMessage<T::SignatureKey>> {
-        &self.coordinator_outbox
-    }
-
-    pub fn coordinator_outbox_mut(&mut self) -> &mut Outbox<OpaqueMessage<T::SignatureKey>> {
-        &mut self.coordinator_outbox
-    }
-
     pub fn current_view(&self) -> ViewNumber {
         self.consensus.current_view()
+    }
+
+    pub fn last_decided_leaf(&self) -> &Leaf2<T> {
+        self.consensus.last_decided_leaf()
     }
 
     pub fn state(&self, v: ViewNumber) -> Option<&StateEntry<T>> {
@@ -1744,7 +1742,7 @@ where
             },
             MessageType::External(data) => {
                 debug!(%node, %sender, bytes = data.len(), "recv external message");
-                self.coordinator_outbox.push_back(OpaqueMessage {
+                let _ = self.external_tx.send(OpaqueMessage {
                     sender: message.sender,
                     data,
                 });
