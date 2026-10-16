@@ -92,6 +92,9 @@ const MAX_SNAPSHOT_BYTES: u32 = 1 << 30;
 /// A record over this budget takes all of it, so peak memory is about one record plus its
 /// `frame_buf` copy.
 const IN_FLIGHT_BYTES: usize = 128 << 20;
+/// Furthest past the local clock a frame stamp may reach. A segment's newest stamp pins its GC,
+/// and a leader's header time is unvalidated when the share is stored.
+const MAX_STAMP_DRIFT: u32 = 60;
 
 /// Per-record size bounds, enforced in `put_wal`/`put_data` before a record reaches a lane.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -740,6 +743,7 @@ impl Persistence {
             "data record of kind {kind:?} is {} bytes, over the {max}-byte limit",
             body.len()
         );
+        let stamp = stamp.min(unix_now()?.saturating_add(MAX_STAMP_DRIFT));
         let permit = lane.lane.reserve(body.len() as u32).await;
         let lsn = lane
             .lane
@@ -2051,6 +2055,36 @@ mod tests {
             assert!(!has_leaf_copy(&storage, view).await, "leaf copy {view}");
         }
         assert!(has_leaf_copy(&storage, 4).await);
+    }
+
+    /// A leader's far-future header time must not keep a segment from ever being collected.
+    #[tokio::test]
+    async fn far_future_stamp_is_clamped_and_collected() {
+        let tmp = TempDir::new().unwrap();
+        let retention = 1000;
+        let opts = Options {
+            segment_bytes: Some(1),
+            share_retention: Duration::from_secs(retention),
+            ..options(&tmp)
+        };
+        let storage = Persistence::open(opts).await.unwrap();
+        storage
+            .append_vid_stamped(&vid_share(1).await, u32::MAX)
+            .await
+            .unwrap();
+        let latest = unix_now().unwrap() + MAX_STAMP_DRIFT;
+        assert!(
+            share_stamps(&storage)[0] <= latest,
+            "{:?}",
+            share_stamps(&storage)
+        );
+
+        let mut chain = consecutive_height_chain(2).await;
+        let ts = latest as u64 + retention + 10;
+        chain[1].0.block_header_mut().set_timestamp(ts, ts * 1000);
+        decide_range(&storage, &chain, 0..2, &NullEventConsumer).await;
+        let share = storage.load_vid_share(ViewNumber::new(1)).await.unwrap();
+        assert!(share.is_none());
     }
 
     #[tokio::test]
