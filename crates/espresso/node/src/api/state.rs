@@ -6077,6 +6077,8 @@ mod tests {
             "--pruning-threshold",
             "1000000000000",
             "--",
+            "http",
+            "--",
             "query",
         ]);
         let cfg = PublicNodeConfig::new(&opt, &opt.modules(), &test_genesis());

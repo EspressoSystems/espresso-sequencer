@@ -1754,6 +1754,8 @@ pub(crate) mod tests {
             "--pruning-threshold",
             "1000000000000",
             "--",
+            "http",
+            "--",
             "query",
         ]);
         let modules = opt.modules();
