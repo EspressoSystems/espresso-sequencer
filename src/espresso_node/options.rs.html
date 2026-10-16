@@ -462,7 +462,7 @@
 <a href=#462 id=462 data-nosnippet>462</a>                poll_interval: follower.poll_interval,
 <a href=#463 id=463 data-nosnippet>463</a>                max_blocks_per_poll: follower.max_blocks_per_poll,
 <a href=#464 id=464 data-nosnippet>464</a>                light_client: query.light_client.clone(),
-<a href=#465 id=465 data-nosnippet>465</a>                light_client_db: query.light_client_db.clone(),
+<a href=#465 id=465 data-nosnippet>465</a>                light_client_db: query.light_client_db(),
 <a href=#466 id=466 data-nosnippet>466</a>                light_client_genesis,
 <a href=#467 id=467 data-nosnippet>467</a>            },
 <a href=#468 id=468 data-nosnippet>468</a>        })
@@ -1089,7 +1089,7 @@
 <a href=#1089 id=1089 data-nosnippet>1089</a>        <span class="self">Self </span>{
 <a href=#1090 id=1090 data-nosnippet>1090</a>            peers: o.peers.clone(),
 <a href=#1091 id=1091 data-nosnippet>1091</a>            light_client: o.light_client.clone(),
-<a href=#1092 id=1092 data-nosnippet>1092</a>            light_client_db: o.light_client_db.clone(),
+<a href=#1092 id=1092 data-nosnippet>1092</a>            light_client_db: o.light_client_db(),
 <a href=#1093 id=1093 data-nosnippet>1093</a>        }
 <a href=#1094 id=1094 data-nosnippet>1094</a>    }
 <a href=#1095 id=1095 data-nosnippet>1095</a>}
@@ -1632,134 +1632,158 @@
 <a href=#1632 id=1632 data-nosnippet>1632</a>        </span>);
 <a href=#1633 id=1633 data-nosnippet>1633</a>    }
 <a href=#1634 id=1634 data-nosnippet>1634</a>
-<a href=#1635 id=1635 data-nosnippet>1635</a>    <span class="comment">// Document the JSON shape of GET /config/runtime. Runs under Postgres builds only;
-<a href=#1636 id=1636 data-nosnippet>1636</a>    // the embedded-db variant produces a near-identical shape and the duplication isn't
-<a href=#1637 id=1637 data-nosnippet>1637</a>    // worth the test complexity.
-<a href=#1638 id=1638 data-nosnippet>1638</a>    </span><span class="attr">#[cfg(not(feature = <span class="string">"embedded-db"</span>))]
-<a href=#1639 id=1639 data-nosnippet>1639</a>    #[test]
-<a href=#1640 id=1640 data-nosnippet>1640</a>    </span><span class="kw">fn </span>config_node_response_snapshot() {
-<a href=#1641 id=1641 data-nosnippet>1641</a>        <span class="kw">let </span>opt = parse_options_with(<span class="kw-2">&amp;</span>[
-<a href=#1642 id=1642 data-nosnippet>1642</a>            <span class="string">"--orchestrator-url"</span>,
-<a href=#1643 id=1643 data-nosnippet>1643</a>            <span class="string">"http://orchestrator.example:8080"</span>,
-<a href=#1644 id=1644 data-nosnippet>1644</a>            <span class="string">"--cdn-endpoint"</span>,
-<a href=#1645 id=1645 data-nosnippet>1645</a>            <span class="string">"cdn.example:8081"</span>,
-<a href=#1646 id=1646 data-nosnippet>1646</a>            <span class="string">"--cliquenet-bind-address"</span>,
-<a href=#1647 id=1647 data-nosnippet>1647</a>            <span class="string">"0.0.0.0:9977"</span>,
-<a href=#1648 id=1648 data-nosnippet>1648</a>            <span class="string">"--cliquenet-advertise-address"</span>,
-<a href=#1649 id=1649 data-nosnippet>1649</a>            <span class="string">"node1.example:9977"</span>,
-<a href=#1650 id=1650 data-nosnippet>1650</a>            <span class="string">"--libp2p-bind-address"</span>,
-<a href=#1651 id=1651 data-nosnippet>1651</a>            <span class="string">"0.0.0.0:1769"</span>,
-<a href=#1652 id=1652 data-nosnippet>1652</a>            <span class="string">"--libp2p-advertise-address"</span>,
-<a href=#1653 id=1653 data-nosnippet>1653</a>            <span class="string">"node1.example:1769"</span>,
-<a href=#1654 id=1654 data-nosnippet>1654</a>            <span class="string">"--libp2p-bootstrap-nodes"</span>,
-<a href=#1655 id=1655 data-nosnippet>1655</a>            <span class="string">"/ip4/10.0.0.1/tcp/1769"</span>,
-<a href=#1656 id=1656 data-nosnippet>1656</a>            <span class="string">"--public-api-url"</span>,
-<a href=#1657 id=1657 data-nosnippet>1657</a>            <span class="string">"http://node1.example:24000"</span>,
-<a href=#1658 id=1658 data-nosnippet>1658</a>            <span class="string">"--builder-urls"</span>,
-<a href=#1659 id=1659 data-nosnippet>1659</a>            <span class="string">"http://builder.example:31004"</span>,
-<a href=#1660 id=1660 data-nosnippet>1660</a>            <span class="string">"--state-relay-server-url"</span>,
-<a href=#1661 id=1661 data-nosnippet>1661</a>            <span class="string">"http://relay.example:8083"</span>,
-<a href=#1662 id=1662 data-nosnippet>1662</a>            <span class="string">"--state-peers"</span>,
-<a href=#1663 id=1663 data-nosnippet>1663</a>            <span class="string">"https://peer1.example,https://peer2.example"</span>,
-<a href=#1664 id=1664 data-nosnippet>1664</a>            <span class="string">"--config-peers"</span>,
-<a href=#1665 id=1665 data-nosnippet>1665</a>            <span class="string">"https://peer1.example"</span>,
-<a href=#1666 id=1666 data-nosnippet>1666</a>            <span class="string">"--is-da"</span>,
-<a href=#1667 id=1667 data-nosnippet>1667</a>            <span class="string">"--genesis-file"</span>,
-<a href=#1668 id=1668 data-nosnippet>1668</a>            <span class="string">"/path/to/genesis.toml"</span>,
-<a href=#1669 id=1669 data-nosnippet>1669</a>            <span class="string">"--l1-provider-url"</span>,
-<a href=#1670 id=1670 data-nosnippet>1670</a>            <span class="string">"https://eth.example"</span>,
-<a href=#1671 id=1671 data-nosnippet>1671</a>            <span class="string">"--country-code"</span>,
-<a href=#1672 id=1672 data-nosnippet>1672</a>            <span class="string">"US"</span>,
-<a href=#1673 id=1673 data-nosnippet>1673</a>            <span class="string">"--node-name"</span>,
-<a href=#1674 id=1674 data-nosnippet>1674</a>            <span class="string">"Snapshot Node"</span>,
-<a href=#1675 id=1675 data-nosnippet>1675</a>            <span class="comment">// Pin host-dependent identity defaults so the snapshot is portable.
-<a href=#1676 id=1676 data-nosnippet>1676</a>            </span><span class="string">"--operating-system"</span>,
-<a href=#1677 id=1677 data-nosnippet>1677</a>            <span class="string">"linux"</span>,
-<a href=#1678 id=1678 data-nosnippet>1678</a>            <span class="string">"--node-type"</span>,
-<a href=#1679 id=1679 data-nosnippet>1679</a>            <span class="string">"espresso-sequencer 0.0.0"</span>,
-<a href=#1680 id=1680 data-nosnippet>1680</a>            <span class="string">"--"</span>,
-<a href=#1681 id=1681 data-nosnippet>1681</a>            <span class="string">"storage-sql"</span>,
-<a href=#1682 id=1682 data-nosnippet>1682</a>            <span class="string">"--prune"</span>,
-<a href=#1683 id=1683 data-nosnippet>1683</a>            <span class="string">"--pruning-threshold"</span>,
-<a href=#1684 id=1684 data-nosnippet>1684</a>            <span class="string">"1000000000000"</span>,
-<a href=#1685 id=1685 data-nosnippet>1685</a>            <span class="string">"--"</span>,
-<a href=#1686 id=1686 data-nosnippet>1686</a>            <span class="string">"http"</span>,
-<a href=#1687 id=1687 data-nosnippet>1687</a>            <span class="string">"--port"</span>,
-<a href=#1688 id=1688 data-nosnippet>1688</a>            <span class="string">"24000"</span>,
-<a href=#1689 id=1689 data-nosnippet>1689</a>            <span class="string">"--"</span>,
-<a href=#1690 id=1690 data-nosnippet>1690</a>            <span class="string">"query"</span>,
-<a href=#1691 id=1691 data-nosnippet>1691</a>            <span class="string">"--peers"</span>,
-<a href=#1692 id=1692 data-nosnippet>1692</a>            <span class="string">"http://peer.example:24000"</span>,
-<a href=#1693 id=1693 data-nosnippet>1693</a>            <span class="string">"--"</span>,
-<a href=#1694 id=1694 data-nosnippet>1694</a>            <span class="string">"config"</span>,
-<a href=#1695 id=1695 data-nosnippet>1695</a>        ]);
-<a href=#1696 id=1696 data-nosnippet>1696</a>        <span class="kw">let </span>modules = opt.modules();
-<a href=#1697 id=1697 data-nosnippet>1697</a>
-<a href=#1698 id=1698 data-nosnippet>1698</a>        <span class="kw">let </span>cfg = PublicNodeConfig::new(<span class="kw-2">&amp;</span>opt, <span class="kw-2">&amp;</span>modules, <span class="kw-2">&amp;</span>test_genesis());
-<a href=#1699 id=1699 data-nosnippet>1699</a>
-<a href=#1700 id=1700 data-nosnippet>1700</a>        <span class="macro">insta::assert_yaml_snapshot!</span>(<span class="string">"config_node_response_postgres"</span>, cfg);
-<a href=#1701 id=1701 data-nosnippet>1701</a>    }
-<a href=#1702 id=1702 data-nosnippet>1702</a>
-<a href=#1703 id=1703 data-nosnippet>1703</a>    <span class="comment">// Postgres only: storage-sql under embedded-db requires a --path arg that's
-<a href=#1704 id=1704 data-nosnippet>1704</a>    // irrelevant to what this test asserts.
-<a href=#1705 id=1705 data-nosnippet>1705</a>    </span><span class="attr">#[cfg(not(feature = <span class="string">"embedded-db"</span>))]
-<a href=#1706 id=1706 data-nosnippet>1706</a>    #[test]
-<a href=#1707 id=1707 data-nosnippet>1707</a>    </span><span class="kw">fn </span>public_node_config_includes_pruning() {
-<a href=#1708 id=1708 data-nosnippet>1708</a>        <span class="kw">let </span>opt = parse_options_with(<span class="kw-2">&amp;</span>[
-<a href=#1709 id=1709 data-nosnippet>1709</a>            <span class="string">"--cliquenet-bind-address"</span>,
-<a href=#1710 id=1710 data-nosnippet>1710</a>            <span class="string">"127.0.0.1:1"</span>,
-<a href=#1711 id=1711 data-nosnippet>1711</a>            <span class="string">"--"</span>,
-<a href=#1712 id=1712 data-nosnippet>1712</a>            <span class="string">"storage-sql"</span>,
-<a href=#1713 id=1713 data-nosnippet>1713</a>            <span class="string">"--prune"</span>,
-<a href=#1714 id=1714 data-nosnippet>1714</a>            <span class="string">"--pruning-threshold"</span>,
-<a href=#1715 id=1715 data-nosnippet>1715</a>            <span class="string">"1000000000000"</span>,
-<a href=#1716 id=1716 data-nosnippet>1716</a>        ]);
-<a href=#1717 id=1717 data-nosnippet>1717</a>        <span class="kw">let </span>modules = opt.modules();
-<a href=#1718 id=1718 data-nosnippet>1718</a>
-<a href=#1719 id=1719 data-nosnippet>1719</a>        <span class="kw">let </span>cfg = PublicNodeConfig::new(<span class="kw-2">&amp;</span>opt, <span class="kw-2">&amp;</span>modules, <span class="kw-2">&amp;</span>test_genesis());
-<a href=#1720 id=1720 data-nosnippet>1720</a>        <span class="kw">let </span>json = serde_json::to_string(<span class="kw-2">&amp;</span>cfg).unwrap();
+<a href=#1635 id=1635 data-nosnippet>1635</a>    <span class="attr">#[test]
+<a href=#1636 id=1636 data-nosnippet>1636</a>    </span><span class="kw">fn </span>light_client_db_defaults_under_storage_path() {
+<a href=#1637 id=1637 data-nosnippet>1637</a>        <span class="kw">fn </span>lc_path(storage_path: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>str&gt;, lc_path: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>str&gt;) -&gt; <span class="prelude-ty">Option</span>&lt;PathBuf&gt; {
+<a href=#1638 id=1638 data-nosnippet>1638</a>            <span class="kw">let </span>query = api::options::Query {
+<a href=#1639 id=1639 data-nosnippet>1639</a>                storage_path: storage_path.map(PathBuf::from),
+<a href=#1640 id=1640 data-nosnippet>1640</a>                light_client_db: LightClientSqliteOptions {
+<a href=#1641 id=1641 data-nosnippet>1641</a>                    lc_path: lc_path.map(PathBuf::from),
+<a href=#1642 id=1642 data-nosnippet>1642</a>                    ..Default::default()
+<a href=#1643 id=1643 data-nosnippet>1643</a>                },
+<a href=#1644 id=1644 data-nosnippet>1644</a>                ..Default::default()
+<a href=#1645 id=1645 data-nosnippet>1645</a>            };
+<a href=#1646 id=1646 data-nosnippet>1646</a>            query.light_client_db().lc_path
+<a href=#1647 id=1647 data-nosnippet>1647</a>        }
+<a href=#1648 id=1648 data-nosnippet>1648</a>        <span class="macro">assert_eq!</span>(
+<a href=#1649 id=1649 data-nosnippet>1649</a>            lc_path(<span class="prelude-val">Some</span>(<span class="string">"/store/espresso"</span>), <span class="prelude-val">None</span>),
+<a href=#1650 id=1650 data-nosnippet>1650</a>            <span class="prelude-val">Some</span>(PathBuf::from(<span class="string">"/store/espresso/light-client/lc.db"</span>))
+<a href=#1651 id=1651 data-nosnippet>1651</a>        );
+<a href=#1652 id=1652 data-nosnippet>1652</a>        <span class="macro">assert_eq!</span>(
+<a href=#1653 id=1653 data-nosnippet>1653</a>            lc_path(<span class="prelude-val">Some</span>(<span class="string">"/store/espresso"</span>), <span class="prelude-val">Some</span>(<span class="string">"/store/lc"</span>)),
+<a href=#1654 id=1654 data-nosnippet>1654</a>            <span class="prelude-val">Some</span>(PathBuf::from(<span class="string">"/store/lc"</span>))
+<a href=#1655 id=1655 data-nosnippet>1655</a>        );
+<a href=#1656 id=1656 data-nosnippet>1656</a>        <span class="macro">assert_eq!</span>(lc_path(<span class="prelude-val">None</span>, <span class="prelude-val">None</span>), <span class="prelude-val">None</span>);
+<a href=#1657 id=1657 data-nosnippet>1657</a>    }
+<a href=#1658 id=1658 data-nosnippet>1658</a>
+<a href=#1659 id=1659 data-nosnippet>1659</a>    <span class="comment">// Document the JSON shape of GET /config/runtime. Runs under Postgres builds only;
+<a href=#1660 id=1660 data-nosnippet>1660</a>    // the embedded-db variant produces a near-identical shape and the duplication isn't
+<a href=#1661 id=1661 data-nosnippet>1661</a>    // worth the test complexity.
+<a href=#1662 id=1662 data-nosnippet>1662</a>    </span><span class="attr">#[cfg(not(feature = <span class="string">"embedded-db"</span>))]
+<a href=#1663 id=1663 data-nosnippet>1663</a>    #[test]
+<a href=#1664 id=1664 data-nosnippet>1664</a>    </span><span class="kw">fn </span>config_node_response_snapshot() {
+<a href=#1665 id=1665 data-nosnippet>1665</a>        <span class="kw">let </span>opt = parse_options_with(<span class="kw-2">&amp;</span>[
+<a href=#1666 id=1666 data-nosnippet>1666</a>            <span class="string">"--orchestrator-url"</span>,
+<a href=#1667 id=1667 data-nosnippet>1667</a>            <span class="string">"http://orchestrator.example:8080"</span>,
+<a href=#1668 id=1668 data-nosnippet>1668</a>            <span class="string">"--cdn-endpoint"</span>,
+<a href=#1669 id=1669 data-nosnippet>1669</a>            <span class="string">"cdn.example:8081"</span>,
+<a href=#1670 id=1670 data-nosnippet>1670</a>            <span class="string">"--cliquenet-bind-address"</span>,
+<a href=#1671 id=1671 data-nosnippet>1671</a>            <span class="string">"0.0.0.0:9977"</span>,
+<a href=#1672 id=1672 data-nosnippet>1672</a>            <span class="string">"--cliquenet-advertise-address"</span>,
+<a href=#1673 id=1673 data-nosnippet>1673</a>            <span class="string">"node1.example:9977"</span>,
+<a href=#1674 id=1674 data-nosnippet>1674</a>            <span class="string">"--libp2p-bind-address"</span>,
+<a href=#1675 id=1675 data-nosnippet>1675</a>            <span class="string">"0.0.0.0:1769"</span>,
+<a href=#1676 id=1676 data-nosnippet>1676</a>            <span class="string">"--libp2p-advertise-address"</span>,
+<a href=#1677 id=1677 data-nosnippet>1677</a>            <span class="string">"node1.example:1769"</span>,
+<a href=#1678 id=1678 data-nosnippet>1678</a>            <span class="string">"--libp2p-bootstrap-nodes"</span>,
+<a href=#1679 id=1679 data-nosnippet>1679</a>            <span class="string">"/ip4/10.0.0.1/tcp/1769"</span>,
+<a href=#1680 id=1680 data-nosnippet>1680</a>            <span class="string">"--public-api-url"</span>,
+<a href=#1681 id=1681 data-nosnippet>1681</a>            <span class="string">"http://node1.example:24000"</span>,
+<a href=#1682 id=1682 data-nosnippet>1682</a>            <span class="string">"--builder-urls"</span>,
+<a href=#1683 id=1683 data-nosnippet>1683</a>            <span class="string">"http://builder.example:31004"</span>,
+<a href=#1684 id=1684 data-nosnippet>1684</a>            <span class="string">"--state-relay-server-url"</span>,
+<a href=#1685 id=1685 data-nosnippet>1685</a>            <span class="string">"http://relay.example:8083"</span>,
+<a href=#1686 id=1686 data-nosnippet>1686</a>            <span class="string">"--state-peers"</span>,
+<a href=#1687 id=1687 data-nosnippet>1687</a>            <span class="string">"https://peer1.example,https://peer2.example"</span>,
+<a href=#1688 id=1688 data-nosnippet>1688</a>            <span class="string">"--config-peers"</span>,
+<a href=#1689 id=1689 data-nosnippet>1689</a>            <span class="string">"https://peer1.example"</span>,
+<a href=#1690 id=1690 data-nosnippet>1690</a>            <span class="string">"--is-da"</span>,
+<a href=#1691 id=1691 data-nosnippet>1691</a>            <span class="string">"--genesis-file"</span>,
+<a href=#1692 id=1692 data-nosnippet>1692</a>            <span class="string">"/path/to/genesis.toml"</span>,
+<a href=#1693 id=1693 data-nosnippet>1693</a>            <span class="string">"--l1-provider-url"</span>,
+<a href=#1694 id=1694 data-nosnippet>1694</a>            <span class="string">"https://eth.example"</span>,
+<a href=#1695 id=1695 data-nosnippet>1695</a>            <span class="string">"--country-code"</span>,
+<a href=#1696 id=1696 data-nosnippet>1696</a>            <span class="string">"US"</span>,
+<a href=#1697 id=1697 data-nosnippet>1697</a>            <span class="string">"--node-name"</span>,
+<a href=#1698 id=1698 data-nosnippet>1698</a>            <span class="string">"Snapshot Node"</span>,
+<a href=#1699 id=1699 data-nosnippet>1699</a>            <span class="comment">// Pin host-dependent identity defaults so the snapshot is portable.
+<a href=#1700 id=1700 data-nosnippet>1700</a>            </span><span class="string">"--operating-system"</span>,
+<a href=#1701 id=1701 data-nosnippet>1701</a>            <span class="string">"linux"</span>,
+<a href=#1702 id=1702 data-nosnippet>1702</a>            <span class="string">"--node-type"</span>,
+<a href=#1703 id=1703 data-nosnippet>1703</a>            <span class="string">"espresso-sequencer 0.0.0"</span>,
+<a href=#1704 id=1704 data-nosnippet>1704</a>            <span class="string">"--"</span>,
+<a href=#1705 id=1705 data-nosnippet>1705</a>            <span class="string">"storage-sql"</span>,
+<a href=#1706 id=1706 data-nosnippet>1706</a>            <span class="string">"--prune"</span>,
+<a href=#1707 id=1707 data-nosnippet>1707</a>            <span class="string">"--pruning-threshold"</span>,
+<a href=#1708 id=1708 data-nosnippet>1708</a>            <span class="string">"1000000000000"</span>,
+<a href=#1709 id=1709 data-nosnippet>1709</a>            <span class="string">"--"</span>,
+<a href=#1710 id=1710 data-nosnippet>1710</a>            <span class="string">"http"</span>,
+<a href=#1711 id=1711 data-nosnippet>1711</a>            <span class="string">"--port"</span>,
+<a href=#1712 id=1712 data-nosnippet>1712</a>            <span class="string">"24000"</span>,
+<a href=#1713 id=1713 data-nosnippet>1713</a>            <span class="string">"--"</span>,
+<a href=#1714 id=1714 data-nosnippet>1714</a>            <span class="string">"query"</span>,
+<a href=#1715 id=1715 data-nosnippet>1715</a>            <span class="string">"--peers"</span>,
+<a href=#1716 id=1716 data-nosnippet>1716</a>            <span class="string">"http://peer.example:24000"</span>,
+<a href=#1717 id=1717 data-nosnippet>1717</a>            <span class="string">"--"</span>,
+<a href=#1718 id=1718 data-nosnippet>1718</a>            <span class="string">"config"</span>,
+<a href=#1719 id=1719 data-nosnippet>1719</a>        ]);
+<a href=#1720 id=1720 data-nosnippet>1720</a>        <span class="kw">let </span>modules = opt.modules();
 <a href=#1721 id=1721 data-nosnippet>1721</a>
-<a href=#1722 id=1722 data-nosnippet>1722</a>        <span class="macro">assert_eq!</span>(cfg.storage.backend, StorageBackend::Sql);
-<a href=#1723 id=1723 data-nosnippet>1723</a>        <span class="macro">assert!</span>(
-<a href=#1724 id=1724 data-nosnippet>1724</a>            json.contains(<span class="string">"\"prune\":true"</span>),
-<a href=#1725 id=1725 data-nosnippet>1725</a>            <span class="string">"expected prune:true in JSON: {json}"
-<a href=#1726 id=1726 data-nosnippet>1726</a>        </span>);
-<a href=#1727 id=1727 data-nosnippet>1727</a>        <span class="macro">assert!</span>(
-<a href=#1728 id=1728 data-nosnippet>1728</a>            json.contains(<span class="string">"pruning_threshold"</span>),
-<a href=#1729 id=1729 data-nosnippet>1729</a>            <span class="string">"expected pruning_threshold in JSON: {json}"
-<a href=#1730 id=1730 data-nosnippet>1730</a>        </span>);
-<a href=#1731 id=1731 data-nosnippet>1731</a>        <span class="macro">assert!</span>(
-<a href=#1732 id=1732 data-nosnippet>1732</a>            json.contains(<span class="string">"1000000000000"</span>),
-<a href=#1733 id=1733 data-nosnippet>1733</a>            <span class="string">"expected pruning threshold value in JSON: {json}"
-<a href=#1734 id=1734 data-nosnippet>1734</a>        </span>);
-<a href=#1735 id=1735 data-nosnippet>1735</a>        <span class="macro">assert!</span>(
-<a href=#1736 id=1736 data-nosnippet>1736</a>            json.contains(<span class="string">"\"consensus_pruning\""</span>),
-<a href=#1737 id=1737 data-nosnippet>1737</a>            <span class="string">"expected consensus_pruning object in JSON: {json}"
-<a href=#1738 id=1738 data-nosnippet>1738</a>        </span>);
-<a href=#1739 id=1739 data-nosnippet>1739</a>        <span class="macro">assert!</span>(
-<a href=#1740 id=1740 data-nosnippet>1740</a>            json.contains(<span class="string">"\"pruning\""</span>),
-<a href=#1741 id=1741 data-nosnippet>1741</a>            <span class="string">"expected pruning object in JSON: {json}"
-<a href=#1742 id=1742 data-nosnippet>1742</a>        </span>);
-<a href=#1743 id=1743 data-nosnippet>1743</a>        <span class="macro">assert!</span>(
-<a href=#1744 id=1744 data-nosnippet>1744</a>            json.contains(<span class="string">"\"target_retention\":302000"</span>),
-<a href=#1745 id=1745 data-nosnippet>1745</a>            <span class="string">"expected consensus_pruning target_retention default in JSON: {json}"
-<a href=#1746 id=1746 data-nosnippet>1746</a>        </span>);
+<a href=#1722 id=1722 data-nosnippet>1722</a>        <span class="kw">let </span>cfg = PublicNodeConfig::new(<span class="kw-2">&amp;</span>opt, <span class="kw-2">&amp;</span>modules, <span class="kw-2">&amp;</span>test_genesis());
+<a href=#1723 id=1723 data-nosnippet>1723</a>
+<a href=#1724 id=1724 data-nosnippet>1724</a>        <span class="macro">insta::assert_yaml_snapshot!</span>(<span class="string">"config_node_response_postgres"</span>, cfg);
+<a href=#1725 id=1725 data-nosnippet>1725</a>    }
+<a href=#1726 id=1726 data-nosnippet>1726</a>
+<a href=#1727 id=1727 data-nosnippet>1727</a>    <span class="comment">// Postgres only: storage-sql under embedded-db requires a --path arg that's
+<a href=#1728 id=1728 data-nosnippet>1728</a>    // irrelevant to what this test asserts.
+<a href=#1729 id=1729 data-nosnippet>1729</a>    </span><span class="attr">#[cfg(not(feature = <span class="string">"embedded-db"</span>))]
+<a href=#1730 id=1730 data-nosnippet>1730</a>    #[test]
+<a href=#1731 id=1731 data-nosnippet>1731</a>    </span><span class="kw">fn </span>public_node_config_includes_pruning() {
+<a href=#1732 id=1732 data-nosnippet>1732</a>        <span class="kw">let </span>opt = parse_options_with(<span class="kw-2">&amp;</span>[
+<a href=#1733 id=1733 data-nosnippet>1733</a>            <span class="string">"--cliquenet-bind-address"</span>,
+<a href=#1734 id=1734 data-nosnippet>1734</a>            <span class="string">"127.0.0.1:1"</span>,
+<a href=#1735 id=1735 data-nosnippet>1735</a>            <span class="string">"--"</span>,
+<a href=#1736 id=1736 data-nosnippet>1736</a>            <span class="string">"storage-sql"</span>,
+<a href=#1737 id=1737 data-nosnippet>1737</a>            <span class="string">"--prune"</span>,
+<a href=#1738 id=1738 data-nosnippet>1738</a>            <span class="string">"--pruning-threshold"</span>,
+<a href=#1739 id=1739 data-nosnippet>1739</a>            <span class="string">"1000000000000"</span>,
+<a href=#1740 id=1740 data-nosnippet>1740</a>        ]);
+<a href=#1741 id=1741 data-nosnippet>1741</a>        <span class="kw">let </span>modules = opt.modules();
+<a href=#1742 id=1742 data-nosnippet>1742</a>
+<a href=#1743 id=1743 data-nosnippet>1743</a>        <span class="kw">let </span>cfg = PublicNodeConfig::new(<span class="kw-2">&amp;</span>opt, <span class="kw-2">&amp;</span>modules, <span class="kw-2">&amp;</span>test_genesis());
+<a href=#1744 id=1744 data-nosnippet>1744</a>        <span class="kw">let </span>json = serde_json::to_string(<span class="kw-2">&amp;</span>cfg).unwrap();
+<a href=#1745 id=1745 data-nosnippet>1745</a>
+<a href=#1746 id=1746 data-nosnippet>1746</a>        <span class="macro">assert_eq!</span>(cfg.storage.backend, StorageBackend::Sql);
 <a href=#1747 id=1747 data-nosnippet>1747</a>        <span class="macro">assert!</span>(
-<a href=#1748 id=1748 data-nosnippet>1748</a>            json.contains(<span class="string">"\"minimum_retention\":130000"</span>),
-<a href=#1749 id=1749 data-nosnippet>1749</a>            <span class="string">"expected consensus_pruning minimum_retention default in JSON: {json}"
+<a href=#1748 id=1748 data-nosnippet>1748</a>            json.contains(<span class="string">"\"prune\":true"</span>),
+<a href=#1749 id=1749 data-nosnippet>1749</a>            <span class="string">"expected prune:true in JSON: {json}"
 <a href=#1750 id=1750 data-nosnippet>1750</a>        </span>);
 <a href=#1751 id=1751 data-nosnippet>1751</a>        <span class="macro">assert!</span>(
-<a href=#1752 id=1752 data-nosnippet>1752</a>            json.contains(<span class="string">"\"target_usage\":1000000000"</span>),
-<a href=#1753 id=1753 data-nosnippet>1753</a>            <span class="string">"expected consensus_pruning target_usage default in JSON: {json}"
+<a href=#1752 id=1752 data-nosnippet>1752</a>            json.contains(<span class="string">"pruning_threshold"</span>),
+<a href=#1753 id=1753 data-nosnippet>1753</a>            <span class="string">"expected pruning_threshold in JSON: {json}"
 <a href=#1754 id=1754 data-nosnippet>1754</a>        </span>);
 <a href=#1755 id=1755 data-nosnippet>1755</a>        <span class="macro">assert!</span>(
-<a href=#1756 id=1756 data-nosnippet>1756</a>            !json.contains(<span class="string">"\"uri\""</span>),
-<a href=#1757 id=1757 data-nosnippet>1757</a>            <span class="string">"DB URI key leaked into JSON: {json}"
+<a href=#1756 id=1756 data-nosnippet>1756</a>            json.contains(<span class="string">"1000000000000"</span>),
+<a href=#1757 id=1757 data-nosnippet>1757</a>            <span class="string">"expected pruning threshold value in JSON: {json}"
 <a href=#1758 id=1758 data-nosnippet>1758</a>        </span>);
 <a href=#1759 id=1759 data-nosnippet>1759</a>        <span class="macro">assert!</span>(
-<a href=#1760 id=1760 data-nosnippet>1760</a>            !json.contains(<span class="string">"postgres://"</span>),
-<a href=#1761 id=1761 data-nosnippet>1761</a>            <span class="string">"DB connection string leaked into JSON: {json}"
+<a href=#1760 id=1760 data-nosnippet>1760</a>            json.contains(<span class="string">"\"consensus_pruning\""</span>),
+<a href=#1761 id=1761 data-nosnippet>1761</a>            <span class="string">"expected consensus_pruning object in JSON: {json}"
 <a href=#1762 id=1762 data-nosnippet>1762</a>        </span>);
-<a href=#1763 id=1763 data-nosnippet>1763</a>    }
-<a href=#1764 id=1764 data-nosnippet>1764</a>}
+<a href=#1763 id=1763 data-nosnippet>1763</a>        <span class="macro">assert!</span>(
+<a href=#1764 id=1764 data-nosnippet>1764</a>            json.contains(<span class="string">"\"pruning\""</span>),
+<a href=#1765 id=1765 data-nosnippet>1765</a>            <span class="string">"expected pruning object in JSON: {json}"
+<a href=#1766 id=1766 data-nosnippet>1766</a>        </span>);
+<a href=#1767 id=1767 data-nosnippet>1767</a>        <span class="macro">assert!</span>(
+<a href=#1768 id=1768 data-nosnippet>1768</a>            json.contains(<span class="string">"\"target_retention\":302000"</span>),
+<a href=#1769 id=1769 data-nosnippet>1769</a>            <span class="string">"expected consensus_pruning target_retention default in JSON: {json}"
+<a href=#1770 id=1770 data-nosnippet>1770</a>        </span>);
+<a href=#1771 id=1771 data-nosnippet>1771</a>        <span class="macro">assert!</span>(
+<a href=#1772 id=1772 data-nosnippet>1772</a>            json.contains(<span class="string">"\"minimum_retention\":130000"</span>),
+<a href=#1773 id=1773 data-nosnippet>1773</a>            <span class="string">"expected consensus_pruning minimum_retention default in JSON: {json}"
+<a href=#1774 id=1774 data-nosnippet>1774</a>        </span>);
+<a href=#1775 id=1775 data-nosnippet>1775</a>        <span class="macro">assert!</span>(
+<a href=#1776 id=1776 data-nosnippet>1776</a>            json.contains(<span class="string">"\"target_usage\":1000000000"</span>),
+<a href=#1777 id=1777 data-nosnippet>1777</a>            <span class="string">"expected consensus_pruning target_usage default in JSON: {json}"
+<a href=#1778 id=1778 data-nosnippet>1778</a>        </span>);
+<a href=#1779 id=1779 data-nosnippet>1779</a>        <span class="macro">assert!</span>(
+<a href=#1780 id=1780 data-nosnippet>1780</a>            !json.contains(<span class="string">"\"uri\""</span>),
+<a href=#1781 id=1781 data-nosnippet>1781</a>            <span class="string">"DB URI key leaked into JSON: {json}"
+<a href=#1782 id=1782 data-nosnippet>1782</a>        </span>);
+<a href=#1783 id=1783 data-nosnippet>1783</a>        <span class="macro">assert!</span>(
+<a href=#1784 id=1784 data-nosnippet>1784</a>            !json.contains(<span class="string">"postgres://"</span>),
+<a href=#1785 id=1785 data-nosnippet>1785</a>            <span class="string">"DB connection string leaked into JSON: {json}"
+<a href=#1786 id=1786 data-nosnippet>1786</a>        </span>);
+<a href=#1787 id=1787 data-nosnippet>1787</a>    }
+<a href=#1788 id=1788 data-nosnippet>1788</a>}
 </code></pre></div></section></main></body></html>
