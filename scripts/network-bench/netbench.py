@@ -417,6 +417,8 @@ class DeploymentMeta(TypedDict):
     # `--epoch-height` and whether every node was staked on L1 for it; absent for the template's.
     epoch_height: NotRequired[int]
     staking: NotRequired[bool]
+    # How far the light-client prover got on ctl; absent without `--prover`.
+    prover: NotRequired[str]
 
 
 class BenchResult(TypedDict):
@@ -3582,6 +3584,7 @@ def deployment_lines(result: BenchResult) -> list[str]:
             if d.get("staking")
             else []
         ),
+        *([f"- light-client prover: {d['prover']}"] if "prover" in d else []),
     ]
 
 

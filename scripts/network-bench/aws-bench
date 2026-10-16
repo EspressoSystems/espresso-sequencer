@@ -257,6 +257,7 @@ IMAGE_COMPONENTS = (
     "state-relay-server",
     "deploy",
     "staking-cli",
+    "prover-service",
 )
 # `--allocator`: espresso-node images of `.github/workflows/build-allocators.yml`, tagged
 # `<tag>-<allocator>`: the published `espresso-node:main` image with the branch's binaries.
@@ -269,7 +270,14 @@ SUPPORT_IMAGES = {
 }
 # Images each role's user-data pulls ahead of time and start.sh runs.
 ROLE_IMAGES: dict[str, tuple[str, ...]] = {
-    "ctl": ("deploy", "orchestrator", "state-relay-server", "staking-cli", "foundry"),
+    "ctl": (
+        "deploy",
+        "orchestrator",
+        "state-relay-server",
+        "staking-cli",
+        "prover-service",
+        "foundry",
+    ),
     "validator": ("espresso-node",),
     "query": ("espresso-node", "postgres"),
 }
@@ -354,9 +362,32 @@ SHIPPED_HOST_FILES = (
     "recreate.sh",
     "ctl.env",
     "stake.env",
+    "prover.sh",
     "start.sh",
     "agent.json",
     "pg.json",
+)
+
+# `--prover`: the light-client prover on ctl, deployed and started by prover.sh once node0 serves
+# its API (the deploy reads the stake table from it). Its log has one `<epoch s> <step>` line per
+# step reached, or `<epoch s> failed <step>`.
+PROVER_STEPS = ("node0-up", "lc-deployed", "lc-address-ok", "prover-started")
+PROVER_LOG = f"{BENCH_DIR}/prover.log"
+PROVER_CPUS = 4
+# The proof circuit and its SRS need this much; below it the prover is killed by the OOM killer.
+PROVER_MIN_MIB = 12288
+# The circuit is sized for this many stake table entries: genesis, relay, deploy and prover agree.
+PROVER_STAKE_TABLE_CAPACITY = 200
+PROVER_UPDATE_INTERVAL = "20s"
+# ark-srs downloads its parameters under the home of root in the container once; the host
+# directory keeps them across runs.
+SRS_HOST_DIR = "/data/ark-srs"
+SRS_CONTAINER_DIR = "/root/.local/share/ark-srs"
+# The V2 and V3 upgrades follow the deployment at once, near genesis; the real verifier stays.
+LC_DEPLOY_FLAGS = (
+    "--deploy-light-client-v1",
+    "--upgrade-light-client-v2",
+    "--upgrade-light-client-v3",
 )
 
 CGROUP_ROOT = Path("/sys/fs/cgroup")
@@ -951,6 +982,8 @@ class Evidence(TypedDict):
     # rds runs: each `cloudwatch/rds.json` metric's minimum over the load window, None without
     # a datapoint; empty when the file was not collected.
     rds_min: NotRequired[dict[str, float | None]]
+    # `--prover` runs: the last step of ctl's prover.log, see `prover_reached`.
+    prover: NotRequired[str]
 
 
 class MetricSeries(TypedDict):
@@ -1021,6 +1054,8 @@ class RunConfig:
     chaos: ch.ChaosConfig | None = None
     # node0 prunes its data and state older than this many seconds; None for no pruning.
     prune: int | None = None
+    # The light-client prover runs on ctl; needs epochs and a ctl of PROVER_MIN_MIB.
+    prover: bool = False
 
 
 # Callers need the return code and stderr, unlike scripts/release's Runner, to report a
@@ -1676,6 +1711,16 @@ def format_node_summary(cfg: RunConfig) -> list[str]:
             if cfg.prune
             else []
         ),
+        *(
+            [
+                (
+                    "prover: light client on ctl, stake table capacity "
+                    f"{stake_table_capacity(cfg)}, update every {PROVER_UPDATE_INTERVAL}"
+                )
+            ]
+            if cfg.prover
+            else []
+        ),
     ]
 
 
@@ -2132,6 +2177,8 @@ def preflight(system: System, cfg: RunConfig, hosts: list[HostSpec]) -> Prefligh
     account = caller_account(run, cfg.region)
     types = {h["instance_type"] for h in hosts}
     arch, memory_mib = instance_specs(run, cfg.region, types)
+    if cfg.prover:
+        check_prover_ctl(memory_mib[cfg.ctl_type])
     if cfg.tcp_cc == "bbr3" and arch != "amd64":
         raise Refused("--tcp-cc bbr3 needs the XanMod kernel, which is x86_64 only")
     prices = fetch_prices(run, cfg.region, types)
@@ -2285,13 +2332,20 @@ def write_private_json(path: Path, data: Any) -> None:
     nb.write_json(path, data)
 
 
+def stake_table_capacity(cfg: RunConfig) -> int:
+    """`nodes` validators need a stake table at least as large."""
+    return PROVER_STAKE_TABLE_CAPACITY if cfg.prover else max(10, cfg.nodes)
+
+
 def render_genesis(
-    template: bytes, n: int, max_block_size: str, epoch_height: int | None = None
+    template: bytes,
+    capacity: int,
+    max_block_size: str,
+    epoch_height: int | None = None,
 ) -> bytes:
-    """`n` validators need a stake table at least as large; contract addresses stay as the
-    template's, since they are deterministic from the deployer nonce. `max_block_size` goes
-    into both chain configs; `epoch_height` replaces the template's when given."""
-    capacity = max(10, n)
+    """`capacity` is the stake table capacity; contract addresses stay as the template's, since
+    they are deterministic from the deployer nonce. `max_block_size` goes into both chain
+    configs; `epoch_height` replaces the template's when given."""
     text = template.decode()
     text, size_n = re.subn(
         r'(?m)^max_block_size = ".*"$', f'max_block_size = "{max_block_size}"', text
@@ -2540,6 +2594,8 @@ def render_ctl_env(
     env["ESPRESSO_ORCHESTRATOR_BUILDER_URLS"] = "http://localhost:1"
     env["ESPRESSO_ORCHESTRATOR_BUILDER_TIMEOUT"] = "100ms"
     env["ESPRESSO_API_NODE_URL"] = _node_url(node0)
+    if cfg.prover:
+        env["ESPRESSO_STAKE_TABLE_CAPACITY"] = str(stake_table_capacity(cfg))
     return "".join(f"{key}={value}\n" for key, value in env.items())
 
 
@@ -2636,6 +2692,7 @@ def render_start_sh(
     consensus_storage: ConsensusStorage = "fs",
     query_engine: QueryEngine = "postgres",
     stake_nodes: int | None = None,
+    prover: bool = False,
 ) -> str:
     """Deviates from the plan signature (drops unused `hosts`, `cfg`): every value start.sh
     needs is already in `host`, `images` and the host's `memory_mib`, or in ctl.env/node.env
@@ -2697,6 +2754,8 @@ def render_start_sh(
                     str(stake_nodes),
                 ],
             )
+        if prover:
+            script += render_prover_containers(images)
         return script
     if host["role"] == "query" and query_engine == "postgres" and query_db != "rds":
         pg = images["postgres"]
@@ -2737,6 +2796,81 @@ def render_start_sh(
     )
     script += _docker_create("espresso-node", argv)
     return script
+
+
+def render_prover_containers(images: dict[str, ImageInfo]) -> str:
+    """`deploy-lc` puts the light client on L1 and `state-prover` updates it; prover.sh starts
+    them. The deploy runs without the light-client address of .env, which it would take for an
+    existing deployment."""
+    deploy, prover = images["deploy"], images["prover-service"]
+    flags = " ".join(LC_DEPLOY_FLAGS)
+    relay_port = env_port("ESPRESSO_STATE_RELAY_SERVER_PORT")
+    script = _docker_create(
+        "deploy-lc",
+        [
+            "--env-file",
+            f"{BENCH_DIR}/ctl.env",
+            f"{deploy['ref']}@{deploy['digest']}",
+            "-c",
+            f"unset ESPRESSO_LIGHT_CLIENT_PROXY_ADDRESS && exec /bin/deploy {flags}",
+        ],
+        entrypoint="sh",
+    )
+    return script + _docker_create(
+        "state-prover",
+        [
+            "--env-file",
+            f"{BENCH_DIR}/ctl.env",
+            "--cpus",
+            str(PROVER_CPUS),
+            "-v",
+            f"{SRS_HOST_DIR}:{SRS_CONTAINER_DIR}",
+            "-e",
+            f"ESPRESSO_STATE_RELAY_SERVER_URL=http://localhost:{relay_port}",
+            "-e",
+            f"ESPRESSO_L1_PROVIDER=http://localhost:{env_port('ESPRESSO_L1_PORT')}",
+            "-e",
+            f"ESPRESSO_STATE_PROVER_UPDATE_INTERVAL={PROVER_UPDATE_INTERVAL}",
+            "-e",
+            f"RAYON_NUM_THREADS={PROVER_CPUS}",
+            f"{prover['ref']}@{prover['digest']}",
+            "/usr/local/bin/state-prover",
+            "-d",
+        ],
+    )
+
+
+def render_prover_sh(lc_address: str, node0_url: str) -> str:
+    """Runs as root on ctl: deploys the light client once node0 serves its API, checks the
+    contract is where the prover looks for it, then starts the prover. Each step appends to
+    PROVER_LOG; a failing command appends `failed <step>` and ends the script."""
+    actions = {
+        "node0-up": f"until curl -sf {node0_url}/v1/node/block-height > /dev/null; do sleep 2; done",
+        "lc-deployed": (
+            "docker start deploy-lc > /dev/null\n"
+            f'[ "$(timeout {DEPLOY_TIMEOUT_S} docker wait deploy-lc)" = 0 ]'
+        ),
+        "lc-address-ok": rpc_check(
+            "eth_getCode", [lc_address, "latest"], '.result != "0x"'
+        ),
+        "prover-started": "docker start state-prover > /dev/null",
+    }
+    script = (
+        "#!/usr/bin/env bash\nset -eEu -o pipefail\n\nstep=init\n"
+        f"trap 'echo \"$(date +%s.%N) failed $step\" >> {PROVER_LOG}' ERR\n\n"
+    )
+    for step in PROVER_STEPS:
+        script += (
+            f"step={step}\n{actions[step]}\n"
+            f'echo "$(date +%s.%N) $step" >> {PROVER_LOG}\n\n'
+        )
+    return script
+
+
+def prover_reached(log: str) -> str:
+    """The last step of PROVER_LOG, `failed <step>` if it failed there."""
+    lines = log.splitlines()
+    return lines[-1].partition(" ")[2] if lines else "not started"
 
 
 def node_create_argv(
@@ -3129,7 +3263,17 @@ def add_block_size_flag(parser: argparse.ArgumentParser) -> None:
         type=positive_int,
         default=RunConfig.epoch_height,
         help=f"genesis epoch_height in blocks; stakes every node on L1 (default: the "
-        f"template's 1000000, {SHORT_EPOCH_HEIGHT} with --chaos)",
+        f"template's 1000000, {SHORT_EPOCH_HEIGHT} with --chaos or --prover)",
+    )
+
+
+def add_prover_flag(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--prover",
+        action="store_true",
+        help="run the light-client prover on ctl (real verifier, stake table capacity "
+        f"{PROVER_STAKE_TABLE_CAPACITY}); needs a ctl of {PROVER_MIN_MIB} MiB, takes "
+        f"--epoch-height {SHORT_EPOCH_HEIGHT} and --ctl-type {CTL_TYPE} unless given",
     )
 
 
@@ -3237,13 +3381,22 @@ def config_from_args(args: argparse.Namespace) -> RunConfig:
     load = load_from_args(args, search, nodes)
     if chaos is not None:
         load = chaos_load(load, chaos)
+    # The prover needs a larger ctl than the chaos shape's.
+    ctl_type = (
+        args.ctl_type
+        if args.prover
+        else chaos_default(args, "--ctl-type", CHAOS_CTL_TYPE)
+    )
+    epoch_height = args.epoch_height
+    if (args.chaos or args.prover) and "--epoch-height" not in given_flags(args.argv):
+        epoch_height = SHORT_EPOCH_HEIGHT
     return RunConfig(
         tag=args.tag,
         allocator=args.allocator,
         nodes=nodes,
         query_nodes=chaos_default(args, "--query-nodes", nodes),
         node_type=chaos_default(args, "--node-type", CHAOS_NODE_TYPE),
-        ctl_type=chaos_default(args, "--ctl-type", CHAOS_CTL_TYPE),
+        ctl_type=ctl_type,
         chaos=chaos,
         load=load,
         node_env=tuple(args.node_env),
@@ -3255,7 +3408,8 @@ def config_from_args(args: argparse.Namespace) -> RunConfig:
         mtu=args.mtu,
         netem=netem,
         jitter_ratio=args.jitter_ratio,
-        epoch_height=chaos_default(args, "--epoch-height", SHORT_EPOCH_HEIGHT),
+        epoch_height=epoch_height,
+        prover=args.prover,
         consensus_storage=args.consensus_storage,
         prune=args.prune,
         root_gb=args.root_gb,
@@ -3420,6 +3574,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     add_prune_flag(plan_p)
     add_submit_nodes_flag(plan_p)
     add_chaos_flags(plan_p)
+    add_prover_flag(plan_p)
     add_ttl_flag(plan_p)
     plan_p.add_argument("--db-modes", type=parse_db_modes, default=defaults.db_modes)
     plan_p.set_defaults(func=cmd_plan, yes=False, max_usd=UP_MAX_USD)
@@ -3445,6 +3600,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         netem=defaults.netem,
         jitter_ratio=defaults.jitter_ratio,
         epoch_height=defaults.epoch_height,
+        prover=defaults.prover,
         consensus_storage=defaults.consensus_storage,
         prune=defaults.prune,
         submit_nodes=None,
@@ -3473,6 +3629,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     add_prune_flag(run_p)
     add_submit_nodes_flag(run_p)
     add_chaos_flags(run_p)
+    add_prover_flag(run_p)
     add_ttl_flag(run_p)
     run_p.add_argument(
         "--fleet",
@@ -4085,6 +4242,8 @@ def measure_run(run: Run) -> None:
         spread = start_nodes(remote, node_hosts(remote.hosts), at)
         update_manifest(run.manifest_path, "measuring", start_spread_s=spread)
         log.info("measuring: nodes started within %.2f s of each other", spread)
+        if run.cfg.prover:
+            start_prover(remote)
         chaos = (
             ChaosRunner(
                 remote,
@@ -4724,6 +4883,7 @@ def fleet_run_config(args: argparse.Namespace, saved: FleetManifest) -> RunConfi
         netem=cli.netem,
         jitter_ratio=cli.jitter_ratio,
         epoch_height=cli.epoch_height,
+        prover=cli.prover,
         consensus_storage=cli.consensus_storage,
         prune=cli.prune,
         fleet=cli.fleet,
@@ -4735,21 +4895,33 @@ def fleet_run_config(args: argparse.Namespace, saved: FleetManifest) -> RunConfi
     check_chaos(cfg)
     check_fleet_disks(saved, cfg)
     check_fleet_images(saved, cfg)
+    if cfg.prover:
+        check_prover_ctl(saved["memory_mib"][cfg.ctl_type])
     return cfg
 
 
-def check_fleet_images(saved: FleetManifest, cfg: RunConfig) -> None:
-    """A fleet from before `staking-cli` has neither its image nor the digest to pull; a new
-    `--tag` resolves all images again."""
-    if (
-        staking(cfg)
-        and "staking-cli" not in saved["images"]
-        and not tag_changed(saved, cfg)
-    ):
+def check_prover_ctl(memory_mib: int) -> None:
+    if memory_mib < PROVER_MIN_MIB:
         raise Refused(
-            "the fleet has no staking-cli image: pass --tag to pull the images, or "
-            "run without --epoch-height"
+            f"--prover needs a ctl with at least {PROVER_MIN_MIB} MiB, this one has "
+            f"{memory_mib}: pass --ctl-type"
         )
+
+
+def check_fleet_images(saved: FleetManifest, cfg: RunConfig) -> None:
+    """A fleet from before `staking-cli` or `prover-service` has neither image nor the digest
+    to pull; a new `--tag` resolves all images again."""
+    if tag_changed(saved, cfg):
+        return
+    for image, used, flag in (
+        ("staking-cli", staking(cfg), "--epoch-height"),
+        ("prover-service", cfg.prover, "--prover"),
+    ):
+        if used and image not in saved["images"]:
+            raise Refused(
+                f"the fleet has no {image} image: pass --tag to pull the images, or "
+                f"run without {flag}"
+            )
 
 
 def reject_fleet_flags(argv: list[str]) -> None:
@@ -5082,7 +5254,7 @@ def reset_script(role: str, pg_store: str = "") -> str:
     keep = " ".join(f"! -name {name}" for name in RESET_KEEP)
     script = (
         "set -eu\n"
-        "for unit in bench-agent bench-host; do "
+        "for unit in bench-agent bench-host bench-prover; do "
         "if systemctl is-active --quiet $unit; then systemctl stop $unit; fi; done\n"
         "ids=$(docker ps -aq)\n"
         f'if [ -n "$ids" ]; then docker stop -t {int(FREEZE_STOP_TIMEOUT_S)} $ids; '
@@ -5288,7 +5460,7 @@ def render_run(
     `run_estimate` this is the run of a single shot, which also provisions."""
     genesis = render_genesis(
         (SCRIPT_DIR / "genesis.toml").read_bytes(),
-        cfg.nodes,
+        stake_table_capacity(cfg),
         cfg.max_block_size,
         cfg.epoch_height,
     )
@@ -5353,11 +5525,13 @@ def run_config_hash(
 ) -> str:
     """Load config plus what else changes the measured system: image digests, the fleet's
     shape, the query database placement, the rendered genesis and the latency matrix."""
-    # staking-cli joined the images later; its digest counts only for runs that use it.
+    # staking-cli and prover-service joined the images later; a digest counts only for runs
+    # that use it.
     digests = {
         name: image["digest"]
         for name, image in sorted(images.items())
-        if name != "staking-cli" or staking(cfg)
+        if (name != "staking-cli" or staking(cfg))
+        and (name != "prover-service" or cfg.prover)
     }
     return nb.config_hash(
         cfg.load,
@@ -5371,6 +5545,7 @@ def run_config_hash(
             *([json.dumps(sorted(cfg.node_env)).encode()] if cfg.node_env else []),
             *([b"leader-trace"] if cfg.leader_trace else []),
             *([b"staking"] if staking(cfg) else []),
+            *([b"prover"] if cfg.prover else []),
             f"prune={cfg.prune}".encode(),
             *(
                 [json.dumps(dataclasses.asdict(cfg.chaos), sort_keys=True).encode()]
@@ -5615,12 +5790,20 @@ def render_host_files(
                 consensus_storage=cfg.consensus_storage,
                 query_engine=cfg.query_engine,
                 stake_nodes=len(_node_names(hosts)) if staking(cfg) else None,
+                prover=cfg.prover,
             )
         )
         if spec["role"] == "ctl":
             (host_dir / "ctl.env").write_text(render_ctl_env(hosts, cfg, dotenv()))
             if staking(cfg):
                 (host_dir / "stake.env").write_text(render_stake_env(hosts, dotenv()))
+            if cfg.prover:
+                (host_dir / "prover.sh").write_text(
+                    render_prover_sh(
+                        dotenv()["ESPRESSO_LIGHT_CLIENT_PROXY_ADDRESS"],
+                        _node_url(hosts["node0"]),
+                    )
+                )
         else:
             pg = query_endpoint(cfg, run_dir) if spec["role"] == "query" else None
             node_env = host_dir / "node.env"
@@ -6174,6 +6357,14 @@ def start_agent(remote: Remote) -> None:
     )
 
 
+def start_prover(remote: Remote) -> None:
+    """In the background: the load never waits for the prover, whose outcome is in PROVER_LOG."""
+    remote.ssh(
+        "ctl",
+        f"sudo systemd-run --unit bench-prover --collect bash {BENCH_DIR}/prover.sh",
+    )
+
+
 def bounded(command: str) -> str:
     """`command` as root under `timeout`: a hung docker or systemctl call must not block
     teardown."""
@@ -6666,10 +6857,15 @@ def poll_agent(
 # Containers `render_start_sh` creates per role that write to the journal or answer queries;
 # postgres stays up so that `collect_hosts` can still ask it for statistics.
 FREEZE_CONTAINERS = {
-    "ctl": ("anvil", "orchestrator", "state-relay-server"),
+    "ctl": ("anvil", "orchestrator", "state-relay-server", "state-prover"),
     "query": ("espresso-node",),
     "validator": ("espresso-node",),
 }
+
+
+STOP_PROVER = (
+    "if systemctl is-active --quiet bench-prover; then systemctl stop bench-prover; fi"
+)
 
 
 def freeze_command(names: tuple[str, ...]) -> str:
@@ -6684,8 +6880,12 @@ def freeze_command(names: tuple[str, ...]) -> str:
 
 def freeze(remote: Remote) -> None:
     def stop(host: str) -> None:
-        names = FREEZE_CONTAINERS[remote.hosts[host]["role"]]
-        remote.ssh(host, bounded(freeze_command(names)))
+        role = remote.hosts[host]["role"]
+        command = freeze_command(FREEZE_CONTAINERS[role])
+        if role == "ctl":
+            # Before the containers: a running prover.sh would start the prover again.
+            command = f"{STOP_PROVER}\n{command}"
+        remote.ssh(host, bounded(command))
 
     remote.parallel(stop, remote.hosts)
 
@@ -8338,6 +8538,11 @@ def load_evidence(
     if manifest["query_db"] == "rds":
         metrics = run_dir / RDS_CLOUDWATCH_FILE
         evidence["rds_min"] = metric_min(metrics, t0, t1) if metrics.exists() else {}
+    if manifest["config"].get("prover"):
+        log_path = run_dir / "hosts" / "ctl" / "prover.log"
+        evidence["prover"] = prover_reached(
+            log_path.read_text() if log_path.exists() else ""
+        )
     for spec in manifest["hosts"]:
         name = spec["name"]
         host_dir = run_dir / "hosts" / name
@@ -8425,6 +8630,7 @@ def deployment_meta(manifest: Manifest, evidence: Evidence) -> nb.DeploymentMeta
             if config.get("epoch_height")
             else {}
         ),
+        **({"prover": evidence["prover"]} if "prover" in evidence else {}),
     }
 
 

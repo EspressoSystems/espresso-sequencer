@@ -1078,18 +1078,11 @@ def test_tofu_validate(tmp_path):
         assert result.returncode == 0, result.stderr
 
 
-@pytest.mark.parametrize(("n", "capacity"), [(3, 10), (50, 50)])
-def test_genesis_capacity_at_least_ten(n, capacity):
-    rendered = awsb.render_genesis(
-        (HERE / "genesis.toml").read_bytes(), n=n, max_block_size="50mb"
-    ).decode()
-    assert f"stake_table_capacity = {capacity}" in rendered
-    assert re.search(rf"^capacity = {capacity}$", rendered, re.MULTILINE)
-
-
 def test_genesis_max_block_size_replaces_both_chain_configs():
     template = (HERE / "genesis.toml").read_bytes()
-    rendered = awsb.render_genesis(template, n=5, max_block_size="30mb").decode()
+    rendered = awsb.render_genesis(
+        template, capacity=10, max_block_size="30mb"
+    ).decode()
     assert (
         re.findall(r"^max_block_size = (.*)$", rendered, re.MULTILINE) == ['"30mb"'] * 2
     )
@@ -1112,7 +1105,10 @@ def test_max_block_size_flag_defaults_and_differs_in_the_config_hash():
     hosts = awsb.plan_hosts(cfg)
     hashes = {
         awsb.run_config_hash(
-            cfg, hosts, {}, awsb.render_genesis(template, cfg.nodes, size)
+            cfg,
+            hosts,
+            {},
+            awsb.render_genesis(template, awsb.stake_table_capacity(cfg), size),
         )
         for size in ("30mb", "50mb")
     }
@@ -1130,7 +1126,9 @@ def test_plan_writes_the_max_block_size_into_the_run_genesis(fleet_dir):
 
 def test_genesis_raises_if_template_shape_changes():
     with pytest.raises(ValueError):
-        awsb.render_genesis(b"no capacity fields here", n=5, max_block_size="50mb")
+        awsb.render_genesis(
+            b"no capacity fields here", capacity=10, max_block_size="50mb"
+        )
 
 
 @pytest.mark.parametrize(
@@ -2007,8 +2005,8 @@ def test_search_node0_journal_holds_the_offer_below_the_noisy_mark(db_modes, nod
 
 def test_genesis_epoch_height_replaces_the_template_value():
     template = (HERE / "genesis.toml").read_bytes()
-    assert b"epoch_height = 1000000\n" in awsb.render_genesis(template, 5, "50mb")
-    rendered = awsb.render_genesis(template, 5, "50mb", epoch_height=3000)
+    assert b"epoch_height = 1000000\n" in awsb.render_genesis(template, 10, "50mb")
+    rendered = awsb.render_genesis(template, 10, "50mb", epoch_height=3000)
     assert b"epoch_height = 3000\n" in rendered
     with pytest.raises(ValueError, match="1 epoch_height"):
         awsb.render_genesis(
@@ -2096,7 +2094,7 @@ def test_host_files_ship_stake_env_only_with_epochs(tmp_path: Path):
 def test_staking_is_in_the_config_hash_and_its_image_only_when_on():
     hosts = awsb.plan_hosts(small_cfg())
     template = (HERE / "genesis.toml").read_bytes()
-    genesis = awsb.render_genesis(template, 2, "50mb")
+    genesis = awsb.render_genesis(template, 10, "50mb")
     without = {k: v for k, v in fake_images().items() if k != "staking-cli"}
 
     def digest(cfg, images) -> str:

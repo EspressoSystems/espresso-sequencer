@@ -83,7 +83,7 @@ laptop                       EC2, one AZ, private IPs
 
 | Host        | Runs                                                                                                   |
 | ----------- | ------------------------------------------------------------------------------------------------------ |
-| `ctl`       | anvil, `deploy`, `stake` (epochs on), orchestrator, state-relay-server, `agent-drive`, `agent-host`    |
+| `ctl`       | anvil, `deploy`, `stake`, orchestrator, relay, `state-prover`, `agent-drive`, `agent-host`             |
 | `node0`     | espresso-node `-- storage-sql -- http -- query ... -- light-client`, postgres container, `agent-host`  |
 | query nodes | with `--query-nodes K` (all nodes under `--chaos`), `node0..node{K-1}` run the same modules as `node0` |
 | `node1..`   | espresso-node `-- storage-fs -- http -- status -- submit -- catchup -- config`, `agent-host`           |
@@ -404,6 +404,34 @@ just bench aws run --tag chaos-dense --chaos --nodes 32 --query-nodes 3 --chaos-
 - Correlated or simultaneous faults: one fault per tick, at least `--chaos-gap` apart; mass kinds fault a group at once.
 - Faults aimed at upcoming leaders: targets follow the seeded order, not the leader schedule.
 
+### Light client prover
+
+```
+just bench aws run --tag release-x --prover
+just bench aws run --tag release-x --chaos --prover
+just bench aws run --fleet --prover   # the fleet's ctl needs 12288 MiB, e.g. up --ctl-type c8g.2xlarge
+```
+
+- `ctl` runs `stake` (`--epoch-height` given or implied) and `state-prover` (`--prover`) in addition to the services of
+  [Topology](#topology). `--prover` runs the light-client prover on `ctl` beside the network: `state-prover -d` of the
+  `prover-service` image against the real verifier, updating the light client contract every 20 s.
+- Flags not given take `--epoch-height 300` and `--ctl-type c8g.2xlarge` (also with `--chaos`, whose `c8g.xlarge` is too
+  small). A `ctl` below 12288 MiB is refused by `plan`, `run` and `run --fleet`; a fleet from before the image is
+  refused unless `--tag` pulls the images.
+- Stake table capacity 200 in genesis (`stake_table_capacity`, `[stake_table] capacity`) and in
+  `ESPRESSO_STAKE_TABLE_CAPACITY` of the relay, `deploy` and the prover. Without `--prover` it is `max(10, nodes)`.
+- `prover.sh` runs as unit `bench-prover` on `ctl` once the nodes have started and the load never waits for it. Steps:
+  `node0-up` (node0 answers `block-height`), `lc-deployed` (container `deploy-lc`:
+  `deploy --deploy-light-client-v1 --upgrade-light-client-v2 --upgrade-light-client-v3`), `lc-address-ok` (code at
+  `ESPRESSO_LIGHT_CLIENT_PROXY_ADDRESS` of `.env`), `prover-started`.
+- Output: `hosts/ctl/prover.log` (`<epoch s> <step>`, or `<epoch s> failed <step>`) and the `light-client prover:` line
+  of `summary.md` with the last step. A failed step does not fail the run.
+- Nodes find the light client through `StakeTableV3.lightClient()`; no node environment changes.
+- The prover container has 4 CPUs (`RAYON_NUM_THREADS=4`) and shares `ctl` with the orchestrator, the relay and the load
+  driver. The config hash includes `--prover`.
+- SRS: ark-srs downloads its parameters on first use (`ctl` needs internet egress) into `/data/ark-srs` on `ctl`, which
+  a fleet keeps across runs.
+
 ### Node build and config
 
 ```
@@ -586,6 +614,7 @@ Where:
 | `--mtu`                               | 1500                           | per run      | with `--latency`: interface MTU of the nodes                                                  |
 | `--netem`                             | `delay`; `full` with `--chaos` | per run      | with `--latency`: `full` adds per-pair jitter and loss to the delay                           |
 | `--jitter-ratio`                      | 0.0065                         | per run      | with `--netem full`: floor of the jitter half-width as a ratio of the one-way delay           |
+| `--prover`                            | off                            | per run      | light-client prover on `ctl`; see [Light client prover](#light-client-prover)                 |
 | `--epoch-height`                      | `1000000`; 300 w. `--chaos`    | per run      | genesis `epoch_height`, in blocks; any value stakes every node on L1                          |
 | `--consensus-storage`                 | `fs`                           | per run      | `fs`, `journal` (experimental, not in `main` images); query node uses `storage-sql` with `fs` |
 | `--prune [RETENTION]`                 | off; bare `1m`                 | per run      | node0 prunes data and state older than RETENTION every 30 s; part of the config hash          |

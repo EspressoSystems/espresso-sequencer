@@ -2940,3 +2940,12 @@ def test_summary_names_the_epoch_height_only_when_nodes_were_staked(tmp_path: Pa
     assert "- epoch height: 300, every node staked on L1" in netbench.render(
         result, None
     )
+
+
+def test_summary_names_how_far_the_prover_got(tmp_path: Path):
+    write_run_dir(tmp_path)
+    result = analyze(tmp_path)
+    result["deployment"] = deployment()
+    assert "prover" not in netbench.render(result, None)
+    result["deployment"] = deployment() | {"prover": "prover-started"}
+    assert "- light-client prover: prover-started" in netbench.render(result, None)
