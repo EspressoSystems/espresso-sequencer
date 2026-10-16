@@ -383,7 +383,7 @@ pub struct Options {
     #[clap(long, env = "ESPRESSO_NODE_LOCAL_CATCHUP_TIMEOUT", default_value = "5s", value_parser = parse_duration)]
     pub local_catchup_timeout: Duration,
 
-    /// HTTP catchup starts this long after request-response, if request-response is available.
+    /// HTTP catchup starts this long after request-response, if request-response is registered.
     #[clap(long, env = "ESPRESSO_NODE_HTTP_CATCHUP_DELAY", default_value = "2s", value_parser = parse_duration)]
     pub http_catchup_delay: Duration,
 

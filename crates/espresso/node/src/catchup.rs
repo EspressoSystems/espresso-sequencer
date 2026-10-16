@@ -1119,7 +1119,7 @@ impl StateCatchup for NullStateCatchup {
 #[derive(Clone)]
 struct Provider {
     catchup: Arc<dyn StateCatchup>,
-    /// Starts after `fallback_delay` if a non-fallback remote provider is present.
+    /// Starts after `fallback_delay` if a primary (non-fallback) remote provider is present.
     fallback: bool,
 }
 
@@ -1153,7 +1153,7 @@ impl ParallelStateCatchup {
         }
     }
 
-    /// Delay before fallback providers start when a non-fallback remote provider exists.
+    /// Delay before fallback providers start; see [`Provider::fallback`].
     pub fn with_fallback_delay(mut self, delay: Duration) -> Self {
         self.fallback_delay = delay;
         self
@@ -1164,8 +1164,7 @@ impl ParallelStateCatchup {
         self.add(provider, false);
     }
 
-    /// Add a remote provider that starts after the fallback delay if a non-fallback remote
-    /// provider is present.
+    /// Add a remote provider that races after the fallback delay; see [`Provider::fallback`].
     pub fn add_fallback_provider(&self, provider: Arc<dyn StateCatchup>) {
         self.add(provider, true);
     }
@@ -1181,7 +1180,6 @@ impl ParallelStateCatchup {
         F: Future<Output = anyhow::Result<RT>> + Send + 'static,
         RT: Send + Sync + 'static,
     {
-        // Make sure we have at least one provider
         let providers = self.providers.lock().clone();
         if providers.is_empty() {
             return Err(anyhow::anyhow!("no providers were initialized"));
@@ -1193,24 +1191,26 @@ impl ParallelStateCatchup {
         let local_timeout = self.local_timeout;
         let fallback_delay = self.fallback_delay;
 
-        // Spawn futures for each provider
         let mut futures = FuturesUnordered::new();
         for Provider { catchup, fallback } in providers {
             let closure = closure.clone();
+            let name = catchup.name();
             futures.push(AbortOnDropHandle::new(tokio::spawn(async move {
-                if catchup.is_local() {
-                    return timeout(local_timeout, closure(catchup))
+                let result = if catchup.is_local() {
+                    timeout(local_timeout, closure(catchup))
                         .await
                         .unwrap_or_else(|_| {
-                            let err = format!("local provider timed out after {local_timeout:?}");
+                            let err = format!("{name} timed out after {local_timeout:?}");
                             tracing::warn!("{err}");
                             Err(anyhow::anyhow!(err))
-                        });
-                }
-                if fallback && has_primary_remote {
-                    sleep(fallback_delay).await;
-                }
-                closure(catchup).await
+                        })
+                } else {
+                    if fallback && has_primary_remote {
+                        sleep(fallback_delay).await;
+                    }
+                    closure(catchup).await
+                };
+                (name, result)
             })));
         }
 
@@ -1218,7 +1218,7 @@ impl ParallelStateCatchup {
         // Return the first successful result
         while let Some(result) = futures.next().await {
             // Unwrap the inner (join) result
-            let result = match result {
+            let (name, result) = match result {
                 Ok(res) => res,
                 Err(err) => {
                     tracing::debug!("Failed to join on provider: {err:#}.");
@@ -1231,8 +1231,8 @@ impl ParallelStateCatchup {
             let result = match result {
                 Ok(res) => res,
                 Err(err) => {
-                    tracing::debug!("Failed to fetch data: {err:#}.");
-                    logs.push(format!("Failed to fetch data: {err:#}."));
+                    tracing::debug!("Failed to fetch data from {name}: {err:#}.");
+                    logs.push(format!("Failed to fetch data from {name}: {err:#}."));
                     continue;
                 },
             };
@@ -1786,7 +1786,10 @@ mod test {
         }
 
         fn name(&self) -> String {
-            "DelayedCatchup".into()
+            format!(
+                "DelayedCatchup({})",
+                if self.local { "local" } else { "remote" }
+            )
         }
 
         fn is_local(&self) -> bool {
@@ -1834,19 +1837,18 @@ mod test {
 
         let err = format!("{:#}", catchup.fetch_state_cert(1).await.unwrap_err());
         assert_eq!(err.matches("unsupported").count(), 2, "{err}");
+        assert!(err.contains("DelayedCatchup(local)"), "{err}");
+        assert!(err.contains("DelayedCatchup(remote)"), "{err}");
     }
 
     const FALLBACK_DELAY: Duration = Duration::from_secs(2);
 
     fn fallback_catchup(
-        primary: Option<Arc<dyn StateCatchup>>,
+        primary: Arc<dyn StateCatchup>,
         fallback: Arc<dyn StateCatchup>,
     ) -> ParallelStateCatchup {
-        let catchup = ParallelStateCatchup::new(&[], Duration::from_secs(30))
+        let catchup = ParallelStateCatchup::new(&[primary], Duration::from_secs(30))
             .with_fallback_delay(FALLBACK_DELAY);
-        if let Some(primary) = primary {
-            catchup.add_provider(primary);
-        }
         catchup.add_fallback_provider(fallback);
         catchup
     }
@@ -1855,7 +1857,7 @@ mod test {
     async fn test_fallback_not_called_when_primary_answers_first() {
         let (primary, _) = DelayedCatchup::counted(false, Duration::from_secs(1));
         let (fallback, fallback_calls) = DelayedCatchup::counted(false, Duration::ZERO);
-        let catchup = fallback_catchup(Some(primary), fallback);
+        let catchup = fallback_catchup(primary, fallback);
 
         catchup
             .fetch_chain_config(ChainConfig::default().commit())
@@ -1869,7 +1871,7 @@ mod test {
     async fn test_fallback_answers_after_delay_when_primary_hangs() {
         let (primary, _) = DelayedCatchup::counted(false, Duration::from_secs(3600));
         let (fallback, fallback_calls) = DelayedCatchup::counted(false, Duration::ZERO);
-        let catchup = fallback_catchup(Some(primary), fallback);
+        let catchup = fallback_catchup(primary, fallback);
 
         let start = tokio::time::Instant::now();
         catchup
@@ -1884,7 +1886,7 @@ mod test {
     async fn test_fallback_immediate_without_primary_remote() {
         let local = DelayedCatchup::provider(true, Duration::from_secs(3600));
         let (fallback, fallback_calls) = DelayedCatchup::counted(false, Duration::ZERO);
-        let catchup = fallback_catchup(Some(local), fallback);
+        let catchup = fallback_catchup(local, fallback);
 
         let start = tokio::time::Instant::now();
         catchup
@@ -1893,5 +1895,24 @@ mod test {
             .unwrap();
         assert_eq!(start.elapsed(), Duration::ZERO);
         assert_eq!(fallback_calls.load(AtomicOrdering::SeqCst), 1);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn test_fallback_delay_is_decided_per_call() {
+        let (fallback, fallback_calls) = DelayedCatchup::counted(false, Duration::ZERO);
+        let catchup = ParallelStateCatchup::new(&[], Duration::from_secs(30))
+            .with_fallback_delay(FALLBACK_DELAY);
+        catchup.add_fallback_provider(fallback);
+        let config = ChainConfig::default();
+
+        let start = tokio::time::Instant::now();
+        catchup.fetch_chain_config(config.commit()).await.unwrap();
+        assert_eq!(start.elapsed(), Duration::ZERO);
+
+        catchup.add_provider(DelayedCatchup::provider(false, Duration::from_secs(3600)));
+        let start = tokio::time::Instant::now();
+        catchup.fetch_chain_config(config.commit()).await.unwrap();
+        assert_eq!(start.elapsed(), FALLBACK_DELAY);
+        assert_eq!(fallback_calls.load(AtomicOrdering::SeqCst), 2);
     }
 }
