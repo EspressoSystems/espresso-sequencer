@@ -11,7 +11,7 @@ pub type Lsn = u64;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Stream {
     Wal = 0,
-    Data = 1,
+    Da = 1,
     Payload = 2,
     Share = 3,
 }
@@ -21,7 +21,7 @@ impl Stream {
     pub fn label(self) -> &'static str {
         match self {
             Self::Wal => "wal",
-            Self::Data => "data",
+            Self::Da => "da",
             Self::Payload => "payload",
             Self::Share => "share",
         }
@@ -88,7 +88,7 @@ impl SegmentHeader {
         );
         let stream = match b[6] {
             0 => Stream::Wal,
-            1 => Stream::Data,
+            1 => Stream::Da,
             2 => Stream::Payload,
             3 => Stream::Share,
             other => anyhow::bail!("segment header: bad stream tag {other}"),
@@ -355,7 +355,7 @@ mod tests {
     #[test]
     fn segment_header_roundtrip() {
         let header = SegmentHeader {
-            stream: Stream::Data,
+            stream: Stream::Da,
             seq: 42,
             first_lsn: 100,
             prev_max_key: 9,
@@ -368,7 +368,7 @@ mod tests {
 
     #[test]
     fn segment_header_roundtrips_every_stream() {
-        for stream in [Stream::Wal, Stream::Data, Stream::Payload, Stream::Share] {
+        for stream in [Stream::Wal, Stream::Da, Stream::Payload, Stream::Share] {
             let header = SegmentHeader {
                 stream,
                 seq: 7,

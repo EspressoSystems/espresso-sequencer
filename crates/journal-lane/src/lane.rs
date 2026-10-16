@@ -1332,7 +1332,7 @@ mod tests {
     fn mode(stream: Stream) -> LaneMode {
         match stream {
             Stream::Wal => LaneMode::Snapshot,
-            Stream::Data | Stream::Payload | Stream::Share => LaneMode::Append,
+            Stream::Da | Stream::Payload | Stream::Share => LaneMode::Append,
         }
     }
 
@@ -1393,7 +1393,7 @@ mod tests {
     #[test]
     fn oldest_over_bytes_drops_oldest_until_under_cap() {
         let segs = segments(
-            Stream::Data,
+            Stream::Da,
             &[(1, 40, 100), (2, 40, 100), (3, 40, 100), (4, 40, 100)],
         );
         assert_eq!(seqs(segs.oldest_over_bytes(90, None)), vec![1, 2]);
@@ -1402,14 +1402,14 @@ mod tests {
 
     #[test]
     fn oldest_over_bytes_never_includes_the_active_segment() {
-        let segs = segments(Stream::Data, &[(1, 40, 1), (2, 40, 2), (3, 40, 3)]);
+        let segs = segments(Stream::Da, &[(1, 40, 1), (2, 40, 2), (3, 40, 3)]);
         assert_eq!(seqs(segs.oldest_over_bytes(0, None)), vec![1, 2]);
     }
 
     #[test]
     fn oldest_over_bytes_keeps_segments_after_keep_after() {
         let segs = segments(
-            Stream::Data,
+            Stream::Da,
             &[(1, 40, 5), (2, 40, 10), (3, 40, 20), (4, 40, 30)],
         );
         assert_eq!(seqs(segs.oldest_over_bytes(0, Some(10))), vec![1, 2]);
@@ -1418,7 +1418,7 @@ mod tests {
 
     #[test]
     fn bytes_sums_every_segment() {
-        let segs = segments(Stream::Data, &[(1, 10, 0), (2, 20, 0), (3, 30, 0)]);
+        let segs = segments(Stream::Da, &[(1, 10, 0), (2, 20, 0), (3, 30, 0)]);
         assert_eq!(segs.bytes(), 60);
     }
 
@@ -1452,7 +1452,7 @@ mod tests {
         let (lane, _handle) = spawn_lane(
             fs.clone(),
             dir.clone(),
-            cfg(Stream::Data),
+            cfg(Stream::Da),
             (1, 1),
             None,
             segments,
@@ -1465,7 +1465,7 @@ mod tests {
 
         // Simulate a crash: nothing unsynced should exist, since the ack implies fsync happened.
         fs.crash(|_| 0);
-        let recovered = recover(&*fs, &dir, Stream::Data).unwrap();
+        let recovered = recover(&*fs, &dir, Stream::Da).unwrap();
         assert_eq!(recovered.next_lsn, 2);
     }
 
@@ -1481,7 +1481,7 @@ mod tests {
         let (lane, _handle) = spawn_lane(
             fs,
             dir,
-            cfg(Stream::Data),
+            cfg(Stream::Da),
             (1, 1),
             None,
             segments.clone(),
@@ -1662,7 +1662,7 @@ mod tests {
         let (lane, _handle) = spawn_lane(
             fs,
             PathBuf::from("/data-reserve"),
-            cfg(Stream::Data),
+            cfg(Stream::Da),
             (1, 1),
             None,
             segments,
@@ -1684,7 +1684,7 @@ mod tests {
         let (lane, _handle) = spawn_lane(
             fs.clone(),
             dir.clone(),
-            cfg(Stream::Data),
+            cfg(Stream::Da),
             (1, 1),
             None,
             segments,
@@ -1695,7 +1695,7 @@ mod tests {
             let lsn = lane.enqueue(i, VID, vec![i as u8; 4], Class::Durable, None);
             lane.wait_durable(lsn).await.unwrap();
         }
-        let recovered = recover(&*fs, &dir, Stream::Data).unwrap();
+        let recovered = recover(&*fs, &dir, Stream::Da).unwrap();
         assert_eq!(recovered.next_lsn, 6);
         assert_eq!(recovered.segments.len(), 1);
     }
@@ -1788,14 +1788,14 @@ mod tests {
                 &fs,
                 &data_dir,
                 SegmentHeader {
-                    stream: Stream::Data,
+                    stream: Stream::Da,
                     seq,
                     first_lsn: seq,
                     prev_max_key: 100,
                 },
                 &[],
             );
-            segments.push_active(meta(Stream::Data, seq, SegmentHeader::LEN as u64, 100));
+            segments.push_active(meta(Stream::Da, seq, SegmentHeader::LEN as u64, 100));
         }
         let segments = Mutex::new(segments);
 
@@ -1842,7 +1842,7 @@ mod tests {
         );
         assert_eq!(fs.list(&data_dir).unwrap().len(), 1);
 
-        recover(&fs, &data_dir, Stream::Data).expect("no sequence gap left behind");
+        recover(&fs, &data_dir, Stream::Da).expect("no sequence gap left behind");
     }
 
     fn write_segment(fs: &MemFs, dir: &Path, header: SegmentHeader, frames: &[u8]) {

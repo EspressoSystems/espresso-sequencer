@@ -1,6 +1,6 @@
 //! Append-only journal persistence backend for consensus data.
 //!
-//! Two independent streams (`wal`, `data`), each a std writer thread doing group commit with a
+//! Independent lanes (`wal`, `share`, `da`), each a std writer thread doing group commit with a
 //! durable/enqueue sync policy; see the design doc for the write path, roll and recovery. Reads of
 //! consensus state come from an in-memory `State` folded from wal records; `MembershipPersistence`
 //! and `DhtPersistentStorage` delegate to a side `fs::Persistence` tree, which keeps fs semantics
@@ -12,7 +12,12 @@
 pub mod state;
 
 use std::{
-    collections::BTreeMap, fs, io, os::unix::fs::FileExt as _, path::PathBuf, sync::Arc,
+    collections::BTreeMap,
+    fs, io,
+    os::unix::fs::FileExt as _,
+    path::{Path, PathBuf},
+    sync::Arc,
+    thread::JoinHandle,
     time::Instant,
 };
 
@@ -52,8 +57,8 @@ use hotshot_types::{
 use journal_lane::{
     format::{self, Class, ScanEnd, SegmentHeader, Stream},
     lane::{
-        self, DataIndex, JournalFs, Lane, LaneConfig, LaneMetrics, LaneMode, SegmentMeta, Segments,
-        SnapshotHook, StdFs,
+        self, DataIndex, JournalFs, Lane, LaneConfig, LaneMetrics, LaneMode, Recovered,
+        SegmentMeta, Segments, SnapshotHook, StdFs,
     },
 };
 
@@ -71,7 +76,8 @@ use crate::{
 const WAL_SEGMENT_BYTES: u64 = 256 << 20;
 const WAL_MAX_VIEW_SPAN: u64 = 8192;
 const WAL_MAX_BATCH_BYTES: usize = 4 << 20;
-const DATA_SEGMENT_BYTES: u64 = 1 << 30;
+const SHARE_SEGMENT_BYTES: u64 = 1 << 30;
+const DA_SEGMENT_BYTES: u64 = 1 << 30;
 const DATA_MAX_BATCH_BYTES: usize = 64 << 20;
 /// Added to both record bounds: covers everything in a record that does not grow with block
 /// size (QCs, header fields).
@@ -142,8 +148,8 @@ pub struct Options {
     )]
     pub view_retention: u64,
 
-    /// Soft cap on total `data` stream bytes on disk; oldest segments are dropped first once
-    /// exceeded (age-based retention runs regardless of this cap).
+    /// Soft cap on total `share` and `da` lane bytes on disk, each; oldest segments are dropped
+    /// first once exceeded (age-based retention runs regardless of this cap).
     #[clap(
         long,
         env = "ESPRESSO_NODE_JOURNAL_MAX_BYTES",
@@ -173,6 +179,10 @@ pub struct Options {
     /// Largest `max_block_size` over the genesis base version and upgrades, set from genesis.
     #[clap(skip)]
     pub max_block_size: Option<u64>,
+
+    /// Overrides the share and da segment size, for tests that roll segments.
+    #[clap(skip)]
+    pub(crate) segment_bytes: Option<u64>,
 
     #[clap(skip)]
     pub(crate) query_storage: Option<QueryStorage>,
@@ -249,28 +259,58 @@ struct Inner {
     state: Arc<parking_lot::Mutex<State>>,
     // Field order matters: dropping the lanes closes the channels, then `threads` joins the
     // writers, then `_lock` is released.
-    wal: Lane,
-    data: Lane,
+    lanes: Lanes,
     _threads: JoinOnDrop,
-    wal_segments: Arc<parking_lot::Mutex<Segments>>,
-    data_segments: Arc<parking_lot::Mutex<Segments>>,
     // Serializes `gc` passes: `gc` computes the segments to unlink once up front, so an
     // overlapping pass could otherwise select and unlink the same segment twice.
     gc_lock: parking_lot::Mutex<()>,
     side: side_fs::Persistence,
     opts: Options,
-    wal_dir: PathBuf,
-    data_dir: PathBuf,
     probe: StorageProbe,
     limits: RecordLimits,
     /// Measured before any real `Metrics` is attached; `enable_metrics` records it once a
     /// histogram exists to record it into.
     replay_seconds: f64,
-    /// `Some` exactly on a query node, which replays decided blocks into its query service.
-    replay_index: Option<DataIndex>,
     /// Payloads not yet delivered to the query service. Memory only, see [`PendingPayloads`].
     pending_payloads: parking_lot::Mutex<PendingPayloads>,
     _lock: std::fs::File,
+}
+
+struct Lanes {
+    wal: JournalLane,
+    share: JournalLane,
+    da: JournalLane,
+}
+
+/// A lane's writer handle with what GC and readers need next to it.
+struct JournalLane {
+    lane: Lane,
+    dir: PathBuf,
+    segments: Arc<parking_lot::Mutex<Segments>>,
+    /// `Some` exactly on a query node, which replays decided blocks into its query service.
+    index: Option<DataIndex>,
+}
+
+impl JournalLane {
+    /// Unlinks `unlinkable` and reports the bytes left. See `lane::prune`.
+    fn prune(&self, unlinkable: &[SegmentMeta]) -> anyhow::Result<()> {
+        let left = lane::prune(&StdFs, &self.dir, &self.segments, unlinkable)?;
+        if let Some(bytes) = left {
+            self.lane.set_total_bytes(bytes);
+        }
+        Ok(())
+    }
+
+    /// Forgets index entries of unlinked segments.
+    fn trim_index(&self) {
+        let Some(index) = &self.index else {
+            return;
+        };
+        let oldest = self.segments.lock().list().first().map(|meta| meta.seq);
+        index
+            .lock()
+            .retain(|_, location| oldest.is_some_and(|oldest| location.seq >= oldest));
+    }
 }
 
 /// A payload this node obtained for a view, held for the query service.
@@ -398,20 +438,86 @@ fn sync_new_dirs(journal_dir: &std::path::Path, path: &std::path::Path) -> io::R
     Ok(())
 }
 
+async fn recover_lane(
+    fs: &Arc<StdFs>,
+    dir: &Path,
+    stream: Stream,
+    mode: LaneMode,
+) -> anyhow::Result<Recovered> {
+    let (fs, dir) = (fs.clone(), dir.to_path_buf());
+    tokio::task::spawn_blocking(move || lane::recover(&*fs, &dir, stream, mode, Kind::is_known))
+        .await
+        .with_context(|| format!("{stream:?} recovery task panicked"))?
+        .with_context(|| format!("recovering {stream:?} lane"))
+}
+
+fn append_config(stream: Stream, segment_bytes: u64) -> LaneConfig {
+    LaneConfig {
+        stream,
+        mode: LaneMode::Append,
+        segment_bytes,
+        max_key_span: u64::MAX,
+        max_batch_bytes: DATA_MAX_BATCH_BYTES,
+        // Never read: an append lane has no `SnapshotHook`, so no `Snapshot` frame is ever written
+        // on it.
+        max_snapshot_bytes: MAX_SNAPSHOT_BYTES,
+        in_flight_bytes: IN_FLIGHT_BYTES,
+    }
+}
+
+fn start_lane(
+    fs: &Arc<StdFs>,
+    dir: PathBuf,
+    cfg: LaneConfig,
+    recovered: Recovered,
+    hook: Option<Arc<dyn SnapshotHook>>,
+    index: Option<DataIndex>,
+) -> anyhow::Result<(JournalLane, JoinHandle<()>)> {
+    let stream = cfg.stream;
+    let segments = Arc::new(parking_lot::Mutex::new(Segments::from(recovered.segments)));
+    let (lane, thread) = lane::spawn_lane(
+        fs.clone(),
+        dir.clone(),
+        cfg,
+        (recovered.next_seq, recovered.next_lsn),
+        hook,
+        segments.clone(),
+        index.clone(),
+    )
+    .with_context(|| format!("spawning {stream:?} writer thread"))?;
+    let lane = JournalLane {
+        lane,
+        dir,
+        segments,
+        index,
+    };
+    Ok((lane, thread))
+}
+
 impl Persistence {
     pub async fn open(opts: Options) -> anyhow::Result<Self> {
         let path = opts.path.clone();
         let journal_dir = path.join("journal");
         let wal_dir = journal_dir.join("wal");
-        let data_dir = journal_dir.join("data");
+        let share_dir = journal_dir.join("share");
+        let da_dir = journal_dir.join("da");
         let side_dir = path.join("side");
 
+        let old_data_dir = journal_dir.join("data");
+        ensure!(
+            !dir_has_log_files(&old_data_dir),
+            "found segments in {}: the single `data` lane was split into `share` and `da`, and \
+             there is no migration; remove the journal directory to start over",
+            old_data_dir.display()
+        );
         // Must run before any directory is created (including by `storage_probe::probe` below):
-        // `wal_dir`/`data_dir` existing is not evidence of a prior journal run, only of this check
+        // `wal_dir`/`share_dir` existing is not evidence of a prior journal run, only of this check
         // itself having run before.
         let old_layout_present =
             path.join("sqlite").join("database").is_file() || path.join("decided_leaves2").is_dir();
-        let journal_empty = !dir_has_log_files(&wal_dir) && !dir_has_log_files(&data_dir);
+        let journal_empty = [&wal_dir, &share_dir, &da_dir]
+            .into_iter()
+            .all(|dir| !dir_has_log_files(dir));
         ensure!(
             opts.ignore_existing || !old_layout_present || !journal_empty,
             "found an existing sql/fs storage layout at {}; refusing to start storage-journal \
@@ -422,9 +528,11 @@ impl Persistence {
         fs::create_dir_all(&journal_dir).context("creating journal directory")?;
         // Recovery and the writer threads never touch the filesystem except through `JournalFs`
         // (so `MemFs` tests stay hermetic); the one directory-creation exception lives here.
-        fs::create_dir_all(&wal_dir).context("creating wal directory")?;
-        fs::create_dir_all(&data_dir).context("creating data directory")?;
-        // `wal_dir`/`data_dir` get fsynced once their first segment is created (`open_new_segment`);
+        for dir in [&wal_dir, &share_dir, &da_dir] {
+            fs::create_dir_all(dir)
+                .with_context(|| format!("creating lane directory {}", dir.display()))?;
+        }
+        // Lane directories get fsynced once their first segment is created (`open_new_segment`);
         // this covers the parent directory entries `create_dir_all` just added, which are not.
         sync_new_dirs(&journal_dir, &path).context("fsyncing newly created journal directories")?;
 
@@ -450,26 +558,11 @@ impl Persistence {
         );
 
         let std_fs = Arc::new(StdFs);
-        let (wal_recovered, data_recovered) = {
-            let fs = std_fs.clone();
-            let dir = wal_dir.clone();
-            let wal = tokio::task::spawn_blocking(move || {
-                lane::recover(&*fs, &dir, Stream::Wal, LaneMode::Snapshot, Kind::is_known)
-            })
-            .await
-            .context("wal recovery task panicked")?
-            .context("recovering wal stream")?;
-
-            let fs = std_fs.clone();
-            let dir = data_dir.clone();
-            let data = tokio::task::spawn_blocking(move || {
-                lane::recover(&*fs, &dir, Stream::Data, LaneMode::Append, Kind::is_known)
-            })
-            .await
-            .context("data recovery task panicked")?
-            .context("recovering data stream")?;
-            (wal, data)
-        };
+        let wal_recovered =
+            recover_lane(&std_fs, &wal_dir, Stream::Wal, LaneMode::Snapshot).await?;
+        let share_recovered =
+            recover_lane(&std_fs, &share_dir, Stream::Share, LaneMode::Append).await?;
+        let da_recovered = recover_lane(&std_fs, &da_dir, Stream::Da, LaneMode::Append).await?;
 
         let mut side_opts = side_fs::Options::new(side_dir);
         let side = side_opts.create().await.context("opening side fs store")?;
@@ -505,91 +598,76 @@ impl Persistence {
         } else {
             state.replay = None;
         }
-        let replay_index = match &state.replay {
-            Some(replay) => Some(
-                index_unreplayed(
-                    std_fs.clone(),
-                    data_dir.clone(),
-                    &data_recovered.segments,
-                    replay,
-                )
-                .await?,
+        let (share_index, da_index) = match &state.replay {
+            Some(replay) => (
+                Some(
+                    index_unreplayed(
+                        &std_fs,
+                        &share_dir,
+                        Stream::Share,
+                        &share_recovered.segments,
+                        replay,
+                    )
+                    .await?,
+                ),
+                Some(
+                    index_unreplayed(&std_fs, &da_dir, Stream::Da, &da_recovered.segments, replay)
+                        .await?,
+                ),
             ),
-            None => None,
+            None => (None, None),
         };
         let pending_payloads = PendingPayloads::new(opts.pending_payload_bytes);
 
-        let wal_segments = Arc::new(parking_lot::Mutex::new(Segments::from(
-            wal_recovered.segments,
-        )));
-        let data_segments = Arc::new(parking_lot::Mutex::new(Segments::from(
-            data_recovered.segments,
-        )));
         let state = Arc::new(parking_lot::Mutex::new(state));
         let hook: Arc<dyn SnapshotHook> = Arc::new(StateSnapshotHook(state.clone()));
 
-        let (wal, wal_thread) = lane::spawn_lane(
-            std_fs.clone(),
-            wal_dir.clone(),
-            LaneConfig {
-                stream: Stream::Wal,
-                mode: LaneMode::Snapshot,
-                segment_bytes: WAL_SEGMENT_BYTES,
-                max_key_span: WAL_MAX_VIEW_SPAN,
-                max_batch_bytes: WAL_MAX_BATCH_BYTES,
-                max_snapshot_bytes: MAX_SNAPSHOT_BYTES,
-                in_flight_bytes: IN_FLIGHT_BYTES,
-            },
-            (wal_recovered.next_seq, wal_recovered.next_lsn),
-            Some(hook),
-            wal_segments.clone(),
+        let wal_cfg = LaneConfig {
+            stream: Stream::Wal,
+            mode: LaneMode::Snapshot,
+            segment_bytes: WAL_SEGMENT_BYTES,
+            max_key_span: WAL_MAX_VIEW_SPAN,
+            max_batch_bytes: WAL_MAX_BATCH_BYTES,
+            max_snapshot_bytes: MAX_SNAPSHOT_BYTES,
+            in_flight_bytes: IN_FLIGHT_BYTES,
+        };
+        let (wal, wal_thread) =
+            start_lane(&std_fs, wal_dir, wal_cfg, wal_recovered, Some(hook), None)?;
+        let share_cfg = append_config(
+            Stream::Share,
+            opts.segment_bytes.unwrap_or(SHARE_SEGMENT_BYTES),
+        );
+        let (share, share_thread) = start_lane(
+            &std_fs,
+            share_dir,
+            share_cfg,
+            share_recovered,
             None,
-        )
-        .context("spawning wal writer thread")?;
-
-        let (data, data_thread) = lane::spawn_lane(
-            std_fs,
-            data_dir.clone(),
-            LaneConfig {
-                stream: Stream::Data,
-                mode: LaneMode::Append,
-                segment_bytes: DATA_SEGMENT_BYTES,
-                max_key_span: u64::MAX,
-                max_batch_bytes: DATA_MAX_BATCH_BYTES,
-                // Never read: the data lane has no `SnapshotHook`, so no `Snapshot` frame is ever
-                // written on it.
-                max_snapshot_bytes: MAX_SNAPSHOT_BYTES,
-                in_flight_bytes: IN_FLIGHT_BYTES,
-            },
-            (data_recovered.next_seq, data_recovered.next_lsn),
-            None,
-            data_segments.clone(),
-            replay_index.clone(),
-        )
-        .context("spawning data writer thread")?;
+            share_index,
+        )?;
+        let da_cfg = append_config(Stream::Da, opts.segment_bytes.unwrap_or(DA_SEGMENT_BYTES));
+        let (da, da_thread) = start_lane(&std_fs, da_dir, da_cfg, da_recovered, None, da_index)?;
 
         Ok(Self {
             inner: Arc::new(Inner {
                 state,
-                wal,
-                data,
-                _threads: JoinOnDrop(vec![wal_thread, data_thread]),
-                wal_segments,
-                data_segments,
+                lanes: Lanes { wal, share, da },
+                _threads: JoinOnDrop(vec![wal_thread, share_thread, da_thread]),
                 gc_lock: parking_lot::Mutex::new(()),
                 side,
                 opts,
-                wal_dir,
-                data_dir,
                 probe,
                 limits,
                 replay_seconds,
-                replay_index,
                 pending_payloads: parking_lot::Mutex::new(pending_payloads),
                 _lock: lock_file,
             }),
             metrics: Arc::new(PersistenceMetricsValue::default()),
         })
+    }
+
+    fn is_query_node(&self) -> bool {
+        self.inner.lanes.da.index.is_some()
     }
 
     /// Applies `rec` to `State` under the state lock, then enqueues it on the wal lane. LSN
@@ -605,10 +683,11 @@ impl Persistence {
             "wal record of kind {kind:?} is {} bytes, over the {max}-byte limit",
             body.len()
         );
+        let wal = &self.inner.lanes.wal.lane;
         let (lsn, finalized) = {
             let mut state = self.inner.state.lock();
             let finalized = state.apply(&rec);
-            let lsn = self.inner.wal.enqueue(view, kind.into(), body, class, None);
+            let lsn = wal.enqueue(view, kind.into(), body, class, None);
             (lsn, finalized)
         };
         if let Some(finalized) = finalized {
@@ -620,14 +699,14 @@ impl Persistence {
                 .await?;
         }
         if class == Class::Durable {
-            self.inner.wal.wait_durable(lsn).await?;
+            wal.wait_durable(lsn).await?;
         }
         Ok(())
     }
 
-    /// Data records have no `State` effect, so there is no lock to hold: only the in-flight byte
-    /// budget bounds them.
-    async fn put_data(&self, rec: Record, class: Class) -> anyhow::Result<()> {
+    /// Share and da records have no `State` effect, so there is no lock to hold: only the
+    /// in-flight byte budget bounds them.
+    async fn put_data(&self, lane: &JournalLane, rec: Record, class: Class) -> anyhow::Result<()> {
         let kind = rec.kind();
         let view = rec.view();
         let body = rec.encode()?;
@@ -637,13 +716,12 @@ impl Persistence {
             "data record of kind {kind:?} is {} bytes, over the {max}-byte limit",
             body.len()
         );
-        let permit = self.inner.data.reserve(body.len() as u32).await;
-        let lsn = self
-            .inner
-            .data
+        let permit = lane.lane.reserve(body.len() as u32).await;
+        let lsn = lane
+            .lane
             .enqueue(view, kind.into(), body, class, Some(permit));
         if class == Class::Durable {
-            self.inner.data.wait_durable(lsn).await?;
+            lane.lane.wait_durable(lsn).await?;
         }
         Ok(())
     }
@@ -652,22 +730,18 @@ impl Persistence {
     /// with no production caller. Picks segments whose bound (from `Segments`) covers `view`.
     async fn scan_for<T>(
         &self,
-        stream: Stream,
+        lane: &JournalLane,
         kind: Kind,
         view: ViewNumber,
     ) -> anyhow::Result<Option<T>>
     where
         T: serde::de::DeserializeOwned + Send + 'static,
     {
-        let (dir, segments) = match stream {
-            Stream::Wal => (self.inner.wal_dir.clone(), &self.inner.wal_segments),
-            Stream::Data => (self.inner.data_dir.clone(), &self.inner.data_segments),
-            Stream::Payload | Stream::Share => unreachable!("journal has no {stream:?} lane"),
-        };
+        let dir = lane.dir.clone();
         let key = view.u64();
         // (seq, sealed): only the last segment is active and may have a torn tail.
         let candidates: Vec<(u64, bool)> = {
-            let segments = segments.lock();
+            let segments = lane.segments.lock();
             let list = segments.list();
             let active = list.last().map(|m| m.seq);
             list.iter()
@@ -693,57 +767,45 @@ impl Persistence {
         .context("scan_for: blocking task panicked")?
     }
 
-    /// Unlinks the segments `wal_unlinkable` and `data_unlinkable` select. Passes are serialized by
+    /// Unlinks the segments `wal_unlinkable` and `da_unlinkable` select. Passes are serialized by
     /// `gc_lock`: see `lane::prune` for why an unlink failure stops the pass instead of skipping
-    /// ahead. On a query node, `replayed` keeps every data segment the query service still has to
-    /// ingest.
+    /// ahead. On a query node, `replayed` keeps every share and da segment the query service still
+    /// has to ingest.
     async fn gc(&self, decided: ViewNumber, replayed: Option<u64>) -> anyhow::Result<()> {
         let inner = self.inner.clone();
         let bound = decided.u64().saturating_sub(inner.opts.view_retention);
 
         tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
             let _guard = inner.gc_lock.lock();
-            let pruned = prune_both(&inner, bound, replayed);
+            let pruned = prune_all(&inner, bound, replayed);
             // Also after a failed pass: the segments it did unlink are already gone from
-            // `data_segments`.
-            if let Some(index) = &inner.replay_index {
-                let oldest = inner
-                    .data_segments
-                    .lock()
-                    .list()
-                    .first()
-                    .map(|meta| meta.seq);
-                index
-                    .lock()
-                    .retain(|_, location| oldest.is_some_and(|oldest| location.seq >= oldest));
-            }
-            let (wal_bytes, data_bytes) = pruned?;
-            if let Some(bytes) = wal_bytes {
-                inner.wal.set_total_bytes(bytes);
-            }
-            if let Some(bytes) = data_bytes {
-                inner.data.set_total_bytes(bytes);
-            }
-            Ok(())
+            // `segments`.
+            inner.lanes.share.trim_index();
+            inner.lanes.da.trim_index();
+            pruned
         })
         .await
-        .context("gc: blocking task panicked")??;
-        Ok(())
+        .context("gc: blocking task panicked")?
     }
 
-    /// The newest `kind` data record at `view`. A query node reads it through its index, any
-    /// other node scans the segments that could hold it.
-    async fn read_data<T>(&self, kind: Kind, view: ViewNumber) -> anyhow::Result<Option<T>>
+    /// The newest `kind` record at `view` in `lane`. A query node reads it through the lane's
+    /// index, any other node scans the segments that could hold it.
+    async fn read_data<T>(
+        &self,
+        lane: &JournalLane,
+        kind: Kind,
+        view: ViewNumber,
+    ) -> anyhow::Result<Option<T>>
     where
         T: serde::de::DeserializeOwned + Send + 'static,
     {
-        let Some(index) = &self.inner.replay_index else {
-            return self.scan_for(Stream::Data, kind, view).await;
+        let Some(index) = &lane.index else {
+            return self.scan_for(lane, kind, view).await;
         };
         let Some(location) = index.lock().get(&(view.u64(), kind.into())).copied() else {
             return Ok(None);
         };
-        let path = lane::segment_path(&self.inner.data_dir, location.seq);
+        let path = lane::segment_path(&lane.dir, location.seq);
         tokio::task::spawn_blocking(move || -> anyhow::Result<Option<T>> {
             let file = match std::fs::File::open(&path) {
                 Ok(file) => file,
@@ -809,7 +871,11 @@ impl Persistence {
                     attached.push(view);
                 }
                 let vid_share = self
-                    .read_data::<Proposal<SeqTypes, VidDisperseShare<SeqTypes>>>(Kind::Vid, view)
+                    .read_data::<Proposal<SeqTypes, VidDisperseShare<SeqTypes>>>(
+                        &self.inner.lanes.share,
+                        Kind::Vid,
+                        view,
+                    )
                     .await?
                     .map(|proposal| proposal.data);
                 chain.push(DecidedLeaf {
@@ -856,7 +922,11 @@ impl Persistence {
             return Ok(true);
         }
         match self
-            .read_data::<Proposal<SeqTypes, DaProposal2<SeqTypes>>>(Kind::Da, view)
+            .read_data::<Proposal<SeqTypes, DaProposal2<SeqTypes>>>(
+                &self.inner.lanes.da,
+                Kind::Da,
+                view,
+            )
             .await?
         {
             Some(proposal) => leaf.fill_block_payload_unchecked(Payload::from_bytes(
@@ -896,7 +966,7 @@ impl Persistence {
 
     /// On a query node, hold `payload` for the query service until `view` is replayed.
     fn hold_payload(&self, view: ViewNumber, header: &Header, payload: Arc<Payload>) {
-        if self.inner.replay_index.is_none() {
+        if !self.is_query_node() {
             return;
         }
         let dropped = self
@@ -936,23 +1006,18 @@ impl Persistence {
     }
 }
 
-/// Unlinks the wal and data segments GC selects. Wal first: a failure there leaves data untouched.
-/// Returns the bytes left per stream, `None` for a stream nothing was unlinked from.
-fn prune_both(
-    inner: &Inner,
-    bound: u64,
-    replayed: Option<u64>,
-) -> anyhow::Result<(Option<u64>, Option<u64>)> {
-    let wal = wal_unlinkable(&inner.wal_segments.lock(), bound);
-    let wal_bytes = lane::prune(&StdFs, &inner.wal_dir, &inner.wal_segments, &wal)?;
-    let data = data_unlinkable(
-        &inner.data_segments.lock(),
-        bound,
-        inner.opts.max_bytes,
-        replayed,
-    );
-    let data_bytes = lane::prune(&StdFs, &inner.data_dir, &inner.data_segments, &data)?;
-    Ok((wal_bytes, data_bytes))
+/// Unlinks the segments GC selects. Wal first: a failure there leaves the other lanes untouched.
+fn prune_all(inner: &Inner, bound: u64, replayed: Option<u64>) -> anyhow::Result<()> {
+    let lanes = &inner.lanes;
+    lanes
+        .wal
+        .prune(&wal_unlinkable(&lanes.wal.segments.lock(), bound))?;
+    for lane in [&lanes.share, &lanes.da] {
+        let unlinkable =
+            da_unlinkable(&lane.segments.lock(), bound, inner.opts.max_bytes, replayed);
+        lane.prune(&unlinkable)?;
+    }
+    Ok(())
 }
 
 /// Age-based only. The two newest segments stay: a crash mid-roll falls back to the older one's
@@ -965,7 +1030,7 @@ fn wal_unlinkable(segments: &Segments, bound: u64) -> Vec<SegmentMeta> {
 
 /// Age-based, then oldest-first while the stream exceeds `max_bytes`. Segments holding a key after
 /// `replayed` stay either way: the query service still has to ingest them.
-fn data_unlinkable(
+fn da_unlinkable(
     segments: &Segments,
     bound: u64,
     max_bytes: u64,
@@ -1013,15 +1078,17 @@ fn find_in_segment(
     Ok(found)
 }
 
-/// Index the data frames a query node may still replay: every record past the replay cursor,
-/// decided or not yet. `max_key` only grows along a stream, so segments ending at or before the
-/// cursor hold nothing replay needs.
+/// Index the frames of `stream` a query node may still replay: every record past the replay
+/// cursor, decided or not yet. `max_key` only grows along a stream, so segments ending at or before
+/// the cursor hold nothing replay needs.
 async fn index_unreplayed(
-    fs: Arc<StdFs>,
-    dir: PathBuf,
+    fs: &Arc<StdFs>,
+    dir: &Path,
+    stream: Stream,
     segments: &[SegmentMeta],
     replay: &Replay,
 ) -> anyhow::Result<DataIndex> {
+    let (fs, dir) = (fs.clone(), dir.to_path_buf());
     let index = DataIndex::default();
     let cursor = replay.cursor.map_or(0, |(view, _)| view.u64());
     let seqs = segments
@@ -1035,7 +1102,7 @@ async fn index_unreplayed(
             frames.extend(lane::frame_locations(
                 &*fs,
                 &dir,
-                Stream::Data,
+                stream,
                 seq,
                 Kind::is_known,
             )?);
@@ -1162,7 +1229,7 @@ impl SequencerPersistence for Persistence {
         consumer: &(impl EventConsumer + 'static),
     ) -> anyhow::Result<Option<ViewNumber>> {
         let now = Instant::now();
-        let processed = if self.inner.replay_index.is_some() {
+        let processed = if self.is_query_node() {
             // GC runs on what did get replayed even when a batch failed, so a query service
             // outage does not also stop the wal from being pruned.
             let replayed = self.replay_decided(consumer).await;
@@ -1192,14 +1259,15 @@ impl SequencerPersistence for Persistence {
         &self,
         view: ViewNumber,
     ) -> anyhow::Result<Option<Proposal<SeqTypes, DaProposal2<SeqTypes>>>> {
-        self.read_data(Kind::Da, view).await
+        self.read_data(&self.inner.lanes.da, Kind::Da, view).await
     }
 
     async fn load_vid_share(
         &self,
         view: ViewNumber,
     ) -> anyhow::Result<Option<Proposal<SeqTypes, VidDisperseShare<SeqTypes>>>> {
-        self.read_data(Kind::Vid, view).await
+        self.read_data(&self.inner.lanes.share, Kind::Vid, view)
+            .await
     }
 
     async fn append_vid(
@@ -1208,7 +1276,11 @@ impl SequencerPersistence for Persistence {
     ) -> anyhow::Result<()> {
         let now = Instant::now();
         let res = self
-            .put_data(Record::Vid(proposal.clone()), Class::Durable)
+            .put_data(
+                &self.inner.lanes.share,
+                Record::Vid(proposal.clone()),
+                Class::Durable,
+            )
             .await;
         self.metrics
             .internal_append_vid_duration
@@ -1264,7 +1336,8 @@ impl SequencerPersistence for Persistence {
     }
 
     async fn load_cert2(&self, view: ViewNumber) -> anyhow::Result<Option<Certificate2<SeqTypes>>> {
-        self.scan_for(Stream::Wal, Kind::Cert2, view).await
+        self.scan_for(&self.inner.lanes.wal, Kind::Cert2, view)
+            .await
     }
 
     async fn load_quorum_proposals(
@@ -1347,14 +1420,18 @@ impl SequencerPersistence for Persistence {
         _vid_commit: VidCommitment,
     ) -> anyhow::Result<()> {
         // Only a query node replays payloads from here. No other node keeps them, same as sql/fs.
-        if self.inner.replay_index.is_none() {
+        if !self.is_query_node() {
             return Ok(());
         }
         let now = Instant::now();
         // Durable: the query service is replayed from this record, so it must survive a power
         // loss.
         let res = self
-            .put_data(Record::Da(proposal.clone()), Class::Durable)
+            .put_data(
+                &self.inner.lanes.da,
+                Record::Da(proposal.clone()),
+                Class::Durable,
+            )
             .await;
         self.metrics
             .internal_append_da2_duration
@@ -1434,7 +1511,11 @@ impl SequencerPersistence for Persistence {
             metrics,
             "journal",
             "stream",
-            &[&self.inner.wal, &self.inner.data],
+            &[
+                &self.inner.lanes.wal.lane,
+                &self.inner.lanes.share.lane,
+                &self.inner.lanes.da.lane,
+            ],
         );
     }
 }
@@ -1595,30 +1676,30 @@ mod tests {
     }
 
     #[test]
-    fn data_unlinkable_drops_oldest_first_over_byte_cap() {
+    fn da_unlinkable_drops_oldest_first_over_byte_cap() {
         let segs = segments(
-            Stream::Data,
+            Stream::Da,
             &[(1, 40, 100), (2, 40, 100), (3, 40, 100), (4, 40, 100)],
         );
         // All young, total 160 > cap 90: drop oldest until under the cap; the active one stays.
-        assert_eq!(seqs(data_unlinkable(&segs, 0, 90, None)), vec![1, 2]);
+        assert_eq!(seqs(da_unlinkable(&segs, 0, 90, None)), vec![1, 2]);
     }
 
     #[test]
-    fn data_unlinkable_age_based_ignores_byte_cap() {
-        let segs = segments(Stream::Data, &[(1, 10, 0), (2, 10, 1000), (3, 10, 1000)]);
-        assert_eq!(seqs(data_unlinkable(&segs, 990, u64::MAX, None)), vec![1]);
+    fn da_unlinkable_age_based_ignores_byte_cap() {
+        let segs = segments(Stream::Da, &[(1, 10, 0), (2, 10, 1000), (3, 10, 1000)]);
+        assert_eq!(seqs(da_unlinkable(&segs, 990, u64::MAX, None)), vec![1]);
     }
 
     #[test]
-    fn data_unlinkable_keeps_unreplayed_segments_even_over_cap() {
+    fn da_unlinkable_keeps_unreplayed_segments_even_over_cap() {
         let segs = segments(
-            Stream::Data,
+            Stream::Da,
             &[(1, 40, 5), (2, 40, 10), (3, 40, 20), (4, 40, 30)],
         );
-        assert_eq!(seqs(data_unlinkable(&segs, 0, 0, Some(10))), vec![1, 2]);
-        assert_eq!(seqs(data_unlinkable(&segs, 1000, 0, Some(10))), vec![1, 2]);
-        assert_eq!(seqs(data_unlinkable(&segs, 1000, 0, None)), vec![1, 2, 3]);
+        assert_eq!(seqs(da_unlinkable(&segs, 0, 0, Some(10))), vec![1, 2]);
+        assert_eq!(seqs(da_unlinkable(&segs, 1000, 0, Some(10))), vec![1, 2]);
+        assert_eq!(seqs(da_unlinkable(&segs, 1000, 0, None)), vec![1, 2, 3]);
     }
 
     /// A payload the decide carries (built, reconstructed or fetched before it) reaches the
@@ -1651,7 +1732,7 @@ mod tests {
             consumer.take(),
             vec![(1, Some(carried)), (2, Some(obtained))]
         );
-        let index = storage.inner.replay_index.as_ref().unwrap().lock();
+        let index = storage.inner.lanes.da.index.as_ref().unwrap().lock();
         assert!(
             index
                 .keys()
@@ -1776,7 +1857,11 @@ mod tests {
         let len = RecordLimits::new(TEST_MAX_BLOCK_SIZE).wal as usize + (16 << 20);
         // `append_da2` enqueues without waiting for the write; wait so the cold scan sees it.
         storage
-            .put_data(da_record(len).await, Class::Durable)
+            .put_data(
+                &storage.inner.lanes.da,
+                da_record(len).await,
+                Class::Durable,
+            )
             .await
             .unwrap();
         let stored = storage.load_da_proposal(ViewNumber::new(1)).await.unwrap();
@@ -1792,7 +1877,11 @@ mod tests {
         inner.limits.data = len as u32 - 1;
 
         let err = storage
-            .put_data(da_record(1024).await, Class::Durable)
+            .put_data(
+                &storage.inner.lanes.da,
+                da_record(1024).await,
+                Class::Durable,
+            )
             .await
             .unwrap_err();
         assert!(err.to_string().contains("over the"), "{err:#}");
@@ -1800,7 +1889,11 @@ mod tests {
         let inner = Arc::get_mut(&mut storage.inner).expect("no other handle to inner yet");
         inner.limits.data = len as u32;
         storage
-            .put_data(da_record(1024).await, Class::Durable)
+            .put_data(
+                &storage.inner.lanes.da,
+                da_record(1024).await,
+                Class::Durable,
+            )
             .await
             .unwrap();
     }
@@ -1808,7 +1901,7 @@ mod tests {
     #[test]
     fn find_in_segment_fails_on_corrupt_sealed_segment() {
         let header = SegmentHeader {
-            stream: Stream::Data,
+            stream: Stream::Da,
             seq: 1,
             first_lsn: 1,
             prev_max_key: 0,
@@ -1840,6 +1933,40 @@ mod tests {
         assert!(err.to_string().contains("max_block_size"), "{err:#}");
     }
 
+    #[tokio::test]
+    async fn refuses_to_start_over_old_data_lane() {
+        let tmp = TempDir::new().unwrap();
+        let old_lane = tmp.path().join("journal").join("data");
+        std::fs::create_dir_all(&old_lane).unwrap();
+        std::fs::write(old_lane.join("0000000000000000.log"), b"").unwrap();
+
+        let err = Persistence::open(options(&tmp))
+            .await
+            .err()
+            .expect("open must refuse the old data lane");
+        assert!(format!("{err:#}").contains("journal/data"), "{err:#}");
+    }
+
+    #[tokio::test]
+    async fn vid_shares_and_da_proposals_use_separate_lanes() {
+        let tmp = TempDir::new().unwrap();
+        let storage = Persistence::open(options(&tmp)).await.unwrap();
+        storage
+            .put_data(&storage.inner.lanes.da, da_record(16).await, Class::Durable)
+            .await
+            .unwrap();
+        let da = storage.inner.lanes.da.segments.lock().bytes();
+        let share = storage.inner.lanes.share.segments.lock().bytes();
+        assert!(da > share, "da {da} share {share}");
+        assert!(
+            storage
+                .load_da_proposal(ViewNumber::new(1))
+                .await
+                .unwrap()
+                .is_some()
+        );
+    }
+
     fn options(tmp: &TempDir) -> Options {
         Options {
             path: tmp.path().to_path_buf(),
@@ -1848,6 +1975,7 @@ mod tests {
             pending_payload_bytes: DEFAULT_PENDING_PAYLOAD_BYTES,
             ignore_existing: false,
             max_block_size: Some(TEST_MAX_BLOCK_SIZE),
+            segment_bytes: None,
             query_storage: None,
         }
     }
@@ -1905,6 +2033,7 @@ mod tests {
             pending_payload_bytes: DEFAULT_PENDING_PAYLOAD_BYTES,
             ignore_existing: false,
             max_block_size: Some(TEST_MAX_BLOCK_SIZE),
+            segment_bytes: None,
             query_storage: None,
         })
         .await
@@ -1942,6 +2071,7 @@ mod testing {
                 pending_payload_bytes: DEFAULT_PENDING_PAYLOAD_BYTES,
                 ignore_existing: false,
                 max_block_size: Some(TEST_MAX_BLOCK_SIZE),
+                segment_bytes: None,
                 query_storage: Some(QueryStorage::Fs(side_fs::Options::new(
                     storage.path().join("query"),
                 ))),
