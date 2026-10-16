@@ -12,7 +12,7 @@
 pub mod state;
 
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     fs, io,
     os::unix::fs::FileExt as _,
     path::{Path, PathBuf},
@@ -626,7 +626,14 @@ impl Persistence {
                         .await?,
                 ),
             ),
-            None => (None, None),
+            None => {
+                let seqs = share_recovered.segments.iter().map(|meta| meta.seq);
+                let vids = index_frames(&std_fs, &share_dir, Stream::Share, seqs.collect(), |h| {
+                    h.kind == Kind::Vid.into()
+                })
+                .await?;
+                (Some(vids), None)
+            },
         };
         let pending_payloads = PendingPayloads::new(opts.pending_payload_bytes);
 
@@ -788,6 +795,41 @@ impl Persistence {
         })
         .await
         .context("scan_for: blocking task panicked")?
+    }
+
+    /// Decided leaves in the wal with header time at least `min_header_ts`, newest view first.
+    /// Cold scan of every wal segment.
+    async fn scan_decided_leaves(&self, min_header_ts: u64) -> anyhow::Result<Vec<Leaf2>> {
+        let wal = &self.inner.lanes.wal;
+        let dir = wal.dir.clone();
+        let candidates: Vec<(u64, bool)> = {
+            let segments = wal.segments.lock();
+            let list = segments.list();
+            let active = list.last().map(|m| m.seq);
+            list.iter()
+                .map(|m| (m.seq, Some(m.seq) != active))
+                .collect()
+        };
+        tokio::task::spawn_blocking(move || -> anyhow::Result<Vec<Leaf2>> {
+            let mut by_view = BTreeMap::new();
+            for (seq, sealed) in candidates {
+                let path = lane::segment_path(&dir, seq);
+                let bytes = match std::fs::read(&path) {
+                    Ok(bytes) => bytes,
+                    // GC unlinked the segment after the listing.
+                    Err(err) if err.kind() == io::ErrorKind::NotFound => continue,
+                    Err(err) => {
+                        return Err(err).with_context(|| format!("reading {}", path.display()));
+                    },
+                };
+                let leaves = leaves_in_segment(&bytes, min_header_ts, sealed)
+                    .with_context(|| format!("scanning segment {}", path.display()))?;
+                by_view.extend(leaves.into_iter().map(|leaf| (leaf.view_number(), leaf)));
+            }
+            Ok(by_view.into_values().rev().collect())
+        })
+        .await
+        .context("scan_decided_leaves: blocking task panicked")?
     }
 
     /// Unlinks the segments `wal_unlinkable` and `da_unlinkable` select. Passes are serialized by
@@ -1119,6 +1161,37 @@ fn da_unlinkable(
     std::cmp::max_by_key(by_age, by_bytes, Vec::len)
 }
 
+/// Decided leaves in a whole wal segment file whose header time is at least `min_header_ts`.
+fn leaves_in_segment(bytes: &[u8], min_header_ts: u64, sealed: bool) -> anyhow::Result<Vec<Leaf2>> {
+    ensure!(
+        bytes.len() >= SegmentHeader::LEN,
+        "segment shorter than its header"
+    );
+    let header = SegmentHeader::decode(bytes).context("corrupt segment header")?;
+    let mut leaves = Vec::new();
+    let (end, ..) = format::scan(
+        &bytes[SegmentHeader::LEN..],
+        header.first_lsn,
+        Kind::is_known,
+        |h, body| {
+            if h.kind != Kind::Leaf.into() {
+                return Ok(());
+            }
+            let Record::Leaf { leaf, .. } = Record::decode(Kind::Leaf, h.key, body)? else {
+                anyhow::bail!("leaf frame decoded to another record");
+            };
+            if leaf.block_header().timestamp() >= min_header_ts {
+                leaves.push(leaf);
+            }
+            Ok(())
+        },
+    )?;
+    if let ScanEnd::Torn(offset) = end {
+        ensure!(!sealed, "sealed segment corrupt at frame offset {offset}");
+    }
+    Ok(leaves)
+}
+
 /// Body of the last `kind` record at `key` in a whole segment file. A torn tail is expected on
 /// the active segment; on a sealed one (fsynced before the roll) it is corruption.
 fn find_in_segment(
@@ -1161,24 +1234,30 @@ async fn index_unreplayed(
     segments: &[SegmentMeta],
     replay: &Replay,
 ) -> anyhow::Result<DataIndex> {
-    let (fs, dir) = (fs.clone(), dir.to_path_buf());
-    let index = DataIndex::default();
     let cursor = replay.cursor.map_or(0, |(view, _)| view.u64());
     let seqs = segments
         .iter()
         .filter(|meta| replay.cursor.is_none() || meta.max_key > cursor)
         .map(|meta| meta.seq)
-        .collect::<Vec<_>>();
+        .collect();
+    index_frames(fs, dir, stream, seqs, |_| true).await
+}
+
+/// Index the frames of segments `seqs` that pass `keep`, the newest per `(key, kind)`.
+async fn index_frames(
+    fs: &Arc<StdFs>,
+    dir: &Path,
+    stream: Stream,
+    seqs: Vec<u64>,
+    keep: fn(&format::FrameHeader) -> bool,
+) -> anyhow::Result<DataIndex> {
+    let (fs, dir) = (fs.clone(), dir.to_path_buf());
+    let index = DataIndex::default();
     let frames = tokio::task::spawn_blocking(move || -> anyhow::Result<Vec<_>> {
         let mut frames = Vec::new();
         for seq in seqs {
-            frames.extend(lane::frame_locations(
-                &*fs,
-                &dir,
-                stream,
-                seq,
-                Kind::is_known,
-            )?);
+            let located = lane::frame_locations(&*fs, &dir, stream, seq, Kind::is_known)?;
+            frames.extend(located.into_iter().filter(|(header, _)| keep(header)));
         }
         Ok(frames)
     })
@@ -1346,6 +1425,31 @@ impl SequencerPersistence for Persistence {
     ) -> anyhow::Result<Option<Proposal<SeqTypes, VidDisperseShare<SeqTypes>>>> {
         self.read_data(&self.inner.lanes.share, Kind::Vid, view)
             .await
+    }
+
+    async fn held_vid_views(&self) -> anyhow::Result<BTreeSet<ViewNumber>> {
+        ensure!(
+            !self.is_query_node(),
+            "share heal is not supported on a query node, its share index covers unreplayed views \
+             only"
+        );
+        let index = self
+            .inner
+            .lanes
+            .share
+            .index
+            .as_ref()
+            .context("share lane has no index")?;
+        Ok(index
+            .lock()
+            .keys()
+            .filter(|(_, kind)| *kind == Kind::Vid.into())
+            .map(|(view, _)| ViewNumber::new(*view))
+            .collect())
+    }
+
+    async fn decided_leaves(&self, min_header_ts: u64) -> anyhow::Result<Vec<Leaf2>> {
+        self.scan_decided_leaves(min_header_ts).await
     }
 
     /// Without a header at hand, stamps the share with the local clock, which is within the
@@ -1971,6 +2075,83 @@ mod tests {
         let after = share_stamps(&storage);
         assert_eq!(after[..3], before[..3]);
         assert!(after[3..].iter().all(|stamp| *stamp == 900), "{after:?}");
+    }
+
+    /// A wiped share lane holds no views; a stamped append after the wipe is held again and
+    /// survives a restart.
+    #[tokio::test]
+    async fn journal_append_healed_vid_ok() {
+        let tmp = TempDir::new().unwrap();
+        let opts = options(&tmp);
+        let storage = Persistence::open(opts.clone()).await.unwrap();
+        for view in [1, 2] {
+            storage
+                .append_vid_stamped(&vid_share(view).await, 100)
+                .await
+                .unwrap();
+        }
+        let views = |set: &[u64]| {
+            set.iter()
+                .map(|v| ViewNumber::new(*v))
+                .collect::<BTreeSet<_>>()
+        };
+        assert_eq!(storage.held_vid_views().await.unwrap(), views(&[1, 2]));
+        drop(storage);
+
+        fs::remove_dir_all(tmp.path().join("journal/share")).unwrap();
+        let storage = Persistence::open(opts.clone()).await.unwrap();
+        assert!(storage.held_vid_views().await.unwrap().is_empty());
+        assert!(
+            storage
+                .load_vid_share(ViewNumber::new(2))
+                .await
+                .unwrap()
+                .is_none()
+        );
+
+        storage
+            .append_vid_stamped(&vid_share(2).await, 150)
+            .await
+            .unwrap();
+        assert_eq!(storage.held_vid_views().await.unwrap(), views(&[2]));
+        assert!(
+            storage
+                .load_vid_share(ViewNumber::new(2))
+                .await
+                .unwrap()
+                .is_some()
+        );
+        assert_eq!(share_stamps(&storage)[0], 150);
+        drop(storage);
+
+        let storage = Persistence::open(opts).await.unwrap();
+        assert_eq!(storage.held_vid_views().await.unwrap(), views(&[2]));
+    }
+
+    #[tokio::test]
+    async fn decided_leaves_newest_first_above_min_ts() {
+        let tmp = TempDir::new().unwrap();
+        let storage = Persistence::open(options(&tmp)).await.unwrap();
+        let mut chain = consecutive_height_chain(4).await;
+        for (view, (leaf, _)) in chain.iter_mut().enumerate() {
+            let ts = 1000 * (view as u64 + 1);
+            leaf.block_header_mut().set_timestamp(ts, ts * 1000);
+        }
+        decide_range(&storage, &chain, 0..4, &NullEventConsumer).await;
+
+        let all = storage.decided_leaves(0).await.unwrap();
+        let views: Vec<_> = all.iter().map(|leaf| leaf.view_number()).collect();
+        let mut expected: Vec<_> = chain.iter().map(|(leaf, _)| leaf.view_number()).collect();
+        expected.reverse();
+        assert_eq!(views, expected);
+
+        let recent = storage.decided_leaves(3000).await.unwrap();
+        assert_eq!(recent.len(), 2);
+        assert!(
+            recent
+                .iter()
+                .all(|leaf| leaf.block_header().timestamp() >= 3000)
+        );
     }
 
     /// A payload the decide carries (built, reconstructed or fetched before it) reaches the

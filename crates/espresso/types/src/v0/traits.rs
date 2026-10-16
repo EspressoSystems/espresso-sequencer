@@ -1,7 +1,10 @@
 //! This module contains all the traits used for building the sequencer types.
 //! It also includes some trait implementations that cannot be implemented in an external crate.
 #[cfg(feature = "node")]
-use std::{cmp::max, collections::BTreeMap};
+use std::{
+    cmp::max,
+    collections::{BTreeMap, BTreeSet},
+};
 use std::{fmt::Debug, ops::Range, sync::Arc};
 
 use alloy::primitives::Address;
@@ -617,6 +620,17 @@ pub trait SequencerPersistence:
         &self,
         view: ViewNumber,
     ) -> anyhow::Result<Option<Proposal<SeqTypes, VidDisperseShare<SeqTypes>>>>;
+
+    /// Views whose VID share is on disk. Share heal only; needs `storage-journal`.
+    async fn held_vid_views(&self) -> anyhow::Result<BTreeSet<ViewNumber>> {
+        anyhow::bail!("share heal needs storage-journal")
+    }
+
+    /// Decided leaves with header time at least `min_header_ts`, newest first. Share heal only;
+    /// needs `storage-journal`.
+    async fn decided_leaves(&self, _min_header_ts: u64) -> anyhow::Result<Vec<Leaf2>> {
+        anyhow::bail!("share heal needs storage-journal")
+    }
     async fn load_da_proposal(
         &self,
         view: ViewNumber,
