@@ -17,6 +17,9 @@ pub struct Header {
     pub node: u64,
     pub nodes: u64,
     pub epoch_height: u64,
+    /// The leaders whose proposals break the rules.
+    #[serde(default)]
+    pub misbehaving: Vec<u64>,
 }
 
 /// A certificate over a block.
@@ -40,12 +43,19 @@ pub struct TimeoutCert {
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq)]
 pub struct Block {
     pub id: u64,
+    /// Whether the block passes the validity check.
+    #[serde(default = "valid")]
+    pub valid: bool,
     pub view: u64,
     pub epoch: u64,
     pub height: u64,
     pub payload: u64,
     pub parent: Cert,
     pub evidence: Option<TimeoutCert>,
+}
+
+fn valid() -> bool {
+    true
 }
 
 /// An input, as the specification has it (`NewProtocol.Input`).

@@ -13,8 +13,12 @@
 //! result in an epoch's transition blocks, which is the harness's
 //! `TEST_DRB_RESULT` throughout.
 
-use std::collections::{BTreeMap, HashMap};
+use std::{
+    collections::{BTreeMap, HashMap},
+    sync::Arc,
+};
 
+use bitvec::bitvec;
 use committable::{Commitment, Committable};
 use futures::future::BoxFuture;
 use hotshot::types::{BLSPrivKey, BLSPubKey};
@@ -28,25 +32,30 @@ use hotshot_types::{
         EpochNumber, Leaf2, VidCommitment, VidDisperse, VidDisperse2, VidDisperseShare2, ViewNumber,
     },
     epoch_membership::EpochMembershipCoordinator,
-    message::Proposal as SignedProposal,
+    message::{Proposal as SignedProposal, UpgradeLock},
     simple_certificate::{TimeoutCertificate3, TimeoutEvidence},
-    stake_table::HSStakeTable,
+    simple_vote::{
+        LockView, QuorumData2, SimpleVote, TimeoutData3, VersionedVoteData, Vote2Data, Voteable,
+    },
+    stake_table::{HSStakeTable, StakeTableEntries},
     traits::{
-        BlockPayload, block_contents::BlockHeader, election::Membership,
-        signature_key::SignatureKey,
+        BlockPayload,
+        block_contents::BlockHeader,
+        election::Membership,
+        signature_key::{SignatureKey, StakeTableEntryType},
     },
     utils::{epoch_from_block_number, is_epoch_root, is_epoch_transition, is_last_block},
+    vote::{Certificate, Vote},
 };
 
 use super::format::{self, Cert, TimeoutCert};
 use crate::{
-    helpers::test_upgrade_lock,
+    helpers::{test_timeout_epoch_lock, test_upgrade_lock},
     message::{Certificate1, Certificate2, Proposal},
     tests::common::{
         coordinator_builder::build_genesis_cert1,
         utils::{
-            MockBlock, TEST_DRB_RESULT, build_cert1, build_cert2, build_state_cert_for_test,
-            build_timeout_cert3_with_lock, extract_vid_shares, key_map_with_num_nodes,
+            MockBlock, TEST_DRB_RESULT, build_state_cert_for_test, extract_vid_shares,
             mock_membership_with_num_nodes,
         },
     },
@@ -61,7 +70,8 @@ pub const ANCHOR: u64 = 1;
 #[derive(Clone)]
 pub struct Built {
     pub proposal: SignedProposal<TestTypes, Proposal<TestTypes>>,
-    pub leaf: Leaf2<TestTypes>,
+    /// The leaf's commitment, which certificates over the block name.
+    pub commit: Commitment<Leaf2<TestTypes>>,
     pub payload: TestBlockPayload,
     pub vid: VidDisperse2<TestTypes>,
     pub shares: Vec<VidDisperseShare2<TestTypes>>,
@@ -79,15 +89,38 @@ impl Built {
     }
 }
 
+/// What building costs most, kept across the scenarios of a test run: VID
+/// dispersals, certificates and the nodes' keys. Each is a function of what it
+/// is keyed by, so a scenario of another node or another run that names the
+/// same reuses it.
+#[derive(Default)]
+pub struct Cache {
+    /// By payload (`None` for the harness's own block), view and epoch.
+    vids: BTreeMap<(Option<u64>, u64, u64), VidDisperse2<TestTypes>>,
+    /// By the block's leaf commitment, epoch, height and view.
+    cert1s: BTreeMap<CertKey, Certificate1<TestTypes>>,
+    cert2s: BTreeMap<CertKey, Certificate2<TestTypes>>,
+    state_certs: BTreeMap<CertKey, StateCert>,
+    /// By view, epoch and lock, the anchor's being `None`.
+    timeout_certs: BTreeMap<(u64, u64, Option<CertKey>), TimeoutCertificate3<TestTypes>>,
+    /// Each node's keys, by its number less one.
+    keys: Vec<(BLSPubKey, BLSPrivKey)>,
+}
+
+type CertKey = (Commitment<Leaf2<TestTypes>>, u64, u64, u64);
+
 pub struct World {
+    cache: Cache,
     nodes: u64,
     epoch_height: u64,
     membership: EpochMembershipCoordinator<TestTypes>,
     keys: BTreeMap<BLSPubKey, BLSPrivKey>,
+    /// Each node's keys, by its number less one.
+    node_keys: Vec<(BLSPubKey, BLSPrivKey)>,
     genesis: Leaf2<TestTypes>,
     genesis_cert: Certificate1<TestTypes>,
     defs: HashMap<u64, format::Block>,
-    built: HashMap<u64, Built>,
+    built: HashMap<u64, Arc<Built>>,
     /// The blocks the node itself proposed (`World::adopt_own`).
     own: std::collections::HashSet<u64>,
     /// The `Certificate2`s the node was given, by the block they are over.
@@ -95,9 +128,20 @@ pub struct World {
 }
 
 impl World {
-    pub async fn new(nodes: u64, epoch_height: u64, blocks: &[format::Block]) -> Self {
-        let (pk0, _) = BLSPubKey::generated_from_seed_indexed([0u8; 32], 0);
-        let (membership, ..) = mock_membership_with_num_nodes(nodes as usize, epoch_height, pk0);
+    pub async fn new(
+        nodes: u64,
+        epoch_height: u64,
+        blocks: &[format::Block],
+        mut cache: Cache,
+    ) -> Self {
+        if cache.keys.len() as u64 != nodes {
+            cache.keys = (0..nodes)
+                .map(|i| BLSPubKey::generated_from_seed_indexed([0u8; 32], i))
+                .collect();
+        }
+        let node_keys = cache.keys.clone();
+        let (membership, ..) =
+            mock_membership_with_num_nodes(nodes as usize, epoch_height, node_keys[0].0);
         let genesis = Leaf2::<TestTypes>::genesis(
             &TestValidatedState::default(),
             &TestInstanceState::default(),
@@ -106,10 +150,12 @@ impl World {
         .await;
         let genesis_cert = build_genesis_cert1(&genesis);
         Self {
+            cache,
             nodes,
             epoch_height,
             membership,
-            keys: key_map_with_num_nodes(nodes),
+            keys: node_keys.iter().cloned().collect(),
+            node_keys,
             genesis,
             genesis_cert,
             defs: blocks.iter().map(|b| (b.id, *b)).collect(),
@@ -119,13 +165,14 @@ impl World {
         }
     }
 
-    /// Node `node`'s keys; nodes are numbered from 1.
-    pub fn key(node: u64) -> (BLSPubKey, BLSPrivKey) {
-        BLSPubKey::generated_from_seed_indexed([0u8; 32], node - 1)
+    /// The cache, for the next scenario's world.
+    pub fn into_cache(self) -> Cache {
+        self.cache
     }
 
-    fn signer(&self) -> (BLSPubKey, BLSPrivKey) {
-        Self::key(1)
+    /// Node `node`'s keys; nodes are numbered from 1.
+    pub fn key(&self, node: u64) -> (BLSPubKey, BLSPrivKey) {
+        self.node_keys[(node - 1) as usize].clone()
     }
 
     /// The leader of `view` in `epoch`, with its private key.
@@ -146,11 +193,11 @@ impl World {
 
     /// The node a key belongs to, numbered from 1.
     pub fn node_of(&self, key: &BLSPubKey) -> Option<u64> {
-        (1..=self.nodes).find(|&n| Self::key(n).0 == *key)
+        (1..=self.nodes).find(|&n| self.node_keys[(n - 1) as usize].0 == *key)
     }
 
     /// The block with the identity `id`, built on first use.
-    pub fn block(&mut self, id: u64) -> BoxFuture<'_, Built> {
+    pub fn block(&mut self, id: u64) -> BoxFuture<'_, Arc<Built>> {
         Box::pin(async move {
             if let Some(b) = self.built.get(&id) {
                 return b.clone();
@@ -159,7 +206,7 @@ impl World {
                 .defs
                 .get(&id)
                 .unwrap_or_else(|| panic!("block {id} is in the scenario's block list"));
-            let b = self.build(def).await;
+            let b = Arc::new(self.build(def).await);
             self.built.insert(id, b.clone());
             b
         })
@@ -194,9 +241,9 @@ impl World {
         let mock = MockBlock::new();
         let epoch = proposal.data.epoch;
         let vid = self
-            .disperse(&mock.block, &mock.metadata, def.view, epoch)
+            .disperse(None, &mock.block, &mock.metadata, def.view, epoch)
             .await;
-        let leader = self.leader(def.epoch, def.view).0;
+        let leader = self.leader(*epoch, def.view).0;
         let leaf = Leaf2::from(proposal.data.clone());
         if is_epoch_root(def.height, self.epoch_height) {
             self.register_epoch_root(&proposal.data.block_header).await;
@@ -204,16 +251,29 @@ impl World {
         self.own.insert(id);
         self.built.insert(
             id,
-            Built {
+            Arc::new(Built {
                 proposal,
-                leaf,
+                commit: leaf.commit(),
                 payload: mock.block,
                 shares: extract_vid_shares(&vid),
                 vid,
                 leader,
-            },
+            }),
         );
         true
+    }
+
+    /// The identity of the built block with this leaf commitment, if any.
+    pub fn block_with_commitment(&self, commitment: &Commitment<Leaf2<TestTypes>>) -> Option<u64> {
+        self.built
+            .iter()
+            .find(|(_, b)| b.commit == *commitment)
+            .map(|(id, _)| *id)
+    }
+
+    /// Whether the block `id` passes the validity check.
+    pub fn is_valid(&self, id: u64) -> bool {
+        self.defs.get(&id).is_none_or(|b| b.valid)
     }
 
     /// Whether the block `id` is one the node itself proposed.
@@ -231,55 +291,136 @@ impl World {
         if id == ANCHOR {
             return self.genesis.commit();
         }
-        self.block(id).await.leaf.commit()
+        self.block(id).await.commit
     }
 
     pub async fn cert1(&mut self, c: Cert) -> Certificate1<TestTypes> {
         if c.block == ANCHOR && c.view == 0 {
             return self.genesis_cert.clone();
         }
-        let commit = self.leaf_commit(c.block).await;
-        let (pk, sk) = self.signer();
-        let membership = self.committee(c.epoch);
-        build_cert1(
-            commit,
-            EpochNumber::new(c.epoch),
-            c.height,
-            &membership,
-            ViewNumber::new(c.view),
-            &pk,
-            &sk,
-        )
+        let key = self.cert_key(c).await;
+        if let Some(cert) = self.cache.cert1s.get(&key) {
+            return cert.clone();
+        }
+        let data = QuorumData2 {
+            leaf_commit: key.0,
+            epoch: Some(EpochNumber::new(c.epoch)),
+            block_number: Some(c.height),
+        };
+        let cert: Certificate1<TestTypes> = self.certify(data, c.epoch, c.view);
+        self.cache.cert1s.insert(key, cert.clone());
+        cert
+    }
+
+    async fn cert_key(&mut self, c: Cert) -> CertKey {
+        (self.leaf_commit(c.block).await, c.epoch, c.height, c.view)
     }
 
     pub async fn cert2(&mut self, c: Cert) -> Certificate2<TestTypes> {
-        let commit = self.leaf_commit(c.block).await;
-        let (pk, sk) = self.signer();
-        let membership = self.committee(c.epoch);
-        build_cert2(
-            commit,
-            EpochNumber::new(c.epoch),
-            c.height,
-            &membership,
-            ViewNumber::new(c.view),
-            &pk,
-            &sk,
-        )
+        let key = self.cert_key(c).await;
+        if let Some(cert) = self.cache.cert2s.get(&key) {
+            return cert.clone();
+        }
+        let data = Vote2Data {
+            leaf_commit: key.0,
+            epoch: EpochNumber::new(c.epoch),
+            block_number: c.height,
+        };
+        let cert: Certificate2<TestTypes> = self.certify(data, c.epoch, c.view);
+        self.cache.cert2s.insert(key, cert.clone());
+        cert
     }
 
     pub async fn timeout_cert(&mut self, tc: TimeoutCert) -> TimeoutCertificate3<TestTypes> {
-        let lock = if tc.lock.block == ANCHOR && tc.lock.view == 0 {
+        let anchor = tc.lock.block == ANCHOR && tc.lock.view == 0;
+        let lock_key = if anchor {
+            None
+        } else {
+            Some(self.cert_key(tc.lock).await)
+        };
+        let key = (tc.view, tc.epoch, lock_key);
+        if let Some(cert) = self.cache.timeout_certs.get(&key) {
+            return cert.clone();
+        }
+        let lock = if anchor {
             None
         } else {
             Some(self.cert1(tc.lock).await)
         };
-        let membership = self.committee(tc.epoch);
-        build_timeout_cert3_with_lock(
-            ViewNumber::new(tc.view),
-            EpochNumber::new(tc.epoch),
-            lock,
-            &membership,
-        )
+        let cert = self.sign_timeout_cert(tc.view, tc.epoch, lock);
+        self.cache.timeout_certs.insert(key, cert.clone());
+        cert
+    }
+
+    /// A certificate over `data` at `view`, signed by every member of `epoch`'s
+    /// committee.
+    fn certify<D, C>(&self, data: D, epoch: u64, view: u64) -> C
+    where
+        D: Voteable<TestTypes> + 'static,
+        C: Certificate<TestTypes, D, Voteable = D>,
+    {
+        let membership = self.committee(epoch);
+        let view = ViewNumber::new(view);
+        let upgrade_lock = test_upgrade_lock::<TestTypes>();
+        let entries = StakeTableEntries::<TestTypes>::from(C::stake_table(&membership)).0;
+        let signatures: Vec<_> = entries
+            .iter()
+            .map(|e| self.vote(data.clone(), view, &e.public_key(), &upgrade_lock))
+            .collect();
+        let params = BLSPubKey::public_parameter(&entries, C::threshold(&membership));
+        let signature = BLSPubKey::assemble(
+            &params,
+            bitvec![1; entries.len()].as_bitslice(),
+            &signatures,
+        );
+        let commitment = VersionedVoteData::new(data.clone(), view, &upgrade_lock)
+            .expect("versioned vote data")
+            .commit();
+        C::create_signed_certificate(commitment, data, signature, view)
+    }
+
+    /// A timeout certificate for `view` in `epoch`, signed by every member of the
+    /// committee, all holding `lock`.
+    fn sign_timeout_cert(
+        &self,
+        view: u64,
+        epoch: u64,
+        lock: Option<Certificate1<TestTypes>>,
+    ) -> TimeoutCertificate3<TestTypes> {
+        let membership = self.committee(epoch);
+        let (view, epoch) = (ViewNumber::new(view), EpochNumber::new(epoch));
+        let upgrade_lock = test_timeout_epoch_lock::<TestTypes>();
+        let entries = StakeTableEntries::<TestTypes>::from_iter(membership.stake_table()).0;
+        let lock_view = lock.as_ref().map(LockView::of);
+        let data = TimeoutData3 {
+            view,
+            epoch,
+            lock: lock_view,
+        };
+        let votes: Vec<_> = entries
+            .iter()
+            .map(|e| {
+                let key = e.public_key();
+                let signature = self.vote(data.clone(), view, &key, &upgrade_lock);
+                (lock_view, key, signature)
+            })
+            .collect();
+        TimeoutCertificate3::assemble(view, epoch, &entries, votes, lock)
+            .expect("assemble timeout certificate")
+    }
+
+    /// The signature of `key`'s vote for `data` at `view`.
+    fn vote<D: Voteable<TestTypes> + 'static>(
+        &self,
+        data: D,
+        view: ViewNumber,
+        key: &BLSPubKey,
+        upgrade_lock: &UpgradeLock<TestTypes>,
+    ) -> <BLSPubKey as SignatureKey>::PureAssembledSignatureType {
+        let private_key = self.keys.get(key).expect("every member is a test key");
+        SimpleVote::create_signed_vote(data, view, key, private_key, upgrade_lock)
+            .expect("sign vote")
+            .signature()
     }
 
     fn committee(&self, epoch: u64) -> hotshot_types::epoch_membership::EpochMembership<TestTypes> {
@@ -288,13 +429,20 @@ impl World {
             .unwrap_or_else(|e| panic!("the committee of epoch {epoch} is known: {e}"))
     }
 
+    /// The dispersal of a payload, the scenario's `payload` or, for `None`, the
+    /// harness's own block.
     async fn disperse(
-        &self,
+        &mut self,
+        id: Option<u64>,
         payload: &TestBlockPayload,
         metadata: &TestMetadata,
         view: u64,
         epoch: EpochNumber,
     ) -> VidDisperse2<TestTypes> {
+        let key = (id, view, *epoch);
+        if let Some(vid) = self.cache.vids.get(&key) {
+            return vid.clone();
+        }
         let disperse = VidDisperse::calculate_vid_disperse(
             payload,
             &self.membership,
@@ -309,11 +457,23 @@ impl World {
         let VidDisperse::V2(vid) = disperse.disperse else {
             panic!("a V2 dispersal");
         };
+        self.cache.vids.insert(key, vid.clone());
         vid
+    }
+
+    /// The epoch a block's height puts it in, given its parent, whatever epoch the
+    /// proposal names: the one whose committee disperses and signs for it.
+    fn epoch_of(&self, def: &format::Block) -> u64 {
+        if is_last_block(def.parent.height, self.epoch_height) {
+            def.parent.epoch + 1
+        } else {
+            def.parent.epoch.max(1)
+        }
     }
 
     async fn build(&mut self, def: format::Block) -> Built {
         let epoch = EpochNumber::new(def.epoch);
+        let committee_epoch = EpochNumber::new(self.epoch_of(&def));
         let justify_qc = self.cert1(def.parent).await;
         let transactions = vec![TestTransaction::new(def.payload.to_le_bytes().to_vec())];
         let (payload, metadata) = <TestBlockPayload as BlockPayload<TestTypes>>::from_transactions(
@@ -325,7 +485,15 @@ impl World {
         .expect("a payload from one transaction");
         let builder_commitment =
             <TestBlockPayload as BlockPayload<TestTypes>>::builder_commitment(&payload, &metadata);
-        let vid = self.disperse(&payload, &metadata, def.view, epoch).await;
+        let vid = self
+            .disperse(
+                Some(def.payload),
+                &payload,
+                &metadata,
+                def.view,
+                committee_epoch,
+            )
+            .await;
         let block_header = TestBlockHeader {
             block_number: def.height,
             payload_commitment: VidCommitment::V2(vid.payload_commitment),
@@ -361,19 +529,19 @@ impl World {
             state_cert,
         };
         let leaf = Leaf2::from(proposal.clone());
-        let (leader, leader_key) = self.leader(def.epoch, def.view);
+        let (leader, leader_key) = self.leader(*committee_epoch, def.view);
         let signature = <BLSPubKey as SignatureKey>::sign(&leader_key, leaf.commit().as_ref())
             .expect("the leader signs the leaf");
         if is_epoch_root(def.height, self.epoch_height) {
             self.register_epoch_root(&proposal.block_header).await;
         }
         Built {
+            commit: leaf.commit(),
             proposal: SignedProposal {
                 data: proposal,
                 signature,
                 _pd: std::marker::PhantomData,
             },
-            leaf,
             payload,
             shares: extract_vid_shares(&vid),
             vid,
@@ -388,6 +556,10 @@ impl World {
         if !is_epoch_root(c.height, self.epoch_height) {
             return None;
         }
+        let key = self.cert_key(c).await;
+        if let Some(cert) = self.cache.state_certs.get(&key) {
+            return Some(cert.clone());
+        }
         let root = self.block(c.block).await;
         let next = self
             .committee(c.epoch)
@@ -396,13 +568,15 @@ impl World {
         let next_state = HSStakeTable::from_iter(next.stake_table())
             .commitment(self.nodes as usize)
             .expect("a stake table commitment");
-        Some(build_state_cert_for_test(
+        let cert = build_state_cert_for_test(
             &root.proposal.data.block_header,
             ViewNumber::new(c.view),
             EpochNumber::new(c.epoch),
             &next_state,
             (2 * self.nodes) / 3 + 1,
-        ))
+        );
+        self.cache.state_certs.insert(key, cert.clone());
+        Some(cert)
     }
 
     /// The `Certificate2` over an epoch's last block that the first block of the

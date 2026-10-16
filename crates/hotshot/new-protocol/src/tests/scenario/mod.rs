@@ -29,6 +29,7 @@ mod world;
 
 use std::path::{Path, PathBuf};
 
+use hotshot_example_types::node_types::TestTypes;
 use hotshot_types::{
     data::{EpochNumber, ViewNumber},
     simple_certificate::TimeoutEvidence,
@@ -36,13 +37,14 @@ use hotshot_types::{
 
 use self::{
     format::{Input, Scenario},
-    world::World,
+    world::{Cache, World},
 };
 use crate::{
     cert_verifier::ValidCert,
     consensus::{ConsensusInput, ConsensusOutput},
-    helpers::test_timeout_epoch_lock,
+    helpers::{proposal_commitment, test_timeout_epoch_lock},
     message::{EpochChangeMessage, ProposalMessage, ReVote, ReVoteMessage},
+    proposal::ProposalValidator,
     tests::common::{
         coordinator_builder::{build_genesis_cert1, build_genesis_proposal},
         utils::ConsensusHarness,
@@ -55,9 +57,11 @@ const EPOCH_HEIGHT: u64 = 10;
 
 /// Replay every scenario in the directory `NP_SCENARIOS` names.
 ///
-/// Does nothing when it is unset, so a plain `cargo test` passes over it.
-#[tokio::test]
-async fn scenarios_replay() {
+/// Does nothing when it is unset, so a plain `cargo test` passes over it. The
+/// scenarios are shared out over a thread per core, a run's nodes to the same
+/// thread: they name the same blocks, so they share most of what is built.
+#[test]
+fn scenarios_replay() {
     let Ok(dir) = std::env::var("NP_SCENARIOS") else {
         return;
     };
@@ -68,13 +72,42 @@ async fn scenarios_replay() {
         .collect();
     paths.sort();
     assert!(!paths.is_empty(), "no scenarios in {dir}");
-    for path in &paths {
-        replay(path).await;
+    let threads = std::thread::available_parallelism().map_or(1, |n| n.get());
+    let mut shares = vec![Vec::new(); threads];
+    for (i, run) in paths.chunk_by(|a, b| run_of(a) == run_of(b)).enumerate() {
+        shares[i % threads].extend_from_slice(run);
     }
+    std::thread::scope(|s| {
+        for share in &shares {
+            s.spawn(move || replay_all(share));
+        }
+    });
+}
+
+/// The run a scenario file is of: its name without the node.
+fn run_of(path: &Path) -> &str {
+    let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+    stem.rsplit_once("-node").map_or(stem, |(run, _)| run)
+}
+
+/// Replay `paths` in order on this thread.
+fn replay_all(paths: &[PathBuf]) {
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("a runtime");
+    runtime.block_on(async {
+        let mut cache = Cache::default();
+        for path in paths {
+            cache = replay(path, cache).await;
+        }
+    });
 }
 
 /// Replay one scenario to a fresh node, recording its trace under the file's name.
-async fn replay(path: &Path) {
+///
+/// Takes and gives back what earlier scenarios built, for later ones to reuse.
+async fn replay(path: &Path, cache: Cache) -> Cache {
     crate::logging::init_test_logging();
     let scenario = Scenario::read(path);
     let h = &scenario.header;
@@ -91,7 +124,6 @@ async fn replay(path: &Path) {
             .unwrap_or("unnamed")
     );
     let me = h.node;
-    let (my_key, _) = World::key(me);
     let mut harness =
         ConsensusHarness::new_with_upgrade_lock(me - 1, EPOCH_HEIGHT, test_timeout_epoch_lock())
             .await
@@ -103,7 +135,8 @@ async fn replay(path: &Path) {
         build_genesis_proposal(&genesis_leaf),
         std::iter::empty(),
     );
-    let mut world = World::new(NODES, EPOCH_HEIGHT, &scenario.blocks).await;
+    let mut world = World::new(NODES, EPOCH_HEIGHT, &scenario.blocks, cache).await;
+    let my_key = world.key(me).0;
     let mut seen_outputs = 0;
     for step in &scenario.steps {
         // The node's own proposals since the last step stand for the simulated ones.
@@ -128,12 +161,63 @@ async fn replay(path: &Path) {
                 world.adopt_own(id, p).await;
             }
         }
-        if let Some(input) = consensus_input(&mut world, &my_key, &step.input).await {
-            for i in input {
-                harness.apply(i).await;
-            }
+        if let Some(inputs) = consensus_input(&mut world, &my_key, &step.input).await {
+            deliver(&mut harness, &world, &scenario.header, inputs).await;
         }
     }
+    world.into_cache()
+}
+
+/// Hand one of the scenario's inputs to the node, as its coordinator would.
+///
+/// A proposal from a misbehaving leader goes through the node's proposal
+/// validation first; one it refuses never reaches consensus, so it is recorded
+/// as taken, with its share, and nothing done. A block that is not valid fails
+/// its state validation.
+async fn deliver(
+    harness: &mut ConsensusHarness,
+    world: &World,
+    header: &format::Header,
+    inputs: Vec<ConsensusInput<TestTypes>>,
+) {
+    if let Some(ConsensusInput::Proposal(sender, message)) = inputs.first() {
+        let commitment = proposal_commitment(&message.proposal.data);
+        if let Some(id) = world.block_with_commitment(&commitment)
+            && !world.is_valid(id)
+        {
+            harness.invalidate(commitment);
+        }
+        if world
+            .node_of(sender)
+            .is_some_and(|n| header.misbehaving.contains(&n))
+            && !valid_proposal(harness, message).await
+        {
+            let share = inputs.iter().find_map(|i| match i {
+                ConsensusInput::VidShare(share) => Some(share.clone()),
+                _ => None,
+            });
+            harness.record_refused(*sender, message.clone(), share);
+            return;
+        }
+    }
+    for input in inputs {
+        harness.apply(input).await;
+    }
+}
+
+/// Whether the node's proposal validation accepts `message`.
+async fn valid_proposal(
+    harness: &ConsensusHarness,
+    message: &ProposalMessage<TestTypes, crate::message::Validated>,
+) -> bool {
+    let mut validator = ProposalValidator::new(
+        harness.membership_coordinator.clone(),
+        EPOCH_HEIGHT,
+        test_timeout_epoch_lock(),
+        None,
+    );
+    validator.validate(ProposalMessage::unchecked(message.proposal.clone()));
+    matches!(validator.next().await, Some(Ok(_)))
 }
 
 /// The inputs the Rust node takes for one of the scenario's.
@@ -195,7 +279,7 @@ async fn consensus_input(
             vec![ConsensusInput::EpochChange(EpochChangeMessage::validated(
                 c1,
                 c2,
-                built.proposal.data,
+                built.proposal.data.clone(),
             ))]
         },
         Input::BlockReconstructed { view, payload } => {
@@ -206,7 +290,7 @@ async fn consensus_input(
             vec![ConsensusInput::BlockReconstructed {
                 view: ViewNumber::new(view),
                 payload_commitment: built.vid.payload_commitment,
-                payload: built.payload,
+                payload: built.payload.clone(),
             }]
         },
         Input::Revote {
@@ -226,7 +310,7 @@ async fn consensus_input(
                 cert1,
                 timeout,
             };
-            let (_, key) = World::key(sender);
+            let key = world.key(sender).1;
             vec![ConsensusInput::ReVote(
                 ReVoteMessage::new(revote, &key).expect("the leader signs the request"),
             )]

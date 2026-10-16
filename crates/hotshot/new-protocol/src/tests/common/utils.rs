@@ -1172,6 +1172,7 @@ pub(crate) struct ConsensusHarness {
     pub membership_coordinator: EpochMembershipCoordinator<TestTypes>,
     pub collected: Outbox<ConsensusOutput<TestTypes>>,
     deferred_states: BTreeMap<ViewNumber, ConsensusInput<TestTypes>>,
+    invalid_blocks: BTreeSet<Commitment<Leaf2<TestTypes>>>,
     defer_state_for: BTreeSet<ViewNumber>,
     deferred_headers: BTreeMap<ViewNumber, Vec<ConsensusInput<TestTypes>>>,
     defer_header_for: BTreeSet<ViewNumber>,
@@ -1250,6 +1251,7 @@ impl ConsensusHarness {
             membership_coordinator: membership,
             collected: Outbox::new(),
             deferred_states: BTreeMap::new(),
+            invalid_blocks: BTreeSet::new(),
             defer_state_for: BTreeSet::new(),
             deferred_headers: BTreeMap::new(),
             defer_header_for: BTreeSet::new(),
@@ -1308,6 +1310,7 @@ impl ConsensusHarness {
             membership_coordinator: membership,
             collected: Outbox::new(),
             deferred_states: BTreeMap::new(),
+            invalid_blocks: BTreeSet::new(),
             defer_state_for: BTreeSet::new(),
             deferred_headers: BTreeMap::new(),
             defer_header_for: BTreeSet::new(),
@@ -1367,6 +1370,36 @@ impl ConsensusHarness {
     pub fn record_as(mut self, label: &str) -> Self {
         self.trace = trace::Recorder::new(label);
         self
+    }
+
+    /// Fail the state validation of the block with this leaf commitment, as for a
+    /// block that is not valid.
+    pub fn invalidate(&mut self, block: Commitment<Leaf2<TestTypes>>) {
+        self.invalid_blocks.insert(block);
+    }
+
+    /// Record a proposal the node took and refused before consensus saw it, as its
+    /// proposal validation refuses a malformed one, with the share it came with:
+    /// the node did nothing.
+    pub fn record_refused(
+        &mut self,
+        sender: BLSPubKey,
+        proposal: ProposalMessage<TestTypes, Validated>,
+        share: Option<VidDisperseShare2<TestTypes>>,
+    ) {
+        self.trace.preamble(
+            self.consensus.public_key(),
+            self.consensus.last_decided_leaf(),
+            self.consensus.cert1_at(ViewNumber::genesis()),
+            *self.consensus.epoch_height,
+        );
+        let input = ConsensusInput::Proposal(sender, proposal);
+        record_leader(&mut self.trace, &self.consensus, &input);
+        let ConsensusInput::Proposal(sender, proposal) = input else {
+            unreachable!("built as a proposal");
+        };
+        self.trace
+            .refused(&sender, &proposal.proposal.data, share.as_ref());
     }
 
     /// Withhold `view`'s state-validation response until [`Self::release_state`].
@@ -1482,7 +1515,19 @@ impl ConsensusHarness {
     ) {
         match output {
             ConsensusOutput::RequestState(req) => {
-                let input = state_verified_input(&req.proposal, req.view);
+                let input = if self
+                    .invalid_blocks
+                    .contains(&proposal_commitment(&req.proposal))
+                {
+                    let ConsensusInput::StateValidated(response) =
+                        state_verified_input(&req.proposal, req.view)
+                    else {
+                        unreachable!("a state response");
+                    };
+                    ConsensusInput::StateValidationFailed(response)
+                } else {
+                    state_verified_input(&req.proposal, req.view)
+                };
                 if self.defer_state_for.contains(&req.view) {
                     self.deferred_states.insert(req.view, input);
                 } else {

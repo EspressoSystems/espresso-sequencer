@@ -55,6 +55,13 @@ structure Params where
   -/
   equivocators : List Nat := []
 
+  /--
+  Faulty nodes that run the machine but, as leaders, send a proposal that breaks
+  the rules, a different way by turns (`Params.misbehave`). The certificates it
+  carries are genuine: a faulty node cannot forge a quorum's signatures.
+  -/
+  misbehaving : List Nat := []
+
   /-- Nodes silent in one epoch each, and honest in the others: what they send for that epoch is lost. -/
   silentIn : List (Nat × Nat) := []
 
@@ -113,10 +120,12 @@ def running : List PubKey :=
   (List.range P.nodes).filterMap fun i => if P.faulty.contains (i + 1) then none else some ⟨i + 1⟩
 
 /-- The nodes whose histories are checked: those that obey the rules in some epoch. -/
-def checked : List PubKey := P.running.filter fun k => !P.equivocators.contains k.toNat
+def checked : List PubKey :=
+  P.running.filter fun k => !P.equivocators.contains k.toNat && !P.misbehaving.contains k.toNat
 
 def faultyIn (e : EpochNumber) (k : PubKey) : Bool :=
-  P.faulty.contains k.toNat || P.equivocators.contains k.toNat || P.silentIn.contains (k.toNat, e.toNat)
+  P.faulty.contains k.toNat || P.equivocators.contains k.toNat || P.misbehaving.contains k.toNat
+    || P.silentIn.contains (k.toNat, e.toNat)
 
 /-- The epoch a message is signed for, if it is signed. -/
 def signedFor : Output → Option EpochNumber
@@ -139,6 +148,38 @@ def anchor : Block :=
   ⟨⟨⟨0⟩, 0⟩, ViewNumber.genesis, P.epoch0, ⟨⟨⟨0⟩, P.epoch0, 0⟩, ViewNumber.genesis⟩, none, ⟨1⟩⟩
 
 def cfg : Config := ⟨P.anchor, ⟨⟨⟨1⟩, P.epoch0, 0⟩, ViewNumber.genesis⟩, 20, P.epochHeight⟩
+
+/--
+What a misbehaving leader sends instead of the proposal `p` the machine made, and
+whether its block is valid, by its turn to lead: one a block too high, one of the wrong
+epoch, one that skips views without a timeout certificate, one on a parent before
+its timeout certificate's lock, and one whose block is not valid. Each but the
+last is refused by the rules, and the last by the validity check. Where the
+proposal carries nothing to break, it is made too high instead.
+
+The unsafe one builds on a certificate the node holds from earlier in the lock's
+epoch, `cert1s` or the anchor's.
+-/
+def misbehave (cert1s : List Cert1) (p : Proposal) : Proposal × Bool :=
+  let taller := { p with blockHeader := { p.blockHeader with blockNumber := p.blockHeader.blockNumber + 1 } }
+  match p.viewNumber.toNat / P.size % 5 with
+  | 0 => (taller, true)
+  | 1 => ({ p with epoch := p.epoch + 1 }, true)
+  | 2 => (if p.timeoutEvidence.isSome then { p with timeoutEvidence := none } else taller, true)
+  | 3 =>
+    let earlier (tc : TimeoutCert) (c : Cert1) :=
+      c.data.epoch = tc.data.lock.data.epoch && c.view.toNat < tc.data.lock.view.toNat
+    match p.timeoutEvidence with
+    | some tc =>
+      match (P.cfg.anchorCert :: cert1s).find? (earlier tc) with
+      | some c =>
+        let height := c.data.blockNumber + 1
+        let header := { p.blockHeader with blockNumber := height }
+        let behind := { p with parentCert := c, epoch := epochOf height P.epochHeight, blockHeader := header }
+        (behind, true)
+      | none => (taller, true)
+    | none => (taller, true)
+  | _ => (p, false)
 
 /-- Every committee keeps a quorum of honest members, as `TimedNetwork.honestQuorum` asks. -/
 def coherent : Bool :=
@@ -167,6 +208,8 @@ structure State where
   nextId : Nat := 2
   nextPayload : Nat := 1
   blocks : List Block := []
+  /-- The identities of the blocks that are not valid. -/
+  invalid : List Nat := []
   vote1s : List ((Vote1Data × ViewNumber) × List PubKey) := []
   vote2s : List ((Vote2Data × ViewNumber) × List PubKey) := []
   timeouts : List ((ViewNumber × EpochNumber) × List (PubKey × Cert1)) := []
@@ -235,8 +278,11 @@ def later (a b : Cert1) : Cert1 :=
 
 /-- What the network does with an output of node `k` at `now`. -/
 def handle (now : Nat) (k : PubKey) : Output → SimM Unit
-  | .send (.proposal p) => do
+  | .send (.proposal p0) => do
+    let cert1s := (← get).cert1s
+    let (p, valid) := if P.misbehaving.contains k.toNat then P.misbehave cert1s p0 else (p0, true)
     let b ← identify p
+    unless valid do modify fun s => { s with invalid := b.identity.toNat :: s.invalid }
     let other ← identify { p with blockHeader := { p.blockHeader with payloadCommit := ⟨p.payloadCommit.toNat + 2 ^ 32⟩ } }
     let members := P.members b.epoch
     for k' in P.running do
@@ -244,7 +290,7 @@ def handle (now : Nat) (k : PubKey) : Output → SimM Unit
       let b' := if P.equivocators.contains k.toNat && members.idxOf k' ≥ members.length / 2 then other else b
       if P.isMember b.epoch k' then
         push t k' (.proposal k b' (some ⟨b'.viewNumber, b'.payloadCommit⟩))
-        push (t + 1) k' (.blockValidated b'.viewNumber (blockHash b'))
+        if valid then push (t + 1) k' (.blockValidated b'.viewNumber (blockHash b'))
       else push t k' (.proposal k b' none)
   | .send (.revote r) => do
     modify fun s => { s with revotes := s.revotes + 1 }

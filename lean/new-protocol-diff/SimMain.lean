@@ -39,7 +39,8 @@ def describe (name : String) (p : Params) : String :=
 Settings the Rust node's tests can reproduce: the ten nodes and one committee of
 their test membership, and epochs of ten blocks, the shortest its epoch roots
 allow, with each kind of fault: one node silent throughout, one leader that
-equivocates, and one member silent in each epoch, a different one each time. The
+equivocates, one leader whose proposals break the rules, and one member silent in
+each epoch, a different one each time. The
 chain must cross the first epoch boundary.
 -/
 def rustSettings (seed : Nat) : List (String × Params) :=
@@ -49,6 +50,9 @@ def rustSettings (seed : Nat) : List (String × Params) :=
   let rustFaults : List (String × (Params → Params)) :=
     [ ("silent", fun p => { p with faulty := [10] }),
       ("equivocating", fun p => { p with equivocators := [4] }),
+      -- Node 1 leads each view after one of silent node 10's, so its proposals
+      -- follow a timeout and can skip views or build behind the lock.
+      ("misbehaving", fun p => { p with faulty := [10], misbehaving := [1] }),
       ("rotating", fun p =>
         { p with silentIn := (List.range 100).map fun e => (e % p.nodes + 1, e) }) ]
   rustFaults.flatMap fun (name, f) => [0, 60].map fun g =>
@@ -59,19 +63,20 @@ def writeScenarios (dir : System.FilePath) (seeds : Nat) : IO UInt32 := do
   IO.FS.createDirAll dir
   let mut failed := 0
   let mut written := 0
-  for seed in List.range' 1 seeds do
-    for (name, p) in rustSettings seed do
-      let s := run p
-      let o := checkState p s
-      unless o.failures.isEmpty do
-        failed := failed + 1
-        IO.println s!"FAILED: {describe name p}: {String.intercalate "; " o.failures}"
-        continue
-      for k in p.checked do
-        let file := dir / s!"{name}-seed{seed}-gst{p.gst}-node{k.toNat}.jsonl"
-        IO.FS.writeFile file (Scenario.render p s k)
-        written := written + 1
-      IO.println s!"ok: {describe name p}: height {o.height}, {o.steps} steps"
+  -- Each run in a task of its own, so the runs use every core.
+  let runs := (List.range' 1 seeds).flatMap fun seed => (rustSettings seed).map fun (name, p) =>
+    (seed, name, p, Task.spawn fun _ => let s := run p; (s, checkState p s))
+  for (seed, name, p, task) in runs do
+    let (s, o) := task.get
+    unless o.failures.isEmpty do
+      failed := failed + 1
+      IO.println s!"FAILED: {describe name p}: {String.intercalate "; " o.failures}"
+      continue
+    for k in p.checked do
+      let file := dir / s!"{name}-seed{seed}-gst{p.gst}-node{k.toNat}.jsonl"
+      IO.FS.writeFile file (Scenario.render p s k)
+      written := written + 1
+    IO.println s!"ok: {describe name p}: height {o.height}, {o.steps} steps"
   IO.println s!"{written} scenarios written, {failed} runs failed"
   return if failed = 0 then 0 else 1
 
@@ -85,19 +90,20 @@ public def main (args : List String) : IO UInt32 := do
     return 1
   let mut failed := 0
   let mut runs := 0
-  for seed in List.range' 1 seeds do
-    for (name, p) in settings seed do
-      runs := runs + 1
-      unless p.coherent do
-        IO.println s!"incoherent setting: {describe name p}"
-        failed := failed + 1
-        continue
-      let o := check p
-      if o.failures.isEmpty then
-        IO.println s!"ok: {describe name p}: height {o.height}, {o.steps} steps, \
-          {o.timeoutCerts} timeout certificates, {o.epochChanges} epoch changes, {o.revotes} re-vote requests"
-      else
-        failed := failed + 1
-        IO.println s!"FAILED: {describe name p}: {String.intercalate "; " o.failures}"
+  -- Each run in a task of its own, so the runs use every core.
+  let all := (List.range' 1 seeds).flatMap fun seed => (settings seed).map fun (name, p) =>
+    (name, p, if p.coherent then some (Task.spawn fun _ => check p) else none)
+  for (name, p, task) in all do
+    runs := runs + 1
+    let some task := task | do
+      IO.println s!"incoherent setting: {describe name p}"
+      failed := failed + 1
+    let o := task.get
+    if o.failures.isEmpty then
+      IO.println s!"ok: {describe name p}: height {o.height}, {o.steps} steps, \
+        {o.timeoutCerts} timeout certificates, {o.epochChanges} epoch changes, {o.revotes} re-vote requests"
+    else
+      failed := failed + 1
+      IO.println s!"FAILED: {describe name p}: {String.intercalate "; " o.failures}"
   IO.println s!"{runs} runs, {failed} failed"
   return if failed = 0 then 0 else 1

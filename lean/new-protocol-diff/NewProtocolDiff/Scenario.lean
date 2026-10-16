@@ -54,8 +54,9 @@ def evidenceJson : Option TimeoutCert → Json
   | some tc => timeoutCertJson tc
   | none => Json.null
 
-def blockJson (p : Proposal) : Json :=
-  Json.mkObj [("id", toJson p.identity.toNat), ("view", toJson p.viewNumber.toNat),
+def blockJson (p : Proposal) (valid : Bool := true) : Json :=
+  Json.mkObj [("id", toJson p.identity.toNat), ("valid", toJson valid),
+    ("view", toJson p.viewNumber.toNat),
     ("epoch", toJson p.epoch.toNat), ("height", toJson p.blockHeader.blockNumber.toNat),
     ("payload", toJson p.blockHeader.payloadCommit.toNat), ("parent", cert1Json p.parentCert),
     ("evidence", evidenceJson p.timeoutEvidence)]
@@ -91,13 +92,15 @@ def inputJson : Input → Json
 def headerJson (P : Params) (k : PubKey) : Json :=
   Json.mkObj [("scenario", Json.mkObj
     [("node", toJson k.toNat), ("nodes", toJson P.nodes), ("faulty", toJson P.faulty),
-     ("equivocators", toJson P.equivocators), ("epochHeight", toJson P.epochHeight),
+     ("equivocators", toJson P.equivocators), ("misbehaving", toJson P.misbehaving),
+     ("epochHeight", toJson P.epochHeight),
      ("seed", toJson P.seed), ("gst", toJson P.gst), ("delta", toJson P.delta),
      ("tau", toJson P.tau)])]
 
 /-- The second line: every block the network built, in the order it built them. -/
 def blocksJson (s : State) : Json :=
-  Json.mkObj [("blocks", Json.arr (s.blocks.reverse.map blockJson).toArray)]
+  Json.mkObj [("blocks", Json.arr (s.blocks.reverse.map fun b =>
+    blockJson b (!s.invalid.contains b.identity.toNat)).toArray)]
 
 /-- The scenario of node `k` in a run that ended in state `s`. -/
 def render (P : Params) (s : State) (k : PubKey) : String :=
