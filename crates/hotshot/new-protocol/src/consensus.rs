@@ -9,7 +9,6 @@ use std::{
 };
 
 use committable::{Commitment, CommitmentBoundsArkless, Committable};
-use hotshot::traits::BlockPayload;
 use hotshot_contract_adapter::light_client::derive_signed_state_digest;
 use hotshot_types::{
     data::{
@@ -29,6 +28,7 @@ use hotshot_types::{
     },
     stake_table::HSStakeTable,
     traits::{
+        BlockPayload,
         block_contents::{BlockHeader, EncodeBytes},
         node_implementation::NodeType,
         signature_key::{
@@ -152,9 +152,6 @@ pub enum ConsensusOutput<T: NodeType> {
     ViewChanged(ViewNumber, EpochNumber),
     /// A view timed out with a timeout certificate.
     ViewTimedOut(ViewNumber),
-    /// A proposal a certificate names was adopted, so the shares of its view,
-    /// the ones voters broadcast included, can rebuild its payload.
-    ProposalCertified(Proposal<T>),
     /// A validated proposal met this node's VID share.
     ProposalPaired {
         proposal: SignedProposal<T, Proposal<T>>,
@@ -164,6 +161,12 @@ pub enum ConsensusOutput<T: NodeType> {
         proposal: SignedProposal<T, Proposal<T>>,
         sender: T::SignatureKey,
     },
+    /// A proposal taken in on a certificate's word rather than paired with
+    /// this node's VID share: fetched from a peer, or parked live until a
+    /// certificate vouched for it. The share the leader owed this node may
+    /// never arrive, so this is what lets the payload be rebuilt from the
+    /// shares the voters broadcast.
+    ProposalCertified(Proposal<T>),
     RequestMissingProposal {
         view: ViewNumber,
         leaf_commit: Commitment<Leaf2<T>>,
@@ -1680,11 +1683,11 @@ impl<T: NodeType> Consensus<T> {
         self.request_parent_proposal_if_missing(&proposal, outbox);
         self.adopt_certified_drb(view);
         self.adopt_proposal_upgrade_certificate(&proposal);
-        outbox.push_back(ConsensusOutput::ProposalCertified(proposal.clone()));
 
         let payload_size = self.payload_size_for(&proposal);
         self.request_state(&proposal, payload_size, outbox);
         self.request_block_and_header_if_next_leader(&proposal, outbox);
+        outbox.push_back(ConsensusOutput::ProposalCertified(proposal));
     }
 
     /// Adopt the live proposal parked for `view` awaiting this node's VID
@@ -2510,6 +2513,9 @@ impl<T: NodeType> Consensus<T> {
             warn!("locked certificate is newer than the epoch change");
             return Protocol::Continue;
         }
+        // Taken in on the certificates' word like a fetched proposal, and this
+        // node may hold no share of it.
+        outbox.push_back(ConsensusOutput::ProposalCertified(proposal.clone()));
 
         // Locked on without the payload, which the commit shows a quorum had,
         // so that a node new to the incoming committee can lock.

@@ -733,13 +733,13 @@ mod tests {
     use std::{fmt::Debug, marker::PhantomData, time::Duration};
 
     use committable::Committable;
-    use hotshot::types::BLSPubKey;
     use hotshot_example_types::node_types::TestTypes;
     use hotshot_testing::{node_stake::TestNodeStakes, test_builder::gen_node_lists};
     use hotshot_types::{
         data::{EpochNumber, ViewNumber},
         epoch_membership::EpochMembership,
         message::UpgradeLock,
+        signature_key::BLSPubKey,
         simple_certificate::{
             Certificate1, SuccessThreshold, Threshold, TimeoutCertificate2, TimeoutCertificate3,
             TimeoutEvidence, UpgradeCertificate,

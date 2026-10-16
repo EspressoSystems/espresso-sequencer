@@ -8,7 +8,6 @@ use std::{
 use alloy::primitives::FixedBytes;
 use async_lock::RwLock;
 use espresso_types::Header;
-use hotshot::types::{Event, EventType, SchnorrPubKey};
 use hotshot_contract_adapter::light_client::derive_signed_state_digest;
 use hotshot_types::{
     data::{EpochNumber, ViewNumber},
@@ -17,6 +16,7 @@ use hotshot_types::{
         StakeTableState, StateSignKey, StateVerKey,
     },
     new_protocol::CoordinatorEvent,
+    signature_key::SchnorrPubKey,
     stake_table::HSStakeTable,
     traits::{
         block_contents::BlockHeader,
@@ -99,7 +99,7 @@ impl<ApiVer: StaticVersionType> StateSigner<ApiVer> {
         leaf: &DecidedLeaf,
         consensus_handle: &ConsensusHandle<SeqTypes, I>,
     ) where
-        I: hotshot::traits::NodeImplementation<SeqTypes>,
+        I: hotshot_types::traits::node_implementation::NodeImplementation<SeqTypes>,
         I::Storage: hotshot_new_protocol::storage::NewProtocolStorage<SeqTypes>,
     {
         match leaf.header.get_light_client_state(leaf.view) {
@@ -269,10 +269,6 @@ pub(crate) struct DecidedLeaf {
 impl DecidedLeaf {
     pub(crate) fn from_event(event: &CoordinatorEvent<SeqTypes>) -> Option<DecidedLeaf> {
         let leaf = match event {
-            CoordinatorEvent::LegacyEvent(Event {
-                event: EventType::Decide { leaf_chain, .. },
-                ..
-            }) => &leaf_chain.first()?.leaf,
             CoordinatorEvent::NewDecide { leaf_infos, .. } => &leaf_infos.first()?.leaf,
             _ => return None,
         };

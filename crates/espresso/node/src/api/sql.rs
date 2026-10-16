@@ -18,7 +18,6 @@ use espresso_types::{
     v0_6::RewardAccountQueryDataV2,
 };
 use futures::future::Future;
-use hotshot::traits::ValidatedState as _;
 use hotshot_query_service::{
     Resolvable,
     availability::LeafId,
@@ -36,7 +35,7 @@ use hotshot_query_service::{
 use hotshot_types::{
     data::{EpochNumber, QuorumProposalWrapper, ViewNumber},
     message::Proposal,
-    traits::election::MembershipSnapshot,
+    traits::{ValidatedState as _, election::MembershipSnapshot},
     utils::{epoch_from_block_number, is_last_block},
     vote::HasViewNumber,
 };
@@ -607,15 +606,14 @@ impl RewardMerkleTreeDataSource for SqlStorage {
                     if height < tree_height {
                         return Ok(());
                     }
-                    // During V4→V5 upgrades the previous epoch boundary may be V4.
+                    // During V4→V5 upgrades the previous epoch boundary may be V4. The data pruner
+                    // may have deleted the boundary leaf, in which case the tree load below decides.
                     let mut tx = self.read().await.context("opening read transaction")?;
-                    let leaf = tx
+                    if let Ok(leaf) = tx
                         .get_leaf(LeafId::<SeqTypes>::from(tree_height as usize))
                         .await
-                        .context(format!(
-                            "leaf at epoch boundary {tree_height} not available"
-                        ))?;
-                    if leaf.header().version() < EPOCH_REWARD_VERSION {
+                        && leaf.header().version() < EPOCH_REWARD_VERSION
+                    {
                         return Ok(());
                     }
                 }

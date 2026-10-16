@@ -10,11 +10,11 @@ use std::{
 
 use bon::{Builder, bon};
 use committable::Commitment;
-use hotshot::{HotShotInitializer, traits::BlockPayload, types::SignatureKey};
 use hotshot_types::{
     consensus::{ConsensusMetricsValue, ParticipationTracker},
     data::{EpochNumber, Leaf2, VidCommitment, VidCommitment2, ViewChangeEvidence2, ViewNumber},
     epoch_membership::EpochMembershipCoordinator,
+    initializer::HotShotInitializer,
     message::{Proposal as SignedProposal, UpgradeLock},
     simple_certificate::{
         OneHonestThreshold, SuccessThreshold, TimeoutCertificate2, TimeoutCertificate3,
@@ -22,8 +22,11 @@ use hotshot_types::{
     },
     simple_vote::{HasEpoch, LockView, QuorumVote2, TimeoutVote2},
     traits::{
-        block_contents::BlockHeader, metrics::Metrics, node_implementation::NodeType,
-        signature_key::StateSignatureKey,
+        BlockPayload,
+        block_contents::BlockHeader,
+        metrics::Metrics,
+        node_implementation::NodeType,
+        signature_key::{SignatureKey, StateSignatureKey},
     },
     upgrade_config::UpgradeConfig,
     utils::{is_epoch_root, is_last_block},
@@ -63,7 +66,7 @@ use crate::{
     storage::{NewProtocolStorage, Storage},
     upgrade::UpgradeProtocol,
     vid::{
-        ObtainedPayload, VidDisperseRequest, VidDisperser, VidFragmentAccumulator,
+        ObtainedPayload, PinnedBy, VidDisperseRequest, VidDisperser, VidFragmentAccumulator,
         VidReconstructor, expected_vid_param,
     },
     vote::{EpochRootTally, SimpleTally, TimeoutTally, UpgradeTally, VoteCollector},
@@ -941,10 +944,6 @@ where
                     }
                 }
             },
-            ConsensusOutput::ProposalCertified(proposal) => {
-                debug!(%node, view = %proposal.view_number, "certified proposal adopted");
-                self.notify_vid_reconstructor(&proposal);
-            },
             ConsensusOutput::ProposalPaired {
                 proposal,
                 vid_share,
@@ -965,7 +964,7 @@ where
                     self.storage
                         .append_state_cert(state_cert.view_number(), state_cert.clone());
                 }
-                self.notify_vid_reconstructor(&proposal.data);
+                self.notify_vid_reconstructor(&proposal.data, PinnedBy::Leader);
                 self.vid_reconstructor
                     .handle_vid_share(self.public_key.clone(), vid_share);
             },
@@ -1179,6 +1178,16 @@ where
                     .unwrap_or_else(EpochNumber::genesis);
                 self.gc(epoch, GcScope::Timeout(view))?;
             },
+            ConsensusOutput::ProposalCertified(proposal) => {
+                // Without this node's own share nothing pairs, so pin the
+                // view here instead: the voters' broadcast shares are held
+                // until a commitment admits them, and the header carries it.
+                debug!(
+                    %node, view = %proposal.view_number,
+                    "pinning reconstructor from certified proposal"
+                );
+                self.notify_vid_reconstructor(&proposal, PinnedBy::Certificate);
+            },
             ConsensusOutput::BlockPayloadReconstructed { .. } => {},
             ConsensusOutput::UpgradeDecided(cert) => {
                 info!(
@@ -1208,6 +1217,10 @@ where
 
     pub fn current_view(&self) -> ViewNumber {
         self.consensus.current_view()
+    }
+
+    pub fn last_decided_leaf(&self) -> &Leaf2<T> {
+        self.consensus.last_decided_leaf()
     }
 
     pub fn state(&self, v: ViewNumber) -> Option<&StateEntry<T>> {
@@ -2151,18 +2164,23 @@ where
             .validate_fetched(ProposalMessage::unchecked(proposal));
     }
 
-    fn notify_vid_reconstructor(&mut self, proposal: &Proposal<T>) {
+    /// Pin the reconstructor to `proposal`'s payload commitment, so the shares
+    /// the voters broadcast for its view can rebuild the payload.
+    fn notify_vid_reconstructor(&mut self, proposal: &Proposal<T>, pinned_by: PinnedBy) {
+        let view = proposal.view_number;
         let VidCommitment::V2(payload_commitment) = proposal.block_header.payload_commitment()
         else {
+            warn!(node = %self.node_id, %view, "proposal payload commitment is not V2");
             return;
         };
         let expected_param = expected_vid_param(&self.membership_coordinator, proposal.epoch);
         self.vid_reconstructor.handle_proposal(
-            proposal.view_number,
+            view,
             payload_commitment,
             proposal.block_header.metadata().clone(),
             proposal.epoch,
             expected_param,
+            pinned_by,
         );
     }
 
