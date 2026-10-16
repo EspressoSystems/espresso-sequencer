@@ -353,6 +353,14 @@ def test_closing_the_pool_stops_retries(caplog: pytest.LogCaptureFixture):
     assert set(levels[1:]) == {"DEBUG"}
 
 
+def test_a_refused_connection_retries_quietly(caplog: pytest.LogCaptureFixture):
+    clock = fakes.FakeClock()
+    pool = ScriptedPool(clock, ConnectionRefusedError(111, "refused"), (200, b"7"))
+    with caplog.at_level(logging.DEBUG, netbench.log.name):
+        assert netbench.get_ok(pool, "http://x") == b"7"
+    assert [record.levelname for record in caplog.records] == ["DEBUG"]
+
+
 def test_not_found_is_not_retried():
     clock = fakes.FakeClock()
     pool = ScriptedPool(clock, (404, b""), (500, b""))

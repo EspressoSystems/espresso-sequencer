@@ -823,17 +823,20 @@ def read(pool: Http, url: str) -> tuple[int, bytes]:
     pool is closed."""
     deadline = pool.clock.time() + READ_DEADLINE_S
     for attempt in itertools.count():
+        # Chaos faults leave nodes refusing; the deadline still reports one that stays down.
+        quiet = attempt > 0
         try:
             status, body = pool.request("GET", url)
         except OSError as err:
             problem = str(err)
+            quiet |= isinstance(err, ConnectionRefusedError)
         else:
             if status < 500:
                 return status, body
             problem = f"GET {url}: HTTP {status}"
         if pool.clock.time() >= deadline:
             raise NetworkError(f"{problem}, retried for {READ_DEADLINE_S:.0f} s")
-        log.log(logging.DEBUG if attempt else logging.WARNING, "%s, retrying", problem)
+        log.log(logging.DEBUG if quiet else logging.WARNING, "%s, retrying", problem)
         if pool.clock.wait(pool.closed, READ_RETRY_S):
             raise NetworkError(f"{problem}, stopped retrying")
     raise AssertionError("unreachable")
