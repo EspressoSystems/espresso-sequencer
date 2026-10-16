@@ -5952,7 +5952,16 @@ mod tests {
                         light_client_db: Some(proto::LightClientDbOptions {
                             num_connections: 7,
                             num_leaves: 11,
-                            lc_path: None,
+                            // Not pinned to `None`: it defaults under ESPRESSO_NODE_STORAGE_PATH.
+                            lc_path: cfg
+                                .modules
+                                .query
+                                .as_ref()
+                                .unwrap()
+                                .light_client_db
+                                .lc_path
+                                .as_ref()
+                                .map(|path| path.display().to_string()),
                         }),
                     }),
                     submit: false,
