@@ -8371,6 +8371,7 @@ def runner_info(lscpu: str, meminfo: str, uname: str, ami_id: str) -> nb.RunnerI
 # Devices whose counters double count a parent (partitions, device mapper) or carry no I/O of
 # interest, and the interfaces that are not the host's own network.
 DISK_SKIP = re.compile(r"^(loop|ram|dm-)|p\d+$|^(sd|vd|xvd)[a-z]+\d+$")
+FS_PATHS = ("/", "/data/pg")
 NET_SKIP = re.compile(r"^(lo|docker\d+|veth.*|br-.*)$")
 
 
@@ -9882,6 +9883,16 @@ def netdev(text: str) -> dict[str, dict[str, int]]:
     return stats
 
 
+def fs_used_bytes(st: os.statvfs_result) -> int:
+    return (st.f_blocks - st.f_bfree) * st.f_frsize
+
+
+def fs_usage(paths: tuple[str, ...] = FS_PATHS) -> dict[str, int]:
+    """Used bytes per path that is a mount point: `/data/pg` is on its own volume for some
+    placements, and elsewhere it would repeat the root filesystem."""
+    return {p: fs_used_bytes(os.statvfs(p)) for p in paths if os.path.ismount(p)}
+
+
 def parse_cpu_stat(text: str) -> int:
     """cgroup v2 cpu.stat, `usage_usec <n>` line."""
     for line in text.splitlines():
@@ -9938,6 +9949,7 @@ def host_sample(
         "procs": container_stats(containers, cgroup_root),
         "disk": diskstats(Path("/proc/diskstats").read_text()),
         "net": netdev(Path("/proc/net/dev").read_text()),
+        "fs": fs_usage(),
     }
 
 

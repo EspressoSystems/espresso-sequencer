@@ -8,6 +8,7 @@ import threading
 from collections.abc import Callable, Iterator
 from datetime import UTC, datetime
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import netbench
@@ -708,6 +709,14 @@ def test_host_sample_stats_rates_and_coverage() -> None:
     assert coverage == pytest.approx(1.0)
     _, half = awsb.host_sample_stats(samples[:2], 100.0, 108.0)
     assert half == pytest.approx(0.5)
+
+
+def test_fs_used_bytes_and_usage_keep_mount_points_only(monkeypatch) -> None:
+    st = SimpleNamespace(f_blocks=1000, f_bfree=250, f_frsize=4096)
+    assert awsb.fs_used_bytes(st) == 750 * 4096
+    monkeypatch.setattr(awsb.os, "statvfs", lambda path: st)
+    monkeypatch.setattr(awsb.os.path, "ismount", lambda path: path == "/")
+    assert awsb.fs_usage(("/", "/data/pg")) == {"/": 750 * 4096}
 
 
 def test_sweep_terminates_then_deletes_group_and_key() -> None:
