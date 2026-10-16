@@ -41,6 +41,16 @@ pub trait NewProtocolStorage<T: NodeType>: StorageTrait<T> {
 
     /// Load the persisted locked QC, if any.
     async fn load_high_qc2(&self) -> anyhow::Result<Option<Certificate1<T>>>;
+
+    /// Persist a VID share, with `stamp` the unix seconds of its proposal's header. Backends that
+    /// do not age shares by header time ignore it.
+    async fn append_vid_stamped(
+        &self,
+        proposal: &SignedProposal<T, VidDisperseShare<T>>,
+        _stamp: u32,
+    ) -> anyhow::Result<()> {
+        StorageTrait::append_vid(self, proposal).await
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -136,8 +146,16 @@ impl<T: NodeType, S: NewProtocolStorage<T>> Storage<T, S> {
         self
     }
 
-    pub fn append_vid(&mut self, vid_share: VidDisperseShare2<T>) {
+    /// `header_timestamp` is the proposal header's timestamp in seconds.
+    pub fn append_vid(&mut self, vid_share: VidDisperseShare2<T>, header_timestamp: u64) {
         let view = vid_share.view_number;
+        let Ok(stamp) = u32::try_from(header_timestamp) else {
+            error!(
+                header_timestamp,
+                "header timestamp does not fit a u32 stamp"
+            );
+            return;
+        };
         let storage = self.storage.clone();
         let private_key = self.private_key.clone();
         let timer = self
@@ -151,7 +169,7 @@ impl<T: NodeType, S: NewProtocolStorage<T>> Storage<T, S> {
                 return None;
             };
             loop {
-                match storage.append_vid(&proposal).await {
+                match storage.append_vid_stamped(&proposal, stamp).await {
                     Ok(()) => {
                         finish_measurement(timer);
                         return Some(StorageOutput::Vid(view));

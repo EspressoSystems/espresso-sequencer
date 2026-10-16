@@ -18,7 +18,7 @@ use std::{
     path::{Path, PathBuf},
     sync::Arc,
     thread::JoinHandle,
-    time::Instant,
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
 use anyhow::{Context, ensure};
@@ -26,7 +26,7 @@ use async_trait::async_trait;
 use clap::Parser;
 use espresso_types::{
     AuthenticatedValidatorMap, Header, Leaf2, NetworkConfig, Payload, PubKey,
-    RegisteredValidatorMap, SeqTypes, StakeTableHash,
+    RegisteredValidatorMap, SeqTypes, StakeTableHash, parse_duration,
     traits::{EventsPersistenceRead, MembershipPersistence, StakeTuple},
     v0::traits::{EventConsumer, PersistenceOptions, SequencerPersistence},
     v0_3::{EventKey, IndexedStake, RegisteredValidator, RewardAmount, StakeTableEvent},
@@ -148,14 +148,25 @@ pub struct Options {
     )]
     pub view_retention: u64,
 
-    /// Soft cap on total `share` and `da` lane bytes on disk, each; oldest segments are dropped
-    /// first once exceeded (age-based retention runs regardless of this cap).
+    /// Soft cap on total `da` lane bytes on disk; oldest segments are dropped first once exceeded
+    /// (age-based retention runs regardless of this cap). The `share` lane has no byte cap and
+    /// logs a warning when it exceeds this size.
     #[clap(
         long,
         env = "ESPRESSO_NODE_JOURNAL_MAX_BYTES",
         default_value_t = DEFAULT_MAX_BYTES
     )]
     pub max_bytes: u64,
+
+    /// How long `share` lane records are kept, measured in header time: a segment is dropped once
+    /// its newest record's header timestamp is this far behind the newest decided header.
+    #[clap(
+        long,
+        env = "ESPRESSO_NODE_JOURNAL_SHARE_RETENTION",
+        value_parser = parse_duration,
+        default_value = "7d"
+    )]
+    pub share_retention: Duration,
 
     /// Cap on the block payloads a query node holds in memory for its query service, from when
     /// it obtains them until their decide is replayed. Oldest dropped first once exceeded; the
@@ -706,7 +717,13 @@ impl Persistence {
 
     /// Share and da records have no `State` effect, so there is no lock to hold: only the
     /// in-flight byte budget bounds them.
-    async fn put_data(&self, lane: &JournalLane, rec: Record, class: Class) -> anyhow::Result<()> {
+    async fn put_data(
+        &self,
+        lane: &JournalLane,
+        rec: Record,
+        stamp: u32,
+        class: Class,
+    ) -> anyhow::Result<()> {
         let kind = rec.kind();
         let view = rec.view();
         let body = rec.encode()?;
@@ -719,11 +736,17 @@ impl Persistence {
         let permit = lane.lane.reserve(body.len() as u32).await;
         let lsn = lane
             .lane
-            .enqueue(view, 0, kind.into(), body, class, Some(permit));
+            .enqueue(view, stamp, kind.into(), body, class, Some(permit));
         if class == Class::Durable {
             lane.lane.wait_durable(lsn).await?;
         }
         Ok(())
+    }
+
+    /// Archive copy of a wal record in the share lane, which outlives it there. Never replayed.
+    async fn put_share_copy(&self, rec: Record, stamp: u32) -> anyhow::Result<()> {
+        self.put_data(&self.inner.lanes.share, rec, stamp, Class::Enqueue)
+            .await
     }
 
     /// Cold linear scan for a historical record: reconstruction/test/operator-tool path only,
@@ -774,10 +797,11 @@ impl Persistence {
     async fn gc(&self, decided: ViewNumber, replayed: Option<u64>) -> anyhow::Result<()> {
         let inner = self.inner.clone();
         let bound = decided.u64().saturating_sub(inner.opts.view_retention);
+        let share_cutoff = self.share_cutoff()?;
 
         tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
             let _guard = inner.gc_lock.lock();
-            let pruned = prune_all(&inner, bound, replayed);
+            let pruned = prune_all(&inner, bound, share_cutoff, replayed);
             // Also after a failed pass: the segments it did unlink are already gone from
             // `segments`.
             inner.lanes.share.trim_index();
@@ -786,6 +810,20 @@ impl Persistence {
         })
         .await
         .context("gc: blocking task panicked")?
+    }
+
+    /// Header time `share_retention` before the newest decided header, or `None` before the first
+    /// decide. Stalled consensus moves nothing, and the local clock plays no part.
+    fn share_cutoff(&self) -> anyhow::Result<Option<u32>> {
+        let state = self.inner.state.lock();
+        let Some((anchor, ..)) = &state.anchor else {
+            return Ok(None);
+        };
+        let retention = self.inner.opts.share_retention.as_secs();
+        let cutoff = anchor.block_header().timestamp().saturating_sub(retention);
+        Ok(Some(
+            u32::try_from(cutoff).context("share cutoff over u32")?,
+        ))
     }
 
     /// The newest `kind` record at `view` in `lane`. A query node reads it through the lane's
@@ -1007,17 +1045,52 @@ impl Persistence {
 }
 
 /// Unlinks the segments GC selects. Wal first: a failure there leaves the other lanes untouched.
-fn prune_all(inner: &Inner, bound: u64, replayed: Option<u64>) -> anyhow::Result<()> {
+fn prune_all(
+    inner: &Inner,
+    bound: u64,
+    share_cutoff: Option<u32>,
+    replayed: Option<u64>,
+) -> anyhow::Result<()> {
     let lanes = &inner.lanes;
     lanes
         .wal
         .prune(&wal_unlinkable(&lanes.wal.segments.lock(), bound))?;
-    for lane in [&lanes.share, &lanes.da] {
-        let unlinkable =
-            da_unlinkable(&lane.segments.lock(), bound, inner.opts.max_bytes, replayed);
-        lane.prune(&unlinkable)?;
+    let unlinkable = da_unlinkable(
+        &lanes.da.segments.lock(),
+        bound,
+        inner.opts.max_bytes,
+        replayed,
+    );
+    lanes.da.prune(&unlinkable)?;
+    if let Some(cutoff) = share_cutoff {
+        let unlinkable = share_unlinkable(&lanes.share.segments.lock(), cutoff, replayed);
+        lanes.share.prune(&unlinkable)?;
+    }
+    let share_bytes = lanes.share.segments.lock().bytes();
+    if share_bytes > inner.opts.max_bytes {
+        tracing::warn!(
+            share_bytes,
+            max_bytes = inner.opts.max_bytes,
+            "journal: share lane is over max_bytes, and is kept until share_retention passes"
+        );
     }
     Ok(())
+}
+
+/// Age by header time only, never by size. Segments holding a key after `replayed` stay: the
+/// query service still has to ingest them.
+fn share_unlinkable(segments: &Segments, cutoff: u32, replayed: Option<u64>) -> Vec<SegmentMeta> {
+    segments.oldest_stamped_below(cutoff, replayed)
+}
+
+/// The leaf's header timestamp as a frame stamp.
+fn header_stamp(leaf: &Leaf2) -> anyhow::Result<u32> {
+    u32::try_from(leaf.block_header().timestamp()).context("header timestamp over u32")
+}
+
+fn unix_now() -> anyhow::Result<u32> {
+    let secs = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
+    u32::try_from(secs).context("unix time over u32")
 }
 
 /// Age-based only. The two newest segments stay: a crash mid-roll falls back to the older one's
@@ -1196,18 +1269,22 @@ impl SequencerPersistence for Persistence {
     ) -> anyhow::Result<()> {
         // No event consumer call: a query node replays these from `process_decided_events`, off
         // the voting path, and any other node runs `NullEventConsumer`.
+        let leaf_chain = leaf_chain
+            .into_iter()
+            .map(|(info, cert)| Ok((info.leaf.clone(), cert, header_stamp(&info.leaf)?)))
+            .collect::<anyhow::Result<Vec<_>>>()?;
         if let Some(cert2) = cert2 {
             let record = Record::Cert2 {
                 view: cert2.view_number,
                 cert: cert2.clone(),
             };
-            self.put_wal(record, Class::Enqueue).await?;
+            self.put_wal(record.clone(), Class::Enqueue).await?;
+            // Stamped like the newest leaf of its decide.
+            if let Some(stamp) = leaf_chain.iter().map(|(.., stamp)| *stamp).max() {
+                self.put_share_copy(record, stamp).await?;
+            }
         }
-        let leaf_chain: Vec<_> = leaf_chain
-            .into_iter()
-            .map(|(info, cert)| (info.leaf.clone(), cert))
-            .collect();
-        for (mut leaf, cert) in leaf_chain {
+        for (mut leaf, cert, stamp) in leaf_chain {
             // The wal record carries no payload: a query node holds it in memory until the
             // replay, any other node has no use for it.
             if let Some(payload) = leaf.unfill_block_payload() {
@@ -1218,7 +1295,8 @@ impl SequencerPersistence for Persistence {
                 qc: cert.qc().clone(),
                 next_epoch_qc: cert.next_epoch_qc().cloned(),
             };
-            self.put_wal(record, Class::Enqueue).await?;
+            self.put_wal(record.clone(), Class::Enqueue).await?;
+            self.put_share_copy(record, stamp).await?;
         }
         Ok(())
     }
@@ -1270,15 +1348,26 @@ impl SequencerPersistence for Persistence {
             .await
     }
 
+    /// Without a header at hand, stamps the share with the local clock, which is within the
+    /// accepted header drift of the header timestamp.
     async fn append_vid(
         &self,
         proposal: &Proposal<SeqTypes, VidDisperseShare<SeqTypes>>,
+    ) -> anyhow::Result<()> {
+        self.append_vid_stamped(proposal, unix_now()?).await
+    }
+
+    async fn append_vid_stamped(
+        &self,
+        proposal: &Proposal<SeqTypes, VidDisperseShare<SeqTypes>>,
+        stamp: u32,
     ) -> anyhow::Result<()> {
         let now = Instant::now();
         let res = self
             .put_data(
                 &self.inner.lanes.share,
                 Record::Vid(proposal.clone()),
+                stamp,
                 Class::Durable,
             )
             .await;
@@ -1430,6 +1519,7 @@ impl SequencerPersistence for Persistence {
             .put_data(
                 &self.inner.lanes.da,
                 Record::Da(proposal.clone()),
+                0,
                 Class::Durable,
             )
             .await;
@@ -1626,7 +1716,13 @@ mod tests {
     use hotshot::types::{BLSPubKey, SignatureKey};
     use hotshot_example_types::node_types::TEST_VERSIONS;
     use hotshot_query_service::metrics::PrometheusMetrics;
-    use hotshot_types::{traits::EncodeBytes, utils::EpochTransitionIndicator};
+    use hotshot_types::{
+        data::{ns_table::parse_ns_table, vid_disperse::AvidmGf2DisperseShare},
+        simple_certificate::NextEpochQuorumCertificate2,
+        traits::EncodeBytes,
+        utils::EpochTransitionIndicator,
+        vid::avidm_gf2::{AvidmGf2Scheme, init_avidm_gf2_param},
+    };
     use tempfile::TempDir;
 
     use super::{testing::TEST_MAX_BLOCK_SIZE, *};
@@ -1701,6 +1797,180 @@ mod tests {
         assert_eq!(seqs(da_unlinkable(&segs, 0, 0, Some(10))), vec![1, 2]);
         assert_eq!(seqs(da_unlinkable(&segs, 1000, 0, Some(10))), vec![1, 2]);
         assert_eq!(seqs(da_unlinkable(&segs, 1000, 0, None)), vec![1, 2, 3]);
+    }
+
+    #[test]
+    fn share_unlinkable_drops_segments_older_than_the_cutoff() {
+        let segs = stamped_shares(&[(1, 1, 100), (2, 2, 200), (3, 3, 300), (4, 4, 400)]);
+        assert_eq!(seqs(share_unlinkable(&segs, 250, None)), vec![1, 2]);
+        assert!(share_unlinkable(&segs, 100, None).is_empty());
+    }
+
+    #[test]
+    fn share_unlinkable_keeps_unreplayed_segments() {
+        let segs = stamped_shares(&[(1, 5, 100), (2, 10, 100), (3, 20, 100), (4, 30, 100)]);
+        assert_eq!(seqs(share_unlinkable(&segs, 1000, Some(10))), vec![1, 2]);
+        assert_eq!(seqs(share_unlinkable(&segs, 1000, None)), vec![1, 2, 3]);
+    }
+
+    #[test]
+    fn share_unlinkable_ignores_bytes() {
+        let mut segs = stamped_shares(&[(1, 1, 100), (2, 2, 100), (3, 3, 100)]);
+        segs = segs
+            .list()
+            .iter()
+            .map(|meta| SegmentMeta {
+                bytes: u64::MAX / 4,
+                ..*meta
+            })
+            .collect::<Vec<_>>()
+            .into();
+        assert!(share_unlinkable(&segs, 50, None).is_empty());
+    }
+
+    fn stamped_shares(spec: &[(u64, u64, u32)]) -> Segments {
+        spec.iter()
+            .map(|&(seq, max_key, max_stamp)| SegmentMeta {
+                stream: Stream::Share,
+                seq,
+                bytes: 10,
+                max_key,
+                max_stamp,
+            })
+            .collect::<Vec<_>>()
+            .into()
+    }
+
+    async fn vid_share(view: u64) -> Proposal<SeqTypes, VidDisperseShare<SeqTypes>> {
+        let payload = genesis_leaf().await.block_payload().unwrap();
+        let param = init_avidm_gf2_param(2).unwrap();
+        let ns_table = parse_ns_table(payload.byte_len().as_usize(), &payload.ns_table().encode());
+        let (payload_commitment, common, shares) =
+            AvidmGf2Scheme::ns_disperse(&param, &[1u32; 2], &payload.encode(), ns_table).unwrap();
+        let (recipient_key, privkey) = BLSPubKey::generated_from_seed_indexed([0; 32], 1);
+        let share: VidDisperseShare<SeqTypes> = AvidmGf2DisperseShare {
+            view_number: ViewNumber::new(view),
+            payload_commitment,
+            share: shares[0].clone(),
+            recipient_key,
+            epoch: Some(EpochNumber::new(0)),
+            target_epoch: Some(EpochNumber::new(0)),
+            common,
+        }
+        .into();
+        share.to_proposal(&privkey).unwrap()
+    }
+
+    type LeafCopy = (
+        Leaf2,
+        QuorumCertificate2<SeqTypes>,
+        Option<NextEpochQuorumCertificate2<SeqTypes>>,
+    );
+
+    async fn has_leaf_copy(storage: &Persistence, view: u64) -> bool {
+        let share = &storage.inner.lanes.share;
+        storage
+            .scan_for::<LeafCopy>(share, Kind::Leaf, ViewNumber::new(view))
+            .await
+            .unwrap()
+            .is_some()
+    }
+
+    fn share_stamps(storage: &Persistence) -> Vec<u32> {
+        let segments = storage.inner.lanes.share.segments.lock();
+        segments.list().iter().map(|meta| meta.max_stamp).collect()
+    }
+
+    /// One share and one decided leaf per view, view `i` at header time `1000 * (i + 1)`, each
+    /// lane rolling after every record.
+    #[tokio::test]
+    async fn share_lane_ages_by_header_time_while_da_ages_by_view() {
+        let tmp = TempDir::new().unwrap();
+        let opts = Options {
+            view_retention: 1,
+            share_retention: Duration::from_secs(3500),
+            segment_bytes: Some(1),
+            ..options(&tmp)
+        };
+        let storage = Persistence::open(opts.clone()).await.unwrap();
+        let mut chain = consecutive_height_chain(5).await;
+        for (view, (leaf, _)) in chain.iter_mut().enumerate() {
+            let ts = 1000 * (view as u64 + 1);
+            leaf.block_header_mut().set_timestamp(ts, ts * 1000);
+        }
+
+        for view in 0..4u64 {
+            let stamp = 1000 * (view as u32 + 1);
+            storage
+                .put_data(
+                    &storage.inner.lanes.da,
+                    da_record_at(view, 16).await,
+                    0,
+                    Class::Durable,
+                )
+                .await
+                .unwrap();
+            storage
+                .append_vid_stamped(&vid_share(view).await, stamp)
+                .await
+                .unwrap();
+            decide_range(
+                &storage,
+                &chain,
+                view as usize..view as usize + 1,
+                &NullEventConsumer,
+            )
+            .await;
+        }
+
+        // Anchor time 4000 and a 3500 s retention put the cutoff at 500: nothing is old enough.
+        // View retention 1 and decided view 3 drop the da records of views 0 and 1.
+        for view in 0..4 {
+            let share = storage.load_vid_share(ViewNumber::new(view)).await.unwrap();
+            assert!(share.is_some(), "share {view}");
+            assert!(has_leaf_copy(&storage, view).await, "leaf copy {view}");
+        }
+        for (view, kept) in [(0, false), (1, false), (2, true), (3, true)] {
+            let da = storage.load_da_proposal(ViewNumber::new(view)).await;
+            assert_eq!(da.unwrap().is_some(), kept, "da {view}");
+        }
+
+        // Anchor time 10000 moves the cutoff to 6500, past every share and leaf copy so far.
+        chain[4]
+            .0
+            .block_header_mut()
+            .set_timestamp(10_000, 10_000_000);
+        decide_range(&storage, &chain, 4..5, &NullEventConsumer).await;
+        for view in 0..4 {
+            let share = storage.load_vid_share(ViewNumber::new(view)).await.unwrap();
+            assert!(share.is_none(), "share {view}");
+            assert!(!has_leaf_copy(&storage, view).await, "leaf copy {view}");
+        }
+        assert!(has_leaf_copy(&storage, 4).await);
+    }
+
+    #[tokio::test]
+    async fn share_max_stamp_survives_restart() {
+        let tmp = TempDir::new().unwrap();
+        let opts = Options {
+            segment_bytes: Some(1),
+            ..options(&tmp)
+        };
+        let storage = Persistence::open(opts.clone()).await.unwrap();
+        for (view, stamp) in [(1, 500), (2, 900), (3, 700)] {
+            storage
+                .append_vid_stamped(&vid_share(view).await, stamp)
+                .await
+                .unwrap();
+        }
+        let before = share_stamps(&storage);
+        assert_eq!(&before[..3], &[500, 900, 900]);
+        drop(storage);
+
+        let storage = Persistence::open(opts).await.unwrap();
+        let after = share_stamps(&storage);
+        assert_eq!(after[..3], before[..3]);
+        assert!(after[3..].iter().all(|stamp| *stamp == 900), "{after:?}");
     }
 
     /// A payload the decide carries (built, reconstructed or fetched before it) reaches the
@@ -1861,6 +2131,7 @@ mod tests {
             .put_data(
                 &storage.inner.lanes.da,
                 da_record(len).await,
+                0,
                 Class::Durable,
             )
             .await
@@ -1881,6 +2152,7 @@ mod tests {
             .put_data(
                 &storage.inner.lanes.da,
                 da_record(1024).await,
+                0,
                 Class::Durable,
             )
             .await
@@ -1893,6 +2165,7 @@ mod tests {
             .put_data(
                 &storage.inner.lanes.da,
                 da_record(1024).await,
+                0,
                 Class::Durable,
             )
             .await
@@ -1954,7 +2227,12 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let storage = Persistence::open(options(&tmp)).await.unwrap();
         storage
-            .put_data(&storage.inner.lanes.da, da_record(16).await, Class::Durable)
+            .put_data(
+                &storage.inner.lanes.da,
+                da_record(16).await,
+                0,
+                Class::Durable,
+            )
             .await
             .unwrap();
         let da = storage.inner.lanes.da.segments.lock().bytes();
@@ -1974,6 +2252,7 @@ mod tests {
             path: tmp.path().to_path_buf(),
             view_retention: DEFAULT_VIEW_RETENTION,
             max_bytes: DEFAULT_MAX_BYTES,
+            share_retention: parse_duration("7d").unwrap(),
             pending_payload_bytes: DEFAULT_PENDING_PAYLOAD_BYTES,
             ignore_existing: false,
             max_block_size: Some(TEST_MAX_BLOCK_SIZE),
@@ -1993,13 +2272,17 @@ mod tests {
 
     /// A view-1 DA proposal whose payload is `len` bytes.
     async fn da_record(len: usize) -> Record {
+        da_record_at(1, len).await
+    }
+
+    async fn da_record_at(view: u64, len: usize) -> Record {
         let payload = genesis_leaf().await.block_payload().unwrap();
         let (_, privkey) = BLSPubKey::generated_from_seed_indexed([0; 32], 1);
         Record::Da(Proposal {
             data: DaProposal2::<SeqTypes> {
                 encoded_transactions: vec![7u8; len].into(),
                 metadata: payload.ns_table().clone(),
-                view_number: ViewNumber::new(1),
+                view_number: ViewNumber::new(view),
                 epoch: None,
                 epoch_transition_indicator: EpochTransitionIndicator::NotInTransition,
             },
@@ -2032,6 +2315,7 @@ mod tests {
             path: tmp.path().to_path_buf(),
             view_retention: DEFAULT_VIEW_RETENTION,
             max_bytes: DEFAULT_MAX_BYTES,
+            share_retention: parse_duration("7d").unwrap(),
             pending_payload_bytes: DEFAULT_PENDING_PAYLOAD_BYTES,
             ignore_existing: false,
             max_block_size: Some(TEST_MAX_BLOCK_SIZE),
@@ -2070,6 +2354,7 @@ mod testing {
                 path: storage.path().into(),
                 view_retention: DEFAULT_VIEW_RETENTION,
                 max_bytes: DEFAULT_MAX_BYTES,
+                share_retention: parse_duration("7d").unwrap(),
                 pending_payload_bytes: DEFAULT_PENDING_PAYLOAD_BYTES,
                 ignore_existing: false,
                 max_block_size: Some(TEST_MAX_BLOCK_SIZE),

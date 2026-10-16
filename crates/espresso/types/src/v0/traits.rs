@@ -981,6 +981,17 @@ pub trait SequencerPersistence:
         &self,
         proposal: &Proposal<SeqTypes, VidDisperseShare<SeqTypes>>,
     ) -> anyhow::Result<()>;
+
+    /// `append_vid` with the unix seconds of the proposal's header. Backends that do not age
+    /// shares by header time ignore `stamp`.
+    async fn append_vid_stamped(
+        &self,
+        proposal: &Proposal<SeqTypes, VidDisperseShare<SeqTypes>>,
+        _stamp: u32,
+    ) -> anyhow::Result<()> {
+        self.append_vid(proposal).await
+    }
+
     async fn append_da(
         &self,
         proposal: &Proposal<SeqTypes, DaProposal<SeqTypes>>,
@@ -1280,6 +1291,14 @@ impl<P: SequencerPersistence> NewProtocolStorage<SeqTypes> for Arc<P> {
 
     async fn load_high_qc2(&self) -> anyhow::Result<Option<Certificate1<SeqTypes>>> {
         (**self).load_high_qc2().await
+    }
+
+    async fn append_vid_stamped(
+        &self,
+        proposal: &Proposal<SeqTypes, VidDisperseShare<SeqTypes>>,
+        stamp: u32,
+    ) -> anyhow::Result<()> {
+        (**self).append_vid_stamped(proposal, stamp).await
     }
 }
 

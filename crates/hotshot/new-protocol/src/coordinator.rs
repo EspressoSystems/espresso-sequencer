@@ -927,7 +927,8 @@ where
             } => {
                 let view = proposal.data.view_number;
                 debug!(%node, %view, "proposal paired with vid share");
-                self.storage.append_vid(vid_share.clone());
+                self.storage
+                    .append_vid(vid_share.clone(), proposal.data.block_header.timestamp());
                 self.storage.append_proposal(proposal.data.clone());
                 // Same gate as the in-memory store in `Consensus::apply`: persisting
                 // unconditionally writes a `state_cert` row under a view the sender
