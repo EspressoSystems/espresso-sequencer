@@ -3886,13 +3886,22 @@ mod test {
         .await
         .expect("network did not reach block height 2");
 
+        let past_limit =
+            hotshot_query_service::availability::Options::default().large_object_range_limit + 1;
         for (path, status) in [
             // A finalized height must be past the requested leaf.
-            ("leaf/1/1", reqwest::StatusCode::BAD_REQUEST),
+            ("leaf/1/1".to_string(), reqwest::StatusCode::BAD_REQUEST),
             // A header proof's root must be past the requested header.
-            ("header/1/1", reqwest::StatusCode::BAD_REQUEST),
+            ("header/1/1".to_string(), reqwest::StatusCode::BAD_REQUEST),
             // This 404 comes from the header proof helper, exercising `lc_error`.
-            ("header/1000001/1000000", reqwest::StatusCode::NOT_FOUND),
+            (
+                "header/1000001/1000000".to_string(),
+                reqwest::StatusCode::NOT_FOUND,
+            ),
+            (
+                format!("payload/0/{past_limit}"),
+                reqwest::StatusCode::BAD_REQUEST,
+            ),
         ] {
             let res = reqwest::get(format!("http://localhost:{port}/v1/light-client/{path}"))
                 .await
