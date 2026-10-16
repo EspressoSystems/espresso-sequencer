@@ -29,7 +29,9 @@ mod disperse;
 mod fragments;
 mod reconstruct;
 
+pub(crate) use disperse::encode_namespaces;
 pub use disperse::{VidDisperseError, VidDisperseOutput, VidDisperseRequest, VidDisperser};
+pub(crate) use fragments::assemble_share;
 pub use fragments::{VidFragmentAccumulator, VidFragmentError};
 use hotshot_types::{
     data::{
