@@ -30,7 +30,6 @@ use espresso_node::{
     context::SequencerContext,
     genesis::{Genesis, L1Finalized, StakeTableConfig},
     keyset::KeySet,
-    network,
     options::{Modules, Options, PublicNodeConfig},
     run::{NodeContext, init_with_storage},
     testing::staking_priv_keys,
@@ -278,9 +277,7 @@ impl NodeParams {
 #[derive(Debug)]
 struct TestNode<S: TestableSequencerDataSource> {
     storage: S::Storage,
-    context: Option<
-        SequencerContext<network::Production, <S::Options as PersistenceOptions>::Persistence>,
-    >,
+    context: Option<SequencerContext<<S::Options as PersistenceOptions>::Persistence>>,
     modules: Modules,
     opt: Options,
     num_nodes: usize,

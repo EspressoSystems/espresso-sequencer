@@ -26,7 +26,6 @@ use hotshot_types::{
     epoch_membership::EpochMembershipCoordinator,
     message::UpgradeLock,
     network::NetworkConfig,
-    traits::network::ConnectedNetwork,
     utils::StateAndDelta,
 };
 
@@ -160,9 +159,8 @@ where
     }
 }
 
-impl<N, P> ApiContext for SequencerContext<N, P>
+impl<P> ApiContext for SequencerContext<P>
 where
-    N: ConnectedNetwork<PubKey>,
     P: SequencerPersistence,
 {
     type Persistence = P;

@@ -214,7 +214,7 @@ mod tests {
         network_config::light_client_genesis_from_stake_table,
     };
     use espresso_types::{
-        Event, L1BlockInfo, L1Client, L1ClientOptions, Leaf, Leaf2, NodeState, PubKey, SeqTypes,
+        L1BlockInfo, L1Client, L1ClientOptions, Leaf, Leaf2, NodeState, PubKey, SeqTypes,
         TEST_UPGRADE, ValidatedState,
         traits::{
             EventConsumer, EventsPersistenceRead, MembershipPersistence, NullEventConsumer,
@@ -223,10 +223,7 @@ mod tests {
         v0_3::{AuthenticatedValidator, EventKey, Fetcher, RegisteredValidator, StakeTableEvent},
     };
     use futures::{StreamExt, TryStreamExt, future::join_all};
-    use hotshot::{
-        InitializerEpochInfo,
-        types::{BLSPubKey, SignatureKey},
-    };
+    use hotshot::types::{BLSPubKey, SignatureKey};
     use hotshot_contract_adapter::{
         sol_types::StakeTableV3::Delegated, stake_table::StakeTableContractVersion,
     };
@@ -241,7 +238,8 @@ mod tests {
             vid_commitment,
             vid_disperse::{AvidMDisperseShare, AvidmGf2DisperseShare},
         },
-        event::{EventType, HotShotAction, LeafInfo},
+        event::{HotShotAction, LeafInfo},
+        initializer::InitializerEpochInfo,
         light_client::{LightClientState, StakeTableState, StateKeyPair},
         message::{Proposal, UpgradeLock, convert_proposal},
         new_protocol::CoordinatorEvent,
@@ -926,7 +924,6 @@ mod tests {
             .append_decided_leaves(
                 ViewNumber::new(2),
                 leaf_chain.iter().map(|(leaf, qc)| (leaf, (*qc).clone())),
-                None,
                 &consumer,
             )
             .await
@@ -988,7 +985,6 @@ mod tests {
             .append_decided_leaves(
                 ViewNumber::new(3),
                 vec![(&leaf_info(leaves[3].clone()), qcs[3].clone())],
-                None,
                 &consumer,
             )
             .await
@@ -1528,7 +1524,6 @@ mod tests {
                 leaf_chain
                     .iter()
                     .map(|(leaf, qc)| (leaf, CertificatePair::non_epoch_change(qc.clone()))),
-                None,
                 &FailConsumer,
             )
             .await
@@ -1582,7 +1577,6 @@ mod tests {
                 leaf_chain
                     .iter()
                     .map(|(leaf, qc)| (leaf, CertificatePair::non_epoch_change(qc.clone()))),
-                None,
                 &consumer,
             )
             .await
@@ -1737,7 +1731,7 @@ mod tests {
         let consumer = EventCollector::default();
 
         // Two decides with no processing in between (a lagging/coalescing processor): {0,1}, {2,3}.
-        for (from, to, view) in [(0usize, 2usize, 1u64), (2, 4, 3)] {
+        for (from, to) in [(0usize, 2usize), (2, 4)] {
             let leaf_chain = chain
                 .iter()
                 .take(to)
@@ -1746,11 +1740,9 @@ mod tests {
                 .collect::<Vec<_>>();
             storage
                 .persist_decided_leaves(
-                    ViewNumber::new(view),
                     leaf_chain
                         .iter()
                         .map(|(leaf, qc)| (leaf, CertificatePair::non_epoch_change(qc.clone()))),
-                    None,
                     None,
                     &consumer,
                 )
@@ -1790,7 +1782,7 @@ mod tests {
         // A failing consumer propagates the error and leaves the cursor un-advanced: nothing is
         // GC'd and the range is retried below.
         storage
-            .process_decided_events(ViewNumber::new(3), None, &FailConsumer)
+            .process_decided_events(ViewNumber::new(3), &FailConsumer)
             .await
             .unwrap_err();
         for i in 0..4 {
@@ -1807,7 +1799,7 @@ mod tests {
         // One process pass at the latest view drains the whole backlog, runs GC, and reports the
         // cursor it advanced to.
         let processed = storage
-            .process_decided_events(ViewNumber::new(3), None, &consumer)
+            .process_decided_events(ViewNumber::new(3), &consumer)
             .await
             .unwrap();
         assert_eq!(
@@ -1849,7 +1841,7 @@ mod tests {
         // Re-processing with nothing new is a no-op.
         let consumer2 = EventCollector::default();
         storage
-            .process_decided_events(ViewNumber::new(3), None, &consumer2)
+            .process_decided_events(ViewNumber::new(3), &consumer2)
             .await
             .unwrap();
         assert!(
@@ -1927,7 +1919,6 @@ mod tests {
                 leaf_chain
                     .iter()
                     .map(|(leaf, qc)| (leaf, CertificatePair::non_epoch_change(qc.clone()))),
-                None,
                 consumer,
             )
             .await
@@ -1943,25 +1934,14 @@ mod tests {
     #[async_trait]
     impl EventConsumer for DecideViewCollector {
         async fn handle_event(&self, event: &CoordinatorEvent<SeqTypes>) -> anyhow::Result<()> {
-            let mut views = self.views.write().await;
-            match event {
-                // Decide events carry their leaves newest first.
-                CoordinatorEvent::NewDecide { leaf_infos, .. } => views.extend(
+            // Decide events carry their leaves newest first.
+            if let CoordinatorEvent::NewDecide { leaf_infos, .. } = event {
+                self.views.write().await.extend(
                     leaf_infos
                         .iter()
                         .rev()
                         .map(|info| info.leaf.view_number().u64()),
-                ),
-                CoordinatorEvent::LegacyEvent(Event {
-                    event: EventType::Decide { leaf_chain, .. },
-                    ..
-                }) => views.extend(
-                    leaf_chain
-                        .iter()
-                        .rev()
-                        .map(|info| info.leaf.view_number().u64()),
-                ),
-                _ => {},
+                );
             }
             Ok(())
         }
@@ -2010,7 +1990,7 @@ mod tests {
 
         // ...and re-processing neither skips the gap nor emits duplicates.
         storage
-            .process_decided_events(ViewNumber::new(4), None, &consumer)
+            .process_decided_events(ViewNumber::new(4), &consumer)
             .await
             .unwrap();
         assert_eq!(received_views(&consumer).await, vec![0, 1]);
@@ -2039,7 +2019,7 @@ mod tests {
         decide_range(&storage, &chain, 2..3, &consumer).await;
         // A re-process pass at the watermark must not skip or duplicate anything.
         storage
-            .process_decided_events(ViewNumber::new(4), None, &consumer)
+            .process_decided_events(ViewNumber::new(4), &consumer)
             .await
             .unwrap();
 
@@ -2114,7 +2094,7 @@ mod tests {
 
         let consumer = Cert2Collector::default();
         storage
-            .process_decided_events(newest.view_number(), None, &consumer)
+            .process_decided_events(newest.view_number(), &consumer)
             .await
             .unwrap();
 
@@ -2240,7 +2220,7 @@ mod tests {
 
         // Decide a newer view, view 1.
         storage
-            .append_decided_leaves(ViewNumber::new(1), [], None, &NullEventConsumer)
+            .append_decided_leaves(ViewNumber::new(1), [], &NullEventConsumer)
             .await
             .unwrap();
 
@@ -2279,7 +2259,7 @@ mod tests {
 
         // Decide an even newer view, triggering GC of the old data.
         storage
-            .append_decided_leaves(ViewNumber::new(2), [], None, &NullEventConsumer)
+            .append_decided_leaves(ViewNumber::new(2), [], &NullEventConsumer)
             .await
             .unwrap();
         assert!(
@@ -3337,7 +3317,6 @@ mod tests {
                     &leaf_info(leaf0.clone()),
                     CertificatePair::non_epoch_change(qc0),
                 )],
-                None,
                 &FailConsumer,
             )
             .await
@@ -3347,12 +3326,10 @@ mod tests {
         // `leaf2` is delivered rather than held for a gap-fill decide.
         storage
             .persist_decided_leaves(
-                newest_view,
                 [(
                     &leaf_info(newest_leaf),
                     CertificatePair::non_epoch_change(newest_qc),
                 )],
-                None,
                 None,
                 &NullEventConsumer,
             )
@@ -3370,7 +3347,6 @@ mod tests {
                     &leaf_info(leaf2.clone()),
                     CertificatePair::non_epoch_change(qc2),
                 )],
-                None,
                 &consumer,
             )
             .await
@@ -3527,7 +3503,6 @@ mod tests {
             .append_decided_leaves(
                 ViewNumber::new(2),
                 leaf_chain.iter().map(|(info, qc)| (info, qc.clone())),
-                None,
                 &consumer,
             )
             .await

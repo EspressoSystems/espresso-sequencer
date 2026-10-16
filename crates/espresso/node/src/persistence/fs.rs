@@ -23,7 +23,6 @@ use espresso_types::{
         StakeTableEvent,
     },
 };
-use hotshot::InitializerEpochInfo;
 use hotshot_libp2p_networking::network::behaviours::dht::store::persistent::{
     DhtPersistentStorage, SerializableRecord,
 };
@@ -34,7 +33,8 @@ use hotshot_types::{
         VidCommitment, VidDisperseShare,
     },
     drb::{DrbInput, DrbResult},
-    event::{Event, EventType, HotShotAction, LeafInfo},
+    event::{HotShotAction, LeafInfo},
+    initializer::InitializerEpochInfo,
     message::{Proposal, convert_proposal},
     new_protocol::CoordinatorEvent,
     simple_certificate::{
@@ -490,7 +490,6 @@ impl Inner {
     async fn generate_decide_events(
         &mut self,
         view: ViewNumber,
-        deciding_qc: Option<Arc<CertificatePair<SeqTypes>>>,
         consumer: &impl EventConsumer,
     ) -> anyhow::Result<Vec<RangeInclusive<ViewNumber>>> {
         // Generate a decide event for each leaf, to be processed by the event consumer. We make a
@@ -556,31 +555,12 @@ impl Inner {
         for (view, (leaf, cert)) in leaves {
             let height = leaf.leaf.block_header().block_number();
 
-            let event = if leaf.leaf.block_header().version() >= versions::NEW_PROTOCOL_VERSION {
-                let cert2 = self.load_cert2(view)?;
-                // One event per view. cert2 is only stored for the
-                // directly finalized view
-                // ancestors get `cert2: None`,
-                // which is what update() expects for indirectly decided leaves.
-                CoordinatorEvent::NewDecide {
-                    leaf_infos: vec![leaf],
-                    cert1: cert.qc().clone(),
-                    cert2,
-                }
-            } else {
-                let deciding_qc = deciding_qc
-                    .as_ref()
-                    .filter(|qc| qc.view_number() == cert.view_number() + 1)
-                    .cloned();
-                CoordinatorEvent::LegacyEvent(Event {
-                    view_number: view,
-                    event: EventType::Decide {
-                        committing_qc: Arc::new(cert),
-                        deciding_qc,
-                        leaf_chain: Arc::new(vec![leaf]),
-                        block_size: None,
-                    },
-                })
+            // cert2 is stored only for the directly finalized view; ancestors get `None`, which
+            // is what update() expects for indirectly decided leaves.
+            let event = CoordinatorEvent::NewDecide {
+                leaf_infos: vec![leaf],
+                cert1: cert.qc().clone(),
+                cert2: self.load_cert2(view)?,
             };
             consumer.handle_event(&event).await?;
 
@@ -810,10 +790,8 @@ impl SequencerPersistence for Persistence {
 
     async fn persist_decided_leaves(
         &self,
-        _view: ViewNumber,
         leaf_chain: impl IntoIterator<Item = (&LeafInfo<SeqTypes>, CertificatePair<SeqTypes>)> + Send,
         cert2: Option<&Certificate2<SeqTypes>>,
-        _deciding_qc: Option<Arc<CertificatePair<SeqTypes>>>,
         _consumer: &(impl EventConsumer + 'static),
     ) -> anyhow::Result<()> {
         let mut inner = self.inner.write().await;
@@ -880,7 +858,6 @@ impl SequencerPersistence for Persistence {
     async fn process_decided_events(
         &self,
         view: ViewNumber,
-        deciding_qc: Option<Arc<CertificatePair<SeqTypes>>>,
         consumer: &(impl EventConsumer + 'static),
     ) -> anyhow::Result<Option<ViewNumber>> {
         // Started before the lock acquisition: this pass holds the exclusive write lock, so the
@@ -892,9 +869,7 @@ impl SequencerPersistence for Persistence {
         let intervals = if self.consensus_only {
             inner.skip_decide_events(view)?
         } else {
-            inner
-                .generate_decide_events(view, deciding_qc, consumer)
-                .await?
+            inner.generate_decide_events(view, consumer).await?
         };
         drop(inner);
 

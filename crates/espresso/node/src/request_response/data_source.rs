@@ -2,12 +2,12 @@
 //! to calculate/derive a response for a specific request. In the confirmation layer the implementer
 //! would be something like a [`FeeMerkleTree`] for fee catchup
 
-use std::{marker::PhantomData, sync::Arc};
+use std::sync::Arc;
 
 use anyhow::{Context, Result, bail};
 use async_trait::async_trait;
 use espresso_types::{
-    NodeState, PubKey, SeqTypes, retain_accounts,
+    NodeState, SeqTypes, retain_accounts,
     traits::SequencerPersistence,
     v0_3::{RewardAccountV1, RewardMerkleTreeV1},
     v0_4::{RewardAccountV2, RewardMerkleTreeV2},
@@ -21,7 +21,7 @@ use hotshot_query_service::{
     },
     node::BlockId,
 };
-use hotshot_types::{data::ViewNumber, traits::network::ConnectedNetwork, vote::HasViewNumber};
+use hotshot_types::{data::ViewNumber, vote::HasViewNumber};
 use itertools::Itertools;
 use jf_merkle_tree_compat::{
     ForgetableMerkleTreeScheme, ForgetableUniversalMerkleTreeScheme, LookupResult,
@@ -47,11 +47,7 @@ pub enum Storage {
 }
 
 #[derive(Clone)]
-pub struct DataSource<
-    I: NodeImplementation<SeqTypes>,
-    N: ConnectedNetwork<PubKey>,
-    P: SequencerPersistence,
-> {
+pub struct DataSource<I: NodeImplementation<SeqTypes>, P: SequencerPersistence> {
     /// The consensus adapter handle
     pub consensus_handle: Arc<ConsensusHandle<SeqTypes, I>>,
     /// The node's state
@@ -60,14 +56,12 @@ pub struct DataSource<
     pub storage: Option<Storage>,
     /// sequencer persistence
     pub persistence: Arc<P>,
-    /// Phantom data
-    pub phantom: PhantomData<N>,
 }
 
 /// Implement the trait that allows the [`RequestResponseProtocol`] to calculate/derive a response for a specific request
 #[async_trait]
-impl<I: NodeImplementation<SeqTypes>, N: ConnectedNetwork<PubKey>, P: SequencerPersistence>
-    DataSourceTrait<Request> for DataSource<I, N, P>
+impl<I: NodeImplementation<SeqTypes>, P: SequencerPersistence> DataSourceTrait<Request>
+    for DataSource<I, P>
 where
     I::Storage: NewProtocolStorage<SeqTypes>,
 {

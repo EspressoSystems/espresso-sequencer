@@ -10,11 +10,12 @@ use std::{
 
 use bon::{Builder, bon};
 use committable::Commitment;
-use hotshot::{HotShotInitializer, traits::BlockPayload, types::SignatureKey};
+use hotshot::{traits::BlockPayload, types::SignatureKey};
 use hotshot_types::{
     consensus::{ConsensusMetricsValue, ParticipationTracker},
     data::{EpochNumber, Leaf2, VidCommitment, VidCommitment2, ViewChangeEvidence2, ViewNumber},
     epoch_membership::EpochMembershipCoordinator,
+    initializer::HotShotInitializer,
     message::{Proposal as SignedProposal, UpgradeLock},
     simple_certificate::{
         OneHonestThreshold, SuccessThreshold, TimeoutCertificate2, TimeoutCertificate3,
@@ -1181,6 +1182,10 @@ where
 
     pub fn current_view(&self) -> ViewNumber {
         self.consensus.current_view()
+    }
+
+    pub fn last_decided_leaf(&self) -> &Leaf2<T> {
+        self.consensus.last_decided_leaf()
     }
 
     pub fn state(&self, v: ViewNumber) -> Option<&StateEntry<T>> {

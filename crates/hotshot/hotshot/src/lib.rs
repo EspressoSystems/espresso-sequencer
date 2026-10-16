@@ -13,10 +13,10 @@ pub mod documentation;
 
 use committable::Committable;
 use hotshot_types::{
-    drb::{DrbResult, INITIAL_DRB_RESULT, drb_difficulty_selector},
+    drb::drb_difficulty_selector,
     epoch_membership::EpochMembershipCoordinator,
     message::UpgradeLock,
-    simple_certificate::{CertificatePair, LightClientStateUpdateCertificateV2},
+    simple_certificate::CertificatePair,
     traits::{
         block_contents::BlockHeader, election::Membership, network::BroadcastDelay,
         signature_key::StateSignatureKey, storage::Storage,
@@ -30,8 +30,7 @@ pub mod traits;
 pub mod types;
 
 pub mod tasks;
-use hotshot_types::data::QuorumProposalWrapper;
-use versions::{EPOCH_VERSION, Upgrade};
+use versions::EPOCH_VERSION;
 
 /// Contains helper functions for the crate
 pub mod helpers;
@@ -56,14 +55,14 @@ pub use hotshot_types::error::HotShotError;
 use hotshot_types::{
     HotShotConfig,
     consensus::{
-        Consensus, ConsensusMetricsValue, OuterConsensus, PayloadWithMetadata, VidShares, View,
-        ViewInner,
+        Consensus, ConsensusMetricsValue, OuterConsensus, PayloadWithMetadata, View, ViewInner,
     },
     constants::{EVENT_CHANNEL_SIZE, EXTERNAL_EVENT_CHANNEL_SIZE},
     data::{EpochNumber, Leaf2, ViewNumber},
     event::{EventType, LeafInfo},
-    message::{DataMessage, Message, MessageKind, Proposal},
-    simple_certificate::{NextEpochQuorumCertificate2, QuorumCertificate2, UpgradeCertificate},
+    initializer::{HotShotInitializer, load_start_epoch_info},
+    message::{DataMessage, Message, MessageKind},
+    simple_certificate::QuorumCertificate2,
     stake_table::HSStakeTable,
     storage_metrics::StorageMetricsValue,
     traits::{
@@ -256,8 +255,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
 
         let consensus_metrics = Arc::new(consensus_metrics);
         let storage_metrics = Arc::new(storage_metrics);
-        let anchored_leaf = initializer.anchor_leaf;
-        let instance_state = initializer.instance_state;
+        let anchored_leaf = initializer.anchor_leaf().clone();
+        let instance_state = initializer.instance_state().clone();
 
         let (internal_tx, internal_rx) = internal_channel;
         let (mut external_tx, external_rx) = external_channel;
@@ -279,15 +278,15 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
         );
         tracing::warn!(
             "Loading previously decided upgrade certificate from storage: {:?}",
-            initializer.decided_upgrade_certificate
+            initializer.decided_upgrade_certificate()
         );
 
         // A certificate at or below the configured base is from a completed
         // upgrade; kept, it would make `UpgradeLock::version` fail once the
         // target moves on.
         let decided_upgrade_certificate = initializer
-            .decided_upgrade_certificate
-            .clone()
+            .decided_upgrade_certificate()
+            .cloned()
             .filter(|cert| cert.data.new_version > upgrade.base);
 
         let upgrade_lock =
@@ -315,18 +314,18 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
 
         // Get the validated state from the initializer or construct an incomplete one from the
         // block header.
-        let validated_state = initializer.anchor_state;
+        let validated_state = Arc::clone(initializer.anchor_state());
 
         load_start_epoch_info(
             &membership_coordinator,
-            &initializer.start_epoch_info,
+            initializer.start_epoch_info(),
             config.epoch_height,
             config.epoch_start_block,
         )
         .await;
 
         // #3967 REVIEW NOTE: Should this actually be Some()? How do we know?
-        let epoch = initializer.high_qc.data.block_number.map(|block_number| {
+        let epoch = initializer.high_qc().data.block_number.map(|block_number| {
             EpochNumber::new(epoch_from_block_number(
                 block_number + 1,
                 config.epoch_height,
@@ -341,20 +340,20 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
                 view_inner: ViewInner::Leaf {
                     leaf: anchored_leaf.commit(),
                     state: Arc::clone(&validated_state),
-                    delta: initializer.anchor_state_delta,
+                    delta: initializer.anchor_state_delta().cloned(),
                     epoch,
                 },
             },
         );
-        for (view_num, inner) in initializer.undecided_state {
-            validated_state_map.insert(view_num, inner);
+        for (view_num, inner) in initializer.undecided_state() {
+            validated_state_map.insert(*view_num, inner.clone());
         }
 
         let mut saved_leaves = HashMap::new();
         let mut saved_payloads = BTreeMap::new();
         saved_leaves.insert(anchored_leaf.commit(), anchored_leaf.clone());
 
-        for (_, leaf) in initializer.undecided_leaves {
+        for leaf in initializer.undecided_leaves().values() {
             saved_leaves.insert(leaf.commit(), leaf.clone());
         }
         if let Some(payload) = anchored_leaf.block_payload() {
@@ -364,7 +363,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
                 Arc::new(PayloadWithMetadata { payload, metadata }),
             );
         }
-        let high_qc_block_number = initializer.high_qc.data.block_number;
+        let high_qc_block_number = initializer.high_qc().data.block_number;
         let (stake_table, success_threshold) =
             if let Ok(epoch_membership) = membership_coordinator.stake_table_for_epoch(epoch) {
                 (
@@ -380,25 +379,25 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
             };
 
         let recovered_locked_view = initializer
-            .high_qc
+            .high_qc()
             .view_number
             .max(anchored_leaf.view_number());
         let consensus = Consensus::new(
             validated_state_map,
-            Some(initializer.saved_vid_shares),
+            Some(initializer.saved_vid_shares().clone()),
             anchored_leaf.view_number(),
             epoch,
             recovered_locked_view,
             anchored_leaf.view_number(),
-            initializer.last_actioned_view,
-            initializer.saved_proposals,
+            initializer.last_actioned_view(),
+            initializer.saved_proposals().clone(),
             saved_leaves,
             saved_payloads,
-            initializer.high_qc,
-            initializer.next_epoch_high_qc,
+            initializer.high_qc().clone(),
+            initializer.next_epoch_high_qc().cloned(),
             Arc::clone(&consensus_metrics),
             config.epoch_height,
-            initializer.state_cert,
+            initializer.state_cert().cloned(),
             config.drb_difficulty,
             config.drb_upgrade_difficulty,
             stake_table,
@@ -444,8 +443,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
             private_key,
             state_private_key,
             config,
-            start_view: initializer.start_view,
-            start_epoch: initializer.start_epoch,
+            start_view: initializer.start_view(),
+            start_epoch: initializer.start_epoch(),
             network,
             membership_coordinator,
             metrics: Arc::clone(&consensus_metrics),
@@ -811,312 +810,5 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ConsensusApi<TYPES, I>
         &self,
     ) -> &<TYPES::StateSignatureKey as StateSignatureKey>::StatePrivateKey {
         &self.hotshot.state_private_key
-    }
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct InitializerEpochInfo<TYPES: NodeType> {
-    pub epoch: EpochNumber,
-    pub drb_result: DrbResult,
-    // pub stake_table: Option<StakeTable>, // TODO: Figure out how to connect this up
-    pub block_header: Option<TYPES::BlockHeader>,
-}
-
-/// The anchor leaf with its validated state and optional state delta, as supplied to
-/// [`HotShotInitializer::load`]. The state and delta may be omitted, in which case a
-/// sparse state is constructed from the leaf's header.
-pub type InitializerAnchor<TYPES> = (
-    Leaf2<TYPES>,
-    Option<Arc<<TYPES as NodeType>::ValidatedState>>,
-    Option<Arc<<<TYPES as NodeType>::ValidatedState as ValidatedState<TYPES>>::Delta>>,
-);
-
-/// initializer struct for creating starting block
-#[derive(Clone, Debug)]
-pub struct HotShotInitializer<TYPES: NodeType> {
-    /// Instance-level state.
-    instance_state: TYPES::InstanceState,
-
-    /// Epoch height
-    epoch_height: u64,
-
-    /// Epoch start block
-    epoch_start_block: u64,
-
-    /// the anchor leaf for the hotshot initializer
-    anchor_leaf: Leaf2<TYPES>,
-
-    /// ValidatedState for the anchor leaf
-    anchor_state: Arc<TYPES::ValidatedState>,
-
-    /// ValidatedState::Delta for the anchor leaf, optional.
-    anchor_state_delta: Option<Arc<<TYPES::ValidatedState as ValidatedState<TYPES>>::Delta>>,
-
-    /// Starting view number that should be equivalent to the view the node shut down with last.
-    start_view: ViewNumber,
-
-    /// The view we last performed an action in.  An action is proposing or voting for
-    /// either the quorum or DA.
-    last_actioned_view: ViewNumber,
-
-    /// Starting epoch number that should be equivalent to the epoch the node shut down with last.
-    start_epoch: Option<EpochNumber>,
-
-    /// Highest QC that was seen, for genesis it's the genesis QC.  It should be for a view greater
-    /// than `inner`s view number for the non genesis case because we must have seen higher QCs
-    /// to decide on the leaf.
-    high_qc: QuorumCertificate2<TYPES>,
-
-    /// Next epoch highest QC that was seen. This is needed to propose during epoch transition after restart.
-    next_epoch_high_qc: Option<NextEpochQuorumCertificate2<TYPES>>,
-
-    /// Proposals we have sent out to provide to others for catchup
-    saved_proposals: BTreeMap<ViewNumber, Proposal<TYPES, QuorumProposalWrapper<TYPES>>>,
-
-    /// Previously decided upgrade certificate; this is necessary if an upgrade has happened and we are not restarting with the new version
-    decided_upgrade_certificate: Option<UpgradeCertificate<TYPES>>,
-
-    /// Undecided leaves that were seen, but not yet decided on.  These allow a restarting node
-    /// to vote and propose right away if they didn't miss anything while down.
-    undecided_leaves: BTreeMap<ViewNumber, Leaf2<TYPES>>,
-
-    /// Not yet decided state
-    undecided_state: BTreeMap<ViewNumber, View<TYPES>>,
-
-    /// Saved VID shares
-    saved_vid_shares: VidShares<TYPES>,
-
-    /// The last formed light client state update certificate if there's any
-    state_cert: Option<LightClientStateUpdateCertificateV2<TYPES>>,
-
-    /// Saved epoch information. This must be sorted ascending by epoch.
-    start_epoch_info: Vec<InitializerEpochInfo<TYPES>>,
-}
-
-impl<TYPES: NodeType> HotShotInitializer<TYPES> {
-    /// initialize from genesis
-    /// # Errors
-    /// If we are unable to apply the genesis block to the default state
-    pub async fn from_genesis(
-        instance_state: TYPES::InstanceState,
-        epoch_height: u64,
-        epoch_start_block: u64,
-        start_epoch_info: Vec<InitializerEpochInfo<TYPES>>,
-        upgrade: Upgrade,
-    ) -> Result<Self, HotShotError<TYPES>> {
-        let (validated_state, state_delta) = TYPES::ValidatedState::genesis(&instance_state);
-        let high_qc = QuorumCertificate2::genesis(&validated_state, &instance_state, upgrade).await;
-
-        Ok(Self {
-            anchor_leaf: Leaf2::genesis(&validated_state, &instance_state, upgrade.base).await,
-            anchor_state: Arc::new(validated_state),
-            anchor_state_delta: Some(Arc::new(state_delta)),
-            start_view: ViewNumber::new(0),
-            start_epoch: genesis_epoch_from_version(upgrade.base),
-            last_actioned_view: ViewNumber::new(0),
-            saved_proposals: BTreeMap::new(),
-            high_qc,
-            next_epoch_high_qc: None,
-            decided_upgrade_certificate: None,
-            undecided_leaves: BTreeMap::new(),
-            undecided_state: BTreeMap::new(),
-            instance_state,
-            saved_vid_shares: BTreeMap::new(),
-            epoch_height,
-            state_cert: None,
-            epoch_start_block,
-            start_epoch_info,
-        })
-    }
-
-    /// Use saved proposals to update undecided leaves and state
-    #[must_use]
-    fn update_undecided(self) -> Self {
-        let mut undecided_leaves = self.undecided_leaves.clone();
-        let mut undecided_state = self.undecided_state.clone();
-
-        for proposal in self.saved_proposals.values() {
-            // skip proposals unless they're newer than the anchor leaf
-            if proposal.data.view_number() <= self.anchor_leaf.view_number() {
-                continue;
-            }
-
-            undecided_leaves.insert(
-                proposal.data.view_number(),
-                Leaf2::from_quorum_proposal(&proposal.data),
-            );
-        }
-
-        for leaf in undecided_leaves.values() {
-            let view_inner = ViewInner::Leaf {
-                leaf: leaf.commit(),
-                state: Arc::new(TYPES::ValidatedState::from_header(leaf.block_header())),
-                delta: None,
-                epoch: leaf.epoch(self.epoch_height),
-            };
-            let view = View { view_inner };
-
-            undecided_state.insert(leaf.view_number(), view);
-        }
-
-        Self {
-            undecided_leaves,
-            undecided_state,
-            ..self
-        }
-    }
-
-    /// Create a `HotShotInitializer` from the given information.
-    ///
-    /// The anchor's validated state and state delta may be supplied by callers that have
-    /// them (e.g. a full genesis state); when absent, a sparse state is constructed from
-    /// the anchor leaf's header. `undecided_leaves` and `undecided_state` are always
-    /// populated from `saved_proposals`.
-    #[allow(clippy::too_many_arguments)]
-    pub fn load(
-        instance_state: TYPES::InstanceState,
-        epoch_height: u64,
-        epoch_start_block: u64,
-        start_epoch_info: Vec<InitializerEpochInfo<TYPES>>,
-        (anchor_leaf, anchor_state, anchor_state_delta): InitializerAnchor<TYPES>,
-        (start_view, start_epoch): (ViewNumber, Option<EpochNumber>),
-        (high_qc, next_epoch_high_qc): (
-            QuorumCertificate2<TYPES>,
-            Option<NextEpochQuorumCertificate2<TYPES>>,
-        ),
-        last_actioned_view: ViewNumber,
-        saved_proposals: BTreeMap<ViewNumber, Proposal<TYPES, QuorumProposalWrapper<TYPES>>>,
-        saved_vid_shares: VidShares<TYPES>,
-        decided_upgrade_certificate: Option<UpgradeCertificate<TYPES>>,
-        state_cert: Option<LightClientStateUpdateCertificateV2<TYPES>>,
-    ) -> Self {
-        let anchor_state = anchor_state.unwrap_or_else(|| {
-            Arc::new(TYPES::ValidatedState::from_header(
-                anchor_leaf.block_header(),
-            ))
-        });
-
-        let initializer = Self {
-            instance_state,
-            epoch_height,
-            epoch_start_block,
-            anchor_leaf,
-            anchor_state,
-            anchor_state_delta,
-            high_qc,
-            start_view,
-            start_epoch,
-            last_actioned_view,
-            saved_proposals,
-            saved_vid_shares,
-            next_epoch_high_qc,
-            decided_upgrade_certificate,
-            undecided_leaves: BTreeMap::new(),
-            undecided_state: BTreeMap::new(),
-            state_cert,
-            start_epoch_info,
-        };
-
-        initializer.update_undecided()
-    }
-
-    /// Instance-level state.
-    pub fn instance_state(&self) -> &TYPES::InstanceState {
-        &self.instance_state
-    }
-
-    /// Epoch height.
-    pub fn epoch_height(&self) -> u64 {
-        self.epoch_height
-    }
-
-    /// Epoch start block.
-    pub fn epoch_start_block(&self) -> u64 {
-        self.epoch_start_block
-    }
-
-    /// The anchor (last decided) leaf.
-    pub fn anchor_leaf(&self) -> &Leaf2<TYPES> {
-        &self.anchor_leaf
-    }
-
-    /// ValidatedState for the anchor leaf.
-    pub fn anchor_state(&self) -> &Arc<TYPES::ValidatedState> {
-        &self.anchor_state
-    }
-
-    /// The view to start consensus from.
-    pub fn start_view(&self) -> ViewNumber {
-        self.start_view
-    }
-
-    /// The view we last proposed or voted in.
-    pub fn last_actioned_view(&self) -> ViewNumber {
-        self.last_actioned_view
-    }
-
-    /// Highest QC that was seen.
-    pub fn high_qc(&self) -> &QuorumCertificate2<TYPES> {
-        &self.high_qc
-    }
-
-    /// Next epoch highest QC that was seen.
-    pub fn next_epoch_high_qc(&self) -> Option<&NextEpochQuorumCertificate2<TYPES>> {
-        self.next_epoch_high_qc.as_ref()
-    }
-
-    /// Proposals we have sent out to provide to others for catchup.
-    pub fn saved_proposals(
-        &self,
-    ) -> &BTreeMap<ViewNumber, Proposal<TYPES, QuorumProposalWrapper<TYPES>>> {
-        &self.saved_proposals
-    }
-
-    /// The upgrade certificate consensus has decided, if there is one.
-    pub fn decided_upgrade_certificate(&self) -> Option<&UpgradeCertificate<TYPES>> {
-        self.decided_upgrade_certificate.as_ref()
-    }
-
-    /// The last formed light client state update certificate, if there is any.
-    pub fn state_cert(&self) -> Option<&LightClientStateUpdateCertificateV2<TYPES>> {
-        self.state_cert.as_ref()
-    }
-}
-
-async fn load_start_epoch_info<TYPES: NodeType>(
-    coordinator: &EpochMembershipCoordinator<TYPES>,
-    start_epoch_info: &Vec<InitializerEpochInfo<TYPES>>,
-    epoch_height: u64,
-    epoch_start_block: u64,
-) {
-    let membership = coordinator.membership();
-    let first_epoch_number =
-        EpochNumber::new(epoch_from_block_number(epoch_start_block, epoch_height));
-
-    tracing::warn!("Calling set_first_epoch for epoch {first_epoch_number}");
-    membership.set_first_epoch(first_epoch_number, INITIAL_DRB_RESULT);
-
-    let mut sorted_epoch_info = start_epoch_info.clone();
-    sorted_epoch_info.sort_by_key(|info| info.epoch);
-    for epoch_info in sorted_epoch_info {
-        if let Some(block_header) = &epoch_info.block_header {
-            tracing::warn!("Calling add_epoch_root for epoch {}", epoch_info.epoch);
-
-            coordinator
-                .add_epoch_root(block_header.clone())
-                .await
-                .unwrap_or_else(|err| {
-                    // REVIEW NOTE: Should we panic here? a failure here seems like it should be fatal
-                    tracing::error!(
-                        "Failed to add epoch root for epoch {}: {err}",
-                        epoch_info.epoch
-                    );
-                });
-        }
-    }
-
-    for epoch_info in start_epoch_info {
-        tracing::warn!("Calling add_drb_result for epoch {}", epoch_info.epoch);
-        membership.add_drb_result(epoch_info.epoch, epoch_info.drb_result);
     }
 }
