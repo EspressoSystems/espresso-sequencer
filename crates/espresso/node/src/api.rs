@@ -3676,7 +3676,7 @@ mod test {
         legacy_chain::LegacyChain,
         persistence,
         persistence::no_storage,
-        startup_catchup::{BootstrapParams, SkipMode},
+        startup_catchup::BootstrapParams,
         testing::{
             TestConfig, TestConfigBuilder, decided_leaves, wait_for_decide_on_handle,
             wait_for_epochs,
@@ -5726,7 +5726,6 @@ mod test {
             bootstrap: BootstrapParams {
                 step_timeout: Duration::from_secs(30),
                 deadline: Duration::from_secs(900),
-                skip: SkipMode::Auto,
                 boot: true,
             },
             options: FollowerOptions {
@@ -6567,16 +6566,9 @@ mod test {
     /// mock is pointed at a recent decided block, node 5 is stopped, and it restarts on an empty
     /// database with node 0 as its only state peer. That peer cannot serve the epoch root of
     /// epoch 3, which stalls a walk at epoch 3, the way one failed fetch left a decaf validator
-    /// stuck far below the tip. With the skip off and no state peers, nothing reports a chain tip
-    /// to retry toward, so the first failure ends the walk and the window stays below the anchor.
-    /// With peers, the walk would retry until the deadline instead, which the unit tests cover.
-    #[rstest]
-    #[case::off_without_peers(SkipMode::Off)]
-    #[case::auto(SkipMode::Auto)]
+    /// stuck far below the tip.
     #[test_log::test(tokio::test(flavor = "multi_thread"))]
-    async fn test_new_protocol_fresh_validator_skips_epoch_walk(
-        #[case] skip: SkipMode,
-    ) -> anyhow::Result<()> {
+    async fn test_new_protocol_fresh_validator_skips_epoch_walk() -> anyhow::Result<()> {
         const NUM_NODES: usize = 6;
         const NODE: usize = 5;
         const EPOCH_HEIGHT: u64 = 10;
@@ -6697,10 +6689,7 @@ mod test {
         let fresh_storage = SqlDataSource::create_storage().await;
         let metrics = PrometheusMetrics::default();
         let mut cfg = network.cfg.clone();
-        cfg.set_bootstrap_skip(skip);
-        if skip == SkipMode::Auto {
-            cfg.set_bootstrap_peers(vec![api_url.clone()]);
-        }
+        cfg.set_bootstrap_peers(vec![api_url.clone()]);
         let failing_root = root_block_in_epoch(3, EPOCH_HEIGHT);
         let node = cfg
             .init_node(
@@ -6731,20 +6720,7 @@ mod test {
             .find_map(|line| line.strip_prefix("consensus_bootstrap_window_epoch "))
             .context("window epoch gauge not exported")?
             .parse()?;
-        if skip == SkipMode::Off {
-            assert!(
-                exported.contains("consensus_bootstrap_skipped 0"),
-                "{exported}"
-            );
-            assert!(window_epoch < anchor_epoch, "{exported}");
-            return Ok(());
-        }
-
         // The window is the anchor's, with nothing below it walked.
-        assert!(
-            exported.contains("consensus_bootstrap_skipped 1"),
-            "{exported}"
-        );
         let membership = node.node_state().coordinator.membership().clone();
         for epoch in (anchor_epoch - 3)..=(anchor_epoch + 1) {
             assert!(

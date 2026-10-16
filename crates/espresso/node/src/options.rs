@@ -33,7 +33,7 @@ use crate::{
     keyset::KeySetOptions,
     persistence,
     proposal_fetcher::ProposalFetcherConfig,
-    startup_catchup::{BootstrapParams, SkipMode},
+    startup_catchup::BootstrapParams,
 };
 
 // This options struct is a bit unconventional. The sequencer has multiple optional modules which
@@ -354,8 +354,8 @@ pub struct Options {
 
     /// Peer nodes use to fetch missing state
     ///
-    /// At least one peer must serve the light-client module (query module with SQL storage) for
-    /// the startup skip, see `ESPRESSO_NODE_BOOTSTRAP_SKIP`.
+    /// A node joining a running network needs at least one peer that serves the light-client
+    /// module (query module with SQL storage). Without one, startup fails.
     #[clap(long, env = "ESPRESSO_NODE_STATE_PEERS", value_delimiter = ',')]
     #[derivative(Debug(format_with = "fmt_urls"))]
     pub state_peers: Vec<Url>,
@@ -397,25 +397,8 @@ pub struct Options {
     #[clap(long, env = "ESPRESSO_NODE_BOOTSTRAP_EPOCH_CATCHUP_TIMEOUT", default_value = "30s", value_parser = parse_duration)]
     pub bootstrap_epoch_catchup_timeout: Duration,
 
-    /// Whether startup skips the stake-table walk using the L1 light-client anchor.
-    ///
-    /// `off` reads no anchor and walks from the highest known epoch. The walk still targets the
-    /// chain tip the state peers report, retries below it, and exits with an error at the
-    /// deadline.
-    ///
-    /// `auto` needs at least one state peer that serves the light-client module (query module with
-    /// SQL storage). Without one, startup retries until the deadline and exits. `off` is the escape
-    /// hatch for state peers that lack the module.
-    #[clap(
-        long,
-        env = "ESPRESSO_NODE_BOOTSTRAP_SKIP",
-        value_enum,
-        default_value_t = SkipMode::Auto
-    )]
-    pub bootstrap_skip: SkipMode,
-
-    /// How long startup retries before giving up, for the skip (anchor read, epoch roots and their install) and
-    /// again for the walk toward the chain tip the state peers report.
+    /// How long startup retries before giving up, for the install (anchor read, epoch roots and their
+    /// install) and again for the walk toward the chain tip the state peers report.
     ///
     /// At the deadline the node exits with an error.
     #[clap(long, env = "ESPRESSO_NODE_BOOTSTRAP_DEADLINE", default_value = "15m", value_parser = parse_duration)]
@@ -443,7 +426,6 @@ impl Options {
         BootstrapParams {
             step_timeout: self.bootstrap_epoch_catchup_timeout,
             deadline: self.bootstrap_deadline,
-            skip: self.bootstrap_skip,
             boot: true,
         }
     }
@@ -921,7 +903,6 @@ pub struct PublicNodeConfig {
     pub local_catchup_timeout: Duration,
     pub bootstrap_epoch_catchup_timeout: Duration,
     pub bootstrap_deadline: Duration,
-    pub bootstrap_skip: SkipMode,
     pub catchup_backoff: BackoffParams,
     /// Unset on a validator.
     pub follower: Option<FollowerConfig>,
@@ -1288,7 +1269,6 @@ impl PublicNodeConfig {
             local_catchup_timeout: opt.local_catchup_timeout,
             bootstrap_epoch_catchup_timeout: opt.bootstrap_epoch_catchup_timeout,
             bootstrap_deadline: opt.bootstrap_deadline,
-            bootstrap_skip: opt.bootstrap_skip,
             catchup_backoff: opt.catchup_backoff,
             follower: modules.follower.as_ref().map(FollowerConfig::from),
             proposal_fetcher: opt.proposal_fetcher_config,

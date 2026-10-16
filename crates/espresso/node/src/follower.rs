@@ -267,7 +267,13 @@ where
     bootstrap_epoch_window(
         &coordinator,
         epoch_height,
-        || async { Ok(node_state.finalized_light_client_state().await?.into()) },
+        || async {
+            // A replayed chain has no light-client contract to read.
+            if replay.is_some() {
+                return Ok(TrustedAnchor::genesis());
+            }
+            Ok(node_state.finalized_light_client_state().await?.into())
+        },
         &peers,
         &params.bootstrap,
         &bootstrap_metrics,
