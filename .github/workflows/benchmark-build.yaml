@@ -36,7 +36,7 @@ jobs:
       - name: Build
         # Build in release without `testing` feature, this should work without `hotshot_example` config.
         run: |
-          cargo build --locked --release --features benchmarking --workspace
+          cargo build --locked --release --features benchmarking --workspace --exclude espresso-node-sqlite --exclude espresso-dev-node --exclude slow-tests
 
       - name: Build Espresso Dev Node
         # Espresso Dev Node currently requires testing feature, so it is built separately.
@@ -85,7 +85,7 @@ jobs:
 
       - name: Build
         run: |
-          cargo build --locked --release --features benchmarking --workspace
+          cargo build --locked --release --features benchmarking --workspace --exclude espresso-node-sqlite --exclude espresso-dev-node --exclude slow-tests
 
       - name: Build Espresso Dev Node
         # Espresso Dev Node currently requires testing feature, so it is built separately.
