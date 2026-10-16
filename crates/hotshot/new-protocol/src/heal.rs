@@ -1,18 +1,42 @@
 //! Re-creation of a node's lost VID shares from peers' shares.
 
+mod run;
 pub mod serve;
 
-use std::time::Duration;
+use std::{cmp::Reverse, collections::BTreeSet, sync::Arc, time::Duration};
 
 use hotshot_types::{
     data::{
-        EpochNumber, VidCommitment2, VidDisperseShare2, ViewNumber,
+        EpochNumber, Leaf2, VidCommitment, VidCommitment2, VidDisperseShare2, ViewNumber,
         vid_disperse::AvidmGf2DisperseParams,
     },
-    traits::node_implementation::NodeType,
+    epoch_membership::EpochMembershipCoordinator,
+    traits::{
+        block_contents::BlockHeader,
+        metrics::{Counter, Gauge, HistogramFamily, Metrics},
+        node_implementation::NodeType,
+        signature_key::SignatureKey,
+    },
+};
+use tokio::sync::{mpsc, watch};
+use tokio_util::task::AbortOnDropHandle;
+use tracing::warn;
+
+pub use self::run::{HealCtx, ShareResponse, run};
+use crate::{
+    message::{
+        Message, MessageType,
+        share::{ShareFetchMessage, ShareFetchRequest, ShareFetchResponse},
+    },
+    network::Sender,
+    storage::NewProtocolStorage,
+    vid::{self, Metadata, VidDisperseError},
 };
 
-use crate::vid::{self, VidDisperseError};
+/// Requests the healer can have queued for the network task.
+const REQUEST_QUEUE: usize = 256;
+/// Responses queued for the healer; further ones are dropped, the healer re-asks on timeout.
+const RESPONSE_QUEUE: usize = 256;
 
 /// Tuning of the share healer and of serving shares to peers.
 #[derive(Clone, Debug)]
@@ -24,7 +48,6 @@ pub struct HealConfig {
     /// Heights whose share would expire within this long are not worth healing.
     pub min_remaining: Duration,
     pub scan_interval: Duration,
-    pub heights_inflight: usize,
     pub req_timeout: Duration,
     pub serve_inflight: usize,
     pub max_response_bytes: usize,
@@ -38,11 +61,197 @@ impl Default for HealConfig {
             tip_margin: 100,
             min_remaining: Duration::from_secs(3600),
             scan_interval: Duration::from_secs(60),
-            heights_inflight: 1,
             req_timeout: Duration::from_secs(10),
             serve_inflight: 4,
             max_response_bytes: 64 << 20,
             max_fetch_bytes_per_s: None,
+        }
+    }
+}
+
+/// A decided height whose share this node lost.
+#[derive(Clone, Debug)]
+pub struct HealTarget<T: NodeType> {
+    pub view: ViewNumber,
+    pub height: u64,
+    pub epoch: EpochNumber,
+    pub header_ts: u64,
+    pub commit: VidCommitment2,
+    pub metadata: Metadata<T>,
+}
+
+/// The decided `leaves` whose share is missing and worth recreating, newest first.
+///
+/// A height qualifies when its header time leaves at least `min_remaining` before the share would
+/// expire, it is `tip_margin` views behind `anchor_view`, it is not in `held`, it commits with
+/// VID V2 and `recipient_epoch` says this node held a share in its epoch (returning that epoch).
+pub fn heal_targets<T: NodeType>(
+    leaves: &[Leaf2<T>],
+    held: &BTreeSet<ViewNumber>,
+    anchor_view: ViewNumber,
+    now_ts: u64,
+    recipient_epoch: impl Fn(&Leaf2<T>) -> Option<EpochNumber>,
+    cfg: &HealConfig,
+) -> Vec<HealTarget<T>> {
+    let oldest_ts = now_ts.saturating_sub(cfg.w.as_secs()) + cfg.min_remaining.as_secs();
+    let mut targets: Vec<_> = leaves
+        .iter()
+        .filter_map(|leaf| {
+            let view = leaf.view_number();
+            let header = leaf.block_header();
+            let VidCommitment::V2(commit) = header.payload_commitment() else {
+                return None;
+            };
+            let wanted = view != ViewNumber::genesis()
+                && view.u64() + cfg.tip_margin <= anchor_view.u64()
+                && header.timestamp() >= oldest_ts
+                && !held.contains(&view);
+            wanted.then_some(())?;
+            Some(HealTarget {
+                view,
+                height: header.block_number(),
+                epoch: recipient_epoch(leaf)?,
+                header_ts: header.timestamp(),
+                commit,
+                metadata: header.metadata().clone(),
+            })
+        })
+        .collect();
+    targets.sort_by_key(|target| Reverse(target.view));
+    targets
+}
+
+#[derive(Clone)]
+pub struct HealMetrics {
+    targets: Arc<dyn Gauge>,
+    unreachable: Arc<dyn Gauge>,
+    done: Arc<dyn Counter>,
+    fetch_bytes: Arc<dyn Counter>,
+    verify_fail: Arc<dyn Counter>,
+    height_seconds: Arc<dyn HistogramFamily>,
+}
+
+impl HealMetrics {
+    pub fn new(metrics: &dyn Metrics) -> Self {
+        let counter = |name: &str| metrics.create_counter(name.into(), None).into();
+        let gauge = |name: &str| metrics.create_gauge(name.into(), None).into();
+        Self {
+            targets: gauge("share_heal_targets"),
+            unreachable: gauge("share_heal_unreachable"),
+            done: counter("share_heal_done_total"),
+            fetch_bytes: counter("share_heal_fetch_bytes_total"),
+            verify_fail: counter("share_heal_verify_fail_total"),
+            height_seconds: metrics
+                .histogram_family("share_heal_height_seconds".into(), vec!["phase".into()])
+                .into(),
+        }
+    }
+
+    fn phase(&self, phase: &str, took: Duration) {
+        self.height_seconds
+            .create(vec![phase.into()])
+            .add_point(took.as_secs_f64());
+    }
+}
+
+/// The healer's link to the coordinator: peers' responses in, the node's view in, and the tasks
+/// that heal and send requests, stopped when this is dropped.
+pub struct Healer<T: NodeType, S> {
+    responses: mpsc::Sender<ShareResponse<T>>,
+    view: watch::Sender<ViewNumber>,
+    unstarted: Option<Unstarted<T, S>>,
+    tasks: Vec<AbortOnDropHandle<()>>,
+}
+
+struct Unstarted<T: NodeType, S> {
+    ctx: HealCtx<T, S>,
+    responses: mpsc::Receiver<ShareResponse<T>>,
+    requests: mpsc::Receiver<(T::SignatureKey, ShareFetchRequest)>,
+    network: Sender<T>,
+}
+
+impl<T: NodeType, S: NewProtocolStorage<T>> Healer<T, S> {
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        config: HealConfig,
+        storage: S,
+        membership: EpochMembershipCoordinator<T>,
+        public_key: T::SignatureKey,
+        private_key: <T::SignatureKey as SignatureKey>::PrivateKey,
+        network: Sender<T>,
+        view: ViewNumber,
+        metrics: &dyn Metrics,
+    ) -> Self {
+        let (requests_tx, requests) = mpsc::channel(REQUEST_QUEUE);
+        let (responses_tx, responses) = mpsc::channel(RESPONSE_QUEUE);
+        let (view_tx, view_rx) = watch::channel(view);
+        let ctx = HealCtx {
+            config,
+            storage,
+            membership,
+            public_key,
+            private_key,
+            requests: requests_tx,
+            view: view_rx,
+            metrics: HealMetrics::new(metrics),
+        };
+        Self {
+            responses: responses_tx,
+            view: view_tx,
+            unstarted: Some(Unstarted {
+                ctx,
+                responses,
+                requests,
+                network,
+            }),
+            tasks: Vec::new(),
+        }
+    }
+
+    /// Spawn the healer and its request sender. Does nothing when already started.
+    pub fn start(&mut self) {
+        let Some(Unstarted {
+            ctx,
+            responses,
+            requests,
+            network,
+        }) = self.unstarted.take()
+        else {
+            return;
+        };
+        let sender = forward_requests(requests, network, ctx.public_key.clone(), ctx.view.clone());
+        self.tasks
+            .push(AbortOnDropHandle::new(tokio::spawn(sender)));
+        self.tasks
+            .push(AbortOnDropHandle::new(tokio::spawn(run(ctx, responses))));
+    }
+
+    pub fn on_view_changed(&self, view: ViewNumber) {
+        self.view.send_replace(view);
+    }
+
+    pub fn on_response(&self, from: T::SignatureKey, response: ShareFetchResponse<T>) {
+        if self.responses.try_send((from, response)).is_err() {
+            warn!("share heal is behind, dropping a share response");
+        }
+    }
+}
+
+/// Unicast the healer's requests in the node's current view.
+async fn forward_requests<T: NodeType>(
+    mut requests: mpsc::Receiver<(T::SignatureKey, ShareFetchRequest)>,
+    network: Sender<T>,
+    public_key: T::SignatureKey,
+    view: watch::Receiver<ViewNumber>,
+) {
+    while let Some((peer, request)) = requests.recv().await {
+        let message = Message {
+            sender: public_key.clone(),
+            message_type: MessageType::ShareFetch(ShareFetchMessage::Req(request)),
+        };
+        let slot = *view.borrow();
+        if let Err(err) = network.unicast(slot, &peer, &message) {
+            warn!(%peer, %err, "failed to send share request");
         }
     }
 }
@@ -143,5 +352,108 @@ mod tests {
         )
         .unwrap_err();
         assert!(matches!(err, HealError::NotRecipient));
+    }
+
+    fn cfg() -> HealConfig {
+        HealConfig {
+            w: Duration::from_secs(1000),
+            tip_margin: 2,
+            min_remaining: Duration::from_secs(100),
+            ..HealConfig::default()
+        }
+    }
+
+    /// One leaf per view, view `i + 1` at header time `100 * (i + 1)`.
+    async fn leaves(count: usize) -> Vec<Leaf2<TestTypes>> {
+        let data = TestData::new(count).await;
+        data.views
+            .iter()
+            .enumerate()
+            .map(|(i, view)| {
+                let mut leaf = view.leaf.clone();
+                leaf.block_header_mut().timestamp = 100 * (i as u64 + 1);
+                leaf
+            })
+            .collect()
+    }
+
+    fn views(targets: &[HealTarget<TestTypes>]) -> Vec<u64> {
+        targets.iter().map(|t| t.view.u64()).collect()
+    }
+
+    fn member(leaf: &Leaf2<TestTypes>) -> Option<EpochNumber> {
+        leaf.epoch(10)
+    }
+
+    #[tokio::test]
+    async fn heal_targets_newest_first_ok() {
+        let leaves = leaves(6).await;
+        let held = BTreeSet::from([ViewNumber::new(2)]);
+        let targets = heal_targets(&leaves, &held, ViewNumber::new(10), 1000, member, &cfg());
+        // Views 1..=6; 2 is held; the `now - w + min_remaining` bound of 100 admits all times.
+        assert_eq!(views(&targets), vec![6, 5, 4, 3, 1]);
+        assert!(targets.iter().all(|t| t.header_ts == 100 * t.view.u64()));
+    }
+
+    #[tokio::test]
+    async fn heal_targets_tip_margin_ok() {
+        let leaves = leaves(6).await;
+        let targets = heal_targets(
+            &leaves,
+            &BTreeSet::new(),
+            ViewNumber::new(5),
+            1000,
+            member,
+            &cfg(),
+        );
+        assert_eq!(views(&targets), vec![3, 2, 1]);
+    }
+
+    #[tokio::test]
+    async fn heal_targets_near_expiry_ok() {
+        let leaves = leaves(6).await;
+        // Bound 1500 - 1000 + 100 = 600: only views at time 600 and later remain.
+        let targets = heal_targets(
+            &leaves,
+            &BTreeSet::new(),
+            ViewNumber::new(10),
+            1500,
+            member,
+            &cfg(),
+        );
+        assert_eq!(views(&targets), vec![6]);
+    }
+
+    #[tokio::test]
+    async fn heal_targets_not_recipient_ok() {
+        let leaves = leaves(3).await;
+        let targets = heal_targets(
+            &leaves,
+            &BTreeSet::new(),
+            ViewNumber::new(10),
+            1000,
+            |leaf| {
+                (leaf.view_number() != ViewNumber::new(2))
+                    .then(|| leaf.epoch(10))
+                    .flatten()
+            },
+            &cfg(),
+        );
+        assert_eq!(views(&targets), vec![3, 1]);
+    }
+
+    #[tokio::test]
+    async fn heal_targets_v1_skipped_ok() {
+        let mut leaves = leaves(3).await;
+        leaves[1].block_header_mut().payload_commitment = VidCommitment::V1(Default::default());
+        let targets = heal_targets(
+            &leaves,
+            &BTreeSet::new(),
+            ViewNumber::new(10),
+            1000,
+            member,
+            &cfg(),
+        );
+        assert_eq!(views(&targets), vec![3, 1]);
     }
 }

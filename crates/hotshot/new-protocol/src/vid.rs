@@ -43,9 +43,7 @@ use hotshot_types::{
     traits::node_implementation::NodeType,
     vid::avidm_gf2::{AvidmGf2Common, AvidmGf2Param, init_avidm_gf2_param},
 };
-pub(crate) use reconstruct::{
-    Metadata, ReconstructResult, VidShareAccumulator, matches_commitment, reconstruct,
-};
+pub(crate) use reconstruct::{Metadata, VidShareAccumulator, matches_commitment, reconstruct};
 pub use reconstruct::{
     ObtainedPayload, VidReconstructError, VidReconstructErrorKind, VidReconstructor,
 };

@@ -51,7 +51,7 @@ use crate::{
     },
     epoch::{EpochManager, EpochRootResult},
     fetch::{Fetcher, Retry},
-    heal::{HealConfig, serve::ShareServer},
+    heal::{HealConfig, Healer, serve::ShareServer},
     helpers::{proposal_commitment, validated_state_cert},
     leader_trace::LeaderTracerHandle,
     logging::KeyPrefix,
@@ -146,6 +146,7 @@ pub struct Coordinator<T: NodeType, S> {
     timer: Timer,
     /// Serves this node's shares to peers healing theirs; `None` when share heal is off.
     share_server: Option<ShareServer<T, S>>,
+    healer: Option<Healer<T, S>>,
     #[builder(skip)]
     pending_proposal_fetches: PendingProposalFetches<T>,
     #[builder(skip)]
@@ -332,12 +333,24 @@ where
         let mut vid_reconstructor = VidReconstructor::new();
         vid_reconstructor.set_tracer(leader_tracer);
 
-        let share_server = heal.map(|config| {
+        let share_server = heal.as_ref().map(|config| {
             ShareServer::over_network(
                 storage.clone(),
                 network.sender().clone(),
                 public_key.clone(),
-                &config,
+                config,
+                metrics,
+            )
+        });
+        let healer = heal.map(|config| {
+            Healer::new(
+                config,
+                storage.clone(),
+                membership_coordinator.clone(),
+                public_key.clone(),
+                private_key.clone(),
+                network.sender().clone(),
+                consensus.current_view(),
                 metrics,
             )
         });
@@ -442,12 +455,16 @@ where
             .participation(participation)
             .external_tx(external_tx)
             .maybe_share_server(share_server)
+            .maybe_healer(healer)
             .build()
     }
 
     /// Emit `ViewChanged(current_view + 1)` and, if leader, a
     /// `RequestBlockAndHeader`.
     pub fn start(&mut self) {
+        if let Some(healer) = &mut self.healer {
+            healer.start();
+        }
         let cur_view = self.consensus.current_view();
         let next_view = cur_view + 1;
         // Client requests are served before the outbox reaches the builder, so it must know the
@@ -1182,6 +1199,9 @@ where
                     return Ok(());
                 }
                 info!(%node, %view, %epoch, "view changed");
+                if let Some(healer) = &self.healer {
+                    healer.on_view_changed(view);
+                }
                 self.timer.reset_with(view);
                 self.gc(epoch, GcScope::Local(view))?;
                 let resend = self.block_builder.on_view_changed(view);
@@ -1768,6 +1788,9 @@ where
             },
             MessageType::ShareFetch(ShareFetchMessage::Res(response)) => {
                 debug!(%node, %sender, view = %response.view_number(), "received share fetch response");
+                if let Some(healer) = &self.healer {
+                    healer.on_response(message.sender, response);
+                }
                 None
             },
             MessageType::External(data) => {
