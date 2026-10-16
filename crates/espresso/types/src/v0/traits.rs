@@ -5,7 +5,7 @@ use std::{
     cmp::max,
     collections::{BTreeMap, BTreeSet},
 };
-use std::{fmt::Debug, ops::Range, sync::Arc};
+use std::{fmt::Debug, ops::Range, sync::Arc, time::Duration};
 
 use alloy::primitives::Address;
 #[cfg(feature = "node")]
@@ -589,6 +589,12 @@ pub trait SequencerPersistence:
         _backoff: BackoffParams,
     ) -> anyhow::Result<Arc<dyn StateCatchup>> {
         bail!("state catchup is not implemented for this persistence type");
+    }
+
+    /// How far back, in header time, this node re-creates its lost VID shares from peers, or
+    /// `None` when share heal is off.
+    fn share_heal_window(&self) -> Option<Duration> {
+        None
     }
 
     /// Load the orchestrator config from storage.

@@ -171,6 +171,11 @@ pub struct Options {
     )]
     pub share_retention: Duration,
 
+    /// Re-create lost VID shares from peers' shares, over the `share_retention` window. Needs an
+    /// index of every stored share, built at startup, and is refused on a query node.
+    #[clap(long, env = "ESPRESSO_NODE_SHARE_HEAL")]
+    pub share_heal: bool,
+
     /// Cap on the block payloads a query node holds in memory for its query service, from when
     /// it obtains them until their decide is replayed. Oldest dropped first once exceeded; the
     /// query service fetches those blocks from a peer.
@@ -510,6 +515,12 @@ fn start_lane(
 
 impl Persistence {
     pub async fn open(opts: Options) -> anyhow::Result<Self> {
+        ensure!(
+            !(opts.share_heal && opts.query_storage.is_some()),
+            "share heal is not supported on a query node, its share index covers unreplayed views \
+             only"
+        );
+
         let path = opts.path.clone();
         let journal_dir = path.join("journal");
         let wal_dir = journal_dir.join("wal");
@@ -629,7 +640,7 @@ impl Persistence {
                         .await?,
                 ),
             ),
-            None => {
+            None if opts.share_heal => {
                 let seqs = share_recovered.segments.iter().map(|meta| meta.seq);
                 let vids = index_frames(&std_fs, &share_dir, Stream::Share, seqs.collect(), |h| {
                     h.kind == Kind::Vid.into()
@@ -637,6 +648,7 @@ impl Persistence {
                 .await?;
                 (Some(vids), None)
             },
+            None => (None, None),
         };
         let pending_payloads = PendingPayloads::new(opts.pending_payload_bytes);
 
@@ -1328,6 +1340,13 @@ fn next_replay_batch(replay: &Replay) -> Option<ReplayBatch> {
 
 #[async_trait]
 impl SequencerPersistence for Persistence {
+    fn share_heal_window(&self) -> Option<Duration> {
+        self.inner
+            .opts
+            .share_heal
+            .then_some(self.inner.opts.share_retention)
+    }
+
     async fn load_config(&self) -> anyhow::Result<Option<NetworkConfig>> {
         self.inner.side.load_config().await
     }
@@ -2088,6 +2107,33 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn share_index_is_built_only_for_heal() {
+        for heal in [false, true] {
+            let tmp = TempDir::new().unwrap();
+            let opts = Options {
+                share_heal: heal,
+                ..options(&tmp)
+            };
+            let storage = Persistence::open(opts).await.unwrap();
+            assert_eq!(storage.inner.lanes.share.index.is_some(), heal);
+        }
+    }
+
+    #[tokio::test]
+    async fn share_heal_is_refused_on_a_query_node() {
+        let tmp = TempDir::new().unwrap();
+        let opts = Options {
+            share_heal: true,
+            ..options(&tmp)
+        }
+        .with_query_storage(QueryStorage::Fs(side_fs::Options::new(
+            tmp.path().join("query"),
+        )));
+        let err = Persistence::open(opts).await.err().unwrap();
+        assert!(err.to_string().contains("query node"), "{err:#}");
+    }
+
+    #[tokio::test]
     async fn share_max_stamp_survives_restart() {
         let tmp = TempDir::new().unwrap();
         let opts = Options {
@@ -2116,7 +2162,10 @@ mod tests {
     #[tokio::test]
     async fn journal_append_healed_vid_ok() {
         let tmp = TempDir::new().unwrap();
-        let opts = options(&tmp);
+        let opts = Options {
+            share_heal: true,
+            ..options(&tmp)
+        };
         let storage = Persistence::open(opts.clone()).await.unwrap();
         for view in [1, 2] {
             storage
@@ -2468,6 +2517,7 @@ mod tests {
             view_retention: DEFAULT_VIEW_RETENTION,
             max_bytes: DEFAULT_MAX_BYTES,
             share_retention: parse_duration("7d").unwrap(),
+            share_heal: false,
             pending_payload_bytes: DEFAULT_PENDING_PAYLOAD_BYTES,
             ignore_existing: false,
             max_block_size: Some(TEST_MAX_BLOCK_SIZE),
@@ -2531,6 +2581,7 @@ mod tests {
             view_retention: DEFAULT_VIEW_RETENTION,
             max_bytes: DEFAULT_MAX_BYTES,
             share_retention: parse_duration("7d").unwrap(),
+            share_heal: false,
             pending_payload_bytes: DEFAULT_PENDING_PAYLOAD_BYTES,
             ignore_existing: false,
             max_block_size: Some(TEST_MAX_BLOCK_SIZE),
@@ -2570,6 +2621,7 @@ mod testing {
                 view_retention: DEFAULT_VIEW_RETENTION,
                 max_bytes: DEFAULT_MAX_BYTES,
                 share_retention: parse_duration("7d").unwrap(),
+                share_heal: false,
                 pending_payload_bytes: DEFAULT_PENDING_PAYLOAD_BYTES,
                 ignore_existing: false,
                 max_block_size: Some(TEST_MAX_BLOCK_SIZE),

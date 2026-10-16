@@ -11,7 +11,7 @@ use anyhow::{Context, ensure};
 use async_lock::RwLock;
 use derivative::Derivative;
 use espresso_types::{
-    NodeState, Transaction, ValidatedState, parse_duration,
+    NodeState, Transaction, ValidatedState,
     v0::traits::{EventConsumer as PersistenceEventConsumer, SequencerPersistence},
 };
 use futures::{
@@ -220,7 +220,10 @@ where
             .transpose()?;
 
         let (external_tx, external_rx) = unbounded_channel();
-        let heal = share_heal_config()?;
+        let heal = persistence.share_heal_window().map(|w| HealConfig {
+            w,
+            ..HealConfig::default()
+        });
         let coordinator = Coordinator::maker()
             .membership_coordinator(membership_coordinator.clone())
             .network(coordinator_network)
@@ -936,23 +939,4 @@ impl Drop for TaskList {
     fn drop(&mut self) {
         self.shut_down()
     }
-}
-
-const SHARE_HEAL_ENV: &str = "ESPRESSO_NODE_SHARE_HEAL";
-const SHARE_RETENTION_ENV: &str = "ESPRESSO_NODE_JOURNAL_SHARE_RETENTION";
-
-/// Share heal is on when `ESPRESSO_NODE_SHARE_HEAL` is set to anything but empty or `0`. Its
-/// retention window follows the journal's `ESPRESSO_NODE_JOURNAL_SHARE_RETENTION`.
-fn share_heal_config() -> anyhow::Result<Option<HealConfig>> {
-    let enabled =
-        std::env::var(SHARE_HEAL_ENV).is_ok_and(|value| !value.is_empty() && value != "0");
-    if !enabled {
-        return Ok(None);
-    }
-    let mut config = HealConfig::default();
-    if let Ok(retention) = std::env::var(SHARE_RETENTION_ENV) {
-        config.w =
-            parse_duration(&retention).with_context(|| format!("parsing {SHARE_RETENTION_ENV}"))?;
-    }
-    Ok(Some(config))
 }
