@@ -2951,6 +2951,10 @@ def test_pruned_heights_reach_the_summary_when_pruning_is_on(tmp_path: Path):
     assert "- prune: retention 60 s; pruned to height: node0 data 1120, state 480" in (
         netbench.render(result, None)
     )
+    result["deployment"] = deployment() | {"prune_shares": "300 s"}
+    assert "- prune shares: VID shares older than 300 s" in (
+        netbench.render(result, None)
+    )
 
 
 def test_summary_names_the_epoch_height_only_when_nodes_were_staked(tmp_path: Path):

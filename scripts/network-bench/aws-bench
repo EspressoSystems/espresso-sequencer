@@ -329,9 +329,11 @@ API_MODULES: dict[NodeRole, tuple[str, ...]] = {
     "validator": ("http", "status", "submit", "catchup", "config"),
     "query": ("http", "query", "submit", "catchup", "config", "light-client"),
 }
-# `--prune` runs node0's pruner this often; a run deletes everything past the retention.
+# `--prune` runs every query node's pruner this often; a run deletes everything past the retention.
 PRUNE_INTERVAL = "30s"
 PRUNE_RETENTION_S = 60
+# `--prune-shares` keeps VID shares this long; shares serve reconstruction, so longer than payloads.
+SHARE_RETENTION_S = 300
 RETENTION_UNITS = {"s": 1, "m": 60, "h": 3600}
 # Headroom below the usable disk so the journal's own retention GCs data before the volume
 # fills.
@@ -426,8 +428,8 @@ PG_JSON = f"{BENCH_DIR}/pg.json"
 # Self-signed cert made by user-data on the query role, mounted read-only into the container.
 PG_TLS_DIR = "/data/pg-tls"
 # Query payloads and VID shares of the query node live next to the Postgres data so they use the
-# same volume; node image reads ESPRESSO_NODE_BLOB_DIR, which `--node-env` sets to
-# PAYLOAD_CONTAINER_DIR (experimental, so not a default).
+# same volume; node image reads ESPRESSO_NODE_BLOB_DIR, which `--prune-shares` (or `--node-env`)
+# sets to PAYLOAD_CONTAINER_DIR (experimental, so not a default).
 PAYLOAD_HOST_DIR = "/data/pg/payload"
 TRACE_HOST_DIR = f"{BENCH_DIR}/trace"
 TRACE_CONTAINER_DIR = "/trace"
@@ -1062,8 +1064,11 @@ class RunConfig:
     consensus_storage: ConsensusStorage = "fs"
     # Faults while the load runs; None for a plain run.
     chaos: ch.ChaosConfig | None = None
-    # node0 prunes its data and state older than this many seconds; None for no pruning.
+    # Query nodes prune their data and state older than this many seconds; None for no pruning.
     prune: int | None = None
+    # Seconds that query nodes keep VID shares, with payloads in the blob dir (pruned only with
+    # `prune`); None for the node's defaults.
+    prune_shares: int | None = None
     # The light-client prover runs on ctl; needs epochs and a ctl of PROVER_MIN_MIB.
     prover: bool = False
 
@@ -1719,6 +1724,16 @@ def format_node_summary(cfg: RunConfig) -> list[str]:
         *(
             [f"prune: data and state older than {cfg.prune}s, every {PRUNE_INTERVAL}"]
             if cfg.prune
+            else []
+        ),
+        *(
+            [
+                (
+                    f"prune shares: VID shares older than {cfg.prune_shares}s "
+                    "(blob dir on every query node)"
+                )
+            ]
+            if cfg.prune_shares is not None
             else []
         ),
         *(
@@ -2445,6 +2460,7 @@ def render_node_env(
     consensus_storage: ConsensusStorage = "fs",
     query_engine: QueryEngine = "postgres",
     prune: int | None = None,
+    prune_shares: int | None = None,
     config_peers: bool = False,
     chaos: bool = False,
 ) -> str:
@@ -2519,8 +2535,11 @@ def render_node_env(
                 "ESPRESSO_NODE_POSTGRES_DATABASE": pg["database"],
             }
         )
-    if host["name"] == "node0" and prune is not None:
+    if prune is not None and host["role"] == "query":
         env.update(prune_env(prune))
+    if prune_shares is not None and host["role"] == "query":
+        env["ESPRESSO_NODE_BLOB_DIR"] = PAYLOAD_CONTAINER_DIR
+        env["ESPRESSO_NODE_SHARE_RETENTION"] = f"{prune_shares}s"
     for pair in node_env:
         key, _, value = pair.partition("=")
         env[key] = value
@@ -2528,7 +2547,7 @@ def render_node_env(
 
 
 def prune_env(retention_s: int) -> dict[str, str]:
-    """The pruner settings of node0: data and state older than `retention_s` go every
+    """The pruner settings of a query node: data and state older than `retention_s` go every
     PRUNE_INTERVAL, whatever the disk usage."""
     retention = f"{retention_s}s"
     return {
@@ -3275,9 +3294,19 @@ def add_prune_flag(parser: argparse.ArgumentParser) -> None:
         const=PRUNE_RETENTION_S,
         type=retention,
         metavar="RETENTION",
-        help=f"node0 deletes query data and state older than RETENTION (like 90s, 2m; bare: "
+        help=f"every query node deletes data and state older than RETENTION (like 90s, 2m; bare: "
         f"{PRUNE_RETENTION_S // 60}m) every {PRUNE_INTERVAL}; the warmup grows by RETENTION so "
         "that pruning runs before measurement",
+    )
+    parser.add_argument(
+        "--prune-shares",
+        nargs="?",
+        const=SHARE_RETENTION_S,
+        type=retention,
+        metavar="SHARE_RETENTION",
+        help="query nodes store payloads and VID shares in a blob dir and delete shares older "
+        f"than SHARE_RETENTION (bare: {SHARE_RETENTION_S // 60}m); payloads are pruned only "
+        "with --prune; needs a bench-experimental image",
     )
 
 
@@ -3454,6 +3483,7 @@ def config_from_args(args: argparse.Namespace) -> RunConfig:
         prover=args.prover,
         consensus_storage=args.consensus_storage,
         prune=args.prune,
+        prune_shares=args.prune_shares,
         root_gb=args.root_gb,
         pg_iops=args.pg_iops,
         pg_mbps=args.pg_mbps,
@@ -3645,6 +3675,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         prover=defaults.prover,
         consensus_storage=defaults.consensus_storage,
         prune=defaults.prune,
+        prune_shares=defaults.prune_shares,
         submit_nodes=None,
         chaos=False,
         fleet=None,
@@ -4879,25 +4910,29 @@ def cmd_run_fleet(args: argparse.Namespace, system: System) -> int:
 
 
 def check_query_store(
-    engine: QueryEngine, placement: DbMode, node_env: Iterable[str]
+    engine: QueryEngine,
+    placement: DbMode,
+    node_env: Iterable[str],
+    prune_shares: int | None = None,
 ) -> None:
     if placement not in QUERY_PLACEMENTS[engine]:
         raise Refused(
             f"--query-engine {engine} does not support --query-db {placement}; "
             f"choose from {', '.join(QUERY_PLACEMENTS[engine])}"
         )
-    if placement == "tmpfs" and not any(
+    has_blob_dir = prune_shares is not None or any(
         pair.startswith("ESPRESSO_NODE_BLOB_DIR=") for pair in node_env
-    ):
+    )
+    if placement == "tmpfs" and not has_blob_dir:
         raise Refused(
-            "--query-db tmpfs needs --node-env ESPRESSO_NODE_BLOB_DIR=...: "
+            "--query-db tmpfs needs --prune-shares or --node-env ESPRESSO_NODE_BLOB_DIR=...: "
             "payloads in SQLite would fill the tmpfs"
         )
 
 
 def fleet_config_from_args(args: argparse.Namespace) -> RunConfig:
     query_engine = chaos_default(args, "--query-engine", CHAOS_QUERY_ENGINE)
-    check_query_store(query_engine, args.query_db, args.node_env)
+    check_query_store(query_engine, args.query_db, args.node_env, args.prune_shares)
     return dataclasses.replace(
         config_from_args(args),
         db_modes=args.db_modes,
@@ -4936,6 +4971,7 @@ def fleet_run_config(args: argparse.Namespace, saved: FleetManifest) -> RunConfi
         prover=cli.prover,
         consensus_storage=cli.consensus_storage,
         prune=cli.prune,
+        prune_shares=cli.prune_shares,
         fleet=cli.fleet,
         force=cli.force,
         search=cli.search,
@@ -5602,7 +5638,15 @@ def run_config_hash(
             *([b"leader-trace"] if cfg.leader_trace else []),
             *([b"staking"] if staking(cfg) else []),
             *([b"prover"] if cfg.prover else []),
-            f"prune={cfg.prune}".encode(),
+            # `prune-query`: every query node prunes, unlike older node0-only `prune=` runs.
+            (
+                f"prune-query={cfg.prune}" if cfg.prune is not None else "prune=None"
+            ).encode(),
+            *(
+                [f"prune-shares={cfg.prune_shares}".encode()]
+                if cfg.prune_shares is not None
+                else []
+            ),
             *(
                 [json.dumps(dataclasses.asdict(cfg.chaos), sort_keys=True).encode()]
                 if cfg.chaos
@@ -5874,6 +5918,7 @@ def render_host_files(
                 cfg.consensus_storage,
                 cfg.query_engine,
                 cfg.prune,
+                cfg.prune_shares,
             )
             chaos = cfg.chaos is not None
             node_env.write_text(render_node_env(*env_args, chaos=chaos))
@@ -8692,6 +8737,11 @@ def deployment_meta(manifest: Manifest, evidence: Evidence) -> nb.DeploymentMeta
             else {}
         ),
         **({"prune": f"{config['prune']} s"} if config.get("prune") else {}),
+        **(
+            {"prune_shares": f"{config['prune_shares']} s"}
+            if config.get("prune_shares") is not None
+            else {}
+        ),
         # Manifests from before epochs have no such key; a null one is the template's.
         **(
             {"epoch_height": config["epoch_height"]}

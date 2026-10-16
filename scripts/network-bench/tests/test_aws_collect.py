@@ -650,6 +650,10 @@ def test_tmpfs_needs_the_payload_dir_outside_sqlite() -> None:
     awsb.check_query_store("sqlite", "colocated", [])
 
 
+def test_tmpfs_accepts_prune_shares_as_the_blob_dir() -> None:
+    awsb.check_query_store("sqlite", "tmpfs", [], prune_shares=300)
+
+
 def test_a_run_dir_with_the_legacy_sqlite_query_db_reads_as_sqlite_colocated(
     tmp_path: Path,
 ) -> None:

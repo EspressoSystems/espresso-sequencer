@@ -1242,7 +1242,7 @@ def test_prune_env_deletes_past_the_retention_every_interval():
 
 
 @pytest.mark.parametrize("engine", ["postgres", "sqlite"])
-def test_prune_reaches_node0_only_and_node_env_overrides_it(engine: str):
+def test_prune_reaches_every_query_node_and_node_env_overrides_it(engine: str):
     hosts = {h["name"]: h for h in awsb.plan_hosts(small_cfg())}
     pg = awsb.pg_endpoint() if engine == "postgres" else None
 
@@ -1262,9 +1262,84 @@ def test_prune_reaches_node0_only_and_node_env_overrides_it(engine: str):
         query_engine=engine,
         prune=60,
     )
-    assert "ESPRESSO_NODE_DATABASE_PRUNE" not in second_query
+    assert second_query.count("ESPRESSO_NODE_DATABASE_PRUNE=true") == 1
     override = env("node0", "ESPRESSO_NODE_PRUNER_INTERVAL=5s")
     assert override["ESPRESSO_NODE_PRUNER_INTERVAL"] == "5s"
+
+
+def render_shares(spec: dict, prune: int | None, shares: int | None, *extra: str):
+    pg = awsb.pg_endpoint() if spec["role"] == "query" else None
+    text = awsb.render_node_env(
+        spec,
+        fleet(3, query_nodes=2),
+        pg,
+        extra,
+        prune=prune,
+        prune_shares=shares,
+    )
+    return parse_env(text)
+
+
+@pytest.mark.parametrize("name", ["node0", "node1"])
+def test_prune_shares_sets_the_blob_dir_and_retention_on_every_query_node(name: str):
+    env = render_shares(host(name, "query"), 90, 600)
+    assert env["ESPRESSO_NODE_BLOB_DIR"] == awsb.PAYLOAD_CONTAINER_DIR
+    assert env["ESPRESSO_NODE_SHARE_RETENTION"] == "600s"
+    assert env["ESPRESSO_NODE_PRUNER_TARGET_RETENTION"] == "90s"
+    off = render_shares(host(name, "query"), 90, None)
+    assert "ESPRESSO_NODE_BLOB_DIR" not in off
+    assert "ESPRESSO_NODE_SHARE_RETENTION" not in off
+
+
+def test_prune_shares_without_prune_leaves_the_pruner_off():
+    env = render_shares(host("node1", "query"), None, 600)
+    assert env["ESPRESSO_NODE_SHARE_RETENTION"] == "600s"
+    assert "ESPRESSO_NODE_DATABASE_PRUNE" not in env
+
+
+def test_prune_shares_node_env_overrides_the_blob_dir():
+    env = render_shares(
+        host("node0", "query"), None, 600, "ESPRESSO_NODE_BLOB_DIR=/elsewhere"
+    )
+    assert env["ESPRESSO_NODE_BLOB_DIR"] == "/elsewhere"
+
+
+def test_prune_shares_does_not_reach_a_validator():
+    env = render_shares(host("node2", "validator"), 90, 600)
+    assert not [key for key in env if "BLOB" in key or "SHARE" in key or "PRUN" in key]
+
+
+def test_prune_shares_flag_is_independent_of_prune():
+    assert node_env_config().prune_shares is None
+    cfg = node_env_config("--prune-shares")
+    assert (cfg.prune_shares, cfg.prune) == (awsb.SHARE_RETENTION_S, None)
+    assert cfg.load.warmup_s == 60
+    cfg = node_env_config("--prune-shares", "10m", "--prune", "2m")
+    assert (cfg.prune_shares, cfg.prune) == (600, 120)
+    assert node_env_config("--prune").prune_shares is None
+
+
+def test_prune_shares_differs_in_the_config_hash():
+    hosts = awsb.plan_hosts(small_cfg())
+
+    def digest(**kw) -> str:
+        return awsb.run_config_hash(small_cfg(prune=60, **kw), hosts, {}, b"genesis")
+
+    assert digest() == digest(prune_shares=None)
+    assert digest() != digest(prune_shares=300)
+    assert digest(prune_shares=300) != digest(prune_shares=600)
+
+
+def test_prune_shares_shows_in_the_summary_and_manifest():
+    cfg = small_cfg(prune=60, prune_shares=300)
+    text = "\n".join(awsb.format_node_summary(cfg))
+    assert "prune shares: VID shares older than 300s" in text
+    plain = small_cfg(prune=60)
+    assert "prune shares" not in "\n".join(awsb.format_node_summary(plain))
+    assert awsb.config_from_manifest(awsb.config_to_json(cfg)).prune_shares == 300
+    saved = awsb.config_to_json(small_cfg())
+    del saved["prune_shares"]
+    assert awsb.config_from_manifest(saved).prune_shares is None
 
 
 @pytest.mark.parametrize(
