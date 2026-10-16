@@ -1,6 +1,6 @@
 //! Sequencer-specific API options and initialization.
 
-use std::{collections::BTreeSet, env, sync::Arc};
+use std::{collections::BTreeSet, env, path::PathBuf, sync::Arc};
 
 use ::light_client::{state::LightClientOptions, storage::LightClientSqliteOptions};
 use anyhow::{Context, bail};
@@ -267,13 +267,14 @@ impl Options {
         Box<dyn ApiSink>,
         Option<RequestResponseStorage>,
     )> {
+        let light_client_db = query_opt.light_client_db();
         let ds = <fs::DataSource as SequencerDataSource>::create(
             mod_opt,
             provider(
                 query_opt.peers,
                 &state,
                 query_opt.light_client,
-                query_opt.light_client_db,
+                light_client_db,
             )
             .await?,
             false,
@@ -339,11 +340,12 @@ impl Options {
             .with_block_provider(db_provider.clone())
             .with_vid_common_provider(db_provider);
         // If that fails, fetch missing data from peers.
+        let light_client_db = query_opt.light_client_db();
         let light_client = Arc::new(LightClientProvider::new(
             query_opt.peers,
             state.clone(),
             query_opt.light_client,
-            query_opt.light_client_db,
+            light_client_db,
         )?);
         provider = provider.with_provider(Arc::clone(&light_client));
 
@@ -483,6 +485,25 @@ pub struct Query {
     /// Persistence for the light client, enabling faster startup.
     #[clap(flatten)]
     pub light_client_db: LightClientSqliteOptions,
+
+    /// Node storage directory. When `--light-client-db-path` is unset, the light client database
+    /// is kept under it, so the stake tables it verified survive a restart.
+    #[clap(long, env = "ESPRESSO_NODE_STORAGE_PATH")]
+    pub(crate) storage_path: Option<PathBuf>,
+}
+
+impl Query {
+    pub fn light_client_db(&self) -> LightClientSqliteOptions {
+        let lc_path = self.light_client_db.lc_path.clone().or_else(|| {
+            self.storage_path
+                .as_ref()
+                .map(|dir| dir.join("light-client").join("lc.db"))
+        });
+        LightClientSqliteOptions {
+            lc_path,
+            ..self.light_client_db.clone()
+        }
+    }
 }
 
 #[cfg(test)]
