@@ -23,7 +23,6 @@ use espresso_types::{
         StakeTableEvent,
     },
 };
-use hotshot::InitializerEpochInfo;
 use hotshot_libp2p_networking::network::behaviours::dht::store::persistent::{
     DhtPersistentStorage, SerializableRecord,
 };
@@ -34,7 +33,8 @@ use hotshot_types::{
         VidCommitment, VidDisperseShare,
     },
     drb::{DrbInput, DrbResult},
-    event::{Event, EventType, HotShotAction, LeafInfo},
+    event::{HotShotAction, LeafInfo},
+    initializer::InitializerEpochInfo,
     message::{Proposal, convert_proposal},
     new_protocol::CoordinatorEvent,
     simple_certificate::{
@@ -330,6 +330,25 @@ impl Inner {
         ))
     }
 
+    fn append_cert2(
+        &mut self,
+        view: ViewNumber,
+        cert2: &Certificate2<SeqTypes>,
+    ) -> anyhow::Result<()> {
+        let dir_path = self.decided_cert2_dir_path();
+        fs::create_dir_all(&dir_path).context("failed to create decided_cert2 dir")?;
+        let file_path = dir_path.join(view.u64().to_string()).with_extension("bin");
+        self.replace(
+            &file_path,
+            |_| Ok(true),
+            |mut file| {
+                let bytes = bincode::serialize(cert2).context("serialize cert2")?;
+                file.write_all(&bytes)?;
+                Ok(())
+            },
+        )
+    }
+
     /// Overwrite a file if a condition is met.
     ///
     /// The file at `path`, if it exists, is opened in read mode and passed to `pred`. If `pred`
@@ -471,7 +490,6 @@ impl Inner {
     async fn generate_decide_events(
         &mut self,
         view: ViewNumber,
-        deciding_qc: Option<Arc<CertificatePair<SeqTypes>>>,
         consumer: &impl EventConsumer,
     ) -> anyhow::Result<Vec<RangeInclusive<ViewNumber>>> {
         // Generate a decide event for each leaf, to be processed by the event consumer. We make a
@@ -537,31 +555,12 @@ impl Inner {
         for (view, (leaf, cert)) in leaves {
             let height = leaf.leaf.block_header().block_number();
 
-            let event = if leaf.leaf.block_header().version() >= versions::NEW_PROTOCOL_VERSION {
-                let cert2 = self.load_cert2(view)?;
-                // One event per view. cert2 is only stored for the
-                // directly finalized view
-                // ancestors get `cert2: None`,
-                // which is what update() expects for indirectly decided leaves.
-                CoordinatorEvent::NewDecide {
-                    leaf_infos: vec![leaf],
-                    cert1: cert.qc().clone(),
-                    cert2,
-                }
-            } else {
-                let deciding_qc = deciding_qc
-                    .as_ref()
-                    .filter(|qc| qc.view_number() == cert.view_number() + 1)
-                    .cloned();
-                CoordinatorEvent::LegacyEvent(Event {
-                    view_number: view,
-                    event: EventType::Decide {
-                        committing_qc: Arc::new(cert),
-                        deciding_qc,
-                        leaf_chain: Arc::new(vec![leaf]),
-                        block_size: None,
-                    },
-                })
+            // cert2 is stored only for the directly finalized view; ancestors get `None`, which
+            // is what update() expects for indirectly decided leaves.
+            let event = CoordinatorEvent::NewDecide {
+                leaf_infos: vec![leaf],
+                cert1: cert.qc().clone(),
+                cert2: self.load_cert2(view)?,
             };
             consumer.handle_event(&event).await?;
 
@@ -791,12 +790,16 @@ impl SequencerPersistence for Persistence {
 
     async fn persist_decided_leaves(
         &self,
-        _view: ViewNumber,
         leaf_chain: impl IntoIterator<Item = (&LeafInfo<SeqTypes>, CertificatePair<SeqTypes>)> + Send,
-        _deciding_qc: Option<Arc<CertificatePair<SeqTypes>>>,
+        cert2: Option<&Certificate2<SeqTypes>>,
         _consumer: &(impl EventConsumer + 'static),
     ) -> anyhow::Result<()> {
         let mut inner = self.inner.write().await;
+        // Written before the leaves and under the same lock as the decide replay, so the replay
+        // can never find the newest leaf on disk without its cert2.
+        if let Some(cert2) = cert2 {
+            inner.append_cert2(cert2.view_number, cert2)?;
+        }
         let path = inner.decided_leaf2_path();
 
         // Ensure the anchor leaf directory exists.
@@ -855,7 +858,6 @@ impl SequencerPersistence for Persistence {
     async fn process_decided_events(
         &self,
         view: ViewNumber,
-        deciding_qc: Option<Arc<CertificatePair<SeqTypes>>>,
         consumer: &(impl EventConsumer + 'static),
     ) -> anyhow::Result<Option<ViewNumber>> {
         // Started before the lock acquisition: this pass holds the exclusive write lock, so the
@@ -867,9 +869,7 @@ impl SequencerPersistence for Persistence {
         let intervals = if self.consensus_only {
             inner.skip_decide_events(view)?
         } else {
-            inner
-                .generate_decide_events(view, deciding_qc, consumer)
-                .await?
+            inner.generate_decide_events(view, consumer).await?
         };
         drop(inner);
 
@@ -1058,19 +1058,7 @@ impl SequencerPersistence for Persistence {
         view: ViewNumber,
         cert2: Certificate2<SeqTypes>,
     ) -> anyhow::Result<()> {
-        let mut inner = self.inner.write().await;
-        let dir_path = inner.decided_cert2_dir_path();
-        fs::create_dir_all(dir_path.clone()).context("failed to create decided_cert2 dir")?;
-        let file_path = dir_path.join(view.u64().to_string()).with_extension("bin");
-        inner.replace(
-            &file_path,
-            |_| Ok(true),
-            |mut file| {
-                let bytes = bincode::serialize(&cert2).context("serialize cert2")?;
-                file.write_all(&bytes)?;
-                Ok(())
-            },
-        )
+        self.inner.write().await.append_cert2(view, &cert2)
     }
 
     async fn load_cert2(&self, view: ViewNumber) -> anyhow::Result<Option<Certificate2<SeqTypes>>> {

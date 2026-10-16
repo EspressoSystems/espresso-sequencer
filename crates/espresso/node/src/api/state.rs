@@ -572,13 +572,24 @@ where
         );
 
         let blocks: Vec<_> = blocks_stream
-            .then(|block| async move { block.resolve().await })
-            .collect()
-            .await;
+            .zip(futures::stream::iter(from..until))
+            .then(|(block, i)| async move {
+                block
+                    .with_timeout(FETCH_TIMEOUT)
+                    .await
+                    .ok_or_else(|| not_found(format!("block {i} not available")))
+            })
+            .try_collect()
+            .await?;
         let vids: Vec<_> = vids_stream
-            .then(|vid| async move { vid.resolve().await })
-            .collect()
-            .await;
+            .zip(futures::stream::iter(from..until))
+            .then(|(vid, i)| async move {
+                vid.with_timeout(FETCH_TIMEOUT)
+                    .await
+                    .ok_or_else(|| not_found(format!("VID common for block {i} not available")))
+            })
+            .try_collect()
+            .await?;
 
         if blocks.len() != vids.len() {
             return Err(anyhow::anyhow!(
@@ -1395,6 +1406,7 @@ fn payload_id_to_hs(id: v1::availability::PayloadId) -> anyhow::Result<HsBlockId
 fn classify_query_error(err: hotshot_query_service::QueryError) -> anyhow::Error {
     match err {
         QueryError::NotFound | QueryError::Missing => not_found(err.to_string()),
+        QueryError::Pruned { .. } => AvailabilityError::Pruned(err.to_string()).into(),
         QueryError::Error { .. } => anyhow::anyhow!(err.to_string()),
     }
 }
@@ -3342,6 +3354,7 @@ fn lc_large_object_range_limit() -> usize {
 pub(crate) fn lc_error(err: hotshot_query_service::Error) -> anyhow::Error {
     match err.status() {
         StatusCode::NOT_FOUND => not_found(err.to_string()),
+        StatusCode::GONE => AvailabilityError::Pruned(err.to_string()).into(),
         StatusCode::BAD_REQUEST => bad_request(err.to_string()),
         _ => anyhow::anyhow!("{err}"),
     }
@@ -4732,8 +4745,9 @@ mod tests {
         );
     }
 
-    // A test network only disperses with ADVZ, so the AvidM arms run only here, against the
-    // namespaced wrappers the node stores rather than the inner per-namespace shares.
+    // A test network only disperses with AvidmGf2, so the ADVZ and AvidM arms, which mainnet
+    // still serves for blocks from before 0.6, run only here, against the namespaced wrappers
+    // the node stores rather than the inner per-namespace shares.
     #[test]
     fn every_vid_share_arm_maps_to_its_own_shape() {
         let payload = b"two namespaces worth of payload bytes, dispersed";
@@ -4750,7 +4764,20 @@ mod tests {
             panic!("the V0 arm");
         };
         assert!(advz.aggregate_proofs.starts_with("FIELD~"));
-        assert!(!advz.evals_proof.unwrap().proof.is_empty());
+        let v1 = &serde_json::to_value(&share).unwrap()["V0"];
+        assert_eq!(
+            advz.aggregate_proofs,
+            v1["aggregate_proofs"].as_str().unwrap()
+        );
+        assert_eq!(advz.evals, v1["evals"].as_str().unwrap());
+        let proof = advz.evals_proof.unwrap();
+        assert_eq!(proof.pos, v1["evals_proof"]["pos"].as_str().unwrap());
+        let v1_nodes = v1["evals_proof"]["proof"].as_array().unwrap();
+        assert!(v1_nodes.len() > 1, "{v1}");
+        assert_eq!(proof.proof.len(), v1_nodes.len());
+        for (v1_node, node) in v1_nodes.iter().zip(&proof.proof) {
+            assert_advz_node_matches_v1(v1_node, node);
+        }
 
         let param = init_avidm_param(3).unwrap();
         let (_, mut shares) =
@@ -4783,6 +4810,35 @@ mod tests {
         assert_eq!(gf2.namespaces.len(), 2);
         assert!(!gf2.namespaces[0].payload.is_empty());
         assert!(gf2.namespaces[0].mt_proofs[0].starts_with("MERKLE_PROOF~"));
+    }
+
+    fn assert_advz_node_matches_v1(v1: &serde_json::Value, v2: &proto::AdvzMerkleNode) {
+        use proto::advz_merkle_node::Node;
+        match (v2.node.as_ref().unwrap(), v1) {
+            (Node::Leaf(leaf), v1) if v1.get("Leaf").is_some() => {
+                let v1 = &v1["Leaf"];
+                assert_eq!(leaf.elem, v1["elem"].as_str().unwrap());
+                assert_eq!(leaf.pos, v1["pos"].as_str().unwrap());
+                assert_eq!(leaf.value, v1["value"].as_str().unwrap());
+            },
+            (Node::Branch(branch), v1) if v1.get("Branch").is_some() => {
+                let v1 = &v1["Branch"];
+                assert_eq!(branch.value, v1["value"].as_str().unwrap());
+                let v1_children = v1["children"].as_array().unwrap();
+                assert_eq!(branch.children.len(), v1_children.len());
+                for (v1_child, v2_child) in v1_children.iter().zip(&branch.children) {
+                    assert_advz_node_matches_v1(v1_child, v2_child);
+                }
+            },
+            (Node::ForgottenSubtree(subtree), v1) if v1.get("ForgettenSubtree").is_some() => {
+                assert_eq!(
+                    subtree.value,
+                    v1["ForgettenSubtree"]["value"].as_str().unwrap()
+                );
+            },
+            (Node::Empty(_), v1) if v1.as_str() == Some("Empty") => {},
+            (v2, v1) => panic!("{v2:?} against {v1}"),
+        }
     }
 
     // No test network registers a validator, so this mapping is only exercised here.
@@ -5623,6 +5679,15 @@ mod tests {
     }
 
     #[test]
+    fn lc_error_preserves_gone() {
+        let err = lc_error(custom(StatusCode::GONE));
+        assert!(matches!(
+            err.downcast_ref::<AvailabilityError>(),
+            Some(AvailabilityError::Pruned(_))
+        ));
+    }
+
+    #[test]
     fn lc_error_other_statuses_stay_internal() {
         let err = lc_error(custom(StatusCode::INTERNAL_SERVER_ERROR));
         assert!(err.downcast_ref::<AvailabilityError>().is_none());
@@ -5669,7 +5734,7 @@ mod tests {
             .map(|byte| espresso_types::Transaction::new(namespace, vec![byte; 8]))
             .collect();
         let (payload, _) = espresso_types::Payload::from_transactions(
-            transactions,
+            &transactions,
             &Default::default(),
             &Default::default(),
         )

@@ -8,7 +8,7 @@ use std::{
 use alloy::primitives::FixedBytes;
 use async_lock::RwLock;
 use espresso_types::Header;
-use hotshot::types::{Event, EventType, SchnorrPubKey};
+use hotshot::types::SchnorrPubKey;
 use hotshot_contract_adapter::light_client::derive_signed_state_digest;
 use hotshot_types::{
     data::{EpochNumber, ViewNumber},
@@ -269,10 +269,6 @@ pub(crate) struct DecidedLeaf {
 impl DecidedLeaf {
     pub(crate) fn from_event(event: &CoordinatorEvent<SeqTypes>) -> Option<DecidedLeaf> {
         let leaf = match event {
-            CoordinatorEvent::LegacyEvent(Event {
-                event: EventType::Decide { leaf_chain, .. },
-                ..
-            }) => &leaf_chain.first()?.leaf,
             CoordinatorEvent::NewDecide { leaf_infos, .. } => &leaf_infos.first()?.leaf,
             _ => return None,
         };

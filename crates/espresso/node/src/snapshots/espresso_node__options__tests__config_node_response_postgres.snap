@@ -248,7 +248,8 @@ modules:
     max_connections: ~
     tonic_port: ~
   query:
-    peers: []
+    peers:
+      - "http://peer.example:24000/"
     light_client:
       num_stake_tables_in_memory: 100
     light_client_db:
