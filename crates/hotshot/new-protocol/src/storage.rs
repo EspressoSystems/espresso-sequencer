@@ -1,4 +1,9 @@
-use std::{collections::BTreeMap, marker::PhantomData, sync::Arc, time::Duration};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    marker::PhantomData,
+    sync::Arc,
+    time::Duration,
+};
 
 use async_trait::async_trait;
 use committable::Commitment;
@@ -51,6 +56,18 @@ pub trait NewProtocolStorage<T: NodeType>: StorageTrait<T> {
     ) -> anyhow::Result<()> {
         StorageTrait::append_vid(self, proposal).await
     }
+
+    /// This node's stored VID share for `view`, for serving to peers.
+    async fn load_vid_share(
+        &self,
+        view: ViewNumber,
+    ) -> anyhow::Result<Option<SignedProposal<T, VidDisperseShare<T>>>>;
+
+    /// Views whose VID share is stored.
+    async fn held_vid_views(&self) -> anyhow::Result<BTreeSet<ViewNumber>>;
+
+    /// Decided leaves with header time at least `min_header_ts`, newest first.
+    async fn decided_leaves(&self, min_header_ts: u64) -> anyhow::Result<Vec<Leaf2<T>>>;
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -372,5 +389,20 @@ impl<T: NodeType> NewProtocolStorage<T> for TestStorage<T> {
 
     async fn load_high_qc2(&self) -> anyhow::Result<Option<Certificate1<T>>> {
         Ok(self.high_qc_cloned().await)
+    }
+
+    async fn load_vid_share(
+        &self,
+        view: ViewNumber,
+    ) -> anyhow::Result<Option<SignedProposal<T, VidDisperseShare<T>>>> {
+        Ok(self.vid_share(view).await)
+    }
+
+    async fn held_vid_views(&self) -> anyhow::Result<BTreeSet<ViewNumber>> {
+        Ok(self.vids_cloned().await.into_keys().collect())
+    }
+
+    async fn decided_leaves(&self, min_header_ts: u64) -> anyhow::Result<Vec<Leaf2<T>>> {
+        Ok(self.decided_leaves_cloned(min_header_ts).await)
     }
 }

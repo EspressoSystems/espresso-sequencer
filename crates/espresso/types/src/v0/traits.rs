@@ -1314,6 +1314,21 @@ impl<P: SequencerPersistence> NewProtocolStorage<SeqTypes> for Arc<P> {
     ) -> anyhow::Result<()> {
         (**self).append_vid_stamped(proposal, stamp).await
     }
+
+    async fn load_vid_share(
+        &self,
+        view: ViewNumber,
+    ) -> anyhow::Result<Option<Proposal<SeqTypes, VidDisperseShare<SeqTypes>>>> {
+        (**self).load_vid_share(view).await
+    }
+
+    async fn held_vid_views(&self) -> anyhow::Result<BTreeSet<ViewNumber>> {
+        (**self).held_vid_views().await
+    }
+
+    async fn decided_leaves(&self, min_header_ts: u64) -> anyhow::Result<Vec<Leaf2>> {
+        (**self).decided_leaves(min_header_ts).await
+    }
 }
 
 /// Data that can be deserialized from a subslice of namespace payload bytes.
