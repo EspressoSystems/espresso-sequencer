@@ -17,15 +17,15 @@
 <a href=#17 id=17 data-nosnippet>17</a>    v0::traits::SequencerPersistence,
 <a href=#18 id=18 data-nosnippet>18</a>};
 <a href=#19 id=19 data-nosnippet>19</a><span class="kw">use </span>futures::future::BoxFuture;
-<a href=#20 id=20 data-nosnippet>20</a><span class="kw">use </span>hotshot::traits::NodeImplementation;
-<a href=#21 id=21 data-nosnippet>21</a><span class="kw">use </span>hotshot_new_protocol::storage::NewProtocolStorage;
-<a href=#22 id=22 data-nosnippet>22</a><span class="kw">use </span>hotshot_query_service::availability::VidCommonQueryData;
-<a href=#23 id=23 data-nosnippet>23</a><span class="kw">use </span>hotshot_types::{
-<a href=#24 id=24 data-nosnippet>24</a>    ValidatorConfig,
-<a href=#25 id=25 data-nosnippet>25</a>    data::{EpochNumber, VidShare, ViewNumber},
-<a href=#26 id=26 data-nosnippet>26</a>    epoch_membership::EpochMembershipCoordinator,
-<a href=#27 id=27 data-nosnippet>27</a>    message::UpgradeLock,
-<a href=#28 id=28 data-nosnippet>28</a>    network::NetworkConfig,
+<a href=#20 id=20 data-nosnippet>20</a><span class="kw">use </span>hotshot_new_protocol::storage::NewProtocolStorage;
+<a href=#21 id=21 data-nosnippet>21</a><span class="kw">use </span>hotshot_query_service::availability::VidCommonQueryData;
+<a href=#22 id=22 data-nosnippet>22</a><span class="kw">use </span>hotshot_types::{
+<a href=#23 id=23 data-nosnippet>23</a>    ValidatorConfig,
+<a href=#24 id=24 data-nosnippet>24</a>    data::{EpochNumber, VidShare, ViewNumber},
+<a href=#25 id=25 data-nosnippet>25</a>    epoch_membership::EpochMembershipCoordinator,
+<a href=#26 id=26 data-nosnippet>26</a>    message::UpgradeLock,
+<a href=#27 id=27 data-nosnippet>27</a>    network::NetworkConfig,
+<a href=#28 id=28 data-nosnippet>28</a>    traits::node_implementation::NodeImplementation,
 <a href=#29 id=29 data-nosnippet>29</a>    utils::StateAndDelta,
 <a href=#30 id=30 data-nosnippet>30</a>};
 <a href=#31 id=31 data-nosnippet>31</a>

@@ -5441,126 +5441,125 @@
 <a href=#5441 id=5441 data-nosnippet>5441</a><span class="attr">#[cfg(all(test, feature = <span class="string">"rlp"</span>))]
 <a href=#5442 id=5442 data-nosnippet>5442</a></span><span class="kw">mod </span>rlp_tests {
 <a href=#5443 id=5443 data-nosnippet>5443</a>    <span class="kw">use </span>alloy_rlp::{Decodable, Encodable};
-<a href=#5444 id=5444 data-nosnippet>5444</a>    <span class="kw">use </span>hotshot::types::BLSPubKey;
-<a href=#5445 id=5445 data-nosnippet>5445</a>    <span class="kw">use </span>hotshot_types::traits::signature_key::StateSignatureKey;
-<a href=#5446 id=5446 data-nosnippet>5446</a>
-<a href=#5447 id=5447 data-nosnippet>5447</a>    <span class="kw">use super</span>::<span class="kw-2">*</span>;
-<a href=#5448 id=5448 data-nosnippet>5448</a>
-<a href=#5449 id=5449 data-nosnippet>5449</a>    <span class="attr">#[test]
-<a href=#5450 id=5450 data-nosnippet>5450</a>    </span><span class="kw">fn </span>test_registered_validator_round_canonical_order() {
-<a href=#5451 id=5451 data-nosnippet>5451</a>        <span class="kw">let </span>seed = [<span class="number">0</span>; <span class="number">32</span>];
-<a href=#5452 id=5452 data-nosnippet>5452</a>        <span class="kw">let </span>validator1 = RegisteredValidator {
-<a href=#5453 id=5453 data-nosnippet>5453</a>            account: Address::random(),
-<a href=#5454 id=5454 data-nosnippet>5454</a>            stake_table_key: <span class="prelude-val">Some</span>(BLSPubKey::generated_from_seed_indexed(seed, <span class="number">0</span>).<span class="number">0</span>),
-<a href=#5455 id=5455 data-nosnippet>5455</a>            state_ver_key: <span class="prelude-val">Some</span>(SchnorrPubKey::generated_from_seed_indexed(seed, <span class="number">0</span>).<span class="number">0</span>),
-<a href=#5456 id=5456 data-nosnippet>5456</a>            stake: U256::MAX,
-<a href=#5457 id=5457 data-nosnippet>5457</a>            commission: u16::MAX,
-<a href=#5458 id=5458 data-nosnippet>5458</a>            delegators: [
-<a href=#5459 id=5459 data-nosnippet>5459</a>                (Address::random(), U256::ZERO),
-<a href=#5460 id=5460 data-nosnippet>5460</a>                (Address::random(), U256::MAX),
-<a href=#5461 id=5461 data-nosnippet>5461</a>            ]
-<a href=#5462 id=5462 data-nosnippet>5462</a>            .into_iter()
-<a href=#5463 id=5463 data-nosnippet>5463</a>            .collect(),
-<a href=#5464 id=5464 data-nosnippet>5464</a>            authenticated: <span class="bool-val">true</span>,
-<a href=#5465 id=5465 data-nosnippet>5465</a>            x25519_key: <span class="prelude-val">Some</span>(x25519::Keypair::generate().unwrap().public_key()),
-<a href=#5466 id=5466 data-nosnippet>5466</a>            p2p_addr: <span class="prelude-val">Some</span>(NetAddr::named(<span class="string">"localhost"</span>, <span class="number">8080</span>)),
-<a href=#5467 id=5467 data-nosnippet>5467</a>        };
-<a href=#5468 id=5468 data-nosnippet>5468</a>        <span class="kw">let </span>validator2 = RegisteredValidator {
-<a href=#5469 id=5469 data-nosnippet>5469</a>            account: Address::random(),
-<a href=#5470 id=5470 data-nosnippet>5470</a>            ..validator1.clone()
-<a href=#5471 id=5471 data-nosnippet>5471</a>        };
-<a href=#5472 id=5472 data-nosnippet>5472</a>
-<a href=#5473 id=5473 data-nosnippet>5473</a>        <span class="comment">// Two hashsets with different capacities are very likely to end up with a different
-<a href=#5474 id=5474 data-nosnippet>5474</a>        // iteration order.
-<a href=#5475 id=5475 data-nosnippet>5475</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>validator_exits1 = HashSet::with_capacity(<span class="number">100</span>);
-<a href=#5476 id=5476 data-nosnippet>5476</a>        <span class="kw">let </span><span class="kw-2">mut </span>validator_exits2 = HashSet::with_capacity(<span class="number">10_000</span>);
-<a href=#5477 id=5477 data-nosnippet>5477</a>        <span class="kw">let </span><span class="kw-2">mut </span>used_bls_keys1 = HashSet::with_capacity(<span class="number">100</span>);
-<a href=#5478 id=5478 data-nosnippet>5478</a>        <span class="kw">let </span><span class="kw-2">mut </span>used_bls_keys2 = HashSet::with_capacity(<span class="number">10_000</span>);
-<a href=#5479 id=5479 data-nosnippet>5479</a>        <span class="kw">let </span><span class="kw-2">mut </span>used_schnorr_keys1 = HashSet::with_capacity(<span class="number">100</span>);
-<a href=#5480 id=5480 data-nosnippet>5480</a>        <span class="kw">let </span><span class="kw-2">mut </span>used_schnorr_keys2 = HashSet::with_capacity(<span class="number">10_000</span>);
-<a href=#5481 id=5481 data-nosnippet>5481</a>        <span class="kw">let </span><span class="kw-2">mut </span>used_x25519_keys1 = HashSet::with_capacity(<span class="number">100</span>);
-<a href=#5482 id=5482 data-nosnippet>5482</a>        <span class="kw">let </span><span class="kw-2">mut </span>used_x25519_keys2 = HashSet::with_capacity(<span class="number">10_000</span>);
-<a href=#5483 id=5483 data-nosnippet>5483</a>
-<a href=#5484 id=5484 data-nosnippet>5484</a>        <span class="kw">for </span>i <span class="kw">in </span><span class="number">0</span>..<span class="number">100 </span>{
-<a href=#5485 id=5485 data-nosnippet>5485</a>            <span class="kw">let </span>exit = Address::random();
-<a href=#5486 id=5486 data-nosnippet>5486</a>            <span class="kw">let </span>bls_key = BLSPubKey::generated_from_seed_indexed([<span class="number">0</span>; <span class="number">32</span>], i).<span class="number">0</span>;
-<a href=#5487 id=5487 data-nosnippet>5487</a>            <span class="kw">let </span>schnorr_key = SchnorrPubKey::generated_from_seed_indexed([<span class="number">0</span>; <span class="number">32</span>], i).<span class="number">0</span>;
-<a href=#5488 id=5488 data-nosnippet>5488</a>            <span class="kw">let </span>x25519_key = x25519::Keypair::generate().unwrap().public_key();
-<a href=#5489 id=5489 data-nosnippet>5489</a>
-<a href=#5490 id=5490 data-nosnippet>5490</a>            validator_exits1.insert(exit);
-<a href=#5491 id=5491 data-nosnippet>5491</a>            validator_exits2.insert(exit);
-<a href=#5492 id=5492 data-nosnippet>5492</a>            used_bls_keys1.insert(bls_key);
-<a href=#5493 id=5493 data-nosnippet>5493</a>            used_bls_keys2.insert(bls_key);
-<a href=#5494 id=5494 data-nosnippet>5494</a>            used_schnorr_keys1.insert(schnorr_key.clone());
-<a href=#5495 id=5495 data-nosnippet>5495</a>            used_schnorr_keys2.insert(schnorr_key);
-<a href=#5496 id=5496 data-nosnippet>5496</a>            used_x25519_keys1.insert(x25519_key);
-<a href=#5497 id=5497 data-nosnippet>5497</a>            used_x25519_keys2.insert(x25519_key);
-<a href=#5498 id=5498 data-nosnippet>5498</a>        }
-<a href=#5499 id=5499 data-nosnippet>5499</a>        <span class="macro">assert_eq!</span>(validator_exits1, validator_exits2);
-<a href=#5500 id=5500 data-nosnippet>5500</a>        <span class="macro">assert_eq!</span>(used_bls_keys1, used_bls_keys2);
-<a href=#5501 id=5501 data-nosnippet>5501</a>        <span class="macro">assert_eq!</span>(used_schnorr_keys1, used_schnorr_keys2);
-<a href=#5502 id=5502 data-nosnippet>5502</a>        <span class="macro">assert_eq!</span>(used_x25519_keys1, used_x25519_keys2);
-<a href=#5503 id=5503 data-nosnippet>5503</a>        <span class="macro">assert_ne!</span>(
-<a href=#5504 id=5504 data-nosnippet>5504</a>            validator_exits1.iter().collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;(),
-<a href=#5505 id=5505 data-nosnippet>5505</a>            validator_exits2.iter().collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;()
-<a href=#5506 id=5506 data-nosnippet>5506</a>        );
-<a href=#5507 id=5507 data-nosnippet>5507</a>        <span class="macro">assert_ne!</span>(
-<a href=#5508 id=5508 data-nosnippet>5508</a>            used_bls_keys1.iter().collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;(),
-<a href=#5509 id=5509 data-nosnippet>5509</a>            used_bls_keys2.iter().collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;()
-<a href=#5510 id=5510 data-nosnippet>5510</a>        );
-<a href=#5511 id=5511 data-nosnippet>5511</a>        <span class="macro">assert_ne!</span>(
-<a href=#5512 id=5512 data-nosnippet>5512</a>            used_schnorr_keys1.iter().collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;(),
-<a href=#5513 id=5513 data-nosnippet>5513</a>            used_schnorr_keys2.iter().collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;()
-<a href=#5514 id=5514 data-nosnippet>5514</a>        );
-<a href=#5515 id=5515 data-nosnippet>5515</a>        <span class="macro">assert_ne!</span>(
-<a href=#5516 id=5516 data-nosnippet>5516</a>            used_x25519_keys1.iter().collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;(),
-<a href=#5517 id=5517 data-nosnippet>5517</a>            used_x25519_keys2.iter().collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;()
-<a href=#5518 id=5518 data-nosnippet>5518</a>        );
-<a href=#5519 id=5519 data-nosnippet>5519</a>
-<a href=#5520 id=5520 data-nosnippet>5520</a>        <span class="kw">let </span>state1 = StakeTableState {
-<a href=#5521 id=5521 data-nosnippet>5521</a>            validators: [
-<a href=#5522 id=5522 data-nosnippet>5522</a>                (validator1.account, validator1.clone()),
-<a href=#5523 id=5523 data-nosnippet>5523</a>                (validator2.account, validator2.clone()),
-<a href=#5524 id=5524 data-nosnippet>5524</a>            ]
-<a href=#5525 id=5525 data-nosnippet>5525</a>            .into_iter()
-<a href=#5526 id=5526 data-nosnippet>5526</a>            .collect(),
-<a href=#5527 id=5527 data-nosnippet>5527</a>            validator_exits: validator_exits1,
-<a href=#5528 id=5528 data-nosnippet>5528</a>            used_bls_keys: used_bls_keys1,
-<a href=#5529 id=5529 data-nosnippet>5529</a>            used_schnorr_keys: used_schnorr_keys1,
-<a href=#5530 id=5530 data-nosnippet>5530</a>            used_x25519_keys: used_x25519_keys1,
-<a href=#5531 id=5531 data-nosnippet>5531</a>        };
-<a href=#5532 id=5532 data-nosnippet>5532</a>        <span class="kw">let </span>state2 = StakeTableState {
-<a href=#5533 id=5533 data-nosnippet>5533</a>            validators: [
-<a href=#5534 id=5534 data-nosnippet>5534</a>                (validator2.account, validator2.clone()),
-<a href=#5535 id=5535 data-nosnippet>5535</a>                (validator1.account, validator1.clone()),
-<a href=#5536 id=5536 data-nosnippet>5536</a>            ]
-<a href=#5537 id=5537 data-nosnippet>5537</a>            .into_iter()
-<a href=#5538 id=5538 data-nosnippet>5538</a>            .collect(),
-<a href=#5539 id=5539 data-nosnippet>5539</a>            validator_exits: validator_exits2,
-<a href=#5540 id=5540 data-nosnippet>5540</a>            used_bls_keys: used_bls_keys2,
-<a href=#5541 id=5541 data-nosnippet>5541</a>            used_schnorr_keys: used_schnorr_keys2,
-<a href=#5542 id=5542 data-nosnippet>5542</a>            used_x25519_keys: used_x25519_keys2,
-<a href=#5543 id=5543 data-nosnippet>5543</a>        };
-<a href=#5544 id=5544 data-nosnippet>5544</a>        <span class="macro">assert_eq!</span>(state1, state2);
-<a href=#5545 id=5545 data-nosnippet>5545</a>        <span class="macro">assert_eq!</span>(state1.commit(), state2.commit());
-<a href=#5546 id=5546 data-nosnippet>5546</a>
-<a href=#5547 id=5547 data-nosnippet>5547</a>        <span class="kw">let </span><span class="kw-2">mut </span>bytes1 = <span class="macro">vec!</span>[];
-<a href=#5548 id=5548 data-nosnippet>5548</a>        state1.encode(<span class="kw-2">&amp;mut </span>bytes1);
-<a href=#5549 id=5549 data-nosnippet>5549</a>        <span class="macro">assert_eq!</span>(bytes1.len(), state1.length());
-<a href=#5550 id=5550 data-nosnippet>5550</a>
-<a href=#5551 id=5551 data-nosnippet>5551</a>        <span class="kw">let </span><span class="kw-2">mut </span>bytes2 = <span class="macro">vec!</span>[];
-<a href=#5552 id=5552 data-nosnippet>5552</a>        state2.encode(<span class="kw-2">&amp;mut </span>bytes2);
-<a href=#5553 id=5553 data-nosnippet>5553</a>        <span class="macro">assert_eq!</span>(bytes2.len(), state2.length());
-<a href=#5554 id=5554 data-nosnippet>5554</a>
-<a href=#5555 id=5555 data-nosnippet>5555</a>        <span class="macro">assert_eq!</span>(bytes1, bytes2);
-<a href=#5556 id=5556 data-nosnippet>5556</a>        <span class="macro">assert_eq!</span>(
-<a href=#5557 id=5557 data-nosnippet>5557</a>            state1,
-<a href=#5558 id=5558 data-nosnippet>5558</a>            StakeTableState::decode(<span class="kw-2">&amp;mut </span>bytes2.as_slice()).unwrap()
-<a href=#5559 id=5559 data-nosnippet>5559</a>        );
-<a href=#5560 id=5560 data-nosnippet>5560</a>        <span class="macro">assert_eq!</span>(
-<a href=#5561 id=5561 data-nosnippet>5561</a>            state2,
-<a href=#5562 id=5562 data-nosnippet>5562</a>            StakeTableState::decode(<span class="kw-2">&amp;mut </span>bytes1.as_slice()).unwrap()
-<a href=#5563 id=5563 data-nosnippet>5563</a>        );
-<a href=#5564 id=5564 data-nosnippet>5564</a>    }
-<a href=#5565 id=5565 data-nosnippet>5565</a>}
+<a href=#5444 id=5444 data-nosnippet>5444</a>    <span class="kw">use </span>hotshot_types::{signature_key::BLSPubKey, traits::signature_key::StateSignatureKey};
+<a href=#5445 id=5445 data-nosnippet>5445</a>
+<a href=#5446 id=5446 data-nosnippet>5446</a>    <span class="kw">use super</span>::<span class="kw-2">*</span>;
+<a href=#5447 id=5447 data-nosnippet>5447</a>
+<a href=#5448 id=5448 data-nosnippet>5448</a>    <span class="attr">#[test]
+<a href=#5449 id=5449 data-nosnippet>5449</a>    </span><span class="kw">fn </span>test_registered_validator_round_canonical_order() {
+<a href=#5450 id=5450 data-nosnippet>5450</a>        <span class="kw">let </span>seed = [<span class="number">0</span>; <span class="number">32</span>];
+<a href=#5451 id=5451 data-nosnippet>5451</a>        <span class="kw">let </span>validator1 = RegisteredValidator {
+<a href=#5452 id=5452 data-nosnippet>5452</a>            account: Address::random(),
+<a href=#5453 id=5453 data-nosnippet>5453</a>            stake_table_key: <span class="prelude-val">Some</span>(BLSPubKey::generated_from_seed_indexed(seed, <span class="number">0</span>).<span class="number">0</span>),
+<a href=#5454 id=5454 data-nosnippet>5454</a>            state_ver_key: <span class="prelude-val">Some</span>(SchnorrPubKey::generated_from_seed_indexed(seed, <span class="number">0</span>).<span class="number">0</span>),
+<a href=#5455 id=5455 data-nosnippet>5455</a>            stake: U256::MAX,
+<a href=#5456 id=5456 data-nosnippet>5456</a>            commission: u16::MAX,
+<a href=#5457 id=5457 data-nosnippet>5457</a>            delegators: [
+<a href=#5458 id=5458 data-nosnippet>5458</a>                (Address::random(), U256::ZERO),
+<a href=#5459 id=5459 data-nosnippet>5459</a>                (Address::random(), U256::MAX),
+<a href=#5460 id=5460 data-nosnippet>5460</a>            ]
+<a href=#5461 id=5461 data-nosnippet>5461</a>            .into_iter()
+<a href=#5462 id=5462 data-nosnippet>5462</a>            .collect(),
+<a href=#5463 id=5463 data-nosnippet>5463</a>            authenticated: <span class="bool-val">true</span>,
+<a href=#5464 id=5464 data-nosnippet>5464</a>            x25519_key: <span class="prelude-val">Some</span>(x25519::Keypair::generate().unwrap().public_key()),
+<a href=#5465 id=5465 data-nosnippet>5465</a>            p2p_addr: <span class="prelude-val">Some</span>(NetAddr::named(<span class="string">"localhost"</span>, <span class="number">8080</span>)),
+<a href=#5466 id=5466 data-nosnippet>5466</a>        };
+<a href=#5467 id=5467 data-nosnippet>5467</a>        <span class="kw">let </span>validator2 = RegisteredValidator {
+<a href=#5468 id=5468 data-nosnippet>5468</a>            account: Address::random(),
+<a href=#5469 id=5469 data-nosnippet>5469</a>            ..validator1.clone()
+<a href=#5470 id=5470 data-nosnippet>5470</a>        };
+<a href=#5471 id=5471 data-nosnippet>5471</a>
+<a href=#5472 id=5472 data-nosnippet>5472</a>        <span class="comment">// Two hashsets with different capacities are very likely to end up with a different
+<a href=#5473 id=5473 data-nosnippet>5473</a>        // iteration order.
+<a href=#5474 id=5474 data-nosnippet>5474</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>validator_exits1 = HashSet::with_capacity(<span class="number">100</span>);
+<a href=#5475 id=5475 data-nosnippet>5475</a>        <span class="kw">let </span><span class="kw-2">mut </span>validator_exits2 = HashSet::with_capacity(<span class="number">10_000</span>);
+<a href=#5476 id=5476 data-nosnippet>5476</a>        <span class="kw">let </span><span class="kw-2">mut </span>used_bls_keys1 = HashSet::with_capacity(<span class="number">100</span>);
+<a href=#5477 id=5477 data-nosnippet>5477</a>        <span class="kw">let </span><span class="kw-2">mut </span>used_bls_keys2 = HashSet::with_capacity(<span class="number">10_000</span>);
+<a href=#5478 id=5478 data-nosnippet>5478</a>        <span class="kw">let </span><span class="kw-2">mut </span>used_schnorr_keys1 = HashSet::with_capacity(<span class="number">100</span>);
+<a href=#5479 id=5479 data-nosnippet>5479</a>        <span class="kw">let </span><span class="kw-2">mut </span>used_schnorr_keys2 = HashSet::with_capacity(<span class="number">10_000</span>);
+<a href=#5480 id=5480 data-nosnippet>5480</a>        <span class="kw">let </span><span class="kw-2">mut </span>used_x25519_keys1 = HashSet::with_capacity(<span class="number">100</span>);
+<a href=#5481 id=5481 data-nosnippet>5481</a>        <span class="kw">let </span><span class="kw-2">mut </span>used_x25519_keys2 = HashSet::with_capacity(<span class="number">10_000</span>);
+<a href=#5482 id=5482 data-nosnippet>5482</a>
+<a href=#5483 id=5483 data-nosnippet>5483</a>        <span class="kw">for </span>i <span class="kw">in </span><span class="number">0</span>..<span class="number">100 </span>{
+<a href=#5484 id=5484 data-nosnippet>5484</a>            <span class="kw">let </span>exit = Address::random();
+<a href=#5485 id=5485 data-nosnippet>5485</a>            <span class="kw">let </span>bls_key = BLSPubKey::generated_from_seed_indexed([<span class="number">0</span>; <span class="number">32</span>], i).<span class="number">0</span>;
+<a href=#5486 id=5486 data-nosnippet>5486</a>            <span class="kw">let </span>schnorr_key = SchnorrPubKey::generated_from_seed_indexed([<span class="number">0</span>; <span class="number">32</span>], i).<span class="number">0</span>;
+<a href=#5487 id=5487 data-nosnippet>5487</a>            <span class="kw">let </span>x25519_key = x25519::Keypair::generate().unwrap().public_key();
+<a href=#5488 id=5488 data-nosnippet>5488</a>
+<a href=#5489 id=5489 data-nosnippet>5489</a>            validator_exits1.insert(exit);
+<a href=#5490 id=5490 data-nosnippet>5490</a>            validator_exits2.insert(exit);
+<a href=#5491 id=5491 data-nosnippet>5491</a>            used_bls_keys1.insert(bls_key);
+<a href=#5492 id=5492 data-nosnippet>5492</a>            used_bls_keys2.insert(bls_key);
+<a href=#5493 id=5493 data-nosnippet>5493</a>            used_schnorr_keys1.insert(schnorr_key.clone());
+<a href=#5494 id=5494 data-nosnippet>5494</a>            used_schnorr_keys2.insert(schnorr_key);
+<a href=#5495 id=5495 data-nosnippet>5495</a>            used_x25519_keys1.insert(x25519_key);
+<a href=#5496 id=5496 data-nosnippet>5496</a>            used_x25519_keys2.insert(x25519_key);
+<a href=#5497 id=5497 data-nosnippet>5497</a>        }
+<a href=#5498 id=5498 data-nosnippet>5498</a>        <span class="macro">assert_eq!</span>(validator_exits1, validator_exits2);
+<a href=#5499 id=5499 data-nosnippet>5499</a>        <span class="macro">assert_eq!</span>(used_bls_keys1, used_bls_keys2);
+<a href=#5500 id=5500 data-nosnippet>5500</a>        <span class="macro">assert_eq!</span>(used_schnorr_keys1, used_schnorr_keys2);
+<a href=#5501 id=5501 data-nosnippet>5501</a>        <span class="macro">assert_eq!</span>(used_x25519_keys1, used_x25519_keys2);
+<a href=#5502 id=5502 data-nosnippet>5502</a>        <span class="macro">assert_ne!</span>(
+<a href=#5503 id=5503 data-nosnippet>5503</a>            validator_exits1.iter().collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;(),
+<a href=#5504 id=5504 data-nosnippet>5504</a>            validator_exits2.iter().collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;()
+<a href=#5505 id=5505 data-nosnippet>5505</a>        );
+<a href=#5506 id=5506 data-nosnippet>5506</a>        <span class="macro">assert_ne!</span>(
+<a href=#5507 id=5507 data-nosnippet>5507</a>            used_bls_keys1.iter().collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;(),
+<a href=#5508 id=5508 data-nosnippet>5508</a>            used_bls_keys2.iter().collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;()
+<a href=#5509 id=5509 data-nosnippet>5509</a>        );
+<a href=#5510 id=5510 data-nosnippet>5510</a>        <span class="macro">assert_ne!</span>(
+<a href=#5511 id=5511 data-nosnippet>5511</a>            used_schnorr_keys1.iter().collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;(),
+<a href=#5512 id=5512 data-nosnippet>5512</a>            used_schnorr_keys2.iter().collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;()
+<a href=#5513 id=5513 data-nosnippet>5513</a>        );
+<a href=#5514 id=5514 data-nosnippet>5514</a>        <span class="macro">assert_ne!</span>(
+<a href=#5515 id=5515 data-nosnippet>5515</a>            used_x25519_keys1.iter().collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;(),
+<a href=#5516 id=5516 data-nosnippet>5516</a>            used_x25519_keys2.iter().collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;()
+<a href=#5517 id=5517 data-nosnippet>5517</a>        );
+<a href=#5518 id=5518 data-nosnippet>5518</a>
+<a href=#5519 id=5519 data-nosnippet>5519</a>        <span class="kw">let </span>state1 = StakeTableState {
+<a href=#5520 id=5520 data-nosnippet>5520</a>            validators: [
+<a href=#5521 id=5521 data-nosnippet>5521</a>                (validator1.account, validator1.clone()),
+<a href=#5522 id=5522 data-nosnippet>5522</a>                (validator2.account, validator2.clone()),
+<a href=#5523 id=5523 data-nosnippet>5523</a>            ]
+<a href=#5524 id=5524 data-nosnippet>5524</a>            .into_iter()
+<a href=#5525 id=5525 data-nosnippet>5525</a>            .collect(),
+<a href=#5526 id=5526 data-nosnippet>5526</a>            validator_exits: validator_exits1,
+<a href=#5527 id=5527 data-nosnippet>5527</a>            used_bls_keys: used_bls_keys1,
+<a href=#5528 id=5528 data-nosnippet>5528</a>            used_schnorr_keys: used_schnorr_keys1,
+<a href=#5529 id=5529 data-nosnippet>5529</a>            used_x25519_keys: used_x25519_keys1,
+<a href=#5530 id=5530 data-nosnippet>5530</a>        };
+<a href=#5531 id=5531 data-nosnippet>5531</a>        <span class="kw">let </span>state2 = StakeTableState {
+<a href=#5532 id=5532 data-nosnippet>5532</a>            validators: [
+<a href=#5533 id=5533 data-nosnippet>5533</a>                (validator2.account, validator2.clone()),
+<a href=#5534 id=5534 data-nosnippet>5534</a>                (validator1.account, validator1.clone()),
+<a href=#5535 id=5535 data-nosnippet>5535</a>            ]
+<a href=#5536 id=5536 data-nosnippet>5536</a>            .into_iter()
+<a href=#5537 id=5537 data-nosnippet>5537</a>            .collect(),
+<a href=#5538 id=5538 data-nosnippet>5538</a>            validator_exits: validator_exits2,
+<a href=#5539 id=5539 data-nosnippet>5539</a>            used_bls_keys: used_bls_keys2,
+<a href=#5540 id=5540 data-nosnippet>5540</a>            used_schnorr_keys: used_schnorr_keys2,
+<a href=#5541 id=5541 data-nosnippet>5541</a>            used_x25519_keys: used_x25519_keys2,
+<a href=#5542 id=5542 data-nosnippet>5542</a>        };
+<a href=#5543 id=5543 data-nosnippet>5543</a>        <span class="macro">assert_eq!</span>(state1, state2);
+<a href=#5544 id=5544 data-nosnippet>5544</a>        <span class="macro">assert_eq!</span>(state1.commit(), state2.commit());
+<a href=#5545 id=5545 data-nosnippet>5545</a>
+<a href=#5546 id=5546 data-nosnippet>5546</a>        <span class="kw">let </span><span class="kw-2">mut </span>bytes1 = <span class="macro">vec!</span>[];
+<a href=#5547 id=5547 data-nosnippet>5547</a>        state1.encode(<span class="kw-2">&amp;mut </span>bytes1);
+<a href=#5548 id=5548 data-nosnippet>5548</a>        <span class="macro">assert_eq!</span>(bytes1.len(), state1.length());
+<a href=#5549 id=5549 data-nosnippet>5549</a>
+<a href=#5550 id=5550 data-nosnippet>5550</a>        <span class="kw">let </span><span class="kw-2">mut </span>bytes2 = <span class="macro">vec!</span>[];
+<a href=#5551 id=5551 data-nosnippet>5551</a>        state2.encode(<span class="kw-2">&amp;mut </span>bytes2);
+<a href=#5552 id=5552 data-nosnippet>5552</a>        <span class="macro">assert_eq!</span>(bytes2.len(), state2.length());
+<a href=#5553 id=5553 data-nosnippet>5553</a>
+<a href=#5554 id=5554 data-nosnippet>5554</a>        <span class="macro">assert_eq!</span>(bytes1, bytes2);
+<a href=#5555 id=5555 data-nosnippet>5555</a>        <span class="macro">assert_eq!</span>(
+<a href=#5556 id=5556 data-nosnippet>5556</a>            state1,
+<a href=#5557 id=5557 data-nosnippet>5557</a>            StakeTableState::decode(<span class="kw-2">&amp;mut </span>bytes2.as_slice()).unwrap()
+<a href=#5558 id=5558 data-nosnippet>5558</a>        );
+<a href=#5559 id=5559 data-nosnippet>5559</a>        <span class="macro">assert_eq!</span>(
+<a href=#5560 id=5560 data-nosnippet>5560</a>            state2,
+<a href=#5561 id=5561 data-nosnippet>5561</a>            StakeTableState::decode(<span class="kw-2">&amp;mut </span>bytes1.as_slice()).unwrap()
+<a href=#5562 id=5562 data-nosnippet>5562</a>        );
+<a href=#5563 id=5563 data-nosnippet>5563</a>    }
+<a href=#5564 id=5564 data-nosnippet>5564</a>}
 </code></pre></div></section></main></body></html>

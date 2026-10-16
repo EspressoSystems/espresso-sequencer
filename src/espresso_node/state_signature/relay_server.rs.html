@@ -367,11 +367,11 @@
 <a href=#367 id=367 data-nosnippet>367</a>    <span class="kw">use </span>alloy::primitives::{FixedBytes, U256};
 <a href=#368 id=368 data-nosnippet>368</a>    <span class="kw">use </span>axum::Json;
 <a href=#369 id=369 data-nosnippet>369</a>    <span class="kw">use </span>espresso_types::SeqTypes;
-<a href=#370 id=370 data-nosnippet>370</a>    <span class="kw">use </span>hotshot::types::SchnorrPubKey;
-<a href=#371 id=371 data-nosnippet>371</a>    <span class="kw">use </span>hotshot_contract_adapter::light_client::derive_signed_state_digest;
-<a href=#372 id=372 data-nosnippet>372</a>    <span class="kw">use </span>hotshot_types::{
-<a href=#373 id=373 data-nosnippet>373</a>        PeerConfig, ValidatorConfig,
-<a href=#374 id=374 data-nosnippet>374</a>        light_client::{LightClientState, StakeTableState},
+<a href=#370 id=370 data-nosnippet>370</a>    <span class="kw">use </span>hotshot_contract_adapter::light_client::derive_signed_state_digest;
+<a href=#371 id=371 data-nosnippet>371</a>    <span class="kw">use </span>hotshot_types::{
+<a href=#372 id=372 data-nosnippet>372</a>        PeerConfig, ValidatorConfig,
+<a href=#373 id=373 data-nosnippet>373</a>        light_client::{LightClientState, StakeTableState},
+<a href=#374 id=374 data-nosnippet>374</a>        signature_key::SchnorrPubKey,
 <a href=#375 id=375 data-nosnippet>375</a>        traits::signature_key::{LCV2StateSignatureKey, LCV3StateSignatureKey},
 <a href=#376 id=376 data-nosnippet>376</a>    };
 <a href=#377 id=377 data-nosnippet>377</a>    <span class="kw">use </span>http_client::{Client, error::ClientErr};

@@ -2,20 +2,20 @@
 <a href=#2 id=2 data-nosnippet>2</a>
 <a href=#3 id=3 data-nosnippet>3</a><span class="kw">use </span>async_trait::async_trait;
 <a href=#4 id=4 data-nosnippet>4</a><span class="kw">use </span>committable::Commitment;
-<a href=#5 id=5 data-nosnippet>5</a><span class="kw">use </span>hotshot::{traits::BlockPayload, types::SignatureKey};
-<a href=#6 id=6 data-nosnippet>6</a><span class="kw">use </span>hotshot_example_types::storage_types::TestStorage;
-<a href=#7 id=7 data-nosnippet>7</a><span class="kw">use </span>hotshot_types::{
-<a href=#8 id=8 data-nosnippet>8</a>    data::{
-<a href=#9 id=9 data-nosnippet>9</a>        DaProposal2, EpochNumber, Leaf2, QuorumProposalWrapper, VidCommitment, VidDisperseShare,
-<a href=#10 id=10 data-nosnippet>10</a>        VidDisperseShare2, ViewNumber,
-<a href=#11 id=11 data-nosnippet>11</a>    },
-<a href=#12 id=12 data-nosnippet>12</a>    event::HotShotAction,
-<a href=#13 id=13 data-nosnippet>13</a>    message::Proposal <span class="kw">as </span>SignedProposal,
-<a href=#14 id=14 data-nosnippet>14</a>    simple_certificate::{LightClientStateUpdateCertificateV2, UpgradeCertificate},
-<a href=#15 id=15 data-nosnippet>15</a>    traits::{
-<a href=#16 id=16 data-nosnippet>16</a>        EncodeBytes,
-<a href=#17 id=17 data-nosnippet>17</a>        metrics::{Histogram, Metrics},
-<a href=#18 id=18 data-nosnippet>18</a>        node_implementation::NodeType,
+<a href=#5 id=5 data-nosnippet>5</a><span class="kw">use </span>hotshot_example_types::storage_types::TestStorage;
+<a href=#6 id=6 data-nosnippet>6</a><span class="kw">use </span>hotshot_types::{
+<a href=#7 id=7 data-nosnippet>7</a>    data::{
+<a href=#8 id=8 data-nosnippet>8</a>        DaProposal2, EpochNumber, Leaf2, QuorumProposalWrapper, VidCommitment, VidDisperseShare,
+<a href=#9 id=9 data-nosnippet>9</a>        VidDisperseShare2, ViewNumber,
+<a href=#10 id=10 data-nosnippet>10</a>    },
+<a href=#11 id=11 data-nosnippet>11</a>    event::HotShotAction,
+<a href=#12 id=12 data-nosnippet>12</a>    message::Proposal <span class="kw">as </span>SignedProposal,
+<a href=#13 id=13 data-nosnippet>13</a>    simple_certificate::{LightClientStateUpdateCertificateV2, UpgradeCertificate},
+<a href=#14 id=14 data-nosnippet>14</a>    traits::{
+<a href=#15 id=15 data-nosnippet>15</a>        BlockPayload, EncodeBytes,
+<a href=#16 id=16 data-nosnippet>16</a>        metrics::{Histogram, Metrics},
+<a href=#17 id=17 data-nosnippet>17</a>        node_implementation::NodeType,
+<a href=#18 id=18 data-nosnippet>18</a>        signature_key::SignatureKey,
 <a href=#19 id=19 data-nosnippet>19</a>        storage::Storage <span class="kw">as </span>StorageTrait,
 <a href=#20 id=20 data-nosnippet>20</a>    },
 <a href=#21 id=21 data-nosnippet>21</a>    utils::EpochTransitionIndicator,
