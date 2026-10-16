@@ -687,7 +687,7 @@ impl Persistence {
         let (lsn, finalized) = {
             let mut state = self.inner.state.lock();
             let finalized = state.apply(&rec);
-            let lsn = wal.enqueue(view, kind.into(), body, class, None);
+            let lsn = wal.enqueue(view, 0, kind.into(), body, class, None);
             (lsn, finalized)
         };
         if let Some(finalized) = finalized {
@@ -719,7 +719,7 @@ impl Persistence {
         let permit = lane.lane.reserve(body.len() as u32).await;
         let lsn = lane
             .lane
-            .enqueue(view, kind.into(), body, class, Some(permit));
+            .enqueue(view, 0, kind.into(), body, class, Some(permit));
         if class == Class::Durable {
             lane.lane.wait_durable(lsn).await?;
         }
@@ -1639,6 +1639,7 @@ mod tests {
                 seq,
                 bytes,
                 max_key,
+                max_stamp: 0,
             })
             .collect::<Vec<_>>()
             .into()
@@ -1905,10 +1906,11 @@ mod tests {
             seq: 1,
             first_lsn: 1,
             prev_max_key: 0,
+            prev_max_stamp: 0,
         };
         let mut seg = header.encode().to_vec();
-        format::encode_frame(&mut seg, 1, 5, Kind::Da.into(), b"five");
-        format::encode_frame(&mut seg, 2, 6, Kind::Da.into(), b"six");
+        format::encode_frame(&mut seg, 1, 5, 0, Kind::Da.into(), b"five");
+        format::encode_frame(&mut seg, 2, 6, 0, Kind::Da.into(), b"six");
         let last = seg.len() - 1;
         seg[last] ^= 0xff;
 
