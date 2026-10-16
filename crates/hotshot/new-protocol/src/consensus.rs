@@ -157,6 +157,12 @@ pub enum ConsensusOutput<T: NodeType> {
         proposal: SignedProposal<T, Proposal<T>>,
         sender: T::SignatureKey,
     },
+    /// A proposal taken in on a certificate's word rather than paired with
+    /// this node's VID share: fetched from a peer, or parked live until a
+    /// certificate vouched for it. The share the leader owed this node may
+    /// never arrive, so this is what lets the payload be rebuilt from the
+    /// shares the voters broadcast.
+    ProposalCertified(Proposal<T>),
     RequestMissingProposal {
         view: ViewNumber,
         leaf_commit: Commitment<Leaf2<T>>,
@@ -1300,6 +1306,7 @@ impl<T: NodeType> Consensus<T> {
         self.signed_proposals
             .insert((view, commit), signed_proposal);
         self.hold_proposal(proposal.clone());
+        outbox.push_back(ConsensusOutput::ProposalCertified(proposal.clone()));
         // Parked ancestors are stored ahead of this proposal
         // (`adopt_certified_proposal`), so this only fetches a parent nothing
         // parked can supply.

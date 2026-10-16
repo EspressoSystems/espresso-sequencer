@@ -1153,6 +1153,28 @@ where
                     .unwrap_or_else(EpochNumber::genesis);
                 self.gc(epoch, GcScope::Timeout(view))?;
             },
+            ConsensusOutput::ProposalCertified(proposal) => {
+                let view = proposal.view_number;
+                // Without this node's own share nothing pairs, so pin the
+                // view here instead: the voters' broadcast shares are held
+                // until a commitment admits them, and the header carries it.
+                let VidCommitment::V2(payload_commitment) =
+                    proposal.block_header.payload_commitment()
+                else {
+                    warn!(%node, %view, "certified proposal payload commitment is not V2");
+                    return Ok(());
+                };
+                debug!(%node, %view, "pinning reconstructor from certified proposal");
+                let expected_param =
+                    expected_vid_param(&self.membership_coordinator, proposal.epoch);
+                self.vid_reconstructor.handle_proposal(
+                    view,
+                    payload_commitment,
+                    proposal.block_header.metadata().clone(),
+                    proposal.epoch,
+                    expected_param,
+                );
+            },
             ConsensusOutput::BlockPayloadReconstructed { .. } => {},
             ConsensusOutput::UpgradeDecided(cert) => {
                 info!(
