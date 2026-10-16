@@ -37,7 +37,7 @@ use hotshot_types::{
 
 use self::{
     format::{Input, Scenario},
-    world::{Cache, World},
+    world::{Cache, World, scheduled_membership},
 };
 use crate::{
     cert_verifier::ValidCert,
@@ -47,13 +47,9 @@ use crate::{
     proposal::ProposalValidator,
     tests::common::{
         coordinator_builder::{build_genesis_cert1, build_genesis_proposal},
-        utils::ConsensusHarness,
+        utils::{ConsensusHarness, STAKE_TABLE_CAPACITY},
     },
 };
-
-/// The nodes and epoch height of the harness's test membership.
-const NODES: u64 = 10;
-const EPOCH_HEIGHT: u64 = 10;
 
 /// Replay every scenario in the directory `NP_SCENARIOS` names.
 ///
@@ -111,10 +107,9 @@ async fn replay(path: &Path, cache: Cache) -> Cache {
     crate::logging::init_test_logging();
     let scenario = Scenario::read(path);
     let h = &scenario.header;
-    assert_eq!(
-        (h.nodes, h.epoch_height),
-        (NODES, EPOCH_HEIGHT),
-        "{}: the harness has {NODES} nodes and epochs of {EPOCH_HEIGHT}",
+    assert!(
+        h.nodes as usize <= STAKE_TABLE_CAPACITY,
+        "{}: the harness's stake tables hold {STAKE_TABLE_CAPACITY} nodes",
         path.display()
     );
     let label = format!(
@@ -124,10 +119,15 @@ async fn replay(path: &Path, cache: Cache) -> Cache {
             .unwrap_or("unnamed")
     );
     let me = h.node;
-    let mut harness =
-        ConsensusHarness::new_with_upgrade_lock(me - 1, EPOCH_HEIGHT, test_timeout_epoch_lock())
-            .await
-            .record_as(&label);
+    let membership = scheduled_membership(h.nodes, h.epoch_height, &h.committees);
+    let mut harness = ConsensusHarness::with_membership(
+        me - 1,
+        h.epoch_height,
+        test_timeout_epoch_lock(),
+        membership,
+    )
+    .await
+    .record_as(&label);
     // Started as `Coordinator::maker` starts a node: locked on the anchor.
     let genesis_leaf = harness.consensus.last_decided_leaf().clone();
     harness.consensus.seed_parent(
@@ -135,7 +135,14 @@ async fn replay(path: &Path, cache: Cache) -> Cache {
         build_genesis_proposal(&genesis_leaf),
         std::iter::empty(),
     );
-    let mut world = World::new(NODES, EPOCH_HEIGHT, &scenario.blocks, cache).await;
+    let mut world = World::new(
+        h.nodes,
+        h.epoch_height,
+        &h.committees,
+        &scenario.blocks,
+        cache,
+    )
+    .await;
     let my_key = world.key(me).0;
     let mut seen_outputs = 0;
     for step in &scenario.steps {
@@ -212,7 +219,7 @@ async fn valid_proposal(
 ) -> bool {
     let mut validator = ProposalValidator::new(
         harness.membership_coordinator.clone(),
-        EPOCH_HEIGHT,
+        *harness.consensus.epoch_height,
         test_timeout_epoch_lock(),
         None,
     );

@@ -26,6 +26,7 @@ use hotshot_example_types::{
     block_types::{TestBlockHeader, TestBlockPayload, TestMetadata, TestTransaction},
     node_types::{TEST_VERSIONS, TestTypes},
     state_types::{TestInstanceState, TestValidatedState},
+    storage_types::TestStorage,
 };
 use hotshot_types::{
     data::{
@@ -55,8 +56,9 @@ use crate::{
     tests::common::{
         coordinator_builder::build_genesis_cert1,
         utils::{
-            MockBlock, TEST_DRB_RESULT, build_state_cert_for_test, extract_vid_shares,
-            mock_membership_with_num_nodes,
+            MockBlock, STAKE_TABLE_CAPACITY, StakeTableSchedule, TEST_DRB_RESULT,
+            build_state_cert_for_test, extract_vid_shares,
+            mock_membership_with_client_and_schedule,
         },
     },
 };
@@ -91,10 +93,12 @@ impl Built {
 
 /// What building costs most, kept across the scenarios of a test run: VID
 /// dispersals, certificates and the nodes' keys. Each is a function of what it
-/// is keyed by, so a scenario of another node or another run that names the
-/// same reuses it.
+/// is keyed by and the committees, so a scenario of another node or another run
+/// with the same committees that names the same reuses it.
 #[derive(Default)]
 pub struct Cache {
+    /// The node count and committees the rest was built for.
+    committees: Option<(u64, Committees)>,
     /// By payload (`None` for the harness's own block), view and epoch.
     vids: BTreeMap<(Option<u64>, u64, u64), VidDisperse2<TestTypes>>,
     /// By the block's leaf commitment, epoch, height and view.
@@ -108,6 +112,9 @@ pub struct Cache {
 }
 
 type CertKey = (Commitment<Leaf2<TestTypes>>, u64, u64, u64);
+
+/// Committees by the epoch they start from, each node by its number from 1.
+pub type Committees = Vec<(u64, Vec<u64>)>;
 
 pub struct World {
     cache: Cache,
@@ -131,17 +138,24 @@ impl World {
     pub async fn new(
         nodes: u64,
         epoch_height: u64,
+        committees: &Committees,
         blocks: &[format::Block],
         mut cache: Cache,
     ) -> Self {
+        let setup = Some((nodes, committees.clone()));
+        if cache.committees != setup {
+            cache = Cache {
+                committees: setup,
+                ..Cache::default()
+            };
+        }
         if cache.keys.len() as u64 != nodes {
             cache.keys = (0..nodes)
                 .map(|i| BLSPubKey::generated_from_seed_indexed([0u8; 32], i))
                 .collect();
         }
         let node_keys = cache.keys.clone();
-        let (membership, ..) =
-            mock_membership_with_num_nodes(nodes as usize, epoch_height, node_keys[0].0);
+        let membership = scheduled_membership(nodes, epoch_height, committees);
         let genesis = Leaf2::<TestTypes>::genesis(
             &TestValidatedState::default(),
             &TestInstanceState::default(),
@@ -566,14 +580,15 @@ impl World {
             .next_epoch_stake_table()
             .expect("the next epoch's committee is known");
         let next_state = HSStakeTable::from_iter(next.stake_table())
-            .commitment(self.nodes as usize)
+            .commitment(STAKE_TABLE_CAPACITY)
             .expect("a stake table commitment");
+        let members = self.committee(c.epoch).stake_table().len() as u64;
         let cert = build_state_cert_for_test(
             &root.proposal.data.block_header,
             ViewNumber::new(c.view),
             EpochNumber::new(c.epoch),
             &next_state,
-            (2 * self.nodes) / 3 + 1,
+            (2 * members) / 3 + 1,
         );
         self.cache.state_certs.insert(key, cert.clone());
         Some(cert)
@@ -609,4 +624,42 @@ impl World {
             .membership()
             .add_drb_result(target, TEST_DRB_RESULT);
     }
+}
+
+/// The test membership of `nodes` nodes with `committees`. The first committee
+/// is the genesis one, and the test membership fixes it for the first two epochs.
+pub fn scheduled_membership(
+    nodes: u64,
+    epoch_height: u64,
+    committees: &Committees,
+) -> EpochMembershipCoordinator<TestTypes> {
+    let indices = |members: &[u64]| members.iter().map(|&n| (n - 1) as usize).collect();
+    let (initial, changes) = match committees.split_first() {
+        Some(((_, first), rest)) => (
+            indices(first),
+            rest.iter()
+                .map(|(e, members)| (*e, indices(members)))
+                .collect(),
+        ),
+        None => ((0..nodes as usize).collect(), Vec::new()),
+    };
+    assert!(
+        changes.iter().all(|(e, _)| *e >= 3),
+        "the test membership fixes the committee of the first two epochs"
+    );
+    let schedule = StakeTableSchedule {
+        initial,
+        changes,
+        addr_overrides: Vec::new(),
+    };
+    let (pk0, _) = BLSPubKey::generated_from_seed_indexed([0u8; 32], 0);
+    mock_membership_with_client_and_schedule(
+        nodes as usize,
+        epoch_height,
+        pk0,
+        TestStorage::default(),
+        &schedule,
+        &[],
+    )
+    .0
 }

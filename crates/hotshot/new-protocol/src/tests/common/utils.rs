@@ -734,6 +734,9 @@ impl TestData {
     }
 }
 
+/// The stake table capacity a harness's consensus commits to stake tables with.
+pub const STAKE_TABLE_CAPACITY: usize = 10;
+
 pub fn mock_membership() -> EpochMembershipCoordinator<TestTypes> {
     let (public_key, _) = BLSPubKey::generated_from_seed_indexed([0u8; 32], 0);
     let (coordinator, ..) = mock_membership_with_num_nodes(10, 10, public_key);
@@ -1221,12 +1224,22 @@ impl ConsensusHarness {
         epoch_height: u64,
         lock: UpgradeLock<TestTypes>,
     ) -> Self {
+        Self::with_membership(node_index, epoch_height, lock, mock_membership()).await
+    }
+
+    /// A harness whose consensus runs under `lock` with the committees of
+    /// `membership`.
+    pub async fn with_membership(
+        node_index: u64,
+        epoch_height: u64,
+        lock: UpgradeLock<TestTypes>,
+        membership: EpochMembershipCoordinator<TestTypes>,
+    ) -> Self {
         let (public_key, private_key) = BLSPubKey::generated_from_seed_indexed([0; 32], node_index);
         let state_key_pair = hotshot_types::light_client::StateKeyPair::generate_from_seed_indexed(
             [0u8; 32], node_index,
         );
         let state_private_key = state_key_pair.sign_key_ref().clone();
-        let membership = mock_membership();
         let instance = Arc::new(TestInstanceState::default());
         // At an epoch version, as a new-protocol anchor is: a leaf from before
         // epochs commits differently from the proposal rebuilt from it.
@@ -1241,7 +1254,7 @@ impl ConsensusHarness {
             public_key,
             private_key,
             state_private_key,
-            10,
+            STAKE_TABLE_CAPACITY,
             lock,
             genesis_leaf,
             epoch_height,

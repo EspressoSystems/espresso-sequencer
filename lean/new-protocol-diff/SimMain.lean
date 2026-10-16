@@ -35,17 +35,26 @@ def settings (seed : Nat) : List (String × Params) :=
 def describe (name : String) (p : Params) : String :=
   s!"{name}, epoch height {p.epochHeight}, GST {p.gst}, seed {p.seed}"
 
+/-- Nodes `a` to `b`. -/
+def nodesFrom (a b : Nat) : List Nat := (List.range (b + 1 - a)).map (· + a)
+
 /--
-Settings the Rust node's tests can reproduce: the ten nodes and one committee of
-their test membership, and epochs of ten blocks, the shortest its epoch roots
-allow, with each kind of fault: one node silent throughout, one leader that
-equivocates, one leader whose proposals break the rules, and one member silent in
-each epoch, a different one each time. The
-chain must cross the first epoch boundary.
+Settings the Rust node's tests can reproduce: committees its test membership can
+schedule, which fixes the first two epochs, and epochs of ten blocks, the
+shortest its epoch roots allow.
+
+On ten nodes in one committee, each kind of fault: one node silent throughout,
+one leader that equivocates, one leader whose proposals break the rules, and one
+member silent in each epoch, a different one each time. Then committees that
+leave nodes out: seven of ten nodes throughout, a committee that rotates by one
+node every epoch from the third, and one that a node leaves and another joins at
+the third. And smaller committees of all the nodes: four and seven. Each has one
+silent node. Where the committee changes, the chain must reach the third epoch;
+elsewhere, it must cross the first boundary.
 -/
 def rustSettings (seed : Nat) : List (String × Params) :=
   let base : Params :=
-    { seed := seed, nodes := 10, size := 10, faulty := [], staticCommittee := true,
+    { seed := seed, nodes := 10, size := 10, faulty := [], committees := [(0, nodesFrom 1 10)],
       epochHeight := 10, minHeight := 12 }
   let rustFaults : List (String × (Params → Params)) :=
     [ ("silent", fun p => { p with faulty := [10] }),
@@ -55,8 +64,20 @@ def rustSettings (seed : Nat) : List (String × Params) :=
       ("misbehaving", fun p => { p with faulty := [10], misbehaving := [1] }),
       ("rotating", fun p =>
         { p with silentIn := (List.range 100).map fun e => (e % p.nodes + 1, e) }) ]
-  rustFaults.flatMap fun (name, f) => [0, 60].map fun g =>
-    (name, f { base with gst := g, horizon := 500 + g })
+  let rotation (e : Nat) := (List.range 7).map fun i => (e + i) % 10 + 1
+  let rotated := (0, nodesFrom 1 7) :: (List.range' 3 20).map fun e => (e, rotation e)
+  let committees : List (String × Params) :=
+    [ ("outsiders", { base with size := 7, committees := [(0, nodesFrom 1 7)], faulty := [7] }),
+      ("rotating-committee",
+        { base with size := 7, faulty := [10], minHeight := 25, committees := rotated }),
+      ("joining",
+        { base with
+            size := 7, faulty := [7], minHeight := 25,
+            committees := [(0, nodesFrom 1 7), (3, nodesFrom 2 8)] }),
+      ("four", { base with nodes := 4, size := 4, committees := [(0, nodesFrom 1 4)], faulty := [4] }),
+      ("seven", { base with nodes := 7, size := 7, committees := [(0, nodesFrom 1 7)], faulty := [7] }) ]
+  let all : List (String × Params) := rustFaults.map (fun (name, f) => (name, f base)) ++ committees
+  all.flatMap fun (name, p) => [0, 60].map fun g => (name, { p with gst := g, horizon := 500 + g })
 
 /-- Run the Rust-compatible settings and write each checked node's scenario to `dir`. -/
 def writeScenarios (dir : System.FilePath) (seeds : Nat) : IO UInt32 := do
@@ -67,6 +88,10 @@ def writeScenarios (dir : System.FilePath) (seeds : Nat) : IO UInt32 := do
   let runs := (List.range' 1 seeds).flatMap fun seed => (rustSettings seed).map fun (name, p) =>
     (seed, name, p, Task.spawn fun _ => let s := run p; (s, checkState p s))
   for (seed, name, p, task) in runs do
+    unless p.coherent do
+      failed := failed + 1
+      IO.println s!"incoherent setting: {describe name p}"
+      continue
     let (s, o) := task.get
     unless o.failures.isEmpty do
       failed := failed + 1

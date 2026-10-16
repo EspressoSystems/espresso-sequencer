@@ -93,7 +93,7 @@ def headerJson (P : Params) (k : PubKey) : Json :=
   Json.mkObj [("scenario", Json.mkObj
     [("node", toJson k.toNat), ("nodes", toJson P.nodes), ("faulty", toJson P.faulty),
      ("equivocators", toJson P.equivocators), ("misbehaving", toJson P.misbehaving),
-     ("epochHeight", toJson P.epochHeight),
+     ("committees", toJson P.committees), ("epochHeight", toJson P.epochHeight),
      ("seed", toJson P.seed), ("gst", toJson P.gst), ("delta", toJson P.delta),
      ("tau", toJson P.tau)])]
 

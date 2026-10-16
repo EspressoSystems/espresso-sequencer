@@ -90,11 +90,12 @@ structure Params where
   minHeight : Nat := 3
 
   /--
-  Every epoch has the same committee, nodes `1` to `size` in order, as the test
-  membership of the Rust node has. Otherwise each epoch's committee starts one node
-  later.
+  The committees, as the Rust node's test membership schedules them: each from the
+  epoch it names until the next, its members in the order they lead. Each has
+  `size` members, and the first is from epoch `0`. Empty, each epoch's
+  committee is the `size` nodes from `e + 1` on, cyclically.
   -/
-  staticCommittee : Bool := false
+  committees : List (Nat × List Nat) := []
 deriving Repr
 
 namespace Params
@@ -102,8 +103,9 @@ namespace Params
 variable (P : Params)
 
 def members (e : EpochNumber) : List PubKey :=
-  (List.range P.size).map fun i =>
-    if P.staticCommittee then ⟨i + 1⟩ else ⟨(e.toNat + i) % P.nodes + 1⟩
+  match (P.committees.filter (·.1 ≤ e.toNat)).getLast? with
+  | some (_, ms) => ms.map (⟨·⟩)
+  | none => (List.range P.size).map fun i => ⟨(e.toNat + i) % P.nodes + 1⟩
 
 def isMember (e : EpochNumber) (k : PubKey) : Bool := (P.members e).contains k
 
@@ -181,9 +183,14 @@ def misbehave (cert1s : List Cert1) (p : Proposal) : Proposal × Bool :=
     | none => (taller, true)
   | _ => (p, false)
 
-/-- Every committee keeps a quorum of honest members, as `TimedNetwork.honestQuorum` asks. -/
+/--
+Every committee keeps a quorum of honest members, as `TimedNetwork.honestQuorum`
+asks, and the scheduled ones have `size` distinct nodes.
+-/
 def coherent : Bool :=
-  (List.range (P.nodes + 1)).all fun e =>
+  P.committees.all (fun (_, ms) =>
+    ms.length == P.size && ms.eraseDups.length == ms.length && ms.all (fun k => 1 ≤ k && k ≤ P.nodes))
+  && (List.range (P.nodes + 1 + (P.committees.map (·.1)).foldl max 0)).all fun e =>
     ((P.members ⟨e⟩).filter fun k => !P.faultyIn ⟨e⟩ k).length ≥ P.quorum
 
 end Params

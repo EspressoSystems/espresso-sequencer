@@ -20,6 +20,10 @@ pub struct Header {
     /// The leaders whose proposals break the rules.
     #[serde(default)]
     pub misbehaving: Vec<u64>,
+    /// The committees, each from the epoch it names, its members in the order
+    /// they lead. Empty for one committee of all the nodes.
+    #[serde(default)]
+    pub committees: Vec<(u64, Vec<u64>)>,
 }
 
 /// A certificate over a block.
