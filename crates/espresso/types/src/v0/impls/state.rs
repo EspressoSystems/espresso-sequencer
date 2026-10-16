@@ -1238,6 +1238,9 @@ pub async fn get_l1_deposits(
     parent_leaf: &Leaf2,
     fee_contract_address: Option<Address>,
 ) -> Vec<FeeInfo> {
+    if header.version() >= NEW_PROTOCOL_VERSION {
+        return vec![];
+    }
     if let (Some(addr), Some(block_info)) = (fee_contract_address, header.l1_finalized()) {
         instance
             .l1_client
@@ -1265,7 +1268,10 @@ pub async fn get_l1_deposits(
     _parent_leaf: &Leaf2,
     fee_contract_address: Option<Address>,
 ) -> Vec<FeeInfo> {
-    if fee_contract_address.is_some() && header.l1_finalized().is_some() {
+    if header.version() < NEW_PROTOCOL_VERSION
+        && fee_contract_address.is_some()
+        && header.l1_finalized().is_some()
+    {
         unimplemented!("fetching L1 deposits requires the node feature")
     } else {
         vec![]
