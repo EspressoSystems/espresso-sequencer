@@ -12,9 +12,9 @@
 //!    `F` are fetched with Merkle proofs against `F` and installed directly. Failures to read the
 //!    anchor or fetch the roots are retried until the deadline. A non-empty install range without
 //!    state peers fails at once.
-//! 2. Walk: from the highest known epoch, one epoch at a time. At boot, the walk targets the epoch
-//!    the peers' chain tip needs, and a failure below it is retried until the deadline. Without a
-//!    target, or past it, the first failure marks the live tip.
+//! 2. Walk: from the highest known epoch, one epoch at a time. The walk targets the epoch the peers'
+//!    chain tip needs, and a failure below it is retried until the deadline. Without a target, or
+//!    past it, the first failure marks the live tip.
 
 use std::{ops::RangeInclusive, time::Duration};
 
@@ -64,13 +64,12 @@ pub struct BootstrapParams {
     /// How long the install, and separately the walk toward the peers' chain tip, may keep
     /// retrying before startup gives up.
     pub deadline: Duration,
-    /// Set for the call at boot only. Mid-run, milestones log at debug, the gauges stay, and the
-    /// walk has no target: the first failure marks the tip and the next poll advances it.
+    /// Set for the call at boot only. Mid-run, milestones log at debug and the gauges stay.
     pub boot: bool,
 }
 
 /// A finalized HotShot block that the node trusts without asking the peers: the L1 light-client
-/// contract's finalized state, or a leaf the follower's light client has verified.
+/// contract's finalized state.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct TrustedAnchor {
     pub height: u64,
@@ -84,15 +83,6 @@ impl TrustedAnchor {
             height: 0,
             block_comm_root: CircuitField::from(0u64),
         }
-    }
-
-    /// The anchor at a header the caller has verified.
-    pub(crate) fn from_header(header: &Header) -> anyhow::Result<Self> {
-        let state = header.get_light_client_state(ViewNumber::genesis())?;
-        Ok(Self {
-            height: header.height(),
-            block_comm_root: state.block_comm_root,
-        })
     }
 }
 
@@ -180,13 +170,9 @@ where
         .await?;
     }
 
-    let target = if params.boot {
-        // An anchor with an empty range vouches for nothing, so it does not cap the target.
-        let anchor = range.is_some().then_some(&anchor);
-        walk_target(peers, anchor, epoch_height, params.step_timeout).await
-    } else {
-        None
-    };
+    // An anchor with an empty range vouches for nothing, so it does not cap the target.
+    let anchor = range.is_some().then_some(&anchor);
+    let target = walk_target(peers, anchor, epoch_height, params.step_timeout).await;
     let current = walk_to_tip(coordinator, first_epoch, target, params).await?;
     if params.boot {
         metrics.window_epoch.set(current.u64() as usize);
@@ -628,7 +614,13 @@ mod tests {
     async fn chain() -> (TestClient, TrustedAnchor) {
         let client = TestClient::with_epoch_height(EPOCH_HEIGHT);
         let header = client.header(ANCHOR_HEIGHT).await.unwrap();
-        let anchor = TrustedAnchor::from_header(&header).unwrap();
+        let anchor = TrustedAnchor {
+            height: header.height(),
+            block_comm_root: header
+                .get_light_client_state(ViewNumber::genesis())
+                .unwrap()
+                .block_comm_root,
+        };
         (client, anchor)
     }
 
@@ -1114,8 +1106,7 @@ mod tests {
         assert!(has_table(&coordinator, N + 2));
     }
 
-    /// The follower's mid-run call has no target and no boot milestones, and still installs the
-    /// window.
+    /// The follower's mid-run call installs the window without boot milestones.
     #[test_log::test(tokio::test)]
     async fn mid_run_installs_window() {
         let (client, anchor) = chain().await;
@@ -1269,37 +1260,5 @@ mod tests {
             .unwrap();
 
         assert_eq!(current, EpochNumber::new(N + TARGET_SLACK));
-    }
-
-    /// Mid-run there is no target: the first failing step marks the tip, however far the peers'
-    /// chain is.
-    #[test_log::test(tokio::test)]
-    async fn mid_run_walk_stops_at_the_first_failure() {
-        let (client, _) = chain().await;
-        let store = SeededStore::for_chain(&client, (N - 4)..=(N + 1)).await;
-        store.0.lock().unwrap().remove(&(N - 1));
-        let coordinator = coordinator(store);
-        for epoch in [N - 4, N - 3] {
-            coordinator
-                .membership()
-                .load_stake_table(EpochNumber::new(epoch))
-                .await;
-        }
-        let params = BootstrapParams {
-            boot: false,
-            ..PARAMS
-        };
-
-        let current = bootstrap(
-            &coordinator,
-            Some(TrustedAnchor::genesis()),
-            &[client],
-            params,
-        )
-        .await
-        .unwrap();
-
-        assert_eq!(current, EpochNumber::new(N - 3));
-        assert!(!has_table(&coordinator, N - 1));
     }
 }

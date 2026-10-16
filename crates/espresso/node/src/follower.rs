@@ -33,7 +33,6 @@ use espresso_types::{
 use futures::{FutureExt, future::BoxFuture};
 use hotshot_query_service::{
     availability::{BlockInfo, BlockQueryData, LeafQueryData, VidCommonQueryData},
-    node::BlockId,
     types::HeightIndexed,
 };
 use hotshot_types::{
@@ -263,17 +262,12 @@ where
     )
     .await;
     let peers = query_clients(&params.upstreams);
+    let replaying = replay.is_some();
     let bootstrap_metrics = BootstrapMetrics::new(&*metrics);
     bootstrap_epoch_window(
         &coordinator,
         epoch_height,
-        || async {
-            // A replayed chain has no light-client contract to read.
-            if replay.is_some() {
-                return Ok(TrustedAnchor::genesis());
-            }
-            Ok(node_state.finalized_light_client_state().await?.into())
-        },
+        || l1_anchor(&node_state, replaying),
         &peers,
         &params.bootstrap,
         &bootstrap_metrics,
@@ -320,7 +314,8 @@ where
         .context("reading the height the query database has reached")?;
     let follower = Follower {
         source,
-        light_client: light_client.clone(),
+        node_state: node_state.clone(),
+        replaying,
         sink: Arc::new(sink),
         persistence: persistence.clone(),
         coordinator,
@@ -584,8 +579,8 @@ impl ConsensusSource for FollowerConsensus {
 
 struct Follower<P> {
     source: Arc<dyn ChainSource>,
-    /// Anchors the mid-run skip; `None` when replaying, which has no peers to skip from.
-    light_client: Option<Arc<NodeLightClient>>,
+    node_state: NodeState,
+    replaying: bool,
     sink: Arc<dyn DecideSink>,
     persistence: Arc<P>,
     coordinator: EpochMembershipCoordinator<SeqTypes>,
@@ -654,7 +649,7 @@ impl<P: SequencerPersistence> Follower<P> {
                 tip,
                 "skipping ahead; the query service backfills the gap"
             );
-            self.catch_up_skipped_epochs(self.next..from, tip).await?;
+            self.catch_up_skipped_epochs(self.next..from).await?;
             self.next = from;
         }
         for block in self.source.fetch_range(from, tip).await? {
@@ -752,7 +747,7 @@ impl<P: SequencerPersistence> Follower<P> {
     /// Skipping an epoch root skips the stake table it derives, which later roots build on. DRBs
     /// the skipped transition blocks carried are left to the coordinator, which fetches them on
     /// demand.
-    async fn catch_up_skipped_epochs(&self, skipped: Range<u64>, tip: u64) -> anyhow::Result<()> {
+    async fn catch_up_skipped_epochs(&self, skipped: Range<u64>) -> anyhow::Result<()> {
         if skipped.is_empty() {
             return Ok(());
         }
@@ -778,18 +773,7 @@ impl<P: SequencerPersistence> Follower<P> {
         let current_epoch = bootstrap_epoch_window(
             &self.coordinator,
             self.epoch_height,
-            || async {
-                // The latest block the light client has verified, so the skip needs no L1.
-                let height = tip.checked_sub(1).context("the chain is empty")?;
-                let header = self
-                    .light_client
-                    .as_ref()
-                    .context("no light client to anchor the skip")?
-                    .fetch_header(BlockId::Number(height as usize))
-                    .await
-                    .context("fetching the latest verified header")?;
-                TrustedAnchor::from_header(&header)
-            },
+            || l1_anchor(&self.node_state, self.replaying),
             &self.peers,
             &self.bootstrap,
             &self.bootstrap_metrics,
@@ -873,6 +857,14 @@ impl ChainSource for NodeLightClient {
     async fn fetch_cert2(&self, header: &Header) -> anyhow::Result<Option<Certificate2<SeqTypes>>> {
         Ok(self.fetch_certificate2_for_header(header).await?)
     }
+}
+
+async fn l1_anchor(node_state: &NodeState, replaying: bool) -> anyhow::Result<TrustedAnchor> {
+    // A replayed chain has no light-client contract to read.
+    if replaying {
+        return Ok(TrustedAnchor::genesis());
+    }
+    Ok(node_state.finalized_light_client_state().await?.into())
 }
 
 async fn connect_light_client(
