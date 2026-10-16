@@ -886,20 +886,22 @@ impl SqlStorage {
     }
 }
 
-/// With `reset`, the database is about to be emptied, so the records in the directory go too.
+/// With `reset`, the database is about to be emptied, so the records in the directory go too. A
+/// sequencer connection does not use the directory but wipes it, so no stale ID outlives the schema.
 async fn open_blobs(
     cfg: Option<BlobCfg>,
     connection_type: &StorageConnectionType,
     reset: bool,
 ) -> anyhow::Result<Option<Arc<BlobStore>>> {
-    match cfg {
-        Some(cfg) if *connection_type == StorageConnectionType::Query => {
-            if reset {
-                blob::reset_dir(&cfg.dir)?;
-            }
-            Ok(Some(BlobStore::open(cfg, Arc::new(StdFs)).await?))
-        },
-        _ => Ok(None),
+    let Some(cfg) = cfg else {
+        return Ok(None);
+    };
+    if reset {
+        blob::reset_dir(&cfg.dir)?;
+    }
+    match connection_type {
+        StorageConnectionType::Query => Ok(Some(BlobStore::open(cfg, Arc::new(StdFs)).await?)),
+        StorageConnectionType::Sequencer => Ok(None),
     }
 }
 
@@ -2927,6 +2929,28 @@ mod test {
         assert_eq!(storage.prune(&mut pruner).await.unwrap(), Some(1));
         assert_eq!(count_rows(&storage, "payload").await, 0);
         assert_eq!(count_rows(&storage, "vid_common").await, 0);
+    }
+
+    #[test_log::test(tokio::test(flavor = "multi_thread"))]
+    async fn test_reset_by_query_then_sequencer_leaves_restartable_node() {
+        let db = TmpDb::init().await;
+        let dir = tempfile::tempdir().unwrap();
+        let cfg = db.config().blob(BlobCfg {
+            dir: dir.path().to_path_buf(),
+            share_retention: Duration::from_secs(60),
+        });
+
+        let query = SqlStorage::connect(cfg.clone().reset_schema(), StorageConnectionType::Query)
+            .await
+            .unwrap();
+        drop(query);
+        SqlStorage::connect(cfg.clone().reset_schema(), StorageConnectionType::Sequencer)
+            .await
+            .unwrap();
+
+        SqlStorage::connect(cfg, StorageConnectionType::Query)
+            .await
+            .unwrap();
     }
 
     #[test_log::test(tokio::test(flavor = "multi_thread"))]
