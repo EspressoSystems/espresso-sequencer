@@ -48,7 +48,8 @@ just demo-native                      # local network via process-compose
 
 ## Architecture pointers
 
-- **SequencerContext** (`crates/espresso/node/src/context.rs`): wraps HotShot's `SystemContextHandle`.
+- **SequencerContext** (`crates/espresso/node/src/context.rs`): runs the new protocol's `Coordinator` behind
+  `ConsensusHandle` (`consensus_handle.rs`), which is what the rest of the node reads consensus state from.
 - **Node** (`crates/espresso/node/src/lib.rs`): generic over `N: ConnectedNetwork`, `P: SequencerPersistence`.
 - **ValidatedState** (`crates/espresso/types/src/v0/impls/state.rs`): four merkle trees (block, fee, reward v1, reward
   v2) plus chain config; `validate_and_apply_header()` is the state transition. Persisting the merklized state is
@@ -56,8 +57,8 @@ just demo-native                      # local network via process-compose
   pruned database, it first stores a snapshot at a recent epoch boundary, from peers, unless the node keeps state longer
   than data and so needs complete trees, which only a replay from genesis gives. Leaves the data pruner has already
   deleted, and state the local snapshot lacks, come from peers; the state pruner never passes that snapshot.
-- **HotShot SystemContext** (`crates/hotshot/hotshot/src/lib.rs`): tasks via `ConsensusTaskRegistry`, broadcast channels
-  with `HotShotEvent` variants. `EpochMembershipCoordinator` manages per-epoch stake tables.
+- **Coordinator** (`crates/hotshot/new-protocol/src/coordinator.rs`): the consensus protocol.
+  `EpochMembershipCoordinator` (`crates/hotshot/types/src/epoch_membership.rs`) manages per-epoch stake tables.
 - **L1Client** (`crates/espresso/types/src/v0/impls/l1.rs`): tracks `head` and `finalized`; reads use
   `BlockId::finalized()`.
 - **Stake table fetcher** (`crates/espresso/types/src/v0/impls/stake_table.rs`): polls finalized L1, builds

@@ -46,10 +46,7 @@ use hotshot_types::{
     network::NetworkConfig,
     simple_certificate::LightClientStateUpdateCertificateV2,
     stake_table::HSStakeTable,
-    traits::{
-        election::{Membership, MembershipSnapshot, NonEpochMembershipSnapshot},
-        network::ConnectedNetwork,
-    },
+    traits::election::{Membership, MembershipSnapshot, NonEpochMembershipSnapshot},
     utils::epoch_from_block_number,
     vid::avidm::{AvidMScheme, init_avidm_param},
     vote::HasViewNumber,
@@ -485,14 +482,13 @@ impl<C: ApiContext> RequestResponseDataSource<SeqTypes> for ApiState<C> {
     }
 }
 
-pub(super) fn request_vid_shares<N, P>(
-    request_response_protocol: RequestResponseProtocol<ConsensusNode<N, P>, N, P>,
+pub(super) fn request_vid_shares<P>(
+    request_response_protocol: RequestResponseProtocol<ConsensusNode<P>, P>,
     block_number: u64,
     vid_common_data: VidCommonQueryData<SeqTypes>,
     duration: Duration,
 ) -> BoxFuture<'static, anyhow::Result<Vec<VidShare>>>
 where
-    N: ConnectedNetwork<PubKey>,
     P: SequencerPersistence,
 {
     async move {
@@ -1710,7 +1706,7 @@ pub(crate) fn light_client_genesis(config: &NetworkConfig<SeqTypes>, chain_id: C
 /// tries again.
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""))]
-struct LightClientProvider<C: ApiContext> {
+pub(crate) struct LightClientProvider<C: ApiContext> {
     light_client: OnceCell<Arc<NodeLightClient>>,
     state: ApiState<C>,
     client: FallbackClient<QueryServiceClient>,
@@ -1719,7 +1715,7 @@ struct LightClientProvider<C: ApiContext> {
 }
 
 impl<C: ApiContext> LightClientProvider<C> {
-    pub fn new(
+    fn new(
         peers: impl IntoIterator<Item = Url>,
         state: ApiState<C>,
         opt: LightClientOptions,
@@ -1735,7 +1731,7 @@ impl<C: ApiContext> LightClientProvider<C> {
         })
     }
 
-    async fn light_client(&self) -> Option<&Arc<NodeLightClient>> {
+    pub(crate) async fn light_client(&self) -> Option<&Arc<NodeLightClient>> {
         self.light_client
             .get_or_try_init(|| self.init())
             .await
@@ -1809,7 +1805,6 @@ pub mod test_helpers {
         future::{FutureExt, join_all},
         stream::{Stream, StreamExt},
     };
-    use hotshot::types::{Event, EventType};
     use hotshot_contract_adapter::stake_table::StakeTableContractVersion;
     use hotshot_types::{
         event::LeafInfo, light_client::LCV3StateSignatureRequestBody,
@@ -1832,10 +1827,9 @@ pub mod test_helpers {
     use crate::{
         api::data_source::testing::TestableSequencerDataSource,
         catchup::{NullStateCatchup, ParallelStateCatchup, StatePeers},
-        network,
         persistence::no_storage,
         testing::{
-            TestConfig, TestConfigBuilder, decided_leaves, deploy_stake_table, run_test_builder,
+            TestConfig, TestConfigBuilder, decided_leaves, deploy_stake_table,
             wait_for_decide_on_handle, wait_for_epochs,
         },
     };
@@ -1851,8 +1845,8 @@ pub mod test_helpers {
     }
 
     pub struct TestNetwork<P: PersistenceOptions, const NUM_NODES: usize> {
-        pub server: SequencerContext<network::Memory, P::Persistence>,
-        pub peers: Vec<SequencerContext<network::Memory, P::Persistence>>,
+        pub server: SequencerContext<P::Persistence>,
+        pub peers: Vec<SequencerContext<P::Persistence>>,
         pub cfg: TestConfig<{ NUM_NODES }>,
         // todo (abdul): remove this when fs storage is removed
         pub temp_dir: Option<TempDir>,
@@ -2138,14 +2132,6 @@ pub mod test_helpers {
             if upgrade.base >= NEW_PROTOCOL_VERSION && !cfg.has_stake_table() {
                 cfg.deploy_default_stake_table().await;
             }
-            let mut builder_tasks = Vec::new();
-
-            let (task, builder_url) =
-                run_test_builder::<{ NUM_NODES }>(cfg.network_config.builder_port()).await;
-            builder_tasks.push(task);
-            cfg.network_config
-                .set_builder_urls(vec1::vec1![builder_url.clone()]);
-
             // add default storage if none is provided as query module is now required
             let mut opt = cfg.api_config.clone();
             let temp_dir = if opt.storage_fs.is_none() && opt.storage_sql.is_none() {
@@ -2230,20 +2216,6 @@ pub mod test_helpers {
             )
             .await;
 
-            let handle_0 = &nodes[0];
-
-            // Hook the builder(s) up to the event stream from the first node
-            for builder_task in builder_tasks {
-                builder_task.start(Box::new(
-                    handle_0
-                        .consensus_handle()
-                        .legacy_consensus()
-                        .read()
-                        .await
-                        .event_stream(),
-                ));
-            }
-
             for ctx in &nodes {
                 ctx.start_consensus().await;
             }
@@ -2273,7 +2245,7 @@ pub mod test_helpers {
             persistence: P,
             catchup: C,
             upgrade: versions::Upgrade,
-        ) -> &SequencerContext<network::Memory, P::Persistence> {
+        ) -> &SequencerContext<P::Persistence> {
             assert_eq!(
                 self.deferred.first(),
                 Some(&i),
@@ -2300,7 +2272,7 @@ pub mod test_helpers {
             persistence: P,
             catchup: C,
             upgrade: versions::Upgrade,
-        ) -> &SequencerContext<network::Memory, P::Persistence> {
+        ) -> &SequencerContext<P::Persistence> {
             self.stop_node(i).await;
             self.start_stopped_node(i, state, persistence, catchup, upgrade)
                 .await
@@ -2339,7 +2311,7 @@ pub mod test_helpers {
             persistence: P,
             catchup: C,
             upgrade: versions::Upgrade,
-        ) -> &SequencerContext<network::Memory, P::Persistence> {
+        ) -> &SequencerContext<P::Persistence> {
             let ctx = self
                 .init_and_start(i, state, persistence, catchup, upgrade)
                 .await;
@@ -2361,7 +2333,7 @@ pub mod test_helpers {
             persistence: P,
             catchup: C,
             upgrade: versions::Upgrade,
-        ) -> SequencerContext<network::Memory, P::Persistence> {
+        ) -> SequencerContext<P::Persistence> {
             let ctx = self
                 .cfg
                 .init_node(
@@ -2390,7 +2362,7 @@ pub mod test_helpers {
         }
 
         /// The context of the node at index `i` (node 0 is the API server).
-        pub fn node(&self, i: usize) -> &SequencerContext<network::Memory, P::Persistence> {
+        pub fn node(&self, i: usize) -> &SequencerContext<P::Persistence> {
             if i == 0 {
                 &self.server
             } else {
@@ -2672,7 +2644,7 @@ pub mod test_helpers {
     /// legacy builder stops producing non-empty blocks after roughly a
     /// hundred views, independent of any stake table activity.
     pub async fn assert_node_live<P: SequencerPersistence>(
-        node: &SequencerContext<network::Memory, P>,
+        node: &SequencerContext<P>,
         epoch_height: u64,
         epochs_ahead: u64,
     ) {
@@ -2703,10 +2675,6 @@ pub mod test_helpers {
         tokio::time::timeout(Duration::from_secs(120), async {
             loop {
                 let leaf = match events.next().await.unwrap() {
-                    CoordinatorEvent::LegacyEvent(Event {
-                        event: EventType::Decide { leaf_chain, .. },
-                        ..
-                    }) => leaf_chain[0].leaf.clone(),
                     CoordinatorEvent::NewDecide { leaf_infos, .. } => leaf_infos[0].leaf.clone(),
                     _ => continue,
                 };
@@ -2728,7 +2696,7 @@ pub mod test_helpers {
     /// Asserts every node has decided at least `min_height`, and that nodes
     /// which have decided the same height agree on the leaf.
     pub async fn assert_nodes_agree<P: SequencerPersistence>(
-        nodes: &[&SequencerContext<network::Memory, P>],
+        nodes: &[&SequencerContext<P>],
         min_height: u64,
     ) {
         let leaves = join_all(nodes.iter().map(|node| node.decided_leaf())).await;
@@ -3025,7 +2993,6 @@ mod api_tests {
 
     use super::{update::ApiEventConsumer, *};
     use crate::{
-        network,
         persistence::{no_storage::NoStorage, sql::DECIDE_GAP_FILL_HORIZON},
         testing::{TestConfigBuilder, wait_for_decide_on_handle},
     };
@@ -3241,7 +3208,7 @@ mod api_tests {
 
         let storage = D::create_storage().await;
         let persistence = D::persistence_options(&storage).create().await.unwrap();
-        let data_source: Arc<StorageState<SequencerContext<network::Memory, NoStorage>, _>> =
+        let data_source: Arc<StorageState<SequencerContext<NoStorage>, _>> =
             Arc::new(StorageState::new(
                 D::create(D::persistence_options(&storage), Default::default(), false)
                     .await
@@ -3366,7 +3333,6 @@ mod api_tests {
             .append_decided_leaves(
                 ViewNumber::new(1),
                 leaf_chain.iter().map(|(leaf, qc)| (leaf, qc.clone())),
-                None,
                 &FailConsumer,
             )
             .await
@@ -3384,7 +3350,6 @@ mod api_tests {
             .append_decided_leaves(
                 ViewNumber::new(chain_len - 1),
                 leaf_chain.iter().map(|(leaf, qc)| (leaf, qc.clone())),
-                None,
                 &consumer,
             )
             .await
@@ -3466,7 +3431,7 @@ mod api_tests {
 
         let storage = D::create_storage().await;
         let persistence = D::persistence_options(&storage).create().await.unwrap();
-        let data_source: Arc<StorageState<SequencerContext<network::Memory, NoStorage>, _>> =
+        let data_source: Arc<StorageState<SequencerContext<NoStorage>, _>> =
             Arc::new(StorageState::new(
                 D::create(D::persistence_options(&storage), Default::default(), false)
                     .await
@@ -3492,7 +3457,6 @@ mod api_tests {
                     &leaf_info(leaf.clone()),
                     CertificatePair::non_epoch_change(qc.clone()),
                 )],
-                None,
                 &consumer,
             )
             .await
@@ -3533,7 +3497,6 @@ mod api_tests {
                     &leaf_info(leaf.clone()),
                     CertificatePair::non_epoch_change(qc),
                 )],
-                None,
                 &consumer,
             )
             .await
@@ -3598,7 +3561,6 @@ mod test {
         stream::{StreamExt, TryStreamExt},
         try_join,
     };
-    use hotshot::types::{Event, EventType};
     use hotshot_contract_adapter::{
         reward::{RewardAuthData, RewardClaimInput, RewardProofSiblings},
         sol_types::{EspToken, StakeTableV3},
@@ -3655,7 +3617,10 @@ mod test {
         state_signature_test_helper, status_test_helper, submit_test_helper, wait_for_committee,
     };
     use test_utils::reserve_tcp_port;
-    use tokio::time::sleep;
+    use tokio::{
+        net::{TcpListener, TcpStream},
+        time::sleep,
+    };
     use vbs::version::StaticVersion;
     use versions::{
         DRB_AND_HEADER_UPGRADE_VERSION, EPOCH_VERSION, LARGE_BLOCK_VERSION, NEW_PROTOCOL_VERSION,
@@ -4145,10 +4110,6 @@ mod test {
         let namespace = NamespaceId::from(7_u32);
         let mut decided = network.server.event_stream().filter_map(|event| {
             future::ready(match event {
-                CoordinatorEvent::LegacyEvent(Event {
-                    event: EventType::Decide { leaf_chain, .. },
-                    ..
-                }) => Some(leaf_chain[0].leaf.clone()),
                 CoordinatorEvent::NewDecide { leaf_infos, .. } => Some(leaf_infos[0].leaf.clone()),
                 _ => None,
             })
@@ -4422,6 +4383,112 @@ mod test {
 
         network.server.shut_down().await;
         drop(network);
+    }
+
+    /// A coordinator that dies is not papered over: `join` returns so the node exits, and the
+    /// readers fail instead of serving the resting state as if the chain had stopped.
+    #[test_log::test(tokio::test(flavor = "multi_thread"))]
+    async fn test_dead_coordinator_is_visible() {
+        let port = reserve_tcp_port().expect("OS should have ephemeral ports available");
+        let config = TestNetworkConfigBuilder::default()
+            .api_config(Options::with_port(port))
+            .network_config(TestConfigBuilder::default().build())
+            .build();
+        let mut network = TestNetwork::new(config, TEST_UPGRADE).await;
+        let node = &mut network.peers[0];
+        while node.decided_leaf().await.height() < 1 {
+            sleep(Duration::from_millis(100)).await;
+        }
+
+        let handle = node.consensus_handle();
+        handle.kill_coordinator();
+
+        timeout(Duration::from_secs(10), node.join())
+            .await
+            .expect("join did not return after the coordinator died");
+        let read = tokio::spawn(async move { handle.decided_leaf().await }).await;
+        assert!(
+            read.is_err_and(|err| err.is_panic()),
+            "a dead coordinator was served from the resting state"
+        );
+    }
+
+    /// After shutdown the readers serve the coordinator's last decide, not the anchor the node
+    /// started from, and the leaf and state they serve belong to the same block.
+    #[test_log::test(tokio::test(flavor = "multi_thread"))]
+    async fn test_shut_down_keeps_last_decided_leaf_and_state() {
+        const HEIGHT: u64 = 5;
+        let port = reserve_tcp_port().expect("OS should have ephemeral ports available");
+        let config = TestNetworkConfigBuilder::default()
+            .api_config(Options::with_port(port))
+            .network_config(TestConfigBuilder::default().build())
+            .build();
+        let network = TestNetwork::new(config, TEST_UPGRADE).await;
+        let node = &network.peers[0];
+        while node.decided_leaf().await.height() < HEIGHT {
+            sleep(Duration::from_millis(100)).await;
+        }
+
+        node.shutdown_consensus().await;
+
+        let leaf = node.decided_leaf().await;
+        let state = node.decided_state().await.expect("state after shutdown");
+        assert!(
+            leaf.height() >= HEIGHT,
+            "anchor served instead of the last decide"
+        );
+        // The state at height `h` holds the commitments of the `h` headers before it.
+        assert_eq!(
+            state.block_merkle_tree.num_leaves(),
+            leaf.height(),
+            "state does not belong to the resting leaf"
+        );
+    }
+
+    /// A node shut down before it ever started consensus stays stopped: a later read serves the
+    /// anchor instead of lazily starting the coordinator after shutdown.
+    #[test_log::test(tokio::test(flavor = "multi_thread"))]
+    async fn test_shut_down_before_start_keeps_consensus_stopped() {
+        const NUM_NODES: usize = 3;
+        const LATE: usize = NUM_NODES - 1;
+        let port = reserve_tcp_port().expect("OS should have ephemeral ports available");
+        let config = TestNetworkConfigBuilder::<NUM_NODES, _, _>::with_num_nodes()
+            .api_config(Options::with_port(port))
+            .network_config(TestConfigBuilder::default().build())
+            .deferred_start(&[LATE])
+            .build();
+        let network = TestNetwork::new(config, TEST_UPGRADE).await;
+
+        let late = network
+            .cfg
+            .init_node(
+                LATE,
+                network.genesis_state(LATE),
+                no_storage::Options,
+                Some(NullStateCatchup::default()),
+                None,
+                &NoMetrics,
+                STAKE_TABLE_CAPACITY_FOR_TEST,
+                NullEventConsumer,
+                TEST_UPGRADE,
+                network.cfg.upgrades(),
+            )
+            .await;
+        let handle = late.consensus_handle();
+
+        // No read before the shutdown: a read would lazily start consensus.
+        late.shutdown_consensus().await;
+
+        assert_eq!(late.decided_leaf().await.height(), 0, "not the anchor");
+        assert!(
+            handle.client_api().await.is_none(),
+            "a read started consensus after shutdown"
+        );
+        handle.start_consensus().await;
+        assert!(
+            handle.client_api().await.is_none(),
+            "consensus restarted after shutdown"
+        );
     }
 
     #[test_log::test(tokio::test(flavor = "multi_thread"))]
@@ -5445,80 +5512,6 @@ mod test {
                     .expect("decided state resolves its chain config"),
                 upgrade_chain_config,
             );
-        }
-
-        Ok(())
-    }
-
-    /// Run entirely without the legacy consensus stack: with base version
-    /// `NEW_PROTOCOL_VERSION` it is torn down at startup, and the explicit
-    /// mid-run `shut_down_legacy` calls below must be harmless to repeat.
-    /// The network has to keep deciding across epoch boundaries: DRB
-    /// computations on the shared membership coordinator must survive the
-    /// teardown.
-    #[test_log::test(tokio::test(flavor = "multi_thread"))]
-    async fn test_new_protocol_survives_legacy_shutdown() -> anyhow::Result<()> {
-        const EPOCH_HEIGHT: u64 = 20;
-        const NUM_NODES: usize = 5;
-        const SHUTDOWN_HEIGHT: u64 = 10;
-        const TARGET_BLOCK_HEIGHT: u64 = 50;
-
-        let network_config = TestConfigBuilder::default()
-            .epoch_height(EPOCH_HEIGHT)
-            .epoch_start_block(0)
-            .build();
-
-        let api_port = reserve_tcp_port().expect("No ports free for query service");
-
-        let (storage, persistence) = node_storage::<SqlDataSource, NUM_NODES>().await;
-
-        let config = TestNetworkConfigBuilder::<NUM_NODES, _, _>::with_num_nodes()
-            .api_config(SqlDataSource::options(
-                &storage[0],
-                Options::with_port(api_port),
-            ))
-            .network_config(network_config)
-            .persistences(persistence)
-            .build();
-
-        let network = TestNetwork::new(config, TEST_UPGRADE).await;
-
-        let client: Client<ClientErr, SequencerApiVersion> =
-            Client::new(format!("http://localhost:{api_port}").parse().unwrap());
-        client.connect(Some(Duration::from_secs(30))).await;
-
-        let mut leaves = client
-            .socket("availability/stream/leaves/0")
-            .subscribe::<LeafQueryData<SeqTypes>>()
-            .await
-            .expect("subscribe to leaf stream");
-
-        // Let the new protocol decide a few blocks first.
-        let mut height = 0;
-        while height < SHUTDOWN_HEIGHT {
-            let leaf = leaves
-                .next()
-                .await
-                .expect("leaf stream ended early")
-                .expect("leaf stream yielded an error");
-            height = leaf.header().height();
-        }
-
-        // Tear down the legacy stack on every node.
-        network.server.consensus_handle().shut_down_legacy().await;
-        for peer in &network.peers {
-            peer.consensus_handle().shut_down_legacy().await;
-        }
-
-        // The chain must keep growing across the epoch boundaries at 20 and
-        // 40 purely on the new protocol.
-        while height < TARGET_BLOCK_HEIGHT {
-            let leaf = leaves
-                .next()
-                .await
-                .expect("leaf stream ended early")
-                .expect("leaf stream yielded an error");
-            height = leaf.header().height();
         }
 
         Ok(())
@@ -7247,8 +7240,6 @@ mod test {
             }
         }
 
-        // Read before shutting consensus down: once the coordinator stops, these fall back to the
-        // legacy handle, which never ran at 0.6.
         let decided_leaf = node_0.decided_leaf().await;
         let state = node_0.decided_state().await.unwrap();
         node_0.shutdown_consensus().await;
@@ -7487,14 +7478,15 @@ mod test {
         /// The marker is stamped while the loop waits on the local stream for a leaf that never
         /// comes: the loop has to notice and switch to peers. The loop is put well behind first,
         /// as a long outage would, since a gap above the consensus anchor is re-decided on
-        /// restart and cannot be kept open.
+        /// restart and cannot be kept open, and the peers stay unreachable until the stamp, since
+        /// the fetcher would otherwise fill the gap.
         WhileWaiting,
     }
 
     /// The availability layer never fetches a leaf at or below the data pruned height, so the
     /// state loop has to get the leaves it still needs from peers, without storing them, and
-    /// carry on from the local stream once it is past the pruned height. Peers' leaf chains are
-    /// verified against per-epoch stake tables, so the network runs with epochs.
+    /// carry on from the local stream once it is past the pruned height. The leaves come through
+    /// the light client, verified against per-epoch stake tables, so the network runs with epochs.
     #[rstest]
     #[case::before_restart(DataPruned::BeforeRestart)]
     #[case::while_waiting(DataPruned::WhileWaiting)]
@@ -7658,9 +7650,11 @@ mod test {
             },
             DataPruned::WhileWaiting => {
                 // Put the loop behind its own storage and take the leaves above its new head out
-                // of local reach: below the consensus anchor they are never re-decided, and
-                // without availability peers they are never fetched. The loop then waits on the
-                // stream for the leaf above its head while consensus moves the tip on.
+                // of local reach. Below the consensus anchor they are never re-decided, and with
+                // the peers unreachable they are never fetched. The loop then waits on the stream
+                // for the leaf above its head while consensus moves the tip on.
+                let proxy_port =
+                    reserve_tcp_port().expect("OS should have ephemeral ports available");
                 {
                     let mut tx = db.write().await?;
                     UpdateStateData::<SeqTypes, BlockMerkleTree, { BlockMerkleTree::ARITY }>::set_last_state_height(
@@ -7671,7 +7665,8 @@ mod test {
                     tx.commit().await?;
                 }
                 delete_data_between(&db, BEHIND, head_at_shutdown).await?;
-                _restarted = start_query_node(vec![]).await;
+                _restarted =
+                    start_query_node(vec![format!("http://localhost:{proxy_port}").parse()?]).await;
                 let deadline = Instant::now() + Duration::from_secs(120);
                 loop {
                     if local_block_height(&db).await? > local_tip + GAP {
@@ -7689,10 +7684,12 @@ mod test {
                     head == BEHIND,
                     "the loop moved to {head} without the leaf above {BEHIND}"
                 );
-                // Now stamp past the height the loop is waiting for. The old head is well below
-                // the tip, as a real run leaves it.
+                // Now stamp past the height the loop is waiting for, with the old head well below
+                // the tip as a real run leaves it, and let the peers through. The fetcher no
+                // longer asks them for heights at or below the stamp, so the loop has to.
                 let pruned = head_at_shutdown;
                 prune_data_to(&db, pruned).await?;
+                tokio::spawn(forward_tcp(proxy_port, api_port));
                 pruned
             },
         };
@@ -7904,6 +7901,19 @@ mod test {
             .context("no block tree nodes")
     }
 
+    /// Forward connections on `port` to `target`, so a peer's URL is dead until this runs and
+    /// reachable from then on.
+    async fn forward_tcp(port: u16, target: u16) {
+        let listener = TcpListener::bind(("127.0.0.1", port)).await.unwrap();
+        loop {
+            let (mut inbound, _) = listener.accept().await.unwrap();
+            tokio::spawn(async move {
+                let mut outbound = TcpStream::connect(("127.0.0.1", target)).await.unwrap();
+                _ = tokio::io::copy_bidirectional(&mut inbound, &mut outbound).await;
+            });
+        }
+    }
+
     /// The number of blocks in the node's own availability storage.
     async fn local_block_height(db: &SqlStorage) -> anyhow::Result<u64> {
         let mut tx = db.read().await?;
@@ -8063,8 +8073,6 @@ mod test {
         // Wait until at least 3 epochs have passed
         wait_for_epochs(&mut events, EPOCH_HEIGHT, 3).await;
 
-        // Read before shutting consensus down: once the coordinator stops, the decided state falls
-        // back to the legacy handle, which never ran at 0.6.
         let instance = node_0.node_state();
         // A node can decide a leaf before it has validated that leaf's state itself.
         let state = timeout(Duration::from_secs(60), async {
@@ -8110,10 +8118,22 @@ mod test {
         tracing::warn!("shutting down node 0");
         node_0.shutdown_consensus().await;
 
-        // The oldest stored proposal. It may already be decided, since pruning lags the decide.
-        let (to_view, proposal) = persistence
-            .load_quorum_proposals()
-            .await?
+        // The decide processor keeps pruning the proposals of decides that landed before the
+        // shutdown, so wait for the stored set to settle before choosing one.
+        let proposals = timeout(Duration::from_secs(30), async {
+            let mut proposals = persistence.load_quorum_proposals().await?;
+            loop {
+                sleep(Duration::from_millis(500)).await;
+                let now = persistence.load_quorum_proposals().await?;
+                if now.keys().eq(proposals.keys()) {
+                    break anyhow::Ok(now);
+                }
+                proposals = now;
+            }
+        })
+        .await
+        .context("stored proposals did not settle after the shutdown")??;
+        let (to_view, proposal) = proposals
             .into_iter()
             .next()
             .expect("an undecided proposal survives the shutdown");

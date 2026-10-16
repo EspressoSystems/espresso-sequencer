@@ -38,8 +38,8 @@ use hotshot_query_service::{
 use hotshot_types::{
     ValidatorConfig,
     data::{EpochNumber, VidShare, ViewNumber},
-    drb::INITIAL_DRB_RESULT,
     epoch_membership::EpochMembershipCoordinator,
+    initializer::load_start_epoch_info,
     message::UpgradeLock,
     network::NetworkConfig,
     traits::{
@@ -252,11 +252,13 @@ where
     .await?;
     let coordinator = node_state.coordinator.clone();
 
-    seed_first_epoch(
+    load_start_epoch_info(
         &coordinator,
+        &[],
         epoch_height,
         genesis.epoch_start_block.unwrap_or_default(),
-    );
+    )
+    .await;
     let current_epoch = bootstrap_epoch_window(
         &coordinator,
         epoch_height,
@@ -831,18 +833,6 @@ impl ChainSource for NodeLightClient {
     async fn fetch_cert2(&self, header: &Header) -> anyhow::Result<Option<Certificate2<SeqTypes>>> {
         Ok(self.fetch_certificate2_for_header(header).await?)
     }
-}
-
-/// As `SystemContext::init` does for a validator.
-fn seed_first_epoch(
-    coordinator: &EpochMembershipCoordinator<SeqTypes>,
-    epoch_height: u64,
-    epoch_start_block: u64,
-) {
-    let first_epoch = EpochNumber::new(epoch_from_block_number(epoch_start_block, epoch_height));
-    coordinator
-        .membership()
-        .set_first_epoch(first_epoch, INITIAL_DRB_RESULT);
 }
 
 async fn connect_light_client(

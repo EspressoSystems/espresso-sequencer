@@ -141,7 +141,7 @@ where
         }
     }
 
-    // The stored legacy QC chain is no longer read: it could only close a chain whose tip was
+    // There is no stored legacy QC chain to fall back on: it could only close a chain whose tip was
     // legacy, and every network is past the 0.6 cutover, so running out of leaves is a 404.
     Err(not_found("not enough leaves to prove finality"))
 }

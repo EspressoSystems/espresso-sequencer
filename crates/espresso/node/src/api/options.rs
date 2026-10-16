@@ -342,12 +342,13 @@ impl Options {
             .with_block_provider(db_provider.clone())
             .with_vid_common_provider(db_provider);
         // If that fails, fetch missing data from peers.
-        provider = provider.with_provider(LightClientProvider::new(
+        let light_client = Arc::new(LightClientProvider::new(
             query_opt.peers,
             state.clone(),
             query_opt.light_client,
             query_opt.light_client_db,
         )?);
+        provider = provider.with_provider(Arc::clone(&light_client));
 
         let ranges_concurrency = mod_opt.ranges_concurrency;
         let ds = sql::DataSource::create(mod_opt.clone(), provider, false).await?;
@@ -363,7 +364,7 @@ impl Options {
             EmptyStateStart::for_pruning(inner_storage.get_pruning_config().as_ref());
         tasks.spawn(
             "merklized state storage update loop",
-            update_state_storage_loop(ds.clone(), get_node_state, empty_state_start),
+            update_state_storage_loop(ds.clone(), get_node_state, light_client, empty_state_start),
         );
 
         // Archive mode disables the pruner, so nothing else bounds the merklized state tables.
