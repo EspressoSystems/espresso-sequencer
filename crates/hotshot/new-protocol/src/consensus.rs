@@ -3290,7 +3290,7 @@ impl<T: NodeType> Consensus<T> {
             outbox.push_back(ConsensusOutput::SendReVote(message));
         }
         let stored = self.stored_proposals.get(&view);
-        for (_, message) in
+        for (ViewEpoch(_, epoch), message) in
             self.pending_proposal
                 .extract_if(ViewEpoch::at_view(view), |_, message| {
                     stored.is_some_and(|commitments| {
@@ -3298,6 +3298,10 @@ impl<T: NodeType> Consensus<T> {
                     })
                 })
         {
+            if self.upgrade_lock.certificate_rule(view) && epoch < self.current_epoch {
+                debug!(%view, %epoch, "dropping pending proposal of an epoch this node has left");
+                continue;
+            }
             outbox.push_back(ConsensusOutput::SendProposal(message));
         }
     }
