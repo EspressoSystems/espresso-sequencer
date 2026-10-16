@@ -7,7 +7,7 @@
 | Setting                                          | Needs                        |
 | ------------------------------------------------ | ---------------------------- |
 | `--consensus-storage journal`                    | bench                        |
-| `ESPRESSO_QUERY_PAYLOAD_DIR=/payload`            | bench                        |
+| `ESPRESSO_NODE_BLOB_DIR=/payload`                | bench                        |
 | `ESPRESSO_BENCH_BLAKE3_TX_HASH=1`                | bench                        |
 | `--query-engine sqlite`                          | main                         |
 | `EXPERIMENTAL_SQLITE_PRAGMAS=synchronous=normal` | bench                        |
@@ -16,7 +16,7 @@
 | `--prune [RETENTION]`                            | main                         |
 
 With `--query-engine sqlite`, `--query-db volume` keeps SQLite and payloads off the root disk the journal uses; `tmpfs`
-drops SQLite disk I/O entirely (needs `ESPRESSO_QUERY_PAYLOAD_DIR`). `EXPERIMENTAL_SQLITE_PRAGMAS` takes comma-separated
+drops SQLite disk I/O entirely (needs `ESPRESSO_NODE_BLOB_DIR`). `EXPERIMENTAL_SQLITE_PRAGMAS` takes comma-separated
 `key=value` pragmas applied after the defaults.
 
 With `--prune` and `--query-engine sqlite`, each prune batch holds the write lock, which shows as query lag.
