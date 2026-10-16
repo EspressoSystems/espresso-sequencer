@@ -390,14 +390,13 @@ pub(crate) enum EmptyStateStart {
 }
 
 impl EmptyStateStart {
-    /// A node that keeps state longer than data, or prunes nothing, asks for state that its data
-    /// no longer covers, so it gets the replay from genesis.
+    /// A pruned node serves recent state only, so it starts from a recent boundary. Archive nodes
+    /// and nodes without a pruner, which have no pruner config, replay from genesis for complete
+    /// trees.
     pub(crate) fn for_pruning(cfg: Option<&PrunerCfg>) -> Self {
         match cfg {
-            Some(cfg) if cfg.state_target_retention() <= cfg.target_retention() => {
-                Self::RecentBoundary
-            },
-            _ => Self::Genesis,
+            Some(_) => Self::RecentBoundary,
+            None => Self::Genesis,
         }
     }
 }
@@ -426,8 +425,8 @@ where
     // readable however far behind the chain the loop has fallen.
     let mut last_height = storage.get_last_state_height().await? as u64;
     // With no state of its own on a pruned database, as on a fresh pruned node, the loop would
-    // replay the whole chain from genesis, mostly on leaves from peers. Unless the node asks for
-    // complete trees, give it a recent snapshot to resume from instead.
+    // replay the whole chain from genesis, mostly on leaves from peers. A pruned node serves recent
+    // state only, so give it a recent snapshot to resume from instead.
     if last_height == 0
         && empty_state_start == EmptyStateStart::RecentBoundary
         && let Some(pruned) = storage.load_pruned_height().await?
@@ -935,7 +934,7 @@ mod test {
     use super::EmptyStateStart;
 
     #[test]
-    fn empty_state_start_follows_retention() {
+    fn empty_state_start_follows_pruning() {
         const DAY: Duration = Duration::from_secs(24 * 3600);
         let cfg = |data, state| {
             PrunerCfg::new()
@@ -944,17 +943,12 @@ mod test {
         };
 
         assert_eq!(EmptyStateStart::for_pruning(None), EmptyStateStart::Genesis);
-        assert_eq!(
-            EmptyStateStart::for_pruning(Some(&cfg(7 * DAY, DAY))),
-            EmptyStateStart::RecentBoundary
-        );
-        assert_eq!(
-            EmptyStateStart::for_pruning(Some(&cfg(7 * DAY, 7 * DAY))),
-            EmptyStateStart::RecentBoundary
-        );
-        assert_eq!(
-            EmptyStateStart::for_pruning(Some(&cfg(7 * DAY, 8 * DAY))),
-            EmptyStateStart::Genesis
-        );
+        // The retention values do not matter, even when state outlives data.
+        for state in [DAY, 7 * DAY, 8 * DAY] {
+            assert_eq!(
+                EmptyStateStart::for_pruning(Some(&cfg(7 * DAY, state))),
+                EmptyStateStart::RecentBoundary
+            );
+        }
     }
 }

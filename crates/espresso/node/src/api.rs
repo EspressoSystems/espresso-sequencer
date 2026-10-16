@@ -7728,8 +7728,8 @@ mod test {
     /// its state from a snapshot at a recent epoch boundary, from peers, instead of replaying the
     /// chain from genesis. The snapshot has no fee accounts, so the loop gets past the boundary
     /// only if it fetches them from peers, and past the next boundary only if the reward tree it
-    /// fetched is whole. A node that keeps state longer than data asks for complete trees, so it
-    /// still replays from genesis, on leaves from peers up to the data pruned height.
+    /// fetched is whole. A node without a pruner, here one that pruned before and has turned
+    /// pruning off, still replays from genesis, on leaves from peers up to the data pruned height.
     #[rstest]
     #[case::recent_boundary(EmptyStateStart::RecentBoundary)]
     #[case::genesis(EmptyStateStart::Genesis)]
@@ -7739,12 +7739,8 @@ mod test {
     ) -> anyhow::Result<()> {
         const NUM_NODES: usize = 5;
         const EPOCH_HEIGHT: u64 = 10;
-        // Pruning is on, but the pruner never runs within the test.
-        const DATA_RETENTION: &str = "1000000s";
-        let state_retention = match expected {
-            EmptyStateStart::RecentBoundary => DATA_RETENTION,
-            EmptyStateStart::Genesis => "2000000s",
-        };
+        // When pruning is on, the pruner never runs within the test.
+        const RETENTION: &str = "1000000s";
 
         let storage = join_all((0..NUM_NODES).map(|_| SqlDataSource::create_storage())).await;
         let persistence: [_; NUM_NODES] = storage
@@ -7798,13 +7794,13 @@ mod test {
         let pruned = 3 * EPOCH_HEIGHT + EPOCH_HEIGHT / 2;
         wait_until_block_height(&api_client, "status/block-height", pruned + EPOCH_HEIGHT).await;
         let mut db_opt = tmp_options(&storage[1]);
-        db_opt.prune = true;
+        db_opt.prune = expected == EmptyStateStart::RecentBoundary;
         db_opt.pruning = <persistence::sql::PruningOptions as clap::Parser>::parse_from([
             "pruning",
             "--target-retention",
-            DATA_RETENTION,
+            RETENTION,
             "--state-target-retention",
-            state_retention,
+            RETENTION,
             "--interval",
             "3600s",
         ]);
