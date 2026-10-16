@@ -83,7 +83,7 @@ laptop                       EC2, one AZ, private IPs
 
 | Host        | Runs                                                                                                   |
 | ----------- | ------------------------------------------------------------------------------------------------------ |
-| `ctl`       | anvil, `deploy`, orchestrator, state-relay-server, `agent-drive`, `agent-host`                         |
+| `ctl`       | anvil, `deploy`, `stake` (epochs on), orchestrator, state-relay-server, `agent-drive`, `agent-host`    |
 | `node0`     | espresso-node `-- storage-sql -- http -- query ... -- light-client`, postgres container, `agent-host`  |
 | query nodes | with `--query-nodes K` (all nodes under `--chaos`), `node0..node{K-1}` run the same modules as `node0` |
 | `node1..`   | espresso-node `-- storage-fs -- http -- status -- submit -- catchup -- config`, `agent-host`           |
@@ -239,10 +239,13 @@ just bench aws run --tag chaos-dense --chaos --nodes 32 --query-nodes 3 --chaos-
 
 - `--chaos` restarts, kills and wipes nodes, any node, while the load runs at a constant rate. Flags not given take the
   chaos shape: 22 nodes, every node a query node, `sqlite` colocated, `c8g.large` nodes, `c8g.xlarge` `ctl`,
-  `--latency decaf-2025`, `--netem full`, `--chaos-min` steps of 60 s at `--chaos-rate` MB/s, `--keep-going`. `--nodes`,
-  `--query-nodes`, `--node-type`, `--ctl-type`, `--latency` (`off`, `mainnet`, `decaf-2025` or `decaf-2026`), `--netem`,
-  `--submit-nodes` and `--query-engine` given on the command line are kept; `--latency` is per run, `up` does not take
-  it; `--nodes N` alone gives N query nodes.
+  `--latency decaf-2025`, `--netem full`, `--epoch-height 300`, `--chaos-min` steps of 60 s at `--chaos-rate` MB/s,
+  `--keep-going`. `--nodes`, `--query-nodes`, `--node-type`, `--ctl-type`, `--latency` (`off`, `mainnet`, `decaf-2025`
+  or `decaf-2026`), `--netem`, `--submit-nodes`, `--epoch-height` and `--query-engine` given on the command line are
+  kept; `--latency` is per run, `up` does not take it; `--nodes N` alone gives N query nodes.
+- Any `--epoch-height` stakes every node on L1 before the nodes start: `staking-cli stake-for-demo` on `ctl`, then a
+  wait for the L1 finalized block (`scripts/wait-for-l1-finalized`). Nodes then read the stake table from L1 at each
+  epoch change. A run without `--epoch-height` is unchanged.
 - Refused: `--steps`, `--step-s`, `--search`, `--keep-going` and `--warmup-s` (set by the chaos config); fewer than 7
   nodes; 2 or fewer query nodes; a shape where no node has 2 peers (`--nodes 7 --query-nodes 6`; not with mass kinds
   only or `none`); a `--chaos-min` that gives no faults (not with `--chaos-kinds none`); `--query-engine postgres`;
@@ -385,8 +388,8 @@ just bench aws run --tag chaos-dense --chaos --nodes 32 --query-nodes 3 --chaos-
 #### Not covered
 
 - Stake table changes: no delegation, undelegation, validator registration or exit during the run.
-- Epoch transitions under faults: runs do not span a stake table epoch change. `--epoch-height 3000` (decaf's value) is
-  accepted but not exercised by a chaos run; the default is the template's 1000000.
+- Epoch transitions without `--chaos`: the default `--epoch-height` is the template's 1000000, which a run does not
+  reach. `--chaos` crosses several epochs (300 blocks), the stake table fixed at the staked nodes.
 - L1 faults: anvil on ctl never stalls, reorgs or drops RPC.
 - Network faults: no partitions or latency spikes; `--latency` shaping is static, with `--netem full` a steady jitter
   and loss floor.
@@ -583,7 +586,7 @@ Where:
 | `--mtu`                               | 1500                           | per run      | with `--latency`: interface MTU of the nodes                                                  |
 | `--netem`                             | `delay`; `full` with `--chaos` | per run      | with `--latency`: `full` adds per-pair jitter and loss to the delay                           |
 | `--jitter-ratio`                      | 0.0065                         | per run      | with `--netem full`: floor of the jitter half-width as a ratio of the one-way delay           |
-| `--epoch-height`                      | template (1000000)             | per run      | genesis `epoch_height`, in blocks                                                             |
+| `--epoch-height`                      | `1000000`; 300 w. `--chaos`    | per run      | genesis `epoch_height`, in blocks; any value stakes every node on L1                          |
 | `--consensus-storage`                 | `fs`                           | per run      | `fs`, `journal` (experimental, not in `main` images); query node uses `storage-sql` with `fs` |
 | `--prune [RETENTION]`                 | off; bare `1m`                 | per run      | node0 prunes data and state older than RETENTION every 30 s; part of the config hash          |
 | `--fleet [FLEET]`                     | none                           | run          | measure on a fleet from `up`                                                                  |
@@ -751,7 +754,7 @@ Each step is judged over its second half. A step stopped early is judged over it
 - Stake: equal, orchestrator self-registration. 5 nodes give quorum 4, so a lagging `node0` never stalls consensus.
 - Peers: every node has state peers. Query nodes set `ESPRESSO_NODE_API_PEERS` to the other query nodes; the single
   query node has none.
-- Keys: test mnemonic, index 20 + i. No `keygen`, no `stake-for-demo`.
+- Keys: test mnemonic, index 20 + i. No `keygen`. `stake-for-demo` only with `--epoch-height`.
 - Network: cliquenet over private IPs, libp2p over private DNS. The security group allows ssh from this machine's IP
   only (checkip).
 - Images: `ghcr.io/espressosystems/espresso-network/<component>:<--tag>` plus foundry and postgres. Preflight resolves

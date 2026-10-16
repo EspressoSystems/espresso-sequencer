@@ -586,6 +586,8 @@ CHAOS_NODES = 22
 CHAOS_NODE_TYPE = "c8g.large"
 CHAOS_CTL_TYPE = "c8g.xlarge"
 CHAOS_LATENCY = "decaf-2025"
+# Short enough that a chaos run crosses several epoch changes, which needs the L1 stake table.
+SHORT_EPOCH_HEIGHT = 300
 CHAOS_FLAGS = (
     "--chaos-min",
     "--chaos-rate",
@@ -3126,7 +3128,8 @@ def add_block_size_flag(parser: argparse.ArgumentParser) -> None:
         "--epoch-height",
         type=positive_int,
         default=RunConfig.epoch_height,
-        help="genesis epoch_height in blocks (default: the template's 1000000)",
+        help=f"genesis epoch_height in blocks; stakes every node on L1 (default: the "
+        f"template's 1000000, {SHORT_EPOCH_HEIGHT} with --chaos)",
     )
 
 
@@ -3252,7 +3255,7 @@ def config_from_args(args: argparse.Namespace) -> RunConfig:
         mtu=args.mtu,
         netem=netem,
         jitter_ratio=args.jitter_ratio,
-        epoch_height=args.epoch_height,
+        epoch_height=chaos_default(args, "--epoch-height", SHORT_EPOCH_HEIGHT),
         consensus_storage=args.consensus_storage,
         prune=args.prune,
         root_gb=args.root_gb,
