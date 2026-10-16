@@ -335,6 +335,7 @@ impl<F: JournalFs> BlobStore<F> {
     }
 
     /// `open` with a chosen segment size, so tests can seal segments without gigabytes of data.
+    #[cfg(test)]
     pub(crate) async fn open_with(
         cfg: BlobCfg,
         fs: Arc<F>,
