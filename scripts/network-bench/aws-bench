@@ -2751,6 +2751,21 @@ def wipe_script(query: bool) -> str:
     return "\n".join(lines) + "\n"
 
 
+def share_wipe_script(query: bool) -> str:
+    """Run as root through `bounded`. Prints the path the share lane moved to. Validators only:
+    a query node serves its history from the lane."""
+    if query:
+        raise ValueError("share-wipe targets validators that are not query nodes")
+    return (
+        "set -eu\n"
+        "docker stop -t 30 espresso-node\n"
+        "dest=/data/journal/share.orig.$(date +%s)\n"
+        "mv /data/journal/journal/share \"$dest\"\n"
+        "echo \"$dest\"\n"
+        "docker start espresso-node\n"
+    )
+
+
 def geometric_steps(start: float, factor: float, top: float) -> tuple[float, ...]:
     """`start`, `start*factor`, ... below `top`, then `top` itself."""
     steps = []
@@ -2920,7 +2935,8 @@ def add_chaos_flags(parser: argparse.ArgumentParser) -> None:
         type=chaos_kinds,
         default=chaos.kinds,
         help="with --chaos: comma separated fault kinds, used in turn; `mass-restart` and `mass-kill` "
-        "fault every node at once, or --chaos-mass-nodes of them; `none` for no faults",
+        "fault every node at once, or --chaos-mass-nodes of them; `share-wipe` moves the share lane "
+        "of a validator that is not a query node to /data/journal/share.orig.<ts>; `none` for no faults",
     )
     for flag, value, text in (
         ("gap", chaos.gap_s, "seconds between two faults"),
@@ -6411,6 +6427,8 @@ class ChaosRunner:
         def act(name: str) -> subprocess.CompletedProcess[str]:
             if actions[name] == "wipe":
                 script = bounded(wipe_script(name in self.queries))
+            elif actions[name] == "share-wipe":
+                script = bounded(share_wipe_script(name in self.queries))
             else:
                 script = DOCKER_NODE_COMMANDS[actions[name]]
             return self.remote.ssh(name, script, check=False)
@@ -6418,6 +6436,9 @@ class ChaosRunner:
         # One worker per action: a mass restart goes out at once, not in pool-sized batches.
         done = self.remote.parallel(act, actions, workers=max(1, len(actions)))
         failed = {name for name, out in done.items() if out.returncode != 0}
+        for name, out in done.items():
+            if actions[name] == "share-wipe" and name not in failed:
+                log.info("chaos: %s share lane moved to %s", name, out.stdout.strip())
         step = ch.revert_failed(prev, step, failed)
         self.state = step["state"]
         for name, s in self.state["nodes"].items():

@@ -34,11 +34,15 @@ FLOOR_TAIL_S = VIEW_TIMEOUT_S + COUNTER_POLL_S
 SYNC_STATUS_TTL_S = 5.0
 SYNC_SETTLE_S = 2 * SYNC_STATUS_TTL_S
 
-ChaosKind = Literal["restart", "kill", "wipe", "mass-restart", "mass-kill"]
+ChaosKind = Literal[
+    "restart", "kill", "wipe", "share-wipe", "mass-restart", "mass-kill"
+]
 MASS_RESTART: ChaosKind = "mass-restart"
 MASS_KILL: ChaosKind = "mass-kill"
 MASS_KINDS = frozenset({MASS_RESTART, MASS_KILL})
 KILL_KINDS = frozenset({"kill", MASS_KILL})
+# Moves the share lane of a validator aside; a query node is never a target.
+SHARE_WIPE: ChaosKind = "share-wipe"
 
 # Missing blocks, leaves and vid_common of a query node's `sync-status`.
 Missing = tuple[int, int, int]
@@ -202,7 +206,7 @@ class ChaosObservation(TypedDict):
 
 class ChaosAction(TypedDict):
     node: str
-    op: Literal["restart", "kill", "start", "wipe"]
+    op: Literal["restart", "kill", "start", "wipe", "share-wipe"]
 
 
 class ChaosStep(TypedDict):
@@ -426,6 +430,7 @@ def chaos_step(
                 peers,
                 state["stake"],
                 cfg.query_floor,
+                kind,
             )
         )
         is not None
@@ -505,7 +510,7 @@ def with_started(state: ChaosState, started: Iterable[ChaosEvent]) -> ChaosState
     return {**state, "nodes": nodes}
 
 
-def _op(kind: ChaosKind) -> Literal["restart", "kill", "wipe"]:
+def _op(kind: ChaosKind) -> Literal["restart", "kill", "wipe", "share-wipe"]:
     match kind:
         case "mass-restart":
             return "restart"
@@ -636,11 +641,12 @@ def _fault_target(
     peers: dict[str, list[str]],
     stake: Mapping[str, int],
     query_floor: int,
+    kind: ChaosKind,
 ) -> int | None:
     """Index in `order` of the first node from `cursor` on whose fault keeps the faulty stake
     below a third, the up query floor and 2 up peers for itself and for every faulty node;
     `None` when there is none. A `lagging` node counts as faulty everywhere and is never a
-    target."""
+    target, nor is a query node for `share-wipe`."""
     up = {name for name, s in nodes.items() if s["health"] == "up"} - set(lagging)
     down = nodes.keys() - up
     up_queries = sum(q in up for q in queries)
@@ -651,7 +657,7 @@ def _fault_target(
     for step in range(len(order)):
         i = (cursor + step) % len(order)
         name = order[i]
-        if name not in up:
+        if name not in up or (kind == SHARE_WIPE and name in queries):
             continue
         if halts(stake, [*down, name]):
             continue

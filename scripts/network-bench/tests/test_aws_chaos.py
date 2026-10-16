@@ -59,6 +59,22 @@ def test_wipe_script_steps():
     ]
 
 
+def test_share_wipe_script_moves_the_share_lane_of_a_validator():
+    assert awsb.share_wipe_script(False).splitlines() == [
+        "set -eu",
+        "docker stop -t 30 espresso-node",
+        "dest=/data/journal/share.orig.$(date +%s)",
+        'mv /data/journal/journal/share "$dest"',
+        'echo "$dest"',
+        "docker start espresso-node",
+    ]
+
+
+def test_share_wipe_script_refuses_a_query_node():
+    with pytest.raises(ValueError, match="not query nodes"):
+        awsb.share_wipe_script(True)
+
+
 # TEST:rejoin-env-config-peers-ok
 def test_rejoin_env_config_peers():
     hosts = fleet(8, 2)
