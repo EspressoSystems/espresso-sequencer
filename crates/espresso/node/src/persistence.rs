@@ -1956,12 +1956,9 @@ mod tests {
     impl EventConsumer for DecideViewCollector {
         async fn handle_event(&self, event: &CoordinatorEvent<SeqTypes>) -> anyhow::Result<()> {
             let mut leaves = self.leaves.write().await;
-            match event {
-                // Decide events carry their leaves newest first.
-                CoordinatorEvent::NewDecide { leaf_infos, .. } => {
-                    leaves.extend(leaf_infos.iter().rev().map(|info| info.leaf.clone()))
-                },
-                _ => {},
+            // Decide events carry their leaves newest first.
+            if let CoordinatorEvent::NewDecide { leaf_infos, .. } = event {
+                leaves.extend(leaf_infos.iter().rev().map(|info| info.leaf.clone()))
             }
             Ok(())
         }
