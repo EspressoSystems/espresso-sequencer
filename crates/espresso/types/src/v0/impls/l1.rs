@@ -1425,7 +1425,7 @@ impl L1Client {
         }
     }
 
-    pub(crate) fn options(&self) -> &L1ClientOptions {
+    pub fn options(&self) -> &L1ClientOptions {
         self.transport.options()
     }
 

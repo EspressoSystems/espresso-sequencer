@@ -202,7 +202,7 @@ mod tests {
 
     use alloy::{
         network::EthereumWallet,
-        primitives::{Address, U256},
+        primitives::{Address, B256, U256},
         providers::{Provider, ProviderBuilder, ext::AnvilApi},
     };
     use anyhow::{bail, ensure};
@@ -214,8 +214,8 @@ mod tests {
         network_config::light_client_genesis_from_stake_table,
     };
     use espresso_types::{
-        L1Client, L1ClientOptions, Leaf, Leaf2, NodeState, PubKey, SeqTypes, TEST_UPGRADE,
-        ValidatedState,
+        L1BlockInfo, L1Client, L1ClientOptions, Leaf, Leaf2, NodeState, PubKey, SeqTypes,
+        TEST_UPGRADE, ValidatedState,
         traits::{
             EventConsumer, EventsPersistenceRead, MembershipPersistence, NullEventConsumer,
             PersistenceOptions, SequencerPersistence,
@@ -260,11 +260,14 @@ mod tests {
     };
     use http_client::{Client, error::ClientErr};
     use indexmap::IndexMap;
+    use serde_json::{Value, json};
     use staking_cli::demo::{DelegationConfig, StakingTransactions};
     use test_utils::reserve_tcp_port;
     use tokio::{spawn, time::sleep};
+    use url::Url;
     use vbs::version::Version;
     use versions::Upgrade;
+    use warp::Filter;
 
     use crate::{
         RECENT_STAKE_TABLES_LIMIT, SequencerApiVersion,
@@ -276,7 +279,7 @@ mod tests {
         legacy_chain::LegacyChain,
         persistence::sql::DECIDE_GAP_FILL_HORIZON,
         prefetch_stake_table_events,
-        testing::{TestConfigBuilder, staking_priv_keys},
+        testing::{TestConfig, TestConfigBuilder, staking_priv_keys},
     };
 
     #[async_trait]
@@ -2290,11 +2293,12 @@ mod tests {
 
     async fn assert_events_eq<P: TestablePersistence>(
         persistence: &P,
-        block: u64,
+        finalized: L1BlockInfo,
         stake_table_fetcher: &Fetcher,
         l1_client: &L1Client,
         stake_table_contract: Address,
     ) -> anyhow::Result<()> {
+        let block = finalized.number;
         // Load persisted events
         let (stored_l1, events) = persistence.load_events(0, block).await?;
         assert!(!events.is_empty());
@@ -2315,7 +2319,7 @@ mod tests {
 
         // Fetch events from stake table fetcher and compare with persisted data
         let fetched_events = stake_table_fetcher
-            .fetch_and_store_stake_table_events(stake_table_contract, block)
+            .fetch_and_store_stake_table_events(stake_table_contract, finalized)
             .await?;
         assert_eq!(fetched_events, events);
 
@@ -2401,7 +2405,7 @@ mod tests {
 
             assert_events_eq(
                 &persistence,
-                block1,
+                l1_client.wait_for_finalized_block(block1).await,
                 stake_table_fetcher,
                 &l1_client,
                 stake_table_contract,
@@ -2428,7 +2432,7 @@ mod tests {
 
             assert_events_eq(
                 &persistence,
-                block2,
+                l1_client.wait_for_finalized_block(block2).await,
                 stake_table_fetcher,
                 &l1_client,
                 stake_table_contract,
@@ -2452,7 +2456,7 @@ mod tests {
 
         assert_events_eq(
             &replay.persistence().await?,
-            block,
+            l1_client.wait_for_finalized_block(block).await,
             membership.fetcher(),
             &l1_client,
             contract,
@@ -2661,14 +2665,7 @@ mod tests {
         Ok(())
     }
 
-    #[rstest_reuse::apply(persistence_types)]
-    pub async fn test_prefetch_stake_table_events<P: TestablePersistence>(
-        _p: PhantomData<P>,
-    ) -> anyhow::Result<()> {
-        use espresso_types::v0_3::ChainConfig;
-
-        let network_config = TestConfigBuilder::<1>::default().build();
-
+    async fn deploy_stake_table_with_one_registration(network_config: &TestConfig<1>) -> Address {
         let (_, priv_keys): (Vec<_>, Vec<_>) = (0..1)
             .map(|i| <PubKey as SignatureKey>::generated_from_seed_indexed([1; 32], i as u64))
             .unzip();
@@ -2738,6 +2735,18 @@ mod tests {
             .await
             .expect("send tx failed")
             .expect("at least one registration transaction is queued");
+        st_addr
+    }
+
+    #[rstest_reuse::apply(persistence_types)]
+    pub async fn test_prefetch_stake_table_events<P: TestablePersistence>(
+        _p: PhantomData<P>,
+    ) -> anyhow::Result<()> {
+        use espresso_types::v0_3::ChainConfig;
+
+        let network_config = TestConfigBuilder::<1>::default().build();
+
+        let st_addr = deploy_stake_table_with_one_registration(&network_config).await;
 
         let storage = P::tmp_storage().await;
         let persistence = P::options(&storage).create().await.unwrap();
@@ -2778,14 +2787,7 @@ mod tests {
 
         prefetch_stake_table_events(&fetcher, &l1_client, &finalized, Some(st_addr)).await?;
 
-        assert_events_eq(
-            &persistence,
-            finalized.number,
-            &fetcher,
-            &l1_client,
-            st_addr,
-        )
-        .await?;
+        assert_events_eq(&persistence, finalized, &fetcher, &l1_client, st_addr).await?;
         let (offset, _) = persistence.load_events(0, finalized.number).await?;
         assert_eq!(offset, Some(EventsPersistenceRead::Complete));
 
@@ -2796,6 +2798,164 @@ mod tests {
         )
         .await
         .expect("prefetch without a contract must return immediately")?;
+
+        Ok(())
+    }
+
+    #[rstest_reuse::apply(persistence_types)]
+    pub async fn test_scan_without_the_finalized_block_stores_nothing<P: TestablePersistence>(
+        _p: PhantomData<P>,
+    ) -> anyhow::Result<()> {
+        use espresso_types::v0_3::{ChainConfig, ProviderBlockError};
+
+        let network_config = TestConfigBuilder::<1>::default().build();
+        let st_addr = deploy_stake_table_with_one_registration(&network_config).await;
+
+        let storage = P::tmp_storage().await;
+        let persistence = P::options(&storage).create().await.unwrap();
+        let l1_client = L1ClientOptions::default()
+            .connect(Vec::from([network_config.l1_url()]))
+            .unwrap();
+        let fetcher = Fetcher::new(
+            Arc::new(NullStateCatchup::default()),
+            Arc::new(Mutex::new(persistence.clone())),
+            l1_client.clone(),
+            ChainConfig {
+                stake_table_contract: Some(st_addr),
+                base_fee: 0.into(),
+                ..Default::default()
+            },
+        );
+
+        // This anvil mines only on transactions, so the block past the head stays unmined
+        // until the test mines it.
+        let head = l1_client.get_block_number().await?;
+        let unmined = L1BlockInfo {
+            number: head + 1,
+            ..Default::default()
+        };
+        let err = fetcher
+            .fetch_and_store_stake_table_events(st_addr, unmined)
+            .await
+            .expect_err("a provider without the block must not be scanned");
+        assert!(
+            matches!(
+                err.downcast_ref::<ProviderBlockError>(),
+                Some(ProviderBlockError::Missing { .. })
+            ),
+            "{err:#}"
+        );
+
+        l1_client.anvil_mine(Some(1), None).await?;
+        let mined = l1_client.wait_for_finalized_block(head + 1).await;
+        let other_branch = L1BlockInfo {
+            hash: B256::repeat_byte(1),
+            ..mined
+        };
+        let err = fetcher
+            .fetch_and_store_stake_table_events(st_addr, other_branch)
+            .await
+            .expect_err("a provider on another branch must not be scanned");
+        assert!(
+            matches!(
+                err.downcast_ref::<ProviderBlockError>(),
+                Some(ProviderBlockError::Mismatch { .. })
+            ),
+            "{err:#}"
+        );
+        let (offset, events) = persistence.load_events(0, head + 1).await?;
+        assert_eq!(offset, None);
+        assert!(events.is_empty());
+
+        fetcher
+            .fetch_and_store_stake_table_events(st_addr, mined)
+            .await?;
+        let (offset, _) = persistence.load_events(0, head + 1).await?;
+        assert_eq!(offset, Some(EventsPersistenceRead::Complete));
+
+        Ok(())
+    }
+
+    /// Answers `eth_getBlockByNumber` with `block`, `eth_call` with zero, and `eth_getLogs` with
+    /// `logs`, or with a JSON-RPC error when `logs` is `None`.
+    async fn serve_provider(block: Option<Value>, logs: Option<Value>) -> Url {
+        let route = warp::post()
+            .and(warp::body::json::<Value>())
+            .map(move |req: Value| {
+                let id = req["id"].clone();
+                let reply = match (req["method"].as_str(), &logs) {
+                    (Some("eth_getBlockByNumber"), _) => {
+                        json!({ "jsonrpc": "2.0", "id": id, "result": block })
+                    },
+                    (Some("eth_call"), _) => {
+                        json!({ "jsonrpc": "2.0", "id": id, "result": B256::ZERO })
+                    },
+                    (Some("eth_getLogs"), Some(logs)) => {
+                        json!({ "jsonrpc": "2.0", "id": id, "result": logs })
+                    },
+                    (method, _) => json!({
+                        "jsonrpc": "2.0",
+                        "id": id,
+                        "error": { "code": -32000, "message": format!("internal error serving {method:?}") },
+                    }),
+                };
+                warp::reply::json(&reply)
+            });
+        test_server::serve_on_random_port(route).await
+    }
+
+    #[rstest_reuse::apply(persistence_types)]
+    pub async fn test_scan_refuses_a_lagging_provider_reached_by_failover<
+        P: TestablePersistence,
+    >(
+        _p: PhantomData<P>,
+    ) -> anyhow::Result<()> {
+        use espresso_types::v0_3::{ChainConfig, ProviderBlockError};
+
+        let finalized = L1BlockInfo {
+            number: 16,
+            hash: B256::repeat_byte(1),
+            ..Default::default()
+        };
+        let mut block = alloy::rpc::types::Block::<alloy::rpc::types::Transaction>::default();
+        block.header.hash = finalized.hash;
+        block.header.inner.number = finalized.number;
+
+        let ahead_but_failing_logs = serve_provider(Some(json!(block)), None).await;
+        let behind = serve_provider(None, Some(json!([]))).await;
+        let l1_client = L1ClientOptions {
+            l1_retry_delay: Duration::from_millis(10),
+            l1_consecutive_failure_tolerance: 1,
+            l1_frequent_failure_tolerance: Duration::ZERO,
+            l1_events_max_retry_duration: Duration::from_secs(5),
+            ..Default::default()
+        }
+        .connect(Vec::from([ahead_but_failing_logs, behind]))
+        .unwrap();
+
+        let storage = P::tmp_storage().await;
+        let persistence = P::options(&storage).create().await.unwrap();
+        let fetcher = Fetcher::new(
+            Arc::new(NullStateCatchup::default()),
+            Arc::new(Mutex::new(persistence.clone())),
+            l1_client,
+            ChainConfig::default(),
+        );
+
+        let err = fetcher
+            .fetch_and_store_stake_table_events(Address::ZERO, finalized)
+            .await
+            .expect_err("a scan finished on a provider without the block must not succeed");
+        assert!(
+            matches!(
+                err.downcast_ref::<ProviderBlockError>(),
+                Some(ProviderBlockError::Missing { .. })
+            ),
+            "{err:#}"
+        );
+        let (offset, events) = persistence.load_events(0, finalized.number).await?;
+        assert_eq!(offset, None);
+        assert!(events.is_empty());
 
         Ok(())
     }
