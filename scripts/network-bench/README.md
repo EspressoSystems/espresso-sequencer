@@ -414,10 +414,11 @@ just bench aws run --fleet --prover   # the fleet's ctl needs 12288 MiB, e.g. up
 
 - `ctl` runs `stake` (`--epoch-height` given or implied) and `state-prover` (`--prover`) in addition to the services of
   [Topology](#topology). `--prover` runs the light-client prover on `ctl` beside the network: `state-prover -d` of the
-  `prover-service` image against the real verifier, updating the light client contract every 20 s.
-- Flags not given take `--epoch-height 600` (`--chaos` alone: 300) and `--ctl-type c8g.4xlarge` (16 vCPU; also with
-  `--chaos`, whose `c8g.xlarge` is too small). A `ctl` below 12288 MiB is refused by `plan`, `run` and `run --fleet`; a
-  fleet from before the image is refused unless `--tag` pulls the images.
+  `prover-service` image against the real verifier, updating the light client contract back to back
+  (`ESPRESSO_STATE_PROVER_UPDATE_INTERVAL=0s`).
+- Flags not given take `--epoch-height 300` and `--ctl-type c8g.4xlarge` (16 vCPU; also with `--chaos`, whose
+  `c8g.xlarge` is too small). A `ctl` below 12288 MiB is refused by `plan`, `run` and `run --fleet`; a fleet from before
+  the image is refused unless `--tag` pulls the images.
 - Stake table capacity 200 in genesis (`stake_table_capacity`, `[stake_table] capacity`) and in
   `ESPRESSO_STAKE_TABLE_CAPACITY` of `ctl.env` (relay, `deploy`, prover). Without `--prover` genesis uses
   `max(10, nodes)` and `ctl.env` keeps the `ESPRESSO_STAKE_TABLE_CAPACITY` of `.env`.
@@ -620,7 +621,7 @@ Where:
 | `--netem`                             | `delay`; `full` with `--chaos` | per run      | with `--latency`: `full` adds per-pair jitter and loss to the delay                           |
 | `--jitter-ratio`                      | 0.0065                         | per run      | with `--netem full`: floor of the jitter half-width as a ratio of the one-way delay           |
 | `--prover`                            | off                            | per run      | light-client prover on `ctl`; see [Light client prover](#light-client-prover)                 |
-| `--epoch-height`                      | `1000000`; 300 w. `--chaos`    | per run      | genesis `epoch_height`, in blocks (600 with `--prover`); any value stakes every node on L1    |
+| `--epoch-height`                      | `1000000`; 300 w. `--chaos`    | per run      | genesis `epoch_height`, in blocks; any value stakes every node on L1                          |
 | `--consensus-storage`                 | `fs`                           | per run      | `fs`, `journal` (experimental, not in `main` images); query node uses `storage-sql` with `fs` |
 | `--prune [RETENTION]`                 | off; bare `1m`                 | per run      | node0 prunes data and state older than RETENTION every 30 s; part of the config hash          |
 | `--fleet [FLEET]`                     | none                           | run          | measure on a fleet from `up`                                                                  |

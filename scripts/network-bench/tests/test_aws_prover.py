@@ -37,11 +37,11 @@ def config(*flags: str) -> Any:
     [
         ((), None, awsb.CTL_TYPE, False),
         (("--chaos",), 300, awsb.CHAOS_CTL_TYPE, False),
-        (("--prover",), awsb.PROVER_EPOCH_HEIGHT, awsb.PROVER_CTL_TYPE, True),
-        (("--chaos", "--prover"), awsb.PROVER_EPOCH_HEIGHT, awsb.PROVER_CTL_TYPE, True),
+        (("--prover",), awsb.SHORT_EPOCH_HEIGHT, awsb.PROVER_CTL_TYPE, True),
+        (("--chaos", "--prover"), awsb.SHORT_EPOCH_HEIGHT, awsb.PROVER_CTL_TYPE, True),
         (("--prover", "--epoch-height", "3000"), 3000, awsb.PROVER_CTL_TYPE, True),
-        (("--prover", "--ctl-type", "c8g.8xlarge"), 600, "c8g.8xlarge", True),
-        (("--chaos", "--prover", "--ctl-type", "c8g.xlarge"), 600, "c8g.xlarge", True),
+        (("--prover", "--ctl-type", "c8g.8xlarge"), 300, "c8g.8xlarge", True),
+        (("--chaos", "--prover", "--ctl-type", "c8g.xlarge"), 300, "c8g.xlarge", True),
         (("--epoch-height", "3000"), 3000, awsb.CTL_TYPE, False),
     ],
 )
@@ -126,12 +126,12 @@ def test_a_fleet_run_takes_the_prover_flag(
     assert harness.run(runner, "--prover") == awsb.EXIT_OK
     run = netbench.read_json(harness.fleet_dir / "runs/01-colocated/manifest.json")
     assert run["config"]["prover"] is True
-    assert run["config"]["epoch_height"] == awsb.PROVER_EPOCH_HEIGHT
+    assert run["config"]["epoch_height"] == awsb.SHORT_EPOCH_HEIGHT
     evidence: Any = {"clock_offset_ms": {}}
     meta = awsb.deployment_meta(run, evidence | {"prover": "prover-started"})
     assert (meta["prover"], meta["epoch_height"], meta["staking"]) == (
         "prover-started",
-        awsb.PROVER_EPOCH_HEIGHT,
+        awsb.SHORT_EPOCH_HEIGHT,
         True,
     )
     assert "prover" not in awsb.deployment_meta(run, evidence)
