@@ -11,9 +11,16 @@
 // see <https://www.gnu.org/licenses/>.
 
 #![cfg(feature = "sql-data-source")]
-use std::{cmp::min, fmt::Debug, future::Future, str::FromStr, time::Duration};
+use std::{
+    cmp::min,
+    fmt::Debug,
+    future::Future,
+    str::FromStr,
+    sync::Arc,
+    time::{Duration, SystemTime},
+};
 
-use anyhow::Context;
+use anyhow::{Context, bail, ensure};
 use async_trait::async_trait;
 use backon::{BackoffBuilder, ExponentialBuilder};
 use chrono::Utc;
@@ -27,6 +34,7 @@ use hotshot_types::{
     },
 };
 use itertools::Itertools;
+use journal_lane::lane::StdFs;
 use log::LevelFilter;
 use rand::Rng;
 #[cfg(not(feature = "embedded-db"))]
@@ -47,6 +55,7 @@ use crate::{
         VersionedDataSource,
         storage::{
             MerklizedStateHeightStorage, SerializableRetry,
+            blob::{self, BlobCfg, BlobStore},
             pruning::{PruneStorage, PrunedHeightStorage, PrunerCfg, PrunerConfig},
         },
         update::Transaction as _,
@@ -58,10 +67,16 @@ use crate::{
 pub extern crate sqlx;
 pub use sqlx::{Database, Sqlite};
 
+#[cfg(all(test, not(target_os = "windows")))]
+mod blob_pruning_test;
 mod db;
 mod migrate;
+#[cfg(all(test, not(target_os = "windows")))]
+mod payload_loc_test;
 mod queries;
 mod transaction;
+#[cfg(all(test, not(target_os = "windows")))]
+mod vid_share_test;
 
 pub use anyhow::Error;
 pub use db::*;
@@ -242,6 +257,7 @@ pub struct Config {
     archive: bool,
     serializable_retry_config: SerializableRetryConfig,
     pool: Option<Pool<Db>>,
+    blob: Option<BlobCfg>,
 }
 
 #[cfg(not(feature = "embedded-db"))]
@@ -276,6 +292,7 @@ impl From<SqliteConnectOptions> for Config {
             archive: false,
             serializable_retry_config: SerializableRetryConfig::default(),
             pool: None,
+            blob: None,
         }
     }
 }
@@ -295,6 +312,7 @@ impl From<PgConnectOptions> for Config {
             archive: false,
             serializable_retry_config: SerializableRetryConfig::default(),
             pool: None,
+            blob: None,
         }
     }
 }
@@ -390,6 +408,14 @@ impl Config {
     /// This allows reusing an existing connection pool when building a new `SqlStorage` instance.
     pub fn pool(mut self, pool: Pool<Db>) -> Self {
         self.pool = Some(pool);
+        self
+    }
+
+    /// Keep block payloads and VID shares in a blob store instead of the database.
+    ///
+    /// Only query connections open the store, since it holds an exclusive lock on its directory.
+    pub fn blob(mut self, cfg: BlobCfg) -> Self {
+        self.blob = Some(cfg);
         self
     }
 
@@ -553,6 +579,7 @@ pub struct SqlStorage {
     pruned_heights: PrunedHeightMetrics,
     pruner_cfg: Option<PrunerCfg>,
     serializable_retry_config: SerializableRetryConfig,
+    blobs: Option<Arc<BlobStore>>,
 }
 
 #[derive(Debug)]
@@ -707,19 +734,28 @@ impl SqlStorage {
 
         let pruner_cfg = config.pruner_cfg;
         let serializable_retry_config = config.serializable_retry_config;
+        let blobs = open_blobs(config.blob.take(), &connection_type, config.reset).await?;
+        if let Some(blobs) = &blobs {
+            blobs.install_metrics(&metrics);
+        }
 
         // Only reuse the same pool if we're using sqlite
         if cfg!(feature = "embedded-db") || connection_type == StorageConnectionType::Sequencer {
             // re-use the same pool if present and return early
             if let Some(pool) = config.pool {
-                return Ok(Self {
+                check_blob_binding(&pool, blobs.as_deref(), &connection_type).await?;
+                let storage = Self {
                     metrics,
                     pool_metrics,
                     pruned_heights,
                     pool,
                     pruner_cfg,
                     serializable_retry_config,
-                });
+                    blobs,
+                };
+                storage.gc_blobs().await?;
+                storage.drop_lost_locators().await?;
+                return Ok(storage);
             }
         } else if config.pool.is_some() {
             tracing::info!("not reusing existing pool for query connection");
@@ -832,6 +868,7 @@ impl SqlStorage {
         }
 
         conn.close().await?;
+        check_blob_binding(&pool, blobs.as_deref(), &connection_type).await?;
 
         let storage = Self {
             pool,
@@ -840,12 +877,91 @@ impl SqlStorage {
             metrics,
             pruner_cfg,
             serializable_retry_config,
+            blobs,
         };
+        storage.gc_blobs().await?;
+        storage.drop_lost_locators().await?;
         // Before the state writer can start: it resumes from the head, and the heights it rewrites
         // have to come under a pruning batch again. The pruner's first run is an interval away.
         storage.state_prune_start().await?;
         Ok(storage)
     }
+}
+
+/// With `reset`, the database is about to be emptied, so the records in the directory go too. A
+/// sequencer connection does not use the directory but wipes it, so no stale ID outlives the schema.
+async fn open_blobs(
+    cfg: Option<BlobCfg>,
+    connection_type: &StorageConnectionType,
+    reset: bool,
+) -> anyhow::Result<Option<Arc<BlobStore>>> {
+    let Some(cfg) = cfg else {
+        return Ok(None);
+    };
+    match (connection_type, reset) {
+        (StorageConnectionType::Query, true) => {
+            Ok(Some(BlobStore::open_resetting(cfg, Arc::new(StdFs)).await?))
+        },
+        (StorageConnectionType::Query, false) => {
+            Ok(Some(BlobStore::open(cfg, Arc::new(StdFs)).await?))
+        },
+        (StorageConnectionType::Sequencer, true) => {
+            blob::reset_dir(&cfg.dir)?;
+            Ok(None)
+        },
+        (StorageConnectionType::Sequencer, false) => Ok(None),
+    }
+}
+
+/// Refuses a query connection whose database and blob directory do not belong together: locators
+/// without a directory, or a directory written for another database.
+async fn check_blob_binding(
+    pool: &Pool<Db>,
+    blobs: Option<&BlobStore>,
+    connection_type: &StorageConnectionType,
+) -> anyhow::Result<()> {
+    if *connection_type != StorageConnectionType::Query {
+        return Ok(());
+    }
+    let Some(blobs) = blobs else {
+        let located = query("SELECT 1 FROM payload_loc LIMIT 1")
+            .fetch_optional(pool)
+            .await?;
+        ensure!(
+            located.is_none(),
+            "payload_loc rows present but ESPRESSO_NODE_BLOB_DIR unset"
+        );
+        return Ok(());
+    };
+
+    // Stale records of another database would be served as this one's: reads by height find
+    // them, and their heights hold back unlinking. A directory without an id was lost or is new,
+    // and holds nothing to confuse.
+    let recorded = query_as::<(String,)>("SELECT store_id FROM blob_store WHERE id = 1")
+        .fetch_optional(pool)
+        .await?
+        .map(|(id,)| id);
+    match (blobs.read_id()?, recorded) {
+        (Some(dir), Some(db)) => ensure!(
+            dir == db,
+            "blob directory {} belongs to a different database",
+            blobs.dir().display()
+        ),
+        (Some(_), None) => bail!(
+            "blob directory {} belongs to a different database",
+            blobs.dir().display()
+        ),
+        (None, Some(db)) => blobs.write_id(&db)?,
+        (None, None) => {
+            let id = format!("{:032x}", rand::random::<u128>());
+            query("INSERT INTO blob_store (id, store_id) VALUES (1, $1)")
+                .bind(&id)
+                .execute(pool)
+                .await?;
+            blobs.write_id(&id)?;
+        },
+    }
+    Ok(())
 }
 
 /// Retry policy for transactions aborted by PostgreSQL serialization conflicts (SQLSTATE 40001).
@@ -1273,7 +1389,7 @@ impl HasMetrics for SqlStorage {
 
 impl SqlStorage {
     async fn prune_write(&self) -> anyhow::Result<Transaction<Prune>> {
-        Transaction::new(&self.pool, self.pool_metrics.clone()).await
+        Transaction::new(&self.pool, self.pool_metrics.clone(), self.blobs.clone()).await
     }
 
     /// Open a transaction for a deferred-migration batch.
@@ -1281,7 +1397,93 @@ impl SqlStorage {
     /// Backfill transactions run under READ COMMITTED on Postgres so long-running batches don't
     /// trip SSI predicate-lock conflicts against concurrent consensus writes. See [`Backfill`].
     pub async fn backfill(&self) -> anyhow::Result<Transaction<Backfill>> {
-        Transaction::new(&self.pool, self.pool_metrics.clone()).await
+        Transaction::new(&self.pool, self.pool_metrics.clone(), self.blobs.clone()).await
+    }
+
+    /// Finishes a prune batch that a run left between the commit of its pruned height and its
+    /// `gc_payload_below`, and unlinks share segments past their retention.
+    async fn gc_blobs(&self) -> anyhow::Result<()> {
+        let Some(blobs) = &self.blobs else {
+            return Ok(());
+        };
+        let pruned = {
+            let mut tx = self
+                .read()
+                .await
+                .context("opening transaction to load the pruned height")?;
+            self.load_pruned_height(&mut tx, PruneCategory::Data)
+                .await?
+        };
+        if let Some(pruned) = pruned {
+            // The pruned height commits before its delete batch. Segments may only go once the
+            // locators below it do.
+            let mut tx = self
+                .prune_write()
+                .await
+                .context("opening pruning transaction")?;
+            tx.delete_batch(pruned).await?;
+            tx.commit().await.context("committing deleted batch")?;
+            blobs
+                .gc_payload_below(pruned)
+                .await
+                .context("unlinking pruned payload segments")?;
+        }
+        self.gc_shares().await
+    }
+
+    /// Deletes the locators of records the directory no longer holds (removed by recovery or
+    /// replaced directory), so those heights are missing again and get fetched.
+    async fn drop_lost_locators(&self) -> anyhow::Result<()> {
+        const BATCH: i64 = 10_000;
+        let Some(blobs) = &self.blobs else {
+            return Ok(());
+        };
+        let pruned = {
+            let mut tx = self.read().await?;
+            self.load_pruned_height(&mut tx, PruneCategory::Data)
+                .await?
+        };
+        let mut after = pruned.map_or(-1, |height| height as i64);
+        let mut removed = 0;
+        loop {
+            let mut tx = self.write().await?;
+            let rows = query_as::<(i64, String)>(
+                "SELECT height, loc FROM payload_loc WHERE height > $1 ORDER BY height LIMIT $2",
+            )
+            .bind(after)
+            .bind(BATCH)
+            .fetch_all(tx.as_mut())
+            .await?;
+            let Some((last, _)) = rows.last() else {
+                break;
+            };
+            after = *last;
+            for (height, loc) in &rows {
+                let loc: blob::BlobLoc = loc.parse()?;
+                if !blobs.payload_holds(&loc) {
+                    query("DELETE FROM payload_loc WHERE height = $1")
+                        .bind(height)
+                        .execute(tx.as_mut())
+                        .await?;
+                    removed += 1;
+                }
+            }
+            tx.commit().await?;
+        }
+        if removed > 0 {
+            tracing::info!(removed, "dropped payload locators of lost blob records");
+        }
+        Ok(())
+    }
+
+    async fn gc_shares(&self) -> anyhow::Result<()> {
+        if let Some(blobs) = &self.blobs {
+            blobs
+                .gc_shares_older_than(SystemTime::now())
+                .await
+                .context("unlinking expired share segments")?;
+        }
+        Ok(())
     }
 
     async fn new_pruner<'a>(&'a self) -> anyhow::Result<Pruner<'a>> {
@@ -1447,7 +1649,17 @@ impl SqlStorage {
             .await
             .context("opening pruning transaction")?;
         tx.delete_batch(to).await?;
-        tx.commit().await.context("committing deleted batch")
+        tx.commit().await.context("committing deleted batch")?;
+
+        // Only after the commit: until then readers can still need the records. A failure here
+        // leaves segments that the next prune batch or the next `connect` unlinks.
+        if let Some(blobs) = &self.blobs {
+            blobs
+                .gc_payload_below(to)
+                .await
+                .context("unlinking pruned payload segments")?;
+        }
+        Ok(())
     }
 
     /// State is never fetched from peers, so unlike data the marker need not commit first.
@@ -1560,8 +1772,12 @@ impl SqlStorage {
 
         let row = tx.fetch_one(query).await.context("getting disk usage")?;
         let size: i64 = row.get(0);
+        let blob_bytes = self
+            .blobs
+            .as_ref()
+            .map_or(0, |blobs| blobs.sealed_payload_bytes());
 
-        Ok(size as u64)
+        Ok(size as u64 + blob_bytes)
     }
 
     /// No-op on Postgres: no incremental vacuum, and a full one is too expensive to schedule.
@@ -1662,7 +1878,11 @@ impl PruneStorage for SqlStorage {
     async fn prune<'a>(&'a self, pruner: &mut Option<Pruner<'a>>) -> anyhow::Result<Option<u64>> {
         let pruner = match pruner {
             Some(pruner) => pruner,
-            None => pruner.get_or_insert(self.new_pruner().await?),
+            None => {
+                // The first call of a run.
+                self.gc_shares().await?;
+                pruner.get_or_insert(self.new_pruner().await?)
+            },
         };
 
         // Prune data exceeding target retention in batches
@@ -1723,12 +1943,16 @@ impl VersionedDataSource for SqlStorage {
     where
         Self: 'a;
 
+    fn blob_store(&self) -> Option<&Arc<BlobStore>> {
+        self.blobs.as_ref()
+    }
+
     async fn write(&self) -> anyhow::Result<Transaction<Write>> {
-        Transaction::new(&self.pool, self.pool_metrics.clone()).await
+        Transaction::new(&self.pool, self.pool_metrics.clone(), self.blobs.clone()).await
     }
 
     async fn read(&self) -> anyhow::Result<Transaction<Read>> {
-        Transaction::new(&self.pool, self.pool_metrics.clone()).await
+        Transaction::new(&self.pool, self.pool_metrics.clone(), self.blobs.clone()).await
     }
 }
 
@@ -1746,7 +1970,7 @@ pub mod testing {
     use test_utils::reserve_tcp_port;
     use tokio::time::timeout;
 
-    use super::Config;
+    use super::{BlobCfg, Config};
     use crate::testing::sleep;
     #[derive(Debug)]
     pub struct TmpDb {
@@ -1762,6 +1986,7 @@ pub mod testing {
         db_path: std::path::PathBuf,
         #[allow(dead_code)]
         persistent: bool,
+        blob_dir: Option<tempfile::TempDir>,
     }
     impl TmpDb {
         #[cfg(feature = "embedded-db")]
@@ -1777,6 +2002,7 @@ pub mod testing {
             Self {
                 db_path,
                 persistent,
+                blob_dir: None,
             }
         }
         pub async fn init() -> Self {
@@ -1823,6 +2049,7 @@ pub mod testing {
                 data_dir,
                 postgres: None,
                 persistent,
+                blob_dir: None,
             };
 
             db.start_postgres().await;
@@ -1844,6 +2071,16 @@ pub mod testing {
             self.db_path.clone()
         }
 
+        /// Store payloads of data sources connected to this database in a temporary blob dir.
+        pub fn with_blobs(mut self) -> Self {
+            self.blob_dir = Some(tempfile::tempdir().unwrap());
+            self
+        }
+
+        pub fn blob_dir(&self) -> Option<&std::path::Path> {
+            self.blob_dir.as_ref().map(|dir| dir.path())
+        }
+
         pub fn config(&self) -> Config {
             #[cfg(feature = "embedded-db")]
             let mut cfg = Config::default().db_path(self.db_path.clone());
@@ -1862,6 +2099,13 @@ pub mod testing {
                 )
                 .unwrap(),
             ]);
+
+            if let Some(dir) = self.blob_dir() {
+                cfg = cfg.blob(BlobCfg {
+                    dir: dir.to_path_buf(),
+                    share_retention: Duration::from_secs(7 * 24 * 3600),
+                });
+            }
 
             cfg
         }
@@ -2030,7 +2274,8 @@ mod test {
     use crate::{
         availability::{BlockQueryData, LeafQueryData},
         data_source::storage::{
-            MerklizedStateStorage, UpdateAvailabilityStorage, pruning::PrunedHeightStorage,
+            MerklizedStateStorage, UpdateAvailabilityStorage, blob::BlobLoc,
+            pruning::PrunedHeightStorage,
         },
         merklized_state::{MerklizedState, Snapshot, UpdateStateData},
         testing::mocks::{MockMerkleTree, MockTypes},
@@ -2737,6 +2982,81 @@ mod test {
         assert_eq!(storage.prune(&mut pruner).await.unwrap(), Some(1));
         assert_eq!(count_rows(&storage, "payload").await, 0);
         assert_eq!(count_rows(&storage, "vid_common").await, 0);
+    }
+
+    #[test_log::test(tokio::test(flavor = "multi_thread"))]
+    async fn test_reset_by_query_then_sequencer_leaves_restartable_node() {
+        let db = TmpDb::init().await;
+        let dir = tempfile::tempdir().unwrap();
+        let cfg = db.config().blob(BlobCfg {
+            dir: dir.path().to_path_buf(),
+            share_retention: Duration::from_secs(60),
+        });
+
+        let query = SqlStorage::connect(cfg.clone().reset_schema(), StorageConnectionType::Query)
+            .await
+            .unwrap();
+        drop(query);
+        SqlStorage::connect(cfg.clone().reset_schema(), StorageConnectionType::Sequencer)
+            .await
+            .unwrap();
+
+        SqlStorage::connect(cfg, StorageConnectionType::Query)
+            .await
+            .unwrap();
+    }
+
+    #[test_log::test(tokio::test(flavor = "multi_thread"))]
+    async fn test_blob_store_is_threaded_to_query_connections_only() {
+        let db = TmpDb::init().await;
+        let dir = tempfile::tempdir().unwrap();
+        let cfg = db.config().blob(BlobCfg {
+            dir: dir.path().to_path_buf(),
+            share_retention: Duration::from_secs(60),
+        });
+
+        let sequencer = SqlStorage::connect(cfg.clone(), StorageConnectionType::Sequencer)
+            .await
+            .unwrap();
+        assert!(sequencer.blob_store().is_none());
+        assert!(!dir.path().join("LOCK").exists());
+
+        let query = SqlStorage::connect(cfg, StorageConnectionType::Query)
+            .await
+            .unwrap();
+        assert!(query.blob_store().is_some());
+        assert!(query.read().await.unwrap().blob_store().is_some());
+        assert!(query.write().await.unwrap().blob_store().is_some());
+
+        let unset = SqlStorage::connect(db.config(), StorageConnectionType::Query)
+            .await
+            .unwrap();
+        assert!(unset.blob_store().is_none());
+        assert!(unset.read().await.unwrap().blob_store().is_none());
+    }
+
+    #[test_log::test(tokio::test(flavor = "multi_thread"))]
+    async fn test_attach_blobs_is_scoped_to_one_transaction() {
+        let db = TmpDb::init().await;
+        let storage = SqlStorage::connect(db.config(), StorageConnectionType::Query)
+            .await
+            .unwrap();
+        let loc = BlobLoc {
+            seq: 1,
+            offset: 2,
+            len: 3,
+            lsn: 4,
+        };
+
+        let mut tx = storage.write().await.unwrap();
+        assert!(tx.staged_blob(7).is_none());
+        UpdateAvailabilityStorage::<MockTypes>::attach_blobs(&mut tx, vec![(7, loc)]);
+        assert_eq!(tx.staged_blob(7), Some(&loc));
+        assert!(tx.staged_blob(8).is_none());
+        tx.revert().await;
+
+        let tx = storage.write().await.unwrap();
+        assert!(tx.staged_blob(7).is_none());
     }
 
     #[test_log::test(tokio::test(flavor = "multi_thread"))]

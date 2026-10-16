@@ -13,7 +13,6 @@ use espresso_types::{
     v0_4::Delta,
 };
 use futures::{StreamExt, future::Future};
-use hotshot::traits::ValidatedState as HotShotState;
 use hotshot_query_service::{
     availability::{self, AvailabilityDataSource},
     data_source::{Transaction, VersionedDataSource, storage::pruning::PrunedHeightDataSource},
@@ -21,7 +20,7 @@ use hotshot_query_service::{
     status::StatusDataSource,
     types::HeightIndexed,
 };
-use hotshot_types::utils::is_last_block;
+use hotshot_types::{traits::ValidatedState as HotShotState, utils::is_last_block};
 use jf_merkle_tree_compat::{
     LookupResult, MerkleTreeScheme, ToTraversalPath, UniversalMerkleTreeScheme,
 };

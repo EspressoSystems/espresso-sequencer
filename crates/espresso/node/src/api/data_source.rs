@@ -17,7 +17,6 @@ use espresso_types::{
     v0_4::{RewardAccountProofV2, RewardAccountQueryDataV2, RewardAccountV2, RewardMerkleTreeV2},
 };
 use futures::future::{BoxFuture, Future};
-use hotshot::types::BLSPubKey;
 use hotshot_query_service::{
     availability::{AvailabilityDataSource, BlockQueryData, LeafQueryData, VidCommonQueryData},
     data_source::{UpdateDataSource, VersionedDataSource},
@@ -30,6 +29,7 @@ use hotshot_types::{
     addr::NetAddr,
     data::{EpochNumber, VidShare, ViewNumber},
     light_client::{LCV3StateSignatureRequestBody, StateVerKey},
+    signature_key::BLSPubKey,
     simple_certificate::LightClientStateUpdateCertificateV2,
     traits::node_implementation::NodeType,
     x25519,

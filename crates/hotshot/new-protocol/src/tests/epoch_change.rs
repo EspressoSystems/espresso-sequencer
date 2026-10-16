@@ -1,8 +1,8 @@
-use hotshot::types::BLSPubKey;
 use hotshot_example_types::node_types::TestTypes;
 use hotshot_types::{
     data::{EpochNumber, ViewNumber},
     message::Proposal as SignedProposal,
+    signature_key::BLSPubKey,
     traits::{block_contents::BlockHeader, signature_key::SignatureKey},
     utils::is_epoch_transition,
     vote::HasViewNumber,

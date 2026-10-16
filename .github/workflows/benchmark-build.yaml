@@ -22,6 +22,11 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v7
 
+      - name: Install Protoc
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler
+
       - name: Enable Rust Caching
         uses: Swatinem/rust-cache@v2
         with:
@@ -31,12 +36,12 @@ jobs:
       - name: Build
         # Build in release without `testing` feature, this should work without `hotshot_example` config.
         run: |
-          cargo build --locked --release --features benchmarking --workspace
+          cargo build --locked --release --features benchmarking --workspace --exclude espresso-node-sqlite --exclude espresso-dev-node --exclude slow-tests
 
       - name: Build Espresso Dev Node
         # Espresso Dev Node currently requires testing feature, so it is built separately.
         run: |
-          cargo build --locked --release --features benchmarking,testing,embedded-db --bin espresso-dev-node
+          cargo build --locked --release -p espresso-dev-node --features espresso-node/benchmarking --bin espresso-dev-node
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v7
@@ -68,6 +73,11 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v7
 
+      - name: Install Protoc
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler
+
       - name: Enable Rust Caching
         uses: Swatinem/rust-cache@v2
         with:
@@ -75,12 +85,12 @@ jobs:
 
       - name: Build
         run: |
-          cargo build --locked --release --features benchmarking --workspace
+          cargo build --locked --release --features benchmarking --workspace --exclude espresso-node-sqlite --exclude espresso-dev-node --exclude slow-tests
 
       - name: Build Espresso Dev Node
         # Espresso Dev Node currently requires testing feature, so it is built separately.
         run: |
-          cargo build --locked --release --features benchmarking,testing,embedded-db --bin espresso-dev-node
+          cargo build --locked --release -p espresso-dev-node --features espresso-node/benchmarking --bin espresso-dev-node
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v7

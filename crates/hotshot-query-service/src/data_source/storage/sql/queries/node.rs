@@ -12,10 +12,7 @@
 
 //! Node storage implementation for a database query engine.
 
-use std::{
-    io::ErrorKind,
-    ops::{Bound, RangeBounds},
-};
+use std::ops::{Bound, RangeBounds};
 
 use alloy::primitives::map::HashMap;
 use anyhow::anyhow;
@@ -33,7 +30,7 @@ use super::{
 };
 use crate::{
     Header, MissingSnafu, QueryError, QueryResult,
-    availability::{Certificate2, NamespaceId, QueryableHeader, sql::payload_dir},
+    availability::{Certificate2, NamespaceId, QueryableHeader},
     data_source::storage::{
         Aggregate, AggregatesStorage, NodeStorage, PayloadMetadata, UpdateAggregatesStorage,
     },
@@ -146,27 +143,16 @@ where
               ORDER BY h.height
               LIMIT 1"
         );
-        let (height, share_data) = query
+        let (height, inline) = query
             .query_as::<(i64, Option<Vec<u8>>)>(&sql)
             .fetch_one(self.as_mut())
             .await?;
-        let share_data = match (share_data, payload_dir()) {
-            (Some(data), _) => data,
-            (None, Some(dir)) => {
-                let path = dir.join(format!("{height}.share"));
-                match tokio::fs::read(&path).await {
-                    Err(err) if err.kind() == ErrorKind::NotFound => {
-                        return MissingSnafu.fail();
-                    },
-                    res => {
-                        res.decode_error(format!("reading VID share file {}", path.display()))?
-                    },
-                }
-            },
-            (None, None) => return MissingSnafu.fail(),
-        };
-        let share = bincode::deserialize(&share_data).decode_error("malformed VID share")?;
-        Ok(share)
+        // Only a height with a header row has a share; the lane may hold records of heights that
+        // were pruned or whose transaction did not commit.
+        match self.read_blob_share(height as u64).await?.or(inline) {
+            Some(data) => decode_share(&data),
+            None => MissingSnafu.fail(),
+        }
     }
 
     async fn sync_status_for_range(
@@ -175,11 +161,16 @@ where
         to: usize,
     ) -> QueryResult<SyncStatusQueryData> {
         // A block can be missing if its corresponding header is missing or if the block's pyaload
-        // information is missing.
+        // information is missing. A non-empty payload is only there if its bytes are inline or
+        // this height has a locator: the payload row is shared by every height with the same
+        // payload, and a locator is per height.
         let blocks = self
             .sync_status_ranges(
-                "header AS h JOIN payload AS p ON (h.payload_hash, h.ns_table) = (p.hash, \
-                 p.ns_table)",
+                "(SELECT h.height AS height
+                    FROM header AS h
+                    JOIN payload AS p ON (h.payload_hash, h.ns_table) = (p.hash, p.ns_table)
+                    LEFT JOIN payload_loc AS pl ON pl.height = h.height
+                   WHERE p.size = 0 OR length(p.data) > 0 OR pl.loc IS NOT NULL) AS present",
                 "height",
                 from,
                 to,
@@ -525,6 +516,23 @@ where
 
         Ok(ResourceSyncStatus { missing, ranges })
     }
+
+    /// The share record of `height`, if a blob store is configured and holds one.
+    async fn read_blob_share(&self, height: u64) -> QueryResult<Option<Vec<u8>>> {
+        let Some(blobs) = self.blob_store() else {
+            return Ok(None);
+        };
+        blobs
+            .read_share(height)
+            .await
+            .map_err(|err| QueryError::Error {
+                message: format!("reading VID share record: {err:#}"),
+            })
+    }
+}
+
+fn decode_share(data: &[u8]) -> QueryResult<VidShare> {
+    Ok(bincode::deserialize(data).decode_error("malformed VID share")?)
 }
 
 impl<Types, Mode: TransactionMode> AggregatesStorage<Types> for Transaction<Mode>

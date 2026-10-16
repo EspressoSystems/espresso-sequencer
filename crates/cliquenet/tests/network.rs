@@ -1,4 +1,4 @@
-use std::{net::Ipv4Addr, time::Duration};
+use std::{net::Ipv4Addr, num::NonZeroUsize, time::Duration};
 
 use bytes::Bytes;
 use cliquenet::{
@@ -43,6 +43,8 @@ fn reserve_port() -> u16 {
 }
 
 /// Create a Config for a node, listing all nodes as parties.
+const MAX_MESSAGE_SIZE: NonZeroUsize = NonZeroUsize::new(10 * 1024 * 1024).unwrap();
+
 fn make_config(node: &Node, all: &[&Node]) -> Config {
     Config::builder()
         .name("test")
@@ -53,6 +55,7 @@ fn make_config(node: &Node, all: &[&Node]) -> Config {
         .connect_retry_delays(vec![1, 3])
         .send_retry_delays(vec![1, 3])
         .noise_protocols([(1.into(), Protocol::IK_25519_AesGcm_Blake2s)])
+        .max_message_size(MAX_MESSAGE_SIZE)
         .build()
 }
 
@@ -239,7 +242,7 @@ async fn large_message() {
 async fn message_too_large() {
     let (net_a, _net_b, _pka, pkb) = two_nodes().await;
 
-    let huge = vec![0u8; 11 * 1024 * 1024]; // > 10 MiB default
+    let huge = vec![0u8; MAX_MESSAGE_SIZE.get() + 1];
     let result = net_a.unicast(Slot::MIN, pkb, huge);
     assert!(matches!(result, Err(NetworkError::MessageTooLarge)));
 }

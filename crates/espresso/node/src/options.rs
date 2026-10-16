@@ -467,7 +467,7 @@ impl Options {
                 poll_interval: follower.poll_interval,
                 max_blocks_per_poll: follower.max_blocks_per_poll,
                 light_client: query.light_client.clone(),
-                light_client_db: query.light_client_db.clone(),
+                light_client_db: query.light_client_db(),
                 light_client_genesis,
             },
         })
@@ -964,6 +964,8 @@ pub struct SqlStorageConfig {
     pub max_connections: u32,
     pub query_min_connections: Option<u32>,
     pub query_max_connections: Option<u32>,
+    pub blob_dir: Option<PathBuf>,
+    pub share_retention: Duration,
     pub pruning: PruningView,
     pub consensus_pruning: ConsensusPruningView,
 }
@@ -1082,6 +1084,8 @@ impl From<&persistence::sql::Options> for SqlStorageConfig {
             query_max_connections: o.query_max_connections,
             #[cfg(feature = "embedded-db")]
             query_max_connections: None,
+            blob_dir: o.blob_dir.clone(),
+            share_retention: o.share_retention,
             pruning: PruningView::from(&o.pruning),
             consensus_pruning: ConsensusPruningView::from(&o.consensus_pruning),
         }
@@ -1122,7 +1126,7 @@ impl From<&api::options::Query> for QueryConfig {
         Self {
             peers: o.peers.clone(),
             light_client: o.light_client.clone(),
-            light_client_db: o.light_client_db.clone(),
+            light_client_db: o.light_client_db(),
         }
     }
 }
@@ -1666,6 +1670,30 @@ pub(crate) mod tests {
         );
     }
 
+    #[test]
+    fn light_client_db_defaults_under_storage_path() {
+        fn lc_path(storage_path: Option<&str>, lc_path: Option<&str>) -> Option<PathBuf> {
+            let query = api::options::Query {
+                storage_path: storage_path.map(PathBuf::from),
+                light_client_db: LightClientSqliteOptions {
+                    lc_path: lc_path.map(PathBuf::from),
+                    ..Default::default()
+                },
+                ..Default::default()
+            };
+            query.light_client_db().lc_path
+        }
+        assert_eq!(
+            lc_path(Some("/store/espresso"), None),
+            Some(PathBuf::from("/store/espresso/light-client/lc.db"))
+        );
+        assert_eq!(
+            lc_path(Some("/store/espresso"), Some("/store/lc")),
+            Some(PathBuf::from("/store/lc"))
+        );
+        assert_eq!(lc_path(None, None), None);
+    }
+
     // Document the JSON shape of GET /config/runtime. Runs under Postgres builds only;
     // the embedded-db variant produces a near-identical shape and the duplication isn't
     // worth the test complexity.
@@ -1716,6 +1744,8 @@ pub(crate) mod tests {
             "--prune",
             "--pruning-threshold",
             "1000000000000",
+            "--blob-dir",
+            "/var/lib/espresso/blob",
             "--",
             "http",
             "--port",
@@ -1747,6 +1777,8 @@ pub(crate) mod tests {
             "--prune",
             "--pruning-threshold",
             "1000000000000",
+            "--",
+            "http",
             "--",
             "query",
         ]);

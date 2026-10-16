@@ -25,6 +25,7 @@ use hotshot_types::{data::VidShare, traits::node_implementation::NodeType};
 use super::{
     Aggregate, AggregatesStorage, AvailabilityStorage, NodeStorage, UpdateAggregatesStorage,
     UpdateAvailabilityStorage,
+    blob::{BlobStore, StagedBlobs},
     pruning::{PruneStorage, PrunedHeightStorage, PrunerCfg, PrunerConfig},
 };
 use crate::{
@@ -243,6 +244,10 @@ where
             inner: self.inner.read().await?,
             failure: self.failure.clone(),
         })
+    }
+
+    fn blob_store(&self) -> Option<&Arc<BlobStore>> {
+        self.inner.blob_store()
     }
 }
 
@@ -522,6 +527,10 @@ where
     ) -> anyhow::Result<()> {
         self.maybe_fail_write(FailableAction::Any).await?;
         self.inner.insert_vid_range(vid).await
+    }
+
+    fn attach_blobs(&mut self, staged: StagedBlobs) {
+        self.inner.attach_blobs(staged);
     }
 }
 

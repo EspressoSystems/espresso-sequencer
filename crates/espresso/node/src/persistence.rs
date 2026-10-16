@@ -230,7 +230,6 @@ mod tests {
         v0_3::{AuthenticatedValidator, EventKey, Fetcher, RegisteredValidator, StakeTableEvent},
     };
     use futures::{StreamExt, TryStreamExt, future::join_all};
-    use hotshot::types::{BLSPubKey, SignatureKey};
     use hotshot_contract_adapter::{
         sol_types::StakeTableV3::Delegated, stake_table::StakeTableContractVersion,
     };
@@ -250,6 +249,7 @@ mod tests {
         light_client::{LightClientState, StakeTableState, StateKeyPair},
         message::{Proposal, UpgradeLock, convert_proposal},
         new_protocol::CoordinatorEvent,
+        signature_key::BLSPubKey,
         simple_certificate::{
             CertificatePair, LightClientStateUpdateCertificateV2, NextEpochQuorumCertificate2,
             QuorumCertificate, QuorumCertificate2, UpgradeCertificate,
@@ -260,6 +260,7 @@ mod tests {
         traits::{
             EncodeBytes,
             block_contents::{BlockHeader, BlockPayload},
+            signature_key::SignatureKey,
         },
         utils::EpochTransitionIndicator,
         vid::{
@@ -1956,12 +1957,9 @@ mod tests {
     impl EventConsumer for DecideViewCollector {
         async fn handle_event(&self, event: &CoordinatorEvent<SeqTypes>) -> anyhow::Result<()> {
             let mut leaves = self.leaves.write().await;
-            match event {
-                // Decide events carry their leaves newest first.
-                CoordinatorEvent::NewDecide { leaf_infos, .. } => {
-                    leaves.extend(leaf_infos.iter().rev().map(|info| info.leaf.clone()))
-                },
-                _ => {},
+            // Decide events carry their leaves newest first.
+            if let CoordinatorEvent::NewDecide { leaf_infos, .. } = event {
+                leaves.extend(leaf_infos.iter().rev().map(|info| info.leaf.clone()))
             }
             Ok(())
         }

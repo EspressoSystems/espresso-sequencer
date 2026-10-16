@@ -9,8 +9,6 @@
 //! A query node pairs the journal with a separate query-service database. Consensus writes stay
 //! here, and decided blocks are replayed into the query service from a cursor, off the voting path.
 
-pub mod format;
-pub mod lane;
 pub mod state;
 
 use std::{
@@ -51,19 +49,19 @@ use hotshot_types::{
         metrics::Metrics,
     },
 };
+use journal_lane::{
+    format::{self, Class, ScanEnd, SegmentHeader, Stream},
+    lane::{
+        self, DataIndex, JournalFs, Lane, LaneConfig, LaneMetrics, LaneMode, SegmentMeta, Segments,
+        SnapshotHook, StdFs,
+    },
+};
 
 use crate::{
     ViewNumber,
     persistence::{
         fs as side_fs,
-        journal::{
-            format::{Class, Kind, ScanEnd, SegmentHeader, Stream},
-            lane::{
-                DataIndex, JournalFs, Lane, LaneConfig, LaneMetrics, SegmentMeta, SegmentSet,
-                SnapshotHook, StdFs,
-            },
-            state::{Record, Replay, ReplayLeaf, State},
-        },
+        journal::state::{Kind, Record, Replay, ReplayLeaf, State},
         persistence_metrics::PersistenceMetricsValue,
         sql::{self, DecidedLeaf, decide_event_from_chain, within_gap_fill_horizon},
         storage_probe::{self, StorageProbe},
@@ -254,9 +252,10 @@ struct Inner {
     wal: Lane,
     data: Lane,
     _threads: JoinOnDrop,
-    segments: Arc<parking_lot::Mutex<SegmentSet>>,
-    // Serializes `gc` passes: `lane::prune` computes `to_unlink` once up front, so an overlapping
-    // pass could otherwise select and unlink the same segment twice.
+    wal_segments: Arc<parking_lot::Mutex<Segments>>,
+    data_segments: Arc<parking_lot::Mutex<Segments>>,
+    // Serializes `gc` passes: `gc` computes the segments to unlink once up front, so an
+    // overlapping pass could otherwise select and unlink the same segment twice.
     gc_lock: parking_lot::Mutex<()>,
     side: side_fs::Persistence,
     opts: Options,
@@ -454,17 +453,21 @@ impl Persistence {
         let (wal_recovered, data_recovered) = {
             let fs = std_fs.clone();
             let dir = wal_dir.clone();
-            let wal = tokio::task::spawn_blocking(move || lane::recover(&*fs, &dir, Stream::Wal))
-                .await
-                .context("wal recovery task panicked")?
-                .context("recovering wal stream")?;
+            let wal = tokio::task::spawn_blocking(move || {
+                lane::recover(&*fs, &dir, Stream::Wal, LaneMode::Snapshot, Kind::is_known)
+            })
+            .await
+            .context("wal recovery task panicked")?
+            .context("recovering wal stream")?;
 
             let fs = std_fs.clone();
             let dir = data_dir.clone();
-            let data = tokio::task::spawn_blocking(move || lane::recover(&*fs, &dir, Stream::Data))
-                .await
-                .context("data recovery task panicked")?
-                .context("recovering data stream")?;
+            let data = tokio::task::spawn_blocking(move || {
+                lane::recover(&*fs, &dir, Stream::Data, LaneMode::Append, Kind::is_known)
+            })
+            .await
+            .context("data recovery task panicked")?
+            .context("recovering data stream")?;
             (wal, data)
         };
 
@@ -474,7 +477,8 @@ impl Persistence {
         let replay_started = Instant::now();
         let mut state = State::default();
         for (header, body) in &wal_recovered.wal_records {
-            let record = Record::decode(header.kind, header.view, body)
+            let kind = Kind::from_u8(header.kind.0).context("unknown wal record kind")?;
+            let record = Record::decode(kind, header.key, body)
                 .context("decoding wal record during replay")?;
             match record {
                 Record::Snapshot(snapshot) => state = *snapshot,
@@ -515,10 +519,12 @@ impl Persistence {
         };
         let pending_payloads = PendingPayloads::new(opts.pending_payload_bytes);
 
-        let segments = Arc::new(parking_lot::Mutex::new(SegmentSet {
-            wal: wal_recovered.segments,
-            data: data_recovered.segments,
-        }));
+        let wal_segments = Arc::new(parking_lot::Mutex::new(Segments::from(
+            wal_recovered.segments,
+        )));
+        let data_segments = Arc::new(parking_lot::Mutex::new(Segments::from(
+            data_recovered.segments,
+        )));
         let state = Arc::new(parking_lot::Mutex::new(state));
         let hook: Arc<dyn SnapshotHook> = Arc::new(StateSnapshotHook(state.clone()));
 
@@ -527,15 +533,16 @@ impl Persistence {
             wal_dir.clone(),
             LaneConfig {
                 stream: Stream::Wal,
+                mode: LaneMode::Snapshot,
                 segment_bytes: WAL_SEGMENT_BYTES,
-                max_view_span: WAL_MAX_VIEW_SPAN,
+                max_key_span: WAL_MAX_VIEW_SPAN,
                 max_batch_bytes: WAL_MAX_BATCH_BYTES,
                 max_snapshot_bytes: MAX_SNAPSHOT_BYTES,
                 in_flight_bytes: IN_FLIGHT_BYTES,
             },
             (wal_recovered.next_seq, wal_recovered.next_lsn),
             Some(hook),
-            segments.clone(),
+            wal_segments.clone(),
             None,
         )
         .context("spawning wal writer thread")?;
@@ -545,8 +552,9 @@ impl Persistence {
             data_dir.clone(),
             LaneConfig {
                 stream: Stream::Data,
+                mode: LaneMode::Append,
                 segment_bytes: DATA_SEGMENT_BYTES,
-                max_view_span: u64::MAX,
+                max_key_span: u64::MAX,
                 max_batch_bytes: DATA_MAX_BATCH_BYTES,
                 // Never read: the data lane has no `SnapshotHook`, so no `Snapshot` frame is ever
                 // written on it.
@@ -555,7 +563,7 @@ impl Persistence {
             },
             (data_recovered.next_seq, data_recovered.next_lsn),
             None,
-            segments.clone(),
+            data_segments.clone(),
             replay_index.clone(),
         )
         .context("spawning data writer thread")?;
@@ -566,7 +574,8 @@ impl Persistence {
                 wal,
                 data,
                 _threads: JoinOnDrop(vec![wal_thread, data_thread]),
-                segments,
+                wal_segments,
+                data_segments,
                 gc_lock: parking_lot::Mutex::new(()),
                 side,
                 opts,
@@ -599,7 +608,7 @@ impl Persistence {
         let (lsn, finalized) = {
             let mut state = self.inner.state.lock();
             let finalized = state.apply(&rec);
-            let lsn = self.inner.wal.enqueue(view, kind, body, class, None);
+            let lsn = self.inner.wal.enqueue(view, kind.into(), body, class, None);
             (lsn, finalized)
         };
         if let Some(finalized) = finalized {
@@ -632,7 +641,7 @@ impl Persistence {
         let lsn = self
             .inner
             .data
-            .enqueue(view, kind, body, class, Some(permit));
+            .enqueue(view, kind.into(), body, class, Some(permit));
         if class == Class::Durable {
             self.inner.data.wait_durable(lsn).await?;
         }
@@ -640,7 +649,7 @@ impl Persistence {
     }
 
     /// Cold linear scan for a historical record: reconstruction/test/operator-tool path only,
-    /// with no production caller. Picks segments whose bound (from `SegmentSet`) covers `view`.
+    /// with no production caller. Picks segments whose bound (from `Segments`) covers `view`.
     async fn scan_for<T>(
         &self,
         stream: Stream,
@@ -650,18 +659,19 @@ impl Persistence {
     where
         T: serde::de::DeserializeOwned + Send + 'static,
     {
-        let dir = match stream {
-            Stream::Wal => self.inner.wal_dir.clone(),
-            Stream::Data => self.inner.data_dir.clone(),
+        let (dir, segments) = match stream {
+            Stream::Wal => (self.inner.wal_dir.clone(), &self.inner.wal_segments),
+            Stream::Data => (self.inner.data_dir.clone(), &self.inner.data_segments),
+            Stream::Payload | Stream::Share => unreachable!("journal has no {stream:?} lane"),
         };
-        let view_u64 = view.u64();
+        let key = view.u64();
         // (seq, sealed): only the last segment is active and may have a torn tail.
         let candidates: Vec<(u64, bool)> = {
-            let segments = self.inner.segments.lock();
-            let list = segments.list(stream);
+            let segments = segments.lock();
+            let list = segments.list();
             let active = list.last().map(|m| m.seq);
             list.iter()
-                .filter(|m| m.max_view >= view_u64)
+                .filter(|m| m.max_key >= key)
                 .map(|m| (m.seq, Some(m.seq) != active))
                 .collect()
         };
@@ -671,7 +681,7 @@ impl Persistence {
                 let path = lane::segment_path(&dir, seq);
                 let bytes = std::fs::read(&path)
                     .with_context(|| format!("reading segment {}", path.display()))?;
-                let found = find_in_segment(&bytes, kind, view_u64, sealed)
+                let found = find_in_segment(&bytes, kind, key, sealed)
                     .with_context(|| format!("scanning segment {}", path.display()))?;
                 if let Some(body) = found {
                     return Ok(Some(bincode::deserialize::<T>(&body)?));
@@ -683,43 +693,35 @@ impl Persistence {
         .context("scan_for: blocking task panicked")?
     }
 
-    /// Unlinks segments `SegmentSet::to_unlink` selects. Passes are serialized by `gc_lock`: see
-    /// `lane::prune` for why an unlink failure stops the pass instead of skipping ahead. On a
-    /// query node, `replayed` keeps every data segment the query service still has to ingest.
+    /// Unlinks the segments `wal_unlinkable` and `data_unlinkable` select. Passes are serialized by
+    /// `gc_lock`: see `lane::prune` for why an unlink failure stops the pass instead of skipping
+    /// ahead. On a query node, `replayed` keeps every data segment the query service still has to
+    /// ingest.
     async fn gc(&self, decided: ViewNumber, replayed: Option<u64>) -> anyhow::Result<()> {
         let inner = self.inner.clone();
-        let decided = decided.u64();
+        let bound = decided.u64().saturating_sub(inner.opts.view_retention);
 
         tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
             let _guard = inner.gc_lock.lock();
-            let pruned = lane::prune(
-                &StdFs,
-                &inner.segments,
-                &inner.wal_dir,
-                &inner.data_dir,
-                decided,
-                inner.opts.view_retention,
-                inner.opts.max_bytes,
-                replayed,
-            );
+            let pruned = prune_both(&inner, bound, replayed);
             // Also after a failed pass: the segments it did unlink are already gone from
-            // `segments`.
+            // `data_segments`.
             if let Some(index) = &inner.replay_index {
                 let oldest = inner
-                    .segments
+                    .data_segments
                     .lock()
-                    .list(Stream::Data)
+                    .list()
                     .first()
                     .map(|meta| meta.seq);
                 index
                     .lock()
                     .retain(|_, location| oldest.is_some_and(|oldest| location.seq >= oldest));
             }
-            let stats = pruned?;
-            if let Some(bytes) = stats.wal_bytes {
+            let (wal_bytes, data_bytes) = pruned?;
+            if let Some(bytes) = wal_bytes {
                 inner.wal.set_total_bytes(bytes);
             }
-            if let Some(bytes) = stats.data_bytes {
+            if let Some(bytes) = data_bytes {
                 inner.data.set_total_bytes(bytes);
             }
             Ok(())
@@ -738,7 +740,7 @@ impl Persistence {
         let Some(index) = &self.inner.replay_index else {
             return self.scan_for(Stream::Data, kind, view).await;
         };
-        let Some(location) = index.lock().get(&(view.u64(), kind)).copied() else {
+        let Some(location) = index.lock().get(&(view.u64(), kind.into())).copied() else {
             return Ok(None);
         };
         let path = lane::segment_path(&self.inner.data_dir, location.seq);
@@ -934,12 +936,57 @@ impl Persistence {
     }
 }
 
-/// Body of the last `kind` record at `view` in a whole segment file. A torn tail is expected on
+/// Unlinks the wal and data segments GC selects. Wal first: a failure there leaves data untouched.
+/// Returns the bytes left per stream, `None` for a stream nothing was unlinked from.
+fn prune_both(
+    inner: &Inner,
+    bound: u64,
+    replayed: Option<u64>,
+) -> anyhow::Result<(Option<u64>, Option<u64>)> {
+    let wal = wal_unlinkable(&inner.wal_segments.lock(), bound);
+    let wal_bytes = lane::prune(&StdFs, &inner.wal_dir, &inner.wal_segments, &wal)?;
+    let data = data_unlinkable(
+        &inner.data_segments.lock(),
+        bound,
+        inner.opts.max_bytes,
+        replayed,
+    );
+    let data_bytes = lane::prune(&StdFs, &inner.data_dir, &inner.data_segments, &data)?;
+    Ok((wal_bytes, data_bytes))
+}
+
+/// Age-based only. The two newest segments stay: a crash mid-roll falls back to the older one's
+/// snapshot.
+fn wal_unlinkable(segments: &Segments, bound: u64) -> Vec<SegmentMeta> {
+    let mut out = segments.oldest_below(bound);
+    out.truncate(segments.list().len().saturating_sub(2));
+    out
+}
+
+/// Age-based, then oldest-first while the stream exceeds `max_bytes`. Segments holding a key after
+/// `replayed` stay either way: the query service still has to ingest them.
+fn data_unlinkable(
+    segments: &Segments,
+    bound: u64,
+    max_bytes: u64,
+    replayed: Option<u64>,
+) -> Vec<SegmentMeta> {
+    let mut by_age = segments.oldest_below(bound);
+    let replayable = by_age
+        .iter()
+        .take_while(|meta| replayed.is_none_or(|replayed| meta.max_key <= replayed))
+        .count();
+    by_age.truncate(replayable);
+    let by_bytes = segments.oldest_over_bytes(max_bytes, replayed);
+    std::cmp::max_by_key(by_age, by_bytes, Vec::len)
+}
+
+/// Body of the last `kind` record at `key` in a whole segment file. A torn tail is expected on
 /// the active segment; on a sealed one (fsynced before the roll) it is corruption.
 fn find_in_segment(
     bytes: &[u8],
     kind: Kind,
-    view: u64,
+    key: u64,
     sealed: bool,
 ) -> anyhow::Result<Option<Vec<u8>>> {
     ensure!(
@@ -947,13 +994,19 @@ fn find_in_segment(
         "segment shorter than its header"
     );
     let header = SegmentHeader::decode(bytes).context("corrupt segment header")?;
+    let kind = format::Kind::from(kind);
     let mut found = None;
-    let (end, ..) = format::scan(&bytes[SegmentHeader::LEN..], header.first_lsn, |h, body| {
-        if h.kind == kind && h.view == view {
-            found = Some(body.to_vec());
-        }
-        Ok(())
-    })?;
+    let (end, ..) = format::scan(
+        &bytes[SegmentHeader::LEN..],
+        header.first_lsn,
+        Kind::is_known,
+        |h, body| {
+            if h.kind == kind && h.key == key {
+                found = Some(body.to_vec());
+            }
+            Ok(())
+        },
+    )?;
     if let ScanEnd::Torn(offset) = end {
         ensure!(!sealed, "sealed segment corrupt at frame offset {offset}");
     }
@@ -961,7 +1014,7 @@ fn find_in_segment(
 }
 
 /// Index the data frames a query node may still replay: every record past the replay cursor,
-/// decided or not yet. `max_view` only grows along a stream, so segments ending at or before the
+/// decided or not yet. `max_key` only grows along a stream, so segments ending at or before the
 /// cursor hold nothing replay needs.
 async fn index_unreplayed(
     fs: Arc<StdFs>,
@@ -973,13 +1026,19 @@ async fn index_unreplayed(
     let cursor = replay.cursor.map_or(0, |(view, _)| view.u64());
     let seqs = segments
         .iter()
-        .filter(|meta| replay.cursor.is_none() || meta.max_view > cursor)
+        .filter(|meta| replay.cursor.is_none() || meta.max_key > cursor)
         .map(|meta| meta.seq)
         .collect::<Vec<_>>();
     let frames = tokio::task::spawn_blocking(move || -> anyhow::Result<Vec<_>> {
         let mut frames = Vec::new();
         for seq in seqs {
-            frames.extend(lane::frame_locations(&*fs, &dir, Stream::Data, seq)?);
+            frames.extend(lane::frame_locations(
+                &*fs,
+                &dir,
+                Stream::Data,
+                seq,
+                Kind::is_known,
+            )?);
         }
         Ok(frames)
     })
@@ -988,7 +1047,7 @@ async fn index_unreplayed(
     index.lock().extend(
         frames
             .into_iter()
-            .map(|(header, location)| ((header.view, header.kind), location)),
+            .map(|(header, location)| ((header.key, header.kind), location)),
     );
     Ok(index)
 }
@@ -1371,7 +1430,12 @@ impl SequencerPersistence for Persistence {
             )
             .add_point(self.inner.replay_seconds);
         self.inner.probe.register(&*metrics.subgroup("disk".into()));
-        LaneMetrics::install(metrics, &[&self.inner.wal, &self.inner.data]);
+        LaneMetrics::install(
+            metrics,
+            "journal",
+            "stream",
+            &[&self.inner.wal, &self.inner.data],
+        );
     }
 }
 
@@ -1487,6 +1551,76 @@ mod tests {
     use super::{testing::TEST_MAX_BLOCK_SIZE, *};
     use crate::persistence::tests::{TestablePersistence, consecutive_height_chain, decide_range};
 
+    fn segments(stream: Stream, spec: &[(u64, u64, u64)]) -> Segments {
+        spec.iter()
+            .map(|&(seq, bytes, max_key)| SegmentMeta {
+                stream,
+                seq,
+                bytes,
+                max_key,
+            })
+            .collect::<Vec<_>>()
+            .into()
+    }
+
+    fn seqs(list: Vec<SegmentMeta>) -> Vec<u64> {
+        list.iter().map(|m| m.seq).collect()
+    }
+
+    #[test]
+    fn wal_unlinkable_keeps_two_newest_segments() {
+        let segs = segments(
+            Stream::Wal,
+            &[(1, 100, 5), (2, 100, 10), (3, 100, 20), (4, 100, 30)],
+        );
+        // bound 50: every segment is old enough, but only those outside the two newest qualify.
+        assert_eq!(seqs(wal_unlinkable(&segs, 50)), vec![1, 2]);
+    }
+
+    #[test]
+    fn wal_unlinkable_never_touches_active_or_recent_segments() {
+        let segs = segments(Stream::Wal, &[(1, 100, 0), (2, 100, 0)]);
+        assert!(wal_unlinkable(&segs, 1_000_000).is_empty());
+        let segs = segments(Stream::Wal, &[(1, 100, 0), (2, 100, 0), (3, 100, 0)]);
+        assert_eq!(seqs(wal_unlinkable(&segs, 1_000_000)), vec![1]);
+    }
+
+    #[test]
+    fn wal_unlinkable_never_skips_a_segment_to_reach_a_younger_looking_one() {
+        let segs = segments(
+            Stream::Wal,
+            &[(1, 100, 60), (2, 100, 0), (3, 100, 80), (4, 100, 90)],
+        );
+        assert!(wal_unlinkable(&segs, 50).is_empty());
+    }
+
+    #[test]
+    fn data_unlinkable_drops_oldest_first_over_byte_cap() {
+        let segs = segments(
+            Stream::Data,
+            &[(1, 40, 100), (2, 40, 100), (3, 40, 100), (4, 40, 100)],
+        );
+        // All young, total 160 > cap 90: drop oldest until under the cap; the active one stays.
+        assert_eq!(seqs(data_unlinkable(&segs, 0, 90, None)), vec![1, 2]);
+    }
+
+    #[test]
+    fn data_unlinkable_age_based_ignores_byte_cap() {
+        let segs = segments(Stream::Data, &[(1, 10, 0), (2, 10, 1000), (3, 10, 1000)]);
+        assert_eq!(seqs(data_unlinkable(&segs, 990, u64::MAX, None)), vec![1]);
+    }
+
+    #[test]
+    fn data_unlinkable_keeps_unreplayed_segments_even_over_cap() {
+        let segs = segments(
+            Stream::Data,
+            &[(1, 40, 5), (2, 40, 10), (3, 40, 20), (4, 40, 30)],
+        );
+        assert_eq!(seqs(data_unlinkable(&segs, 0, 0, Some(10))), vec![1, 2]);
+        assert_eq!(seqs(data_unlinkable(&segs, 1000, 0, Some(10))), vec![1, 2]);
+        assert_eq!(seqs(data_unlinkable(&segs, 1000, 0, None)), vec![1, 2, 3]);
+    }
+
     /// A payload the decide carries (built, reconstructed or fetched before it) reaches the
     /// query service at replay without a `BlockPayload` event, and neither it nor an event's
     /// payload is written to the journal.
@@ -1518,7 +1652,11 @@ mod tests {
             vec![(1, Some(carried)), (2, Some(obtained))]
         );
         let index = storage.inner.replay_index.as_ref().unwrap().lock();
-        assert!(index.keys().all(|(_, kind)| *kind != Kind::PendingPayload));
+        assert!(
+            index
+                .keys()
+                .all(|(_, kind)| *kind != Kind::PendingPayload.into())
+        );
         assert!(storage.inner.pending_payloads.lock().by_view.is_empty());
     }
 
@@ -1673,11 +1811,11 @@ mod tests {
             stream: Stream::Data,
             seq: 1,
             first_lsn: 1,
-            prev_max_view: 0,
+            prev_max_key: 0,
         };
         let mut seg = header.encode().to_vec();
-        format::encode_frame(&mut seg, 1, 5, Kind::Da, b"five");
-        format::encode_frame(&mut seg, 2, 6, Kind::Da, b"six");
+        format::encode_frame(&mut seg, 1, 5, Kind::Da.into(), b"five");
+        format::encode_frame(&mut seg, 2, 6, Kind::Da.into(), b"six");
         let last = seg.len() - 1;
         seg[last] ^= 0xff;
 

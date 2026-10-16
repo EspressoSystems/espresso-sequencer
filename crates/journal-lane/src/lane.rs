@@ -7,12 +7,13 @@
 
 use std::{
     io::{self, Read},
+    os::unix::fs::FileExt,
     path::{Path, PathBuf},
     sync::{
         Arc,
         atomic::{AtomicU64, Ordering},
     },
-    time::Instant,
+    time::{Instant, SystemTime},
 };
 
 use anyhow::Context;
@@ -20,9 +21,7 @@ use hotshot_types::traits::metrics::{Gauge, Histogram, Metrics, NoMetrics};
 use parking_lot::Mutex;
 use tokio::sync::{OwnedSemaphorePermit, Semaphore, mpsc, watch};
 
-use crate::persistence::journal::format::{
-    self, Class, FrameHeader, Kind, Lsn, ScanEnd, SegmentHeader, Stream,
-};
+use crate::format::{self, Class, FrameHeader, Kind, Lsn, ScanEnd, SegmentHeader, Stream};
 
 /// Per-stream journal metrics. A lane's writer thread starts recording into this before any real
 /// `Metrics` implementation exists (`enable_metrics` runs only after `Persistence::open` returns),
@@ -47,15 +46,16 @@ impl LaneMetrics {
         }
     }
 
-    /// Installs real histograms/gauges labelled `stream = "wal"|"data"` on every lane. Each family
-    /// is registered once: registering a name twice fails with Prometheus.
-    pub fn install(metrics: &dyn Metrics, lanes: &[&Lane]) {
-        let labels = || vec!["stream".to_string()];
-        let batch_records = metrics.histogram_family("journal_batch_records".into(), labels());
-        let batch_bytes = metrics.histogram_family("journal_batch_bytes".into(), labels());
-        let fsync_seconds = metrics.histogram_family("journal_fsync_seconds".into(), labels());
-        let queue_bytes = metrics.gauge_family("journal_queue_bytes".into(), labels());
-        let total_bytes = metrics.gauge_family("journal_bytes".into(), labels());
+    /// Installs real histograms/gauges named `{prefix}_*`, with the stream name under the label key
+    /// `label`, on every lane. Each family is registered once: registering a name twice fails with
+    /// Prometheus.
+    pub fn install(metrics: &dyn Metrics, prefix: &str, label: &str, lanes: &[&Lane]) {
+        let labels = || vec![label.to_string()];
+        let batch_records = metrics.histogram_family(format!("{prefix}_batch_records"), labels());
+        let batch_bytes = metrics.histogram_family(format!("{prefix}_batch_bytes"), labels());
+        let fsync_seconds = metrics.histogram_family(format!("{prefix}_fsync_seconds"), labels());
+        let queue_bytes = metrics.gauge_family(format!("{prefix}_queue_bytes"), labels());
+        let total_bytes = metrics.gauge_family(format!("{prefix}_bytes"), labels());
         for lane in lanes {
             let label = vec![lane.stream.label().to_string()];
             let m = &lane.metrics;
@@ -81,7 +81,7 @@ impl LaneMetrics {
     }
 
     /// Total bytes on disk across every live segment of this stream; the caller (writer thread or
-    /// `Persistence::gc`) computes the sum from `SegmentSet`.
+    /// `Persistence::gc`) computes the sum from `Segments`.
     fn set_total_bytes(&self, bytes: u64) {
         self.total_bytes.lock().set(bytes as usize);
     }
@@ -114,6 +114,9 @@ pub trait JournalFs: Send + Sync + 'static {
     /// gigabyte-sized) data segment.
     fn read_header(&self, path: &Path) -> io::Result<Vec<u8>>;
     fn len(&self, path: &Path) -> io::Result<u64>;
+    /// Fills `buf` from `offset`; `UnexpectedEof` if the file ends first.
+    fn read_at(&self, path: &Path, offset: u64, buf: &mut [u8]) -> io::Result<()>;
+    fn modified(&self, path: &Path) -> io::Result<SystemTime>;
     fn list(&self, dir: &Path) -> io::Result<Vec<PathBuf>>;
     fn remove(&self, path: &Path) -> io::Result<()>;
     fn sync_dir(&self, dir: &Path) -> io::Result<()>;
@@ -170,6 +173,14 @@ impl JournalFs for StdFs {
         Ok(std::fs::metadata(path)?.len())
     }
 
+    fn read_at(&self, path: &Path, offset: u64, buf: &mut [u8]) -> io::Result<()> {
+        std::fs::File::open(path)?.read_exact_at(buf, offset)
+    }
+
+    fn modified(&self, path: &Path) -> io::Result<SystemTime> {
+        std::fs::metadata(path)?.modified()
+    }
+
     fn list(&self, dir: &Path) -> io::Result<Vec<PathBuf>> {
         std::fs::read_dir(dir)?
             .map(|e| e.map(|e| e.path()))
@@ -201,11 +212,11 @@ impl JournalFile for std::fs::File {
     }
 }
 
-pub(crate) fn segment_path(dir: &Path, seq: u64) -> PathBuf {
+pub fn segment_path(dir: &Path, seq: u64) -> PathBuf {
     dir.join(format!("{seq:016x}.log"))
 }
 
-fn parse_seq(path: &Path) -> Option<u64> {
+pub fn parse_seq(path: &Path) -> Option<u64> {
     if path.extension().and_then(|e| e.to_str()) != Some("log") {
         return None;
     }
@@ -217,172 +228,139 @@ pub struct SegmentMeta {
     pub stream: Stream,
     pub seq: u64,
     pub bytes: u64,
-    pub max_view: u64,
+    pub max_key: u64,
 }
 
 /// Where one frame lives, so it can be read back without scanning its segment.
 #[derive(Clone, Copy, Debug)]
-pub(crate) struct Location {
+pub struct Location {
     pub seq: u64,
     pub offset: u64,
     pub lsn: Lsn,
     pub len: u32,
 }
 
-/// The newest data frame for each `(view, kind)`, kept only on a query node, whose replay reads
+/// The newest data frame for each `(key, kind)`, kept only on a query node, whose replay reads
 /// every decided block's payload and share back. Entries appear once their bytes are written.
-pub(crate) type DataIndex = Arc<Mutex<std::collections::BTreeMap<(u64, Kind), Location>>>;
+pub type DataIndex = Arc<Mutex<std::collections::BTreeMap<(u64, Kind), Location>>>;
 
-/// In-memory index of every segment a stream currently has on disk, kept live by the writer
-/// thread. Lets GC compute what to unlink without a directory scan or a full-segment read.
+/// In-memory index of every segment one stream currently has on disk, oldest first and kept live by
+/// the writer thread. Lets GC compute what to unlink without a directory scan or a full-segment
+/// read. The last entry is the active segment.
 #[derive(Clone, Debug, Default)]
-pub struct SegmentSet {
-    pub wal: Vec<SegmentMeta>,
-    pub data: Vec<SegmentMeta>,
+pub struct Segments(Vec<SegmentMeta>);
+
+impl From<Vec<SegmentMeta>> for Segments {
+    fn from(list: Vec<SegmentMeta>) -> Self {
+        Self(list)
+    }
 }
 
-impl SegmentSet {
-    fn list_mut(&mut self, stream: Stream) -> &mut Vec<SegmentMeta> {
-        match stream {
-            Stream::Wal => &mut self.wal,
-            Stream::Data => &mut self.data,
-        }
+impl Segments {
+    pub fn list(&self) -> &[SegmentMeta] {
+        &self.0
     }
 
-    pub fn list(&self, stream: Stream) -> &[SegmentMeta] {
-        match stream {
-            Stream::Wal => &self.wal,
-            Stream::Data => &self.data,
-        }
+    pub fn bytes(&self) -> u64 {
+        self.0.iter().map(|m| m.bytes).sum()
+    }
+
+    /// The oldest contiguous run of sealed segments whose `max_key` is below `bound`.
+    ///
+    /// Stops at the first segment that doesn't qualify: `max_key` is monotonic (see
+    /// `open_new_segment`), so a segment that isn't old enough means nothing sealed after it is
+    /// either, and unlinking one segment while keeping an older one would leave a gap GC can never
+    /// fill in later. Never includes the active (newest) segment.
+    pub fn oldest_below(&self, bound: u64) -> Vec<SegmentMeta> {
+        self.sealed()
+            .iter()
+            .take_while(|m| m.max_key < bound)
+            .copied()
+            .collect()
+    }
+
+    /// The oldest contiguous run of sealed segments to drop until the stream's total is at most
+    /// `max_bytes`. Stops before the first segment whose `max_key` is above `keep_after`. Never
+    /// includes the active (newest) segment.
+    pub fn oldest_over_bytes(&self, max_bytes: u64, keep_after: Option<u64>) -> Vec<SegmentMeta> {
+        let mut total = self.bytes();
+        self.sealed()
+            .iter()
+            .take_while(|m| keep_after.is_none_or(|keep| m.max_key <= keep))
+            .take_while(|m| {
+                let over = total > max_bytes;
+                total = total.saturating_sub(m.bytes);
+                over
+            })
+            .copied()
+            .collect()
+    }
+
+    /// Every segment but the active (newest) one.
+    pub fn sealed(&self) -> &[SegmentMeta] {
+        &self.0[..self.0.len().saturating_sub(1)]
     }
 
     fn push_active(&mut self, meta: SegmentMeta) {
-        self.list_mut(meta.stream).push(meta);
+        self.0.push(meta);
     }
 
-    fn update_active(&mut self, stream: Stream, bytes: u64, max_view: u64) {
-        if let Some(last) = self.list_mut(stream).last_mut() {
+    fn update_active(&mut self, bytes: u64, max_key: u64) {
+        if let Some(last) = self.0.last_mut() {
             last.bytes = bytes;
-            last.max_view = max_view;
+            last.max_key = max_key;
         }
-    }
-
-    /// Segments GC may unlink. `wal`: age-based only, never the active segment or the one behind
-    /// it (a crash mid-roll falls back to that segment's snapshot). `data`: age-based, then
-    /// oldest-first while the running total exceeds `max_bytes`; never the active segment.
-    ///
-    /// Both only ever take a contiguous prefix of the oldest segments and stop at the first one
-    /// that doesn't qualify: `max_view` is monotonic (see `open_new_segment`), so a segment that
-    /// isn't old enough means nothing sealed after it is either, and unlinking one segment while
-    /// keeping an older one would leave a gap GC can never fill in later.
-    ///
-    /// `data` segments holding any view after `replayed` stay, even over `max_bytes`: a query
-    /// node's query service still has to ingest them.
-    pub fn to_unlink(
-        &self,
-        decided: u64,
-        view_retention: u64,
-        max_bytes: u64,
-        replayed: Option<u64>,
-    ) -> Vec<SegmentMeta> {
-        let bound = decided.saturating_sub(view_retention);
-        let mut out = Vec::new();
-
-        if self.wal.len() > 2 {
-            out.extend(
-                self.wal[..self.wal.len() - 2]
-                    .iter()
-                    .take_while(|m| m.max_view < bound)
-                    .copied(),
-            );
-        }
-
-        if !self.data.is_empty() {
-            let mut total: u64 = self.data.iter().map(|m| m.bytes).sum();
-            for meta in &self.data[..self.data.len() - 1] {
-                if replayed.is_some_and(|replayed| meta.max_view > replayed) {
-                    break;
-                }
-                if meta.max_view >= bound && total <= max_bytes {
-                    break;
-                }
-                out.push(*meta);
-                total = total.saturating_sub(meta.bytes);
-            }
-        }
-
-        out
     }
 }
 
-/// Bytes remaining on disk per stream after a `prune` pass, if that stream's live set changed
-/// (`None` means nothing to report, matching `Persistence::gc`'s prior skip-if-untouched metric).
-#[derive(Debug)]
-pub struct PruneStats {
-    pub wal_bytes: Option<u64>,
-    pub data_bytes: Option<u64>,
-}
-
-/// Unlinks the segments `SegmentSet::to_unlink` selects, oldest first within each stream. A segment
-/// is dropped from `segments` only once its file is actually gone (`NotFound` counts as gone), so a
-/// failed unlink leaves it both on disk and tracked; the pass stops there and returns the error
-/// instead of unlinking younger segments first, which would leave a sequence gap recovery can never
-/// close. The caller must serialize passes (e.g. a gc lock): `to_unlink` is computed once up front,
-/// so an overlapping pass could otherwise select the same segment twice.
-#[allow(clippy::too_many_arguments)]
+/// Unlinks `to_unlink` from `dir`, oldest first, and returns the bytes left in `segments`, or
+/// `None` if `to_unlink` is empty. A segment is dropped from `segments` only once its file is
+/// actually gone (`NotFound` counts as gone), so a failed unlink leaves it both on disk and
+/// tracked; the pass stops there and returns the error instead of unlinking younger segments
+/// first, which would leave a sequence gap recovery can never close. The caller must serialize
+/// passes (e.g. a gc lock): `to_unlink` is computed up front, so an overlapping pass could
+/// otherwise select the same segment twice.
 pub fn prune<F: JournalFs>(
     fs: &F,
-    segments: &Mutex<SegmentSet>,
-    wal_dir: &Path,
-    data_dir: &Path,
-    decided: u64,
-    view_retention: u64,
-    max_bytes: u64,
-    replayed: Option<u64>,
-) -> anyhow::Result<PruneStats> {
-    let to_unlink = segments
-        .lock()
-        .to_unlink(decided, view_retention, max_bytes, replayed);
-    let mut stats = PruneStats {
-        wal_bytes: None,
-        data_bytes: None,
-    };
-
-    for (stream, dir) in [(Stream::Wal, wal_dir), (Stream::Data, data_dir)] {
-        let mut touched = false;
-        for meta in to_unlink.iter().filter(|m| m.stream == stream) {
-            match fs.remove(&segment_path(dir, meta.seq)) {
-                Ok(()) => {},
-                Err(err) if err.kind() == io::ErrorKind::NotFound => {},
-                Err(err) => {
-                    if touched {
-                        fs.sync_dir(dir)?;
-                    }
-                    return Err(err).with_context(|| format!("unlinking segment {}", meta.seq));
-                },
-            }
-            segments
-                .lock()
-                .list_mut(stream)
-                .retain(|m| m.seq != meta.seq);
-            touched = true;
+    dir: &Path,
+    segments: &Mutex<Segments>,
+    to_unlink: &[SegmentMeta],
+) -> anyhow::Result<Option<u64>> {
+    for (i, meta) in to_unlink.iter().enumerate() {
+        match fs.remove(&segment_path(dir, meta.seq)) {
+            Ok(()) => {},
+            Err(err) if err.kind() == io::ErrorKind::NotFound => {},
+            Err(err) => {
+                if i > 0 {
+                    fs.sync_dir(dir)?;
+                }
+                return Err(err).with_context(|| format!("unlinking segment {}", meta.seq));
+            },
         }
-        if touched {
-            fs.sync_dir(dir)?;
-            let bytes = segments.lock().list(stream).iter().map(|m| m.bytes).sum();
-            match stream {
-                Stream::Wal => stats.wal_bytes = Some(bytes),
-                Stream::Data => stats.data_bytes = Some(bytes),
-            }
-        }
+        segments.lock().0.retain(|m| m.seq != meta.seq);
     }
-    Ok(stats)
+    if to_unlink.is_empty() {
+        return Ok(None);
+    }
+    fs.sync_dir(dir)?;
+    Ok(Some(segments.lock().bytes()))
+}
+
+/// How a lane uses its records.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LaneMode {
+    /// Every segment starts with a `Kind::SNAPSHOT` frame. Recovery returns the newest segment's
+    /// records and drops a newest segment that holds none.
+    Snapshot,
+    /// Independent records, read back through an index or a scan.
+    Append,
 }
 
 pub struct LaneConfig {
     pub stream: Stream,
+    pub mode: LaneMode,
     pub segment_bytes: u64,
-    pub max_view_span: u64,
+    pub max_key_span: u64,
     pub max_batch_bytes: usize,
     /// Bound on a wal `Snapshot` frame; irrelevant for a data lane, which never writes one.
     pub max_snapshot_bytes: u32,
@@ -393,17 +371,24 @@ pub struct LaneConfig {
 /// so channel order always matches `lsn` order, which `format::scan` requires on replay.
 struct Write {
     lsn: Lsn,
-    view: u64,
+    key: u64,
     kind: Kind,
     body: Vec<u8>,
     class: Class,
     _permit: Option<OwnedSemaphorePermit>,
 }
 
+/// What the writer thread receives. `Sync` shares the record channel so it is ordered after every
+/// record enqueued before it.
+enum Msg {
+    Record(Write),
+    Sync,
+}
+
 #[derive(Clone)]
 pub struct Lane {
     stream: Stream,
-    tx: mpsc::UnboundedSender<Write>,
+    tx: mpsc::UnboundedSender<Msg>,
     /// Guards lsn allocation *and* the channel send together, so a data-stream caller racing
     /// another can't allocate lsn N, then lose the race to send before lsn N+1. Shared with the
     /// writer thread so a wal roll's snapshot frame reserves its lsn from the same counter,
@@ -424,7 +409,7 @@ impl Lane {
     /// `State::apply` order); data records don't need it.
     pub fn enqueue(
         &self,
-        view: u64,
+        key: u64,
         kind: Kind,
         body: Vec<u8>,
         class: Class,
@@ -440,14 +425,14 @@ impl Lane {
         self.metrics.set_queue_bytes(queued);
         // The writer thread may already have exited (process is aborting); a dropped receiver
         // just means this record never lands, which is moot since the process is on its way down.
-        let _ = self.tx.send(Write {
+        let _ = self.tx.send(Msg::Record(Write {
             lsn,
-            view,
+            key,
             kind,
             body,
             class,
             _permit: permit,
-        });
+        }));
         lsn
     }
 
@@ -470,7 +455,19 @@ impl Lane {
         Ok(())
     }
 
-    /// Reports `journal_bytes`: the caller (`Persistence::gc`) sums `SegmentSet` after unlinking.
+    /// The newest lsn the writer has made durable, whose record is also in the index.
+    pub fn durable_lsn(&self) -> Lsn {
+        *self.durable.borrow()
+    }
+
+    /// Asks the writer to `fdatasync` the active segment if it holds unsynced records, then
+    /// publish them as durable. Returns immediately; callers that need the ack use `wait_durable`.
+    pub fn request_sync(&self) {
+        // A dropped receiver means the writer is gone and the process is aborting.
+        let _ = self.tx.send(Msg::Sync);
+    }
+
+    /// Reports `journal_bytes`: the caller (`Persistence::gc`) sums `Segments` after unlinking.
     pub fn set_total_bytes(&self, bytes: u64) {
         self.metrics.set_total_bytes(bytes);
     }
@@ -482,10 +479,10 @@ struct ActiveSegment<Fh> {
     offset: u64,
     /// Last lsn actually written to this segment (including any not-yet-fsynced bytes).
     last_lsn: Lsn,
-    /// View baseline for this segment, used to bound `max_view_span`; unset (`None`) until the
-    /// first real record lands, since the wal's own `Snapshot` record has no consensus view.
-    first_view: Option<u64>,
-    max_view: u64,
+    /// Key baseline for this segment, used to bound `max_key_span`; unset (`None`) until the
+    /// first real record lands, since the wal's own `Snapshot` record has no key.
+    first_key: Option<u64>,
+    max_key: u64,
     /// Offset right after the segment's own `Snapshot` frame (or right after the header, for a
     /// data segment, which never writes one). `over_bytes` in `Writer::run` measures from here,
     /// not from `offset` directly, so a large snapshot can't make the very next batch look like
@@ -499,7 +496,7 @@ fn open_new_segment<F: JournalFs>(
     stream: Stream,
     seq: u64,
     first_lsn: Lsn,
-    prev_max_view: u64,
+    prev_max_key: u64,
     metrics: &LaneMetrics,
 ) -> anyhow::Result<ActiveSegment<F::File>> {
     let path = segment_path(dir, seq);
@@ -510,7 +507,7 @@ fn open_new_segment<F: JournalFs>(
         stream,
         seq,
         first_lsn,
-        prev_max_view,
+        prev_max_key,
     }
     .encode();
     file.write_all_at(0, &header)?;
@@ -521,12 +518,12 @@ fn open_new_segment<F: JournalFs>(
         seq,
         offset: SegmentHeader::LEN as u64,
         last_lsn: first_lsn.saturating_sub(1),
-        first_view: None,
-        // Seeded from the previous segment's bound, not 0: `SegmentMeta::max_view` is a running
-        // max across the whole stream, so GC (`SegmentSet::to_unlink`) never sees a segment appear
+        first_key: None,
+        // Seeded from the previous segment's bound, not 0: `SegmentMeta::max_key` is a running
+        // max across the whole stream, so GC (`Segments::oldest_below`) never sees a segment appear
         // younger than the one sealed right before it (e.g. a snapshot-only segment with no real
         // records of its own).
-        max_view: prev_max_view,
+        max_key: prev_max_key,
         snapshot_end: SegmentHeader::LEN as u64,
     })
 }
@@ -549,7 +546,7 @@ struct SegmentRead {
     locations: Vec<(FrameHeader, Location)>,
     end: ScanEnd,
     next_lsn: Lsn,
-    max_view: u64,
+    max_key: u64,
 }
 
 /// Fills `buf` from `r` as far as it goes before EOF, returning how many bytes landed (which may
@@ -570,13 +567,14 @@ fn read_up_to(r: &mut dyn Read, buf: &mut [u8]) -> io::Result<usize> {
 
 /// Scans one segment frame by frame over a stream instead of loading it whole, so a (possibly
 /// gigabyte-sized) data segment's recovery scan holds at most one frame in memory at a time.
-/// `format::decode_frame` still does the actual crc/lsn/kind validation, on a per-frame buffer
-/// reused (cleared and resized) across iterations.
+/// `format::decode_frame` still does the actual crc/lsn validation, on a per-frame buffer reused
+/// (cleared and resized) across iterations; `known_kind` rejects unrecognized tags.
 fn read_segment<F: JournalFs>(
     fs: &F,
     path: &Path,
     seq: u64,
     stream: Stream,
+    known_kind: fn(u8) -> bool,
     collect_records: bool,
 ) -> anyhow::Result<SegmentRead> {
     let file_len = fs.len(path)?;
@@ -597,7 +595,7 @@ fn read_segment<F: JournalFs>(
     let mut locations = Vec::new();
     let mut frame_buf: Vec<u8> = Vec::new();
     let mut expect_lsn = header.first_lsn;
-    let mut max_view = 0u64;
+    let mut max_key = 0u64;
     let mut consumed = 0u64;
 
     let end = loop {
@@ -628,7 +626,7 @@ fn read_segment<F: JournalFs>(
         }
 
         match format::decode_frame(&frame_buf, expect_lsn) {
-            Ok((frame_header, body, total)) => {
+            Ok((frame_header, body, total)) if known_kind(frame_header.kind.0) => {
                 if collect_records {
                     records.push((frame_header, body.to_vec()));
                 }
@@ -641,11 +639,11 @@ fn read_segment<F: JournalFs>(
                         len: frame_header.len,
                     },
                 ));
-                max_view = max_view.max(frame_header.view);
+                max_key = max_key.max(frame_header.key);
                 expect_lsn = frame_header.lsn + 1;
                 consumed += total as u64;
             },
-            Err(_) => break ScanEnd::Torn(consumed),
+            _ => break ScanEnd::Torn(consumed),
         }
     };
 
@@ -655,19 +653,54 @@ fn read_segment<F: JournalFs>(
         locations,
         end,
         next_lsn: expect_lsn,
-        max_view,
+        max_key,
     })
 }
 
 /// Every frame in segment `seq` with where it lives, stopping at a torn tail. Streams the segment
 /// like recovery does, so at most one frame is in memory at a time.
-pub(crate) fn frame_locations<F: JournalFs>(
+pub fn frame_locations<F: JournalFs>(
     fs: &F,
     dir: &Path,
     stream: Stream,
     seq: u64,
+    known_kind: fn(u8) -> bool,
 ) -> anyhow::Result<Vec<(FrameHeader, Location)>> {
-    Ok(read_segment(fs, &segment_path(dir, seq), seq, stream, false)?.locations)
+    Ok(read_segment(fs, &segment_path(dir, seq), seq, stream, known_kind, false)?.locations)
+}
+
+/// Reads the record body at `loc` in the segment file at `path`. `None` when the segment is gone
+/// (unlinked by GC), the frame runs past the end of the file, or the bytes at `loc` are not the
+/// record `(key, kind, loc.len, loc.lsn)`. The key check matters because a lane that loses
+/// segments reuses their seq, offset and lsn for later records. Blocking; async callers use
+/// `spawn_blocking`.
+pub fn read_frame<F: JournalFs>(
+    fs: &F,
+    path: &Path,
+    loc: Location,
+    key: u64,
+    kind: Kind,
+) -> anyhow::Result<Option<Vec<u8>>> {
+    let mut frame = vec![0; format::FRAME_HEADER_LEN + loc.len as usize];
+    match fs.read_at(path, loc.offset, &mut frame) {
+        Ok(()) => {},
+        Err(err)
+            if matches!(
+                err.kind(),
+                io::ErrorKind::NotFound | io::ErrorKind::UnexpectedEof
+            ) =>
+        {
+            return Ok(None);
+        },
+        Err(err) => return Err(err).with_context(|| format!("reading segment {}", path.display())),
+    }
+    match format::decode_frame(&frame, loc.lsn) {
+        Ok((header, ..)) if (header.len, header.key, header.kind) == (loc.len, key, kind) => {
+            frame.drain(..format::FRAME_HEADER_LEN);
+            Ok(Some(frame))
+        },
+        _ => Ok(None),
+    }
 }
 
 /// True only for a segment that was created but never durably written to: shorter than a header,
@@ -682,16 +715,23 @@ fn is_unwritten_segment<F: JournalFs>(fs: &F, path: &Path) -> anyhow::Result<boo
     Ok(fs.read_header(path)?.iter().all(|&b| b == 0))
 }
 
-/// Recovers one stream's segments: validates headers, truncates a torn newest segment, and (wal
-/// only) returns the records to replay `State` from.
+/// Recovers one stream's segments: validates headers, truncates a torn newest segment, and (in
+/// `LaneMode::Snapshot` only) returns the records to replay `State` from.
 ///
-/// The newest segment must contain at least one acked record, i.e. (wal only) start with a
-/// `Snapshot`; if it was never written to (see `is_unwritten_segment`) or, for wal, is a valid
-/// header with zero parseable records (a torn snapshot write), nothing in it was ever acked, so it
-/// is a candidate to unlink and retry with the segment behind it. Nothing is actually unlinked
-/// until a keepable segment is found: an error validating the fallback must not leave a segment
-/// deleted with no replacement.
-pub fn recover<F: JournalFs>(fs: &F, dir: &Path, stream: Stream) -> anyhow::Result<Recovered> {
+/// The newest segment must contain at least one acked record, i.e. (snapshot mode only) start with
+/// a `Snapshot`; if it was never written to (see `is_unwritten_segment`) or, in snapshot mode, is a
+/// valid header with zero parseable records (a torn snapshot write), nothing in it was ever acked,
+/// so it is a candidate to unlink and retry with the segment behind it. Nothing is actually
+/// unlinked until a keepable segment is found: an error validating the fallback must not leave a
+/// segment deleted with no replacement.
+pub fn recover<F: JournalFs>(
+    fs: &F,
+    dir: &Path,
+    stream: Stream,
+    mode: LaneMode,
+    known_kind: fn(u8) -> bool,
+) -> anyhow::Result<Recovered> {
+    let snapshots = mode == LaneMode::Snapshot;
     let mut paths: Vec<(u64, PathBuf)> = fs
         .list(dir)?
         .into_iter()
@@ -744,7 +784,7 @@ pub fn recover<F: JournalFs>(fs: &F, dir: &Path, stream: Stream) -> anyhow::Resu
             continue;
         }
 
-        let read = read_segment(fs, &path, seq, stream, stream == Stream::Wal)?;
+        let read = read_segment(fs, &path, seq, stream, known_kind, snapshots)?;
 
         if let Some(expected) = expect_next_lsn {
             anyhow::ensure!(
@@ -755,18 +795,22 @@ pub fn recover<F: JournalFs>(fs: &F, dir: &Path, stream: Stream) -> anyhow::Resu
             );
         }
 
-        if stream == Stream::Wal && read.records.is_empty() {
-            tracing::warn!(seq, "journal: dropping newest wal segment: no snapshot");
+        if snapshots && read.records.is_empty() {
+            tracing::warn!(
+                ?stream,
+                seq,
+                "journal: dropping newest segment: no snapshot"
+            );
             expect_next_lsn = Some(read.header.first_lsn);
             to_remove.push(path);
             paths.pop();
             continue;
         }
 
-        if stream == Stream::Wal {
+        if snapshots {
             anyhow::ensure!(
-                read.records[0].0.kind == Kind::Snapshot,
-                "wal segment {seq} has records but the first is {:?}, not Snapshot",
+                read.records[0].0.kind == Kind::SNAPSHOT,
+                "{stream:?} segment {seq} has records but the first is {:?}, not Snapshot",
                 read.records[0].0.kind
             );
         }
@@ -807,40 +851,36 @@ pub fn recover<F: JournalFs>(fs: &F, dir: &Path, stream: Stream) -> anyhow::Resu
             seq: *seq,
             bytes: fs.len(path)?,
             // Backfilled below from the following segment's header.
-            max_view: 0,
+            max_key: 0,
         });
     }
     segments.push(SegmentMeta {
         stream,
         seq: newest_seq,
         bytes: total,
-        // `read.max_view` alone is only this segment's own records; carry the running bound
+        // `read.max_key` alone is only this segment's own records; carry the running bound
         // forward from its header, same as the writer does for a freshly rolled segment.
-        max_view: read.max_view.max(read.header.prev_max_view),
+        max_key: read.max_key.max(read.header.prev_max_key),
     });
 
-    backfill_prev_max_view(fs, stream, &paths, &mut segments)?;
+    backfill_prev_max_key(fs, stream, &paths, &mut segments)?;
 
     Ok(Recovered {
         segments,
         next_seq: newest_seq + 1,
         next_lsn: read.next_lsn,
-        wal_records: if stream == Stream::Wal {
-            read.records
-        } else {
-            vec![]
-        },
+        wal_records: read.records,
     })
 }
 
-fn backfill_prev_max_view<F: JournalFs>(
+fn backfill_prev_max_key<F: JournalFs>(
     fs: &F,
     stream: Stream,
     paths: &[(u64, PathBuf)],
     segments: &mut [SegmentMeta],
 ) -> anyhow::Result<()> {
     for i in 0..segments.len().saturating_sub(1) {
-        if segments[i].max_view != 0 {
+        if segments[i].max_key != 0 {
             continue;
         }
         let next_path = &paths[i + 1].1;
@@ -851,7 +891,7 @@ fn backfill_prev_max_view<F: JournalFs>(
             header.stream as u8 == stream as u8,
             "stream mismatch in {next_path:?}"
         );
-        segments[i].max_view = header.prev_max_view;
+        segments[i].max_key = header.prev_max_key;
     }
     Ok(())
 }
@@ -893,29 +933,25 @@ fn check_snapshot_size(stream: Stream, body: &[u8], max_snapshot_bytes: u32) {
 /// handle, which the caller must join after dropping the `Lane` (see `journal::Inner`'s `Drop`).
 /// `hook` is `Some` only for the wal lane: it provides the `Snapshot` payload opening every new
 /// wal segment. `index`, when given, learns where every record this lane writes lives.
-pub(crate) fn spawn_lane<F: JournalFs>(
+pub fn spawn_lane<F: JournalFs>(
     fs: Arc<F>,
     dir: PathBuf,
     cfg: LaneConfig,
     start: (u64, Lsn),
     hook: Option<Arc<dyn SnapshotHook>>,
-    segments: Arc<Mutex<SegmentSet>>,
+    segments: Arc<Mutex<Segments>>,
     index: Option<DataIndex>,
 ) -> anyhow::Result<(Lane, std::thread::JoinHandle<()>)> {
     let (next_seq, next_lsn) = start;
     let metrics = Arc::new(LaneMetrics::noop());
-    let prev_max_view = segments
-        .lock()
-        .list(cfg.stream)
-        .last()
-        .map_or(0, |m| m.max_view);
+    let prev_max_key = segments.lock().list().last().map_or(0, |m| m.max_key);
     let mut active = open_new_segment(
         &*fs,
         &dir,
         cfg.stream,
         next_seq,
         next_lsn,
-        prev_max_view,
+        prev_max_key,
         &metrics,
     )?;
 
@@ -928,7 +964,7 @@ pub(crate) fn spawn_lane<F: JournalFs>(
         next_lsn
     };
 
-    let (tx, rx) = mpsc::unbounded_channel::<Write>();
+    let (tx, rx) = mpsc::unbounded_channel::<Msg>();
     let (durable_tx, durable_rx) = watch::channel(active.last_lsn);
     let in_flight = Arc::new(Semaphore::new(cfg.in_flight_bytes));
     let in_flight_budget =
@@ -940,7 +976,7 @@ pub(crate) fn spawn_lane<F: JournalFs>(
     if let Some(body) = seed {
         check_snapshot_size(cfg.stream, &body, cfg.max_snapshot_bytes);
         let mut frame = Vec::new();
-        format::encode_frame(&mut frame, next_lsn, 0, Kind::Snapshot, &body);
+        format::encode_frame(&mut frame, next_lsn, 0, Kind::SNAPSHOT, &body);
         active
             .file
             .write_all_at(active.offset, &frame)
@@ -955,10 +991,10 @@ pub(crate) fn spawn_lane<F: JournalFs>(
         stream: cfg.stream,
         seq: next_seq,
         bytes: active.offset,
-        max_view: active.max_view,
+        max_key: active.max_key,
     });
     // Published only after `segments` above reflects this segment: `wait_durable` callers must
-    // never observe a durable lsn `scan_for`/gc can't yet see in `SegmentSet`.
+    // never observe a durable lsn `scan_for`/gc can't yet see in `Segments`.
     if seeded {
         durable_tx.send(active.last_lsn).ok();
     }
@@ -978,6 +1014,7 @@ pub(crate) fn spawn_lane<F: JournalFs>(
         metrics: metrics.clone(),
         frame_buf,
         index,
+        unsynced: false,
     };
     let stream = writer.cfg.stream;
     let handle = std::thread::Builder::new()
@@ -1006,11 +1043,11 @@ struct Writer<F: JournalFs> {
     fs: Arc<F>,
     dir: PathBuf,
     cfg: LaneConfig,
-    rx: mpsc::UnboundedReceiver<Write>,
+    rx: mpsc::UnboundedReceiver<Msg>,
     active: ActiveSegment<F::File>,
     durable_tx: watch::Sender<Lsn>,
     hook: Option<Arc<dyn SnapshotHook>>,
-    segments: Arc<Mutex<SegmentSet>>,
+    segments: Arc<Mutex<Segments>>,
     /// Shared with `Lane::enqueue`; see the field doc on `Lane::alloc`.
     alloc: Arc<Mutex<Lsn>>,
     /// Shared with `Lane::enqueue`; see the field doc on `Lane::queue_bytes`.
@@ -1018,113 +1055,150 @@ struct Writer<F: JournalFs> {
     metrics: Arc<LaneMetrics>,
     frame_buf: Vec<u8>,
     index: Option<DataIndex>,
+    /// Records written to `active` that no `fdatasync` has covered yet.
+    unsynced: bool,
 }
 
-/// Applies one record's bookkeeping to `active`: `max_view`, `first_view` (view 0 marks
-/// `Snapshot`/`Upgrade`, never a span baseline, or `over_views` would latch true forever) and
+/// Applies one record's bookkeeping to `active`: `max_key`, `first_key` (key 0 marks
+/// `Snapshot`/`Upgrade`, never a span baseline, or `over_keys` would latch true forever) and
 /// `last_lsn`. Shared by `Writer::run`'s batch loop and `roll`'s drain, so a record landing during
 /// a roll is tracked exactly like one landing in the normal path.
 fn apply_write_to_active<Fh>(active: &mut ActiveSegment<Fh>, w: &Write) {
-    active.max_view = active.max_view.max(w.view);
-    if w.view != 0 {
-        active.first_view.get_or_insert(w.view);
+    active.max_key = active.max_key.max(w.key);
+    if w.key != 0 {
+        active.first_key.get_or_insert(w.key);
     }
     active.last_lsn = w.lsn;
 }
 
+/// Messages drained from the channel for one write and sync pass.
+#[derive(Default)]
+struct Batch {
+    records: Vec<Write>,
+    bytes: usize,
+    sync_requested: bool,
+}
+
+impl Batch {
+    fn push(&mut self, msg: Msg) {
+        match msg {
+            Msg::Record(w) => {
+                self.bytes += w.body.len();
+                self.records.push(w);
+            },
+            Msg::Sync => self.sync_requested = true,
+        }
+    }
+}
+
 impl<F: JournalFs> Writer<F> {
     fn run(mut self) {
-        loop {
-            let Some(first) = self.rx.blocking_recv() else {
-                return; // Lane (and the Persistence holding it) was dropped.
-            };
-            let mut batch = vec![first];
-            let mut batch_bytes = batch[0].body.len();
-            while batch_bytes < self.cfg.max_batch_bytes {
-                match self.rx.try_recv() {
-                    Ok(w) => {
-                        batch_bytes += w.body.len();
-                        batch.push(w);
-                    },
-                    Err(_) => break,
-                }
-            }
-            self.metrics.record_batch(batch.len(), batch_bytes);
-            self.queue_bytes
-                .fetch_sub(batch_bytes as u64, Ordering::Relaxed);
-            self.metrics
-                .set_queue_bytes(self.queue_bytes.load(Ordering::Relaxed));
+        while let Some(batch) = self.next_batch() {
+            let durable_in_batch = self.write_batch(batch.records, batch.bytes);
 
-            let mut durable_in_batch = false;
-            let mut written = Vec::new();
-            for w in &batch {
-                if self.index.is_some() {
-                    written.push((
-                        (w.view, w.kind),
-                        Location {
-                            seq: self.active.seq,
-                            offset: self.active.offset + self.frame_buf.len() as u64,
-                            lsn: w.lsn,
-                            len: w.body.len() as u32,
-                        },
-                    ));
-                }
-                format::encode_frame(&mut self.frame_buf, w.lsn, w.view, w.kind, &w.body);
-                durable_in_batch |= w.class == Class::Durable;
-                apply_write_to_active(&mut self.active, w);
-            }
-
-            if let Err(err) = self
-                .active
-                .file
-                .write_all_at(self.active.offset, &self.frame_buf)
-            {
-                tracing::error!(stream = ?self.cfg.stream, %err, "journal: write failed");
-                std::process::abort();
-            }
-            if let Some(index) = &self.index {
-                index.lock().extend(written);
-            }
-            self.active.offset += self.frame_buf.len() as u64;
-            // A batch can overshoot `max_batch_bytes`; shrink only well past it, so saturated
-            // batches reuse the buffer and one oversized record does not keep its copy resident.
-            self.frame_buf.clear();
-            if self.frame_buf.capacity() > 2 * self.cfg.max_batch_bytes {
-                self.frame_buf.shrink_to(self.cfg.max_batch_bytes);
-            }
-            // Permits are held by `batch` until here, bounding in-flight data bytes until the write
-            // (not the fsync) lands; the semaphore is about memory, not durability.
-            drop(batch);
-
-            // Update before publishing durability: `wait_durable` callers must see this batch's
-            // views in `SegmentSet` (e.g. via `scan_for`) as soon as it returns.
-            let total_bytes = {
-                let mut segments = self.segments.lock();
-                segments.update_active(self.cfg.stream, self.active.offset, self.active.max_view);
-                segments.list(self.cfg.stream).iter().map(|m| m.bytes).sum()
-            };
-            self.metrics.set_total_bytes(total_bytes);
-
-            if durable_in_batch {
-                if let Err(err) = timed_sync(&mut self.active.file, &self.metrics) {
-                    tracing::error!(stream = ?self.cfg.stream, %err, "journal: fsync failed");
-                    std::process::abort();
-                }
-                self.durable_tx.send(self.active.last_lsn).ok();
+            if durable_in_batch || (batch.sync_requested && self.unsynced) {
+                self.sync_active();
             }
 
             let over_bytes = self.active.offset.saturating_sub(self.active.snapshot_end)
                 >= self.cfg.segment_bytes;
-            let over_views = self.cfg.stream == Stream::Wal
+            let over_keys = self.cfg.mode == LaneMode::Snapshot
                 && self
                     .active
-                    .max_view
-                    .saturating_sub(self.active.first_view.unwrap_or(self.active.max_view))
-                    >= self.cfg.max_view_span;
-            if over_bytes || over_views {
+                    .max_key
+                    .saturating_sub(self.active.first_key.unwrap_or(self.active.max_key))
+                    >= self.cfg.max_key_span;
+            if over_bytes || over_keys {
                 self.roll();
             }
         }
+    }
+
+    /// Blocks for the next message, then takes whatever else is queued up to `max_batch_bytes`.
+    /// `None` once the `Lane` (and the `Persistence` holding it) was dropped.
+    fn next_batch(&mut self) -> Option<Batch> {
+        let mut batch = Batch::default();
+        batch.push(self.rx.blocking_recv()?);
+        while batch.bytes < self.cfg.max_batch_bytes {
+            match self.rx.try_recv() {
+                Ok(msg) => batch.push(msg),
+                Err(_) => break,
+            }
+        }
+        Some(batch)
+    }
+
+    /// Writes `records` to the active segment, updates `Segments` and returns whether any of them
+    /// is `Class::Durable`. Does not sync.
+    fn write_batch(&mut self, records: Vec<Write>, bytes: usize) -> bool {
+        if records.is_empty() {
+            return false;
+        }
+        self.metrics.record_batch(records.len(), bytes);
+        self.queue_bytes.fetch_sub(bytes as u64, Ordering::Relaxed);
+        self.metrics
+            .set_queue_bytes(self.queue_bytes.load(Ordering::Relaxed));
+
+        let mut durable_in_batch = false;
+        let mut written = Vec::new();
+        for w in &records {
+            if self.index.is_some() {
+                written.push((
+                    (w.key, w.kind),
+                    Location {
+                        seq: self.active.seq,
+                        offset: self.active.offset + self.frame_buf.len() as u64,
+                        lsn: w.lsn,
+                        len: w.body.len() as u32,
+                    },
+                ));
+            }
+            format::encode_frame(&mut self.frame_buf, w.lsn, w.key, w.kind, &w.body);
+            durable_in_batch |= w.class == Class::Durable;
+            apply_write_to_active(&mut self.active, w);
+        }
+
+        if let Err(err) = self
+            .active
+            .file
+            .write_all_at(self.active.offset, &self.frame_buf)
+        {
+            tracing::error!(stream = ?self.cfg.stream, %err, "journal: write failed");
+            std::process::abort();
+        }
+        if let Some(index) = &self.index {
+            index.lock().extend(written);
+        }
+        self.active.offset += self.frame_buf.len() as u64;
+        self.unsynced = true;
+        // A batch can overshoot `max_batch_bytes`; shrink only well past it, so saturated
+        // batches reuse the buffer and one oversized record does not keep its copy resident.
+        self.frame_buf.clear();
+        if self.frame_buf.capacity() > 2 * self.cfg.max_batch_bytes {
+            self.frame_buf.shrink_to(self.cfg.max_batch_bytes);
+        }
+        // Permits are held by `records` until here, bounding in-flight data bytes until the write
+        // (not the fsync) lands; the semaphore is about memory, not durability.
+        drop(records);
+
+        // Update before publishing durability: `wait_durable` callers must see this batch's
+        // keys in `Segments` (e.g. via `scan_for`) as soon as it returns.
+        let total_bytes = {
+            let mut segments = self.segments.lock();
+            segments.update_active(self.active.offset, self.active.max_key);
+            segments.bytes()
+        };
+        self.metrics.set_total_bytes(total_bytes);
+        durable_in_batch
+    }
+
+    fn sync_active(&mut self) {
+        if let Err(err) = timed_sync(&mut self.active.file, &self.metrics) {
+            tracing::error!(stream = ?self.cfg.stream, %err, "journal: fsync failed");
+            std::process::abort();
+        }
+        self.unsynced = false;
+        self.durable_tx.send(self.active.last_lsn).ok();
     }
 
     /// Drains any records already sent to the channel into the *old* segment under the state lock
@@ -1147,8 +1221,10 @@ impl<F: JournalFs> Writer<F> {
                 drain_buf.clear();
                 drained_records = 0;
                 drained_bytes = 0;
-                while let Ok(w) = rx.try_recv() {
-                    format::encode_frame(&mut drain_buf, w.lsn, w.view, w.kind, &w.body);
+                // A pending `Sync` needs no handling: the roll fsyncs the old segment below.
+                while let Ok(msg) = rx.try_recv() {
+                    let Msg::Record(w) = msg else { continue };
+                    format::encode_frame(&mut drain_buf, w.lsn, w.key, w.kind, &w.body);
                     drained_records += 1;
                     drained_bytes += w.body.len();
                     apply_write_to_active(active, &w);
@@ -1181,8 +1257,9 @@ impl<F: JournalFs> Writer<F> {
         }
         self.segments
             .lock()
-            .update_active(stream, active.offset, active.max_view);
+            .update_active(active.offset, active.max_key);
         self.durable_tx.send(active.last_lsn).ok();
+        self.unsynced = false;
 
         let new_seq = active.seq + 1;
         let mut new_active = match open_new_segment(
@@ -1191,7 +1268,7 @@ impl<F: JournalFs> Writer<F> {
             stream,
             new_seq,
             new_first_lsn,
-            active.max_view,
+            active.max_key,
             &self.metrics,
         ) {
             Ok(seg) => seg,
@@ -1206,13 +1283,13 @@ impl<F: JournalFs> Writer<F> {
             stream,
             seq: new_seq,
             bytes: new_active.offset,
-            max_view: new_active.max_view,
+            max_key: new_active.max_key,
         });
 
         if let Some(body) = snapshot {
             check_snapshot_size(stream, &body, max_snapshot_bytes);
             let mut frame = Vec::new();
-            format::encode_frame(&mut frame, new_first_lsn, 0, Kind::Snapshot, &body);
+            format::encode_frame(&mut frame, new_first_lsn, 0, Kind::SNAPSHOT, &body);
             if new_active
                 .file
                 .write_all_at(new_active.offset, &frame)
@@ -1227,17 +1304,11 @@ impl<F: JournalFs> Writer<F> {
             new_active.snapshot_end = new_active.offset;
             self.segments
                 .lock()
-                .update_active(stream, new_active.offset, new_active.max_view);
+                .update_active(new_active.offset, new_active.max_key);
             self.durable_tx.send(new_active.last_lsn).ok();
         }
 
-        let total_bytes = self
-            .segments
-            .lock()
-            .list(stream)
-            .iter()
-            .map(|m| m.bytes)
-            .sum();
+        let total_bytes = self.segments.lock().bytes();
         self.metrics.set_total_bytes(total_bytes);
 
         self.active = new_active;
@@ -1245,275 +1316,118 @@ impl<F: JournalFs> Writer<F> {
 }
 
 #[cfg(test)]
-pub mod mem {
-    use std::{
-        collections::{HashMap, HashSet},
-        sync::{Arc, Mutex},
-    };
-
-    use super::{JournalFile, JournalFs};
-
-    #[derive(Default)]
-    struct FileState {
-        synced: Vec<u8>,
-        unsynced: Vec<u8>,
-    }
-
-    impl FileState {
-        fn len(&self) -> usize {
-            self.synced.len().max(self.unsynced.len())
-        }
-
-        fn write_at(&mut self, off: usize, buf: &[u8]) {
-            let end = off + buf.len();
-            if self.unsynced.len() < end {
-                self.unsynced.resize(end, 0);
-            }
-            self.unsynced[off..end].copy_from_slice(buf);
-        }
-    }
-
-    /// In-memory `JournalFs` with a crash model: `crash()` keeps every fsynced byte range and
-    /// randomly truncates the unsynced tail of each file, simulating a power loss mid-write.
-    #[derive(Clone, Default)]
-    pub struct MemFs {
-        files: Arc<Mutex<HashMap<std::path::PathBuf, FileState>>>,
-        pub fail_next_write: Arc<std::sync::atomic::AtomicBool>,
-        /// Paths on which `remove` fails once (removed from the set on the failing call).
-        pub fail_remove: Arc<Mutex<HashSet<std::path::PathBuf>>>,
-    }
-
-    pub struct MemFile {
-        path: std::path::PathBuf,
-        files: Arc<Mutex<HashMap<std::path::PathBuf, FileState>>>,
-        fail_next_write: Arc<std::sync::atomic::AtomicBool>,
-    }
-
-    impl MemFs {
-        pub fn crash(&self, mut rng: impl FnMut(usize) -> usize) {
-            let mut files = self.files.lock().unwrap();
-            for state in files.values_mut() {
-                let extra = rng(state.unsynced.len().saturating_sub(state.synced.len()) + 1);
-                let keep = state.synced.len()
-                    + extra.min(state.unsynced.len().saturating_sub(state.synced.len()));
-                state.unsynced.truncate(keep.max(state.synced.len()));
-                state.synced = state.unsynced.clone();
-            }
-        }
-
-        pub fn file_len(&self, path: &std::path::Path) -> usize {
-            self.files
-                .lock()
-                .unwrap()
-                .get(path)
-                .map_or(0, FileState::len)
-        }
-    }
-
-    impl JournalFs for MemFs {
-        type File = MemFile;
-
-        fn create(&self, path: &std::path::Path) -> std::io::Result<Self::File> {
-            let mut files = self.files.lock().unwrap();
-            if files.contains_key(path) {
-                return Err(std::io::ErrorKind::AlreadyExists.into());
-            }
-            files.insert(path.to_path_buf(), FileState::default());
-            Ok(MemFile {
-                path: path.to_path_buf(),
-                files: self.files.clone(),
-                fail_next_write: self.fail_next_write.clone(),
-            })
-        }
-
-        fn open_write(&self, path: &std::path::Path) -> std::io::Result<Self::File> {
-            if !self.files.lock().unwrap().contains_key(path) {
-                return Err(std::io::ErrorKind::NotFound.into());
-            }
-            Ok(MemFile {
-                path: path.to_path_buf(),
-                files: self.files.clone(),
-                fail_next_write: self.fail_next_write.clone(),
-            })
-        }
-
-        fn open_read(&self, path: &std::path::Path) -> std::io::Result<Vec<u8>> {
-            self.files
-                .lock()
-                .unwrap()
-                .get(path)
-                .map(|s| s.synced.clone())
-                .ok_or_else(|| std::io::ErrorKind::NotFound.into())
-        }
-
-        fn open_read_stream(
-            &self,
-            path: &std::path::Path,
-        ) -> std::io::Result<Box<dyn std::io::Read>> {
-            Ok(Box::new(std::io::Cursor::new(self.open_read(path)?)))
-        }
-
-        fn read_header(&self, path: &std::path::Path) -> std::io::Result<Vec<u8>> {
-            let bytes = self.open_read(path)?;
-            if bytes.len() < super::SegmentHeader::LEN {
-                return Err(std::io::ErrorKind::UnexpectedEof.into());
-            }
-            Ok(bytes[..super::SegmentHeader::LEN].to_vec())
-        }
-
-        fn len(&self, path: &std::path::Path) -> std::io::Result<u64> {
-            self.open_read(path).map(|b| b.len() as u64)
-        }
-
-        fn list(&self, dir: &std::path::Path) -> std::io::Result<Vec<std::path::PathBuf>> {
-            Ok(self
-                .files
-                .lock()
-                .unwrap()
-                .keys()
-                .filter(|p| p.parent() == Some(dir))
-                .cloned()
-                .collect())
-        }
-
-        fn remove(&self, path: &std::path::Path) -> std::io::Result<()> {
-            if self.fail_remove.lock().unwrap().remove(path) {
-                return Err(std::io::ErrorKind::Other.into());
-            }
-            self.files.lock().unwrap().remove(path);
-            Ok(())
-        }
-
-        fn sync_dir(&self, _dir: &std::path::Path) -> std::io::Result<()> {
-            Ok(())
-        }
-    }
-
-    impl JournalFile for MemFile {
-        fn write_all_at(&mut self, off: u64, buf: &[u8]) -> std::io::Result<()> {
-            if self
-                .fail_next_write
-                .swap(false, std::sync::atomic::Ordering::SeqCst)
-            {
-                return Err(std::io::ErrorKind::Other.into());
-            }
-            let mut files = self.files.lock().unwrap();
-            let state = files.get_mut(&self.path).expect("file exists");
-            state.write_at(off as usize, buf);
-            Ok(())
-        }
-
-        fn sync_data(&mut self) -> std::io::Result<()> {
-            let mut files = self.files.lock().unwrap();
-            let state = files.get_mut(&self.path).expect("file exists");
-            state.synced = state.unsynced.clone();
-            Ok(())
-        }
-
-        fn set_len(&mut self, len: u64) -> std::io::Result<()> {
-            let mut files = self.files.lock().unwrap();
-            let state = files.get_mut(&self.path).expect("file exists");
-            state.unsynced.truncate(len as usize);
-            Ok(())
-        }
-    }
-}
-
-#[cfg(test)]
 mod tests {
     use std::time::Duration;
 
-    use super::{mem::MemFs, *};
+    use super::*;
+    use crate::mem::MemFs;
 
-    fn meta(stream: Stream, seq: u64, bytes: u64, max_view: u64) -> SegmentMeta {
+    const ACTION: Kind = Kind(2);
+    const VID: Kind = Kind(11);
+
+    fn known(kind: u8) -> bool {
+        matches!(kind, 1 | 2 | 11)
+    }
+
+    fn mode(stream: Stream) -> LaneMode {
+        match stream {
+            Stream::Wal => LaneMode::Snapshot,
+            Stream::Data | Stream::Payload | Stream::Share => LaneMode::Append,
+        }
+    }
+
+    fn recover<F: JournalFs>(fs: &F, dir: &Path, stream: Stream) -> anyhow::Result<Recovered> {
+        super::recover(fs, dir, stream, mode(stream), known)
+    }
+
+    fn meta(stream: Stream, seq: u64, bytes: u64, max_key: u64) -> SegmentMeta {
         SegmentMeta {
             stream,
             seq,
             bytes,
-            max_view,
+            max_key,
         }
     }
 
-    #[test]
-    fn to_unlink_keeps_two_newest_wal_segments() {
-        let set = SegmentSet {
-            wal: vec![
-                meta(Stream::Wal, 1, 100, 5),
-                meta(Stream::Wal, 2, 100, 10),
-                meta(Stream::Wal, 3, 100, 20),
-                meta(Stream::Wal, 4, 100, 30),
-            ],
-            data: vec![],
-        };
-        // decided=100, retention=50 -> bound=50: segments 1,2 are old enough, but only those
-        // outside the two newest (3, 4) are candidates.
-        let unlink = set.to_unlink(100, 50, u64::MAX, None);
-        assert_eq!(unlink.iter().map(|m| m.seq).collect::<Vec<_>>(), vec![1, 2]);
+    fn segments(stream: Stream, spec: &[(u64, u64, u64)]) -> Segments {
+        spec.iter()
+            .map(|&(seq, bytes, max_key)| meta(stream, seq, bytes, max_key))
+            .collect::<Vec<_>>()
+            .into()
+    }
+
+    fn seqs(list: Vec<SegmentMeta>) -> Vec<u64> {
+        list.iter().map(|m| m.seq).collect()
     }
 
     #[test]
-    fn to_unlink_never_touches_active_or_recent_wal() {
-        let set = SegmentSet {
-            wal: vec![meta(Stream::Wal, 1, 100, 0), meta(Stream::Wal, 2, 100, 0)],
-            data: vec![],
-        };
-        assert!(set.to_unlink(1_000_000, 0, u64::MAX, None).is_empty());
-    }
-
-    // A zero-view segment (e.g. rolled right after a snapshot, before any real record landed)
-    // must never make `to_unlink` skip over an older, not-yet-old-enough segment: `max_view` is
-    // supposed to be monotonic (`open_new_segment` seeds it from the previous segment's bound),
-    // but this asserts `to_unlink` itself never produces a gap even if that invariant is somehow
-    // violated.
-    #[test]
-    fn to_unlink_wal_never_skips_a_segment_to_reach_a_younger_looking_one() {
-        let set = SegmentSet {
-            wal: vec![
-                meta(Stream::Wal, 1, 100, 60), // not old enough: bound is 50
-                meta(Stream::Wal, 2, 100, 0),  // looks old, but sits after segment 1
-                meta(Stream::Wal, 3, 100, 80),
-                meta(Stream::Wal, 4, 100, 90), // active
-            ],
-            data: vec![],
-        };
-        assert!(set.to_unlink(100, 50, u64::MAX, None).is_empty());
+    fn oldest_below_takes_sealed_prefix_under_bound() {
+        let segs = segments(
+            Stream::Wal,
+            &[(1, 10, 5), (2, 10, 10), (3, 10, 20), (4, 10, 30)],
+        );
+        assert_eq!(seqs(segs.oldest_below(15)), vec![1, 2]);
+        assert_eq!(seqs(segs.oldest_below(5)), Vec::<u64>::new());
     }
 
     #[test]
-    fn to_unlink_data_drops_oldest_first_over_byte_cap() {
-        let set = SegmentSet {
-            wal: vec![],
-            data: vec![
-                meta(Stream::Data, 1, 40, 100),
-                meta(Stream::Data, 2, 40, 100),
-                meta(Stream::Data, 3, 40, 100),
-                meta(Stream::Data, 4, 40, 100), // active, never dropped
-            ],
-        };
-        // All young (max_view 100 >= bound 0), total 160 > cap 90: drop oldest until <= cap.
-        let unlink = set.to_unlink(0, 0, 90, None);
-        assert_eq!(unlink.iter().map(|m| m.seq).collect::<Vec<_>>(), vec![1, 2]);
+    fn oldest_below_never_includes_the_active_segment() {
+        let segs = segments(Stream::Wal, &[(1, 10, 0), (2, 10, 0)]);
+        assert_eq!(seqs(segs.oldest_below(1_000_000)), vec![1]);
+        let single = segments(Stream::Wal, &[(1, 10, 0)]);
+        assert!(single.oldest_below(1_000_000).is_empty());
+        assert!(Segments::default().oldest_below(1_000_000).is_empty());
+    }
+
+    // `max_key` is supposed to be monotonic (`open_new_segment` seeds it from the previous
+    // segment's bound), but `oldest_below` itself must never produce a gap even if it is not.
+    #[test]
+    fn oldest_below_stops_at_first_segment_over_bound() {
+        let segs = segments(
+            Stream::Wal,
+            &[(1, 10, 60), (2, 10, 0), (3, 10, 80), (4, 10, 90)],
+        );
+        assert!(segs.oldest_below(50).is_empty());
     }
 
     #[test]
-    fn to_unlink_data_age_based_ignores_byte_cap() {
-        let set = SegmentSet {
-            wal: vec![],
-            data: vec![
-                meta(Stream::Data, 1, 10, 0),
-                meta(Stream::Data, 2, 10, 1000),
-                meta(Stream::Data, 3, 10, 1000), // active
-            ],
-        };
-        let unlink = set.to_unlink(1000, 10, u64::MAX, None);
-        assert_eq!(unlink.iter().map(|m| m.seq).collect::<Vec<_>>(), vec![1]);
+    fn oldest_over_bytes_drops_oldest_until_under_cap() {
+        let segs = segments(
+            Stream::Data,
+            &[(1, 40, 100), (2, 40, 100), (3, 40, 100), (4, 40, 100)],
+        );
+        assert_eq!(seqs(segs.oldest_over_bytes(90, None)), vec![1, 2]);
+        assert_eq!(seqs(segs.oldest_over_bytes(160, None)), Vec::<u64>::new());
+    }
+
+    #[test]
+    fn oldest_over_bytes_never_includes_the_active_segment() {
+        let segs = segments(Stream::Data, &[(1, 40, 1), (2, 40, 2), (3, 40, 3)]);
+        assert_eq!(seqs(segs.oldest_over_bytes(0, None)), vec![1, 2]);
+    }
+
+    #[test]
+    fn oldest_over_bytes_keeps_segments_after_keep_after() {
+        let segs = segments(
+            Stream::Data,
+            &[(1, 40, 5), (2, 40, 10), (3, 40, 20), (4, 40, 30)],
+        );
+        assert_eq!(seqs(segs.oldest_over_bytes(0, Some(10))), vec![1, 2]);
+        assert!(segs.oldest_over_bytes(0, Some(4)).is_empty());
+    }
+
+    #[test]
+    fn bytes_sums_every_segment() {
+        let segs = segments(Stream::Data, &[(1, 10, 0), (2, 20, 0), (3, 30, 0)]);
+        assert_eq!(segs.bytes(), 60);
     }
 
     fn cfg(stream: Stream) -> LaneConfig {
         LaneConfig {
             stream,
+            mode: mode(stream),
             segment_bytes: 10_000,
-            max_view_span: 10_000,
+            max_key_span: 10_000,
             max_batch_bytes: 4096,
             max_snapshot_bytes: 1024,
             in_flight_bytes: 1 << 20,
@@ -1534,7 +1448,7 @@ mod tests {
     async fn durable_ack_survives_crash() {
         let fs = Arc::new(MemFs::default());
         let dir = std::path::PathBuf::from("/data");
-        let segments = Arc::new(Mutex::new(SegmentSet::default()));
+        let segments = Arc::new(Mutex::new(Segments::default()));
         let (lane, _handle) = spawn_lane(
             fs.clone(),
             dir.clone(),
@@ -1546,7 +1460,7 @@ mod tests {
         )
         .unwrap();
 
-        let lsn = lane.enqueue(1, Kind::Vid, b"hello".to_vec(), Class::Durable, None);
+        let lsn = lane.enqueue(1, VID, b"hello".to_vec(), Class::Durable, None);
         lane.wait_durable(lsn).await.unwrap();
 
         // Simulate a crash: nothing unsynced should exist, since the ack implies fsync happened.
@@ -1555,15 +1469,15 @@ mod tests {
         assert_eq!(recovered.next_lsn, 2);
     }
 
-    // Regression test: `SegmentSet` must reflect an acked write's view before `durable_tx` publishes
+    // Regression test: `Segments` must reflect an acked write's key before `durable_tx` publishes
     // it, or a `scan_for` racing right after `wait_durable` returns can pick stale segment bounds and
     // miss the record. Two independent threads (writer thread vs. this task's tokio runtime) racing
     // on the watch channel, so many iterations to give a wrong order a chance to show up.
     #[tokio::test]
-    async fn durable_ack_makes_segment_set_reflect_the_acked_view_immediately() {
+    async fn durable_ack_makes_segment_set_reflect_the_acked_key_immediately() {
         let fs = Arc::new(MemFs::default());
         let dir = std::path::PathBuf::from("/data-order");
-        let segments = Arc::new(Mutex::new(SegmentSet::default()));
+        let segments = Arc::new(Mutex::new(Segments::default()));
         let (lane, _handle) = spawn_lane(
             fs,
             dir,
@@ -1575,26 +1489,176 @@ mod tests {
         )
         .unwrap();
 
-        for view in 1..=2000u64 {
-            let lsn = lane.enqueue(view, Kind::Vid, vec![0u8; 4], Class::Durable, None);
+        for key in 1..=2000u64 {
+            let lsn = lane.enqueue(key, VID, vec![0u8; 4], Class::Durable, None);
             lane.wait_durable(lsn).await.unwrap();
-            let max_view = segments
+            let max_key = segments
                 .lock()
-                .list(Stream::Data)
+                .list()
                 .last()
-                .map(|m| m.max_view)
+                .map(|m| m.max_key)
                 .unwrap_or(0);
             assert!(
-                max_view >= view,
-                "SegmentSet max_view {max_view} lagged the just-acked view {view}"
+                max_key >= key,
+                "Segments max_key {max_key} lagged the just-acked key {key}"
             );
         }
     }
 
     #[tokio::test]
+    async fn request_sync_makes_an_enqueue_record_durable() {
+        let fs = Arc::new(MemFs::default());
+        let dir = std::path::PathBuf::from("/data-sync");
+        let segments = Arc::new(Mutex::new(Segments::default()));
+        let (lane, _handle) = spawn_lane(
+            fs.clone(),
+            dir.clone(),
+            cfg(Stream::Share),
+            (1, 1),
+            None,
+            segments,
+            None,
+        )
+        .unwrap();
+
+        let lsn = lane.enqueue(1, VID, b"share".to_vec(), Class::Enqueue, None);
+        lane.request_sync();
+        tokio::time::timeout(Duration::from_secs(5), lane.wait_durable(lsn))
+            .await
+            .expect("sync was not acked")
+            .unwrap();
+
+        fs.crash(|_| 0);
+        let recovered = recover(&*fs, &dir, Stream::Share).unwrap();
+        assert_eq!(recovered.next_lsn, lsn + 1);
+    }
+
+    #[tokio::test]
+    async fn request_sync_without_unsynced_records_leaves_the_lane_working() {
+        let fs = Arc::new(MemFs::default());
+        let segments = Arc::new(Mutex::new(Segments::default()));
+        let (lane, _handle) = spawn_lane(
+            fs,
+            "/data-idle-sync".into(),
+            cfg(Stream::Share),
+            (1, 1),
+            None,
+            segments,
+            None,
+        )
+        .unwrap();
+
+        lane.request_sync();
+        let lsn = lane.enqueue(1, VID, b"x".to_vec(), Class::Durable, None);
+        tokio::time::timeout(Duration::from_secs(5), lane.wait_durable(lsn))
+            .await
+            .expect("durable write was not acked")
+            .unwrap();
+    }
+
+    fn write_frame_file(dir: &Path, body: &[u8]) -> (PathBuf, Location) {
+        let path = segment_path(dir, 1);
+        let header = SegmentHeader {
+            stream: Stream::Payload,
+            seq: 1,
+            first_lsn: 1,
+            prev_max_key: 0,
+        };
+        let mut bytes = header.encode().to_vec();
+        let mut frame = Vec::new();
+        format::encode_frame(&mut frame, 1, 5, VID, b"first");
+        let offset = (bytes.len() + frame.len()) as u64;
+        format::encode_frame(&mut frame, 2, 6, VID, body);
+        bytes.extend_from_slice(&frame);
+        std::fs::write(&path, bytes).unwrap();
+        let loc = Location {
+            seq: 1,
+            offset,
+            lsn: 2,
+            len: body.len() as u32,
+        };
+        (path, loc)
+    }
+
+    #[test]
+    fn read_frame_roundtrips_a_body() {
+        let dir = tempfile::tempdir().unwrap();
+        let (path, loc) = write_frame_file(dir.path(), b"payload bytes");
+        assert_eq!(
+            read_frame(&StdFs, &path, loc, 6, VID).unwrap().as_deref(),
+            Some(&b"payload bytes"[..])
+        );
+    }
+
+    #[test]
+    fn read_frame_is_none_for_missing_short_or_corrupt() {
+        let dir = tempfile::tempdir().unwrap();
+        let (path, loc) = write_frame_file(dir.path(), b"payload bytes");
+
+        let gone = segment_path(dir.path(), 9);
+        assert!(read_frame(&StdFs, &gone, loc, 6, VID).unwrap().is_none());
+
+        let wrong_lsn = Location { lsn: 3, ..loc };
+        assert!(
+            read_frame(&StdFs, &path, wrong_lsn, 6, VID)
+                .unwrap()
+                .is_none()
+        );
+
+        let past_end = Location {
+            len: loc.len + 1,
+            ..loc
+        };
+        assert!(
+            read_frame(&StdFs, &path, past_end, 6, VID)
+                .unwrap()
+                .is_none()
+        );
+
+        let mut bytes = std::fs::read(&path).unwrap();
+        *bytes.last_mut().unwrap() ^= 1;
+        std::fs::write(&path, &bytes).unwrap();
+        assert!(read_frame(&StdFs, &path, loc, 6, VID).unwrap().is_none());
+
+        std::fs::write(&path, &bytes[..loc.offset as usize + 4]).unwrap();
+        assert!(read_frame(&StdFs, &path, loc, 6, VID).unwrap().is_none());
+    }
+
+    /// A locator outlives its segment when the lane reuses the same seq, offset and lsn for a
+    /// different record; the frame must still be the one that was asked for.
+    #[test]
+    fn read_frame_is_none_for_a_different_record_at_the_locator() {
+        let dir = tempfile::tempdir().unwrap();
+        let (path, loc) = write_frame_file(dir.path(), b"payload bytes");
+
+        assert!(read_frame(&StdFs, &path, loc, 7, VID).unwrap().is_none());
+        assert!(
+            read_frame(&StdFs, &path, loc, 6, Kind(VID.0 + 1))
+                .unwrap()
+                .is_none()
+        );
+
+        let longer = Location {
+            len: loc.len - 1,
+            ..loc
+        };
+        assert!(read_frame(&StdFs, &path, longer, 6, VID).unwrap().is_none());
+
+        let (path, loc) = write_frame_file(dir.path(), b"shorter");
+        let mut bytes = std::fs::read(&path).unwrap();
+        bytes.extend_from_slice(&[0; 32]);
+        std::fs::write(&path, bytes).unwrap();
+        let stale = Location {
+            len: b"payload bytes".len() as u32,
+            ..loc
+        };
+        assert!(read_frame(&StdFs, &path, stale, 6, VID).unwrap().is_none());
+    }
+
+    #[tokio::test]
     async fn reserve_over_budget_takes_whole_budget() {
         let fs = Arc::new(MemFs::default());
-        let segments = Arc::new(Mutex::new(SegmentSet::default()));
+        let segments = Arc::new(Mutex::new(Segments::default()));
         let (lane, _handle) = spawn_lane(
             fs,
             PathBuf::from("/data-reserve"),
@@ -1616,7 +1680,7 @@ mod tests {
     async fn empty_dir_then_write_then_recover_roundtrips() {
         let fs = Arc::new(MemFs::default());
         let dir = std::path::PathBuf::from("/data2");
-        let segments = Arc::new(Mutex::new(SegmentSet::default()));
+        let segments = Arc::new(Mutex::new(Segments::default()));
         let (lane, _handle) = spawn_lane(
             fs.clone(),
             dir.clone(),
@@ -1628,7 +1692,7 @@ mod tests {
         )
         .unwrap();
         for i in 0..5u64 {
-            let lsn = lane.enqueue(i, Kind::Vid, vec![i as u8; 4], Class::Durable, None);
+            let lsn = lane.enqueue(i, VID, vec![i as u8; 4], Class::Durable, None);
             lane.wait_durable(lsn).await.unwrap();
         }
         let recovered = recover(&*fs, &dir, Stream::Data).unwrap();
@@ -1657,7 +1721,7 @@ mod tests {
     async fn wal_roll_reserves_snapshot_lsn_so_recovery_reaches_the_last_acked_record() {
         let fs = Arc::new(MemFs::default());
         let dir = std::path::PathBuf::from("/wal3");
-        let segments = Arc::new(Mutex::new(SegmentSet::default()));
+        let segments = Arc::new(Mutex::new(Segments::default()));
         let state = Arc::new(Mutex::new(0u64));
         let hook: Arc<dyn SnapshotHook> = Arc::new(CounterHook(state.clone()));
 
@@ -1675,16 +1739,16 @@ mod tests {
         )
         .unwrap();
 
-        for view in 1..=40u64 {
+        for key in 1..=40u64 {
             // Mirrors `put_wal`: mutate "state" and enqueue while holding the same lock the hook
             // locks, so alloc's counter and the hook's drain always agree on what's been sent.
             let lsn = {
                 let mut n = state.lock();
                 *n += 1;
                 lane.enqueue(
-                    view,
-                    Kind::Action,
-                    view.to_le_bytes().to_vec(),
+                    key,
+                    ACTION,
+                    key.to_le_bytes().to_vec(),
                     Class::Durable,
                     None,
                 )
@@ -1696,7 +1760,7 @@ mod tests {
         let recovered = recover(&*fs, &dir, Stream::Wal).unwrap();
         assert_eq!(
             recovered.wal_records.first().map(|(h, _)| h.kind),
-            Some(Kind::Snapshot)
+            Some(Kind::SNAPSHOT)
         );
         // `scan` already enforces lsn-consecutiveness; the count check is a sanity check on top.
         assert_eq!(
@@ -1709,17 +1773,16 @@ mod tests {
         assert_eq!(snap_count + recovered.wal_records.len() as u64 - 1, 40);
     }
 
-    // Regression test: a failed unlink must not drop its segment from `SegmentSet` before the file
+    // Regression test: a failed unlink must not drop its segment from `Segments` before the file
     // is actually gone, or a later pass moves on to younger segments and leaves a gap on disk that
     // `recover` refuses to start over.
     #[tokio::test]
     async fn prune_stops_at_a_failed_unlink_instead_of_skipping_ahead() {
         let fs = MemFs::default();
-        let wal_dir = std::path::PathBuf::from("/gc-wal");
         let data_dir = std::path::PathBuf::from("/gc-data");
 
         // 6 data segments, all old enough to qualify except the last (active, never unlinked).
-        let mut segments = SegmentSet::default();
+        let mut segments = Segments::default();
         for seq in 1..=6u64 {
             write_segment(
                 &fs,
@@ -1728,13 +1791,11 @@ mod tests {
                     stream: Stream::Data,
                     seq,
                     first_lsn: seq,
-                    prev_max_view: 100,
+                    prev_max_key: 100,
                 },
                 &[],
             );
-            segments
-                .data
-                .push(meta(Stream::Data, seq, SegmentHeader::LEN as u64, 100));
+            segments.push_active(meta(Stream::Data, seq, SegmentHeader::LEN as u64, 100));
         }
         let segments = Mutex::new(segments);
 
@@ -1743,7 +1804,8 @@ mod tests {
             .unwrap()
             .insert(segment_path(&data_dir, 2));
 
-        let err = prune(&fs, &segments, &wal_dir, &data_dir, 1000, 0, u64::MAX, None).unwrap_err();
+        let to_unlink = segments.lock().oldest_below(1000);
+        let err = prune(&fs, &data_dir, &segments, &to_unlink).unwrap_err();
         assert!(format!("{err:#}").contains("segment 2"), "{err:#}");
 
         assert_eq!(fs.list(&data_dir).unwrap().len(), 5, "only seq 1 unlinked");
@@ -1757,7 +1819,7 @@ mod tests {
         assert_eq!(
             segments
                 .lock()
-                .data
+                .list()
                 .iter()
                 .map(|m| m.seq)
                 .collect::<Vec<_>>(),
@@ -1766,12 +1828,13 @@ mod tests {
         );
 
         // Second pass, fault cleared (single-shot): must retry seq 2 first, in order.
-        let stats = prune(&fs, &segments, &wal_dir, &data_dir, 1000, 0, u64::MAX, None).unwrap();
-        assert_eq!(stats.data_bytes, Some(SegmentHeader::LEN as u64));
+        let to_unlink = segments.lock().oldest_below(1000);
+        let bytes = prune(&fs, &data_dir, &segments, &to_unlink).unwrap();
+        assert_eq!(bytes, Some(SegmentHeader::LEN as u64));
         assert_eq!(
             segments
                 .lock()
-                .data
+                .list()
                 .iter()
                 .map(|m| m.seq)
                 .collect::<Vec<_>>(),
@@ -1799,8 +1862,8 @@ mod tests {
         let dir = std::path::PathBuf::from("/wal4");
 
         let mut seg1 = Vec::new();
-        format::encode_frame(&mut seg1, 1, 0, Kind::Snapshot, b"snap");
-        format::encode_frame(&mut seg1, 2, 7, Kind::Action, b"a");
+        format::encode_frame(&mut seg1, 1, 0, Kind::SNAPSHOT, b"snap");
+        format::encode_frame(&mut seg1, 2, 7, ACTION, b"a");
         write_segment(
             &fs,
             &dir,
@@ -1808,7 +1871,7 @@ mod tests {
                 stream: Stream::Wal,
                 seq: 1,
                 first_lsn: 1,
-                prev_max_view: 0,
+                prev_max_key: 0,
             },
             &seg1,
         );
@@ -1820,7 +1883,7 @@ mod tests {
                 stream: Stream::Wal,
                 seq: 2,
                 first_lsn: 3,
-                prev_max_view: 7,
+                prev_max_key: 7,
             },
             &[],
         );
@@ -1851,9 +1914,9 @@ mod tests {
         let dir = std::path::PathBuf::from("/wal5");
 
         let mut seg = Vec::new();
-        format::encode_frame(&mut seg, 1, 0, Kind::Snapshot, b"snap");
+        format::encode_frame(&mut seg, 1, 0, Kind::SNAPSHOT, b"snap");
         let clean_end = seg.len();
-        format::encode_frame(&mut seg, 2, 7, Kind::Action, b"torn-record");
+        format::encode_frame(&mut seg, 2, 7, ACTION, b"torn-record");
         seg.truncate(seg.len() - 3); // torn tail: the second frame's crc no longer matches.
 
         write_segment(
@@ -1863,7 +1926,7 @@ mod tests {
                 stream: Stream::Wal,
                 seq: 1,
                 first_lsn: 1,
-                prev_max_view: 0,
+                prev_max_key: 0,
             },
             &seg,
         );
@@ -1871,7 +1934,7 @@ mod tests {
         let recovered = recover(&fs, &dir, Stream::Wal).unwrap();
         assert_eq!(
             recovered.wal_records.first().map(|(h, _)| h.kind),
-            Some(Kind::Snapshot)
+            Some(Kind::SNAPSHOT)
         );
         assert_eq!(recovered.wal_records.len(), 1);
         assert_eq!(recovered.next_lsn, 2);
@@ -1891,13 +1954,13 @@ mod tests {
             stream: Stream::Wal,
             seq,
             first_lsn: 1,
-            prev_max_view: 0,
+            prev_max_key: 0,
         };
 
         let mut seg = Vec::new();
-        format::encode_frame(&mut seg, 1, 0, Kind::Snapshot, b"snap");
+        format::encode_frame(&mut seg, 1, 0, Kind::SNAPSHOT, b"snap");
         let clean_end = seg.len();
-        format::encode_frame(&mut seg, 2, 7, Kind::Action, b"x");
+        format::encode_frame(&mut seg, 2, 7, ACTION, b"x");
 
         // A final frame whose length exactly fills the file is valid.
         let exact = std::path::PathBuf::from("/wal6-exact");

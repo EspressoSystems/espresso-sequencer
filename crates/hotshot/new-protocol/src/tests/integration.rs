@@ -1,12 +1,12 @@
 use std::{marker::PhantomData, time::Duration};
 
 use committable::{Commitment, CommitmentBoundsArkless, Committable};
-use hotshot::types::{BLSPrivKey, BLSPubKey};
 use hotshot_example_types::node_types::TestTypes;
 use hotshot_testing::helpers::build_cert;
 use hotshot_types::{
     data::{EpochNumber, VidCommitment2, ViewNumber},
     epoch_membership::EpochMembership,
+    signature_key::{BLSPrivKey, BLSPubKey},
     simple_certificate::{TimeoutCertificate3, TimeoutEvidence},
     simple_vote::{HasEpoch, QuorumData2, TimeoutData3, TimeoutVote3},
     stake_table::StakeTableEntries,

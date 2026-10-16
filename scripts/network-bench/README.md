@@ -183,17 +183,17 @@ Other combinations are refused. The default is `postgres` on `colocated`.
 
 ```
 just bench aws run --tag release-x --nodes 4 --query-db volume --pg-mbps 1000 --yes
-just bench aws run --fleet --query-db volume --node-env ESPRESSO_QUERY_PAYLOAD_DIR=/payload
+just bench aws run --fleet --query-db volume --node-env ESPRESSO_NODE_BLOB_DIR=/payload
 ```
 
 - `--db-modes` (`plan`, `up`) lists the placements a fleet prepares. `--query-db` (`run`) picks one; `tmpfs` needs no
-  preparation and runs on any fleet; it requires `--node-env ESPRESSO_QUERY_PAYLOAD_DIR=...` so payloads stay out of the
+  preparation and runs on any fleet; it requires `--node-env ESPRESSO_NODE_BLOB_DIR=...` so payloads stay out of the
   tmpfs.
 - A fleet with `rds` refuses `--pg-iops` and `--pg-mbps` values other than the defaults.
 - `rds` needs IAM rights `iam:CreateRole`, `iam:PutRolePolicy`, `iam:PassRole`, `scheduler:CreateSchedule`. Without them
   apply fails, the fleet is destroyed, exit 3.
-- The query node mounts `/data/pg/payload` as `/payload`. `ESPRESSO_QUERY_PAYLOAD_DIR=/payload` (experimental image
-  feature, off by default) puts payload and VID share files there: on the `volume` store in `volume` mode, on node0's
+- The query node mounts `/data/pg/payload` as `/payload`. `ESPRESSO_NODE_BLOB_DIR=/payload` (experimental image feature,
+  off by default) puts payload and VID share journal segments there: on the `volume` store in `volume` mode, on node0's
   root disk otherwise. Size collected as `du-payload.txt`.
 
 ### Latency
@@ -437,7 +437,6 @@ just bench aws run --tag release-x --leader-trace
   `ESPRESSO_NODE_PRUNER_STATE_TARGET_RETENTION`, `ESPRESSO_NODE_PRUNER_INTERVAL`). Part of the config hash.
   - The warmup grows by RETENTION, so the pruner runs before the first measured step.
   - `--node-env` overrides these variables, e.g. `ESPRESSO_NODE_PRUNER_PRUNING_THRESHOLD` for the usage-triggered path.
-  - Payload files (`ESPRESSO_QUERY_PAYLOAD_DIR`) are not pruned: the node keeps them after their rows go.
   - Scan or reader lag beyond RETENTION shows as missing payloads (noisy run) and missing reader ranges.
   - The summary lists the retention and the `pruner_data_height` and `pruner_state_height` gauges at the window end.
 - `--clients N`: N light-client readers per namespace (default 2, a stack chain's sequencer and follower; 0 for none),

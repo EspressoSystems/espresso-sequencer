@@ -98,6 +98,7 @@ use super::{
         Aggregate, AggregatesStorage, AvailabilityStorage, ExplorerStorage,
         MerklizedStateHeightStorage, MerklizedStateStorage, NodeStorage, SerializableRetry,
         UpdateAggregatesStorage, UpdateAvailabilityStorage,
+        blob::{BlobStore, StagedBlobs},
         pruning::{PruneStorage, PrunedHeightDataSource, PrunedHeightStorage},
     },
 };
@@ -995,6 +996,10 @@ where
     async fn read(&self) -> anyhow::Result<Self::ReadOnly<'_>> {
         self.fetcher.read().await
     }
+
+    fn blob_store(&self) -> Option<&Arc<BlobStore>> {
+        self.fetcher.blob_store()
+    }
 }
 
 /// Asynchronous retrieval and storage of [`Fetchable`] resources.
@@ -1053,6 +1058,10 @@ where
 
     async fn read(&self) -> anyhow::Result<Self::ReadOnly<'_>> {
         self.storage.read().await
+    }
+
+    fn blob_store(&self) -> Option<&Arc<BlobStore>> {
+        self.storage.blob_store()
     }
 }
 
@@ -2121,8 +2130,22 @@ where
     where
         T: Storable<Types>,
     {
+        // Staging happens before any write transaction opens, and once for all retries.
+        let blobs = self.storage.blob_store().map(|blobs| blobs.as_ref());
+        let staged = match obj.stage(blobs, self.leaf_only).await {
+            Ok(staged) => staged,
+            Err(err) => {
+                tracing::warn!(
+                    obj = obj.debug_name(),
+                    "failed to stage fetched object: {err:#}"
+                );
+                return;
+            },
+        };
+
         let try_store = || async {
             let mut tx = self.storage.write().await?;
+            tx.attach_blobs(staged.clone());
             obj.clone().store(&mut tx, self.leaf_only).await?;
             tx.commit().await
         };
@@ -2575,6 +2598,15 @@ trait Storable<Types: NodeType>: Clone {
     /// Notify anyone waiting for this object that it has become available.
     fn notify(&self, notifiers: &Notifiers<Types>) -> impl Send + Future<Output = ()>;
 
+    /// Write the object's blobs to the blob store, before the write transaction opens.
+    fn stage(
+        &self,
+        _blobs: Option<&BlobStore>,
+        _leaf_only: bool,
+    ) -> impl Send + Future<Output = anyhow::Result<StagedBlobs>> {
+        async { Ok(StagedBlobs::new()) }
+    }
+
     /// Store the object in the local database.
     fn store(
         &self,
@@ -2604,6 +2636,18 @@ where
         for run in self {
             run.notify(notifiers).await;
         }
+    }
+
+    async fn stage(
+        &self,
+        blobs: Option<&BlobStore>,
+        leaf_only: bool,
+    ) -> anyhow::Result<StagedBlobs> {
+        let mut staged = StagedBlobs::new();
+        for run in self {
+            staged.extend(run.stage(blobs, leaf_only).await?);
+        }
+        Ok(staged)
     }
 
     async fn store(

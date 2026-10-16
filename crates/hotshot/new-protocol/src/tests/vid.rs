@@ -1,7 +1,7 @@
-use hotshot::types::BLSPubKey;
 use hotshot_example_types::node_types::TestTypes;
 use hotshot_types::{
     data::{VidCommitment2, VidDisperseShare2, ViewNumber, ns_table::parse_ns_table},
+    signature_key::BLSPubKey,
     traits::signature_key::SignatureKey,
     vid::avidm_gf2::{AvidmGf2Scheme, init_avidm_gf2_param},
 };

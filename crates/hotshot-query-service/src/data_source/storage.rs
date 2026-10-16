@@ -65,6 +65,7 @@ use hotshot_types::{data::VidShare, traits::node_implementation::NodeType};
 use jf_merkle_tree_compat::prelude::MerkleProof;
 use tagged_base64::TaggedBase64;
 
+use self::blob::StagedBlobs;
 use crate::{
     Header, Payload, QueryResult, Transaction,
     availability::{
@@ -140,6 +141,7 @@ macro_rules! serializable_retry {
     };
 }
 
+pub mod blob;
 pub mod fail_storage;
 pub mod fs;
 mod ledger_log;
@@ -316,6 +318,10 @@ where
             Item = (&'a VidCommonQueryData<Types>, Option<&'a VidShare>),
         >,
     ) -> impl Send + Future<Output = anyhow::Result<()>>;
+
+    /// Locators of payloads already written to the blob store, to be used by later inserts in
+    /// this transaction.
+    fn attach_blobs(&mut self, _staged: StagedBlobs) {}
 }
 
 #[async_trait]
