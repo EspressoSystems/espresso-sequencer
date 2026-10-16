@@ -37,11 +37,11 @@ def config(*flags: str) -> Any:
     [
         ((), None, awsb.CTL_TYPE, False),
         (("--chaos",), 300, awsb.CHAOS_CTL_TYPE, False),
-        (("--prover",), 300, awsb.CTL_TYPE, True),
-        (("--chaos", "--prover"), 300, awsb.CTL_TYPE, True),
-        (("--prover", "--epoch-height", "3000"), 3000, awsb.CTL_TYPE, True),
-        (("--prover", "--ctl-type", "c8g.4xlarge"), 300, "c8g.4xlarge", True),
-        (("--chaos", "--prover", "--ctl-type", "c8g.xlarge"), 300, "c8g.xlarge", True),
+        (("--prover",), awsb.PROVER_EPOCH_HEIGHT, awsb.PROVER_CTL_TYPE, True),
+        (("--chaos", "--prover"), awsb.PROVER_EPOCH_HEIGHT, awsb.PROVER_CTL_TYPE, True),
+        (("--prover", "--epoch-height", "3000"), 3000, awsb.PROVER_CTL_TYPE, True),
+        (("--prover", "--ctl-type", "c8g.8xlarge"), 600, "c8g.8xlarge", True),
+        (("--chaos", "--prover", "--ctl-type", "c8g.xlarge"), 600, "c8g.xlarge", True),
         (("--epoch-height", "3000"), 3000, awsb.CTL_TYPE, False),
     ],
 )
@@ -126,12 +126,12 @@ def test_a_fleet_run_takes_the_prover_flag(
     assert harness.run(runner, "--prover") == awsb.EXIT_OK
     run = netbench.read_json(harness.fleet_dir / "runs/01-colocated/manifest.json")
     assert run["config"]["prover"] is True
-    assert run["config"]["epoch_height"] == awsb.SHORT_EPOCH_HEIGHT
+    assert run["config"]["epoch_height"] == awsb.PROVER_EPOCH_HEIGHT
     evidence: Any = {"clock_offset_ms": {}}
     meta = awsb.deployment_meta(run, evidence | {"prover": "prover-started"})
     assert (meta["prover"], meta["epoch_height"], meta["staking"]) == (
         "prover-started",
-        awsb.SHORT_EPOCH_HEIGHT,
+        awsb.PROVER_EPOCH_HEIGHT,
         True,
     )
     assert "prover" not in awsb.deployment_meta(run, evidence)
@@ -162,7 +162,9 @@ def test_ctl_start_sh_creates_the_light_client_deploy_and_the_prover():
     )
     assert script == (START_SH_GOLDEN_DIR / "start-ctl-prover.sh").read_text()
     assert "--name deploy-lc" in script
-    assert "--cpus 4" in script
+    assert "--cpu-shares 2" in script
+    assert "--cpus" not in script
+    assert "RAYON_NUM_THREADS" not in script
     assert "-v /data/ark-srs:/root/.local/share/ark-srs" in script
     assert "unset ESPRESSO_LIGHT_CLIENT_PROXY_ADDRESS" in script
     assert "--use-mock" not in script
@@ -374,7 +376,7 @@ def test_the_prover_state_file_reaches_the_evidence(tmp_path: Path):
 
 
 def test_the_fleet_prover_refusal_names_up_ctl_type():
-    with pytest.raises(awsb.Refused, match="up --ctl-type c8g.2xlarge"):
+    with pytest.raises(awsb.Refused, match=f"up --ctl-type {awsb.PROVER_CTL_TYPE}"):
         awsb.check_prover_ctl(awsb.PROVER_MIN_MIB - 1, fleet=True)
     with pytest.raises(awsb.Refused, match="pass --ctl-type") as plain:
         awsb.check_prover_ctl(awsb.PROVER_MIN_MIB - 1)
@@ -406,6 +408,6 @@ def test_an_epoch_height_run_without_staking_is_not_labelled_staked(
 def test_the_prover_summary_says_the_load_driver_shares_ctl():
     cfg = small_cfg(epoch_height=300, prover=True)
     assert any(
-        "load driver shares ctl" in line and "4 vCPUs" in line
+        "load driver shares ctl" in line and "vCPUs" not in line
         for line in awsb.format_node_summary(cfg)
     )

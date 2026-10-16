@@ -377,7 +377,13 @@ PROVER_LOG = f"{BENCH_DIR}/prover.log"
 PROVER_STATE = f"{BENCH_DIR}/prover-state.json"
 # `finalizedState()` of the light client contract.
 FINALIZED_STATE_SELECTOR = "0x9fdb54a7"
-PROVER_CPUS = 4
+# Twice the default ctl: a proof takes every core, and the prover must keep up with the epochs.
+PROVER_CTL_TYPE = "c8g.4xlarge"
+# Long enough for a proof to finish within an epoch at the chaos block rate.
+PROVER_EPOCH_HEIGHT = 600
+# cgroup v2 cpu.weight minimum. The load driver runs in its own systemd unit cgroup and CFS weighs
+# sibling cgroups before nice values, so `nice` inside the container would not yield to it.
+PROVER_CPU_SHARES = 2
 # The proof circuit and its SRS need this much; below it the prover is killed by the OOM killer.
 PROVER_MIN_MIB = 12288
 # The circuit is sized for this many stake table entries: genesis, relay, deploy and prover agree.
@@ -1721,7 +1727,7 @@ def format_node_summary(cfg: RunConfig) -> list[str]:
                 (
                     "prover: light client on ctl, stake table capacity "
                     f"{stake_table_capacity(cfg)}, update every {PROVER_UPDATE_INTERVAL}; "
-                    f"the load driver shares ctl with the prover ({PROVER_CPUS} vCPUs)"
+                    "the prover uses every ctl core at the lowest CPU weight, the load driver shares ctl"
                 )
             ]
             if cfg.prover
@@ -2828,8 +2834,8 @@ def render_prover_containers(images: dict[str, ImageInfo]) -> str:
         [
             "--env-file",
             f"{BENCH_DIR}/ctl.env",
-            "--cpus",
-            str(PROVER_CPUS),
+            "--cpu-shares",
+            str(PROVER_CPU_SHARES),
             "-v",
             f"{SRS_HOST_DIR}:{SRS_CONTAINER_DIR}",
             "-e",
@@ -2838,8 +2844,6 @@ def render_prover_containers(images: dict[str, ImageInfo]) -> str:
             f"ESPRESSO_L1_PROVIDER=http://localhost:{env_port('ESPRESSO_L1_PORT')}",
             "-e",
             f"ESPRESSO_STATE_PROVER_UPDATE_INTERVAL={PROVER_UPDATE_INTERVAL}",
-            "-e",
-            f"RAYON_NUM_THREADS={PROVER_CPUS}",
             f"{prover['ref']}@{prover['digest']}",
             "/usr/local/bin/state-prover",
             "-d",
@@ -3303,7 +3307,7 @@ def add_block_size_flag(parser: argparse.ArgumentParser) -> None:
         type=positive_int,
         default=RunConfig.epoch_height,
         help=f"genesis epoch_height in blocks; stakes every node on L1 (default: the "
-        f"template's 1000000, {SHORT_EPOCH_HEIGHT} with --chaos or --prover)",
+        f"template's 1000000, {SHORT_EPOCH_HEIGHT} with --chaos, {PROVER_EPOCH_HEIGHT} with --prover)",
     )
 
 
@@ -3313,7 +3317,7 @@ def add_prover_flag(parser: argparse.ArgumentParser) -> None:
         action="store_true",
         help="run the light-client prover on ctl (real verifier, stake table capacity "
         f"{PROVER_STAKE_TABLE_CAPACITY}); needs a ctl of {PROVER_MIN_MIB} MiB, takes "
-        f"--epoch-height {SHORT_EPOCH_HEIGHT} and --ctl-type {CTL_TYPE} unless given",
+        f"--epoch-height {PROVER_EPOCH_HEIGHT} and --ctl-type {PROVER_CTL_TYPE} unless given",
     )
 
 
@@ -3422,14 +3426,16 @@ def config_from_args(args: argparse.Namespace) -> RunConfig:
     if chaos is not None:
         load = chaos_load(load, chaos)
     # The prover needs a larger ctl than the chaos shape's.
-    ctl_type = (
-        args.ctl_type
-        if args.prover
-        else chaos_default(args, "--ctl-type", CHAOS_CTL_TYPE)
-    )
+    if args.prover and "--ctl-type" not in given_flags(args.argv):
+        ctl_type = PROVER_CTL_TYPE
+    else:
+        ctl_type = chaos_default(args, "--ctl-type", CHAOS_CTL_TYPE)
     epoch_height = args.epoch_height
-    if (args.chaos or args.prover) and "--epoch-height" not in given_flags(args.argv):
-        epoch_height = SHORT_EPOCH_HEIGHT
+    if "--epoch-height" not in given_flags(args.argv):
+        if args.prover:
+            epoch_height = PROVER_EPOCH_HEIGHT
+        elif args.chaos:
+            epoch_height = SHORT_EPOCH_HEIGHT
     return RunConfig(
         tag=args.tag,
         allocator=args.allocator,
@@ -4952,7 +4958,7 @@ def check_prover_ctl(memory_mib: int, fleet: bool = False) -> None:
     if memory_mib < PROVER_MIN_MIB:
         # `run --fleet` refuses --ctl-type: the fleet's ctl is fixed at `up`.
         fix = (
-            f"bring the fleet up with `up --ctl-type {CTL_TYPE}`"
+            f"bring the fleet up with `up --ctl-type {PROVER_CTL_TYPE}`"
             if fleet
             else "pass --ctl-type"
         )
@@ -8816,7 +8822,9 @@ def check_validity_aws(
     if spread >= START_SPREAD_NOISY_S:
         noisy.append(f"nodes started {spread:.1f} s apart")
     hosts = result["hosts"]
-    if "ctl" in hosts and hosts["ctl"]["util_mean"] > CTL_CPU_NOISY_FRAC:
+    # The prover saturates ctl by design.
+    prover = manifest["config"].get("prover", False)
+    if "ctl" in hosts and not prover and hosts["ctl"]["util_mean"] > CTL_CPU_NOISY_FRAC:
         noisy.append(f"ctl CPU busy {hosts['ctl']['util_mean']:.0%}")
     for name, stats in hosts.items():
         # node0's steal is already judged by netbench.check_validity through result["host"].

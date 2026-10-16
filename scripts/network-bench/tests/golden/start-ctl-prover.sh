@@ -27,7 +27,7 @@ id=$(docker create --name deploy-lc --network host --restart no --entrypoint sh 
 jq --arg n deploy-lc --arg i "$id" '. + {($n): $i}' /opt/bench/containers.json > /opt/bench/containers.json.tmp
 mv /opt/bench/containers.json.tmp /opt/bench/containers.json
 
-id=$(docker create --name state-prover --network host --restart no --env-file /opt/bench/ctl.env --cpus 4 -v /data/ark-srs:/root/.local/share/ark-srs -e ESPRESSO_STATE_RELAY_SERVER_URL=http://localhost:30011 -e ESPRESSO_L1_PROVIDER=http://localhost:8545 -e ESPRESSO_STATE_PROVER_UPDATE_INTERVAL=20s -e RAYON_NUM_THREADS=4 ghcr.io/x/prover-service:t@sha256:0000000000000000000000000000000000000000000000000000000000000000 /usr/local/bin/state-prover -d)
+id=$(docker create --name state-prover --network host --restart no --env-file /opt/bench/ctl.env --cpu-shares 2 -v /data/ark-srs:/root/.local/share/ark-srs -e ESPRESSO_STATE_RELAY_SERVER_URL=http://localhost:30011 -e ESPRESSO_L1_PROVIDER=http://localhost:8545 -e ESPRESSO_STATE_PROVER_UPDATE_INTERVAL=20s ghcr.io/x/prover-service:t@sha256:0000000000000000000000000000000000000000000000000000000000000000 /usr/local/bin/state-prover -d)
 jq --arg n state-prover --arg i "$id" '. + {($n): $i}' /opt/bench/containers.json > /opt/bench/containers.json.tmp
 mv /opt/bench/containers.json.tmp /opt/bench/containers.json
 

@@ -409,15 +409,15 @@ just bench aws run --tag chaos-dense --chaos --nodes 32 --query-nodes 3 --chaos-
 ```
 just bench aws run --tag release-x --prover
 just bench aws run --tag release-x --chaos --prover
-just bench aws run --fleet --prover   # the fleet's ctl needs 12288 MiB, e.g. up --ctl-type c8g.2xlarge
+just bench aws run --fleet --prover   # the fleet's ctl needs 12288 MiB, e.g. up --ctl-type c8g.4xlarge
 ```
 
 - `ctl` runs `stake` (`--epoch-height` given or implied) and `state-prover` (`--prover`) in addition to the services of
   [Topology](#topology). `--prover` runs the light-client prover on `ctl` beside the network: `state-prover -d` of the
   `prover-service` image against the real verifier, updating the light client contract every 20 s.
-- Flags not given take `--epoch-height 300` and `--ctl-type c8g.2xlarge` (also with `--chaos`, whose `c8g.xlarge` is too
-  small). A `ctl` below 12288 MiB is refused by `plan`, `run` and `run --fleet`; a fleet from before the image is
-  refused unless `--tag` pulls the images.
+- Flags not given take `--epoch-height 600` (`--chaos` alone: 300) and `--ctl-type c8g.4xlarge` (16 vCPU; also with
+  `--chaos`, whose `c8g.xlarge` is too small). A `ctl` below 12288 MiB is refused by `plan`, `run` and `run --fleet`; a
+  fleet from before the image is refused unless `--tag` pulls the images.
 - Stake table capacity 200 in genesis (`stake_table_capacity`, `[stake_table] capacity`) and in
   `ESPRESSO_STAKE_TABLE_CAPACITY` of `ctl.env` (relay, `deploy`, prover). Without `--prover` genesis uses
   `max(10, nodes)` and `ctl.env` keeps the `ESPRESSO_STAKE_TABLE_CAPACITY` of `.env`.
@@ -430,8 +430,10 @@ just bench aws run --fleet --prover   # the fleet's ctl needs 12288 MiB, e.g. up
   from anvil) and the `light-client prover:` line of `summary.md`: the last step, or once started `running, LC height N`
   / `exited N at prover-started, LC height N`. A failed step does not fail the run.
 - Nodes find the light client through `StakeTableV3.lightClient()`; no node environment changes.
-- The prover container has 4 CPUs (`RAYON_NUM_THREADS=4`) and shares `ctl` with the orchestrator, the relay and the load
-  driver. The config hash includes `--prover`.
+- The prover container uses every `ctl` core (no `--cpus`, no `RAYON_NUM_THREADS`) at `--cpu-shares 2` (cgroup v2
+  `cpu.weight` 1, the minimum), so it yields to the orchestrator, the relay and the load driver. `nice` would not: the
+  load driver runs in its own systemd unit cgroup, and CFS weighs sibling cgroups before nice values. The `ctl` CPU
+  noisy check is skipped with `--prover`. The config hash includes `--prover`.
 - SRS: ark-srs downloads its parameters on first use (`ctl` needs internet egress) into `/data/ark-srs` on `ctl`, which
   a fleet keeps across runs.
 
@@ -580,7 +582,7 @@ Where:
 | `--nodes`                             | 5                              | provision    | validator count, `node0` included                                                             |
 | `--query-nodes`                       | 1                              | provision    | query service nodes, the first `K` of `--nodes`; above 1 needs `--query-db colocated`         |
 | `--node-type`                         | `c8g.4xlarge`                  | provision    | node instance type                                                                            |
-| `--ctl-type`                          | `c8g.2xlarge`                  | provision    | `ctl` instance type                                                                           |
+| `--ctl-type`                          | `c8g.2xlarge`                  | provision    | `ctl` instance type (`c8g.4xlarge` with `--prover`)                                           |
 | `--root-gb`                           | `auto`                         | provision    | root volume GB; `auto` sizes from the ramp, or from `--offered-gb` with `--search`            |
 | `--pg-iops`, `--pg-mbps`              | 12000, 500                     | provision    | node0 root volume and `volume` store                                                          |
 | `--region`                            | eu-west-1                      | provision    | AWS region                                                                                    |
@@ -618,7 +620,7 @@ Where:
 | `--netem`                             | `delay`; `full` with `--chaos` | per run      | with `--latency`: `full` adds per-pair jitter and loss to the delay                           |
 | `--jitter-ratio`                      | 0.0065                         | per run      | with `--netem full`: floor of the jitter half-width as a ratio of the one-way delay           |
 | `--prover`                            | off                            | per run      | light-client prover on `ctl`; see [Light client prover](#light-client-prover)                 |
-| `--epoch-height`                      | `1000000`; 300 w. `--chaos`    | per run      | genesis `epoch_height`, in blocks; any value stakes every node on L1                          |
+| `--epoch-height`                      | `1000000`; 300 w. `--chaos`    | per run      | genesis `epoch_height`, in blocks (600 with `--prover`); any value stakes every node on L1    |
 | `--consensus-storage`                 | `fs`                           | per run      | `fs`, `journal` (experimental, not in `main` images); query node uses `storage-sql` with `fs` |
 | `--prune [RETENTION]`                 | off; bare `1m`                 | per run      | node0 prunes data and state older than RETENTION every 30 s; part of the config hash          |
 | `--fleet [FLEET]`                     | none                           | run          | measure on a fleet from `up`                                                                  |
