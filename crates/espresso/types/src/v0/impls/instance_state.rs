@@ -172,10 +172,23 @@ impl NodeState {
     /// The light client contract's finalized state, read at the L1 finalized block. Not cached: it
     /// advances with every prover update.
     ///
-    /// Height 0 when the contract has no code at the finalized block yet, as on a fresh L1.
-    /// Fails when there is no contract address, L1 finality is not yet known, or a read fails.
+    /// Height 0 when the chain config has no stake table contract, or the light client has no
+    /// code at the finalized block yet, as on a fresh L1. Fails when L1 finality is not yet known
+    /// or a read fails.
     #[cfg(feature = "node")]
     pub async fn finalized_light_client_state(&self) -> anyhow::Result<LightClientStateSol> {
+        let genesis = LightClientStateSol {
+            viewNum: 0,
+            blockHeight: 0,
+            blockCommRoot: U256::ZERO,
+        };
+        if self.chain_config.stake_table_contract.is_none() {
+            tracing::info!(
+                target: "announce::bootstrap",
+                "no stake table contract in the chain config; anchor height 0"
+            );
+            return Ok(genesis);
+        }
         // The L1 client learns the finalized block asynchronously after start.
         let finalized = self
             .l1_client
@@ -200,11 +213,7 @@ impl NodeState {
                 l1_block = finalized,
                 "light client not deployed at the finalized L1 block; anchor height 0"
             );
-            return Ok(LightClientStateSol {
-                viewNum: 0,
-                blockHeight: 0,
-                blockCommRoot: U256::ZERO,
-            });
+            return Ok(genesis);
         }
         let light_client_contract = LightClientV3::new(address, self.l1_client.provider.clone());
         let state = light_client_contract
