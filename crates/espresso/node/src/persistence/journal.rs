@@ -26,7 +26,6 @@ use espresso_types::{
     v0::traits::{EventConsumer, PersistenceOptions, SequencerPersistence},
     v0_3::{EventKey, IndexedStake, RegisteredValidator, RewardAmount, StakeTableEvent},
 };
-use hotshot::InitializerEpochInfo;
 use hotshot_libp2p_networking::network::behaviours::dht::store::persistent::{
     DhtPersistentStorage, SerializableRecord,
 };
@@ -38,6 +37,7 @@ use hotshot_types::{
     },
     drb::{DrbInput, DrbResult},
     event::{HotShotAction, LeafInfo},
+    initializer::InitializerEpochInfo,
     message::Proposal,
     new_protocol::CoordinatorEvent,
     simple_certificate::{
@@ -63,7 +63,7 @@ use crate::{
         fs as side_fs,
         journal::state::{Kind, Record, Replay, ReplayLeaf, State},
         persistence_metrics::PersistenceMetricsValue,
-        sql::{self, DecidedLeaf, decide_events_from_chain, within_gap_fill_horizon},
+        sql::{self, DecidedLeaf, decide_event_from_chain, within_gap_fill_horizon},
         storage_probe::{self, StorageProbe},
     },
 };
@@ -775,7 +775,6 @@ impl Persistence {
     /// leaves the batch to be retried by the next call.
     async fn replay_decided(
         &self,
-        deciding_qc: Option<Arc<CertificatePair<SeqTypes>>>,
         consumer: &(impl EventConsumer + 'static),
     ) -> anyhow::Result<()> {
         loop {
@@ -824,7 +823,7 @@ impl Persistence {
                     cert,
                 });
             }
-            for event in decide_events_from_chain(chain, cert2, deciding_qc.clone()) {
+            if let Some(event) = decide_event_from_chain(chain, cert2) {
                 consumer.handle_event(&event).await?;
             }
             self.put_wal(
@@ -1124,13 +1123,19 @@ impl SequencerPersistence for Persistence {
 
     async fn persist_decided_leaves(
         &self,
-        _decided_view: ViewNumber,
         leaf_chain: impl IntoIterator<Item = (&LeafInfo<SeqTypes>, CertificatePair<SeqTypes>)> + Send,
-        _deciding_qc: Option<Arc<CertificatePair<SeqTypes>>>,
+        cert2: Option<&Certificate2<SeqTypes>>,
         _consumer: &(impl EventConsumer + 'static),
     ) -> anyhow::Result<()> {
         // No event consumer call: a query node replays these from `process_decided_events`, off
         // the voting path, and any other node runs `NullEventConsumer`.
+        if let Some(cert2) = cert2 {
+            let record = Record::Cert2 {
+                view: cert2.view_number,
+                cert: cert2.clone(),
+            };
+            self.put_wal(record, Class::Enqueue).await?;
+        }
         let leaf_chain: Vec<_> = leaf_chain
             .into_iter()
             .map(|(info, cert)| (info.leaf.clone(), cert))
@@ -1154,14 +1159,13 @@ impl SequencerPersistence for Persistence {
     async fn process_decided_events(
         &self,
         decided_view: ViewNumber,
-        deciding_qc: Option<Arc<CertificatePair<SeqTypes>>>,
         consumer: &(impl EventConsumer + 'static),
     ) -> anyhow::Result<Option<ViewNumber>> {
         let now = Instant::now();
         let processed = if self.inner.replay_index.is_some() {
             // GC runs on what did get replayed even when a batch failed, so a query service
             // outage does not also stop the wal from being pruned.
-            let replayed = self.replay_decided(deciding_qc, consumer).await;
+            let replayed = self.replay_decided(consumer).await;
             let cursor = self.replay_cursor();
             self.gc(decided_view, Some(cursor.map_or(0, |view| view.u64())))
                 .await?;

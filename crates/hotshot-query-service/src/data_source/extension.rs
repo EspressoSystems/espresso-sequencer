@@ -553,7 +553,6 @@ where
 
 #[cfg(any(test, feature = "testing"))]
 mod impl_testable_data_source {
-    use hotshot::types::Event;
     use hotshot_types::new_protocol::CoordinatorEvent;
 
     use super::*;
@@ -593,9 +592,8 @@ mod impl_testable_data_source {
             Self::new(D::reset(storage).await, Default::default())
         }
 
-        async fn handle_event(&self, event: &Event<MockTypes>) {
-            let event = CoordinatorEvent::LegacyEvent(event.clone());
-            self.update(&event).await.unwrap();
+        async fn handle_event(&self, event: &CoordinatorEvent<MockTypes>) {
+            self.update(event).await.unwrap();
         }
     }
 }

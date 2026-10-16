@@ -35,7 +35,6 @@ use futures::future::Future;
 use futures::stream::TryStreamExt;
 use hotshot_types::{
     data::VidShare,
-    simple_certificate::CertificatePair,
     traits::{
         EncodeBytes,
         block_contents::BlockHeader,
@@ -68,7 +67,7 @@ use crate::{
     },
     data_source::{
         storage::{
-            NodeStorage, UpdateAvailabilityStorage,
+            UpdateAvailabilityStorage,
             blob::{BlobLoc, BlobStore, StagedBlobs},
             pruning::PrunedHeightStorage,
         },
@@ -772,26 +771,6 @@ where
     Payload<Types>: QueryablePayload<Types>,
     Header<Types>: QueryableHeader<Types>,
 {
-    async fn insert_qc_chain(
-        &mut self,
-        height: u64,
-        qc_chain: Option<[CertificatePair<Types>; 2]>,
-    ) -> anyhow::Result<()> {
-        let block_height = NodeStorage::<Types>::block_height(self).await? as u64;
-        if height + 1 >= block_height {
-            // If this QC chain is for the latest leaf we know about, store it so that we can prove
-            // to clients that the corresponding leaf is finalized. (If it is not the latest leaf,
-            // this is unnecessary, since we can prove it is an ancestor of some later, finalized
-            // leaf.)
-            let qcs = serde_json::to_value(&qc_chain)?;
-            self.upsert("latest_qc_chain", ["id", "qcs"], ["id"], [(1i32, qcs)])
-                .await
-                .context("inserting QC chain")?;
-        }
-
-        Ok(())
-    }
-
     async fn insert_cert2(
         &mut self,
         height: u64,

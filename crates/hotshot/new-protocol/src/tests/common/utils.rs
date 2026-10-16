@@ -1165,6 +1165,8 @@ impl ConsensusHarness {
         self.trace.preamble(
             self.consensus.public_key(),
             self.consensus.last_decided_leaf(),
+            self.consensus.cert1_at(ViewNumber::genesis()),
+            *self.consensus.epoch_height,
         );
         record_leader(&mut self.trace, &self.consensus, &input);
         let before = outbox.len();
@@ -1272,6 +1274,49 @@ impl ConsensusHarness {
             defer_state_for: BTreeSet::new(),
             trace: trace::Recorder::for_current_test(),
         }
+    }
+
+    /// Place the node at `view` in `epoch`, as `Consensus::set_view` does, and
+    /// note the placement in the trace.
+    pub fn set_view(&mut self, view: ViewNumber, epoch: EpochNumber) {
+        self.trace.preamble(
+            self.consensus.public_key(),
+            self.consensus.last_decided_leaf(),
+            self.consensus.cert1_at(ViewNumber::genesis()),
+            *self.consensus.epoch_height,
+        );
+        self.trace.placed(view, epoch);
+        self.consensus.set_view(view, epoch);
+    }
+
+    /// Replace the node's proposal for `view`, as `Consensus::force_set_proposal`
+    /// does, and note the replacement in the trace.
+    pub fn force_set_proposal(&mut self, view: ViewNumber, proposal: Proposal<TestTypes>) {
+        self.trace.preamble(
+            self.consensus.public_key(),
+            self.consensus.last_decided_leaf(),
+            self.consensus.cert1_at(ViewNumber::genesis()),
+            *self.consensus.epoch_height,
+        );
+        self.trace.forced(view);
+        self.consensus.force_set_proposal(view, proposal);
+    }
+
+    /// Seed proposals the node holds without having received them, and record
+    /// each as a block it holds, so the trace does not show it deciding a block
+    /// it never had.
+    pub fn seed_proposals(&mut self, proposals: impl IntoIterator<Item = Proposal<TestTypes>>) {
+        let proposals: Vec<_> = proposals.into_iter().collect();
+        self.trace.preamble(
+            self.consensus.public_key(),
+            self.consensus.last_decided_leaf(),
+            self.consensus.cert1_at(ViewNumber::genesis()),
+            *self.consensus.epoch_height,
+        );
+        for proposal in &proposals {
+            self.trace.held(proposal);
+        }
+        self.consensus.seed_proposals(proposals);
     }
 
     /// Withhold `view`'s state-validation response until [`Self::release_state`].
@@ -1670,10 +1715,10 @@ pub(crate) fn build_timeout_cert3(
     ))
 }
 
-/// Name the leader of the view a step is about, for the replay.
+/// Name the leader of the view a step is about, for the trace checker.
 ///
 /// Every view has one, and the model takes the schedule as a parameter, so a
-/// trace that does not say who leads leaves the replay unable to tell a proposal
+/// trace that does not say who leads leaves the checker unable to tell a proposal
 /// this node was entitled to make from one it was not. Asked of the stake table
 /// here rather than taken from the propose path, so a propose path that forgets
 /// to check leadership is caught rather than confirmed.
@@ -1687,7 +1732,7 @@ pub(crate) fn build_timeout_cert3(
 /// silence would not say whether a view's leader was unknown or merely unrecorded,
 /// and the two mean different things to a reader. It is not a failure — an epoch
 /// the membership does not have leaves consensus unable to claim leadership
-/// either, so a replay that refuses to propose there agrees with it. Only reached
+/// either, and the rules, which then find no leader, agree with it. Only reached
 /// while recording, so an ordinary test run is unaffected.
 pub(crate) fn record_leader(
     trace: &mut trace::Recorder,
@@ -1702,5 +1747,5 @@ pub(crate) fn record_leader(
         .epoch()
         .or_else(|| consensus.current_epoch())
         .unwrap_or_else(EpochNumber::genesis);
-    trace.leader::<TestTypes>(view, consensus.leader_of(view, epoch).as_ref());
+    trace.leader::<TestTypes>(view, epoch, consensus.leader_of(view, epoch).as_ref());
 }

@@ -27,7 +27,7 @@ use tracing::{error, info, warn};
 use crate::{
     coordinator::metrics::{Measurement, finish_measurement},
     helpers::proposal_commitment,
-    message::{Certificate1, Certificate2, Proposal},
+    message::{Certificate1, Proposal},
 };
 
 const RETRY_DELAY: Duration = Duration::from_millis(300);
@@ -35,8 +35,6 @@ const RETRY_DELAY: Duration = Duration::from_millis(300);
 /// New protocol storage extension for data that is not part of the legacy HotShot storage trait.
 #[async_trait]
 pub trait NewProtocolStorage<T: NodeType>: StorageTrait<T> {
-    async fn append_cert2(&self, view: ViewNumber, cert: Certificate2<T>) -> anyhow::Result<()>;
-
     /// Persist the locked QC, written before each phase-2 vote so the lock
     /// survives a restart instead of regressing to the decided-anchor QC.
     async fn append_high_qc2(&self, high_qc: Certificate1<T>) -> anyhow::Result<()>;
@@ -90,7 +88,6 @@ impl<T: NodeType> StorageOutput<T> {
 /// records its elapsed time up to the abort.
 pub struct StorageMetrics {
     append_vid: Arc<dyn Histogram>,
-    append_cert2: Arc<dyn Histogram>,
     append_high_qc: Arc<dyn Histogram>,
     append_state_cert: Arc<dyn Histogram>,
     append_proposal: Arc<dyn Histogram>,
@@ -105,7 +102,6 @@ impl StorageMetrics {
         };
         Self {
             append_vid: histogram("append_vid"),
-            append_cert2: histogram("append_cert2"),
             append_high_qc: histogram("append_high_qc"),
             append_state_cert: histogram("append_state_cert"),
             append_proposal: histogram("append_proposal"),
@@ -162,29 +158,6 @@ impl<T: NodeType, S: NewProtocolStorage<T>> Storage<T, S> {
                     },
                     Err(err) => {
                         warn!(%err, "failed to append VID share, retrying");
-                        sleep(RETRY_DELAY).await;
-                    },
-                }
-            }
-        });
-        self.handles.entry(view).or_default().push(handle);
-    }
-
-    pub fn append_cert2(&mut self, view: ViewNumber, cert2: Certificate2<T>) {
-        let storage = self.storage.clone();
-        let timer = self
-            .metrics
-            .as_ref()
-            .map(|m| Measurement::start(m.append_cert2.clone()));
-        let handle = self.tasks.spawn(async move {
-            loop {
-                match storage.append_cert2(view, cert2.clone()).await {
-                    Ok(()) => {
-                        finish_measurement(timer);
-                        return None;
-                    },
-                    Err(err) => {
-                        warn!(%err, %view, "failed to append cert2, retrying");
                         sleep(RETRY_DELAY).await;
                     },
                 }
@@ -374,11 +347,6 @@ impl<T: NodeType, S: NewProtocolStorage<T>> Storage<T, S> {
 
 #[async_trait]
 impl<T: NodeType> NewProtocolStorage<T> for TestStorage<T> {
-    async fn append_cert2(&self, view: ViewNumber, cert: Certificate2<T>) -> anyhow::Result<()> {
-        self.insert_cert2(view, cert).await;
-        Ok(())
-    }
-
     async fn append_high_qc2(&self, high_qc: Certificate1<T>) -> anyhow::Result<()> {
         // `Certificate1<T>` is a `QuorumCertificate2<T>`; reuse the monotonic legacy slot.
         StorageTrait::update_high_qc2(self, high_qc).await

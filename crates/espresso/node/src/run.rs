@@ -1,5 +1,4 @@
 use anyhow::{Context, ensure};
-use clap::Parser;
 use espresso_telemetry as telemetry;
 use espresso_types::{traits::NullEventConsumer, v0::traits::SequencerPersistence};
 use futures::future::FutureExt;
@@ -12,7 +11,7 @@ use super::{
     CatchupParams, Genesis, L1Params, NetworkParams,
     api::{self, data_source::QueryModuleOptions},
     context::SequencerContext,
-    init_node, network,
+    init_node,
     options::{Modules, Options, PublicNodeConfig},
     persistence,
 };
@@ -23,7 +22,7 @@ use crate::{
 };
 
 pub enum NodeContext<P: SequencerPersistence> {
-    Validator(Box<SequencerContext<network::Production, P>>),
+    Validator(Box<SequencerContext<P>>),
     Follower(Box<FollowerContext<P>>),
 }
 
@@ -54,7 +53,7 @@ impl<P: SequencerPersistence> NodeContext<P> {
 
 pub async fn main(migrated_envs: Vec<(&str, &str)>) -> anyhow::Result<()> {
     espresso_types::assert_node_feature();
-    let opt = Options::parse();
+    let (opt, ignored_network_options) = Options::parse_with_ignored();
     let mut modules = opt.modules();
 
     // Genesis carries the chain ID, which selects the default telemetry
@@ -117,9 +116,26 @@ pub async fn main(migrated_envs: Vec<(&str, &str)>) -> anyhow::Result<()> {
         tracing::error!("{e:#}; continuing without telemetry");
     }
     espresso_utils::env_compat::log_migrated_env_vars(&migrated_envs);
+    if !ignored_network_options.is_empty() {
+        tracing::warn!(
+            ?ignored_network_options,
+            "the CDN and libp2p options are deprecated and ignored: consensus has run over \
+             cliquenet since protocol 0.6. Remove them from the command line and environment."
+        );
+    }
     log_cpu_probe(genesis.drb_difficulty.max(genesis.drb_upgrade_difficulty)).await;
 
     tracing::warn!(?modules, "sequencer starting up");
+    if modules
+        .query
+        .as_ref()
+        .is_some_and(|query| query.peers.is_empty())
+    {
+        tracing::error!(
+            "module query fetches missing data from its peers but none are set: set --peers \
+             (ESPRESSO_NODE_API_PEERS)"
+        );
+    }
 
     let public_node_config = PublicNodeConfig::new(&opt, &modules, &genesis);
 
@@ -239,13 +255,9 @@ where
     } = opt.key_set.try_into()?;
 
     let network_params = NetworkParams {
-        cdn_endpoint: opt.cdn_endpoint,
         cliquenet_bind_addr: opt.cliquenet_bind_address,
         cliquenet_advertise_addr: opt.cliquenet_advertise_address,
         x25519_secret_key: x25519,
-        libp2p_advertise_address: opt.libp2p_advertise_address,
-        libp2p_bind_address: opt.libp2p_bind_address,
-        libp2p_bootstrap_nodes: opt.libp2p_bootstrap_nodes,
         orchestrator_url: opt.orchestrator_url,
         builder_urls: opt.builder_urls,
         state_relay_server_url: opt.state_relay_server_url,
@@ -260,28 +272,6 @@ where
             local_timeout: opt.local_catchup_timeout,
         },
         bootstrap_epoch_catchup_timeout: opt.bootstrap_epoch_catchup_timeout,
-        libp2p_history_gossip: opt.libp2p_history_gossip,
-        libp2p_history_length: opt.libp2p_history_length,
-        libp2p_max_ihave_length: opt.libp2p_max_ihave_length,
-        libp2p_max_ihave_messages: opt.libp2p_max_ihave_messages,
-        libp2p_max_gossip_transmit_size: opt.libp2p_max_gossip_transmit_size,
-        libp2p_max_direct_transmit_size: opt.libp2p_max_direct_transmit_size,
-        libp2p_mesh_outbound_min: opt.libp2p_mesh_outbound_min,
-        libp2p_mesh_n: opt.libp2p_mesh_n,
-        libp2p_mesh_n_high: opt.libp2p_mesh_n_high,
-        libp2p_heartbeat_interval: opt.libp2p_heartbeat_interval,
-        libp2p_mesh_n_low: opt.libp2p_mesh_n_low,
-        libp2p_published_message_ids_cache_time: opt.libp2p_published_message_ids_cache_time,
-        libp2p_iwant_followup_time: opt.libp2p_iwant_followup_time,
-        libp2p_max_messages_per_rpc: opt.libp2p_max_messages_per_rpc,
-        libp2p_gossip_retransmission: opt.libp2p_gossip_retransmission,
-        libp2p_flood_publish: opt.libp2p_flood_publish,
-        libp2p_duplicate_cache_time: opt.libp2p_duplicate_cache_time,
-        libp2p_fanout_ttl: opt.libp2p_fanout_ttl,
-        libp2p_heartbeat_initial_delay: opt.libp2p_heartbeat_initial_delay,
-        libp2p_gossip_factor: opt.libp2p_gossip_factor,
-        libp2p_gossip_lazy: opt.libp2p_gossip_lazy,
-        libp2p_dht_put_quorum: opt.libp2p_dht_put_quorum,
     };
 
     let proposal_fetcher_config = opt.proposal_fetcher_config;
@@ -416,6 +406,7 @@ fn api_options<S: QueryModuleOptions>(
 mod test {
     use std::time::Duration;
 
+    use clap::Parser;
     use espresso_types::{
         PubKey, Upgrade, UpgradeType,
         v0_1::{UpgradeMode, ViewBasedUpgrade},
@@ -426,7 +417,7 @@ mod test {
     use tempfile::TempDir;
     use test_utils::reserve_tcp_port;
     use tokio::spawn;
-    use vbs::version::Version;
+    use versions::{LARGE_BLOCK_VERSION, NEW_PROTOCOL_VERSION};
 
     use super::*;
     use crate::{
@@ -453,10 +444,8 @@ mod test {
             accounts: Default::default(),
             l1_finalized: L1Finalized::Number { number: 0 },
             header: Default::default(),
-            // `validate_fee_contract` would reject this upgrade (no fee_contract); the test
-            // never reaches validation because startup blocks at the orchestrator first.
             upgrades: [(
-                Version { major: 0, minor: 2 },
+                LARGE_BLOCK_VERSION,
                 Upgrade {
                     mode: UpgradeMode::View(ViewBasedUpgrade {
                         start_proposing_view: 100,
@@ -464,21 +453,21 @@ mod test {
                         start_voting_view: None,
                         stop_voting_view: None,
                     }),
-                    upgrade_type: UpgradeType::Fee {
+                    upgrade_type: UpgradeType::LargeBlock {
                         chain_config: Default::default(),
                     },
                 },
             )]
             .into_iter()
             .collect(),
-            base_version: Version { major: 0, minor: 1 },
-            upgrade_version: Version { major: 0, minor: 2 },
-            epoch_height: None,
+            base_version: NEW_PROTOCOL_VERSION,
+            upgrade_version: LARGE_BLOCK_VERSION,
+            epoch_height: Some(10),
             drb_difficulty: None,
             drb_upgrade_difficulty: None,
             epoch_start_block: None,
             stake_table_capacity: None,
-            genesis_version: Version { major: 0, minor: 1 },
+            genesis_version: NEW_PROTOCOL_VERSION,
             da_committees: None,
         };
         genesis.to_file(&genesis_file).unwrap();
@@ -505,6 +494,8 @@ mod test {
                 .expect("valid key")
                 .to_string(),
             "--cliquenet-bind-address",
+            &format!("127.0.0.1:{port2}"),
+            "--cliquenet-advertise-address",
             &format!("127.0.0.1:{port2}"),
             // Never bound: this test blocks at orchestrator before libp2p starts. Port 0 is a
             // placeholder to satisfy the orchestrator-bootstrap requirement on the advertise
@@ -590,15 +581,15 @@ mod test {
             "expected testing in features: {lines:#?}"
         );
         let genesis_line = concat!(
-            r#"consensus_genesis{base_version="0.1",genesis_version="0.1","#,
-            r#"upgrade_version="0.2"} 1"#
+            r#"consensus_genesis{base_version="0.6",genesis_version="0.6","#,
+            r#"upgrade_version="0.7"} 1"#
         );
         assert!(
             lines.contains(&genesis_line),
             "missing consensus_genesis metric: {lines:#?}"
         );
         assert!(
-            lines.contains(&r#"consensus_genesis_upgrade{version="0.2"} 1"#),
+            lines.contains(&r#"consensus_genesis_upgrade{version="0.7"} 1"#),
             "missing consensus_genesis_upgrade metric: {lines:#?}"
         );
 
@@ -641,12 +632,12 @@ mod test {
         }
         assert_eq!(
             node_cfg["genesis"]["base_version"],
-            serde_json::Value::String("0.1".into()),
+            serde_json::Value::String("0.6".into()),
             "genesis.base_version mismatch: {node_cfg}"
         );
         assert_eq!(
             node_cfg["genesis"]["upgrade"][0]["version"],
-            serde_json::Value::String("0.2".into()),
+            serde_json::Value::String("0.7".into()),
             "genesis.upgrade[0].version mismatch: {node_cfg}"
         );
         assert_eq!(
