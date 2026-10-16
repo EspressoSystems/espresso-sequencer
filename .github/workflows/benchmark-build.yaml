@@ -41,7 +41,7 @@ jobs:
       - name: Build Espresso Dev Node
         # Espresso Dev Node currently requires testing feature, so it is built separately.
         run: |
-          cargo build --locked --release --features benchmarking,testing,embedded-db -p espresso-dev-node --bin espresso-dev-node
+          cargo build --locked --release -p espresso-dev-node --features espresso-node/benchmarking --bin espresso-dev-node
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v7
@@ -90,7 +90,7 @@ jobs:
       - name: Build Espresso Dev Node
         # Espresso Dev Node currently requires testing feature, so it is built separately.
         run: |
-          cargo build --locked --release --features benchmarking,testing,embedded-db -p espresso-dev-node --bin espresso-dev-node
+          cargo build --locked --release -p espresso-dev-node --features espresso-node/benchmarking --bin espresso-dev-node
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v7
