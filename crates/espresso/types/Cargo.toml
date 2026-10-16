@@ -22,7 +22,6 @@ node = [
     "alloy/node-bindings",
     "alloy/provider-ws",
     "alloy/signer-ledger",
-    "dep:hotshot",
     "dep:hotshot-libp2p-networking",
     "dep:hotshot-new-protocol",
     "espresso-utils/full",
@@ -72,7 +71,6 @@ either = { workspace = true }
 espresso-utils = { workspace = true }
 ethers-core = { workspace = true }
 futures = { workspace = true }
-hotshot = { workspace = true, optional = true }
 hotshot-contract-adapter = { workspace = true }
 hotshot-example-types = { workspace = true, optional = true }
 hotshot-libp2p-networking = { workspace = true, optional = true }
