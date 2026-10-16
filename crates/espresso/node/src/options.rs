@@ -378,8 +378,8 @@ pub struct Options {
 
     /// Timeout for local catchup provider requests.
     ///
-    /// If a local provider (e.g. database) takes longer than this, the node falls back to
-    /// remote providers so it can still vote within the current view.
+    /// Remote providers are queried concurrently; this bounds the wait on a slow local provider
+    /// (e.g. database) once remote providers have failed.
     #[clap(long, env = "ESPRESSO_NODE_LOCAL_CATCHUP_TIMEOUT", default_value = "5s", value_parser = parse_duration)]
     pub local_catchup_timeout: Duration,
 
