@@ -8,9 +8,10 @@ use cdn_broker::reexports::{
     def::{ConnectionDef, RunDef, Topic as TopicTrait, hook::NoMessageHook},
     discovery::{Embedded, Redis},
 };
-use hotshot::types::SignatureKey;
 use hotshot_types::{
-    traits::{network::Topic as HotShotTopic, node_implementation::NodeType},
+    traits::{
+        network::Topic as HotShotTopic, node_implementation::NodeType, signature_key::SignatureKey,
+    },
     utils::bincode_opts,
 };
 use num_enum::{IntoPrimitive, TryFromPrimitive};

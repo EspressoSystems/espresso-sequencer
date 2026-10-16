@@ -563,12 +563,20 @@ impl StakeTableState {
                     return Err(StakeTableError::BlsKeyAlreadyUsed(k.to_string()));
                 }
 
-                // The stake table v2 contract enforces schnorr key is only used once.
-                if let Some(k) = state_ver_key.as_ref()
-                    && self.used_schnorr_keys.contains(k)
-                {
-                    return Err(StakeTableError::SchnorrKeyAlreadyUsed(k.to_string()));
-                }
+                // The contract only remembers schnorr keys registered since its v2 upgrade, so a
+                // key from a v1 registration can be accepted on chain a second time. Decaf started
+                // on the v1 contract and mainnet on v2, so only decaf has v1 registrations.
+                let (state_ver_key, authenticated) = match state_ver_key {
+                    Some(k) if self.used_schnorr_keys.contains(&k) => {
+                        tracing::warn!(
+                            ?account,
+                            schnorr_key = %k,
+                            "registering unauthenticated validator (schnorr key already used)"
+                        );
+                        (None, false)
+                    },
+                    key => (key, authenticated),
+                };
 
                 // All checks ok, applying changes
                 if let Some(k) = stake_table_key.as_ref() {
@@ -762,11 +770,10 @@ impl StakeTableState {
                     ));
                 }
 
-                // The stake table v2 contract enforces that each schnorr key is only used once
                 if self.used_schnorr_keys.contains(&state_ver_key) {
-                    return Err(StakeTableError::SchnorrKeyAlreadyUsed(
+                    return Ok(Err(ExpectedStakeTableError::SchnorrKeyAlreadyUsed(
                         state_ver_key.to_string(),
-                    ));
+                    )));
                 }
 
                 // All checks ok, applying changes
@@ -859,17 +866,23 @@ impl StakeTableState {
                     return Err(StakeTableError::BlsKeyAlreadyUsed(k.to_string()));
                 }
 
-                if let Some(k) = state_ver_key.as_ref()
-                    && self.used_schnorr_keys.contains(k)
-                {
-                    return Err(StakeTableError::SchnorrKeyAlreadyUsed(k.to_string()));
-                }
-
                 if let Some(k) = x25519_key.as_ref()
                     && self.used_x25519_keys.contains(k)
                 {
                     return Err(StakeTableError::X25519KeyAlreadyUsed(k.to_string()));
                 }
+
+                let (state_ver_key, authenticated) = match state_ver_key {
+                    Some(k) if self.used_schnorr_keys.contains(&k) => {
+                        tracing::warn!(
+                            ?account,
+                            schnorr_key = %k,
+                            "registering unauthenticated validator (schnorr key already used)"
+                        );
+                        (None, false)
+                    },
+                    key => (key, authenticated),
+                };
 
                 // All checks ok, applying changes
                 if let Some(k) = stake_table_key.as_ref() {
@@ -2999,7 +3012,7 @@ mod tests {
         let schnorr = SchnorrPubKey::try_from(val1.schnorr_vk).expect("valid test Schnorr key");
         assert_matches!(
             result,
-            Err(StakeTableError::SchnorrKeyAlreadyUsed(key))
+            Ok(Err(ExpectedStakeTableError::SchnorrKeyAlreadyUsed(key)))
                 if key == schnorr.to_string(),
             "Expected SchnorrKeyAlreadyUsed({schnorr}), but got: {result:?}",
         );
@@ -4159,15 +4172,60 @@ mod tests {
     }
 
     #[test]
-    fn test_register_v3_duplicate_schnorr_key() -> anyhow::Result<()> {
+    fn test_register_v2_duplicate_schnorr_key_is_unauthenticated() -> anyhow::Result<()> {
+        let val1 = TestValidator::random();
+        let mut val2 = TestValidator::random();
+        val2.schnorr_vk = val1.schnorr_vk;
+
+        let mut state = StakeTableState::default();
+        state.apply_event(StakeTableEvent::RegisterV2((&val1).into()))??;
+        state.apply_event(StakeTableEvent::RegisterV2((&val2).into()))??;
+
+        let registered = state.validators().get(&val2.account).expect("present");
+        assert!(!registered.authenticated);
+        assert!(registered.state_ver_key.is_none());
+        assert_excluded_from_active_set(&state, val2.account);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_register_v3_duplicate_schnorr_key_is_unauthenticated() -> anyhow::Result<()> {
         let val1 = TestValidator::random();
         let mut val2 = TestValidator::random();
         val2.schnorr_vk = val1.schnorr_vk;
 
         let mut state = StakeTableState::default();
         state.apply_event(StakeTableEvent::RegisterV3((&val1).into()))??;
-        let result = state.apply_event(StakeTableEvent::RegisterV3((&val2).into()));
-        assert_matches!(result, Err(StakeTableError::SchnorrKeyAlreadyUsed(_)));
+        state.apply_event(StakeTableEvent::RegisterV3((&val2).into()))??;
+
+        let registered = state.validators().get(&val2.account).expect("present");
+        assert!(!registered.authenticated);
+        assert!(registered.state_ver_key.is_none());
+        assert_excluded_from_active_set(&state, val2.account);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_register_v3_reusing_v1_schnorr_key_keeps_both_validators() -> anyhow::Result<()> {
+        let v1 = TestValidator::random();
+        let mut v3 = TestValidator::random();
+        v3.schnorr_vk = v1.schnorr_vk;
+
+        let events = Vec::from([
+            StakeTableEvent::Register((&v1).into()),
+            StakeTableEvent::RegisterV3((&v3).into()),
+        ]);
+        let (validators, _) = validators_from_l1_events(events.into_iter())?;
+
+        let first = validators.get(&v1.account).expect("present");
+        assert!(first.authenticated);
+        assert!(first.state_ver_key.is_some());
+
+        let second = validators.get(&v3.account).expect("present");
+        assert!(!second.authenticated);
+        assert!(second.state_ver_key.is_none());
 
         Ok(())
     }
@@ -5383,8 +5441,7 @@ mod proptest_x25519_key {
 #[cfg(all(test, feature = "rlp"))]
 mod rlp_tests {
     use alloy_rlp::{Decodable, Encodable};
-    use hotshot::types::BLSPubKey;
-    use hotshot_types::traits::signature_key::StateSignatureKey;
+    use hotshot_types::{signature_key::BLSPubKey, traits::signature_key::StateSignatureKey};
 
     use super::*;
 

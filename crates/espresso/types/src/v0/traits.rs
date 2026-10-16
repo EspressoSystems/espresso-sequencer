@@ -11,8 +11,6 @@ use async_trait::async_trait;
 use committable::Commitment;
 use futures::{FutureExt, TryFutureExt};
 #[cfg(feature = "node")]
-use hotshot::{HotShotInitializer, InitializerEpochInfo, types::EventType};
-#[cfg(feature = "node")]
 use hotshot_libp2p_networking::network::behaviours::dht::store::persistent::DhtPersistentStorage;
 #[cfg(feature = "node")]
 use hotshot_new_protocol::storage::NewProtocolStorage;
@@ -26,6 +24,7 @@ use hotshot_types::{
     },
     drb::DrbInput,
     event::{HotShotAction, LeafInfo},
+    initializer::{HotShotInitializer, InitializerEpochInfo},
     message::{Proposal, convert_proposal},
     simple_certificate::{
         CertificatePair, NextEpochQuorumCertificate2, QuorumCertificate, QuorumCertificate2,
@@ -839,8 +838,8 @@ pub trait SequencerPersistence:
     }
 
     /// Decode a consensus decide event and persist its leaves, for the consensus event loop.
-    /// Returns `Some((decided_view, deciding_qc))` on a decide so the caller can wake a background
-    /// task to run [`process_decided_events`](Self::process_decided_events); `None` otherwise.
+    /// Returns the decided view on a decide so the caller can wake a background task to run
+    /// [`process_decided_events`](Self::process_decided_events); `None` otherwise.
     ///
     /// This is the persist-only half of a decide: query-service ingestion and GC are deferred to
     /// [`process_decided_events`](Self::process_decided_events). Tests that want the synchronous
@@ -849,46 +848,8 @@ pub trait SequencerPersistence:
         &self,
         event: &CoordinatorEvent<SeqTypes>,
         consumer: &(impl EventConsumer + 'static),
-    ) -> Option<(ViewNumber, Option<Arc<CertificatePair<SeqTypes>>>)> {
+    ) -> Option<ViewNumber> {
         match event {
-            CoordinatorEvent::LegacyEvent(hotshot_event) => {
-                let EventType::Decide {
-                    leaf_chain,
-                    committing_qc,
-                    deciding_qc,
-                    ..
-                } = &hotshot_event.event
-                else {
-                    return None;
-                };
-                let LeafInfo { leaf, .. } = leaf_chain.first()?;
-                let decided_view = leaf.view_number();
-
-                let chain = leaf_chain.iter().zip(
-                    std::iter::once((**committing_qc).clone()).chain(
-                        leaf_chain
-                            .iter()
-                            .map(|leaf| CertificatePair::for_parent(&leaf.leaf)),
-                    ),
-                );
-
-                if let Err(err) = self
-                    .persist_decided_leaves(
-                        decided_view,
-                        chain,
-                        None,
-                        deciding_qc.clone(),
-                        consumer,
-                    )
-                    .await
-                {
-                    tracing::error!(
-                        "failed to save decided leaves, chain may not be up to date: {err:#}"
-                    );
-                    return None;
-                }
-                Some((decided_view, deciding_qc.clone()))
-            },
             CoordinatorEvent::NewDecide {
                 leaf_infos,
                 cert1,
@@ -906,10 +867,8 @@ pub trait SequencerPersistence:
 
                 if let Err(err) = self
                     .persist_decided_leaves(
-                        decided_view,
                         leaf_infos.iter().zip(certifying_qcs),
                         cert2.as_ref(),
-                        None,
                         consumer,
                     )
                     .await
@@ -920,7 +879,7 @@ pub trait SequencerPersistence:
                     );
                     return None;
                 }
-                Some((decided_view, None))
+                Some(decided_view)
             },
             _ => None,
         }
@@ -959,22 +918,12 @@ pub trait SequencerPersistence:
         &self,
         decided_view: ViewNumber,
         leaf_chain: impl IntoIterator<Item = (&LeafInfo<SeqTypes>, CertificatePair<SeqTypes>)> + Send,
-        deciding_qc: Option<Arc<CertificatePair<SeqTypes>>>,
         consumer: &(impl EventConsumer + 'static),
     ) -> anyhow::Result<()> {
-        self.persist_decided_leaves(
-            decided_view,
-            leaf_chain,
-            None,
-            deciding_qc.clone(),
-            consumer,
-        )
-        .await?;
+        self.persist_decided_leaves(leaf_chain, None, consumer)
+            .await?;
         // Leaves are persisted; processing failures are non-fatal here and retried in production.
-        if let Err(err) = self
-            .process_decided_events(decided_view, deciding_qc, consumer)
-            .await
-        {
+        if let Err(err) = self.process_decided_events(decided_view, consumer).await {
             tracing::warn!(?decided_view, "decide event processing failed: {err:#}");
         }
         Ok(())
@@ -990,10 +939,8 @@ pub trait SequencerPersistence:
     /// without it.
     async fn persist_decided_leaves(
         &self,
-        decided_view: ViewNumber,
         leaf_chain: impl IntoIterator<Item = (&LeafInfo<SeqTypes>, CertificatePair<SeqTypes>)> + Send,
         cert2: Option<&Certificate2<SeqTypes>>,
-        deciding_qc: Option<Arc<CertificatePair<SeqTypes>>>,
         consumer: &(impl EventConsumer + 'static),
     ) -> anyhow::Result<()>;
 
@@ -1010,7 +957,6 @@ pub trait SequencerPersistence:
     async fn process_decided_events(
         &self,
         decided_view: ViewNumber,
-        _deciding_qc: Option<Arc<CertificatePair<SeqTypes>>>,
         _consumer: &(impl EventConsumer + 'static),
     ) -> anyhow::Result<Option<ViewNumber>> {
         Ok(Some(decided_view))

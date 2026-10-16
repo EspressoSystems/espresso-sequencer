@@ -271,6 +271,9 @@ where
 
         // Fetch the last leaf in the range as our known finalized anchor point
         let known_end_leaf = self.fetch_leaf(LeafId::Number(end_height - 1)).await?;
+        if end_height - start_height == 1 {
+            return Ok(vec![known_end_leaf]);
+        }
 
         // at this point, we know the end leaf is valid and is finalized
         // now we need to fetch all leaves from start to end - 1 from the server

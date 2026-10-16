@@ -1,14 +1,14 @@
 # Recorded legacy chains
 
 Chains recorded from legacy consensus, the protocol before 0.6. Mainnet and decaf still serve data from before 0.6: old
-headers, VID schemes, reward trees, state certificates and the stake table contract's V1 and V2 event history. Once
-legacy consensus is deleted no test network can produce that data, so these recordings keep it testable.
+headers, VID schemes, reward trees, state certificates and the stake table contract's V1 and V2 event history. The node
+runs only the new protocol, so no test network can produce that data any more; these recordings keep it testable.
 `LegacyChain::replay` in `crates/espresso/node/src/legacy_chain.rs` starts a query node with no consensus on one of
 them: a follower fed the recorded blocks, on an anvil that has mined the recorded L1 transactions again. The node then
 derives the stake table, rewards and merklized state with the code a live node uses, checking every derived root against
 its header.
 
-**These recordings cannot be regenerated once legacy consensus is deleted.** A change to how any recorded type
+**These recordings cannot be regenerated: the node no longer runs legacy consensus.** A change to how any recorded type
 deserializes has to keep reading them, as it has to keep reading the `data/v*` reference vectors.
 
 ## Chains
@@ -44,7 +44,7 @@ stake table the replayed node derives.
 `record_legacy_chains` recorded them. It runs a `TestNetwork` on legacy consensus against an anvil that mines a block a
 second, drives the contract upgrades from the test, reads the chain back through the query API and the first node's
 persistence, and exports the L1 block by block with `eth_getBlockByNumber` and `eth_getRawTransactionByHash`. It needs
-legacy consensus, which is being deleted, so it is kept off `main`: it is
+legacy consensus, which the node no longer runs, so it is kept off `main`: it is
 `crates/espresso/node/src/legacy_chain/record.rs` at the `legacy-chain-recorder` tag (commit `319dfd916d5`, also the
 head of the branch of the same name), `#[ignore]`d:
 

@@ -4,7 +4,7 @@ import latency
 import pytest
 from fakes import load_script
 
-ml = load_script("mainnet-locations")
+ml = load_script("network-locations")
 
 
 def entry(addr: str | None, amount: str = "0x10") -> dict:
@@ -124,7 +124,7 @@ def test_mainnet_main_writes_json(tmp_path, capsys):
 
     out = tmp_path / "out.json"
     code = ml.main(
-        ["--out", str(out)],
+        ["mainnet", "--out", str(out)],
         lambda url: json.dumps(table).encode(),
         post,
         ips.__getitem__,
@@ -136,7 +136,7 @@ def test_mainnet_main_writes_json(tmp_path, capsys):
         assert secret not in text
     data = json.loads(text)
     assert data["measured_at"] == "2026-10-05"
-    assert data["source"] == ml.SOURCE
+    assert data["source"] == ml.SOURCES["mainnet"]
     assert (data["epoch"], data["validators"]) == (7, 3)
     assert [loc["nodes"] for loc in data["locations"]] == [2, 1]
     assert "3 validators, 2 locations" in capsys.readouterr().err
@@ -146,7 +146,7 @@ def test_mainnet_main_writes_nothing_on_failure(tmp_path):
     out = tmp_path / "out.json"
     with pytest.raises(ValueError):
         ml.main(
-            ["--out", str(out)],
+            ["mainnet", "--out", str(out)],
             lambda url: json.dumps(doc(entry(None))).encode(),
             lambda url, body: b"[]",
             str,
@@ -156,7 +156,32 @@ def test_mainnet_main_writes_nothing_on_failure(tmp_path):
 
 
 def test_shipped_mainnet_shares_sum_to_one():
-    data = json.loads(latency.MAINNET_JSON.read_text())
+    data = json.loads(latency.LOCATIONS_JSON["mainnet"].read_text())
     total = sum(place["stake_share"] for place in data["locations"])
     assert total == pytest.approx(1, abs=1e-6)
     assert latency.load_profile("mainnet").name == "mainnet"
+
+
+def test_parse_drops_excluded_hosts():
+    table = doc(entry("1.2.3.4:9977"), entry("bad.example.org:9977", "0x20"))
+    assert ml.parse_stake_table(table, ["bad.example.org"]) == [("1.2.3.4", 16)]
+
+
+def test_decaf_main_reads_the_decaf_stake_table(tmp_path):
+    urls = []
+
+    def fetch(url: str) -> bytes:
+        urls.append(url)
+        return json.dumps(doc(entry("1.2.3.4:9977"))).encode()
+
+    out = tmp_path / "out.json"
+    ml.main(
+        ["decaf", "--out", str(out)],
+        fetch,
+        lambda url, body: json.dumps(
+            [geo("1.2.3.4", "Sydney", "AU", -33.9, 151.2)]
+        ).encode(),
+        str,
+        "2026-10-12",
+    )
+    assert urls == [ml.SOURCES["decaf"]] and "decaf.testnet" in urls[0]
