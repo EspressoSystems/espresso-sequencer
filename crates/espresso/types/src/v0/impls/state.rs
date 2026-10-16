@@ -1041,23 +1041,29 @@ impl ValidatedState {
             validated_state.chain_config = chain_config.into();
         }
 
-        let l1_deposits = get_l1_deposits(
-            instance,
-            proposed_header,
-            parent_leaf,
-            chain_config.fee_contract,
-        )
-        .await;
+        // The new protocol charges no fees and credits no deposits, so it never touches the fee tree.
+        let (l1_deposits, missing_accounts) = if version < NEW_PROTOCOL_VERSION {
+            let l1_deposits = get_l1_deposits(
+                instance,
+                proposed_header,
+                parent_leaf,
+                chain_config.fee_contract,
+            )
+            .await;
 
-        // Find missing fee state entries. We will need to use the builder account which is paying a
-        // fee and the recipient account which is receiving it, plus any counts receiving deposits
-        // in this block.
-        let missing_accounts = self.forgotten_accounts(
-            [chain_config.fee_recipient]
-                .into_iter()
-                .chain(proposed_header.fee_info().accounts())
-                .chain(l1_deposits.accounts()),
-        );
+            // Find missing fee state entries. We will need to use the builder account which is
+            // paying a fee and the recipient account which is receiving it, plus any counts
+            // receiving deposits in this block.
+            let missing_accounts = self.forgotten_accounts(
+                [chain_config.fee_recipient]
+                    .into_iter()
+                    .chain(proposed_header.fee_info().accounts())
+                    .chain(l1_deposits.accounts()),
+            );
+            (l1_deposits, missing_accounts)
+        } else {
+            (Vec::new(), Vec::new())
+        };
 
         let parent_height = parent_leaf.height();
         let parent_view = parent_leaf.view_number();
