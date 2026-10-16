@@ -19,7 +19,7 @@ use super::ns_lens_match_metadata;
 
 pub(crate) type Metadata<T> = <<T as NodeType>::BlockPayload as BlockPayload<T>>::Metadata;
 
-pub(crate) type ReconstructResult<T> =
+type ReconstructResult<T> =
     Result<ObtainedPayload<T>, VidReconstructError<<T as NodeType>::SignatureKey>>;
 
 /// A block's payload in hand, with what the node needs to file it.
@@ -79,9 +79,9 @@ pub struct VidReconstructor<T: NodeType> {
 
 pub(crate) struct VidShareAccumulator<T: NodeType> {
     /// The payload commitment claimed by the view's validated proposal.
-    pub(crate) payload_commitment: VidCommitment2,
-    pub(crate) metadata: Metadata<T>,
-    pub(crate) epoch: EpochNumber,
+    payload_commitment: VidCommitment2,
+    metadata: Metadata<T>,
+    epoch: EpochNumber,
     /// The VID erasure parameters the committee fixes for this view, used to
     /// reject shares carrying a forged `common.param` (see [`Self::accept`]).
     /// `None` if the committee could not be resolved; the param check is then
@@ -99,7 +99,7 @@ pub(crate) struct VidShareAccumulator<T: NodeType> {
     /// Set when a fully verified share set failed to decode to a payload
     /// matching the commitment: the disperser is provably faulty and further
     /// attempts are pointless.
-    pub(crate) exhausted: bool,
+    exhausted: bool,
 }
 
 impl<T: NodeType> VidReconstructor<T> {

@@ -56,6 +56,13 @@ pub struct HealConfig {
     pub max_fetch_bytes_per_s: Option<u64>,
 }
 
+impl HealConfig {
+    /// The oldest header time worth healing at `now`: the share must outlive `min_remaining`.
+    pub fn oldest_ts(&self, now: u64) -> u64 {
+        now.saturating_sub(self.w.as_secs()) + self.min_remaining.as_secs()
+    }
+}
+
 impl Default for HealConfig {
     fn default() -> Self {
         Self {
@@ -76,7 +83,6 @@ impl Default for HealConfig {
 #[derive(Clone, Debug)]
 pub struct HealTarget<T: NodeType> {
     pub view: ViewNumber,
-    pub height: u64,
     pub epoch: EpochNumber,
     pub header_ts: u64,
     pub commit: VidCommitment2,
@@ -96,7 +102,7 @@ pub fn heal_targets<T: NodeType>(
     recipient_epoch: impl Fn(&Leaf2<T>) -> Option<EpochNumber>,
     cfg: &HealConfig,
 ) -> Vec<HealTarget<T>> {
-    let oldest_ts = now_ts.saturating_sub(cfg.w.as_secs()) + cfg.min_remaining.as_secs();
+    let oldest_ts = cfg.oldest_ts(now_ts);
     let mut targets: Vec<_> = leaves
         .iter()
         .filter_map(|leaf| {
@@ -112,7 +118,6 @@ pub fn heal_targets<T: NodeType>(
             wanted.then_some(())?;
             Some(HealTarget {
                 view,
-                height: header.block_number(),
                 epoch: recipient_epoch(leaf)?,
                 header_ts: header.timestamp(),
                 commit,

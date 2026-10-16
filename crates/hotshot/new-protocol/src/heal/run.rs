@@ -22,7 +22,9 @@ use tokio::{
 };
 use tracing::{debug, info, warn};
 
-use super::{HealConfig, HealError, HealMetrics, HealTarget, heal_targets, rederive_own_share};
+use super::{
+    HealConfig, HealError, HealMetrics, HealTarget, heal_targets, rederive_own_share, serve,
+};
 use crate::{
     message::share::{ShareFetchRequest, ShareFetchResponse, ShareRequestBody, ShareResponseBody},
     storage::NewProtocolStorage,
@@ -94,10 +96,12 @@ async fn heal_pass<T: NodeType, S: NewProtocolStorage<T>>(
     terminal: &mut HashSet<ViewNumber>,
 ) -> anyhow::Result<bool> {
     let now = unix_now();
-    let min_ts = now.saturating_sub(ctx.config.w.as_secs()) + ctx.config.min_remaining.as_secs();
     // The held views first: a node that cannot answer them has no use for the wal scan.
     let held = ctx.storage.held_vid_views().await?;
-    let leaves = ctx.storage.decided_leaves(min_ts).await?;
+    let leaves = ctx
+        .storage
+        .decided_leaves(ctx.config.oldest_ts(now))
+        .await?;
     let epoch_height = ctx.membership.epoch_height().u64();
     let (view, member) = (*ctx.view.borrow(), |leaf: &Leaf2<T>| {
         ctx.recipient_epoch(leaf, epoch_height)
@@ -349,7 +353,7 @@ impl<T: NodeType, S: NewProtocolStorage<T>> Fetch<'_, T, S> {
             ShareResponseBody::Busy => return self.note_busy(from),
             _ => return,
         };
-        let len = bincode::serialized_size(&share).map_or(0, |len| len as usize);
+        let len = serve::serialized_len(&*share);
         self.bytes += len;
         self.ctx.metrics.fetch_bytes.add(len);
         let view = self.target.view;

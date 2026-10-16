@@ -1151,7 +1151,13 @@ fn prune_all(
     );
     lanes.da.prune(&unlinkable)?;
     if let Some(cutoff) = share_cutoff {
-        let unlinkable = share_unlinkable(&lanes.share.segments.lock(), cutoff, replayed);
+        // Age by header time only, never by size. Segments holding a key after `replayed` stay: the
+        // query service still has to ingest them.
+        let unlinkable = lanes
+            .share
+            .segments
+            .lock()
+            .oldest_stamped_below(cutoff, replayed);
         lanes.share.prune(&unlinkable)?;
     }
     let share_bytes = lanes.share.segments.lock().bytes();
@@ -1164,12 +1170,6 @@ fn prune_all(
         );
     }
     Ok(())
-}
-
-/// Age by header time only, never by size. Segments holding a key after `replayed` stay: the
-/// query service still has to ingest them.
-fn share_unlinkable(segments: &Segments, cutoff: u32, replayed: Option<u64>) -> Vec<SegmentMeta> {
-    segments.oldest_stamped_below(cutoff, replayed)
 }
 
 /// The leaf's header timestamp as a frame stamp.
@@ -1995,15 +1995,15 @@ mod tests {
     #[test]
     fn share_unlinkable_drops_segments_older_than_the_cutoff() {
         let segs = stamped_shares(&[(1, 1, 100), (2, 2, 200), (3, 3, 300), (4, 4, 400)]);
-        assert_eq!(seqs(share_unlinkable(&segs, 250, None)), vec![1, 2]);
-        assert!(share_unlinkable(&segs, 100, None).is_empty());
+        assert_eq!(seqs(segs.oldest_stamped_below(250, None)), vec![1, 2]);
+        assert!(segs.oldest_stamped_below(100, None).is_empty());
     }
 
     #[test]
     fn share_unlinkable_keeps_unreplayed_segments() {
         let segs = stamped_shares(&[(1, 5, 100), (2, 10, 100), (3, 20, 100), (4, 30, 100)]);
-        assert_eq!(seqs(share_unlinkable(&segs, 1000, Some(10))), vec![1, 2]);
-        assert_eq!(seqs(share_unlinkable(&segs, 1000, None)), vec![1, 2, 3]);
+        assert_eq!(seqs(segs.oldest_stamped_below(1000, Some(10))), vec![1, 2]);
+        assert_eq!(seqs(segs.oldest_stamped_below(1000, None)), vec![1, 2, 3]);
     }
 
     #[test]
@@ -2018,7 +2018,7 @@ mod tests {
             })
             .collect::<Vec<_>>()
             .into();
-        assert!(share_unlinkable(&segs, 50, None).is_empty());
+        assert!(segs.oldest_stamped_below(50, None).is_empty());
     }
 
     fn stamped_shares(spec: &[(u64, u64, u32)]) -> Segments {

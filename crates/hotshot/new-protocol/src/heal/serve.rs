@@ -151,7 +151,7 @@ impl<T: NodeType, S: NewProtocolStorage<T>> ShareServer<T, S> {
     }
 }
 
-fn serialized_len<V: serde::Serialize>(value: &V) -> usize {
+pub(super) fn serialized_len<V: serde::Serialize>(value: &V) -> usize {
     bincode::serialized_size(value).map_or(usize::MAX, |len| len as usize)
 }
 
