@@ -14,7 +14,6 @@ pub enum Stream {
     Da = 1,
     Payload = 2,
     Share = 3,
-    Leaf = 4,
 }
 
 impl Stream {
@@ -25,7 +24,6 @@ impl Stream {
             Self::Da => "da",
             Self::Payload => "payload",
             Self::Share => "share",
-            Self::Leaf => "leaf",
         }
     }
 }
@@ -93,7 +91,6 @@ impl SegmentHeader {
             1 => Stream::Da,
             2 => Stream::Payload,
             3 => Stream::Share,
-            4 => Stream::Leaf,
             other => anyhow::bail!("segment header: bad stream tag {other}"),
         };
         let seq = u64::from_le_bytes(b[8..16].try_into().unwrap());
@@ -191,7 +188,6 @@ pub fn decode_frame(
 /// Where a scan stopped: at an exact frame boundary with no bytes left (`Clean`), or with leftover
 /// bytes that don't form another valid frame (`Torn`). Both carry the byte offset of the boundary,
 /// i.e. how much of `buf` to keep.
-#[derive(Debug)]
 pub enum ScanEnd {
     Clean(u64),
     Torn(u64),
@@ -372,13 +368,7 @@ mod tests {
 
     #[test]
     fn segment_header_roundtrips_every_stream() {
-        for stream in [
-            Stream::Wal,
-            Stream::Da,
-            Stream::Payload,
-            Stream::Share,
-            Stream::Leaf,
-        ] {
+        for stream in [Stream::Wal, Stream::Da, Stream::Payload, Stream::Share] {
             let header = SegmentHeader {
                 stream,
                 seq: 7,
@@ -398,7 +388,7 @@ mod tests {
             prev_max_key: 0,
         }
         .encode();
-        encoded[6] = 5;
+        encoded[6] = 4;
         let crc = crc32fast::hash(&encoded[0..36]);
         encoded[36..40].copy_from_slice(&crc.to_le_bytes());
         assert!(SegmentHeader::decode(&encoded).is_err());

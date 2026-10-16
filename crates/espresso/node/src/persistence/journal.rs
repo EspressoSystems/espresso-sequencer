@@ -1,6 +1,6 @@
 //! Append-only journal persistence backend for consensus data.
 //!
-//! Independent lanes (`wal`, `share`, `da`, `leaf`), each a std writer thread doing group commit with a
+//! Independent lanes (`wal`, `share`, `da`), each a std writer thread doing group commit with a
 //! durable/enqueue sync policy; see the design doc for the write path, roll and recovery. Reads of
 //! consensus state come from an in-memory `State` folded from wal records; `MembershipPersistence`
 //! and `DhtPersistentStorage` delegate to a side `fs::Persistence` tree, which keeps fs semantics
@@ -66,7 +66,7 @@ use crate::{
     ViewNumber,
     persistence::{
         fs as side_fs,
-        journal::state::{Finalized, Kind, Record, Replay, ReplayLeaf, State},
+        journal::state::{Kind, Record, Replay, ReplayLeaf, State},
         persistence_metrics::PersistenceMetricsValue,
         sql::{self, DecidedLeaf, decide_event_from_chain, within_gap_fill_horizon},
         storage_probe::{self, StorageProbe},
@@ -78,7 +78,6 @@ const WAL_MAX_VIEW_SPAN: u64 = 8192;
 const WAL_MAX_BATCH_BYTES: usize = 4 << 20;
 const SHARE_SEGMENT_BYTES: u64 = 1 << 30;
 const DA_SEGMENT_BYTES: u64 = 1 << 30;
-const LEAF_SEGMENT_BYTES: u64 = 64 << 20;
 const DATA_MAX_BATCH_BYTES: usize = 64 << 20;
 /// Added to both record bounds: covers everything in a record that does not grow with block
 /// size (QCs, header fields).
@@ -94,7 +93,7 @@ const MAX_SNAPSHOT_BYTES: u32 = 1 << 30;
 /// `frame_buf` copy.
 const IN_FLIGHT_BYTES: usize = 128 << 20;
 
-/// Per-record size bounds, enforced in `put_state`/`put_data` before a record reaches a lane.
+/// Per-record size bounds, enforced in `put_wal`/`put_data` before a record reaches a lane.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct RecordLimits {
     wal: u32,
@@ -181,7 +180,7 @@ pub struct Options {
     #[clap(skip)]
     pub max_block_size: Option<u64>,
 
-    /// Overrides every lane's segment size, for tests that roll segments.
+    /// Overrides the share and da segment size, for tests that roll segments.
     #[clap(skip)]
     pub(crate) segment_bytes: Option<u64>,
 
@@ -281,7 +280,6 @@ struct Lanes {
     wal: JournalLane,
     share: JournalLane,
     da: JournalLane,
-    leaf: JournalLane,
 }
 
 /// A lane's writer handle with what GC and readers need next to it.
@@ -440,23 +438,6 @@ fn sync_new_dirs(journal_dir: &std::path::Path, path: &std::path::Path) -> io::R
     Ok(())
 }
 
-async fn replay_leaf_lane(
-    fs: &Arc<StdFs>,
-    dir: &Path,
-    recovered: &Recovered,
-    mut state: State,
-) -> anyhow::Result<(State, Vec<Finalized>)> {
-    let (fs, dir, segments) = (fs.clone(), dir.to_path_buf(), recovered.segments.clone());
-    tokio::task::spawn_blocking(move || -> anyhow::Result<_> {
-        let after_lsn = state.leaf_lsn;
-        let finalized = replay_leaf_tail(&*fs, &dir, &segments, after_lsn, &mut state)?;
-        Ok((state, finalized))
-    })
-    .await
-    .context("leaf replay task panicked")?
-    .context("replaying leaf lane")
-}
-
 async fn recover_lane(
     fs: &Arc<StdFs>,
     dir: &Path,
@@ -520,7 +501,6 @@ impl Persistence {
         let wal_dir = journal_dir.join("wal");
         let share_dir = journal_dir.join("share");
         let da_dir = journal_dir.join("da");
-        let leaf_dir = journal_dir.join("leaf");
         let side_dir = path.join("side");
 
         let old_data_dir = journal_dir.join("data");
@@ -535,7 +515,7 @@ impl Persistence {
         // itself having run before.
         let old_layout_present =
             path.join("sqlite").join("database").is_file() || path.join("decided_leaves2").is_dir();
-        let journal_empty = [&wal_dir, &share_dir, &da_dir, &leaf_dir]
+        let journal_empty = [&wal_dir, &share_dir, &da_dir]
             .into_iter()
             .all(|dir| !dir_has_log_files(dir));
         ensure!(
@@ -548,7 +528,7 @@ impl Persistence {
         fs::create_dir_all(&journal_dir).context("creating journal directory")?;
         // Recovery and the writer threads never touch the filesystem except through `JournalFs`
         // (so `MemFs` tests stay hermetic); the one directory-creation exception lives here.
-        for dir in [&wal_dir, &share_dir, &da_dir, &leaf_dir] {
+        for dir in [&wal_dir, &share_dir, &da_dir] {
             fs::create_dir_all(dir)
                 .with_context(|| format!("creating lane directory {}", dir.display()))?;
         }
@@ -583,8 +563,6 @@ impl Persistence {
         let share_recovered =
             recover_lane(&std_fs, &share_dir, Stream::Share, LaneMode::Append).await?;
         let da_recovered = recover_lane(&std_fs, &da_dir, Stream::Da, LaneMode::Append).await?;
-        let leaf_recovered =
-            recover_lane(&std_fs, &leaf_dir, Stream::Leaf, LaneMode::Append).await?;
 
         let mut side_opts = side_fs::Options::new(side_dir);
         let side = side_opts.create().await.context("opening side fs store")?;
@@ -606,26 +584,10 @@ impl Persistence {
                 },
             }
         }
-        let wal_leaf_lsn = state.leaf_lsn;
-        let finalized;
-        (state, finalized) = replay_leaf_lane(&std_fs, &leaf_dir, &leaf_recovered, state).await?;
-        for finalized in finalized {
-            side.insert_state_cert(finalized.epoch, finalized.cert)
-                .await
-                .context("re-upserting state cert recovered from leaf replay")?;
-        }
-        ensure!(
-            leaf_recovered.next_lsn > state.leaf_lsn,
-            "wal snapshot covers leaf lane lsn {} but the leaf lane ends at {}: leaf records were \
-             lost",
-            state.leaf_lsn,
-            leaf_recovered.next_lsn.saturating_sub(1)
-        );
         let replay_seconds = replay_started.elapsed().as_secs_f64();
         tracing::info!(
             wal_segment = ?wal_recovered.segments.last().map(|s| s.seq),
             records = wal_recovered.wal_records.len(),
-            leaf_records = state.leaf_lsn - wal_leaf_lsn,
             anchor_view = ?state.anchor.as_ref().map(|(leaf, ..)| leaf.view_number()),
             replay_seconds,
             "journal: replayed wal"
@@ -663,7 +625,7 @@ impl Persistence {
         let wal_cfg = LaneConfig {
             stream: Stream::Wal,
             mode: LaneMode::Snapshot,
-            segment_bytes: opts.segment_bytes.unwrap_or(WAL_SEGMENT_BYTES),
+            segment_bytes: WAL_SEGMENT_BYTES,
             max_key_span: WAL_MAX_VIEW_SPAN,
             max_batch_bytes: WAL_MAX_BATCH_BYTES,
             max_snapshot_bytes: MAX_SNAPSHOT_BYTES,
@@ -685,26 +647,12 @@ impl Persistence {
         )?;
         let da_cfg = append_config(Stream::Da, opts.segment_bytes.unwrap_or(DA_SEGMENT_BYTES));
         let (da, da_thread) = start_lane(&std_fs, da_dir, da_cfg, da_recovered, None, da_index)?;
-        let leaf_cfg = LaneConfig {
-            max_batch_bytes: WAL_MAX_BATCH_BYTES,
-            ..append_config(
-                Stream::Leaf,
-                opts.segment_bytes.unwrap_or(LEAF_SEGMENT_BYTES),
-            )
-        };
-        let (leaf, leaf_thread) =
-            start_lane(&std_fs, leaf_dir, leaf_cfg, leaf_recovered, None, None)?;
 
         Ok(Self {
             inner: Arc::new(Inner {
                 state,
-                lanes: Lanes {
-                    wal,
-                    share,
-                    da,
-                    leaf,
-                },
-                _threads: JoinOnDrop(vec![wal_thread, share_thread, da_thread, leaf_thread]),
+                lanes: Lanes { wal, share, da },
+                _threads: JoinOnDrop(vec![wal_thread, share_thread, da_thread]),
                 gc_lock: parking_lot::Mutex::new(()),
                 side,
                 opts,
@@ -722,11 +670,10 @@ impl Persistence {
         self.inner.lanes.da.index.is_some()
     }
 
-    /// Applies `rec` to `State` under the state lock, then enqueues it on the wal lane, or on the
-    /// leaf lane for decided history. LSN allocation happens inside `Lane::enqueue`, still under
-    /// the same lock, so channel order, lsn order and `State::apply` order always agree (see the
-    /// design's write path), and `State::leaf_lsn` is exact in every wal snapshot.
-    async fn put_state(&self, rec: Record, class: Class) -> anyhow::Result<()> {
+    /// Applies `rec` to `State` under the state lock, then enqueues it on the wal lane. LSN
+    /// allocation happens inside `Lane::enqueue`, still under the same lock, so channel order,
+    /// lsn order and `State::apply` order always agree (see the design's write path).
+    async fn put_wal(&self, rec: Record, class: Class) -> anyhow::Result<()> {
         let kind = rec.kind();
         let view = rec.view();
         let body = rec.encode()?;
@@ -736,19 +683,11 @@ impl Persistence {
             "wal record of kind {kind:?} is {} bytes, over the {max}-byte limit",
             body.len()
         );
-        let lanes = &self.inner.lanes;
-        let lane = if kind.on_leaf_lane() {
-            &lanes.leaf.lane
-        } else {
-            &lanes.wal.lane
-        };
+        let wal = &self.inner.lanes.wal.lane;
         let (lsn, finalized) = {
             let mut state = self.inner.state.lock();
             let finalized = state.apply(&rec);
-            let lsn = lane.enqueue(view, kind.into(), body, class, None);
-            if kind.on_leaf_lane() {
-                state.leaf_lsn = lsn;
-            }
+            let lsn = wal.enqueue(view, kind.into(), body, class, None);
             (lsn, finalized)
         };
         if let Some(finalized) = finalized {
@@ -760,17 +699,9 @@ impl Persistence {
                 .await?;
         }
         if class == Class::Durable {
-            lane.wait_durable(lsn).await?;
+            wal.wait_durable(lsn).await?;
         }
         Ok(())
-    }
-
-    /// Waits until every leaf lane record enqueued so far is on disk.
-    async fn sync_leaf_lane(&self) -> anyhow::Result<()> {
-        let lsn = self.inner.state.lock().leaf_lsn;
-        let lane = &self.inner.lanes.leaf.lane;
-        lane.request_sync();
-        lane.wait_durable(lsn).await
     }
 
     /// Share and da records have no `State` effect, so there is no lock to hold: only the
@@ -961,7 +892,7 @@ impl Persistence {
             if let Some(event) = decide_event_from_chain(chain, cert2) {
                 consumer.handle_event(&event).await?;
             }
-            self.put_state(
+            self.put_wal(
                 Record::Processed {
                     view: to_view,
                     height: to_height,
@@ -1081,53 +1012,12 @@ fn prune_all(inner: &Inner, bound: u64, replayed: Option<u64>) -> anyhow::Result
     lanes
         .wal
         .prune(&wal_unlinkable(&lanes.wal.segments.lock(), bound))?;
-    lanes
-        .leaf
-        .prune(&wal_unlinkable(&lanes.leaf.segments.lock(), bound))?;
     for lane in [&lanes.share, &lanes.da] {
         let unlinkable =
             da_unlinkable(&lane.segments.lock(), bound, inner.opts.max_bytes, replayed);
         lane.prune(&unlinkable)?;
     }
     Ok(())
-}
-
-/// Applies the leaf lane records after `after_lsn`, the ones no wal snapshot covers, in lane
-/// order. Reads segments newest first only until one starts at or before that lsn.
-fn replay_leaf_tail<F: JournalFs>(
-    fs: &F,
-    dir: &Path,
-    segments: &[SegmentMeta],
-    after_lsn: u64,
-    state: &mut State,
-) -> anyhow::Result<Vec<Finalized>> {
-    let mut tail = Vec::new();
-    for meta in segments.iter().rev() {
-        let header = fs
-            .read_header(&lane::segment_path(dir, meta.seq))
-            .with_context(|| format!("reading header of leaf segment {}", meta.seq))?;
-        tail.push(meta.seq);
-        if SegmentHeader::decode(&header)?.first_lsn <= after_lsn {
-            break;
-        }
-    }
-
-    let mut finalized = Vec::new();
-    for seq in tail.into_iter().rev() {
-        let (records, end) = lane::read_records(fs, dir, Stream::Leaf, seq, Kind::is_known)?;
-        ensure!(
-            matches!(end, ScanEnd::Clean(_)),
-            "leaf segment {seq} is corrupt: scan ended at {end:?}"
-        );
-        for (header, body) in records.iter().filter(|(header, _)| header.lsn > after_lsn) {
-            let kind = Kind::from_u8(header.kind.0).context("unknown leaf record kind")?;
-            let record = Record::decode(kind, header.key, body)
-                .with_context(|| format!("decoding leaf record {}", header.lsn))?;
-            finalized.extend(state.apply(&record));
-            state.leaf_lsn = header.lsn;
-        }
-    }
-    Ok(finalized)
 }
 
 /// Age-based only. The two newest segments stay: a crash mid-roll falls back to the older one's
@@ -1311,7 +1201,7 @@ impl SequencerPersistence for Persistence {
                 view: cert2.view_number,
                 cert: cert2.clone(),
             };
-            self.put_state(record, Class::Enqueue).await?;
+            self.put_wal(record, Class::Enqueue).await?;
         }
         let leaf_chain: Vec<_> = leaf_chain
             .into_iter()
@@ -1328,10 +1218,9 @@ impl SequencerPersistence for Persistence {
                 qc: cert.qc().clone(),
                 next_epoch_qc: cert.next_epoch_qc().cloned(),
             };
-            self.put_state(record, Class::Enqueue).await?;
+            self.put_wal(record, Class::Enqueue).await?;
         }
-        // Durable before returning: a later wal `Processed` must never refer to a lost leaf.
-        self.sync_leaf_lane().await
+        Ok(())
     }
 
     async fn process_decided_events(
@@ -1419,7 +1308,7 @@ impl SequencerPersistence for Persistence {
         if !matches!(action, HotShotAction::Propose | HotShotAction::Vote) {
             return Ok(());
         }
-        self.put_state(Record::Action { view, kind: action }, Class::Durable)
+        self.put_wal(Record::Action { view, kind: action }, Class::Durable)
             .await
     }
 
@@ -1429,7 +1318,7 @@ impl SequencerPersistence for Persistence {
     ) -> anyhow::Result<()> {
         let now = Instant::now();
         let res = self
-            .put_state(Record::Proposal(proposal.clone()), Class::Durable)
+            .put_wal(Record::Proposal(proposal.clone()), Class::Durable)
             .await;
         self.metrics
             .internal_append_quorum2_duration
@@ -1442,12 +1331,12 @@ impl SequencerPersistence for Persistence {
         view: ViewNumber,
         cert2: Certificate2<SeqTypes>,
     ) -> anyhow::Result<()> {
-        self.put_state(Record::Cert2 { view, cert: cert2 }, Class::Durable)
+        self.put_wal(Record::Cert2 { view, cert: cert2 }, Class::Durable)
             .await
     }
 
     async fn load_cert2(&self, view: ViewNumber) -> anyhow::Result<Option<Certificate2<SeqTypes>>> {
-        self.scan_for(&self.inner.lanes.leaf, Kind::Cert2, view)
+        self.scan_for(&self.inner.lanes.wal, Kind::Cert2, view)
             .await
     }
 
@@ -1481,7 +1370,7 @@ impl SequencerPersistence for Persistence {
         &self,
         decided_upgrade_certificate: Option<UpgradeCertificate<SeqTypes>>,
     ) -> anyhow::Result<()> {
-        self.put_state(Record::Upgrade(decided_upgrade_certificate), Class::Durable)
+        self.put_wal(Record::Upgrade(decided_upgrade_certificate), Class::Durable)
             .await
     }
 
@@ -1495,7 +1384,7 @@ impl SequencerPersistence for Persistence {
         &self,
         next_epoch_high_qc: NextEpochQuorumCertificate2<SeqTypes>,
     ) -> anyhow::Result<()> {
-        self.put_state(Record::NextEpochQc(next_epoch_high_qc), Class::Durable)
+        self.put_wal(Record::NextEpochQc(next_epoch_high_qc), Class::Durable)
             .await
     }
 
@@ -1504,7 +1393,7 @@ impl SequencerPersistence for Persistence {
         high_qc: QuorumCertificate2<SeqTypes>,
         next_epoch_high_qc: NextEpochQuorumCertificate2<SeqTypes>,
     ) -> anyhow::Result<()> {
-        self.put_state(Record::Eqc(high_qc, next_epoch_high_qc), Class::Durable)
+        self.put_wal(Record::Eqc(high_qc, next_epoch_high_qc), Class::Durable)
             .await
     }
 
@@ -1518,8 +1407,7 @@ impl SequencerPersistence for Persistence {
     }
 
     async fn append_high_qc2(&self, high_qc: QuorumCertificate2<SeqTypes>) -> anyhow::Result<()> {
-        self.put_state(Record::HighQc2(high_qc), Class::Durable)
-            .await
+        self.put_wal(Record::HighQc2(high_qc), Class::Durable).await
     }
 
     async fn load_high_qc2(&self) -> anyhow::Result<Option<QuorumCertificate2<SeqTypes>>> {
@@ -1581,7 +1469,7 @@ impl SequencerPersistence for Persistence {
         &self,
         state_cert: LightClientStateUpdateCertificateV2<SeqTypes>,
     ) -> anyhow::Result<()> {
-        self.put_state(Record::StateCert(state_cert), Class::Durable)
+        self.put_wal(Record::StateCert(state_cert), Class::Enqueue)
             .await
     }
 
@@ -1627,7 +1515,6 @@ impl SequencerPersistence for Persistence {
                 &self.inner.lanes.wal.lane,
                 &self.inner.lanes.share.lane,
                 &self.inner.lanes.da.lane,
-                &self.inner.lanes.leaf.lane,
             ],
         );
     }
@@ -1739,9 +1626,7 @@ mod tests {
     use hotshot::types::{BLSPubKey, SignatureKey};
     use hotshot_example_types::node_types::TEST_VERSIONS;
     use hotshot_query_service::metrics::PrometheusMetrics;
-    use hotshot_types::{
-        light_client::LightClientState, traits::EncodeBytes, utils::EpochTransitionIndicator,
-    };
+    use hotshot_types::{traits::EncodeBytes, utils::EpochTransitionIndicator};
     use tempfile::TempDir;
 
     use super::{testing::TEST_MAX_BLOCK_SIZE, *};
@@ -2046,116 +1931,6 @@ mod tests {
         .err()
         .expect("open must fail without max_block_size");
         assert!(err.to_string().contains("max_block_size"), "{err:#}");
-    }
-
-    fn light_client_state_cert(view: u64) -> LightClientStateUpdateCertificateV2<SeqTypes> {
-        LightClientStateUpdateCertificateV2 {
-            epoch: EpochNumber::new(view),
-            light_client_state: LightClientState {
-                view_number: view,
-                block_height: 0,
-                block_comm_root: Default::default(),
-            },
-            next_stake_table_state: Default::default(),
-            signatures: vec![],
-            auth_root: Default::default(),
-        }
-    }
-
-    fn encoded_state(storage: &Persistence) -> Vec<u8> {
-        bincode::serialize(&*storage.inner.state.lock()).unwrap()
-    }
-
-    /// Decide leaves while the wal and the leaf lane roll many times, so only the newest wal
-    /// snapshot and a multi-segment leaf tail are left to rebuild the state from.
-    async fn write_rolling_history(storage: &Persistence) {
-        let chain = consecutive_height_chain(8).await;
-        storage
-            .add_state_cert(light_client_state_cert(20))
-            .await
-            .unwrap();
-        for view in 0..chain.len() {
-            decide_range(storage, &chain, view..view + 1, &NullEventConsumer).await;
-            for action_view in 0..100 {
-                storage
-                    .record_action(
-                        ViewNumber::new(100 * view as u64 + action_view),
-                        None,
-                        HotShotAction::Propose,
-                    )
-                    .await
-                    .unwrap();
-            }
-        }
-        assert!(storage.inner.lanes.wal.segments.lock().list().len() > 2);
-        assert!(storage.inner.lanes.leaf.segments.lock().list().len() > 2);
-    }
-
-    #[test_log::test(tokio::test)]
-    async fn reopen_restores_state_from_wal_snapshot_and_leaf_tail() {
-        let tmp = TempDir::new().unwrap();
-        let opts = Options {
-            segment_bytes: Some(2048),
-            ..options(&tmp)
-        };
-        let storage = Persistence::open(opts.clone()).await.unwrap();
-        write_rolling_history(&storage).await;
-        let before = encoded_state(&storage);
-        drop(storage);
-
-        let storage = Persistence::open(opts).await.unwrap();
-        assert_eq!(encoded_state(&storage), before);
-        let state = storage.inner.state.lock();
-        assert_eq!(
-            state.anchor.as_ref().map(|(leaf, ..)| leaf.view_number()),
-            Some(ViewNumber::new(7))
-        );
-        assert!(state.pending_state_certs.contains_key(&ViewNumber::new(20)));
-    }
-
-    #[test_log::test(tokio::test)]
-    async fn reopen_with_nothing_after_the_snapshot_keeps_state() {
-        let tmp = TempDir::new().unwrap();
-        let opts = Options {
-            segment_bytes: Some(2048),
-            ..options(&tmp)
-        };
-        let storage = Persistence::open(opts.clone()).await.unwrap();
-        write_rolling_history(&storage).await;
-        let before = encoded_state(&storage);
-        drop(storage);
-
-        // The first reopen seeds a wal segment with a snapshot already covering every leaf record.
-        drop(Persistence::open(opts.clone()).await.unwrap());
-        let storage = Persistence::open(opts).await.unwrap();
-        assert_eq!(encoded_state(&storage), before);
-    }
-
-    #[tokio::test]
-    async fn leaf_records_are_not_written_to_the_wal() {
-        let tmp = TempDir::new().unwrap();
-        let storage = Persistence::open(options(&tmp)).await.unwrap();
-        let chain = consecutive_height_chain(2).await;
-        decide_range(&storage, &chain, 0..2, &NullEventConsumer).await;
-
-        let (wal_records, _) = lane::read_records(
-            &StdFs,
-            &storage.inner.lanes.wal.dir,
-            Stream::Wal,
-            1,
-            Kind::is_known,
-        )
-        .unwrap();
-        let wal_kinds = wal_records
-            .iter()
-            .map(|(header, _)| Kind::from_u8(header.kind.0).unwrap())
-            .collect::<Vec<_>>();
-        assert!(
-            wal_kinds.iter().all(|kind| !kind.on_leaf_lane()),
-            "{wal_kinds:?}"
-        );
-        let leaf_bytes = storage.inner.lanes.leaf.segments.lock().bytes();
-        assert!(leaf_bytes > SegmentHeader::LEN as u64, "{leaf_bytes}");
     }
 
     #[tokio::test]

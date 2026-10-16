@@ -669,18 +669,6 @@ pub fn frame_locations<F: JournalFs>(
     Ok(read_segment(fs, &segment_path(dir, seq), seq, stream, known_kind, false)?.locations)
 }
 
-/// Every record in segment `seq` with its body, and where the scan ended.
-pub fn read_records<F: JournalFs>(
-    fs: &F,
-    dir: &Path,
-    stream: Stream,
-    seq: u64,
-    known_kind: fn(u8) -> bool,
-) -> anyhow::Result<(Vec<(FrameHeader, Vec<u8>)>, ScanEnd)> {
-    let read = read_segment(fs, &segment_path(dir, seq), seq, stream, known_kind, true)?;
-    Ok((read.records, read.end))
-}
-
 /// Reads the record body at `loc` in the segment file at `path`. `None` when the segment is gone
 /// (unlinked by GC), the frame runs past the end of the file, or the bytes at `loc` are not the
 /// record `(key, kind, loc.len, loc.lsn)`. The key check matters because a lane that loses
@@ -1344,7 +1332,7 @@ mod tests {
     fn mode(stream: Stream) -> LaneMode {
         match stream {
             Stream::Wal => LaneMode::Snapshot,
-            Stream::Da | Stream::Payload | Stream::Share | Stream::Leaf => LaneMode::Append,
+            Stream::Da | Stream::Payload | Stream::Share => LaneMode::Append,
         }
     }
 

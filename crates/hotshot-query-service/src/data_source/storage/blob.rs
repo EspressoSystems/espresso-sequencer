@@ -589,7 +589,7 @@ fn open_lane_blocking<F: JournalFs>(
     let known_kind: fn(u8) -> bool = match stream {
         Stream::Payload => is_payload,
         Stream::Share => is_share,
-        Stream::Wal | Stream::Da | Stream::Leaf => unreachable!("not a blob lane: {stream:?}"),
+        Stream::Wal | Stream::Da => unreachable!("not a blob lane: {stream:?}"),
     };
     let recovered = recover_lane(&**fs, &dir, stream, known_kind)?;
 
