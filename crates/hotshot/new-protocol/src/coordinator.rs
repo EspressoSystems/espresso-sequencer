@@ -10,7 +10,6 @@ use std::{
 
 use bon::{Builder, bon};
 use committable::Commitment;
-use hotshot::{traits::BlockPayload, types::SignatureKey};
 use hotshot_types::{
     consensus::{ConsensusMetricsValue, ParticipationTracker},
     data::{EpochNumber, Leaf2, VidCommitment, VidCommitment2, ViewChangeEvidence2, ViewNumber},
@@ -23,8 +22,11 @@ use hotshot_types::{
     },
     simple_vote::{HasEpoch, QuorumVote2, TimeoutVote2, TimeoutVote3},
     traits::{
-        block_contents::BlockHeader, metrics::Metrics, node_implementation::NodeType,
-        signature_key::StateSignatureKey,
+        BlockPayload,
+        block_contents::BlockHeader,
+        metrics::Metrics,
+        node_implementation::NodeType,
+        signature_key::{SignatureKey, StateSignatureKey},
     },
     upgrade_config::UpgradeConfig,
     utils::{is_epoch_root, is_last_block},

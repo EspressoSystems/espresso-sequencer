@@ -59,7 +59,7 @@ pub(crate) fn default_telemetry_endpoint(chain_id: ChainId) -> Option<&'static s
 pub use espresso_types::RECENT_STAKE_TABLES_LIMIT;
 use genesis::L1Finalized;
 pub use genesis::{Genesis, GenesisSource};
-use hotshot::{traits::implementations::MemoryNetwork, types::SignatureKey};
+use hotshot::traits::implementations::MemoryNetwork;
 use hotshot_new_protocol::network::{Cliquenet, message_limit};
 use hotshot_orchestrator::client::{OrchestratorClient, get_complete_config};
 use hotshot_types::{
@@ -73,6 +73,7 @@ use hotshot_types::{
     traits::{
         metrics::{Metrics, NoMetrics},
         node_implementation::{NodeImplementation, NodeType},
+        signature_key::SignatureKey,
         storage::Storage,
     },
     x25519,
@@ -876,7 +877,6 @@ pub mod testing {
         future::join_all,
         stream::{Stream, StreamExt},
     };
-    use hotshot::traits::BlockPayload;
     use hotshot_contract_adapter::stake_table::StakeTableContractVersion;
     use hotshot_types::{
         HotShotConfig, PeerConfig, PeerConnectInfo,
@@ -885,7 +885,7 @@ pub mod testing {
         light_client::StateKeyPair,
         new_protocol::CoordinatorEvent,
         traits::{
-            EncodeBytes, block_contents::BlockHeader, metrics::NoMetrics,
+            BlockPayload, EncodeBytes, block_contents::BlockHeader, metrics::NoMetrics,
             signature_key::BuilderSignatureKey,
         },
     };

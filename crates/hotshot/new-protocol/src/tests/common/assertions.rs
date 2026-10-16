@@ -1,6 +1,7 @@
-use hotshot::types::BLSPubKey;
 use hotshot_example_types::node_types::TestTypes;
-use hotshot_types::{traits::signature_key::SignatureKey, vote::HasViewNumber};
+use hotshot_types::{
+    signature_key::BLSPubKey, traits::signature_key::SignatureKey, vote::HasViewNumber,
+};
 
 use crate::consensus::{ConsensusInput, ConsensusOutput};
 

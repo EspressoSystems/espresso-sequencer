@@ -9,7 +9,6 @@ use std::{
 };
 
 use committable::{Commitment, CommitmentBoundsArkless, Committable};
-use hotshot::traits::BlockPayload;
 use hotshot_contract_adapter::light_client::derive_signed_state_digest;
 use hotshot_types::{
     data::{
@@ -29,6 +28,7 @@ use hotshot_types::{
     },
     stake_table::HSStakeTable,
     traits::{
+        BlockPayload,
         block_contents::{BlockHeader, EncodeBytes},
         node_implementation::NodeType,
         signature_key::{

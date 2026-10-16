@@ -1,7 +1,6 @@
 use std::{marker::PhantomData, sync::Arc};
 
 use committable::{Commitment, CommitmentBoundsArkless, Committable};
-use hotshot::{traits::ValidatedState, types::BLSPubKey};
 use hotshot_example_types::{
     block_types::TestBlockHeader,
     node_types::{TEST_VERSIONS, TestTypes},
@@ -10,9 +9,10 @@ use hotshot_example_types::{
 use hotshot_types::{
     data::{EpochNumber, Leaf2, VidCommitment, VidCommitment2, ViewNumber},
     message::Proposal as SignedProposal,
+    signature_key::BLSPubKey,
     simple_certificate::{LightClientStateUpdateCertificateV2, TimeoutEvidence},
     simple_vote::{HasEpoch, QuorumData2, SimpleVote, TimeoutData2, TimeoutData3, Vote2Data},
-    traits::{block_contents::BlockHeader, signature_key::SignatureKey},
+    traits::{ValidatedState, block_contents::BlockHeader, signature_key::SignatureKey},
     utils::is_epoch_root,
     vote::HasViewNumber,
 };
