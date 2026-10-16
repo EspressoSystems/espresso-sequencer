@@ -419,13 +419,16 @@ just bench aws run --fleet --prover   # the fleet's ctl needs 12288 MiB, e.g. up
   small). A `ctl` below 12288 MiB is refused by `plan`, `run` and `run --fleet`; a fleet from before the image is
   refused unless `--tag` pulls the images.
 - Stake table capacity 200 in genesis (`stake_table_capacity`, `[stake_table] capacity`) and in
-  `ESPRESSO_STAKE_TABLE_CAPACITY` of the relay, `deploy` and the prover. Without `--prover` it is `max(10, nodes)`.
+  `ESPRESSO_STAKE_TABLE_CAPACITY` of `ctl.env` (relay, `deploy`, prover). Without `--prover` genesis uses
+  `max(10, nodes)` and `ctl.env` keeps the `ESPRESSO_STAKE_TABLE_CAPACITY` of `.env`.
 - `prover.sh` runs as unit `bench-prover` on `ctl` once the nodes have started and the load never waits for it. Steps:
   `node0-up` (node0 answers `block-height`), `lc-deployed` (container `deploy-lc`:
   `deploy --deploy-light-client-v1 --upgrade-light-client-v2 --upgrade-light-client-v3`), `lc-address-ok` (code at
   `ESPRESSO_LIGHT_CLIENT_PROXY_ADDRESS` of `.env`), `prover-started`.
-- Output: `hosts/ctl/prover.log` (`<epoch s> <step>`, or `<epoch s> failed <step>`) and the `light-client prover:` line
-  of `summary.md` with the last step. A failed step does not fail the run.
+- Output: `hosts/ctl/prover.log` (`<epoch s> <step>`, or `<epoch s> failed <step>`), `hosts/ctl/prover-state.json`
+  (written at freeze: `state-prover` container status, exit code, `finalizedState().blockHeight` of the light client
+  from anvil) and the `light-client prover:` line of `summary.md`: the last step, or once started `running, LC height N`
+  / `exited N at prover-started, LC height N`. A failed step does not fail the run.
 - Nodes find the light client through `StakeTableV3.lightClient()`; no node environment changes.
 - The prover container has 4 CPUs (`RAYON_NUM_THREADS=4`) and shares `ctl` with the orchestrator, the relay and the load
   driver. The config hash includes `--prover`.

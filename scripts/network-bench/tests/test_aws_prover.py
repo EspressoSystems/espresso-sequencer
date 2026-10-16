@@ -311,3 +311,101 @@ def test_the_prover_log_reaches_the_evidence_and_the_deployment_meta(tmp_path: P
     (ctl / "prover.log").write_text("1 node0-up\n2 failed lc-deployed\n")
     _, evidence = awsb.load_evidence(tmp_path, manifest, 0.0, 1.0)
     assert evidence["prover"] == "failed lc-deployed"
+
+
+def test_freeze_records_the_prover_state_before_stopping_the_containers(
+    isolated: Path,
+):
+    runner = Scripted({})
+    awsb.freeze(remote(runner, isolated), lc_address=LC_ADDRESS)
+    ctl = next(c[-1] for c in runner.calls if c[0] == "ssh" and "anvil" in c[-1])
+    assert ctl.index("prover-state.json") < ctl.index("docker stop")
+    assert "docker inspect" in ctl
+    assert "0x9fdb54a7" in ctl
+    assert LC_ADDRESS in ctl
+    runner = Scripted({})
+    awsb.freeze(remote(runner, isolated))
+    assert not any("prover-state.json" in c[-1] for c in runner.calls)
+
+
+@pytest.mark.parametrize(
+    ("log", "state", "text"),
+    [
+        ("1 node0-up\n", None, "node0-up"),
+        ("1 node0-up\n2 failed lc-deployed\n", None, "failed lc-deployed"),
+        ("1 prover-started\n", None, "prover-started"),
+        (
+            "1 prover-started\n",
+            {"status": "running", "exit_code": 0, "lc_height": 25},
+            "running, LC height 25",
+        ),
+        (
+            "1 prover-started\n",
+            {"status": "exited", "exit_code": 137, "lc_height": 0},
+            "exited 137 at prover-started, LC height 0",
+        ),
+        (
+            "1 prover-started\n",
+            {"status": "running", "exit_code": 0, "lc_height": None},
+            "running, LC height unavailable",
+        ),
+        (
+            "1 node0-up\n2 failed lc-deployed\n",
+            {"status": "created", "exit_code": 0, "lc_height": None},
+            "failed lc-deployed",
+        ),
+    ],
+)
+def test_prover_summary(log, state, text):
+    assert awsb.prover_summary(log, state) == text
+
+
+def test_the_prover_state_file_reaches_the_evidence(tmp_path: Path):
+    manifest = aws_manifest()
+    manifest["config"]["prover"] = True
+    ctl = tmp_path / "hosts/ctl"
+    ctl.mkdir(parents=True)
+    (ctl / "prover.log").write_text("1 prover-started\n")
+    (ctl / "prover-state.json").write_text(
+        '{"status": "running", "exit_code": 0, "lc_height": 7}'
+    )
+    _, evidence = awsb.load_evidence(tmp_path, manifest, 0.0, 1.0)
+    assert evidence["prover"] == "running, LC height 7"
+
+
+def test_the_fleet_prover_refusal_names_up_ctl_type():
+    with pytest.raises(awsb.Refused, match="up --ctl-type c8g.2xlarge"):
+        awsb.check_prover_ctl(awsb.PROVER_MIN_MIB - 1, fleet=True)
+    with pytest.raises(awsb.Refused, match="pass --ctl-type") as plain:
+        awsb.check_prover_ctl(awsb.PROVER_MIN_MIB - 1)
+    assert "up --ctl-type" not in str(plain.value)
+
+
+def test_staking_is_stored_explicitly_in_the_manifest_config():
+    on = awsb.config_to_json(small_cfg(epoch_height=300))
+    off = awsb.config_to_json(small_cfg())
+    assert (on["staking"], off["staking"]) == (True, False)
+    assert awsb.config_from_manifest(on).epoch_height == 300
+
+
+def test_an_epoch_height_run_without_staking_is_not_labelled_staked(
+    isolated: Path, monkeypatch: pytest.MonkeyPatch
+):
+    harness = FleetHarness(monkeypatch, isolated)
+    runner = harness.up_fleet()
+    assert harness.run(runner, "--epoch-height", "3000") == awsb.EXIT_OK
+    run = netbench.read_json(harness.fleet_dir / "runs/01-colocated/manifest.json")
+    evidence: Any = {"clock_offset_ms": {}}
+    assert awsb.deployment_meta(run, evidence)["staking"] is True
+    del run["config"]["staking"]
+    meta = awsb.deployment_meta(run, evidence)
+    assert "staking" not in meta
+    assert meta["epoch_height"] == 3000
+
+
+def test_the_prover_summary_says_the_load_driver_shares_ctl():
+    cfg = small_cfg(epoch_height=300, prover=True)
+    assert any(
+        "load driver shares ctl" in line and "4 vCPUs" in line
+        for line in awsb.format_node_summary(cfg)
+    )

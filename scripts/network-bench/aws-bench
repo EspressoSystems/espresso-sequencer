@@ -373,6 +373,10 @@ SHIPPED_HOST_FILES = (
 # step reached, or `<epoch s> failed <step>`.
 PROVER_STEPS = ("node0-up", "lc-deployed", "lc-address-ok", "prover-started")
 PROVER_LOG = f"{BENCH_DIR}/prover.log"
+# Written at freeze, see `prover_state_script`.
+PROVER_STATE = f"{BENCH_DIR}/prover-state.json"
+# `finalizedState()` of the light client contract.
+FINALIZED_STATE_SELECTOR = "0x9fdb54a7"
 PROVER_CPUS = 4
 # The proof circuit and its SRS need this much; below it the prover is killed by the OOM killer.
 PROVER_MIN_MIB = 12288
@@ -536,8 +540,9 @@ GATE_TIMEOUT_S = 120.0
 # Contract deployment: 7 deploy steps at anvil's 1 s block time, with margin.
 DEPLOY_TIMEOUT_S = 300
 # `stake-for-demo` registers and delegates every node on anvil, then the L1 finalized block
-# has to reach the head (~32 blocks of 1 s) before the nodes read the stake table.
-STAKE_EXPECTED_S = 90.0
+# has to reach the head (anvil's finalized block is latest - 64, at 1 s per block) before the
+# nodes read the stake table.
+STAKE_EXPECTED_S = 120.0
 STAKE_TIMEOUT_S = 600
 L1_FINALIZED_TIMEOUT_S = 300.0
 # systemd-run returns before python writes its first agent-state.json.
@@ -982,7 +987,7 @@ class Evidence(TypedDict):
     # rds runs: each `cloudwatch/rds.json` metric's minimum over the load window, None without
     # a datapoint; empty when the file was not collected.
     rds_min: NotRequired[dict[str, float | None]]
-    # `--prover` runs: the last step of ctl's prover.log, see `prover_reached`.
+    # `--prover` runs: the prover's outcome, see `prover_summary`.
     prover: NotRequired[str]
 
 
@@ -1715,7 +1720,8 @@ def format_node_summary(cfg: RunConfig) -> list[str]:
             [
                 (
                     "prover: light client on ctl, stake table capacity "
-                    f"{stake_table_capacity(cfg)}, update every {PROVER_UPDATE_INTERVAL}"
+                    f"{stake_table_capacity(cfg)}, update every {PROVER_UPDATE_INTERVAL}; "
+                    f"the load driver shares ctl with the prover ({PROVER_CPUS} vCPUs)"
                 )
             ]
             if cfg.prover
@@ -1822,6 +1828,7 @@ def append_event(directory: Path, phase: str, event: str, detail: str | None) ->
 def config_to_json(cfg: RunConfig) -> dict[str, Any]:
     data = dataclasses.asdict(cfg)
     data["fleet"] = None if cfg.fleet is None else str(cfg.fleet)
+    data["staking"] = staking(cfg)
     return data
 
 
@@ -2871,6 +2878,39 @@ def prover_reached(log: str) -> str:
     """The last step of PROVER_LOG, `failed <step>` if it failed there."""
     lines = log.splitlines()
     return lines[-1].partition(" ")[2] if lines else "not started"
+
+
+def prover_summary(log: str, state: dict[str, Any] | None) -> str:
+    """`prover_reached`, and once the prover started, its container state and the light client
+    height that `prover_state_script` recorded at freeze."""
+    reached = prover_reached(log)
+    if reached != "prover-started" or state is None:
+        return reached
+    height = state["lc_height"]
+    tail = f"LC height {'unavailable' if height is None else height}"
+    if state["status"] == "running":
+        return f"running, {tail}"
+    return f"{state['status']} {state['exit_code']} at {reached}, {tail}"
+
+
+def prover_state_script(lc_address: str) -> str:
+    """Writes PROVER_STATE: the state-prover container's status and exit code, and
+    `finalizedState().blockHeight` of the light client on local anvil (null if the call
+    fails). Must run before the containers are stopped."""
+    call = rpc_curl(
+        "eth_call", [{"to": lc_address, "data": FINALIZED_STATE_SELECTOR}, "latest"]
+    )
+    return (
+        "if state=$(docker inspect -f '{{.State.Status}} {{.State.ExitCode}}' state-prover); then\n"
+        'read -r status code <<< "$state"\n'
+        f"result=$({call} | jq -r .result) || result=\n"
+        "height=null\n"
+        # 0x, then three 32-byte words: viewNum, blockHeight, blockCommRoot.
+        '[ "${#result}" = 194 ] && height=$((16#${result:66:64}))\n'
+        'jq -n --arg status "$status" --argjson code "$code" --argjson height "$height" '
+        f"'{{status: $status, exit_code: $code, lc_height: $height}}' > {PROVER_STATE}\n"
+        "fi\n"
+    )
 
 
 def node_create_argv(
@@ -4339,7 +4379,15 @@ def finish_run(run: Run, cloudwatch: bool) -> None:
         log.info("collecting: stop, freeze, logs, host samples, final rsync")
         actions: dict[CollectStep, tuple[str, Callable[[], object]]] = {
             "stop_agent": ("stop agent", lambda: stop_agent(remote)),
-            "freeze": ("freeze", lambda: freeze(remote)),
+            "freeze": (
+                "freeze",
+                lambda: freeze(
+                    remote,
+                    dotenv()["ESPRESSO_LIGHT_CLIENT_PROXY_ADDRESS"]
+                    if run.cfg.prover
+                    else None,
+                ),
+            ),
             "collect_hosts": (
                 "collect",
                 lambda: collect_hosts(
@@ -4896,15 +4944,21 @@ def fleet_run_config(args: argparse.Namespace, saved: FleetManifest) -> RunConfi
     check_fleet_disks(saved, cfg)
     check_fleet_images(saved, cfg)
     if cfg.prover:
-        check_prover_ctl(saved["memory_mib"][cfg.ctl_type])
+        check_prover_ctl(saved["memory_mib"][cfg.ctl_type], fleet=True)
     return cfg
 
 
-def check_prover_ctl(memory_mib: int) -> None:
+def check_prover_ctl(memory_mib: int, fleet: bool = False) -> None:
     if memory_mib < PROVER_MIN_MIB:
+        # `run --fleet` refuses --ctl-type: the fleet's ctl is fixed at `up`.
+        fix = (
+            f"bring the fleet up with `up --ctl-type {CTL_TYPE}`"
+            if fleet
+            else "pass --ctl-type"
+        )
         raise Refused(
             f"--prover needs a ctl with at least {PROVER_MIN_MIB} MiB, this one has "
-            f"{memory_mib}: pass --ctl-type"
+            f"{memory_mib}: {fix}"
         )
 
 
@@ -6129,12 +6183,16 @@ def gate(
         interrupts.sleep(GATE_RETRY_S)
 
 
-def rpc_check(method: str, params: list[str], jq_filter: str) -> str:
+def rpc_curl(method: str, params: list[Any]) -> str:
     body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": method, "params": params})
     return (
         f"curl -sf -X POST -H 'Content-Type: application/json' --data {shlex.quote(body)} "
-        f"http://localhost:{env_port('ESPRESSO_L1_PORT')} | jq -e {shlex.quote(jq_filter)}"
+        f"http://localhost:{env_port('ESPRESSO_L1_PORT')}"
     )
+
+
+def rpc_check(method: str, params: list[Any], jq_filter: str) -> str:
+    return f"{rpc_curl(method, params)} | jq -e {shlex.quote(jq_filter)}"
 
 
 class GateStart(TypedDict):
@@ -6878,13 +6936,18 @@ def freeze_command(names: tuple[str, ...]) -> str:
     )
 
 
-def freeze(remote: Remote) -> None:
+def freeze(remote: Remote, lc_address: str | None = None) -> None:
+    """Stops the containers; with the light client's `lc_address` (`--prover`), ctl first
+    records the prover state."""
+
     def stop(host: str) -> None:
         role = remote.hosts[host]["role"]
         command = freeze_command(FREEZE_CONTAINERS[role])
         if role == "ctl":
-            # Before the containers: a running prover.sh would start the prover again.
-            command = f"{STOP_PROVER}\n{command}"
+            # Before the containers: a running prover.sh would start the prover again, and
+            # the prover state needs the running prover and anvil.
+            state = prover_state_script(lc_address) if lc_address else ""
+            command = f"{STOP_PROVER}\n{state}{command}"
         remote.ssh(host, bounded(command))
 
     remote.parallel(stop, remote.hosts)
@@ -7596,6 +7659,7 @@ def config_from_manifest(saved: dict[str, Any]) -> RunConfig:
     # Dirs from before the flag have no such key.
     if "node_env" in saved:
         fields["node_env"] = tuple(saved["node_env"])
+    fields.pop("staking", None)  # derived from epoch_height
     fields.setdefault("region", LEGACY_REGION)
     fields.setdefault("consensus_storage", LEGACY_CONSENSUS_STORAGE)
     fields["search"] = search_config(saved.get("search"))
@@ -8539,9 +8603,11 @@ def load_evidence(
         metrics = run_dir / RDS_CLOUDWATCH_FILE
         evidence["rds_min"] = metric_min(metrics, t0, t1) if metrics.exists() else {}
     if manifest["config"].get("prover"):
-        log_path = run_dir / "hosts" / "ctl" / "prover.log"
-        evidence["prover"] = prover_reached(
-            log_path.read_text() if log_path.exists() else ""
+        ctl_dir = run_dir / "hosts" / "ctl"
+        log_path, state_path = ctl_dir / "prover.log", ctl_dir / "prover-state.json"
+        evidence["prover"] = prover_summary(
+            log_path.read_text() if log_path.exists() else "",
+            nb.read_json(state_path) if state_path.exists() else None,
         )
     for spec in manifest["hosts"]:
         name = spec["name"]
@@ -8626,10 +8692,11 @@ def deployment_meta(manifest: Manifest, evidence: Evidence) -> nb.DeploymentMeta
         **({"prune": f"{config['prune']} s"} if config.get("prune") else {}),
         # Manifests from before epochs have no such key; a null one is the template's.
         **(
-            {"epoch_height": config["epoch_height"], "staking": True}
+            {"epoch_height": config["epoch_height"]}
             if config.get("epoch_height")
             else {}
         ),
+        **({"staking": True} if config.get("staking") else {}),
         **({"prover": evidence["prover"]} if "prover" in evidence else {}),
     }
 
