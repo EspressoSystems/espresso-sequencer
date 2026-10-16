@@ -1634,26 +1634,26 @@ pub(crate) mod tests {
 
     #[test]
     fn light_client_db_defaults_under_storage_path() {
-        fn lc_path(args: &[&str]) -> Option<PathBuf> {
-            api::options::Query::try_parse_from(args)
-                .unwrap()
-                .light_client_db()
-                .lc_path
+        fn lc_path(storage_path: Option<&str>, lc_path: Option<&str>) -> Option<PathBuf> {
+            let query = api::options::Query {
+                storage_path: storage_path.map(PathBuf::from),
+                light_client_db: LightClientSqliteOptions {
+                    lc_path: lc_path.map(PathBuf::from),
+                    ..Default::default()
+                },
+                ..Default::default()
+            };
+            query.light_client_db().lc_path
         }
         assert_eq!(
-            lc_path(&["query", "--storage-path", "/store/espresso"]),
+            lc_path(Some("/store/espresso"), None),
             Some(PathBuf::from("/store/espresso/light-client/lc.db"))
         );
         assert_eq!(
-            lc_path(&[
-                "query",
-                "--storage-path",
-                "/store/espresso",
-                "--light-client-db-path",
-                "/store/lc",
-            ]),
+            lc_path(Some("/store/espresso"), Some("/store/lc")),
             Some(PathBuf::from("/store/lc"))
         );
+        assert_eq!(lc_path(None, None), None);
     }
 
     // Document the JSON shape of GET /config/runtime. Runs under Postgres builds only;
