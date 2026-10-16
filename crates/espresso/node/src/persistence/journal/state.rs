@@ -53,6 +53,8 @@ pub struct State {
     /// Set only on a query node. Recovery replays nothing older than the newest wal segment, so
     /// the query service's backlog has to live here to survive a restart.
     pub replay: Option<Replay>,
+    /// Newest leaf lane lsn applied to this state; recovery replays the leaf lane after it.
+    pub leaf_lsn: u64,
 }
 
 /// Decided data a query node has not yet replayed into its query service.
@@ -177,6 +179,11 @@ impl Kind {
     /// Passed to `lane::recover` for the consensus journal lanes.
     pub fn is_known(b: u8) -> bool {
         Self::from_u8(b).is_some()
+    }
+
+    /// Decided history: kept longer than the rest of the wal's state and read back by view.
+    pub fn on_leaf_lane(self) -> bool {
+        matches!(self, Self::Leaf | Self::Cert2 | Self::StateCert)
     }
 }
 
@@ -654,6 +661,36 @@ mod tests {
 
         assert_eq!(finalized.unwrap().cert.light_client_state.view_number, 4);
         assert_eq!(s.anchor.unwrap().0.view_number(), ViewNumber::new(10));
+    }
+
+    /// The wal's `Processed` and the leaf lane's `Leaf` reach recovery in either order.
+    #[tokio::test]
+    async fn processed_and_leaf_apply_in_either_order() {
+        let (leaf3, qc3) = leaf_and_qc(3).await;
+        let leaf = Record::Leaf {
+            leaf: leaf3,
+            qc: qc3,
+            next_epoch_qc: None,
+        };
+        let processed = Record::Processed {
+            view: ViewNumber::new(3),
+            height: 0,
+        };
+        let replayed = |records: [&Record; 2]| {
+            let mut s = State {
+                replay: Some(Replay::default()),
+                ..State::default()
+            };
+            records.iter().for_each(|rec| {
+                s.apply(rec);
+            });
+            let replay = s.replay.unwrap();
+            (replay.cursor, replay.leaves.len(), replay.cert2.len())
+        };
+
+        let expected = (Some((ViewNumber::new(3), 0)), 0, 0);
+        assert_eq!(replayed([&leaf, &processed]), expected);
+        assert_eq!(replayed([&processed, &leaf]), expected);
     }
 
     #[test]
