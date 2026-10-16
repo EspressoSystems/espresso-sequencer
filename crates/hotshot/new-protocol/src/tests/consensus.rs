@@ -12,13 +12,7 @@ use hotshot_types::{
     message::Proposal as SignedProposal,
     simple_certificate::{LightClientStateUpdateCertificateV2, TimeoutEvidence},
     simple_vote::{HasEpoch, QuorumData2, SimpleVote, TimeoutData2, TimeoutData3, Vote2Data},
-<<<<<<< HEAD
-    traits::signature_key::SignatureKey,
-||||||| parent of c5a379754 (fix(new-protocol): reconstruct a certified block without our own share (#5278))
-    traits::{ValidatedState, signature_key::SignatureKey},
-=======
-    traits::{ValidatedState, block_contents::BlockHeader, signature_key::SignatureKey},
->>>>>>> c5a379754 (fix(new-protocol): reconstruct a certified block without our own share (#5278))
+    traits::{block_contents::BlockHeader, signature_key::SignatureKey},
     utils::is_epoch_root,
     vote::HasViewNumber,
 };
