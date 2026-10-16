@@ -3,7 +3,7 @@
 # requires-python = ">=3.14"
 # dependencies = ["matplotlib", "numpy"]
 # ///
-"""Plots a run into `<run_dir>/throughput.png`, three to five panels over the same time axis:
+"""Plots a run into `<run_dir>/throughput.png`, three to seven panels over the same time axis:
 
 - decided MB/s (consensus counters) against the MB/s the query node makes transactions available
   (`t_included` of `load.jsonl`), with the submitted rate as reference, and a tick per view
@@ -17,6 +17,10 @@
 - only with a non-empty `clients.jsonl`: p50 of how long after a validator showed a range's last
   block the light-client readers held it over the last SMOOTH_S (left, log scale) and the MB/s
   they fetched (right).
+- only with host samples (`hosts/*/host.jsonl`, roles from `manifest.json`): disk write MB/s and,
+  when the samples hold `fs`, used GB of the root and `/data/pg` filesystems. Each is the mean over
+  the hosts of a role, per DISK_BIN_S bin, one line for the query and one for the validator hosts.
+  The RAM of `--query-db tmpfs` is in neither panel.
 
 A run with `chaos.jsonl` (also an empty one, `--chaos-kinds none`) gets a view timeout floor panel
 at the bottom: view timeouts per FLOOR_BIN_S, then the `stub`, `no-propose` and `no-vote1` node
@@ -65,6 +69,10 @@ PHASES = (("down", "#6b4fa0"), ("recovering", "#e8a317"), ("catching up", "#2a9d
 PHASE_COLOR = dict(PHASES)
 EVENT_MARKERS = {"fault": "o", "started": "^", "rejoined": "s", "caught_up": "D"}
 FAULT_SPAN = "#e8a317"
+DISK_BIN_S = 10
+# The skip rule of aws-bench's DISK_SKIP: partitions and device mapper double count their parent.
+DISK_SKIP = re.compile(r"^(loop|ram|dm-)|p\d+$|^(sd|vd|xvd)[a-z]+\d+$")
+ROLE_COLORS = {"query": QUERY, "validator": DECIDED}
 SIZE_UNITS = {"": 1, "b": 1, "kb": 1e3, "mb": 1e6, "gb": 1e9}
 SIZE_UNITS |= {"kib": 2**10, "mib": 2**20, "gib": 2**30}
 
@@ -94,6 +102,94 @@ def binned_mb_s(
     return binned_bytes_mb_s(
         np.asarray(times), np.full(len(times), tx_size), t0, t1, bin_s
     )
+
+
+def disk_write_mb_s(samples: list[dict]) -> tuple[np.ndarray, np.ndarray]:
+    """Write MB/s between consecutive host samples, at the later sample's time, from the
+    `write_bytes` counters of the devices DISK_SKIP keeps. Intervals where the counter fell are
+    left out."""
+    ts = np.array([s["ts"] for s in samples])
+    written = np.array(
+        [
+            sum(
+                c["write_bytes"]
+                for dev, c in s["disk"].items()
+                if not DISK_SKIP.search(dev)
+            )
+            for s in samples
+        ]
+    )
+    rate = np.diff(written) / np.diff(ts) / 1e6
+    keep = rate >= 0
+    return ts[1:][keep], rate[keep]
+
+
+def fs_used_gb(samples: list[dict]) -> tuple[np.ndarray, np.ndarray]:
+    """Used GB summed over the filesystems of each host sample."""
+    return (
+        np.array([s["ts"] for s in samples]),
+        np.array([sum(s["fs"].values()) for s in samples]) / 1e9,
+    )
+
+
+def role_means(
+    series: dict[str, tuple[np.ndarray, np.ndarray]],
+    roles: dict[str, str],
+    t0: float,
+    t1: float,
+) -> tuple[np.ndarray, dict[str, np.ndarray]]:
+    """Bin centers and per role the mean over its hosts of each host's mean in a DISK_BIN_S bin;
+    NaN where no host has a sample in the bin."""
+    starts, _ = bin_counts(np.array([]), np.array([]), t0, t1, DISK_BIN_S)
+    per_host: dict[str, list[np.ndarray]] = {}
+    for host, (at, values) in series.items():
+        _, total = bin_counts(at, values, t0, t1, DISK_BIN_S)
+        _, count = bin_counts(at, np.ones(len(at)), t0, t1, DISK_BIN_S)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            per_host.setdefault(roles[host], []).append(
+                np.where(count > 0, total / count, np.nan)
+            )
+    means = {}
+    for role, hosts in per_host.items():
+        stack = np.array(hosts)
+        n = (~np.isnan(stack)).sum(axis=0)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            means[role] = np.where(n > 0, np.nansum(stack, axis=0) / n, np.nan)
+    return starts + DISK_BIN_S / 2, means
+
+
+def disk_panels_series(
+    samples: dict[str, list[dict]],
+) -> dict[str, dict[str, tuple[np.ndarray, np.ndarray]]]:
+    """Panel label to per-host series; a panel without any host to draw it from is left out
+    (`fs` is absent from the samples of older runs)."""
+    panels = {
+        "disk write MB/s": {
+            h: disk_write_mb_s(v) for h, v in samples.items() if len(v) > 1
+        },
+        "disk used GB": {
+            h: fs_used_gb(v) for h, v in samples.items() if v and "fs" in v[0]
+        },
+    }
+    return {label: series for label, series in panels.items() if series}
+
+
+def read_host_samples(run_dir: Path) -> tuple[dict[str, list[dict]], dict[str, str]]:
+    """Host samples and role of every non-ctl host of the manifest that has samples."""
+    manifest_path = run_dir / "manifest.json"
+    if not manifest_path.exists():
+        return {}, {}
+    roles = {
+        h["name"]: h["role"]
+        for h in json.loads(manifest_path.read_text())["hosts"]
+        if h["role"] != "ctl"
+    }
+    samples = {
+        name: read_jsonl(path)
+        for name in roles
+        if (path := run_dir / "hosts" / name / "host.jsonl").exists()
+    }
+    return samples, {name: roles[name] for name in samples}
 
 
 def moving_mean(y: np.ndarray, w: int = SMOOTH_S) -> np.ndarray:
@@ -421,26 +517,36 @@ def main(argv: list[str] | None = None) -> None:
     lane_count = len({r.node for r in rows})
     lane_ratio = (max(1.0, 0.3 * lane_count),) if rows else ()
     client_ratio = (1,) if clients else ()
+    host_samples, host_roles = read_host_samples(run_dir)
+    disk_series = disk_panels_series(host_samples)
     floor_ratio = (0.6, 0.8, 0.8, 0.8) if (run_dir / "chaos.jsonl").exists() else ()
     fig, panels = plt.subplots(
-        len(lane_ratio) + 3 + len(client_ratio) + len(floor_ratio),
+        len(lane_ratio) + 3 + len(client_ratio) + len(disk_series) + len(floor_ratio),
         1,
         figsize=(
             13,
             3.3 * (3 + len(client_ratio))
+            + 2.2 * len(disk_series)
             + 0.4 * lane_count
             + 1.6 * sum(floor_ratio) ** 0.5 * bool(floor_ratio),
         ),
         sharex=True,
-        height_ratios=(*lane_ratio, 2, 1, 1, *client_ratio, *floor_ratio),
+        height_ratios=(
+            *lane_ratio,
+            2,
+            1,
+            1,
+            *client_ratio,
+            *(1,) * len(disk_series),
+            *floor_ratio,
+        ),
         facecolor=SURFACE,
     )
     lane_panel = panels[: len(lane_ratio)]
     floor_panels = panels[len(panels) - len(floor_ratio) :]
-    ax, blk_ax, lat_ax, *client_panel = panels[
-        len(lane_ratio) : len(panels) - len(floor_ratio)
-    ]
-    data_panels = (ax, blk_ax, lat_ax, *client_panel, *floor_panels)
+    ax, blk_ax, lat_ax, *rest = panels[len(lane_ratio) : len(panels) - len(floor_ratio)]
+    client_panel, disk_panels = rest[: len(client_ratio)], rest[len(client_ratio) :]
+    data_panels = (ax, blk_ax, lat_ax, *client_panel, *disk_panels, *floor_panels)
     for panel in panels:
         panel.set_facecolor(SURFACE)
         panel.tick_params(colors=INK)
@@ -608,6 +714,8 @@ def main(argv: list[str] | None = None) -> None:
         fetch_ax.set_ylabel("MB/s", color=QUERY)
         fetch_ax.tick_params(colors=INK)
         twin_legend(cli_ax, fetch_ax)
+    for disk_ax, (label, series) in zip(disk_panels, disk_series.items()):
+        draw_roles(disk_ax, label, series, host_roles, t0, t1, minutes)
     if len(floor_panels):
         manifest_path = run_dir / "manifest.json"
         manifest = (
@@ -623,6 +731,32 @@ def main(argv: list[str] | None = None) -> None:
     fig.suptitle(f"{run.parent.parent.name}/{run.name}", color=INK)
     fig.tight_layout()
     fig.savefig(run_dir / "throughput.png", dpi=130, facecolor=SURFACE)
+
+
+def draw_roles(
+    ax: plt.Axes,
+    label: str,
+    series: dict[str, tuple[np.ndarray, np.ndarray]],
+    roles: dict[str, str],
+    t0: float,
+    t1: float,
+    minutes,
+) -> None:
+    """One line per host role: the mean over its hosts."""
+    centers, means = role_means(series, roles, t0, t1)
+    for role, mean in means.items():
+        ax.plot(minutes(centers), mean, color=ROLE_COLORS[role], lw=1.5, label=role)
+    ax.set_ylim(bottom=0)
+    ax.set_ylabel(label, color=INK, fontsize=8)
+    ax.spines[["top", "right"]].set_visible(False)
+    ax.legend(
+        loc="lower left",
+        bbox_to_anchor=(0, 1),
+        ncol=2,
+        fontsize=8,
+        frameon=False,
+        labelcolor=INK,
+    )
 
 
 def twin_legend(left: plt.Axes, right: plt.Axes) -> None:

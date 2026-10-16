@@ -414,6 +414,8 @@ class DeploymentMeta(TypedDict):
     max_block_size: NotRequired[str]
     # `--prune` retention of the query node's data and state; absent without pruning.
     prune: NotRequired[str]
+    # `--prune-shares` retention of the VID shares; absent without it.
+    prune_shares: NotRequired[str]
     # `--epoch-height` and whether every node was staked on L1 for it; absent for the template's.
     epoch_height: NotRequired[int]
     staking: NotRequired[bool]
@@ -3597,14 +3599,20 @@ def deployment_lines(result: BenchResult) -> list[str]:
 def prune_lines(result: BenchResult) -> list[str]:
     """The pruner's retention and how far it had pruned by the window end."""
     d = result["deployment"]
+    lines = []
+    if "prune_shares" in d:
+        lines.append(f"- prune shares: VID shares older than {d['prune_shares']}")
     if "prune" not in d:
-        return []
+        return lines
     heights = ", ".join(
         f"{node} data {s['pruned_data_height_end']}, state {s['pruned_state_height_end']}"
         for node, s in result["nodes"].items()
         if "pruned_data_height_end" in s
     )
-    return [f"- prune: retention {d['prune']}; pruned to height: {heights or 'n/a'}"]
+    return [
+        f"- prune: retention {d['prune']}; pruned to height: {heights or 'n/a'}",
+        *lines,
+    ]
 
 
 def query_db_line(q: QueryDbMeta) -> str:

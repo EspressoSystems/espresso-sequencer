@@ -8,6 +8,7 @@ import threading
 from collections.abc import Callable, Iterator
 from datetime import UTC, datetime
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import netbench
@@ -621,7 +622,7 @@ def test_query_db_line_omits_tls_for_sqlite() -> None:
     ],
 )
 def test_query_store_combinations(engine: str, placement: str, ok: bool) -> None:
-    env = ["ESPRESSO_QUERY_PAYLOAD_DIR=/payload"]
+    env = ["ESPRESSO_NODE_BLOB_DIR=/payload"]
     if ok:
         awsb.check_query_store(engine, placement, env)
     else:
@@ -645,9 +646,13 @@ def test_sqlite_on_a_volume_reports_the_volume_store() -> None:
 
 
 def test_tmpfs_needs_the_payload_dir_outside_sqlite() -> None:
-    with pytest.raises(awsb.Refused, match="ESPRESSO_QUERY_PAYLOAD_DIR"):
+    with pytest.raises(awsb.Refused, match="ESPRESSO_NODE_BLOB_DIR"):
         awsb.check_query_store("sqlite", "tmpfs", ["RUST_LOG=debug"])
     awsb.check_query_store("sqlite", "colocated", [])
+
+
+def test_tmpfs_accepts_prune_shares_as_the_blob_dir() -> None:
+    awsb.check_query_store("sqlite", "tmpfs", [], prune_shares=300)
 
 
 def test_a_run_dir_with_the_legacy_sqlite_query_db_reads_as_sqlite_colocated(
@@ -704,6 +709,14 @@ def test_host_sample_stats_rates_and_coverage() -> None:
     assert coverage == pytest.approx(1.0)
     _, half = awsb.host_sample_stats(samples[:2], 100.0, 108.0)
     assert half == pytest.approx(0.5)
+
+
+def test_fs_used_bytes_and_usage_keep_mount_points_only(monkeypatch) -> None:
+    st = SimpleNamespace(f_blocks=1000, f_bfree=250, f_frsize=4096)
+    assert awsb.fs_used_bytes(st) == 750 * 4096
+    monkeypatch.setattr(awsb.os, "statvfs", lambda path: st)
+    monkeypatch.setattr(awsb.os.path, "ismount", lambda path: path == "/")
+    assert awsb.fs_usage(("/", "/data/pg")) == {"/": 750 * 4096}
 
 
 def test_sweep_terminates_then_deletes_group_and_key() -> None:

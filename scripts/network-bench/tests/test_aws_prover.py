@@ -137,6 +137,19 @@ def test_a_fleet_run_takes_the_prover_flag(
     assert "prover" not in awsb.deployment_meta(run, evidence)
 
 
+def test_a_fleet_run_records_prune_shares_in_the_deployment_meta(
+    isolated: Path, monkeypatch: pytest.MonkeyPatch
+):
+    harness = FleetHarness(monkeypatch, isolated)
+    runner = harness.up_fleet()
+    flags = ("--prune-shares", "10m")
+    assert harness.run(runner, *flags) == awsb.EXIT_OK
+    run = netbench.read_json(harness.fleet_dir / "runs/01-colocated/manifest.json")
+    assert run["config"]["prune_shares"] == 600
+    evidence: Any = {"clock_offset_ms": {}}
+    assert awsb.deployment_meta(run, evidence)["prune_shares"] == "600 s"
+
+
 def test_a_fleet_without_the_prover_image_refuses_the_prover(
     isolated: Path, monkeypatch: pytest.MonkeyPatch
 ):

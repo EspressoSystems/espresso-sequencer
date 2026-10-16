@@ -7,6 +7,7 @@ from fakes import load_script
 from test_chaos import CHAOS_EVENTS
 
 plot = load_script("throughput-plot")
+awsb = load_script("aws-bench")
 
 TX_SIZE = 1_000_000
 
@@ -267,3 +268,84 @@ def test_binned_by_group_counts_one_label_name_per_group():
     starts, counts = plot.binned_by_group(events, groups, "no-propose", 0.0, 20.0)
     assert list(starts) == [0.0, 10.0]
     assert {g: list(c) for g, c in counts.items()} == {"a": [1, 0], "b": [1, 1]}
+
+
+def host_tick(ts: float, written: int, used: int | None) -> dict:
+    io = {"read_bytes": 0, "write_bytes": written}
+    tick = {"ts": ts, "disk": {"nvme0n1": io, "nvme0n1p1": io, "loop0": io}}
+    if used is not None:
+        tick["fs"] = {"/": used, "/data/pg": used}
+    return tick
+
+
+def test_disk_write_rate_skips_partitions_and_counter_resets():
+    samples = [
+        host_tick(0.0, 0, None),
+        host_tick(2.0, 4_000_000, None),
+        host_tick(4.0, 1_000_000, None),
+        host_tick(6.0, 5_000_000, None),
+    ]
+    t, rate = plot.disk_write_mb_s(samples)
+    assert list(t) == [2.0, 6.0]
+    assert list(rate) == [2.0, 2.0]
+
+
+def test_fs_used_gb_sums_the_mounts():
+    t, used = plot.fs_used_gb([host_tick(1.0, 0, 1_000_000_000)])
+    assert list(t) == [1.0] and list(used) == [2.0]
+
+
+def test_role_means_average_hosts_of_a_role_per_bin():
+    series = {
+        "a": (np.array([1.0, 2.0, 12.0]), np.array([2.0, 4.0, 10.0])),
+        "b": (np.array([3.0]), np.array([9.0])),
+        "v": (np.array([15.0]), np.array([7.0])),
+    }
+    roles = {"a": "query", "b": "query", "v": "validator"}
+    centers, means = plot.role_means(series, roles, 0.0, 20.0)
+    assert list(centers) == [5.0, 15.0]
+    assert list(means["query"]) == [6.0, 10.0]
+    assert np.isnan(means["validator"][0]) and means["validator"][1] == 7.0
+
+
+def write_hosts(run_dir: Path, t0: float, fs: bool) -> None:
+    hosts = [
+        {"name": "ctl", "role": "ctl"},
+        {"name": "node0", "role": "query"},
+        {"name": "node1", "role": "validator"},
+    ]
+    (run_dir / "manifest.json").write_text(json.dumps({"hosts": hosts}))
+    for h in hosts:
+        host_dir = run_dir / "hosts" / h["name"]
+        host_dir.mkdir(parents=True, exist_ok=True)
+        ticks = [
+            host_tick(t0 + 2 * i, 1_000_000 * i, 5_000_000_000 + i if fs else None)
+            for i in range(30)
+        ]
+        (host_dir / "host.jsonl").write_text(
+            "".join(json.dumps(t) + "\n" for t in ticks)
+        )
+
+
+def test_disk_skip_matches_aws_bench():
+    assert plot.DISK_SKIP.pattern == awsb.DISK_SKIP.pattern
+
+
+def test_disk_panels_series_keys_and_ctl_excluded(tmp_path: Path):
+    write_hosts(tmp_path, 1000.0, fs=False)
+    samples, roles = plot.read_host_samples(tmp_path)
+    assert set(samples) == {"node0", "node1"}
+    assert roles == {"node0": "query", "node1": "validator"}
+    assert list(plot.disk_panels_series(samples)) == ["disk write MB/s"]
+    write_hosts(tmp_path, 1000.0, fs=True)
+    samples, _ = plot.read_host_samples(tmp_path)
+    assert list(plot.disk_panels_series(samples)) == ["disk write MB/s", "disk used GB"]
+    assert plot.disk_panels_series({}) == {}
+
+
+def test_main_draws_disk_panels(tmp_path: Path):
+    run_dir = tmp_path / "fleet" / "runs" / "01-run"
+    t0 = write_run(run_dir)
+    write_hosts(run_dir, t0, fs=True)
+    plot.main([str(run_dir)])
+    assert (run_dir / "throughput.png").read_bytes().startswith(b"\x89PNG")
