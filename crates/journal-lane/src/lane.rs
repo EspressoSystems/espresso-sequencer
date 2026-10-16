@@ -669,6 +669,9 @@ pub fn frame_locations<F: JournalFs>(
     Ok(read_segment(fs, &segment_path(dir, seq), seq, stream, known_kind, false)?.locations)
 }
 
+/// A scanned record: its frame header and body.
+pub type Frame = (FrameHeader, Vec<u8>);
+
 /// Every record in segment `seq` with its body, and where the scan ended.
 pub fn read_records<F: JournalFs>(
     fs: &F,
@@ -676,7 +679,7 @@ pub fn read_records<F: JournalFs>(
     stream: Stream,
     seq: u64,
     known_kind: fn(u8) -> bool,
-) -> anyhow::Result<(Vec<(FrameHeader, Vec<u8>)>, ScanEnd)> {
+) -> anyhow::Result<(Vec<Frame>, ScanEnd)> {
     let read = read_segment(fs, &segment_path(dir, seq), seq, stream, known_kind, true)?;
     Ok((read.records, read.end))
 }
