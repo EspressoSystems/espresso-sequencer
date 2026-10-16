@@ -1,5 +1,9 @@
 //! Re-creation of a node's lost VID shares from peers' shares.
 
+pub mod serve;
+
+use std::time::Duration;
+
 use hotshot_types::{
     data::{
         EpochNumber, VidCommitment2, VidDisperseShare2, ViewNumber,
@@ -9,6 +13,39 @@ use hotshot_types::{
 };
 
 use crate::vid::{self, VidDisperseError};
+
+/// Tuning of the share healer and of serving shares to peers.
+#[derive(Clone, Debug)]
+pub struct HealConfig {
+    /// How long shares are retained, measured in header time.
+    pub w: Duration,
+    /// Views behind the current one a height must be before it is healed.
+    pub tip_margin: u64,
+    /// Heights whose share would expire within this long are not worth healing.
+    pub min_remaining: Duration,
+    pub scan_interval: Duration,
+    pub heights_inflight: usize,
+    pub req_timeout: Duration,
+    pub serve_inflight: usize,
+    pub max_response_bytes: usize,
+    pub max_fetch_bytes_per_s: Option<u64>,
+}
+
+impl Default for HealConfig {
+    fn default() -> Self {
+        Self {
+            w: Duration::from_secs(7 * 24 * 3600),
+            tip_margin: 100,
+            min_remaining: Duration::from_secs(3600),
+            scan_interval: Duration::from_secs(60),
+            heights_inflight: 1,
+            req_timeout: Duration::from_secs(10),
+            serve_inflight: 4,
+            max_response_bytes: 64 << 20,
+            max_fetch_bytes_per_s: None,
+        }
+    }
+}
 
 #[derive(Debug, thiserror::Error)]
 pub enum HealError {
@@ -56,9 +93,7 @@ pub fn rederive_own_share<T: NodeType>(
 mod tests {
     use hotshot_example_types::node_types::TestTypes;
     use hotshot_types::{
-        data::VidDisperse2,
-        signature_key::BLSPubKey,
-        traits::{BlockPayload, signature_key::SignatureKey},
+        data::VidDisperse2, signature_key::BLSPubKey, traits::signature_key::SignatureKey,
     };
 
     use super::*;
