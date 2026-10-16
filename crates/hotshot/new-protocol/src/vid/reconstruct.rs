@@ -19,7 +19,7 @@ use super::ns_lens_match_metadata;
 
 pub(crate) type Metadata<T> = <<T as NodeType>::BlockPayload as BlockPayload<T>>::Metadata;
 
-type ReconstructResult<T> =
+pub(crate) type ReconstructResult<T> =
     Result<ObtainedPayload<T>, VidReconstructError<<T as NodeType>::SignatureKey>>;
 
 /// A block's payload in hand, with what the node needs to file it.
@@ -79,9 +79,9 @@ pub struct VidReconstructor<T: NodeType> {
 
 pub(crate) struct VidShareAccumulator<T: NodeType> {
     /// The payload commitment claimed by the view's validated proposal.
-    payload_commitment: VidCommitment2,
-    metadata: Metadata<T>,
-    epoch: EpochNumber,
+    pub(crate) payload_commitment: VidCommitment2,
+    pub(crate) metadata: Metadata<T>,
+    pub(crate) epoch: EpochNumber,
     /// The VID erasure parameters the committee fixes for this view, used to
     /// reject shares carrying a forged `common.param` (see [`Self::accept`]).
     /// `None` if the committee could not be resolved; the param check is then
@@ -89,17 +89,17 @@ pub(crate) struct VidShareAccumulator<T: NodeType> {
     expected_param: Option<AvidmGf2Param>,
     /// Common data pinned by the first admitted share; hash-bound to
     /// `payload_commitment` (see [`Self::accept`]).
-    common: Option<AvidmGf2Common>,
+    pub(crate) common: Option<AvidmGf2Common>,
     /// Admitted shares by voter; their shard ranges are pairwise disjoint
     /// (see [`Self::accept`]).
-    shares: BTreeMap<T::SignatureKey, AvidmGf2Share>,
+    pub(crate) shares: BTreeMap<T::SignatureKey, AvidmGf2Share>,
     /// Every voter whose share was admitted, including weeded ones: a voter
     /// whose share failed verification doesn't get a second submission.
     seen_keys: HashSet<T::SignatureKey>,
     /// Set when a fully verified share set failed to decode to a payload
     /// matching the commitment: the disperser is provably faulty and further
     /// attempts are pointless.
-    exhausted: bool,
+    pub(crate) exhausted: bool,
 }
 
 impl<T: NodeType> VidReconstructor<T> {
@@ -312,7 +312,7 @@ impl<T: NodeType> VidReconstructor<T> {
 }
 
 impl<T: NodeType> VidShareAccumulator<T> {
-    fn new(
+    pub(crate) fn new(
         payload_commitment: VidCommitment2,
         metadata: Metadata<T>,
         epoch: EpochNumber,
@@ -334,7 +334,12 @@ impl<T: NodeType> VidShareAccumulator<T> {
     /// any intake check. The non-overlapping path stays crypto-free; a
     /// shard-range overlap is the only case that triggers per-share
     /// verification, via [`Self::resolve_conflict`].
-    fn accept(&mut self, view: ViewNumber, sender: T::SignatureKey, share: VidDisperseShare2<T>) {
+    pub(crate) fn accept(
+        &mut self,
+        view: ViewNumber,
+        sender: T::SignatureKey,
+        share: VidDisperseShare2<T>,
+    ) {
         if self.exhausted {
             return;
         }
@@ -456,11 +461,11 @@ impl<T: NodeType> VidShareAccumulator<T> {
 
     /// Number of shard positions covered by the admitted shares; exact
     /// because their ranges are disjoint.
-    fn coverage(&self) -> usize {
+    pub(crate) fn coverage(&self) -> usize {
         self.ranges().map(ExactSizeIterator::len).sum()
     }
 
-    fn has_enough_shares(&self) -> bool {
+    pub(crate) fn has_enough_shares(&self) -> bool {
         self.common
             .as_ref()
             .is_some_and(|common| self.coverage() >= common.param.recovery_threshold)
@@ -474,7 +479,7 @@ impl<T: NodeType> VidShareAccumulator<T> {
 /// verifies, the payload is unrecoverable: the shares cover the recovery
 /// threshold with disjoint ranges, so the disperser committed to a
 /// non-codeword and no share subset can ever succeed.
-fn reconstruct<T: NodeType>(
+pub(crate) fn reconstruct<T: NodeType>(
     view: ViewNumber,
     epoch: EpochNumber,
     payload_commitment: VidCommitment2,
