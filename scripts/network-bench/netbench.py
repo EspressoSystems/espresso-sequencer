@@ -414,6 +414,9 @@ class DeploymentMeta(TypedDict):
     max_block_size: NotRequired[str]
     # `--prune` retention of the query node's data and state; absent without pruning.
     prune: NotRequired[str]
+    # `--epoch-height` and whether every node was staked on L1 for it; absent for the template's.
+    epoch_height: NotRequired[int]
+    staking: NotRequired[bool]
 
 
 class BenchResult(TypedDict):
@@ -3574,6 +3577,11 @@ def deployment_lines(result: BenchResult) -> list[str]:
             else []
         ),
         *prune_lines(result),
+        *(
+            [f"- epoch height: {d['epoch_height']}, every node staked on L1"]
+            if d.get("staking")
+            else []
+        ),
     ]
 
 

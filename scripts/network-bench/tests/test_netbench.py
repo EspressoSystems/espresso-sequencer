@@ -2929,3 +2929,14 @@ def test_pruned_heights_reach_the_summary_when_pruning_is_on(tmp_path: Path):
     assert "- prune: retention 60 s; pruned to height: node0 data 1120, state 480" in (
         netbench.render(result, None)
     )
+
+
+def test_summary_names_the_epoch_height_only_when_nodes_were_staked(tmp_path: Path):
+    write_run_dir(tmp_path)
+    result = analyze(tmp_path)
+    result["deployment"] = deployment()
+    assert "epoch height" not in netbench.render(result, None)
+    result["deployment"] = deployment() | {"epoch_height": 300, "staking": True}
+    assert "- epoch height: 300, every node staked on L1" in netbench.render(
+        result, None
+    )

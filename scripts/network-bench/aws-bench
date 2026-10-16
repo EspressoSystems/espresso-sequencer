@@ -251,7 +251,13 @@ NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]{2,39}$")
 UBUNTU_OWNER_ID = "099720109477"  # Canonical
 GHCR_ORG = "ghcr.io/espressosystems/espresso-network"
 # Rebuilt from --tag; these are the only components the tag under test controls.
-IMAGE_COMPONENTS = ("espresso-node", "orchestrator", "state-relay-server", "deploy")
+IMAGE_COMPONENTS = (
+    "espresso-node",
+    "orchestrator",
+    "state-relay-server",
+    "deploy",
+    "staking-cli",
+)
 # `--allocator`: espresso-node images of `.github/workflows/build-allocators.yml`, tagged
 # `<tag>-<allocator>`: the published `espresso-node:main` image with the branch's binaries.
 ALLOCATORS = ("jemalloc", "mimalloc", "snmalloc", "tcmalloc")
@@ -263,7 +269,7 @@ SUPPORT_IMAGES = {
 }
 # Images each role's user-data pulls ahead of time and start.sh runs.
 ROLE_IMAGES: dict[str, tuple[str, ...]] = {
-    "ctl": ("deploy", "orchestrator", "state-relay-server", "foundry"),
+    "ctl": ("deploy", "orchestrator", "state-relay-server", "staking-cli", "foundry"),
     "validator": ("espresso-node",),
     "query": ("espresso-node", "postgres"),
 }
@@ -347,6 +353,7 @@ SHIPPED_HOST_FILES = (
     "node-rejoin.env",
     "recreate.sh",
     "ctl.env",
+    "stake.env",
     "start.sh",
     "agent.json",
     "pg.json",
@@ -497,6 +504,11 @@ GATE_RETRY_S = 2.0
 GATE_TIMEOUT_S = 120.0
 # Contract deployment: 7 deploy steps at anvil's 1 s block time, with margin.
 DEPLOY_TIMEOUT_S = 300
+# `stake-for-demo` registers and delegates every node on anvil, then the L1 finalized block
+# has to reach the head (~32 blocks of 1 s) before the nodes read the stake table.
+STAKE_EXPECTED_S = 90.0
+STAKE_TIMEOUT_S = 600
+L1_FINALIZED_TIMEOUT_S = 300.0
 # systemd-run returns before python writes its first agent-state.json.
 AGENT_START_GRACE_S = 30.0
 # Beyond ready timeout plus load duration, for the final drain and stake table fetch.
@@ -1437,9 +1449,19 @@ def _measure_seconds(cfg: RunConfig) -> tuple[float, float]:
     if cfg.chaos:
         expected_load += CHAOS_DRAIN_EXPECTED_S
         worst_load += cfg.chaos.recover_timeout_s
+    expected_stake, worst_stake = 0.0, 0.0
+    if staking(cfg):
+        expected_stake, worst_stake = (
+            STAKE_EXPECTED_S,
+            STAKE_TIMEOUT_S + L1_FINALIZED_TIMEOUT_S,
+        )
     return (
-        SERVICES_S + expected_load + READY_EXPECTED_S + COLLECT_EXPECTED_S,
-        SERVICES_S + worst_load + READY_TIMEOUT_S + COLLECT_MAX_S,
+        SERVICES_S
+        + expected_stake
+        + expected_load
+        + READY_EXPECTED_S
+        + COLLECT_EXPECTED_S,
+        SERVICES_S + worst_stake + worst_load + READY_TIMEOUT_S + COLLECT_MAX_S,
     )
 
 
@@ -2519,6 +2541,31 @@ def render_ctl_env(
     return "".join(f"{key}={value}\n" for key, value in env.items())
 
 
+def staking(cfg: RunConfig) -> bool:
+    """Epochs need a stake table on L1, so every node is staked before the nodes start."""
+    return cfg.epoch_height is not None
+
+
+def render_stake_env(hosts: dict[str, HostInfo], dotenv: dict[str, str]) -> str:
+    """Environment of `staking-cli stake-for-demo`: funded by the token grant recipient, with
+    the nodes' consensus keys derived from the mnemonic the nodes use. The per-node address
+    form is the one that does not touch .env's demo keys."""
+    env = {
+        "L1_PROVIDER": f"http://localhost:{dotenv['ESPRESSO_L1_PORT']}",
+        "MNEMONIC": dotenv["ESPRESSO_ETH_MNEMONIC"],
+        "ACCOUNT_INDEX": dotenv["ESP_TOKEN_INITIAL_GRANT_RECIPIENT_ACCOUNT_INDEX"],
+        "ESP_TOKEN_CONTRACT_ADDRESS": dotenv["ESP_TOKEN_PROXY_ADDRESS"],
+        "STAKE_TABLE_ADDRESS": dotenv["ESPRESSO_STAKE_TABLE_PROXY_ADDRESS"],
+        "ESPRESSO_NODE_KEY_MNEMONIC": BENCH_MNEMONIC,
+        "DELEGATION_CONFIG": "equal-amounts",
+        "RUST_LOG": "info",
+    }
+    for i, name in enumerate(_node_names(hosts)):
+        key = f"ESPRESSO_DEMO_NODE_CLIQUENET_ADVERTISE_ADDRESS_{i}"
+        env[key] = f"{hosts[name]['private_ip']}:{CLIQUENET_PORT}"
+    return "".join(f"{key}={value}\n" for key, value in env.items())
+
+
 def _pull_and_record_digest(name: str, ref: str) -> str:
     """Pulls by the requested digest, then records what `docker image inspect` says was
     actually pulled, into /opt/bench/digests.json; ready.json's manifest check needs the
@@ -2586,6 +2633,7 @@ def render_start_sh(
     leader_trace: bool = False,
     consensus_storage: ConsensusStorage = "fs",
     query_engine: QueryEngine = "postgres",
+    stake_nodes: int | None = None,
 ) -> str:
     """Deviates from the plan signature (drops unused `hosts`, `cfg`): every value start.sh
     needs is already in `host`, `images` and the host's `memory_mib`, or in ctl.env/node.env
@@ -2632,6 +2680,21 @@ def render_start_sh(
             if name == "deploy":
                 argv += list(DEPLOY_FLAGS)
             script += _docker_create(name, argv)
+        if stake_nodes is not None:
+            staker = images["staking-cli"]
+            script += _docker_create(
+                "stake",
+                [
+                    "--env-file",
+                    f"{BENCH_DIR}/stake.env",
+                    f"{staker['ref']}@{staker['digest']}",
+                    "/bin/staking-cli",
+                    "--no-config",
+                    "stake-for-demo",
+                    "--num-validators",
+                    str(stake_nodes),
+                ],
+            )
         return script
     if host["role"] == "query" and query_engine == "postgres" and query_db != "rds":
         pg = images["postgres"]
@@ -4002,7 +4065,8 @@ def measure_run(run: Run) -> None:
             fleet,
             run.manifest_path,
             "services",
-            f"anvil, deploy, orchestrator, relay, {run.cfg.query_engine}",
+            f"anvil, deploy, {'stake, ' if staking(run.cfg) else ''}orchestrator, relay, "
+            f"{run.cfg.query_engine}",
         )
         start_support(
             remote,
@@ -4011,6 +4075,7 @@ def measure_run(run: Run) -> None:
             run.cfg.query_db,
             run.cfg.query_engine,
             _query_names(remote.hosts),
+            staking(run.cfg),
         )
         enter_phase(fleet, run.manifest_path, "nodes", "synchronized docker start")
         at = fleet_time(remote) + DOCKER_START_LEAD_S
@@ -4666,7 +4731,22 @@ def fleet_run_config(args: argparse.Namespace, saved: FleetManifest) -> RunConfi
     check_search(cfg)
     check_chaos(cfg)
     check_fleet_disks(saved, cfg)
+    check_fleet_images(saved, cfg)
     return cfg
+
+
+def check_fleet_images(saved: FleetManifest, cfg: RunConfig) -> None:
+    """A fleet from before `staking-cli` has neither its image nor the digest to pull; a new
+    `--tag` resolves all images again."""
+    if (
+        staking(cfg)
+        and "staking-cli" not in saved["images"]
+        and not tag_changed(saved, cfg)
+    ):
+        raise Refused(
+            "the fleet has no staking-cli image: pass --tag to pull the images, or "
+            "run without --epoch-height"
+        )
 
 
 def reject_fleet_flags(argv: list[str]) -> None:
@@ -5270,7 +5350,12 @@ def run_config_hash(
 ) -> str:
     """Load config plus what else changes the measured system: image digests, the fleet's
     shape, the query database placement, the rendered genesis and the latency matrix."""
-    digests = {name: image["digest"] for name, image in sorted(images.items())}
+    # staking-cli joined the images later; its digest counts only for runs that use it.
+    digests = {
+        name: image["digest"]
+        for name, image in sorted(images.items())
+        if name != "staking-cli" or staking(cfg)
+    }
     return nb.config_hash(
         cfg.load,
         [
@@ -5282,6 +5367,7 @@ def run_config_hash(
             cfg.query_engine.encode(),
             *([json.dumps(sorted(cfg.node_env)).encode()] if cfg.node_env else []),
             *([b"leader-trace"] if cfg.leader_trace else []),
+            *([b"staking"] if staking(cfg) else []),
             f"prune={cfg.prune}".encode(),
             *(
                 [json.dumps(dataclasses.asdict(cfg.chaos), sort_keys=True).encode()]
@@ -5525,10 +5611,13 @@ def render_host_files(
                 leader_trace=cfg.leader_trace,
                 consensus_storage=cfg.consensus_storage,
                 query_engine=cfg.query_engine,
+                stake_nodes=len(_node_names(hosts)) if staking(cfg) else None,
             )
         )
         if spec["role"] == "ctl":
             (host_dir / "ctl.env").write_text(render_ctl_env(hosts, cfg, dotenv()))
+            if staking(cfg):
+                (host_dir / "stake.env").write_text(render_stake_env(hosts, dotenv()))
         else:
             pg = query_endpoint(cfg, run_dir) if spec["role"] == "query" else None
             node_env = host_dir / "node.env"
@@ -5708,8 +5797,8 @@ def digest_mismatches(
 
 
 def ship_agents(remote: Remote) -> str:
-    """The laptop's current `aws-bench`, `netbench.py`, `chaos.py`, `latency.py` and
-    `bbr-hold.sh` to every host, whatever `up` put there. Returns the git revision they were
+    """The laptop's current `aws-bench`, `netbench.py`, `chaos.py`, `latency.py`, `bbr-hold.sh`
+    and `wait-for-l1-finalized` to every host, whatever `up` put there. Returns the git revision they were
     shipped from."""
     files = [
         SCRIPT_DIR / "netbench.py",
@@ -5717,6 +5806,7 @@ def ship_agents(remote: Remote) -> str:
         SCRIPT_DIR / "latency.py",
         SCRIPT_DIR / "aws-bench",
         SCRIPT_DIR / "aws" / "bbr-hold.sh",
+        REPO_ROOT / "scripts" / "wait-for-l1-finalized",
     ]
     remote.parallel(
         lambda host: remote.rsync_to(host, files, f"{BENCH_DIR}/"), remote.hosts
@@ -5889,9 +5979,11 @@ def support_plan(
     contracts: list[str],
     query_engine: QueryEngine = "postgres",
     query_hosts: Sequence[str] = ("node0",),
+    stake: bool = False,
 ) -> list[SupportStart]:
     """The support services in start order, each with the check that gates the next. The rds
-    instance is only checked: it is already running. SQLite has no database service."""
+    instance is only checked: it is already running. SQLite has no database service. With
+    `stake`, every node is staked and the L1 finalized before the orchestrator starts."""
     plan: list[SupportStart] = [
         GateStart(
             kind="gate",
@@ -5921,6 +6013,27 @@ def support_plan(
                 timeout_s=GATE_TIMEOUT_S,
             )
         )
+    if stake:
+        plan += [
+            DeployStart(
+                kind="deploy",
+                host="ctl",
+                container="stake",
+                what="stake",
+                timeout_s=STAKE_TIMEOUT_S,
+            ),
+            GateStart(
+                kind="gate",
+                host="ctl",
+                container=None,
+                what="wait-for-l1-finalized",
+                gate_cmd=(
+                    f"L1_PROVIDER=http://localhost:{env_port('ESPRESSO_L1_PORT')} "
+                    f"timeout {L1_FINALIZED_TIMEOUT_S:.0f} sh {BENCH_DIR}/wait-for-l1-finalized"
+                ),
+                timeout_s=L1_FINALIZED_TIMEOUT_S,
+            ),
+        ]
     plan += [
         GateStart(
             kind="gate",
@@ -5979,11 +6092,12 @@ def start_support(
     query_db: DbMode = "colocated",
     query_engine: QueryEngine = "postgres",
     query_hosts: Sequence[str] = ("node0",),
+    stake: bool = False,
 ) -> None:
-    """On ctl, in order and each gated on a check: anvil, contract deployment, orchestrator,
-    relay; then Postgres on each query host (the rds instance is only gated, it is already
+    """On ctl, in order and each gated on a check: anvil, contract deployment, staking (with
+    `stake`), orchestrator, relay; then Postgres on each query host (the rds instance is only gated, it is already
     running; SQLite has no such step)."""
-    for step in support_plan(query_db, contracts, query_engine, query_hosts):
+    for step in support_plan(query_db, contracts, query_engine, query_hosts, stake):
         host = step["host"]
         if step["container"] is not None:
             remote.ssh(host, f"sudo docker start {step['container']}")
@@ -6654,6 +6768,7 @@ COLLECT_EXCLUDES = (
     "--exclude=/chaos.py",
     "--exclude=/latency.py",
     "--exclude=/bbr-hold.sh",
+    "--exclude=/wait-for-l1-finalized",
     "--exclude=/pg.json",
 )
 
@@ -8301,6 +8416,12 @@ def deployment_meta(manifest: Manifest, evidence: Evidence) -> nb.DeploymentMeta
             else {}
         ),
         **({"prune": f"{config['prune']} s"} if config.get("prune") else {}),
+        # Manifests from before epochs have no such key; a null one is the template's.
+        **(
+            {"epoch_height": config["epoch_height"], "staking": True}
+            if config.get("epoch_height")
+            else {}
+        ),
     }
 
 
