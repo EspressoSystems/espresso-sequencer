@@ -2760,8 +2760,8 @@ def share_wipe_script(query: bool) -> str:
         "set -eu\n"
         "docker stop -t 30 espresso-node\n"
         "dest=/data/journal/share.orig.$(date +%s)\n"
-        "mv /data/journal/journal/share \"$dest\"\n"
-        "echo \"$dest\"\n"
+        'mv /data/journal/journal/share "$dest"\n'
+        'echo "$dest"\n'
         "docker start espresso-node\n"
     )
 
