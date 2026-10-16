@@ -4610,10 +4610,10 @@ def check_query_store(
             f"choose from {', '.join(QUERY_PLACEMENTS[engine])}"
         )
     if placement == "tmpfs" and not any(
-        pair.startswith("ESPRESSO_QUERY_PAYLOAD_DIR=") for pair in node_env
+        pair.startswith("ESPRESSO_NODE_BLOB_DIR=") for pair in node_env
     ):
         raise Refused(
-            "--query-db tmpfs needs --node-env ESPRESSO_QUERY_PAYLOAD_DIR=...: "
+            "--query-db tmpfs needs --node-env ESPRESSO_NODE_BLOB_DIR=...: "
             "payloads in SQLite would fill the tmpfs"
         )
 
