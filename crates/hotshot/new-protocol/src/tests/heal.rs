@@ -299,6 +299,29 @@ async fn heal_unrecoverable_skipped_ok() {
     healer.abort();
 }
 
+/// A height that cannot be healed is asked for once, not on every scan.
+#[tokio::test(flavor = "multi_thread")]
+async fn heal_terminal_failure_not_retried_ok() {
+    let mut cluster = Cluster::new().await;
+    let poisoned = cluster.data.views[1].view_number;
+    cluster.poison(poisoned).await;
+    let storage = cluster.storages[HEALER].clone();
+
+    let healer = cluster.start_healer(storage.clone());
+    let mut expected = cluster.all_views();
+    expected.remove(&poisoned);
+    cluster.wait_held(&storage, &expected).await;
+    sleep(Duration::from_millis(600)).await;
+    healer.abort();
+    let asked = cluster
+        .requested
+        .lock()
+        .iter()
+        .filter(|view| **view == poisoned)
+        .count();
+    assert!(asked < NODES, "asked {asked} times");
+}
+
 /// A live append of a view the healer also heals leaves one identical share.
 #[tokio::test(flavor = "multi_thread")]
 async fn heal_duplicate_view_ok() {

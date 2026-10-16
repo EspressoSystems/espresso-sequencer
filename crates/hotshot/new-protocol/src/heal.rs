@@ -271,6 +271,9 @@ pub enum HealError {
 
     #[error("re-encoded share is inconsistent with the commitment")]
     Inconsistent,
+
+    #[error("re-encoded share fails verification")]
+    Unverified,
 }
 
 /// Re-encode the payload in `params` and return the share `own` received when

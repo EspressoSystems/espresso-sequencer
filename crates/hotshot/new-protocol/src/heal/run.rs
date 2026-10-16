@@ -1,9 +1,9 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
-use anyhow::{Context, bail};
+use anyhow::Context;
 use hotshot_types::{
     data::{
         EpochNumber, Leaf2, VidDisperse2, VidDisperseShare, ViewNumber,
@@ -22,7 +22,7 @@ use tokio::{
 };
 use tracing::{debug, info, warn};
 
-use super::{HealConfig, HealMetrics, HealTarget, heal_targets, rederive_own_share};
+use super::{HealConfig, HealError, HealMetrics, HealTarget, heal_targets, rederive_own_share};
 use crate::{
     message::share::{ShareFetchRequest, ShareFetchResponse, ShareRequestBody, ShareResponseBody},
     storage::NewProtocolStorage,
@@ -60,8 +60,9 @@ enum Outcome {
     Healed,
     /// Peers did not hold enough shares; the height stays a target.
     Unreachable,
-    /// The leader committed to a non-codeword; no share set decodes.
-    Unrecoverable,
+    /// No attempt can succeed: the leader committed to a non-codeword, or this node cannot
+    /// re-create its share from the payload. The height is not asked for again.
+    Terminal,
 }
 
 /// Heal missing shares forever: scan, heal every target newest first, sleep.
@@ -69,8 +70,9 @@ pub async fn run<T: NodeType, S: NewProtocolStorage<T>>(
     ctx: HealCtx<T, S>,
     mut responses: mpsc::Receiver<ShareResponse<T>>,
 ) {
+    let mut terminal = HashSet::new();
     loop {
-        if let Err(err) = heal_pass(&ctx, &mut responses).await {
+        if let Err(err) = heal_pass(&ctx, &mut responses, &mut terminal).await {
             warn!(%err, "share heal pass failed");
         }
         sleep(ctx.config.scan_interval).await;
@@ -80,13 +82,14 @@ pub async fn run<T: NodeType, S: NewProtocolStorage<T>>(
 async fn heal_pass<T: NodeType, S: NewProtocolStorage<T>>(
     ctx: &HealCtx<T, S>,
     responses: &mut mpsc::Receiver<ShareResponse<T>>,
+    terminal: &mut HashSet<ViewNumber>,
 ) -> anyhow::Result<()> {
     let now = unix_now();
     let min_ts = now.saturating_sub(ctx.config.w.as_secs()) + ctx.config.min_remaining.as_secs();
     let leaves = ctx.storage.decided_leaves(min_ts).await?;
     let held = ctx.storage.held_vid_views().await?;
     let epoch_height = ctx.membership.epoch_height().u64();
-    let targets = heal_targets(
+    let mut targets = heal_targets(
         &leaves,
         &held,
         *ctx.view.borrow(),
@@ -94,6 +97,7 @@ async fn heal_pass<T: NodeType, S: NewProtocolStorage<T>>(
         |leaf| ctx.recipient_epoch(leaf, epoch_height),
         &ctx.config,
     );
+    targets.retain(|target| !terminal.contains(&target.view));
     ctx.metrics.targets.set(targets.len());
     if targets.is_empty() {
         return Ok(());
@@ -108,7 +112,10 @@ async fn heal_pass<T: NodeType, S: NewProtocolStorage<T>>(
         match heal_one(ctx, responses, target).await {
             Ok(Outcome::Healed) => healed += 1,
             Ok(Outcome::Unreachable) => unreachable += 1,
-            Ok(Outcome::Unrecoverable) => skipped += 1,
+            Ok(Outcome::Terminal) => {
+                skipped += 1;
+                terminal.insert(target.view);
+            },
             Err(err) => {
                 skipped += 1;
                 warn!(view = %target.view, %err, "share heal failed for height");
@@ -162,7 +169,7 @@ async fn heal_one<T: NodeType, S: NewProtocolStorage<T>>(
         }
         match fetch.decode().await? {
             Ok(payload) => break payload,
-            Err(Outcome::Unrecoverable) => return Ok(Outcome::Unrecoverable),
+            Err(Outcome::Terminal) => return Ok(Outcome::Terminal),
             Err(_) => continue,
         }
     };
@@ -174,7 +181,7 @@ async fn heal_one<T: NodeType, S: NewProtocolStorage<T>>(
         let membership = ctx.membership.clone();
         let (own, key) = (ctx.public_key.clone(), ctx.private_key.clone());
         let target = target.clone();
-        task::spawn_blocking(move || -> anyhow::Result<_> {
+        task::spawn_blocking(move || -> anyhow::Result<Result<_, HealError>> {
             let params = VidDisperse2::<T>::disperse_params(
                 &payload,
                 &membership,
@@ -183,15 +190,24 @@ async fn heal_one<T: NodeType, S: NewProtocolStorage<T>>(
             )
             .map_err(|err| anyhow::anyhow!("{err}"))?;
             let share =
-                rederive_own_share(&params, &own, target.view, target.epoch, target.commit)?;
-            if !share.verify(total_weight) {
-                bail!("rederived share fails verification");
-            }
-            VidDisperseShare::V2(share)
+                match rederive_own_share(&params, &own, target.view, target.epoch, target.commit) {
+                    Ok(share) if share.verify(total_weight) => share,
+                    Ok(_) => return Ok(Err(HealError::Unverified)),
+                    Err(err) => return Ok(Err(err)),
+                };
+            let proposal = VidDisperseShare::V2(share)
                 .to_proposal(&key)
-                .context("signing rederived share")
+                .context("signing rederived share")?;
+            Ok(Ok(proposal))
         })
         .await??
+    };
+    let proposal = match proposal {
+        Ok(proposal) => proposal,
+        Err(err) => {
+            warn!(view = %target.view, %err, "share heal cannot re-create the share");
+            return Ok(Outcome::Terminal);
+        },
     };
     ctx.metrics.phase("reencode", decoded.elapsed());
 
@@ -318,7 +334,7 @@ impl<T: NodeType, S: NewProtocolStorage<T>> Fetch<'_, T, S> {
                     self.acc.shares.remove(key);
                 }
                 Ok(Err(match err.kind {
-                    VidReconstructErrorKind::Unrecoverable => Outcome::Unrecoverable,
+                    VidReconstructErrorKind::Unrecoverable => Outcome::Terminal,
                     VidReconstructErrorKind::AwaitingShares => Outcome::Unreachable,
                 }))
             },
