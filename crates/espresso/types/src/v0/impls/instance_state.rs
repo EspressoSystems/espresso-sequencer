@@ -4,7 +4,7 @@ use std::{collections::BTreeMap, sync::Arc};
 
 use alloy::primitives::Address;
 #[cfg(feature = "node")]
-use alloy::{eips::BlockId, primitives::U256};
+use alloy::{eips::BlockId, primitives::U256, providers::Provider};
 use anyhow::{Context, bail};
 use async_lock::Mutex;
 use async_trait::async_trait;
@@ -172,7 +172,8 @@ impl NodeState {
     /// The light client contract's finalized state, read at the L1 finalized block. Not cached: it
     /// advances with every prover update.
     ///
-    /// Fails when there is no contract, L1 finality is not yet known, or the read fails.
+    /// Height 0 when the contract has no code at the finalized block yet, as on a fresh L1.
+    /// Fails when there is no contract address, L1 finality is not yet known, or a read fails.
     #[cfg(feature = "node")]
     pub async fn finalized_light_client_state(&self) -> anyhow::Result<LightClientStateSol> {
         // The L1 client learns the finalized block asynchronously after start.
@@ -183,10 +184,29 @@ impl NodeState {
             .finalized
             .context("L1 finality is not yet known")?
             .number;
-        let light_client_contract = LightClientV3::new(
-            self.light_client_contract_address().await?,
-            self.l1_client.provider.clone(),
-        );
+        let address = self.light_client_contract_address().await?;
+        // The address is read at latest, so the contract may not exist at the finalized block.
+        let code = self
+            .l1_client
+            .provider
+            .get_code_at(address)
+            .block_id(BlockId::number(finalized))
+            .await
+            .context("reading the light client code")?;
+        if code.is_empty() {
+            tracing::info!(
+                target: "announce::bootstrap",
+                %address,
+                l1_block = finalized,
+                "light client not deployed at the finalized L1 block; anchor height 0"
+            );
+            return Ok(LightClientStateSol {
+                viewNum: 0,
+                blockHeight: 0,
+                blockCommRoot: U256::ZERO,
+            });
+        }
+        let light_client_contract = LightClientV3::new(address, self.l1_client.provider.clone());
         let state = light_client_contract
             .finalizedState()
             .block(BlockId::number(finalized))
