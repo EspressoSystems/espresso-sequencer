@@ -41,6 +41,8 @@ enum Peer {
     Honest,
     /// Answers every request with `NotHeld`.
     Empty,
+    /// Answers each view's first request with `Busy`, then honestly.
+    BusyOnce,
     /// Answers with a share whose content does not belong to the commitment.
     Garbage,
 }
@@ -53,6 +55,9 @@ struct Cluster {
     /// Views requested from peers, in order.
     requested: Arc<Mutex<Vec<ViewNumber>>>,
 }
+
+/// `(peer, view)` pairs that already got their `Busy`.
+type Busied = Arc<Mutex<BTreeSet<(usize, ViewNumber)>>>;
 
 impl Cluster {
     /// Every node but the healer holds its share of every view; the healer's store knows the chain.
@@ -125,6 +130,7 @@ impl Cluster {
 
         let (keys, storages) = (self.keys.clone(), self.storages.clone());
         let (peers, requested) = (self.peers.clone(), self.requested.clone());
+        let busied = Busied::default();
         let data_shares: HashMap<_, _> = self
             .data
             .views
@@ -141,6 +147,8 @@ impl Cluster {
                 let body = match behavior {
                     Peer::Honest => load_response(&storages[idx], &request, usize::MAX).await.0,
                     Peer::Empty => ShareResponseBody::NotHeld,
+                    Peer::BusyOnce if busied.lock().insert((idx, view)) => ShareResponseBody::Busy,
+                    Peer::BusyOnce => load_response(&storages[idx], &request, usize::MAX).await.0,
                     Peer::Garbage => {
                         let honest = data_shares[&view].iter().find(|s| s.recipient_key == peer);
                         ShareResponseBody::Share(Box::new(garbage(honest.unwrap().clone())))
@@ -336,6 +344,41 @@ async fn heal_keeps_scanning_for_recent_heights_ok() {
     cluster.wait_held(&storage, &oldest).await;
     sleep(Duration::from_millis(600)).await;
     assert!(!healer.is_finished());
+    healer.abort();
+}
+
+/// A leaf without an epoch is skipped, not healed as if it belonged to the genesis epoch.
+#[tokio::test(flavor = "multi_thread")]
+async fn heal_leaf_without_epoch_skipped_ok() {
+    let cluster = Cluster::new().await;
+    let storage = cluster.storages[HEALER].clone();
+    let skipped = cluster.data.views[1].view_number;
+    let mut leaf = cluster.data.views[1].leaf.clone();
+    leaf.with_epoch = false;
+    storage.insert_decided_leaf(leaf).await;
+
+    let healer = cluster.start_healer(storage.clone());
+    let mut expected = cluster.all_views();
+    expected.remove(&skipped);
+    cluster.wait_held(&storage, &expected).await;
+    sleep(Duration::from_millis(300)).await;
+    assert_eq!(cluster.held(&storage).await, expected);
+    healer.abort();
+}
+
+/// Peers that answer `Busy` are asked again after a backoff, within the same height.
+#[tokio::test(flavor = "multi_thread")]
+async fn heal_busy_peers_asked_again_ok() {
+    let cluster = Cluster::new().await;
+    cluster.peers.lock().fill(Peer::BusyOnce);
+    let storage = cluster.storages[HEALER].clone();
+    let config = HealConfig {
+        scan_interval: Duration::from_secs(3600),
+        busy_backoff: Duration::from_millis(50),
+        ..Cluster::config()
+    };
+    let healer = cluster.start_healer_with(storage.clone(), config, ViewNumber::new(1000));
+    cluster.wait_held(&storage, &cluster.all_views()).await;
     healer.abort();
 }
 

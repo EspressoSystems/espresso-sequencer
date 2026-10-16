@@ -32,7 +32,11 @@ use crate::{
 impl<T: NodeType, S> HealCtx<T, S> {
     /// The leaf's epoch if this node is in that epoch's committee, and so holds a share of it.
     fn recipient_epoch(&self, leaf: &Leaf2<T>, epoch_height: u64) -> Option<EpochNumber> {
-        let epoch = leaf.epoch(epoch_height).unwrap_or(EpochNumber::genesis());
+        let Some(epoch) = leaf.epoch(epoch_height) else {
+            warn!(view = %leaf.view_number(), "share heal skips a leaf without an epoch");
+            self.metrics.skipped("no_epoch");
+            return None;
+        };
         let committee = self.membership.stake_table_for_epoch(Some(epoch)).ok()?;
         let member = committee
             .stake_table()
@@ -171,6 +175,8 @@ async fn heal_one<T: NodeType, S: NewProtocolStorage<T>>(
             Some(param),
         ),
         bytes: 0,
+        busy: Vec::new(),
+        busy_retries: HashMap::new(),
     };
     let payload = loop {
         fetch.fetch_shares(responses).await?;
@@ -234,6 +240,9 @@ async fn heal_one<T: NodeType, S: NewProtocolStorage<T>>(
     Ok(Outcome::Healed)
 }
 
+/// Times a peer that answers `Busy` is asked again for one height.
+const MAX_BUSY_RETRIES: usize = 3;
+
 /// Peers to ask at once, so their shares together reach the fetch goal.
 fn wave_size(param: &AvidmGf2Param, nodes: usize) -> usize {
     (param.recovery_threshold * 3 / 2 * nodes)
@@ -252,6 +261,9 @@ struct Fetch<'a, T: NodeType, S> {
     goal: usize,
     acc: VidShareAccumulator<T>,
     bytes: usize,
+    /// Peers that answered `Busy`, with when to ask them again.
+    busy: Vec<(tokio::time::Instant, T::SignatureKey)>,
+    busy_retries: HashMap<T::SignatureKey, usize>,
 }
 
 impl<T: NodeType, S: NewProtocolStorage<T>> Fetch<'_, T, S> {
@@ -262,6 +274,7 @@ impl<T: NodeType, S: NewProtocolStorage<T>> Fetch<'_, T, S> {
     ) -> anyhow::Result<()> {
         let mut inflight: HashMap<T::SignatureKey, Instant> = HashMap::new();
         loop {
+            self.requeue_ready_busy();
             while self.acc.coverage() < self.goal
                 && self.next_peer < self.peers.len()
                 && (inflight.len() + self.acc.shares.len() < self.wave || inflight.is_empty())
@@ -277,10 +290,17 @@ impl<T: NodeType, S: NewProtocolStorage<T>> Fetch<'_, T, S> {
                 self.ctx.requests.send((peer.clone(), request)).await?;
                 inflight.insert(peer, Instant::now());
             }
-            let Some(oldest) = inflight.values().min().copied() else {
+            let timeout = self.ctx.config.req_timeout;
+            let oldest = inflight
+                .values()
+                .min()
+                .map(|started| tokio::time::Instant::from_std(*started + timeout));
+            let retry = (self.acc.coverage() < self.goal)
+                .then(|| self.busy.iter().map(|(at, _)| *at).min())
+                .flatten();
+            let Some(deadline) = oldest.into_iter().chain(retry).min() else {
                 return Ok(());
             };
-            let deadline = tokio::time::Instant::from_std(oldest + self.ctx.config.req_timeout);
             tokio::select! {
                 response = responses.recv() => {
                     let (from, response) = response.context("share responses closed")?;
@@ -289,16 +309,36 @@ impl<T: NodeType, S: NewProtocolStorage<T>> Fetch<'_, T, S> {
                     }
                 },
                 () = sleep_until(deadline) => {
-                    let timeout = self.ctx.config.req_timeout;
                     inflight.retain(|_, started| started.elapsed() < timeout);
                 },
             }
         }
     }
 
+    /// Queue the peers whose backoff has passed to be asked again.
+    fn requeue_ready_busy(&mut self) {
+        let now = tokio::time::Instant::now();
+        let (ready, waiting) = std::mem::take(&mut self.busy)
+            .into_iter()
+            .partition(|(at, _)| *at <= now);
+        self.busy = waiting;
+        self.peers.extend(ready.into_iter().map(|(_, peer)| peer));
+    }
+
+    fn note_busy(&mut self, from: T::SignatureKey) {
+        let retries = self.busy_retries.entry(from.clone()).or_default();
+        if *retries < MAX_BUSY_RETRIES {
+            *retries += 1;
+            let at = tokio::time::Instant::now() + self.ctx.config.busy_backoff;
+            self.busy.push((at, from));
+        }
+    }
+
     fn admit(&mut self, from: T::SignatureKey, body: ShareResponseBody<T>) {
-        let ShareResponseBody::Share(share) = body else {
-            return;
+        let share = match body {
+            ShareResponseBody::Share(share) => share,
+            ShareResponseBody::Busy => return self.note_busy(from),
+            _ => return,
         };
         let len = bincode::serialized_size(&share).map_or(0, |len| len as usize);
         self.bytes += len;

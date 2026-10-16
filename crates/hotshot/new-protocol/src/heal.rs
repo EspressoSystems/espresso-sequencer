@@ -13,7 +13,7 @@ use hotshot_types::{
     epoch_membership::EpochMembershipCoordinator,
     traits::{
         block_contents::BlockHeader,
-        metrics::{Counter, Gauge, HistogramFamily, Metrics},
+        metrics::{Counter, CounterFamily, Gauge, HistogramFamily, Metrics},
         node_implementation::NodeType,
         signature_key::SignatureKey,
     },
@@ -49,6 +49,8 @@ pub struct HealConfig {
     pub min_remaining: Duration,
     pub scan_interval: Duration,
     pub req_timeout: Duration,
+    /// How long a peer that answered `Busy` is left alone before it is asked again.
+    pub busy_backoff: Duration,
     pub serve_inflight: usize,
     pub max_response_bytes: usize,
     pub max_fetch_bytes_per_s: Option<u64>,
@@ -62,6 +64,7 @@ impl Default for HealConfig {
             min_remaining: Duration::from_secs(3600),
             scan_interval: Duration::from_secs(60),
             req_timeout: Duration::from_secs(10),
+            busy_backoff: Duration::from_secs(1),
             serve_inflight: 4,
             max_response_bytes: 64 << 20,
             max_fetch_bytes_per_s: None,
@@ -128,6 +131,7 @@ pub struct HealMetrics {
     done: Arc<dyn Counter>,
     fetch_bytes: Arc<dyn Counter>,
     verify_fail: Arc<dyn Counter>,
+    skipped: Arc<dyn CounterFamily>,
     height_seconds: Arc<dyn HistogramFamily>,
 }
 
@@ -141,10 +145,17 @@ impl HealMetrics {
             done: counter("share_heal_done_total"),
             fetch_bytes: counter("share_heal_fetch_bytes_total"),
             verify_fail: counter("share_heal_verify_fail_total"),
+            skipped: metrics
+                .counter_family("share_heal_skipped_total".into(), vec!["reason".into()])
+                .into(),
             height_seconds: metrics
                 .histogram_family("share_heal_height_seconds".into(), vec!["phase".into()])
                 .into(),
         }
+    }
+
+    fn skipped(&self, reason: &str) {
+        self.skipped.create(vec![reason.into()]).add(1);
     }
 
     fn phase(&self, phase: &str, took: Duration) {
