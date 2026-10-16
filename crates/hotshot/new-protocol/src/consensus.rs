@@ -1306,7 +1306,6 @@ impl<T: NodeType> Consensus<T> {
         self.signed_proposals
             .insert((view, commit), signed_proposal);
         self.hold_proposal(proposal.clone());
-        outbox.push_back(ConsensusOutput::ProposalCertified(proposal.clone()));
         // Parked ancestors are stored ahead of this proposal
         // (`adopt_certified_proposal`), so this only fetches a parent nothing
         // parked can supply.
@@ -1317,6 +1316,7 @@ impl<T: NodeType> Consensus<T> {
         let payload_size = self.payload_size_for(&proposal);
         self.request_state(&proposal, payload_size, outbox);
         self.request_block_and_header_if_next_leader(&proposal, outbox);
+        outbox.push_back(ConsensusOutput::ProposalCertified(proposal));
     }
 
     /// Adopt the live proposal parked for `view` awaiting this node's VID
