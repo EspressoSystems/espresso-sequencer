@@ -7728,14 +7728,17 @@ mod test {
     /// its state from a snapshot at a recent epoch boundary, from peers, instead of replaying the
     /// chain from genesis. The snapshot has no fee accounts, so the loop gets past the boundary
     /// only if it fetches them from peers, and past the next boundary only if the reward tree it
-    /// fetched is whole. A node without a pruner, here one that pruned before and has turned
+    /// fetched is whole. A brand-new database, which the data pruner has not stamped yet, starts
+    /// from a boundary too. A node without a pruner, here one that pruned before and has turned
     /// pruning off, still replays from genesis, on leaves from peers up to the data pruned height.
     #[rstest]
-    #[case::recent_boundary(EmptyStateStart::RecentBoundary)]
-    #[case::genesis(EmptyStateStart::Genesis)]
+    #[case::recent_boundary(EmptyStateStart::RecentBoundary, true)]
+    #[case::fresh_database(EmptyStateStart::RecentBoundary, false)]
+    #[case::genesis(EmptyStateStart::Genesis, true)]
     #[test_log::test(tokio::test(flavor = "multi_thread"))]
     async fn test_state_loop_starts_on_pruned_data(
         #[case] expected: EmptyStateStart,
+        #[case] stamp_pruned_height: bool,
     ) -> anyhow::Result<()> {
         const NUM_NODES: usize = 5;
         const EPOCH_HEIGHT: u64 = 10;
@@ -7789,10 +7792,10 @@ mod test {
         let api_client: Client<ClientErr, StaticVersion<0, 1>> = Client::new(api_url.clone());
         assert!(api_client.connect(Some(Duration::from_secs(60))).await);
 
-        // Let the chain run a few epochs, then stamp a data pruned height on the empty database,
-        // as a fresh pruned node starts.
-        let pruned = 3 * EPOCH_HEIGHT + EPOCH_HEIGHT / 2;
-        wait_until_block_height(&api_client, "status/block-height", pruned + EPOCH_HEIGHT).await;
+        // Let the chain run a few epochs. Then, unless the database is brand new, stamp a data
+        // pruned height on it, as if the data pruner had run before the loop started.
+        let stamp = 3 * EPOCH_HEIGHT + EPOCH_HEIGHT / 2;
+        wait_until_block_height(&api_client, "status/block-height", stamp + EPOCH_HEIGHT).await;
         let mut db_opt = tmp_options(&storage[1]);
         db_opt.prune = expected == EmptyStateStart::RecentBoundary;
         db_opt.pruning = <persistence::sql::PruningOptions as clap::Parser>::parse_from([
@@ -7806,7 +7809,14 @@ mod test {
         ]);
         let db =
             SqlStorage::connect(Config::try_from(&db_opt)?, StorageConnectionType::Query).await?;
-        prune_data_to(&db, pruned).await?;
+        let pruned = if stamp_pruned_height {
+            prune_data_to(&db, stamp).await?;
+            stamp
+        } else {
+            0
+        };
+        // `status/block-height` counts blocks, so the tip is one below it.
+        let tip = api_client.get::<u64>("status/block-height").send().await? - 1;
 
         let query_port = reserve_tcp_port().expect("OS should have ephemeral ports available");
         let opt = Options::with_port(query_port).query_sql(
@@ -7855,10 +7865,12 @@ mod test {
         }
         let start = lowest_block_tree_node(&db).await?;
         match expected {
+            // The boundary is recent only if the node's first local block was the consensus tip,
+            // not a lower block it filled in first.
             EmptyStateStart::RecentBoundary => ensure!(
-                start > pruned && start.is_multiple_of(EPOCH_HEIGHT),
+                start > pruned && start.is_multiple_of(EPOCH_HEIGHT) && start + EPOCH_HEIGHT > tip,
                 "state loop started at {start}, not at an epoch boundary above the data pruned \
-                 height {pruned}"
+                 height {pruned} and within an epoch of the tip {tip} when the node started"
             ),
             // The genesis tree has no blocks, so the first block tree nodes are at height 1.
             EmptyStateStart::Genesis => {

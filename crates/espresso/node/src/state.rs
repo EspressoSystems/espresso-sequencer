@@ -377,8 +377,7 @@ const BOUNDARY_RETRY_INTERVAL: Duration = Duration::from_secs(10);
 /// slow read does not send requests to peers for nothing.
 const LOCAL_CATCHUP_TIMEOUT: Duration = Duration::from_secs(60);
 
-/// Where the state loop starts when it has no state of its own and the data pruner has already
-/// deleted the start of the chain.
+/// Where the state loop starts when it has no state of its own.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum EmptyStateStart {
     /// From a snapshot at a recent epoch boundary, from peers. Fast, but the trees stay incomplete
@@ -429,9 +428,7 @@ where
     // state only, so give it a recent snapshot to resume from instead.
     if last_height == 0
         && empty_state_start == EmptyStateStart::RecentBoundary
-        && let Some(pruned) = storage.load_pruned_height().await?
-        && let Some(boundary) =
-            seed_boundary_snapshot(&storage, &instance, &provider, pruned).await?
+        && let Some(boundary) = seed_boundary_snapshot(&storage, &instance, &provider).await?
     {
         last_height = boundary;
     }
@@ -507,13 +504,13 @@ where
 }
 
 /// Store a snapshot at a recent epoch boundary for a loop with no state of its own, and return the
-/// boundary, which the loop then resumes from as after a restart. `pruned` is the data pruned
-/// height.
+/// boundary, which the loop then resumes from as after a restart.
 ///
-/// The boundary is the newest one at or below the local tip, once the node holds a block above
-/// `pruned`; a fresh node holds none until consensus decides one. It has to be recent: the reward
-/// tree is stored only at boundaries, and every node garbage collects all but the last few, so
-/// peers have no tree for an older snapshot.
+/// The boundary is the newest one at or below the local tip, once the node holds a block above the
+/// data pruned height, or above genesis before the data pruner has run; a fresh node holds none
+/// until consensus decides one. It has to be recent: the reward tree is stored only at boundaries,
+/// and every node garbage collects all but the last few, so peers have no tree for an older
+/// snapshot.
 ///
 /// The snapshot holds the block frontier and the reward tree, fetched from peers and checked
 /// against the boundary header. Peers serve fee accounts only by address, and the loop cannot know
@@ -526,7 +523,6 @@ async fn seed_boundary_snapshot<T, C>(
     storage: &Arc<T>,
     instance: &NodeState,
     provider: &LightClientProvider<C>,
-    pruned: u64,
 ) -> anyhow::Result<Option<u64>>
 where
     T: SequencerStateDataSource,
@@ -536,6 +532,7 @@ where
     let Some(epoch_height) = instance.epoch_height.filter(|height| *height > 0) else {
         return Ok(None);
     };
+    let pruned = storage.load_pruned_height().await?.unwrap_or(0);
     // Each request is sent once, because this loop retries: peers never answer a request for a
     // boundary they have pruned, and the next try then picks the boundary again from the tip. Each
     // try passes its number on, so that peers get longer to answer.
