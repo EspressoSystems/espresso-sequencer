@@ -98,13 +98,22 @@ impl Cluster {
 
     /// Start the healer over `storage`, with peers answered from the cluster's stores.
     fn start_healer(&self, storage: TestStorage<TestTypes>) -> JoinHandle<()> {
+        self.start_healer_with(storage, Self::config(), ViewNumber::new(1000))
+    }
+
+    fn start_healer_with(
+        &self,
+        storage: TestStorage<TestTypes>,
+        config: HealConfig,
+        current_view: ViewNumber,
+    ) -> JoinHandle<()> {
         let (public_key, private_key) = self.keys[HEALER].clone();
         let (membership, ..) = mock_membership_with_num_nodes(NODES, 10, public_key);
         let (requests, mut requests_rx) = mpsc::channel::<(BLSPubKey, ShareFetchRequest)>(64);
         let (responses_tx, responses) = mpsc::channel(64);
-        let (_view_tx, view) = watch::channel(ViewNumber::new(1000));
+        let (_view_tx, view) = watch::channel(current_view);
         let ctx = HealCtx {
-            config: Self::config(),
+            config,
             storage,
             membership,
             public_key,
@@ -296,6 +305,37 @@ async fn heal_unrecoverable_skipped_ok() {
     cluster.wait_held(&storage, &expected).await;
     sleep(Duration::from_millis(500)).await;
     assert_eq!(cluster.held(&storage).await, expected);
+    healer.abort();
+}
+
+/// With nothing left to heal the task ends, and no later scan reads the wal again.
+#[tokio::test(flavor = "multi_thread")]
+async fn heal_idles_when_done_ok() {
+    let cluster = Cluster::new().await;
+    let storage = cluster.storages[HEALER].clone();
+    let healer = cluster.start_healer(storage.clone());
+    cluster.wait_held(&storage, &cluster.all_views()).await;
+    timeout(Duration::from_secs(2), healer)
+        .await
+        .expect("healer is still scanning")
+        .unwrap();
+}
+
+/// Missing shares too close to the tip are healed once they are old enough, so the healer keeps
+/// scanning while any remain.
+#[tokio::test(flavor = "multi_thread")]
+async fn heal_keeps_scanning_for_recent_heights_ok() {
+    let cluster = Cluster::new().await;
+    let storage = cluster.storages[HEALER].clone();
+    let config = HealConfig {
+        tip_margin: 2,
+        ..Cluster::config()
+    };
+    let healer = cluster.start_healer_with(storage.clone(), config, ViewNumber::new(3));
+    let oldest = BTreeSet::from([cluster.data.views[0].view_number]);
+    cluster.wait_held(&storage, &oldest).await;
+    sleep(Duration::from_millis(600)).await;
+    assert!(!healer.is_finished());
     healer.abort();
 }
 

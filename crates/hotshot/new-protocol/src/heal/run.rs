@@ -65,49 +65,56 @@ enum Outcome {
     Terminal,
 }
 
-/// Heal missing shares forever: scan, heal every target newest first, sleep.
+/// Heal missing shares: scan, heal every target newest first, and scan again after a sleep while
+/// a pass leaves work. Ends when nothing is left, so a settled node reads no wal.
 pub async fn run<T: NodeType, S: NewProtocolStorage<T>>(
     ctx: HealCtx<T, S>,
     mut responses: mpsc::Receiver<ShareResponse<T>>,
 ) {
     let mut terminal = HashSet::new();
     loop {
-        if let Err(err) = heal_pass(&ctx, &mut responses, &mut terminal).await {
-            warn!(%err, "share heal pass failed");
+        match heal_pass(&ctx, &mut responses, &mut terminal).await {
+            Ok(false) => return,
+            Ok(true) => {},
+            Err(err) => warn!(%err, "share heal pass failed"),
         }
         sleep(ctx.config.scan_interval).await;
     }
 }
 
+/// One scan and heal. Returns whether a later pass can still find work: heights that stayed
+/// unreachable or failed, or are missing but too recent to heal yet.
 async fn heal_pass<T: NodeType, S: NewProtocolStorage<T>>(
     ctx: &HealCtx<T, S>,
     responses: &mut mpsc::Receiver<ShareResponse<T>>,
     terminal: &mut HashSet<ViewNumber>,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<bool> {
     let now = unix_now();
     let min_ts = now.saturating_sub(ctx.config.w.as_secs()) + ctx.config.min_remaining.as_secs();
-    let leaves = ctx.storage.decided_leaves(min_ts).await?;
+    // The held views first: a node that cannot answer them has no use for the wal scan.
     let held = ctx.storage.held_vid_views().await?;
+    let leaves = ctx.storage.decided_leaves(min_ts).await?;
     let epoch_height = ctx.membership.epoch_height().u64();
-    let mut targets = heal_targets(
-        &leaves,
-        &held,
-        *ctx.view.borrow(),
-        now,
-        |leaf| ctx.recipient_epoch(leaf, epoch_height),
-        &ctx.config,
-    );
+    let (view, member) = (*ctx.view.borrow(), |leaf: &Leaf2<T>| {
+        ctx.recipient_epoch(leaf, epoch_height)
+    });
+    let mut targets = heal_targets(&leaves, &held, view, now, member, &ctx.config);
+    let recent = HealConfig {
+        tip_margin: 0,
+        ..ctx.config.clone()
+    };
+    let deferred = heal_targets(&leaves, &held, view, now, member, &recent).len() - targets.len();
     targets.retain(|target| !terminal.contains(&target.view));
     ctx.metrics.targets.set(targets.len());
     if targets.is_empty() {
-        return Ok(());
+        return Ok(deferred > 0);
     }
     info!(
         targets = targets.len(),
         "share heal: healing missing shares"
     );
 
-    let (mut healed, mut unreachable, mut skipped) = (0, 0, 0);
+    let (mut healed, mut unreachable, mut skipped, mut failed) = (0, 0, 0, 0);
     for target in &targets {
         match heal_one(ctx, responses, target).await {
             Ok(Outcome::Healed) => healed += 1,
@@ -117,15 +124,18 @@ async fn heal_pass<T: NodeType, S: NewProtocolStorage<T>>(
                 terminal.insert(target.view);
             },
             Err(err) => {
-                skipped += 1;
+                failed += 1;
                 warn!(view = %target.view, %err, "share heal failed for height");
             },
         }
         ctx.metrics.targets.set(targets.len() - healed);
     }
     ctx.metrics.unreachable.set(unreachable);
-    info!(healed, unreachable, skipped, "share heal: pass done");
-    Ok(())
+    info!(
+        healed,
+        unreachable, skipped, failed, "share heal: pass done"
+    );
+    Ok(unreachable + failed + deferred > 0)
 }
 
 async fn heal_one<T: NodeType, S: NewProtocolStorage<T>>(
