@@ -489,7 +489,7 @@ pub struct Query {
     /// Node storage directory. When `--light-client-db-path` is unset, the light client database
     /// is kept under it, so the stake tables it verified survive a restart.
     #[clap(long, env = "ESPRESSO_NODE_STORAGE_PATH")]
-    pub(crate) storage_path: Option<PathBuf>,
+    pub storage_path: Option<PathBuf>,
 }
 
 impl Query {
