@@ -167,6 +167,10 @@ where
     };
     let walk_reason = match &anchor {
         Ok(anchor) => {
+            if params.boot {
+                let anchor_epoch = epoch_from_block_number(anchor.height, epoch_height);
+                metrics.anchor_epoch.set(anchor_epoch as usize);
+            }
             let skip = skip_to_anchor(
                 coordinator,
                 peers,
@@ -175,7 +179,6 @@ where
                 first_epoch,
                 deadline,
                 params,
-                metrics,
             );
             skip.await?
         },
@@ -228,7 +231,6 @@ async fn skip_to_anchor<C: Client>(
     first_epoch: EpochNumber,
     deadline: Instant,
     params: &BootstrapParams,
-    metrics: &BootstrapMetrics,
 ) -> anyhow::Result<Option<&'static str>> {
     let membership = coordinator.membership();
     let known = membership.highest_known_epoch();
@@ -238,11 +240,6 @@ async fn skip_to_anchor<C: Client>(
             .snapshot(EpochNumber::new(known.saturating_sub(1)))
             .is_some()
     });
-    let anchor_epoch = epoch_from_block_number(anchor.height, epoch_height);
-    if params.boot {
-        metrics.anchor_epoch.set(anchor_epoch as usize);
-    }
-
     let range = match plan_skip(anchor, epoch_height, first_epoch, resume) {
         Ok(range) => range,
         Err(reason) => return Ok(Some(reason)),
