@@ -17,7 +17,6 @@ use espresso_types::{
     v0::traits::SequencerPersistence,
 };
 use futures::future::BoxFuture;
-use hotshot::traits::NodeImplementation;
 use hotshot_new_protocol::storage::NewProtocolStorage;
 use hotshot_query_service::availability::VidCommonQueryData;
 use hotshot_types::{
@@ -26,7 +25,7 @@ use hotshot_types::{
     epoch_membership::EpochMembershipCoordinator,
     message::UpgradeLock,
     network::NetworkConfig,
-    traits::network::ConnectedNetwork,
+    traits::node_implementation::NodeImplementation,
     utils::StateAndDelta,
 };
 
@@ -160,9 +159,8 @@ where
     }
 }
 
-impl<N, P> ApiContext for SequencerContext<N, P>
+impl<P> ApiContext for SequencerContext<P>
 where
-    N: ConnectedNetwork<PubKey>,
     P: SequencerPersistence,
 {
     type Persistence = P;

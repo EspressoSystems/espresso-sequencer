@@ -5,10 +5,6 @@ use std::{
 
 use committable::{Commitment, Committable};
 use futures::StreamExt;
-use hotshot::{
-    traits::{BlockPayload, ValidatedState},
-    types::{BLSPrivKey, BLSPubKey, SchnorrPubKey},
-};
 use hotshot_contract_adapter::light_client::derive_signed_state_digest;
 use hotshot_example_types::{
     block_types::{TestBlockHeader, TestBlockPayload, TestMetadata},
@@ -34,6 +30,7 @@ use hotshot_types::{
     epoch_membership::EpochMembershipCoordinator,
     light_client::{StakeTableState, StateKeyPair},
     message::{Proposal as SignedProposal, UpgradeLock},
+    signature_key::{BLSPrivKey, BLSPubKey, SchnorrPubKey},
     simple_certificate::{
         TimeoutCertificate2, TimeoutCertificate3, TimeoutEvidence, UpgradeCertificate,
         UpgradeCertificate2,
@@ -44,7 +41,7 @@ use hotshot_types::{
     },
     stake_table::{HSStakeTable, StakeTableEntries},
     traits::{
-        EncodeBytes,
+        BlockPayload, EncodeBytes, ValidatedState,
         block_contents::{BlockHeader, BuilderFee},
         election::Membership,
         signature_key::{
