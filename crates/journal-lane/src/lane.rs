@@ -954,6 +954,9 @@ fn check_snapshot_size(stream: Stream, body: &[u8], max_snapshot_bytes: u32) {
     }
 }
 
+/// Capacity below which the writer's frame buffer is never shrunk.
+const MIN_FRAME_BUF: usize = 64 << 10;
+
 /// Spawns the writer thread and returns a handle to enqueue records on it plus the thread's join
 /// handle, which the caller must join after dropping the `Lane` (see `journal::Inner`'s `Drop`).
 /// `hook` is `Some` only for the wal lane: it provides the `Snapshot` payload opening every new
@@ -1029,7 +1032,6 @@ pub fn spawn_lane<F: JournalFs>(
         durable_tx.send(active.last_lsn).ok();
     }
 
-    let frame_buf = Vec::with_capacity(cfg.max_batch_bytes);
     let writer = Writer {
         fs,
         dir,
@@ -1042,7 +1044,7 @@ pub fn spawn_lane<F: JournalFs>(
         alloc: alloc.clone(),
         queue_bytes: queue_bytes.clone(),
         metrics: metrics.clone(),
-        frame_buf,
+        frame_buf: Vec::new(),
         index,
         unsynced: false,
     };
@@ -1172,6 +1174,7 @@ impl<F: JournalFs> Writer<F> {
 
         let mut durable_in_batch = false;
         let mut written = Vec::new();
+        self.frame_buf.reserve(bytes);
         for w in &records {
             if self.index.is_some() {
                 written.push((
@@ -1202,11 +1205,12 @@ impl<F: JournalFs> Writer<F> {
         }
         self.active.offset += self.frame_buf.len() as u64;
         self.unsynced = true;
-        // A batch can overshoot `max_batch_bytes`; shrink only well past it, so saturated
-        // batches reuse the buffer and one oversized record does not keep its copy resident.
+        // The buffer grows with the batch; shrink after a batch far smaller than the capacity so
+        // one large batch does not stay resident per lane.
+        let batch_len = self.frame_buf.len();
         self.frame_buf.clear();
-        if self.frame_buf.capacity() > 2 * self.cfg.max_batch_bytes {
-            self.frame_buf.shrink_to(self.cfg.max_batch_bytes);
+        if self.frame_buf.capacity() > 4 * batch_len.max(MIN_FRAME_BUF) {
+            self.frame_buf.shrink_to(2 * batch_len.max(MIN_FRAME_BUF));
         }
         // Permits are held by `records` until here, bounding in-flight data bytes until the write
         // (not the fsync) lands; the semaphore is about memory, not durability.
@@ -1360,6 +1364,28 @@ mod tests {
     use super::*;
     use crate::mem::MemFs;
 
+    thread_local! {
+        static MAX_ALLOC: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    }
+
+    /// Records the largest single allocation made by the current thread.
+    struct MaxAlloc;
+
+    // SAFETY: delegates to `System`; only bookkeeping is added.
+    unsafe impl std::alloc::GlobalAlloc for MaxAlloc {
+        unsafe fn alloc(&self, layout: std::alloc::Layout) -> *mut u8 {
+            MAX_ALLOC.with(|m| m.set(m.get().max(layout.size())));
+            unsafe { std::alloc::System.alloc(layout) }
+        }
+
+        unsafe fn dealloc(&self, ptr: *mut u8, layout: std::alloc::Layout) {
+            unsafe { std::alloc::System.dealloc(ptr, layout) }
+        }
+    }
+
+    #[global_allocator]
+    static ALLOC: MaxAlloc = MaxAlloc;
+
     const ACTION: Kind = Kind(2);
     const VID: Kind = Kind(11);
 
@@ -1471,6 +1497,32 @@ mod tests {
             max_snapshot_bytes: 1024,
             in_flight_bytes: 1 << 20,
         }
+    }
+
+    #[tokio::test]
+    async fn spawn_lane_does_not_preallocate_the_batch_buffer() {
+        let fs = Arc::new(MemFs::default());
+        let segments = Arc::new(Mutex::new(Segments::default()));
+        let cfg = LaneConfig {
+            max_batch_bytes: 64 << 20,
+            ..cfg(Stream::Da)
+        };
+        MAX_ALLOC.with(|m| m.set(0));
+        let (_lane, _handle) = spawn_lane(
+            fs,
+            std::path::PathBuf::from("/prealloc"),
+            cfg,
+            (1, 1),
+            None,
+            segments,
+            None,
+        )
+        .unwrap();
+        let largest = MAX_ALLOC.with(|m| m.get());
+        assert!(
+            largest < 1 << 20,
+            "spawn_lane allocated {largest} bytes at once"
+        );
     }
 
     #[tokio::test]
