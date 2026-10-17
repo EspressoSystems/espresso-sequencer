@@ -1222,6 +1222,10 @@ where
         index: u64,
     ) -> anyhow::Result<Self::Transaction> {
         let ds = &*self.data_source;
+        let _permit = self
+            .payload_budget
+            .admit_block(ds, HsBlockId::Number(height as usize))
+            .await?;
         let block = ds
             .get_block(HsBlockId::Number(height as usize))
             .await
@@ -1266,6 +1270,10 @@ where
     ) -> anyhow::Result<Self::TransactionWithProof> {
         let ds = &*self.data_source;
         let timeout = FETCH_TIMEOUT;
+        let _permit = self
+            .payload_budget
+            .admit_block(ds, HsBlockId::Number(height as usize))
+            .await?;
 
         let (block_fetch, vid_fetch) = futures::join!(
             ds.get_block(HsBlockId::Number(height as usize)),
@@ -1338,6 +1346,10 @@ where
 
     async fn get_block_summary(&self, height: usize) -> anyhow::Result<Self::BlockSummary> {
         let ds = &*self.data_source;
+        let _permit = self
+            .payload_budget
+            .admit_block(ds, HsBlockId::Number(height))
+            .await?;
         let block = ds
             .get_block(HsBlockId::Number(height))
             .await
@@ -1355,6 +1367,7 @@ where
         enforce_range(from, until, large_object_range_limit())?;
         let timeout = FETCH_TIMEOUT;
         let ds = &*self.data_source;
+        let _permit = self.payload_budget.admit_range(ds, from..until).await?;
         let stream = ds.get_block_range(from..until).await;
         let mut results = Vec::new();
         futures::pin_mut!(stream);
