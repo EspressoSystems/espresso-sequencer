@@ -3,15 +3,15 @@ use std::{cmp::Ordering, collections::HashMap, fmt::Display, sync::Arc, time::Du
 use anyhow::{Result, bail, ensure};
 use committable::{Commitment, Committable};
 use disco_types::status::StatusCode;
-use espresso_types::{BlockMerkleTree, Header, NsIndex, NsProof, SeqTypes};
+use espresso_types::{BlockMerkleTree, Header, NsIndex, NsProof, Payload, SeqTypes};
 use futures::{
     TryStreamExt,
-    future::{self, try_join3},
+    future::{self, try_join},
     stream::{self, StreamExt},
 };
 use hotshot_query_service::{
     Error, QueryError,
-    availability::{AvailabilityDataSource, LeafQueryData, PayloadQueryData, VidCommonQueryData},
+    availability::{AvailabilityDataSource, BlockQueryData, LeafQueryData, VidCommonQueryData},
     data_source::{VersionedDataSource, storage::NodeStorage},
     merklized_state::{MerklizedStateDataSource, MerklizedStateHeightPersistence, Snapshot},
     node::BlockId,
@@ -543,14 +543,9 @@ fn child_values(
 /// Number of blocks loaded concurrently by one range request.
 ///
 /// Each block holds its payload until its proof is built, so a request keeps at most this many
-/// payloads in memory, independent of the range length.
+/// payloads in memory, independent of the range length. The response still holds every
+/// [`NamespaceProof`], so its size is O(range x namespace size).
 const BLOCK_WINDOW: usize = 4;
-
-type BlockData = (
-    Header,
-    PayloadQueryData<SeqTypes>,
-    VidCommonQueryData<SeqTypes>,
-);
 
 fn check_range(start: usize, end: usize, large_object_range_limit: usize) -> Result<(), Error> {
     if end <= start {
@@ -570,32 +565,23 @@ fn check_range(start: usize, end: usize, large_object_range_limit: usize) -> Res
     Ok(())
 }
 
-/// Load header, payload and VID common of one block, failing with 404 if any is missing.
+/// Load a block and its VID common, failing with 404 if either is missing.
 async fn fetch_block_data<State>(
     state: &State,
     height: usize,
     fetch_timeout: Duration,
-) -> Result<BlockData, Error>
+) -> Result<(BlockQueryData<SeqTypes>, VidCommonQueryData<SeqTypes>), Error>
 where
     State: AvailabilityDataSource<SeqTypes>,
 {
     let id = BlockId::Number(height);
-    let missing = |what: &str| not_found(format!("missing {what} {height}"));
-    let header = async {
+    let block = async {
         state
-            .get_header(id)
+            .get_block(id)
             .await
             .with_timeout(fetch_timeout)
             .await
-            .ok_or_else(|| missing("header"))
-    };
-    let payload = async {
-        state
-            .get_payload(id)
-            .await
-            .with_timeout(fetch_timeout)
-            .await
-            .ok_or_else(|| missing("payload"))
+            .ok_or_else(|| not_found(format!("missing block {height}")))
     };
     let vid_common = async {
         state
@@ -603,9 +589,9 @@ where
             .await
             .with_timeout(fetch_timeout)
             .await
-            .ok_or_else(|| missing("VID common"))
+            .ok_or_else(|| not_found(format!("missing VID common {height}")))
     };
-    try_join3(header, payload, vid_common).await
+    try_join(block, vid_common).await
 }
 
 /// Fetch the blocks in `start..end` and reduce each with `process`, in height order.
@@ -676,13 +662,13 @@ where
         start,
         end,
         |height| fetch_block_data(state, height, fetch_timeout),
-        |(header, payload, vid_common)| {
+        |(block, vid_common)| {
             namespaces
                 .iter()
                 .filter_map(|&namespace| {
-                    let ns_index = header.ns_table().find_ns_id(&namespace.into())?;
+                    let ns_index = block.header.ns_table().find_ns_id(&namespace.into())?;
                     Some(
-                        build_namespace_proof(&payload, &ns_index, &vid_common)
+                        build_namespace_proof(&block.payload, &ns_index, &vid_common)
                             .map(|proof| (namespace, proof)),
                     )
                 })
@@ -710,16 +696,14 @@ pub(crate) fn parse_namespaces_str(encoded: &str) -> anyhow::Result<Vec<u64>> {
 
 /// Construct a [`NamespaceProof`] for the namespace at `ns_index` of the given block.
 fn build_namespace_proof(
-    payload: &PayloadQueryData<SeqTypes>,
+    payload: &Payload,
     ns_index: &NsIndex,
     vid_common: &VidCommonQueryData<SeqTypes>,
 ) -> Result<NamespaceProof, Error> {
     let ns_proof =
-        NsProof::new(payload.data(), ns_index, vid_common.common()).ok_or_else(|| {
-            Error::Custom {
-                message: "failed to construct namespace proof".into(),
-                status: StatusCode::INTERNAL_SERVER_ERROR,
-            }
+        NsProof::new(payload, ns_index, vid_common.common()).ok_or_else(|| Error::Custom {
+            message: "failed to construct namespace proof".into(),
+            status: StatusCode::INTERNAL_SERVER_ERROR,
         })?;
     Ok(NamespaceProof::new(ns_proof, vid_common.common().clone()))
 }
@@ -1997,7 +1981,28 @@ mod test {
         .await
         .unwrap_err();
         assert_eq!(err.status(), StatusCode::NOT_FOUND);
-        assert!(fetched.load(SeqCst) <= 2 + 1 + BLOCK_WINDOW);
+        // Processing height 2 has pulled in heights up to 2 + BLOCK_WINDOW.
+        assert!(fetched.load(SeqCst) <= 3 + BLOCK_WINDOW);
+    }
+
+    #[tokio::test]
+    async fn test_try_map_blocks_fetch_error_passes_through() {
+        let err = try_map_blocks(
+            0,
+            100,
+            |height| async move {
+                if height == 50 {
+                    Err(internal("fetch failed"))
+                } else {
+                    Ok(height)
+                }
+            },
+            Ok,
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(err.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        assert!(err.to_string().contains("fetch failed"), "{err:#}");
     }
 
     #[tokio::test]
