@@ -3,7 +3,7 @@
 mod run;
 pub mod serve;
 
-use std::{cmp::Reverse, collections::BTreeSet, sync::Arc, time::Duration};
+use std::{cmp::Reverse, collections::BTreeSet, num::NonZeroUsize, sync::Arc, time::Duration};
 
 use hotshot_types::{
     data::{
@@ -52,15 +52,14 @@ pub struct HealConfig {
     /// How long a peer that answered `Busy` is left alone before it is asked again.
     pub busy_backoff: Duration,
     /// Heights healed concurrently.
-    pub heights_inflight: usize,
+    pub heights_inflight: NonZeroUsize,
     /// Requests outstanding to one peer across all heights.
-    pub peer_inflight: usize,
+    pub peer_inflight: NonZeroUsize,
     /// Memory budget over the heights in flight, see `HealTarget::cost`. At least one height is
     /// always admitted.
     pub inflight_bytes: usize,
-    pub serve_inflight: usize,
+    pub serve_inflight: NonZeroUsize,
     pub max_response_bytes: usize,
-    pub max_fetch_bytes_per_s: Option<u64>,
 }
 
 impl HealConfig {
@@ -79,12 +78,11 @@ impl Default for HealConfig {
             scan_interval: Duration::from_secs(60),
             req_timeout: Duration::from_secs(10),
             busy_backoff: Duration::from_secs(1),
-            heights_inflight: 8,
-            peer_inflight: 2,
+            heights_inflight: NonZeroUsize::new(8).unwrap(),
+            peer_inflight: NonZeroUsize::new(2).unwrap(),
             inflight_bytes: 512 << 20,
-            serve_inflight: 16,
+            serve_inflight: NonZeroUsize::new(16).unwrap(),
             max_response_bytes: 64 << 20,
-            max_fetch_bytes_per_s: None,
         }
     }
 }
@@ -99,17 +97,20 @@ pub struct HealTarget<T: NodeType> {
     pub metadata: Metadata<T>,
 }
 
-/// Peak memory of a height in flight, in multiples of its payload: fetched shares, the decoded
-/// payload and the re-encoding.
-const COST_FACTOR: usize = 3;
+/// Peak memory of a height in flight, in multiples of its payload `P`. The recovery threshold is a
+/// third of the weight, so the shares fetched to 1.5 times the threshold are about 1.5 P.
+/// - Decode: those shares, the recovered bytes and the payload built from them, 3.5 P.
+/// - Re-encode, fetched shares and the original payload dropped: the copy of the payload in the
+///   dispersal params and the pieces for every recipient, P + 3 P = 4 P.
+const COST_FACTOR: usize = 4;
 
 impl<T: NodeType> HealTarget<T> {
     /// Estimated memory while in flight, from the payload length in the header's namespace table.
-    /// A table that does not parse counts as an empty payload; every height costs at least a byte.
+    /// A table that does not parse has an unknown payload size and costs `usize::MAX`, so the
+    /// height runs alone. Every height costs at least a byte.
     pub fn cost(&self) -> usize {
         ns_table_payload_byte_len(&self.metadata.encode())
-            .unwrap_or(0)
-            .saturating_mul(COST_FACTOR)
+            .map_or(usize::MAX, |len| len.saturating_mul(COST_FACTOR))
             .max(1)
     }
 }
@@ -506,5 +507,20 @@ mod tests {
             &cfg(),
         );
         assert_eq!(views(&targets), vec![3, 1]);
+    }
+
+    #[tokio::test]
+    async fn heal_target_unparsable_ns_table_costs_everything_ok() {
+        // The test metadata encodes to no bytes, which is not a namespace table.
+        let leaves = leaves(3).await;
+        let targets = heal_targets(
+            &leaves,
+            &BTreeSet::new(),
+            ViewNumber::new(10),
+            1000,
+            member,
+            &cfg(),
+        );
+        assert!(targets.iter().all(|t| t.cost() == usize::MAX));
     }
 }

@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{num::NonZeroUsize, sync::Arc};
 
 use hotshot_types::{
     data::{VidDisperseShare, ViewNumber},
@@ -72,7 +72,7 @@ impl<T: NodeType, S: NewProtocolStorage<T>> ShareServer<T, S> {
         storage: S,
         reply: Reply<T>,
         view: watch::Receiver<ViewNumber>,
-        serve_inflight: usize,
+        serve_inflight: NonZeroUsize,
         max_response_bytes: usize,
         metrics: &dyn Metrics,
     ) -> Self {
@@ -80,7 +80,7 @@ impl<T: NodeType, S: NewProtocolStorage<T>> ShareServer<T, S> {
             storage,
             reply,
             view,
-            inflight: Arc::new(Semaphore::new(serve_inflight)),
+            inflight: Arc::new(Semaphore::new(serve_inflight.get())),
             max_response_bytes,
             metrics: ServeMetrics::new(metrics),
         }
@@ -205,7 +205,6 @@ mod tests {
     /// A server over a storage holding node 0's share of view 1, and the channel its replies land
     /// in.
     async fn server(
-        inflight: usize,
         max_bytes: usize,
     ) -> (
         ShareServer<TestTypes, TestStorage<TestTypes>>,
@@ -228,7 +227,14 @@ mod tests {
             tx.send((slot, response)).unwrap();
         });
         let (view_tx, view_rx) = watch::channel(ViewNumber::new(5));
-        let server = ShareServer::new(storage, reply, view_rx, inflight, max_bytes, &NoMetrics);
+        let server = ShareServer::new(
+            storage,
+            reply,
+            view_rx,
+            NonZeroUsize::MIN,
+            max_bytes,
+            &NoMetrics,
+        );
         let request = ShareFetchRequest::new(
             view.view_number,
             ShareRequestBody {
@@ -241,7 +247,7 @@ mod tests {
     /// The view moves on between the request and the reply, and the reply goes out in the new one.
     #[tokio::test]
     async fn heal_serve_replies_in_current_view_ok() {
-        let (server, mut replies, request, view) = server(1, usize::MAX).await;
+        let (server, mut replies, request, view) = server(usize::MAX).await;
         server.handle_request(request, peer());
         view.send_replace(ViewNumber::new(9));
         let (slot, response) = replies.recv().await.unwrap();
@@ -251,7 +257,8 @@ mod tests {
 
     #[tokio::test]
     async fn heal_serve_busy_ok() {
-        let (server, mut replies, request, _view) = server(0, usize::MAX).await;
+        let (server, mut replies, request, _view) = server(usize::MAX).await;
+        let _held = server.inflight.clone().try_acquire_owned().unwrap();
         server.handle_request(request, peer());
         let (_, response) = replies.recv().await.unwrap();
         assert_eq!(*response.body(), ShareResponseBody::Busy);
@@ -259,7 +266,7 @@ mod tests {
 
     #[tokio::test]
     async fn heal_serve_too_large_ok() {
-        let (server, mut replies, request, _view) = server(1, 1).await;
+        let (server, mut replies, request, _view) = server(1).await;
         server.handle_request(request, peer());
         let (_, response) = replies.recv().await.unwrap();
         assert_eq!(*response.body(), ShareResponseBody::TooLarge);
@@ -267,7 +274,7 @@ mod tests {
 
     #[tokio::test]
     async fn heal_serve_share_and_not_held_ok() {
-        let (server, mut replies, request, _view) = server(1, usize::MAX).await;
+        let (server, mut replies, request, _view) = server(usize::MAX).await;
         server.handle_request(request.clone(), peer());
         let (_, response) = replies.recv().await.unwrap();
         assert!(matches!(response.body(), ShareResponseBody::Share(_)));

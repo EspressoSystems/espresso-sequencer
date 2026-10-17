@@ -3,6 +3,7 @@
 
 use std::{
     collections::{BTreeSet, HashMap},
+    num::NonZeroUsize,
     sync::Arc,
     time::Duration,
 };
@@ -134,6 +135,8 @@ impl Cluster {
             min_remaining: Duration::ZERO,
             scan_interval: Duration::from_millis(100),
             req_timeout: Duration::from_millis(500),
+            // The test metadata has no namespace table, so every height costs `usize::MAX`.
+            inflight_bytes: usize::MAX,
             ..HealConfig::default()
         }
     }
@@ -460,8 +463,8 @@ async fn heal_many_heights_in_parallel_ok() {
     let cluster = Cluster::with_views(20).await;
     let storage = cluster.storages[HEALER].clone();
     let config = HealConfig {
-        heights_inflight: 8,
-        peer_inflight: 2,
+        heights_inflight: NonZeroUsize::new(8).unwrap(),
+        peer_inflight: NonZeroUsize::new(2).unwrap(),
         ..Cluster::config()
     };
     let healer = cluster.start_healer_with(storage.clone(), config, ViewNumber::new(1000));
@@ -485,8 +488,8 @@ async fn heal_peer_cap_respected_ok() {
     let cluster = Cluster::with_views(12).await;
     let storage = cluster.storages[HEALER].clone();
     let config = HealConfig {
-        heights_inflight: 8,
-        peer_inflight: 1,
+        heights_inflight: NonZeroUsize::new(8).unwrap(),
+        peer_inflight: NonZeroUsize::MIN,
         ..Cluster::config()
     };
     let healer = cluster.start_healer_with(storage.clone(), config, ViewNumber::new(1000));
@@ -501,7 +504,7 @@ async fn heal_byte_budget_serializes_heights_ok() {
     let cluster = Cluster::with_views(8).await;
     let storage = cluster.storages[HEALER].clone();
     let config = HealConfig {
-        heights_inflight: 8,
+        heights_inflight: NonZeroUsize::new(8).unwrap(),
         inflight_bytes: 0,
         ..Cluster::config()
     };

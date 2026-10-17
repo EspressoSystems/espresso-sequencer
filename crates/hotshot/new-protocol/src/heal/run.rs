@@ -1,7 +1,7 @@
 use std::{
     collections::{BTreeSet, HashMap, HashSet},
     sync::Arc,
-    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
+    time::{Instant, SystemTime, UNIX_EPOCH},
 };
 
 use anyhow::Context;
@@ -19,7 +19,7 @@ use hotshot_types::{
 use parking_lot::Mutex;
 use rand::seq::SliceRandom;
 use tokio::{
-    sync::{OwnedSemaphorePermit, Semaphore, mpsc, watch},
+    sync::{Notify, OwnedSemaphorePermit, Semaphore, mpsc, watch},
     task,
     time::{sleep, sleep_until},
 };
@@ -31,7 +31,7 @@ use super::{
 use crate::{
     message::share::{ShareFetchRequest, ShareFetchResponse, ShareRequestBody, ShareResponseBody},
     storage::NewProtocolStorage,
-    vid::{VidReconstructErrorKind, VidShareAccumulator, expected_vid_param, reconstruct},
+    vid::{VidReconstructErrorKind, VidShareAccumulator, expected_vid_param, reconstruct_borrowed},
 };
 
 impl<T: NodeType, S> HealCtx<T, S> {
@@ -81,9 +81,7 @@ pub async fn run<T: NodeType, S: NewProtocolStorage<T>>(
     ctx: HealCtx<T, S>,
     mut responses: mpsc::Receiver<ShareResponse<T>>,
 ) {
-    assert!(ctx.config.heights_inflight > 0, "heights_inflight is 0");
-    assert!(ctx.config.peer_inflight > 0, "peer_inflight is 0");
-    let limits = PeerLimits::new(ctx.config.peer_inflight);
+    let limits = PeerLimits::new(ctx.config.peer_inflight.get());
     let mut terminal = HashSet::new();
     loop {
         match heal_pass(&ctx, &limits, &mut responses, &mut terminal).await {
@@ -99,6 +97,22 @@ pub async fn run<T: NodeType, S: NewProtocolStorage<T>>(
 struct PeerLimits<K> {
     cap: usize,
     peers: Mutex<HashMap<K, Arc<Semaphore>>>,
+    /// Signalled whenever a slot is released.
+    released: Arc<Notify>,
+}
+
+/// A slot for one request to a peer; releasing it wakes the heights waiting for a slot.
+struct PeerSlot {
+    permit: Option<OwnedSemaphorePermit>,
+    released: Arc<Notify>,
+}
+
+impl Drop for PeerSlot {
+    fn drop(&mut self) {
+        // Release first: a waiter woken before the permit is back would miss the free slot.
+        self.permit.take();
+        self.released.notify_waiters();
+    }
 }
 
 impl<K: std::hash::Hash + Eq + Clone> PeerLimits<K> {
@@ -106,18 +120,23 @@ impl<K: std::hash::Hash + Eq + Clone> PeerLimits<K> {
         Self {
             cap,
             peers: Mutex::default(),
+            released: Arc::default(),
         }
     }
 
     /// A slot for one request to `peer`, released on drop; `None` while the peer is at its cap.
-    fn try_acquire(&self, peer: &K) -> Option<OwnedSemaphorePermit> {
+    fn try_acquire(&self, peer: &K) -> Option<PeerSlot> {
         let semaphore = self
             .peers
             .lock()
             .entry(peer.clone())
             .or_insert_with(|| Arc::new(Semaphore::new(self.cap)))
             .clone();
-        semaphore.try_acquire_owned().ok()
+        let permit = semaphore.try_acquire_owned().ok()?;
+        Some(PeerSlot {
+            permit: Some(permit),
+            released: self.released.clone(),
+        })
     }
 }
 
@@ -125,7 +144,8 @@ impl<K: std::hash::Hash + Eq + Clone> PeerLimits<K> {
 /// budget, unless nothing runs.
 fn admits(config: &HealConfig, running: usize, used: usize, cost: usize) -> bool {
     running == 0
-        || (running < config.heights_inflight && used.saturating_add(cost) <= config.inflight_bytes)
+        || (running < config.heights_inflight.get()
+            && used.saturating_add(cost) <= config.inflight_bytes)
 }
 
 /// One scan and heal. Returns whether a later pass can still find work: heights that stayed
@@ -166,17 +186,15 @@ async fn heal_pass<T: NodeType, S: NewProtocolStorage<T>>(
     let (mut unreachable, mut skipped, mut failed) = (0, 0, 0);
     let mut healed = BTreeSet::new();
     let mut queue = targets.iter().peekable();
+    let routes = Routes::default();
     let mut running = FuturesUnordered::new();
-    let mut routes = HashMap::new();
-    let mut used = 0;
+    let mut used = 0usize;
     loop {
         while let Some(target) =
             queue.next_if(|target| admits(&ctx.config, running.len(), used, target.cost()))
         {
-            let (route, height_responses) = mpsc::unbounded_channel();
-            routes.insert(target.view, route);
-            used += target.cost();
-            running.push(heal_tracked(ctx, limits, height_responses, target));
+            used = used.saturating_add(target.cost());
+            running.push(heal_tracked(ctx, limits, &routes, target));
         }
         ctx.metrics.inflight.set(running.len());
         if running.is_empty() {
@@ -184,8 +202,7 @@ async fn heal_pass<T: NodeType, S: NewProtocolStorage<T>>(
         }
         tokio::select! {
             Some((target, result)) = running.next() => {
-                routes.remove(&target.view);
-                used -= target.cost();
+                used = used.saturating_sub(target.cost());
                 match result {
                     Ok(Outcome::Healed) => {
                         healed.insert(target.view);
@@ -204,10 +221,7 @@ async fn heal_pass<T: NodeType, S: NewProtocolStorage<T>>(
             },
             response = responses.recv() => {
                 let (from, response) = response.context("share responses closed")?;
-                if let Some(route) = routes.get(&response.view_number()) {
-                    // A closed route is a height that just ended; its response is stale.
-                    let _ = route.send((from, response));
-                }
+                route(&routes, response.view_number(), (from, response));
             },
         }
     }
@@ -225,21 +239,33 @@ async fn heal_pass<T: NodeType, S: NewProtocolStorage<T>>(
     Ok(unreachable + failed + deferred > 0)
 }
 
+/// Where each running height receives the responses for its view.
+type Routes<T> = Mutex<HashMap<ViewNumber, mpsc::Sender<ShareResponse<T>>>>;
+
+/// Hand `item` to the height running `view`. A height has one request per peer outstanding, so a
+/// full queue holds only late duplicates and the item is dropped. No route is a height that ended.
+fn route<K>(routes: &Mutex<HashMap<ViewNumber, mpsc::Sender<K>>>, view: ViewNumber, item: K) {
+    if let Some(route) = routes.lock().get(&view) {
+        let _ = route.try_send(item);
+    }
+}
+
 /// `heal_one`, returning its target with the result.
 async fn heal_tracked<'a, T: NodeType, S: NewProtocolStorage<T>>(
     ctx: &HealCtx<T, S>,
     limits: &PeerLimits<T::SignatureKey>,
-    mut responses: mpsc::UnboundedReceiver<ShareResponse<T>>,
+    routes: &Routes<T>,
     target: &'a HealTarget<T>,
 ) -> (&'a HealTarget<T>, anyhow::Result<Outcome>) {
-    let result = heal_one(ctx, limits, &mut responses, target).await;
+    let result = heal_one(ctx, limits, routes, target).await;
+    routes.lock().remove(&target.view);
     (target, result)
 }
 
 async fn heal_one<T: NodeType, S: NewProtocolStorage<T>>(
     ctx: &HealCtx<T, S>,
     limits: &PeerLimits<T::SignatureKey>,
-    responses: &mut mpsc::UnboundedReceiver<ShareResponse<T>>,
+    routes: &Routes<T>,
     target: &HealTarget<T>,
 ) -> anyhow::Result<Outcome> {
     let started = Instant::now();
@@ -255,6 +281,8 @@ async fn heal_one<T: NodeType, S: NewProtocolStorage<T>>(
         .filter(|key| *key != ctx.public_key)
         .collect();
     peers.shuffle(&mut rand::thread_rng());
+    let (route, mut responses) = mpsc::channel(peers.len().max(1));
+    routes.lock().insert(target.view, route);
 
     let mut fetch = Fetch {
         ctx,
@@ -270,12 +298,11 @@ async fn heal_one<T: NodeType, S: NewProtocolStorage<T>>(
             target.epoch,
             Some(param),
         ),
-        bytes: 0,
         busy: Vec::new(),
         busy_retries: HashMap::new(),
     };
     let payload = loop {
-        fetch.fetch_shares(responses).await?;
+        fetch.fetch_shares(&mut responses).await?;
         if !fetch.acc.has_enough_shares() {
             return Ok(Outcome::Unreachable);
         }
@@ -286,7 +313,8 @@ async fn heal_one<T: NodeType, S: NewProtocolStorage<T>>(
         }
     };
     ctx.metrics.phase("fetch", started.elapsed());
-    let fetched_bytes = fetch.bytes;
+    // The fetched shares are not needed to re-encode.
+    drop(fetch);
 
     let decoded = Instant::now();
     let proposal = {
@@ -301,6 +329,7 @@ async fn heal_one<T: NodeType, S: NewProtocolStorage<T>>(
                 &target.metadata,
             )
             .map_err(|err| anyhow::anyhow!("{err}"))?;
+            drop(payload);
             let share =
                 match rederive_own_share(&params, &own, target.view, target.epoch, target.commit) {
                     Ok(share) if share.verify(total_weight) => share,
@@ -330,14 +359,8 @@ async fn heal_one<T: NodeType, S: NewProtocolStorage<T>>(
     ctx.metrics.done.add(1);
     debug!(view = %target.view, "share healed");
 
-    if let Some(rate) = ctx.config.max_fetch_bytes_per_s {
-        sleep(Duration::from_secs_f64(fetched_bytes as f64 / rate as f64)).await;
-    }
     Ok(Outcome::Healed)
 }
-
-/// How often a height blocked on peer caps looks again; slots free up in other heights' tasks.
-const THROTTLE_POLL: Duration = Duration::from_millis(25);
 
 /// Times a peer that answers `Busy` is asked again for one height.
 const MAX_BUSY_RETRIES: usize = 3;
@@ -360,7 +383,6 @@ struct Fetch<'a, T: NodeType, S> {
     /// Shard coverage at which asking stops: spare shares for the ones that turn out bad.
     goal: usize,
     acc: VidShareAccumulator<T>,
-    bytes: usize,
     /// Peers that answered `Busy`, with when to ask them again.
     busy: Vec<(tokio::time::Instant, T::SignatureKey)>,
     busy_retries: HashMap<T::SignatureKey, usize>,
@@ -370,12 +392,14 @@ impl<T: NodeType, S: NewProtocolStorage<T>> Fetch<'_, T, S> {
     /// Ask peers, at most one request each, until the shares cover `goal` or no peer is left.
     async fn fetch_shares(
         &mut self,
-        responses: &mut mpsc::UnboundedReceiver<ShareResponse<T>>,
+        responses: &mut mpsc::Receiver<ShareResponse<T>>,
     ) -> anyhow::Result<()> {
-        let mut inflight: HashMap<T::SignatureKey, (Instant, OwnedSemaphorePermit)> =
-            HashMap::new();
+        let mut inflight: HashMap<T::SignatureKey, (Instant, PeerSlot)> = HashMap::new();
         loop {
             self.requeue_ready_busy();
+            // Created before looking for a free peer, so a release in between is not missed.
+            let released = self.limits.released.notified();
+            tokio::pin!(released);
             let mut throttled = false;
             while self.acc.coverage() < self.goal
                 && self.next_peer < self.peers.len()
@@ -400,29 +424,32 @@ impl<T: NodeType, S: NewProtocolStorage<T>> Fetch<'_, T, S> {
                 .map(|(started, _)| *started)
                 .min()
                 .map(|started| tokio::time::Instant::from_std(started + timeout));
-            let poll = throttled.then(|| tokio::time::Instant::now() + THROTTLE_POLL);
             let retry = (self.acc.coverage() < self.goal)
                 .then(|| self.busy.iter().map(|(at, _)| *at).min())
                 .flatten();
-            let Some(deadline) = oldest.into_iter().chain(retry).chain(poll).min() else {
+            let deadline = oldest.into_iter().chain(retry).min();
+            if deadline.is_none() && !throttled {
                 return Ok(());
-            };
+            }
             tokio::select! {
                 response = responses.recv() => {
                     let (from, response) = response.context("share responses closed")?;
-                    if response.view_number() == self.target.view && inflight.remove(&from).is_some() {
+                    if inflight.remove(&from).is_some() {
                         self.admit(from, response.into_body());
                     }
                 },
-                () = sleep_until(deadline) => {
+                () = sleep_until(deadline.unwrap_or_else(tokio::time::Instant::now)), if deadline.is_some() => {
+                    // The slot of a request that timed out is freed although its peer may still be
+                    // working on it, so a slow peer can briefly exceed the per-peer cap.
                     inflight.retain(|_, (started, _)| started.elapsed() < timeout);
                 },
+                () = &mut released, if throttled => {},
             }
         }
     }
 
     /// The next peer, from the unasked ones, that is under its in-flight cap, with its slot.
-    fn take_free_peer(&mut self) -> Option<(T::SignatureKey, OwnedSemaphorePermit)> {
+    fn take_free_peer(&mut self) -> Option<(T::SignatureKey, PeerSlot)> {
         let (index, permit) = (self.next_peer..self.peers.len())
             .find_map(|i| Some((i, self.limits.try_acquire(&self.peers[i])?)))?;
         self.peers.swap(self.next_peer, index);
@@ -456,7 +483,6 @@ impl<T: NodeType, S: NewProtocolStorage<T>> Fetch<'_, T, S> {
             _ => return,
         };
         let len = serve::serialized_len(&*share);
-        self.bytes += len;
         self.ctx.metrics.fetch_bytes.add(len);
         let view = self.target.view;
         let admitted = share.recipient_key == from && {
@@ -473,12 +499,9 @@ impl<T: NodeType, S: NewProtocolStorage<T>> Fetch<'_, T, S> {
     async fn decode(&mut self) -> anyhow::Result<Result<T::BlockPayload, Outcome>> {
         let decoding = Instant::now();
         let common = self.acc.common.clone().context("shares without a common")?;
-        let shares: Vec<_> = self
-            .acc
-            .shares
-            .iter()
-            .map(|(key, share)| (key.clone(), share.clone()))
-            .collect();
+        // Moved, not cloned: the shares are the largest part of the height's memory.
+        let (keys, shares): (Vec<_>, Vec<_>) =
+            std::mem::take(&mut self.acc.shares).into_iter().unzip();
         let target = self.target;
         let (view, epoch, commit, metadata) = (
             target.view,
@@ -486,8 +509,11 @@ impl<T: NodeType, S: NewProtocolStorage<T>> Fetch<'_, T, S> {
             target.commit,
             target.metadata.clone(),
         );
-        let result = task::spawn_blocking(move || {
-            reconstruct::<T>(view, epoch, commit, common, shares, metadata, None)
+        let (result, keys, shares) = task::spawn_blocking(move || {
+            let result = reconstruct_borrowed::<T>(
+                view, epoch, commit, &common, &keys, &shares, metadata, None,
+            );
+            (result, keys, shares)
         })
         .await?;
         self.ctx.metrics.phase("decode", decoding.elapsed());
@@ -495,9 +521,11 @@ impl<T: NodeType, S: NewProtocolStorage<T>> Fetch<'_, T, S> {
             Ok(obtained) => Ok(Ok(obtained.payload)),
             Err(err) => {
                 self.ctx.metrics.verify_fail.add(err.bad_share_keys.len());
-                for key in &err.bad_share_keys {
-                    self.acc.shares.remove(key);
-                }
+                self.acc.shares = keys
+                    .into_iter()
+                    .zip(shares)
+                    .filter(|(key, _)| !err.bad_share_keys.contains(key))
+                    .collect();
                 Ok(Err(match err.kind {
                     VidReconstructErrorKind::Unrecoverable => Outcome::Terminal,
                     VidReconstructErrorKind::AwaitingShares => Outcome::Unreachable,
@@ -516,12 +544,14 @@ fn unix_now() -> u64 {
 
 #[cfg(test)]
 mod tests {
+    use std::num::NonZeroUsize;
+
     use super::*;
 
     #[test]
     fn admits_respects_count_and_budget() {
         let config = HealConfig {
-            heights_inflight: 3,
+            heights_inflight: NonZeroUsize::new(3).unwrap(),
             inflight_bytes: 100,
             ..HealConfig::default()
         };
@@ -532,5 +562,27 @@ mod tests {
         assert!(admits(&config, 1, 40, 60));
         assert!(!admits(&config, 1, 40, 61));
         assert!(!admits(&config, 3, 0, 1));
+    }
+
+    #[test]
+    fn admits_unknown_cost_only_alone() {
+        let config = HealConfig {
+            inflight_bytes: 100,
+            ..HealConfig::default()
+        };
+        assert!(admits(&config, 0, 0, usize::MAX));
+        assert!(!admits(&config, 1, 1, usize::MAX));
+    }
+
+    #[test]
+    fn late_responses_dropped_when_queue_full() {
+        let (tx, mut rx) = mpsc::channel(2);
+        let routes = Mutex::new(HashMap::from([(ViewNumber::new(1), tx)]));
+        for item in 0..5 {
+            route(&routes, ViewNumber::new(1), item);
+        }
+        route(&routes, ViewNumber::new(2), 99);
+        assert_eq!((rx.try_recv(), rx.try_recv()), (Ok(0), Ok(1)));
+        assert!(rx.try_recv().is_err());
     }
 }

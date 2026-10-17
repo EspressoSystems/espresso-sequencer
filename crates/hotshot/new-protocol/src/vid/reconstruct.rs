@@ -489,8 +489,32 @@ pub(crate) fn reconstruct<T: NodeType>(
     tracer: Option<crate::leader_trace::LeaderTracerHandle>,
 ) -> ReconstructResult<T> {
     let (keys, shares): (Vec<_>, Vec<_>) = shares.into_iter().unzip();
+    reconstruct_borrowed::<T>(
+        view,
+        epoch,
+        payload_commitment,
+        &common,
+        &keys,
+        &shares,
+        metadata,
+        tracer,
+    )
+}
+
+/// `reconstruct` over shares the caller keeps, so it can retain the good ones after a failure.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn reconstruct_borrowed<T: NodeType>(
+    view: ViewNumber,
+    epoch: EpochNumber,
+    payload_commitment: VidCommitment2,
+    common: &AvidmGf2Common,
+    keys: &[T::SignatureKey],
+    shares: &[AvidmGf2Share],
+    metadata: Metadata<T>,
+    tracer: Option<crate::leader_trace::LeaderTracerHandle>,
+) -> ReconstructResult<T> {
     if let Some(bytes) =
-        decode_and_recommit::<T>(view, &common, &shares, &payload_commitment, &metadata)
+        decode_and_recommit::<T>(view, common, shares, &payload_commitment, &metadata)
     {
         crate::trace_leader_event!(
             tracer,
@@ -511,10 +535,10 @@ pub(crate) fn reconstruct<T: NodeType>(
     }
 
     let bad_share_keys: Vec<_> = keys
-        .into_iter()
-        .zip(&shares)
-        .filter(|(_, share)| !share_verifies(&common, share))
-        .map(|(key, _)| key)
+        .iter()
+        .zip(shares)
+        .filter(|(_, share)| !share_verifies(common, share))
+        .map(|(key, _)| key.clone())
         .collect();
 
     let kind = if bad_share_keys.is_empty() {

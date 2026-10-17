@@ -14,6 +14,7 @@ pub mod state;
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs, io,
+    num::NonZeroUsize,
     os::unix::fs::FileExt as _,
     path::{Path, PathBuf},
     sync::Arc,
@@ -191,9 +192,9 @@ pub struct Options {
         env = "ESPRESSO_NODE_SHARE_HEAL_PARALLEL",
         default_value_t = HealConfig::default().heights_inflight
     )]
-    pub share_heal_parallel: usize,
+    pub share_heal_parallel: NonZeroUsize,
 
-    /// Memory budget of the heights share heal has in flight, estimated at 3 times each payload.
+    /// Memory budget of the heights share heal has in flight, estimated at 4 times each payload.
     /// One height always runs.
     #[clap(
         long,
@@ -208,7 +209,7 @@ pub struct Options {
         env = "ESPRESSO_NODE_SHARE_SERVE_INFLIGHT",
         default_value_t = HealConfig::default().serve_inflight
     )]
-    pub share_serve_inflight: usize,
+    pub share_serve_inflight: NonZeroUsize,
 
     /// Cap on the block payloads a query node holds in memory for its query service, from when
     /// it obtains them until their decide is replayed. Oldest dropped first once exceeded; the
@@ -1958,9 +1959,9 @@ mod tests {
             Options::try_parse_from(["node", "--path", "/store"].iter().chain(args)).unwrap()
         };
         let opts = parse(&[]);
-        assert_eq!(opts.share_heal_parallel, 8);
+        assert_eq!(opts.share_heal_parallel.get(), 8);
         assert_eq!(opts.share_heal_bytes, 512 << 20);
-        assert_eq!(opts.share_serve_inflight, 16);
+        assert_eq!(opts.share_serve_inflight.get(), 16);
         let opts = parse(&[
             "--share-heal-parallel=3",
             "--share-heal-bytes=100",
@@ -1968,12 +1969,22 @@ mod tests {
         ]);
         assert_eq!(
             (
-                opts.share_heal_parallel,
+                opts.share_heal_parallel.get(),
                 opts.share_heal_bytes,
-                opts.share_serve_inflight
+                opts.share_serve_inflight.get()
             ),
             (3, 100, 5)
         );
+    }
+
+    #[test]
+    fn share_heal_zero_concurrency_err() {
+        for flag in ["--share-heal-parallel=0", "--share-serve-inflight=0"] {
+            assert!(
+                Options::try_parse_from(["node", "--path", "/store", flag]).is_err(),
+                "{flag}"
+            );
+        }
     }
 
     fn segments(stream: Stream, spec: &[(u64, u64, u64)]) -> Segments {
@@ -2711,9 +2722,9 @@ mod tests {
             max_bytes: DEFAULT_MAX_BYTES,
             share_retention: parse_duration("7d").unwrap(),
             share_heal: false,
-            share_heal_parallel: 8,
-            share_heal_bytes: 512 << 20,
-            share_serve_inflight: 16,
+            share_heal_parallel: HealConfig::default().heights_inflight,
+            share_heal_bytes: HealConfig::default().inflight_bytes,
+            share_serve_inflight: HealConfig::default().serve_inflight,
             pending_payload_bytes: DEFAULT_PENDING_PAYLOAD_BYTES,
             ignore_existing: false,
             max_block_size: Some(TEST_MAX_BLOCK_SIZE),
@@ -2778,9 +2789,9 @@ mod tests {
             max_bytes: DEFAULT_MAX_BYTES,
             share_retention: parse_duration("7d").unwrap(),
             share_heal: false,
-            share_heal_parallel: 8,
-            share_heal_bytes: 512 << 20,
-            share_serve_inflight: 16,
+            share_heal_parallel: HealConfig::default().heights_inflight,
+            share_heal_bytes: HealConfig::default().inflight_bytes,
+            share_serve_inflight: HealConfig::default().serve_inflight,
             pending_payload_bytes: DEFAULT_PENDING_PAYLOAD_BYTES,
             ignore_existing: false,
             max_block_size: Some(TEST_MAX_BLOCK_SIZE),
@@ -2821,9 +2832,9 @@ mod testing {
                 max_bytes: DEFAULT_MAX_BYTES,
                 share_retention: parse_duration("7d").unwrap(),
                 share_heal: false,
-                share_heal_parallel: 8,
-                share_heal_bytes: 512 << 20,
-                share_serve_inflight: 16,
+                share_heal_parallel: HealConfig::default().heights_inflight,
+                share_heal_bytes: HealConfig::default().inflight_bytes,
+                share_serve_inflight: HealConfig::default().serve_inflight,
                 pending_payload_bytes: DEFAULT_PENDING_PAYLOAD_BYTES,
                 ignore_existing: false,
                 max_block_size: Some(TEST_MAX_BLOCK_SIZE),
