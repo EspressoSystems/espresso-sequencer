@@ -258,9 +258,9 @@ just bench aws run --tag chaos-dense --chaos --nodes 32 --query-nodes 3 --chaos-
     `--chaos-kinds restart,kill,wipe,mass-restart` or alone): `docker restart` of every node, or of `--chaos-mass-nodes`
     of them, in one tick, all ssh in parallel, to test recovery from storage. `mass-kill` (opt-in, same use):
     `docker kill` of the group, `docker start` after `--chaos-kill-down`.
-  - `share-wipe` (opt-in, validators that are not query nodes only, needs `--query-nodes` below `--nodes`): `docker stop`,
-    `/data/journal/journal/share` moved to `/data/journal/share.orig.<ts>`, `docker start`. The path is logged as
-    `chaos: <node> share lane moved to <path>`. After the heal, compare the lanes:
+  - `share-wipe` (opt-in, any node): `docker stop`, `/data/journal/espresso/journal/share` moved to
+    `/data/journal/share.orig.<ts>`, `docker start` (also when the move fails; a missing lane fails before the stop).
+    The path is logged as `chaos: <node> share lane moved to <path>`. After the heal, compare the lanes:
     `python3 share_diff.py <orig_dir> <healed_dir>` prints `equal=N differ=N orig_only=N healed_only=N`, exit 1 if
     `differ` > 0.
 - Faults beyond `f` only through the mass kinds. A group holding a third of the stake or more halts the network; its

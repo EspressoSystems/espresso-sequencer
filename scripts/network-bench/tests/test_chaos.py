@@ -593,21 +593,15 @@ def test_kinds_cycle():
     assert ops[:3] == ["restart", "kill", "wipe"]
 
 
-def test_share_wipe_targets_validators_only():
+def test_share_wipe_can_target_query_nodes():
     cfg = ch.ChaosConfig(kinds=("share-wipe",))
     steps = run(cfg, seconds=1000)
     queries = queries_of(topo_of())
     targets = [e["node"] for e in faults(steps)]
-    assert targets
-    assert not queries.intersection(targets)
+    assert queries.intersection(targets)
     assert {a["op"] for s in steps for a in s["actions"] if a["op"] != "start"} == {
         "share-wipe"
     }
-
-
-def test_share_wipe_with_only_query_nodes_issues_no_fault():
-    cfg = ch.ChaosConfig(kinds=("share-wipe",))
-    assert faults(run(cfg, n=7, k=7, seconds=500)) == []
 
 
 # TEST:gap-respected-ok

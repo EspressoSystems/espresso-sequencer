@@ -59,20 +59,25 @@ def test_wipe_script_steps():
     ]
 
 
-def test_share_wipe_script_moves_the_share_lane_of_a_validator():
-    assert awsb.share_wipe_script(False).splitlines() == [
+def test_share_wipe_script_moves_the_share_lane():
+    assert awsb.share_wipe_script().splitlines() == [
         "set -eu",
+        "share=/data/journal/espresso/journal/share",
+        'test -d "$share" || { echo "no share lane at $share" >&2; exit 1; }',
         "docker stop -t 30 espresso-node",
+        "trap 'docker start espresso-node' EXIT",
         "dest=/data/journal/share.orig.$(date +%s)",
-        'mv /data/journal/journal/share "$dest"',
+        'mv "$share" "$dest"',
         'echo "$dest"',
-        "docker start espresso-node",
     ]
 
 
-def test_share_wipe_script_refuses_a_query_node():
-    with pytest.raises(ValueError, match="not query nodes"):
-        awsb.share_wipe_script(True)
+def test_share_wipe_script_checks_before_stopping_and_restarts_on_failure():
+    lines = awsb.share_wipe_script().splitlines()
+    check = next(i for i, c in enumerate(lines) if c.startswith("test -d"))
+    stop = next(i for i, c in enumerate(lines) if c.startswith("docker stop"))
+    trap = next(i for i, c in enumerate(lines) if c.startswith("trap "))
+    assert check < stop < trap
 
 
 # TEST:rejoin-env-config-peers-ok

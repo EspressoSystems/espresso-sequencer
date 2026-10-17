@@ -2751,18 +2751,20 @@ def wipe_script(query: bool) -> str:
     return "\n".join(lines) + "\n"
 
 
-def share_wipe_script(query: bool) -> str:
-    """Run as root through `bounded`. Prints the path the share lane moved to. Validators only:
-    a query node serves its history from the lane."""
-    if query:
-        raise ValueError("share-wipe targets validators that are not query nodes")
+def share_wipe_script() -> str:
+    """Run as root through `bounded`. Prints the path the share lane moved to. Host path of the
+    node's `<storage>/journal/share`: `/data/journal` is mounted at `/store`, storage is
+    `/store/espresso`. Fails before stopping the node when the lane is missing; once stopped,
+    the node is started again on every exit."""
     return (
         "set -eu\n"
+        "share=/data/journal/espresso/journal/share\n"
+        'test -d "$share" || { echo "no share lane at $share" >&2; exit 1; }\n'
         "docker stop -t 30 espresso-node\n"
+        "trap 'docker start espresso-node' EXIT\n"
         "dest=/data/journal/share.orig.$(date +%s)\n"
-        'mv /data/journal/journal/share "$dest"\n'
+        'mv "$share" "$dest"\n'
         'echo "$dest"\n'
-        "docker start espresso-node\n"
     )
 
 
@@ -2936,7 +2938,7 @@ def add_chaos_flags(parser: argparse.ArgumentParser) -> None:
         default=chaos.kinds,
         help="with --chaos: comma separated fault kinds, used in turn; `mass-restart` and `mass-kill` "
         "fault every node at once, or --chaos-mass-nodes of them; `share-wipe` moves the share lane "
-        "of a validator that is not a query node to /data/journal/share.orig.<ts>; `none` for no faults",
+        "of a node to /data/journal/share.orig.<ts>; `none` for no faults",
     )
     for flag, value, text in (
         ("gap", chaos.gap_s, "seconds between two faults"),
@@ -6428,7 +6430,7 @@ class ChaosRunner:
             if actions[name] == "wipe":
                 script = bounded(wipe_script(name in self.queries))
             elif actions[name] == "share-wipe":
-                script = bounded(share_wipe_script(name in self.queries))
+                script = bounded(share_wipe_script())
             else:
                 script = DOCKER_NODE_COMMANDS[actions[name]]
             return self.remote.ssh(name, script, check=False)
