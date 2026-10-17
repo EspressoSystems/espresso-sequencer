@@ -173,7 +173,7 @@ pub struct Options {
     pub share_retention: Duration,
 
     /// Re-create lost VID shares from peers' shares, over the `share_retention` window. Needs an
-    /// index of every stored share, built at startup, and is refused on a query node.
+    /// index of every stored share, built at startup. A query node always builds it.
     #[clap(
         long,
         env = "ESPRESSO_NODE_SHARE_HEAL",
@@ -340,7 +340,8 @@ struct JournalLane {
     lane: Lane,
     dir: PathBuf,
     segments: Arc<parking_lot::Mutex<Segments>>,
-    /// `Some` exactly on a query node, which replays decided blocks into its query service.
+    /// Share lane: every Vid frame, on a query node or with share heal. Da lane: unreplayed
+    /// frames, on a query node only.
     index: Option<DataIndex>,
 }
 
@@ -549,12 +550,6 @@ fn start_lane(
 
 impl Persistence {
     pub async fn open(opts: Options) -> anyhow::Result<Self> {
-        ensure!(
-            !(opts.share_heal && opts.query_storage.is_some()),
-            "share heal is not supported on a query node, its share index covers unreplayed views \
-             only"
-        );
-
         let path = opts.path.clone();
         let journal_dir = path.join("journal");
         let wal_dir = journal_dir.join("wal");
@@ -657,32 +652,22 @@ impl Persistence {
         } else {
             state.replay = None;
         }
-        let (share_index, da_index) = match &state.replay {
-            Some(replay) => (
-                Some(
-                    index_unreplayed(
-                        &std_fs,
-                        &share_dir,
-                        Stream::Share,
-                        &share_recovered.segments,
-                        replay,
-                    )
+        let share_index = if opts.query_storage.is_some() || opts.share_heal {
+            let seqs = share_recovered.segments.iter().map(|meta| meta.seq);
+            let vids = index_frames(&std_fs, &share_dir, Stream::Share, seqs.collect(), |h| {
+                h.kind == Kind::Vid.into()
+            })
+            .await?;
+            Some(vids)
+        } else {
+            None
+        };
+        let da_index = match &state.replay {
+            Some(replay) => Some(
+                index_unreplayed(&std_fs, &da_dir, Stream::Da, &da_recovered.segments, replay)
                     .await?,
-                ),
-                Some(
-                    index_unreplayed(&std_fs, &da_dir, Stream::Da, &da_recovered.segments, replay)
-                        .await?,
-                ),
             ),
-            None if opts.share_heal => {
-                let seqs = share_recovered.segments.iter().map(|meta| meta.seq);
-                let vids = index_frames(&std_fs, &share_dir, Stream::Share, seqs.collect(), |h| {
-                    h.kind == Kind::Vid.into()
-                })
-                .await?;
-                (Some(vids), None)
-            },
-            None => (None, None),
+            None => None,
         };
         let pending_payloads = PendingPayloads::new(opts.pending_payload_bytes);
 
@@ -1295,7 +1280,7 @@ fn find_in_segment(
     Ok(found)
 }
 
-/// Index the frames of `stream` a query node may still replay: every record past the replay
+/// Index the frames of the da stream a query node may still replay: every record past the replay
 /// cursor, decided or not yet. `max_key` only grows along a stream, so segments ending at or before
 /// the cursor hold nothing replay needs.
 async fn index_unreplayed(
@@ -1506,11 +1491,6 @@ impl SequencerPersistence for Persistence {
     }
 
     async fn held_vid_views(&self) -> anyhow::Result<BTreeSet<ViewNumber>> {
-        ensure!(
-            !self.is_query_node(),
-            "share heal is not supported on a query node, its share index covers unreplayed views \
-             only"
-        );
         let index = self
             .inner
             .lanes
@@ -2202,20 +2182,26 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn share_index_is_built_only_for_heal() {
-        for heal in [false, true] {
+    async fn share_index_is_built_for_heal_or_query_node() {
+        for (heal, query) in [(false, false), (true, false), (false, true), (true, true)] {
             let tmp = TempDir::new().unwrap();
-            let opts = Options {
+            let mut opts = Options {
                 share_heal: heal,
                 ..options(&tmp)
             };
+            if query {
+                opts = opts.with_query_storage(QueryStorage::Fs(side_fs::Options::new(
+                    tmp.path().join("query"),
+                )));
+            }
             let storage = Persistence::open(opts).await.unwrap();
-            assert_eq!(storage.inner.lanes.share.index.is_some(), heal);
+            assert_eq!(storage.inner.lanes.share.index.is_some(), heal || query);
         }
     }
 
+    /// The share index of a query node with heal covers replayed views too, across a restart.
     #[tokio::test]
-    async fn share_heal_is_refused_on_a_query_node() {
+    async fn query_node_heal_holds_replayed_shares_ok() {
         let tmp = TempDir::new().unwrap();
         let opts = Options {
             share_heal: true,
@@ -2224,8 +2210,32 @@ mod tests {
         .with_query_storage(QueryStorage::Fs(side_fs::Options::new(
             tmp.path().join("query"),
         )));
-        let err = Persistence::open(opts).await.err().unwrap();
-        assert!(err.to_string().contains("query node"), "{err:#}");
+        let storage = Persistence::open(opts.clone()).await.unwrap();
+        let chain = consecutive_height_chain(3).await;
+        for view in 0..3 {
+            storage
+                .append_vid_stamped(&vid_share(view).await, 100)
+                .await
+                .unwrap();
+        }
+        decide_range(&storage, &chain, 0..3, &NullEventConsumer).await;
+        let held = storage.held_vid_views().await.unwrap();
+        assert_eq!(held.len(), 3);
+        let cursor = storage.replay_cursor().unwrap();
+        assert!(
+            held.iter().any(|view| *view <= cursor),
+            "no replayed view held"
+        );
+        for view in &held {
+            assert!(storage.load_vid_share(*view).await.unwrap().is_some());
+        }
+        drop(storage);
+
+        let storage = Persistence::open(opts).await.unwrap();
+        assert_eq!(storage.held_vid_views().await.unwrap(), held);
+        for view in &held {
+            assert!(storage.load_vid_share(*view).await.unwrap().is_some());
+        }
     }
 
     /// A wiped share lane loses the leaf copies with the shares; restoring writes them again for
