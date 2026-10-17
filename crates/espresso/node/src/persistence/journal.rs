@@ -34,7 +34,7 @@ use espresso_types::{
 use hotshot_libp2p_networking::network::behaviours::dht::store::persistent::{
     DhtPersistentStorage, SerializableRecord,
 };
-use hotshot_new_protocol::message::Certificate2;
+use hotshot_new_protocol::{heal::HealConfig, message::Certificate2};
 use hotshot_types::{
     data::{
         DaProposal, DaProposal2, EpochNumber, QuorumProposalWrapper, VidCommitment,
@@ -184,6 +184,31 @@ pub struct Options {
         default_missing_value = "true"
     )]
     pub share_heal: bool,
+
+    /// Heights share heal recreates concurrently.
+    #[clap(
+        long,
+        env = "ESPRESSO_NODE_SHARE_HEAL_PARALLEL",
+        default_value_t = HealConfig::default().heights_inflight
+    )]
+    pub share_heal_parallel: usize,
+
+    /// Memory budget of the heights share heal has in flight, estimated at 3 times each payload.
+    /// One height always runs.
+    #[clap(
+        long,
+        env = "ESPRESSO_NODE_SHARE_HEAL_BYTES",
+        default_value_t = HealConfig::default().inflight_bytes
+    )]
+    pub share_heal_bytes: usize,
+
+    /// Share requests from peers served concurrently; further ones are answered busy.
+    #[clap(
+        long,
+        env = "ESPRESSO_NODE_SHARE_SERVE_INFLIGHT",
+        default_value_t = HealConfig::default().serve_inflight
+    )]
+    pub share_serve_inflight: usize,
 
     /// Cap on the block payloads a query node holds in memory for its query service, from when
     /// it obtains them until their decide is replayed. Oldest dropped first once exceeded; the
@@ -1380,11 +1405,15 @@ fn next_replay_batch(replay: &Replay) -> Option<ReplayBatch> {
 
 #[async_trait]
 impl SequencerPersistence for Persistence {
-    fn share_heal_window(&self) -> Option<Duration> {
-        self.inner
-            .opts
-            .share_heal
-            .then_some(self.inner.opts.share_retention)
+    fn share_heal_config(&self) -> Option<HealConfig> {
+        let opts = &self.inner.opts;
+        opts.share_heal.then(|| HealConfig {
+            w: opts.share_retention,
+            heights_inflight: opts.share_heal_parallel,
+            inflight_bytes: opts.share_heal_bytes,
+            serve_inflight: opts.share_serve_inflight,
+            ..HealConfig::default()
+        })
     }
 
     async fn load_config(&self) -> anyhow::Result<Option<NetworkConfig>> {
@@ -1921,6 +1950,30 @@ mod tests {
         assert!(parse(&["--share-heal", "1"]));
         assert!(parse(&["--share-heal", "true"]));
         assert!(!parse(&["--share-heal", "0"]));
+    }
+
+    #[test]
+    fn share_heal_tuning_flags() {
+        let parse = |args: &[&str]| {
+            Options::try_parse_from(["node", "--path", "/store"].iter().chain(args)).unwrap()
+        };
+        let opts = parse(&[]);
+        assert_eq!(opts.share_heal_parallel, 8);
+        assert_eq!(opts.share_heal_bytes, 512 << 20);
+        assert_eq!(opts.share_serve_inflight, 16);
+        let opts = parse(&[
+            "--share-heal-parallel=3",
+            "--share-heal-bytes=100",
+            "--share-serve-inflight=5",
+        ]);
+        assert_eq!(
+            (
+                opts.share_heal_parallel,
+                opts.share_heal_bytes,
+                opts.share_serve_inflight
+            ),
+            (3, 100, 5)
+        );
     }
 
     fn segments(stream: Stream, spec: &[(u64, u64, u64)]) -> Segments {
@@ -2658,6 +2711,9 @@ mod tests {
             max_bytes: DEFAULT_MAX_BYTES,
             share_retention: parse_duration("7d").unwrap(),
             share_heal: false,
+            share_heal_parallel: 8,
+            share_heal_bytes: 512 << 20,
+            share_serve_inflight: 16,
             pending_payload_bytes: DEFAULT_PENDING_PAYLOAD_BYTES,
             ignore_existing: false,
             max_block_size: Some(TEST_MAX_BLOCK_SIZE),
@@ -2722,6 +2778,9 @@ mod tests {
             max_bytes: DEFAULT_MAX_BYTES,
             share_retention: parse_duration("7d").unwrap(),
             share_heal: false,
+            share_heal_parallel: 8,
+            share_heal_bytes: 512 << 20,
+            share_serve_inflight: 16,
             pending_payload_bytes: DEFAULT_PENDING_PAYLOAD_BYTES,
             ignore_existing: false,
             max_block_size: Some(TEST_MAX_BLOCK_SIZE),
@@ -2762,6 +2821,9 @@ mod testing {
                 max_bytes: DEFAULT_MAX_BYTES,
                 share_retention: parse_duration("7d").unwrap(),
                 share_heal: false,
+                share_heal_parallel: 8,
+                share_heal_bytes: 512 << 20,
+                share_serve_inflight: 16,
                 pending_payload_bytes: DEFAULT_PENDING_PAYLOAD_BYTES,
                 ignore_existing: false,
                 max_block_size: Some(TEST_MAX_BLOCK_SIZE),

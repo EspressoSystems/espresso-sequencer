@@ -20,7 +20,6 @@ use futures::{
 };
 use hotshot_new_protocol::{
     coordinator::Coordinator,
-    heal::HealConfig,
     leader_trace::{CsvLeaderTracer, LeaderTracerHandle},
     network::{Cliquenet, NetworkError},
 };
@@ -220,10 +219,7 @@ where
             .transpose()?;
 
         let (external_tx, external_rx) = unbounded_channel();
-        let heal = persistence.share_heal_window().map(|w| HealConfig {
-            w,
-            ..HealConfig::default()
-        });
+        let heal = persistence.share_heal_config();
         let coordinator = Coordinator::maker()
             .membership_coordinator(membership_coordinator.clone())
             .network(coordinator_network)

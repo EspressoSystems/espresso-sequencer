@@ -5,7 +5,7 @@ use std::{
     cmp::max,
     collections::{BTreeMap, BTreeSet},
 };
-use std::{fmt::Debug, ops::Range, sync::Arc, time::Duration};
+use std::{fmt::Debug, ops::Range, sync::Arc};
 
 use alloy::primitives::Address;
 #[cfg(feature = "node")]
@@ -16,7 +16,7 @@ use futures::{FutureExt, TryFutureExt};
 #[cfg(feature = "node")]
 use hotshot_libp2p_networking::network::behaviours::dht::store::persistent::DhtPersistentStorage;
 #[cfg(feature = "node")]
-use hotshot_new_protocol::storage::NewProtocolStorage;
+use hotshot_new_protocol::{heal::HealConfig, storage::NewProtocolStorage};
 #[cfg(feature = "node")]
 use hotshot_types::simple_certificate::{Certificate1, Certificate2};
 #[cfg(feature = "node")]
@@ -591,9 +591,9 @@ pub trait SequencerPersistence:
         bail!("state catchup is not implemented for this persistence type");
     }
 
-    /// How far back, in header time, this node re-creates its lost VID shares from peers, or
-    /// `None` when share heal is off.
-    fn share_heal_window(&self) -> Option<Duration> {
+    /// How this node re-creates its lost VID shares from peers and serves its own, or `None`
+    /// when share heal is off.
+    fn share_heal_config(&self) -> Option<HealConfig> {
         None
     }
 
