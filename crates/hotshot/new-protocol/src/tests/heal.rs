@@ -54,7 +54,39 @@ struct Cluster {
     peers: Arc<Mutex<Vec<Peer>>>,
     /// Views requested from peers, in order.
     requested: Arc<Mutex<Vec<ViewNumber>>>,
+    load: Arc<Mutex<Load>>,
 }
+
+/// Requests peers have received and not yet answered, and the peaks seen.
+#[derive(Default)]
+struct Load {
+    per_peer: HashMap<usize, usize>,
+    per_view: HashMap<ViewNumber, usize>,
+    max_per_peer: usize,
+    max_views: usize,
+}
+
+impl Load {
+    fn start(&mut self, peer: usize, view: ViewNumber) {
+        let current = self.per_peer.entry(peer).or_default();
+        *current += 1;
+        self.max_per_peer = self.max_per_peer.max(*current);
+        *self.per_view.entry(view).or_default() += 1;
+        self.max_views = self.max_views.max(self.per_view.len());
+    }
+
+    fn end(&mut self, peer: usize, view: ViewNumber) {
+        *self.per_peer.get_mut(&peer).unwrap() -= 1;
+        let count = self.per_view.get_mut(&view).unwrap();
+        *count -= 1;
+        if *count == 0 {
+            self.per_view.remove(&view);
+        }
+    }
+}
+
+/// Time a peer takes to answer, so requests overlap.
+const LATENCY: Duration = Duration::from_millis(20);
 
 /// `(peer, view)` pairs that already got their `Busy`.
 type Busied = Arc<Mutex<BTreeSet<(usize, ViewNumber)>>>;
@@ -62,7 +94,11 @@ type Busied = Arc<Mutex<BTreeSet<(usize, ViewNumber)>>>;
 impl Cluster {
     /// Every node but the healer holds its share of every view; the healer's store knows the chain.
     async fn new() -> Self {
-        let data = TestData::new_with_epoch_height_and_num_nodes(VIEWS, 10, NODES).await;
+        Self::with_views(VIEWS).await
+    }
+
+    async fn with_views(views: usize) -> Self {
+        let data = TestData::new_with_epoch_height_and_num_nodes(views, 10, NODES).await;
         let keys: Vec<_> = (0..NODES as u64)
             .map(|i| BLSPubKey::generated_from_seed_indexed([0u8; 32], i))
             .collect();
@@ -87,6 +123,7 @@ impl Cluster {
             storages,
             peers: Arc::new(Mutex::new(vec![Peer::Honest; NODES])),
             requested: Arc::default(),
+            load: Arc::default(),
         }
     }
 
@@ -130,6 +167,7 @@ impl Cluster {
 
         let (keys, storages) = (self.keys.clone(), self.storages.clone());
         let (peers, requested) = (self.peers.clone(), self.requested.clone());
+        let load = self.load.clone();
         let busied = Busied::default();
         let data_shares: HashMap<_, _> = self
             .data
@@ -139,25 +177,36 @@ impl Cluster {
             .collect();
         tokio::spawn(async move {
             let _view_tx = _view_tx;
+            let (keys, storages) = (Arc::new(keys), Arc::new(storages));
+            let data_shares = Arc::new(data_shares);
             while let Some((peer, request)) = requests_rx.recv().await {
                 let idx = keys.iter().position(|key| key.0 == peer).unwrap();
                 let view = request.view_number();
                 requested.lock().push(view);
+                load.lock().start(idx, view);
                 let behavior = peers.lock()[idx];
-                let body = match behavior {
-                    Peer::Honest => load_response(&storages[idx], &request, usize::MAX).await.0,
-                    Peer::Empty => ShareResponseBody::NotHeld,
-                    Peer::BusyOnce if busied.lock().insert((idx, view)) => ShareResponseBody::Busy,
-                    Peer::BusyOnce => load_response(&storages[idx], &request, usize::MAX).await.0,
-                    Peer::Garbage => {
-                        let honest = data_shares[&view].iter().find(|s| s.recipient_key == peer);
-                        ShareResponseBody::Share(Box::new(garbage(honest.unwrap().clone())))
-                    },
-                };
-                responses_tx
-                    .send((peer, Response::new(view, body)))
-                    .await
-                    .unwrap();
+                let first_busy = behavior == Peer::BusyOnce && busied.lock().insert((idx, view));
+                let (storages, data_shares) = (storages.clone(), data_shares.clone());
+                let (responses_tx, load) = (responses_tx.clone(), load.clone());
+                tokio::spawn(async move {
+                    sleep(LATENCY).await;
+                    let body = match behavior {
+                        Peer::Honest | Peer::BusyOnce if !first_busy => {
+                            load_response(&storages[idx], &request, usize::MAX).await.0
+                        },
+                        Peer::BusyOnce => ShareResponseBody::Busy,
+                        Peer::Empty => ShareResponseBody::NotHeld,
+                        Peer::Garbage => {
+                            let honest =
+                                data_shares[&view].iter().find(|s| s.recipient_key == peer);
+                            ShareResponseBody::Share(Box::new(garbage(honest.unwrap().clone())))
+                        },
+                        Peer::Honest => unreachable!(),
+                    };
+                    load.lock().end(idx, view);
+                    // The healer may have ended; a late response is dropped.
+                    let _ = responses_tx.send((peer, Response::new(view, body))).await;
+                });
             }
         });
         tokio::spawn(run(ctx, responses))
@@ -403,6 +452,63 @@ async fn heal_terminal_failure_not_retried_ok() {
         .filter(|view| **view == poisoned)
         .count();
     assert!(asked < NODES, "asked {asked} times");
+}
+
+/// Many targets heal at once, byte-equal to the live shares, with the per-peer cap held.
+#[tokio::test(flavor = "multi_thread")]
+async fn heal_many_heights_in_parallel_ok() {
+    let cluster = Cluster::with_views(20).await;
+    let storage = cluster.storages[HEALER].clone();
+    let config = HealConfig {
+        heights_inflight: 8,
+        peer_inflight: 2,
+        ..Cluster::config()
+    };
+    let healer = cluster.start_healer_with(storage.clone(), config, ViewNumber::new(1000));
+    cluster.wait_held(&storage, &cluster.all_views()).await;
+    cluster
+        .assert_byte_equal(&storage, &cluster.all_views())
+        .await;
+    healer.abort();
+    let load = cluster.load.lock();
+    assert!(load.max_views > 1, "heights ran one at a time");
+    assert!(load.max_views <= 8, "{} heights at once", load.max_views);
+    assert!(
+        load.max_per_peer <= 2,
+        "{} requests to a peer",
+        load.max_per_peer
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn heal_peer_cap_respected_ok() {
+    let cluster = Cluster::with_views(12).await;
+    let storage = cluster.storages[HEALER].clone();
+    let config = HealConfig {
+        heights_inflight: 8,
+        peer_inflight: 1,
+        ..Cluster::config()
+    };
+    let healer = cluster.start_healer_with(storage.clone(), config, ViewNumber::new(1000));
+    cluster.wait_held(&storage, &cluster.all_views()).await;
+    healer.abort();
+    assert_eq!(cluster.load.lock().max_per_peer, 1);
+}
+
+/// A budget below one height still heals, one height at a time.
+#[tokio::test(flavor = "multi_thread")]
+async fn heal_byte_budget_serializes_heights_ok() {
+    let cluster = Cluster::with_views(8).await;
+    let storage = cluster.storages[HEALER].clone();
+    let config = HealConfig {
+        heights_inflight: 8,
+        inflight_bytes: 0,
+        ..Cluster::config()
+    };
+    let healer = cluster.start_healer_with(storage.clone(), config, ViewNumber::new(1000));
+    cluster.wait_held(&storage, &cluster.all_views()).await;
+    healer.abort();
+    assert_eq!(cluster.load.lock().max_views, 1);
 }
 
 /// A live append of a view the healer also heals leaves one identical share.

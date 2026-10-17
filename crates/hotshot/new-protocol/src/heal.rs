@@ -8,11 +8,11 @@ use std::{cmp::Reverse, collections::BTreeSet, sync::Arc, time::Duration};
 use hotshot_types::{
     data::{
         EpochNumber, Leaf2, VidCommitment, VidCommitment2, VidDisperseShare2, ViewNumber,
-        vid_disperse::AvidmGf2DisperseParams,
+        ns_table::ns_table_payload_byte_len, vid_disperse::AvidmGf2DisperseParams,
     },
     epoch_membership::EpochMembershipCoordinator,
     traits::{
-        block_contents::BlockHeader,
+        block_contents::{BlockHeader, EncodeBytes},
         metrics::{Counter, CounterFamily, Gauge, HistogramFamily, Metrics},
         node_implementation::NodeType,
         signature_key::SignatureKey,
@@ -51,6 +51,13 @@ pub struct HealConfig {
     pub req_timeout: Duration,
     /// How long a peer that answered `Busy` is left alone before it is asked again.
     pub busy_backoff: Duration,
+    /// Heights healed concurrently.
+    pub heights_inflight: usize,
+    /// Requests outstanding to one peer across all heights.
+    pub peer_inflight: usize,
+    /// Memory budget over the heights in flight, see `HealTarget::cost`. At least one height is
+    /// always admitted.
+    pub inflight_bytes: usize,
     pub serve_inflight: usize,
     pub max_response_bytes: usize,
     pub max_fetch_bytes_per_s: Option<u64>,
@@ -72,7 +79,10 @@ impl Default for HealConfig {
             scan_interval: Duration::from_secs(60),
             req_timeout: Duration::from_secs(10),
             busy_backoff: Duration::from_secs(1),
-            serve_inflight: 4,
+            heights_inflight: 8,
+            peer_inflight: 2,
+            inflight_bytes: 512 << 20,
+            serve_inflight: 16,
             max_response_bytes: 64 << 20,
             max_fetch_bytes_per_s: None,
         }
@@ -87,6 +97,21 @@ pub struct HealTarget<T: NodeType> {
     pub header_ts: u64,
     pub commit: VidCommitment2,
     pub metadata: Metadata<T>,
+}
+
+/// Peak memory of a height in flight, in multiples of its payload: fetched shares, the decoded
+/// payload and the re-encoding.
+const COST_FACTOR: usize = 3;
+
+impl<T: NodeType> HealTarget<T> {
+    /// Estimated memory while in flight, from the payload length in the header's namespace table.
+    /// A table that does not parse counts as an empty payload; every height costs at least a byte.
+    pub fn cost(&self) -> usize {
+        ns_table_payload_byte_len(&self.metadata.encode())
+            .unwrap_or(0)
+            .saturating_mul(COST_FACTOR)
+            .max(1)
+    }
 }
 
 /// The decided `leaves` whose share is missing and worth recreating, newest first.
@@ -132,6 +157,7 @@ pub fn heal_targets<T: NodeType>(
 #[derive(Clone)]
 pub struct HealMetrics {
     targets: Arc<dyn Gauge>,
+    inflight: Arc<dyn Gauge>,
     unreachable: Arc<dyn Gauge>,
     done: Arc<dyn Counter>,
     fetch_bytes: Arc<dyn Counter>,
@@ -146,6 +172,7 @@ impl HealMetrics {
         let gauge = |name: &str| metrics.create_gauge(name.into(), None).into();
         Self {
             targets: gauge("share_heal_targets"),
+            inflight: gauge("share_heal_inflight"),
             unreachable: gauge("share_heal_unreachable"),
             done: counter("share_heal_done_total"),
             fetch_bytes: counter("share_heal_fetch_bytes_total"),
