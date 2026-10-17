@@ -6,7 +6,10 @@ use ::light_client::{state::LightClientOptions, storage::LightClientSqliteOption
 use anyhow::{Context, bail};
 use clap::Parser;
 use espresso_telemetry as telemetry;
-use espresso_types::v0::traits::{NullEventConsumer, PersistenceOptions};
+use espresso_types::{
+    parse_size,
+    v0::traits::{NullEventConsumer, PersistenceOptions},
+};
 use futures::{channel::oneshot, future::BoxFuture};
 use hotshot_query_service::{
     data_source::{ExtensibleDataSource, MetricsDataSource},
@@ -499,27 +502,29 @@ pub struct Query {
 
     /// Block payload bytes the query API loads into memory at once, across all requests.
     ///
-    /// A request waits for budget before loading payloads and gets a 503 with `Retry-After` if
-    /// none frees up in time. A single block larger than the budget is still served, alone.
-    /// Defaults to 512 MiB.
-    #[clap(long, env = "ESPRESSO_NODE_API_PAYLOAD_MEMORY_BUDGET")]
+    /// A request that cannot get budget gets a 503 with `Retry-After`; single-block requests
+    /// wait a few seconds first, range requests fail at once. A request larger than the whole
+    /// budget is served alone. Takes a size such as `512MiB`.
+    #[clap(
+        long,
+        env = "ESPRESSO_NODE_API_PAYLOAD_MEMORY_BUDGET",
+        value_parser = parse_budget,
+        default_value = "512MiB"
+    )]
     pub payload_memory_budget: Option<u64>,
+}
 
-    /// Block payload bytes a single range request may cover, in addition to the limit on the
-    /// number of blocks. Larger requests get a 400. Defaults to 128 MiB.
-    #[clap(long, env = "ESPRESSO_NODE_API_PAYLOAD_RANGE_BYTE_LIMIT")]
-    pub payload_range_byte_limit: Option<u64>,
+fn parse_budget(s: &str) -> Result<u64, String> {
+    match parse_size(s).map_err(|err| err.to_string())? {
+        0 => Err("payload memory budget must be greater than 0".into()),
+        bytes => Ok(bytes),
+    }
 }
 
 impl Query {
     fn payload_budget(&self) -> PayloadBudget {
-        let budget = self
-            .payload_memory_budget
-            .map_or_else(PayloadBudget::default, PayloadBudget::new);
-        match self.payload_range_byte_limit {
-            Some(limit) => budget.with_range_limit(limit),
-            None => budget,
-        }
+        self.payload_memory_budget
+            .map_or_else(PayloadBudget::default, PayloadBudget::new)
     }
 
     pub fn light_client_db(&self) -> LightClientSqliteOptions {
@@ -539,6 +544,28 @@ impl Query {
 impl Query {
     pub fn test() -> Self {
         Self::default()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::api::payload_budget::DEFAULT_BUDGET_BYTES;
+
+    #[test]
+    fn payload_memory_budget_defaults_to_512_mib() {
+        let query = Query::try_parse_from(["query"]).unwrap();
+
+        assert_eq!(query.payload_memory_budget, Some(DEFAULT_BUDGET_BYTES));
+    }
+
+    #[test]
+    fn payload_memory_budget_takes_sizes_and_rejects_zero() {
+        let parse = |arg: &str| Query::try_parse_from(["query", "--payload-memory-budget", arg]);
+
+        assert_eq!(parse("1MiB").unwrap().payload_memory_budget, Some(1 << 20));
+        assert!(parse("0").is_err());
+        assert!(parse("lots").is_err());
     }
 }
 

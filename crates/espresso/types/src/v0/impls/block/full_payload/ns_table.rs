@@ -66,7 +66,8 @@ impl NsTable {
         )
     }
 
-    /// Payload size in bytes implied by the final namespace offset, `0` if the table is empty.
+    /// Payload size in bytes as declared by the namespace table: the final namespace offset, `0`
+    /// if the table is empty. Not checked against the payload, see [`NsTable::validate`].
     pub fn payload_byte_len(&self) -> usize {
         match self.len().0 {
             0 => 0,
