@@ -28,7 +28,7 @@ BINARIES = {
 MAX_NAME = 160
 # Frames of the allocator and of std containers that only forward an allocation request.
 ALLOCATOR_FRAME = re.compile(
-    r"^(prof_|_rjem_|je_|tikv_jemalloc|alloc::alloc|alloc::raw_vec|__rust_|<tikv_jemallocator"
+    r"^(prof_|_rjem_|je_|do_rallocx|tikv_jemalloc|<?alloc::alloc|<?alloc::raw_vec|__rust_|<tikv_jemallocator"
     r"|alloc::vec::Vec<.*>::(with_capacity|reserve|push|extend)|<alloc::vec::Vec|core::ptr"
     r"|alloc::boxed|alloc::sync::Arc<.*>::new|<alloc::alloc|hashbrown::raw|alloc::slice"
     r"|<T as alloc::slice)"

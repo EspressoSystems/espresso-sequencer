@@ -116,3 +116,15 @@ def test_render_lists_total_and_both_tables() -> None:
     assert lines[0] == "total in use (sampled estimate): 2 MiB"
     assert "     2.0 MiB 100.0%  a" in lines
     assert not any(line.endswith("  b") for line in lines)
+
+
+@pytest.mark.parametrize(
+    "frame",
+    [
+        "<alloc::raw_vec::RawVecInner>::finish_grow",
+        "do_rallocx",
+        "<alloc::raw_vec::RawVec<u8>>::grow_one",
+    ],
+)
+def test_vec_growth_frames_are_allocator_frames(frame: str) -> None:
+    assert report.ALLOCATOR_FRAME.match(frame)
