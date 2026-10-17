@@ -2761,7 +2761,7 @@ def share_wipe_script() -> str:
         "share=/data/journal/espresso/journal/share\n"
         'test -d "$share" || { echo "no share lane at $share" >&2; exit 1; }\n'
         "docker stop -t 30 espresso-node\n"
-        "trap 'docker start espresso-node' EXIT\n"
+        "trap 'docker start espresso-node >/dev/null' EXIT\n"
         "dest=/data/journal/share.orig.$(date +%s)\n"
         'mv "$share" "$dest"\n'
         'echo "$dest"\n'
