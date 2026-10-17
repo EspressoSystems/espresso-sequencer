@@ -28,7 +28,6 @@ use axum::{
     response::{Html, IntoResponse, Response},
     routing::{any, get},
 };
-use futures::StreamExt as _;
 use http_wire::{
     ContentType, DecodeFailure, WireError, drive_ws_stream, healthcheck_response,
     module_healthcheck_response,
@@ -192,12 +191,13 @@ tokio::task_local! {
     static RESPONSE_GUARDS: ResponseGuards;
 }
 
-/// Keep `guard` alive until the response being built has been sent and dropped, so a resource
-/// the response bytes depend on, such as a memory budget, covers serialization and the write.
+/// Keep `guard` alive until the handler has built its response, serialized body included, so a
+/// resource the response bytes depend on, such as a memory budget, covers the serialization copy.
+/// The guard is dropped before the body is written to the client, so a slow reader cannot pin it.
 ///
 /// Returns the guard when the caller is not inside a request served by this router (a gRPC call,
 /// a unit test) or runs on a spawned task. The caller then keeps it for as long as it needs.
-pub fn hold_until_response_dropped<T: Send + 'static>(guard: T) -> Option<T> {
+pub fn hold_until_response_built<T: Send + 'static>(guard: T) -> Option<T> {
     let mut guard = Some(guard);
     // `try_with` fails outside a scope, leaving `guard` with the caller.
     let _ = RESPONSE_GUARDS.try_with(|guards| {
@@ -207,20 +207,12 @@ pub fn hold_until_response_dropped<T: Send + 'static>(guard: T) -> Option<T> {
     guard
 }
 
-/// Run the handler with a guard list that [`hold_until_response_dropped`] fills, and tie the
-/// collected guards to the response body.
+/// Run the handler with a guard list that [`hold_until_response_built`] fills. The list, and so
+/// the guards, drop when the handler returns.
 pub(crate) async fn hold_response_guards(req: Request, next: axum::middleware::Next) -> Response {
-    let guards = ResponseGuards::default();
-    let res = RESPONSE_GUARDS.scope(guards.clone(), next.run(req)).await;
-    let guards = std::mem::take(&mut *guards.lock().expect("not poisoned"));
-    if guards.is_empty() {
-        return res;
-    }
-    let (parts, body) = res.into_parts();
-    let body = body.into_data_stream().inspect(move |_| {
-        let _ = &guards;
-    });
-    Response::from_parts(parts, axum::body::Body::from_stream(body))
+    RESPONSE_GUARDS
+        .scope(ResponseGuards::default(), next.run(req))
+        .await
 }
 
 /// In-flight request slots for `max_connections`.
@@ -6049,10 +6041,23 @@ mod tests {
         assert!(res.headers().get(header::RETRY_AFTER).is_none());
     }
 
-    /// A guard handed to `hold_until_response_dropped` stays held while the response body is
-    /// alive, and is released once it is dropped.
+    /// The guard is held while the handler builds its response, `IntoResponse` included, and is
+    /// released before the body is consumed. The body is not wrapped, so its size stays known.
     #[tokio::test]
-    async fn response_guard_is_held_until_body_is_dropped() {
+    async fn response_guard_covers_building_the_response_not_writing_it() {
+        struct Payload(Arc<Semaphore>);
+
+        impl IntoResponse for Payload {
+            fn into_response(self) -> Response {
+                assert_eq!(
+                    self.0.available_permits(),
+                    0,
+                    "guard held while serializing"
+                );
+                "payload".into_response()
+            }
+        }
+
         let budget = Arc::new(Semaphore::new(1));
         let handler_budget = budget.clone();
         let router = Router::new()
@@ -6061,41 +6066,31 @@ mod tests {
                 get(move || {
                     let budget = handler_budget.clone();
                     async move {
-                        match budget.try_acquire_owned() {
-                            Ok(permit) => {
-                                assert!(hold_until_response_dropped(permit).is_none());
-                                "payload".into_response()
-                            },
-                            Err(_) => StatusCode::SERVICE_UNAVAILABLE.into_response(),
-                        }
+                        let permit = budget.clone().try_acquire_owned().unwrap();
+                        assert!(hold_until_response_built(permit).is_none());
+                        Payload(budget)
                     }
                 }),
             )
             .layer(axum::middleware::from_fn(hold_response_guards));
-        let request = || {
-            Request::builder()
-                .uri("/payload")
-                .body(axum::body::Body::empty())
-                .unwrap()
-        };
-
-        let first = tower::ServiceExt::oneshot(router.clone(), request())
-            .await
+        let request = Request::builder()
+            .uri("/payload")
+            .body(axum::body::Body::empty())
             .unwrap();
-        assert_eq!(first.status(), StatusCode::OK);
-        let second = tower::ServiceExt::oneshot(router.clone(), request())
-            .await
-            .unwrap();
-        assert_eq!(second.status(), StatusCode::SERVICE_UNAVAILABLE);
 
-        drop(first);
-        let third = tower::ServiceExt::oneshot(router, request()).await.unwrap();
-        assert_eq!(third.status(), StatusCode::OK);
+        let res = tower::ServiceExt::oneshot(router, request).await.unwrap();
+
+        assert_eq!(
+            budget.available_permits(),
+            1,
+            "guard released before the body is read"
+        );
+        assert_eq!(axum::body::HttpBody::size_hint(res.body()).exact(), Some(7));
     }
 
     #[test]
     fn guard_is_returned_outside_a_request() {
-        assert_eq!(hold_until_response_dropped(7), Some(7));
+        assert_eq!(hold_until_response_built(7), Some(7));
     }
 
     #[tokio::test]

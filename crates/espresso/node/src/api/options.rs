@@ -1,6 +1,6 @@
 //! Sequencer-specific API options and initialization.
 
-use std::{collections::BTreeSet, env, path::PathBuf, sync::Arc};
+use std::{collections::BTreeSet, env, path::PathBuf, sync::Arc, time::Duration};
 
 use ::light_client::{state::LightClientOptions, storage::LightClientSqliteOptions};
 use anyhow::{Context, bail};
@@ -505,6 +505,8 @@ pub struct Query {
     /// A request that cannot get budget gets a 503 with `Retry-After`; single-block requests
     /// wait a few seconds first, range requests fail at once. A request larger than the whole
     /// budget is served alone. Takes a size such as `512MiB`.
+    // An `Option` so `Query::default()`, which skips clap, means the 512 MiB default and not a
+    // zero budget.
     #[clap(
         long,
         env = "ESPRESSO_NODE_API_PAYLOAD_MEMORY_BUDGET",
@@ -512,6 +514,10 @@ pub struct Query {
         default_value = "512MiB"
     )]
     pub payload_memory_budget: Option<u64>,
+
+    /// How long a request waits for payload budget. Set by tests only.
+    #[clap(skip)]
+    pub payload_wait: Option<Duration>,
 }
 
 fn parse_budget(s: &str) -> Result<u64, String> {
@@ -523,8 +529,13 @@ fn parse_budget(s: &str) -> Result<u64, String> {
 
 impl Query {
     fn payload_budget(&self) -> PayloadBudget {
-        self.payload_memory_budget
-            .map_or_else(PayloadBudget::default, PayloadBudget::new)
+        let budget = self
+            .payload_memory_budget
+            .map_or_else(PayloadBudget::default, PayloadBudget::new);
+        match self.payload_wait {
+            Some(wait) => budget.with_wait(wait),
+            None => budget,
+        }
     }
 
     pub fn light_client_db(&self) -> LightClientSqliteOptions {

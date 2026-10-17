@@ -3911,16 +3911,18 @@ mod test {
         }
     }
 
-    /// With a budget smaller than any block, every payload route still serves (a request larger
-    /// than the budget takes all of it), ranges requests acquire once for all their ranges, and
-    /// concurrent requests that find the budget held get a 503 with `Retry-After`.
+    /// Blocks of 4 KiB against a 1 KiB pool: every payload route still serves (a request larger
+    /// than its pool takes all of it), ranges requests acquire once for all their ranges, and
+    /// concurrent requests that find the pool held get a 503 with `Retry-After`.
     #[test_log::test(tokio::test(flavor = "multi_thread"))]
     async fn test_payload_admission() {
         let port = reserve_tcp_port().expect("OS should have ephemeral ports available");
         let storage = SqlDataSource::create_storage().await;
         let mut api_config = SqlDataSource::options(&storage, Options::with_port(port))
             .light_client(Default::default());
-        api_config.query.as_mut().unwrap().payload_memory_budget = Some(1);
+        let query = api_config.query.as_mut().unwrap();
+        query.payload_memory_budget = Some(1);
+        query.payload_wait = Some(Duration::from_millis(1));
         let config = TestNetworkConfigBuilder::default()
             .api_config(api_config)
             .network_config(TestConfigBuilder::default().build())
@@ -3930,7 +3932,7 @@ mod test {
         let mut events = network.server.event_stream();
         let ns = NamespaceId::from(42_u32);
         let mut heights = vec![];
-        for payload in [vec![1, 2, 3], vec![4, 5, 6]] {
+        for payload in [vec![1; 4096], vec![2; 4096]] {
             let tx = Transaction::new(ns, payload);
             network.server.submit_transaction(tx.clone()).await.unwrap();
             heights.push(wait_for_decide_on_handle(&mut events, &tx).await.0);
@@ -3960,9 +3962,10 @@ mod test {
         ] {
             let res = http.get(format!("{base}/{path}")).send().await.unwrap();
             assert_eq!(res.status(), reqwest::StatusCode::OK, "{path}");
+            res.bytes().await.unwrap();
         }
-        // Two ranges of one block each fit a 1 KiB budget each, so this takes the whole budget
-        // twice over unless the per-range loads share the request's permit.
+        // Each range alone exceeds the pool, so this fails unless the per-range loads share the
+        // request's permit.
         for path in ["availability/block/ranges", "light-client/payload/ranges"] {
             let res = http
                 .post(format!("{base}/{path}"))
@@ -3971,10 +3974,11 @@ mod test {
                 .await
                 .unwrap();
             assert_eq!(res.status(), reqwest::StatusCode::OK, "{path}");
+            res.bytes().await.unwrap();
         }
 
-        // Ranges fail fast, so concurrent ones overlap on the one-permit budget and some are
-        // turned away. Retry rounds in case a round happens to serialize.
+        // Concurrent ranges overlap on the one-pool budget and some outwait the 1 ms wait. Retry
+        // rounds in case a round happens to serialize.
         let mut rejected = None;
         for _ in 0..10 {
             let responses = futures::future::join_all((0..64).map(|_| {
@@ -3986,16 +3990,27 @@ mod test {
             for res in responses.into_iter().map(Result::unwrap) {
                 match res.status() {
                     reqwest::StatusCode::OK => {},
-                    reqwest::StatusCode::SERVICE_UNAVAILABLE => rejected = Some(res),
+                    reqwest::StatusCode::SERVICE_UNAVAILABLE => {
+                        rejected = Some(res.headers().clone());
+                    },
                     status => panic!("unexpected status {status}"),
                 }
+                res.bytes().await.unwrap();
             }
             if rejected.is_some() {
                 break;
             }
         }
         let rejected = rejected.expect("no request was turned away");
-        assert_eq!(rejected.headers()[reqwest::header::RETRY_AFTER], "5");
+        assert_eq!(rejected[reqwest::header::RETRY_AFTER], "1");
+
+        // Content-Length survives, the body is not wrapped.
+        let res = http
+            .get(format!("{base}/light-client/payload/{height}"))
+            .send()
+            .await
+            .unwrap();
+        assert!(res.content_length().unwrap() > 4096);
     }
 
     async fn run_catchup_test(url_suffix: &str) {
