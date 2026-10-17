@@ -220,6 +220,19 @@ def test_every_query_node_serves_the_light_client_module_also_after_a_wipe():
     assert "light-client" not in validator
 
 
+def test_share_heal_node_env_skips_query_nodes():
+    hosts = fleet(5)
+    heal = ["ESPRESSO_NODE_SHARE_HEAL=true"]
+    query = awsb.render_node_env(
+        host("node0", "query"), hosts, awsb.pg_endpoint(), node_env=heal
+    )
+    validator = awsb.render_node_env(
+        host("node1", "validator"), hosts, None, node_env=heal
+    )
+    assert "ESPRESSO_NODE_SHARE_HEAL" not in parse_env(query)
+    assert parse_env(validator)["ESPRESSO_NODE_SHARE_HEAL"] == "true"
+
+
 def test_single_query_node_has_no_api_peers():
     hosts = fleet(5)
     text = awsb.render_node_env(host("node0", "query"), hosts, awsb.pg_endpoint())

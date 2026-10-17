@@ -2434,6 +2434,9 @@ def render_node_env(
     for pair in node_env:
         key, _, value = pair.partition("=")
         env[key] = value
+    if host["role"] == "query":
+        # The node refuses share heal on a query node: its share index covers unreplayed views only.
+        env.pop("ESPRESSO_NODE_SHARE_HEAL", None)
     return "".join(f"{key}={value}\n" for key, value in env.items())
 
 
