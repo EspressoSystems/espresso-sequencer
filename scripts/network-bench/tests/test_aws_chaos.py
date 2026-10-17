@@ -64,7 +64,7 @@ def test_share_wipe_script_moves_the_share_lane():
         "set -eu",
         "share=/data/journal/espresso/journal/share",
         'test -d "$share" || { echo "no share lane at $share" >&2; exit 1; }',
-        "docker stop -t 30 espresso-node",
+        "docker stop -t 30 espresso-node >/dev/null",
         "trap 'docker start espresso-node >/dev/null' EXIT",
         "dest=/data/journal/share.orig.$(date +%s)",
         'mv "$share" "$dest"',
