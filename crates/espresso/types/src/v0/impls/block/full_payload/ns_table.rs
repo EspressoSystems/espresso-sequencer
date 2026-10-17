@@ -66,6 +66,14 @@ impl NsTable {
         )
     }
 
+    /// Payload size in bytes implied by the final namespace offset, `0` if the table is empty.
+    pub fn payload_byte_len(&self) -> usize {
+        match self.len().0 {
+            0 => 0,
+            len => self.read_ns_offset_unchecked(&NsIndex(len - 1)),
+        }
+    }
+
     /// Iterator over all unique namespaces in the namespace table.
     pub fn iter(&self) -> impl Iterator<Item = NsIndex> + '_ {
         NsIter::new(&self.len())

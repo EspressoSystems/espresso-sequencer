@@ -89,9 +89,18 @@ impl IntoResponse for ApiError {
             ApiError::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
             ApiError::Unavailable(_) => StatusCode::SERVICE_UNAVAILABLE,
         };
-        (status, Json(ErrorResponse::new(status, self.to_string()))).into_response()
+        let body = Json(ErrorResponse::new(status, self.to_string()));
+        match self {
+            ApiError::Unavailable(_) => {
+                (status, [(header::RETRY_AFTER, RETRY_AFTER_SECS)], body).into_response()
+            },
+            _ => (status, body).into_response(),
+        }
     }
 }
+
+/// `Retry-After` on a 503, in seconds.
+const RETRY_AFTER_SECS: &str = "1";
 
 impl WireError for ErrorResponse {
     fn status(&self) -> StatusCode {
@@ -5948,6 +5957,18 @@ mod tests {
             .unwrap();
         let resp = tower::ServiceExt::oneshot(router, req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::PAYLOAD_TOO_LARGE);
+    }
+
+    #[test]
+    fn overloaded_payload_request_is_503_with_retry_after() {
+        let err = crate::error::classify(anyhow::Error::new(
+            crate::error::AvailabilityError::Overloaded("budget exhausted".into()),
+        ));
+
+        let res = err.into_response();
+
+        assert_eq!(res.status(), StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(res.headers()[header::RETRY_AFTER], "1");
     }
 
     #[tokio::test]

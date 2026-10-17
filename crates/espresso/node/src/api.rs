@@ -90,6 +90,7 @@ pub mod data_source;
 pub mod fs;
 pub mod light_client;
 pub mod options;
+pub mod payload_budget;
 pub mod sql;
 pub mod state;
 pub mod unlock_schedule;
@@ -3906,6 +3907,54 @@ mod test {
             let res = reqwest::get(format!("http://localhost:{port}/v1/light-client/{path}"))
                 .await
                 .unwrap();
+            assert_eq!(res.status(), status, "{path}");
+        }
+    }
+
+    /// A block larger than the whole payload budget is still served, and a range over the byte
+    /// limit is a 400 although it is within the block-count limit.
+    #[test_log::test(tokio::test(flavor = "multi_thread"))]
+    async fn test_light_client_payload_admission() {
+        let port = reserve_tcp_port().expect("OS should have ephemeral ports available");
+        let storage = SqlDataSource::create_storage().await;
+        let mut api_config = SqlDataSource::options(&storage, Options::with_port(port))
+            .light_client(Default::default());
+        let query = api_config.query.as_mut().unwrap();
+        query.payload_memory_budget = Some(1);
+        query.payload_range_byte_limit = Some(1);
+        let config = TestNetworkConfigBuilder::default()
+            .api_config(api_config)
+            .network_config(TestConfigBuilder::default().build())
+            .build();
+        let network = TestNetwork::new(config, TEST_UPGRADE).await;
+
+        let mut events = network.server.event_stream();
+        let ns = NamespaceId::from(42_u32);
+        let tx = Transaction::new(ns, vec![1, 2, 3]);
+        network.server.submit_transaction(tx.clone()).await.unwrap();
+        let (height, _) = wait_for_decide_on_handle(&mut events, &tx).await;
+
+        let client: Client<ClientErr, StaticVersion<0, 1>> =
+            Client::new(format!("http://localhost:{port}").parse().unwrap());
+        wait_until_block_height(&client, "node/block-height", height + 1).await;
+
+        let base = format!("http://localhost:{port}/v1/light-client");
+        for (path, status) in [
+            (format!("payload/{height}"), reqwest::StatusCode::OK),
+            (
+                format!("namespace/{height}/{}", u64::from(ns)),
+                reqwest::StatusCode::OK,
+            ),
+            (
+                format!("payload/{height}/{}", height + 1),
+                reqwest::StatusCode::BAD_REQUEST,
+            ),
+            (
+                format!("namespace/{height}/{}/{}", height + 1, u64::from(ns)),
+                reqwest::StatusCode::BAD_REQUEST,
+            ),
+        ] {
+            let res = reqwest::get(format!("{base}/{path}")).await.unwrap();
             assert_eq!(res.status(), status, "{path}");
         }
     }

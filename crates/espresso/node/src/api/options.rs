@@ -22,7 +22,9 @@ use super::{
     data_source::{
         NodeStateDataSource, Provider, PruningDataSource, SequencerDataSource, provider,
     },
-    fs, sql,
+    fs,
+    payload_budget::PayloadBudget,
+    sql,
     sql::ArchiveStateGc,
     state::NodeApiStateImpl,
     update::{ApiEventConsumer, ApiSink},
@@ -268,6 +270,7 @@ impl Options {
         Option<RequestResponseStorage>,
     )> {
         let light_client_db = query_opt.light_client_db();
+        let payload_budget = query_opt.payload_budget();
         let ds = <fs::DataSource as SequencerDataSource>::create(
             mod_opt,
             provider(
@@ -301,7 +304,8 @@ impl Options {
         tasks.spawn("API server", async move {
             let state = NodeApiStateImpl::new(ds_for_axum)
                 .with_env_vars(env_vars)
-                .with_public_node_config(node_cfg);
+                .with_public_node_config(node_cfg)
+                .with_payload_budget(payload_budget);
             if let Err(e) = espresso_api::serve_axum_fs(port, state, modules, max_connections).await
             {
                 tracing::error!("Axum server error: {}", e);
@@ -341,6 +345,7 @@ impl Options {
             .with_vid_common_provider(db_provider);
         // If that fails, fetch missing data from peers.
         let light_client_db = query_opt.light_client_db();
+        let payload_budget = query_opt.payload_budget();
         let light_client = Arc::new(LightClientProvider::new(
             query_opt.peers,
             state.clone(),
@@ -391,7 +396,8 @@ impl Options {
         // rather than copying the genesis they embed.
         let mut api_state = NodeApiStateImpl::new(ds.clone())
             .with_env_vars(env_vars)
-            .with_public_node_config(node_cfg);
+            .with_public_node_config(node_cfg)
+            .with_payload_budget(payload_budget);
         if let Some(ranges_concurrency) = ranges_concurrency {
             api_state = api_state.with_ranges_concurrency(ranges_concurrency);
         }
@@ -490,9 +496,32 @@ pub struct Query {
     /// is kept under it, so the stake tables it verified survive a restart.
     #[clap(long, env = "ESPRESSO_NODE_STORAGE_PATH")]
     pub storage_path: Option<PathBuf>,
+
+    /// Block payload bytes the query API loads into memory at once, across all requests.
+    ///
+    /// A request waits for budget before loading payloads and gets a 503 with `Retry-After` if
+    /// none frees up in time. A single block larger than the budget is still served, alone.
+    /// Defaults to 512 MiB.
+    #[clap(long, env = "ESPRESSO_NODE_API_PAYLOAD_MEMORY_BUDGET")]
+    pub payload_memory_budget: Option<u64>,
+
+    /// Block payload bytes a single range request may cover, in addition to the limit on the
+    /// number of blocks. Larger requests get a 400. Defaults to 128 MiB.
+    #[clap(long, env = "ESPRESSO_NODE_API_PAYLOAD_RANGE_BYTE_LIMIT")]
+    pub payload_range_byte_limit: Option<u64>,
 }
 
 impl Query {
+    fn payload_budget(&self) -> PayloadBudget {
+        let budget = self
+            .payload_memory_budget
+            .map_or_else(PayloadBudget::default, PayloadBudget::new);
+        match self.payload_range_byte_limit {
+            Some(limit) => budget.with_range_limit(limit),
+            None => budget,
+        }
+    }
+
     pub fn light_client_db(&self) -> LightClientSqliteOptions {
         let lc_path = self.light_client_db.lc_path.clone().or_else(|| {
             self.storage_path
