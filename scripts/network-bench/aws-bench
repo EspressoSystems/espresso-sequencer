@@ -7649,10 +7649,18 @@ def chaos_view(
         "",
         "",
         *(ch.recovery_table(rows, config["chaos"]["kinds"]) if rows else []),
+        *heal_section(run_dir, rows),
         *([""] + throughput if throughput else []),
         *floor_section(run_dir, manifest, consensus, rows, steps, end),
     ]
     return {"lead": lead, "faults": ch.fault_table(rows, t0), "steps": chaos_steps}
+
+
+def heal_section(run_dir: Path, rows: list[ch.FaultRow]) -> list[str]:
+    """The share heal of each `share-wipe` from `metrics.jsonl`; empty without any."""
+    nodes = {r.node for r in rows if r.kind == ch.SHARE_WIPE}
+    table = ch.heal_table(ch.heal_rows(rows, ch.read_heal_series(run_dir, nodes)))
+    return ["", "Share heal from the rejoin:", "", *table] if table else []
 
 
 def floor_section(
