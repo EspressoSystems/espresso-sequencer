@@ -23,7 +23,7 @@ use std::{
 
 use anyhow::{Context, ensure};
 use async_trait::async_trait;
-use clap::Parser;
+use clap::{ArgAction, Parser, builder::BoolishValueParser};
 use espresso_types::{
     AuthenticatedValidatorMap, Header, Leaf2, NetworkConfig, Payload, PubKey,
     RegisteredValidatorMap, SeqTypes, StakeTableHash, parse_duration,
@@ -174,7 +174,15 @@ pub struct Options {
 
     /// Re-create lost VID shares from peers' shares, over the `share_retention` window. Needs an
     /// index of every stored share, built at startup, and is refused on a query node.
-    #[clap(long, env = "ESPRESSO_NODE_SHARE_HEAL")]
+    #[clap(
+        long,
+        env = "ESPRESSO_NODE_SHARE_HEAL",
+        action = ArgAction::Set,
+        value_parser = BoolishValueParser::new(),
+        num_args = 0..=1,
+        default_value_t = false,
+        default_missing_value = "true"
+    )]
     pub share_heal: bool,
 
     /// Cap on the block payloads a query node holds in memory for its query service, from when
@@ -1920,6 +1928,20 @@ mod tests {
 
     use super::{testing::TEST_MAX_BLOCK_SIZE, *};
     use crate::persistence::tests::{TestablePersistence, consecutive_height_chain, decide_range};
+
+    #[test]
+    fn share_heal_accepts_boolish_values() {
+        let parse = |args: &[&str]| {
+            Options::try_parse_from(["node", "--path", "/store"].iter().chain(args))
+                .unwrap()
+                .share_heal
+        };
+        assert!(!parse(&[]));
+        assert!(parse(&["--share-heal"]));
+        assert!(parse(&["--share-heal", "1"]));
+        assert!(parse(&["--share-heal", "true"]));
+        assert!(!parse(&["--share-heal", "0"]));
+    }
 
     fn segments(stream: Stream, spec: &[(u64, u64, u64)]) -> Segments {
         spec.iter()
