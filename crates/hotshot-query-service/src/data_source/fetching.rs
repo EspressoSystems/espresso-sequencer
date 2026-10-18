@@ -967,23 +967,12 @@ where
             );
             return Ok(());
         }
-        // Storing is an upsert that rewrites the whole payload, and the same block arrives
-        // again on every replay, so skip blocks that are already stored. The payload row is
-        // shared by every height with the same payload, so it only counts once this height's
-        // transactions are indexed too.
-        match tx
-            .get_payload_metadata(BlockId::Number(height as usize))
-            .await
-        {
-            Ok(stored) if stored.num_transactions == 0 || !stored.namespaces.is_empty() => {
-                return Ok(());
-            },
-            Ok(_) | Err(QueryError::Missing | QueryError::NotFound) => {},
-            Err(err) => {
-                return Err(err).context(format!("checking whether block {height} is stored"));
-            },
-        }
         drop(tx);
+        // Storing is an upsert that rewrites the whole payload, and the same block arrives
+        // again on every replay, so skip blocks that are already stored.
+        if self.fetcher.payload_stored(height).await? {
+            return Ok(());
+        }
         self.fetcher.store_and_notify(&block).await;
         Ok(())
     }
@@ -1262,6 +1251,21 @@ where
         // Wait for the object to be fetched, either from the local database on retry or from
         // another provider eventually.
         passive(req, select_some(passive_fetch, recv.map(Result::ok)))
+    }
+
+    /// Whether the payload of the block at `height` is stored. The payload row is shared by every
+    /// height with the same payload, so it only counts once this height's transactions are
+    /// indexed too.
+    async fn payload_stored(&self, height: u64) -> anyhow::Result<bool> {
+        let mut tx = self.read().await.context("opening read transaction")?;
+        match tx
+            .get_payload_metadata(BlockId::Number(height as usize))
+            .await
+        {
+            Ok(stored) => Ok(stored.num_transactions == 0 || !stored.namespaces.is_empty()),
+            Err(QueryError::Missing | QueryError::NotFound) => Ok(false),
+            Err(err) => Err(err).context(format!("checking whether block {height} is stored")),
+        }
     }
 
     /// `ready` if the caller has the object, else storage, else `None` with a fetch spawned if

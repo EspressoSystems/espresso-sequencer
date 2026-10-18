@@ -12,7 +12,14 @@
 
 //! [`Fetchable`] implementation for [`BlockQueryData`] and [`PayloadQueryData`].
 
-use std::{cmp::Ordering, future::IntoFuture, iter::once, ops::RangeBounds, sync::Arc};
+use std::{
+    cmp::Ordering,
+    future::IntoFuture,
+    iter::once,
+    ops::RangeBounds,
+    sync::Arc,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
 
 use async_trait::async_trait;
 use derivative::Derivative;
@@ -20,6 +27,7 @@ use futures::future::{BoxFuture, FutureExt, join_all, try_join_all};
 use hotshot_types::traits::{
     EncodeBytes, block_contents::BlockHeader, node_implementation::NodeType,
 };
+use tokio::{spawn, time::sleep};
 
 use super::{
     AvailabilityProvider, FetchRequest, Fetchable, Fetcher, Heights, Notifiers, RangedFetchable,
@@ -204,6 +212,12 @@ async fn stage_payloads<'a, Types: NodeType>(
     .await
 }
 
+/// Fetch the payload of `header` from a provider.
+///
+/// A recent block's payload may still be on its way from the node's own consensus, see
+/// [`Builder::with_local_payload_grace`](super::Builder::with_local_payload_grace). Its fetch waits
+/// out the rest of the grace and is dropped if the payload was stored meanwhile. A request for the
+/// block waits on the passive notifier, which storing the local payload triggers.
 pub(super) fn fetch_block_with_header<Types, S, P>(
     fetcher: Arc<Fetcher<Types, S, P>>,
     header: Header<Types>,
@@ -213,14 +227,66 @@ pub(super) fn fetch_block_with_header<Types, S, P>(
     Payload<Types>: QueryablePayload<Types>,
     S: VersionedDataSource + 'static,
     for<'a> S::Transaction<'a>: UpdateAvailabilityStorage<Types>,
+    for<'a> S::ReadOnly<'a>: AvailabilityStorage<Types> + NodeStorage<Types> + PrunedHeightStorage,
+    P: AvailabilityProvider<Types>,
+{
+    if fetcher.payload_fetcher.is_none() {
+        // If we're in light-weight mode, we don't need to fetch the block data.
+        return;
+    }
+    let wait = local_payload_wait(
+        fetcher.local_payload_grace,
+        header.timestamp_millis(),
+        SystemTime::now(),
+    );
+    if wait.is_zero() {
+        spawn_payload_fetch(&fetcher, header);
+        return;
+    }
+
+    let height = header.block_number();
+    tracing::debug!(
+        height,
+        ?wait,
+        "waiting for the local payload before fetching it"
+    );
+    spawn(async move {
+        sleep(wait).await;
+        match fetcher.payload_stored(height).await {
+            Ok(true) => tracing::debug!(height, "payload stored locally, not fetching it"),
+            Ok(false) => spawn_payload_fetch(&fetcher, header),
+            Err(err) => {
+                tracing::warn!(height, "fetching payload: {err:#}");
+                spawn_payload_fetch(&fetcher, header);
+            },
+        }
+    });
+}
+
+/// What is left of `grace` since `header_millis`, at most `grace`.
+fn local_payload_wait(grace: Duration, header_millis: u64, now: SystemTime) -> Duration {
+    let now_millis = now
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64;
+    grace.saturating_sub(Duration::from_millis(
+        now_millis.saturating_sub(header_millis),
+    ))
+}
+
+fn spawn_payload_fetch<Types, S, P>(fetcher: &Arc<Fetcher<Types, S, P>>, header: Header<Types>)
+where
+    Types: NodeType,
+    Header<Types>: QueryableHeader<Types>,
+    Payload<Types>: QueryablePayload<Types>,
+    S: VersionedDataSource + 'static,
+    for<'a> S::Transaction<'a>: UpdateAvailabilityStorage<Types>,
+    for<'a> S::ReadOnly<'a>: AvailabilityStorage<Types> + NodeStorage<Types> + PrunedHeightStorage,
     P: AvailabilityProvider<Types>,
 {
     let Some(payload_fetcher) = fetcher.payload_fetcher.as_ref() else {
-        // If we're in light-weight mode, we don't need to fetch the block data.
         return;
     };
-
-    // Now that we have the header, we only need to retrieve the payload.
     tracing::debug!(
         "spawned active fetch for payload {:?} (height {})",
         header.payload_commitment(),
@@ -611,5 +677,28 @@ where
     async fn run(self, blocks: NonEmptyRange<BlockQueryData<Types>>) {
         tracing::info!("fetched blocks {}..{}", blocks.start(), blocks.end());
         self.fetcher.store_and_notify(&blocks).await;
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_local_payload_wait() {
+        let grace = Duration::from_secs(5);
+        let now = UNIX_EPOCH + Duration::from_secs(100);
+        let wait = |header_millis| local_payload_wait(grace, header_millis, now);
+
+        assert_eq!(wait(100_000), grace);
+        assert_eq!(wait(98_000), Duration::from_secs(3));
+        assert_eq!(wait(95_000), Duration::ZERO);
+        assert_eq!(wait(0), Duration::ZERO);
+        // A header from the future, by clock skew, waits no longer than the grace.
+        assert_eq!(wait(200_000), grace);
+        assert_eq!(
+            local_payload_wait(Duration::ZERO, 100_000, now),
+            Duration::ZERO
+        );
     }
 }
