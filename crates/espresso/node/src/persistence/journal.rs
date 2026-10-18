@@ -2462,12 +2462,6 @@ mod tests {
             consumer.take(),
             vec![(1, Some(carried)), (2, Some(obtained))]
         );
-        let index = storage.inner.lanes.da.index.as_ref().unwrap().lock();
-        assert!(
-            index
-                .keys()
-                .all(|(_, kind)| *kind != Kind::PendingPayload.into())
-        );
         assert!(storage.inner.pending_payloads.lock().by_view.is_empty());
     }
 

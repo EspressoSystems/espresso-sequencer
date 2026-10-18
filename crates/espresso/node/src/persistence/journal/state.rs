@@ -4,7 +4,7 @@
 
 use std::collections::BTreeMap;
 
-use espresso_types::{Header, Leaf2, Payload, SeqTypes};
+use espresso_types::{Leaf2, SeqTypes};
 use hotshot_new_protocol::message::Certificate2;
 use hotshot_types::{
     data::{DaProposal2, QuorumProposalWrapper, VidDisperseShare},
@@ -13,10 +13,6 @@ use hotshot_types::{
     simple_certificate::{
         CertificatePair, LightClientStateUpdateCertificateV2, NextEpochQuorumCertificate2,
         QuorumCertificate2, UpgradeCertificate,
-    },
-    traits::{
-        EncodeBytes as _,
-        block_contents::{BlockHeader as _, BlockPayload as _},
     },
     vote::HasViewNumber,
 };
@@ -109,14 +105,6 @@ pub enum Record {
         view: ViewNumber,
         height: u64,
     },
-    /// A payload this node obtained for `view`. No longer written: a query node holds payloads
-    /// in memory until their view is replayed. Still decoded so segments written before that
-    /// recover.
-    PendingPayload {
-        view: ViewNumber,
-        header: Header,
-        payload: Payload,
-    },
 }
 
 /// Tag identifying which `Record` variant a frame's payload decodes to. Discriminants are the
@@ -136,7 +124,7 @@ pub enum Kind {
     Vid = 11,
     Da = 12,
     Processed = 13,
-    PendingPayload = 14,
+    // 14 (PendingPayload) is reserved: no longer written.
 }
 
 // The lane layer recognizes snapshot frames by this tag.
@@ -156,7 +144,6 @@ impl Kind {
             11 => Self::Vid,
             12 => Self::Da,
             13 => Self::Processed,
-            14 => Self::PendingPayload,
             _ => return None,
         })
     }
@@ -187,7 +174,6 @@ impl Record {
             Self::Vid(_) => Kind::Vid,
             Self::Da(_) => Kind::Da,
             Self::Processed { .. } => Kind::Processed,
-            Self::PendingPayload { .. } => Kind::PendingPayload,
         }
     }
 
@@ -206,7 +192,6 @@ impl Record {
             Self::Vid(p) => p.data.view_number().u64(),
             Self::Da(p) => p.data.view_number().u64(),
             Self::Processed { view, .. } => view.u64(),
-            Self::PendingPayload { view, .. } => view.u64(),
         }
     }
 
@@ -227,9 +212,6 @@ impl Record {
             Self::Vid(p) => bincode::serialize(p)?,
             Self::Da(p) => bincode::serialize(p)?,
             Self::Processed { height, .. } => bincode::serialize(height)?,
-            Self::PendingPayload {
-                header, payload, ..
-            } => bincode::serialize(&(header, payload.encode().as_ref()))?,
         })
     }
 
@@ -264,24 +246,8 @@ impl Record {
                 view: ViewNumber::new(view),
                 height: bincode::deserialize(body)?,
             },
-            Kind::PendingPayload => {
-                let (header, payload) = decode_pending_payload(body)?;
-                Self::PendingPayload {
-                    view: ViewNumber::new(view),
-                    header,
-                    payload,
-                }
-            },
         })
     }
-}
-
-/// Body of a [`Record::PendingPayload`] frame. The payload is stored as its encoded bytes, which
-/// only decode against the header's namespace table.
-pub fn decode_pending_payload(body: &[u8]) -> anyhow::Result<(Header, Payload)> {
-    let (header, payload) = bincode::deserialize::<(Header, Vec<u8>)>(body)?;
-    let payload = Payload::from_bytes(&payload, header.metadata());
-    Ok((header, payload))
 }
 
 impl State {
@@ -289,10 +255,7 @@ impl State {
     /// Returns a state cert finalized by a `Leaf` reaching its view, if any.
     pub fn apply(&mut self, rec: &Record) -> Option<Finalized> {
         match rec {
-            Record::Snapshot(_)
-            | Record::Vid(_)
-            | Record::Da(_)
-            | Record::PendingPayload { .. } => None,
+            Record::Snapshot(_) | Record::Vid(_) | Record::Da(_) => None,
             Record::Cert2 { view, cert } => {
                 if let Some(replay) = &mut self.replay
                     && !replay.is_replayed(*view)
@@ -405,14 +368,10 @@ impl State {
 
 #[cfg(test)]
 mod tests {
-    use std::marker::PhantomData;
-
     use committable::Committable;
     use espresso_types::{NodeState, ValidatedState};
     use hotshot_example_types::node_types::TEST_VERSIONS;
-    use hotshot_types::{
-        data::QuorumProposal2, light_client::LightClientState, simple_vote::NextEpochQuorumData2,
-    };
+    use hotshot_types::{data::QuorumProposal2, light_client::LightClientState};
 
     use super::*;
 
