@@ -321,6 +321,15 @@ mod tests {
     #[test_log::test(tokio::test(flavor = "multi_thread"))]
     pub fn replaying_persistence_types<P: TestablePersistence>(#[case] _p: PhantomData<P>) {}
 
+    /// Backends that persist the legacy protocol's eQC and next-epoch QC: sql and fs. `journal`
+    /// requires genesis.base_version >= 0.6 and stores neither.
+    #[rstest_reuse::template]
+    #[rstest::rstest]
+    #[case(PhantomData::<crate::persistence::sql::Persistence>)]
+    #[case(PhantomData::<crate::persistence::fs::Persistence>)]
+    #[test_log::test(tokio::test(flavor = "multi_thread"))]
+    pub fn legacy_qc_persistence_types<P: TestablePersistence>(#[case] _p: PhantomData<P>) {}
+
     #[derive(Clone, Debug, Default)]
     struct EventCollector {
         events: Arc<RwLock<Vec<CoordinatorEvent<SeqTypes>>>>,
@@ -1092,7 +1101,7 @@ mod tests {
         assert_eq!(view_number, new_view_number_for_certificate);
     }
 
-    #[rstest_reuse::apply(persistence_types)]
+    #[rstest_reuse::apply(legacy_qc_persistence_types)]
     pub async fn test_next_epoch_quorum_certificate<P: TestablePersistence>(_p: PhantomData<P>) {
         let tmp = P::tmp_storage().await;
         let storage = P::connect(&tmp).await;
@@ -1156,7 +1165,7 @@ mod tests {
 
     /// `append_next_epoch_high_qc2` must apply an atomic monotonic compare-and-set (like
     /// `append_high_qc2`): a stale (older-view) write is a no-op and never regresses the stored view.
-    #[rstest_reuse::apply(persistence_types)]
+    #[rstest_reuse::apply(legacy_qc_persistence_types)]
     pub async fn test_append_next_epoch_high_qc2_monotonic<P: TestablePersistence>(
         _p: PhantomData<P>,
     ) {
@@ -1278,8 +1287,19 @@ mod tests {
             storage.load_high_qc2().await.unwrap().unwrap().view_number,
             ViewNumber::new(7)
         );
+    }
 
-        // The next-epoch high QC round-trips through update_next_epoch_high_qc2 as well.
+    /// The next-epoch high QC round-trips through `update_next_epoch_high_qc2`.
+    #[rstest_reuse::apply(legacy_qc_persistence_types)]
+    pub async fn test_storage_update_next_epoch_high_qc2_persists<P: TestablePersistence>(
+        _p: PhantomData<P>,
+    ) {
+        use hotshot_types::traits::storage::Storage;
+
+        let tmp = P::tmp_storage().await;
+        let storage = P::connect(&tmp).await;
+        let arc = Arc::new(storage.clone());
+
         let upgrade_lock = UpgradeLock::<SeqTypes>::new(TEST_VERSIONS.test);
         let leaf = Leaf2::genesis(
             &ValidatedState::default(),
@@ -1352,7 +1372,7 @@ mod tests {
     /// Recovery must not hand `Consensus::new` a mismatched (high QC, next-epoch QC) pair: when a
     /// newer running high QC is adopted, a persisted next-epoch QC that does not correspond to it
     /// (`verify_next_epoch_qc`) is dropped to `None` instead of being recovered alongside it.
-    #[rstest_reuse::apply(persistence_types)]
+    #[rstest_reuse::apply(legacy_qc_persistence_types)]
     pub async fn test_load_consensus_state_drops_noncorresponding_next_epoch_qc<
         P: TestablePersistence,
     >(

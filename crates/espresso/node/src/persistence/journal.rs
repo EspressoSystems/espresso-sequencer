@@ -1673,27 +1673,20 @@ impl SequencerPersistence for Persistence {
             .await
     }
 
+    // The eQC and next-epoch QC belong to the legacy protocol, which the journal does not run
+    // (genesis.base_version >= 0.6): nothing is stored or loaded for them.
     async fn load_next_epoch_quorum_certificate(
         &self,
     ) -> anyhow::Result<Option<NextEpochQuorumCertificate2<SeqTypes>>> {
-        Ok(self.inner.state.lock().next_epoch_qc.clone())
-    }
-
-    async fn append_next_epoch_high_qc2(
-        &self,
-        next_epoch_high_qc: NextEpochQuorumCertificate2<SeqTypes>,
-    ) -> anyhow::Result<()> {
-        self.put_wal(Record::NextEpochQc(next_epoch_high_qc), Class::Durable)
-            .await
+        Ok(None)
     }
 
     async fn store_eqc(
         &self,
-        high_qc: QuorumCertificate2<SeqTypes>,
-        next_epoch_high_qc: NextEpochQuorumCertificate2<SeqTypes>,
+        _high_qc: QuorumCertificate2<SeqTypes>,
+        _next_epoch_high_qc: NextEpochQuorumCertificate2<SeqTypes>,
     ) -> anyhow::Result<()> {
-        self.put_wal(Record::Eqc(high_qc, next_epoch_high_qc), Class::Durable)
-            .await
+        Ok(())
     }
 
     async fn load_eqc(
@@ -1702,7 +1695,7 @@ impl SequencerPersistence for Persistence {
         QuorumCertificate2<SeqTypes>,
         NextEpochQuorumCertificate2<SeqTypes>,
     )> {
-        self.inner.state.lock().eqc.clone()
+        None
     }
 
     async fn append_high_qc2(&self, high_qc: QuorumCertificate2<SeqTypes>) -> anyhow::Result<()> {
