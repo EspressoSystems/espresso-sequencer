@@ -500,11 +500,12 @@ pub struct Query {
     #[clap(long, env = "ESPRESSO_NODE_STORAGE_PATH")]
     pub storage_path: Option<PathBuf>,
 
-    /// Block payload bytes the query API loads into memory at once, across all requests.
+    /// Memory the query API spends on payload responses at once, across all requests.
     ///
-    /// A request that cannot get budget gets a 503 with `Retry-After`; single-block requests
-    /// wait a few seconds first, range requests fail at once. A request larger than the whole
-    /// budget is served alone. Takes a size such as `512MiB`.
+    /// A response is charged its payload bytes times 4 when encoded as JSON, times 2 when
+    /// encoded as binary. Single blocks and ranges each get half. A request that cannot get
+    /// budget within a few seconds gets a 503 with `Retry-After`. A request larger than its half
+    /// is served alone. Takes a size such as `512MiB`.
     // An `Option` so `Query::default()`, which skips clap, means the 512 MiB default and not a
     // zero budget.
     #[clap(

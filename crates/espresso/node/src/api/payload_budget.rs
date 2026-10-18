@@ -1,13 +1,15 @@
 //! Admission control for handlers that load block payloads into memory.
 //!
 //! `large_object_range_limit` bounds how many blocks a request may cover, not how many bytes. A
-//! [`PayloadBudget`] bounds the payload bytes loaded at once across all requests. Single blocks
-//! and ranges draw on separate pools, half the budget each, so a stream of ranges cannot starve
-//! single-block requests or the reverse. A request larger than its pool takes the whole pool and
-//! is served alone, so no block or range is ever unservable.
+//! [`PayloadBudget`] bounds the estimated memory of payload responses built at once across all
+//! requests: payload bytes times a weight for the response encoding, [`JSON_WEIGHT`] or
+//! [`BINARY_WEIGHT`]. Single blocks and ranges draw on separate pools, half the budget each, so a
+//! stream of ranges cannot starve single-block requests or the reverse. A request larger than its
+//! pool takes the whole pool and is served alone, so no block or range is ever unservable, and a
+//! pool's memory is bounded by the larger of the pool and that one response.
 //!
-//! Sizes are the ones the header's namespace table declares, so nothing is loaded before a
-//! request is admitted. Through the axum router the permit is held until the handler has built
+//! Payload sizes are the ones the header's namespace table declares, so nothing is loaded before
+//! a request is admitted. Through the axum router the permit is held until the handler has built
 //! its response (see [`espresso_api::hold_until_response_built`]), so it covers the loaded
 //! payloads and their serialized copy but not the write to the client. Otherwise it is held until
 //! the handler returns.
@@ -25,11 +27,20 @@ use super::state::FETCH_TIMEOUT;
 /// Permits are KiB, so a pool fits the `u32` of `acquire_many`.
 const UNIT: u64 = 1024;
 
-/// Payload bytes a node loads at once, unless configured.
+/// Estimated response memory, payload bytes times the encoding weight, a node holds at once,
+/// unless configured.
 pub const DEFAULT_BUDGET_BYTES: u64 = 512 * 1024 * 1024;
 
 /// How long a request waits for budget before it is turned away.
 const DEFAULT_WAIT: Duration = Duration::from_secs(5);
+
+/// Peak memory of a JSON response per payload byte: the payload, its base64 `String` (1.33x),
+/// and the output buffer, which grows by doubling.
+const JSON_WEIGHT: u64 = 4;
+
+/// Peak memory of a VBS response per payload byte: the payload and the output `Vec`, which grows
+/// by doubling.
+const BINARY_WEIGHT: u64 = 2;
 
 #[derive(Clone, Debug)]
 pub struct PayloadBudget {
@@ -113,7 +124,7 @@ impl PayloadBudget {
             .await
             .ok_or_else(|| AvailabilityError::NotFound(format!("header not found for {id}")))?;
         let permit = self
-            .acquire_block(header.ns_table().payload_byte_len() as u64)
+            .acquire_block(header.ns_table().payload_byte_len() as u64 * response_weight())
             .await?;
         Ok(hold_until_response_built(permit))
     }
@@ -150,16 +161,27 @@ impl PayloadBudget {
                 bytes += header.ns_table().payload_byte_len() as u64;
             }
         }
-        let permit = self.acquire_ranges(bytes).await?;
+        let permit = self.acquire_ranges(bytes * response_weight()).await?;
         Ok(hold_until_response_built(permit))
     }
 
     fn overloaded(&self, bytes: u64) -> anyhow::Error {
         AvailabilityError::Overloaded {
-            message: format!("payload memory budget exhausted, {bytes} bytes not available"),
+            message: format!(
+                "payload memory budget exhausted, {bytes} bytes of response memory not available"
+            ),
             retry_after_secs: self.wait.as_secs().max(1),
         }
         .into()
+    }
+}
+
+/// Bytes of memory a response costs per payload byte, by the format it is encoded in.
+fn response_weight() -> u64 {
+    if espresso_api::response_is_binary() {
+        BINARY_WEIGHT
+    } else {
+        JSON_WEIGHT
     }
 }
 
@@ -249,6 +271,11 @@ mod tests {
         let _held = budget.acquire_block(0).await.unwrap();
 
         assert!(is_overloaded(&budget.acquire_block(0).await.unwrap_err()));
+    }
+
+    #[test]
+    fn responses_outside_a_negotiated_route_are_weighted_as_json() {
+        assert_eq!(response_weight(), JSON_WEIGHT);
     }
 
     #[test]
