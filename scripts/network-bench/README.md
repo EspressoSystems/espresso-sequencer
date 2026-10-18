@@ -89,6 +89,8 @@ laptop                       EC2, one AZ, private IPs
 | `node1..`   | espresso-node `-- storage-fs -- http -- status -- submit -- catchup -- config`, `agent-host`           |
 
 Modules shown are for `--consensus-storage fs` (default). With `journal`, both roles also get `storage-journal` first.
+With `--query-placement fargate` the query nodes are Fargate tasks with their journal on EFS:
+[Fargate query nodes](#fargate-query-nodes).
 
 ## Requirements
 
@@ -225,6 +227,60 @@ just bench aws run --tag release-x --latency decaf-2026 --netem full     # per-p
   delay.
 - Never shaped: `ctl` traffic (orchestrator, L1, relay, submit, metrics), RDS, ssh.
 - Model and profiles: [Latency model](#latency-model).
+
+### Fargate query nodes
+
+```
+just bench aws run --tag release-x --nodes 3 --query-placement fargate --query-engine postgres --query-db rds \
+  --consensus-storage journal --node-env ESPRESSO_NODE_BLOB_DIR=/payload --latency decaf-2025 --max-usd 40
+just bench aws up --tag release-x --nodes 3 --query-placement fargate --db-modes rds --ttl-min 180 --max-usd 60
+```
+
+- `--query-placement fargate`: `node0..node{K-1}` run as ECS Fargate tasks instead of EC2 instances. Validators stay on
+  EC2. The query database is the rds instance (`--query-db rds`, `--db-modes rds` for `plan` and `up`); the journal and
+  payloads are on EFS.
+- Size: the vCPUs and memory of `--node-type` (c8g.4xlarge: 16 vCPU, 32 GiB, ARM64). A type Fargate does not offer is
+  refused (1, 2, 4, 8 or 16 vCPU).
+- Refused before any AWS call: `--query-engine sqlite`, a db mode other than `rds`, `--chaos`, `--tcp-cc bbr_hold` and
+  `bbr3` (they need the host kernel), `--leader-trace`, `--root-gb`, `--netem full`, `--latency` with `--query-nodes`
+  above 1.
+- Payload dir: the harness sets none. Pass `--node-env ESPRESSO_NODE_BLOB_DIR=/payload` (or
+  `ESPRESSO_QUERY_PAYLOAD_DIR=/payload`; both exist in bench images only). Without it payloads go to rds.
+- The image must contain the code the flags use (`journal`, the payload dir): a tag built from the bench branch.
+- Rights, beyond rds: ECS (cluster, task definitions, tasks), EFS, CloudWatch Logs, `iam:CreateRole`,
+  `iam:PutRolePolicy`, `iam:PassRole`, `scheduler:CreateSchedule`, and once per account the ECS service-linked role.
+  Without them apply fails, the fleet is destroyed, exit 3.
+
+| Where                              | What                                                                                                            |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| EFS access point `/<node>`, `/efs` | `store/` (journal, VID shares), `payload/`, `bench/` (the mailbox below)                                        |
+| task, links made by the wrapper    | `/store -> /efs/store`, `/payload -> /efs/payload`, so env paths are the same as on EC2                         |
+| `bench/` in the mailbox            | `node.env`, `genesis.toml`, `ready`, `go`, `started_at`, `espresso-node.log`, `task-stats.jsonl`                |
+| `ctl`, EFS root mounted at `/efs`  | ships the mailbox files, runs psql, the pg gates, the pg sampler and the pg stats (`/opt/bench/pg.<node>.json`) |
+| ECS and tofu                       | cluster, log group `/espresso-bench/<fleet>`, exec role `...-exec`, EFS, one access point per node              |
+
+- Start: `run-task` goes first, so Fargate provisioning (30-90 s) overlaps shipping. The ENI addresses of the task
+  (`describe-tasks`) go into `node.env` and `ctl.env`. The wrapper checks its sysctls, writes `ready`, waits for `go`
+  (the start time, epoch ns), sleeps until it, writes `started_at` and execs the node. The start spread includes it.
+- Fails at startup, with the reason in the error and `summary.md`: a task definition or `run-task` AWS refuses (a sysctl
+  a task may not set); a task that stops (stopped reason, container reason, last 20 awslogs lines); the wrapper exiting
+  78 on a sysctl that is not what the definition asked for; a task not ready after 300 s. A task that stops during the
+  load fails the next node check.
+- Sysctls: with `--latency` the task definition carries `tcp_congestion_control`, `tcp_rmem`, `tcp_wmem`,
+  `tcp_notsent_lowat`, `tcp_slow_start_after_idle` and `tcp_mtu_probing`. `net.core.default_qdisc` is global and cannot
+  be set in a task; BBR paces without `fq`. Whether Fargate's kernel has `bbr` shows at startup.
+- Latency: a task cannot run `tc`. Each EC2 node shapes its egress toward the task with the whole round trip of the
+  matrix, and the task's egress is unshaped, so every link sees the matrix RTT. The task's MTU stays 9001; the MSS
+  follows the validators' `--mtu`. Probes ping from the shaped end. `latency.unshaped` in the manifest lists the
+  unshaped nodes.
+- Judged: the task has no host samples, chrony or EBS balance. `result["host"]` and the runner info come from the first
+  EC2 node. The task's CPU and memory are in `hosts/<node>/task-stats.jsonl`, unjudged. The image digest is compared
+  with `task.json`.
+- Ends: the wrapper runs the node under `timeout` until the fleet's expiry. `down` stops the tasks, then deletes the
+  task definitions (registered per run and node) before `tofu destroy`. The reaper deletes the EFS mount target and
+  access points at the rds delete time and the file system 15 min later.
+- Cost: lines `fargate vcpu`, `fargate memory`, `efs storage` and `efs elastic writes` (about $0.06 per GB written:
+  twice the payload factor times the offered GB). A 200 MB/s ramp can need `--max-usd` above the default.
 
 ### Chaos
 
@@ -547,7 +603,8 @@ Where:
 | `--allocator`                         | none                           | all          | `jemalloc`, `mimalloc`, `snmalloc`, `tcmalloc`                                                |
 | `--nodes`                             | 5                              | provision    | validator count, `node0` included                                                             |
 | `--query-nodes`                       | 1                              | provision    | query service nodes, the first `K` of `--nodes`; above 1: `--query-db colocated` or `rds`     |
-| `--node-type`                         | `c8g.4xlarge`                  | provision    | node instance type                                                                            |
+| `--query-placement`                   | `ec2`                          | provision    | `ec2`, or `fargate`: query nodes as ECS tasks, rds only; see [Fargate](#fargate-query-nodes)  |
+| `--node-type`                         | `c8g.4xlarge`                  | provision    | node instance type; the task size of a Fargate query node                                     |
 | `--ctl-type`                          | `c8g.2xlarge`                  | provision    | `ctl` instance type                                                                           |
 | `--root-gb`                           | `auto`                         | provision    | root volume GB; `auto` sizes from the ramp, or from `--offered-gb` with `--search`            |
 | `--pg-iops`, `--pg-mbps`              | 12000, 500                     | provision    | node0 root volume and `volume` store                                                          |
@@ -875,8 +932,9 @@ real-world RTT. Without it, nodes see about 0.1 ms (one AZ).
 - Hosts and the pg volume terminate at the TTL. An EventBridge one-shot schedule deletes the rds instance 5 min earlier.
 - `destroy --orphans` covers fleets past expiry, in a terminal phase, or of this owner without `fleet.json`. It never
   touches a live fleet with state.
-- Sweep order: delete schedule group, instances, rds instance (waits), its subnet and parameter groups, volumes,
-  security group, key pair, scheduler IAM role (path `/espresso-bench/`).
+- Sweep order: delete schedule group, ecs cluster (its tasks stop first) and task definitions, instances, rds instance
+  (waits), its subnet and parameter groups, efs access points and file system (its mount targets first), log group,
+  volumes, security group, key pair, scheduler and exec IAM roles (path `/espresso-bench/`).
 - The IAM role is not in the tag API. `status --all` lists roles by path and shows a role whose fleet has no other
   resource as `role without resources`. Without `iam:ListRoles` roles are not listed (warning).
 - A fleet whose `fleet.json` was renamed or deleted is `no local state` for its owner. `destroy --orphans` sweeps it.
@@ -907,6 +965,8 @@ runs/01-run/             one measurement
                          node-rejoin.env, recreate.sh (--chaos), espresso-node.wiped.log.gz (wiped nodes)
                          trace/ (--leader-trace)
                          pg-stats.json pg-stats.jsonl pg-statements.json pg-settings.json du-payload.txt (node0)
+                         Fargate query node: task-def.json task.json task-stats.jsonl du-journal.txt du-payload.txt
+                         espresso-node.log.gz; its pg files are in hosts/ctl/ as pg-stats-<node>.json and so on
   cloudwatch/            ec2-node0.json (EBS balance, every run); rds.json (rds runs)
   rds-logs/              postgres logs of the run window (rds runs)
   metrics.jsonl heights.jsonl consensus.jsonl load.jsonl steps.json
