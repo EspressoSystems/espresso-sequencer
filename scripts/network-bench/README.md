@@ -250,6 +250,8 @@ just bench aws up --tag release-x --nodes 3 --query-placement fargate --db-modes
 - Rights, beyond rds: ECS (cluster, task definitions, tasks), EFS, CloudWatch Logs, `iam:CreateRole`,
   `iam:PutRolePolicy`, `iam:PassRole`, `scheduler:CreateSchedule`, and once per account the ECS service-linked role.
   Without them apply fails, the fleet is destroyed, exit 3.
+- Quota: the account's Fargate On-Demand vCPU quota must hold the tasks (16 vCPU each for c8g.4xlarge); `run-task`
+  reports a refusal as the error of the run.
 
 | Where                              | What                                                                                                            |
 | ---------------------------------- | --------------------------------------------------------------------------------------------------------------- |
