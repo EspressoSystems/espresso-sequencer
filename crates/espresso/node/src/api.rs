@@ -13135,6 +13135,17 @@ mod test {
                 400,
             )
             .await?;
+            let by_ns: Vec<HashMap<NamespaceId, NamespaceProof>> = assert_binary_endpoint(
+                &http,
+                api_port,
+                &format!(
+                    "light-client/namespaces/{avail_block}/{}/{encoded_ns}",
+                    avail_block + 1
+                ),
+            )
+            .await?;
+            assert_eq!(by_ns.len(), 1);
+            by_ns[0][&avail_ns].verify(&avail_header, avail_ns)?;
 
             // Token endpoints.
             assert_json_endpoint(&http, api_port, "token/total-minted-supply").await?;
