@@ -319,8 +319,8 @@ API_MODULES: dict[NodeRole, tuple[str, ...]] = {
 PRUNE_INTERVAL = "30s"
 PRUNE_RETENTION_S = 60
 RETENTION_UNITS = {"s": 1, "m": 60, "h": 3600}
-# Headroom below the usable disk so the journal's own retention GCs data before the volume
-# fills.
+# Headroom below the usable disk. ESPRESSO_NODE_JOURNAL_MAX_BYTES only sets the size at which the
+# node warns that the share lane is over budget; share retention alone prunes it.
 JOURNAL_MAX_BYTES_FRACTION = 0.8
 # OS, docker images, and worst-case docker json-file logs (up to 2 containers x 4 x 2 GB,
 # user-data.sh's daemon.json), subtracted from root_gb before applying JOURNAL_MAX_BYTES_FRACTION.
