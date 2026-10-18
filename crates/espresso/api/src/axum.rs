@@ -6118,6 +6118,45 @@ mod tests {
         assert_eq!(hold_until_response_built(7), Some(7));
     }
 
+    /// `response_is_binary()` as seen by a handler: one route through [`negotiated`], one that
+    /// always answers JSON.
+    async fn binary_seen_by_handler(route: &'static str, accept: &'static str) -> bool {
+        let router = Router::new()
+            .route(
+                "/negotiated",
+                get(|headers: HeaderMap| async move {
+                    negotiated(&headers, async { Ok(response_is_binary()) }).await
+                }),
+            )
+            .route("/json", get(|| async { ApiJson(response_is_binary()) }));
+        let request = Request::builder()
+            .uri(route)
+            .header(header::ACCEPT, accept)
+            .body(axum::body::Body::empty())
+            .unwrap();
+        let res = tower::ServiceExt::oneshot(router, request).await.unwrap();
+        let format = ContentType::parse(res.headers()[header::CONTENT_TYPE].to_str().unwrap())
+            .expect("known content type");
+        let body = axum::body::to_bytes(res.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        match format {
+            ContentType::Binary => Serializer::<WireVersion>::deserialize(&body).unwrap(),
+            ContentType::Json => serde_json::from_slice(&body).unwrap(),
+        }
+    }
+
+    #[tokio::test]
+    async fn negotiated_binary_response_is_seen_as_binary() {
+        assert!(binary_seen_by_handler("/negotiated", "application/octet-stream").await);
+    }
+
+    #[tokio::test]
+    async fn json_responses_are_not_seen_as_binary() {
+        assert!(!binary_seen_by_handler("/negotiated", "application/json").await);
+        assert!(!binary_seen_by_handler("/json", "application/octet-stream").await);
+    }
+
     #[tokio::test]
     async fn max_connections_limits_in_flight_requests() {
         let router = Router::new().route(
