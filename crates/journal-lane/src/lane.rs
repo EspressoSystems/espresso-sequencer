@@ -293,23 +293,6 @@ impl Segments {
             .collect()
     }
 
-    /// The oldest contiguous run of sealed segments to drop until the stream's total is at most
-    /// `max_bytes`. Stops before the first segment whose `max_key` is above `keep_after`. Never
-    /// includes the active (newest) segment.
-    pub fn oldest_over_bytes(&self, max_bytes: u64, keep_after: Option<u64>) -> Vec<SegmentMeta> {
-        let mut total = self.bytes();
-        self.sealed()
-            .iter()
-            .take_while(|m| keep_after.is_none_or(|keep| m.max_key <= keep))
-            .take_while(|m| {
-                let over = total > max_bytes;
-                total = total.saturating_sub(m.bytes);
-                over
-            })
-            .copied()
-            .collect()
-    }
-
     /// Every segment but the active (newest) one.
     pub fn sealed(&self) -> &[SegmentMeta] {
         &self.0[..self.0.len().saturating_sub(1)]
@@ -1453,32 +1436,6 @@ mod tests {
             &[(1, 10, 60), (2, 10, 0), (3, 10, 80), (4, 10, 90)],
         );
         assert!(segs.oldest_below(50).is_empty());
-    }
-
-    #[test]
-    fn oldest_over_bytes_drops_oldest_until_under_cap() {
-        let segs = segments(
-            Stream::Da,
-            &[(1, 40, 100), (2, 40, 100), (3, 40, 100), (4, 40, 100)],
-        );
-        assert_eq!(seqs(segs.oldest_over_bytes(90, None)), vec![1, 2]);
-        assert_eq!(seqs(segs.oldest_over_bytes(160, None)), Vec::<u64>::new());
-    }
-
-    #[test]
-    fn oldest_over_bytes_never_includes_the_active_segment() {
-        let segs = segments(Stream::Da, &[(1, 40, 1), (2, 40, 2), (3, 40, 3)]);
-        assert_eq!(seqs(segs.oldest_over_bytes(0, None)), vec![1, 2]);
-    }
-
-    #[test]
-    fn oldest_over_bytes_keeps_segments_after_keep_after() {
-        let segs = segments(
-            Stream::Da,
-            &[(1, 40, 5), (2, 40, 10), (3, 40, 20), (4, 40, 30)],
-        );
-        assert_eq!(seqs(segs.oldest_over_bytes(0, Some(10))), vec![1, 2]);
-        assert!(segs.oldest_over_bytes(0, Some(4)).is_empty());
     }
 
     #[test]
