@@ -4828,14 +4828,14 @@ def fargate_started_at(remote: Remote, node: str) -> float:
 
 
 def fargate_collect_script(node: str) -> str:
-    """On ctl, in the node's mailbox: sizes of the journal and payloads, log gzipped as the
-    docker log of an EC2 node is."""
+    """On ctl, in the node's mailbox: the log gzipped as the docker log of an EC2 node is, then
+    the sizes of the journal and payloads, which walk the whole tree and may hit the timeout."""
     base = f"{FARGATE_CTL_MOUNT}/{node}"
     return (
         f"cd {base}/bench\n"
+        "gzip -kf espresso-node.log\n"
         f"du -sb {base}/store > du-journal.txt\n"
         f"du -sb {base}/payload > du-payload.txt\n"
-        "gzip -kf espresso-node.log\n"
     )
 
 
