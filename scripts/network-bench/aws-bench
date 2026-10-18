@@ -8937,11 +8937,19 @@ def search_config(saved: dict[str, Any] | None) -> nb.SearchConfig | None:
     return None if saved is None else nb.SearchConfig(**saved)
 
 
+def analysis_host(manifest: Manifest) -> str:
+    """The host whose samples stand for the run's process and host statistics: node0, which
+    holds Postgres (colocated) and the journal. A Fargate node0 has no host samples, so the
+    first node on EC2, or ctl without one, stands in."""
+    fargate = fargate_names(manifest)
+    nodes = (h["name"] for h in manifest["hosts"] if h["role"] != "ctl")
+    return next((name for name in nodes if name not in fargate), "ctl")
+
+
 def prepare_analysis(run_dir: Path, manifest: Manifest) -> None:
-    """The files `netbench.analyze` reads that the local bench produces itself. Its process and
-    host statistics come from node0, the host with Postgres. The AWS harness runs no
-    calibration; zeros keep the schema."""
-    node0 = run_dir / "hosts" / "node0"
+    """The files `netbench.analyze` reads that the local bench produces itself. The AWS harness
+    runs no calibration; zeros keep the schema."""
+    node0 = run_dir / "hosts" / analysis_host(manifest)
     shutil.copyfile(node0 / "host.jsonl", run_dir / "host.jsonl")
     zero: nb.Calibration = {
         "sha256_1t_mb_s": 0.0,
@@ -9268,7 +9276,14 @@ def load_evidence(
         name = spec["name"]
         host_dir = run_dir / "hosts" / name
         samples = host_dir / "host.jsonl"
-        evidence["coverage"][name] = 0.0
+        if "fargate" in spec:
+            task = host_dir / "task.json"
+            if task.exists():
+                evidence["digest_mismatch"][name] = task_digest_mismatches(
+                    nb.read_json(task), manifest["images"]
+                )
+        else:
+            evidence["coverage"][name] = 0.0
         if samples.exists():
             stats[name], evidence["coverage"][name] = host_sample_stats(
                 list(nb.read_jsonl(samples)), t0, t1
@@ -9292,18 +9307,32 @@ def load_evidence(
             evidence["clock_offset_ms"][name] = max(
                 map(parse_clock_offset_ms, tracking)
             )
-        settings = host_dir / "pg-settings.json"
-        # Empty when psql failed at collect time; treated like a missing file.
-        if settings.exists() and settings.read_text().strip():
-            evidence["pg_settings"] = nb.read_json(settings)
-        samples = host_dir / "pg-stats.jsonl"
-        if samples.exists():
-            evidence["ssl_backends"] = sum_ssl_backends(nb.read_jsonl(samples), t0, t1)
+        # ctl holds one set per Fargate query node, `pg-settings-<node>.json` and so on.
+        for settings in sorted(host_dir.glob("pg-settings*.json")):
+            # Empty when psql failed at collect time; treated like a missing file.
+            if settings.read_text().strip():
+                evidence["pg_settings"] = nb.read_json(settings)
+        for samples in sorted(host_dir.glob("pg-stats*.jsonl")):
+            evidence["ssl_backends"] = sum_ssl_backends(
+                nb.read_jsonl(samples), t0, t1
+            ) + evidence.get("ssl_backends", Counter())
         if ready is not None:
             evidence["digest_mismatch"][name] = digest_mismatches(
                 ready["digests"], manifest["images"]
             )
     return stats, evidence
+
+
+def task_digest_mismatches(
+    task: dict[str, Any], images: dict[str, ImageInfo]
+) -> list[str]:
+    """`espresso-node` when the container ran another digest than the manifest's."""
+    (container,) = task["containers"]
+    return (
+        []
+        if container["imageDigest"] == images["espresso-node"]["digest"]
+        else ["espresso-node"]
+    )
 
 
 def sum_ssl_backends(
@@ -9326,10 +9355,7 @@ def deployment_meta(manifest: Manifest, evidence: Evidence) -> nb.DeploymentMeta
         "region": manifest_region(manifest),
         "az": manifest["az"],
         "ami": manifest["ami_id"],
-        "hosts": {
-            h["name"]: {"instance_type": h["instance_type"], "role": h["role"]}
-            for h in manifest["hosts"]
-        },
+        "hosts": {h["name"]: host_meta(h) for h in manifest["hosts"]},
         "images": {n: f"{i['ref']}@{i['digest']}" for n, i in images.items()},
         "image_revision": images["espresso-node"]["revision"],
         "start_spread_s": manifest["start_spread_s"],
@@ -9345,6 +9371,20 @@ def deployment_meta(manifest: Manifest, evidence: Evidence) -> nb.DeploymentMeta
             else {}
         ),
         **({"prune": f"{config['prune']} s"} if config.get("prune") else {}),
+    }
+
+
+def host_meta(host: HostSpec) -> dict[str, Any]:
+    if "fargate" not in host:
+        return {"instance_type": host["instance_type"], "role": host["role"]}
+    task = host["fargate"]
+    vcpus, memory_mib = task["cpu"] // 1024, task["memory_mib"]
+    return {
+        "instance_type": f"fargate {vcpus} vCPU {memory_mib // 1024} GiB",
+        "role": host["role"],
+        "placement": "fargate",
+        "vcpus": vcpus,
+        "memory_mib": memory_mib,
     }
 
 
@@ -9466,8 +9506,9 @@ def check_validity_aws(
     if "ctl" in hosts and hosts["ctl"]["util_mean"] > CTL_CPU_NOISY_FRAC:
         noisy.append(f"ctl CPU busy {hosts['ctl']['util_mean']:.0%}")
     for name, stats in hosts.items():
-        # node0's steal is already judged by netbench.check_validity through result["host"].
-        if name != "node0" and stats["steal_pct"] > nb.STEAL_NOISY_PCT:
+        # The analysis host's steal is already judged by netbench.check_validity through
+        # result["host"].
+        if name != analysis_host(manifest) and stats["steal_pct"] > nb.STEAL_NOISY_PCT:
             noisy.append(
                 f"{name} steal {stats['steal_pct']:.1f}% > {nb.STEAL_NOISY_PCT:.0f}%"
             )
@@ -9488,7 +9529,8 @@ def check_validity_aws(
                 noisy.append(
                     f"{name} journal {size / 1e9:.1f} GB near its {limit / 1e9:.1f} GB limit"
                 )
-    noisy += ebs_balance_reasons(evidence["ebs_balance_min"])
+    if "node0" not in fargate_names(manifest):
+        noisy += ebs_balance_reasons(evidence["ebs_balance_min"])
     if "rds_min" in evidence:
         noisy += rds_reasons(evidence["rds_min"])
     base = result["validity"]

@@ -34,13 +34,16 @@ from fakes import (
     isolated_env,
     mapping,
     no_children,
+    pg_settings,
     pricing,
+    rds_spec,
     rds_tag_runner,
     remote,
     respond_to_pulls,
     sts_response,
     task_arn,
     valid_result,
+    write_collected_run,
 )
 
 EXEC_ROLE_ARN = f"{ROLE_ARN}-exec"
@@ -1118,3 +1121,107 @@ def test_a_wrapper_that_finds_another_congestion_control_fails_a_shaped_run(
     assert "exit 78" in summary
     assert tail in summary
     assert not runner.ran("tc qdisc add")
+
+
+def test_the_analysis_host_is_node0_unless_node0_is_a_task():
+    cfg = task_cfg(nodes=3)
+    ec2 = {"hosts": awsb.plan_hosts(cfg)}
+    placed = awsb.place_fargate(awsb.plan_hosts(cfg), {"fargate": FARGATE_SHAPE})
+    assert awsb.analysis_host(ec2) == "node0"
+    assert awsb.analysis_host({"hosts": placed}) == "node1"
+    every = awsb.place_fargate(
+        awsb.plan_hosts(task_cfg(nodes=3, query_nodes=3)), {"fargate": FARGATE_SHAPE}
+    )
+    assert awsb.analysis_host({"hosts": every}) == "ctl"
+
+
+def fargate_run_dir(run_dir: Path) -> dict:
+    """A collected 3-node rds run whose node0 is a task: the files of an EC2 node0 are gone,
+    and the mailbox files and `task.json` are there instead."""
+    manifest = write_collected_run(run_dir)
+    cfg = task_cfg(load=netbench.BenchConfig(submit_nodes=2))
+    manifest |= {
+        "config": awsb.config_to_json(cfg),
+        "hosts": awsb.place_fargate(awsb.plan_hosts(cfg), {"fargate": FARGATE_SHAPE}),
+        "query_db": "rds",
+        "rds_spec": rds_spec(),
+    }
+    node0, node1 = run_dir / "hosts/node0", run_dir / "hosts/node1"
+    for name in ("lscpu.txt", "meminfo.txt", "uname.txt"):
+        (node0 / name).rename(node1 / name)
+    for name in ("host.jsonl", "chrony.txt", "ready.json"):
+        (node0 / name).unlink()
+    (run_dir / awsb.EC2_NODE0_FILE).unlink()
+    digest = manifest["images"]["espresso-node"]["digest"]
+    task = fargate_task()
+    task["containers"][0]["imageDigest"] = digest
+    netbench.write_json(node0 / "task.json", task)
+    series = {"timestamps": [60.0, 120.0, 180.0], "values": [1.0, 1.0, 1.0]}
+    metrics = {metric: series for metric, _ in awsb.RDS_METRICS.values()}
+    for balance in ("EBSIOBalance%", "EBSByteBalance%"):
+        metrics[balance] = {**series, "values": [100.0] * 3}
+    (run_dir / awsb.RDS_CLOUDWATCH_FILE).write_text(
+        json.dumps({"period_s": 60, "metrics": metrics})
+    )
+    netbench.write_json(run_dir / "manifest.json", manifest)
+    return manifest
+
+
+# TEST:fargate-validity-no-coverage-ok
+def test_a_task_is_judged_without_host_samples_chrony_or_ebs_balance(tmp_path):
+    fargate_run_dir(tmp_path)
+    result = awsb.write_report(tmp_path)
+    assert result["validity"]["valid"], result["validity"]["reasons"]
+    assert not result["validity"]["noisy"], result["validity"]["reasons"]
+    hosts = result["deployment"]["hosts"]
+    assert hosts["node0"] == {
+        "instance_type": "fargate 16 vCPU 32 GiB",
+        "role": "query",
+        "placement": "fargate",
+        "vcpus": 16,
+        "memory_mib": 32768,
+    }
+    assert hosts["node1"]["instance_type"] == "c8g.4xlarge"
+    assert "node0 fargate 16 vCPU 32 GiB" in (tmp_path / "summary.md").read_text()
+
+
+def test_the_analysis_comes_from_the_first_ec2_node(tmp_path):
+    fargate_run_dir(tmp_path)
+    (tmp_path / "hosts/node1/meminfo.txt").write_text("MemTotal:       16000000 kB\n")
+    awsb.write_report(tmp_path)
+    runner = netbench.read_json(tmp_path / "sysinfo.json")["runner"]
+    assert runner["mem_total_bytes"] == 16000000 * 1024
+
+
+# TEST:fargate-digest-mismatch-fails
+def test_a_task_that_ran_another_image_is_invalid(tmp_path):
+    fargate_run_dir(tmp_path)
+    task = netbench.read_json(tmp_path / "hosts/node0/task.json")
+    task["containers"][0]["imageDigest"] = f"sha256:{'9' * 64}"
+    netbench.write_json(tmp_path / "hosts/node0/task.json", task)
+    validity = awsb.write_report(tmp_path)["validity"]
+    assert not validity["valid"]
+    assert (
+        "node0 pulled another digest than the manifest for espresso-node"
+        in (validity["reasons"])
+    )
+
+
+def test_the_postgres_files_of_ctl_are_judged_for_the_task(tmp_path):
+    fargate_run_dir(tmp_path)
+    ctl = tmp_path / "hosts/ctl"
+    netbench.write_json(
+        ctl / "pg-settings-node0.json", pg_settings(shared_buffers="1GB")
+    )
+    sample = {"ts": 100.0, "ssl_backends": {"false": 2}}
+    netbench.write_jsonl(ctl / "pg-stats-node0.jsonl", [sample])
+    reasons = awsb.write_report(tmp_path)["validity"]["reasons"]
+    assert any("postgres shared_buffers=1GB" in r for r in reasons)
+    assert "node0 postgres backends connected without TLS" in reasons
+
+
+def test_the_task_journal_limit_is_not_halved_for_postgres():
+    hosts = awsb.plan_hosts(task_cfg())
+    ec2 = next(h for h in hosts if h["name"] == "node0")
+    task = {**ec2, "fargate": FARGATE_SHAPE}
+    assert awsb._journal_max_bytes(task) == 2 * awsb._journal_max_bytes(ec2)
