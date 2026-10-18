@@ -29,7 +29,7 @@ use axum::{
     routing::{any, get},
 };
 use http_wire::{
-    ContentType, DecodeFailure, WireError, WireVersion, drive_ws_stream, healthcheck_response,
+    ContentType, DecodeFailure, WireError, drive_ws_stream, healthcheck_response,
     module_healthcheck_response,
 };
 use schemars::transform::Transform;
@@ -137,23 +137,11 @@ async fn negotiated<T: Serialize>(
     headers: &HeaderMap,
     fut: impl Future<Output = anyhow::Result<T>>,
 ) -> Result<Response, ApiError> {
-    let format = ContentType::negotiate(headers);
     let value = RESPONSE_FORMAT
-        .scope(format, fut)
+        .scope(ContentType::negotiate(headers), fut)
         .await
         .map_err(classify_availability_error)?;
-    Ok(
-        match http_wire::encode_body::<WireVersion, _>(format, &value) {
-            Ok(bytes) => ([(header::CONTENT_TYPE, format.mime())], bytes).into_response(),
-            Err(err) => http_wire::encode_err::<ErrorResponse>(
-                headers,
-                ErrorResponse::catch_all(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("failed to serialize response: {err}"),
-                ),
-            ),
-        },
-    )
+    Ok(encode_response(headers, value))
 }
 
 /// Decode a request body based on its `Content-Type`, matched by media-type essence.
@@ -3843,6 +3831,7 @@ mod tests {
     use std::collections::BTreeMap;
 
     use futures::stream::BoxStream;
+    use http_wire::WireVersion;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use vbs::{BinarySerializer, Serializer};
 
