@@ -2804,21 +2804,24 @@ pub(crate) fn router_light_client(state: LightClientState) -> ApiRouter {
             .map_err(classify_availability_error)
     };
 
-    let lc_payload = |State(state): State<LightClientState>, Path(height): Path<u64>| async move {
-        state
+    let lc_payload = |State(state): State<LightClientState>,
+                      headers: HeaderMap,
+                      Path(height): Path<u64>| async move {
+        let proof = state
             .get_payload_proof(height)
             .await
-            .map(ApiJson)
-            .map_err(classify_availability_error)
+            .map_err(classify_availability_error)?;
+        Ok::<_, ApiError>(encode_response(&headers, proof))
     };
 
     let lc_payload_range = |State(state): State<LightClientState>,
+                            headers: HeaderMap,
                             Path((start, end)): Path<(u64, u64)>| async move {
-        state
+        let proofs = state
             .get_payload_proof_range(start, end)
             .await
-            .map(ApiJson)
-            .map_err(classify_availability_error)
+            .map_err(classify_availability_error)?;
+        Ok::<_, ApiError>(encode_response(&headers, proofs))
     };
 
     let lc_payload_ranges =
@@ -2828,32 +2831,35 @@ pub(crate) fn router_light_client(state: LightClientState) -> ApiRouter {
         };
 
     let lc_namespace = |State(state): State<LightClientState>,
+                        headers: HeaderMap,
                         Path((height, namespace)): Path<(u64, u64)>| async move {
-        state
+        let proof = state
             .get_lc_namespace_proof(height, namespace)
             .await
-            .map(ApiJson)
-            .map_err(classify_availability_error)
+            .map_err(classify_availability_error)?;
+        Ok::<_, ApiError>(encode_response(&headers, proof))
     };
 
     let lc_namespace_range =
         |State(state): State<LightClientState>,
+         headers: HeaderMap,
          Path((start, end, namespace)): Path<(u64, u64, u64)>| async move {
-            state
+            let proofs = state
                 .get_lc_namespace_proof_range(start, end, namespace)
                 .await
-                .map(ApiJson)
-                .map_err(classify_availability_error)
+                .map_err(classify_availability_error)?;
+            Ok::<_, ApiError>(encode_response(&headers, proofs))
         };
 
     let lc_namespaces_range =
         |State(state): State<LightClientState>,
+         headers: HeaderMap,
          Path((start, end, namespaces)): Path<(u64, u64, String)>| async move {
-            state
+            let proofs = state
                 .get_lc_namespaces_proof_range(start, end, namespaces)
                 .await
-                .map(ApiJson)
-                .map_err(classify_availability_error)
+                .map_err(classify_availability_error)?;
+            Ok::<_, ApiError>(encode_response(&headers, proofs))
         };
 
     ApiRouter::new()
