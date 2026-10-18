@@ -12076,7 +12076,7 @@ mod test {
             "v1/{path}: Accept header ignored"
         );
         let body = resp.bytes().await?;
-        Ok(Serializer::<StaticVersion<0, 1>>::deserialize(&body)?)
+        Serializer::<StaticVersion<0, 1>>::deserialize(&body)
     }
 
     /// Connect to the WebSocket endpoint, collect up to 10 messages, and assert that at least 2
