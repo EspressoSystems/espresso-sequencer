@@ -1520,11 +1520,23 @@ def plan_args(*extra: str, nodes: str = "2") -> argparse.Namespace:
     return parse_plan_args(["--tag", "x", "--nodes", nodes, *extra])
 
 
-def fleet(n: int, query_nodes: int = 1) -> dict:
+def fargate_host_info(name: str, index: int) -> dict:
+    """A query node on Fargate: no public ip, and a task ARN for the instance id."""
+    return {
+        **host_info(name, "query", index),
+        "public_ip": "",
+        "instance_id": f"arn:aws:ecs:eu-west-1:1:task/espresso-bench-fleet1/{index:032x}",
+    }
+
+
+def fleet(n: int, query_nodes: int = 1, fargate: bool = False) -> dict:
     hosts = {"ctl": host_info("ctl", "ctl", 1)}
     for i in range(n):
         role = "query" if i < query_nodes else "validator"
-        hosts[f"node{i}"] = host_info(f"node{i}", role, i + 2)
+        if fargate and role == "query":
+            hosts[f"node{i}"] = fargate_host_info(f"node{i}", i + 2)
+        else:
+            hosts[f"node{i}"] = host_info(f"node{i}", role, i + 2)
     return hosts
 
 
