@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 use espresso_types::{Leaf2, SeqTypes};
 use hotshot_new_protocol::message::Certificate2;
 use hotshot_types::{
-    data::{DaProposal2, QuorumProposalWrapper, VidDisperseShare},
+    data::{QuorumProposalWrapper, VidDisperseShare},
     event::HotShotAction,
     message::Proposal,
     simple_certificate::{
@@ -99,7 +99,6 @@ pub enum Record {
     StateCert(LightClientStateUpdateCertificateV2<SeqTypes>),
     Upgrade(Option<UpgradeCertificate<SeqTypes>>),
     Vid(Proposal<SeqTypes, VidDisperseShare<SeqTypes>>),
-    Da(Proposal<SeqTypes, DaProposal2<SeqTypes>>),
     /// The query service has ingested every decided leaf up to `view`, at block `height`.
     Processed {
         view: ViewNumber,
@@ -122,7 +121,7 @@ pub enum Kind {
     Upgrade = 8,
     // 9 (Eqc) and 10 (NextEpochQc) are reserved: no longer written.
     Vid = 11,
-    Da = 12,
+    // 12 (Da) is reserved: no longer written.
     Processed = 13,
     // 14 (PendingPayload) is reserved: no longer written.
 }
@@ -142,7 +141,6 @@ impl Kind {
             7 => Self::StateCert,
             8 => Self::Upgrade,
             11 => Self::Vid,
-            12 => Self::Da,
             13 => Self::Processed,
             _ => return None,
         })
@@ -172,7 +170,6 @@ impl Record {
             Self::StateCert(_) => Kind::StateCert,
             Self::Upgrade(_) => Kind::Upgrade,
             Self::Vid(_) => Kind::Vid,
-            Self::Da(_) => Kind::Da,
             Self::Processed { .. } => Kind::Processed,
         }
     }
@@ -190,7 +187,6 @@ impl Record {
             Self::Cert2 { view, .. } => view.u64(),
             Self::StateCert(c) => c.light_client_state.view_number,
             Self::Vid(p) => p.data.view_number().u64(),
-            Self::Da(p) => p.data.view_number().u64(),
             Self::Processed { view, .. } => view.u64(),
         }
     }
@@ -210,7 +206,6 @@ impl Record {
             Self::StateCert(c) => bincode::serialize(c)?,
             Self::Upgrade(u) => bincode::serialize(u)?,
             Self::Vid(p) => bincode::serialize(p)?,
-            Self::Da(p) => bincode::serialize(p)?,
             Self::Processed { height, .. } => bincode::serialize(height)?,
         })
     }
@@ -241,7 +236,6 @@ impl Record {
             Kind::StateCert => Self::StateCert(bincode::deserialize(body)?),
             Kind::Upgrade => Self::Upgrade(bincode::deserialize(body)?),
             Kind::Vid => Self::Vid(bincode::deserialize(body)?),
-            Kind::Da => Self::Da(bincode::deserialize(body)?),
             Kind::Processed => Self::Processed {
                 view: ViewNumber::new(view),
                 height: bincode::deserialize(body)?,
@@ -255,7 +249,7 @@ impl State {
     /// Returns a state cert finalized by a `Leaf` reaching its view, if any.
     pub fn apply(&mut self, rec: &Record) -> Option<Finalized> {
         match rec {
-            Record::Snapshot(_) | Record::Vid(_) | Record::Da(_) => None,
+            Record::Snapshot(_) | Record::Vid(_) => None,
             Record::Cert2 { view, cert } => {
                 if let Some(replay) = &mut self.replay
                     && !replay.is_replayed(*view)

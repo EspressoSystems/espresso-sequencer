@@ -1,6 +1,6 @@
 //! Append-only journal persistence backend for consensus data.
 //!
-//! Independent lanes (`wal`, `share`, `da`), each a std writer thread doing group commit with a
+//! Independent lanes (`wal`, `share`), each a std writer thread doing group commit with a
 //! durable/enqueue sync policy; see the design doc for the write path, roll and recovery. Reads of
 //! consensus state come from an in-memory `State` folded from wal records; `MembershipPersistence`
 //! and `DhtPersistentStorage` delegate to a side `fs::Persistence` tree, which keeps fs semantics
@@ -78,7 +78,6 @@ const WAL_SEGMENT_BYTES: u64 = 256 << 20;
 const WAL_MAX_VIEW_SPAN: u64 = 8192;
 const WAL_MAX_BATCH_BYTES: usize = 4 << 20;
 const SHARE_SEGMENT_BYTES: u64 = 1 << 30;
-const DA_SEGMENT_BYTES: u64 = 1 << 30;
 const DATA_MAX_BATCH_BYTES: usize = 64 << 20;
 /// Added to both record bounds: covers everything in a record that does not grow with block
 /// size (QCs, header fields).
@@ -111,7 +110,7 @@ impl RecordLimits {
     /// wal: only the header's ns table grows with block size, and it stays under
     /// `max_block_size` (each namespace takes at least 8 payload bytes for an 8-byte entry).
     /// data: a VID share holds `weight / ceil(total_weight / 3)` of the payload, so up to 3x for a
-    /// node with all the stake; a DA proposal holds 1x. Never below `DATA_MIN_RECORD_BYTES`.
+    /// node with all the stake. Never below `DATA_MIN_RECORD_BYTES`.
     /// Both stop at `u32::MAX`, the frame length field's range.
     fn new(max_block_size: u64) -> Self {
         let bound = |factor: u64| {
@@ -153,9 +152,8 @@ pub struct Options {
     )]
     pub view_retention: u64,
 
-    /// Soft cap on total `da` lane bytes on disk; oldest segments are dropped first once exceeded
-    /// (age-based retention runs regardless of this cap). The `share` lane has no byte cap and
-    /// logs a warning when it exceeds this size.
+    /// Size of the `share` lane on disk above which GC logs a warning. The lane is pruned by
+    /// `share_retention` alone and is never trimmed to this size.
     #[clap(
         long,
         env = "ESPRESSO_NODE_JOURNAL_MAX_BYTES",
@@ -234,7 +232,7 @@ pub struct Options {
     #[clap(skip)]
     pub max_block_size: Option<u64>,
 
-    /// Overrides the share and da segment size, for tests that roll segments.
+    /// Overrides the share segment size, for tests that roll segments.
     #[clap(skip)]
     pub(crate) segment_bytes: Option<u64>,
 
@@ -358,7 +356,6 @@ impl GcState {
 struct Lanes {
     wal: JournalLane,
     share: JournalLane,
-    da: JournalLane,
 }
 
 /// A lane's writer handle with what GC and readers need next to it.
@@ -366,8 +363,7 @@ struct JournalLane {
     lane: Lane,
     dir: PathBuf,
     segments: Arc<parking_lot::Mutex<Segments>>,
-    /// Share lane: every Vid frame, on a query node or with share heal. Da lane: unreplayed
-    /// frames, on a query node only.
+    /// Share lane: every Vid frame, on a query node or with share heal.
     index: Option<DataIndex>,
 }
 
@@ -581,7 +577,6 @@ impl Persistence {
         let journal_dir = path.join("journal");
         let wal_dir = journal_dir.join("wal");
         let share_dir = journal_dir.join("share");
-        let da_dir = journal_dir.join("da");
         let side_dir = path.join("side");
 
         // Must run before any directory is created (including by `storage_probe::probe` below):
@@ -589,7 +584,7 @@ impl Persistence {
         // itself having run before.
         let old_layout_present =
             path.join("sqlite").join("database").is_file() || path.join("decided_leaves2").is_dir();
-        let journal_empty = [&wal_dir, &share_dir, &da_dir]
+        let journal_empty = [&wal_dir, &share_dir]
             .into_iter()
             .all(|dir| !dir_has_log_files(dir));
         ensure!(
@@ -602,7 +597,7 @@ impl Persistence {
         fs::create_dir_all(&journal_dir).context("creating journal directory")?;
         // Recovery and the writer threads never touch the filesystem except through `JournalFs`
         // (so `MemFs` tests stay hermetic); the one directory-creation exception lives here.
-        for dir in [&wal_dir, &share_dir, &da_dir] {
+        for dir in [&wal_dir, &share_dir] {
             fs::create_dir_all(dir)
                 .with_context(|| format!("creating lane directory {}", dir.display()))?;
         }
@@ -636,7 +631,6 @@ impl Persistence {
             recover_lane(&std_fs, &wal_dir, Stream::Wal, LaneMode::Snapshot).await?;
         let share_recovered =
             recover_lane(&std_fs, &share_dir, Stream::Share, LaneMode::Append).await?;
-        let da_recovered = recover_lane(&std_fs, &da_dir, Stream::Da, LaneMode::Append).await?;
 
         let mut side_opts = side_fs::Options::new(side_dir);
         let side = side_opts.create().await.context("opening side fs store")?;
@@ -682,13 +676,6 @@ impl Persistence {
         } else {
             None
         };
-        let da_index = match &state.replay {
-            Some(replay) => Some(
-                index_unreplayed(&std_fs, &da_dir, Stream::Da, &da_recovered.segments, replay)
-                    .await?,
-            ),
-            None => None,
-        };
         let pending_payloads = PendingPayloads::new(opts.pending_payload_bytes);
 
         let state = Arc::new(parking_lot::Mutex::new(state));
@@ -717,14 +704,12 @@ impl Persistence {
             None,
             share_index,
         )?;
-        let da_cfg = append_config(Stream::Da, opts.segment_bytes.unwrap_or(DA_SEGMENT_BYTES));
-        let (da, da_thread) = start_lane(&std_fs, da_dir, da_cfg, da_recovered, None, da_index)?;
 
         Ok(Self {
             inner: Arc::new(Inner {
                 state,
-                lanes: Lanes { wal, share, da },
-                _threads: JoinOnDrop(vec![wal_thread, share_thread, da_thread]),
+                lanes: Lanes { wal, share },
+                _threads: JoinOnDrop(vec![wal_thread, share_thread]),
                 gc_lock: parking_lot::Mutex::new(GcState::default()),
                 side,
                 opts,
@@ -776,7 +761,7 @@ impl Persistence {
         Ok(())
     }
 
-    /// Share and da records have no `State` effect, so there is no lock to hold: only the
+    /// Share records have no `State` effect, so there is no lock to hold: only the
     /// in-flight byte budget bounds them.
     async fn put_data(
         &self,
@@ -890,10 +875,10 @@ impl Persistence {
         .context("scan_wal_leaves: blocking task panicked")?
     }
 
-    /// Unlinks the segments `wal_unlinkable` and `da_unlinkable` select. Passes are serialized by
-    /// `gc_lock`: see `lane::prune` for why an unlink failure stops the pass instead of skipping
-    /// ahead. On a query node, `replayed` keeps every share and da segment the query service still
-    /// has to ingest.
+    /// Unlinks the segments `wal_unlinkable` and the share retention select. Passes are serialized
+    /// by `gc_lock`: see `lane::prune` for why an unlink failure stops the pass instead of
+    /// skipping ahead. On a query node, `replayed` keeps every share segment the query service
+    /// still has to ingest.
     async fn gc(&self, decided: ViewNumber, replayed: Option<u64>) -> anyhow::Result<()> {
         let inner = self.inner.clone();
         let bound = decided.u64().saturating_sub(inner.opts.view_retention);
@@ -905,7 +890,6 @@ impl Persistence {
             // Also after a failed pass: the segments it did unlink are already gone from
             // `segments`.
             inner.lanes.share.trim_index();
-            inner.lanes.da.trim_index();
             pruned
         })
         .await
@@ -1005,7 +989,7 @@ impl Persistence {
                 },
             ) in leaves.into_iter().rev()
             {
-                if self.fill_payload(view, &mut leaf).await? {
+                if self.fill_payload(view, &mut leaf) {
                     attached.push(view);
                 }
                 let vid_share = self
@@ -1047,13 +1031,11 @@ impl Persistence {
         Ok(())
     }
 
-    /// Fill `leaf` with its payload, from a pending payload of the same block, else from a DA
-    /// proposal. Returns whether a pending payload was used.
+    /// Fill `leaf` with the pending payload of the same block. Returns whether one was used.
     ///
-    /// Only the legacy protocol writes DA proposals (`append_da2`); after the new protocol
-    /// cutover the `da` lane stays empty. A miss there is normally reconstruction finishing after
-    /// the decide, and the payload follows as a `BlockPayload` event.
-    async fn fill_payload(&self, view: ViewNumber, leaf: &mut Leaf2) -> anyhow::Result<bool> {
+    /// A miss is normally reconstruction finishing after the decide, and the payload follows as
+    /// a `BlockPayload` event.
+    fn fill_payload(&self, view: ViewNumber, leaf: &mut Leaf2) -> bool {
         let pending = self
             .inner
             .pending_payloads
@@ -1061,29 +1043,15 @@ impl Persistence {
             .payload_for(view, leaf.block_header());
         if let Some(payload) = pending {
             leaf.fill_block_payload_unchecked((*payload).clone());
-            return Ok(true);
+            return true;
         }
-        match self
-            .read_data::<Proposal<SeqTypes, DaProposal2<SeqTypes>>>(
-                &self.inner.lanes.da,
-                Kind::Da,
-                view,
-            )
-            .await?
-        {
-            Some(proposal) => leaf.fill_block_payload_unchecked(Payload::from_bytes(
-                &proposal.data.encoded_transactions,
-                &proposal.data.metadata,
-            )),
-            // The genesis view has no DA proposal, and its payload is always empty.
-            None if view == ViewNumber::genesis() => {
-                leaf.fill_block_payload_unchecked(Payload::empty().0)
-            },
-            None => {
-                tracing::warn!(%view, "payload not available at replay, the query service must fetch this block")
-            },
+        if view == ViewNumber::genesis() {
+            // The genesis payload is always empty.
+            leaf.fill_block_payload_unchecked(Payload::empty().0);
+        } else {
+            tracing::warn!(%view, "payload not available at replay, the query service must fetch this block");
         }
-        Ok(false)
+        false
     }
 
     /// Send every pending payload at or below `cursor` that no replayed leaf took: forks,
@@ -1148,7 +1116,7 @@ impl Persistence {
     }
 }
 
-/// Unlinks the segments GC selects. Wal first: a failure there leaves the other lanes untouched.
+/// Unlinks the segments GC selects. Wal first: a failure there leaves the share lane untouched.
 fn prune_all(
     inner: &Inner,
     gc_state: &mut GcState,
@@ -1160,13 +1128,6 @@ fn prune_all(
     lanes
         .wal
         .prune(&wal_unlinkable(&lanes.wal.segments.lock(), bound))?;
-    let unlinkable = da_unlinkable(
-        &lanes.da.segments.lock(),
-        bound,
-        inner.opts.max_bytes,
-        replayed,
-    );
-    lanes.da.prune(&unlinkable)?;
     if let Some(cutoff) = share_cutoff {
         // Age by header time only, never by size. Segments holding a key after `replayed` stay: the
         // query service still has to ingest them.
@@ -1205,24 +1166,6 @@ fn wal_unlinkable(segments: &Segments, bound: u64) -> Vec<SegmentMeta> {
     let mut out = segments.oldest_below(bound);
     out.truncate(segments.list().len().saturating_sub(2));
     out
-}
-
-/// Age-based, then oldest-first while the stream exceeds `max_bytes`. Segments holding a key after
-/// `replayed` stay either way: the query service still has to ingest them.
-fn da_unlinkable(
-    segments: &Segments,
-    bound: u64,
-    max_bytes: u64,
-    replayed: Option<u64>,
-) -> Vec<SegmentMeta> {
-    let mut by_age = segments.oldest_below(bound);
-    let replayable = by_age
-        .iter()
-        .take_while(|meta| replayed.is_none_or(|replayed| meta.max_key <= replayed))
-        .count();
-    by_age.truncate(replayable);
-    let by_bytes = segments.oldest_over_bytes(max_bytes, replayed);
-    std::cmp::max_by_key(by_age, by_bytes, Vec::len)
 }
 
 /// A wal `Leaf` record: the leaf with the QCs that decided it.
@@ -1302,25 +1245,6 @@ fn find_in_segment(
         ensure!(!sealed, "sealed segment corrupt at frame offset {offset}");
     }
     Ok(found)
-}
-
-/// Index the frames of the da stream a query node may still replay: every record past the replay
-/// cursor, decided or not yet. `max_key` only grows along a stream, so segments ending at or before
-/// the cursor hold nothing replay needs.
-async fn index_unreplayed(
-    fs: &Arc<StdFs>,
-    dir: &Path,
-    stream: Stream,
-    segments: &[SegmentMeta],
-    replay: &Replay,
-) -> anyhow::Result<DataIndex> {
-    let cursor = replay.cursor.map_or(0, |(view, _)| view.u64());
-    let seqs = segments
-        .iter()
-        .filter(|meta| replay.cursor.is_none() || meta.max_key > cursor)
-        .map(|meta| meta.seq)
-        .collect();
-    index_frames(fs, dir, stream, seqs, |_| true).await
 }
 
 /// Index the frames of segments `seqs` that pass `keep`, the newest per `(key, kind)`.
@@ -1505,9 +1429,9 @@ impl SequencerPersistence for Persistence {
 
     async fn load_da_proposal(
         &self,
-        view: ViewNumber,
+        _view: ViewNumber,
     ) -> anyhow::Result<Option<Proposal<SeqTypes, DaProposal2<SeqTypes>>>> {
-        self.read_data(&self.inner.lanes.da, Kind::Da, view).await
+        Ok(None)
     }
 
     async fn load_vid_share(
@@ -1708,28 +1632,13 @@ impl SequencerPersistence for Persistence {
 
     async fn append_da2(
         &self,
-        proposal: &Proposal<SeqTypes, DaProposal2<SeqTypes>>,
+        _proposal: &Proposal<SeqTypes, DaProposal2<SeqTypes>>,
         _vid_commit: VidCommitment,
     ) -> anyhow::Result<()> {
-        // Only a query node replays payloads from here. No other node keeps them, same as sql/fs.
-        if !self.is_query_node() {
-            return Ok(());
-        }
-        let now = Instant::now();
-        // Durable: the query service is replayed from this record, so it must survive a power
-        // loss.
-        let res = self
-            .put_data(
-                &self.inner.lanes.da,
-                Record::Da(proposal.clone()),
-                0,
-                Class::Durable,
-            )
-            .await;
-        self.metrics
-            .internal_append_da2_duration
-            .add_point(now.elapsed().as_secs_f64());
-        res
+        anyhow::bail!(
+            "storage-journal does not support the legacy DA proposal format; it requires \
+             genesis.base_version >= 0.6"
+        )
     }
 
     async fn append_pending_payload(
@@ -1804,11 +1713,7 @@ impl SequencerPersistence for Persistence {
             metrics,
             "journal",
             "stream",
-            &[
-                &self.inner.lanes.wal.lane,
-                &self.inner.lanes.share.lane,
-                &self.inner.lanes.da.lane,
-            ],
+            &[&self.inner.lanes.wal.lane, &self.inner.lanes.share.lane],
         );
     }
 }
@@ -1922,7 +1827,6 @@ mod tests {
     use hotshot_types::{
         data::{ns_table::parse_ns_table, vid_disperse::AvidmGf2DisperseShare},
         traits::EncodeBytes,
-        utils::EpochTransitionIndicator,
         vid::avidm_gf2::{AvidmGf2Scheme, init_avidm_gf2_param},
     };
     use tempfile::TempDir;
@@ -2023,33 +1927,6 @@ mod tests {
     }
 
     #[test]
-    fn da_unlinkable_drops_oldest_first_over_byte_cap() {
-        let segs = segments(
-            Stream::Da,
-            &[(1, 40, 100), (2, 40, 100), (3, 40, 100), (4, 40, 100)],
-        );
-        // All young, total 160 > cap 90: drop oldest until under the cap; the active one stays.
-        assert_eq!(seqs(da_unlinkable(&segs, 0, 90, None)), vec![1, 2]);
-    }
-
-    #[test]
-    fn da_unlinkable_age_based_ignores_byte_cap() {
-        let segs = segments(Stream::Da, &[(1, 10, 0), (2, 10, 1000), (3, 10, 1000)]);
-        assert_eq!(seqs(da_unlinkable(&segs, 990, u64::MAX, None)), vec![1]);
-    }
-
-    #[test]
-    fn da_unlinkable_keeps_unreplayed_segments_even_over_cap() {
-        let segs = segments(
-            Stream::Da,
-            &[(1, 40, 5), (2, 40, 10), (3, 40, 20), (4, 40, 30)],
-        );
-        assert_eq!(seqs(da_unlinkable(&segs, 0, 0, Some(10))), vec![1, 2]);
-        assert_eq!(seqs(da_unlinkable(&segs, 1000, 0, Some(10))), vec![1, 2]);
-        assert_eq!(seqs(da_unlinkable(&segs, 1000, 0, None)), vec![1, 2, 3]);
-    }
-
-    #[test]
     fn share_unlinkable_drops_segments_older_than_the_cutoff() {
         let segs = stamped_shares(&[(1, 1, 100), (2, 2, 200), (3, 3, 300), (4, 4, 400)]);
         assert_eq!(seqs(segs.oldest_stamped_below(250, None)), vec![1, 2]);
@@ -2125,13 +2002,12 @@ mod tests {
         segments.list().iter().map(|meta| meta.max_stamp).collect()
     }
 
-    /// One share and one decided leaf per view, view `i` at header time `1000 * (i + 1)`, each
-    /// lane rolling after every record.
+    /// One share and one decided leaf per view, view `i` at header time `1000 * (i + 1)`, the
+    /// share lane rolling after every record.
     #[tokio::test]
-    async fn share_lane_ages_by_header_time_while_da_ages_by_view() {
+    async fn share_lane_ages_by_header_time() {
         let tmp = TempDir::new().unwrap();
         let opts = Options {
-            view_retention: 1,
             share_retention: Duration::from_secs(3500),
             segment_bytes: Some(1),
             ..options(&tmp)
@@ -2146,15 +2022,6 @@ mod tests {
         for view in 0..4u64 {
             let stamp = 1000 * (view as u32 + 1);
             storage
-                .put_data(
-                    &storage.inner.lanes.da,
-                    da_record_at(view, 16).await,
-                    0,
-                    Class::Durable,
-                )
-                .await
-                .unwrap();
-            storage
                 .append_vid_stamped(&vid_share(view).await, stamp)
                 .await
                 .unwrap();
@@ -2168,15 +2035,10 @@ mod tests {
         }
 
         // Anchor time 4000 and a 3500 s retention put the cutoff at 500: nothing is old enough.
-        // View retention 1 and decided view 3 drop the da records of views 0 and 1.
         for view in 0..4 {
             let share = storage.load_vid_share(ViewNumber::new(view)).await.unwrap();
             assert!(share.is_some(), "share {view}");
             assert!(has_leaf_copy(&storage, view).await, "leaf copy {view}");
-        }
-        for (view, kept) in [(0, false), (1, false), (2, true), (3, true)] {
-            let da = storage.load_da_proposal(ViewNumber::new(view)).await;
-            assert_eq!(da.unwrap().is_some(), kept, "da {view}");
         }
 
         // Anchor time 10000 moves the cutoff to 6500, past every share and leaf copy so far.
@@ -2572,80 +2434,72 @@ mod tests {
         assert_eq!(limits.data, u32::MAX);
     }
 
-    // Regression test: VID shares and DA payloads grow with block size and stake (78 MB shares at
-    // 40% stake with 1 MB txs), past the wal record bound.
+    // Regression test: VID shares grow with block size and stake (78 MB shares at 40% stake with
+    // 1 MB txs), past the wal record bound.
     #[tokio::test]
     async fn stores_data_record_larger_than_wal_record_limit() {
         let tmp = TempDir::new().unwrap();
-        let storage = Persistence::open(options(&tmp)).await.unwrap();
-        let len = RecordLimits::new(TEST_MAX_BLOCK_SIZE).wal as usize + (16 << 20);
-        // `append_da2` enqueues without waiting for the write; wait so the cold scan sees it.
+        let mut storage = Persistence::open(options(&tmp)).await.unwrap();
+        let share = vid_share(1).await;
+        let len = Record::Vid(share.clone()).encode().unwrap().len() as u32;
+        let inner = Arc::get_mut(&mut storage.inner).expect("no other handle to inner yet");
+        inner.limits = RecordLimits {
+            wal: len - 1,
+            data: len,
+        };
+
+        storage.append_vid_stamped(&share, 100).await.unwrap();
+        assert!(
+            storage
+                .load_vid_share(ViewNumber::new(1))
+                .await
+                .unwrap()
+                .is_some()
+        );
         storage
-            .put_data(
-                &storage.inner.lanes.da,
-                da_record(len).await,
-                0,
-                Class::Durable,
-            )
+            .put_wal(Record::Vid(share), Class::Enqueue)
             .await
-            .unwrap();
-        let stored = storage.load_da_proposal(ViewNumber::new(1)).await.unwrap();
-        assert_eq!(stored.map(|p| p.data.encoded_transactions.len()), Some(len));
+            .unwrap_err();
     }
 
     #[tokio::test]
     async fn put_data_rejects_record_over_data_limit() {
         let tmp = TempDir::new().unwrap();
         let mut storage = Persistence::open(options(&tmp)).await.unwrap();
-        let len = da_record(1024).await.encode().unwrap().len();
+        let share = vid_share(1).await;
+        let len = Record::Vid(share.clone()).encode().unwrap().len();
         let inner = Arc::get_mut(&mut storage.inner).expect("no other handle to inner yet");
         inner.limits.data = len as u32 - 1;
 
-        let err = storage
-            .put_data(
-                &storage.inner.lanes.da,
-                da_record(1024).await,
-                0,
-                Class::Durable,
-            )
-            .await
-            .unwrap_err();
+        let err = storage.append_vid_stamped(&share, 100).await.unwrap_err();
         assert!(err.to_string().contains("over the"), "{err:#}");
 
         let inner = Arc::get_mut(&mut storage.inner).expect("no other handle to inner yet");
         inner.limits.data = len as u32;
-        storage
-            .put_data(
-                &storage.inner.lanes.da,
-                da_record(1024).await,
-                0,
-                Class::Durable,
-            )
-            .await
-            .unwrap();
+        storage.append_vid_stamped(&share, 100).await.unwrap();
     }
 
     #[test]
     fn find_in_segment_fails_on_corrupt_sealed_segment() {
         let header = SegmentHeader {
-            stream: Stream::Da,
+            stream: Stream::Share,
             seq: 1,
             first_lsn: 1,
             prev_max_key: 0,
             prev_max_stamp: 0,
         };
         let mut seg = header.encode().to_vec();
-        format::encode_frame(&mut seg, 1, 5, 0, Kind::Da.into(), b"five");
-        format::encode_frame(&mut seg, 2, 6, 0, Kind::Da.into(), b"six");
+        format::encode_frame(&mut seg, 1, 5, 0, Kind::Vid.into(), b"five");
+        format::encode_frame(&mut seg, 2, 6, 0, Kind::Vid.into(), b"six");
         let last = seg.len() - 1;
         seg[last] ^= 0xff;
 
         assert_eq!(
-            find_in_segment(&seg, Kind::Da, 5, false).unwrap(),
+            find_in_segment(&seg, Kind::Vid, 5, false).unwrap(),
             Some(b"five".to_vec())
         );
-        assert_eq!(find_in_segment(&seg, Kind::Da, 6, false).unwrap(), None);
-        find_in_segment(&seg, Kind::Da, 5, true).unwrap_err();
+        assert_eq!(find_in_segment(&seg, Kind::Vid, 6, false).unwrap(), None);
+        find_in_segment(&seg, Kind::Vid, 5, true).unwrap_err();
     }
 
     #[tokio::test]
@@ -2659,31 +2513,6 @@ mod tests {
         .err()
         .expect("open must fail without max_block_size");
         assert!(err.to_string().contains("max_block_size"), "{err:#}");
-    }
-
-    #[tokio::test]
-    async fn vid_shares_and_da_proposals_use_separate_lanes() {
-        let tmp = TempDir::new().unwrap();
-        let storage = Persistence::open(options(&tmp)).await.unwrap();
-        storage
-            .put_data(
-                &storage.inner.lanes.da,
-                da_record(16).await,
-                0,
-                Class::Durable,
-            )
-            .await
-            .unwrap();
-        let da = storage.inner.lanes.da.segments.lock().bytes();
-        let share = storage.inner.lanes.share.segments.lock().bytes();
-        assert!(da > share, "da {da} share {share}");
-        assert!(
-            storage
-                .load_da_proposal(ViewNumber::new(1))
-                .await
-                .unwrap()
-                .is_some()
-        );
     }
 
     fn options(tmp: &TempDir) -> Options {
@@ -2711,27 +2540,6 @@ mod tests {
             TEST_VERSIONS.test.base,
         )
         .await
-    }
-
-    /// A view-1 DA proposal whose payload is `len` bytes.
-    async fn da_record(len: usize) -> Record {
-        da_record_at(1, len).await
-    }
-
-    async fn da_record_at(view: u64, len: usize) -> Record {
-        let payload = genesis_leaf().await.block_payload().unwrap();
-        let (_, privkey) = BLSPubKey::generated_from_seed_indexed([0; 32], 1);
-        Record::Da(Proposal {
-            data: DaProposal2::<SeqTypes> {
-                encoded_transactions: vec![7u8; len].into(),
-                metadata: payload.ns_table().clone(),
-                view_number: ViewNumber::new(view),
-                epoch: None,
-                epoch_transition_indicator: EpochTransitionIndicator::NotInTransition,
-            },
-            signature: BLSPubKey::sign(&privkey, &payload.encode()).unwrap(),
-            _pd: Default::default(),
-        })
     }
 
     // Regression test: both lanes share one metric family per name; registering a family per lane

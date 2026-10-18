@@ -311,7 +311,7 @@ mod tests {
     pub fn persistence_types<P: TestablePersistence>(#[case] _p: PhantomData<P>) {}
 
     /// Backends whose decide path replays leaves into an event consumer and deletes decided data
-    /// immediately: fs and sql. `journal` keeps decided VID/DA for the retention window and never
+    /// immediately: fs and sql. `journal` keeps decided VID shares for the retention window and never
     /// calls the consumer from `persist_decided_leaves` (see the design doc's GC section), so the
     /// tests applied to this template don't hold for it.
     #[rstest_reuse::template]
@@ -2155,7 +2155,6 @@ mod tests {
     /// includes payloads of views that decide only after the restart.
     #[rstest::rstest]
     #[case(PhantomData::<crate::persistence::sql::Persistence>)]
-    #[case(PhantomData::<crate::persistence::journal::Persistence>)]
     #[test_log::test(tokio::test(flavor = "multi_thread"))]
     pub async fn test_decide_processing_survives_restart<P: TestablePersistence>(
         #[case] _p: PhantomData<P>,
@@ -2204,7 +2203,6 @@ mod tests {
     /// payload.
     #[rstest::rstest]
     #[case(PhantomData::<crate::persistence::sql::Persistence>)]
-    #[case(PhantomData::<crate::persistence::journal::Persistence>)]
     #[test_log::test(tokio::test(flavor = "multi_thread"))]
     pub async fn test_decide_delivers_payload_stored_just_before<P: TestablePersistence>(
         #[case] _p: PhantomData<P>,
@@ -2236,7 +2234,6 @@ mod tests {
     /// catches up: storage keeps what it has not yet delivered.
     #[rstest::rstest]
     #[case(PhantomData::<crate::persistence::sql::Persistence>)]
-    #[case(PhantomData::<crate::persistence::journal::Persistence>)]
     #[test_log::test(tokio::test(flavor = "multi_thread"))]
     pub async fn test_decide_delivers_payloads_after_long_lag<P: TestablePersistence>(
         #[case] _p: PhantomData<P>,
