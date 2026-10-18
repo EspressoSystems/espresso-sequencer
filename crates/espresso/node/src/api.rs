@@ -3531,6 +3531,7 @@ mod test {
         consensus::{
             header::HeaderProof,
             leaf::{LeafProof, LeafProofHint},
+            namespace::NamespaceProof,
             payload::PayloadProof,
         },
         testing::EpochChangeQuorum,
@@ -3609,6 +3610,7 @@ mod test {
     use pretty_assertions::assert_matches;
     use rand::seq::SliceRandom;
     use rstest::rstest;
+    use serde::de::DeserializeOwned;
     use staking_cli::{
         Transaction as StakingTransaction, demo::DelegationConfig, fetch_commission,
         update_commission, update_network_config,
@@ -3622,7 +3624,7 @@ mod test {
         net::{TcpListener, TcpStream},
         time::sleep,
     };
-    use vbs::version::StaticVersion;
+    use vbs::{BinarySerializer, Serializer, version::StaticVersion};
     use versions::{
         DRB_AND_HEADER_UPGRADE_VERSION, EPOCH_VERSION, LARGE_BLOCK_VERSION, NEW_PROTOCOL_VERSION,
         Upgrade,
@@ -12044,6 +12046,39 @@ mod test {
         Ok(())
     }
 
+    /// GET with `Accept: application/octet-stream` and decode the VBS body.
+    ///
+    /// Internal clients (`QueryServiceClient`, peer catchup) send this `Accept` header. A handler
+    /// that ignores it answers JSON, which for payload routes base64-encodes the whole block.
+    async fn assert_binary_endpoint<T: DeserializeOwned>(
+        http: &reqwest::Client,
+        api_port: u16,
+        path: &str,
+    ) -> anyhow::Result<T> {
+        let resp = http
+            .get(format!("http://localhost:{api_port}/v1/{path}"))
+            .header("Accept", "application/octet-stream")
+            .send()
+            .await?;
+        let status = resp.status();
+        assert!(
+            status.is_success(),
+            "v1/{path}: binary GET returned {status}, expected 2xx"
+        );
+        let content_type = resp
+            .headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok())
+            .map(str::to_owned);
+        assert_eq!(
+            content_type.as_deref(),
+            Some("application/octet-stream"),
+            "v1/{path}: Accept header ignored"
+        );
+        let body = resp.bytes().await?;
+        Ok(Serializer::<StaticVersion<0, 1>>::deserialize(&body)?)
+    }
+
     /// Connect to the WebSocket endpoint, collect up to 10 messages, and assert that at least 2
     /// of them are valid JSON.
     async fn assert_ws_endpoint(api_port: u16, path: &str) -> anyhow::Result<()> {
@@ -13048,6 +13083,41 @@ mod test {
                 ),
             )
             .await?;
+            let proof: PayloadProof = assert_binary_endpoint(
+                &http,
+                api_port,
+                &format!("light-client/payload/{avail_block}"),
+            )
+            .await?;
+            proof.verify(&avail_header)?;
+            let proofs: Vec<PayloadProof> = assert_binary_endpoint(
+                &http,
+                api_port,
+                &format!("light-client/payload/{avail_block}/{}", avail_block + 1),
+            )
+            .await?;
+            assert_eq!(proofs.len(), 1);
+            let proof: NamespaceProof = assert_binary_endpoint(
+                &http,
+                api_port,
+                &format!(
+                    "light-client/namespace/{avail_block}/{}",
+                    u64::from(avail_ns)
+                ),
+            )
+            .await?;
+            proof.verify(&avail_header, avail_ns)?;
+            let proofs: Vec<NamespaceProof> = assert_binary_endpoint(
+                &http,
+                api_port,
+                &format!(
+                    "light-client/namespace/{avail_block}/{}/{}",
+                    avail_block + 1,
+                    u64::from(avail_ns)
+                ),
+            )
+            .await?;
+            assert_eq!(proofs.len(), 1);
 
             // Regression: an oversized range on the plural namespaces route must return
             // 400 Bad Request (the status carried by the query-service error), not 500.
