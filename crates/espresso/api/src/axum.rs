@@ -2807,21 +2807,13 @@ pub(crate) fn router_light_client(state: LightClientState) -> ApiRouter {
     let lc_payload = |State(state): State<LightClientState>,
                       headers: HeaderMap,
                       Path(height): Path<u64>| async move {
-        let proof = state
-            .get_payload_proof(height)
-            .await
-            .map_err(classify_availability_error)?;
-        Ok::<_, ApiError>(encode_response(&headers, proof))
+        negotiated(&headers, state.get_payload_proof(height)).await
     };
 
     let lc_payload_range = |State(state): State<LightClientState>,
                             headers: HeaderMap,
                             Path((start, end)): Path<(u64, u64)>| async move {
-        let proofs = state
-            .get_payload_proof_range(start, end)
-            .await
-            .map_err(classify_availability_error)?;
-        Ok::<_, ApiError>(encode_response(&headers, proofs))
+        negotiated(&headers, state.get_payload_proof_range(start, end)).await
     };
 
     let lc_payload_ranges =
@@ -2833,33 +2825,29 @@ pub(crate) fn router_light_client(state: LightClientState) -> ApiRouter {
     let lc_namespace = |State(state): State<LightClientState>,
                         headers: HeaderMap,
                         Path((height, namespace)): Path<(u64, u64)>| async move {
-        let proof = state
-            .get_lc_namespace_proof(height, namespace)
-            .await
-            .map_err(classify_availability_error)?;
-        Ok::<_, ApiError>(encode_response(&headers, proof))
+        negotiated(&headers, state.get_lc_namespace_proof(height, namespace)).await
     };
 
     let lc_namespace_range =
         |State(state): State<LightClientState>,
          headers: HeaderMap,
          Path((start, end, namespace)): Path<(u64, u64, u64)>| async move {
-            let proofs = state
-                .get_lc_namespace_proof_range(start, end, namespace)
-                .await
-                .map_err(classify_availability_error)?;
-            Ok::<_, ApiError>(encode_response(&headers, proofs))
+            negotiated(
+                &headers,
+                state.get_lc_namespace_proof_range(start, end, namespace),
+            )
+            .await
         };
 
     let lc_namespaces_range =
         |State(state): State<LightClientState>,
          headers: HeaderMap,
          Path((start, end, namespaces)): Path<(u64, u64, String)>| async move {
-            let proofs = state
-                .get_lc_namespaces_proof_range(start, end, namespaces)
-                .await
-                .map_err(classify_availability_error)?;
-            Ok::<_, ApiError>(encode_response(&headers, proofs))
+            negotiated(
+                &headers,
+                state.get_lc_namespaces_proof_range(start, end, namespaces),
+            )
+            .await
         };
 
     ApiRouter::new()

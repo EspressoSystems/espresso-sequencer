@@ -4047,6 +4047,21 @@ mod test {
         assert_eq!(binary.status(), reqwest::StatusCode::OK);
         let json = post("application/json").await.unwrap();
         assert_eq!(json.status(), reqwest::StatusCode::SERVICE_UNAVAILABLE);
+
+        let lc_range = |accept: &str| {
+            reqwest::Client::new()
+                .get(format!(
+                    "http://localhost:{port}/v1/light-client/payload/{}/{}",
+                    heights[0],
+                    heights[0] + 1
+                ))
+                .header(reqwest::header::ACCEPT, accept)
+                .send()
+        };
+        let binary = lc_range("application/octet-stream").await.unwrap();
+        assert_eq!(binary.status(), reqwest::StatusCode::OK);
+        let json = lc_range("application/json").await.unwrap();
+        assert_eq!(json.status(), reqwest::StatusCode::SERVICE_UNAVAILABLE);
     }
 
     async fn run_catchup_test(url_suffix: &str) {
