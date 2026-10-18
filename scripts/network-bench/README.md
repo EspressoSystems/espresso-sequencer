@@ -279,7 +279,7 @@ just bench aws up --tag release-x --nodes 3 --query-placement fargate --db-modes
 - Judged: the task has no host samples, chrony or EBS balance. `result["host"]` and the runner info come from the first
   EC2 node. The task's CPU and memory are in `hosts/<node>/task-stats.jsonl`, unjudged. The image digest is compared
   with `task.json`.
-- Ends: the wrapper runs the node under `timeout` until the fleet's expiry. `down` stops the tasks, then deletes the
+- Ends: the wrapper runs the node under `timeout` until 120 s before the EFS and RDS reaper fires (`timeout -k 30`). `down` stops the tasks, then deletes the
   task definitions (registered per run and node) before `tofu destroy`. The reaper deletes the EFS mount target and
   access points at the rds delete time and the file system 30 min later.
 - Cost: lines `fargate vcpu`, `fargate memory`, `efs storage` and `efs elastic writes` (about $0.06 per GB written:
