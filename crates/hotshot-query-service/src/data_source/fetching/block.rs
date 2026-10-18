@@ -21,6 +21,7 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
+use anyhow::Context;
 use async_trait::async_trait;
 use derivative::Derivative;
 use futures::future::{BoxFuture, FutureExt, join_all, try_join_all};
@@ -411,17 +412,54 @@ where
     Payload<Types>: QueryablePayload<Types>,
     S: 'static + VersionedDataSource,
     for<'a> S::Transaction<'a>: UpdateAvailabilityStorage<Types>,
+    for<'a> S::ReadOnly<'a>: AvailabilityStorage<Types> + NodeStorage<Types> + PrunedHeightStorage,
     P: AvailabilityProvider<Types>,
 {
     async fn run(self, payload: Payload<Types>) {
         tracing::debug!("fetched payload {:?}", self.header.payload_commitment());
+        let height = self.header.block_number();
         let block = BlockQueryData::new(self.header, payload);
+        // The node's own payload may have been stored while this fetch was in flight, and
+        // storing rewrites the whole payload. Waiters still get notified: the block can have
+        // become readable without a notification, e.g. through a payload shared with another
+        // height.
+        if block_stored(&self.fetcher, height).await {
+            tracing::debug!(height, "fetched payload already stored");
+            block.notify(&self.fetcher.notifiers).await;
+            return;
+        }
         self.fetcher.store_and_notify(&block).await;
     }
 
     fn height(&self) -> Option<u64> {
         Some(self.header.block_number())
     }
+}
+
+/// Whether the block at `height` is stored per [`Fetcher::payload_stored`] and its payload also
+/// reads back, so a fetch still replaces an unreadable payload record. Only a fetched payload
+/// pays for that read.
+async fn block_stored<Types, S, P>(fetcher: &Fetcher<Types, S, P>, height: u64) -> bool
+where
+    Types: NodeType,
+    Header<Types>: QueryableHeader<Types>,
+    Payload<Types>: QueryablePayload<Types>,
+    S: VersionedDataSource + 'static,
+    for<'a> S::Transaction<'a>: UpdateAvailabilityStorage<Types>,
+    for<'a> S::ReadOnly<'a>: AvailabilityStorage<Types> + NodeStorage<Types> + PrunedHeightStorage,
+    P: AvailabilityProvider<Types>,
+{
+    let checked = async {
+        if !fetcher.payload_stored(height).await? {
+            return Ok(false);
+        }
+        let mut tx = fetcher.read().await.context("opening read transaction")?;
+        anyhow::Ok(tx.get_block(BlockId::Number(height as usize)).await.is_ok())
+    };
+    checked.await.unwrap_or_else(|err| {
+        tracing::warn!(height, "checking whether block is stored: {err:#}");
+        false
+    })
 }
 
 #[async_trait]
