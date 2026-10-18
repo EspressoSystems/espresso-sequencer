@@ -131,6 +131,8 @@ mod block;
 mod cert2;
 mod header;
 mod leaf;
+#[cfg(all(test, not(target_os = "windows")))]
+mod local_payload_test;
 mod ranges;
 mod transaction;
 mod vid;
@@ -159,6 +161,7 @@ pub struct Builder<Types, S, P> {
     sync_status_chunk_size: usize,
     active_fetch_delay: Duration,
     chunk_fetch_delay: Duration,
+    local_payload_grace: Duration,
     proactive_fetching: bool,
     aggregator: bool,
     aggregator_chunk_size: Option<usize>,
@@ -191,6 +194,7 @@ impl<Types, S, P> Builder<Types, S, P> {
             sync_status_chunk_size: 100_000,
             active_fetch_delay: Duration::from_millis(50),
             chunk_fetch_delay: Duration::from_millis(100),
+            local_payload_grace: Duration::ZERO,
             proactive_fetching: true,
             aggregator: true,
             aggregator_chunk_size: None,
@@ -310,6 +314,17 @@ impl<Types, S, P> Builder<Types, S, P> {
     /// catch up on, as without a delay, scanning can be extremely burdensome on the peer.
     pub fn with_active_fetch_delay(mut self, active_fetch_delay: Duration) -> Self {
         self.active_fetch_delay = active_fetch_delay;
+        self
+    }
+
+    /// Wait up to `grace` after a block's timestamp before fetching its payload from a peer.
+    ///
+    /// A node that runs consensus decides a block before its own VID reconstruction has always
+    /// produced the payload, and then appends the payload separately. Within the grace a missing
+    /// payload is only fetched if it is still missing once the grace has passed. Older blocks are
+    /// fetched at once.
+    pub fn with_local_payload_grace(mut self, grace: Duration) -> Self {
+        self.local_payload_grace = grace;
         self
     }
 
@@ -1027,6 +1042,8 @@ where
     active_fetch_delay: Duration,
     // Duration to sleep after each chunk fetched
     chunk_fetch_delay: Duration,
+    // How long after a block's timestamp its payload is left to arrive locally before fetching it.
+    local_payload_grace: Duration,
     // Exponential backoff when retrying failed operations.
     backoff: ExponentialBuilder,
     // Semaphore limiting the number of simultaneous DB accesses we can have from tasks spawned to
@@ -1141,6 +1158,7 @@ where
             sync_status_chunk_size: builder.sync_status_chunk_size,
             active_fetch_delay: builder.active_fetch_delay,
             chunk_fetch_delay: builder.chunk_fetch_delay,
+            local_payload_grace: builder.local_payload_grace,
             backoff,
             retry_semaphore,
             leaf_only,
