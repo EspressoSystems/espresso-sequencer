@@ -1482,13 +1482,14 @@ impl SequencerPersistence for Persistence {
         Ok(())
     }
 
-    /// Without a header at hand, stamps the share with the local clock, which is within the
-    /// accepted header drift of the header timestamp.
+    /// Only the legacy vote task calls this; the new protocol stamps shares itself.
     async fn append_vid(
         &self,
-        proposal: &Proposal<SeqTypes, VidDisperseShare<SeqTypes>>,
+        _proposal: &Proposal<SeqTypes, VidDisperseShare<SeqTypes>>,
     ) -> anyhow::Result<()> {
-        self.append_vid_stamped(proposal, unix_now()?).await
+        anyhow::bail!(
+            "storage-journal requires append_vid_stamped, the legacy path is not supported"
+        )
     }
 
     async fn append_vid_stamped(
@@ -1547,15 +1548,6 @@ impl SequencerPersistence for Persistence {
             .internal_append_quorum2_duration
             .add_point(now.elapsed().as_secs_f64());
         res
-    }
-
-    async fn append_cert2(
-        &self,
-        view: ViewNumber,
-        cert2: Certificate2<SeqTypes>,
-    ) -> anyhow::Result<()> {
-        self.put_wal(Record::Cert2 { view, cert: cert2 }, Class::Durable)
-            .await
     }
 
     async fn load_cert2(&self, view: ViewNumber) -> anyhow::Result<Option<Certificate2<SeqTypes>>> {
