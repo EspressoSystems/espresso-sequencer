@@ -60,14 +60,13 @@ struct Setup {
 }
 
 impl Setup {
-    /// A data source with `grace`, a decided leaf at height 1 proposed at `timestamp_millis`, and
-    /// a provider that serves its payload.
-    async fn new(grace: Duration, timestamp_millis: u64) -> Self {
+    /// A data source with `grace`, a leaf at height 1 proposed `age` ago, and a provider that
+    /// serves its payload.
+    async fn new(grace: Duration, age: Duration) -> Self {
         let db = TmpDb::init().await.with_blobs();
-        let (leaf, block) = block_at(1, timestamp_millis).await;
         let requests = Arc::new(AtomicUsize::new(0));
         let provider = TestProvider::new(ServePayload {
-            payload: block.payload().clone(),
+            payload: payload(),
             requests: requests.clone(),
         });
         let ds = db
@@ -82,6 +81,8 @@ impl Setup {
             .build()
             .await
             .unwrap();
+        // Setting up the database takes seconds, which would count against the grace.
+        let (leaf, block) = block_at(1, now_millis() - age.as_millis() as u64).await;
         Self {
             _db: db,
             ds,
@@ -139,11 +140,14 @@ async fn block_at(height: u64, timestamp_millis: u64) -> (Leaf, Block) {
     header.metadata.num_transactions = 1;
     header.timestamp = timestamp_millis / 1000;
     header.timestamp_millis = timestamp_millis;
-    let payload = MockPayload {
-        transactions: vec![mock_transaction(vec![1, 2, 3])],
-    };
-    let block = Block::new(leaf.header().clone(), payload);
+    let block = Block::new(leaf.header().clone(), payload());
     (leaf, block)
+}
+
+fn payload() -> MockPayload {
+    MockPayload {
+        transactions: vec![mock_transaction(vec![1, 2, 3])],
+    }
 }
 
 fn now_millis() -> u64 {
@@ -155,7 +159,7 @@ fn now_millis() -> u64 {
 
 #[test_log::test(tokio::test(flavor = "multi_thread"))]
 async fn local_payload_within_grace_skips_peer_fetch() {
-    let setup = Setup::new(GRACE, now_millis()).await;
+    let setup = Setup::new(GRACE, Duration::ZERO).await;
     setup.decide_without_payload().await;
     sleep(Duration::from_millis(100)).await;
     setup.append_local_payload().await;
@@ -167,7 +171,7 @@ async fn local_payload_within_grace_skips_peer_fetch() {
 
 #[test_log::test(tokio::test(flavor = "multi_thread"))]
 async fn user_get_within_grace_waits_for_local_payload() {
-    let setup = Setup::new(GRACE, now_millis()).await;
+    let setup = Setup::new(GRACE, Duration::ZERO).await;
     setup.decide_without_payload().await;
     let fetch = setup.ds.get_block(1).await;
     sleep(Duration::from_millis(100)).await;
@@ -183,7 +187,7 @@ async fn user_get_within_grace_waits_for_local_payload() {
 
 #[test_log::test(tokio::test(flavor = "multi_thread"))]
 async fn missing_local_payload_fetches_after_grace() {
-    let setup = Setup::new(GRACE, now_millis()).await;
+    let setup = Setup::new(GRACE, Duration::ZERO).await;
     setup.decide_without_payload().await;
 
     sleep(GRACE / 2).await;
@@ -195,7 +199,7 @@ async fn missing_local_payload_fetches_after_grace() {
 #[test_log::test(tokio::test(flavor = "multi_thread"))]
 async fn old_header_fetches_immediately() {
     let grace = Duration::from_secs(60);
-    let setup = Setup::new(grace, now_millis() - 2 * grace.as_millis() as u64).await;
+    let setup = Setup::new(grace, 2 * grace).await;
     setup.decide_without_payload().await;
 
     assert_eq!(setup.wait_stored().await, setup.block);
@@ -204,7 +208,7 @@ async fn old_header_fetches_immediately() {
 
 #[test_log::test(tokio::test(flavor = "multi_thread"))]
 async fn fetched_payload_already_stored_not_rewritten() {
-    let setup = Setup::new(Duration::ZERO, now_millis()).await;
+    let setup = Setup::new(Duration::ZERO, Duration::ZERO).await;
     setup.provider.block().await;
     setup.decide_without_payload().await;
     // The peer fetch is now in flight, held in the provider.
