@@ -739,7 +739,7 @@ impl Persistence {
     }
 
     fn is_query_node(&self) -> bool {
-        self.inner.lanes.da.index.is_some()
+        self.inner.opts.query_storage.is_some()
     }
 
     /// Applies `rec` to `State` under the state lock, then enqueues it on the wal lane. LSN
