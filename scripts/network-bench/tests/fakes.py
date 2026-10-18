@@ -2266,9 +2266,9 @@ class RdsHarness(FleetHarness):
     def up_args(self, *extra: str) -> argparse.Namespace:
         return super().up_args("--db-modes", self.modes, *extra)
 
-    def up_rds(self, **kwargs) -> RdsRunner:
+    def up_rds(self, *extra: str, **kwargs) -> RdsRunner:
         runner = RdsRunner([DONE_STATE], describe=DESCRIBE, **kwargs)
-        assert self.up(runner) == awsb.EXIT_OK
+        assert self.up(runner, *extra) == awsb.EXIT_OK
         return runner
 
     def tfvars(self) -> dict:

@@ -190,6 +190,8 @@ just bench aws run --fleet --query-db volume --node-env ESPRESSO_QUERY_PAYLOAD_D
   preparation and runs on any fleet; it requires `--node-env ESPRESSO_QUERY_PAYLOAD_DIR=...` so payloads stay out of the
   tmpfs.
 - A fleet with `rds` refuses `--pg-iops` and `--pg-mbps` values other than the defaults.
+- With `--query-nodes K` above 1, one `rds` instance holds one database per query node: `espresso` for `node0`,
+  `espresso_node1` for `node1`, and so on. Every run recreates all of them.
 - `rds` needs IAM rights `iam:CreateRole`, `iam:PutRolePolicy`, `iam:PassRole`, `scheduler:CreateSchedule`. Without them
   apply fails, the fleet is destroyed, exit 3.
 - The query node mounts `/data/pg/payload` as `/payload`. `ESPRESSO_QUERY_PAYLOAD_DIR=/payload` (experimental image
@@ -544,7 +546,7 @@ Where:
 | `--tag`                               | required; fleet's on `--fleet` | all          | ghcr image tag pushed by CI                                                                   |
 | `--allocator`                         | none                           | all          | `jemalloc`, `mimalloc`, `snmalloc`, `tcmalloc`                                                |
 | `--nodes`                             | 5                              | provision    | validator count, `node0` included                                                             |
-| `--query-nodes`                       | 1                              | provision    | query service nodes, the first `K` of `--nodes`; above 1 needs `--query-db colocated`         |
+| `--query-nodes`                       | 1                              | provision    | query service nodes, the first `K` of `--nodes`; above 1: `--query-db colocated` or `rds`     |
 | `--node-type`                         | `c8g.4xlarge`                  | provision    | node instance type                                                                            |
 | `--ctl-type`                          | `c8g.2xlarge`                  | provision    | `ctl` instance type                                                                           |
 | `--root-gb`                           | `auto`                         | provision    | root volume GB; `auto` sizes from the ramp, or from `--offered-gb` with `--search`            |

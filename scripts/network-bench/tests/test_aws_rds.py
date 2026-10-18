@@ -31,6 +31,7 @@ from fakes import (
     completed,
     db_instance,
     fake_preflight,
+    fleet,
     instance,
     isolated_env,
     mapping,
@@ -261,6 +262,40 @@ def test_node0_env_points_at_the_endpoint(harness):
     assert mode(node0 / "pg.json") == 0o600
     assert mode(node0 / "node.env") == 0o600
     assert "--name postgres" not in (node0 / "start.sh").read_text()
+
+
+# TEST:rds-database-per-query-node-ok
+def test_each_query_node_gets_its_own_database(harness):
+    harness.up_rds()
+    run_dir, cfg = rds_run_dir(harness)
+    cfg = dataclasses.replace(cfg, query_nodes=2)
+    manifest = {**harness.fleet(), "hosts": awsb.plan_hosts(cfg)}
+    hosts = fleet(2, query_nodes=2)
+    awsb.render_host_files(run_dir, cfg, manifest, hosts)
+    for node, database in (("node0", "espresso"), ("node1", "espresso_node1")):
+        text = (run_dir / "hosts" / node / "node.env").read_text()
+        env = dict(line.split("=", 1) for line in text.splitlines())
+        assert env["ESPRESSO_NODE_POSTGRES_DATABASE"] == database
+        assert netbench.read_json(run_dir / "hosts" / node / "pg.json")["database"] == (
+            database
+        )
+
+
+# TEST:rds-reset-all-databases-ok
+def test_up_and_reset_create_a_database_for_every_query_node(harness):
+    runner = harness.up_rds("--query-nodes", "2")
+    create = next(c for c in ssh_calls(runner) if "CREATE DATABASE" in c)
+    assert "CREATE DATABASE espresso_node1" in create
+    assert "CREATE DATABASE espresso " not in create
+    for node in ("node0", "node1"):
+        pg = netbench.read_json(harness.fleet_dir / "hosts" / node / "pg.json")
+        assert pg["database"] == awsb.rds_database(node)
+    mark = len(runner.calls)
+    assert harness.run(runner, "--query-db", "rds") == awsb.EXIT_OK
+    statement = next(c for c in ssh_calls(runner, mark) if "DROP DATABASE" in c)
+    for database in ("espresso", "espresso_node1"):
+        assert f"DROP DATABASE IF EXISTS {database} WITH (FORCE)" in statement
+        assert f"CREATE DATABASE {database}" in statement
 
 
 def test_the_password_files_are_private_before_they_are_written(harness, monkeypatch):

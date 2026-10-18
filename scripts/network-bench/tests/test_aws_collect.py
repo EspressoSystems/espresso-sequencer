@@ -355,6 +355,12 @@ def test_tls_is_counted_by_the_load_samples_not_the_collect_query() -> None:
     assert "pid <> pg_backend_pid()" in ssl
 
 
+def test_the_samples_follow_the_database_of_the_connection() -> None:
+    """A query node's database is not always `espresso`: rds gives each its own."""
+    assert "'espresso'" not in awsb.pg_sample_sql()
+    assert "'espresso'" not in awsb.PG_STATS_SQL
+
+
 def check_aws(
     result: dict | None = None, manifest: dict | None = None, **evidence: Any
 ) -> dict:

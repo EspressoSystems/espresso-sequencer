@@ -669,10 +669,6 @@ RDS_METRICS = {
 RDS_SYNC_TIMEOUT_S = 900.0
 # describe-events keeps 14 days; a fleet lives hours.
 RDS_EVENTS_MINUTES = 1440
-RDS_RESET_SQL = (
-    f"DROP DATABASE IF EXISTS {RDS_DATABASE} WITH (FORCE)",
-    f"CREATE DATABASE {RDS_DATABASE}",
-)
 
 
 class Refused(Exception):
@@ -1315,10 +1311,11 @@ def plan_hosts(cfg: RunConfig) -> list[HostSpec]:
             f"--query-nodes must be between 1 and nodes ({cfg.nodes}): {cfg.query_nodes}"
         )
     if cfg.query_nodes > 1 and (
-        cfg.query_db != "colocated" or set(cfg.db_modes) != {"colocated"}
+        cfg.query_db not in ("colocated", "rds")
+        or not set(cfg.db_modes) <= {"colocated", "rds"}
     ):
         raise Refused(
-            "--query-nodes above 1 needs --query-db colocated: volume and rds serve one host, "
+            "--query-nodes above 1 needs --query-db colocated or rds: volume serves one host, "
             "tmpfs turns every restart into a wipe"
         )
     hosts: list[HostSpec] = [
@@ -4605,7 +4602,9 @@ def cmd_run_fleet(args: argparse.Namespace, system: System) -> int:
             assert fleet.remote is not None
             reset_chain(fleet.remote, cfg.query_db, manifest, interrupts)
             if cfg.query_db == "rds":
-                reset_rds_store(fleet.remote, fleet_dir, interrupts)
+                reset_rds_store(
+                    fleet.remote, fleet_dir, query_node_names(manifest), interrupts
+                )
         reset_failed = bench_run.error is not None
         run_on_fleet(bench_run, cloudwatch=True)
         result = report_run(bench_run)
@@ -5043,20 +5042,46 @@ def reset_chain(
     remote.parallel(reset, ec2_names(remote.hosts))
 
 
-def reset_rds_store(remote: Remote, fleet_dir: Path, interrupts: Interrupts) -> None:
-    """Drops and recreates the database the query service fills, so the run starts on an empty
-    one. `pg.json` goes first because a colocated run leaves another endpoint on node0;
-    `WITH (FORCE)` ends the backends of a run that did not shut down cleanly."""
+def reset_rds_store(
+    remote: Remote, fleet_dir: Path, nodes: list[str], interrupts: Interrupts
+) -> None:
+    """Drops and recreates the database of every query node, so the run starts on empty ones.
+    `pg.json` goes first because a colocated run leaves another endpoint on the node."""
     interrupts.check()
-    ship_rds_endpoint(remote, fleet_dir)
-    commands = " ".join(f"-c {shlex.quote(sql)}" for sql in RDS_RESET_SQL)
+    ship_rds_endpoints(remote, fleet_dir, nodes)
+    reset_rds_databases(
+        remote, pg_host(remote.hosts, nodes[0]), [rds_database(n) for n in nodes]
+    )
+
+
+def reset_rds_databases(remote: Remote, host: str, databases: list[str]) -> None:
+    commands = " ".join(
+        f"-c {shlex.quote(sql)}" for db in databases for sql in rds_reset_sql(db)
+    )
     remote.ssh(
-        pg_host(remote.hosts, "node0"),
+        host,
         pg_shell(
             f"export PGDATABASE=postgres\n"
             f"timeout {GATE_TIMEOUT_S:.0f} psql -v ON_ERROR_STOP=1 {commands}\n"
         ),
     )
+
+
+def rds_database(node: str) -> str:
+    """node0 uses the database terraform creates; every other query node gets its own."""
+    return RDS_DATABASE if node == "node0" else f"{RDS_DATABASE}_{node}"
+
+
+def rds_reset_sql(database: str) -> tuple[str, str]:
+    """`WITH (FORCE)` ends the backends of a run that did not shut down cleanly."""
+    return (
+        f"DROP DATABASE IF EXISTS {database} WITH (FORCE)",
+        f"CREATE DATABASE {database}",
+    )
+
+
+def query_node_names(manifest: FleetManifest) -> list[str]:
+    return [h["name"] for h in manifest["hosts"] if h["role"] == "query"]
 
 
 def write_run_cost(
@@ -5467,39 +5492,41 @@ def prepare_rds(fleet: FleetState) -> None:
         fleet.fleet_dir / RDS_FILE,
         {**rds, "username": RDS_USER, "password": tfvars["rds_password"]},
     )
-    ship_rds_endpoint(remote, fleet.fleet_dir)
-    gate(
-        remote,
-        pg_host(remote.hosts, "node0"),
-        "pg_isready",
-        pg_shell("pg_isready"),
-        fleet.interrupts,
-    )
+    nodes = query_node_names(fleet.manifest)
+    ship_rds_endpoints(remote, fleet.fleet_dir, nodes)
+    host = pg_host(remote.hosts, nodes[0])
+    gate(remote, host, "pg_isready", pg_shell("pg_isready"), fleet.interrupts)
+    if nodes[1:]:
+        reset_rds_databases(remote, host, [rds_database(n) for n in nodes[1:]])
 
 
-def ship_rds_endpoint(remote: Remote, fleet_dir: Path) -> None:
-    """The rds endpoint as node0's `pg.json`, which `pg_shell` and the samplers read."""
-    path = fleet_dir / "hosts" / "node0" / "pg.json"
-    write_private_json(path, rds_endpoint(fleet_dir))
-    remote.rsync_to("node0", [path], PG_JSON)
+def ship_rds_endpoints(remote: Remote, fleet_dir: Path, nodes: list[str]) -> None:
+    """The rds endpoint and database as each query node's `pg.json`, which `pg_shell` and the
+    samplers read."""
+    for node in nodes:
+        path = fleet_dir / "hosts" / node / "pg.json"
+        write_private_json(path, rds_endpoint(fleet_dir, node))
+        remote.rsync_to(node, [path], PG_JSON)
 
 
-def rds_endpoint(fleet_dir: Path) -> PgEndpoint:
+def rds_endpoint(fleet_dir: Path, node: str) -> PgEndpoint:
     rds = nb.read_json(fleet_dir / RDS_FILE)
     return {
         "host": rds["endpoint"],
         "port": rds["port"],
         "user": rds["username"],
         "password": rds["password"],
-        "database": RDS_DATABASE,
+        "database": rds_database(node),
     }
 
 
-def query_endpoint(cfg: RunConfig, run_dir: Path) -> PgEndpoint | None:
-    """Where node0's query service finds Postgres for this run; None with SQLite."""
+def query_endpoint(cfg: RunConfig, run_dir: Path, node: str) -> PgEndpoint | None:
+    """Where the query service of `node` finds Postgres for this run; None with SQLite."""
     if cfg.query_engine == "sqlite":
         return None
-    return rds_endpoint(fleet_of(run_dir)) if cfg.query_db == "rds" else pg_endpoint()
+    if cfg.query_db == "rds":
+        return rds_endpoint(fleet_of(run_dir), node)
+    return pg_endpoint()
 
 
 def topology(hosts: dict[str, HostInfo], query_engine: QueryEngine) -> nb.Topology:
@@ -5550,7 +5577,11 @@ def render_host_files(
         if spec["role"] == "ctl":
             (host_dir / "ctl.env").write_text(render_ctl_env(hosts, cfg, dotenv()))
         else:
-            pg = query_endpoint(cfg, run_dir) if spec["role"] == "query" else None
+            pg = (
+                query_endpoint(cfg, run_dir, spec["name"])
+                if spec["role"] == "query"
+                else None
+            )
             node_env = host_dir / "node.env"
             if cfg.query_db == "rds" and pg is not None:
                 node_env.touch(mode=0o600)
@@ -6618,7 +6649,7 @@ COLLECT_SCRIPT = (
     " | grep allowance_exceeded > ena-allowance.txt\n"
 )
 PG_STATS_SQL = (
-    "select json_build_object('database_bytes', pg_database_size('espresso'), 'tables', "
+    "select json_build_object('database_bytes', pg_database_size(current_database()), 'tables', "
     "(select coalesce(json_agg(t), '[]'::json) from (select relname, n_live_tup, "
     "pg_total_relation_size(relid) as total_bytes from pg_stat_user_tables "
     "order by total_bytes desc limit 20) t))"
@@ -9579,7 +9610,8 @@ def sample_sockets(out: Path, stop: threading.Event, system: System) -> None:
 def pg_sample_sql() -> str:
     """One json object of cumulative counters."""
     backends = (
-        "from pg_stat_activity where datname = 'espresso' and pid <> pg_backend_pid()"
+        "from pg_stat_activity where datname = current_database() "
+        "and pid <> pg_backend_pid()"
     )
     wal_keys = (
         "'wal_records','wal_bytes','wal_buffers_full','wal_write_time','wal_sync_time'"
@@ -9602,12 +9634,12 @@ def pg_sample_sql() -> str:
         "'wait_events', (select coalesce(jsonb_object_agg(wt, n), '{}'::jsonb) from "
         f"(select coalesce(wait_event_type, 'none') as wt, count(*) as n {backends} "
         "group by 1) g), "
-        "'database_bytes', pg_database_size('espresso')) "
+        "'database_bytes', pg_database_size(current_database())) "
         "|| (select jsonb_object_agg(key, value) from jsonb_each(to_jsonb(w)) "
         f"where key in ({wal_keys})))::text "
         "from pg_stat_database d, pg_stat_bgwriter b, pg_stat_wal w, "
         "pg_stat_checkpointer c "
-        "where d.datname = 'espresso'"
+        "where d.datname = current_database()"
     )
 
 
