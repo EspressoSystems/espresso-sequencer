@@ -29,7 +29,7 @@ use axum::{
     routing::{any, get},
 };
 use http_wire::{
-    ContentType, DecodeFailure, WireError, drive_ws_stream, healthcheck_response,
+    ContentType, DecodeFailure, WireError, WireVersion, drive_ws_stream, healthcheck_response,
     module_healthcheck_response,
 };
 use schemars::transform::Transform;
@@ -131,6 +131,31 @@ fn encode_response<T: Serialize>(headers: &HeaderMap, value: T) -> Response {
     http_wire::encode_ok::<ErrorResponse, _>(headers, value)
 }
 
+/// Run a handler's future knowing the response format the request negotiated (see
+/// [`response_is_binary`]), then encode its result in that format.
+async fn negotiated<T: Serialize>(
+    headers: &HeaderMap,
+    fut: impl Future<Output = anyhow::Result<T>>,
+) -> Result<Response, ApiError> {
+    let format = ContentType::negotiate(headers);
+    let value = RESPONSE_FORMAT
+        .scope(format, fut)
+        .await
+        .map_err(classify_availability_error)?;
+    Ok(
+        match http_wire::encode_body::<WireVersion, _>(format, &value) {
+            Ok(bytes) => ([(header::CONTENT_TYPE, format.mime())], bytes).into_response(),
+            Err(err) => http_wire::encode_err::<ErrorResponse>(
+                headers,
+                ErrorResponse::catch_all(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("failed to serialize response: {err}"),
+                ),
+            ),
+        },
+    )
+}
+
 /// Decode a request body based on its `Content-Type`, matched by media-type essence.
 ///
 /// - `application/octet-stream`: VBS (versioned binary), what `Request::body_binary`
@@ -189,6 +214,15 @@ type ResponseGuards = Arc<Mutex<Vec<Box<dyn Any + Send>>>>;
 
 tokio::task_local! {
     static RESPONSE_GUARDS: ResponseGuards;
+    static RESPONSE_FORMAT: ContentType;
+}
+
+/// Whether the response being built is VBS binary. False outside a [`negotiated`] handler: routes
+/// that always answer JSON, gRPC calls and tests.
+pub fn response_is_binary() -> bool {
+    RESPONSE_FORMAT
+        .try_with(|format| *format == ContentType::Binary)
+        .unwrap_or(false)
 }
 
 /// Keep `guard` alive until the handler has built its response, serialized body included, so a
@@ -900,11 +934,7 @@ pub(crate) fn router_availability(state: AvailabilityState) -> ApiRouter {
     let get_block_ranges =
         |State(state): State<AvailabilityState>, headers: HeaderMap, body: Bytes| async move {
             let ranges: Vec<Range<u64>> = decode_body(&headers, &body)?;
-            let blocks = state
-                .get_block_ranges(ranges)
-                .await
-                .map_err(classify_availability_error)?;
-            Ok::<_, ApiError>(encode_response(&headers, blocks))
+            negotiated(&headers, state.get_block_ranges(ranges)).await
         };
 
     let get_vid_common_ranges =
@@ -2806,11 +2836,7 @@ pub(crate) fn router_light_client(state: LightClientState) -> ApiRouter {
     let lc_payload_ranges =
         |State(state): State<LightClientState>, headers: HeaderMap, body: Bytes| async move {
             let ranges: Vec<Range<u64>> = decode_body(&headers, &body)?;
-            let proofs = state
-                .get_payload_proof_ranges(ranges)
-                .await
-                .map_err(classify_availability_error)?;
-            Ok::<_, ApiError>(encode_response(&headers, proofs))
+            negotiated(&headers, state.get_payload_proof_ranges(ranges)).await
         };
 
     let lc_namespace = |State(state): State<LightClientState>,
@@ -3817,7 +3843,6 @@ mod tests {
     use std::collections::BTreeMap;
 
     use futures::stream::BoxStream;
-    use http_wire::WireVersion;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use vbs::{BinarySerializer, Serializer};
 

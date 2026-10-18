@@ -43,7 +43,7 @@ pub const FILE_DESCRIPTOR_SET: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "
 use tower::Layer;
 
 // Re-exports
-pub use self::axum::{create_router_v1, hold_until_response_built, routes};
+pub use self::axum::{create_router_v1, hold_until_response_built, response_is_binary, routes};
 use self::proto::{
     availability_service_server::{AvailabilityService, AvailabilityServiceServer},
     config_service_server::{ConfigService, ConfigServiceServer},
