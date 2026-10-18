@@ -1,6 +1,6 @@
 //! Sequencer-specific API options and initialization.
 
-use std::{collections::BTreeSet, env, path::PathBuf, sync::Arc, time::Duration};
+use std::{collections::BTreeSet, env, path::PathBuf, sync::Arc};
 
 use ::light_client::{state::LightClientOptions, storage::LightClientSqliteOptions};
 use anyhow::{Context, bail};
@@ -516,9 +516,10 @@ pub struct Query {
     )]
     pub payload_memory_budget: Option<u64>,
 
-    /// How long a request waits for payload budget. Set by tests only.
+    /// Replaces the budget built from `payload_memory_budget`, so tests can hold permits and
+    /// shorten the wait. Not a CLI option.
     #[clap(skip)]
-    pub payload_wait: Option<Duration>,
+    pub payload_budget_override: Option<PayloadBudget>,
 }
 
 fn parse_budget(s: &str) -> Result<u64, String> {
@@ -530,13 +531,10 @@ fn parse_budget(s: &str) -> Result<u64, String> {
 
 impl Query {
     fn payload_budget(&self) -> PayloadBudget {
-        let budget = self
-            .payload_memory_budget
-            .map_or_else(PayloadBudget::default, PayloadBudget::new);
-        match self.payload_wait {
-            Some(wait) => budget.with_wait(wait),
-            None => budget,
-        }
+        self.payload_budget_override.clone().unwrap_or_else(|| {
+            self.payload_memory_budget
+                .map_or_else(PayloadBudget::default, PayloadBudget::new)
+        })
     }
 
     pub fn light_client_db(&self) -> LightClientSqliteOptions {

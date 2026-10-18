@@ -3658,6 +3658,7 @@ mod test {
         CatchupParams, L1Params,
         api::{
             options::Query,
+            payload_budget::PayloadBudget,
             sql::{impl_testable_data_source::tmp_options, reconstruct_state},
             test_helpers::STAKE_TABLE_CAPACITY_FOR_TEST,
         },
@@ -3911,18 +3912,15 @@ mod test {
         }
     }
 
-    /// Blocks of 4 KiB against a 1 KiB pool: every payload route still serves (a request larger
-    /// than its pool takes all of it), ranges requests acquire once for all their ranges, and
-    /// concurrent requests that find the pool held get a 503 with `Retry-After`.
-    #[test_log::test(tokio::test(flavor = "multi_thread"))]
-    async fn test_payload_admission() {
+    /// Start a network with the given payload budget and two decided blocks of one 4 KiB
+    /// transaction each. Returns what must stay alive, the API port and the block heights.
+    async fn payload_admission_network(budget: PayloadBudget) -> (impl Sized, u16, Vec<u64>) {
         let port = reserve_tcp_port().expect("OS should have ephemeral ports available");
         let storage = SqlDataSource::create_storage().await;
         let mut api_config = SqlDataSource::options(&storage, Options::with_port(port))
             .light_client(Default::default());
         let query = api_config.query.as_mut().unwrap();
-        query.payload_memory_budget = Some(1);
-        query.payload_wait = Some(Duration::from_millis(1));
+        query.payload_budget_override = Some(budget);
         let config = TestNetworkConfigBuilder::default()
             .api_config(api_config)
             .network_config(TestConfigBuilder::default().build())
@@ -3940,11 +3938,22 @@ mod test {
         let client: Client<ClientErr, StaticVersion<0, 1>> =
             Client::new(format!("http://localhost:{port}").parse().unwrap());
         wait_until_block_height(&client, "node/block-height", heights[1] + 1).await;
+        ((storage, network), port, heights)
+    }
+
+    /// Blocks of 4 KiB against a 1 KiB pool: every payload route still serves (a request larger
+    /// than its pool takes all of it), ranges requests acquire once for all their ranges, and
+    /// concurrent requests that find the pool held get a 503 with `Retry-After`.
+    #[test_log::test(tokio::test(flavor = "multi_thread"))]
+    async fn test_payload_admission() {
+        let (_network, port, heights) =
+            payload_admission_network(PayloadBudget::new(1).with_wait(Duration::from_millis(1)))
+                .await;
+        let ns = u64::from(NamespaceId::from(42_u32));
 
         let base = format!("http://localhost:{port}/v1");
         let http = reqwest::Client::new();
         let height = heights[0];
-        let ns = u64::from(ns);
         let two_ranges = serde_json::json!([
             {"start": heights[0], "end": heights[0] + 1},
             {"start": heights[1], "end": heights[1] + 1},
@@ -4011,6 +4020,31 @@ mod test {
             .await
             .unwrap();
         assert!(res.content_length().unwrap() > 4096);
+    }
+
+    /// A range pool of 20 KiB with 10 KiB held: a 4 KiB block fits as binary (2x, about 9 KiB)
+    /// and not as JSON (4x, about 17 KiB).
+    #[test_log::test(tokio::test(flavor = "multi_thread"))]
+    async fn test_payload_admission_weighs_binary_below_json() {
+        let budget = PayloadBudget::new(40 * 1024).with_wait(Duration::from_millis(1));
+        let (_network, port, heights) = payload_admission_network(budget.clone()).await;
+        let _held = budget.acquire_ranges(10 * 1024).await.unwrap();
+        let range = serde_json::json!([{"start": heights[0], "end": heights[0] + 1}]);
+
+        let post = |accept: &str| {
+            reqwest::Client::new()
+                .post(format!(
+                    "http://localhost:{port}/v1/availability/block/ranges"
+                ))
+                .header(reqwest::header::ACCEPT, accept)
+                .json(&range)
+                .send()
+        };
+
+        let binary = post("application/octet-stream").await.unwrap();
+        assert_eq!(binary.status(), reqwest::StatusCode::OK);
+        let json = post("application/json").await.unwrap();
+        assert_eq!(json.status(), reqwest::StatusCode::SERVICE_UNAVAILABLE);
     }
 
     async fn run_catchup_test(url_suffix: &str) {
