@@ -81,8 +81,7 @@ impl Setup {
             .build()
             .await
             .unwrap();
-        // Setting up the database takes seconds, which would count against the grace.
-        let (leaf, block) = block_at(1, now_millis() - age.as_millis() as u64).await;
+        let (leaf, block) = block_at(1, age).await;
         Self {
             _db: db,
             ds,
@@ -132,9 +131,12 @@ impl Setup {
     }
 }
 
-async fn block_at(height: u64, timestamp_millis: u64) -> (Leaf, Block) {
+/// A block at `height` proposed `age` ago.
+async fn block_at(height: u64, age: Duration) -> (Leaf, Block) {
     let mut leaf =
         Leaf::genesis(&Default::default(), &Default::default(), TEST_VERSIONS.test).await;
+    // Setup, the genesis leaf included, takes seconds, which must not count against the grace.
+    let timestamp_millis = now_millis() - age.as_millis() as u64;
     let header = leaf.leaf.block_header_mut();
     header.block_number = height;
     header.metadata.num_transactions = 1;
