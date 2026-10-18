@@ -868,11 +868,19 @@ REFUSED = {
     "bbr3": ({"tcp_cc": "bbr3"}, "--tcp-cc bbr3 needs the host kernel"),
     "bbr-hold": ({"tcp_cc": "bbr_hold"}, "--tcp-cc bbr_hold needs the host kernel"),
     "leader-trace": ({"leader_trace": True}, "--leader-trace writes to a host"),
-    "latency": ({"latency": "decaf-2025"}, "--latency does not support"),
+    "latency-two-query": (
+        {"latency": "decaf-2025", "query_nodes": 2},
+        "cannot shape the links between fargate query nodes",
+    ),
+    "netem-full": (
+        {"latency": "decaf-2025", "netem": "full"},
+        "--netem full adds jitter and loss",
+    ),
     "root-gb": ({"root_gb": "200"}, "--root-gb sizes a disk"),
 }
 
 
+# TEST:fargate-latency-two-query-fails, TEST:fargate-netem-full-fails,
 # TEST:fargate-sqlite-fails, TEST:fargate-colocated-fails, TEST:fargate-chaos-fails,
 # TEST:fargate-bbr3-fails, TEST:fargate-bbr-hold-fails, TEST:fargate-leader-trace-fails,
 # TEST:fargate-root-gb-fails
@@ -1049,3 +1057,64 @@ def test_a_fleet_that_failed_before_its_outputs_has_no_cluster_to_stop(
     )
     awsb.stop_fargate(state)
     assert runner.calls == []
+
+
+def latency_runner(**kwargs: Any) -> FargateRunner:
+    """The probe of a 3 node decaf-2025 fleet pings node0, whose round trip the folded matrix
+    puts on the egress of the pinging node."""
+    shaping = awsb.latency_shaping(task_cfg(latency="decaf-2025"), 3)
+    (probe,) = awsb.latency.probe_pairs(
+        shaping.assignment, shaping.delays, shaping.intra
+    )
+    return fargate_runner(pings={"10.0.0.2": probe.expected_ms}, **kwargs)
+
+
+@pytest.mark.usefixtures("valid")
+def test_latency_shapes_the_validators_toward_the_task_and_never_the_task(
+    harness: FargateHarness,
+):
+    runner = latency_runner()
+    assert harness.run(runner, "--latency", "decaf-2025") == awsb.EXIT_OK
+    shaped = [
+        c
+        for c in (" ".join(call) for call in runner.calls if call[0] == "ssh")
+        if "tc qdisc add" in c
+    ]
+    # TEST:fargate-shape-ec2-only-ok
+    assert len(shaped) == 2
+    assert all("match ip dst 10.0.0.2/32" in c for c in shaped)
+    manifest = netbench.read_json(harness.run_dir / "manifest.json")
+    assert manifest["latency"]["unshaped"] == [0]
+    assert all(probe["ok"] for probe in manifest["latency"]["probes"])
+    ping = next(call for call in runner.calls if "ping -c 5" in call[-1])
+    assert "ping -c 5 -i 0.2 -n -q 10.0.0.2" in ping[-1]
+    sysctls = runner.task_defs["espresso-bench-run1-node0"]["containerDefinitions"][0][
+        "systemControls"
+    ]
+    assert {"namespace": "net.ipv4.tcp_congestion_control", "value": "bbr"} in sysctls
+
+
+def test_a_sysctl_aws_refuses_fails_a_shaped_run_at_registration(
+    harness: FargateHarness,
+):
+    refused = "ClientException: sysctl net.ipv4.tcp_rmem is not allowed on fargate"
+    runner = latency_runner(register_error=refused)
+    assert harness.run(runner, "--latency", "decaf-2025") == awsb.EXIT_FAILED
+    assert refused in (harness.run_dir / "summary.md").read_text()
+    assert not runner.ran("tc qdisc add")
+    assert not runner.ran("run-task")
+
+
+def test_a_wrapper_that_finds_another_congestion_control_fails_a_shaped_run(
+    harness: FargateHarness,
+):
+    stopped = fargate_task(
+        "STOPPED", stopped_reason="Essential container exited", exit_code=78
+    )
+    tail = "sysctl net.ipv4.tcp_congestion_control=cubic, expected bbr"
+    runner = latency_runner(task_states=[{"node0": stopped}], log_lines=[tail])
+    assert harness.run(runner, "--latency", "decaf-2025") == awsb.EXIT_FAILED
+    summary = (harness.run_dir / "summary.md").read_text()
+    assert "exit 78" in summary
+    assert tail in summary
+    assert not runner.ran("tc qdisc add")

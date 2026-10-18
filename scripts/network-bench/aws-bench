@@ -1402,8 +1402,16 @@ def check_fargate(cfg: RunConfig) -> None:
         )
     if cfg.leader_trace:
         raise Refused("--leader-trace writes to a host directory: not on fargate")
-    if cfg.latency != "off":
-        raise Refused("--latency does not support --query-placement fargate yet")
+    if cfg.latency != "off" and cfg.query_nodes > 1:
+        raise Refused(
+            "--latency cannot shape the links between fargate query nodes: "
+            "use --query-nodes 1"
+        )
+    if cfg.netem == "full":
+        raise Refused(
+            "--netem full adds jitter and loss to both directions of a link, which "
+            "cannot be put on one side: not on fargate"
+        )
     if cfg.root_gb != "auto":
         raise Refused(
             "--root-gb sizes a disk the fargate query node does not have; the "
@@ -6142,7 +6150,11 @@ def render_run(
 
 
 def latency_shaping(cfg: RunConfig, node_count: int) -> latency.Shaping:
-    """Data problems (missing CSV pair, unknown location) are refused before any AWS write."""
+    """Data problems (missing CSV pair, unknown location) are refused before any AWS write.
+    Fargate nodes cannot shape their egress, so their links are folded into their peers'."""
+    unshaped = frozenset(
+        range(cfg.query_nodes if cfg.query_placement == "fargate" else 0)
+    )
     try:
         return latency.shaping(
             cfg.latency,
@@ -6152,6 +6164,7 @@ def latency_shaping(cfg: RunConfig, node_count: int) -> latency.Shaping:
             cfg.mtu,
             cfg.netem,
             cfg.jitter_ratio,
+            unshaped,
         )
     except (KeyError, ValueError, OSError) as exc:
         raise Refused(f"latency {cfg.latency}: {type(exc).__name__}: {exc}") from exc
@@ -6728,15 +6741,17 @@ def shape_nodes(remote: Remote, shaping: latency.Shaping) -> None:
 def verify_shaping(
     remote: Remote, shaping: latency.Shaping, manifest_path: Path
 ) -> None:
-    """Pings from node0 and fails when a measured RTT leaves the tolerance of its expected delay
-    or a ping prints no summary. The probes are written to the manifest either way."""
+    """Pings from node0, or from its peer when node0 is unshaped, and fails when a measured RTT
+    leaves the tolerance of its expected delay or a ping prints no summary. The probes are
+    written to the manifest either way."""
     names = _node_names(remote.hosts)
     probes: list[dict[str, Any]] = []
     failures: list[str] = []
     for probe in latency.probe_pairs(shaping.assignment, shaping.delays, shaping.intra):
-        target = remote.hosts[names[probe.dst]]["private_ip"]
+        pinging, pinged = latency.probe_route(probe, shaping.unshaped)
+        target = remote.hosts[names[pinged]]["private_ip"]
         result = remote.ssh(
-            names[probe.src], bounded(f"ping -c 5 -i 0.2 -n -q {target}"), check=False
+            names[pinging], bounded(f"ping -c 5 -i 0.2 -n -q {target}"), check=False
         )
         label = f"probe node{probe.src}->node{probe.dst} {probe.tier}"
         try:

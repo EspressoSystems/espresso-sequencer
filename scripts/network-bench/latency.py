@@ -155,6 +155,8 @@ class Shaping:
     # Empty for `netem="delay"`.
     noise: dict[tuple[int, int], Noise] = field(default_factory=dict)
     netem: str = "delay"
+    # Nodes that cannot shape their own egress (Fargate tasks); `delays` has folded their links.
+    unshaped: frozenset[int] = frozenset()
 
     def meta(self) -> dict:
         return {
@@ -170,6 +172,7 @@ class Shaping:
             },
             "netem": self.netem,
             "matrix_sha256": matrix_sha256(self.delays, self.noise),
+            "unshaped": sorted(self.unshaped),
             "sysctls": dict(tcp_sysctls(self.tcp_cc)),
             "mtu": self.mtu,
             "probes": [],
@@ -201,16 +204,37 @@ def shaping(
     mtu: int,
     netem: str = "delay",
     jitter_ratio: float = JITTER_RATIO,
+    unshaped: frozenset[int] = frozenset(),
 ) -> Shaping:
+    """`unshaped` nodes get their links folded into their peers' by `fold_unshaped`."""
     if netem not in NETEMS:
         raise ValueError(f"netem {netem!r}; expected one of {NETEMS}")
+    if unshaped and netem == "full":
+        raise ValueError("jitter and loss of an unshaped node's links cannot be folded")
     profile = load_profile(name)
     assignment = assign(n, profile)
     delays = delays_ms(assignment, profile, intra)
     noise = (
         noise_for(assignment, profile, delays, jitter_ratio) if netem == "full" else {}
     )
-    return Shaping(profile, assignment, delays, intra, tcp_cc, mtu, noise, netem)
+    delays = fold_unshaped(delays, unshaped)
+    return Shaping(
+        profile, assignment, delays, intra, tcp_cc, mtu, noise, netem, unshaped
+    )
+
+
+def fold_unshaped(
+    delays: dict[tuple[int, int], float], unshaped: frozenset[int]
+) -> dict[tuple[int, int], float]:
+    """The delays a shaped node must add so that its links to `unshaped` nodes, which add none,
+    have the round trip of the matrix: the egress toward an unshaped node carries both
+    directions, and the unshaped node's own egress none. Links between unshaped nodes go: their
+    delays cannot be added anywhere."""
+    return {
+        (i, j): ms + (delays[(j, i)] if j in unshaped else 0.0)
+        for (i, j), ms in delays.items()
+        if i not in unshaped
+    }
 
 
 def read_matrix(text: str) -> dict[tuple[str, str], float]:
@@ -435,7 +459,9 @@ def probe_pairs(
     assignment: list[str], delays: dict[tuple[int, int], float], intra: bool
 ) -> list[Probe]:
     def expected(j: int) -> float:
-        return delays[(0, j)] + delays[(j, 0)]
+        """Both directions of the link; an unshaped end carries the whole round trip on the
+        other's egress, so one of the two is absent from `delays`."""
+        return delays.get((0, j), 0.0) + delays.get((j, 0), 0.0)
 
     peers = range(1, len(assignment))
     cross = [j for j in peers if assignment[j] != assignment[0]]
@@ -447,6 +473,14 @@ def probe_pairs(
     if intra and same:
         probes.append(Probe(0, same[0], "intra", expected(same[0])))
     return probes
+
+
+def probe_route(probe: Probe, unshaped: frozenset[int]) -> tuple[int, int]:
+    """(pinging node, pinged node): a probe cannot be sent from an unshaped node, which has
+    no ssh, and the round trip is the same from the other end."""
+    if probe.dst in unshaped and probe.src in unshaped:
+        raise ValueError(f"probe node{probe.src}->node{probe.dst} has no shaped end")
+    return (probe.dst, probe.src) if probe.src in unshaped else (probe.src, probe.dst)
 
 
 def parse_ping_avg_ms(stdout: str) -> float:

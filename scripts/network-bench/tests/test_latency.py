@@ -340,8 +340,88 @@ def test_shaping_meta_shape():
         "matrix_sha256": DECAF5_SHA256,
         "sysctls": dict(latency.tcp_sysctls("cubic")),
         "mtu": 1500,
+        "unshaped": [],
         "probes": [],
     }
+
+
+# TEST:fold-unshaped-full-rtt-ok
+def test_fold_unshaped_puts_the_round_trip_on_the_shaped_egress():
+    delays = {
+        (0, 1): 10.0,
+        (1, 0): 12.0,
+        (0, 2): 5.0,
+        (2, 0): 5.0,
+        (1, 2): 3.0,
+        (2, 1): 4.0,
+    }
+    folded = latency.fold_unshaped(delays, frozenset({0}))
+    assert folded == {(1, 0): 22.0, (2, 0): 10.0, (1, 2): 3.0, (2, 1): 4.0}
+    assert (0, 1) not in folded
+
+
+def test_fold_unshaped_leaves_a_matrix_without_unshaped_nodes_alone():
+    delays = {(0, 1): 10.0, (1, 0): 12.0}
+    assert latency.fold_unshaped(delays, frozenset()) == delays
+
+
+# EDGE:fold-zero-delay-intra
+# TEST:fold-unshaped-missing-pair-ok
+def test_fold_unshaped_keeps_absent_a_pair_that_has_no_delay():
+    shaping = latency.shaping(
+        "decaf-2025", 5, intra=False, tcp_cc="cubic", mtu=1500, unshaped=frozenset({0})
+    )
+    assert (1, 0) not in shaping.delays
+    assert (0, 1) not in shaping.delays
+    assert (2, 0) in shaping.delays
+
+
+def test_fold_unshaped_drops_links_between_unshaped_nodes():
+    delays = {(0, 1): 1.0, (1, 0): 1.0}
+    assert latency.fold_unshaped(delays, frozenset({0, 1})) == {}
+
+
+def test_a_fargate_node_gets_the_matrix_round_trip_toward_each_peer():
+    plain = latency.shaping("decaf-2025", 3, intra=True, tcp_cc="bbr", mtu=1500)
+    folded = latency.shaping(
+        "decaf-2025", 3, intra=True, tcp_cc="bbr", mtu=1500, unshaped=frozenset({0})
+    )
+    for peer in (1, 2):
+        rtt = plain.delays[(0, peer)] + plain.delays[(peer, 0)]
+        assert folded.delays[(peer, 0)] == pytest.approx(rtt)
+    assert folded.meta()["unshaped"] == [0]
+    assert folded.meta()["matrix_sha256"] != plain.meta()["matrix_sha256"]
+
+
+def test_jitter_and_loss_cannot_be_folded():
+    with pytest.raises(ValueError, match="cannot be folded"):
+        latency.shaping(
+            "decaf-2025",
+            3,
+            intra=True,
+            tcp_cc="bbr",
+            mtu=1500,
+            netem="full",
+            unshaped=frozenset({0}),
+        )
+
+
+def test_probes_of_a_folded_matrix_expect_the_round_trip():
+    folded = latency.shaping(
+        "decaf-2025", 3, intra=True, tcp_cc="bbr", mtu=1500, unshaped=frozenset({0})
+    )
+    (probe,) = latency.probe_pairs(folded.assignment, folded.delays, folded.intra)
+    assert probe.expected_ms == pytest.approx(folded.delays[(probe.dst, 0)])
+
+
+# TEST:probe-route-swaps-unshaped-src-ok
+def test_probe_route_pings_from_the_shaped_end():
+    probe = Probe(0, 2, "cross", 158.0)
+    assert latency.probe_route(probe, frozenset()) == (0, 2)
+    assert latency.probe_route(probe, frozenset({0})) == (2, 0)
+    assert latency.probe_route(probe, frozenset({2})) == (0, 2)
+    with pytest.raises(ValueError, match="no shaped end"):
+        latency.probe_route(probe, frozenset({0, 2}))
 
 
 def test_tc_script_bbr3_uses_bbr_of_the_xanmod_kernel():
