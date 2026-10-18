@@ -1075,7 +1075,9 @@ TOFU = shutil.which("tofu")
 @pytest.mark.slow
 @pytest.mark.skipif(TOFU is None, reason="tofu/opentofu not on PATH")
 def test_tofu_validate(tmp_path):
-    """TEST:awsbench-tofu-validate-ok: `init` needs the network for the providers."""
+    """TEST:awsbench-tofu-validate-ok, TEST:fargate-tofu-validate-ok (the module holds the
+    fargate resources, inert without the `fargate` variable): `init` needs the network for
+    the providers."""
     assert TOFU is not None
     module = tmp_path / "terraform"
     shutil.copytree(HERE / "aws" / "terraform", module)

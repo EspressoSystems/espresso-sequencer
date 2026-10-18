@@ -198,7 +198,7 @@ def test_the_password_is_generated_private_and_rds_safe(harness):
 
 def test_the_delete_time_follows_the_confirmed_expiry(harness):
     harness.up_rds()
-    delete_at = datetime.fromisoformat(harness.tfvars()["rds"]["delete_at"] + "+00:00")
+    delete_at = datetime.fromisoformat(harness.tfvars()["reaper_at"] + "+00:00")
     expected = NOW + timedelta(minutes=180, seconds=-awsb.RDS_REAPER_LEAD_S)
     assert abs((delete_at - expected).total_seconds()) < 60
 
@@ -210,13 +210,13 @@ def test_a_single_shot_deletes_the_rds_before_its_hosts_end(tmp_path):
         tmp_path / "fleet.json", {"phase": "planned", "estimate": {"ttl_s": 3600.0}}
     )
     tfvars_path = tmp_path / "terraform" / "terraform.tfvars.json"
-    netbench.write_json(tfvars_path, {"expires_at": "x", "rds": {"delete_at": "x"}})
+    netbench.write_json(tfvars_path, {"expires_at": "x", "reaper_at": "x"})
     confirmed = datetime(2026, 9, 29, 16, 0, tzinfo=UTC)
     tf = awsb.Terraform(FakeRunner(states=[]), tmp_path / "terraform", {})
     awsb.stamp_expiry(tmp_path, tf, confirmed)
     written = netbench.read_json(tfvars_path)
     assert written["expires_at"] == "2026-09-29T17:08:00Z"
-    assert written["rds"]["delete_at"] == "2026-09-29T16:55:00"
+    assert written["reaper_at"] == "2026-09-29T16:55:00"
 
 
 def test_plan_renders_the_rds_variables_and_prices_them(isolated, monkeypatch):

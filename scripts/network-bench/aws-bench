@@ -614,6 +614,9 @@ IAM_ROLE_PATH = "/espresso-bench/"
 # network interfaces detach.
 SG_DELETE_RETRIES = 6
 SG_DELETE_BACKOFF_S = 10.0
+# The mount target of an efs file system goes away within about a minute of its deletion.
+EFS_MOUNT_TARGET_GONE_S = 300.0
+EFS_POLL_S = 5.0
 
 # AWS validity rules (check_validity_aws), on top of netbench's own check_validity.
 START_SPREAD_NOISY_S = 2.0
@@ -2230,24 +2233,24 @@ def render_tfvars(
     }
 
 
-def rds_schedule_at(expires: datetime) -> str:
-    """The `at()` timestamp of the delete schedule: `RDS_REAPER_LEAD_S` before the hosts end."""
+def reaper_schedule_at(expires: datetime) -> str:
+    """The `at()` timestamp of the delete schedules: `RDS_REAPER_LEAD_S` before the hosts end."""
     reaper = expires - timedelta(seconds=RDS_REAPER_LEAD_S)
     return reaper.strftime("%Y-%m-%dT%H:%M:%S")
 
 
 def rds_tfvars(rds: RdsSpec, password: str, expires: datetime) -> dict[str, Any]:
-    """The `rds` and `rds_password` variables: the container's tuning and observability
-    settings in the units of the parameter group."""
+    """The `rds`, `rds_password` and `reaper_at` variables: the container's tuning and
+    observability settings in the units of the parameter group."""
     # The RDS class is fixed whatever `--node-type`, and was sized against the reference values.
     tuning = {key: setting for key, (_, setting) in pg_tuning(PG_REFERENCE_MIB).items()}
     return {
         "rds": {
             **rds,
             "parameters": {**tuning, **PG_OBSERVABILITY},
-            "delete_at": rds_schedule_at(expires),
         },
         "rds_password": password,
+        "reaper_at": reaper_schedule_at(expires),
     }
 
 
@@ -3840,7 +3843,7 @@ def stamp_expiry(
     """The `espresso-bench-expires` tag counts from the apply, not from the render: a run that
     waited at the prompt must not look expired. Re-plans because a plan file fixes variables.
     A single shot adds the provisioning time; a fleet passes 0, so that `run --fleet` never
-    counts on time after the earliest possible self-terminate. The rds delete is scheduled
+    counts on time after the earliest possible self-terminate. The reaper schedules are set
     from the end of the hosts, without that margin."""
     manifest: FleetManifest = nb.read_json(fleet_dir / FLEET_JSON)
     expires = confirmed_at + timedelta(seconds=manifest["estimate"]["ttl_s"] + margin_s)
@@ -3848,9 +3851,9 @@ def stamp_expiry(
     tfvars_path = fleet_dir / "terraform" / "terraform.tfvars.json"
     tfvars = nb.read_json(tfvars_path)
     updated = {**tfvars, "expires_at": stamp}
-    if "rds" in tfvars:
+    if "reaper_at" in tfvars:
         hosts_end = expires - timedelta(seconds=margin_s)
-        updated["rds"] = {**tfvars["rds"], "delete_at": rds_schedule_at(hosts_end)}
+        updated["reaper_at"] = reaper_schedule_at(hosts_end)
     nb.write_json(tfvars_path, updated)
     update_manifest(fleet_dir / FLEET_JSON, manifest["phase"], expires_at=stamp)
     tf.plan()
@@ -7189,9 +7192,9 @@ def cmd_destroy(args: argparse.Namespace, system: System) -> int:
             log.info("sweeping %s", orphan["name"])
             sweep(system, args.region, orphan["name"])
             mark_swept(OUT_ROOT / orphan["name"])
-        # `sweep` removes the role of a fleet that still has rds resources.
-        swept_rds = rds_fleets(arn for o in orphans for arn in o["arns"])
-        with_role = {o["name"] for o in orphans if has_role(o)} - swept_rds
+        # `sweep` removes the roles of a fleet that still has a delete schedule group.
+        swept_roles = reaper_fleets(arn for o in orphans for arn in o["arns"])
+        with_role = {o["name"] for o in orphans if has_role(o)} - swept_roles
         if with_role:
             sweep_iam(system.run, args.region, with_role)
     except Refused as exc:
@@ -7414,8 +7417,11 @@ def describe_volumes(run: Runner, region: str, *filters: str) -> list[str]:
 
 def arn_parts(arn: str) -> tuple[str, str]:
     """(`instance`, `i-0abc`) of `arn:aws:ec2:eu-west-1:1:instance/i-0abc`; rds ARNs separate
-    kind and id with a colon: (`db`, `name`) of `arn:aws:rds:eu-west-1:1:db:name`."""
+    kind and id with a colon: (`db`, `name`) of `arn:aws:rds:eu-west-1:1:db:name`, and so do
+    log group ARNs, whose name holds slashes and ends in `:*`: (`log-group`, `/a/b`)."""
     resource = arn.split(":", 5)[5]
+    if resource.startswith("log-group:"):
+        return "log-group", resource.removeprefix("log-group:").removesuffix(":*")
     kind, _, resource_id = resource.partition("/" if "/" in resource else ":")
     return kind, resource_id
 
@@ -7473,8 +7479,10 @@ def later(a: str | None, b: str | None) -> str | None:
 
 
 def role_fleet(role_arn: str) -> str:
-    """`fleet1` of `arn:aws:iam::1:role/espresso-bench/espresso-bench-fleet1`."""
-    return arn_parts(role_arn)[1].rpartition("/")[2].removeprefix(RDS_PREFIX)
+    """`fleet1` of `arn:aws:iam::1:role/espresso-bench/espresso-bench-fleet1`; the task
+    execution role adds `-exec`."""
+    name = arn_parts(role_arn)[1].rpartition("/")[2]
+    return name.removeprefix(RDS_PREFIX).removesuffix("-exec")
 
 
 def local_phase(out_root: Path, name: str) -> str | None:
@@ -8645,7 +8653,9 @@ class AwsStep(TypedDict):
 
 
 class ResourceStep(TypedDict):
-    action: Literal["delete_rds", "delete_security_group"]
+    action: Literal[
+        "delete_ecs_cluster", "delete_rds", "delete_efs", "delete_security_group"
+    ]
     resource: str
 
 
@@ -8654,9 +8664,10 @@ SweepStep = AwsStep | ResourceStep
 
 def sweep_plan(arns: list[str]) -> list[SweepStep]:
     """The deletions for `arns` in dependency order: the delete schedule group (so it cannot
-    fire mid-sweep), instances, the rds instance (waiting for it) with its subnet and parameter
-    groups, volumes, security group (the rds network interfaces hold it until the instance is
-    gone) and key pair."""
+    fire mid-sweep), the ecs cluster (stopping its tasks) and task definitions, instances, the
+    rds instance (waiting for it) with its subnet and parameter groups, the efs access points
+    and file system (after its mount targets) and the log group, volumes, security group (the
+    rds, task and mount target network interfaces hold it until they are gone) and key pair."""
     by_kind: defaultdict[str, list[str]] = defaultdict(list)
     for arn in arns:
         kind, resource_id = arn_parts(arn)
@@ -8678,6 +8689,17 @@ def sweep_plan(arns: list[str]) -> list[SweepStep]:
         )
         for group in by_kind["schedule-group"]
     ]
+    plan += [
+        ResourceStep(action="delete_ecs_cluster", resource=cluster)
+        for cluster in by_kind["cluster"]
+    ]
+    for task_definition in by_kind["task-definition"]:
+        # ClientException: the definition is already gone.
+        for verb, flag in (
+            ("deregister-task-definition", "--task-definition"),
+            ("delete-task-definitions", "--task-definitions"),
+        ):
+            plan.append(delete("ecs", verb, flag, task_definition, "ClientException"))
     if instances := by_kind["instance"]:
         ids = ["--instance-ids", *instances]
         for verb in (["terminate-instances"], ["wait", "instance-terminated"]):
@@ -8707,6 +8729,30 @@ def sweep_plan(arns: list[str]) -> list[SweepStep]:
         )
         for group in by_kind["pg"]
     ]
+    plan += [
+        delete(
+            "efs",
+            "delete-access-point",
+            "--access-point-id",
+            access_point,
+            "AccessPointNotFound",
+        )
+        for access_point in by_kind["access-point"]
+    ]
+    plan += [
+        ResourceStep(action="delete_efs", resource=file_system)
+        for file_system in by_kind["file-system"]
+    ]
+    plan += [
+        delete(
+            "logs",
+            "delete-log-group",
+            "--log-group-name",
+            group,
+            "ResourceNotFoundException",
+        )
+        for group in by_kind["log-group"]
+    ]
     # Root volumes normally vanish with their instance.
     plan += [
         delete("ec2", "delete-volume", "--volume-id", volume, "InvalidVolume.NotFound")
@@ -8732,17 +8778,22 @@ def sweep(system: System, region: str, name: str | None) -> list[str]:
             aws_json(
                 system.run, *step["args"], region=region, tolerate=step["tolerate"]
             )
+        elif step["action"] == "delete_ecs_cluster":
+            delete_ecs_cluster(system.run, region, step["resource"])
         elif step["action"] == "delete_rds":
             delete_rds(system.run, region, step["resource"])
+        elif step["action"] == "delete_efs":
+            delete_efs(system, region, step["resource"])
         else:
             delete_security_group(system, region, step["resource"])
-    if fleets := rds_fleets(arns):
+    if fleets := reaper_fleets(arns):
         sweep_iam(system.run, region, fleets)
     return arns
 
 
-def rds_fleets(arns: Iterable[str]) -> set[str]:
-    """Names of the fleets that own an rds instance or delete schedule group among `arns`."""
+def reaper_fleets(arns: Iterable[str]) -> set[str]:
+    """Names of the fleets that own an rds instance or delete schedule group among `arns`: the
+    ones with an IAM role to sweep."""
     return {
         resource_id.removeprefix(RDS_PREFIX)
         for kind, resource_id in map(arn_parts, arns)
@@ -8787,6 +8838,86 @@ def delete_rds(run: Runner, region: str, identifier: str) -> None:
         "--db-instance-identifier",
         identifier,
         region=region,
+    )
+
+
+def delete_ecs_cluster(run: Runner, region: str, cluster: str) -> None:
+    """`delete-cluster` fails with ClusterContainsTasksException while a task runs, so they
+    are stopped first."""
+    tasks = aws_json(
+        run,
+        "ecs",
+        "list-tasks",
+        "--cluster",
+        cluster,
+        "--query",
+        "taskArns",
+        region=region,
+        tolerate="ClusterNotFoundException",
+    )
+    if tasks is None:
+        return
+    for task in tasks:
+        aws_json(
+            run,
+            *("ecs", "stop-task", "--cluster", cluster, "--task", task),
+            *("--reason", "sweep"),
+            region=region,
+        )
+    if tasks:
+        aws_json(
+            run,
+            *("ecs", "wait", "tasks-stopped", "--cluster", cluster),
+            *("--tasks", *tasks),
+            region=region,
+        )
+    aws_json(
+        run,
+        *("ecs", "delete-cluster", "--cluster", cluster),
+        region=region,
+        tolerate="ClusterNotFoundException",
+    )
+
+
+def delete_efs(system: System, region: str, file_system: str) -> None:
+    """Deletes the mount targets, waits until they are gone (the file system refuses deletion
+    before that) and deletes the file system."""
+    run = system.run
+    targets = mount_targets(run, region, file_system)
+    if targets is None:
+        return
+    for target in targets:
+        aws_json(
+            run,
+            *("efs", "delete-mount-target", "--mount-target-id", target),
+            region=region,
+            tolerate="MountTargetNotFound",
+        )
+    clock = system.clock
+    deadline = clock.monotonic() + EFS_MOUNT_TARGET_GONE_S
+    while mount_targets(run, region, file_system):
+        if clock.monotonic() >= deadline:
+            raise Refused(
+                f"efs {file_system} still has mount targets {EFS_MOUNT_TARGET_GONE_S:.0f} s "
+                "after their deletion"
+            )
+        clock.sleep(EFS_POLL_S)
+    aws_json(
+        run,
+        *("efs", "delete-file-system", "--file-system-id", file_system),
+        region=region,
+        tolerate="FileSystemNotFound",
+    )
+
+
+def mount_targets(run: Runner, region: str, file_system: str) -> list[str] | None:
+    """None once the file system is gone."""
+    return aws_json(
+        run,
+        *("efs", "describe-mount-targets", "--file-system-id", file_system),
+        *("--query", "MountTargets[].MountTargetId"),
+        region=region,
+        tolerate="FileSystemNotFound",
     )
 
 

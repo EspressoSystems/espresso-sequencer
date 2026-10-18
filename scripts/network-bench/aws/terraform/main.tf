@@ -155,8 +155,10 @@ resource "aws_instance" "host" {
 # The schedule is what bounds the cost of an rds fleet whose laptop is gone: hosts terminate
 # themselves, RDS does not.
 locals {
-  rds_enabled = var.rds != null
-  rds_name    = "espresso-bench-${var.name}"
+  rds_enabled     = var.rds != null
+  fargate_enabled = var.fargate != null
+  reaper_enabled  = local.rds_enabled || local.fargate_enabled
+  rds_name        = "espresso-bench-${var.name}"
 }
 
 # A DB subnet group needs subnets in two AZs, unlike the hosts, which sit in one.
@@ -236,15 +238,15 @@ resource "aws_db_instance" "this" {
 
   lifecycle {
     precondition {
-      condition     = var.rds_password != null
-      error_message = "rds needs rds_password."
+      condition     = var.rds_password != null && var.reaper_at != null
+      error_message = "rds needs rds_password and reaper_at."
     }
   }
 }
 
-# The role can delete this one instance and nothing else.
+# The role can delete this one instance and this one file system, nothing else.
 resource "aws_iam_role" "scheduler" {
-  count = local.rds_enabled ? 1 : 0
+  count = local.reaper_enabled ? 1 : 0
 
   name = local.rds_name
   path = "/espresso-bench/${var.region}/"
@@ -279,12 +281,12 @@ resource "aws_iam_role_policy" "scheduler" {
 }
 
 resource "aws_scheduler_schedule_group" "this" {
-  count = local.rds_enabled ? 1 : 0
+  count = local.reaper_enabled ? 1 : 0
 
   name = local.rds_name
 }
 
-# `delete_at` is in UTC, the schedule's default time zone. The provider has no
+# `reaper_at` is in UTC, the schedule's default time zone. The provider has no
 # action_after_completion, so a fired schedule stays until `tofu destroy` removes it.
 resource "aws_scheduler_schedule" "rds_delete" {
   count = local.rds_enabled ? 1 : 0
@@ -292,7 +294,7 @@ resource "aws_scheduler_schedule" "rds_delete" {
   name       = "rds-delete"
   group_name = aws_scheduler_schedule_group.this[0].name
 
-  schedule_expression = "at(${var.rds.delete_at})"
+  schedule_expression = "at(${var.reaper_at})"
 
   flexible_time_window {
     mode = "OFF"
@@ -309,4 +311,198 @@ resource "aws_scheduler_schedule" "rds_delete" {
   }
 
   depends_on = [aws_iam_role_policy.scheduler]
+}
+
+# Fargate query nodes. Tasks and task definitions are created and deleted by aws-bench; the
+# resources here are the static part. A task ends itself at the fleet's expiry (its wrapper runs
+# under `timeout`), so only the file system, which bills per GB, needs a schedule.
+resource "aws_ecs_cluster" "this" {
+  count = local.fargate_enabled ? 1 : 0
+
+  name = local.rds_name
+
+  setting {
+    name  = "containerInsights"
+    value = "disabled"
+  }
+}
+
+resource "aws_cloudwatch_log_group" "ecs" {
+  count = local.fargate_enabled ? 1 : 0
+
+  name              = "/espresso-bench/${var.name}"
+  retention_in_days = 1
+}
+
+# ghcr is public, so pulling needs no ECR rights; the tasks have no role of their own.
+resource "aws_iam_role" "ecs_exec" {
+  count = local.fargate_enabled ? 1 : 0
+
+  name = "${local.rds_name}-exec"
+  path = "/espresso-bench/${var.region}/"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "ecs-tasks.amazonaws.com" }
+      Action    = "sts:AssumeRole"
+      Condition = { StringEquals = { "aws:SourceAccount" = local.account_id } }
+    }]
+  })
+}
+
+resource "aws_iam_role_policy" "ecs_exec" {
+  count = local.fargate_enabled ? 1 : 0
+
+  name = "write-logs"
+  role = aws_iam_role.ecs_exec[0].id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["logs:CreateLogStream", "logs:PutLogEvents"]
+      Resource = "${aws_cloudwatch_log_group.ecs[0].arn}:*"
+    }]
+  })
+}
+
+# Elastic throughput: the payload writes of a 200 MB/s run exceed any bursting baseline.
+resource "aws_efs_file_system" "this" {
+  count = local.fargate_enabled ? 1 : 0
+
+  encrypted        = true
+  performance_mode = "generalPurpose"
+  throughput_mode  = "elastic"
+
+  tags = {
+    Name = local.rds_name
+  }
+
+  lifecycle {
+    precondition {
+      condition     = var.reaper_at != null
+      error_message = "fargate needs reaper_at."
+    }
+  }
+}
+
+resource "aws_efs_mount_target" "this" {
+  count = local.fargate_enabled ? 1 : 0
+
+  file_system_id  = aws_efs_file_system.this[0].id
+  subnet_id       = local.pinned_subnet
+  security_groups = [aws_security_group.this.id]
+}
+
+# One directory per node, so a node sees its own `/efs` and ctl sees all of them at the root.
+resource "aws_efs_access_point" "node" {
+  for_each = local.fargate_enabled ? toset(var.fargate.nodes) : toset([])
+
+  file_system_id = aws_efs_file_system.this[0].id
+
+  posix_user {
+    uid = 0
+    gid = 0
+  }
+
+  root_directory {
+    path = "/${each.key}"
+    creation_info {
+      owner_uid   = 0
+      owner_gid   = 0
+      permissions = "0755"
+    }
+  }
+}
+
+resource "aws_iam_role_policy" "scheduler_efs" {
+  count = local.fargate_enabled ? 1 : 0
+
+  name = "delete-efs"
+  role = aws_iam_role.scheduler[0].id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = [
+        "elasticfilesystem:DeleteMountTarget",
+        "elasticfilesystem:DeleteAccessPoint",
+        "elasticfilesystem:DeleteFileSystem",
+      ]
+      Resource = concat(
+        [aws_efs_file_system.this[0].arn],
+        [for ap in aws_efs_access_point.node : ap.arn],
+      )
+    }]
+  })
+}
+
+# The ids are generated, so these schedules exist only once their targets do; the file system
+# costs next to nothing in the meantime.
+resource "aws_scheduler_schedule" "efs_mount_target_delete" {
+  count = local.fargate_enabled ? 1 : 0
+
+  name       = "efs-mount-target-delete"
+  group_name = aws_scheduler_schedule_group.this[0].name
+
+  schedule_expression = "at(${var.reaper_at})"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  target {
+    arn      = "arn:aws:scheduler:::aws-sdk:efs:deleteMountTarget"
+    role_arn = aws_iam_role.scheduler[0].arn
+    input    = jsonencode({ MountTargetId = aws_efs_mount_target.this[0].id })
+  }
+
+  depends_on = [aws_iam_role_policy.scheduler_efs]
+}
+
+resource "aws_scheduler_schedule" "efs_access_point_delete" {
+  for_each = aws_efs_access_point.node
+
+  name       = "efs-access-point-delete-${each.key}"
+  group_name = aws_scheduler_schedule_group.this[0].name
+
+  schedule_expression = "at(${var.reaper_at})"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  target {
+    arn      = "arn:aws:scheduler:::aws-sdk:efs:deleteAccessPoint"
+    role_arn = aws_iam_role.scheduler[0].arn
+    input    = jsonencode({ AccessPointId = each.value.id })
+  }
+
+  depends_on = [aws_iam_role_policy.scheduler_efs]
+}
+
+# DeleteFileSystem fails until the mount target is gone; the scheduler's default retry policy
+# (24 h) repeats it.
+resource "aws_scheduler_schedule" "efs_delete" {
+  count = local.fargate_enabled ? 1 : 0
+
+  name       = "efs-delete"
+  group_name = aws_scheduler_schedule_group.this[0].name
+
+  schedule_expression = "at(${formatdate("YYYY-MM-DD'T'hh:mm:ss", timeadd("${var.reaper_at}Z", "15m"))})"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  target {
+    arn      = "arn:aws:scheduler:::aws-sdk:efs:deleteFileSystem"
+    role_arn = aws_iam_role.scheduler[0].arn
+    input    = jsonencode({ FileSystemId = aws_efs_file_system.this[0].id })
+  }
+
+  depends_on = [aws_iam_role_policy.scheduler_efs]
 }
