@@ -584,13 +584,6 @@ impl Persistence {
         let da_dir = journal_dir.join("da");
         let side_dir = path.join("side");
 
-        let old_data_dir = journal_dir.join("data");
-        ensure!(
-            !dir_has_log_files(&old_data_dir),
-            "found segments in {}: the single `data` lane was split into `share` and `da`, and \
-             there is no migration; remove the journal directory to start over",
-            old_data_dir.display()
-        );
         // Must run before any directory is created (including by `storage_probe::probe` below):
         // `wal_dir`/`share_dir` existing is not evidence of a prior journal run, only of this check
         // itself having run before.
@@ -2679,20 +2672,6 @@ mod tests {
         .err()
         .expect("open must fail without max_block_size");
         assert!(err.to_string().contains("max_block_size"), "{err:#}");
-    }
-
-    #[tokio::test]
-    async fn refuses_to_start_over_old_data_lane() {
-        let tmp = TempDir::new().unwrap();
-        let old_lane = tmp.path().join("journal").join("data");
-        std::fs::create_dir_all(&old_lane).unwrap();
-        std::fs::write(old_lane.join("0000000000000000.log"), b"").unwrap();
-
-        let err = Persistence::open(options(&tmp))
-            .await
-            .err()
-            .expect("open must refuse the old data lane");
-        assert!(format!("{err:#}").contains("journal/data"), "{err:#}");
     }
 
     #[tokio::test]
