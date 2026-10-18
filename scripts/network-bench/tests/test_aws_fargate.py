@@ -2,6 +2,8 @@ import json
 import os
 import signal
 import subprocess
+import time
+from datetime import datetime
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -218,6 +220,7 @@ def test_one_reaper_time_drives_the_rds_and_efs_schedules() -> None:
 
 GOLDEN_DIR = Path(__file__).parent / "golden"
 EXPIRES_AT = "2026-09-29T17:00:00Z"
+REAPER_AT = "2026-09-29T16:55:00"
 
 
 def task_cfg(**changes: Any) -> Any:
@@ -247,7 +250,7 @@ def fargate_manifest() -> dict:
 
 def task_def(cfg: Any) -> dict:
     return awsb.render_task_def(
-        cfg, fargate_manifest(), "node0", fake_images(), EXPIRES_AT
+        cfg, fargate_manifest(), "node0", fake_images(), EXPIRES_AT, REAPER_AT
     )
 
 
@@ -316,13 +319,13 @@ def test_the_wrapper_has_no_sysctl_to_check_without_latency(tmp_path) -> None:
 def test_the_wrapper_exports_node_env_values_literally(tmp_path) -> None:
     env_file = tmp_path / "node.env"
     env_file.write_text(
-        "MNEMONIC=test test junk\nPASSWORD=pa$$word `x` $(y)\nTOKEN=abc==\nEMPTY=\n"
+        "MNEMONIC=test test junk\nPASSWORD=pa$$word `x` $(y)\nTOKEN=abc==\nPAD=abc=\nEMPTY=\n"
     )
-    script = f'env_file={env_file}\n{awsb._EXPORT_ENV}printf "%s|" "$MNEMONIC" "$PASSWORD" "$TOKEN" "$EMPTY"'
+    script = f'env_file={env_file}\n{awsb._EXPORT_ENV}printf "%s|" "$MNEMONIC" "$PASSWORD" "$TOKEN" "$PAD" "$EMPTY"'
     done = subprocess.run(
         ["bash", "-c", script], capture_output=True, text=True, check=True
     )
-    assert done.stdout == "test test junk|pa$$word `x` $(y)|abc==||"
+    assert done.stdout == "test test junk|pa$$word `x` $(y)|abc==|abc=||"
 
 
 def env_names(cfg: Any) -> set[str]:
@@ -355,7 +358,7 @@ def test_the_task_runs_the_image_digest_of_the_run() -> None:
         "digest": "sha256:" + "7" * 64,
     }
     rendered = awsb.render_task_def(
-        task_cfg(), fargate_manifest(), "node0", images, EXPIRES_AT
+        task_cfg(), fargate_manifest(), "node0", images, EXPIRES_AT, REAPER_AT
     )
     assert rendered["containerDefinitions"][0]["image"].endswith("@sha256:" + "7" * 64)
 
@@ -1225,3 +1228,69 @@ def test_the_task_journal_limit_is_not_halved_for_postgres():
     ec2 = next(h for h in hosts if h["name"] == "node0")
     task = {**ec2, "fargate": FARGATE_SHAPE}
     assert awsb._journal_max_bytes(task) == 2 * awsb._journal_max_bytes(ec2)
+
+
+def test_the_task_ends_before_the_reaper_deletes_its_file_system():
+    environment = task_def(task_cfg())["containerDefinitions"][0]["environment"]
+    deadline = int(
+        next(e["value"] for e in environment if e["name"] == "BENCH_DEADLINE")
+    )
+    reaper = datetime.fromisoformat(REAPER_AT + "+00:00").timestamp()
+    assert deadline == reaper - awsb.FARGATE_DEADLINE_MARGIN_S
+
+
+def run_entry(
+    tmp_path: Path, deadline: float, go: str, *command: str
+) -> subprocess.CompletedProcess[str]:
+    """`FARGATE_ENTRY` with its roots under `tmp_path`, the env file and the go in place."""
+    bench = tmp_path / "efs/bench"
+    bench.mkdir(parents=True)
+    (bench / "node.env").write_text("FOO=a b=\n")
+    (bench / "go").write_text(go)
+    env = {
+        **os.environ,
+        "BENCH_ROOT": str(tmp_path),
+        "BENCH_PROC_SYS": str(tmp_path / "proc"),
+        "BENCH_DEADLINE": str(int(deadline)),
+        "BENCH_SAMPLE_S": "1",
+        "ECS_CONTAINER_METADATA_URI_V4": "http://127.0.0.1:1",
+    }
+    return subprocess.run(
+        ["bash", "-c", awsb.FARGATE_ENTRY, "bash", *command],
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
+def test_the_wrapper_starts_the_command_with_the_env_at_the_go_time(tmp_path) -> None:
+    now = time.time()
+    go = f"{int((now + 0.5) * 1e9)}\n"
+    done = run_entry(tmp_path, now + 60, go, "sh", "-c", 'echo "foo=$FOO"')
+    assert (done.returncode, done.stdout) == (0, "foo=a b=\n")
+    started = float((tmp_path / "efs/bench/started_at").read_text())
+    assert started >= now + 0.5
+    assert (tmp_path / "efs/bench/ready").exists()
+    assert (tmp_path / "store").resolve() == tmp_path / "efs/store"
+    assert "foo=a b=" in (tmp_path / "efs/bench/espresso-node.log").read_text()
+
+
+def test_the_wrapper_refuses_to_start_past_its_deadline(tmp_path) -> None:
+    now = time.time()
+    done = run_entry(tmp_path, now - 5, f"{int(now * 1e9)}\n", "true")
+    assert done.returncode == 1
+    assert "deadline" in done.stderr
+    assert not (tmp_path / "efs/bench/started_at").exists()
+
+
+def test_the_wrapper_gives_up_waiting_for_go_at_the_deadline(tmp_path) -> None:
+    done = run_entry(tmp_path, time.time() + 1, "", "true")
+    assert done.returncode == 1
+    assert "no go before the deadline" in done.stderr
+
+
+def test_the_wrapper_kills_the_command_that_outlives_the_deadline(tmp_path) -> None:
+    now = time.time()
+    done = run_entry(tmp_path, now + 2, f"{int(now * 1e9)}\n", "sleep", "30")
+    assert done.returncode == 124

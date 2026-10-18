@@ -575,6 +575,8 @@ FLEET_ONLY_FLAGS = (
 FARGATE_POLL_S = 5.0
 FARGATE_START_S = 300.0
 FARGATE_LAUNCH_EXPECTED_S = 90.0
+# A task ends this long before the reaper schedules delete its file system.
+FARGATE_DEADLINE_MARGIN_S = 120.0
 # Fargate sizes: vCPU -> the memory in MiB it is offered with.
 FARGATE_SHAPES: dict[int, range] = {
     1: range(2048, 8193, 1024),
@@ -4477,17 +4479,19 @@ for pair in "${wanted[@]}"; do
 done
 """
 _ENTRY_SETUP = """\
-mkdir -p /efs/bench /efs/store /efs/payload /opt/bench
-rm -rf /store /payload
-ln -s /efs/store /store
-ln -s /efs/payload /payload
-ln -sf /efs/bench/genesis.toml /opt/bench/genesis.toml
-stats=/efs/bench/task-stats.jsonl
+root=${BENCH_ROOT:-}
+bench=$root/efs/bench
+mkdir -p $bench $root/efs/store $root/efs/payload $root/opt/bench
+rm -rf $root/store $root/payload
+ln -s $root/efs/store $root/store
+ln -s $root/efs/payload $root/payload
+ln -sf $bench/genesis.toml $root/opt/bench/genesis.toml
+stats=$bench/task-stats.jsonl
 (while curl -sf "$ECS_CONTAINER_METADATA_URI_V4/task/stats" | tr -d '\\n' >> $stats; do
   echo >> $stats; sleep "$BENCH_SAMPLE_S"; done) &
-touch /efs/bench/ready
-go=/efs/bench/go
-env_file=/efs/bench/node.env
+touch $bench/ready
+go=$bench/go
+env_file=$bench/node.env
 """
 _WAIT_FOR_GO = """\
 until read -r at 2> /dev/null < "$go" && [ -n "$at" ]; do
@@ -4495,16 +4499,19 @@ until read -r at 2> /dev/null < "$go" && [ -n "$at" ]; do
   sleep 0.2
 done
 """
-# No `source`: a value may hold `$` or spaces.
+# No `source`: a value may hold `$` or spaces; `read` with an IFS of `=` would drop a trailing `=`.
 _EXPORT_ENV = (
-    'while IFS== read -r key value; do export "$key=$value"; done < "$env_file"\n'
+    'while IFS= read -r line; do export "${line%%=*}=${line#*=}"; done < "$env_file"\n'
 )
+# `timeout 0` would run without a limit, so a deadline in the past is an error.
 _ENTRY_START = """\
 wait_ns=$((at - $(date +%s%N)))
 [ "$wait_ns" -le 0 ] || sleep "$((wait_ns / 1000000000)).$(printf %09d $((wait_ns % 1000000000)))"
-date +%s.%N > /efs/bench/started_at
-exec > >(tee -a /efs/bench/espresso-node.log) 2>&1
-exec timeout "$((BENCH_DEADLINE - $(date +%s)))" "$@"
+left=$((BENCH_DEADLINE - $(date +%s)))
+[ "$left" -gt 0 ] || { echo "deadline passed before the start" >&2; exit 1; }
+date +%s.%N > $bench/started_at
+exec > >(tee -a $bench/espresso-node.log) 2>&1
+exec timeout -k 30 "$left" "$@"
 """
 FARGATE_ENTRY = (
     "set -euo pipefail\n"
@@ -4522,14 +4529,16 @@ def render_task_def(
     node: str,
     images: dict[str, ImageInfo],
     expires_at: str,
+    reaper_at: str,
 ) -> dict[str, Any]:
     """The `register-task-definition` input of query node `node`: one container with the
-    image digest of the run, which `FARGATE_ENTRY` starts at the time ctl names. `expires_at`
-    ends the task with the fleet."""
+    image digest of the run, which `FARGATE_ENTRY` starts at the time ctl names. The task ends
+    FARGATE_DEADLINE_MARGIN_S before the reaper (`reaper_at`, UTC) deletes its file system."""
     host = next(h for h in fleet["hosts"] if h["name"] == node)
     shape, info, image = host["fargate"], fleet["fargate"], images["espresso-node"]
     sysctls = fargate_sysctls(cfg)
-    deadline = datetime.fromisoformat(expires_at).timestamp()
+    reaper = datetime.fromisoformat(f"{reaper_at}+00:00").timestamp()
+    deadline = reaper - FARGATE_DEADLINE_MARGIN_S
     environment = {
         "BENCH_DEADLINE": f"{deadline:.0f}",
         "BENCH_SAMPLE_S": f"{HOST_SAMPLE_S:g}",
@@ -4657,6 +4666,8 @@ def launch_fargate(run: Run) -> FargateTasks:
     fleet_manifest = run.fleet.manifest
     info = fleet_manifest["fargate"]
     images = run.manifest["images"]
+    tfvars = nb.read_json(run.fleet.fleet_dir / "terraform" / "terraform.tfvars.json")
+    reaper_at = tfvars["reaper_at"]
     runner, region = run.fleet.system.run, run.cfg.region
     tasks = FargateTasks(runner, region, info, {})
     definitions: dict[str, str] = {}
@@ -4664,7 +4675,12 @@ def launch_fargate(run: Run) -> FargateTasks:
         node = spec["name"]
         run.fleet.interrupts.check()
         task_def = render_task_def(
-            run.cfg, fleet_manifest, node, images, fleet_manifest["expires_at"]
+            run.cfg,
+            fleet_manifest,
+            node,
+            images,
+            fleet_manifest["expires_at"],
+            reaper_at,
         )
         path = run.run_dir / "hosts" / node / "task-def.json"
         path.parent.mkdir(parents=True, exist_ok=True)
