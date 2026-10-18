@@ -9313,9 +9313,9 @@ def load_evidence(
             if settings.read_text().strip():
                 evidence["pg_settings"] = nb.read_json(settings)
         for samples in sorted(host_dir.glob("pg-stats*.jsonl")):
-            evidence["ssl_backends"] = sum_ssl_backends(
-                nb.read_jsonl(samples), t0, t1
-            ) + evidence.get("ssl_backends", Counter())
+            backends = Counter(evidence.get("ssl_backends", {}))
+            backends.update(sum_ssl_backends(nb.read_jsonl(samples), t0, t1))
+            evidence["ssl_backends"] = dict(backends)
         if ready is not None:
             evidence["digest_mismatch"][name] = digest_mismatches(
                 ready["digests"], manifest["images"]

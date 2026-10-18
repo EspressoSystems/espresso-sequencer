@@ -1214,7 +1214,7 @@ def test_the_postgres_files_of_ctl_are_judged_for_the_task(tmp_path):
         ctl / "pg-settings-node0.json", pg_settings(shared_buffers="1GB")
     )
     sample = {"ts": 100.0, "ssl_backends": {"false": 2}}
-    netbench.write_jsonl(ctl / "pg-stats-node0.jsonl", [sample])
+    netbench.write_jsonl(ctl / "pg-stats-node0.jsonl", iter([sample]))
     reasons = awsb.write_report(tmp_path)["validity"]["reasons"]
     assert any("postgres shared_buffers=1GB" in r for r in reasons)
     assert "node0 postgres backends connected without TLS" in reasons
