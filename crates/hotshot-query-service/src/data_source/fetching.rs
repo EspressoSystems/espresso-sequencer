@@ -138,7 +138,7 @@ mod transaction;
 mod vid;
 
 use self::{
-    block::{PayloadFetcher, PayloadRangeFetcher},
+    block::{LocalPayloadGrace, PayloadFetcher, PayloadRangeFetcher},
     cert2::Cert2Fetcher,
     leaf::{LeafFetcher, LeafRangeFetcher, RangeRequest},
     ranges::{
@@ -525,6 +525,11 @@ where
         + AggregatesStorage<Types>,
     P: AvailabilityProvider<Types>,
 {
+    #[cfg(test)]
+    fn waiting_for_local_payload(&self) -> usize {
+        self.fetcher.local_grace.waiting()
+    }
+
     /// Build a [`FetchingDataSource`] with the given `storage` and `provider`.
     pub fn builder(storage: S, provider: P) -> Builder<Types, S, P> {
         Builder::new(storage, provider)
@@ -891,6 +896,10 @@ where
     async fn append(&self, info: BlockInfo<Types>) -> anyhow::Result<()> {
         let height = info.height() as usize;
 
+        if info.block.is_none() {
+            self.fetcher.local_grace.note_decided(info.height());
+        }
+
         // Save the new decided leaf.
         self.fetcher
             .store(&(info.leaf.clone(), info.cert2.clone()))
@@ -1031,8 +1040,8 @@ where
     active_fetch_delay: Duration,
     // Duration to sleep after each chunk fetched
     chunk_fetch_delay: Duration,
-    // How long after a block's timestamp its payload is left to arrive locally before fetching it.
-    local_payload_grace: Duration,
+    // Leaves of this process's decides, to leave their payloads time to arrive locally.
+    local_grace: LocalPayloadGrace,
     // Exponential backoff when retrying failed operations.
     backoff: ExponentialBuilder,
     // Semaphore limiting the number of simultaneous DB accesses we can have from tasks spawned to
@@ -1147,7 +1156,7 @@ where
             sync_status_chunk_size: builder.sync_status_chunk_size,
             active_fetch_delay: builder.active_fetch_delay,
             chunk_fetch_delay: builder.chunk_fetch_delay,
-            local_payload_grace: builder.local_payload_grace,
+            local_grace: LocalPayloadGrace::new(builder.local_payload_grace),
             backoff,
             retry_semaphore,
             leaf_only,

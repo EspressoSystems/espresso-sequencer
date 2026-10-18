@@ -14,11 +14,12 @@
 
 use std::{
     cmp::Ordering,
+    collections::{HashMap, HashSet},
     future::IntoFuture,
     iter::once,
     ops::RangeBounds,
     sync::Arc,
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::{Duration, Instant},
 };
 
 use anyhow::Context;
@@ -28,6 +29,7 @@ use futures::future::{BoxFuture, FutureExt, join_all, try_join_all};
 use hotshot_types::traits::{
     EncodeBytes, block_contents::BlockHeader, node_implementation::NodeType,
 };
+use parking_lot::Mutex;
 use tokio::{spawn, time::sleep};
 
 use super::{
@@ -215,10 +217,11 @@ async fn stage_payloads<'a, Types: NodeType>(
 
 /// Fetch the payload of `header` from a provider.
 ///
-/// A recent block's payload may still be on its way from the node's own consensus, see
-/// [`Builder::with_local_payload_grace`](super::Builder::with_local_payload_grace). Its fetch waits
-/// out the rest of the grace and is dropped if the payload was stored meanwhile. A request for the
-/// block waits on the passive notifier, which storing the local payload triggers.
+/// A block decided by this process without its payload may get it from the node's own consensus,
+/// see [`Builder::with_local_payload_grace`](super::Builder::with_local_payload_grace). Its fetch
+/// waits out the rest of the grace and is dropped if the payload was stored meanwhile. A request
+/// for the block waits on the passive notifier, which storing the local payload triggers. Other
+/// heights are fetched at once.
 pub(super) fn fetch_block_with_header<Types, S, P>(
     fetcher: Arc<Fetcher<Types, S, P>>,
     header: Header<Types>,
@@ -235,17 +238,16 @@ pub(super) fn fetch_block_with_header<Types, S, P>(
         // If we're in light-weight mode, we don't need to fetch the block data.
         return;
     }
-    let wait = local_payload_wait(
-        fetcher.local_payload_grace,
-        header.timestamp_millis(),
-        SystemTime::now(),
-    );
+    let height = header.block_number();
+    let wait = fetcher.local_grace.remaining(height);
     if wait.is_zero() {
         spawn_payload_fetch(&fetcher, header);
         return;
     }
+    if !fetcher.local_grace.begin_wait(height) {
+        return;
+    }
 
-    let height = header.block_number();
     tracing::debug!(
         height,
         ?wait,
@@ -253,6 +255,7 @@ pub(super) fn fetch_block_with_header<Types, S, P>(
     );
     spawn(async move {
         sleep(wait).await;
+        fetcher.local_grace.end_wait(height);
         match fetcher.payload_stored(height).await {
             Ok(true) => tracing::debug!(height, "payload stored locally, not fetching it"),
             Ok(false) => spawn_payload_fetch(&fetcher, header),
@@ -264,15 +267,54 @@ pub(super) fn fetch_block_with_header<Types, S, P>(
     });
 }
 
-/// What is left of `grace` since `header_millis`, at most `grace`.
-fn local_payload_wait(grace: Duration, header_millis: u64, now: SystemTime) -> Duration {
-    let now_millis = now
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis() as u64;
-    grace.saturating_sub(Duration::from_millis(
-        now_millis.saturating_sub(header_millis),
-    ))
+/// When this process decided blocks whose payload was missing, and the heights waiting out the
+/// grace for them.
+#[derive(Debug)]
+pub(super) struct LocalPayloadGrace {
+    grace: Duration,
+    decided: Mutex<HashMap<u64, Instant>>,
+    waiting: Mutex<HashSet<u64>>,
+}
+
+impl LocalPayloadGrace {
+    pub(super) fn new(grace: Duration) -> Self {
+        Self {
+            grace,
+            decided: Default::default(),
+            waiting: Default::default(),
+        }
+    }
+
+    pub(super) fn note_decided(&self, height: u64) {
+        if self.grace.is_zero() {
+            return;
+        }
+        let mut decided = self.decided.lock();
+        decided.retain(|_, at| at.elapsed() < self.grace);
+        decided.insert(height, Instant::now());
+    }
+
+    /// What is left of the grace since the decide of `height`; zero for any other height.
+    fn remaining(&self, height: u64) -> Duration {
+        self.decided
+            .lock()
+            .get(&height)
+            .map_or(Duration::ZERO, |at| self.grace.saturating_sub(at.elapsed()))
+    }
+
+    /// Whether the caller is the first to wait for `height`.
+    fn begin_wait(&self, height: u64) -> bool {
+        self.waiting.lock().insert(height)
+    }
+
+    fn end_wait(&self, height: u64) {
+        self.waiting.lock().remove(&height);
+    }
+
+    #[cfg(test)]
+    pub(super) fn waiting(&self) -> usize {
+        self.waiting.lock().len()
+    }
 }
 
 fn spawn_payload_fetch<Types, S, P>(fetcher: &Arc<Fetcher<Types, S, P>>, header: Header<Types>)
@@ -723,20 +765,34 @@ mod test {
     use super::*;
 
     #[test]
-    fn test_local_payload_wait() {
-        let grace = Duration::from_secs(5);
-        let now = UNIX_EPOCH + Duration::from_secs(100);
-        let wait = |header_millis| local_payload_wait(grace, header_millis, now);
+    fn test_local_payload_grace() {
+        let grace = LocalPayloadGrace::new(Duration::from_secs(60));
+        assert_eq!(grace.remaining(1), Duration::ZERO);
 
-        assert_eq!(wait(100_000), grace);
-        assert_eq!(wait(98_000), Duration::from_secs(3));
-        assert_eq!(wait(95_000), Duration::ZERO);
-        assert_eq!(wait(0), Duration::ZERO);
-        // A header from the future, by clock skew, waits no longer than the grace.
-        assert_eq!(wait(200_000), grace);
-        assert_eq!(
-            local_payload_wait(Duration::ZERO, 100_000, now),
-            Duration::ZERO
-        );
+        grace.note_decided(1);
+        let remaining = grace.remaining(1);
+        assert!(remaining > Duration::from_secs(59) && remaining <= Duration::from_secs(60));
+        assert_eq!(grace.remaining(2), Duration::ZERO);
+
+        assert!(grace.begin_wait(1));
+        assert!(!grace.begin_wait(1));
+        grace.end_wait(1);
+        assert!(grace.begin_wait(1));
+    }
+
+    #[test]
+    fn test_local_payload_grace_zero_records_nothing() {
+        let grace = LocalPayloadGrace::new(Duration::ZERO);
+        grace.note_decided(1);
+        assert_eq!(grace.remaining(1), Duration::ZERO);
+    }
+
+    #[test]
+    fn test_local_payload_grace_forgets_expired_decides() {
+        let grace = LocalPayloadGrace::new(Duration::from_millis(10));
+        grace.note_decided(1);
+        std::thread::sleep(Duration::from_millis(20));
+        grace.note_decided(2);
+        assert_eq!(grace.decided.lock().len(), 1);
     }
 }

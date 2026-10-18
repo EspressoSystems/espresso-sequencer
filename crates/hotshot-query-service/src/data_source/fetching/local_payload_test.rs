@@ -1,6 +1,7 @@
 //! A payload the node appends itself within the local payload grace is not fetched from a peer.
 
 use std::{
+    future::IntoFuture,
     sync::{
         Arc,
         atomic::{AtomicUsize, Ordering},
@@ -9,6 +10,7 @@ use std::{
 };
 
 use async_trait::async_trait;
+use futures::future::join_all;
 use hotshot_example_types::node_types::TEST_VERSIONS;
 use tokio::time::{sleep, timeout};
 
@@ -18,7 +20,9 @@ use crate::{
         UpdateAvailabilityData,
     },
     data_source::{
-        SqlDataSource, VersionedDataSource, sql::testing::TmpDb, storage::AvailabilityStorage,
+        SqlDataSource, Transaction, VersionedDataSource,
+        sql::testing::TmpDb,
+        storage::{AvailabilityStorage, UpdateAvailabilityStorage},
     },
     fetching::{
         Provider,
@@ -199,12 +203,49 @@ async fn missing_local_payload_fetches_after_grace() {
 }
 
 #[test_log::test(tokio::test(flavor = "multi_thread"))]
-async fn old_header_fetches_immediately() {
-    let grace = Duration::from_secs(60);
-    let setup = Setup::new(grace, 2 * grace).await;
+async fn grace_counts_from_local_decide_not_header_timestamp() {
+    // The query service replays the decide late: the header is already a full grace old.
+    let setup = Setup::new(GRACE, GRACE).await;
     setup.decide_without_payload().await;
+    sleep(Duration::from_millis(300)).await;
+    setup.append_local_payload().await;
 
-    assert_eq!(setup.wait_stored().await, setup.block);
+    sleep(GRACE + Duration::from_millis(500)).await;
+    assert_eq!(setup.requests(), 0);
+    assert_eq!(setup.stored_block().await, Some(setup.block.clone()));
+}
+
+#[test_log::test(tokio::test(flavor = "multi_thread"))]
+async fn concurrent_gets_share_one_grace_wait() {
+    let setup = Setup::new(GRACE, Duration::ZERO).await;
+    setup.decide_without_payload().await;
+    let fetches = join_all((0..10).map(|_| setup.ds.get_block(1))).await;
+    assert_eq!(setup.ds.waiting_for_local_payload(), 1);
+
+    let blocks = timeout(
+        Duration::from_secs(10),
+        join_all(fetches.into_iter().map(IntoFuture::into_future)),
+    )
+    .await
+    .expect("GETs did not resolve");
+    assert!(blocks.iter().all(|block| *block == setup.block));
+    assert_eq!(setup.requests(), 1);
+}
+
+#[test_log::test(tokio::test(flavor = "multi_thread"))]
+async fn height_not_decided_locally_fetches_immediately() {
+    let grace = Duration::from_secs(60);
+    let setup = Setup::new(grace, Duration::ZERO).await;
+    let mut tx = setup.ds.write().await.unwrap();
+    tx.insert_leaf(&setup.leaf).await.unwrap();
+    tx.commit().await.unwrap();
+
+    assert_eq!(
+        timeout(grace / 6, setup.ds.get_block(1).await)
+            .await
+            .unwrap(),
+        setup.block
+    );
     assert_eq!(setup.requests(), 1);
 }
 
