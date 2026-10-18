@@ -15,6 +15,7 @@ import json
 import math
 import re
 import selectors
+import shlex
 import signal
 import stat
 import subprocess
@@ -795,6 +796,12 @@ def metric_data(
 FULL_BALANCE = metric_data([100.0, 100.0, 100.0], [100.0, 100.0, 100.0])
 
 
+# `docker inspect` of a started node, and the `started_at` a Fargate wrapper wrote 0.2 s later,
+# both on one clock.
+DOCKER_STARTED_AT = "2026-09-29T15:00:00.100000000Z"
+TASK_STARTED_AT = datetime(2026, 9, 29, 15, 0, 0, 300000, tzinfo=UTC).timestamp()
+
+
 FLEET_ARNS = [
     "arn:aws:ec2:eu-west-1:1:instance/i-1",
     "arn:aws:ec2:eu-west-1:1:security-group/sg-1",
@@ -829,6 +836,8 @@ class FakeRunner:
         self.describe = describe
         self.balance = balance or completed(stdout=FULL_BALANCE)
         self.polls = 0
+        # Whether the ctl mailbox of a Fargate task holds `ready`.
+        self.ready = True
         self.calls: list[list[str]] = []
         self.lock = threading.Lock()
         # Image name to `ref@digest` as `docker image inspect` reports it on a host.
@@ -922,7 +931,11 @@ class FakeRunner:
         if ".State.Status" in command:
             return completed(stdout="running 0\n")
         if "docker inspect -f" in command:
-            return completed(stdout="2026-09-29T15:00:00.100000000Z\n")
+            return completed(stdout=f"{DOCKER_STARTED_AT}\n")
+        if "test -f" in command and "/bench/ready" in command:
+            return completed(returncode=0 if self.ready else 1)
+        if "started_at" in command:
+            return completed(stdout=f"{TASK_STARTED_AT}\n")
         if "ping -c" in command:
             assert self.pings is not None, "FakeRunner: ping needs `pings`"
             match = re.search(r"(\d+\.\d+\.\d+\.\d+)'?$", command)
@@ -2254,6 +2267,210 @@ class RdsRunner(FakeRunner):
         return super().aws(argv)
 
 
+def task_arn(node: str) -> str:
+    return f"arn:aws:ecs:eu-west-1:1:task/espresso-bench-fleet1/{node}"
+
+
+def fargate_task(
+    state: str = "RUNNING",
+    node: str = "node0",
+    ip: str | None = None,
+    dns: str | None = None,
+    stopped_reason: str | None = None,
+    container_reason: str | None = None,
+    exit_code: int | None = None,
+) -> dict:
+    """One task of a `describe-tasks` reply; the addresses default to the host numbering of
+    `fleet`."""
+    index = int(node.removeprefix("node")) + 2
+    ip = ip or f"10.0.0.{index}"
+    dns = dns or f"ip-10-0-0-{index}.eu-west-1.compute.internal"
+    container: dict[str, Any] = {"name": "espresso-node", "lastStatus": state}
+    if container_reason is not None:
+        container["reason"] = container_reason
+    if exit_code is not None:
+        container["exitCode"] = exit_code
+    task: dict[str, Any] = {
+        "taskArn": task_arn(node),
+        "lastStatus": state,
+        "containers": [container],
+        "attachments": [
+            {
+                "type": "ElasticNetworkInterface",
+                "status": "ATTACHED",
+                "details": [
+                    {"name": "privateIPv4Address", "value": ip},
+                    {"name": "privateDnsName", "value": dns},
+                ],
+            }
+        ],
+    }
+    if stopped_reason is not None:
+        task["stoppedReason"] = stopped_reason
+    return task
+
+
+def fargate_output(query_nodes: list[str]) -> dict:
+    """`tofu output fargate`."""
+    return {
+        "cluster_arn": "arn:aws:ecs:eu-west-1:1:cluster/espresso-bench-fleet1",
+        "exec_role_arn": "arn:aws:iam::1:role/espresso-bench/eu-west-1/espresso-bench-fleet1-exec",
+        "log_group": "/espresso-bench/fleet1",
+        "subnet_id": "subnet-1",
+        "security_group_id": "sg-1",
+        "efs_id": "fs-1",
+        "efs_dns": "fs-1.efs.eu-west-1.amazonaws.com",
+        "access_points": {node: f"fsap-{node}" for node in query_nodes},
+    }
+
+
+class FargateRunner(RdsRunner):
+    """An rds fleet runner whose query nodes run on Fargate: `tofu output` leaves them out of
+    the hosts and adds `fargate`, and the `aws ecs` and `aws logs` calls are answered. The
+    failure modes are scripted: `register_error` is the stderr of a refused
+    `register-task-definition`, `run_task_failures` the `failures` of `run-task`, `task_states`
+    the successive `describe-tasks` answers as {node: task} (a node left out is RUNNING; the
+    last state repeats), `log_lines` the awslogs events of a stopped task."""
+
+    def __init__(
+        self,
+        states: list[dict],
+        nodes: int = 3,
+        query_nodes: int = 1,
+        register_error: str | None = None,
+        run_task_failures: list[dict] | None = None,
+        task_states: list[dict[str, dict]] | None = None,
+        log_lines: list[str] | None = None,
+        on_describe: Callable[[int], None] | None = None,
+        **kwargs,
+    ):
+        super().__init__(states, **kwargs)
+        self.hosts = fleet(nodes, query_nodes, fargate=True)
+        self.query = [n for n, h in self.hosts.items() if h["role"] == "query"]
+        self.register_error = register_error
+        self.run_task_failures = run_task_failures
+        self.task_states = task_states or [{}]
+        self.log_lines = log_lines
+        self.on_describe = on_describe
+        self.describes = 0
+        self.launched: list[str] = []
+        self.task_defs: dict[str, dict] = {}
+
+    def tofu(self, verb: str) -> subprocess.CompletedProcess:
+        if verb == "output":
+            output = json.loads(super().tofu(verb).stdout)
+            output["hosts"] = {
+                "value": {n: h for n, h in self.hosts.items() if h["public_ip"]}
+            }
+            output["fargate"] = {"value": fargate_output(self.query)}
+            return completed(stdout=json.dumps(output))
+        return super().tofu(verb)
+
+    def aws(self, argv: list[str]) -> subprocess.CompletedProcess:
+        if "register-task-definition" in argv:
+            return self.register(argv)
+        if "run-task" in argv:
+            return self.run_task(argv)
+        if "describe-tasks" in argv:
+            return self.describe_tasks(argv)
+        if "get-log-events" in argv:
+            if self.log_lines is None:
+                return completed(returncode=254, stderr="ResourceNotFoundException")
+            events = [{"message": line} for line in self.log_lines]
+            return completed(stdout=json.dumps({"events": events}))
+        if "list-tasks" in argv:
+            return completed(stdout=json.dumps([task_arn(n) for n in self.launched]))
+        return super().aws(argv)
+
+    def register(self, argv: list[str]) -> subprocess.CompletedProcess:
+        if self.register_error:
+            return completed(returncode=254, stderr=self.register_error)
+        path = argv[argv.index("--cli-input-json") + 1].removeprefix("file://")
+        task_def = json.loads(Path(path).read_text())
+        self.task_defs[task_def["family"]] = task_def
+        arn = f"arn:aws:ecs:eu-west-1:1:task-definition/{task_def['family']}:1"
+        return completed(
+            stdout=json.dumps({"taskDefinition": {"taskDefinitionArn": arn}})
+        )
+
+    def run_task(self, argv: list[str]) -> subprocess.CompletedProcess:
+        if self.run_task_failures:
+            failures = self.run_task_failures
+            return completed(stdout=json.dumps({"tasks": [], "failures": failures}))
+        family = argv[argv.index("--task-definition") + 1].rpartition("/")[2]
+        node = family.partition(":")[0].rpartition("-")[2]
+        self.launched.append(node)
+        reply = {"tasks": [{"taskArn": task_arn(node)}], "failures": []}
+        return completed(stdout=json.dumps(reply))
+
+    def describe_tasks(self, argv: list[str]) -> subprocess.CompletedProcess:
+        with self.lock:
+            state = self.task_states[min(self.describes, len(self.task_states) - 1)]
+            self.describes += 1
+        if self.on_describe:
+            self.on_describe(self.describes)
+        nodes = [a.rpartition("/")[2] for a in argv[argv.index("--tasks") + 1 :]]
+        nodes = [n for n in nodes if n in self.query]
+        tasks = [state.get(n) or fargate_task(node=n) for n in nodes]
+        return completed(stdout=json.dumps({"tasks": tasks, "failures": []}))
+
+
+class FargateHarness(RunHarness):
+    """`RunHarness` for a single shot of 3 nodes whose query node0 is a Fargate task on rds."""
+
+    def __init__(self, monkeypatch: pytest.MonkeyPatch, root: Path):
+        super().__init__(monkeypatch, root)
+        pre = {
+            **fake_preflight(),
+            "rds_engine_version": "18.2",
+            "fargate": FARGATE_SHAPE,
+        }
+        monkeypatch.setattr(awsb, "preflight", lambda *_: pre)
+
+    def args(self, *extra: str, nodes: int = 3) -> argparse.Namespace:
+        return super().args(
+            *("--query-placement", "fargate", "--query-db", "rds"),
+            *("--max-usd", "50"),
+            *extra,
+            nodes=nodes,
+        )
+
+    def run(self, runner: FakeRunner, *extra: str, nodes: int = 3) -> int:
+        return super().run(runner, *extra, nodes=nodes)
+
+
+FARGATE_SHAPE = {"cpu": 16384, "memory_mib": 32768, "arch": "arm64"}
+
+
+def respond_to_pulls(runner: FakeRunner, wrong: dict[str, str]) -> None:
+    """Pulls report the requested digests except those in `wrong`; the record script echoes
+    the digests it was given."""
+
+    def pull(argv: list[str]) -> subprocess.CompletedProcess:
+        if not argv[-1].startswith("sudo timeout"):
+            return runner.default(argv)
+        script = shlex.split(argv[-1])[-1]
+        pulls = re.findall(r"docker pull (\S+)@(\S+) >&2", script)
+        names = re.findall(r"--arg name (\S+) ", script)
+        digests = {
+            name: f"{ref}@{wrong.get(name, digest)}"
+            for name, (ref, digest) in zip(names, pulls, strict=True)
+        }
+        return completed(stdout=json.dumps(digests))
+
+    def record(argv: list[str]) -> subprocess.CompletedProcess:
+        if not argv[-1].startswith("sudo timeout"):
+            return runner.default(argv)
+        script = shlex.split(argv[-1])[-1]
+        printf = next(l for l in script.splitlines() if l.startswith("printf"))
+        return completed(
+            stdout=json.dumps({"digests": json.loads(shlex.split(printf)[2])})
+        )
+
+    runner.respond("docker pull", pull)
+    runner.respond("digests.json.tmp", record)
+
+
 class RdsHarness(FleetHarness):
     """`FleetHarness` for an rds fleet: preflight resolved the engine minor 18.2."""
 
@@ -2278,6 +2495,30 @@ class RdsHarness(FleetHarness):
 
     def run_dir(self, name: str) -> Path:
         return self.fleet_dir / "runs" / name
+
+
+class FargateFleetHarness(RdsHarness):
+    """`RdsHarness` for a 3-node fleet whose query node0 is a Fargate task."""
+
+    def __init__(self, monkeypatch: pytest.MonkeyPatch, root: Path):
+        super().__init__(monkeypatch, root, "rds")
+        pre = {
+            **fake_preflight(),
+            "rds_engine_version": "18.2",
+            "fargate": FARGATE_SHAPE,
+        }
+        monkeypatch.setattr(awsb, "preflight", lambda *_: pre)
+
+    def fleet_flags(self) -> list[str]:
+        return [
+            *("--tag", "t", "--nodes", "3", "--yes", "--max-usd", "50"),
+            *("--query-placement", "fargate"),
+        ]
+
+    def up_fargate(self, **kwargs) -> FargateRunner:
+        runner = FargateRunner([DONE_STATE], describe=DESCRIBE, **kwargs)
+        assert self.up(runner) == awsb.EXIT_OK
+        return runner
 
 
 LIST_ROLES = ("aws", "--profile", "timeboost-dev", "iam", "list-roles")

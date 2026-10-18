@@ -1,0 +1,142 @@
+{
+  "family": "espresso-bench-fleet1-node0",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": [
+    "FARGATE"
+  ],
+  "cpu": "16384",
+  "memory": "32768",
+  "runtimePlatform": {
+    "cpuArchitecture": "ARM64",
+    "operatingSystemFamily": "LINUX"
+  },
+  "executionRoleArn": "arn:aws:iam::1:role/espresso-bench/eu-west-1/espresso-bench-fleet1-exec",
+  "volumes": [
+    {
+      "name": "efs",
+      "efsVolumeConfiguration": {
+        "fileSystemId": "fs-1",
+        "transitEncryption": "ENABLED",
+        "authorizationConfig": {
+          "accessPointId": "fsap-node0",
+          "iam": "DISABLED"
+        }
+      }
+    }
+  ],
+  "containerDefinitions": [
+    {
+      "name": "espresso-node",
+      "image": "ghcr.io/x/espresso-node:t@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+      "essential": true,
+      "entryPoint": [
+        "bash",
+        "-c",
+        "set -euo pipefail\nproc=${BENCH_PROC_SYS:-/proc/sys}\nIFS=';' read -ra wanted <<< \"${BENCH_SYSCTLS:-}\"\nfor pair in \"${wanted[@]}\"; do\n  key=${pair%%=*}\n  want=${pair#*=}\n  got=$(<\"$proc/${key//.//}\")\n  [ \"$(echo $got)\" = \"$(echo $want)\" ] || { echo \"sysctl $key=$got, expected $want\" >&2; exit 78; }\ndone\nmkdir -p /efs/bench /efs/store /efs/payload /opt/bench\nrm -rf /store /payload\nln -s /efs/store /store\nln -s /efs/payload /payload\nln -sf /efs/bench/genesis.toml /opt/bench/genesis.toml\nstats=/efs/bench/task-stats.jsonl\n(while curl -sf \"$ECS_CONTAINER_METADATA_URI_V4/task/stats\" | tr -d '\\n' >> $stats; do\n  echo >> $stats; sleep \"$BENCH_SAMPLE_S\"; done) &\ntouch /efs/bench/ready\ngo=/efs/bench/go\nenv_file=/efs/bench/node.env\nuntil read -r at 2> /dev/null < \"$go\" && [ -n \"$at\" ]; do\n  [ \"$(date +%s)\" -lt \"$BENCH_DEADLINE\" ] || { echo \"no go before the deadline\" >&2; exit 1; }\n  sleep 0.2\ndone\nwhile IFS== read -r key value; do export \"$key=$value\"; done < \"$env_file\"\nwait_ns=$((at - $(date +%s%N)))\n[ \"$wait_ns\" -le 0 ] || sleep \"$((wait_ns / 1000000000)).$(printf %09d $((wait_ns % 1000000000)))\"\ndate +%s.%N > /efs/bench/started_at\nexec > >(tee -a /efs/bench/espresso-node.log) 2>&1\nexec timeout \"$((BENCH_DEADLINE - $(date +%s)))\" \"$@\"\n",
+        "bash"
+      ],
+      "command": [
+        "/bin/espresso-node",
+        "--",
+        "storage-journal",
+        "--",
+        "storage-sql",
+        "--",
+        "http",
+        "--",
+        "query",
+        "--",
+        "submit",
+        "--",
+        "catchup",
+        "--",
+        "config",
+        "--",
+        "light-client"
+      ],
+      "environment": [
+        {
+          "name": "BENCH_DEADLINE",
+          "value": "1790701200"
+        },
+        {
+          "name": "BENCH_SAMPLE_S",
+          "value": "2"
+        },
+        {
+          "name": "BENCH_SYSCTLS",
+          "value": "net.ipv4.tcp_congestion_control=bbr;net.ipv4.tcp_rmem=4096 131072 268435456;net.ipv4.tcp_wmem=4096 16384 268435456;net.ipv4.tcp_notsent_lowat=131072;net.ipv4.tcp_slow_start_after_idle=0;net.ipv4.tcp_mtu_probing=1"
+        }
+      ],
+      "mountPoints": [
+        {
+          "sourceVolume": "efs",
+          "containerPath": "/efs"
+        }
+      ],
+      "portMappings": [
+        {
+          "containerPort": 8080,
+          "protocol": "tcp"
+        },
+        {
+          "containerPort": 8081,
+          "protocol": "tcp"
+        },
+        {
+          "containerPort": 9000,
+          "protocol": "tcp"
+        },
+        {
+          "containerPort": 1769,
+          "protocol": "tcp"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/espresso-bench/fleet1",
+          "awslogs-region": "eu-west-1",
+          "awslogs-stream-prefix": "espresso"
+        }
+      },
+      "stopTimeout": 30,
+      "systemControls": [
+        {
+          "namespace": "net.ipv4.tcp_congestion_control",
+          "value": "bbr"
+        },
+        {
+          "namespace": "net.ipv4.tcp_rmem",
+          "value": "4096 131072 268435456"
+        },
+        {
+          "namespace": "net.ipv4.tcp_wmem",
+          "value": "4096 16384 268435456"
+        },
+        {
+          "namespace": "net.ipv4.tcp_notsent_lowat",
+          "value": "131072"
+        },
+        {
+          "namespace": "net.ipv4.tcp_slow_start_after_idle",
+          "value": "0"
+        },
+        {
+          "namespace": "net.ipv4.tcp_mtu_probing",
+          "value": "1"
+        }
+      ]
+    }
+  ],
+  "tags": [
+    {
+      "key": "espresso-bench-run",
+      "value": "fleet1"
+    },
+    {
+      "key": "espresso-bench-expires",
+      "value": "2026-09-29T17:00:00Z"
+    }
+  ]
+}

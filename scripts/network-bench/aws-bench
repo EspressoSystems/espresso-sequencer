@@ -15,6 +15,8 @@ first `--query-nodes` nodes (node0 by default). Its Postgres runs in a container
 (`volume`), or on an RDS instance (`rds`); `up --db-modes` provisions the stores, a run picks one.
 `--query-engine sqlite` runs the query service on embedded SQLite instead, with no Postgres:
 on the root volume (`--query-db colocated`) or in RAM (`tmpfs`); neither needs provisioning.
+`--query-placement fargate` runs the query nodes as ECS Fargate tasks (rds only): the journal and
+payloads are on EFS, mounted on ctl, which also runs their psql.
 
 `status` shows one fleet (phase, instances, agent progress, cost so far) or, with `--all`, every
 tagged resource in the region. `destroy --orphans` sweeps runs
@@ -70,7 +72,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from collections import Counter, defaultdict, deque
-from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Container, Iterable, Iterator, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -233,7 +235,9 @@ QUERY_DISK_FACTOR = 3
 # instances per hour; gp3 GB-month, gp3 IOPS above the 3000 baseline (per IOPS-month), gp3
 # throughput above the 125 MB/s baseline (per MB/s-month), RDS PostgreSQL Single-AZ gp3 storage
 # (per GB-month; the IOPS and MB/s of a 400 GiB volume are included), a public IPv4 address (per
-# hour), internet egress (per GB, first tier).
+# hour), internet egress (per GB, first tier). Fargate per vCPU-hour and GB-hour by architecture;
+# EFS standard storage per GB-month and elastic throughput writes per GB. Unverified against the
+# Pricing API.
 PRICES = {
     "db.m8g.4xlarge": 1.488,
     "gp3_gb_month_usd": 0.088,
@@ -242,6 +246,12 @@ PRICES = {
     "rds_gp3_gb_month_usd": 0.127,
     "public_ipv4_hour_usd": 0.005,
     "egress_gb_usd": 0.09,
+    "fargate_arm64_vcpu_hour_usd": 0.03238,
+    "fargate_arm64_gb_hour_usd": 0.00356,
+    "fargate_amd64_vcpu_hour_usd": 0.04048,
+    "fargate_amd64_gb_hour_usd": 0.004445,
+    "efs_gb_month_usd": 0.33,
+    "efs_write_gb_usd": 0.06,
 }
 
 # Identical to the terraform module's `name` variable validation (variables.tf); matching it
@@ -553,12 +563,42 @@ FLEET_ONLY_FLAGS = (
     "--node-type",
     "--ctl-type",
     "--root-gb",
+    "--query-placement",
     "--pg-iops",
     "--pg-mbps",
     "--ttl-min",
     "--max-usd",
     "--region",
 )
+# Query nodes on ECS Fargate. `run-task` goes first, so provisioning overlaps shipping and the
+# services; a task that is not ready after FARGATE_START_S failed.
+FARGATE_POLL_S = 5.0
+FARGATE_START_S = 300.0
+FARGATE_LAUNCH_EXPECTED_S = 90.0
+# Fargate sizes: vCPU -> the memory in MiB it is offered with.
+FARGATE_SHAPES: dict[int, range] = {
+    1: range(2048, 8193, 1024),
+    2: range(4096, 16385, 1024),
+    4: range(8192, 30721, 1024),
+    8: range(16384, 61441, 4096),
+    16: range(32768, 122881, 8192),
+}
+# awslogs lines of a stopped task in the error.
+FARGATE_LOG_LINES = 20
+# Where the task reads and writes: the access point of the node is mounted at /efs. ctl mounts
+# the file system root at FARGATE_CTL_MOUNT, where the node's files are under /<node>.
+FARGATE_CTL_MOUNT = "/efs"
+FARGATE_CONTAINER = "espresso-node"
+FARGATE_LOG_PREFIX = "espresso"
+# Large transfers for the payload files; `lookupcache=none` so that ctl sees the `ready` and
+# `started_at` the task creates at once, not after the nfs client's cache of absent names expires.
+EFS_MOUNT_OPTIONS = (
+    "nfsvers=4.1,rsize=1048576,wsize=1048576,hard,timeo=600,retrans=2,noresvport,"
+    "lookupcache=none"
+)
+# Exit status of the wrapper when a sysctl of the task is not the one its definition asked for
+# (EX_CONFIG).
+FARGATE_SYSCTL_RC = 78
 # Thread pool size for parallel ssh/rsync calls; also the espresso-deploy fan-out limit.
 REMOTE_POOL_SIZE = 16
 # Chrony-synced clocks give a wall-clock start command room to land within this spread; a start
@@ -668,6 +708,8 @@ RDS_METRICS = {
     "io_balance": ("EBSIOBalance%", "Minimum"),
     "byte_balance": ("EBSByteBalance%", "Minimum"),
 }
+# Billed once, not per hour of the fleet.
+ONE_OFF_ITEMS = ("egress", "efs elastic writes")
 # Seconds a parameter group may take to report `in-sync` after the reboot.
 RDS_SYNC_TIMEOUT_S = 900.0
 # describe-events keeps 14 days; a fleet lives hours.
@@ -721,15 +763,29 @@ SQLITE_TMPFS_GB = 8
 Arch = Literal["amd64", "arm64"]
 # `ProcessorInfo.SupportedArchitectures` of `describe-instance-types` -> Arch.
 EC2_ARCHS: dict[str, Arch] = {"x86_64": "amd64", "arm64": "arm64"}
+FARGATE_ARCHS: dict[Arch, str] = {"amd64": "X86_64", "arm64": "ARM64"}
+# Where the query nodes run: an EC2 instance each, or an ECS Fargate task each.
+QueryPlacement = Literal["ec2", "fargate"]
+
+
+class FargateSpec(TypedDict):
+    """The task size of a query node: `cpu` in ECS units (1024 per vCPU)."""
+
+    cpu: int
+    memory_mib: int
+    arch: Arch
 
 
 class HostSpec(TypedDict):
+    """`root_gb` of a Fargate host only sizes its journal limit; it has no disk."""
+
     name: str
     role: Literal["ctl", "query", "validator"]
     instance_type: str
     root_gb: int
     root_iops: int
     root_mbps: int
+    fargate: NotRequired[FargateSpec]
 
 
 class VolumeSpec(TypedDict):
@@ -749,7 +805,9 @@ class ImageInfo(TypedDict):
 
 class HostInfo(TypedDict):
     """`tofu output -json hosts`, one entry per host; `role` is carried over from `HostSpec`
-    since terraform's own copy is a plain passthrough of the tfvars input."""
+    since terraform's own copy is a plain passthrough of the tfvars input. A Fargate host has no
+    `public_ip` (so no ssh), its task ARN as `instance_id`, and the addresses of its network
+    interface."""
 
     name: str
     role: Literal["ctl", "query", "validator"]
@@ -771,6 +829,8 @@ class Preflight(TypedDict):
     images: dict[str, ImageInfo]
     # The engine minor `rds_orderable` resolved; present when the fleet has an rds mode.
     rds_engine_version: NotRequired[str]
+    # The task size of the Fargate query nodes; present when they run there.
+    fargate: NotRequired[FargateSpec]
 
 
 class CostLine(TypedDict):
@@ -806,6 +866,19 @@ class RdsInfo(TypedDict):
     port: int
     engine_version: str
     created_at: NotRequired[str]
+
+
+class FargateInfo(TypedDict):
+    """`tofu output fargate`: the static part of the Fargate query nodes."""
+
+    cluster_arn: str
+    exec_role_arn: str
+    log_group: str
+    subnet_id: str
+    security_group_id: str
+    efs_id: str
+    efs_dns: str
+    access_points: dict[str, str]
 
 
 class FleetLock(TypedDict):
@@ -856,6 +929,7 @@ class FleetManifest(TypedDict):
     pg_volume_id: NotRequired[str]
     rds_spec: NotRequired[RdsSpec]
     rds: NotRequired[RdsInfo]
+    fargate: NotRequired[FargateInfo]
 
 
 class Manifest(FleetManifest):
@@ -873,6 +947,9 @@ class Manifest(FleetManifest):
     start_spread_s: NotRequired[float]
     config_hash: NotRequired[str]
     latency: NotRequired[nb.LatencyMeta]
+    # Fargate runs: the task and task definition ARN of each query node.
+    tasks: NotRequired[dict[str, str]]
+    task_definitions: NotRequired[dict[str, str]]
 
 
 class AgentState(TypedDict):
@@ -1006,6 +1083,7 @@ class RunConfig:
     chaos: ch.ChaosConfig | None = None
     # node0 prunes its data and state older than this many seconds; None for no pruning.
     prune: int | None = None
+    query_placement: QueryPlacement = "ec2"
 
 
 # Callers need the return code and stderr, unlike scripts/release's Runner, to report a
@@ -1302,7 +1380,39 @@ def check_chaos(cfg: RunConfig) -> None:
         )
 
 
+def check_fargate(cfg: RunConfig) -> None:
+    """Refuses, before any AWS call, what a task without disk, kernel and ssh cannot run."""
+    if cfg.query_placement != "fargate":
+        return
+    if cfg.chaos is not None:
+        raise Refused("--chaos runs docker over ssh on the query host: not on fargate")
+    if cfg.query_engine == "sqlite":
+        raise Refused(
+            "--query-placement fargate has no local disk for sqlite: "
+            "use --query-engine postgres with --query-db rds"
+        )
+    if set(cfg.db_modes) != {"rds"}:
+        raise Refused(
+            "--query-placement fargate needs --query-db rds and --db-modes rds only: "
+            "colocated, volume and tmpfs need the query host's disk"
+        )
+    if cfg.tcp_cc in ("bbr_hold", "bbr3"):
+        raise Refused(
+            f"--tcp-cc {cfg.tcp_cc} needs the host kernel, which a fargate task cannot change"
+        )
+    if cfg.leader_trace:
+        raise Refused("--leader-trace writes to a host directory: not on fargate")
+    if cfg.latency != "off":
+        raise Refused("--latency does not support --query-placement fargate yet")
+    if cfg.root_gb != "auto":
+        raise Refused(
+            "--root-gb sizes a disk the fargate query node does not have; the "
+            "validators keep the default"
+        )
+
+
 def plan_hosts(cfg: RunConfig) -> list[HostSpec]:
+    check_fargate(cfg)
     check_rds_config(cfg)
     check_search(cfg)
     check_chaos(cfg)
@@ -1437,9 +1547,12 @@ def _measure_seconds(cfg: RunConfig) -> tuple[float, float]:
     if cfg.chaos:
         expected_load += CHAOS_DRAIN_EXPECTED_S
         worst_load += cfg.chaos.recover_timeout_s
+    launch_s, launch_max_s = 0.0, 0.0
+    if cfg.query_placement == "fargate":
+        launch_s, launch_max_s = FARGATE_LAUNCH_EXPECTED_S, FARGATE_START_S
     return (
-        SERVICES_S + expected_load + READY_EXPECTED_S + COLLECT_EXPECTED_S,
-        SERVICES_S + worst_load + READY_TIMEOUT_S + COLLECT_MAX_S,
+        launch_s + SERVICES_S + expected_load + READY_EXPECTED_S + COLLECT_EXPECTED_S,
+        launch_max_s + SERVICES_S + worst_load + READY_TIMEOUT_S + COLLECT_MAX_S,
     )
 
 
@@ -1459,6 +1572,8 @@ def cost_estimate(
     if rds is not None:
         lines += rds_cost_lines(rds, expected_s)
         bound_lines += rds_cost_lines(rds, ttl_s + RDS_DELETE_S)
+    lines += fargate_cost_lines(hosts, cfg, expected_s)
+    bound_lines += fargate_cost_lines(hosts, cfg, ttl_s + BOOT_ALLOWANCE_S)
     return {
         "expected_s": expected_s,
         "worst_s": worst_s,
@@ -1481,8 +1596,11 @@ def ttl_seconds(cfg: RunConfig, worst_s: float) -> float:
 
 
 def estimate_rate(estimate: Estimate) -> float:
-    """USD per hour of the fleet: the estimate's lines without the one-off egress."""
-    usd = sum(line["usd"] for line in estimate["lines"] if line["item"] != "egress")
+    """USD per hour of the fleet: the estimate's lines without the one-off egress and efs
+    writes."""
+    usd = sum(
+        line["usd"] for line in estimate["lines"] if line["item"] not in ONE_OFF_ITEMS
+    )
     return usd / (estimate["expected_s"] / 3600)
 
 
@@ -1528,7 +1646,7 @@ def _cost_lines(
     """The pg volume, if any, bills at the root volumes' gp3 rates."""
     hours = duration_s / 3600
     lines: list[CostLine] = []
-    by_type = Counter(host["instance_type"] for host in hosts)
+    by_type = Counter(h["instance_type"] for h in hosts if "fargate" not in h)
     for instance_type, count in sorted(by_type.items()):
         lines.append(
             _line(
@@ -1538,7 +1656,11 @@ def _cost_lines(
                 instance_prices[instance_type],
             )
         )
-    disks = [(h["root_gb"], h["root_iops"], h["root_mbps"]) for h in hosts]
+    disks = [
+        (h["root_gb"], h["root_iops"], h["root_mbps"])
+        for h in hosts
+        if "fargate" not in h
+    ]
     if pg_volume is not None:
         disks.append((pg_volume["gb"], pg_volume["iops"], pg_volume["mbps"]))
     gb_hours = sum(gb for gb, _, _ in disks) * hours
@@ -1577,6 +1699,48 @@ def _cost_lines(
     egress_gb = len(hosts) * EGRESS_MB_PER_HOST / 1024
     lines.append(_line("egress", egress_gb, "gb", PRICES["egress_gb_usd"]))
     return lines
+
+
+def fargate_cost_lines(
+    hosts: list[HostSpec], cfg: RunConfig, duration_s: float
+) -> list[CostLine]:
+    """The tasks by vCPU and memory hours, and the efs file system: its elastic writes are the
+    payloads every query node stores plus the same again for its journal; it holds about as
+    much as it is written."""
+    tasks = [h["fargate"] for h in hosts if "fargate" in h]
+    if not tasks:
+        return []
+    hours = duration_s / 3600
+    (arch,) = {task["arch"] for task in tasks}
+    written_gb = 2 * payload_factor(cfg.nodes) * offered_gb(cfg)
+    return [
+        _line(
+            "fargate vcpu",
+            sum(task["cpu"] for task in tasks) / 1024 * hours,
+            "vcpu-hour",
+            PRICES[f"fargate_{arch}_vcpu_hour_usd"],
+        ),
+        _line(
+            "fargate memory",
+            sum(task["memory_mib"] for task in tasks) / 1024 * hours,
+            "gb-hour",
+            PRICES[f"fargate_{arch}_gb_hour_usd"],
+        ),
+        _line(
+            "efs storage",
+            written_gb * hours,
+            "gb-hour",
+            PRICES["efs_gb_month_usd"] / HOURS_PER_MONTH,
+        ),
+        _line("efs elastic writes", written_gb, "gb", PRICES["efs_write_gb_usd"]),
+    ]
+
+
+def offered_gb(cfg: RunConfig) -> float:
+    """Bytes the load offers over the whole ramp, or to the search."""
+    if cfg.search:
+        return cfg.search.offered_gb
+    return sum(cfg.load.steps) * cfg.load.step_s / 1000
 
 
 def rds_cost_lines(rds: RdsSpec, duration_s: float) -> list[CostLine]:
@@ -1633,11 +1797,12 @@ def format_node_summary(cfg: RunConfig) -> list[str]:
     validators = STORAGE_MODULES[cfg.consensus_storage, "validator"]
     # node0's first storage module backs consensus, its last the query service.
     node0 = STORAGE_MODULES[cfg.consensus_storage, "query"]
+    placement = " on fargate" if cfg.query_placement == "fargate" else ""
     return [
         f"storage validators: consensus {validators[0]}",
         (
             f"storage query:      consensus {node0[0]}, query {node0[-1]} "
-            f"({cfg.query_engine}, {cfg.query_db})"
+            f"({cfg.query_engine}, {cfg.query_db}){placement}"
         ),
         (
             f"nodes: {cfg.nodes} ({cfg.query_nodes} query, "
@@ -2106,10 +2271,12 @@ def preflight(system: System, cfg: RunConfig, hosts: list[HostSpec]) -> Prefligh
         system.which, ["tofu", "aws", "ssh", "scp", "rsync", "git", "ssh-keygen"]
     )
     account = caller_account(run, cfg.region)
-    types = {h["instance_type"] for h in hosts}
-    arch, memory_mib = instance_specs(run, cfg.region, types)
+    arch, memory_mib = instance_specs(
+        run, cfg.region, {h["instance_type"] for h in hosts}
+    )
     if cfg.tcp_cc == "bbr3" and arch != "amd64":
         raise Refused("--tcp-cc bbr3 needs the XanMod kernel, which is x86_64 only")
+    types = {h["instance_type"] for h in hosts if not on_fargate(cfg, h)}
     prices = fetch_prices(run, cfg.region, types)
     az = capable_az(run, cfg.region, types)
     ami_id = resolve_ami(run, cfg.region, arch)
@@ -2126,7 +2293,49 @@ def preflight(system: System, cfg: RunConfig, hosts: list[HostSpec]) -> Prefligh
     }
     if rds_minor is not None:
         pre["rds_engine_version"] = rds_minor
+    if cfg.query_placement == "fargate":
+        pre["fargate"] = fargate_shape(run, cfg.region, cfg.node_type, arch)
     return pre
+
+
+def on_fargate(cfg: RunConfig, host: HostSpec) -> bool:
+    """Before `place_fargate`, which stamps the hosts, only the config knows."""
+    return cfg.query_placement == "fargate" and host["role"] == "query"
+
+
+def fargate_shape(
+    run: Runner, region: str, instance_type: str, arch: Arch
+) -> FargateSpec:
+    """The task size with the vCPUs and memory of `instance_type`."""
+    (described,) = aws_json(
+        run,
+        "ec2",
+        "describe-instance-types",
+        "--instance-types",
+        instance_type,
+        region=region,
+    )["InstanceTypes"]
+    vcpus = described["VCpuInfo"]["DefaultVCpus"]
+    memory_mib = described["MemoryInfo"]["SizeInMiB"]
+    if memory_mib not in FARGATE_SHAPES.get(vcpus, range(0)):
+        offered = ", ".join(
+            f"{v} vCPU {r.start // 1024}-{(r.stop - 1) // 1024} GiB"
+            for v, r in FARGATE_SHAPES.items()
+        )
+        raise Refused(
+            f"--node-type {instance_type} has {vcpus} vCPU and {memory_mib} MiB, a size "
+            f"fargate does not offer: {offered}"
+        )
+    return {"cpu": vcpus * 1024, "memory_mib": memory_mib, "arch": arch}
+
+
+def place_fargate(hosts: list[HostSpec], pre: Preflight) -> list[HostSpec]:
+    """The hosts with the task size on their query nodes; unchanged without fargate."""
+    if "fargate" not in pre:
+        return hosts
+    return [
+        {**h, "fargate": pre["fargate"]} if h["role"] == "query" else h for h in hosts
+    ]
 
 
 def terraform_env() -> dict[str, str]:
@@ -2229,8 +2438,15 @@ def render_tfvars(
                 "user_data_path": str(fleet_dir / "hosts" / h["name"] / "user-data.sh"),
             }
             for h in hosts
+            if "fargate" not in h
         },
+        "fargate": fargate_tfvars(hosts),
     }
+
+
+def fargate_tfvars(hosts: list[HostSpec]) -> dict[str, Any] | None:
+    nodes = [h["name"] for h in hosts if "fargate" in h]
+    return {"nodes": nodes} if nodes else None
 
 
 def reaper_schedule_at(expires: datetime) -> str:
@@ -2342,9 +2558,28 @@ def ec2_node_names(hosts: dict[str, HostInfo]) -> list[str]:
     return [name for name in _node_names(hosts) if hosts[name]["public_ip"]]
 
 
-def pg_host(hosts: dict[str, HostInfo], query: str) -> str:
-    """Where psql runs for the database of `query`: ctl when the query node has no ssh."""
-    return query if hosts[query]["public_ip"] else "ctl"
+def fargate_node_names(hosts: dict[str, HostInfo]) -> list[str]:
+    return [name for name in _node_names(hosts) if not hosts[name]["public_ip"]]
+
+
+def fargate_names(manifest: FleetManifest) -> frozenset[str]:
+    return frozenset(h["name"] for h in fargate_specs(manifest["hosts"]))
+
+
+def pg_host(node: str, fargate: Container[str]) -> str:
+    """Where psql reaches the database of query node `node`: ctl when the node has no ssh."""
+    return "ctl" if node in fargate else node
+
+
+def pg_json(node: str, fargate: Container[str]) -> str:
+    """The endpoint file of `node` on its `pg_host`; ctl keeps one per Fargate query node."""
+    return f"{BENCH_DIR}/pg.{node}.json" if node in fargate else PG_JSON
+
+
+def pg_suffix(endpoint: str) -> str:
+    """What names the output files of an endpoint file: `pg.json` gives none, `pg.node1.json`
+    `-node1`, as in `pg-stats-node1.jsonl`."""
+    return Path(endpoint).stem.removeprefix("pg").replace(".", "-")
 
 
 def _node_url(info: HostInfo) -> str:
@@ -2353,10 +2588,11 @@ def _node_url(info: HostInfo) -> str:
 
 def _journal_max_bytes(host: HostSpec) -> int:
     """Usable disk after RESERVED_GB, times JOURNAL_MAX_BYTES_FRACTION; halved on the query
-    role, which shares the disk with Postgres."""
+    role, which shares the disk with Postgres, except on Fargate, where Postgres is on rds and
+    the journal is on efs."""
     usable_gb = host["root_gb"] - RESERVED_GB
     fraction = JOURNAL_MAX_BYTES_FRACTION
-    if host["role"] == "query":
+    if host["role"] == "query" and "fargate" not in host:
         fraction *= QUERY_JOURNAL_FRACTION
     return int(usable_gb * 1_000_000_000 * fraction)
 
@@ -2557,7 +2793,11 @@ chown 999:999 {PG_TLS_DIR}/server.key {PG_TLS_DIR}/server.crt
 chmod 0600 {PG_TLS_DIR}/server.key"""
 
 
-def render_user_data(host: HostSpec, images: dict[str, ImageInfo], ttl_s: int) -> str:
+def render_user_data(
+    host: HostSpec, images: dict[str, ImageInfo], ttl_s: int, fargate: bool = False
+) -> str:
+    """`fargate`: ctl mounts the efs file system of the Fargate query nodes and runs their
+    psql."""
     needed = ROLE_IMAGES[host["role"]]
     pulls = "\n".join(
         _pull_and_record_digest(name, f"{images[name]['ref']}@{images[name]['digest']}")
@@ -2568,10 +2808,16 @@ def render_user_data(host: HostSpec, images: dict[str, ImageInfo], ttl_s: int) -
     template = string.Template(USER_DATA_TEMPLATE.read_text())
     return template.substitute(
         TTL_MIN=str(ttl_min),
-        EXTRA_PACKAGES=" postgresql-client openssl" if query else "",
+        EXTRA_PACKAGES=extra_packages(host, fargate),
         QUERY_SETUP=QUERY_SETUP if query else "",
         DOCKER_PULLS=pulls,
     )
+
+
+def extra_packages(host: HostSpec, fargate: bool) -> str:
+    if host["role"] == "query":
+        return " postgresql-client openssl"
+    return " nfs-common postgresql-client" if host["role"] == "ctl" and fargate else ""
 
 
 def _docker_create(name: str, argv: list[str], entrypoint: str | None = None) -> str:
@@ -2699,11 +2945,7 @@ def node_create_argv(
 ) -> list[str]:
     """`docker create` arguments of the espresso-node container."""
     node = images["espresso-node"]
-    role: NodeRole = "query" if host["role"] == "query" else "validator"
-    storage = STORAGE_MODULES[consensus_storage, role]
-    if query_engine == "sqlite" and role == "query":
-        storage = tuple(m for m in storage if m != "storage-sql")
-    modules = (*storage, *API_MODULES[role])
+    modules = node_modules(host, consensus_storage, query_engine)
     argv = [
         "--env-file",
         env_file,
@@ -2721,10 +2963,25 @@ def node_create_argv(
     if leader_trace:
         argv += ["-v", f"{TRACE_HOST_DIR}:{TRACE_CONTAINER_DIR}"]
     argv.append(f"{node['ref']}@{node['digest']}")
-    argv.append("/bin/espresso-node")
-    for module in modules:
-        argv += ["--", module]
-    return argv
+    return [*argv, *node_command(modules)]
+
+
+def node_modules(
+    host: HostSpec, consensus_storage: ConsensusStorage, query_engine: QueryEngine
+) -> tuple[str, ...]:
+    role: NodeRole = "query" if host["role"] == "query" else "validator"
+    storage = STORAGE_MODULES[consensus_storage, role]
+    if query_engine == "sqlite" and role == "query":
+        storage = tuple(m for m in storage if m != "storage-sql")
+    return (*storage, *API_MODULES[role])
+
+
+def node_command(modules: tuple[str, ...]) -> list[str]:
+    """What follows the image: the entrypoint script of the image, then `-- <module>` each."""
+    return [
+        "/bin/espresso-node",
+        *(arg for module in modules for arg in ("--", module)),
+    ]
 
 
 def render_recreate_sh(
@@ -2796,6 +3053,13 @@ def add_run_flags(parser: argparse.ArgumentParser, tag_required: bool = True) ->
     )
     parser.add_argument("--nodes", type=int, default=defaults.nodes)
     parser.add_argument("--query-nodes", type=int, default=defaults.query_nodes)
+    parser.add_argument(
+        "--query-placement",
+        choices=get_args(QueryPlacement),
+        default=defaults.query_placement,
+        help="where the query nodes run: an EC2 instance each, or an ECS Fargate task each "
+        "(sized like --node-type; needs --query-db rds)",
+    )
     parser.add_argument("--node-type", default=defaults.node_type)
     parser.add_argument("--ctl-type", default=defaults.ctl_type)
     steps = ", ".join(f"{rate:g}" for rate in load.steps)
@@ -3214,6 +3478,7 @@ def config_from_args(args: argparse.Namespace) -> RunConfig:
         yes=args.yes,
         search=search,
         query_engine=CHAOS_QUERY_ENGINE if chaos else RunConfig.query_engine,
+        query_placement=args.query_placement,
     )
 
 
@@ -3513,7 +3778,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         "--role", required=True, choices=("ctl", "query", "validator")
     )
     agent_host_p.add_argument(
-        "--pg", type=Path, help="pg.json; sample Postgres when given"
+        "--pg",
+        type=Path,
+        action="append",
+        default=[],
+        help="pg.json; sample Postgres when given, once per file",
     )
     agent_host_p.set_defaults(func=cmd_agent_host)
 
@@ -3671,6 +3940,8 @@ class Remote:
         ]
 
     def _target(self, host: str) -> str:
+        if not self.hosts[host]["public_ip"]:
+            raise ValueError(f"{host} runs on Fargate and has no ssh")
         return f"{SSH_USER}@{self.hosts[host]['public_ip']}"
 
     def ssh(
@@ -3683,8 +3954,8 @@ class Remote:
             )
         return result
 
-    def rsync_to(self, host: str, sources: list[Path], dest: str) -> None:
-        self._rsync(host, [*map(str, sources), f"{self._target(host)}:{dest}"])
+    def rsync_to(self, host: str, sources: list[Path], dest: str, *flags: str) -> None:
+        self._rsync(host, [*flags, *map(str, sources), f"{self._target(host)}:{dest}"])
 
     def rsync_from(self, host: str, remote: str, local: Path, *flags: str) -> None:
         local.mkdir(parents=True, exist_ok=True)
@@ -3725,6 +3996,73 @@ def control_path_peak(fleet_dir: Path) -> int:
     return len(os.fsencode(fleet_dir / "ssh" / "255.255.255.255")) + 17
 
 
+@dataclass(frozen=True)
+class FargateTasks:
+    """The tasks of one run, `arns` by node, filled in as they start."""
+
+    run: Runner
+    region: str
+    info: FargateInfo
+    arns: dict[str, str]
+
+    def describe(self) -> dict[str, dict[str, Any]]:
+        """Node to task, from one call."""
+        reply = ecs(
+            self.run,
+            self.region,
+            *("describe-tasks", "--cluster", self.info["cluster_arn"]),
+            *("--tasks", *self.arns.values()),
+        )
+        if reply["failures"]:
+            raise RemoteError(f"describe-tasks failed: {reply['failures']}")
+        by_arn = {task["taskArn"]: task for task in reply["tasks"]}
+        return {node: by_arn[arn] for node, arn in self.arns.items()}
+
+    def check(self, tasks: dict[str, dict[str, Any]]) -> None:
+        """Raises for the first task that stopped, with its reason and its last log lines."""
+        for node, task in tasks.items():
+            if task["lastStatus"] == "STOPPED":
+                raise RemoteError(stopped_message(node, task, self.log_tail(task)))
+
+    def stop(self, reason: str) -> None:
+        """Stops every task and waits until they are gone."""
+        if not self.arns:
+            return
+        cluster = self.info["cluster_arn"]
+        for arn in self.arns.values():
+            ecs(
+                self.run,
+                self.region,
+                *("stop-task", "--cluster", cluster, "--task", arn, "--reason", reason),
+            )
+        ecs(
+            self.run,
+            self.region,
+            *("wait", "tasks-stopped", "--cluster", cluster),
+            *("--tasks", *self.arns.values()),
+        )
+
+    def log_tail(self, task: dict[str, Any]) -> str:
+        """A diagnosis only: a task that stopped before it logged has no stream."""
+        task_id = task["taskArn"].rpartition("/")[2]
+        result = self.run(
+            aws_argv(
+                *("logs", "get-log-events", "--log-group-name", self.info["log_group"]),
+                *(
+                    "--log-stream-name",
+                    f"{FARGATE_LOG_PREFIX}/{FARGATE_CONTAINER}/{task_id}",
+                ),
+                *("--limit", str(FARGATE_LOG_LINES), "--no-start-from-head"),
+                region=self.region,
+            )
+        )
+        if result.returncode != 0:
+            return f"(no log: {result.stderr.strip()})"
+        return "\n".join(
+            event["message"] for event in json.loads(result.stdout)["events"]
+        )
+
+
 @dataclass
 class FleetState:
     """The fleet from `tofu apply` on. `remote` is set once `tofu output` gave the hosts."""
@@ -3759,6 +4097,8 @@ class Run:
     error: str | None = None
     interrupted: bool = False
     publish_remote: str | None = None
+    # Set as soon as the first task is started, so that a failure stops it.
+    fargate: FargateTasks | None = None
 
     @property
     def manifest_path(self) -> Path:
@@ -3810,7 +4150,7 @@ def prepare_run(
     """Everything before the first AWS write: `plan_fleet` and the prompt. Any failure or
     Ctrl-C leaves nothing to destroy."""
     fleet_dir, run_dir, tf, hosts, _ = plan_fleet(args, cfg, system)
-    confirm_create(system.ask, cfg, fleet_dir, len(hosts))
+    confirm_create(system.ask, cfg, fleet_dir, ec2_count(hosts))
     stamp_expiry(fleet_dir, tf, utc_now(system.clock))
     return fleet_dir, run_dir, tf
 
@@ -3822,12 +4162,25 @@ def confirm_create(ask: Ask, cfg: RunConfig, fleet_dir: Path, count: int) -> Non
     if "rds" in cfg.db_modes:
         extras += ", 1 rds instance, 1 subnet group, 1 parameter group, 1 schedule"
         extras += ", 1 iam role"
+    if cfg.query_placement == "fargate":
+        extras += (
+            f", 1 ecs cluster, 1 efs file system, {cfg.query_nodes} access points, "
+            "1 log group, 1 iam role"
+        )
     prompt = (
         f"Create {count} instances{extras}, 1 security group, 1 key pair in {ACCOUNT}?"
     )
     if not (cfg.yes or ask(prompt)):
         append_event(fleet_dir, "planned", "refused", "not confirmed")
         raise Refused("not confirmed; nothing was created")
+
+
+def fargate_specs(hosts: Iterable[HostSpec]) -> list[HostSpec]:
+    return [h for h in hosts if "fargate" in h]
+
+
+def ec2_count(hosts: list[HostSpec]) -> int:
+    return sum("fargate" not in h for h in hosts)
 
 
 def expiry_stamp(moment: datetime) -> str:
@@ -3882,6 +4235,7 @@ def plan_new_fleet(
     setup_logging(fleet_dir)
     log.debug("argv %s", args.argv)
     pre = preflight(system, cfg, hosts)
+    hosts = place_fargate(hosts, pre)
     log_preflight(cfg, pre, hosts)
     estimate = estimate_or_refuse(
         cfg,
@@ -3990,6 +4344,8 @@ def measure_run(run: Run) -> None:
         remote = fleet.remote
         assert remote is not None, "up_fleet must run first"
         manifest = fleet.manifest
+        if fargate_specs(manifest["hosts"]):
+            start_fargate(run)
         render_host_files(run.run_dir, run.cfg, manifest, remote.hosts)
         enter_phase(
             fleet, run.manifest_path, "shipping", "files, host monitors, containers"
@@ -4003,6 +4359,7 @@ def measure_run(run: Run) -> None:
         )
         update_manifest(run.manifest_path, "shipping", git_rev=git_rev, **volume)
         ship(remote, run.run_dir)
+        ship_fargate(remote, run.run_dir, fargate_node_names(remote.hosts))
         start_hostmon(remote, run.cfg.query_engine)
         create_containers(remote)
         if run.cfg.latency != "off":
@@ -4025,10 +4382,16 @@ def measure_run(run: Run) -> None:
             run.cfg.query_db,
             run.cfg.query_engine,
             _query_names(remote.hosts),
+            fargate_names(manifest),
         )
         enter_phase(fleet, run.manifest_path, "nodes", "synchronized docker start")
         at = fleet_time(remote) + DOCKER_START_LEAD_S
-        spread = start_nodes(remote, ec2_node_hosts(remote.hosts), at)
+        spread = start_nodes(
+            remote,
+            ec2_node_hosts(remote.hosts),
+            at,
+            fargate_node_names(remote.hosts),
+        )
         update_manifest(run.manifest_path, "measuring", start_spread_s=spread)
         log.info("measuring: nodes started within %.2f s of each other", spread)
         chaos = (
@@ -4048,7 +4411,7 @@ def measure_run(run: Run) -> None:
         run.agent_started = True
         try:
             run.agent = poll_agent(
-                remote, run.run_dir, run.cfg, fleet.interrupts, chaos
+                remote, run.run_dir, run.cfg, fleet.interrupts, chaos, run.fargate
             )
         finally:
             if chaos is not None:
@@ -4066,12 +4429,18 @@ def connect(fleet: FleetState) -> Remote:
     hosts_info = parse_hosts_output(output, manifest["hosts"])
     nb.write_json(fleet.fleet_dir / "hosts.json", hosts_info)
     rds = {"rds": parse_rds_output(output)} if "rds_spec" in manifest else {}
+    fargate = (
+        {"fargate": parse_fargate_output(output)}
+        if fargate_specs(manifest["hosts"])
+        else {}
+    )
     update_manifest(
         fleet.manifest_path,
         "provisioned",
         hosts_info=hosts_info,
         **pg_volume_fields(output, manifest),
         **rds,
+        **fargate,
     )
     fleet.remote = Remote(
         fleet.system.run,
@@ -4080,6 +4449,463 @@ def connect(fleet: FleetState) -> Remote:
         hosts_info,
     )
     return fleet.remote
+
+
+# What the Fargate query nodes run before espresso-node. A task has the efs access point of its
+# node at /efs, and `bench/` there is the mailbox between ctl and the task: ctl ships node.env
+# and genesis.toml, the task answers with `ready`, ctl then writes `go` (the start time in epoch
+# nanoseconds), the task writes `started_at` and execs the node. `$@` is the node command.
+# An nfs client caches that a name is absent for up to a minute, and the task cannot change its
+# mount options: ctl creates `go` empty and writes into it, and the task opens it for each poll,
+# which revalidates it.
+_SYSCTL_CHECK = """\
+proc=${BENCH_PROC_SYS:-/proc/sys}
+IFS=';' read -ra wanted <<< "${BENCH_SYSCTLS:-}"
+for pair in "${wanted[@]}"; do
+  key=${pair%%=*}
+  want=${pair#*=}
+  got=$(<"$proc/${key//.//}")
+  [ "$(echo $got)" = "$(echo $want)" ] || { echo "sysctl $key=$got, expected $want" >&2; exit 78; }
+done
+"""
+_ENTRY_SETUP = """\
+mkdir -p /efs/bench /efs/store /efs/payload /opt/bench
+rm -rf /store /payload
+ln -s /efs/store /store
+ln -s /efs/payload /payload
+ln -sf /efs/bench/genesis.toml /opt/bench/genesis.toml
+stats=/efs/bench/task-stats.jsonl
+(while curl -sf "$ECS_CONTAINER_METADATA_URI_V4/task/stats" | tr -d '\\n' >> $stats; do
+  echo >> $stats; sleep "$BENCH_SAMPLE_S"; done) &
+touch /efs/bench/ready
+go=/efs/bench/go
+env_file=/efs/bench/node.env
+"""
+_WAIT_FOR_GO = """\
+until read -r at 2> /dev/null < "$go" && [ -n "$at" ]; do
+  [ "$(date +%s)" -lt "$BENCH_DEADLINE" ] || { echo "no go before the deadline" >&2; exit 1; }
+  sleep 0.2
+done
+"""
+# No `source`: a value may hold `$` or spaces.
+_EXPORT_ENV = (
+    'while IFS== read -r key value; do export "$key=$value"; done < "$env_file"\n'
+)
+_ENTRY_START = """\
+wait_ns=$((at - $(date +%s%N)))
+[ "$wait_ns" -le 0 ] || sleep "$((wait_ns / 1000000000)).$(printf %09d $((wait_ns % 1000000000)))"
+date +%s.%N > /efs/bench/started_at
+exec > >(tee -a /efs/bench/espresso-node.log) 2>&1
+exec timeout "$((BENCH_DEADLINE - $(date +%s)))" "$@"
+"""
+FARGATE_ENTRY = (
+    "set -euo pipefail\n"
+    + _SYSCTL_CHECK
+    + _ENTRY_SETUP
+    + _WAIT_FOR_GO
+    + _EXPORT_ENV
+    + _ENTRY_START
+)
+
+
+def render_task_def(
+    cfg: RunConfig,
+    fleet: FleetManifest,
+    node: str,
+    images: dict[str, ImageInfo],
+    expires_at: str,
+) -> dict[str, Any]:
+    """The `register-task-definition` input of query node `node`: one container with the
+    image digest of the run, which `FARGATE_ENTRY` starts at the time ctl names. `expires_at`
+    ends the task with the fleet."""
+    host = next(h for h in fleet["hosts"] if h["name"] == node)
+    shape, info, image = host["fargate"], fleet["fargate"], images["espresso-node"]
+    sysctls = fargate_sysctls(cfg)
+    deadline = datetime.fromisoformat(expires_at).timestamp()
+    environment = {
+        "BENCH_DEADLINE": f"{deadline:.0f}",
+        "BENCH_SAMPLE_S": f"{HOST_SAMPLE_S:g}",
+    }
+    if sysctls:
+        environment["BENCH_SYSCTLS"] = ";".join(
+            f"{ctl['namespace']}={ctl['value']}" for ctl in sysctls
+        )
+    modules = node_modules(host, cfg.consensus_storage, cfg.query_engine)
+    return {
+        "family": task_family(fleet["name"], node),
+        "networkMode": "awsvpc",
+        "requiresCompatibilities": ["FARGATE"],
+        "cpu": str(shape["cpu"]),
+        "memory": str(shape["memory_mib"]),
+        "runtimePlatform": {
+            "cpuArchitecture": FARGATE_ARCHS[shape["arch"]],
+            "operatingSystemFamily": "LINUX",
+        },
+        "executionRoleArn": info["exec_role_arn"],
+        "volumes": [
+            {
+                "name": "efs",
+                "efsVolumeConfiguration": {
+                    "fileSystemId": info["efs_id"],
+                    "transitEncryption": "ENABLED",
+                    "authorizationConfig": {
+                        "accessPointId": info["access_points"][node],
+                        "iam": "DISABLED",
+                    },
+                },
+            }
+        ],
+        "containerDefinitions": [
+            {
+                "name": FARGATE_CONTAINER,
+                "image": f"{image['ref']}@{image['digest']}",
+                "essential": True,
+                "entryPoint": ["bash", "-c", FARGATE_ENTRY, "bash"],
+                "command": node_command(modules),
+                "environment": [
+                    {"name": name, "value": value}
+                    for name, value in environment.items()
+                ],
+                "mountPoints": [{"sourceVolume": "efs", "containerPath": "/efs"}],
+                "portMappings": [
+                    {"containerPort": port, "protocol": "tcp"}
+                    for port in (
+                        NODE_API_PORT,
+                        NODE_TONIC_PORT,
+                        CLIQUENET_PORT,
+                        LIBP2P_PORT,
+                    )
+                ],
+                "logConfiguration": {
+                    "logDriver": "awslogs",
+                    "options": {
+                        "awslogs-group": info["log_group"],
+                        "awslogs-region": cfg.region,
+                        "awslogs-stream-prefix": FARGATE_LOG_PREFIX,
+                    },
+                },
+                "stopTimeout": int(FREEZE_STOP_TIMEOUT_S),
+                "systemControls": sysctls,
+            }
+        ],
+        "tags": [
+            {"key": TAG_RUN, "value": fleet["name"]},
+            {"key": TAG_EXPIRES, "value": expires_at},
+        ],
+    }
+
+
+def task_family(fleet_name: str, node: str) -> str:
+    return f"{RDS_PREFIX}{fleet_name}-{node}"
+
+
+def fargate_sysctls(cfg: RunConfig) -> list[dict[str, str]]:
+    """What shaping sets on an EC2 node, as the task definition's namespaced sysctls. The
+    default qdisc is global, which a task cannot set; BBR paces without `fq`."""
+    if cfg.latency == "off":
+        return []
+    return [
+        {"namespace": key, "value": value}
+        for key, value in latency.tcp_sysctls(cfg.tcp_cc)
+        if key != "net.core.default_qdisc"
+    ]
+
+
+def stopped_message(node: str, task: dict[str, Any], log_tail: str) -> str:
+    containers = "; ".join(
+        f"{c['name']} exit {c.get('exitCode', '-')} {c.get('reason', '')}".rstrip()
+        for c in task["containers"]
+    )
+    reason = task.get("stoppedReason", "no reason given")
+    return f"{node} task stopped: {reason}; {containers}\n{log_tail}".rstrip()
+
+
+def ecs(run: Runner, region: str, *args: str) -> Any:
+    """`aws ecs` as a `RemoteError`, which fails the run with AWS's own message (a sysctl the
+    API refuses, a task that cannot be placed)."""
+    try:
+        return aws_json(run, "ecs", *args, region=region)
+    except Refused as exc:
+        raise RemoteError(str(exc)) from exc
+
+
+def start_fargate(run: Run) -> None:
+    """Starts the tasks and waits until each is ready and has its addresses, which
+    `render_host_files` needs. The tasks provision for 30-90 s, so this goes first and shipping
+    waits behind it."""
+    fleet = run.fleet
+    remote = fleet.remote
+    assert remote is not None, "up_fleet must run first"
+    enter_phase(fleet, run.manifest_path, "launching", "ecs tasks of the query nodes")
+    run.fargate = launch_fargate(run)
+    remote.hosts.update(wait_fargate(run, run.fargate))
+    nb.write_json(fleet.fleet_dir / "hosts.json", remote.hosts)
+    update_manifest(run.manifest_path, "launching", hosts_info=remote.hosts)
+
+
+def launch_fargate(run: Run) -> FargateTasks:
+    """Registers a task definition and runs a task per Fargate node. The ARNs go into the run
+    manifest at once, so that `down` can stop them."""
+    fleet_manifest = run.fleet.manifest
+    info = fleet_manifest["fargate"]
+    images = run.manifest["images"]
+    runner, region = run.fleet.system.run, run.cfg.region
+    tasks = FargateTasks(runner, region, info, {})
+    definitions: dict[str, str] = {}
+    for spec in fargate_specs(fleet_manifest["hosts"]):
+        node = spec["name"]
+        run.fleet.interrupts.check()
+        task_def = render_task_def(
+            run.cfg, fleet_manifest, node, images, fleet_manifest["expires_at"]
+        )
+        path = run.run_dir / "hosts" / node / "task-def.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        nb.write_json(path, task_def)
+        reply = ecs(
+            runner,
+            region,
+            *(
+                "register-task-definition",
+                "--cli-input-json",
+                f"file://{path.resolve()}",
+            ),
+        )
+        definitions[node] = reply["taskDefinition"]["taskDefinitionArn"]
+        tasks.arns[node] = run_task(runner, region, info, definitions[node], node)
+        update_manifest(
+            run.manifest_path,
+            "launching",
+            fargate=info,
+            task_definitions=definitions,
+            tasks=tasks.arns,
+        )
+    return tasks
+
+
+def run_task(
+    runner: Runner, region: str, info: FargateInfo, task_definition: str, node: str
+) -> str:
+    network = {
+        "awsvpcConfiguration": {
+            "subnets": [info["subnet_id"]],
+            "securityGroups": [info["security_group_id"]],
+            "assignPublicIp": "ENABLED",
+        }
+    }
+    reply = ecs(
+        runner,
+        region,
+        *("run-task", "--cluster", info["cluster_arn"]),
+        *("--task-definition", task_definition, "--count", "1"),
+        *("--launch-type", "FARGATE", "--platform-version", "LATEST"),
+        *("--network-configuration", json.dumps(network)),
+        *("--propagate-tags", "TASK_DEFINITION"),
+    )
+    if reply["failures"]:
+        failed = "; ".join(
+            f"{f['reason']} {f.get('detail', '')}".rstrip() for f in reply["failures"]
+        )
+        raise RemoteError(f"run-task of {node} failed: {failed}")
+    (task,) = reply["tasks"]
+    return task["taskArn"]
+
+
+def wait_fargate(run: Run, tasks: FargateTasks) -> dict[str, HostInfo]:
+    """Polls until every task is RUNNING and has written `ready` (its sysctls are what the
+    definition asked for). A task that stops, with its reason and log tail, or one that is not
+    ready after FARGATE_START_S fails the run."""
+    interrupts = run.fleet.interrupts
+    remote = run.fleet.remote
+    assert remote is not None
+    deadline = interrupts.clock.monotonic() + FARGATE_START_S
+    ready: dict[str, HostInfo] = {}
+    while True:
+        interrupts.check()
+        described = tasks.describe()
+        tasks.check(described)
+        for node, task in described.items():
+            if node not in ready and fargate_ready(remote, node, task):
+                ready[node] = fargate_host(node, task)
+                nb.write_json(run.run_dir / "hosts" / node / "task.json", task)
+        if len(ready) == len(described):
+            return ready
+        if interrupts.clock.monotonic() >= deadline:
+            waiting = {
+                n: t["lastStatus"] for n, t in described.items() if n not in ready
+            }
+            raise RemoteError(
+                f"fargate tasks not ready after {FARGATE_START_S:.0f} s: {waiting}"
+            )
+        interrupts.sleep(FARGATE_POLL_S)
+
+
+def fargate_ready(remote: Remote, node: str, task: dict[str, Any]) -> bool:
+    if task["lastStatus"] != "RUNNING":
+        return False
+    marker = f"{FARGATE_CTL_MOUNT}/{node}/bench/ready"
+    return remote.ssh("ctl", f"test -f {marker}", check=False).returncode == 0
+
+
+def fargate_host(node: str, task: dict[str, Any]) -> HostInfo:
+    """The addresses of the task's network interface."""
+    details = {
+        d["name"]: d["value"]
+        for attachment in task["attachments"]
+        if attachment["type"] == "ElasticNetworkInterface"
+        for d in attachment["details"]
+    }
+    for key in ("privateIPv4Address", "privateDnsName"):
+        if key not in details:
+            raise RemoteError(
+                f"{node} is RUNNING but its network interface has no {key}"
+            )
+    return {
+        "name": node,
+        "role": "query",
+        "public_ip": "",
+        "private_ip": details["privateIPv4Address"],
+        "private_dns": details["privateDnsName"],
+        "instance_id": task["taskArn"],
+    }
+
+
+def ship_fargate(remote: Remote, run_dir: Path, nodes: Iterable[str]) -> None:
+    """node.env and genesis to each task's mailbox on ctl; node.env may hold the rds password."""
+
+    def send(node: str) -> None:
+        mailbox = f"{FARGATE_CTL_MOUNT}/{node}/bench/"
+        host_dir = run_dir / "hosts" / node
+        remote.rsync_to("ctl", [host_dir / "node.env"], mailbox, "--chmod=F600")
+        remote.rsync_to("ctl", [run_dir / "genesis.toml"], mailbox)
+
+    remote.parallel(send, nodes)
+
+
+def mount_efs(remote: Remote, info: FargateInfo, nodes: Iterable[str]) -> None:
+    """The file system root on ctl, with the mailbox directory of each node."""
+    mount = (
+        f"mkdir -p {FARGATE_CTL_MOUNT}\n"
+        f"mountpoint -q {FARGATE_CTL_MOUNT} || mount -t nfs4 -o {EFS_MOUNT_OPTIONS} "
+        f"{info['efs_dns']}:/ {FARGATE_CTL_MOUNT}\n"
+    )
+    remote.ssh("ctl", bounded(mount + "".join(mailbox_script(node) for node in nodes)))
+
+
+def mailbox_script(node: str) -> str:
+    """The mailbox directory of `node`, with the empty `go` its task polls."""
+    bench = f"{FARGATE_CTL_MOUNT}/{node}/bench"
+    return f"mkdir -p {bench}\ntouch {bench}/go\n"
+
+
+def signal_go(remote: Remote, node: str, at: float) -> None:
+    """The start time, in the file the task polls: one write of one line, which the task does
+    not read before its newline."""
+    go = f"{FARGATE_CTL_MOUNT}/{node}/bench/go"
+    remote.ssh("ctl", bounded(f"echo {int(at * 1e9)} > {go}"))
+
+
+def fargate_started_at(remote: Remote, node: str) -> float:
+    """When the task's wrapper started the node, epoch seconds on its own clock."""
+    marker = f"{FARGATE_CTL_MOUNT}/{node}/bench/started_at"
+    wait_s = int(2 * DOCKER_START_LEAD_S)
+    script = f"until [ -s {marker} ]; do sleep 0.2; done; cat {marker}"
+    done = remote.ssh(
+        "ctl", f"timeout {wait_s} bash -c {shlex.quote(script)}", check=False
+    )
+    if done.returncode != 0:
+        raise RemoteError(
+            f"{node} wrote no started_at within {wait_s} s of its go: {done.stderr.strip()}"
+        )
+    return float(done.stdout)
+
+
+def fargate_collect_script(node: str) -> str:
+    """On ctl, in the node's mailbox: sizes of the journal and payloads, log gzipped as the
+    docker log of an EC2 node is."""
+    base = f"{FARGATE_CTL_MOUNT}/{node}"
+    return (
+        f"cd {base}/bench\n"
+        f"du -sb {base}/store > du-journal.txt\n"
+        f"du -sb {base}/payload > du-payload.txt\n"
+        "gzip -kf espresso-node.log\n"
+    )
+
+
+def reset_fargate(remote: Remote, manifest: FleetManifest) -> None:
+    """Back to an empty mailbox and store per node, with the previous run's tasks gone."""
+    info = manifest["fargate"]
+    stop_tasks(remote.run, manifest_region(manifest), info["cluster_arn"], "reset")
+    wipe = "".join(
+        f"find {FARGATE_CTL_MOUNT}/{node} -mindepth 1 -delete\n" + mailbox_script(node)
+        for node in fargate_names(manifest)
+    )
+    remote.ssh("ctl", bounded(wipe))
+
+
+def stop_fargate(fleet: FleetState) -> None:
+    """Before `tofu destroy`, which cannot delete a cluster that runs tasks: stops whatever
+    runs in it, then deletes the task definitions of the fleet's runs. Never raises."""
+    if fleet.cfg.query_placement != "fargate":
+        return
+    manifest = fleet.manifest
+    if "fargate" not in manifest:
+        return
+    runner, region = fleet.system.run, fleet.cfg.region
+    cluster = manifest["fargate"]["cluster_arn"]
+    best_effort(
+        "stop fargate tasks", lambda: stop_tasks(runner, region, cluster, "down")
+    )
+    for definition in task_definitions(fleet.fleet_dir):
+        best_effort(
+            f"delete {definition}",
+            lambda definition=definition: delete_task_definition(
+                runner, region, definition
+            ),
+        )
+
+
+def task_definitions(fleet_dir: Path) -> list[str]:
+    runs = (
+        nb.read_json(path) for path in sorted(fleet_dir.glob("runs/*/manifest.json"))
+    )
+    return [
+        arn
+        for manifest in runs
+        for arn in manifest.get("task_definitions", {}).values()
+    ]
+
+
+def delete_task_definition(run: Runner, region: str, task_definition: str) -> None:
+    """Only an inactive definition can be deleted."""
+    ecs(run, region, "deregister-task-definition", "--task-definition", task_definition)
+    ecs(run, region, "delete-task-definitions", "--task-definitions", task_definition)
+
+
+def stop_tasks(run: Runner, region: str, cluster: str, reason: str) -> bool:
+    """Stops every task of the cluster and waits; False when the cluster is gone."""
+    tasks = aws_json(
+        run,
+        *("ecs", "list-tasks", "--cluster", cluster, "--query", "taskArns"),
+        region=region,
+        tolerate="ClusterNotFoundException",
+    )
+    if tasks is None:
+        return False
+    for task in tasks:
+        aws_json(
+            run,
+            *("ecs", "stop-task", "--cluster", cluster, "--task", task),
+            *("--reason", reason),
+            region=region,
+        )
+    if tasks:
+        aws_json(
+            run,
+            *("ecs", "wait", "tasks-stopped", "--cluster", cluster),
+            *("--tasks", *tasks),
+            region=region,
+        )
+    return True
 
 
 CollectStep = Literal[
@@ -4095,7 +4921,11 @@ RdsCollect = Callable[[Runner, str, RdsInfo, float, float, Path], None]
 
 
 def collect_plan(
-    error: str | None, agent_started: bool, query_db: DbMode, cloudwatch: bool
+    error: str | None,
+    agent_started: bool,
+    query_db: DbMode,
+    cloudwatch: bool,
+    fargate: bool = False,
 ) -> list[CollectStep]:
     """The collection steps in order. `skip_collect` is not an input: it can be set by a signal
     during any step, so `finish_run` checks it before each one."""
@@ -4104,14 +4934,16 @@ def collect_plan(
     if agent_started:
         steps.append("rsync_out")
     if cloudwatch:
-        steps += cloudwatch_steps(query_db)
+        steps += cloudwatch_steps(query_db, fargate)
     if query_db == "rds":
         steps.append("rds_logs")
     return steps
 
 
-def cloudwatch_steps(query_db: DbMode) -> list[CollectStep]:
-    return ["ebs_balance", "rds_metrics"] if query_db == "rds" else ["ebs_balance"]
+def cloudwatch_steps(query_db: DbMode, fargate: bool = False) -> list[CollectStep]:
+    """node0 has no EBS volume on Fargate."""
+    steps: list[CollectStep] = [] if fargate else ["ebs_balance"]
+    return [*steps, "rds_metrics"] if query_db == "rds" else steps
 
 
 def finish_run(run: Run, cloudwatch: bool) -> None:
@@ -4126,7 +4958,7 @@ def finish_run(run: Run, cloudwatch: bool) -> None:
         log.info("collecting: stop, freeze, logs, host samples, final rsync")
         actions: dict[CollectStep, tuple[str, Callable[[], object]]] = {
             "stop_agent": ("stop agent", lambda: stop_agent(remote)),
-            "freeze": ("freeze", lambda: freeze(remote)),
+            "freeze": ("freeze", lambda: freeze(remote, run.fargate)),
             "collect_hosts": (
                 "collect",
                 lambda: collect_hosts(
@@ -4143,7 +4975,13 @@ def finish_run(run: Run, cloudwatch: bool) -> None:
             **cloudwatch_actions(run),
             "rds_logs": rds_step(run, "rds logs", collect_rds_logs),
         }
-        plan = collect_plan(run.error, run.agent_started, run.cfg.query_db, cloudwatch)
+        plan = collect_plan(
+            run.error,
+            run.agent_started,
+            run.cfg.query_db,
+            cloudwatch,
+            run.cfg.query_placement == "fargate",
+        )
         run_steps(interrupts, [actions[name] for name in plan])
 
 
@@ -4172,7 +5010,12 @@ def collect_cloudwatch(run: Run) -> None:
     actions = cloudwatch_actions(run)
     run_steps(
         run.fleet.interrupts,
-        [actions[name] for name in cloudwatch_steps(run.cfg.query_db)],
+        [
+            actions[name]
+            for name in cloudwatch_steps(
+                run.cfg.query_db, run.cfg.query_placement == "fargate"
+            )
+        ],
     )
 
 
@@ -4400,7 +5243,9 @@ def destroy_verdict(attempt: int, ok: bool) -> Literal["done", "retry", "sweep"]
 
 def destroy_fleet(fleet: FleetState) -> bool:
     """`tofu destroy` with retries, then a tag sweep. False when `tofu destroy` never worked,
-    even if the sweep found and terminated everything: the state file is then out of date."""
+    even if the sweep found and terminated everything: the state file is then out of date.
+    Fargate tasks stop first."""
+    stop_fargate(fleet)
     for attempt in itertools.count(1):
         verdict = destroy_verdict(attempt, try_destroy(fleet, attempt))
         if verdict == "done":
@@ -4456,7 +5301,7 @@ def prepare_up(
     fleet_dir, hosts, pre, estimate = plan_new_fleet(args, cfg, system, idle_fleet=True)
     render_fleet_dir(system, cfg, fleet_dir, hosts, pre, estimate, args.argv)
     tf = init_terraform(system.run, fleet_dir)
-    confirm_create(system.ask, cfg, fleet_dir, len(hosts))
+    confirm_create(system.ask, cfg, fleet_dir, ec2_count(hosts))
     stamp_expiry(fleet_dir, tf, utc_now(system.clock), margin_s=0.0)
     return fleet_dir, tf
 
@@ -4605,9 +5450,7 @@ def cmd_run_fleet(args: argparse.Namespace, system: System) -> int:
             assert fleet.remote is not None
             reset_chain(fleet.remote, cfg.query_db, manifest, interrupts)
             if cfg.query_db == "rds":
-                reset_rds_store(
-                    fleet.remote, fleet_dir, query_node_names(manifest), interrupts
-                )
+                reset_rds_store(fleet.remote, fleet_dir, manifest, interrupts)
         reset_failed = bench_run.error is not None
         run_on_fleet(bench_run, cloudwatch=True)
         result = report_run(bench_run)
@@ -4678,6 +5521,7 @@ def fleet_run_config(args: argparse.Namespace, saved: FleetManifest) -> RunConfi
         force=cli.force,
         search=cli.search,
     )
+    check_fargate(cfg)
     check_submit_nodes(cfg)
     check_search(cfg)
     check_chaos(cfg)
@@ -4990,12 +5834,16 @@ def pg_store_script(mode: DbMode, manifest: FleetManifest) -> str:
 
 def prepare_stores(fleet: FleetState) -> None:
     """What `up` does to the query host's storage once cloud-init is done: makes and mounts the
-    Postgres volume. The volume is reused by every run; `reset_chain` only empties it."""
+    Postgres volume, which every run reuses (`reset_chain` only empties it), and mounts the
+    efs file system of the Fargate query nodes on ctl."""
     manifest = fleet.manifest
-    if "pg_volume_id" not in manifest:
-        return
     remote = fleet.remote
     assert remote is not None, "connect must run first"
+    if "fargate" in manifest:
+        enter_phase(fleet, fleet.manifest_path, "preparing-stores", "mount efs on ctl")
+        mount_efs(remote, manifest["fargate"], sorted(fargate_names(manifest)))
+    if "pg_volume_id" not in manifest:
+        return
     enter_phase(
         fleet,
         fleet.manifest_path,
@@ -5043,21 +5891,30 @@ def reset_chain(
         remote.ssh(host, bounded(reset_script(role, pg_store)))
 
     remote.parallel(reset, ec2_names(remote.hosts))
+    if "fargate" in manifest:
+        reset_fargate(remote, manifest)
 
 
 def reset_rds_store(
-    remote: Remote, fleet_dir: Path, nodes: list[str], interrupts: Interrupts
+    remote: Remote, fleet_dir: Path, manifest: FleetManifest, interrupts: Interrupts
 ) -> None:
     """Drops and recreates the database of every query node, so the run starts on empty ones.
     `pg.json` goes first because a colocated run leaves another endpoint on the node."""
     interrupts.check()
-    ship_rds_endpoints(remote, fleet_dir, nodes)
+    nodes, fargate = query_node_names(manifest), fargate_names(manifest)
+    ship_rds_endpoints(remote, fleet_dir, nodes, fargate)
     reset_rds_databases(
-        remote, pg_host(remote.hosts, nodes[0]), [rds_database(n) for n in nodes]
+        remote,
+        pg_host(nodes[0], fargate),
+        pg_json(nodes[0], fargate),
+        [rds_database(n) for n in nodes],
     )
 
 
-def reset_rds_databases(remote: Remote, host: str, databases: list[str]) -> None:
+def reset_rds_databases(
+    remote: Remote, host: str, endpoint: str, databases: list[str]
+) -> None:
+    """On `host`, which holds the `endpoint` file of the instance."""
     commands = " ".join(
         f"-c {shlex.quote(sql)}" for db in databases for sql in rds_reset_sql(db)
     )
@@ -5065,7 +5922,8 @@ def reset_rds_databases(remote: Remote, host: str, databases: list[str]) -> None
         host,
         pg_shell(
             f"export PGDATABASE=postgres\n"
-            f"timeout {GATE_TIMEOUT_S:.0f} psql -v ON_ERROR_STOP=1 {commands}\n"
+            f"timeout {GATE_TIMEOUT_S:.0f} psql -v ON_ERROR_STOP=1 {commands}\n",
+            endpoint,
         ),
     )
 
@@ -5159,6 +6017,14 @@ def log_preflight(cfg: RunConfig, pre: Preflight, hosts: list[HostSpec]) -> None
         cfg.nodes - cfg.query_nodes,
         cfg.query_engine,
     )
+    if "fargate" in pre:
+        task = pre["fargate"]
+        log.info(
+            "query nodes on fargate: %d vCPU, %d MiB, %s",
+            task["cpu"] // 1024,
+            task["memory_mib"],
+            task["arch"],
+        )
     if "rds" in cfg.db_modes:
         log.info(
             "query db rds: %s postgres %s gp3 %d GB %d IOPS %d MB/s",
@@ -5204,12 +6070,14 @@ def render_fleet_dir(
         },
         **({} if rds is None else {"rds_spec": rds}),
     )
+    fargate = any("fargate" in host for host in hosts)
     for host in hosts:
         host_dir = fleet_dir / "hosts" / host["name"]
         host_dir.mkdir(parents=True)
-        (host_dir / "user-data.sh").write_text(
-            render_user_data(host, pre["images"], int(estimate["ttl_s"]))
-        )
+        if "fargate" not in host:
+            (host_dir / "user-data.sh").write_text(
+                render_user_data(host, pre["images"], int(estimate["ttl_s"]), fargate)
+            )
     tf_dir = fleet_dir / "terraform"
     shutil.copytree(TERRAFORM_SRC, tf_dir)
     # Absolute: `tofu -chdir` changes the directory `file()` resolves user_data_path against.
@@ -5226,8 +6094,10 @@ def render_fleet_dir(
         pre["az"],
         pre["ami_id"],
     )
+    expires = utc_now(system.clock) + timedelta(seconds=estimate["ttl_s"])
+    if fargate:
+        tfvars["reaper_at"] = reaper_schedule_at(expires)
     if rds is not None:
-        expires = utc_now(system.clock) + timedelta(seconds=estimate["ttl_s"])
         tfvars.update(rds_tfvars(rds, secrets.token_urlsafe(24), expires))
     # The tfvars and state carry the rds password.
     tf_dir.chmod(0o700)
@@ -5324,6 +6194,7 @@ def run_config_hash(
             cfg.query_engine.encode(),
             *([json.dumps(sorted(cfg.node_env)).encode()] if cfg.node_env else []),
             *([b"leader-trace"] if cfg.leader_trace else []),
+            *([b"query-placement=fargate"] if cfg.query_placement == "fargate" else []),
             f"prune={cfg.prune}".encode(),
             *(
                 [json.dumps(dataclasses.asdict(cfg.chaos), sort_keys=True).encode()]
@@ -5424,6 +6295,25 @@ def parse_hosts_output(
             "instance_id": value[spec["name"]]["instance_id"],
         }
         for spec in specs
+        if "fargate" not in spec
+    }
+
+
+def parse_fargate_output(output: dict[str, Any]) -> FargateInfo:
+    value = output["fargate"]["value"]
+    if value is None:
+        raise RemoteError(
+            "tofu output fargate is null, but the fleet has fargate query nodes"
+        )
+    return {
+        "cluster_arn": value["cluster_arn"],
+        "exec_role_arn": value["exec_role_arn"],
+        "log_group": value["log_group"],
+        "subnet_id": value["subnet_id"],
+        "security_group_id": value["security_group_id"],
+        "efs_id": value["efs_id"],
+        "efs_dns": value["efs_dns"],
+        "access_points": value["access_points"],
     }
 
 
@@ -5495,21 +6385,27 @@ def prepare_rds(fleet: FleetState) -> None:
         fleet.fleet_dir / RDS_FILE,
         {**rds, "username": RDS_USER, "password": tfvars["rds_password"]},
     )
-    nodes = query_node_names(fleet.manifest)
-    ship_rds_endpoints(remote, fleet.fleet_dir, nodes)
-    host = pg_host(remote.hosts, nodes[0])
-    gate(remote, host, "pg_isready", pg_shell("pg_isready"), fleet.interrupts)
+    manifest = fleet.manifest
+    nodes, fargate = query_node_names(manifest), fargate_names(manifest)
+    ship_rds_endpoints(remote, fleet.fleet_dir, nodes, fargate)
+    host = pg_host(nodes[0], fargate)
+    endpoint = pg_json(nodes[0], fargate)
+    gate(remote, host, "pg_isready", pg_shell("pg_isready", endpoint), fleet.interrupts)
     if nodes[1:]:
-        reset_rds_databases(remote, host, [rds_database(n) for n in nodes[1:]])
+        extra = [rds_database(n) for n in nodes[1:]]
+        reset_rds_databases(remote, host, endpoint, extra)
 
 
-def ship_rds_endpoints(remote: Remote, fleet_dir: Path, nodes: list[str]) -> None:
-    """The rds endpoint and database as each query node's `pg.json`, which `pg_shell` and the
-    samplers read."""
+def ship_rds_endpoints(
+    remote: Remote, fleet_dir: Path, nodes: list[str], fargate: Container[str]
+) -> None:
+    """The rds endpoint and database as the `pg.json` of each query node, which `pg_shell` and
+    the samplers read on its `pg_host`."""
     for node in nodes:
-        path = fleet_dir / "hosts" / node / "pg.json"
+        host, dest = pg_host(node, fargate), pg_json(node, fargate)
+        path = fleet_dir / "hosts" / host / Path(dest).name
         write_private_json(path, rds_endpoint(fleet_dir, node))
-        remote.rsync_to(node, [path], PG_JSON)
+        remote.rsync_to(host, [path], dest)
 
 
 def rds_endpoint(fleet_dir: Path, node: str) -> PgEndpoint:
@@ -5566,17 +6462,18 @@ def render_host_files(
     for spec in manifest["hosts"]:
         host_dir = run_dir / "hosts" / spec["name"]
         host_dir.mkdir(parents=True, exist_ok=True)
-        (host_dir / "start.sh").write_text(
-            render_start_sh(
-                spec,
-                manifest["images"],
-                manifest["memory_mib"][spec["instance_type"]],
-                query_db=cfg.query_db,
-                leader_trace=cfg.leader_trace,
-                consensus_storage=cfg.consensus_storage,
-                query_engine=cfg.query_engine,
+        if "fargate" not in spec:
+            (host_dir / "start.sh").write_text(
+                render_start_sh(
+                    spec,
+                    manifest["images"],
+                    manifest["memory_mib"][spec["instance_type"]],
+                    query_db=cfg.query_db,
+                    leader_trace=cfg.leader_trace,
+                    consensus_storage=cfg.consensus_storage,
+                    query_engine=cfg.query_engine,
+                )
             )
-        )
         if spec["role"] == "ctl":
             (host_dir / "ctl.env").write_text(render_ctl_env(hosts, cfg, dotenv()))
         else:
@@ -5615,7 +6512,10 @@ def render_host_files(
                     )
                 )
             if pg is not None:
-                write_private_json(host_dir / "pg.json", pg)
+                fargate = fargate_names(manifest)
+                node = spec["name"]
+                pg_dir = run_dir / "hosts" / pg_host(node, fargate)
+                write_private_json(pg_dir / Path(pg_json(node, fargate)).name, pg)
     topo = topology(hosts, cfg.query_engine)
     nb.write_json(run_dir / "topology.json", topo)
     nb.write_json(
@@ -5783,6 +6683,7 @@ def ship(remote: Remote, run_dir: Path) -> None:
     def send(host: str) -> None:
         host_dir = run_dir / "hosts" / host
         files = [host_dir / f for f in SHIPPED_HOST_FILES if (host_dir / f).exists()]
+        files += sorted(host_dir.glob("pg.*.json"))
         files.append(run_dir / "genesis.toml")
         remote.rsync_to(host, files, f"{BENCH_DIR}/")
 
@@ -5790,10 +6691,18 @@ def ship(remote: Remote, run_dir: Path) -> None:
 
 
 def start_hostmon(remote: Remote, query_engine: QueryEngine) -> None:
+    """On ctl the sampler also reads the databases of the Fargate query nodes."""
+    fargate = fargate_node_names(remote.hosts)
+
     def start(host: str) -> None:
         role = remote.hosts[host]["role"]
-        postgres = role == "query" and query_engine == "postgres"
-        pg = f" --pg {PG_JSON}" if postgres else ""
+        if query_engine == "postgres" and role == "query":
+            endpoints = [PG_JSON]
+        elif query_engine == "postgres" and host == "ctl":
+            endpoints = [pg_json(node, fargate) for node in fargate]
+        else:
+            endpoints = []
+        pg = "".join(f" --pg {endpoint}" for endpoint in endpoints)
         remote.ssh(
             host,
             f"sudo systemd-run --unit bench-host --collect -p TimeoutStopSec=3 {AGENT_PYTHON} {BENCH_DIR}/aws-bench "
@@ -5946,6 +6855,7 @@ def support_plan(
     contracts: list[str],
     query_engine: QueryEngine = "postgres",
     query_hosts: Sequence[str] = ("node0",),
+    fargate: Container[str] = (),
 ) -> list[SupportStart]:
     """The support services in start order, each with the check that gates the next. The rds
     instance is only checked: it is already running. SQLite has no database service."""
@@ -5998,14 +6908,15 @@ def support_plan(
     ]
     if query_engine == "sqlite":
         return plan
-    for host in query_hosts:
+    for node in query_hosts:
+        host, endpoint = pg_host(node, fargate), pg_json(node, fargate)
         plan += [
             GateStart(
                 kind="gate",
                 host=host,
                 container=None if query_db == "rds" else "postgres",
                 what="pg_isready",
-                gate_cmd=pg_shell("pg_isready"),
+                gate_cmd=pg_shell("pg_isready", endpoint),
                 timeout_s=GATE_TIMEOUT_S,
             ),
         ]
@@ -6022,7 +6933,7 @@ def support_plan(
                     host=host,
                     container=None,
                     what=what,
-                    gate_cmd=pg_shell(f"psql -c {shlex.quote(sql)}"),
+                    gate_cmd=pg_shell(f"psql -c {shlex.quote(sql)}", endpoint),
                     timeout_s=GATE_TIMEOUT_S,
                 )
             )
@@ -6036,11 +6947,12 @@ def start_support(
     query_db: DbMode = "colocated",
     query_engine: QueryEngine = "postgres",
     query_hosts: Sequence[str] = ("node0",),
+    fargate: Container[str] = (),
 ) -> None:
     """On ctl, in order and each gated on a check: anvil, contract deployment, orchestrator,
-    relay; then Postgres on each query host (the rds instance is only gated, it is already
-    running; SQLite has no such step)."""
-    for step in support_plan(query_db, contracts, query_engine, query_hosts):
+    relay; then Postgres of each query node (the rds instance is only gated, it is already
+    running; SQLite has no such step), from ctl for a Fargate node."""
+    for step in support_plan(query_db, contracts, query_engine, query_hosts, fargate):
         host = step["host"]
         if step["container"] is not None:
             remote.ssh(host, f"sudo docker start {step['container']}")
@@ -6080,9 +6992,12 @@ def fleet_time(remote: Remote) -> float:
     return float(remote.ssh("ctl", "date +%s.%N").stdout)
 
 
-def start_nodes(remote: Remote, hosts: list[HostInfo], at: float) -> float:
-    """`docker start` of every node at fleet time `at`. Returns the spread in seconds between
-    the earliest and latest `.State.StartedAt`."""
+def start_nodes(
+    remote: Remote, hosts: list[HostInfo], at: float, fargate: Sequence[str] = ()
+) -> float:
+    """`docker start` of every node at fleet time `at`; the Fargate nodes in `fargate` get
+    `at` as their go. Returns the spread in seconds between the earliest and latest
+    `.State.StartedAt` or `started_at`."""
     wait = (
         "python3 -c 'import sys, time; time.sleep(max(0.0, float(sys.argv[1]) - time.time()))' "
         f"{at!r}"
@@ -6093,9 +7008,13 @@ def start_nodes(remote: Remote, hosts: list[HostInfo], at: float) -> float:
         remote.ssh(node, f"{wait} && sudo docker start espresso-node")
         return parse_docker_time(remote.ssh(node, inspect).stdout)
 
+    for node in fargate:
+        signal_go(remote, node, at)
     # One thread per node: each ssh call sleeps until `at`, so a smaller pool would start the
     # rest only after the first batch returned.
     started = remote.parallel(start, [h["name"] for h in hosts], workers=len(hosts))
+    for node in fargate:
+        started[node] = fargate_started_at(remote, node)
     return max(started.values()) - min(started.values())
 
 
@@ -6514,9 +7433,16 @@ class ChaosRunner:
                 log.info("chaos: %s", ch.chaos_log_line(event))
 
 
-def check_nodes(remote: Remote, expected_down: frozenset[str] = frozenset()) -> None:
+def check_nodes(
+    remote: Remote,
+    expected_down: frozenset[str] = frozenset(),
+    fargate: FargateTasks | None = None,
+) -> None:
     """Raises when an `espresso-node` container is not running, with the log tail of the
-    first such node. A node in `expected_down` is down on purpose and is not inspected."""
+    first such node, or a Fargate task stopped. A node in `expected_down` is down on purpose
+    and is not inspected."""
+    if fargate is not None:
+        fargate.check(fargate.describe())
     names = [
         info["name"]
         for info in ec2_node_hosts(remote.hosts)
@@ -6546,6 +7472,7 @@ def poll_agent(
     cfg: RunConfig,
     interrupts: Interrupts,
     chaos: ChaosRunner | None = None,
+    fargate: FargateTasks | None = None,
 ) -> AgentState:
     """Until the agent reports `done`: reads its state every AGENT_POLL_S, logs each new line of
     its `agent.log` and each new phase, and rsyncs its output every OUT_RSYNC_S. With `chaos`,
@@ -6594,7 +7521,8 @@ def poll_agent(
         if chaos is not None and not step["retry"]:
             chaos.tick(latest)
         if step["node_check"]:
-            check_nodes(remote, frozenset() if chaos is None else chaos.expected_down())
+            down = frozenset() if chaos is None else chaos.expected_down()
+            check_nodes(remote, down, fargate)
         if step["rsync"]:
             best_effort(
                 "partial rsync",
@@ -6622,12 +7550,14 @@ def freeze_command(names: tuple[str, ...]) -> str:
     )
 
 
-def freeze(remote: Remote) -> None:
+def freeze(remote: Remote, fargate: FargateTasks | None = None) -> None:
     def stop(host: str) -> None:
         names = FREEZE_CONTAINERS[remote.hosts[host]["role"]]
         remote.ssh(host, bounded(freeze_command(names)))
 
     remote.parallel(stop, ec2_names(remote.hosts))
+    if fargate is not None:
+        fargate.stop("freeze")
 
 
 COLLECT_SCRIPT = (
@@ -6700,12 +7630,17 @@ def _pg_dump(sql: str, filename: str) -> str:
     return f"psql -At -c {shlex.quote(sql)} > {BENCH_DIR}/{filename}\n"
 
 
-PG_STATS_SCRIPT = (
-    pg_shell_env(PG_JSON)
-    + _pg_dump(PG_STATS_SQL, "pg-stats.json")
-    + _pg_dump(PG_STATEMENTS_SQL, "pg-statements.json")
-    + _pg_dump(PG_SETTINGS_SQL, "pg-settings.json")
-)
+def pg_stats_script(endpoint: str) -> str:
+    """The statistics of the database `endpoint` names, into files next to it."""
+    suffix = pg_suffix(endpoint)
+    return (
+        pg_shell_env(endpoint)
+        + _pg_dump(PG_STATS_SQL, f"pg-stats{suffix}.json")
+        + _pg_dump(PG_STATEMENTS_SQL, f"pg-statements{suffix}.json")
+        + _pg_dump(PG_SETTINGS_SQL, f"pg-settings{suffix}.json")
+    )
+
+
 # Shipped inputs and the agent's output, which `poll_agent` and the final rsync fetch.
 COLLECT_EXCLUDES = (
     "--exclude=/out/",
@@ -6715,6 +7650,7 @@ COLLECT_EXCLUDES = (
     "--exclude=/latency.py",
     "--exclude=/bbr-hold.sh",
     "--exclude=/pg.json",
+    "--exclude=/pg.*.json",
 )
 
 
@@ -6725,14 +7661,23 @@ def collect_hosts(
     query_engine: QueryEngine,
     subdir: str = "",
 ) -> None:
-    """Logs, inspect, chrony, disk and journal sizes, host samples and (node0) Postgres
-    statistics, except with SQLite, into `out/hosts/<name>/<subdir>`. Best effort per host: one
-    that cannot be reached is reported and the rest are still collected."""
+    """Logs, inspect, chrony, disk and journal sizes, host samples and (query nodes) Postgres
+    statistics, except with SQLite, into `out/hosts/<name>/<subdir>`; ctl runs the statistics
+    of the Fargate nodes, and fetches their mailboxes into their own dirs. Best effort per host:
+    one that cannot be reached is reported and the rest are still collected."""
+    fargate = [h["name"] for h in hosts if not h["public_ip"]]
 
     def collect(name: str) -> None:
         role = remote.hosts[name]["role"]
-        postgres = role == "query" and query_engine == "postgres"
-        pg_stats = PG_STATS_SCRIPT if postgres else ""
+        if query_engine != "postgres":
+            endpoints = []
+        elif role == "query":
+            endpoints = [PG_JSON]
+        elif name == "ctl":
+            endpoints = [pg_json(node, fargate) for node in fargate]
+        else:
+            endpoints = []
+        pg_stats = "".join(pg_stats_script(endpoint) for endpoint in endpoints)
         script = COLLECT_SCRIPT + pg_stats + "true\n"
         # The copy runs even when the script failed or timed out: files already on the
         # host (host.jsonl) are still wanted.
@@ -6751,7 +7696,26 @@ def collect_hosts(
         except RemoteError as exc:
             log.warning("collect %s rsync failed: %s", name, exc)
 
-    remote.parallel(collect, [h["name"] for h in hosts if h["public_ip"]])
+    def collect_task(node: str) -> None:
+        try:
+            remote.ssh("ctl", bounded(fargate_collect_script(node)))
+        except RemoteError as exc:
+            log.warning("collect script %s failed: %s", node, exc)
+        try:
+            remote.rsync_from(
+                "ctl",
+                f"{FARGATE_CTL_MOUNT}/{node}/bench/",
+                out / "hosts" / node / subdir,
+                "--exclude=node.env",
+                "--exclude=espresso-node.log",
+            )
+        except RemoteError as exc:
+            log.warning("collect %s rsync failed: %s", node, exc)
+
+    remote.parallel(
+        lambda name: (collect_task if name in fargate else collect)(name),
+        [h["name"] for h in hosts],
+    )
 
 
 def cmd_status(args: argparse.Namespace, system: System) -> int:
@@ -8844,39 +9808,13 @@ def delete_rds(run: Runner, region: str, identifier: str) -> None:
 def delete_ecs_cluster(run: Runner, region: str, cluster: str) -> None:
     """`delete-cluster` fails with ClusterContainsTasksException while a task runs, so they
     are stopped first."""
-    tasks = aws_json(
-        run,
-        "ecs",
-        "list-tasks",
-        "--cluster",
-        cluster,
-        "--query",
-        "taskArns",
-        region=region,
-        tolerate="ClusterNotFoundException",
-    )
-    if tasks is None:
-        return
-    for task in tasks:
+    if stop_tasks(run, region, cluster, "sweep"):
         aws_json(
             run,
-            *("ecs", "stop-task", "--cluster", cluster, "--task", task),
-            *("--reason", "sweep"),
+            *("ecs", "delete-cluster", "--cluster", cluster),
             region=region,
+            tolerate="ClusterNotFoundException",
         )
-    if tasks:
-        aws_json(
-            run,
-            *("ecs", "wait", "tasks-stopped", "--cluster", cluster),
-            *("--tasks", *tasks),
-            region=region,
-        )
-    aws_json(
-        run,
-        *("ecs", "delete-cluster", "--cluster", cluster),
-        region=region,
-        tolerate="ClusterNotFoundException",
-    )
 
 
 def delete_efs(system: System, region: str, file_system: str) -> None:
@@ -9107,6 +10045,9 @@ def manifest_cost(
             manifest["rds_spec"],
             duration_s if rds_duration_s is None else rds_duration_s,
         )
+    if fargate_specs(manifest["hosts"]):
+        cfg = config_from_manifest(manifest["config"])
+        lines += fargate_cost_lines(manifest["hosts"], cfg, duration_s)
     return sum(line["usd"] for line in lines)
 
 
@@ -9798,9 +10739,9 @@ def cmd_agent_host(args: argparse.Namespace, system: System) -> int:
     stop = threading.Event()
     system.trap((signal.SIGINT, signal.SIGTERM), lambda *_: stop.set())
     threads = []
-    if args.pg is not None:
-        pg_out = args.out.with_name("pg-stats.jsonl")
-        pg = cast(PgEndpoint, json.loads(args.pg.read_text()))
+    for endpoint in args.pg:
+        pg_out = args.out.with_name(f"pg-stats{pg_suffix(str(endpoint))}.jsonl")
+        pg = cast(PgEndpoint, json.loads(endpoint.read_text()))
         threads.append(
             threading.Thread(target=sample_pg, args=(pg_out, stop, pg, system))
         )
