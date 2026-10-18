@@ -280,7 +280,7 @@ just bench aws up --tag release-x --nodes 3 --query-placement fargate --db-modes
   with `task.json`.
 - Ends: the wrapper runs the node under `timeout` until the fleet's expiry. `down` stops the tasks, then deletes the
   task definitions (registered per run and node) before `tofu destroy`. The reaper deletes the EFS mount target and
-  access points at the rds delete time and the file system 15 min later.
+  access points at the rds delete time and the file system 30 min later.
 - Cost: lines `fargate vcpu`, `fargate memory`, `efs storage` and `efs elastic writes` (about $0.06 per GB written:
   twice the payload factor times the offered GB). A 200 MB/s ramp can need `--max-usd` above the default.
 

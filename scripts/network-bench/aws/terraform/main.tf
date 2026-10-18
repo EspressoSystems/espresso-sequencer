@@ -157,8 +157,7 @@ resource "aws_instance" "host" {
 locals {
   rds_enabled     = var.rds != null
   fargate_enabled = var.fargate != null
-  reaper_enabled  = local.rds_enabled || local.fargate_enabled
-  rds_name        = "espresso-bench-${var.name}"
+  prefix          = "espresso-bench-${var.name}"
 }
 
 # A DB subnet group needs subnets in two AZs, unlike the hosts, which sit in one.
@@ -174,7 +173,7 @@ data "aws_subnets" "vpc" {
 resource "aws_db_subnet_group" "this" {
   count = local.rds_enabled ? 1 : 0
 
-  name       = local.rds_name
+  name       = local.prefix
   subnet_ids = data.aws_subnets.vpc[0].ids
 }
 
@@ -184,7 +183,7 @@ resource "aws_db_subnet_group" "this" {
 resource "aws_db_parameter_group" "this" {
   count = local.rds_enabled ? 1 : 0
 
-  name   = local.rds_name
+  name   = local.prefix
   family = "postgres${split(".", var.rds.engine_version)[0]}"
 
   dynamic "parameter" {
@@ -200,7 +199,7 @@ resource "aws_db_parameter_group" "this" {
 resource "aws_db_instance" "this" {
   count = local.rds_enabled ? 1 : 0
 
-  identifier     = local.rds_name
+  identifier     = local.prefix
   engine         = "postgres"
   engine_version = var.rds.engine_version
   instance_class = var.rds.instance_class
@@ -246,9 +245,9 @@ resource "aws_db_instance" "this" {
 
 # The role can delete this one instance and this one file system, nothing else.
 resource "aws_iam_role" "scheduler" {
-  count = local.reaper_enabled ? 1 : 0
+  count = local.rds_enabled ? 1 : 0
 
-  name = local.rds_name
+  name = local.prefix
   path = "/espresso-bench/${var.region}/"
 
   assume_role_policy = jsonencode({
@@ -275,15 +274,15 @@ resource "aws_iam_role_policy" "scheduler" {
     Statement = [{
       Effect   = "Allow"
       Action   = "rds:DeleteDBInstance"
-      Resource = "arn:aws:rds:${var.region}:${local.account_id}:db:${local.rds_name}"
+      Resource = "arn:aws:rds:${var.region}:${local.account_id}:db:${local.prefix}"
     }]
   })
 }
 
 resource "aws_scheduler_schedule_group" "this" {
-  count = local.reaper_enabled ? 1 : 0
+  count = local.rds_enabled ? 1 : 0
 
-  name = local.rds_name
+  name = local.prefix
 }
 
 # `reaper_at` is in UTC, the schedule's default time zone. The provider has no
@@ -304,7 +303,7 @@ resource "aws_scheduler_schedule" "rds_delete" {
     arn      = "arn:aws:scheduler:::aws-sdk:rds:deleteDBInstance"
     role_arn = aws_iam_role.scheduler[0].arn
     input = jsonencode({
-      DbInstanceIdentifier   = local.rds_name
+      DbInstanceIdentifier   = local.prefix
       SkipFinalSnapshot      = true
       DeleteAutomatedBackups = true
     })
@@ -319,7 +318,7 @@ resource "aws_scheduler_schedule" "rds_delete" {
 resource "aws_ecs_cluster" "this" {
   count = local.fargate_enabled ? 1 : 0
 
-  name = local.rds_name
+  name = local.prefix
 
   setting {
     name  = "containerInsights"
@@ -338,7 +337,7 @@ resource "aws_cloudwatch_log_group" "ecs" {
 resource "aws_iam_role" "ecs_exec" {
   count = local.fargate_enabled ? 1 : 0
 
-  name = "${local.rds_name}-exec"
+  name = "${local.prefix}-exec"
   path = "/espresso-bench/${var.region}/"
 
   assume_role_policy = jsonencode({
@@ -377,13 +376,13 @@ resource "aws_efs_file_system" "this" {
   throughput_mode  = "elastic"
 
   tags = {
-    Name = local.rds_name
+    Name = local.prefix
   }
 
   lifecycle {
     precondition {
-      condition     = var.reaper_at != null
-      error_message = "fargate needs reaper_at."
+      condition     = local.rds_enabled
+      error_message = "fargate needs rds: its schedule group and role delete the file system."
     }
   }
 }
@@ -484,15 +483,16 @@ resource "aws_scheduler_schedule" "efs_access_point_delete" {
   depends_on = [aws_iam_role_policy.scheduler_efs]
 }
 
-# DeleteFileSystem fails until the mount target is gone; the scheduler's default retry policy
-# (24 h) repeats it.
+# DeleteFileSystem fails with FileSystemInUse until the mount target is gone, and the scheduler
+# may not retry a client error, so it runs well after the mount target's deletion (a minute or
+# two) instead of relying on a retry.
 resource "aws_scheduler_schedule" "efs_delete" {
   count = local.fargate_enabled ? 1 : 0
 
   name       = "efs-delete"
   group_name = aws_scheduler_schedule_group.this[0].name
 
-  schedule_expression = "at(${formatdate("YYYY-MM-DD'T'hh:mm:ss", timeadd("${var.reaper_at}Z", "15m"))})"
+  schedule_expression = "at(${formatdate("YYYY-MM-DD'T'hh:mm:ss", timeadd("${var.reaper_at}Z", "30m"))})"
 
   flexible_time_window {
     mode = "OFF"

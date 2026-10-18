@@ -109,7 +109,7 @@ variable "fargate" {
 variable "reaper_at" {
   type        = string
   default     = null
-  description = "UTC time, YYYY-MM-DDThh:mm:ss, when the schedules delete the rds instance and the efs mount target and access points; the file system follows 15 minutes later. Required with rds or fargate."
+  description = "UTC time, YYYY-MM-DDThh:mm:ss, when the schedules delete the rds instance and the efs mount target and access points; the file system follows 30 minutes later. Required with rds, which fargate needs too."
 
   validation {
     condition     = var.reaper_at == null || can(regex("^\\d{4}-\\d\\d-\\d\\dT\\d\\d:\\d\\d:\\d\\d$", var.reaper_at))

@@ -1294,3 +1294,8 @@ def test_the_wrapper_kills_the_command_that_outlives_the_deadline(tmp_path) -> N
     now = time.time()
     done = run_entry(tmp_path, now + 2, f"{int(now * 1e9)}\n", "sleep", "30")
     assert done.returncode == 124
+
+
+def test_the_file_system_is_deleted_long_after_its_mount_target():
+    assert '"30m"' in tf_resource("aws_scheduler_schedule", "efs_delete")
+    assert "rds_enabled" in tf_resource("aws_efs_file_system", "this")
