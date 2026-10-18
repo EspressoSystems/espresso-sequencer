@@ -213,7 +213,7 @@ pub struct Options {
 
     /// Cap on the block payloads a query node holds in memory for its query service, from when
     /// it obtains them until their decide is replayed. Oldest dropped first once exceeded; the
-    /// query service fetches those blocks from a peer.
+    /// query service fetches those blocks from a peer once its local payload grace has passed.
     #[clap(
         long,
         env = "ESPRESSO_NODE_JOURNAL_PENDING_PAYLOAD_BYTES",
@@ -400,8 +400,9 @@ struct PendingPayload {
 }
 
 /// Obtained payloads a query node has not yet replayed into its query service, by view. Held in
-/// memory, never written: a decide carries the payload of a block obtained before it, so only a
-/// restart loses one, and the query service then fetches that block from a peer. The cap bounds
+/// memory, never written. A decide often comes before reconstruction obtains its payload; that
+/// payload is then sent separately as a `BlockPayload` event once obtained. A restart or the cap
+/// loses a payload, and the query service then fetches that block from a peer. The cap bounds
 /// the backlog while the query service lags; the oldest views go first.
 struct PendingPayloads {
     by_view: BTreeMap<ViewNumber, PendingPayload>,
@@ -1055,6 +1056,10 @@ impl Persistence {
 
     /// Fill `leaf` with its payload, from a pending payload of the same block, else from a DA
     /// proposal. Returns whether a pending payload was used.
+    ///
+    /// Only the legacy protocol writes DA proposals (`append_da2`); after the new protocol
+    /// cutover the `da` lane stays empty. A miss there is normally reconstruction finishing after
+    /// the decide, and the payload follows as a `BlockPayload` event.
     async fn fill_payload(&self, view: ViewNumber, leaf: &mut Leaf2) -> anyhow::Result<bool> {
         let pending = self
             .inner
