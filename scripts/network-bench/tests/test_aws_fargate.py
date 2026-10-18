@@ -33,6 +33,7 @@ from fakes import (
     fargate_output,
     fargate_task,
     fleet,
+    host_info,
     isolated_env,
     mapping,
     no_children,
@@ -1039,13 +1040,6 @@ def test_ctl_mounts_for_fresh_lookups_and_creates_the_go_the_task_polls(
     assert "touch /efs/node0/bench/go" in script
 
 
-def test_nothing_is_stopped_for_a_run_that_started_no_task(isolated: Path):
-    runner = fargate_runner()
-    tasks = awsb.FargateTasks(runner, awsb.REGION, fargate_output(["node0"]), {})
-    tasks.stop("freeze")
-    assert runner.calls == []
-
-
 def test_a_fleet_that_failed_before_its_outputs_has_no_cluster_to_stop(
     fleet_harness: FargateFleetHarness,
 ):
@@ -1223,11 +1217,26 @@ def test_the_postgres_files_of_ctl_are_judged_for_the_task(tmp_path):
     assert "node0 postgres backends connected without TLS" in reasons
 
 
-def test_the_task_journal_limit_is_not_halved_for_postgres():
-    hosts = awsb.plan_hosts(task_cfg())
-    ec2 = next(h for h in hosts if h["name"] == "node0")
-    task = {**ec2, "fargate": FARGATE_SHAPE}
-    assert awsb._journal_max_bytes(task) == 2 * awsb._journal_max_bytes(ec2)
+def test_a_task_gets_no_journal_limit_and_is_not_judged_by_one(tmp_path):
+    env = task_node_env()
+    assert "ESPRESSO_NODE_JOURNAL_MAX_BYTES" not in env
+    fargate_run_dir(tmp_path)
+    (tmp_path / "hosts/node0/du-journal.txt").write_text(
+        "999999999999\t/efs/node0/store\n"
+    )
+    validity = awsb.write_report(tmp_path)["validity"]
+    assert not any("journal" in r for r in validity["reasons"])
+
+
+def task_node_env() -> str:
+    hosts = awsb.place_fargate(awsb.plan_hosts(task_cfg()), {"fargate": FARGATE_SHAPE})
+    infos = {
+        n: host_info(n, "query" if n == "node0" else "validator", i + 1)
+        for i, n in enumerate(("ctl", "node0", "node1", "node2"))
+    }
+    return awsb.render_node_env(
+        hosts[1], infos, awsb.pg_endpoint(), consensus_storage="journal"
+    )
 
 
 def test_the_task_ends_before_the_reaper_deletes_its_file_system():
@@ -1299,3 +1308,38 @@ def test_the_wrapper_kills_the_command_that_outlives_the_deadline(tmp_path) -> N
 def test_the_file_system_is_deleted_long_after_its_mount_target():
     assert '"30m"' in tf_resource("aws_scheduler_schedule", "efs_delete")
     assert "rds_enabled" in tf_resource("aws_efs_file_system", "this")
+
+
+def test_a_failed_task_definition_deletion_is_an_error():
+    runner = FakeRunner({("aws",): completed()})
+    runner.respond(
+        "delete-task-definitions",
+        lambda _: completed(stdout=json.dumps({"failures": [{"reason": "ACTIVE"}]})),
+    )
+    with pytest.raises(awsb.RemoteError, match="ACTIVE"):
+        awsb.delete_task_definition(runner, awsb.REGION, "fam:1")
+
+
+def test_the_exec_role_is_swept_once_only_the_cluster_is_left():
+    arns = [arn("ecs", "cluster/espresso-bench-fleet1")]
+    assert awsb.reaper_fleets(arns) == {"fleet1"}
+
+
+def test_freeze_stops_the_cluster_tasks_through_stop_tasks(isolated: Path):
+    runner = fargate_runner()
+    runner.launched.append("node0")
+    tasks = awsb.FargateTasks(
+        runner, awsb.REGION, fargate_output(["node0"]), {"node0": task_arn("node0")}
+    )
+    awsb.freeze(remote(runner, isolated), tasks)
+    assert runner.ran("stop-task", "--reason freeze")
+    assert runner.ran("wait", "tasks-stopped")
+
+
+def test_the_manifest_says_which_direction_carries_the_whole_round_trip():
+    folded = awsb.latency.shaping(
+        "decaf-2025", 3, True, "bbr", 1500, unshaped=frozenset({0})
+    )
+    assert "validator to unshaped carries the full RTT" in folded.meta()["fold"]
+    plain = awsb.latency.shaping("decaf-2025", 3, True, "bbr", 1500)
+    assert "fold" not in plain.meta()

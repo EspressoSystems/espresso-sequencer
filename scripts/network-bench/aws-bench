@@ -2598,11 +2598,10 @@ def _node_url(info: HostInfo) -> str:
 
 def _journal_max_bytes(host: HostSpec) -> int:
     """Usable disk after RESERVED_GB, times JOURNAL_MAX_BYTES_FRACTION; halved on the query
-    role, which shares the disk with Postgres, except on Fargate, where Postgres is on rds and
-    the journal is on efs."""
+    role, which shares the disk with Postgres. Not for Fargate, whose journal is on efs."""
     usable_gb = host["root_gb"] - RESERVED_GB
     fraction = JOURNAL_MAX_BYTES_FRACTION
-    if host["role"] == "query" and "fargate" not in host:
+    if host["role"] == "query":
         fraction *= QUERY_JOURNAL_FRACTION
     return int(usable_gb * 1_000_000_000 * fraction)
 
@@ -2648,7 +2647,7 @@ def render_node_env(
         "ESPRESSO_NODE_STORAGE_PATH": "/store/espresso",
         "ESPRESSO_NODE_IDENTITY_NODE_NAME": host["name"],
     }
-    if consensus_storage == "journal":
+    if consensus_storage == "journal" and "fargate" not in host:
         env["ESPRESSO_NODE_JOURNAL_MAX_BYTES"] = str(_journal_max_bytes(host))
     # A required value left empty risks a clap parse error; omit rather than pass "".
     if peer_urls:
@@ -4034,24 +4033,6 @@ class FargateTasks:
             if task["lastStatus"] == "STOPPED":
                 raise RemoteError(stopped_message(node, task, self.log_tail(task)))
 
-    def stop(self, reason: str) -> None:
-        """Stops every task and waits until they are gone."""
-        if not self.arns:
-            return
-        cluster = self.info["cluster_arn"]
-        for arn in self.arns.values():
-            ecs(
-                self.run,
-                self.region,
-                *("stop-task", "--cluster", cluster, "--task", arn, "--reason", reason),
-            )
-        ecs(
-            self.run,
-            self.region,
-            *("wait", "tasks-stopped", "--cluster", cluster),
-            *("--tasks", *self.arns.values()),
-        )
-
     def log_tail(self, task: dict[str, Any]) -> str:
         """A diagnosis only: a task that stopped before it logged has no stream."""
         task_id = task["taskArn"].rpartition("/")[2]
@@ -4902,7 +4883,11 @@ def task_definitions(fleet_dir: Path) -> list[str]:
 def delete_task_definition(run: Runner, region: str, task_definition: str) -> None:
     """Only an inactive definition can be deleted."""
     ecs(run, region, "deregister-task-definition", "--task-definition", task_definition)
-    ecs(run, region, "delete-task-definitions", "--task-definitions", task_definition)
+    reply = ecs(
+        run, region, "delete-task-definitions", "--task-definitions", task_definition
+    )
+    if reply["failures"]:
+        raise RemoteError(f"delete {task_definition} failed: {reply['failures']}")
 
 
 def stop_tasks(run: Runner, region: str, cluster: str, reason: str) -> bool:
@@ -7588,7 +7573,7 @@ def freeze(remote: Remote, fargate: FargateTasks | None = None) -> None:
 
     remote.parallel(stop, ec2_names(remote.hosts))
     if fargate is not None:
-        fargate.stop("freeze")
+        stop_tasks(remote.run, fargate.region, fargate.info["cluster_arn"], "freeze")
 
 
 COLLECT_SCRIPT = (
@@ -9540,6 +9525,8 @@ def check_validity_aws(
     specs = {h["name"]: h for h in manifest["hosts"]}
     if manifest_storage(manifest["config"]) == "journal":
         for name, size in evidence["journal_bytes"].items():
+            if "fargate" in specs[name]:
+                continue
             limit = _journal_max_bytes(specs[name])
             if size > JOURNAL_NOISY_FRACTION * limit:
                 noisy.append(
@@ -9829,12 +9816,12 @@ def sweep(system: System, region: str, name: str | None) -> list[str]:
 
 
 def reaper_fleets(arns: Iterable[str]) -> set[str]:
-    """Names of the fleets that own an rds instance or delete schedule group among `arns`: the
-    ones with an IAM role to sweep."""
+    """Names of the fleets that own an rds instance, delete schedule group or ecs cluster among
+    `arns`: the ones with an IAM role to sweep."""
     return {
         resource_id.removeprefix(RDS_PREFIX)
         for kind, resource_id in map(arn_parts, arns)
-        if kind in ("db", "schedule-group")
+        if kind in ("db", "schedule-group", "cluster")
     }
 
 

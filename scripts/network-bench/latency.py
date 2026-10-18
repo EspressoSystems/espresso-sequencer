@@ -159,7 +159,7 @@ class Shaping:
     unshaped: frozenset[int] = frozenset()
 
     def meta(self) -> dict:
-        return {
+        meta = {
             "profile": self.profile.name,
             "intra": self.intra,
             "nodes": {
@@ -177,6 +177,9 @@ class Shaping:
             "mtu": self.mtu,
             "probes": [],
         }
+        if self.unshaped:
+            meta["fold"] = FOLD_NOTE
+        return meta
 
 
 @dataclass(frozen=True)
@@ -221,6 +224,12 @@ def shaping(
     return Shaping(
         profile, assignment, delays, intra, tcp_cc, mtu, noise, netem, unshaped
     )
+
+
+FOLD_NOTE = (
+    "validator to unshaped carries the full RTT, unshaped to validator none: the round trip "
+    "is the matrix's, each direction alone is not"
+)
 
 
 def fold_unshaped(

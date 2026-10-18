@@ -273,8 +273,9 @@ just bench aws up --tag release-x --nodes 3 --query-placement fargate --db-modes
   be set in a task; BBR paces without `fq`. Whether Fargate's kernel has `bbr` shows at startup.
 - Latency: a task cannot run `tc`. Each EC2 node shapes its egress toward the task with the whole round trip of the
   matrix, and the task's egress is unshaped, so every link sees the matrix RTT. The task's MTU stays 9001; the MSS
-  follows the validators' `--mtu`. Probes ping from the shaped end. `latency.unshaped` in the manifest lists the
-  unshaped nodes.
+  follows the validators' `--mtu`. Shaping is one-way: validator to task carries the full RTT and task to validator
+  none, so only the round trip matches the matrix (`latency.fold` in the manifest). Probes ping from the shaped end.
+  `latency.unshaped` in the manifest lists the unshaped nodes.
 - Judged: the task has no host samples, chrony or EBS balance. `result["host"]` and the runner info come from the first
   EC2 node. The task's CPU and memory are in `hosts/<node>/task-stats.jsonl`, unjudged. The image digest is compared
   with `task.json`.
