@@ -5969,6 +5969,8 @@ mod test {
     )> {
         let port = reserve_tcp_port().expect("No ports free for query service");
         let mut db = tmp_options(storage);
+        // As `run::init_follower_with_storage` sets it.
+        db.local_payload_grace = Duration::ZERO;
         let persistence = db.create().await?;
         let handle = Options::with_port(port)
             .query_sql(
