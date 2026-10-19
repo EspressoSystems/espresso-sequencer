@@ -11,6 +11,7 @@ public import NewProtocolDiff.Corpus
 public import NewProtocolDiff.Tests
 public import NewProtocolDiff.Sim
 public import NewProtocolDiff.Scenario
+public import NewProtocolDiff.Random
 
 /-!
 # Checking a recorded run against the specification

@@ -773,11 +773,14 @@ impl Recorder {
             ConsensusInput::DrbResult(..) => return Err(Dropped("DrbResult")),
             ConsensusInput::ReVote(message) => {
                 let revote = &message.revote;
+                // Unnamed when the node's membership does not have the request's
+                // epoch, as for a fetched proposal.
                 let sender = self
                     .led
                     .get(&(revote.epoch, revote.view))
-                    .cloned()
-                    .unwrap_or_else(|| "null".to_string());
+                    .filter(|named| *named != "unknown")
+                    .map_or(NO_SENDER, String::as_str)
+                    .to_string();
                 tagged(
                     "revote",
                     obj(&[("sender", sender), ("r", self.revote_json(revote))]),

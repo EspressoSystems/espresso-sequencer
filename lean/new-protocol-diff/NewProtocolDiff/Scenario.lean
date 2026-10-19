@@ -92,9 +92,10 @@ def inputJson : Input → Json
 def headerJson (P : Params) (k : PubKey) : Json :=
   Json.mkObj [("scenario", Json.mkObj
     [("node", toJson k.toNat), ("nodes", toJson P.nodes), ("faulty", toJson P.faulty),
-     ("equivocators", toJson P.equivocators), ("misbehaving", toJson P.misbehaving),
+     ("equivocators", toJson P.equivocators), ("misbehaving", toJson P.misbehavers),
      ("committees", toJson P.committees), ("epochHeight", toJson P.epochHeight),
-     ("seed", toJson P.seed), ("gst", toJson P.gst), ("delta", toJson P.delta),
+     ("seed", toJson P.seed), ("gst", toJson P.gst), ("heldUntilGst", toJson P.heldUntilGst),
+     ("delta", toJson P.delta),
      ("tau", toJson P.tau)])]
 
 /-- The second line: every block the network built, in the order it built them. -/

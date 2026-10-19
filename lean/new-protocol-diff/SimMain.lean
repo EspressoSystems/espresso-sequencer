@@ -2,12 +2,15 @@ module
 
 import NewProtocolDiff.Sim
 import NewProtocolDiff.Scenario
+import NewProtocolDiff.Random
 
 /-!
 Random runs of the machine over a simulated network.
 
     sim [seeds]
     sim --scenarios <dir> [seeds]
+    sim --random <dir> [first] [count]
+    sim --random-check [first] [count]
 
 Runs every setting below for seeds `1` to `seeds` (default 4) and checks each run
 (`NewProtocolDiff.Sim.check`), after checking that the checks catch a forged vote
@@ -15,7 +18,9 @@ and a fork (`NewProtocolDiff.Sim.selfTest`). The exit status is 1 if anything fa
 
 With `--scenarios`, it runs the settings the Rust node's tests can reproduce
 instead (`rustSettings`), and writes what each node checked was given to `<dir>`,
-one scenario per node and run (`NewProtocolDiff.Scenario`).
+one scenario per node and run (`NewProtocolDiff.Scenario`). With `--random`, it
+runs `count` random settings from seed `first` on (`NewProtocolDiff.Sim.randomParams`)
+and writes their scenarios; with `--random-check`, it only runs and checks them.
 -/
 
 open NewProtocolDiff NewProtocolDiff.Sim
@@ -41,7 +46,8 @@ def nodesFrom (a b : Nat) : List Nat := (List.range (b + 1 - a)).map (· + a)
 /--
 Settings the Rust node's tests can reproduce: committees its test membership can
 schedule, which fixes the first two epochs, and epochs of ten blocks, the
-shortest its epoch roots allow.
+shortest its epoch roots allow. GST is at 0, at 60, and at 400 with delays of
+at most 8 before it but one message in ten held until then.
 
 On ten nodes in one committee, each kind of fault: one node silent throughout,
 one leader that equivocates, one leader whose proposals break the rules, and one
@@ -77,17 +83,28 @@ def rustSettings (seed : Nat) : List (String × Params) :=
       ("four", { base with nodes := 4, size := 4, committees := [(0, nodesFrom 1 4)], faulty := [4] }),
       ("seven", { base with nodes := 7, size := 7, committees := [(0, nodesFrom 1 7)], faulty := [7] }) ]
   let all : List (String × Params) := rustFaults.map (fun (name, f) => (name, f base)) ++ committees
-  all.flatMap fun (name, p) => [0, 60].map fun g => (name, { p with gst := g, horizon := 500 + g })
+  let timings : List (Params → Params) :=
+    [ fun p => { p with gst := 0 },
+      fun p => { p with gst := 60 },
+      -- Fast enough before GST for the chain to cross an epoch boundary, with a
+      -- message now and then held far beyond δ and τ.
+      fun p => { p with gst := 600, preGst := 8, heldUntilGst := 30, boundaryHeld := 3 } ]
+  all.flatMap fun (name, p) => timings.map fun t =>
+    let p := t p
+    (name, { p with horizon := 500 + p.gst })
 
-/-- Run the Rust-compatible settings and write each checked node's scenario to `dir`. -/
-def writeScenarios (dir : System.FilePath) (seeds : Nat) : IO UInt32 := do
-  IO.FS.createDirAll dir
+/--
+Run `runs`, each named and with its seed, and write each checked node's scenario to
+`dir`; without `dir`, only check them.
+-/
+def runAll (dir : Option System.FilePath) (runs : List (String × Nat × Params)) : IO UInt32 := do
+  if let some d := dir then IO.FS.createDirAll d
   let mut failed := 0
   let mut written := 0
   -- Each run in a task of its own, so the runs use every core.
-  let runs := (List.range' 1 seeds).flatMap fun seed => (rustSettings seed).map fun (name, p) =>
-    (seed, name, p, Task.spawn fun _ => let s := run p; (s, checkState p s))
-  for (seed, name, p, task) in runs do
+  let tasks := runs.map fun (name, seed, p) =>
+    (name, seed, p, Task.spawn fun _ => let s := run p; (s, checkState p s))
+  for (name, seed, p, task) in tasks do
     unless p.coherent do
       failed := failed + 1
       IO.println s!"incoherent setting: {describe name p}"
@@ -96,18 +113,36 @@ def writeScenarios (dir : System.FilePath) (seeds : Nat) : IO UInt32 := do
     unless o.failures.isEmpty do
       failed := failed + 1
       IO.println s!"FAILED: {describe name p}: {String.intercalate "; " o.failures}"
+      if name == "random" then IO.println s!"  {describeRandom p}"
       continue
-    for k in p.checked do
-      let file := dir / s!"{name}-seed{seed}-gst{p.gst}-node{k.toNat}.jsonl"
-      IO.FS.writeFile file (Scenario.render p s k)
-      written := written + 1
+    if let some d := dir then
+      for k in p.checked do
+        let file := d / s!"{name}-seed{seed}-gst{p.gst}-node{k.toNat}.jsonl"
+        IO.FS.writeFile file (Scenario.render p s k)
+        written := written + 1
     IO.println s!"ok: {describe name p}: height {o.height}, {o.steps} steps"
-  IO.println s!"{written} scenarios written, {failed} runs failed"
+  if dir.isSome then IO.println s!"{written} scenarios written, {failed} runs failed"
+  else IO.println s!"{runs.length} runs, {failed} failed"
   return if failed = 0 then 0 else 1
 
+/-- The Rust-compatible settings for seeds `1` to `seeds`. -/
+def rustRuns (seeds : Nat) : List (String × Nat × Params) :=
+  (List.range' 1 seeds).flatMap fun seed => (rustSettings seed).map fun (name, p) => (name, seed, p)
+
+/-- Random runs `first` to `first + count - 1` (`NewProtocolDiff.Sim.randomParams`). -/
+def randomRuns (first count : Nat) : List (String × Nat × Params) :=
+  (List.range' first count).map fun seed => ("random", seed, randomParams seed)
+
 public def main (args : List String) : IO UInt32 := do
-  if let "--scenarios" :: dir :: rest := args then
-    return ← writeScenarios dir ((rest.head?.bind String.toNat?).getD 4)
+  let num (i d : Nat) := ((args.drop i).head?.bind String.toNat?).getD d
+  match args with
+  | "--scenarios" :: dir :: _ => return ← runAll (some dir) (rustRuns (num 2 4))
+  | "--random" :: dir :: _ => return ← runAll (some dir) (randomRuns (num 2 1) (num 3 50))
+  | "--random-check" :: _ => return ← runAll none (randomRuns (num 1 1) (num 2 50))
+  | "--random-describe" :: _ =>
+    for (_, _, p) in randomRuns (num 1 1) (num 2 50) do IO.println (describeRandom p)
+    return 0
+  | _ => pure ()
   let seeds := (args.head?.bind String.toNat?).getD 4
   let self := selfTest { seed := 1 }
   unless self.isEmpty do
