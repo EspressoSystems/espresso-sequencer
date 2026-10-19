@@ -131,8 +131,8 @@ impl Recency {
     /// Persist drained touches to `last_used`. Best-effort: a failure only degrades GC ranking,
     /// it never corrupts data.
     async fn flush(pool: DbPool, pending: Vec<(i64, i64)>) {
-        let res: sqlx::Result<()> = with_pool!(&pool, |pool| {
-            async {
+        let res: sqlx::Result<()> = async {
+            with_pool!(&pool, |pool| {
                 let mut tx = pool.begin().await?;
                 for (h, tick) in &pending {
                     query("UPDATE leaf SET last_used = $1 WHERE height = $2")
@@ -142,9 +142,9 @@ impl Recency {
                         .await?;
                 }
                 tx.commit().await
-            }
-            .await
-        });
+            })
+        }
+        .await;
         if let Err(err) = res {
             tracing::warn!(%err, "failed to flush LRU recency");
         }
