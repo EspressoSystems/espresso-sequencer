@@ -1750,9 +1750,7 @@ def cmd_backport(args: argparse.Namespace, git: Git, gh: Gh) -> int:
     command = parse_command(args.comment)
     if command is None or command.name != "backport" or command.arg is None:
         message = bad_command(args.comment, "`/backport <PR>`")
-        gh_error(message)
-        gh.issue_comment(args.issue, f"/backport failed: {message}\n")
-        return 1
+        return report_failure(gh, args.issue, "/backport", message, False)
     pr = int(command.arg)
     fields = {"pr_number": str(pr), "target_branch": version.branch}
     gh.workflow_run("backport.yml", None, fields)
@@ -1793,10 +1791,7 @@ def cmd_tag(args: argparse.Namespace, git: Git, gh: Gh) -> int:
         command = parse_command(args.comment)
         if command is None or command.name != "tag":
             message = bad_command(args.comment, "a /tag command")
-            gh_error(message)
-            if args.issue is not None and not args.dry_run:
-                gh.issue_comment(args.issue, f"/tag failed: {message}")
-            return 1
+            return report_failure(gh, args.issue, "/tag", message, args.dry_run)
         comment_explicit, notes = command.arg, command.text
     explicit = args.explicit if args.explicit is not None else comment_explicit
 
@@ -1820,7 +1815,7 @@ def _tag(
 ) -> int:
     """Resolves and writes the tag; once `issue` is known, every failure is also reported there."""
 
-    fail = partial(report_failure, gh, issue, "/tag", dry_run=False)
+    fail = partial(report_failure, gh, issue, "/tag", dry_run=args.dry_run)
     git.fetch(version, [branch])
     existing_for_version = git.tag_list(f"{version}.*")
     try:

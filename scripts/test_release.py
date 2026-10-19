@@ -923,6 +923,30 @@ class TagFailurePostsComment(unittest.TestCase):
         )
         self.assertIn("does not belong to 0.6.0", comment_call[-1])
 
+    def test_release_tag_dry_run_failure_does_not_comment_fails(self):
+        runner = FakeRunner(
+            {
+                ("gh", "repo", "view"): REPO,
+                ("gh", "issue", "view"): json.dumps(
+                    {"title": "Release 0.6.0", "body": ""}
+                ),
+                ("git", "fetch"): "",
+                ("git", "tag", "--list", "0.6.0.*"): "",
+            }
+        )
+        args = argparse.Namespace(
+            issue=42,
+            branch=None,
+            comment=None,
+            explicit="0.5.0.1",
+            actor="alice",
+            run_url=None,
+            dry_run=True,
+        )
+        code = rel.cmd_tag(args, rel.Git(runner), rel.Gh(runner))
+        self.assertEqual(code, 1)
+        self.assertFalse(runner.ran("gh", "issue", "comment"))
+
     def test_release_tag_write_failure_posts_comment_and_reraises_fails(self):
         sha = "c" * 40
         responses = {
