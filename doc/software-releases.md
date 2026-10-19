@@ -75,6 +75,7 @@ notes for that network only, such as an upgrade deadline.
 - Refused, with a tracker comment, unless `ghcr.io/espressosystems/espresso-network/espresso-node:<tag>` exists.
 - Rerun to recover from a failed run. `/publish <older tag> <network>` rolls back.
 - Do not edit release titles or the bot's `<!-- ... -->` markers by hand: they record what each network runs.
+- Preview without writing: `just release-publish-preview X.Y.Z.N decaf`.
 
 Operators follow releases with Watch > Custom > Releases (it also fires for `/tag` pre-releases) and look for the
 network marker in the title, or poll `GET /repos/EspressoSystems/espresso-network/releases`.
