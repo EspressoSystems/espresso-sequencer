@@ -14,7 +14,7 @@ export ESPRESSO_NODE_EMBEDDED_DB=${ESPRESSO_NODE_EMBEDDED_DB:-false}
 # and the node would be force killed on `docker stop`.
 if [ "$ESPRESSO_NODE_EMBEDDED_DB" = "true" ]; then
     echo "Starting Espresso node with sqlite..."
-    exec /bin/espresso-node-sqlite -- storage-sql "$@"
+    exec /bin/espresso-node-postgres -- storage-sql "$@"
 else
     echo "Starting Espresso node..."
     exec /bin/espresso-node-postgres "$@"

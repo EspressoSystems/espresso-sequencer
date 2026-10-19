@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# Kept for callers of the former SQLite binary: the node now picks SQLite from the environment.
+ESPRESSO_NODE_EMBEDDED_DB=true exec /bin/espresso-node-postgres "$@"
