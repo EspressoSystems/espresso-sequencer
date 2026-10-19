@@ -295,6 +295,12 @@ impl<Mode: TransactionMode> Transaction<Mode> {
             })?;
 
         if commitment_from_path != merkle_commitment.digest() {
+            // With no node stored on the path, not even the root, the snapshot holds nothing of
+            // this tree, as when the state writer started from a snapshot without it. That is
+            // missing data, as for a parent-child mismatch above, not a corrupt path.
+            if nodes.is_empty() {
+                return Err(QueryError::Missing);
+            }
             return Err(QueryError::Error {
                 message: format!(
                     "Commitment calculated from merkle path ({commitment_from_path:?}) does not \
@@ -1815,5 +1821,50 @@ mod test {
                 .unwrap_err();
             assert!(matches!(err, QueryError::Missing));
         }
+    }
+
+    #[test_log::test(tokio::test(flavor = "multi_thread"))]
+    async fn test_merklized_state_without_nodes() {
+        // A state writer that starts from a snapshot of some trees only stores no node of the
+        // others at that height. A lookup there finds no node at all, not even the root, which is
+        // missing data, not a corrupt path.
+        let db = TmpDb::init().await;
+        let storage = SqlStorage::connect(db.config(), StorageConnectionType::Query)
+            .await
+            .unwrap();
+
+        let mut test_tree = MockMerkleTree::new(MockMerkleTree::tree_height());
+        test_tree.update(0, 0).unwrap();
+
+        let mut tx = storage.write().await.unwrap();
+        tx.upsert(
+            "header",
+            ["height", "hash", "payload_hash", "timestamp", "data", "ns_table"],
+            ["height"],
+            [(
+                0i64,
+                "hash".to_string(),
+                "hash".to_string(),
+                0,
+                serde_json::json!({ MockMerkleTree::header_state_commitment_field() : serde_json::to_value(test_tree.commitment()).unwrap()}),
+                "ns_table".to_string(),
+            )],
+        )
+        .await
+        .unwrap();
+        UpdateStateData::<_, MockMerkleTree, 8>::set_last_state_height(&mut tx, 0)
+            .await
+            .unwrap();
+        tx.commit().await.unwrap();
+
+        let snapshot = Snapshot::<MockTypes, MockMerkleTree, 8>::Index(0);
+        let err = storage
+            .read()
+            .await
+            .unwrap()
+            .get_path(snapshot, 0)
+            .await
+            .unwrap_err();
+        assert!(matches!(err, QueryError::Missing), "{err}");
     }
 }
