@@ -1063,33 +1063,8 @@ async fn first_block_carrying_a_revotes_commit_decides_the_boundary_block() {
 async fn revote_fetches_the_block_and_then_its_payload() {
     let test_data = TestData::new_with_epoch_height(BOUNDARY + 1, EPOCH_HEIGHT).await;
     let boundary = &test_data.views[BOUNDARY];
-    // Not the leader of view 10, which would hold the payload it built.
-    const NODE: u64 = 5;
-    let node_key = BLSPubKey::generated_from_seed_indexed([0; 32], NODE).0;
-    let mut harness =
-        ConsensusHarness::new_with_upgrade_lock(NODE, EPOCH_HEIGHT, test_timeout_epoch_lock())
-            .await;
-    let mut drb_epochs = BTreeSet::new();
-    for v in &test_data.views[..=BOUNDARY] {
-        let block = BlockHeader::<TestTypes>::block_number(&v.proposal.data.block_header);
-        if is_epoch_transition(block, EPOCH_HEIGHT) {
-            drb_epochs.insert(v.epoch_number + 1);
-        }
-    }
-    for e in drb_epochs {
-        harness
-            .apply(ConsensusInput::DrbResult(e, TEST_DRB_RESULT))
-            .await;
-    }
-    for v in &test_data.views[..BOUNDARY] {
-        harness
-            .apply_pair(v.proposal_input_consensus(&node_key))
-            .await;
-        harness.apply(v.block_reconstructed_input()).await;
-        harness.apply(v.cert1_input()).await;
-        harness.apply(v.cert2_input()).await;
-    }
-    // The node never saw the boundary block. A re-vote on it arrives.
+    let mut harness = node_without_the_boundary_block(&test_data).await;
+    // A re-vote on the block arrives.
     let TimeoutEvidence::V3(timeout) =
         timeout_cert(&harness, view(11), Some(boundary.cert1.clone()))
     else {
@@ -1126,6 +1101,71 @@ async fn revote_fetches_the_block_and_then_its_payload() {
         vote1_at(&harness, view(12)).is_some(),
         "and votes once it has both"
     );
+}
+
+/// A re-vote's certificate is grounds for the view after it, as any `Cert1`
+/// is, even to a node without the block.
+///
+/// A re-vote asked in the view right after the block carries no timeout
+/// certificate, so only its certificate can move the node. Left behind, the
+/// node would time out a view the rest of the committee has left.
+#[tokio::test]
+async fn revote_certificate_moves_a_node_without_the_block() {
+    let test_data = TestData::new_with_epoch_height(BOUNDARY + 1, EPOCH_HEIGHT).await;
+    let boundary = &test_data.views[BOUNDARY];
+    let mut harness = node_without_the_boundary_block(&test_data).await;
+    let leader = leader_index(&harness, view(11), epoch(1));
+    let (_, leader_key) = BLSPubKey::generated_from_seed_indexed([0u8; 32], leader);
+    let revote = ReVoteMessage::new(
+        ReVote {
+            view: view(11),
+            epoch: epoch(1),
+            cert1: boundary.cert1.clone(),
+            timeout: None,
+        },
+        &leader_key,
+    )
+    .unwrap();
+    harness.apply(ConsensusInput::ReVote(revote)).await;
+    assert_eq!(harness.consensus.current_view(), view(11));
+
+    harness.apply(ConsensusInput::Timeout(view(10))).await;
+    assert!(
+        last_timeout_vote(&harness).is_none_or(|vote| vote.view_number() != view(10)),
+        "the node does not time out the view it has left"
+    );
+}
+
+/// A node, run under the certificate rule, through views 1..=9 of epoch 1, that
+/// never saw the boundary block at view 10.
+async fn node_without_the_boundary_block(test_data: &TestData) -> ConsensusHarness {
+    // Not the leader of view 10, which would hold the payload it built.
+    const NODE: u64 = 5;
+    let node_key = BLSPubKey::generated_from_seed_indexed([0; 32], NODE).0;
+    let mut harness =
+        ConsensusHarness::new_with_upgrade_lock(NODE, EPOCH_HEIGHT, test_timeout_epoch_lock())
+            .await;
+    let mut drb_epochs = BTreeSet::new();
+    for v in &test_data.views[..=BOUNDARY] {
+        let block = BlockHeader::<TestTypes>::block_number(&v.proposal.data.block_header);
+        if is_epoch_transition(block, EPOCH_HEIGHT) {
+            drb_epochs.insert(v.epoch_number + 1);
+        }
+    }
+    for e in drb_epochs {
+        harness
+            .apply(ConsensusInput::DrbResult(e, TEST_DRB_RESULT))
+            .await;
+    }
+    for v in &test_data.views[..BOUNDARY] {
+        harness
+            .apply_pair(v.proposal_input_consensus(&node_key))
+            .await;
+        harness.apply(v.block_reconstructed_input()).await;
+        harness.apply(v.cert1_input()).await;
+        harness.apply(v.cert2_input()).await;
+    }
+    harness
 }
 
 /// The leader of the view after a re-vote's commit does not propose the first

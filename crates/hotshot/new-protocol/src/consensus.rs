@@ -3726,10 +3726,11 @@ impl<T: NodeType> Consensus<T> {
 
     /// Take in a validated re-vote request (see [`ReVote`]).
     ///
-    /// Its timeout certificate, if any, moves this node into the re-vote's
-    /// view, and its certificate, the block's own or a re-vote's, is kept and
-    /// locked on. The vote is cast by [`Self::maybe_vote_revote`] once the node
-    /// holds the block.
+    /// Its certificate, the block's own or a re-vote's, is taken in as any
+    /// `Cert1` is (`advance_on`): grounds for the view after it, kept, and locked
+    /// on. Its timeout certificate, if any, moves this node into the re-vote's
+    /// view. The vote is cast by [`Self::maybe_vote_revote`] once the node holds
+    /// the block.
     fn handle_revote(
         &mut self,
         message: ReVoteMessage<T, Validated>,
@@ -3746,8 +3747,7 @@ impl<T: NodeType> Consensus<T> {
             debug!(%view, epoch = %revote.epoch, "re-vote request of an earlier epoch");
             return Protocol::Abort;
         }
-        let cert_view = revote.cert1.view_number();
-        self.insert_cert1(revote.cert1.clone());
+        self.advance_on(revote.cert1.clone(), revote.epoch, outbox);
         if let Some(timeout) = &revote.timeout
             && !self.timeout_certs.contains_key(&view)
         {
@@ -3755,7 +3755,6 @@ impl<T: NodeType> Consensus<T> {
             self.handle_timeout_certificate(tc, outbox);
         }
         self.revotes.entry(view).or_insert(revote);
-        self.maybe_vote_2_and_update_lock(cert_view, outbox);
         Protocol::Continue
     }
 
