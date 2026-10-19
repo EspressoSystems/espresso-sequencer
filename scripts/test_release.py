@@ -759,6 +759,7 @@ class CmdTagHappyPath(unittest.TestCase):
                 ("git", "fetch"): "",
                 ("git", "tag", "--list", "0.6.0.*"): "0.6.0.0\n0.6.0.1\n",
                 ("git", "rev-parse", "origin/release-0.6.0"): sha,
+                ("git", "diff"): "",
                 ("git", "tag", "-a"): "",
                 ("git", "push", "origin", "refs/tags/0.6.0.2"): "",
                 ("gh", "workflow", "run"): "",
@@ -782,7 +783,6 @@ class CmdTagHappyPath(unittest.TestCase):
         )
         self.assertIn(["git", "push", "origin", "refs/tags/0.6.0.2"], runner.calls)
         self.assertFalse(runner.ran("gh", "release"))
-        self.assertFalse(runner.ran("git", "diff"))
         self.assertTrue(runner.ran("gh", "workflow", "run", "build.yml"))
         self.assertTrue(
             runner.ran("gh", "workflow", "run", "update-release-tracker.yml")
@@ -802,6 +802,7 @@ class CmdTagHappyPath(unittest.TestCase):
                 ("git", "fetch"): "",
                 ("git", "tag", "--list"): "0.6.0.0\n",
                 ("git", "rev-parse", "origin/release-0.6.0"): "c" * 40,
+                ("git", "diff"): "",
                 PERMISSION: "write",
             }
         )
@@ -916,6 +917,39 @@ class CmdTagHappyPath(unittest.TestCase):
         self.assertIn("/tag failed:", comment[-1])
         self.assertIn("doc/operator-notes/", comment[-1])
 
+    def _assert_tag_blocked(self, runner, message, dry_run=False):
+        args = self._tag_args()
+        args.dry_run = dry_run
+        self.assertEqual(rel.cmd_tag(args, rel.Git(runner), rel.Gh(runner)), 1)
+        self.assertFalse(runner.ran("git", "tag", "-a"))
+        self.assertFalse(runner.ran("git", "push"))
+        self.assertFalse(runner.ran("gh", "workflow", "run"))
+        comments = [c for c in runner.calls if c[:3] == ["gh", "issue", "comment"]]
+        if dry_run:
+            self.assertEqual(comments, [])
+        else:
+            self.assertIn("/tag failed:", comments[0][-1])
+            self.assertIn(message, comments[0][-1])
+
+    def test_release_cmd_tag_fragment_bot_marker_fails(self):
+        runner = self._fragment_runner(
+            "doc/operator-notes/a.md\0", "<!-- operator-notes -->"
+        )
+        self._assert_tag_blocked(runner, "doc/operator-notes/a.md")
+
+    def test_release_cmd_tag_fragment_invalid_path_fails(self):
+        runner = self._fragment_runner("doc/operator-notes/sub/a.md\0", "x")
+        self._assert_tag_blocked(runner, "is not a fragment")
+
+    def test_release_cmd_tag_first_tag_without_earlier_line_fails(self):
+        runner = self._fragment_runner("", "", tags="")
+        runner.responses[("git", "ls-remote")] = ls_remote("0.6.0.0")
+        self._assert_tag_blocked(runner, "no earlier version tag")
+
+    def test_release_cmd_tag_invalid_fragment_dry_run_fails(self):
+        runner = self._fragment_runner("doc/operator-notes/sub/a.md\0", "x")
+        self._assert_tag_blocked(runner, "is not a fragment", dry_run=True)
+
 
 # REQ:release-tag-failure-reported
 
@@ -983,6 +1017,7 @@ class TagFailurePostsComment(unittest.TestCase):
             ("git", "tag", "--list", "0.6.0.*"): "",
             ("git", "ls-remote", "--tags"): ls_remote("0.5.9.1"),
             ("git", "rev-parse", "origin/release-0.6.0"): sha,
+            ("git", "diff"): "",
             ("git", "tag", "-a"): "",
             ("git", "push", "origin", "refs/tags/0.6.0.0"): "",
             ("gh", "issue", "comment"): "",

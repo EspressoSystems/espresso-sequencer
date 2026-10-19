@@ -1759,6 +1759,10 @@ def _tag(
 
     tag_name = str(tag)
     sha = git.rev_parse(git.ref(branch))
+    try:
+        _validate_fragments(git, tag, sha)
+    except ValueError as error:
+        return fail(str(error))
     comment = render_tag_comment(tag, sha, repo, args.actor, args.run_url)
     if args.dry_run:
         print(f"# {tag_name} at {sha} (issue={issue})\n")
@@ -1776,6 +1780,14 @@ def _tag(
             gh.issue_comment(issue, f"/tag failed: {error}")
         raise
     return 0
+
+
+def _validate_fragments(git: Git, tag: Tag, sha: str) -> None:
+    """Runs the operator-notes gate on the range `/publish` will render. Raises ValueError."""
+    base = fragment_base(tag, _base_tags(git, tag))
+    if base is not None:
+        git.fetch_tag(base)
+        render_fragments(git.fragments(str(base), sha))
 
 
 @dataclass(frozen=True)
