@@ -95,6 +95,9 @@ first and mainnet later. Only `/publish` turns a pre-release into a release.
   | no P (first publish)      | X only                                  |
   | X older than P (rollback) | empty; the block says `Rollback from P` |
 
+  Tags after P on P's own line are not in a cross-line range: publish the last tag of P's line first, or restate its
+  actions in the `.0` notes of the next line.
+
   Tags with a stated action get a subsection, newest first. Tags with `none` fold into one `<tags>: no action` line.
 
 - Do not edit release titles or the bot's markers by hand. The title marker is the record of the current holder. If it
