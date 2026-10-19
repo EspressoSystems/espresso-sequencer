@@ -317,6 +317,7 @@ fn replay_params(own_url: url::Url) -> FollowerParams {
             backoff: Default::default(),
             base_timeout: Duration::from_secs(2),
             local_timeout: Duration::from_secs(5),
+            http_delay: Duration::ZERO,
         },
         bootstrap_epoch_catchup_timeout: Duration::from_secs(30),
         options: FollowerOptions {
