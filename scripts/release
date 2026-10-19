@@ -314,7 +314,7 @@ def parse_command(body: str) -> Command | None:
     name, arg, arg2 = match.group(1, 2, 3)
     kind = cast(CommandName, name)
     text = normalize_newlines(body[match.end() :]).strip() or None
-    if text is not None and BOT_MARKER in text:
+    if kind in ("tag", "publish") and text is not None and BOT_MARKER in text:
         return None
     if kind == "publish":
         if arg is None or arg2 not in NETWORKS:

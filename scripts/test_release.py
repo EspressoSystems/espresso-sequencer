@@ -365,6 +365,12 @@ class MarksReplay(unittest.TestCase):
             rel.marks_from_comments(comments, WRITERS), {"def4567": "skip"}
         )
 
+    def test_release_marks_done_with_html_comment_later_line_ok(self):
+        comments = [rel.Comment("/done abc1234\nnote\n<!-- hidden -->", "alice")]
+        self.assertEqual(
+            rel.marks_from_comments(comments, WRITERS), {"abc1234": "done"}
+        )
+
     def test_release_command_authors_ok(self):
         comments = [rel.Comment("/done abc1234", "alice"), rel.Comment("hi", "bob")]
         self.assertEqual(rel.command_authors(comments), {"alice"})
