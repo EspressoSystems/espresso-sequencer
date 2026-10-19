@@ -52,6 +52,15 @@ def version(major=0, minor=6, phase=0) -> "rel.Version":
     return rel.Version(major, minor, phase)
 
 
+def release(tag="0.6.3.1", title=None, body="", prerelease=True) -> "rel.ReleaseInfo":
+    return rel.ReleaseInfo(tag, title or tag, body, prerelease)
+
+
+def release_row(tag, name=None, body="", prerelease=True) -> str:
+    row = {"tag_name": tag, "name": name, "body": body, "prerelease": prerelease}
+    return json.dumps(row)
+
+
 def commit(sha="a" * 40, subject="fix: thing", pr=None) -> "rel.Commit":
     return rel.Commit(sha, subject, pr)
 
@@ -64,7 +73,7 @@ def state(**overrides) -> "rel.TrackerState":
         "head_main": "m" * 40,
         "head_branch": "b" * 40,
         "tags": [],
-        "releases": {},
+        "releases": [],
         "main_commits": [],
         "branch_commits": [],
         "landed_on_branch": set(),
@@ -224,6 +233,22 @@ class CommandParse(unittest.TestCase):
         self.assertEqual(
             rel.parse_command("/done abc1234"), rel.Command("done", "abc1234")
         )
+
+    def test_release_command_parse_text_ok(self):
+        self.assertEqual(
+            rel.parse_command("/tag\r\nUrgency: High\n\n- env X\n"),
+            rel.Command("tag", None, "Urgency: High\n\n- env X"),
+        )
+        self.assertEqual(
+            rel.parse_command("/notes 0.6.0.4\nnone"),
+            rel.Command("notes", "0.6.0.4", "none"),
+        )
+        self.assertEqual(
+            rel.parse_command("/notes 0.6.0.4"), rel.Command("notes", "0.6.0.4")
+        )
+
+    def test_release_command_notes_needs_tag_fails(self):
+        self.assertIsNone(rel.parse_command("/notes\nnone"))
 
     def test_release_command_parse_mid_text_fails(self):
         self.assertIsNone(rel.parse_command("please /tag this"))
@@ -780,19 +805,55 @@ class CmdTagHappyPath(unittest.TestCase):
             ],
         )
 
-    def test_release_gh_releases_prefix_ok(self):
+    def test_release_gh_release_list_ok(self):
         lines = [
-            json.dumps({"tag_name": "0.6.1.0", "prerelease": True}),
-            json.dumps({"tag_name": "0.6.1.3", "prerelease": False}),
-            json.dumps({"tag_name": "0.6.10.0", "prerelease": True}),
-            json.dumps({"tag_name": "0.7.0.0", "prerelease": True}),
+            release_row("0.6.1.0", "0.6.1.0", "a\r\nb"),
+            release_row("0.6.1.3", "0.6.1.3 [mainnet]", None, False),
+            release_row("0.7.0.0", ""),
         ]
         runner = FakeRunner({("gh", "api"): "\n".join(lines) + "\n"})
         self.assertEqual(
-            rel.Gh(runner).releases(rel.Version(0, 6, 1)),
-            {"0.6.1.0": True, "0.6.1.3": False},
+            rel.Gh(runner).release_list(),
+            [
+                release("0.6.1.0", body="a\nb"),
+                release("0.6.1.3", "0.6.1.3 [mainnet]", prerelease=False),
+                release("0.7.0.0"),
+            ],
         )
         self.assertIn("--paginate", runner.calls[-1])
+
+    def test_release_cmd_tag_notes_in_release_ok(self):
+        runner = FakeRunner(
+            {
+                ("gh", "repo", "view"): REPO,
+                ("gh", "issue", "view"): json.dumps(
+                    {"title": "Release 0.6.0", "body": ""}
+                ),
+                ("git", "fetch"): "",
+                ("git", "tag", "--list", "0.6.0.*"): "0.6.0.0\n",
+                ("git", "rev-parse", "origin/release-0.6.0"): "c" * 40,
+                ("git", "tag", "-a"): "",
+                ("git", "push"): "",
+                ("gh", "release", "create"): "",
+                ("gh", "workflow", "run"): "",
+                ("gh", "issue", "comment"): "",
+                PERMISSION: "write",
+            }
+        )
+        args = argparse.Namespace(
+            issue=42,
+            branch=None,
+            comment="/tag\nUrgency: High",
+            explicit=None,
+            actor="alice",
+            run_url=None,
+            dry_run=False,
+        )
+        self.assertEqual(rel.cmd_tag(args, rel.Git(runner), rel.Gh(runner)), 0)
+        create = next(c for c in runner.calls if c[:3] == ["gh", "release", "create"])
+        notes = create[create.index("--notes") + 1]
+        self.assertEqual(rel.tag_notes(notes), "Urgency: High")
+        self.assertIn("--generate-notes", create)
 
 
 # REQ:release-tag-failure-reported
@@ -1130,14 +1191,156 @@ class TagLogReleases(unittest.TestCase):
             ("0.6.3.0", "2026-09-21", "c" * 40),
             ("0.6.3.1", "2026-09-22", "d" * 40),
         ]
-        body = rel.render_tag_log(tags, {"0.6.3.1": True}, REPO)
-        self.assertIn("| GitHub release | Build |", body)
+        body = rel.render_tag_log(tags, [release("0.6.3.1")], REPO)
+        self.assertIn("| GitHub release | Notes | Build |", body)
         self.assertIn(
             f"[pre-release](https://github.com/{REPO}/releases/tag/0.6.3.1)", body
         )
         self.assertIn("build.yml?query=branch%3A0.6.3.0", body)
         self.assertIn("| - |", body)
-        self.assertIn("[release](", rel.render_tag_log(tags, {"0.6.3.1": False}, REPO))
+        self.assertIn(
+            "[release](",
+            rel.render_tag_log(tags, [release("0.6.3.1", prerelease=False)], REPO),
+        )
+
+    def test_release_tag_log_notes_column_ok(self):
+        tags = [(f"0.6.3.{n}", "2026-09-21", "c" * 40) for n in range(3)]
+        stated = release("0.6.3.0", body=rel.render_notes_block("none"))
+        releases = [stated, release("0.6.3.1", body=rel.render_notes_block(None))]
+        rows = rel.render_tag_log(tags, releases, REPO).splitlines()[2:]
+        self.assertIn("| ✅ |", rows[0])
+        self.assertIn("| ⬜ |", rows[1])
+        self.assertIn("| - | - |", rows[2])
+
+
+# REQ:release-operator-notes
+
+
+class OperatorNotes(unittest.TestCase):
+    def test_release_notes_block_roundtrip_ok(self):
+        block = rel.render_notes_block("Urgency: High\n- env X")
+        self.assertEqual(
+            rel.tag_notes(f"{block}\n\n## What's Changed"), "Urgency: High\n- env X"
+        )
+        self.assertEqual(
+            rel.tag_notes(block.replace("\n", "\r\n")), "Urgency: High\n- env X"
+        )
+
+    def test_release_notes_none_renders_no_action_ok(self):
+        self.assertEqual(rel.tag_notes(rel.render_notes_block(" None ")), rel.NO_ACTION)
+
+    def test_release_notes_unstated_ok(self):
+        self.assertIsNone(rel.tag_notes(rel.render_notes_block(None)))
+        self.assertIn(rel.NOT_STATED, rel.render_notes_block(None))
+        self.assertIsNone(rel.tag_notes("## What's Changed"))
+
+    def test_release_with_tag_notes_replaces_block_ok(self):
+        old = f"{rel.render_notes_block(None)}\n\nhand written\n\n## What's Changed"
+        new = rel.with_tag_notes(old, "none")
+        self.assertEqual(rel.tag_notes(new), rel.NO_ACTION)
+        self.assertEqual(new.count(rel.NOTES_OPEN), 1)
+        self.assertIn("hand written\n\n## What's Changed", new)
+
+    def test_release_with_tag_notes_reinserts_deleted_markers_ok(self):
+        new = rel.with_tag_notes("hand written", "Urgency: Low")
+        self.assertTrue(new.startswith(rel.NOTES_OPEN))
+        self.assertTrue(new.endswith("\n\nhand written"))
+        self.assertEqual(rel.tag_notes(new), "Urgency: Low")
+        self.assertEqual(rel.tag_notes(rel.with_tag_notes("", "none")), rel.NO_ACTION)
+
+
+class CmdNotes(unittest.TestCase):
+    def _runner(self, body: str = "") -> FakeRunner:
+        row = {
+            "tag_name": "0.6.0.4",
+            "name": "0.6.0.4",
+            "body": body,
+            "prerelease": True,
+        }
+        return FakeRunner(
+            {
+                ("gh", "issue", "view"): json.dumps(
+                    {"title": "Release 0.6.0", "body": ""}
+                ),
+                ("gh", "repo", "view"): REPO,
+                ("gh", "api", "repos/{owner}/{repo}/releases?per_page=100"): json.dumps(
+                    row
+                ),
+                ("gh", "release", "edit"): "",
+                ("gh", "workflow", "run"): "",
+                ("gh", "issue", "comment"): "",
+                PERMISSION: "write",
+            }
+        )
+
+    def _args(self, comment: str, actor="alice", dry_run=False):
+        return argparse.Namespace(
+            issue=42, comment=comment, actor=actor, run_url=None, dry_run=dry_run
+        )
+
+    def test_release_cmd_notes_ok(self):
+        runner = self._runner(rel.render_notes_block(None) + "\n\n## What's Changed")
+        code = rel.cmd_notes(
+            self._args("/notes 0.6.0.4\nUrgency: High"), rel.Git(runner), rel.Gh(runner)
+        )
+        self.assertEqual(code, 0)
+        edit = next(c for c in runner.calls if c[:3] == ["gh", "release", "edit"])
+        self.assertEqual(edit[3], "0.6.0.4")
+        self.assertTrue(
+            runner.ran("gh", "workflow", "run", "update-release-tracker.yml")
+        )
+        comment = next(c for c in runner.calls if c[:3] == ["gh", "issue", "comment"])
+        self.assertIn("`0.6.0.4`", comment[-1])
+
+    def test_release_cmd_notes_without_text_fails(self):
+        runner = self._runner()
+        code = rel.cmd_notes(
+            self._args("/notes 0.6.0.4"), rel.Git(runner), rel.Gh(runner)
+        )
+        self.assertEqual(code, 1)
+        self.assertFalse(runner.ran("gh", "release", "edit"))
+        comment = next(c for c in runner.calls if c[:3] == ["gh", "issue", "comment"])
+        self.assertIn("/notes failed", comment[-1])
+
+    def test_release_cmd_notes_other_version_fails(self):
+        runner = self._runner()
+        code = rel.cmd_notes(
+            self._args("/notes 0.7.0.1\nnone"), rel.Git(runner), rel.Gh(runner)
+        )
+        self.assertEqual(code, 1)
+        self.assertFalse(runner.ran("gh", "release", "edit"))
+
+    def test_release_cmd_notes_dry_run_writes_nothing_ok(self):
+        runner = self._runner()
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            code = rel.cmd_notes(
+                self._args("/notes 0.6.0.4\nnone", actor=None, dry_run=True),
+                rel.Git(runner),
+                rel.Gh(runner),
+            )
+        self.assertEqual(code, 0)
+        self.assertIn(rel.NO_ACTION, out.getvalue())
+        for write in (("gh", "release", "edit"), ("gh", "issue", "comment")):
+            self.assertFalse(runner.ran(*write))
+
+    def test_release_cmd_notes_non_writer_fails(self):
+        runner = FakeRunner(
+            {
+                (
+                    "gh",
+                    "api",
+                    "repos/{owner}/{repo}/collaborators/mallory/permission",
+                ): "read"
+            }
+        )
+        code = rel.cmd_notes(
+            self._args("/notes 0.6.0.4\nnone", actor="mallory"),
+            rel.Git(runner),
+            rel.Gh(runner),
+        )
+        self.assertEqual(code, 1)
+        self.assertEqual(len(runner.calls), 1)
 
 
 # EDGE:release-no-tags
@@ -1348,7 +1551,7 @@ class CmdCutReusesExistingTracker(unittest.TestCase):
                     "gh",
                     "api",
                     "repos/{owner}/{repo}/releases?per_page=100",
-                ): '{"tag_name": "0.6.0.0", "prerelease": true}\n',
+                ): release_row("0.6.0.0") + "\n",
                 ("gh", "repo", "view"): REPO,
                 ("gh", "issue", "list"): json.dumps(
                     [{"number": 7, "title": "Release 0.6.0"}]
@@ -1452,7 +1655,7 @@ class CmdCutSkipsExistingRelease(unittest.TestCase):
                 ("git", "ls-remote", "--tags"): f"{sha}\trefs/tags/0.6.0.0\n",
                 ("gh", "label", "create"): "",
                 ("gh", "api", "repos/{owner}/{repo}/releases?per_page=100"): (
-                    json.dumps({"tag_name": "0.6.0.0", "prerelease": True}) + "\n"
+                    release_row("0.6.0.0") + "\n"
                 ),
                 ("git", "tag", "--list", "0.6.0.*"): "",
                 ("gh", "repo", "view"): REPO,

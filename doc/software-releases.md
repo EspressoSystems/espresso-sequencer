@@ -30,7 +30,8 @@ Every release branch has one issue titled `Release MAJOR.MINOR.PHASE` with label
 its body on every push to `main` or `release-*`, when a PR against a release branch opens or closes, after every `/tag`
 or cut, and on tracker commands. Sections:
 
-- Tag log: tags on the branch with date, commit, GitHub release state (pre-release or release) and build runs.
+- Tag log: tags on the branch with date, commit, GitHub release state (pre-release or release), operator notes (✅
+  stated, ⬜ missing) and build runs.
 - Backports from `main` to the branch: commits on `main` since the `.0` tag. A row shows ✅ when the commit is on the
   branch: its backport PR (head `backport-<PR>-to-<branch>`) merged, `git cherry` finds the same patch, a branch commit
   has the same PR number, or a `[Backport ...]` commit has the same title. Backport PR status is appended when one
@@ -44,16 +45,30 @@ or cut, and on tracker commands. Sections:
 Commands are comments on the tracker issue by a user with write access to the repository; comments by others are
 ignored. `<sha>` is a commit sha prefix of at least 7 characters.
 
-| Command         | Effect                                                                               |
-| --------------- | ------------------------------------------------------------------------------------ |
-| `/tag`          | Tag the branch tip with the next patch, create a GitHub pre-release, build.          |
-| `/tag X.Y.Z.N`  | Same with an explicit tag. Must match the branch version and be new.                 |
-| `/done <sha>`   | Mark a commit ☑️ that was ported outside the backport workflow.                      |
-| `/skip <sha>`   | Mark a commit ⏭️ and strike it through: deliberately not ported.                     |
-| `/unmark <sha>` | Undo `/done` or `/skip`.                                                             |
-| `/backport 123` | Open a backport PR for merged PR 123 against this release branch (`#123` works too). |
+| Command          | Effect                                                                                                               |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `/tag`           | Tag the branch tip with the next patch, create a GitHub pre-release, build. Lines 2..n are the tag's operator notes. |
+| `/tag X.Y.Z.N`   | Same with an explicit tag. Must match the branch version and be new.                                                 |
+| `/notes X.Y.Z.N` | Replace the tag's operator notes with lines 2..n.                                                                    |
+| `/done <sha>`    | Mark a commit ☑️ that was ported outside the backport workflow.                                                      |
+| `/skip <sha>`    | Mark a commit ⏭️ and strike it through: deliberately not ported.                                                     |
+| `/unmark <sha>`  | Undo `/done` or `/skip`.                                                                                             |
+| `/backport 123`  | Open a backport PR for merged PR 123 against this release branch (`#123` works too).                                 |
 
 Marks are replayed from the issue's comment history, so the body can always be regenerated.
+
+### Operator notes
+
+Each tag's release body starts with a block between `<!-- operator-notes -->` and `<!-- /operator-notes -->`, above the
+generated PR list. It states what an operator must do when moving to the tag from the previous tag on the same line. The
+`.0` tag describes the move from the previous line, including protocol activation.
+
+- `/tag` lines 2..n fill the block. Without them the block reads `_Not yet stated._`.
+- `/notes X.Y.Z.N` replaces the block. `none` renders `No operator action required.` If the markers were deleted in the
+  GitHub UI, the block is inserted again at the top.
+- Suggested content: urgency (High, Medium, Low), config or env changes, DB migration and its duration, restart order, a
+  deadline as view number plus UTC time.
+- The comment author and time are the record of who stated the notes.
 
 ## Process
 
@@ -66,9 +81,9 @@ Marks are replayed from the issue's comment history, so the body can always be r
    which tags `X.Y.Z.0` as a pre-release, creates the backport label and the tracker issue, and builds images. Running
    the workflow from the Actions UI works once the branch exists, with `source_ref` set to the branch tip sha.
 2. Land backport PRs and fixes on the release branch. Watch the tracker checklist.
-3. Comment `/tag` on the tracker after each batch worth testing. The bot replies with the tag, the GitHub pre-release
-   and a link to the `build.yml` run.
-4. Validate the tag on devnet, or push an experimental branch for ad hoc changes.
+3. Comment `/tag` on the tracker after each batch worth testing, with the operator notes on lines 2..n or `none`. The
+   bot replies with the tag, the GitHub pre-release and a link to the `build.yml` run.
+4. Validate the tag on devnet, or push an experimental branch for ad hoc changes. Fix the notes with `/notes X.Y.Z.N`.
 5. Once a tag is validated, `just release-publish X.Y.Z.N` (or edit the release in the GitHub UI) turns the pre-release
    into a release marked latest. Only releases are meant for operators. Announce with the release link.
 6. Delete the release branch when it is no longer needed, shipped or abandoned. The tracker is closed with a final tag
@@ -76,12 +91,12 @@ Marks are replayed from the issue's comment history, so the body can always be r
 
 ## Workflows
 
-| Workflow                     | Trigger                                             | Runs                              |
-| ---------------------------- | --------------------------------------------------- | --------------------------------- |
-| `release-branch.yml`         | `workflow_dispatch`, branch `delete`                | `scripts/release cut`, `teardown` |
-| `tag-release.yml`            | `/tag` or `/backport` comment, `workflow_dispatch`  | `scripts/release tag`, `backport` |
-| `update-release-tracker.yml` | push to `main`/`release-*`, mark comments, dispatch | `scripts/release refresh`         |
-| `build.yml`                  | dispatched by `cut` and `tag` for the new tag       | docker images                     |
+| Workflow                     | Trigger                                                    | Runs                                       |
+| ---------------------------- | ---------------------------------------------------------- | ------------------------------------------ |
+| `release-branch.yml`         | `workflow_dispatch`, branch `delete`                       | `scripts/release cut`, `teardown`          |
+| `tag-release.yml`            | `/tag`, `/backport`, `/notes` comment, `workflow_dispatch` | `scripts/release tag`, `backport`, `notes` |
+| `update-release-tracker.yml` | push to `main`/`release-*`, mark comments, dispatch        | `scripts/release refresh`                  |
+| `build.yml`                  | dispatched by `cut` and `tag` for the new tag              | docker images                              |
 
 Tags pushed by workflows do not fire `push` events, so `cut` and `tag` dispatch `build.yml` and the tracker refresh
 explicitly.
