@@ -316,6 +316,10 @@ release-tag branch tag="":
 release-publish tag:
     gh release edit {{tag}} --prerelease=false --latest
 
+# Preview the release edits and tracker comment of `/publish <tag> <network>` without writing to GitHub.
+release-notes tag network:
+    scripts/release publish --dry-run --comment "/publish {{tag}} {{network}}"
+
 # Render the release tracker body for a version without writing to GitHub.
 release-body version:
     scripts/release refresh --dry-run --version {{version}}

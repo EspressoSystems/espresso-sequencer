@@ -14,6 +14,7 @@ import json
 import unittest
 from importlib.machinery import SourceFileLoader
 from pathlib import Path
+from typing import ClassVar
 
 SCRIPT = Path(__file__).with_name("release")
 _spec = importlib.util.spec_from_loader(
@@ -1341,6 +1342,602 @@ class CmdNotes(unittest.TestCase):
         )
         self.assertEqual(code, 1)
         self.assertEqual(len(runner.calls), 1)
+
+
+# REQ:release-publish
+
+
+def t(text: str) -> "rel.Tag":
+    parsed = rel.parse_tag(text)
+    assert parsed is not None
+    return parsed
+
+
+def stated(
+    tag: str, text="none", title=None, prerelease=True, extra=""
+) -> "rel.ReleaseInfo":
+    body = f"{extra}{rel.render_notes_block(text)}\n\n## What's Changed"
+    return release(tag, title, body, prerelease)
+
+
+def plan(releases, target, network="decaf", notes=None, tags=None, date="2026-10-21"):
+    tags = tags or [t(r.tag) for r in releases]
+    return rel.plan_publish(releases, t(target), network, notes, tags, date, REPO)
+
+
+def apply(releases, edits):
+    """The releases after GitHub accepted `edits`."""
+    by_tag = {edit.tag: edit for edit in edits}
+    return [
+        release(
+            r.tag, by_tag[r.tag].title, by_tag[r.tag].body, by_tag[r.tag].prerelease
+        )
+        if r.tag in by_tag
+        else r
+        for r in releases
+    ]
+
+
+def published(releases, target, network="decaf", **kwargs):
+    return apply(releases, plan(releases, target, network, **kwargs)[1])
+
+
+class PublishCommand(unittest.TestCase):
+    def test_release_publish_parse_ok(self):
+        self.assertEqual(
+            rel.parse_command("/publish 0.7.0.4 decaf\r\nV0_7 at view 5"),
+            rel.Command("publish", "0.7.0.4", "V0_7 at view 5", "decaf"),
+        )
+        self.assertEqual(
+            rel.parse_command("/publish 0.7.0.4 mainnet"),
+            rel.Command("publish", "0.7.0.4", None, "mainnet"),
+        )
+
+    def test_release_publish_parse_fails(self):
+        for body in ("/publish", "/publish 0.7.0.4", "/publish 0.7.0.4 testnet"):
+            self.assertIsNone(rel.parse_command(body), body)
+        self.assertIsNone(rel.parse_command("/tag 0.7.0.4 decaf"))
+
+
+class TitleNetworks(unittest.TestCase):
+    def test_release_title_roundtrip_ok(self):
+        for networks in ([], ["decaf"], ["mainnet"], ["decaf", "mainnet"]):
+            title = rel.render_title("0.7.0.4", frozenset(networks))
+            self.assertEqual(rel.title_networks(title), frozenset(networks))
+        both = rel.render_title("0.7.0.4", frozenset({"mainnet", "decaf"}))
+        self.assertEqual(both, "0.7.0.4 [decaf, mainnet]")
+        self.assertEqual(rel.render_title("0.7.0.4", frozenset()), "0.7.0.4")
+
+    def test_release_title_hand_written_ok(self):
+        self.assertEqual(
+            rel.title_networks("latest release for mainnet 0.6.3.7"), frozenset()
+        )
+        self.assertEqual(rel.title_networks("0.6.3.7 [other]"), frozenset())
+
+    def test_release_current_release_ok(self):
+        releases = [
+            release("0.7.0.3", "0.7.0.3 [decaf]"),
+            release("0.7.0.4", "0.7.0.4 [decaf]"),
+            release("0.6.3.12", "0.6.3.12 [mainnet]"),
+        ]
+        self.assertEqual(rel.current_release(releases, "decaf"), releases[1])
+        self.assertEqual(rel.current_release(releases, "mainnet"), releases[2])
+        self.assertIsNone(rel.current_release(releases[:1], "mainnet"))
+
+
+class NotesRange(unittest.TestCase):
+    TAGS: ClassVar[list] = [t(f"0.7.0.{n}") for n in range(6)]
+
+    def test_release_notes_range_same_line_ok(self):
+        self.assertEqual(
+            rel.notes_range(t("0.7.0.1"), t("0.7.0.4"), self.TAGS), self.TAGS[2:5]
+        )
+
+    def test_release_notes_range_cross_line_ok(self):
+        self.assertEqual(
+            rel.notes_range(t("0.6.3.12"), t("0.7.0.3"), self.TAGS), self.TAGS[:4]
+        )
+
+    def test_release_notes_range_bootstrap_ok(self):
+        self.assertEqual(rel.notes_range(None, t("0.7.0.3"), self.TAGS), [t("0.7.0.3")])
+
+    def test_release_notes_range_rollback_ok(self):
+        self.assertEqual(rel.notes_range(t("0.7.0.4"), t("0.7.0.2"), self.TAGS), [])
+        self.assertEqual(rel.notes_range(t("0.7.0.1"), t("0.6.3.14"), self.TAGS), [])
+
+    def test_release_notes_range_ignores_other_lines_ok(self):
+        tags = [*self.TAGS, t("0.6.3.12")]
+        self.assertEqual(rel.notes_range(None, t("0.7.0.1"), tags), [t("0.7.0.1")])
+        self.assertEqual(
+            rel.notes_range(t("0.6.3.12"), t("0.7.0.1"), tags), self.TAGS[:2]
+        )
+
+
+class PublishBlock(unittest.TestCase):
+    def _block(self, prev, target, entries, notes=None):
+        return rel.render_publish_block(
+            "decaf", prev and t(prev), t(target), "2026-10-21", notes, entries, REPO
+        )
+
+    def test_release_publish_block_header_ok(self):
+        block = self._block("0.7.0.1", "0.7.0.3", [(t("0.7.0.2"), rel.NO_ACTION)])
+        self.assertTrue(
+            block.startswith("<!-- publish:decaf prev=0.7.0.1 date=2026-10-21 -->\n")
+        )
+        self.assertTrue(block.endswith("<!-- /publish:decaf -->"))
+        self.assertIn(
+            "> Deployable on **decaf** since 2026-10-21. Supersedes 0.7.0.1.", block
+        )
+        self.assertIn(
+            "> `docker pull ghcr.io/espressosystems/espresso-network/espresso-node:0.7.0.3`",
+            block,
+        )
+        self.assertIn("## Operator actions for decaf since 0.7.0.1", block)
+        self.assertIn(
+            f"Compare: [0.7.0.1...0.7.0.3](https://github.com/{REPO}/compare/0.7.0.1...0.7.0.3)",
+            block,
+        )
+
+    def test_release_publish_block_entries_ok(self):
+        entries = [
+            (t("0.7.0.2"), rel.NO_ACTION),
+            (t("0.7.0.3"), "Urgency: High"),
+            (t("0.7.0.4"), rel.NO_ACTION),
+        ]
+        block = self._block("0.7.0.1", "0.7.0.4", entries, "V0_7 at view 5")
+        self.assertIn("### 0.7.0.3\n\nUrgency: High", block)
+        self.assertIn("0.7.0.2, 0.7.0.4: no action", block)
+        self.assertLess(block.index("V0_7 at view 5"), block.index("### 0.7.0.3"))
+        self.assertEqual(rel.publish_block_notes(block, "decaf"), "V0_7 at view 5")
+
+    def test_release_publish_block_newest_first_ok(self):
+        entries = [(t("0.7.0.2"), "a"), (t("0.7.0.3"), "b")]
+        block = self._block("0.7.0.1", "0.7.0.3", entries)
+        self.assertLess(block.index("### 0.7.0.3"), block.index("### 0.7.0.2"))
+
+    def test_release_publish_block_all_quiet_ok(self):
+        entries = [(t("0.7.0.2"), rel.NO_ACTION), (t("0.7.0.3"), rel.NO_ACTION)]
+        block = self._block("0.7.0.1", "0.7.0.3", entries)
+        self.assertIn(rel.NO_ACTION, block)
+        self.assertNotIn("no action", block)
+
+    def test_release_publish_block_bootstrap_ok(self):
+        block = self._block(None, "0.6.3.12", [(t("0.6.3.12"), "Urgency: Low")])
+        self.assertIn("prev=none", block)
+        self.assertIn("## Operator actions for decaf\n", block)
+        self.assertNotIn("Supersedes", block)
+        self.assertNotIn("Compare", block)
+
+    def test_release_publish_block_rollback_ok(self):
+        block = self._block("0.7.0.4", "0.7.0.2", [])
+        self.assertIn("Rollback from 0.7.0.4.", block)
+        self.assertNotIn("Operator actions", block)
+        self.assertNotIn("Compare", block)
+
+    def test_release_publish_block_prev_ok(self):
+        block = self._block("0.7.0.1", "0.7.0.3", [])
+        self.assertEqual(
+            rel.publish_block_prev(block, "decaf"), ("0.7.0.1", "2026-10-21")
+        )
+        self.assertIsNone(rel.publish_block_prev(block, "mainnet"))
+        none = self._block(None, "0.7.0.3", [])
+        self.assertEqual(rel.publish_block_prev(none, "decaf"), (None, "2026-10-21"))
+
+    def test_release_with_block_keeps_hand_text_ok(self):
+        first = self._block(None, "0.7.0.3", [])
+        body = rel.with_block("Hand written summary.", "decaf", first)
+        self.assertTrue(body.startswith("<!-- publish:decaf"))
+        self.assertTrue(body.endswith("\n\nHand written summary."))
+        second = self._block("0.7.0.1", "0.7.0.3", [])
+        again = rel.with_block(body, "decaf", second)
+        self.assertEqual(again.count("<!-- publish:decaf"), 1)
+        self.assertIn("prev=0.7.0.1", again)
+        self.assertTrue(again.endswith("Hand written summary."))
+
+    def test_release_mark_superseded_ok(self):
+        block = self._block(None, "0.7.0.3", [])
+        body = rel.with_block("Hand written.", "decaf", block)
+        once = rel.mark_superseded(body, "decaf", "0.7.0.4", "2026-10-23")
+        self.assertIn(
+            "Superseded on decaf by 0.7.0.4 (2026-10-23)\n<!-- /publish:decaf -->", once
+        )
+        twice = rel.mark_superseded(once, "decaf", "0.7.0.5", "2026-10-24")
+        self.assertEqual(twice.count("Superseded on"), 1)
+        self.assertIn("by 0.7.0.5 (2026-10-24)", twice)
+        self.assertTrue(twice.endswith("Hand written."))
+        self.assertEqual(rel.publish_block_prev(twice, "decaf"), (None, "2026-10-21"))
+
+    def test_release_mark_superseded_without_block_ok(self):
+        self.assertEqual(rel.mark_superseded("plain", "decaf", "0.7.0.4", "d"), "plain")
+
+
+class PlanPublish(unittest.TestCase):
+    def test_release_plan_bootstrap_ok(self):
+        releases = [stated("0.7.0.0"), stated("0.7.0.1", "Urgency: High")]
+        prev, edits = plan(releases, "0.7.0.1")
+        self.assertIsNone(prev)
+        (edit,) = edits
+        self.assertEqual(edit.title, "0.7.0.1 [decaf]")
+        self.assertFalse(edit.prerelease)
+        self.assertFalse(edit.make_latest)
+        self.assertIn("prev=none", edit.body)
+        self.assertIn("### 0.7.0.1\n\nUrgency: High", edit.body)
+        self.assertNotIn("### 0.7.0.0", edit.body)
+        self.assertEqual(rel.tag_notes(edit.body), "Urgency: High")
+
+    def test_release_plan_supersedes_previous_ok(self):
+        releases = published(
+            [stated("0.7.0.1"), stated("0.7.0.2"), stated("0.7.0.3", "Urgency: High")],
+            "0.7.0.1",
+        )
+        prev, edits = plan(releases, "0.7.0.3", date="2026-10-23")
+        self.assertEqual(prev, t("0.7.0.1"))
+        old, new = edits
+        self.assertEqual(
+            (old.tag, old.title, old.prerelease, old.make_latest),
+            ("0.7.0.1", "0.7.0.1", False, False),
+        )
+        self.assertIn("Superseded on decaf by 0.7.0.3 (2026-10-23)", old.body)
+        self.assertEqual(new.title, "0.7.0.3 [decaf]")
+        self.assertIn("Supersedes 0.7.0.1", new.body)
+        self.assertIn("### 0.7.0.3", new.body)
+        self.assertIn("0.7.0.2: no action", new.body)
+        self.assertNotIn("### 0.7.0.1", new.body)
+
+    def test_release_plan_mainnet_takes_latest_ok(self):
+        releases = [
+            release("0.6.3.12", "0.6.3.12 [decaf, mainnet]", prerelease=False),
+            stated("0.7.0.0"),
+            stated("0.7.0.1"),
+        ]
+        prev, edits = plan(
+            releases, "0.7.0.1", "mainnet", tags=[t("0.7.0.0"), t("0.7.0.1")]
+        )
+        self.assertEqual(prev, t("0.6.3.12"))
+        old, new = edits
+        self.assertEqual((old.title, old.make_latest), ("0.6.3.12 [decaf]", False))
+        self.assertEqual((new.title, new.make_latest), ("0.7.0.1 [mainnet]", True))
+        self.assertIn("## Operator actions for mainnet since 0.6.3.12", new.body)
+        self.assertIn(rel.NO_ACTION, new.body)
+
+    def test_release_plan_old_holder_keeps_latest_on_other_network_ok(self):
+        releases = [
+            release("0.6.3.12", "0.6.3.12 [decaf, mainnet]", prerelease=False),
+            stated("0.6.3.13"),
+        ]
+        _prev, edits = plan(releases, "0.6.3.13", "decaf", tags=[t("0.6.3.13")])
+        old, new = edits
+        self.assertEqual((old.title, old.make_latest), ("0.6.3.12 [mainnet]", True))
+        self.assertEqual((new.title, new.make_latest), ("0.6.3.13 [decaf]", False))
+
+    def test_release_plan_missing_notes_fails(self):
+        releases = [
+            release("0.7.0.0", "0.7.0.0 [decaf]", prerelease=False),
+            release("0.7.0.1", body=rel.render_notes_block(None)),
+            release("0.7.0.2", body=""),
+            stated("0.7.0.3"),
+        ]
+        with self.assertRaises(ValueError) as caught:
+            plan(releases, "0.7.0.3")
+        self.assertIn("0.7.0.1, 0.7.0.2;", str(caught.exception))
+        self.assertIn("/notes <tag> none", str(caught.exception))
+
+    def test_release_plan_missing_release_fails(self):
+        with self.assertRaises(ValueError):
+            plan([stated("0.7.0.0")], "0.7.0.5")
+
+    def test_release_plan_rerun_keeps_prev_date_and_notes_ok(self):
+        releases = published(
+            [stated("0.7.0.1"), stated("0.7.0.2"), stated("0.7.0.3")],
+            "0.7.0.1",
+        )
+        releases = published(releases, "0.7.0.2", notes="Deadline view 5")
+        prev, (again,) = plan(releases, "0.7.0.2", date="2026-10-30")
+        self.assertEqual(prev, t("0.7.0.1"))
+        self.assertIn("date=2026-10-21", again.body)
+        self.assertIn("Deadline view 5", again.body)
+        self.assertEqual(again.body.count("<!-- publish:decaf"), 1)
+        _prev, (replaced,) = plan(releases, "0.7.0.2", notes="Deadline view 9")
+        self.assertIn("Deadline view 9", replaced.body)
+        self.assertNotIn("Deadline view 5", replaced.body)
+
+    def test_release_plan_rerun_supersedes_leftover_holder_ok(self):
+        releases = [
+            release("0.7.0.1", "0.7.0.1 [decaf]", prerelease=False),
+            stated("0.7.0.2", title="0.7.0.2 [decaf]", prerelease=False),
+        ]
+        _prev, edits = plan(releases, "0.7.0.2")
+        self.assertEqual([e.tag for e in edits], ["0.7.0.1", "0.7.0.2"])
+
+    def test_release_plan_rollback_ok(self):
+        releases = published([stated("0.7.0.1"), stated("0.7.0.2")], "0.7.0.2")
+        prev, edits = plan(releases, "0.7.0.1")
+        self.assertEqual(prev, t("0.7.0.2"))
+        self.assertIn("Rollback from 0.7.0.2.", edits[-1].body)
+        self.assertEqual(edits[0].title, "0.7.0.2")
+
+    def test_release_plan_republish_drops_stale_block_ok(self):
+        releases = published(
+            [stated("0.7.0.1"), stated("0.7.0.2")], "0.7.0.1", notes="Old deadline"
+        )
+        releases = published(releases, "0.7.0.2")
+        self.assertIn("Superseded", releases[0].body)
+        _prev, edits = plan(releases, "0.7.0.1")
+        self.assertNotIn("Old deadline", edits[-1].body)
+        self.assertNotIn("Superseded", edits[-1].body)
+        self.assertEqual(edits[-1].body.count("<!-- publish:decaf"), 1)
+
+
+class RerenderBlocks(unittest.TestCase):
+    def _held(self, notes=None):
+        releases = [stated("0.7.0.1"), stated("0.7.0.2"), stated("0.7.0.3")]
+        releases = published(releases, "0.7.0.1")
+        return published(releases, "0.7.0.3", notes=notes)
+
+    def test_release_rerender_after_notes_change_ok(self):
+        releases = self._held()
+        tags = [t(r.tag) for r in releases]
+        self.assertEqual(rel.rerender_blocks(releases, tags, REPO), [])
+
+        body = rel.with_tag_notes(releases[1].body, "Urgency: High")
+        releases[1] = release("0.7.0.2", body=body)
+        (changed,) = rel.rerender_blocks(releases, tags, REPO)
+        self.assertEqual(changed.tag, "0.7.0.3")
+        self.assertIn("### 0.7.0.2\n\nUrgency: High", changed.body)
+        self.assertEqual(rel.tag_notes(changed.body), rel.NO_ACTION)
+        self.assertEqual(changed.title, "0.7.0.3 [decaf]")
+
+    def test_release_rerender_keeps_network_notes_and_date_ok(self):
+        releases = self._held("Deadline view 5")
+        tags = [t(r.tag) for r in releases]
+        releases[1] = release("0.7.0.2", body=rel.with_tag_notes("", "Urgency: Low"))
+        (changed,) = rel.rerender_blocks(releases, tags, REPO)
+        self.assertIn("Deadline view 5", changed.body)
+        self.assertIn("date=2026-10-21", changed.body)
+        self.assertIn("prev=0.7.0.1", changed.body)
+
+    def test_release_rerender_ignores_superseded_ok(self):
+        releases = self._held()
+        tags = [t(r.tag) for r in releases]
+        releases[0] = release("0.7.0.1", body="stale")
+        self.assertEqual(rel.rerender_blocks(releases[:1], tags, REPO), [])
+
+
+class DeployedLine(unittest.TestCase):
+    def test_release_deployed_line_ok(self):
+        releases = [
+            release("0.7.0.4", "0.7.0.4 [decaf]"),
+            release("0.6.3.12", "0.6.3.12 [mainnet]"),
+        ]
+        line = rel.render_deployed_line(releases, REPO)
+        self.assertEqual(
+            line,
+            f"Deployed: mainnet [0.6.3.12](https://github.com/{REPO}/releases/tag/0.6.3.12)"
+            f" · decaf [0.7.0.4](https://github.com/{REPO}/releases/tag/0.7.0.4)",
+        )
+        self.assertEqual(
+            rel.render_deployed_line([], REPO), "Deployed: mainnet - · decaf -"
+        )
+
+    def test_release_body_starts_with_deployed_line_ok(self):
+        body = rel.render_body(state(), "", REPO)
+        self.assertTrue(body.startswith("Deployed: "))
+
+    def test_release_release_cell_networks_ok(self):
+        releases = [
+            release("0.7.0.4", "0.7.0.4 [decaf, mainnet]", prerelease=False),
+            release("0.7.0.5"),
+        ]
+        cell = rel.render_release_cell("0.7.0.4", releases, REPO)
+        self.assertTrue(cell.startswith("[release]("))
+        self.assertTrue(cell.endswith(" · decaf, mainnet"))
+        self.assertTrue(
+            rel.render_release_cell("0.7.0.5", releases, REPO).endswith(")")
+        )
+
+
+class PublishComment(unittest.TestCase):
+    def test_release_publish_comment_ok(self):
+        comment = rel.render_publish_comment(
+            t("0.7.0.3"), "decaf", t("0.7.0.1"), REPO, "alice", "https://run"
+        )
+        self.assertIn(
+            "Published `0.7.0.3` on `decaf`, superseding `0.7.0.1`, requested by @alice.",
+            comment,
+        )
+        self.assertIn(
+            "docker pull ghcr.io/espressosystems/espresso-network/espresso-node:0.7.0.3",
+            comment,
+        )
+        self.assertIn("[Workflow run](https://run)", comment)
+
+    def test_release_publish_comment_rollback_ok(self):
+        comment = rel.render_publish_comment(
+            t("0.7.0.1"), "decaf", t("0.7.0.3"), REPO, None, None
+        )
+        self.assertIn("Rolled `decaf` back to `0.7.0.1` from `0.7.0.3`.", comment)
+
+
+class CmdPublish(unittest.TestCase):
+    def _runner(self, build='[{"databaseId": 1}]', releases=None, perm="write"):
+        rows = releases or [
+            release_row("0.7.0.1", body=rel.render_notes_block("none")),
+            release_row("0.7.0.2", body=rel.render_notes_block("Urgency: High")),
+        ]
+        return FakeRunner(
+            {
+                ("gh", "issue", "view"): json.dumps(
+                    {"title": "Release 0.7.0", "body": ""}
+                ),
+                ("gh", "issue", "list"): json.dumps(
+                    [{"number": 42, "title": "Release 0.7.0"}]
+                ),
+                ("gh", "repo", "view"): REPO,
+                ("gh", "api", "repos/{owner}/{repo}/releases?per_page=100"): "\n".join(
+                    rows
+                )
+                + "\n",
+                ("gh", "api", "repos/{owner}/{repo}/releases/tags/0.7.0.2"): "77\n",
+                ("gh", "api", "-X", "PATCH"): "",
+                ("gh", "run", "list"): build,
+                ("gh", "workflow", "run"): "",
+                ("gh", "issue", "comment"): "",
+                ("git", "fetch"): "",
+                (
+                    "git",
+                    "tag",
+                    "--list",
+                    "0.7.0.*",
+                ): "0.7.0.0\n0.7.0.1\n0.7.0.2\n0.7.0.3\n",
+                PERMISSION: perm,
+            }
+        )
+
+    def _args(
+        self, comment="/publish 0.7.0.2 decaf", issue=42, actor="alice", dry_run=False
+    ):
+        return argparse.Namespace(
+            issue=issue, comment=comment, actor=actor, run_url=None, dry_run=dry_run
+        )
+
+    def test_release_cmd_publish_ok(self):
+        runner = self._runner()
+        code = rel.cmd_publish(
+            self._args("/publish 0.7.0.2 decaf\nDeadline view 5"),
+            rel.Git(runner),
+            rel.Gh(runner),
+        )
+        self.assertEqual(code, 0, runner.calls)
+        patch = next(c for c in runner.calls if c[:4] == ["gh", "api", "-X", "PATCH"])
+        self.assertEqual(patch[4], "repos/{owner}/{repo}/releases/77")
+        self.assertIn("name=0.7.0.2 [decaf]", patch)
+        self.assertIn("prerelease=false", patch)
+        self.assertIn("make_latest=false", patch)
+        self.assertTrue(
+            runner.ran("gh", "workflow", "run", "update-release-tracker.yml")
+        )
+        comment = next(c for c in runner.calls if c[:3] == ["gh", "issue", "comment"])
+        self.assertIn("Published `0.7.0.2` on `decaf`", comment[-1])
+
+    def test_release_cmd_publish_mainnet_sends_latest_ok(self):
+        runner = self._runner()
+        code = rel.cmd_publish(
+            self._args("/publish 0.7.0.2 mainnet"), rel.Git(runner), rel.Gh(runner)
+        )
+        self.assertEqual(code, 0)
+        patch = next(c for c in runner.calls if c[:4] == ["gh", "api", "-X", "PATCH"])
+        self.assertIn("make_latest=true", patch)
+
+    def test_release_cmd_publish_build_gate_fails(self):
+        runner = self._runner(build="[]")
+        code = rel.cmd_publish(self._args(), rel.Git(runner), rel.Gh(runner))
+        self.assertEqual(code, 1)
+        self.assertFalse(runner.ran("gh", "api", "-X", "PATCH"))
+        comment = next(c for c in runner.calls if c[:3] == ["gh", "issue", "comment"])
+        self.assertIn(
+            "/publish failed: no successful build.yml run for 0.7.0.2", comment[-1]
+        )
+
+    def test_release_cmd_publish_notes_gate_fails(self):
+        rows = [
+            release_row("0.7.0.0", "0.7.0.0 [decaf]", rel.render_notes_block("none")),
+            release_row("0.7.0.1"),
+            release_row("0.7.0.2", body=rel.render_notes_block("none")),
+        ]
+        runner = self._runner(releases=rows)
+        code = rel.cmd_publish(self._args(), rel.Git(runner), rel.Gh(runner))
+        self.assertEqual(code, 1)
+        self.assertFalse(runner.ran("gh", "api", "-X", "PATCH"))
+        comment = next(c for c in runner.calls if c[:3] == ["gh", "issue", "comment"])
+        self.assertIn("missing for 0.7.0.1;", comment[-1])
+
+    def test_release_cmd_publish_wrong_version_fails(self):
+        runner = self._runner()
+        code = rel.cmd_publish(
+            self._args("/publish 0.6.3.1 decaf"), rel.Git(runner), rel.Gh(runner)
+        )
+        self.assertEqual(code, 1)
+        self.assertFalse(runner.ran("gh", "api", "-X", "PATCH"))
+        comment = next(c for c in runner.calls if c[:3] == ["gh", "issue", "comment"])
+        self.assertIn("does not belong to 0.7.0", comment[-1])
+
+    def test_release_cmd_publish_non_writer_fails(self):
+        runner = FakeRunner(
+            {
+                (
+                    "gh",
+                    "api",
+                    "repos/{owner}/{repo}/collaborators/mallory/permission",
+                ): "read"
+            }
+        )
+        code = rel.cmd_publish(
+            self._args(actor="mallory"), rel.Git(runner), rel.Gh(runner)
+        )
+        self.assertEqual(code, 1)
+        self.assertEqual(len(runner.calls), 1)
+
+    def test_release_cmd_publish_dry_run_writes_nothing_ok(self):
+        runner = self._runner()
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            code = rel.cmd_publish(
+                self._args(
+                    "/publish 0.7.0.2 decaf", issue=None, actor=None, dry_run=True
+                ),
+                rel.Git(runner),
+                rel.Gh(runner),
+            )
+        self.assertEqual(code, 0)
+        self.assertIn(
+            "# 0.7.0.2: 0.7.0.2 [decaf] (prerelease=False, make_latest=False)",
+            out.getvalue(),
+        )
+        self.assertIn("docker pull", out.getvalue())
+        for write in (
+            ("gh", "api", "-X"),
+            ("gh", "issue", "comment"),
+            ("gh", "workflow"),
+        ):
+            self.assertFalse(runner.ran(*write))
+
+    def test_release_cmd_notes_rerenders_publish_block_ok(self):
+        releases = [stated("0.7.0.1"), stated("0.7.0.2"), stated("0.7.0.3")]
+        releases = published(releases, "0.7.0.1")
+        releases = published(releases, "0.7.0.3")
+        rows = [
+            release_row("0.7.0.1", releases[0].title, releases[0].body, False),
+            release_row("0.7.0.2", body=rel.render_notes_block(None)),
+            release_row("0.7.0.3", releases[2].title, releases[2].body, False),
+        ]
+        runner = self._runner(releases=rows)
+        runner.responses[("gh", "release", "edit")] = ""
+        args = argparse.Namespace(
+            issue=42,
+            comment="/notes 0.7.0.2\nUrgency: High",
+            actor="alice",
+            run_url=None,
+            dry_run=False,
+        )
+        self.assertEqual(rel.cmd_notes(args, rel.Git(runner), rel.Gh(runner)), 0)
+        edits = [c for c in runner.calls if c[:3] == ["gh", "release", "edit"]]
+        self.assertEqual([c[3] for c in edits], ["0.7.0.2", "0.7.0.3"])
+
+
+class GhReleaseEdit(unittest.TestCase):
+    def test_release_gh_release_edit_sends_make_latest_ok(self):
+        runner = FakeRunner(
+            {
+                ("gh", "api", "repos/{owner}/{repo}/releases/tags/0.7.0.1"): "5\n",
+                ("gh", "api", "-X", "PATCH"): "",
+            }
+        )
+        edit = rel.ReleaseEdit("0.7.0.1", "0.7.0.1 [decaf]", "body", False, False)
+        rel.Gh(runner).release_edit(edit)
+        patch = runner.calls[-1]
+        self.assertIn("make_latest=false", patch)
+        self.assertIn("prerelease=false", patch)
+        self.assertEqual(patch[4], "repos/{owner}/{repo}/releases/5")
 
 
 # EDGE:release-no-tags
