@@ -1296,7 +1296,7 @@ class BuildTrackerStateAnchor(unittest.TestCase):
         git, gh = rel.Git(runner), rel.Gh(runner)
         state, _body_before = rel.build_tracker_state(git, gh, 7, version())
         self.assertEqual(state.branch_tags, {branch_sha: "0.6.0.1"})
-        self.assertEqual(state.fragment_counts, {"0.6.0.1": 1})
+        self.assertEqual(state.fragment_counts, {"0.6.0.1": (1, 0)})
         self.assertEqual(
             [c.sha for c in state.main_commits], [cherry_sha, pr_match_sha]
         )
@@ -1324,7 +1324,7 @@ class TagLogReleases(unittest.TestCase):
 
     def test_release_tag_log_notes_column_ok(self):
         tags = [(f"0.6.3.{n}", "2026-09-21", "c" * 40) for n in range(3)]
-        rows = rel.render_tag_log(tags, [], {"0.6.3.1": 2}, REPO).splitlines()[2:]
+        rows = rel.render_tag_log(tags, [], {"0.6.3.1": (2, 0)}, REPO).splitlines()[2:]
         self.assertIn("| - | - |", rows[0])
         self.assertIn("| - | 2 |", rows[1])
         self.assertIn("| - | - |", rows[2])
@@ -1333,7 +1333,16 @@ class TagLogReleases(unittest.TestCase):
         runner = FakeRunner({("git", "diff"): "doc/operator-notes/a.md\0"})
         tags = [(f"0.6.3.{n}", "d", "c" * 40) for n in range(3)]
         counts = rel.fragment_counts(rel.Git(runner), tags)
-        self.assertEqual(counts, {"0.6.3.1": 1, "0.6.3.2": 1})
+        self.assertEqual(counts, {"0.6.3.1": (1, 0), "0.6.3.2": (1, 0)})
+
+    def test_release_fragment_counts_invalid_path_ok(self):
+        diff = "doc/operator-notes/a.md\0doc/operator-notes/sub/b.md\0"
+        runner = FakeRunner({("git", "diff"): diff})
+        tags = [(f"0.6.3.{n}", "d", "c" * 40) for n in range(2)]
+        counts = rel.fragment_counts(rel.Git(runner), tags)
+        self.assertEqual(counts, {"0.6.3.1": (1, 1)})
+        rows = rel.render_tag_log(tags, [], counts, REPO).splitlines()[2:]
+        self.assertIn("| 1, \u26a0\ufe0f 1 invalid |", rows[1])
 
 
 # REQ:release-operator-notes
@@ -1446,7 +1455,16 @@ class Fragments(unittest.TestCase):
         for path in ("doc/operator-notes/sub/a.md", "doc/operator-notes/notes.txt"):
             runner = FakeRunner({("git", "diff"): f"doc/operator-notes/a.md\0{path}\0"})
             with self.assertRaisesRegex(ValueError, path):
-                rel.Git(runner).fragment_paths("0.6.0.1", "0.6.0.2")
+                rel.Git(runner).fragments("0.6.0.1", "0.6.0.2")
+
+    def test_release_git_fragment_paths_bad_path_ok(self):
+        runner = FakeRunner(
+            {("git", "diff"): "doc/operator-notes/a.md\0doc/operator-notes/n.txt\0"}
+        )
+        self.assertEqual(
+            rel.Git(runner).fragment_paths("0.6.0.1", "0.6.0.2"),
+            ["doc/operator-notes/a.md", "doc/operator-notes/n.txt"],
+        )
 
     def test_release_git_fragments_readme_skipped_ok(self):
         diff = "doc/operator-notes/README.md\0doc/operator-notes/a.md\0"

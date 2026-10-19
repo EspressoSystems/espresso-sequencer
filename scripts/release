@@ -212,8 +212,8 @@ class TrackerState:
     experimental_branches: list[tuple[str, str]]  # name, sha
     branch_tags: dict[str, str]  # branch commit sha -> first tag containing it
     fragment_counts: dict[
-        str, int
-    ]  # tag -> operator-notes fragments new since the previous tag
+        str, tuple[int, int]
+    ]  # tag -> (valid, invalid) operator-notes paths new since the previous tag
 
 
 def parse_version(text: str) -> Version | None:
@@ -811,10 +811,18 @@ def render_publish_comment(
     return "\n".join(lines) + "\n"
 
 
+def render_notes_cell(counts: tuple[int, int] | None) -> str:
+    valid, invalid = counts or (0, 0)
+    parts = [str(valid)] if valid else []
+    if invalid:
+        parts.append(f"\u26a0\ufe0f {invalid} invalid")
+    return ", ".join(parts) or "-"
+
+
 def render_tag_log(
     tags: list[tuple[str, str, str]],
     releases: list[ReleaseInfo],
-    fragment_counts: dict[str, int],
+    fragment_counts: dict[str, tuple[int, int]],
     repo: str,
 ) -> str:
     if not tags:
@@ -823,7 +831,7 @@ def render_tag_log(
         f"| `{_escape_cell(html.escape(name, quote=False))}` | {_escape_cell(date)} | "
         f"[`{sha[:8]}`](https://github.com/{repo}/commit/{sha}) | "
         f"{render_release_cell(name, releases, repo)} | "
-        f"{fragment_counts.get(name) or '-'} | "
+        f"{render_notes_cell(fragment_counts.get(name))} | "
         f"[runs]({build_runs_url(repo, name)}) |"
         for name, date, sha in tags
     ]
@@ -1164,13 +1172,18 @@ class Git:
 
     def fragments(self, base: str, to: str) -> list[Fragment]:
         """Fragments added or edited between two refs, read at `to`."""
+        paths = self.fragment_paths(base, to)
+        for path in paths:
+            if not is_fragment_path(path):
+                raise ValueError(
+                    f"{path} is not a fragment; fragments are top-level `{FRAGMENT_DIR}/<topic>.md` files"
+                )
         return [
-            Fragment(path, self._run(["git", "show", f"{to}:{path}"]))
-            for path in self.fragment_paths(base, to)
+            Fragment(path, self._run(["git", "show", f"{to}:{path}"])) for path in paths
         ]
 
     def fragment_paths(self, base: str, to: str) -> list[str]:
-        """Raises ValueError for an added or edited file in the directory that is not a fragment."""
+        """Added or edited files in the directory, valid fragment or not."""
         out = self._run(
             [
                 "git",
@@ -1185,13 +1198,7 @@ class Git:
                 f"{FRAGMENT_DIR}/",
             ]
         )
-        paths = [path for path in out.split("\0") if path and path != FRAGMENT_README]
-        for path in paths:
-            if not is_fragment_path(path):
-                raise ValueError(
-                    f"{path} is not a fragment; fragments are top-level `{FRAGMENT_DIR}/<topic>.md` files"
-                )
-        return paths
+        return [path for path in out.split("\0") if path and path != FRAGMENT_README]
 
     def cherry(self, upstream: str, head: str, limit: str | None = None) -> set[str]:
         command = ["git", "cherry", upstream, head]
@@ -1925,14 +1932,18 @@ def build_tracker_state(
     return state, body_before
 
 
-def fragment_counts(git: Git, tags: list[tuple[str, str, str]]) -> dict[str, int]:
-    """Fragments new in each tag since the previous tag on its line."""
+def fragment_counts(
+    git: Git, tags: list[tuple[str, str, str]]
+) -> dict[str, tuple[int, int]]:
+    """(valid, invalid) fragment paths new in each tag since the previous tag on its line."""
     parsed = [tag for name, _date, _sha in tags if (tag := parse_tag(name))]
     counts = {}
     for tag in parsed:
         base = tag_base(tag, parsed)
         if base is not None:
-            counts[str(tag)] = len(git.fragment_paths(str(base), str(tag)))
+            paths = git.fragment_paths(str(base), str(tag))
+            valid = sum(is_fragment_path(path) for path in paths)
+            counts[str(tag)] = (valid, len(paths) - valid)
     return counts
 
 
