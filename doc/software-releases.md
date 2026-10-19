@@ -69,9 +69,9 @@ again.
 ### Publishing to a network
 
 `/publish X.Y.Z.N decaf|mainnet` makes the tag the release operators deploy on that network. It creates the GitHub
-release when the tag has none, with generated notes starting at the previous release on that network, and edits it
-otherwise. Lines 2..n are notes for that network only, such as an upgrade deadline. Tags that are never published have
-no release.
+release when the tag has none, and edits it otherwise. Generated notes start at the same base as the operator notes and
+follow the first publish of the tag. Lines 2..n are notes for that network only, such as an upgrade deadline. Tags that
+are never published have no release.
 
 - The title gets `[decaf]`, `[mainnet]` or both. The previous release on that network loses its marker and is marked
   superseded. Latest always follows mainnet.
@@ -80,10 +80,9 @@ no release.
 - Do not edit release titles or the bot's `<!-- ... -->` markers by hand: they record what each network runs.
 - Preview without writing: `just release-publish-preview X.Y.Z.N decaf`.
 
-Operators follow releases with Watch > Custom > Releases, which fires only on publish, and look for the network marker
-in the title, or poll `GET /repos/EspressoSystems/espresso-network/releases`.
-
-Pre-releases created before this change were deleted. Their tags and images remain.
+Operators follow releases with Watch > Custom > Releases. The alert fires when a tag's first `/publish` creates the
+release. A second network's `/publish` of the same tag only edits it: the marker appears in the title and API, no alert.
+Look for the network marker in the title, or poll `GET /repos/EspressoSystems/espresso-network/releases`.
 
 ## Process
 
