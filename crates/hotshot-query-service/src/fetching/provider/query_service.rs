@@ -563,7 +563,6 @@ mod test {
         )
         .await;
         leaf.block_header_mut().block_number = number;
-        leaf.block_header_mut().version = versions::NEW_PROTOCOL_VERSION;
         let mut qc = QuorumCertificate2::<MockTypes>::genesis(
             &Default::default(),
             &Default::default(),
