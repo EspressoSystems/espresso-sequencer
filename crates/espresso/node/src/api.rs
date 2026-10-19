@@ -4,7 +4,7 @@ use ::light_client::{
     LightClient,
     client::{FallbackClient, QueryServiceClient},
     state::{Genesis, LightClientOptions},
-    storage::LightClientSqliteOptions,
+    storage::LightClientDbOptions,
 };
 use alloy::primitives::U256;
 use anyhow::{Context, bail, ensure};
@@ -1711,7 +1711,7 @@ pub(crate) struct LightClientProvider<C: ApiContext> {
     state: ApiState<C>,
     client: FallbackClient<QueryServiceClient>,
     opt: LightClientOptions,
-    db_opt: LightClientSqliteOptions,
+    db_opt: LightClientDbOptions,
 }
 
 impl<C: ApiContext> LightClientProvider<C> {
@@ -1719,7 +1719,7 @@ impl<C: ApiContext> LightClientProvider<C> {
         peers: impl IntoIterator<Item = Url>,
         state: ApiState<C>,
         opt: LightClientOptions,
-        db_opt: LightClientSqliteOptions,
+        db_opt: LightClientDbOptions,
     ) -> anyhow::Result<Self> {
         let client = FallbackClient::new(peers.into_iter().map(QueryServiceClient::new).collect())?;
         Ok(Self {
@@ -1753,7 +1753,7 @@ impl<C: ApiContext> LightClientProvider<C> {
             .clone()
             .connect()
             .await
-            .context("creating SQLite database for light client")?;
+            .context("opening the light client database")?;
         let chain_id = ctx.node_state().genesis_chain_config.chain_id;
         let genesis = light_client_genesis(&ctx.network_config(), chain_id);
         Ok(Arc::new(LightClient::from_genesis_with_options(

@@ -22,7 +22,10 @@ use espresso_types::{BackoffParams, L1ClientOptions, parse_duration};
 use espresso_utils::logging;
 use hotshot_types::addr::NetAddr;
 use libp2p::Multiaddr;
-use light_client::{state::LightClientOptions, storage::LightClientSqliteOptions};
+use light_client::{
+    state::LightClientOptions,
+    storage::{LightClientDbOptions, LightClientSqliteOptions},
+};
 use serde::Serialize;
 use url::Url;
 
@@ -434,6 +437,7 @@ impl Options {
         &self,
         follower: &Follower,
         query: &api::options::Query,
+        light_client_db: LightClientDbOptions,
     ) -> anyhow::Result<FollowerParams> {
         let light_client_genesis = match &follower.light_client_genesis {
             Some(path) => {
@@ -467,7 +471,7 @@ impl Options {
                 poll_interval: follower.poll_interval,
                 max_blocks_per_poll: follower.max_blocks_per_poll,
                 light_client: query.light_client.clone(),
-                light_client_db: query.light_client_db(),
+                light_client_db,
                 light_client_genesis,
             },
         })
@@ -1559,7 +1563,9 @@ pub(crate) mod tests {
         let follower = Follower::try_parse_from(["follower"]).unwrap();
 
         let opt = parse_options_with(&[]);
-        let params = opt.follower_params(&follower, &query).unwrap();
+        let params = opt
+            .follower_params(&follower, &query, Default::default())
+            .unwrap();
         assert_eq!(params.upstreams, peers);
         assert_eq!(params.catchup.state_peers, peers);
         assert!(
@@ -1573,7 +1579,9 @@ pub(crate) mod tests {
             "--config-peers",
             "http://d.test",
         ]);
-        let params = opt.follower_params(&follower, &query).unwrap();
+        let params = opt
+            .follower_params(&follower, &query, Default::default())
+            .unwrap();
         assert_eq!(params.upstreams, peers);
         assert_eq!(
             params.catchup.state_peers,
