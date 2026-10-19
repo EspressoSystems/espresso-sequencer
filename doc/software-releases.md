@@ -30,9 +30,9 @@ Every release branch has one issue titled `Release MAJOR.MINOR.PHASE` with label
 its body on every push to `main` or `release-*`, when a PR against a release branch opens or closes, after every `/tag`
 or cut, and on tracker commands. Sections:
 
-- Deployed line: the release each network runs, `Deployed: mainnet <tag> · decaf <tag>`, from the release titles.
-- Tag log: tags on the branch with date, commit, GitHub release state (pre-release or release, with the networks it is
-  published on), the number of operator-notes fragments new in the tag (`-` for none and for `.0`) and build runs.
+- Deployed line: the release each network runs.
+- Tag log: tags on the branch with date, commit, GitHub release state (pre-release, release, networks), new
+  operator-notes fragments and build runs.
 - Backports from `main` to the branch: commits on `main` since the `.0` tag. A row shows ✅ when the commit is on the
   branch: its backport PR (head `backport-<PR>-to-<branch>`) merged, `git cherry` finds the same patch, a branch commit
   has the same PR number, or a `[Backport ...]` commit has the same title. Backport PR status is appended when one
@@ -60,69 +60,24 @@ Marks are replayed from the issue's comment history, so the body can always be r
 
 ### Operator notes
 
-Operator notes live in the repository as fragment files, one per change, in `doc/operator-notes/*.md`. A PR that changes
-environment variables, CLI flags, config or genesis, DB migrations, ports, storage layout, restart requirements or
-upgrade timing adds a fragment. `doc/operator-notes/README.md` has the template. Backports carry the file from the
-original PR. The release process never deletes fragments and never commits; the rollup lives only in the GitHub release
-body.
-
-- Collection is pure git: the fragments added or edited between two refs are
-  `git diff --no-renames --diff-filter=AM --name-only -z <from> <to> -- doc/operator-notes/`, read at `<to>`,
-  `README.md` excluded. Fragments are sorted by path. An edited fragment reappears in the next tag's block and in the
-  next `/publish` block whose range contains the edit. Any other added or edited path in the directory (a subdirectory
-  or a non-`.md` file) fails the command with a comment naming it.
-- `/tag` writes the fragments added or edited since the previous tag on the same line into the release body, between
-  `<!-- operator-notes -->` and `<!-- /operator-notes -->`, above the generated PR list. No fragments render
-  `No operator action required.` The `.0` tag has no block. `/tag` takes no lines 2..n; text there fails the command
-  with a comment pointing to `doc/operator-notes/`.
-- A fragment containing `<!--` fails `/tag` and `/publish` with a comment naming the file. Fix it with a PR, then tag
-  again.
+A PR that needs operator action adds `doc/operator-notes/<topic>.md` (template in its `README.md`); backports carry it.
+Release bodies list the fragments added or edited since the previous release: `/tag` since the previous tag, `/publish`
+since the previous release on that network, across release lines. Without fragments the body says
+`No operator action required.` Fix a wrong fragment with a PR and tag again.
 
 ### Publishing to a network
 
-`/publish X.Y.Z.N decaf|mainnet` makes the tag the release operators deploy on that network. One tag can serve decaf
-first and mainnet later. Only `/publish` turns a pre-release into a release.
+`/publish X.Y.Z.N decaf|mainnet` turns the pre-release into the release operators deploy on that network. Lines 2..n are
+notes for that network only, such as an upgrade deadline.
 
-- Title: `X.Y.Z.N [decaf]`, `[mainnet]` or `[decaf, mainnet]`. Only the release currently published on a network carries
-  its marker. The previous holder loses the marker, stays a full release and gets the line
-  `Superseded on <network> by <tag> (<date>)`, wrapped in `<!-- superseded:<network> -->` markers.
-- Latest: always the release published on mainnet. Every release edit sends `--latest` explicitly, because GitHub
-  defaults to true.
-- Body: one block per network between `<!-- publish:<network> prev=<tag|none> date=<date> -->` and
-  `<!-- /publish:<network> -->`, above the notes block. It holds the deploy date, the previous tag, the `docker pull`
-  line, the lines 2..n of `/publish`, the cumulative operator-notes fragments and a compare link. Text outside the bot's
-  markers is kept.
-- Fragments in the block, for current holder P and target X. `P..X` is a tree diff, so it works across release lines:
+- The title gets `[decaf]`, `[mainnet]` or both. The previous release on that network loses its marker and is marked
+  superseded. Latest always follows mainnet.
+- Refused, with a tracker comment, unless `ghcr.io/espressosystems/espresso-network/espresso-node:<tag>` exists.
+- Rerun to recover from a failed run. `/publish <older tag> <network>` rolls back.
+- Do not edit release titles or the bot's `<!-- ... -->` markers by hand: they record what each network runs.
 
-  | Case                      | Fragments                                             |
-  | ------------------------- | ----------------------------------------------------- |
-  | P exists                  | added or edited in `P..X`                             |
-  | no P (first publish)      | added or edited in X's `/tag` range (none for a `.0`) |
-  | X older than P (rollback) | none; the block says `Rollback from P`                |
-
-  A first publish prefixes the fragments with the line
-  `No previous release recorded on <network>; operator actions since <base> only.` The base is the tag before X; a `.0`
-  has none and the line ends after `<network>`. No fragments render `No operator action required.`
-
-- Do not edit release titles or the bot's markers by hand. The title marker is the record of the current holder. If it
-  is lost while the block remains, `/publish` fails naming the release; restore the title (`<tag> [<network>]`) and
-  rerun.
-- Command text (lines 2..n) must not contain `<!--`; the command fails with a tracker comment otherwise.
-- Gates, each reported as a tracker comment without changing anything: the tag belongs to the tracker's version, the
-  release exists, the docker image `ghcr.io/espressosystems/espresso-network/espresso-node:<tag>` exists, and no
-  fragment in the range contains `<!--`. The image gate checks only `espresso-node`; the same `build.yml` run builds the
-  other images. A failed registry check is reported the same way, without credentials in the message.
-- Rollback: `/publish <older tag> <network>`.
-- Rerunning `/publish` for the current holder only re-renders its block from git, keeping its date and previous tag. It
-  is also the recovery after a partial failure: the target release is written first, so a rerun still finds its previous
-  tag. Notes given on lines 2..n replace the stored ones; `none` clears them.
-- `just release-publish-preview X.Y.Z.N decaf` previews the edits and the tracker comment without writing.
-
-### Following a network
-
-Operators watch Watch > Custom > Releases on the repository. Alerts include the pre-release of every `/tag`; the
-deployable release carries `[decaf]` or `[mainnet]` in its title. Alternatively poll
-`GET /repos/EspressoSystems/espresso-network/releases` and filter on the title marker.
+Operators follow releases with Watch > Custom > Releases (it also fires for `/tag` pre-releases) and look for the
+network marker in the title, or poll `GET /repos/EspressoSystems/espresso-network/releases`.
 
 ## Process
 
@@ -136,13 +91,10 @@ deployable release carries `[decaf]` or `[mainnet]` in its title. Alternatively 
    the workflow from the Actions UI works once the branch exists, with `source_ref` set to the branch tip sha.
 2. Land backport PRs and fixes on the release branch. Watch the tracker checklist.
 3. Comment `/tag` on the tracker after each batch worth testing. The bot replies with the tag, the GitHub pre-release
-   and a link to the `build.yml` run. The release body lists the new operator-notes fragments.
-4. Validate the tag on devnet, or push an experimental branch for ad hoc changes. Fix a wrong fragment with a PR on the
-   branch, then tag again.
-5. Optionally preview with `just release-publish-preview X.Y.Z.N decaf`. Once a tag is validated, comment
-   `/publish X.Y.Z.N decaf`, with network-specific deadlines on lines 2..n. Only releases are meant for operators. A
-   later mainnet promotion of the same tag is `/publish X.Y.Z.N mainnet` on the same tracker. Announce with the release
-   link.
+   and a link to the `build.yml` run.
+4. Validate the tag on devnet, or push an experimental branch for ad hoc changes.
+5. Once a tag is validated, comment `/publish X.Y.Z.N decaf`, later `/publish X.Y.Z.N mainnet`. Only releases are meant
+   for operators. Announce with the release link.
 6. Delete the release branch when it is no longer needed, shipped or abandoned. The tracker is closed with a final tag
    list and labelled `release-closed`.
 
@@ -210,12 +162,9 @@ gh workflow run release-branch.yml -f version=X.Y.Z -f source_ref=$(git rev-pars
   collaborators API, and mark replay ignores commands by users without write access.
 - Trackers are only recognized when opened by `github-actions[bot]`. They are not locked: the workflow token cannot
   comment on locked issues.
-- `/publish` needs the same write access as `/tag`. There is no environment approval: the decision stays on the tracker.
-- Concurrency groups are job-level, so skipped runs from outside comments or fork PRs never cancel a pending run. The
-  `publish` job uses the group `release-publish`, because a run edits releases of more than one line.
-- GitHub allows one running and one pending run per concurrency group; a newer pending run replaces the older one. Send
-  tracker commands one at a time and wait for the bot reply. If the reply is missing, the command was probably replaced
-  or failed: check the Actions tab and repost it.
+- Concurrency groups are job-level, so skipped runs from outside comments or fork PRs never cancel a pending run.
+- A newer pending run replaces an older one in the same group. Post tracker commands one at a time and repost one whose
+  bot reply is missing.
 - Tag protection rules cannot exempt the workflow token, so tags are not protected yet.
 - Floating docker tags per network (`decaf`, `mainnet`) and automated promotion are not part of this process. Operators
-  pin release tags. `/publish` never moves a tag.
+  pin release tags.
