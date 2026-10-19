@@ -1847,11 +1847,11 @@ class RerenderBlocks(unittest.TestCase):
     def test_release_rerender_after_notes_change_ok(self):
         releases = self._held()
         tags = [t(r.tag) for r in releases]
-        self.assertEqual(rel.rerender_blocks(releases, tags, REPO), [])
+        self.assertEqual(rel.rerender_blocks(releases, lambda *_: tags, REPO), [])
 
         body = rel.with_tag_notes(releases[1].body, "Urgency: High")
         releases[1] = release("0.7.0.2", body=body)
-        (changed,) = rel.rerender_blocks(releases, tags, REPO)
+        (changed,) = rel.rerender_blocks(releases, lambda *_: tags, REPO)
         self.assertEqual(changed.tag, "0.7.0.3")
         self.assertIn("### 0.7.0.2\n\nUrgency: High", changed.body)
         self.assertEqual(rel.tag_notes(changed.body), rel.NO_ACTION)
@@ -1861,7 +1861,7 @@ class RerenderBlocks(unittest.TestCase):
         releases = self._held("Deadline view 5")
         tags = [t(r.tag) for r in releases]
         releases[1] = release("0.7.0.2", body=rel.with_tag_notes("", "Urgency: Low"))
-        (changed,) = rel.rerender_blocks(releases, tags, REPO)
+        (changed,) = rel.rerender_blocks(releases, lambda *_: tags, REPO)
         self.assertIn("Deadline view 5", changed.body)
         self.assertIn("date=2026-10-21", changed.body)
         self.assertIn("prev=0.7.0.1", changed.body)
@@ -1870,7 +1870,7 @@ class RerenderBlocks(unittest.TestCase):
         releases = self._held()
         tags = [t(r.tag) for r in releases]
         releases[0] = release("0.7.0.1", body="stale")
-        self.assertEqual(rel.rerender_blocks(releases[:1], tags, REPO), [])
+        self.assertEqual(rel.rerender_blocks(releases[:1], lambda *_: tags, REPO), [])
 
 
 class DeployedLine(unittest.TestCase):

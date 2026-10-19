@@ -35,6 +35,7 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
+from functools import partial
 from pathlib import Path
 from typing import Literal, cast
 
@@ -719,43 +720,58 @@ def plan_publish(
     release = find_release(releases, str(target))
     if release is None:
         raise ValueError(f"no release for {target}")
+    _require_no_lost_holder(releases, network)
     others = [
         r
         for r in releases
         if r.tag != release.tag and network in title_networks(r.title)
     ]
-    _require_no_lost_holder(releases, network)
-    stored = (
-        publish_block_prev(release.body, network)
-        if network in title_networks(release.title)
-        else None
+    prev, since, network_notes = _previous_holder(
+        release, others, network, network_notes, date
     )
-    clear_notes = network_notes is not None and network_notes.strip().lower() == "none"
-    if clear_notes:
-        network_notes = None
-    if stored is None:
-        holder = current_release(others, network)
-        prev, since = (parse_tag(holder.tag) if holder else None), date
-    else:
-        prev, since = (parse_tag(stored[0]) if stored[0] else None), stored[1]
-        if not clear_notes:
-            network_notes = network_notes or publish_block_notes(release.body, network)
-
     scope = notes_range(prev, target, tags)
     _require_range_stated(releases, scope)
-    entries = release_entries(releases, scope)
     block = render_publish_block(
-        network, prev, target, since, network_notes, entries, repo
+        network,
+        prev,
+        target,
+        since,
+        network_notes,
+        release_entries(releases, scope),
+        repo,
     )
-    networks = title_networks(release.title) | {network}
     edit = ReleaseEdit(
         release.tag,
-        render_title(release.tag, networks),
+        render_title(release.tag, title_networks(release.title) | {network}),
         with_block(release.body, network, block),
         False,
     )
     superseded = [_supersede(other, network, release.tag, date) for other in others]
     return prev, [edit, *superseded]
+
+
+def _previous_holder(
+    release: ReleaseInfo,
+    others: list[ReleaseInfo],
+    network: Network,
+    network_notes: str | None,
+    date: str,
+) -> tuple[Tag | None, str, str | None]:
+    """The previous holder, the deploy date and the network notes. A rerun for the current holder
+    keeps its stored prev, date and notes; `none` clears the notes."""
+    clear = network_notes is not None and network_notes.strip().lower() == "none"
+    notes = None if clear else network_notes
+    stored = (
+        publish_block_prev(release.body, network)
+        if network in title_networks(release.title)
+        else None
+    )
+    if stored is None:
+        holder = current_release(others, network)
+        return (parse_tag(holder.tag) if holder else None), date, notes
+    if not clear:
+        notes = notes or publish_block_notes(release.body, network)
+    return (parse_tag(stored[0]) if stored[0] else None), stored[1], notes
 
 
 def _require_range_stated(releases: list[ReleaseInfo], scope: list[Tag]) -> None:
@@ -801,10 +817,14 @@ def _supersede(
     )
 
 
+TagsFor = Callable[[Tag, Network], list[Tag]]
+
+
 def rerender_blocks(
-    releases: list[ReleaseInfo], tags: list[Tag], repo: str
+    releases: list[ReleaseInfo], tags_for: TagsFor, repo: str
 ) -> list[ReleaseInfo]:
-    """Re-renders every current publish block from the release bodies; returns the changed releases."""
+    """Re-renders every current publish block from the release bodies; returns the changed releases.
+    `tags_for(holder, network)` lists the git tags its range can draw from."""
     changed = []
     for release in releases:
         target = parse_tag(release.tag)
@@ -814,14 +834,14 @@ def rerender_blocks(
             if stored is None or target is None:
                 continue
             prev = parse_tag(stored[0]) if stored[0] else None
-            entries = release_entries(releases, notes_range(prev, target, tags))
+            scope = notes_range(prev, target, tags_for(target, network))
             block = render_publish_block(
                 network,
                 prev,
                 target,
                 stored[1],
                 publish_block_notes(body, network),
-                entries,
+                release_entries(releases, scope),
                 repo,
             )
             body = with_block(body, network, block)
@@ -1696,6 +1716,16 @@ def cmd_teardown(args: argparse.Namespace, git: Git, gh: Gh) -> int:
     return 0
 
 
+def report_failure(
+    gh: Gh, issue: int | None, command: str, message: str, dry_run: bool
+) -> int:
+    """Logs the error and, outside a dry run, comments it on the tracker; returns the exit code."""
+    gh_error(message)
+    if issue is not None and not dry_run:
+        gh.issue_comment(issue, f"{command} failed: {message}")
+    return 1
+
+
 def require_writer(gh: Gh, actor: str | None) -> bool:
     if actor is None or not gh.can_write(actor):
         gh_error(f"{actor} lacks write access; ignoring the command")
@@ -1790,12 +1820,7 @@ def _tag(
 ) -> int:
     """Resolves and writes the tag; once `issue` is known, every failure is also reported there."""
 
-    def fail(message: str) -> int:
-        gh_error(message)
-        if issue is not None:
-            gh.issue_comment(issue, f"/tag failed: {message}")
-        return 1
-
+    fail = partial(report_failure, gh, issue, "/tag", dry_run=False)
     git.fetch(version, [branch])
     existing_for_version = git.tag_list(f"{version}.*")
     try:
@@ -1837,12 +1862,7 @@ def cmd_notes(args: argparse.Namespace, git: Git, gh: Gh) -> int:
     if version is None:
         return 1
 
-    def fail(message: str) -> int:
-        gh_error(message)
-        if not args.dry_run:
-            gh.issue_comment(args.issue, f"/notes failed: {message}")
-        return 1
-
+    fail = partial(report_failure, gh, args.issue, "/notes", dry_run=args.dry_run)
     command = parse_command(args.comment)
     if command is None or command.name != "notes" or command.arg is None:
         return fail(bad_command(args.comment, "`/notes X.Y.Z.N`"))
@@ -1862,7 +1882,11 @@ def cmd_notes(args: argparse.Namespace, git: Git, gh: Gh) -> int:
         for r in releases
     ]
     repo = gh.repo()
-    rerendered = rerender_blocks(releases, line_tags(git, releases), repo)
+    rerendered = rerender_blocks(
+        releases,
+        lambda holder, network: publish_tags(git, releases, holder, network),
+        repo,
+    )
     changed = {r.tag: r for r in releases if r.tag == command.arg}
     changed |= {r.tag: r for r in rerendered}
     edits = [
@@ -1880,18 +1904,6 @@ def cmd_notes(args: argparse.Namespace, git: Git, gh: Gh) -> int:
         args.issue, render_notes_comment(tag, repo, args.actor, args.run_url)
     )
     return 0
-
-
-def line_tags(git: Git, releases: list[ReleaseInfo]) -> list[Tag]:
-    """Tags of every line a current publish block can draw notes from."""
-    versions = {
-        version
-        for release in releases
-        if (target := parse_tag(release.tag))
-        for network in title_networks(release.title)
-        for version in scope_versions(releases, target, network)
-    }
-    return [tag for version in sorted(versions) for tag in _version_tags(git, version)]
 
 
 def _version_tags(git: Git, version: Version) -> list[Tag]:
@@ -1923,6 +1935,17 @@ def _promotion(
     return [row, *history], True
 
 
+@dataclass(frozen=True)
+class PublishPlan:
+    network: Network
+    target: Tag
+    prev: Tag | None
+    edits: list[ReleaseEdit]
+    comment: str
+    repo: str
+    actor: str | None
+
+
 def cmd_publish(args: argparse.Namespace, git: Git, gh: Gh) -> int:
     if not args.dry_run and not require_writer(gh, args.actor):
         return 1
@@ -1931,12 +1954,7 @@ def cmd_publish(args: argparse.Namespace, git: Git, gh: Gh) -> int:
     issue = args.issue
     if issue is None and target is not None:
         issue = find_tracker(gh.open_trackers(), target.version)
-
-    def fail(message: str) -> int:
-        gh_error(message)
-        if issue is not None and not args.dry_run:
-            gh.issue_comment(issue, f"/publish failed: {message}")
-        return 1
+    fail = partial(report_failure, gh, issue, "/publish", dry_run=args.dry_run)
 
     if command is None or command.name != "publish" or command.network is None:
         return fail(bad_command(args.comment, "`/publish X.Y.Z.N decaf|mainnet`"))
@@ -1949,55 +1967,73 @@ def cmd_publish(args: argparse.Namespace, git: Git, gh: Gh) -> int:
         if target.version != version:
             return fail(f"tag {target} does not belong to {version}")
 
-    repo, network = gh.repo(), command.network
     try:
-        releases = gh.release_list()
-        prev, edits = plan_publish(
-            releases,
-            target,
-            network,
-            command.text,
-            publish_tags(git, releases, target, network),
-            datetime.now(UTC).date().isoformat(),
-            repo,
-        )
+        plan = _plan_publish(args, git, gh, target, command)
     except ValueError as error:
         return fail(str(error))
     if not gh.build_succeeded(str(target)):
         return fail(f"no successful build.yml run for {target}, so no images yet")
-
-    comment = render_publish_comment(
-        target, network, prev, repo, args.actor, args.run_url
-    )
     if args.dry_run:
-        for edit in edits:
-            flags = f"prerelease={edit.prerelease}, make_latest={edit.make_latest}"
-            print(f"# {edit.tag}: {edit.title} ({flags})\n")
-        print(f"{edits[0].body}\n\n---\n{comment}", end="")
-        history, _promoted = _promotion(
-            gh, gh.find_network_issue(network), target, prev, args.actor
-        )
-        print(
-            f"\n---\n# Releases: {network}\n\n{render_network_index(network, history, repo)}"
-        )
+        _print_publish(gh, plan)
         return 0
-
     try:
-        for edit in edits:
-            gh.release_edit(edit)
-        number = gh.network_issue(network)
-        history, promoted = _promotion(gh, number, target, prev, args.actor)
-        if promoted:  # comment first: a failure before the row lands is retried with a notification
-            gh.issue_comment(number, comment)
-            gh.issue_edit_body(number, render_network_index(network, history, repo))
-        gh.workflow_run("update-release-tracker.yml", None, {})
-        if issue is not None:
-            gh.issue_comment(issue, comment)
+        apply_publish(gh, plan, issue)
     except RuntimeError as error:
         if issue is not None:
             gh.issue_comment(issue, f"/publish failed: {error}")
         raise
     return 0
+
+
+def _plan_publish(
+    args: argparse.Namespace, git: Git, gh: Gh, target: Tag, command: Command
+) -> PublishPlan:
+    """Raises ValueError when a gate fails."""
+    repo, releases = gh.repo(), gh.release_list()
+    network = cast(Network, command.network)
+    prev, edits = plan_publish(
+        releases,
+        target,
+        network,
+        command.text,
+        publish_tags(git, releases, target, network),
+        datetime.now(UTC).date().isoformat(),
+        repo,
+    )
+    comment = render_publish_comment(
+        target, network, prev, repo, args.actor, args.run_url
+    )
+    return PublishPlan(network, target, prev, edits, comment, repo, args.actor)
+
+
+def _print_publish(gh: Gh, plan: PublishPlan) -> None:
+    for edit in plan.edits:
+        flags = f"prerelease={edit.prerelease}, make_latest={edit.make_latest}"
+        print(f"# {edit.tag}: {edit.title} ({flags})\n")
+    print(f"{plan.edits[0].body}\n\n---\n{plan.comment}", end="")
+    history, _promoted = _promotion(
+        gh, gh.find_network_issue(plan.network), plan.target, plan.prev, plan.actor
+    )
+    index = render_network_index(plan.network, history, plan.repo)
+    print(f"\n---\n# Releases: {plan.network}\n\n{index}")
+
+
+def apply_publish(gh: Gh, plan: PublishPlan, issue: int | None) -> None:
+    """The writes of a publish, in rerun-safe order: releases, network issue, tracker."""
+    for edit in plan.edits:
+        gh.release_edit(edit)
+    number = gh.network_issue(plan.network)
+    history, promoted = _promotion(gh, number, plan.target, plan.prev, plan.actor)
+    if (
+        promoted
+    ):  # comment first: a failure before the row lands is retried with a notification
+        gh.issue_comment(number, plan.comment)
+        gh.issue_edit_body(
+            number, render_network_index(plan.network, history, plan.repo)
+        )
+    gh.workflow_run("update-release-tracker.yml", None, {})
+    if issue is not None:
+        gh.issue_comment(issue, plan.comment)
 
 
 def build_tracker_state(
