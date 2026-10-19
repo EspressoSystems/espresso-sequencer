@@ -498,9 +498,12 @@ def render_notes_block(text: str) -> str:
 
 
 def is_fragment_path(path: str) -> bool:
+    """A top-level `doc/operator-notes/<topic>.md`, `README.md` excluded."""
+    name = path.removeprefix(f"{FRAGMENT_DIR}/")
     return (
-        path.startswith(f"{FRAGMENT_DIR}/")
-        and path.endswith(".md")
+        name != path
+        and "/" not in name
+        and name.endswith(".md")
         and path != FRAGMENT_README
     )
 
@@ -1147,26 +1150,35 @@ class Git:
         )
 
     def fragments(self, base: str, to: str) -> list[Fragment]:
-        """Fragments added between two refs, read at `to`."""
+        """Fragments added or edited between two refs, read at `to`."""
         return [
             Fragment(path, self._run(["git", "show", f"{to}:{path}"]))
             for path in self.fragment_paths(base, to)
         ]
 
     def fragment_paths(self, base: str, to: str) -> list[str]:
+        """Raises ValueError for an added or edited file in the directory that is not a fragment."""
         out = self._run(
             [
                 "git",
                 "diff",
-                "--diff-filter=A",
+                "--no-renames",
+                "--diff-filter=AM",
                 "--name-only",
+                "-z",
                 base,
                 to,
                 "--",
                 f"{FRAGMENT_DIR}/",
             ]
         )
-        return [line for line in out.splitlines() if is_fragment_path(line)]
+        paths = [path for path in out.split("\0") if path and path != FRAGMENT_README]
+        for path in paths:
+            if not is_fragment_path(path):
+                raise ValueError(
+                    f"{path} is not a fragment; fragments are top-level `{FRAGMENT_DIR}/<topic>.md` files"
+                )
+        return paths
 
     def cherry(self, upstream: str, head: str, limit: str | None = None) -> set[str]:
         command = ["git", "cherry", upstream, head]

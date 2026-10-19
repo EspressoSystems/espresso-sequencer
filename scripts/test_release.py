@@ -11,7 +11,11 @@ import contextlib
 import importlib.util
 import io
 import json
+import os
+import subprocess
+import tempfile
 import unittest
+import unittest.mock
 from importlib.machinery import SourceFileLoader
 from pathlib import Path
 
@@ -882,7 +886,7 @@ class CmdTagHappyPath(unittest.TestCase):
         )
 
     def test_release_cmd_tag_fragments_in_release_ok(self):
-        diff = "doc/operator-notes/b.md\ndoc/operator-notes/README.md\n"
+        diff = "doc/operator-notes/b.md\0doc/operator-notes/README.md\0"
         runner = self._fragment_runner(diff, "### B\n\nUrgency: High\n")
         self.assertEqual(
             rel.cmd_tag(self._tag_args(), rel.Git(runner), rel.Gh(runner)), 0
@@ -891,8 +895,10 @@ class CmdTagHappyPath(unittest.TestCase):
             [
                 "git",
                 "diff",
-                "--diff-filter=A",
+                "--no-renames",
+                "--diff-filter=AM",
                 "--name-only",
+                "-z",
                 "0.6.0.0",
                 "c" * 40,
                 "--",
@@ -929,7 +935,7 @@ class CmdTagHappyPath(unittest.TestCase):
         self.assertFalse(runner.ran("git", "diff"))
 
     def test_release_cmd_tag_bad_fragment_fails(self):
-        diff = "doc/operator-notes/b.md\n"
+        diff = "doc/operator-notes/b.md\0"
         runner = self._fragment_runner(diff, "### B\n<!-- /operator-notes -->")
         self.assertEqual(
             rel.cmd_tag(self._tag_args(), rel.Git(runner), rel.Gh(runner)), 1
@@ -1235,7 +1241,7 @@ class BuildTrackerStateAnchor(unittest.TestCase):
                 ("git", "rev-parse", "origin/main"): "m" * 40,
                 ("git", "rev-parse", "origin/release-0.6.0"): "b" * 40,
                 ("git", "tag", "--list", "0.6.0.0"): "0.6.0.0\n",
-                ("git", "diff"): "doc/operator-notes/a.md\n",
+                ("git", "diff"): "doc/operator-notes/a.md\0",
                 ("git", "rev-parse", "0.6.0.0^{commit}"): anchor,
                 ("git", "merge-base", "--is-ancestor"): "",
                 (
@@ -1321,7 +1327,7 @@ class TagLogReleases(unittest.TestCase):
         self.assertIn("| - | - |", rows[2])
 
     def test_release_fragment_counts_ok(self):
-        runner = FakeRunner({("git", "diff"): "doc/operator-notes/a.md\n"})
+        runner = FakeRunner({("git", "diff"): "doc/operator-notes/a.md\0"})
         tags = [(f"0.6.3.{n}", "d", "c" * 40) for n in range(3)]
         counts = rel.fragment_counts(rel.Git(runner), tags)
         self.assertEqual(counts, {"0.6.3.1": 1, "0.6.3.2": 1})
@@ -1332,6 +1338,75 @@ class TagLogReleases(unittest.TestCase):
 
 def frag(name="a", text="### A\n\nUrgency: High\n") -> "rel.Fragment":
     return rel.Fragment(f"doc/operator-notes/{name}.md", text)
+
+
+class GitFragmentsRealRepo(unittest.TestCase):
+    """Runs `Git.fragments` against a scratch repository."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.root = Path(tmp.name)
+        cwd = os.getcwd()
+        os.chdir(self.root)
+        self.addCleanup(os.chdir, cwd)
+        env = {
+            "GIT_CONFIG_GLOBAL": os.devnull,
+            "GIT_CONFIG_NOSYSTEM": "1",
+            "GIT_AUTHOR_NAME": "t",
+            "GIT_AUTHOR_EMAIL": "t@example.com",
+            "GIT_COMMITTER_NAME": "t",
+            "GIT_COMMITTER_EMAIL": "t@example.com",
+        }
+        patcher = unittest.mock.patch.dict(os.environ, env)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.git("init", "--quiet")
+        (self.root / "doc/operator-notes").mkdir(parents=True)
+
+    def git(self, *args):
+        subprocess.run(["git", *args], check=True, capture_output=True)
+
+    def commit(self, tag, **files):
+        for name, text in files.items():
+            path = self.root / "doc/operator-notes" / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(text, encoding="utf-8")
+        self.git("add", "-A")
+        self.git("commit", "--quiet", "--allow-empty", "-m", tag)
+        self.git("tag", tag)
+
+    def test_release_git_fragments_edited_in_later_tag_ok(self):
+        self.commit("0.6.0.0", **{"a.md": "### A\n\nold\n"})
+        self.commit("0.6.0.1", **{"a.md": "### A\n\nnew\n"})
+        self.assertEqual(
+            rel.Git(remote=None).fragments("0.6.0.0", "0.6.0.1"),
+            [rel.Fragment("doc/operator-notes/a.md", "### A\n\nnew\n")],
+        )
+
+    def test_release_git_fragments_delete_and_add_similar_ok(self):
+        text = "### A\n\n" + "same line\n" * 20
+        self.commit("0.6.0.0", **{"old.md": text})
+        (self.root / "doc/operator-notes/old.md").unlink()
+        self.commit("0.6.0.1", **{"new.md": text + "extra\n"})
+        self.assertEqual(
+            rel.Git(remote=None).fragments("0.6.0.0", "0.6.0.1"),
+            [rel.Fragment("doc/operator-notes/new.md", text + "extra\n")],
+        )
+
+    def test_release_git_fragments_non_ascii_name_ok(self):
+        self.commit("0.6.0.0")
+        self.commit("0.6.0.1", **{"\u00fcber.md": "### U\n"})
+        self.assertEqual(
+            rel.Git(remote=None).fragments("0.6.0.0", "0.6.0.1"),
+            [rel.Fragment("doc/operator-notes/\u00fcber.md", "### U\n")],
+        )
+
+    def test_release_git_fragments_nested_path_fails(self):
+        self.commit("0.6.0.0")
+        self.commit("0.6.0.1", **{"sub/a.md": "### A\n"})
+        with self.assertRaisesRegex(ValueError, "doc/operator-notes/sub/a.md"):
+            rel.Git(remote=None).fragments("0.6.0.0", "0.6.0.1")
 
 
 class Fragments(unittest.TestCase):
@@ -1356,13 +1431,27 @@ class Fragments(unittest.TestCase):
             rel.render_fragments([frag("ok"), frag("bad", "### X\n<!-- publish -->")])
 
     def test_release_git_fragments_ok(self):
-        diff = "doc/operator-notes/a.md\ndoc/operator-notes/README.md\ndoc/operator-notes/b.txt\n"
+        diff = "doc/operator-notes/a.md\0doc/operator-notes/README.md\0"
         runner = FakeRunner({("git", "diff"): diff, ("git", "show"): "### A\n"})
         fragments = rel.Git(runner).fragments("0.6.0.1", "0.6.0.2")
         self.assertEqual(
             fragments, [rel.Fragment("doc/operator-notes/a.md", "### A\n")]
         )
         self.assertIn(["git", "show", "0.6.0.2:doc/operator-notes/a.md"], runner.calls)
+
+    def test_release_git_fragments_bad_path_fails(self):
+        for path in ("doc/operator-notes/sub/a.md", "doc/operator-notes/notes.txt"):
+            runner = FakeRunner({("git", "diff"): f"doc/operator-notes/a.md\0{path}\0"})
+            with self.assertRaisesRegex(ValueError, path):
+                rel.Git(runner).fragment_paths("0.6.0.1", "0.6.0.2")
+
+    def test_release_git_fragments_readme_skipped_ok(self):
+        diff = "doc/operator-notes/README.md\0doc/operator-notes/a.md\0"
+        runner = FakeRunner({("git", "diff"): diff})
+        self.assertEqual(
+            rel.Git(runner).fragment_paths("0.6.0.1", "0.6.0.2"),
+            ["doc/operator-notes/a.md"],
+        )
 
     def test_release_tag_base_ok(self):
         tags = [t("0.6.3.0"), t("0.6.3.2"), t("0.6.3.4"), t("0.7.0.1")]
@@ -1963,7 +2052,7 @@ class CmdPublish(unittest.TestCase):
     def test_release_cmd_publish_fragments_in_block_ok(self):
         runner = self._runner()
         runner.responses[("git", "diff")] = (
-            "doc/operator-notes/a.md\ndoc/operator-notes/README.md\n"
+            "doc/operator-notes/a.md\0doc/operator-notes/README.md\0"
         )
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
@@ -1977,8 +2066,10 @@ class CmdPublish(unittest.TestCase):
             [
                 "git",
                 "diff",
-                "--diff-filter=A",
+                "--no-renames",
+                "--diff-filter=AM",
                 "--name-only",
+                "-z",
                 "0.7.0.1",
                 "0.7.0.2",
                 "--",
@@ -2001,11 +2092,11 @@ class CmdPublish(unittest.TestCase):
         args = self._args("/publish 0.7.1.1 mainnet")
         self.assertEqual(rel.cmd_publish(args, rel.Git(runner), rel.Gh(runner)), 0)
         diff = next(c for c in runner.calls if c[:2] == ["git", "diff"])
-        self.assertEqual(diff[4:6], ["0.6.3.12", "0.7.1.1"])
+        self.assertEqual(diff[6:8], ["0.6.3.12", "0.7.1.1"])
 
     def test_release_cmd_publish_bad_fragment_fails(self):
         runner = self._runner()
-        runner.responses[("git", "diff")] = "doc/operator-notes/bad.md\n"
+        runner.responses[("git", "diff")] = "doc/operator-notes/bad.md\0"
         runner.responses[("git", "show")] = "### X\n<!-- /publish:decaf -->"
         code = rel.cmd_publish(self._args(), rel.Git(runner), rel.Gh(runner))
         self.assertEqual(code, 1)

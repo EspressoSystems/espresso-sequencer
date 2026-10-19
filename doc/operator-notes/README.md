@@ -34,5 +34,8 @@ UTC time.
 - A fragment is added in the PR that needs it. Backports carry the file automatically.
 - Fragments are never deleted by the release process.
 - A release lists the fragments added since the previous tag on its line. `/publish` lists the fragments added since the
-  network's previous release. A fix to a fragment is picked up by the next tag and its `/publish`.
+  network's previous release. An edited fragment reappears in the next tag's release body and in the next `/publish`
+  block whose range contains the edit.
+- Only top-level `doc/operator-notes/<topic>.md` files are fragments. Another added or edited path in the directory
+  fails the release commands.
 - This file is not collected.

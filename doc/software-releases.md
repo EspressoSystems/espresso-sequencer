@@ -66,10 +66,12 @@ upgrade timing adds a fragment. `doc/operator-notes/README.md` has the template.
 original PR. The release process never deletes fragments and never commits; the rollup lives only in the GitHub release
 body.
 
-- Collection is pure git: the fragments added between two refs are
-  `git diff --diff-filter=A --name-only <from> <to> -- doc/operator-notes/`, read at `<to>`, `README.md` excluded.
-  Fragments are sorted by path.
-- `/tag` writes the fragments added since the previous tag on the same line into the release body, between
+- Collection is pure git: the fragments added or edited between two refs are
+  `git diff --no-renames --diff-filter=AM --name-only -z <from> <to> -- doc/operator-notes/`, read at `<to>`,
+  `README.md` excluded. Fragments are sorted by path. An edited fragment reappears in the next tag's block and in the
+  next `/publish` block whose range contains the edit. Any other added or edited path in the directory (a subdirectory
+  or a non-`.md` file) fails the command with a comment naming it.
+- `/tag` writes the fragments added or edited since the previous tag on the same line into the release body, between
   `<!-- operator-notes -->` and `<!-- /operator-notes -->`, above the generated PR list. No fragments render
   `No operator action required.` The `.0` tag has no block. Lines 2..n of `/tag` are ignored.
 - A fragment containing `<!--` fails `/tag` and `/publish` with a comment naming the file. Fix it with a PR, then tag
@@ -91,11 +93,11 @@ first and mainnet later. Only `/publish` turns a pre-release into a release.
   markers is kept.
 - Fragments in the block, for current holder P and target X. `P..X` is a tree diff, so it works across release lines:
 
-  | Case                      | Fragments                                   |
-  | ------------------------- | ------------------------------------------- |
-  | P exists                  | added in `P..X`                             |
-  | no P (first publish)      | added in X's `/tag` range (none for a `.0`) |
-  | X older than P (rollback) | none; the block says `Rollback from P`      |
+  | Case                      | Fragments                                             |
+  | ------------------------- | ----------------------------------------------------- |
+  | P exists                  | added or edited in `P..X`                             |
+  | no P (first publish)      | added or edited in X's `/tag` range (none for a `.0`) |
+  | X older than P (rollback) | none; the block says `Rollback from P`                |
 
   No fragments render `No operator action required.`
 
