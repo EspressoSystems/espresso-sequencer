@@ -1068,6 +1068,34 @@ async fn a_first_block_skipping_views_without_a_timeout_is_malformed() {
     ));
 }
 
+/// The outgoing epoch's re-vote certificate moves a node already in the next
+/// epoch to the view after it, as it moves a node that takes it before the
+/// epoch change. Otherwise the two would time out different views, and with
+/// enough of each no timeout certificate would form.
+#[tokio::test]
+async fn earlier_epochs_revote_certificate_moves_a_node_in_the_next_epoch() {
+    let test_data = TestData::new_with_epoch_height(BOUNDARY + 2, EPOCH_HEIGHT).await;
+    let mut harness = node_at_the_first_block(0, &test_data).await;
+    assert_eq!(
+        harness.consensus.current_epoch(),
+        Some(epoch(2)),
+        "setup: in epoch 2"
+    );
+    assert_eq!(
+        harness.consensus.current_view(),
+        view(11),
+        "setup: in view 11"
+    );
+    let (revote_cert, _) = revote_certs(&harness, &test_data, view(11));
+    harness
+        .apply(ConsensusInput::Certificate1(ValidCert::new(
+            revote_cert,
+            epoch(1),
+        )))
+        .await;
+    assert_eq!(harness.consensus.current_view(), view(12));
+}
+
 /// A certificate of the next epoch supersedes the outgoing epoch's re-vote
 /// certificate at the same view, whichever arrives first.
 #[tokio::test]

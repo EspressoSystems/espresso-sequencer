@@ -637,8 +637,7 @@ impl<T: NodeType> Consensus<T> {
 
     /// Whether a certificate at `view` is of an epoch earlier than this node's,
     /// under the certificate rule: one of the outgoing committee's late
-    /// re-votes, which must not move this node through the incoming
-    /// committee's views.
+    /// re-votes, which this node does not lock on.
     fn behind_current_epoch(&self, view: ViewNumber, epoch: EpochNumber) -> bool {
         self.upgrade_lock.certificate_rule(view) && epoch < self.current_epoch
     }
@@ -2128,12 +2127,12 @@ impl<T: NodeType> Consensus<T> {
         self.maybe_vote_2_and_update_lock(view, outbox);
         self.maybe_decide(view, outbox);
 
+        // Every `Cert1` is grounds for the view after it, an earlier epoch's
+        // included: a node that ignored one would split from the nodes that took
+        // it before the epoch change, and the two halves could time out
+        // different views for ever.
         let curr_view = self.current_view;
-        let next_view = view + 1;
-
-        if !self.behind_current_epoch(view, epoch) {
-            self.set_current_view_max(next_view);
-        }
+        self.set_current_view_max(view + 1);
         self.set_current_epoch_max(epoch);
 
         if self.current_view != curr_view {
