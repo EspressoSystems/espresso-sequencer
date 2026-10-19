@@ -532,11 +532,27 @@ def tag_base(target: Tag, tags: list[Tag]) -> Tag | None:
     )
 
 
-def publish_base(prev: Tag | None, target: Tag, line_tags: list[Tag]) -> Tag | None:
+def previous_line_tag(target: Tag, tags: list[Tag]) -> Tag | None:
+    """The newest tag of the newest release line below the target's."""
+    return max((tag for tag in tags if tag.version < target.version), default=None)
+
+
+def fragment_base(target: Tag, tags: list[Tag]) -> Tag | None:
+    """Where the target's own `/tag` fragment range starts: the previous tag on its line, for the
+    `.0` tag the last tag of the previous line. Raises ValueError for a `.0` without a previous line."""
+    base = tag_base(target, tags)
+    if base is None and target.patch == 0:
+        base = previous_line_tag(target, tags)
+        if base is None:
+            raise ValueError(f"no earlier version tag before {target}")
+    return base
+
+
+def publish_base(prev: Tag | None, target: Tag, tags: list[Tag]) -> Tag | None:
     """Where the fragment range for `/publish` starts: the previous holder, the target's own
     `/tag` base when there is none, nothing on rollback."""
     if prev is None:
-        return tag_base(target, line_tags)
+        return fragment_base(target, tags)
     return prev if prev < target else None
 
 
@@ -691,7 +707,7 @@ def plan_publish(
     target: Tag,
     network: Network,
     network_notes: str | None,
-    line_tags: list[Tag],
+    tags: list[Tag],
     collect: Collect,
     date: str,
     repo: str,
@@ -713,7 +729,7 @@ def plan_publish(
     prev, since, network_notes = _previous_holder(
         release, others, network, network_notes, date
     )
-    base = publish_base(prev, target, line_tags)
+    base = publish_base(prev, target, tags)
     fragments = collect(base, target) if base is not None else []
     block = render_publish_block(
         network, prev, target, since, network_notes, fragments, repo, base
@@ -1122,6 +1138,15 @@ class Git:
         if self.remote is not None:
             tags = f"+refs/tags/{version}.*:refs/tags/{version}.*"
             self._run(["git", "fetch", "--quiet", self.remote, *branches, tags])
+
+    def version_tags(self) -> list[Tag]:
+        """All version tags, fetched first so earlier release lines are present."""
+        if self.remote is not None:
+            self._run(
+                ["git", "fetch", "--quiet", self.remote, "+refs/tags/*:refs/tags/*"]
+            )
+        names = self.tag_list("[0-9]*.[0-9]*.[0-9]*.[0-9]*")
+        return [tag for name in names if (tag := parse_tag(name))]
 
     def tag_list(self, pattern: str) -> list[str]:
         return [
@@ -1763,9 +1788,9 @@ def _tag(
 
 
 def _tag_notes(git: Git, tag: Tag, existing: list[str], sha: str) -> str:
-    """The operator-notes block for the new tag; empty for the `.0` tag. Raises ValueError for a
-    bad fragment."""
-    base = tag_base(tag, [parsed for t in existing if (parsed := parse_tag(t))])
+    """The operator-notes block for the new tag. Raises ValueError for a bad fragment or a `.0`
+    without a previous line."""
+    base = fragment_base(tag, _base_tags(git, tag, existing))
     if base is None:
         return ""
     return render_notes_block(render_fragments(git.fragments(str(base), sha)))
@@ -1831,12 +1856,13 @@ def _plan_publish(
     """Raises ValueError when a gate fails."""
     repo, releases = gh.repo(), gh.release_list()
     network = cast(Network, command.network)
+    git.fetch(target.version, [])
     prev, edits = plan_publish(
         releases,
         target,
         network,
         command.text,
-        _line_tags(git, target.version),
+        _base_tags(git, target, git.tag_list(f"{target.version}.*")),
         partial(_collect_fragments, git),
         datetime.now(UTC).date().isoformat(),
         repo,
@@ -1847,9 +1873,11 @@ def _plan_publish(
     return PublishPlan(network, target, prev, edits, comment, repo)
 
 
-def _line_tags(git: Git, version: Version) -> list[Tag]:
-    git.fetch(version, [])
-    return [tag for name in git.tag_list(f"{version}.*") if (tag := parse_tag(name))]
+def _base_tags(git: Git, target: Tag, line: list[str]) -> list[Tag]:
+    """The line's tags; all version tags for a `.0`, whose base is on the previous line."""
+    if target.patch == 0:
+        return git.version_tags()
+    return [tag for name in line if (tag := parse_tag(name))]
 
 
 def _collect_fragments(git: Git, base: Tag, target: Tag) -> list[Fragment]:

@@ -61,9 +61,9 @@ Marks are replayed from the issue's comment history, so the body can always be r
 ### Operator notes
 
 A PR that needs operator action adds `doc/operator-notes/<topic>.md` (template in its `README.md`); backports carry it.
-Release bodies list the fragments added or edited since the previous release: `/tag` since the previous tag, `/publish`
-since the previous release on that network, across release lines. Without fragments the body says
-`No operator action required.` Fix a wrong fragment with a PR and tag again.
+Release bodies list the fragments added or edited since the previous release: `/tag` since the previous tag (for `.0`,
+the last tag of the previous release line), `/publish` since the previous release on that network, across release lines.
+Without fragments the body says `No operator action required.` Fix a wrong fragment with a PR and tag again.
 
 ### Publishing to a network
 

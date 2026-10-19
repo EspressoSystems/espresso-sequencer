@@ -632,6 +632,8 @@ class TagRefusesPushWithoutRemote(unittest.TestCase):
                 ("gh", "repo", "view"): REPO,
                 ("gh", "issue", "list"): "[]",
                 ("git", "tag", "--list", "0.6.0.*"): "",
+                ("git", "tag", "--list", "[0-9]*.[0-9]*.[0-9]*.[0-9]*"): "0.5.9.1\n",
+                ("git", "diff"): "",
                 ("git", "rev-parse", "release-0.6.0"): "c" * 40,
             }
         )
@@ -928,14 +930,28 @@ class CmdTagHappyPath(unittest.TestCase):
         self.assertIn("/tag failed:", comment[-1])
         self.assertIn("doc/operator-notes/", comment[-1])
 
-    def test_release_cmd_tag_dot_zero_has_no_block_ok(self):
-        runner = self._fragment_runner("", "", tags="")
+    def test_release_cmd_tag_dot_zero_notes_since_previous_cut_ok(self):
+        runner = self._fragment_runner("doc/operator-notes/a.md\0", "### A\n", tags="")
+        runner.responses[("git", "tag", "--list", "[0-9]*.[0-9]*.[0-9]*.[0-9]*")] = (
+            "0.5.2.3\n0.5.2.1\n"
+        )
         self.assertEqual(
             rel.cmd_tag(self._tag_args(), rel.Git(runner), rel.Gh(runner)), 0
         )
+        diff = next(c for c in runner.calls if c[:2] == ["git", "diff"])
+        self.assertEqual(diff[6:8], ["0.5.2.3", "c" * 40])
         create = next(c for c in runner.calls if c[:3] == ["gh", "release", "create"])
-        self.assertNotIn("--notes", create)
-        self.assertFalse(runner.ran("git", "diff"))
+        self.assertIn("### A", create[create.index("--notes") + 1])
+
+    def test_release_cmd_tag_dot_zero_no_ancestor_fails(self):
+        runner = self._fragment_runner("", "", tags="")
+        runner.responses[("git", "tag", "--list", "[0-9]*.[0-9]*.[0-9]*.[0-9]*")] = ""
+        self.assertEqual(
+            rel.cmd_tag(self._tag_args(), rel.Git(runner), rel.Gh(runner)), 1
+        )
+        self.assertFalse(runner.ran("git", "tag", "-a"))
+        comment = next(c for c in runner.calls if c[:3] == ["gh", "issue", "comment"])
+        self.assertIn("no earlier version tag", comment[-1])
 
     def test_release_cmd_tag_bad_fragment_fails(self):
         diff = "doc/operator-notes/b.md\0"
@@ -1023,6 +1039,8 @@ class TagFailurePostsComment(unittest.TestCase):
             ("gh", "issue", "view"): json.dumps({"title": "Release 0.6.0", "body": ""}),
             ("git", "fetch"): "",
             ("git", "tag", "--list", "0.6.0.*"): "",
+            ("git", "tag", "--list", "[0-9]*.[0-9]*.[0-9]*.[0-9]*"): "0.5.9.1\n",
+            ("git", "diff"): "",
             ("git", "rev-parse", "origin/release-0.6.0"): sha,
             ("git", "tag", "-a"): "",
             ("git", "push", "origin", "refs/tags/0.6.0.0"): "",
@@ -1495,6 +1513,28 @@ class Fragments(unittest.TestCase):
         self.assertEqual(rel.tag_base(t("0.7.0.1"), tags), None)
         self.assertEqual(rel.tag_base(t("0.6.3.0"), tags), None)
 
+    def test_release_previous_line_tag_ok(self):
+        tags = [t(x) for x in ("0.6.3.2", "0.6.3.14", "0.6.2.20", "0.7.0.0", "0.7.0.3")]
+        self.assertEqual(rel.previous_line_tag(t("0.7.0.0"), tags), t("0.6.3.14"))
+        self.assertEqual(rel.previous_line_tag(t("0.6.3.0"), tags), t("0.6.2.20"))
+        self.assertIsNone(rel.previous_line_tag(t("0.6.2.0"), tags))
+
+    def test_release_publish_base_dot_zero_uses_previous_line_ok(self):
+        tags = [t("0.6.3.14"), t("0.7.0.0")]
+        self.assertEqual(rel.publish_base(None, t("0.7.0.0"), tags), t("0.6.3.14"))
+        self.assertEqual(
+            rel.publish_base(t("0.6.3.9"), t("0.7.0.0"), tags), t("0.6.3.9")
+        )
+        with self.assertRaisesRegex(ValueError, "no earlier version tag"):
+            rel.publish_base(None, t("0.7.0.0"), [t("0.7.0.0")])
+
+    def test_release_git_version_tags_ok(self):
+        runner = FakeRunner(
+            {("git", "fetch"): "", ("git", "tag"): "0.6.3.9\n0.7.0.0\n"}
+        )
+        self.assertEqual(rel.Git(runner).version_tags(), [t("0.6.3.9"), t("0.7.0.0")])
+        self.assertTrue(runner.ran("git", "fetch"))
+
     def test_release_publish_base_ok(self):
         tags = [t(f"0.7.0.{n}") for n in range(5)]
         self.assertEqual(
@@ -1504,7 +1544,9 @@ class Fragments(unittest.TestCase):
             rel.publish_base(t("0.6.3.12"), t("0.7.0.3"), tags), t("0.6.3.12")
         )
         self.assertEqual(rel.publish_base(None, t("0.7.0.3"), tags), t("0.7.0.2"))
-        self.assertIsNone(rel.publish_base(None, t("0.7.0.0"), tags))
+        self.assertEqual(
+            rel.publish_base(None, t("0.7.0.0"), [t("0.6.3.14")]), t("0.6.3.14")
+        )
         self.assertIsNone(rel.publish_base(t("0.7.0.4"), t("0.7.0.2"), tags))
         self.assertIsNone(rel.publish_base(t("0.7.0.1"), t("0.6.3.14"), tags))
 
@@ -1638,9 +1680,11 @@ class FragmentRange(unittest.TestCase):
         )
 
     def test_release_plan_bootstrap_dot_zero_is_empty_ok(self):
-        calls, edit = self._plan([release("0.7.0.0")], "0.7.0.0")
-        self.assertEqual(calls, [])
-        self.assertIn(rel.NO_ACTION, edit.body)
+        calls, edit = self._plan(
+            [release("0.7.0.0")], "0.7.0.0", tags=[t("0.6.3.14"), t("0.7.0.0")]
+        )
+        self.assertEqual(calls, [("0.6.3.14", "0.7.0.0")])
+        self.assertIn("operator actions since 0.6.3.14 only.", edit.body)
 
     def test_release_plan_rollback_collects_nothing_ok(self):
         releases = published([release("0.7.0.1"), release("0.7.0.2")], "0.7.0.2")
@@ -2206,6 +2250,40 @@ class CmdPublish(unittest.TestCase):
         self.assertEqual(rel.cmd_publish(args, rel.Git(runner), rel.Gh(runner)), 0)
         diff = next(c for c in runner.calls if c[:2] == ["git", "diff"])
         self.assertEqual(diff[6:8], ["0.6.3.12", "0.7.1.1"])
+
+    def test_release_cmd_publish_first_dot_zero_lists_fragments_ok(self):
+        runner = self._runner(releases=[release_row("0.7.0.0")])
+        runner.responses[("git", "tag", "--list", "[0-9]*.[0-9]*.[0-9]*.[0-9]*")] = (
+            "0.6.3.9\n0.7.0.0\n"
+        )
+        runner.responses[("git", "diff")] = "doc/operator-notes/a.md\0"
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            code = rel.cmd_publish(
+                self._args(
+                    "/publish 0.7.0.0 decaf", issue=None, actor=None, dry_run=True
+                ),
+                rel.Git(runner),
+                rel.Gh(runner),
+            )
+        self.assertEqual(code, 0)
+        diff = next(c for c in runner.calls if c[:2] == ["git", "diff"])
+        self.assertEqual(diff[6:8], ["0.6.3.9", "0.7.0.0"])
+        self.assertIn("operator actions since 0.6.3.9 only.", out.getvalue())
+        self.assertIn("### A", out.getvalue())
+
+    def test_release_cmd_publish_dot_zero_no_ancestor_fails(self):
+        runner = self._runner(releases=[release_row("0.7.0.0")])
+        runner.responses[("git", "tag", "--list", "[0-9]*.[0-9]*.[0-9]*.[0-9]*")] = (
+            "0.7.0.0\n"
+        )
+        code = rel.cmd_publish(
+            self._args("/publish 0.7.0.0 decaf"), rel.Git(runner), rel.Gh(runner)
+        )
+        self.assertEqual(code, 1)
+        self.assertFalse(runner.ran("gh", "release", "edit"))
+        comment = next(c for c in runner.calls if c[:3] == ["gh", "issue", "comment"])
+        self.assertIn("no earlier version tag", comment[-1])
 
     def test_release_cmd_publish_bad_fragment_fails(self):
         runner = self._runner()
