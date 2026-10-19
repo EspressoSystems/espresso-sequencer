@@ -1845,7 +1845,7 @@ class PublishComment(unittest.TestCase):
 
 
 class CmdPublish(unittest.TestCase):
-    def _runner(self, build='[{"databaseId": 1}]', releases=None, perm="write"):
+    def _runner(self, status="200", releases=None, perm="write"):
         rows = releases or [
             release_row("0.7.0.1"),
             release_row("0.7.0.2"),
@@ -1864,7 +1864,8 @@ class CmdPublish(unittest.TestCase):
                 )
                 + "\n",
                 ("gh", "release", "edit"): "",
-                ("gh", "run", "list"): build,
+                ("curl", "-fsS"): '{"token": "anon"}',
+                ("curl", "-sS"): status,
                 ("gh", "workflow", "run"): "",
                 ("gh", "issue", "comment"): "",
                 ("gh", "issue", "edit"): "",
@@ -1983,13 +1984,15 @@ class CmdPublish(unittest.TestCase):
         self.assertIn("0.7.0.1", comment[-1])
 
     def test_release_cmd_publish_build_gate_fails(self):
-        runner = self._runner(build="[]")
+        runner = self._runner(status="404")
         code = rel.cmd_publish(self._args(), rel.Git(runner), rel.Gh(runner))
         self.assertEqual(code, 1)
         self.assertFalse(runner.ran("gh", "release", "edit"))
         comment = next(c for c in runner.calls if c[:3] == ["gh", "issue", "comment"])
         self.assertIn(
-            "/publish failed: no successful build.yml run for 0.7.0.2", comment[-1]
+            "/publish failed: image "
+            "ghcr.io/espressosystems/espresso-network/espresso-node:0.7.0.2 not found",
+            comment[-1],
         )
 
     def test_release_cmd_publish_fragments_in_block_ok(self):
@@ -2157,6 +2160,36 @@ class NetworkIndex(unittest.TestCase):
         self.assertIn("Releases: decaf", create)
         self.assertIn("release-network", create)
         self.assertTrue(runner.ran("gh", "label", "create", "release-network"))
+
+
+class ImageExists(unittest.TestCase):
+    def _gh(self, status: str):
+        runner = FakeRunner(
+            {("curl", "-fsS"): '{"token": "anon"}', ("curl", "-sS"): status}
+        )
+        return runner, rel.Gh(runner)
+
+    def test_release_image_exists_ok(self):
+        runner, gh = self._gh("200")
+        self.assertTrue(gh.image_exists("EspressoSystems/espresso-network", "0.7.0.3"))
+        self.assertIn(
+            "https://ghcr.io/token?scope=repository:espressosystems/espresso-network/espresso-node:pull",
+            runner.calls[0],
+        )
+        self.assertIn(
+            "https://ghcr.io/v2/espressosystems/espresso-network/espresso-node/manifests/0.7.0.3",
+            runner.calls[1],
+        )
+        self.assertIn("Authorization: Bearer anon", runner.calls[1])
+
+    def test_release_image_missing_ok(self):
+        _runner, gh = self._gh("404")
+        self.assertFalse(gh.image_exists(REPO, "9.9.9.9"))
+
+    def test_release_image_unexpected_status_fails(self):
+        _runner, gh = self._gh("500")
+        with self.assertRaisesRegex(RuntimeError, "returned 500"):
+            gh.image_exists(REPO, "0.7.0.3")
 
 
 class GhReleaseEdit(unittest.TestCase):

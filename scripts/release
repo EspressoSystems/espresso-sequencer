@@ -52,6 +52,15 @@ BOT_MARKER = "<!--"
 NETWORK_LABEL = "release-network"
 NETWORK_NOTES_OPEN = "<!-- network-notes -->"
 NETWORK_NOTES_CLOSE = "<!-- /network-notes -->"
+MANIFEST_TYPES = ", ".join(
+    f"application/vnd.{kind}"
+    for kind in (
+        "oci.image.index.v1+json",
+        "docker.distribution.manifest.list.v2+json",
+        "oci.image.manifest.v1+json",
+        "docker.distribution.manifest.v2+json",
+    )
+)
 LOCAL_HELP = "read the release branch from the checkout instead of origin/*, skip fetch"
 # The legacy `permission` field folds `maintain` into `write` and `triage` into `read`.
 WRITE_PERMISSIONS = frozenset({"admin", "write"})
@@ -1469,27 +1478,33 @@ class Gh:
             f"_No release published on {network} yet._",
         )
 
-    def build_succeeded(self, tag: str) -> bool:
-        runs = json.loads(
-            self._run(
-                [
-                    "gh",
-                    "run",
-                    "list",
-                    "--workflow",
-                    "build.yml",
-                    "--branch",
-                    tag,
-                    "--status",
-                    "success",
-                    "--limit",
-                    "1",
-                    "--json",
-                    "databaseId",
-                ]
+    def image_exists(self, repo: str, tag: str) -> bool:
+        """Whether `ghcr.io/<repo>/espresso-node:<tag>` has a manifest. The package is public, so an
+        anonymous pull token is enough and the workflow token needs no `packages` permission."""
+        image = f"{repo.lower()}/espresso-node"
+        token_url = f"https://ghcr.io/token?scope=repository:{image}:pull"
+        token = json.loads(self._run(["curl", "-fsS", token_url]))["token"]
+        status = self._run(
+            [
+                "curl",
+                "-sS",
+                "-I",
+                "-o",
+                "/dev/null",
+                "-w",
+                "%{http_code}",
+                "-H",
+                f"Authorization: Bearer {token}",
+                "-H",
+                f"Accept: {MANIFEST_TYPES}",
+                f"https://ghcr.io/v2/{image}/manifests/{tag}",
+            ]
+        ).strip()
+        if status not in ("200", "404"):
+            raise RuntimeError(
+                f"ghcr.io manifest check for {image}:{tag} returned {status}"
             )
-        )
-        return bool(runs)
+        return status == "200"
 
     def workflow_run(
         self, workflow: str, ref: str | None, fields: dict[str, str]
@@ -1833,8 +1848,9 @@ def cmd_publish(args: argparse.Namespace, git: Git, gh: Gh) -> int:
         plan = _plan_publish(args, git, gh, target, command)
     except ValueError as error:
         return fail(str(error))
-    if not gh.build_succeeded(str(target)):
-        return fail(f"no successful build.yml run for {target}, so no images yet")
+    if not gh.image_exists(plan.repo, str(target)):
+        image = f"ghcr.io/{plan.repo.lower()}/espresso-node:{target}"
+        return fail(f"image {image} not found; wait for the build.yml run or rerun it")
     if args.dry_run:
         _print_publish(gh, plan)
         return 0

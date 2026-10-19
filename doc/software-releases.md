@@ -104,7 +104,8 @@ first and mainnet later. Only `/publish` turns a pre-release into a release.
   rerun.
 - Command text (lines 2..n) must not contain `<!--`; the command fails with a tracker comment otherwise.
 - Gates, each reported as a tracker comment without changing anything: the tag belongs to the tracker's version, the
-  release exists, a `build.yml` run for the tag succeeded, and no fragment in the range contains `<!--`.
+  release exists, the docker image `ghcr.io/espressosystems/espresso-network/espresso-node:<tag>` exists, and no
+  fragment in the range contains `<!--`.
 - Network issue: the bot comments the same text on the issue `Releases: <network>` (see below).
 - Rollback: `/publish <older tag> <network>`.
 - Rerunning `/publish` for the current holder only re-renders its block from git, keeping its date and previous tag. It
