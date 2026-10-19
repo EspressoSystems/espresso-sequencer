@@ -1727,7 +1727,7 @@ def cmd_backport(args: argparse.Namespace, git: Git, gh: Gh) -> int:
     command = parse_command(args.comment)
     if command is None or command.name != "backport" or command.arg is None:
         message = bad_command(args.comment, "`/backport <PR>`")
-        return report_failure(gh, args.issue, "/backport", message, False)
+        return report_failure(gh, args.issue, "/backport", message, dry_run=False)
     pr = int(command.arg)
     fields = {"pr_number": str(pr), "target_branch": version.branch}
     gh.workflow_run("backport.yml", None, fields)
@@ -1902,7 +1902,7 @@ def git_tags_for(git: Git, releases: list[ReleaseInfo]) -> TagsFor:
             tag.version
             for r in releases
             if (tag := parse_tag(r.tag))
-            and prev.version <= tag.version <= target.version
+            and prev.version < tag.version <= target.version
         } | {target.version}
         return [tag for version in sorted(versions) for tag in line_tags(version)]
 

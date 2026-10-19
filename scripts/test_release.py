@@ -1536,11 +1536,10 @@ class CrossLineRange(unittest.TestCase):
         tags_for = rel.git_tags_for(rel.Git(runner), releases)
         tags_for(t("0.6.3.12"), t("0.7.1.2"))
         tags_for(t("0.7.0.1"), t("0.7.1.2"))
-        fetched = [c for c in runner.calls if c[:2] == ["git", "fetch"]]
-        self.assertEqual(len(fetched), 3)
         self.assertEqual(tags_for(None, t("0.7.1.2")), [])
         self.assertEqual(tags_for(t("0.7.1.2"), t("0.7.0.1")), [])
-        self.assertEqual(len([c for c in runner.calls if c[:2] == ["git", "fetch"]]), 3)
+        fetched = [c for c in runner.calls if c[:2] == ["git", "fetch"]]
+        self.assertEqual(len(fetched), 2)
 
     def test_release_cmd_publish_cross_line_collects_every_line_ok(self):
         releases = [
