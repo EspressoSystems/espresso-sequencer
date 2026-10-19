@@ -1,13 +1,14 @@
 //! Scenarios from the Lean simulator, replayed to the Rust node.
 //!
 //! `lake exe sim --scenarios <dir>` runs the reference machine on simulated
-//! networks and writes, for each node, the inputs it was given in order
-//! (`format`). Replaying one gives the Rust node a run in the shape the
-//! specification describes: real certificates, timeouts, re-votes and epoch
-//! changes, arriving as a network that meets the specification's delivery
-//! assumptions would deliver them. The test asserts nothing about what the node
-//! does. Its recorded trace is checked against the specification afterwards
-//! (`just test-lean-check`), as every other test's is.
+//! networks, each with faults, committees, timing and delays drawn at random,
+//! and writes, for each node, the inputs it was given in order (`format`).
+//! Replaying one gives the Rust node a run in the shape the specification
+//! describes: real certificates, timeouts, re-votes and epoch changes, arriving
+//! as a network that meets the specification's delivery assumptions would
+//! deliver them. The test asserts nothing about what the node does. Its recorded
+//! trace is checked against the specification afterwards
+//! (`just test-lean-scenarios`), as every other test's is.
 //!
 //! The scenario is the node's environment, not a script of what it must do: the
 //! simulated node ran the reference machine, and the Rust node may act
