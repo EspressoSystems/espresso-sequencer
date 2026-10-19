@@ -17,7 +17,6 @@ use anyhow::Context;
 use async_trait::async_trait;
 use backon::{BackoffBuilder, ExponentialBuilder};
 use chrono::Utc;
-use futures::future::FutureExt;
 use hotshot_types::{
     data::VidShare,
     traits::{
@@ -51,126 +50,33 @@ use crate::{
     status::HasMetrics,
 };
 pub extern crate sqlx;
-pub use sqlx::Database;
-#[cfg(feature = "embedded-db")]
-pub use sqlx::Sqlite;
+pub use sqlx::{Database, Sqlite};
 
+// Loaded through `#[path]` by each backend module, so its children are named from here.
+#[path = "sql/data_source.rs"]
+pub mod data_source;
+#[path = "sql/db.rs"]
 mod db;
+#[path = "sql/migrate.rs"]
 mod migrate;
-#[cfg(not(feature = "embedded-db"))]
-mod postgres;
-mod queries;
-#[cfg(feature = "embedded-db")]
-mod sqlite;
+#[path = "sql/migration.rs"]
+pub mod migration;
+#[path = "sql/queries.rs"]
+pub(in crate::data_source::storage::sql) mod queries;
+#[path = "sql/transaction.rs"]
 mod transaction;
 
 pub use anyhow::Error;
+pub use data_source::{Builder, SqlDataSource};
 pub use db::*;
 pub use include_dir::include_dir;
-#[cfg(not(feature = "embedded-db"))]
-use postgres as backend;
 pub use queries::QueryBuilder;
 pub use refinery::Migration;
-#[cfg(feature = "embedded-db")]
-use sqlite as backend;
 pub use transaction::*;
 
 use self::{migrate::Migrator, transaction::PoolMetrics};
-use super::{AvailabilityStorage, NodeStorage};
-// This needs to be reexported so that we can reference it by absolute path relative to this crate
-// in the expansion of `include_migrations`, even when `include_migrations` is invoked from another
-// crate which doesn't have `include_dir` as a dependency.
-pub use crate::include_migrations;
-
-/// Embed migrations from the given directory into the current binary for PostgreSQL or SQLite.
-///
-/// The macro invocation `include_migrations!(path)` evaluates to an expression of type `impl
-/// Iterator<Item = Migration>`. Each migration must be a text file which is an immediate child of
-/// `path`, and there must be no non-migration files in `path`. The migration files must have names
-/// of the form `V${version}__${name}.sql`, where `version` is a positive integer indicating how the
-/// migration is to be ordered relative to other migrations, and `name` is a descriptive name for
-/// the migration.
-///
-/// `path` should be an absolute path. It is possible to give a path relative to the root of the
-/// invoking crate by using environment variable expansions and the `CARGO_MANIFEST_DIR` environment
-/// variable.
-///
-/// As an example, this is the invocation used to load the default migrations from the
-/// `hotshot-query-service` crate. The migrations are located in a directory called `migrations` at
-/// - PostgreSQL migrations are in `/migrations/postgres`.
-/// - SQLite migrations are in `/migrations/sqlite`.
-///
-/// ```
-/// # use hotshot_query_service::data_source::sql::{include_migrations, Migration};
-/// // For PostgreSQL
-/// #[cfg(not(feature = "embedded-db"))]
-///  let mut migrations: Vec<Migration> =
-///     include_migrations!("$CARGO_MANIFEST_DIR/migrations/postgres").collect();
-/// // For SQLite
-/// #[cfg(feature = "embedded-db")]
-/// let mut migrations: Vec<Migration> =
-///     include_migrations!("$CARGO_MANIFEST_DIR/migrations/sqlite").collect();
-///
-///     migrations.sort();
-///     assert_eq!(migrations[0].version(), 10);
-///     assert_eq!(migrations[0].name(), "init_schema");
-/// ```
-///
-/// Note that a similar macro is available from Refinery:
-/// [embed_migrations](https://docs.rs/refinery/0.8.11/refinery/macro.embed_migrations.html). This
-/// macro differs in that it evaluates to an iterator of [migrations](Migration), making it an
-/// expression macro, while `embed_migrations` is a statement macro that defines a module which
-/// provides access to the embedded migrations only indirectly via a
-/// [`Runner`](https://docs.rs/refinery/0.8.11/refinery/struct.Runner.html). The direct access to
-/// migrations provided by [`include_migrations`] makes this macro easier to use with
-/// [`Config::migrations`], for combining custom migrations with [`default_migrations`].
-#[macro_export]
-macro_rules! include_migrations {
-    ($dir:tt) => {
-        $crate::data_source::storage::sql::include_dir!($dir)
-            .files()
-            .map(|file| {
-                let path = file.path();
-                let name = path
-                    .file_name()
-                    .and_then(std::ffi::OsStr::to_str)
-                    .unwrap_or_else(|| {
-                        panic!(
-                            "migration file {} must have a non-empty UTF-8 name",
-                            path.display()
-                        )
-                    });
-                let sql = file
-                    .contents_utf8()
-                    .unwrap_or_else(|| panic!("migration file {name} must use UTF-8 encoding"));
-                $crate::data_source::storage::sql::Migration::unapplied(name, sql)
-                    .expect("invalid migration")
-            })
-    };
-}
-
-/// Drop connections that come back to the pool with a transaction still open.
-///
-/// In sqlx 0.8.6, a `begin()` cancelled mid-flight can return its connection to the pool inside
-/// a transaction that sqlx does not know about.
-pub fn release_only_idle(pool: PoolOptions<sqlx::Postgres>) -> PoolOptions<sqlx::Postgres> {
-    // TODO(abdul): remove once a sqlx release includes launchbadge/sqlx#4394.
-    // With no transaction open, this query starts its own, so both timestamps are the same.
-    // Keep `raw_sql`. A normal query is sent in several messages and Postgres moves
-    // `statement_timestamp()` forward on each one, so the timestamps would always differ.
-    pool.after_release(|conn, _| {
-        async move {
-            let row = conn
-                .fetch_one(sqlx::raw_sql(
-                    "SELECT transaction_timestamp() <> statement_timestamp()",
-                ))
-                .await?;
-            let in_transaction: bool = row.try_get(0)?;
-            Ok(!in_transaction)
-        }
-        .boxed()
-    })
-}
+use super::Db;
+use crate::data_source::storage::{AvailabilityStorage, NodeStorage, sql::StorageConnectionType};
 
 /// The migrations required to build the default schema for this version of [`SqlStorage`].
 pub fn default_migrations() -> Vec<Migration> {
@@ -243,7 +149,7 @@ fn add_custom_migrations(
 
 #[derive(Clone)]
 pub struct Config {
-    db_opt: <Db as Backend>::ConnectOptions,
+    pub(super) db_opt: <Db as Backend>::ConnectOptions,
 
     pool_opt: PoolOptions<Db>,
 
@@ -251,7 +157,7 @@ pub struct Config {
     /// SQLite shares one pool between both connection types, so it ignores this.
     pool_opt_query: PoolOptions<Db>,
 
-    schema: String,
+    pub(super) schema: String,
     reset: bool,
     migrations: Vec<Migration>,
     no_migrations: bool,
@@ -271,7 +177,7 @@ impl Config {
     // Each backend implements `From` for its own connect options in its own module. A `From` over
     // the projection `<Db as Backend>::ConnectOptions` would not be normalized by coherence, and
     // would then conflict with every other `From` and `TryFrom` impl for `Config`.
-    fn with_connect_options(db_opt: <Db as Backend>::ConnectOptions) -> Self {
+    pub(super) fn with_connect_options(db_opt: <Db as Backend>::ConnectOptions) -> Self {
         Self {
             db_opt,
             pool_opt: PoolOptions::default(),
@@ -314,10 +220,9 @@ impl Config {
 
     /// Reset the schema on connection.
     ///
-    /// When this [`Config`] is used to [`connect`](Self::connect) a
-    /// [`SqlDataSource`](crate::data_source::SqlDataSource), if this option is set, the relevant
-    /// [`schema`](Self::schema) will first be dropped and then recreated, yielding a completely
-    /// fresh instance of the query service.
+    /// When this [`Config`] is used to [`connect`](Self::connect) a [`SqlDataSource`], if this
+    /// option is set, the Postgres schema or the SQLite file will first be dropped and then
+    /// recreated, yielding a completely fresh instance of the query service.
     ///
     /// This is a particularly useful capability for development and staging environments. Still, it
     /// must be used with extreme caution, as using this will irrevocably delete any data pertaining
@@ -554,12 +459,6 @@ impl<'a> Pruner<'a> {
             PruneCategory::Data => self.data.min_height = height + 1,
         }
     }
-}
-
-#[derive(PartialEq)]
-pub enum StorageConnectionType {
-    Sequencer,
-    Query,
 }
 
 impl SqlStorage {
@@ -1576,19 +1475,10 @@ impl VersionedDataSource for SqlStorage {
 // These tests start `postgres` from PATH, which doesn't work on Windows.
 #[cfg(all(any(test, feature = "testing"), not(target_os = "windows")))]
 pub mod testing {
-    use std::{
-        env,
-        process::{Child, Command, Stdio},
-        time::Duration,
-    };
-
     use refinery::Migration;
-    use test_utils::reserve_tcp_port;
-    use tokio::time::timeout;
 
-    pub use super::backend::tmp_db::TmpDb;
+    pub use super::super::tmp_db::TmpDb;
     use super::{Backend as _, Db};
-    use crate::testing::sleep;
 
     /// The migrations a [`TmpDb`] applies on top of the default schema.
     pub(crate) fn test_migrations() -> Vec<Migration> {
@@ -1597,141 +1487,6 @@ pub mod testing {
             &TestMerkleTreeMigration::create("test_tree"),
         )
         .unwrap()])
-    }
-
-    /// A throwaway Postgres server with user `postgres` and trust auth, removed on drop.
-    ///
-    /// Available whichever database the query service is built for, for crates that keep data of
-    /// their own in Postgres.
-    #[derive(Debug)]
-    pub struct TmpPostgres {
-        host: String,
-        port: u16,
-        data_dir: std::path::PathBuf,
-        postgres: Option<Child>,
-    }
-
-    impl TmpPostgres {
-        pub async fn init() -> Self {
-            let port = reserve_tcp_port().unwrap();
-            let host = "127.0.0.1".to_string();
-
-            // initdb requires an empty target; clear any dir left by a crashed run
-            // that reused this (recycled) ephemeral port.
-            let data_dir = env::temp_dir().join(format!("espresso-tmpdb-{port}"));
-            let _ = std::fs::remove_dir_all(&data_dir);
-
-            let output = Command::new("initdb")
-                .arg("-D")
-                .arg(&data_dir)
-                .args(["-U", "postgres", "--auth=trust"])
-                .output()
-                .expect("initdb failed to run; is postgres installed and on PATH?");
-            assert!(
-                output.status.success(),
-                "initdb failed for {data_dir:?}: {}",
-                String::from_utf8_lossy(&output.stderr)
-            );
-
-            let mut db = Self {
-                host,
-                port,
-                data_dir,
-                postgres: None,
-            };
-
-            db.start().await;
-            db
-        }
-
-        pub fn host(&self) -> String {
-            self.host.clone()
-        }
-
-        pub fn port(&self) -> u16 {
-            self.port
-        }
-
-        fn stop(&mut self) {
-            let Some(mut postgres) = self.postgres.take() else {
-                return;
-            };
-            tracing::info!(port = self.port, "stopping postgres");
-            // Fast shutdown (SIGINT to the postmaster) releases the datadir before
-            // Drop removes it; fall back to SIGKILL if pg_ctl is unavailable.
-            let stopped = Command::new("pg_ctl")
-                .arg("-D")
-                .arg(&self.data_dir)
-                .args(["stop", "-m", "fast", "-w"])
-                .stdout(Stdio::null())
-                .stderr(Stdio::null())
-                .status()
-                .map(|status| status.success())
-                .unwrap_or(false);
-            if !stopped {
-                let _ = postgres.kill();
-            }
-            let _ = postgres.wait();
-        }
-
-        async fn start(&mut self) {
-            tracing::info!(port = self.port, "starting postgres");
-            let postgres = Command::new("postgres")
-                .arg("-D")
-                .arg(&self.data_dir)
-                .args(["-p", &self.port.to_string()])
-                .args(["-h", &self.host])
-                // Keep the unix socket inside the data dir instead of a shared /tmp.
-                .arg("-k")
-                .arg(&self.data_dir)
-                .stdout(Stdio::null())
-                .stderr(Stdio::null())
-                .spawn()
-                .expect("failed to start postgres; is it installed and on PATH?");
-            self.postgres = Some(postgres);
-
-            self.wait_for_ready().await;
-        }
-
-        async fn wait_for_ready(&self) {
-            let timeout_duration = Duration::from_secs(
-                env::var("SQL_TMP_DB_CONNECT_TIMEOUT")
-                    .unwrap_or("60".to_string())
-                    .parse()
-                    .expect("SQL_TMP_DB_CONNECT_TIMEOUT must be an integer number of seconds"),
-            );
-
-            if let Err(err) = timeout(timeout_duration, async {
-                while !Command::new("pg_isready")
-                    .args(["-h", &self.host])
-                    .args(["-p", &self.port.to_string()])
-                    .args(["-U", "postgres"])
-                    .stdout(Stdio::null())
-                    .stderr(Stdio::null())
-                    .status()
-                    .map(|status| status.success())
-                    .unwrap_or(false)
-                {
-                    tracing::warn!("database is not ready");
-                    sleep(Duration::from_secs(1)).await;
-                }
-            })
-            .await
-            {
-                panic!(
-                    "failed to connect to TmpDb within configured timeout {timeout_duration:?}: \
-                     {err:#}\n{}",
-                    "Consider increasing the timeout by setting SQL_TMP_DB_CONNECT_TIMEOUT"
-                );
-            }
-        }
-    }
-
-    impl Drop for TmpPostgres {
-        fn drop(&mut self) {
-            self.stop();
-            let _ = std::fs::remove_dir_all(&self.data_dir);
-        }
     }
 
     pub struct TestMerkleTreeMigration;

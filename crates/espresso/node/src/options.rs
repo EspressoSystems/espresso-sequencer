@@ -1061,14 +1061,9 @@ impl From<&persistence::sql::Options> for SqlStorageConfig {
             statement_timeout: o.statement_timeout,
             min_connections: o.min_connections,
             max_connections: o.max_connections,
-            #[cfg(not(feature = "embedded-db"))]
-            query_min_connections: o.query_min_connections,
-            #[cfg(feature = "embedded-db")]
-            query_min_connections: None,
-            #[cfg(not(feature = "embedded-db"))]
-            query_max_connections: o.query_max_connections,
-            #[cfg(feature = "embedded-db")]
-            query_max_connections: None,
+            // SQLite shares one pool between consensus and queries, so these do not apply.
+            query_min_connections: o.query_min_connections.filter(|_| !o.embedded_db),
+            query_max_connections: o.query_max_connections.filter(|_| !o.embedded_db),
             pruning: PruningView::from(&o.pruning),
             consensus_pruning: ConsensusPruningView::from(&o.consensus_pruning),
         }
@@ -1593,9 +1588,6 @@ pub(crate) mod tests {
         );
     }
 
-    // Postgres only: storage-sql under embedded-db requires a --path arg that's
-    // irrelevant to what this test asserts.
-    #[cfg(not(feature = "embedded-db"))]
     #[test]
     fn follower_module_requirements() {
         let parse = |modules: &[&str]| {
@@ -1671,10 +1663,7 @@ pub(crate) mod tests {
         assert_eq!(lc_path(None, None), None);
     }
 
-    // Document the JSON shape of GET /config/runtime. Runs under Postgres builds only;
-    // the embedded-db variant produces a near-identical shape and the duplication isn't
-    // worth the test complexity.
-    #[cfg(not(feature = "embedded-db"))]
+    // Document the JSON shape of GET /config/runtime.
     #[test]
     fn config_node_response_snapshot() {
         let opt = parse_options_with(&[
@@ -1739,9 +1728,6 @@ pub(crate) mod tests {
         insta::assert_yaml_snapshot!("config_node_response_postgres", cfg);
     }
 
-    // Postgres only: storage-sql under embedded-db requires a --path arg that's
-    // irrelevant to what this test asserts.
-    #[cfg(not(feature = "embedded-db"))]
     #[test]
     fn public_node_config_includes_pruning() {
         let opt = parse_options_with(&[

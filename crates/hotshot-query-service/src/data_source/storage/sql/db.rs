@@ -16,16 +16,17 @@ use futures::stream::TryStreamExt;
 use sqlx::{ConnectOptions, Database, Row as _, pool::PoolOptions};
 
 use super::{
-    Migration, QueryBuilder, Transaction, Write,
+    Db, Migration, QueryBuilder, Transaction, Write,
     queries::state::{Node, build_hash_batch_insert},
 };
 use crate::QueryResult;
 
-/// The underlying database type for a SQL data source.
+/// The database a copy of the SQL storage runs on.
 ///
-/// Currently, only PostgreSQL and SQLite are supported, with selection based on the "embedded-db" feature flag.
-/// - When the "embedded-db" feature is enabled, SQLite is used.
-/// - When it’s disabled, PostgreSQL is used.
+/// The SQL storage is compiled once per backend, with [`Db`] naming that backend's
+/// [`sqlx::Database`], and each backend implements this trait for its own [`Db`]. Code branches on
+/// [`EMBEDDED`](Self::EMBEDDED) where both branches compile for either database, and calls a
+/// method of this trait where a branch would only compile for one.
 ///
 /// ### Design Choice
 /// The reason for taking this approach over sqlx's Any database is that we can support SQL types
@@ -48,16 +49,6 @@ use crate::QueryResult;
 ///     for<'a> i64: Type<DB> + Encode<'a, DB>,
 /// {}
 /// ```
-#[cfg(feature = "embedded-db")]
-pub type Db = sqlx::Sqlite;
-#[cfg(not(feature = "embedded-db"))]
-pub type Db = sqlx::Postgres;
-
-/// The database [`Db`] names.
-///
-/// Code branches on [`EMBEDDED`](Self::EMBEDDED) where both branches compile for either database,
-/// and calls a method of this trait where a branch would only compile for one. Each backend
-/// implements it in its own module.
 pub trait Backend: Database {
     type ConnectOptions: ConnectOptions<Connection = <Self as Database>::Connection>
         + Clone
@@ -89,7 +80,7 @@ pub trait Backend: Database {
 /// Merklized state queries with a portable form and a faster form that only Postgres can run.
 ///
 /// The provided methods are the portable form, written against [`Db`] rather than `Self` so they
-/// type check for whichever database [`Db`] is. Postgres overrides them.
+/// type check in every copy of the SQL storage. Postgres overrides them.
 pub(crate) trait StateQueries: Backend {
     fn hashes_by_id(
         conn: &mut <Db as Database>::Connection,

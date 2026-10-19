@@ -16,7 +16,17 @@ use std::{path::PathBuf, time::Duration};
 
 use sqlx::{pool::PoolOptions, sqlite::SqliteConnectOptions};
 
-use super::{Backend, Config, Db, Migration, StateQueries};
+pub type Db = sqlx::Sqlite;
+
+#[expect(
+    clippy::duplicate_mod,
+    reason = "each backend compiles the shared tree against its own `Db`"
+)]
+#[path = "../sql.rs"]
+mod imp;
+
+pub use imp::*;
+
 use crate::{include_migrations, sqlite_options::sqlite_options};
 
 impl Backend for Db {
@@ -69,10 +79,10 @@ impl Config {
 }
 
 #[cfg(all(any(test, feature = "testing"), not(target_os = "windows")))]
-pub(super) mod tmp_db {
+mod tmp_db {
     use std::path::PathBuf;
 
-    use super::super::{Config, testing::test_migrations};
+    use super::{Config, testing::test_migrations};
 
     #[derive(Debug)]
     pub struct TmpDb {
@@ -112,7 +122,7 @@ pub(super) mod tmp_db {
 mod test {
     use std::str::FromStr;
 
-    use super::super::Config;
+    use super::Config;
 
     #[test]
     fn test_config_from_str() {

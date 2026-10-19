@@ -151,15 +151,27 @@ pub async fn main(migrated_envs: Vec<(&str, &str)>) -> anyhow::Result<()> {
         )
         .await
     } else if let Some(storage) = modules.storage_sql.take() {
-        run_with_storage(
-            genesis,
-            modules,
-            opt,
-            storage,
-            public_node_config,
-            telemetry_handle.as_mut(),
-        )
-        .await
+        if storage.embedded_db {
+            run_with_storage(
+                genesis,
+                modules,
+                opt,
+                persistence::sql::sqlite::Options(storage),
+                public_node_config,
+                telemetry_handle.as_mut(),
+            )
+            .await
+        } else {
+            run_with_storage(
+                genesis,
+                modules,
+                opt,
+                persistence::sql::postgres::Options(storage),
+                public_node_config,
+                telemetry_handle.as_mut(),
+            )
+            .await
+        }
     } else {
         // Persistence is required. If none is provided, just use the local file system.
         run_with_storage(

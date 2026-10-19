@@ -6,6 +6,7 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result, bail};
 use async_trait::async_trait;
+use derive_more::From;
 use espresso_types::{
     NodeState, SeqTypes, retain_accounts,
     traits::SequencerPersistence,
@@ -16,7 +17,8 @@ use hotshot_new_protocol::storage::NewProtocolStorage;
 use hotshot_query_service::{
     data_source::{
         VersionedDataSource,
-        storage::{FileSystemStorage, NodeStorage, SqlStorage},
+        sql::{postgres, sqlite},
+        storage::{FileSystemStorage, NodeStorage},
     },
     node::BlockId,
 };
@@ -41,9 +43,10 @@ use crate::{
 };
 
 /// Query Service Storage types that can be used for request-response data source
-#[derive(Clone)]
+#[derive(Clone, From)]
 pub enum Storage {
-    Sql(Arc<SqlStorage>),
+    Postgres(Arc<postgres::SqlStorage>),
+    Sqlite(Arc<sqlite::SqlStorage>),
     Fs(Arc<FileSystemStorage<SeqTypes>>),
 }
 
@@ -79,7 +82,11 @@ where
 
                 // Fall back to storage
                 let (merkle_tree, leaf) = match &self.storage {
-                    Some(Storage::Sql(storage)) => storage
+                    Some(Storage::Postgres(storage)) => storage
+                        .get_accounts(&self.node_state, *height, ViewNumber::new(*view), accounts)
+                        .await
+                        .with_context(|| "failed to get accounts from sql storage")?,
+                    Some(Storage::Sqlite(storage)) => storage
                         .get_accounts(&self.node_state, *height, ViewNumber::new(*view), accounts)
                         .await
                         .with_context(|| "failed to get accounts from sql storage")?,
@@ -114,7 +121,11 @@ where
                 }
 
                 let leaf_chain = match &self.storage {
-                    Some(Storage::Sql(storage)) => storage
+                    Some(Storage::Postgres(storage)) => storage
+                        .get_leaf_chain(*height)
+                        .await
+                        .with_context(|| "failed to get leaf from sql storage")?,
+                    Some(Storage::Sqlite(storage)) => storage
                         .get_leaf_chain(*height)
                         .await
                         .with_context(|| "failed to get leaf from sql storage")?,
@@ -137,10 +148,16 @@ where
 
                 // Fall back to storage
                 Ok(Response::ChainConfig(match &self.storage {
-                    Some(Storage::Sql(storage)) => storage
+                    Some(Storage::Postgres(storage)) => storage
                         .get_chain_config(*commitment)
                         .await
                         .with_context(|| "failed to get chain config from sql storage")?,
+                    Some(Storage::Sqlite(storage)) => {
+                        storage
+                            .get_chain_config(*commitment)
+                            .await
+                            .with_context(|| "failed to get chain config from sql storage")?
+                    },
                     Some(Storage::Fs(_)) => {
                         bail!("fs storage not supported for chain config")
                     },
@@ -164,7 +181,11 @@ where
                 } else {
                     // If we can't get the blocks frontier from memory, fall through to storage
                     let blocks_frontier_from_storage = match &self.storage {
-                        Some(Storage::Sql(storage)) => storage
+                        Some(Storage::Postgres(storage)) => storage
+                            .get_frontier(&self.node_state, *height, ViewNumber::new(*view))
+                            .await
+                            .with_context(|| "failed to get blocks frontier from sql storage")?,
+                        Some(Storage::Sqlite(storage)) => storage
                             .get_frontier(&self.node_state, *height, ViewNumber::new(*view))
                             .await
                             .with_context(|| "failed to get blocks frontier from sql storage")?,
@@ -190,7 +211,16 @@ where
 
                 // Fall back to storage
                 let (merkle_tree, leaf) = match &self.storage {
-                    Some(Storage::Sql(storage)) => storage
+                    Some(Storage::Postgres(storage)) => storage
+                        .get_reward_accounts_v2(
+                            &self.node_state,
+                            *height,
+                            ViewNumber::new(*view),
+                            accounts,
+                        )
+                        .await
+                        .with_context(|| "failed to get accounts from sql storage")?,
+                    Some(Storage::Sqlite(storage)) => storage
                         .get_reward_accounts_v2(
                             &self.node_state,
                             *height,
@@ -235,7 +265,16 @@ where
 
                 // Fall back to storage
                 let (merkle_tree, leaf) = match &self.storage {
-                    Some(Storage::Sql(storage)) => storage
+                    Some(Storage::Postgres(storage)) => storage
+                        .get_reward_accounts_v1(
+                            &self.node_state,
+                            *height,
+                            ViewNumber::new(*view),
+                            accounts,
+                        )
+                        .await
+                        .with_context(|| "failed to get v1 reward accounts from sql storage")?,
+                    Some(Storage::Sqlite(storage)) => storage
                         .get_reward_accounts_v1(
                             &self.node_state,
                             *height,
@@ -272,7 +311,11 @@ where
             Request::VidShare(block_number, _request_id) => {
                 // Load the VID share from storage
                 let vid_share = match &self.storage {
-                    Some(Storage::Sql(storage)) => storage
+                    Some(Storage::Postgres(storage)) => storage
+                        .get_vid_share::<SeqTypes>(BlockId::Number(*block_number as usize))
+                        .await
+                        .with_context(|| "failed to get vid share from sql storage")?,
+                    Some(Storage::Sqlite(storage)) => storage
                         .get_vid_share::<SeqTypes>(BlockId::Number(*block_number as usize))
                         .await
                         .with_context(|| "failed to get vid share from sql storage")?,
@@ -310,7 +353,11 @@ where
             },
             Request::Cert2(height) => {
                 let cert2 = match &self.storage {
-                    Some(Storage::Sql(storage)) => storage
+                    Some(Storage::Postgres(storage)) => storage
+                        .load_cert2(*height)
+                        .await
+                        .with_context(|| "failed to load cert2 from sql storage")?,
+                    Some(Storage::Sqlite(storage)) => storage
                         .load_cert2(*height)
                         .await
                         .with_context(|| "failed to load cert2 from sql storage")?,
@@ -342,7 +389,11 @@ where
 
                 // Fall back to storage
                 let merkle_tree_bytes = match &self.storage {
-                    Some(Storage::Sql(storage)) => storage
+                    Some(Storage::Postgres(storage)) => storage
+                        .load_tree(*height)
+                        .await
+                        .with_context(|| "failed to get reward merkle tree from sql storage")?,
+                    Some(Storage::Sqlite(storage)) => storage
                         .load_tree(*height)
                         .await
                         .with_context(|| "failed to get reward merkle tree from sql storage")?,
