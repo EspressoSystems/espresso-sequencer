@@ -768,9 +768,7 @@ def two_node_hosts_info() -> dict:
     }
 
 
-def metric_data(
-    byte: list[float | None], io: list[float | None], first: float = 60.0
-) -> str:
+def metric_results(series: dict[str, list[float | None]], first: float = 60.0) -> str:
     """`cloudwatch get-metric-data` output; one period per list item starting at `first`, a
     None item is a period without datapoint."""
 
@@ -789,8 +787,29 @@ def metric_data(
         }
 
     return json.dumps(
-        {"MetricDataResults": [result("byte", byte), result("io", io)], "Messages": []}
+        {
+            "MetricDataResults": [result(i, v) for i, v in series.items()],
+            "Messages": [],
+        }
     )
+
+
+def metric_data(
+    byte: list[float | None], io: list[float | None], first: float = 60.0
+) -> str:
+    return metric_results({"byte": byte, "io": io}, first)
+
+
+def efs_write_data(
+    data: list[float | None], metadata: list[float | None], first: float = 60.0
+) -> str:
+    """`get-metric-data` of the `Sum` of `DataWriteIOBytes` and `MetadataWriteIOBytes` of an
+    EFS file system, in bytes per period."""
+    return metric_results({"data": data, "metadata": metadata}, first)
+
+
+GIB = 2**30
+EFS_WRITES = efs_write_data([GIB, 2 * GIB, None], [GIB / 2, None, GIB / 2])
 
 
 FULL_BALANCE = metric_data([100.0, 100.0, 100.0], [100.0, 100.0, 100.0])
@@ -825,6 +844,7 @@ class FakeRunner:
         on_poll=None,
         describe: str = "[]",
         balance: subprocess.CompletedProcess | None = None,
+        efs_writes: str = EFS_WRITES,
         pings: dict[str, float] | None = None,
     ):
         self.responses = responses or {}
@@ -835,6 +855,7 @@ class FakeRunner:
         self.on_poll = on_poll
         self.describe = describe
         self.balance = balance or completed(stdout=FULL_BALANCE)
+        self.efs_writes = efs_writes
         self.polls = 0
         # Whether the ctl mailbox of a Fargate task holds `ready`.
         self.ready = True
@@ -949,6 +970,8 @@ class FakeRunner:
     def aws(self, argv: list[str]) -> subprocess.CompletedProcess:
         if "describe-instances" in argv:
             return completed(stdout=self.describe)
+        if "get-metric-data" in argv and "AWS/EFS" in " ".join(argv):
+            return completed(stdout=self.efs_writes)
         if "get-metric-data" in argv:
             return self.balance
         if "get-resources" in argv:

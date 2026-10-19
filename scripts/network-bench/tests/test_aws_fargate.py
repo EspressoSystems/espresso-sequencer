@@ -15,6 +15,8 @@ from fakes import (
     DESCRIBE,
     DONE_STATE,
     FARGATE_SHAPE,
+    GIB,
+    NOW,
     ROLE_ARN,
     STS_CALL,
     FakeClock,
@@ -27,6 +29,7 @@ from fakes import (
     aws_verbs,
     awsb,
     completed,
+    efs_write_data,
     fake_image,
     fake_images,
     fake_preflight,
@@ -43,6 +46,7 @@ from fakes import (
     rds_tag_runner,
     remote,
     respond_to_pulls,
+    shot_estimate,
     sts_response,
     task_arn,
     valid_result,
@@ -1343,3 +1347,85 @@ def test_the_manifest_says_which_direction_carries_the_whole_round_trip():
     assert "validator to unshaped carries the full RTT" in folded.meta()["fold"]
     plain = awsb.latency.shaping("decaf-2025", 3, True, "bbr", 1500)
     assert "fold" not in plain.meta()
+
+
+def priced_fargate_manifest() -> tuple[Any, dict]:
+    cfg = task_cfg()
+    hosts = awsb.place_fargate(awsb.plan_hosts(cfg), {"fargate": FARGATE_SHAPE})
+    manifest = {
+        "name": "fleet1",
+        "config": awsb.config_to_json(cfg),
+        "hosts": hosts,
+        "estimate": shot_estimate(hosts, cfg),
+        "fargate": fargate_output(["node0"]),
+    }
+    return cfg, manifest
+
+
+def test_the_actual_cost_bills_the_metered_efs_writes_not_the_estimate():
+    cfg, manifest = priced_fargate_manifest()
+    runner = FakeRunner(states=[DONE_STATE], describe=DESCRIBE)
+    cost = awsb.actual_cost(runner, manifest, NOW)
+    assert cost["efs_write_gb"] == 4.0  # 3 GiB data and 1 GiB metadata, see EFS_WRITES
+    estimated_gb = 2 * awsb.payload_factor(cfg.nodes) * awsb.offered_gb(cfg)
+    assert estimated_gb != cost["efs_write_gb"]
+    estimated = awsb.manifest_cost(manifest, cost["duration_s"])
+    price = awsb.PRICES["efs_write_gb_usd"]
+    assert cost["actual"] == pytest.approx(
+        estimated + (cost["efs_write_gb"] - estimated_gb) * price
+    )
+    assert cost["bound"] == manifest["estimate"]["bound_usd"]
+
+
+def test_the_efs_writes_are_queried_by_file_system_over_the_billed_window():
+    _, manifest = priced_fargate_manifest()
+    runner = FakeRunner(states=[DONE_STATE], describe=DESCRIBE)
+    awsb.actual_cost(runner, manifest, NOW)
+    (call,) = [c for c in runner.calls if "AWS/EFS" in " ".join(c)]
+    queries = json.loads(call[call.index("--metric-data-queries") + 1])
+    metrics = {q["MetricStat"]["Metric"]["MetricName"] for q in queries}
+    assert metrics == {"DataWriteIOBytes", "MetadataWriteIOBytes"}
+    for query in queries:
+        assert query["MetricStat"]["Stat"] == "Sum"
+        assert query["MetricStat"]["Metric"]["Dimensions"] == [
+            {"Name": "FileSystemId", "Value": manifest["fargate"]["efs_id"]}
+        ]
+    assert call[call.index("--start-time") + 1].startswith("2026-09-29T14:59")
+    assert datetime.fromisoformat(call[call.index("--end-time") + 1]) > NOW
+
+
+def test_metadata_writes_may_be_absent_but_data_writes_may_not():
+    _, manifest = priced_fargate_manifest()
+    only_data = FakeRunner(
+        states=[DONE_STATE],
+        describe=DESCRIBE,
+        efs_writes=efs_write_data([GIB, GIB], [None, None]),
+    )
+    assert awsb.actual_cost(only_data, manifest, NOW)["efs_write_gb"] == 2.0
+    nothing = FakeRunner(
+        states=[DONE_STATE],
+        describe=DESCRIBE,
+        efs_writes=efs_write_data([None, None], [GIB, None]),
+    )
+    with pytest.raises(awsb.RemoteError, match="DataWriteIOBytes"):
+        awsb.actual_cost(nothing, manifest, NOW)
+
+
+def test_a_failed_efs_query_fails_the_actual_cost():
+    _, manifest = priced_fargate_manifest()
+    forbidden = {"MetricDataResults": [{"Id": "data", "StatusCode": "Forbidden"}]}
+    runner = FakeRunner(
+        states=[DONE_STATE], describe=DESCRIBE, efs_writes=json.dumps(forbidden)
+    )
+    with pytest.raises(awsb.RemoteError, match="Forbidden"):
+        awsb.actual_cost(runner, manifest, NOW)
+
+
+@pytest.mark.usefixtures("valid")
+def test_the_metered_efs_writes_are_recorded_in_the_run_and_fleet_cost(
+    harness: FargateHarness,
+):
+    assert harness.run(fargate_runner()) == awsb.EXIT_OK
+    fleet_cost = netbench.read_json(harness.fleet_dir / "cost.json")
+    run_cost = netbench.read_json(harness.run_dir / "cost.json")
+    assert fleet_cost["efs_write_gb"] == run_cost["efs_write_gb"] == 4.0

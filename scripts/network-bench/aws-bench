@@ -677,6 +677,10 @@ EC2_NODE0_FILE = "cloudwatch/ec2-node0.json"
 CLOUDWATCH_PERIOD_S = 60
 # Delay before CloudWatch has published the datapoints of the last minute of the load.
 CLOUDWATCH_LAG_S = 120.0
+EFS_WRITE_METRICS = {
+    "data": ("DataWriteIOBytes", "Sum"),
+    "metadata": ("MetadataWriteIOBytes", "Sum"),
+}
 
 # RDS query database. `tofu apply` returns once the instance is `available` (RDS_CREATE_S
 # typical, RDS_CREATE_MAX_S is the timeout); a delete takes about RDS_DELETE_S. The EventBridge
@@ -1712,11 +1716,14 @@ def _cost_lines(
 
 
 def fargate_cost_lines(
-    hosts: list[HostSpec], cfg: RunConfig, duration_s: float
+    hosts: list[HostSpec],
+    cfg: RunConfig,
+    duration_s: float,
+    efs_write_gb: float | None = None,
 ) -> list[CostLine]:
     """The tasks by vCPU and memory hours, and the efs file system: its elastic writes are the
     payloads every query node stores plus the same again for its journal; it holds about as
-    much as it is written."""
+    much as it is written. `efs_write_gb` (metered) replaces the estimate of the writes."""
     tasks = [h["fargate"] for h in hosts if "fargate" in h]
     if not tasks:
         return []
@@ -1742,7 +1749,12 @@ def fargate_cost_lines(
             "gb-hour",
             PRICES["efs_gb_month_usd"] / HOURS_PER_MONTH,
         ),
-        _line("efs elastic writes", written_gb, "gb", PRICES["efs_write_gb_usd"]),
+        _line(
+            "efs elastic writes",
+            written_gb if efs_write_gb is None else efs_write_gb,
+            "gb",
+            PRICES["efs_write_gb_usd"],
+        ),
     ]
 
 
@@ -5965,6 +5977,8 @@ def write_run_cost(
     else:
         duration_s, usd = actual["duration_s"], actual["actual"]
     cost = {"usd_per_hour": rate, "duration_s": duration_s, "usd": usd}
+    if actual is not None and "efs_write_gb" in actual:
+        cost["efs_write_gb"] = actual["efs_write_gb"]
     nb.write_json(run.run_dir / "cost.json", cost)
     return cost
 
@@ -10040,12 +10054,37 @@ def actual_cost(
         if "rds_spec" in manifest
         else None
     )
-    return {
+    cost = {
         "expected": estimate["expected_usd"],
         "bound": estimate["bound_usd"],
-        "actual": manifest_cost(manifest, duration_s, rds_s),
         "duration_s": duration_s,
     }
+    efs_gb = None
+    if fargate_specs(manifest["hosts"]):
+        efs_gb = efs_written_gb(run, manifest, min(launches), now)
+        cost["efs_write_gb"] = efs_gb
+    cost["actual"] = manifest_cost(manifest, duration_s, rds_s, efs_gb)
+    return cost
+
+
+def efs_written_gb(
+    run: Runner, manifest: FleetManifest, first_launch: datetime, now: datetime
+) -> float:
+    """GiB written to the fleet's file system since the first launch: data and metadata writes,
+    which Elastic throughput bills alike. CloudWatch keeps the metrics of a deleted file
+    system. Raises when there is no data write datapoint."""
+    start, end = metric_window(first_launch.timestamp(), now.timestamp())
+    queries = metric_queries(
+        "AWS/EFS", ("FileSystemId", manifest["fargate"]["efs_id"]), EFS_WRITE_METRICS
+    )
+    stdout = get_metric_data(run, manifest_region(manifest), queries, start, end)
+    names = {query_id: metric for query_id, (metric, _) in EFS_WRITE_METRICS.items()}
+    series = parse_metric_results(stdout, names)
+    if not series["DataWriteIOBytes"]["values"]:
+        raise RemoteError(
+            f"no DataWriteIOBytes datapoints for {manifest['fargate']['efs_id']}"
+        )
+    return sum(sum(s["values"]) for s in series.values()) / 2**30
 
 
 def rds_billed_s(
@@ -10090,10 +10129,13 @@ def rds_delete_time(
 
 
 def manifest_cost(
-    manifest: FleetManifest, duration_s: float, rds_duration_s: float | None = None
+    manifest: FleetManifest,
+    duration_s: float,
+    rds_duration_s: float | None = None,
+    efs_write_gb: float | None = None,
 ) -> float:
     """USD of the whole fleet running `duration_s` at the estimate's prices. The rds instance, if any, runs
-    `rds_duration_s` (default `duration_s`)."""
+    `rds_duration_s` (default `duration_s`); the efs writes default to the estimate."""
     lines = _cost_lines(
         manifest["hosts"],
         duration_s,
@@ -10107,7 +10149,7 @@ def manifest_cost(
         )
     if fargate_specs(manifest["hosts"]):
         cfg = config_from_manifest(manifest["config"])
-        lines += fargate_cost_lines(manifest["hosts"], cfg, duration_s)
+        lines += fargate_cost_lines(manifest["hosts"], cfg, duration_s, efs_write_gb)
     return sum(line["usd"] for line in lines)
 
 

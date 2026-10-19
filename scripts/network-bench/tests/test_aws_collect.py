@@ -764,6 +764,8 @@ def test_actual_cost_prices_the_observed_duration() -> None:
     lines = awsb._cost_lines(manifest["hosts"], 1800.0, None, INSTANCE_PRICES)
     assert cost["actual"] == pytest.approx(sum(line["usd"] for line in lines))
     assert cost["bound"] == manifest["estimate"]["bound_usd"]
+    assert "efs_write_gb" not in cost
+    assert not any("AWS/EFS" in " ".join(call) for call in runner.calls)
 
 
 def test_actual_cost_skips_rows_without_a_reason() -> None:
