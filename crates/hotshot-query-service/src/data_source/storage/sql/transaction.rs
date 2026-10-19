@@ -276,6 +276,8 @@ struct TransactionMetricsGuard<Mode> {
     started_at: Instant,
     metrics: PoolMetrics,
     close_type: CloseType,
+    /// The state pruned height this transaction wrote, for the gauge once it commits.
+    state_pruned_height: Option<u64>,
     _mode: PhantomData<Mode>,
 }
 
@@ -289,6 +291,7 @@ impl<Mode: TransactionMode> TransactionMetricsGuard<Mode> {
             started_at,
             metrics,
             close_type: CloseType::Drop,
+            state_pruned_height: None,
             _mode: Default::default(),
         }
     }
@@ -308,6 +311,9 @@ impl<Mode> Drop for TransactionMetricsGuard<Mode> {
             CloseType::Commit => self.metrics.commits.add(1),
             CloseType::Revert => self.metrics.reverts.add(1),
             CloseType::Drop => self.metrics.drops.add(1),
+        }
+        if let (CloseType::Commit, Some(height)) = (self.close_type, self.state_pruned_height) {
+            self.metrics.state_pruned_height.set(height as usize);
         }
         tracing::trace!(started_at = ?self.started_at, reason = ?self.close_type, "close");
     }
@@ -958,7 +964,9 @@ impl<Types: NodeType, State: MerklizedState<Types, ARITY>, const ARITY: usize>
             [(Self::STATE_PRUNED_HEIGHT_ID, height as i64)],
         )
         .await
-        .context("updating state pruned height")
+        .context("updating state pruned height")?;
+        self.metrics.state_pruned_height = Some(height);
+        Ok(())
     }
 
     async fn insert_merkle_nodes(
@@ -1120,10 +1128,15 @@ pub(super) struct PoolMetrics {
     commits: Box<dyn Counter>,
     reverts: Box<dyn Counter>,
     drops: Box<dyn Counter>,
+    /// The pruner's state height gauge, which the state writer moves too.
+    state_pruned_height: Box<dyn Gauge>,
 }
 
 impl PoolMetrics {
-    pub(super) fn new(metrics: &(impl Metrics + ?Sized)) -> Self {
+    pub(super) fn new(
+        metrics: &(impl Metrics + ?Sized),
+        state_pruned_height: Box<dyn Gauge>,
+    ) -> Self {
         Self {
             open_transactions: metrics.create_gauge("open_transactions".into(), None),
             transaction_durations: metrics
@@ -1131,6 +1144,7 @@ impl PoolMetrics {
             commits: metrics.create_counter("committed_transactions".into(), None),
             reverts: metrics.create_counter("reverted_transactions".into(), None),
             drops: metrics.create_counter("dropped_transactions".into(), None),
+            state_pruned_height,
         }
     }
 }
